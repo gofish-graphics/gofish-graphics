@@ -9,11 +9,8 @@ from gofish import (
     stack,
     derive,
     log,
-    clock,
     ref,
     select_all,
-    palette,
-    gradient,
     normalize,
     repeat,
     rect,
@@ -31,6 +28,8 @@ from gofish import (
     datum,
     scatter,
     arrow,
+    Color,
+    Coord,
 )
 from gofish.ast import _RefProxy
 
@@ -188,27 +187,27 @@ class TestColorConfig:
 
     def test_palette_string(self):
         """Test palette() with string name."""
-        p = palette("tableau10")
+        p = Color.palette("tableau10")
         assert p == {"_tag": "palette", "values": "tableau10"}
 
     def test_palette_list(self):
         """Test palette() with color list."""
-        p = palette(["red", "blue", "green"])
+        p = Color.palette(["red", "blue", "green"])
         assert p == {"_tag": "palette", "values": ["red", "blue", "green"]}
 
     def test_gradient_string(self):
         """Test gradient() with single color."""
-        g = gradient("blue")
+        g = Color.gradient("blue")
         assert g == {"_tag": "gradient", "stops": "blue"}
 
     def test_gradient_list(self):
         """Test gradient() with stop list."""
-        g = gradient(["#fff", "#000"])
+        g = Color.gradient(["#fff", "#000"])
         assert g == {"_tag": "gradient", "stops": ["#fff", "#000"]}
 
     def test_palette_in_chart_options(self):
         """Test palette flows through chart options to IR."""
-        c = chart([{"x": 1}], color=palette("tableau10")).mark(rect(h="x"))
+        c = chart([{"x": 1}], color=Color.palette("tableau10")).mark(rect(h="x"))
         ir = c.to_ir()
         assert ir["options"]["color"] == {"_tag": "palette", "values": "tableau10"}
 
@@ -346,7 +345,7 @@ class TestNewMarks:
     def test_scatter_dims_and_theta_dir(self):
         """scatter takes `dims`; spread's `dir` passes a coord name through."""
         ir = (
-            chart([{"b": 1, "d": 2}], coord=clock())
+            chart([{"b": 1, "d": 2}], coord=Coord.clock())
             .flow(
                 scatter(dims={"theta": "b", "r": {"min": "d", "max": "d"}}),
                 spread(dir="theta"),
@@ -378,19 +377,19 @@ class TestClockCoord:
 
     def test_clock_returns_dict(self):
         """Test clock() returns the correct sentinel dict."""
-        c = clock()
+        c = Coord.clock()
         assert c == {"type": "clock"}
 
     def test_clock_in_chart_options_ir(self):
         """Test clock() serializes correctly through chart options."""
-        c = chart([{"x": 1}], coord=clock()).mark(rect(h="x"))
+        c = chart([{"x": 1}], coord=Coord.clock()).mark(rect(h="x"))
         ir = c.to_ir()
         assert ir["options"]["coord"] == {"type": "clock"}
 
     def test_clock_in_layer_options_ir(self):
         """Test clock() in layer options IR."""
         child = chart([{"x": 1}]).mark(rect(h="x"))
-        ir = layer([child], coord=clock()).to_ir()
+        ir = layer([child], coord=Coord.clock()).to_ir()
         assert ir["options"]["coord"] == {"type": "clock"}
 
 
@@ -496,7 +495,7 @@ class TestChartBuilder:
         """Test a full chart spec round-trips to IR correctly."""
         data = [{"cat": "a", "grp": "x", "value": 1}]
         c = (
-            chart(data, color=palette("tableau10"))
+            chart(data, color=Color.palette("tableau10"))
             .facet(by="cat", dir="x")
             .stack(by="grp", dir="y")
             .mark(rect(h="value", fill="grp").name("bars"))

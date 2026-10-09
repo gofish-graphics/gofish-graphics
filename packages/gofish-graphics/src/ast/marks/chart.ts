@@ -2,7 +2,8 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-import { sumBy, type Curve } from "../../lib";
+import { sumBy } from "../../lib";
+import type { Curve } from "../../families/curve";
 import {
   connect as Connect,
   type AnchorSpec,

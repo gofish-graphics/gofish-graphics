@@ -26,12 +26,10 @@ const {
   treemap,
   rect,
   circle,
-  polar,
-  wavy,
-  geo,
   layer,
   datum,
   field,
+  Coord,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -82,7 +80,7 @@ async function main() {
   console.log("\n# dims: the named spelling renders like the x/y spelling");
   {
     const roseWith = (mark: any, dir = "x") =>
-      chart(rose, { coord: polar() })
+      chart(rose, { coord: Coord.polar() })
         .flow(spread({ by: "month", dir, spacing: 0 }))
         .mark(mark)
         .toDisplayList(SIZE);
@@ -127,7 +125,7 @@ async function main() {
   console.log("\n# dir resolves against the enclosing coordinate space");
   {
     const stacked = (dir: string) =>
-      chart(rose, { coord: polar() })
+      chart(rose, { coord: Coord.polar() })
         .flow(stack({ by: "month", dir }))
         .mark(rect({ w: "value", h: 40, emX: true, emY: true, fill: "month" }))
         .toDisplayList(SIZE);
@@ -136,7 +134,7 @@ async function main() {
       same((await stacked("x")).items, (await stacked("theta")).items)
     );
     const lonSpread = (dir: string) =>
-      chart(places, { coord: geo("equalEarth", WINDOW) })
+      chart(places, { coord: Coord.geo("equalEarth", WINDOW) })
         .flow(spread({ by: "name", dir, spacing: 5 }))
         .mark(rect({ w: 10, h: 10, fill: "name" }))
         .toDisplayList(SIZE);
@@ -146,7 +144,7 @@ async function main() {
     );
 
     const undeclared = await errorOf(() =>
-      chart(rose, { coord: polar() })
+      chart(rose, { coord: Coord.polar() })
         .flow(spread({ by: "month", dir: "lon" }))
         .mark(rect({ w: 0.9, h: "value" }))
         .toDisplayList(SIZE)
@@ -171,7 +169,7 @@ async function main() {
 
   console.log("\n# geo: lon/lat reach marks and scatter");
   {
-    const doc = await chart(places, { coord: geo("equalEarth", WINDOW) })
+    const doc = await chart(places, { coord: Coord.geo("equalEarth", WINDOW) })
       .flow(scatter({ by: "name", dims: { lon: "lon", lat: "lat" } }))
       .mark(circle({ r: 4 }))
       .toDisplayList(SIZE);
@@ -187,7 +185,7 @@ async function main() {
       dots.length === 2 && Math.abs(ys[0] - ys[1]) > 1,
       JSON.stringify(ys)
     );
-    const xy = await chart(places, { coord: geo("equalEarth", WINDOW) })
+    const xy = await chart(places, { coord: Coord.geo("equalEarth", WINDOW) })
       .flow(scatter({ by: "name", x: "lon", y: "lat" }))
       .mark(circle({ r: 4 }))
       .toDisplayList(SIZE);
@@ -197,7 +195,7 @@ async function main() {
     );
 
     const rectsWith = (mark: any) =>
-      chart(places, { coord: geo("equalEarth", WINDOW) })
+      chart(places, { coord: Coord.geo("equalEarth", WINDOW) })
         .flow(group({ by: "name" }))
         .mark(mark)
         .toDisplayList(SIZE);
@@ -219,7 +217,7 @@ async function main() {
 
   console.log("\n# circle in polar: its own r stays its radius");
   {
-    const doc = await chart(rose, { coord: polar() })
+    const doc = await chart(rose, { coord: Coord.polar() })
       .flow(scatter({ by: "month", dims: { theta: "value", r: "value" } }))
       .mark(circle({ r: 4 }))
       .toDisplayList(SIZE);
@@ -236,7 +234,7 @@ async function main() {
 
   console.log("\n# errors");
   {
-    const bar = (opts: any, coord = polar()) =>
+    const bar = (opts: any, coord = Coord.polar()) =>
       chart(rose, { coord })
         .flow(spread({ by: "month", dir: "x" }))
         .mark(rect(opts))
@@ -277,10 +275,10 @@ async function main() {
       badKey
     );
     const nested = await errorOf(() =>
-      chart(places, { coord: geo("equalEarth", WINDOW) })
+      chart(places, { coord: Coord.geo("equalEarth", WINDOW) })
         .flow(spread({ by: "name", dir: "x" }))
         .mark(
-          layer({ coord: polar() }, [
+          layer({ coord: Coord.polar() }, [
             rect({ dims: { lon: { size: 1 } }, h: 5 }),
           ])
         )
@@ -292,7 +290,7 @@ async function main() {
       nested
     );
     const scatterSize = await errorOf(() =>
-      chart(rose, { coord: polar() })
+      chart(rose, { coord: Coord.polar() })
         .flow(scatter({ by: "month", dims: { theta: { size: "value" } } }))
         .mark(circle({ r: 3 }))
         .toDisplayList(SIZE)
@@ -303,7 +301,7 @@ async function main() {
       scatterSize
     );
     const scatterTwice = await errorOf(() =>
-      chart(rose, { coord: polar() })
+      chart(rose, { coord: Coord.polar() })
         .flow(scatter({ by: "month", x: "value", dims: { theta: "value" } }))
         .mark(circle({ r: 3 }))
         .toDisplayList(SIZE)
@@ -319,10 +317,10 @@ async function main() {
   {
     // wavy declares no names, so polar's theta is not visible inside it.
     const inClock = await errorOf(() =>
-      chart(rose, { coord: polar() })
+      chart(rose, { coord: Coord.polar() })
         .flow(spread({ by: "month", dir: "x" }))
         .mark(
-          layer({ coord: wavy() }, [
+          layer({ coord: Coord.wavy() }, [
             rect({ dims: { theta: { size: 1 } }, h: 5 }),
           ])
         )

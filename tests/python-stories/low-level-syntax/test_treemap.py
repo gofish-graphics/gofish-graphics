@@ -6,7 +6,7 @@ partitions the raw rows itself (like `spread`/`group`); `size="Worldwide
 Gross"` sums that field per genre to weight each tile's area.
 """
 
-from gofish import chart, field, rect, squarify, treemap
+from gofish import chart, field, rect, treemap, Tile
 from python_stories.vega_data_urls import read_json
 
 GRAY = "#D1D9E2"  # mirrors packages/gofish-graphics/src/color.ts:492
@@ -25,7 +25,7 @@ def story_default():
                 spacing=2,
                 padding=2,
                 round=True,
-                tile=squarify(),
+                tile=Tile.squarify(),
             )
         )
         .mark(

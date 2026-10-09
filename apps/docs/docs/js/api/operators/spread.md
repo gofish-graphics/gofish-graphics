@@ -53,7 +53,7 @@ under [`polar`](/js/api/coords/polar) you can write `dir: "theta"` or
 `dir: "r"`, and under [`geo`](/js/api/coords/geo) `dir: "lon"` or `dir: "lat"`:
 
 ```ts
-chart(data, { coord: polar() })
+chart(data, { coord: Coord.polar() })
   .flow(spread({ by: "month", dir: "theta", spacing: 0 }))
   .mark(rect({ w: 0.5, h: "value" }));
 ```

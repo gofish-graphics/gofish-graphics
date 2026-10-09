@@ -30,39 +30,7 @@ import * as Interval from "../../util/interval";
 import { createOperator } from "../marks/createOperator";
 import { SplitBy, splitEntries } from "../datumProjection";
 import type { FieldExpr } from "../fieldExpr";
-import { Frontend } from "gofish-ir";
-
-/**
- * How `treemap` tiles its box. A strategy is a plain object made by a function
- * call (`squarify()`, `slice()`, ...), so it crosses the Python bridge as IR.
- * `kind` names the strategy; each maps to one of d3-hierarchy's tiling methods.
- */
-export type TreemapTile = Frontend.TreemapTileIR;
-
-/**
- * Squarified tiling (d3's `treemapSquarify`): makes tiles as close as it can to
- * the aspect `ratio`: the longer side over the shorter side, so it is at least
- * 1 and does not pick an orientation. Omitted, `ratio` is d3's default, the
- * golden ratio. `ratio: 1` aims for square tiles, which suits one circle per
- * leaf.
- */
-export const squarify = ({ ratio }: { ratio?: number } = {}): TreemapTile => ({
-  kind: "squarify",
-  ratio,
-});
-
-/** Lay the tiles out in one column, stacked along y (d3's `treemapSlice`). */
-export const slice = (): TreemapTile => ({ kind: "slice" });
-
-/** Lay the tiles out in one row, side by side along x (d3's `treemapDice`). */
-export const dice = (): TreemapTile => ({ kind: "dice" });
-
-/** Split the tiles into two halves of near-equal weight, recursively (d3's
- *  `treemapBinary`). */
-export const binary = (): TreemapTile => ({ kind: "binary" });
-
-/** Alternate slice and dice by depth (d3's `treemapSliceDice`). */
-export const sliceDice = (): TreemapTile => ({ kind: "sliceDice" });
+import { squarify, type Tile } from "../../families/tile";
 
 const D3_TILES = {
   squarify: treemapSquarify,
@@ -72,7 +40,7 @@ const D3_TILES = {
   sliceDice: treemapSliceDice,
 };
 
-function d3Tile(tile: TreemapTile) {
+function d3Tile(tile: Tile) {
   if (tile.kind === "squarify" && tile.ratio !== undefined) {
     // d3 silently clamps a ratio below 1 to 1; say so instead.
     if (!(tile.ratio >= 1))
@@ -96,8 +64,8 @@ type TreemapProps = {
   /** Inset around the outer edge of the treemap, in pixels. Default 0. */
   padding?: number;
   round?: boolean;
-  /** The tiling strategy. Default `squarify()`. */
-  tile?: TreemapTile;
+  /** The tiling strategy. Default `Tile.squarify()`. */
+  tile?: Tile;
   sort?: TreemapSort;
   /** Per-entry weight driving each leaf's tile area — one value per child, in
    *  child order (mirrors `spread`'s entry-flagged `size`, #700-style). */

@@ -190,7 +190,7 @@ chart(drivingShifts)
     time.history(),
     scatter({ x: "miles", y: "gas" })
   )
-  .mark(line({ along: "year", curve: "linear" }))
+  .mark(line({ along: "year", curve: Curve.linear() }))
   .render(container, { w: 500, h: 500, axes: true });
 ```
 
@@ -259,23 +259,23 @@ The knots of the interpolation are the data's own time values. Years five apart
 take five years' worth of the clock, and years ten apart take ten, so an uneven
 run plays at an even speed. Every keyframe is passed through exactly.
 
-`curve` says how the run is read between them. The default, `"auto"`, is
-`"monotone"`: it smooths the whole run with a monotone cubic whose knots are the
+`curve` says how the run is read between them. The default is
+`Curve.monotone()`: it smooths the whole run with a monotone cubic whose knots are the
 time values. Between two keyframes each value only rises or only falls, so the
 mark never goes past either keyframe. It still turns where the data turns, and
 the turn happens exactly at a keyframe. A monotone `line` threaded through the
 same keyframes also uses the time values as its knots, so the moving mark
-travels exactly along that line. `"linear"`
-moves straight from each keyframe to the next. `"step"` does not move at all:
+travels exactly along that line. `Curve.linear()`
+moves straight from each keyframe to the next. `Curve.step()` does not move at all:
 the mark holds one keyframe's value until the next keyframe's own time arrives,
-and then jumps. `"smooth"` moves along a rounder curve that can
+and then jumps. `Curve.smooth()` moves along a rounder curve that can
 carry the mark a little past a keyframe before it turns. The
-[curves table on the `line` page](/js/api/marks/line#curves-through-data)
+[curves table on the `Curve` page](/js/api/curve#curves-through-data)
 compares all four.
 
 Numbers interpolate; paint does not. A dot's position and size move between
 keyframes, and its fill is read off the keyframe it is nearest, because a
-country's color is its color. Under `"step"` the fill comes from the previous
+country's color is its color. Under `Curve.step()` the fill comes from the previous
 keyframe rather than the nearest one, so the whole mark is the frame the curve
 is holding.
 
@@ -302,19 +302,19 @@ const panel = (curve) =>
 
 gofish(container, { w: 1160, h: 400, legend: false, axes: true }, () =>
   spreadX({ spacing: 16 }, [
-    frame({ w: 240, h: 280 }, [panel("step")]),
-    frame({ w: 240, h: 280 }, [panel("linear")]),
-    frame({ w: 240, h: 280 }, [panel("monotone")]),
+    frame({ w: 240, h: 280 }, [panel(Curve.step())]),
+    frame({ w: 240, h: 280 }, [panel(Curve.linear())]),
+    frame({ w: 240, h: 280 }, [panel(Curve.monotone())]),
   ])
 );
 ```
 
 Held halfway between the 1955 and 1960 keyframes, a country's dot sits at its
-1955 position under `"step"`, exactly halfway between the two under `"linear"`,
-and a little off that straight line under `"monotone"`, where the curve is
+1955 position under `Curve.step()`, exactly halfway between the two under `Curve.linear()`,
+and a little off that straight line under `Curve.monotone()`, where the curve is
 already bending toward 1965.
 
-`"step"` therefore draws the same picture as no transition at all. A sequence
+`Curve.step()` therefore draws the same picture as no transition at all. A sequence
 already holds each keyframe until the next one's time arrives, and a step curve
 asks the transition to do exactly that, so the transition has nothing left to
 add. It is worth having as a curve anyway, because it is the reading the other
@@ -340,7 +340,7 @@ chart(gapminder.filter((d) => countries.includes(d.country)))
     layer([
       time.history([circle({ r: 4, fill: "country", opacity: 0.3 })]),
       circle({ r: 4, fill: "country" }).transition({
-        update: animation.tween(),
+        update: Animation.tween(),
       }),
     ])
   )
@@ -487,14 +487,14 @@ chart(brands, { legend: false })
       position: "outset-right",
     })
   )
-  .layer(time.transition({ curve: "linear" }))
+  .layer(time.transition({ curve: Curve.linear() }))
   .render(container, { w: 600, h: 600, axes: { x: true, y: false } });
 ```
 
 Apart from the mark itself, two lines differ from Gapminder. The inner `spread`
 sorts its groups with `field("name").sort("value", "desc")`, so each year's
 bars are placed in order from largest to smallest. The transition uses
-`curve: "linear"`, so a bar slides to its new rank and grows or shrinks at a
+`curve: Curve.linear()`, so a bar slides to its new rank and grows or shrinks at a
 steady rate between two years, the way the bars in Mike Bostock's D3 version
 move. Each brand's name is a label just past the end of its bar, and it moves
 with the bar.
@@ -567,16 +567,16 @@ yet.
 
 ### `time.transition(options?)`
 
-| Option        | Type                                                     | Default    | Meaning                                                         |
-| ------------- | -------------------------------------------------------- | ---------- | --------------------------------------------------------------- |
-| `along`       | `string`                                                 | inferred   | The field the keyframes are keyed by in time.                   |
-| `at`          | `(() => number) \| number`                               | inferred   | The playhead, in `along`'s units. A `timer`, or a fixed number. |
-| `curve`       | `"auto" \| "step" \| "linear" \| "monotone" \| "smooth"` | `"auto"`   | How the run is read between keyframes.                          |
-| `ease`        | `(u: number) => number`                                  | none       | A time warp inside one keyframe interval, on `[0, 1]`.          |
-| `fill`        | `string`                                                 | keyframe's | Paint for the moving mark.                                      |
-| `stroke`      | `string`                                                 | keyframe's | Outline color.                                                  |
-| `strokeWidth` | `number`                                                 | keyframe's | Outline width.                                                  |
-| `opacity`     | `number`                                                 | keyframe's | Opacity of the moving mark.                                     |
+| Option        | Type                                                                                    | Default            | Meaning                                                         |
+| ------------- | --------------------------------------------------------------------------------------- | ------------------ | --------------------------------------------------------------- |
+| `along`       | `string`                                                                                | inferred           | The field the keyframes are keyed by in time.                   |
+| `at`          | `(() => number) \| number`                                                              | inferred           | The playhead, in `along`'s units. A `timer`, or a fixed number. |
+| `curve`       | `Curve.Curve`: `Curve.step()`, `Curve.linear()`, `Curve.monotone()` or `Curve.smooth()` | `Curve.monotone()` | How the run is read between keyframes.                          |
+| `ease`        | `(u: number) => number`                                                                 | none               | A time warp inside one keyframe interval, on `[0, 1]`.          |
+| `fill`        | `string`                                                                                | keyframe's         | Paint for the moving mark.                                      |
+| `stroke`      | `string`                                                                                | keyframe's         | Outline color.                                                  |
+| `strokeWidth` | `number`                                                                                | keyframe's         | Outline width.                                                  |
+| `opacity`     | `number`                                                                                | keyframe's         | Opacity of the moving mark.                                     |
 
 ### `interpolate(rows, options)`
 
@@ -585,13 +585,13 @@ numeric fields evaluated at that moment and `along` set to it. Fields that are
 not numbers are copied from the nearest keyframe, for the same reason a
 transition does not blend paint.
 
-| Option   | Type                                           | Default      | Meaning                                                        |
-| -------- | ---------------------------------------------- | ------------ | -------------------------------------------------------------- |
-| `along`  | `string`                                       | none         | The field the rows are keyed by in time.                       |
-| `key`    | `string`                                       | none         | The field saying which rows are the same thing at other times. |
-| `at`     | `number`                                       | none         | Where to read the run, in `along`'s units.                     |
-| `method` | `"step" \| "linear" \| "monotone" \| "smooth"` | `"monotone"` | How a run is read between its keyframes.                       |
-| `fields` | `string[]`                                     | every number | Which fields to interpolate.                                   |
+| Option   | Type                                                                                    | Default            | Meaning                                                        |
+| -------- | --------------------------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------- |
+| `along`  | `string`                                                                                | none               | The field the rows are keyed by in time.                       |
+| `key`    | `string`                                                                                | none               | The field saying which rows are the same thing at other times. |
+| `at`     | `number`                                                                                | none               | Where to read the run, in `along`'s units.                     |
+| `method` | `Curve.Curve`: `Curve.step()`, `Curve.linear()`, `Curve.monotone()` or `Curve.smooth()` | `Curve.monotone()` | How a run is read between its keyframes.                       |
+| `fields` | `string[]`                                                                              | every number       | Which fields to interpolate.                                   |
 
 ## What is not built yet
 
@@ -603,12 +603,13 @@ marks enter and exit. The value axis cannot rescale from one keyframe to the
 next.
 
 A threaded line can be cut only when each step from one keyframe to the next
-says how its time runs along it. The curves `"linear"`, `"bezier"`, `"step"`,
-`"monotone"`, `"smooth"` and `"catmullRom"` work. A `"step"` line
+says how its time runs along it. The curves `Curve.linear()`, `Curve.bezier()`,
+`Curve.step()`, `Curve.monotone()`, `Curve.smooth()` and `Curve.catmullRom()`
+work. A `Curve.step()` line
 spends all of a step's time at the earlier keyframe and draws the jump to the
 next one the moment its time arrives, which is where a mark moving with
-`curve: "step"` is. The routing curves `orthogonal()`, `arc()` and
-`perfectArrows()` throw an error, and so do a threaded `ribbon` and a threaded
+`curve: Curve.step()` is. The routing curves `Curve.orthogonal()`, `Curve.arc()` and
+`Curve.perfectArrows()` throw an error, and so do a threaded `ribbon` and a threaded
 line pinned with `source` or `target`.
 
 The chart is laid out once. The playhead is read while the chart is painted, so

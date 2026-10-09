@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 
-import { chart, circle, field, gradient, scatter } from "../../src/lib";
+import { chart, circle, field, scatter, Color } from "../../src/lib";
 
 /**
  * Shared-measure scale equality (#582). When the x and y channels carry the
@@ -49,7 +49,7 @@ export const Sunflower: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(sunflower, { color: gradient(["#fde725", "#21918c", "#440154"]) })
+    chart(sunflower, { color: Color.gradient(["#fde725", "#21918c", "#440154"]) })
       // Same measure on both axes ⇒ one shared scale ⇒ a true circle.
       .flow(scatter({ x: field("x", "plane"), y: field("y", "plane") }))
       .mark(circle({ r: 4, fill: "i" }))
@@ -66,7 +66,7 @@ export const Uncoupled: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(sunflower, { color: gradient(["#fde725", "#21918c", "#440154"]) })
+    chart(sunflower, { color: Color.gradient(["#fde725", "#21918c", "#440154"]) })
       .flow(scatter({ x: "x", y: "y" }))
       .mark(circle({ r: 4, fill: "i" }))
       .render(container, { w: args.w, h: args.h });

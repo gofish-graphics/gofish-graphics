@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Constraint, layer, rect, spread, value, wavy } from "../../src/lib";
+import { Constraint, layer, rect, spread, value, Coord } from "../../src/lib";
 
 const meta: Meta = {
   title: "Low Level Syntax/Constraints",
@@ -193,7 +193,7 @@ export const SpreadEndUnderCoordTransform: StoryObj<Args> = {
   args: { w: 300, h: 300 },
   render: (args: Args) => {
     const container = initializeContainer();
-    layer({ coord: wavy(), x: 0, y: 0 }, [
+    layer({ coord: Coord.wavy(), x: 0, y: 0 }, [
       spread({ dir: "x", alignment: "end", spacing: 8 }, [
         rect({ w: 40, h: value(30), fill: "#e63946" }),
         rect({ w: 40, h: value(80), fill: "#457b9d" }),

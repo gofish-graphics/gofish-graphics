@@ -1,6 +1,6 @@
 """Equivalent of Noise.stories.tsx — Forward Syntax/Noise."""
 
-from gofish import chart, circle, jitter, noise, scatter, sina, spread
+from gofish import chart, circle, scatter, spread, Overlap
 from python_stories.data import DENSE_MASSES, PENGUINS
 
 WEIGHED = [p for p in PENGUINS if p["Body Mass (g)"] is not None]
@@ -11,7 +11,7 @@ def story_penguin_mass():
         chart(WEIGHED, axes=True)
         .flow(
             spread(by="Species", dir="y", spacing=16),
-            scatter(x="Body Mass (g)", alignment="middle", overlap=noise()),
+            scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.noise()),
         )
         .mark(circle(r=3, fill="Species")),
         {"w": 560, "h": 320},
@@ -23,7 +23,7 @@ def story_penguin_mass_sina():
         chart(WEIGHED, axes=True)
         .flow(
             spread(by="Species", dir="y", spacing=16),
-            scatter(x="Body Mass (g)", alignment="middle", overlap=sina()),
+            scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.sina()),
         )
         .mark(circle(r=3, fill="Species")),
         {"w": 560, "h": 320},
@@ -35,7 +35,7 @@ def story_penguin_mass_jitter():
         chart(WEIGHED, axes=True)
         .flow(
             spread(by="Species", dir="y", spacing=16),
-            scatter(x="Body Mass (g)", alignment="middle", overlap=jitter()),
+            scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.jitter()),
         )
         .mark(circle(r=3, fill="Species")),
         {"w": 560, "h": 320},
@@ -55,20 +55,20 @@ def _dense(overlap):
 
 
 def story_dense_default():
-    return _dense(noise(padding=0.5))
+    return _dense(Overlap.noise(padding=0.5))
 
 
 def story_dense_smoothing():
-    return _dense(noise(padding=0.5, smoothing=100))
+    return _dense(Overlap.noise(padding=0.5, smoothing=100))
 
 
 def story_dense_quasi():
-    return _dense(noise(padding=0.5, randomness="quasi"))
+    return _dense(Overlap.noise(padding=0.5, randomness="quasi"))
 
 
 def story_dense_sina():
-    return _dense(sina(padding=0.5))
+    return _dense(Overlap.sina(padding=0.5))
 
 
 def story_dense_jitter():
-    return _dense(jitter(padding=0.5))
+    return _dense(Overlap.jitter(padding=0.5))

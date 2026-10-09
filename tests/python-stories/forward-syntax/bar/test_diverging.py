@@ -1,6 +1,6 @@
 """Equivalent of Diverging.stories.tsx — Forward Syntax/Bar/Diverging."""
 
-from gofish import chart, spread, stack, rect, field, palette, Schema
+from gofish import chart, spread, stack, rect, field, Schema, Color
 
 LEVELS = [
     "Strongly disagree",
@@ -9,7 +9,7 @@ LEVELS = [
     "Agree",
     "Strongly agree",
 ]
-LIKERT_COLORS = palette(
+LIKERT_COLORS = Color.palette(
     {
         "Strongly disagree": "#ca0020",
         "Disagree": "#f4a582",
@@ -115,7 +115,7 @@ def story_population_pyramid():
         chart(
             POPULATION,
             schema={"sex": Schema.ordered(["Women", "Men"]).diverging()},
-            color=palette({"Women": "#c05780", "Men": "#3b75af"}),
+            color=Color.palette({"Women": "#c05780", "Men": "#3b75af"}),
             axes={"x": {"title": "People (millions)"}, "y": True},
         )
         .flow(

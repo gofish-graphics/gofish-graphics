@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, polar } from "gofish-graphics";
+import { circle, Coord, Curve } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — OrthogonalGridEmbedding (polar node-link).
@@ -51,7 +51,7 @@ export const OrthogonalGridEmbedding: StoryObj = {
       {
         node,
         // Orthogonal links unsupported → linear fallback (see NOTES).
-        link: { curve: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1.5 },
         parentChild: combine({
           // θ: parent centered over its subtree's angular span.
           x: { kind: "align", alignment: "middle" },
@@ -75,7 +75,7 @@ export const OrthogonalGridEmbedding: StoryObj = {
           // r: siblings share a radius.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       { w: 480, h: 480 }
     ),

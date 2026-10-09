@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar, datum } from "gofish-graphics";
+import { rect, datum, Coord } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — ClockTree (nodes arranged around a clock-face ring).
@@ -123,7 +123,7 @@ export const ClockTree: StoryObj = {
         }),
         // InnerRadius:0.72 — the hollow clock rim (nodes live in the outer band,
         // the disc is empty from the center out to 0.72·R). Now expressible.
-        coord: polar({ innerRadius: 0.72 }),
+        coord: Coord.polar({ innerRadius: 0.72 }),
       },
       { w: 540, h: 540 },
       clockTree

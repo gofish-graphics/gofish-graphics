@@ -7,7 +7,7 @@ string. Exercises `layer([...], coord=wavy())` (Tier-2 coord transform) and
 shape-level `cx`/`cy` positioning.
 """
 
-from gofish import layer, ellipse, rect, wavy
+from gofish import layer, ellipse, rect, Coord
 from python_stories.data import SEAFOOD, CATCH_LOCATIONS, COLORS
 from python_stories._lowlevel_helpers import group_by
 
@@ -52,6 +52,6 @@ def story_default():
         )
 
     return (
-        layer(scene, coord=wavy(), x=0, y=0),
+        layer(scene, coord=Coord.wavy(), x=0, y=0),
         {"axes": True},
     )

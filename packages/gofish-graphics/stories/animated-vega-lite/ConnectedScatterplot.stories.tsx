@@ -38,7 +38,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
-  animation,
   chart,
   circle,
   layer,
@@ -47,6 +46,8 @@ import {
   time,
   timer,
   type Operator,
+  Animation,
+  Curve,
 } from "../../src/lib";
 import { drivingShifts } from "../../src/data/drivingShifts";
 import { pausedClock } from "./pausedClock";
@@ -94,7 +95,7 @@ const years = (clock: Clock, ...between: Operator<any, any>[]) =>
 /** The port: the line alone, drawn in up to the playhead. Every year stays,
  *  so the line is drawn over everything the playhead has reached. */
 const port = (clock: Clock) =>
-  years(clock, time.history()).mark(line({ along: "year", curve: "linear" }));
+  years(clock, time.history()).mark(line({ along: "year", curve: Curve.linear() }));
 
 /**
  * The port. The line starts at 1956 and is drawn in, one year every 200 ms,
@@ -179,7 +180,7 @@ const movingDot = (clock: Clock) =>
     .mark(
       layer([
         time.history([dot()]),
-        orangeDot().transition({ update: animation.tween() }),
+        orangeDot().transition({ update: Animation.tween() }),
       ])
     )
     .layer(line({ along: "year", stroke: "black", strokeWidth: 2 }));
@@ -216,7 +217,7 @@ export const MovingDotPaused1979: StoryObj<Args> = {
  *  ten-year stretch of the run travels along the path. */
 const comet = (clock: Clock) =>
   years(clock, time.history({ last: 10 })).mark(
-    line({ along: "year", curve: "linear" })
+    line({ along: "year", curve: Curve.linear() })
   );
 
 export const Comet: StoryObj<Args> = {

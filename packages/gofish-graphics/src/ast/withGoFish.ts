@@ -354,8 +354,8 @@ export type NameableMark<T> = Mark<T> & {
   name(layerName: string | Token): NameableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): NameableMark<T>;
   zOrder(value: ZOrderValue<T>): NameableMark<T>;
-  /** How the mark looks in each phase of an animation: `animation.grow()`,
-   *  `animation.fadeIn()`, … (see `src/animation/`). */
+  /** How the mark looks in each phase of an animation: `Animation.grow()`,
+   *  `Animation.fadeIn()`, … (see `src/animation/`). */
   transition(spec: MarkTransition): NameableMark<T>;
   translate(opts: TranslateModifierOptions): NameableMark<T>;
   render(

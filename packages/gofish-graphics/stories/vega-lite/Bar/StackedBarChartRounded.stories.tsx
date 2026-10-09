@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { chart, spread, stack, rect, derive, palette, field } from "../../../src/lib";
+import { chart, spread, stack, rect, derive, field, Color } from "../../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/stacked_bar_count_corner_radius_mark.html
@@ -44,7 +44,7 @@ export const Default: StoryObj<Args> = {
     // corners of every bar.
     // arguably this should be done with some kind of clip path or something.
     chart(context.loaded.weather as any[], { axes: true,
-      color: palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }),
+      color: Color.palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }),
     })
       .flow(
         derive((d: any[]) =>

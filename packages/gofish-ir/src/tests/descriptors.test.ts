@@ -126,7 +126,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "sort",
     "size",
   ],
-  pack: ["by", "method"],
+  pack: ["by"],
 };
 
 console.log("\n# Descriptor fields agree with schema.ts operator interfaces");

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { chunk, orderBy } from "lodash";
 import { initializeContainer } from "../helper";
 
-import { chart, table, circle, derive, spread, palette } from "../../src/lib";
+import { chart, table, circle, derive, spread, Color } from "../../src/lib";
 import {
   titanicPassengers,
   type TitanicPassenger,
@@ -36,7 +36,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     
-     chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]), axes: true })
+     chart(titanicPassengers, { color: Color.palette(["#2b8cbe", "#ff8408"]), axes: true })
         .flow(table({
                 by: {x: "pclass", y: "sex"},
                 // Content-sized tracks (σ-affine 6e) pack facets to their dot

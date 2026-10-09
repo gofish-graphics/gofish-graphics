@@ -34,9 +34,15 @@ import {
   centerPoint,
   sequenceCurve,
   sequenceCurveNames,
-  type Curve,
+  curveName,
   type RunParameter,
 } from "./routers";
+import {
+  bezier,
+  linear as linearCurve,
+  monotone,
+  type Curve,
+} from "../../families/curve";
 import { targetOf } from "./layer";
 import { readLive } from "../../interaction/live";
 import { setLiveSlots } from "../../interaction/liveSlots";
@@ -178,12 +184,12 @@ export const connect = createNodeOperator(
       // Optional in anchor mode (source/target), where it is ignored.
       direction?: FancyDirection;
       fill?: MaybeValue<string>;
-      // The single screen-space path-shaping key. A curve value from a factory
-      // (`bezier()`, `orthogonal()`, `arc({ direction })`,
-      // `perfectArrows({ bow })`, …) or a bare name (`"linear"` | `"bezier"`).
+      // The single screen-space path-shaping key: a call in the Curve family
+      // (`Curve.linear()`, `Curve.bezier()`, `Curve.orthogonal()`,
+      // `Curve.arc({ direction })`, `Curve.perfectArrows({ bow })`, …).
       // Center ("line") mode resolves it through the curve registry; edge
       // ("ribbon") mode only honors `linear` (linear band) vs `bezier`
-      // (S-curve band). Omitted means `"auto"` (resolved below).
+      // (S-curve band). Omitted, it is chosen below.
       curve?: Curve;
       stroke?: MaybeValue<string>;
       strokeWidth?: number;
@@ -224,8 +230,9 @@ export const connect = createNodeOperator(
     const resolvedTarget =
       target !== undefined ? resolveAnchor(target) : undefined;
     const dir = elaborateDirection(direction ?? 0);
-    const curveNameOf = (c: Curve | undefined): string | undefined =>
-      c === undefined ? undefined : typeof c === "string" ? c : c.type;
+    // A curve that is not a Curve-family object fails here, where the
+    // connector is made.
+    curveName(curve, "line/ribbon({ curve })");
 
     return new GoFishNode(
       {
@@ -393,7 +400,7 @@ export const connect = createNodeOperator(
                 return originIs(s, "pinned");
               }));
 
-          // Resolve the curve. An omitted/`"auto"` curve smooths with the
+          // Resolve the curve. An omitted curve smooths with the
           // monotone cubic over a continuous connection axis, for BOTH
           // lines and ribbons: a stacked area should curve like its
           // line-chart sibling. Otherwise it falls back to the mode's
@@ -403,15 +410,15 @@ export const connect = createNodeOperator(
           // straight segment is to a line — the honest discrete-region
           // connector). Connecting two arbitrary points is therefore always
           // valid — it just isn't smoothed. Explicit curves always win.
-          const isAuto = curve === undefined || curveNameOf(curve) === "auto";
-          const resolvedCurve: Curve = !isAuto
-            ? (curve as Curve)
-            : continuousConnectionAxis()
-              ? "monotone"
-              : mode === "center"
-                ? "linear"
-                : "bezier";
-          const resolvedCurveName = curveNameOf(resolvedCurve);
+          const resolvedCurve: Curve =
+            curve !== undefined
+              ? curve
+              : continuousConnectionAxis()
+                ? monotone()
+                : mode === "center"
+                  ? linearCurve()
+                  : bezier();
+          const resolvedCurveName = resolvedCurve.type;
           // Edge ("ribbon") mode: bezier = S-curve band (discrete regions),
           // monotone / catmullRom = smoothed band, else linear band.
           const edgeBezier = resolvedCurveName === "bezier";
@@ -839,18 +846,18 @@ export const connect = createNodeOperator(
               // every sequence curve.
               const threadingCurves = ["linear", "bezier"]
                 .concat(sequenceCurveNames())
-                .map((name) => `"${name}"`)
+                .map((name) => `Curve.${name}()`)
                 .join(", ");
               throw new Error(
-                `[gofish] line({ curve: "${resolvedCurveName}" }): this line ` +
+                `[gofish] line({ curve: Curve.${resolvedCurveName}() }): this line ` +
                   `threads the keyframes of a time.sequence, so it is drawn ` +
                   `only over the stretch of time the sequence shows, cut at ` +
                   `the exact point in data time. That cut needs each step ` +
                   `from one keyframe to the next to run between the keyframes' ` +
                   `centers and to say how its time runs along it, which ` +
-                  `${threadingCurves} draw and "${resolvedCurveName}" does ` +
+                  `${threadingCurves} draw and Curve.${resolvedCurveName}() does ` +
                   `not. Use one of those, or open an issue for ` +
-                  `"${resolvedCurveName}".`
+                  `Curve.${resolvedCurveName}().`
               );
             }
             timeRun = {

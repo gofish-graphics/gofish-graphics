@@ -5,7 +5,7 @@ CircleTimeline is exempt: it sizes each circle in a JS function mark.
 
 from datetime import datetime, timezone
 
-from gofish import chart, scatter, stack, group, ribbon, line, blank, palette, Schema
+from gofish import chart, scatter, stack, group, ribbon, line, blank, Schema, Color, Curve
 
 # A synthetic store's sales per category and quarter (the benchmark's
 # `quarterly-sales.json`).
@@ -88,7 +88,7 @@ def story_stacked_area():
     return (
         chart(QUARTERLY_SALES, schema={"date": Schema.time()}, axes=True)
         .flow(scatter(by="date", x="date"), stack(by="category", dir="y"))
-        .mark(ribbon(h="sales", fill="category", curve="linear")),
+        .mark(ribbon(h="sales", fill="category", curve=Curve.linear())),
         {"w": 520, "h": 330},
     )
 
@@ -125,10 +125,10 @@ def story_surplus_deficit_line():
             area,
             schema=schema,
             axes=True,
-            color=palette({"Surplus": "#2a9d8f", "Deficit": "#e76f51"}),
+            color=Color.palette({"Surplus": "#2a9d8f", "Deficit": "#e76f51"}),
         )
         .flow(group(by="side"), scatter(by="date", x="date"))
-        .mark(ribbon(h="balance", fill="side", curve="linear"))
+        .mark(ribbon(h="balance", fill="side", curve=Curve.linear()))
         # The line: invisible anchors at the monthly values, then a line
         # through them.
         .layer(
@@ -136,6 +136,6 @@ def story_surplus_deficit_line():
             .flow(scatter(by="date", x="date", y="balance"))
             .mark(blank())
         )
-        .layer(line(stroke="#222", stroke_width=1.5, curve="linear")),
+        .layer(line(stroke="#222", stroke_width=1.5, curve=Curve.linear())),
         {"w": 560, "h": 340},
     )

@@ -21,7 +21,6 @@ import {
   chart,
   circle,
   filter,
-  geo,
   group,
   layer,
   line,
@@ -35,6 +34,7 @@ import {
   text,
   time,
   timer,
+  Coord,
 } from "../../src/lib";
 
 const meta: Meta = {
@@ -57,7 +57,7 @@ type Args = { w: number; h: number };
  */
 const basemap = (options: { padding?: number } = {}) =>
   chart(world110m, {
-    coord: geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
+    coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
     legend: false,
     ...options,
   }).mark(polygon({ points: "ring", fill: "#f7f7f7", stroke: "#aaa" }));

@@ -18,9 +18,9 @@ from gofish import (
     layer,
     group,
     petal,
-    polar,
     datum,
     select_all,
+    Coord,
 )
 from python_stories.data import SEAFOOD, CATCH_LOCATIONS, COLORS
 
@@ -55,7 +55,7 @@ def story_default():
                             shared_scale=True,
                         ),
                     ],
-                    coord=polar(),
+                    coord=Coord.polar(),
                 ),
                 ref,
             ],

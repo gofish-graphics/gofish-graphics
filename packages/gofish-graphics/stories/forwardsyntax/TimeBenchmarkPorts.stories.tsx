@@ -10,7 +10,8 @@ import {
   line,
   circle,
   blank,
-  palette,
+  Color,
+  Curve,
   Schema,
 } from "../../src/lib";
 
@@ -123,7 +124,7 @@ export const StackedArea: StoryObj<Args> = {
         scatter({ by: "date", x: "date" }),
         stack({ by: "category", dir: "y" })
       )
-      .mark(ribbon({ h: "sales", fill: "category", curve: "linear" }))
+      .mark(ribbon({ h: "sales", fill: "category", curve: Curve.linear() }))
       .render(container, { w: args.w, h: args.h });
     return container;
   },
@@ -199,10 +200,10 @@ export const SurplusDeficitLine: StoryObj<Args> = {
     chart(area, {
       schema,
       axes: true,
-      color: palette({ Surplus: "#2a9d8f", Deficit: "#e76f51" }),
+      color: Color.palette({ Surplus: "#2a9d8f", Deficit: "#e76f51" }),
     })
       .flow(group({ by: "side" }), scatter({ by: "date", x: "date" }))
-      .mark(ribbon({ h: "balance", fill: "side", curve: "linear" }))
+      .mark(ribbon({ h: "balance", fill: "side", curve: Curve.linear() }))
       // The line: invisible anchors at the monthly values, then a line
       // through them.
       .layer(
@@ -210,7 +211,7 @@ export const SurplusDeficitLine: StoryObj<Args> = {
           .flow(scatter({ by: "date", x: "date", y: "balance" }))
           .mark(blank())
       )
-      .layer(line({ stroke: "#222", strokeWidth: 1.5, curve: "linear" }))
+      .layer(line({ stroke: "#222", strokeWidth: 1.5, curve: Curve.linear() }))
       .render(container, { w: args.w, h: args.h });
     return container;
   },

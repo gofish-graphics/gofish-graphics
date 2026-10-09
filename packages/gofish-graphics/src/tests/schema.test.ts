@@ -42,7 +42,7 @@ import {
   CONTINUOUS,
 } from "../ast/underlyingSpace";
 
-const { chart, spread, stack, rect, filter, derive, palette, Schema } = GoFish as any;
+const { chart, spread, stack, rect, filter, derive, Schema, Color } = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -497,7 +497,7 @@ async function main() {
     const colored = await errorOf(() =>
       chart(rows, {
         schema: { r: Schema.ordered(LEVELS5) },
-        color: palette(["red", "green", "blue", "cyan", "magenta"]),
+        color: Color.palette(["red", "green", "blue", "cyan", "magenta"]),
       })
         .flow(spread({ by: "q", dir: "x" }))
         .mark(rect({ h: "n", fill: "r" }))

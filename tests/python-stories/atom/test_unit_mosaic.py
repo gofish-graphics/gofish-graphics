@@ -4,7 +4,7 @@ import math
 
 import pandas as pd
 
-from gofish import chart, circle, derive, palette, spread
+from gofish import chart, circle, derive, spread, Color
 
 DOTS_PER_ROW = 34  # target group-size per dot-row; tunes the mosaic's aspect
 
@@ -56,7 +56,7 @@ def _mosaic_passengers():
 
 def story_default():
     return (
-        chart(_mosaic_passengers(), color=palette(["#2b8cbe", "#ff8408"]))
+        chart(_mosaic_passengers(), color=Color.palette(["#2b8cbe", "#ff8408"]))
         .flow(
             # pclass rows: 1st at the bottom, 3rd at the top
             spread(by="pclass", dir="y", spacing=6, alignment="start"),

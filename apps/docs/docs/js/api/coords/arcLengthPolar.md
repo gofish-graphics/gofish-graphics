@@ -2,7 +2,7 @@
 order: 30
 ---
 
-# arcLengthPolar
+# Coord.arcLengthPolar
 
 A polar-like transform parameterized by arc length instead of angle, so equal
 steps along the x-axis cover equal distance along the curve rather than equal
@@ -12,7 +12,7 @@ grows.
 ::: gofish
 
 ```js
-gf.chart(seafood, { coord: gf.arcLengthPolar() })
+gf.chart(seafood, { coord: gf.Coord.arcLengthPolar() })
   .flow(gf.stack({ by: "species", dir: "x" }))
   .mark(gf.rect({ w: "count", fill: "species" }))
   .render(root, {
@@ -27,7 +27,7 @@ gf.chart(seafood, { coord: gf.arcLengthPolar() })
 ## Signature
 
 ```ts
-arcLengthPolar();
+Coord.arcLengthPolar();
 ```
 
 ## Parameters

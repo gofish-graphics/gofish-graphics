@@ -29,16 +29,16 @@ never mistaken for data.
 
 ## Parameters
 
-| Parameter        | Type                           | Description                                                                                                                                                                  |
-| ---------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data`           | `T`                            | The dataset to visualize                                                                                                                                                     |
-| `options.w`      | `number`                       | Width hint for the chart frame                                                                                                                                               |
-| `options.h`      | `number`                       | Height hint for the chart frame                                                                                                                                              |
-| `options.coord`  | `CoordinateTransform`          | Coordinate transform (e.g. `polar()`)                                                                                                                                        |
-| `options.color`  | `ColorConfig`                  | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
-| `options.axes`   | `AxesOptions`                  | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
-| `options.legend` | `boolean`                      | Whether to draw the color-scale legend. Default `true`. See [Legend](#legend) below.                                                                                         |
-| `options.schema` | `Record<string, ColumnSchema>` | Column types, keyed by column name, e.g. `{ response: Schema.ordered(LEVELS).diverging() }` or `{ date: Schema.time() }`. See [`Schema`](/js/api/core/schema).               |
+| Parameter        | Type                           | Description                                                                                                                                                                              |
+| ---------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`           | `T`                            | The dataset to visualize                                                                                                                                                                 |
+| `options.w`      | `number`                       | Width hint for the chart frame                                                                                                                                                           |
+| `options.h`      | `number`                       | Height hint for the chart frame                                                                                                                                                          |
+| `options.coord`  | `Coord.Coord`                  | Coordinate transform (e.g. `Coord.polar()`)                                                                                                                                              |
+| `options.color`  | `Color.Color`                  | Color scale applied to all marks in this chart. Use [`Color.palette()`](/js/api/color/palette) for categorical data or [`Color.gradient()`](/js/api/color/gradient) for continuous data. |
+| `options.axes`   | `AxesOptions`                  | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                                        |
+| `options.legend` | `boolean`                      | Whether to draw the color-scale legend. Default `true`. See [Legend](#legend) below.                                                                                                     |
+| `options.schema` | `Record<string, ColumnSchema>` | Column types, keyed by column name, e.g. `{ response: Schema.ordered(LEVELS).diverging() }` or `{ date: Schema.time() }`. See [`Schema`](/js/api/core/schema).                           |
 
 Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js/api/core/mark), [`.render()`](/js/api/core/render), [`.zOrder()`](#zorder), and [`.name()`](#name) methods.
 
@@ -180,7 +180,7 @@ align its center onto the stem's top:
 ```ts
 layer([
   rect({ w: 4, h: "total", fill: "green" }).name("stem"),
-  chart(species, { coord: polar() })
+  chart(species, { coord: Coord.polar() })
     .flow(stack({ by: "species", dir: "x" }))
     .mark(petal({ w: "count", fill: "species" }))
     .name("flower"),

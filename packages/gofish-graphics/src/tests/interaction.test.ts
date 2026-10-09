@@ -35,24 +35,20 @@ const {
   timer,
   click,
   signal,
-  // The low-level render terminal (`gofish`) + a low-level operator, for the
-  // component-level (no chart(), no data) reactive cases.
   gofish,
   spreadX,
-  geo,
   group,
   scatter,
   line,
   text,
-  // The animated bird panels: `filter` + `between` + a `timer()` clock.
   circle,
   filter,
   between,
-  // Panel E: controls as ordinary marks, laid out with the ordinary operators.
   slider,
   button,
   spreadY,
   frame,
+  Coord,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -127,7 +123,7 @@ function trailChart(opts: {
       : (d: any) =>
           between((day() - d.day + DAYS) % DAYS, 0, win, { closed: "left" });
   return chart(birdRows, {
-    coord: geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
+    coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
     axes: false,
     legend: false,
     ...(padding !== undefined ? { padding } : {}),
@@ -1437,7 +1433,7 @@ async function main() {
     // species field is readable off it — the panel-B `hot` predicate.
     const hot = (d: any) => p.datum()?.species === d?.species;
     await chart(rows, {
-      coord: geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
+      coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
       axes: false,
     })
       .flow(

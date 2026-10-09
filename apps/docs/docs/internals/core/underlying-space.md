@@ -365,7 +365,7 @@ kinds together: it holds for `POSITION` (a data axis) and `ORDINAL` (a category
 axis) but not for `SIZE` (a mark's own extent) or `UNDEFINED`. In other words it
 answers "does this space lay marks _out along an axis_?" — the question you ask
 when you want the axis a set of siblings is arranged on rather than each
-sibling's own size. Its first consumer is the connector's `curve: "auto"`: a
+sibling's own size. Its first consumer is a connector with no `curve`: a
 `line` / `ribbon` reads the underlying space its endpoints resolved to and, when
 that space is a _positioning_ one whose measure is continuous, smooths the path
 (the monotone cubic) instead of drawing straight segments — so a line over

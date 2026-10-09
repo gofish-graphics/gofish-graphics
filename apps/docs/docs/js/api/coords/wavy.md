@@ -2,7 +2,7 @@
 order: 50
 ---
 
-# wavy
+# Coord.wavy
 
 Warps the plane with a sinusoidal ripple, so a straight edge is drawn as a wave.
 Used for decorative geometry — a balloon string, a flag, a squiggly connector.
@@ -13,14 +13,14 @@ Used for decorative geometry — a balloon string, a flag, a squiggly connector.
 ## Signature
 
 ```ts
-wavy();
+Coord.wavy();
 ```
 
 Pass it as the `coord` of a [`layer`](/js/api/operators/layer) (or of a chart) to
 warp everything inside that scope:
 
 ```ts
-layer({ coord: wavy(), x: 0, y: 0 }, [rect({ w: 4, h: 120 })]);
+layer({ coord: Coord.wavy(), x: 0, y: 0 }, [rect({ w: 4, h: 120 })]);
 ```
 
 ## Parameters

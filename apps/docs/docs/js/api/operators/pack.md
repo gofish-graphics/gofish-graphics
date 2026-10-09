@@ -24,8 +24,8 @@ gf.chart(seafood)
 ## Signature
 
 ```ts
-pack({ by?, method? })
-pack({ method? }, marks)
+pack({ by? })
+pack({}, marks)
 ```
 
 ## Combinator form
@@ -54,13 +54,11 @@ gf.pack({}, [
 ::: gofish-ref pack
 :::
 
-## Strategies
+## Packing
 
-`method` holds the packing strategy. You make a strategy with a function call.
-
-- `circles()` packs each child's enclosing circle with d3's front-chain
-  algorithm (`packSiblings`). It is the default, so `pack()` and
-  `pack({ method: circles() })` are the same. It takes no options yet.
+`pack` packs each child's enclosing circle with d3's front-chain algorithm
+(`packSiblings`). It has no option to choose another way to pack, because there
+is no other way yet.
 
 Each child is packed by its enclosing circle, which depends on its shape.
 

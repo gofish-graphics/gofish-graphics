@@ -48,8 +48,8 @@ plain value is the point, like `x`, and `{"min": ..., "max": ...}` is the span,
 like `x_min`/`x_max`.
 
 ```python
-# Under polar(): the same as scatter(by="id", x="bearing", y="distance")
-chart(trips, coord=polar()) \
+# Under Coord.polar(): the same as scatter(by="id", x="bearing", y="distance")
+chart(trips, coord=Coord.polar()) \
     .flow(scatter(by="id", dims={"theta": "bearing", "r": "distance"})) \
     .mark(circle(r=4))
 ```
@@ -69,16 +69,17 @@ axis, at the scatter's `alignment`. Dots with close values then cover each
 other. `overlap` moves each child along that free axis so the children no
 longer overlap. A strategy only ever moves children along the free axis: each
 child keeps the position its field gives it on the data axis, which `scatter`
-alone places. You make the strategy with a function call.
+alone places. You make the strategy with a function call in the `Overlap`
+family, which is also the module `gofish.overlap`.
 
 There are two strategies. They differ in what sets the width of the cloud.
 
-- `separate(padding=None)` keeps the dots apart. In data order, each dot
+- `Overlap.separate(padding=None)` keeps the dots apart. In data order, each dot
   moves along the free axis to the nearest free spot, so no two dots overlap.
   The counts set the width exactly: where many dots share a value, the cloud
   grows tall. The result is a beeswarm. `padding` is the number of pixels kept
   between neighboring dots. The default is 0.
-- `noise(randomness=None, smoothing=None, padding=None, seed=None)` spreads
+- `Overlap.noise(randomness=None, smoothing=None, padding=None, seed=None)` spreads
   the dots inside an outline. The outline is wide where many dots share a part
   of the data axis and narrow where few do, so it shows the shape of the
   distribution. The dots are placed inside it and may touch.
@@ -86,23 +87,23 @@ There are two strategies. They differ in what sets the width of the cloud.
 Two more functions make `noise` with other defaults. Any option you pass
 replaces the default.
 
-| Function   | Same as                                           | Looks like                         |
-| ---------- | ------------------------------------------------- | ---------------------------------- |
-| `noise()`  | `noise()`                                         | an outline that follows every pile |
-| `sina()`   | `noise(smoothing="silverman")`                    | a violin filled with dots          |
-| `jitter()` | `noise(randomness="uniform", smoothing=math.inf)` | classic jitter in a flat band      |
+| Function           | Same as                                                   | Looks like                         |
+| ------------------ | --------------------------------------------------------- | ---------------------------------- |
+| `Overlap.noise()`  | `Overlap.noise()`                                         | an outline that follows every pile |
+| `Overlap.sina()`   | `Overlap.noise(smoothing="silverman")`                    | a violin filled with dots          |
+| `Overlap.jitter()` | `Overlap.noise(randomness="uniform", smoothing=math.inf)` | classic jitter in a flat band      |
 
 ::: gofish example:penguin-mass-beeswarm hidden
 :::
 
 ```python
-from gofish import chart, circle, scatter, separate, spread
+from gofish import chart, circle, scatter, spread, Overlap
 
 weighed = [p for p in penguins if p["Body Mass (g)"] is not None]
 
 chart(weighed, axes=True).flow(
     spread(by="Species", dir="y", spacing=16),
-    scatter(x="Body Mass (g)", alignment="middle", overlap=separate(padding=1)),
+    scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.separate(padding=1)),
 ).mark(circle(r=3, fill="Species")).render(w=560, h=320)
 ```
 
@@ -113,31 +114,31 @@ because that word names a family of layouts: greedy ones like this one,
 force-directed ones, and packed ones. The name comes from the separation
 constraints of constraint layout, as in WebCoLa and VPSC.
 
-The same data with `noise()`:
+The same data with `Overlap.noise()`:
 
 ::: gofish example:penguin-mass-noise hidden
 :::
 
 ```python
-from gofish import chart, circle, noise, scatter, spread
+from gofish import chart, circle, scatter, spread, Overlap
 
 chart(weighed, axes=True).flow(
     spread(by="Species", dir="y", spacing=16),
-    scatter(x="Body Mass (g)", alignment="middle", overlap=noise()),
+    scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.noise()),
 ).mark(circle(r=3, fill="Species")).render(w=560, h=320)
 ```
 
-And with `sina()`, which gives each species a smooth violin outline:
+And with `Overlap.sina()`, which gives each species a smooth violin outline:
 
 ::: gofish example:penguin-mass-sina-plot hidden
 :::
 
 ```python
-from gofish import chart, circle, scatter, sina, spread
+from gofish import chart, circle, scatter, spread, Overlap
 
 chart(weighed, axes=True).flow(
     spread(by="Species", dir="y", spacing=16),
-    scatter(x="Body Mass (g)", alignment="middle", overlap=sina()),
+    scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.sina()),
 ).mark(circle(r=3, fill="Species")).render(w=560, h=320)
 ```
 
@@ -225,7 +226,7 @@ Some cases are errors:
 
 - `overlap` when both `x` and `y` come from fields, because then no axis is
   free.
-- `overlap` inside a coordinate space that is not linear, such as `polar()`.
+- `overlap` inside a coordinate space that is not linear, such as `Coord.polar()`.
   The strategies measure distances in the layout frame, and a polar space
   bends that frame, so dots could still overlap on screen. See
   [#1002](https://github.com/gofish-graphics/gofish-graphics/issues/1002).

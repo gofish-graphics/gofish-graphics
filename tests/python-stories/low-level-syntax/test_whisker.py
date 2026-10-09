@@ -8,7 +8,7 @@ male/female pair, and the full pay-grade × gender plot. Mirrors the JS
 `boxwhisker.ts` helper (which the story file delegates to).
 """
 
-from gofish import layer, spread, line, rect, ref, datum
+from gofish import layer, spread, line, rect, ref, datum, Curve
 from python_stories.data import GENDER_PAY_GAP, PAY_GRADE
 from python_stories._lowlevel_helpers import group_by, order_by
 
@@ -38,7 +38,7 @@ def _box_and_whisker(d, tag):
                         [ref(min_name), ref(max_name)],
                         dir="y",
                         stroke_width=1,
-                        curve="bezier",
+                        curve=Curve.bezier(),
                     )
                 ]
             ),

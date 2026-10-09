@@ -148,7 +148,9 @@ function isExportExempt(
 //     A pure `Layer`→`layer` / `For`→`map` rename in a JS story has no Python
 //     counterpart, since Python was always lowercase (and uses list
 //     comprehensions where JS maps). Rewriting each retired name to its
-//     current name before comparing folds such renames out.
+//     current name before comparing folds such renames out. The same goes
+//     for a strategy moved into its family namespace (#1013): `polar()` and
+//     `Coord.polar()` are one call, so the family prefix is dropped.
 //   - **Import declarations** — a Python story mirrors the spec, not the JS
 //     module's imports, which Python spells its own way (`from gofish import
 //     ...`). Adding, removing, or reordering an import changes no spec: if a
@@ -484,12 +486,24 @@ const RETIRED_API_NAMES_RE = new RegExp(
   "g"
 );
 
+/** The strategy families (#1013), read from `src/families/<name>.ts`: a
+ * strategy that moved from a flat export into its family (`polar()` →
+ * `Coord.polar()`) is the same call, so the `Coord.` prefix is dropped. */
+const STRATEGY_FAMILIES = readdirSync(
+  join(ROOT_DIR, "packages/gofish-graphics/src/families")
+)
+  .filter((f) => f.endsWith(".ts"))
+  .map((f) => f[0].toUpperCase() + f.slice(1, -".ts".length));
+const STRATEGY_FAMILY_PREFIX_RE = new RegExp(
+  `\\b(${STRATEGY_FAMILIES.join("|")})\\.`,
+  "g"
+);
+
 /** Rewrite retired API names to their current names so a pure rename is spec-neutral. */
 function canonicalizeRetiredApiNames(source: string): string {
-  return source.replace(
-    RETIRED_API_NAMES_RE,
-    (name) => RETIRED_API_NAMES[name]
-  );
+  return source
+    .replace(RETIRED_API_NAMES_RE, (name) => RETIRED_API_NAMES[name])
+    .replace(STRATEGY_FAMILY_PREFIX_RE, "");
 }
 
 /** True when the file's change between baseRef's merge-base and HEAD touches

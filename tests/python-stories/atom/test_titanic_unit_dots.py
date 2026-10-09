@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from gofish import chart, circle, palette, squarify, treemap
+from gofish import chart, circle, treemap, Color, Tile
 
 
 def story_default():
@@ -20,14 +20,14 @@ def story_default():
     titanic_passengers.loc[mask, "fare"] = titanic_passengers.loc[mask, "pclass"].map(tier_fare).fillna(1)
 
     return (
-        chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"]))
+        chart(titanic_passengers, color=Color.palette(["#2b8cbe", "#ff8408"]))
         .facet(by="pclass", dir="x")
         .flow(
             treemap(
                 h="fare",
                 size="fare",
                 spacing=0,
-                tile=squarify(ratio=1),
+                tile=Tile.squarify(ratio=1),
                 sort="desc",
             )
         )

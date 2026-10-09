@@ -10,7 +10,7 @@ while the bars grow up. Combinator `spread`/`stack` in the `dir` variants stand
 in for JS `spreadX`/`stackX`; a data-bound SIZE uses `datum(v)` (JS `value(v)`).
 """
 
-from gofish import datum, layer, polar, rect, spread, stack
+from gofish import datum, layer, rect, spread, stack, Coord
 from python_stories.data import COLORS
 
 _C6 = COLORS["color6"]
@@ -75,7 +75,7 @@ def _pie():
                 shared_scale=True,
             )
         ],
-        coord=polar(),
+        coord=Coord.polar(),
     )
 
 

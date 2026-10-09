@@ -11,8 +11,8 @@ import {
   group,
   petal,
   stackX,
-  polar,
   v,
+  Coord,
 } from "../../src/lib";
 import { color } from "../../src/color";
 
@@ -69,7 +69,7 @@ export const Default: StoryObj<Args> = {
         .mark(((d: any[]) =>
           // A spread on y reads top-down: the flower above its stem.
           spread({ dir: "y", alignment: "middle", spacing: -FLOWER_RADIUS }, [
-            layer({ coord: polar() }, [
+            layer({ coord: Coord.polar() }, [
               stackX(
                 {
                   h: FLOWER_RADIUS,

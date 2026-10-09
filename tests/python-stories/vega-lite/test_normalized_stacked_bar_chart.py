@@ -1,6 +1,6 @@
 """Equivalent of Bar/NormalizedStackedBarChart.stories.tsx — Vega-Lite/Normalized Stacked Bar Chart."""
 
-from gofish import chart, derive, spread, stack, rect, palette, field
+from gofish import chart, derive, spread, stack, rect, field, Color
 from vega_datasets import data as vega_data
 
 
@@ -17,7 +17,7 @@ def story_default():
     return (
         chart(
             year2000,
-            color=palette({"Female": "#675193", "Male": "#ca8861"}),
+            color=Color.palette({"Female": "#675193", "Male": "#ca8861"}),
             axes=True,
         )
         .flow(

@@ -20,7 +20,7 @@ const data = days.flatMap((day, di) =>
   }))
 );
 
-gf.chart(data, { color: gf.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]) })
+gf.chart(data, { color: gf.Color.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]) })
   .flow(gf.table({ by: { x: "hour", y: "day" }, spacing: 4 }))
   .mark(gf.rect({ fill: "value" }))
   .render(root, { w: 500, h: 300, axes: true });
@@ -29,9 +29,9 @@ gf.chart(data, { color: gf.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]) })
 :::
 
 ```python
-from gofish import chart, table, rect, gradient
+from gofish import chart, table, rect, Color
 
-chart(data, color=gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes=True).flow(
+chart(data, color=Color.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes=True).flow(
     table(by={"x": "hour", "y": "day"}, spacing=4)
 ).mark(rect(fill="value")).render(w=500, h=300)
 ```
@@ -53,7 +53,7 @@ Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
 ```python
 # Heatmap: hour on x, day on y, colored by value
-chart(data, color=gradient(["#ffffcc", "#fd8d3c", "#bd0026"])).flow(
+chart(data, color=Color.gradient(["#ffffcc", "#fd8d3c", "#bd0026"])).flow(
     table(by={"x": "hour", "y": "day"}, spacing=4)
 ).mark(rect(fill="value"))
 
@@ -67,7 +67,7 @@ chart(data).flow(table(by={"x": "col", "y": "row"}, spacing=(2, 8)))
   if you need a specific order.
 - Unlike nested [`spread`](/python/api/operators/spread) calls, `table` exposes
   ordinal axes on **both** dimensions, so axis labels render on x and y.
-- Pair `gradient()` on the chart `color` option with `fill="fieldName"` on the
+- Pair `Color.gradient()` on the chart `color` option with `fill="fieldName"` on the
   mark for heatmap coloring.
 
 ### Cell sizing

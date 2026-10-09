@@ -189,7 +189,7 @@ function leavesOf(node: GoFishNode): GoFishNode[] {
 /**
  * The timeline under `node`. `underArrangement` says an operator above has an
  * enter arrangement: a mark under one with no effect of its own enters with
- * `animation.fadeIn()`, the default #892 gives an entering mark. Every record
+ * `Animation.fadeIn()`, the default #892 gives an entering mark. Every record
  * the walk meets is checked against the clock that plays it (`checkPhases`).
  *
  * The walk runs on every render, animated or not, so a node with no record

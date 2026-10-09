@@ -26,7 +26,7 @@ import { polar } from "../ast/coordinateTransforms/polar";
 import { wavy } from "../ast/coordinateTransforms/wavy";
 import { createName, type Token } from "../ast/createName";
 import { Constraint, RelateOperand } from "../ast/constraints";
-import { palette, gradient } from "../ast/colorSchemes";
+import { palette, gradient } from "../families/color";
 import { ref } from "../ast/shapes/ref";
 import { GoFishRef } from "../ast/_ref";
 import { sealComponent } from "../ast/withGoFish";

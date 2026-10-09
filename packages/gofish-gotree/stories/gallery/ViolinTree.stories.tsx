@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar } from "gofish-graphics";
+import { rect, Coord } from "gofish-graphics";
 import { combine, byDepth, mount, sampleTree } from "./_shared";
 
 // GoTree gallery port — ViolinTree (polar nested bands, no links).
@@ -81,7 +81,7 @@ export const ViolinTree: StoryObj = {
           x: { kind: "distribute", spacing: LEAF_THETA, anchor: "middle" },
           y: { kind: "distribute", spacing: 0, anchor: "middle" },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       { w: 520, h: 520 }
     ),

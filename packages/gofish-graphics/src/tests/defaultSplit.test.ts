@@ -36,6 +36,7 @@ const {
   line,
   circle,
   selectAll,
+  Curve,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -513,7 +514,7 @@ async function main() {
         chart(rows, { w: 200, h: 200 })
           .flow(spread({ by, dir: "x", spacing: 40 }), scatter({ y: "v" }))
           .mark(circle({ r: 3 }))
-          .layer(line({ curve: "monotone" })),
+          .layer(line({ curve: Curve.monotone() })),
         { w: 200, h: 200 }
       );
     const error = await expectThrows(() => smooth((d: any) => d.date.y));

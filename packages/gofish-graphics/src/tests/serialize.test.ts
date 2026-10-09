@@ -30,8 +30,6 @@ const {
   text,
   layer,
   pack,
-  circles,
-  jitter,
   derive,
   join,
   log,
@@ -40,6 +38,7 @@ const {
   datum,
   literal,
   Serialize,
+  Overlap,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -323,7 +322,7 @@ async function main() {
         scatter({
           x: "v",
           alignment: "middle",
-          overlap: jitter(),
+          overlap: Overlap.jitter(),
         })
       )
       .mark(circle({ r: 3 }));
@@ -944,7 +943,7 @@ async function main() {
   // fromJSON rebuilds it through pack's `(opts, marks)` overload.
   {
     const c = chart([{ a: 1 }]).mark(
-      pack({ method: circles() }, [
+      pack({}, [
         circle({ r: 10 }),
         pack({}, [circle({ r: 4 }), circle({ r: 3 })]),
       ])
@@ -955,8 +954,8 @@ async function main() {
     check("combinator pack emits", mark.type === "pack");
     check("combinator pack is flagged", mark.__combinator === true);
     check(
-      "combinator pack keeps method",
-      mark.options?.method?.kind === "circles"
+      "combinator pack has no method",
+      mark.options?.method === undefined
     );
     check(
       "nested combinator pack is flagged",
