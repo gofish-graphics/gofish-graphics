@@ -1665,9 +1665,14 @@ export class GoFishNode {
 
     if (!this.intrinsicDims) this.intrinsicDims = [];
     // Store only the local box (min, size); the `dims` getter derives center/max.
+    // The local min stays where the node's own layout put it: a container's
+    // children are placed in its local frame, so moving that frame's min to 0
+    // would draw them off the box by the old min (a spread pinned across a
+    // cell on an upward y drew its bars one cell away). The translate is
+    // read as `absMin − localMin` either way.
     this.intrinsicDims[dir] = {
       ...(this.intrinsicDims[dir] ?? {}),
-      min: 0,
+      min: this.intrinsicDims[dir]?.min ?? 0,
       size,
     };
     this._geometry = undefined;

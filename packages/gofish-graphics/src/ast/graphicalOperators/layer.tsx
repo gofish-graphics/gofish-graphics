@@ -75,6 +75,7 @@ import {
   buildChildScalePlan,
   buildLayerConstraintLayoutPlan,
   buildPositionScalePlan,
+  buildSpanProposalMap,
   childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
@@ -647,6 +648,11 @@ export const layer = createNodeOperatorSequential(
             node.key ?? node.type
           );
           const effectivePosScales = positionScalePlan.effectivePosScales;
+          // A child pinned across an interval is laid out in that span.
+          const spanByName = buildSpanProposalMap(
+            node.constraints,
+            effectivePosScales
+          );
 
           // Where a child's baseline goes on each axis (#773), by the one
           // seating rule (`seatInScope`) in this layer's frame. A free child
@@ -743,7 +749,8 @@ export const layer = createNodeOperatorSequential(
                 childName,
                 size,
                 gridCellByName,
-                sliceByName
+                sliceByName,
+                spanByName
               ),
               layoutPlan.nestPlan?.byDerived.get(i),
               childPlaceables
