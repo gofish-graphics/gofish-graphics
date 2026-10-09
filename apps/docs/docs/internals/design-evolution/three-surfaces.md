@@ -69,9 +69,10 @@ Connectors are no longer a surface of their own. The standalone `connect` /
 a connector is now the _combinator form_ of an ordinary mark — `line` (center)
 or `ribbon` (edge band, formerly the `area` mark) — invoked with an explicit
 array of `ref(...)` children. The shape of the drawn path is a single `curve`
-key, backed by the pluggable router registry that `lib.ts` re-exports from
-`ast/graphicalOperators/routers` (`registerRoute` / `getRoute` /
-`resolveCurve`). Every curve is a call in the `Curve` family:
+key, backed by the internal router registry in
+`ast/graphicalOperators/routers`, which `lib.ts` does not export: the curve
+family is closed, like `Tile` and `Overlap` (user-defined strategies are
+designed in #1101). Every curve is a call in the `Curve` family:
 `Curve.linear()`, `Curve.bezier()`, `Curve.orthogonal()`, `Curve.arc()`,
 `Curve.perfectArrows()`, and the curves that thread a whole run,
 `Curve.step()`, `Curve.monotone()`, `Curve.smooth()` and

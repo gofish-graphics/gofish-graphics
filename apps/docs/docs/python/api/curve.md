@@ -36,8 +36,10 @@ Curve.perfect_arrows(bow=None, stretch=None, stretch_min=None, stretch_max=None,
 ```
 
 Every member is a function call, including the ones that take no options. Each
-returns a plain dict, `{"type": ..., "options": ...}`, which is the same value
-the JavaScript `Curve` family makes.
+returns a plain dict, `{"kind": ..., **params}`, with snake_case param keys,
+for example `{"kind": "perfectArrows", "pad_end": 4}`. The `curve` option
+renames the keys, so the chart carries the same value the JavaScript `Curve`
+family makes, `{"kind": "perfectArrows", "padEnd": 4}`.
 
 The family is also a module of its own:
 

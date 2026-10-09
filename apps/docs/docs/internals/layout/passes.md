@@ -487,9 +487,12 @@ turned into the side in a frame's axis order by `orientSide("start" | "end",
 direction)`. Geometry a node keeps for its own `lower` (a connector's paths, an
 arrow, a polygon's vertices, a tween's run) is in its axis order too; `lower`
 receives one node-local map, `local` (`p ↦ translate + (x, direction·y)`), the one
-place that geometry is reflected. A node that runs a pixel-native algorithm
-(the treemap's d3 tiling) reads its y from its frame's start edge
-(`fromFrameStart`), where it places its children.
+place that geometry is reflected. A node that runs a pixel-native algorithm (the
+treemap's d3 tiling, pack's `packSiblings`) places its children in its own axis
+order like any operator, with no reflection of its own. A treemap or pack with no
+data-driven size has no y axis, so it takes its frame's direction: in free space
+d3's first tile lands at the top left, as in d3; in a chart whose y grows upward
+it lands at the bottom left.
 
 Seating a child at its baseline is the one place a boundary between two directions
 needs more than the reflection: a child whose y grows upward inside a layer that

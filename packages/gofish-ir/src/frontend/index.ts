@@ -1,6 +1,7 @@
 export * from "./schema.js";
 export {
   validate,
+  checkStrategy,
   AXIS_INTERVAL_KEYS,
   isAxisInterval,
   type ValidationResult,
@@ -32,6 +33,7 @@ export {
   COMBINATOR_MARKS,
   COORDS,
   OPTION_TYPES,
+  STRATEGIES,
   CHART_OPTIONS,
   MARK_BASE_FIELDS,
   OPERATOR_BASE_FIELDS,
@@ -55,4 +57,8 @@ export {
   type ConstructKind,
   type NodeKind,
   type ConstructDescriptor,
+  type StrategyFamily,
+  type StrategyFamilyName,
+  type StrategyKind,
+  type StrategyPreset,
 } from "./descriptors.js";

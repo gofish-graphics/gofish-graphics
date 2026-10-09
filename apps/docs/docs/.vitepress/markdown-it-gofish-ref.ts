@@ -42,6 +42,7 @@ import {
   LEAF_MARKS,
   OPERATORS,
   SHARED_FIELD_GROUPS,
+  STRATEGIES,
   pyKwarg,
   resolveFields,
   type ConstructDescriptor,
@@ -161,8 +162,11 @@ function pyType(f: FieldType): string {
     case "object":
     case "record":
       return "dict";
-    case "any":
     case "ref":
+      // A strategy family is a module of factories in Python too
+      // (`Tile.squarify()`), so its name reads the same in both languages.
+      return f.name in STRATEGIES ? f.name : "Any";
+    case "any":
       return "Any";
   }
 }

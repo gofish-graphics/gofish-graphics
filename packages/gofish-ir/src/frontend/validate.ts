@@ -30,13 +30,18 @@ import {
   type Origin,
   type RefMarkIR,
 } from "./schema.js";
-import { isNonFiniteNumberIR, isTaggedInfinity } from "./nonFinite.js";
+import {
+  decodeNonFinite,
+  isNonFiniteNumberIR,
+  isTaggedInfinity,
+} from "./nonFinite.js";
 import {
   LABEL_OPTIONS,
   OPTION_TYPES,
   acceptedFields,
   type FieldSpec,
   type FieldType,
+  type StrategyFamilyName,
 } from "./descriptors.js";
 
 /**
@@ -378,9 +383,19 @@ function walkFieldType(
       if (typeof value !== "string")
         push(path, `expected string, got ${typeNameOf(value)}`);
       return;
-    case "number":
-      if (!isIRNumber(value)) push(path, notANumber(value));
+    case "number": {
+      if (!isIRNumber(value)) {
+        push(path, notANumber(value));
+        return;
+      }
+      const n =
+        typeof value === "number" ? value : (decodeNonFinite(value) as number);
+      if (type.finite && !Number.isFinite(n))
+        push(path, `expected a finite number, got ${n}`);
+      else if (type.min !== undefined && !(n >= type.min))
+        push(path, `expected a number of at least ${type.min}, got ${n}`);
       return;
+    }
     case "boolean":
       if (typeof value !== "boolean")
         push(path, `expected boolean, got ${typeNameOf(value)}`);
@@ -422,6 +437,27 @@ function walkFieldType(
       return;
     }
     case "union": {
+      // A tagged union (every branch an object whose `kind` is a literal):
+      // the value's `kind` picks the one branch to check it against, as the
+      // Python generator's `_to_wire` does, so an unknown kind and a bad
+      // param each get their own message.
+      const tags = taggedBranches(type.options);
+      if (tags !== null) {
+        if (!isObject(value)) {
+          push(path, `expected object, got ${typeNameOf(value)}`);
+          return;
+        }
+        const branch = tags.get(value.kind as string);
+        if (branch === undefined) {
+          push(
+            `${path}.kind`,
+            `unknown kind ${JSON.stringify(value.kind)}; expected one of ${[...tags.keys()].map((k) => JSON.stringify(k)).join(", ")}`
+          );
+          return;
+        }
+        walkFieldType(branch, value, path, ctx, push);
+        return;
+      }
       // Valid if ANY branch matches cleanly (no errors raised by that branch).
       for (const branch of type.options) {
         const probe: Context = {
@@ -496,6 +532,55 @@ function walkFieldType(
         }
       }
       return;
+  }
+}
+
+/** The branches of a tagged union by their `kind`: every branch an object
+ *  whose required `kind` field is a string literal, no two alike. Null for
+ *  any other union. */
+function taggedBranches(
+  options: readonly FieldType[]
+): Map<string, FieldType> | null {
+  const byKind = new Map<string, FieldType>();
+  for (const branch of options) {
+    if (branch.kind !== "object") return null;
+    const tag = branch.fields.kind;
+    if (
+      tag === undefined ||
+      !tag.required ||
+      tag.type.kind !== "literal" ||
+      typeof tag.type.value !== "string" ||
+      byKind.has(tag.type.value)
+    )
+      return null;
+    byKind.set(tag.type.value, branch);
+  }
+  return byKind;
+}
+
+/**
+ * Check a strategy against its family in `STRATEGIES`: a known `kind`, and
+ * only that kind's params, each of its declared type. Throws the first
+ * problem, naming `where` the strategy was written
+ * (`"treemap({ tile })"`). This is the one check a strategy gets on the JS
+ * side, wherever it came from (a family factory, a hand-written object, or
+ * Python IR); the validator runs the same walk over a whole document.
+ */
+export function checkStrategy(
+  family: StrategyFamilyName,
+  value: unknown,
+  where: string
+): void {
+  const errors: ValidationError[] = [];
+  const ctx: Context = { strict: true, errors, warnings: [] };
+  walkFieldType(OPTION_TYPES[family].type, value, where, ctx, (path, message) =>
+    errors.push({ path, message })
+  );
+  if (errors.length > 0) {
+    const [{ path, message }] = errors;
+    throw new Error(
+      `[gofish] ${path}: ${message}. Make one with a call in the ${family} family.`
+    );
   }
 }
 

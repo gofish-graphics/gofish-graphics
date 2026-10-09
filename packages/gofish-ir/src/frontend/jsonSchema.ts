@@ -41,7 +41,12 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
     case "string":
       return { type: "string" };
     case "number":
-      return { $ref: "#/$defs/Number" };
+      // A finite number has no tagged form (`nonFinite.ts`), so it is a plain
+      // JSON number; `minimum` constrains only the number, not the tag.
+      return {
+        ...(type.finite ? { type: "number" } : { $ref: "#/$defs/Number" }),
+        ...(type.min !== undefined ? { minimum: type.min } : {}),
+      };
     case "boolean":
       return { type: "boolean" };
     case "any":

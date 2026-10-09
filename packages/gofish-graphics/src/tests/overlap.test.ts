@@ -187,16 +187,19 @@ console.log("# separate(): strategy objects");
     JSON.stringify(separate({ padding: 2 })) ===
       '{"kind":"separate","padding":2}'
   );
+  // A strategy is checked against the STRATEGIES table where scatter reads
+  // it (`resolveOverlap`), whoever made it.
   check(
     "a negative padding throws",
-    (await errorOf(() => separate({ padding: -1 })))?.includes("padding") ===
-      true
+    (
+      await errorOf(() => resolveOverlap(separate({ padding: -1 }), [], "middle"))
+    )?.includes("scatter({ overlap }).padding") === true
   );
   check(
     "an unknown kind throws",
     (
       await errorOf(() => resolveOverlap({ kind: "nope" } as any, [], "middle"))
-    )?.includes("unknown strategy") === true
+    )?.includes('unknown kind "nope"') === true
   );
 }
 
@@ -531,13 +534,16 @@ console.log("# noise(), sina(), jitter(): strategy objects");
   check(
     "options override the wrapper defaults",
     JSON.stringify(sina({ smoothing: 3, randomness: "quasi" })) ===
-      '{"kind":"noise","randomness":"quasi","smoothing":3}' &&
+      '{"kind":"noise","smoothing":3,"randomness":"quasi"}' &&
       jitter({ randomness: "blue" }).randomness === "blue"
   );
+  /** The error resolving `strategy` throws, if any. */
+  const resolveError = (strategy: any) =>
+    errorOf(() => resolveOverlap(strategy, [], "middle"));
   check(
-    "an unknown randomness throws, naming the factory called",
-    (await errorOf(() => sina({ randomness: "pink" as any })))?.includes(
-      "sina: randomness"
+    "an unknown randomness throws, naming the option",
+    (await resolveError(sina({ randomness: "pink" as any })))?.includes(
+      "scatter({ overlap }).randomness"
     ) === true
   );
   check(
@@ -546,18 +552,18 @@ console.log("# noise(), sina(), jitter(): strategy objects");
   );
   check(
     "a negative smoothing throws",
-    (await errorOf(() => noise({ smoothing: -1 })))?.includes("smoothing") ===
+    (await resolveError(noise({ smoothing: -1 })))?.includes("smoothing") ===
       true
   );
   check(
     "a NaN smoothing throws",
-    (await errorOf(() => noise({ smoothing: NaN })))?.includes("smoothing") ===
+    (await resolveError(noise({ smoothing: NaN })))?.includes("smoothing") ===
       true
   );
   check(
     "an unknown smoothing name throws",
-    (await errorOf(() => noise({ smoothing: "scott" as any })))?.includes(
-      "silverman"
+    (await resolveError(noise({ smoothing: "scott" as any })))?.includes(
+      "smoothing"
     ) === true
   );
   check(

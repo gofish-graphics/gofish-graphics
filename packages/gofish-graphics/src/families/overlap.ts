@@ -4,48 +4,38 @@
  * `lib.ts` binds this module as `Overlap` (`Overlap.separate({ padding: 1 })`),
  * and `gofish-graphics/overlap` exports the same module, so
  * `import { separate } from "gofish-graphics/overlap"` reaches the same
- * function. A strategy is a plain object made by a function call, so it
- * crosses the Python bridge as IR. `kind` names the strategy. `sina()` and
- * `jitter()` are `noise()` with other defaults filled in, so their objects
- * have kind `"noise"`. The placement itself is in
- * `ast/graphicalOperators/overlap.ts`.
+ * function. A strategy is a plain object made by a function call,
+ * `{ kind, ...params }`, and that object is also its wire form, so it crosses
+ * the Python bridge as IR. `kind` names the strategy. `sina()` and `jitter()`
+ * are `noise()` with other params preset, so their objects have kind
+ * `"noise"`. The kinds, their params and the presets are declared once, in
+ * gofish-ir's `STRATEGIES` table, which checks a strategy where `scatter`
+ * reads it. The placement itself is in `ast/graphicalOperators/overlap.ts`.
  */
-
-/** `separate()`: dots kept apart. See {@link separate}. */
-export type SeparateStrategy = { kind: "separate"; padding?: number };
-
-/** How `noise()` draws each dot's offset inside the outline. */
-export type NoiseRandomness = "blue" | "quasi" | "uniform";
-
-/**
- * `noise()`'s `smoothing`: the bandwidth of each dot's bell, in data units of
- * the data axis (0 or more; 0, the default, is no smoothing beyond the dots'
- * own size); `Infinity` for a flat band; or `"silverman"` to compute it from
- * the data (Silverman's rule of thumb, as `sina()` does).
- */
-export type NoiseSmoothing = number | "silverman";
-
-/** The options `noise()`, `sina()` and `jitter()` share. */
-export type NoiseOptions = {
-  randomness?: NoiseRandomness;
-  smoothing?: NoiseSmoothing;
-  padding?: number;
-  seed?: number;
-};
-
-/** `noise()`: dots spread inside a density outline. See {@link noise}.
- *  `sina()` and `jitter()` make this same object with other defaults. */
-export type NoiseStrategy = { kind: "noise" } & NoiseOptions;
+import type { Frontend } from "gofish-ir";
 
 /** Every built-in overlap strategy: the value of `scatter`'s `overlap`. */
-export type Overlap = SeparateStrategy | NoiseStrategy;
+export type Overlap = Frontend.OverlapIR;
 
-const checkPadding = (name: string, padding: number | undefined) => {
-  if (padding !== undefined && !(Number.isFinite(padding) && padding >= 0))
-    throw new Error(
-      `[gofish] ${name}: padding must be a non-negative number, got ${padding}`
-    );
-};
+/** `separate()`: dots kept apart. See {@link separate}. */
+export type SeparateStrategy = Extract<Overlap, { kind: "separate" }>;
+
+/** `noise()`: dots spread inside a density outline. See {@link noise}.
+ *  `sina()` and `jitter()` make this same object with other params preset. */
+export type NoiseStrategy = Extract<Overlap, { kind: "noise" }>;
+
+/** The options `noise()`, `sina()` and `jitter()` share. */
+export type NoiseOptions = Omit<NoiseStrategy, "kind">;
+
+/** How `noise()` draws each dot's offset inside the outline. */
+export type NoiseRandomness = NonNullable<NoiseOptions["randomness"]>;
+
+/** The options that were given: an option left `undefined` does not
+ *  override a preset. */
+const given = <T extends object>(opts: T): Partial<T> =>
+  Object.fromEntries(
+    Object.entries(opts).filter(([, v]) => v !== undefined)
+  ) as Partial<T>;
 
 /**
  * Keep dots apart: each dot keeps its position on the data axis and moves
@@ -61,42 +51,10 @@ const checkPadding = (name: string, padding: number | undefined) => {
  *
  * @param padding Pixels kept between neighboring dots. Default 0.
  */
-export function separate(opts: { padding?: number } = {}): SeparateStrategy {
-  const { padding } = opts;
-  checkPadding("separate", padding);
-  return padding === undefined
-    ? { kind: "separate" }
-    : { kind: "separate", padding };
-}
-
-const RANDOMNESS: readonly NoiseRandomness[] = ["blue", "quasi", "uniform"];
-
-/** Check the options and build the strategy object; `name` is the factory
- *  the user called, for the error messages. */
-function makeNoise(name: string, opts: NoiseOptions): NoiseStrategy {
-  const { randomness, smoothing, padding, seed } = opts;
-  if (randomness !== undefined && !RANDOMNESS.includes(randomness))
-    throw new Error(
-      `[gofish] ${name}: randomness must be one of ${RANDOMNESS.map((r) => `"${r}"`).join(", ")}, got ${JSON.stringify(randomness)}`
-    );
-  if (
-    smoothing !== undefined &&
-    smoothing !== "silverman" &&
-    !(typeof smoothing === "number" && smoothing >= 0)
-  )
-    throw new Error(
-      `[gofish] ${name}: smoothing must be a non-negative number of data units, ` +
-        `Infinity, or "silverman", got ${JSON.stringify(smoothing)}`
-    );
-  checkPadding(name, padding);
-  if (seed !== undefined && !Number.isFinite(seed))
-    throw new Error(`[gofish] ${name}: seed must be a number, got ${seed}`);
-  const out: NoiseStrategy = { kind: "noise" };
-  if (randomness !== undefined) out.randomness = randomness;
-  if (smoothing !== undefined) out.smoothing = smoothing;
-  if (padding !== undefined) out.padding = padding;
-  if (seed !== undefined) out.seed = seed;
-  return out;
+export function separate(
+  opts: Omit<SeparateStrategy, "kind"> = {}
+): SeparateStrategy {
+  return { kind: "separate", ...given(opts) };
 }
 
 /**
@@ -126,7 +84,7 @@ function makeNoise(name: string, opts: NoiseOptions): NoiseStrategy {
  *   same every time.
  */
 export function noise(opts: NoiseOptions = {}): NoiseStrategy {
-  return makeNoise("noise", opts);
+  return { kind: "noise", ...given(opts) };
 }
 
 /**
@@ -137,10 +95,7 @@ export function noise(opts: NoiseOptions = {}): NoiseStrategy {
  * own. Any option overrides the default.
  */
 export function sina(opts: NoiseOptions = {}): NoiseStrategy {
-  return makeNoise("sina", {
-    ...opts,
-    smoothing: opts.smoothing ?? "silverman",
-  });
+  return { kind: "noise", smoothing: "silverman", ...given(opts) };
 }
 
 /**
@@ -149,9 +104,10 @@ export function sina(opts: NoiseOptions = {}): NoiseStrategy {
  * default.
  */
 export function jitter(opts: NoiseOptions = {}): NoiseStrategy {
-  return makeNoise("jitter", {
-    ...opts,
-    randomness: opts.randomness ?? "uniform",
-    smoothing: opts.smoothing ?? Infinity,
-  });
+  return {
+    kind: "noise",
+    randomness: "uniform",
+    smoothing: Infinity,
+    ...given(opts),
+  };
 }
