@@ -145,11 +145,6 @@ omit `size`).
 - the **absolutes alone exceed the source extent** (the fixed claims don't fit);
 - there are `datum()` weights but **no remainder is left** for them (the
   absolutes already consume the whole source);
-- two `datum()` entries carry **different, both-defined measure tags**
-  (`datum(v, measure)`) — an incompatible-units error. Untagged weights are
-  permissive and unify with anything; this reuses the same measure unification
-  as the underlying-space type system
-  ([#527](https://github.com/joshpoll/gofish/issues/527)).
 
 ## inset
 

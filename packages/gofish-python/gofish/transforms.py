@@ -161,12 +161,13 @@ def bin(
         def binner(data: List[dict]) -> List[dict]:
             return _run_bin(data, field_name, thresholds)
 
-        # The bin edges (`start`/`end`/`size`) are still in the SOURCE field's
-        # units, not the literal column names "start"/"end"; `count` is a count.
+        # The bin edges (`start`/`end`/`size`) are amounts of the SOURCE
+        # field's quantity, not of the columns "start"/"end": they title the
+        # axis as the source does and share its unit; `count` is a count.
         # Mirror the JS bin's column types (`HasUnit`). They can't ride the
         # data rows across the derive RPC bridge, so `derive` puts them in the
         # operator's `schema` (see `derive` and serialize/registry.ts).
-        edge = {"HasUnit": {"unit": field_name}}
+        edge = {"HasUnit": {"quantity": field_name}}
         binner._gofish_column_types = {
             "start": edge,
             "end": edge,

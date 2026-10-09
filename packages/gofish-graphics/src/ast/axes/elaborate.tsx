@@ -29,7 +29,8 @@ import {
   axisOver,
   niceContinuous,
   originIs,
-  spaceMeasure,
+  spaceTitle,
+  spaceCalendar,
   axisTickPartition,
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
@@ -601,7 +602,7 @@ function elaborateTimeAxis(
   side: "start" | "end"
 ): AxisElaboration {
   const [lo, hi] = nice;
-  const zone = space.calendar!.zone;
+  const zone = spaceCalendar(space)!.zone;
   const rows = ticks.rows ?? defaultTimeRows(axisTickPartition(space, ticks));
   const labels = rows.map((row) => rowLabels(row, lo, hi, zone));
 
@@ -735,7 +736,7 @@ function elaborateOrdinalAxis(
       rotate: labelRotation?.rotate,
       textAnchor: labelRotation?.textAnchor,
     }).name(lName(i));
-    label.axisLabel = { dim, kind: "ordinal", tier, field: space.measure };
+    label.axisLabel = { dim, kind: "ordinal", tier, field: spaceTitle(space) };
     nodes.push(label);
     nodes.push((ref(keyMap[k]) as any).name(rName(i)) as GoFishNode);
   });
@@ -929,7 +930,7 @@ function elaborationsFor(
     const crossFloor = floors[cross(dim)];
     const kind = axisOver(s);
     const ticks = ticksFor(dim);
-    if (kind === "absolute" && isCONTINUOUS(s) && s.calendar) {
+    if (kind === "absolute" && isCONTINUOUS(s) && spaceCalendar(s)) {
       const e = elaborateTimeAxis(
         dim,
         s,
@@ -1103,8 +1104,8 @@ export async function elaborateChrome(
     tierCounts,
     childTimeAxes
   );
-  // A title names an axis this node draws. The measure is read off the
-  // node's own space, which elaboration has not re-resolved yet.
+  // A title names an axis this node draws. It is read off the node's own
+  // space (`spaceTitle`), which elaboration has not re-resolved yet.
   const request = node._chromeRequest;
   node._chromeRequest = undefined;
   const titles = ([0, 1] as const).map((dim) =>
@@ -1112,7 +1113,7 @@ export async function elaborateChrome(
       ? chartAxisTitle(
           request.axes,
           dim,
-          spaceMeasure(node._underlyingSpace?.[dim])
+          spaceTitle(node._underlyingSpace?.[dim])
         )
       : undefined
   ) as [string | undefined, string | undefined];
@@ -1219,19 +1220,19 @@ export const TITLE_COLOR = "gray";
 
 /** The title of the axis on `dim` from the chart's `axes` options: it is
  *  titled only when `axes` turns it on (`true`, or a dim's entry that is not
- *  `false`); its title is then {@link axisTitle}'s, with the axis's measure
- *  as the inferred name. */
+ *  `false`); its title is then {@link axisTitle}'s, with the axis's space's
+ *  title (`spaceTitle`) as the inferred name. */
 function chartAxisTitle(
   axes: AxesOptions | undefined,
   dim: 0 | 1,
-  measure: string | undefined
+  inferred: string | undefined
 ): string | undefined {
-  if (axes === true) return measure;
+  if (axes === true) return inferred;
   const opt =
     axes && typeof axes === "object" ? axes[dim === 0 ? "x" : "y"] : undefined;
   return opt === undefined || opt === false
     ? undefined
-    : axisTitle(opt, measure);
+    : axisTitle(opt, inferred);
 }
 
 /** The title of a drawn axis from its `axes` option: the option's `title`,

@@ -8,7 +8,6 @@ import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
 import {
-  getMeasure,
   getValue,
   isAesthetic,
   isValue,
@@ -34,12 +33,10 @@ import { computeAesthetic, computeSize } from "../../util";
 import {
   UNDEFINED,
   UnderlyingSpace,
-  mergeMeasures,
+  joinUnits,
   CONTINUOUS,
-  mergeCalendars,
-  positionCalendar,
-  withCalendar,
   magnitude,
+  valueUnits,
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
@@ -110,16 +107,13 @@ export const Rect = ({
           const center = centerOf(d);
           if (center !== undefined) return glyphAxis(center, d.size);
           if (isValue(d.min) && isValue(d.max)) {
-            return withCalendar(
-              CONTINUOUS(
-                interval(getValue(d.min)!, getValue(d.max)!),
-                "pinned",
-                mergeMeasures(getMeasure(d.min), getMeasure(d.max), {
-                  axis,
-                  where: "between a rect's two ends",
-                })
-              ),
-              mergeCalendars([positionCalendar(d.min), positionCalendar(d.max)])
+            return CONTINUOUS(
+              interval(getValue(d.min)!, getValue(d.max)!),
+              "pinned",
+              joinUnits(valueUnits(d.min), valueUnits(d.max), true, {
+                axis,
+                where: "between a rect's two ends",
+              })
             );
           }
           if (!isValue(d.min) && !isValue(d.size)) {
@@ -139,9 +133,10 @@ export const Rect = ({
           // has position (data-driven), maybe with literal/no size → POSITION.
           const min = isValue(d.min) ? getValue(d.min)! : 0;
           const size = isValue(d.size) ? getValue(d.size)! : 0;
-          return withCalendar(
-            CONTINUOUS(interval(min, min + size), "pinned", getMeasure(d.min)),
-            positionCalendar(d.min)
+          return CONTINUOUS(
+            interval(min, min + size),
+            "pinned",
+            valueUnits(d.min)
           );
         };
 

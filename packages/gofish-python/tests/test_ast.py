@@ -8,6 +8,7 @@ from gofish import (
     spread,
     stack,
     derive,
+    bin,
     compose,
     field,
     filter,
@@ -665,6 +666,22 @@ class TestSchema:
 
     def test_ordered_is_has_order(self):
         assert Schema.ordered(["a", "b"]) == {"HasOrder": {"levels": ["a", "b"]}}
+
+    def test_unit_is_has_unit(self):
+        assert Schema.unit("USD") == {"HasUnit": {"unit": "USD"}}
+        with pytest.raises(TypeError):
+            Schema.unit(3)  # type: ignore[arg-type]
+
+    def test_field_takes_no_unit(self):
+        # A column's unit lives in the schema, not on a channel.
+        assert field("x") == {"type": "field", "name": "x"}
+        with pytest.raises(TypeError):
+            field("x", "plane")  # type: ignore[call-arg]
+
+    def test_bin_edges_are_amounts_of_the_source_quantity(self):
+        types = bin("flipper")._gofish_column_types
+        assert types["start"] == {"HasUnit": {"quantity": "flipper"}}
+        assert types["count"] == {"HasUnit": {"unit": "count"}}
 
     def test_diverging_defaults_the_midpoint_to_half_the_levels(self):
         assert Schema.ordered(["a", "b"]).diverging() == {

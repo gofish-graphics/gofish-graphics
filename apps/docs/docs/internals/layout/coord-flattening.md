@@ -254,7 +254,7 @@ pixel box, and an explicit `w`/`h` sizes that box as it sizes a layer's (a
 radial axis is drawn along the θ = 0 ray, and its title continues the ray
 past its outer end (past the last tick), reading along the ray, so it never
 sits on top of the data. The title is the `axes` option's `y` title,
-else the radial space's measure, else the space's own name for the axis (`r`)
+else the radial space's title, else the space's own name for the axis (`r`)
 (#621). There is deliberately no angular title by default: the ring's tick
 labels say what goes around, and a circle has no single natural place for a
 title. A coordinate space owns no cartesian axes, so it gets no second,

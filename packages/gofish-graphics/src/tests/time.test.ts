@@ -35,11 +35,18 @@ import {
 import {
   CONTINUOUS,
   niceContinuous,
-  withCalendar,
+  type CONTINUOUS_TYPE,
 } from "../ast/underlyingSpace";
 import { interval } from "../util/interval";
 
-const { chart, scatter, spread, line, circle, Schema } = GoFish as any;
+/** `space` over instants read on `calendar`: a time column's measure. */
+const withCalendar = (
+  space: CONTINUOUS_TYPE,
+  calendar: { zone: string }
+): CONTINUOUS_TYPE => ({ ...space, measure: { titles: ["t"], calendar } });
+
+const { chart, scatter, spread, stack, rect, field, line, circle, Schema } =
+  GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
 
 declare const process: { exit(code: number): never };
@@ -920,6 +927,23 @@ async function main() {
       .flow(scatter({ by: "date", x: "date", y: "price" }))
       .mark(line())
       .toDisplayList({ w: 560, h: 200 });
+    // A count over a time column is a count, not an instant: a stack of
+    // `field("date").count()` bars keeps a numeric axis.
+    const counts = textsOf(
+      await chart(
+        prices.map((p, i) => ({ ...p, month: p.date.slice(0, 7), k: i % 2 })),
+        { schema: { date: Schema.time() }, axes: true }
+      )
+        .flow(spread({ by: "month", dir: "x" }), stack({ by: "k", dir: "y" }))
+        .mark(rect({ h: field("date").count() }))
+        .toDisplayList({ w: 560, h: 200 })
+    ).map((t) => t.text);
+    check(
+      "a stacked count over a time column has a numeric axis",
+      !counts.some((w) => /AM|PM/.test(w)) && counts.includes("0"),
+      counts.join(" ")
+    );
+
     const texts = textsOf(dl);
     const words = texts.map((t) => t.text);
     check(

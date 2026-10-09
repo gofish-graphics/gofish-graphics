@@ -449,7 +449,7 @@ async function main() {
     const typed = await applySchema(binned, { count: Schema.ordered([0, 1, 2]) });
     check(
       "bin()'s unit survives a schema for another column",
-      getColumnTypes(typed)?.start?.HasUnit?.unit === "x",
+      getColumnTypes(typed)?.start?.HasUnit?.quantity === "x",
       JSON.stringify(getColumnTypes(typed))
     );
     check(

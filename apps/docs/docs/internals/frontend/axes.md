@@ -305,7 +305,7 @@ spacing along the track. `"auto"` inside a per-tier array is an error.
 
 **Warning when categories go unlabeled.** A hidden category row is fine when a
 legend still names its categories. Ordinal labels carry the field their row
-labels (`axisLabel.field`, the ordinal space's measure), and `layout()` reports
+labels (`axisLabel.field`, the ordinal space's title), and `layout()` reports
 the fields the rendered legend shows (`LayoutData.legendFields`, read off the
 color scale's recorded fields; see
 [Color Scale Resolution](/internals/layout/color-scales)). After the choice,
@@ -474,7 +474,7 @@ siblings:
 - A node whose own space collapsed to `UNDEFINED` on `dim` computes
   `sharedSelfScaledChildSignature`: if **every** direct child is self-scaled on
   `dim` with an **identical** signature (same `dataInterval` + `origin` +
-  `measure` — at least two children, so there's an actual sibling group), the
+  unit (`spaceUnit`) + titles + time zone — at least two children, so there's an actual sibling group), the
   node claims the axis itself, right there, instead of leaving each child to
   fend for itself. It stashes the representative shared space onto
   `GoFishNode.hoistedAxisSpace` (elaboration reads this as a fallback wherever
@@ -514,14 +514,15 @@ elaborated axis share a coordinate frame.
 
 A title is a ring of the chrome of the node that owns its axis. `elaborateChrome`
 titles each axis the node draws from the `axes` options in the node's chrome
-request (`chartAxisTitle`), with the measure of that axis, read off the node's own
+request (`chartAxisTitle`), with the title of that axis (`spaceTitle`: its
+quantity names joined with `", "`, never its unit), read off the node's own
 space before elaboration re-resolves it. That is why a grouped bar chart's x title
 names the outer grouping ("lake") and not the inner one ("species"): the inner
 axes inserted below the root would change the root's space after elaboration.
 
 The chart's `axes` options describe the chrome of the chart root, so `layout()`
 stamps them only on the root. It titles each axis the root owns that
-the options turn on, with the option's `title` or else the measure. Axes owned
+the options turn on, with the option's `title` or else the space's title. Axes owned
 deeper in the tree, e.g. the per-panel axes of the Gapminder panels, get no
 title. The mechanism does not depend on this choice. A nested chart that
 passed its own options would title its own axes through the same ring.
