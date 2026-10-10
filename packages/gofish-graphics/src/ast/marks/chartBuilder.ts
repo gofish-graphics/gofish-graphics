@@ -11,6 +11,7 @@ import { ref } from "../shapes/ref";
 import { fieldNameOf, isField } from "../data";
 import {
   splitKeyFn,
+  dataOf,
   type SplitBy,
   type InferredRelational,
   type TimeTier,
@@ -431,10 +432,11 @@ function computeDefaultBy(
     if (cls.by !== undefined) tierBys.push(cls.by);
   });
   if (tierBys.length === 0) return undefined;
-  const keyFns = tierBys.map((by) => splitKeyFn(by));
-  // Unit-separator join: a bare `join("")` would collide composite keys like
-  // ("ab","c") and ("a","bc").
-  return (r: any) => keyFns.map((fn) => fn(r)).join("\u001f");
+  // A binned tier keys a ref by its cell among the cells over the domain
+  // its rows came from (`dataOf`). Unit-separator join: a bare `join("")`
+  // would collide composite keys like ("ab","c") and ("a","bc").
+  return (r: any) =>
+    tierBys.map((by) => String(splitKeyFn(by, dataOf(r))(r))).join("\u001f");
 }
 
 /**

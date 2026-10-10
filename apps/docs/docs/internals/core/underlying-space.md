@@ -1914,14 +1914,17 @@ error rather than silently doing the wrong thing:
   rows whose value at the field is `null`/`undefined` FIRST (so it composes
   the same regardless of where it sits in the chain — every other domain op
   re-derives its grouping from these filtered rows), then it groups the
-  remaining rows (`Map.groupBy` via `splitKeyFn`, which reads a `field(...)`'s
-  `.name` exactly like a bare string) in order of first appearance, or in the
-  order of the column's levels when the data declares the column ordered
-  (`HasOrder`, see [Column types](#column-types-the-chart-schema)), then
-  applies each remaining domain op
-  in pipeline order — `bin` **replaces** the base grouping entirely (re-groups
-  the rows into the cells of its partition, one entry per cell, empty cells
-  included; see [Cells](#cells-a-binned-key)); `sort` reorders the
+  remaining rows by the key `splitKeyFn` gives each row. That reads a
+  `field(...)`'s `.name` exactly like a bare string, and the groups come in
+  order of first appearance, or in the order of the column's levels when the
+  data declares the column ordered (`HasOrder`, see
+  [Column types](#column-types-the-chart-schema)). A binned key (`bin`, or a
+  binned struct) instead keys each row by its **cell**, and its groups are the
+  cells of its partition, in order, one entry per cell, empty cells included
+  (`binEntries`; see [Cells](#cells-a-binned-key)). The same key function
+  keys a stagger's children and a connector's refs by their cell, so they
+  group the same way the split did. Then it applies each remaining domain op
+  in pipeline order: `sort` reorders the
   resulting entries, either by the group key itself or by the SUM of another
   named field over each group's rows; `reverse` reverses the entries. An
   aggregate op or `normalize` reaching a `by` slot throws — a domain op
@@ -2092,8 +2095,9 @@ struct is a type error, and the split checks the wire form. The class's own
 fields are its wire form (`{ type: "struct", fields, ops? }`), so the
 instance and the object Python sends are read the same way.
 
-`splitEntries` hands a struct key to `structEntries`, which groups the rows
-by the cells of the plane (`polygonCells.ts`). A `PolygonCell` has an id, an
+`splitEntries` groups the rows of a struct key by the cells of the plane
+(`polygonCells.ts`), by the same key function as a binned field
+(`binKey`). A `PolygonCell` has an id, an
 outline in data, and the box that holds it (its span on each axis), and no
 order. The cells are those
 of the two columns' domain, as in 1D, so every group of a nested split sees

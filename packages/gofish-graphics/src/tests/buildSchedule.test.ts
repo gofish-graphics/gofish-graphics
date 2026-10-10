@@ -234,6 +234,28 @@ console.log("# by: equal keys start together, groups in the key's order");
   }
   ok("a child with rows of two keys is an error", threw);
 
+  // A binned key groups the children by cell: a child's rows agree on their
+  // cell, not on their value (#1059).
+  const binnedChildren = [
+    { datum: [{ v: 0.2 }, { v: 0.7 }] },
+    { datum: [{ v: 2.5 }] },
+    { datum: [{ v: 1.1 }, { v: 1.9 }] },
+    { datum: [{ v: 0.4 }] },
+  ];
+  const cells = groupEntries(
+    binnedChildren,
+    rowsOf,
+    field("v").bin({ step: 1 })
+  );
+  ok(
+    "a binned key groups the children by their cell, in the cells' order",
+    JSON.stringify([...cells.keys()].map(String)) ===
+      JSON.stringify(["0", "1", "2"]) &&
+      cells.get([...cells.keys()][0])!.length === 2 &&
+      cells.get([...cells.keys()][0])![1] === binnedChildren[3],
+    JSON.stringify([...cells.entries()].map(([k, g]) => [String(k), g.length]))
+  );
+
   // Ties start together: a stagger over the grouped children.
   const clips: Clip<string>[][] = [...plain.values()].map((g) =>
     g.map((c) => leaf(400, String(children.indexOf(c))))

@@ -606,7 +606,9 @@ orders the path and never splits; every _other_ flow tier's `by` becomes one
 term of a synthesized composite split key (`ChartBuilder`'s
 `computeDefaultBy`, built from `splitKeyFn` in datumProjection.ts — the same
 projection-through-`GoFishRef.datum` helper `splitEntries` uses, so
-string/field/function `by` forms behave identically to a real operator `by`).
+string/field/function `by` forms behave identically to a real operator `by`,
+and a binned tier keys a ref by its cell over the domain its rows came
+from).
 Each operator declares how it arranges its groups (`createOperator`'s
 `arrangement` config, read back by `chartBuilder.ts`'s `classifyOperator`), so
 an operator that declares nothing simply takes no part in the rule. One

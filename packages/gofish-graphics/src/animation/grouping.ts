@@ -35,8 +35,8 @@ export function groupEntries<C>(
   // A child's key is the value its rows agree on: for a field, the same
   // projection with homogeneity collapse `by` uses on a bag of rows; for a
   // key function, its one value over the rows.
-  const rowKey = splitKeyFn(by);
-  const keyOf = (rows: unknown[]): string | number | undefined => {
+  const rowKey = splitKeyFn(by, allRows);
+  const keyOf = (rows: unknown[]): SplitKey | undefined => {
     if (typeof by !== "function") return rowKey(rows);
     const keys = new Set(rows.map(rowKey));
     return keys.size === 1 ? [...keys][0] : undefined;
