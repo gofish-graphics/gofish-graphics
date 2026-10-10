@@ -74,6 +74,38 @@ async function main() {
     );
   }
 
+  console.log("# a layer hands its region to the children it does not place");
+  {
+    const fill = Region({});
+    const dot = Ellipse({ w: 10, h: 10 });
+    const group = (await layer({}, [fill, dot])) as GoFishNode;
+    const box = placedIn(group, [
+      [10, 40],
+      [20, 70],
+    ]);
+    ok(
+      "the layer is placed in its region",
+      JSON.stringify(box) === "[[10,40],[20,70]]",
+      JSON.stringify(box)
+    );
+    // The children's boxes are in the layer's frame; add its min.
+    const abs = (n: GoFishNode) =>
+      [0, 1].map((a) => [
+        box[a][0]! + n.dims[a].min!,
+        box[a][0]! + n.dims[a].max!,
+      ]);
+    ok(
+      "a region in the layer fills the layer's region",
+      JSON.stringify(abs(fill)) === "[[10,40],[20,70]]",
+      JSON.stringify(abs(fill))
+    );
+    ok(
+      "a circle in the layer is centered in the layer's region",
+      JSON.stringify(abs(dot)) === "[[20,30],[40,50]]",
+      JSON.stringify(abs(dot))
+    );
+  }
+
   console.log("# a region draws its outline, else its box");
   {
     // A diamond in [0, 2] × [0, 2], and a box cell [2, 4] × [0, 2].

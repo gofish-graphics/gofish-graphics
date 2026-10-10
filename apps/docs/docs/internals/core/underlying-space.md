@@ -2027,9 +2027,14 @@ solve runs, so the layer takes it out of what the solve sees
 also loses each axis on which every one of its operands has a span in its
 region, since the regions placed them there.
 
-A layer passes the region it was handed on in its own frame, each span
-starting at 0 (`rebaseRegion`), and `GoFishNode.layout` places the layer
-itself in the region it was handed, as it places any node.
+A child with no region of its own gets the region the layer was handed,
+outline and all, unless the layer's constraints place it (a stack's
+children are placed by its distribute and align). So a layer of a `region`
+and a `text` as a partition's mark gives each cell to both: the region
+draws it, and the text sits at its center. A layer passes the region it was
+handed on in its own frame, each span starting at 0 (`rebaseRegion`), and
+`GoFishNode.layout` places the layer itself in the region it was handed, as
+it places any node.
 
 The region holds its cell (a `RegionCell`, cells.ts: an id, a label when it
 has one, a span per axis, and an outline when it is not a box) and the

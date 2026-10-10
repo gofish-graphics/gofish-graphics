@@ -225,17 +225,20 @@ def story_penguin_beak_voronoi():
 # hexagon's box, which is the hexagon's center.
 def story_airport_hex_counts():
     airports = _contiguous_airports()
-    key = struct(x="longitude", y="latitude").bin(Bin.hex(radius=3))
     return (
-        layer(
-            [
-                chart(airports, color=Color.gradient("blues"))
-                .flow(partition(by=key))
-                .mark(region(fill=field("iata").count(), stroke="white")),
-                chart(airports)
-                .flow(partition(by=key))
-                .mark(text(text=field("iata").count(), font_size=10)),
-            ]
+        chart(airports, color=Color.gradient("blues"))
+        .flow(
+            partition(
+                by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=3))
+            )
+        )
+        .mark(
+            layer(
+                [
+                    region(fill=field("iata").count(), stroke="white"),
+                    text(text=field("iata").count(), font_size=10),
+                ]
+            )
         ),
         {"w": 600, "h": 360, "axes": True},
     )

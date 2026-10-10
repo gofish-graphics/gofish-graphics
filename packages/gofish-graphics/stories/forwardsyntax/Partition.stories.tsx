@@ -321,8 +321,9 @@ export const PenguinBeakVoronoi: StoryObj<Args> = {
   },
 };
 
-// A text mark has a size of its own, so it sits at the center of its
-// hexagon's box, which is the hexagon's center.
+// Each hexagon is a layer of its region and its count. The layer hands the
+// hexagon it is given to both: the region draws it, and the text, which has a
+// size of its own, sits at the center of its box, the hexagon's center.
 export const AirportHexCounts: StoryObj<Args> = {
   args: { w: 600, h: 360 },
   loaders: [async () => ({ airports: await data["airports.csv"]() })],
@@ -337,17 +338,21 @@ export const AirportHexCounts: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const airports = contiguous(context.loaded.airports);
-    const key = struct({ x: "longitude", y: "latitude" }).bin(
-      Bin.hex({ radius: 3 })
-    );
-    layer([
-      chart(airports, { color: Color.gradient("blues") })
-        .flow(partition({ by: key }))
-        .mark(region({ fill: field("iata").count(), stroke: "white" })),
-      chart(airports)
-        .flow(partition({ by: key }))
-        .mark(text({ text: field("iata").count(), fontSize: 10 })),
-    ]).render(container, { w: args.w, h: args.h, axes: true });
+    chart(airports, { color: Color.gradient("blues") })
+      .flow(
+        partition({
+          by: struct({ x: "longitude", y: "latitude" }).bin(
+            Bin.hex({ radius: 3 })
+          ),
+        })
+      )
+      .mark(
+        layer([
+          region({ fill: field("iata").count(), stroke: "white" }),
+          text({ text: field("iata").count(), fontSize: 10 }),
+        ])
+      )
+      .render(container, { w: args.w, h: args.h, axes: true });
     return container;
   },
 };

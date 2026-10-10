@@ -10,7 +10,13 @@ import {
   type PositionInterval,
   type PositionRegion,
 } from "./position";
-import { rebaseRegion, type Point, type Region, type Span } from "../geometry";
+import {
+  hasSpan,
+  rebaseRegion,
+  type Point,
+  type Region,
+  type Span,
+} from "../geometry";
 import { type AxisTicks, type UnderlyingSpace } from "../underlyingSpace";
 import { niceScope, type Extent } from "../extent";
 import { sliceExtent } from "./folds";
@@ -194,6 +200,15 @@ function edgePixel(
   return pxOf(scale, getValue(edge)!) + getValueOffset(edge);
 }
 
+/** The regions a layer hands its children ({@link buildChildRegions}). */
+export type ChildRegions = {
+  /** The region of each child a `position` constraint gives a `region`. */
+  byName: Map<string, Region>;
+  /** The region every other child gets unless the layer's constraints place
+   *  it: the one the layer was given, in its own frame. */
+  passedOn: Region | undefined;
+};
+
 /**
  * The region each child of a layer gets (#1059, `geometry/region.ts`).
  *
@@ -206,8 +221,11 @@ function edgePixel(
  * space on y, so a partition inside another partition's cell gives its
  * children both cells. That is the intersection of the two regions, since
  * each one bounds a different axis.
- * A child with no region gets nothing; it is placed by the rest
- * of the layer's constraints as before.
+ *
+ * Every other child gets the region the layer was given, in the layer's
+ * frame, outline and all (`passedOn`), unless the layer's constraints place
+ * it: a `layer([region(...), text(...)])` in a hexagon gives the hexagon to
+ * both, and a stack's children are placed by its distribute and align.
  *
  * The outline is the cell's (`PositionRegion.outline`), mapped through both
  * scales (a cell of the plane: `struct({ x, y }).bin(b)`). TODO(#1059): a
@@ -221,7 +239,7 @@ export function buildChildRegions(
   constraints: readonly ConstraintSpec[],
   posScales: ConstraintPosScales,
   received: Region | undefined
-): Map<string, Region> | undefined {
+): ChildRegions {
   const cells = new Map<string, PositionRegion>();
   for (const constraint of constraints) {
     if (constraint.type !== "position" || constraint.region === undefined)
@@ -229,9 +247,8 @@ export function buildChildRegions(
     for (const ref of constraint.children)
       if (ref) cells.set(ref.name, constraint.region);
   }
-  if (cells.size === 0) return undefined;
 
-  const local = received === undefined ? undefined : rebaseRegion(received);
+  const local = hasSpan(received) ? rebaseRegion(received) : undefined;
   const byName = new Map<string, Region>();
   for (const [name, cell] of cells) {
     const spans = ([0, 1] as const).map((axis): Span | undefined => {
@@ -255,7 +272,7 @@ export function buildChildRegions(
     }
     byName.set(name, { spans, outline });
   }
-  return byName;
+  return { byName, passedOn: local };
 }
 
 /**
@@ -272,9 +289,8 @@ export function buildChildRegions(
  */
 export function placementConstraints(
   constraints: ConstraintSpec[],
-  regions: Map<string, Region> | undefined
+  regions: Map<string, Region>
 ): ConstraintSpec[] {
-  if (regions === undefined) return constraints;
   const spanned = (c: AlignConstraint, axis: 0 | 1) =>
     c.children.every((ref) => regions.get(ref.name)?.spans[axis] !== undefined);
   return constraints.flatMap((c): ConstraintSpec[] => {

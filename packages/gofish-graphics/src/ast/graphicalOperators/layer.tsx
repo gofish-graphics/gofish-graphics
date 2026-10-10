@@ -656,8 +656,10 @@ export const layer = createNodeOperatorSequential(
             effectivePosScales
           );
           // The region each child is handed (#1059): its cell, and on the
-          // other axis the region this layer was given. A child is laid out
-          // in its region's length, and places itself in it.
+          // other axis the region this layer was given; or, for a child with
+          // no cell that no constraint places, the region this layer was
+          // given. A child is laid out in its region's length, and places
+          // itself in it.
           const childRegions = buildChildRegions(
             node.constraints,
             effectivePosScales,
@@ -755,9 +757,10 @@ export const layer = createNodeOperatorSequential(
             // proposal, so nest composes with — and wins on its derived axes
             // over — any budget slice.
             const childRegion =
-              childName !== undefined
-                ? childRegions?.get(childName)
-                : undefined;
+              (childName !== undefined
+                ? childRegions.byName.get(childName)
+                : undefined) ??
+              (constrainedChildren.has(i) ? undefined : childRegions.passedOn);
             const layoutSize = applyNestLayoutProposal(
               childLayoutSizeProposal(
                 childName,
@@ -914,7 +917,7 @@ export const layer = createNodeOperatorSequential(
             }
 
             applyConstraints(
-              placementConstraints(node.constraints, childRegions),
+              placementConstraints(node.constraints, childRegions.byName),
               nameToPlaceable,
               size,
               effectivePosScales,

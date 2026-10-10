@@ -639,10 +639,13 @@ measured from the parent's origin as a `translate` is.
 - A `region` mark places itself by the region (it is its spans) and draws the
   outline as a path when there is one, else its box.
 - A `layer` builds its children's regions from the regions its `position`
-  constraints give them (`PositionRegion`) and from the region it was itself handed
-  (`buildChildRegions`). It passes its own region on in its own frame, each
-  span starting at 0 (`rebaseRegion`), and `GoFishNode.layout` centers the
-  layer in the region it was given, as it centers any node.
+  constraints give them (`PositionRegion`) and from the region it was itself
+  handed (`buildChildRegions`). A child with no region of its own gets the
+  layer's region, outline and all, unless the layer's constraints place it,
+  so `layer([region(...), text(...)])` in a hexagon gives the hexagon to
+  both. It passes its own region on in its own frame, each span starting at
+  0 (`rebaseRegion`), and `GoFishNode.layout` centers the layer in the
+  region it was given, as it centers any node.
 
 Today only `partition` makes regions (see
 [Underlying Space](/internals/core/underlying-space#partition-each-group-in-its-cell)).
