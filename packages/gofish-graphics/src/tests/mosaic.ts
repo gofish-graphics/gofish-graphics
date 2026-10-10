@@ -28,7 +28,7 @@ export const testMosaic = () =>
           w: v(_(items).sumBy("count")),
           spacing: 2,
           alignment: "middle",
-          // },
+        },
         items.toReversed().map((d) =>
           rect({
             h: v(d.count / _(items).sumBy("count")),
