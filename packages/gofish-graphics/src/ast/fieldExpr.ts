@@ -343,6 +343,12 @@ const DOMAIN_OPS = new Set(["sort", "reverse", "bin", "dropNulls"]);
 
 export const isDomainOp = (op: FieldOp): boolean => DOMAIN_OPS.has(op.op);
 
+/** The mean of `values`, or undefined when there are none. A sum or a count
+ *  over no values is 0, but a mean has no value to fall back to: a group
+ *  with no rows has no mean, so a position read as one has no value. */
+export const meanOf = (values: readonly unknown[]): number | undefined =>
+  values.length === 0 ? undefined : meanBy(values as any[]);
+
 /**
  * Evaluate a field expression (or bare string/function accessor) against a
  * group's rows: the per-row values, folded to a SINGLETON when the pipeline
@@ -399,8 +405,11 @@ export function evalFieldValues<T>(
         values: [new Set(rows.map(key)).size],
         measure: annotation ?? "count",
       };
-    case "mean":
-      return { values: [meanBy(rows.map(key) as any[])] };
+    case "mean": {
+      // No rows, no mean: the fold has no value (`meanOf`).
+      const mean = meanOf(rows.map(key));
+      return { values: mean === undefined ? [] : [mean] };
+    }
     default: // "sum"
       return { values: [sumBy(rows.map(key) as any[])] };
   }

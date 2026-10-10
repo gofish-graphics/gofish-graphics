@@ -521,7 +521,8 @@ export class GoFishNode {
   private _layout: Layout;
   /** Per-primitive IR lowering (see {@link Lower}) — the node's sole draw
    *  description. Absent on operators that never lower themselves (their
-   *  children are lowered directly); lowering such a node throws. */
+   *  children are lowered directly); lowering such a node draws nothing
+   *  when it has no children, and throws otherwise. */
   private _lower?: Lower;
   /** The lowering the node was built with, kept when
    *  {@link INTERNAL_emitNothing} silences it, so what it lends
@@ -1957,6 +1958,10 @@ export class GoFishNode {
     // `flattenLayout`) so descendants land in absolute coordinates before
     // `toPixel`. Pre-recursed, parent-relative child items would be mispositioned.
     if (!this._lower) {
+      // A node with no lowering of its own draws only its children (the bake
+      // lowers them directly), so with no children it draws nothing: an
+      // operator over a group with no rows, such as an empty cell's.
+      if (this.children.length === 0) return [];
       throw new Error(
         `[gofish] node type "${this.type}" has no lower() yet — cannot ` +
           `emit the display list.`

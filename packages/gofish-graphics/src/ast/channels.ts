@@ -3,7 +3,6 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-import meanBy from "lodash/meanBy";
 import sumBy from "lodash/sumBy";
 import {
   MaybeValue,
@@ -20,7 +19,12 @@ import {
   type Measure,
 } from "./data";
 import { Frontend } from "gofish-ir";
-import { evalFieldValues, getFieldOps, type FieldExpr } from "./fieldExpr";
+import {
+  evalFieldValues,
+  getFieldOps,
+  meanOf,
+  type FieldExpr,
+} from "./fieldExpr";
 import { columnType, type ColumnType } from "./schema";
 import {
   mapAxisDims,
@@ -274,7 +278,8 @@ export const inferEntrySize = <T>(
 
 /**
  * Shared core of {@link inferSize} / {@link inferPos}: they differ only in the
- * lodash aggregation (`sumBy` vs `meanBy`). Resolves a numeric value from a
+ * aggregation (a sum vs a mean, {@link meanOf}). An aggregation with no
+ * value (the mean of no rows) is no value: the channel is undefined. Resolves a numeric value from a
  * field name, field expression, function accessor, or literal number:
  * - number / literal: passed through as a literal.
  * - `datum(...)`: already a data value, passed through as-is.
@@ -292,7 +297,7 @@ export const inferEntrySize = <T>(
  * array); when omitted it is resolved locally from `d`.
  */
 const inferNumeric =
-  (agg: typeof sumBy) =>
+  (agg: (values: any[]) => number | undefined) =>
   <T>(
     accessor:
       | string
@@ -319,8 +324,10 @@ const inferNumeric =
       accessor,
       data
     );
+    const folded = agg(values as any[]);
+    if (folded === undefined) return undefined;
     return columnValue(
-      agg(values as any[]),
+      folded,
       { measure: pipelineMeasure ?? column.measure, type: column.type },
       fieldNameOf(accessor)
     );
@@ -329,8 +336,9 @@ const inferNumeric =
 /** Infer a size value (sums the field/function across the data array). */
 export const inferSize = inferNumeric(sumBy);
 
-/** Infer a position value (averages the field/function across the data array). */
-export const inferPos = inferNumeric(meanBy);
+/** Infer a position value (averages the field/function across the data
+ *  array). Over no rows it has no value: undefined (see {@link meanOf}). */
+export const inferPos = inferNumeric(meanOf);
 
 /**
  * Shared core of the non-aggregating channels ({@link inferColor} /

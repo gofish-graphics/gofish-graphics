@@ -15,6 +15,8 @@
 import * as GoFish from "../../dist/index.js";
 import "../lib";
 import { binCells, checkPartition, Cell } from "../ast/cells";
+import { inferPos } from "../ast/channels";
+import { evalFieldValues } from "../ast/fieldExpr";
 import { Calendar, loadTemporal } from "../ast/calendar";
 import { splitEntries } from "../ast/datumProjection";
 import { field } from "../ast/data";
@@ -25,12 +27,28 @@ import {
   Schema as SrcSchema,
 } from "../ast/schema";
 
-const { chart, spread, stack, partition, rect, region, text, circle, Schema } =
-  GoFish as any;
+const {
+  chart,
+  spread,
+  stack,
+  scatter,
+  group,
+  table,
+  pack,
+  treemap,
+  partition,
+  rect,
+  region,
+  text,
+  circle,
+  line,
+  selectAll,
+  Schema,
+} = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
 const distField = (GoFish as any).field;
 
-declare const process: { exit(code: number): never };
+declare const process: { exit(code: number): never; execPath: string };
 
 let passed = 0;
 let failed = 0;
@@ -648,6 +666,93 @@ async function main() {
       "a key with no region is an error that names .bin",
       noRegion !== undefined && noRegion.includes('field("rating").bin('),
       String(noRegion)
+    );
+  }
+
+  console.log("\n# a group with no rows");
+  {
+    const walkItems = (dl: any): any[] => {
+      const out: any[] = [];
+      const walk = (it: any) => {
+        out.push(it);
+        for (const c of it.children ?? []) walk(c);
+      };
+      dl.items.forEach(walk);
+      return out;
+    };
+    // Cells [0, 1) to [4, 5): [1, 2) and [3, 4) hold no rows.
+    const pts = [
+      { x: 0.5, y: 1 },
+      { x: 0.7, y: 2 },
+      { x: 2.5, y: 3 },
+      { x: 2.7, y: 1 },
+      { x: 4.2, y: 2 },
+      { x: 4.5, y: 0 },
+    ];
+    const byCell = () => distField("x").bin({ step: 1 });
+    const noAxes = { axes: false };
+
+    const lines = await chart(pts, noAxes)
+      .flow(spread({ by: byCell(), dir: "x" }), scatter({ x: "x", y: "y" }))
+      .mark(line())
+      .toDisplayList({ w: 300, h: 100 })
+      .then(
+        (dl: any) => walkItems(dl).filter((it) => it.kind === "path").length,
+        (e: Error) => e.message
+      );
+    check(
+      "a scatter over an empty cell draws nothing: one line per full cell",
+      lines === 3,
+      String(lines)
+    );
+
+    for (const [name, inner] of [
+      ["stack", () => stack({ by: "y", dir: "y" })],
+      ["spread", () => spread({ by: "y", dir: "y" })],
+      ["group", () => group({ by: "y" })],
+      ["scatter", () => scatter({ x: "x", y: "y" })],
+      ["table", () => table({ by: { x: "y", y: "y" } })],
+      ["pack", () => pack()],
+      ["pack by a field", () => pack({ by: "y" })],
+      ["treemap", () => treemap({ size: "y" })],
+      ["treemap by a field", () => treemap({ by: "y", size: "y" })],
+    ] as const) {
+      const got = await chart(pts, noAxes)
+        .flow(spread({ by: byCell(), dir: "x" }), inner())
+        .mark(rect({ w: 5, h: 5 }))
+        .toDisplayList({ w: 300, h: 100 })
+        .then(
+          (dl: any) => walkItems(dl).filter((it) => it.kind === "rect"),
+          (e: Error) => e.message
+        );
+      check(
+        `a ${name} over an empty cell draws nothing`,
+        Array.isArray(got) &&
+          got.length >= pts.length &&
+          got.every((r: any) =>
+            [r.x, r.y, r.w, r.h].every((v) => Number.isFinite(v))
+          ),
+        Array.isArray(got) ? JSON.stringify(got.slice(0, 3)) : String(got)
+      );
+    }
+
+    check(
+      "the mean of no rows has no value",
+      inferPos("x", []) === undefined &&
+        evalFieldValues(field("x").mean(), []).values.length === 0
+    );
+    const dots = walkItems(
+      await chart(pts, noAxes)
+        .flow(scatter({ by: byCell(), x: "x", y: "y" }))
+        .mark(circle({ r: 3 }))
+        .toDisplayList({ w: 300, h: 100 })
+    ).filter((it) => it.kind === "ellipse");
+    check(
+      "a scatter places a group by its rows, so an empty cell is no point " +
+        "and leaves the others' scale alone",
+      dots.length === 3 &&
+        dots.every((d: any) => Number.isFinite(d.cx) && Number.isFinite(d.cy)),
+      JSON.stringify(dots.map((d: any) => [d.cx, d.cy]))
     );
   }
 

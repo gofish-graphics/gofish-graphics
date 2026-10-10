@@ -1649,7 +1649,8 @@ same unit (a movie's US and worldwide gross, both dollars) say so with
 checked (not silently prioritized) in `resolveMeasure` (`channels.ts`):
 the channel aggregators use lodash's per-helper entrypoints for native ESM
 compatibility, but their semantics are still `sumBy` for size and `meanBy` for
-position.
+position, except that the mean of no rows has no value (`meanOf`, see
+[Cells](#cells-a-binned-key)) where `meanBy` gives `NaN`.
 
 1. **Explicit annotation** — `field(name, measure)` / `datum(v, measure)`
    (`data.ts`). A real type claim about the channel's unit.
@@ -1978,6 +1979,21 @@ count picks its step from the whole domain (#763). The cells of a domain
 are built once per partition value and column (a cache keyed by the domain
 array and the op's partition object), so the groups share the very same
 `Cell` objects.
+
+**A group with no rows.** An empty cell is a group with no rows, and every
+operator over it is well defined: an operator over no rows makes no
+children and draws nothing (a node with no lowering of its own and no
+children lowers to nothing, see [Rendering](/internals/core/rendering)). A
+position read from a group's rows is a statistic of them, so a group with
+no rows has none: a position channel is a mean (`inferPos`), and the mean of
+no rows is no value (`meanOf` in `fieldExpr.ts`; a sum or a count of no rows
+is 0, which is a value). A position with no value is in no domain, since
+only defined positions make position constraints. And `scatter`, which
+places each child at its position, does not draw a child that has no value
+in a placement it is given (`placedChildren` in `scatter.tsx`): there is no
+place to draw it. So `scatter({ by: field("x").bin(p), x, y })` draws one
+point per cell that holds rows, and the empty cells leave the scale of the
+others alone.
 
 A cell holds its start and not its end, and a Calendar value or a `{ step }`
 puts a value in the cell that holds it whatever the domain (March 1 is in

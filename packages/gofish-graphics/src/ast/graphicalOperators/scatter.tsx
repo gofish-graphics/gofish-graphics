@@ -4,6 +4,7 @@ import { MaybeValue, type PositionValue } from "../data";
 import {
   FancyDims,
   type Direction,
+  mapAxisDims,
   mergeAxisDims,
   type AxisDims,
   type AxisDimsForm,
@@ -147,6 +148,45 @@ function assertLinearSpace(scope: AxisScope): void {
     );
 }
 
+/**
+ * The children a scatter places, and their placements. A child is placed at
+ * its values, so a child with no value in a placement it is given has no
+ * place, and the scatter does not draw it: the position of a group with no
+ * rows is the mean of nothing, which has no value (`meanOf`, fieldExpr.ts).
+ * An array that does not have one entry per child is kept whole, for
+ * {@link scatterAxes} to report.
+ */
+function placedChildren(
+  children: GoFishAST[],
+  xy: Pick<ScatterProps, "x" | "y" | "xMin" | "xMax" | "yMin" | "yMax">,
+  dims: AxisDims<PositionValue[]> | undefined
+): {
+  children: GoFishAST[];
+  xy: Pick<ScatterProps, "x" | "y" | "xMin" | "xMax" | "yMin" | "yMax">;
+  dims: AxisDims<PositionValue[]> | undefined;
+} {
+  const count = children.length;
+  const perChild = (a: unknown): a is unknown[] =>
+    Array.isArray(a) && a.length === count;
+  const given: unknown[][] = Object.values(xy).filter(perChild);
+  if (dims !== undefined)
+    mapAxisDims(dims, (a) => (perChild(a) ? given.push(a) : 0), SCATTER_DIMS);
+  const kept = children.flatMap((_, i) =>
+    given.every((a) => a[i] !== undefined) ? [i] : []
+  );
+  if (kept.length === count) return { children, xy, dims };
+  const pick = <A,>(a: A): A =>
+    perChild(a) ? (kept.map((i) => a[i]) as A) : a;
+  return {
+    children: kept.map((i) => children[i]),
+    xy: Object.fromEntries(
+      Object.entries(xy).map(([k, a]) => [k, pick(a)])
+    ) as typeof xy,
+    dims:
+      dims === undefined ? undefined : mapAxisDims(dims, pick, SCATTER_DIMS),
+  };
+}
+
 const Scatter = createNodeOperator(
   async (
     options: ScatterProps,
@@ -168,10 +208,6 @@ const Scatter = createNodeOperator(
     } = options;
     children = unwrapLodashArray(children);
 
-    if (children.length === 0) {
-      throw new Error("Scatter operator expects at least one child");
-    }
-
     // Elaborate to a layer carrying per-child placement constraints (#546),
     // sharing the constraint path instead of a bespoke layout (as spread
     // delegates to distribute/align):
@@ -188,7 +224,12 @@ const Scatter = createNodeOperator(
     //                        constraints, so the align walk skips them).
     // The layer derives the data→pixel posScale from the position datum coords
     // (point values plus interval endpoints — collectPositionDomains).
-    const childList = children as GoFishAST[];
+    const placed = placedChildren(
+      children as GoFishAST[],
+      { x, y, xMin, xMax, yMin, yMax },
+      dims
+    );
+    const childList = placed.children;
     const names = ensureChildNames(childList, "scatter");
     const node = (await layer(
       { key, ...fancyDims } as any,
@@ -200,8 +241,8 @@ const Scatter = createNodeOperator(
     node._elaborateInAxisScope = async (_outer, inner) => {
       if (overlap !== undefined) assertLinearSpace(inner);
       const placement = scatterAxes(
-        { x, y, xMin, xMax, yMin, yMax },
-        dims,
+        placed.xy,
+        placed.dims,
         inner,
         childList.length
       );

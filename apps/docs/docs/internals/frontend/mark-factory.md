@@ -98,8 +98,9 @@ needs one.
 
 `inferSize` and `inferPos` are two instantiations of one numeric-inference
 factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumBy`
-vs `meanBy`, imported through lodash's per-helper entrypoints so this path is
-safe under native ESM). Both take an optional third argument, the accessor's
+vs `meanOf`, `fieldExpr.ts`, lodash's `meanBy` except that the mean of no
+rows is undefined, not `NaN`). An aggregation with no value makes the channel
+undefined, so a position read off a group with no rows has no value. Both take an optional third argument, the accessor's
 resolved column (`ColumnInfo`, from `resolveColumn(data, accessor)`): its
 `Measure` and its type in the chart's `schema`. A string/`field()` accessor's
 produced value is tagged with its unit-of-measure so the underlying-space
@@ -409,7 +410,7 @@ Today's channels are `"size"` and `"color"`. To add (say) `"angle"`:
 
 1. Add `"angle"` to the `ChannelType` union in `channels.ts`.
 2. If a numeric aggregation fits, instantiate the existing factory —
-   `export const inferAngle = inferNumeric(meanBy)` (or whatever aggregation
+   `export const inferAngle = inferNumeric(meanOf)` (or whatever aggregation
    makes sense) — and measure tagging comes along for free. Otherwise write
    `inferAngle(accessor, data, measure?)` next to it with the same signature.
 3. Extend `DeriveMarkProps`'s conditional with the input type for `"angle"`.
