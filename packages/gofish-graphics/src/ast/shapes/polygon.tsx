@@ -1,6 +1,6 @@
 import { packEnclose } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
-import { boxOfDims } from "../geometry";
+import { boxOfDims, ringExtent } from "../geometry";
 import { GoFishAST } from "../_ast";
 import { Size } from "../dims";
 import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
@@ -22,27 +22,6 @@ import { withWire } from "../wire";
 import { MARK_CHANNELS } from "../markChannels.generated";
 
 export type Ring = [number, number][];
-
-/**
- * A ring's axis-aligned extent, in one pass. (`Math.min(...ring.map(...))` reads
- * nicely but allocates two arrays per axis and blows the argument limit on a
- * detailed coastline.)
- */
-const ringExtent = (
-  ring: Ring
-): { minX: number; maxX: number; minY: number; maxY: number } => {
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const [x, y] of ring) {
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  }
-  return { minX, maxX, minY, maxY };
-};
 
 export type PolygonProps = {
   fill?: MaybeValue<string>;

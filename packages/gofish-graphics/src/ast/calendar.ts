@@ -393,7 +393,7 @@ export const Calendar = {
 /** `value` as an error message shows it. A partition shows as its builder
  *  spelling, and nothing calls `toJSON` (a partition with a format has no
  *  wire form, and its `toJSON` throws). */
-function describe(value: unknown): string {
+export function describe(value: unknown): string {
   if (value instanceof CalendarPartition) return String(value);
   if (Array.isArray(value)) return `[${value.map(describe).join(", ")}]`;
   if (value !== null && typeof value === "object") {

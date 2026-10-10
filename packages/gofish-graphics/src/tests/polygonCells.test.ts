@@ -236,9 +236,9 @@ async function main() {
     check("one cell per seed", v.cells.length === 3);
     check(
       "a point goes to its nearest seed",
-      v.cellOf(1, 1)!.seed === seeds[0] &&
-        v.cellOf(9, 1)!.seed === seeds[1] &&
-        v.cellOf(5, 7)!.seed === seeds[2]
+      v.cellOf(1, 1)!.id === "0" &&
+        v.cellOf(9, 1)!.id === "1" &&
+        v.cellOf(5, 7)!.id === "2"
     );
     const xs = v.cells.flatMap((c) => c.outline.map((p) => p[0]));
     const ys = v.cells.flatMap((c) => c.outline.map((p) => p[1]));
@@ -254,7 +254,7 @@ async function main() {
       "each seed is inside its own cell",
       v.cells.every((c) =>
         inside(
-          [(c.seed as any).x, (c.seed as any).y],
+          [seeds[Number(c.id)].x, seeds[Number(c.id)].y],
           c.outline as [number, number][],
           1e-6
         )
@@ -269,7 +269,7 @@ async function main() {
     );
     check(
       "seeds at one point share one cell, that of the first",
-      twice.cells.length === 3 && twice.cellOf(0, 0)!.seed === seeds[0]
+      twice.cells.length === 3 && twice.cellOf(0, 0)!.id === "0"
     );
     check(
       "no seeds is an error",

@@ -2987,13 +2987,22 @@ class StructAccessor(dict):
                 "struct(...).bin: expected a call in the Bin family, "
                 f"Bin.hex(radius=...) or Bin.voronoi(seeds=...), got {cells!r}"
             )
-        out = StructAccessor(self)
-        out["ops"] = [
-            {
-                "op": "bin",
-                "partition": _to_wire(_OPTION_TYPES["Bin"], cells, "struct(...).bin"),
+        wire = _to_wire(_OPTION_TYPES["Bin"], cells, "struct(...).bin")
+        if wire.get("kind") == "voronoi" and isinstance(wire.get("seeds"), list):
+            # A seed is read only at the struct's two fields, so the wire
+            # carries those and not every column of the seed rows.
+            fields = self["fields"]
+            wire = {
+                **wire,
+                "seeds": [
+                    {f: row.get(f) for f in (fields["x"], fields["y"])}
+                    if isinstance(row, dict)
+                    else row
+                    for row in wire["seeds"]
+                ],
             }
-        ]
+        out = StructAccessor(self)
+        out["ops"] = [{"op": "bin", "partition": wire}]
         return out
 
 

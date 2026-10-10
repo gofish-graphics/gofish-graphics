@@ -261,11 +261,31 @@ function compareKeys(a: unknown, b: unknown): number {
   return String(a).localeCompare(String(b));
 }
 
-/** The cells of each domain, per partition and column, built once, so every
- *  group of a split over one domain gets the same `Cell` objects in the same
- *  order. Keyed by the partition value the `bin` op holds (the same object
- *  each time the op runs). */
-const cellsCache = new WeakMap<object, WeakMap<object, Map<string, Cells>>>();
+/**
+ * A memo of what is built once per domain (`domainRows`), per op object (the
+ * value a `bin` op holds, the same object each time the op runs), and per
+ * column key: so every group of a split over one domain gets the same cell
+ * objects, in the same order.
+ */
+function memoByDomain<V>(): (
+  domain: object,
+  op: object,
+  key: string,
+  build: () => V
+) => V {
+  const byDomain = new WeakMap<object, WeakMap<object, Map<string, V>>>();
+  return (domain, op, key, build) => {
+    let byOp = byDomain.get(domain);
+    if (byOp === undefined) byDomain.set(domain, (byOp = new WeakMap()));
+    let byKey = byOp.get(op);
+    if (byKey === undefined) byOp.set(op, (byKey = new Map()));
+    let v = byKey.get(key);
+    if (v === undefined) byKey.set(key, (v = build()));
+    return v;
+  };
+}
+
+const cellsMemo = memoByDomain<Cells>();
 
 /** The cells `field(name).bin(partition)` maps values to: the cells of the
  *  partition over the column's values in `d`'s DOMAIN (`domainRows`,
@@ -278,35 +298,17 @@ function domainCells(
   const where = `field("${name}").bin(...)`;
   const raw = (partitionOp ?? DEFAULT_PARTITION) as object;
   const domain = domainRows(d) as Record<string, any>[];
-  let byPartition = cellsCache.get(domain);
-  if (byPartition === undefined) {
-    byPartition = new WeakMap();
-    cellsCache.set(domain, byPartition);
-  }
-  let byName = byPartition.get(raw);
-  if (byName === undefined) {
-    byName = new Map();
-    byPartition.set(raw, byName);
-  }
-  let cells = byName.get(name);
-  if (cells === undefined) {
-    cells = binCells(
+  return cellsMemo(domain, raw, name, () =>
+    binCells(
       checkPartition(raw, where),
       domain.map((r) => r?.[name]),
       columnType(d, name)?.HasCalendar?.zone,
       where
-    );
-    byName.set(name, cells);
-  }
-  return cells;
+    )
+  );
 }
 
-/** The polygon cells of each domain, per bin and pair of columns, built
- *  once, as {@link cellsCache} does for 1D cells. */
-const planeCache = new WeakMap<
-  object,
-  WeakMap<object, Map<string, PolygonCells>>
->();
+const planeMemo = memoByDomain<PolygonCells>();
 
 /** The cells of `struct({ x, y }).bin(bin)` over the two columns' values in
  *  `d`'s DOMAIN (`domainRows`), as {@link domainCells} does in 1D. */
@@ -317,29 +319,15 @@ function domainPlane(
   where: string
 ): PolygonCells {
   const domain = domainRows(d) as Record<string, any>[];
-  let byBin = planeCache.get(domain);
-  if (byBin === undefined) {
-    byBin = new WeakMap();
-    planeCache.set(domain, byBin);
-  }
-  let byFields = byBin.get(bin);
-  if (byFields === undefined) {
-    byFields = new Map();
-    byBin.set(bin, byFields);
-  }
-  const fieldsKey = JSON.stringify([fields.x, fields.y]);
-  let plane = byFields.get(fieldsKey);
-  if (plane === undefined) {
-    plane = planeCells(
+  return planeMemo(domain, bin, JSON.stringify([fields.x, fields.y]), () =>
+    planeCells(
       bin as Parameters<typeof planeCells>[0],
       fields,
       domain.map((r) => r?.[fields.x]),
       domain.map((r) => r?.[fields.y]),
       where
-    );
-    byFields.set(fieldsKey, plane);
-  }
-  return plane;
+    )
+  );
 }
 
 /** The loud error for a value a binned key has no cell for. */

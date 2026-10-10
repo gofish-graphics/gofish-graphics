@@ -1,4 +1,5 @@
 import { GoFishNode } from "./_node";
+import { round12 } from "./cells";
 import { layer } from "./graphicalOperators/layer";
 import { Constraint } from "./constraints";
 
@@ -71,4 +72,4 @@ export function* breadthFirst(root: GoFishNode): Generator<GoFishNode> {
  *  the runtime's locale (no digit grouping, a period as the decimal point),
  *  as time labels use en-US (`LABEL_LOCALE` in calendar.ts); a chart-level
  *  locale option is #1098. */
-export const fmtNum = (n: number): string => String(+n.toPrecision(12));
+export const fmtNum = (n: number): string => String(round12(n));

@@ -37,6 +37,7 @@ import type { Frontend } from "gofish-ir";
 import {
   calendarPartition,
   CalendarPartition,
+  describe,
   type CalendarCell,
   type CalendarJSON,
 } from "./calendar";
@@ -132,16 +133,6 @@ const isCalendar = (p: unknown): p is CalendarPartition | CalendarJSON =>
   p instanceof CalendarPartition ||
   (typeof p === "object" && p !== null && "unit" in p);
 
-/** `p` as an error message shows it. */
-function describe(p: unknown): string {
-  if (p instanceof CalendarPartition) return String(p);
-  try {
-    return JSON.stringify(p) ?? String(p);
-  } catch {
-    return String(p);
-  }
-}
-
 /** The loud error for a value that is not a partition. */
 const notAPartition = (where: string, p: unknown): Error =>
   new Error(
@@ -207,12 +198,36 @@ export const DEFAULT_PARTITION: NumberPartition = { thresholds: 10 };
 
 /** `x` rounded to 12 significant digits, so `3 * 0.1` is 0.3. Cell edges are
  *  computed as multiples of a step, and a step like 0.1 has no exact binary
- *  form. (Numeric axis labels round the same way, `fmtNum`.) */
-const round = (x: number): number => +x.toPrecision(12);
+ *  form. Numeric axis labels round the same way (`fmtNum`), and so do the
+ *  corners of polygon cells (polygonCells.ts). */
+export const round12 = (x: number): number => +x.toPrecision(12);
+
+/** The `[min, max]` of `values` (missing values skipped), or undefined when
+ *  there are none. A value that is not a number is an error: `${where}:
+ *  ${column} must hold numbers`. */
+export function numericRange(
+  values: readonly unknown[],
+  where: string,
+  column: string
+): [number, number] | undefined {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const v of values) {
+    if (v == null) continue;
+    if (typeof v !== "number" || Number.isNaN(v))
+      throw new Error(
+        `${where}: ${column} must hold numbers, but it has the value ` +
+          `${describe(v)}.`
+      );
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  return lo > hi ? undefined : [lo, hi];
+}
 
 /** The default label of a numeric cell: its two edges, "0.5–1". */
 const numberLabel = (start: number, end: number): string =>
-  `${round(start)}–${round(end)}`;
+  `${round12(start)}–${round12(end)}`;
 
 /** The edges of the cells over `[lo, hi]` for a numeric partition: ascending,
  *  the first at or below `lo`. A step's last edge is above `hi` (the cell
@@ -234,10 +249,10 @@ function numberEdges(p: NumberPartition, lo: number, hi: number): number[] {
   const isStep = "step" in p;
   if ("step" in p) {
     const step = p.step;
-    at = (k) => round(k * step);
+    at = (k) => round12(k * step);
   } else {
     const inc = lo === hi ? 1 : tickIncrement(lo, hi, p.thresholds as number);
-    at = inc > 0 ? (k) => k * inc : (k) => round(k / -inc);
+    at = inc > 0 ? (k) => k * inc : (k) => round12(k / -inc);
   }
   // Find the first edge at or below lo by scanning from an estimate, which
   // the rounding above can put one step off.
@@ -264,21 +279,15 @@ export function binCells(
   zone: string | undefined,
   where: string
 ): Cells {
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (const v of values) {
-    if (v == null) continue;
-    if (typeof v !== "number" || Number.isNaN(v)) {
-      throw new Error(
-        `${where}: a binned column must hold numbers${
-          p instanceof CalendarPartition ? " (times)" : ""
-        }, but it has the value ${describe(v)}.`
-      );
-    }
-    if (v < lo) lo = v;
-    if (v > hi) hi = v;
-  }
-  if (lo > hi) return { cells: [], cellOf: () => undefined };
+  const range = numericRange(
+    values,
+    where,
+    p instanceof CalendarPartition
+      ? "a binned column of times"
+      : "a binned column"
+  );
+  if (range === undefined) return { cells: [], cellOf: () => undefined };
+  const [lo, hi] = range;
 
   let cells: Cell[];
   if (p instanceof CalendarPartition) {

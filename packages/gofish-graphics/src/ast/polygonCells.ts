@@ -23,7 +23,9 @@
 import { Delaunay } from "d3-delaunay";
 import type { Frontend } from "gofish-ir";
 import type { Point } from "./geometry";
-import { RegionCell } from "./cells";
+import { describe } from "./calendar";
+import { numericRange, RegionCell, round12 } from "./cells";
+import { ringExtent } from "./geometry/box";
 
 /** The two columns a key reads, one per axis of the plane. */
 export type PlaneFields = { readonly x: string; readonly y: string };
@@ -45,17 +47,11 @@ export class PolygonCell extends RegionCell {
     /** The cell's identity: a hexagon's grid coordinates `"q,r"`, or a
      *  Voronoi cell's seed index. */
     readonly id: string,
-    readonly outline: readonly Point[],
-    /** For a Voronoi cell, the seed row whose cell it is. */
-    readonly seed?: unknown
+    readonly outline: readonly Point[]
   ) {
     super();
-    const xs = outline.map((p) => p[0]);
-    const ys = outline.map((p) => p[1]);
-    this.box = {
-      x: [Math.min(...xs), Math.max(...xs)],
-      y: [Math.min(...ys), Math.max(...ys)],
-    };
+    const { minX, maxX, minY, maxY } = ringExtent(outline);
+    this.box = { x: [minX, maxX], y: [minY, maxY] };
   }
 
   get label(): undefined {
@@ -75,40 +71,6 @@ export type PolygonCells = {
    *  the cells. */
   cellOf(x: number, y: number): PolygonCell | undefined;
 };
-
-/** `x` rounded to 12 significant digits, as 1D cell edges are (cells.ts). */
-const round = (x: number): number => +x.toPrecision(12);
-
-/** `v` as an error message shows it. */
-const describe = (v: unknown): string => {
-  try {
-    return JSON.stringify(v) ?? String(v);
-  } catch {
-    return String(v);
-  }
-};
-
-/** The `[min, max]` of a column's values (missing values skipped), or
- *  undefined when it has none. A value that is not a number is an error. */
-function range(
-  values: readonly unknown[],
-  name: string,
-  where: string
-): [number, number] | undefined {
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (const v of values) {
-    if (v == null) continue;
-    if (typeof v !== "number" || Number.isNaN(v))
-      throw new Error(
-        `${where}: the column "${name}" must hold numbers, but it has the ` +
-          `value ${describe(v)}.`
-      );
-    if (v < lo) lo = v;
-    if (v > hi) hi = v;
-  }
-  return lo > hi ? undefined : [lo, hi];
-}
 
 // ---------------------------------------------------------------------------
 // Hexagons
@@ -157,30 +119,47 @@ export const hexCenter = (q: number, r: number): Point => [
   1.5 * r,
 ];
 
-/** Whether the OPEN unit hexagon centered at `c` meets the CLOSED box
- *  `[u0, u1] × [v0, v1]` (both convex, so the axes of their edges decide:
- *  the box's two, and the hexagon's three edge normals at 0°, 60° and 120°).
- *  An open hexagon only touching the box along an edge does not meet it. */
-function hexMeetsBox(
-  c: Point,
-  u0: number,
-  u1: number,
-  v0: number,
-  v1: number
-): boolean {
+/** The two slanted edge normals of the unit hexagon, at 60 and 120 degrees
+ *  (its third, at 0 degrees, is the box's u axis). */
+const SLANTED_NORMALS: readonly Point[] = [60, 120].map((deg) => {
+  const a = (deg * Math.PI) / 180;
+  return [Math.cos(a), Math.sin(a)] as const;
+});
+
+/** The CLOSED box `[u0, u1] × [v0, v1]` on the unit grid, with its
+ *  projection `[lo, hi]` onto each of {@link SLANTED_NORMALS}, for
+ *  {@link hexMeetsBox}. */
+type UnitBox = {
+  u0: number;
+  u1: number;
+  v0: number;
+  v1: number;
+  slanted: readonly (readonly [number, number])[];
+};
+
+function unitBox(u0: number, u1: number, v0: number, v1: number): UnitBox {
+  const slanted = SLANTED_NORMALS.map((n) => {
+    const at = (p: Point) => p[0] * n[0] + p[1] * n[1];
+    const corners = [at([u0, v0]), at([u0, v1]), at([u1, v0]), at([u1, v1])];
+    return [Math.min(...corners), Math.max(...corners)] as const;
+  });
+  return { u0, u1, v0, v1, slanted };
+}
+
+/** Whether the OPEN unit hexagon centered at `c` meets the CLOSED box `b`
+ *  (both convex, so the axes of their edges decide: the box's two, and the
+ *  hexagon's three edge normals at 0°, 60° and 120°). An open hexagon only
+ *  touching the box along an edge does not meet it. */
+function hexMeetsBox(c: Point, b: UnitBox): boolean {
   const apothem = SQRT3 / 2;
   // The box's own axes: the hexagon spans its center ± apothem on u (its
   // sides are vertical) and ± 1 on v (its top and bottom are corners).
-  if (!(c[0] - apothem < u1 && u0 < c[0] + apothem)) return false;
-  if (!(c[1] - 1 < v1 && v0 < c[1] + 1)) return false;
-  for (const deg of [60, 120]) {
-    const a = (deg * Math.PI) / 180;
-    const n: Point = [Math.cos(a), Math.sin(a)];
-    const at = (p: Point) => p[0] * n[0] + p[1] * n[1];
-    const corners = [at([u0, v0]), at([u0, v1]), at([u1, v0]), at([u1, v1])];
-    const lo = Math.min(...corners);
-    const hi = Math.max(...corners);
-    const mid = at(c);
+  if (!(c[0] - apothem < b.u1 && b.u0 < c[0] + apothem)) return false;
+  if (!(c[1] - 1 < b.v1 && b.v0 < c[1] + 1)) return false;
+  for (let i = 0; i < SLANTED_NORMALS.length; i++) {
+    const n = SLANTED_NORMALS[i];
+    const [lo, hi] = b.slanted[i];
+    const mid = c[0] * n[0] + c[1] * n[1];
     if (!(mid - apothem < hi && lo < mid + apothem)) return false;
   }
   return true;
@@ -210,69 +189,79 @@ export function hexCells(
   where: string
 ): PolygonCells {
   const [rx, ry] = radii(bin.radius);
-  const xRange = range(xs, fields.x, where);
-  const yRange = range(ys, fields.y, where);
-  const byId = new Map<string, PolygonCell>();
-  const cellAt = (q: number, r: number): PolygonCell => {
-    const id = `${q},${r}`;
-    let cell = byId.get(id);
-    if (cell === undefined) {
-      const [cu, cv] = hexCenter(q, r);
-      cell = new PolygonCell(
-        id,
-        UNIT_CORNERS.map(([u, v]) => [
-          round((cu + u) * rx),
-          round((cv + v) * ry),
-        ])
-      );
-      byId.set(id, cell);
-    }
-    return cell;
-  };
-  const cellOf = (x: number, y: number): PolygonCell => {
-    const [q, r] = hexAt(x / rx, y / ry);
-    return cellAt(q, r);
-  };
+  const xRange = numericRange(xs, where, `the column "${fields.x}"`);
+  const yRange = numericRange(ys, where, `the column "${fields.y}"`);
   if (xRange === undefined || yRange === undefined)
     return { cells: [], cellOf: () => undefined };
+  // The cells, by grid coordinates.
+  const byId = new Map<string, PolygonCell>();
+  const add = (q: number, r: number): boolean => {
+    const id = `${q},${r}`;
+    if (byId.has(id)) return false;
+    const [cu, cv] = hexCenter(q, r);
+    byId.set(
+      id,
+      new PolygonCell(
+        id,
+        UNIT_CORNERS.map(([u, v]) => [
+          round12((cu + u) * rx),
+          round12((cv + v) * ry),
+        ])
+      )
+    );
+    return true;
+  };
 
   // The box of the domain on the unit grid.
-  const [u0, u1] = [xRange[0] / rx, xRange[1] / rx];
-  const [v0, v1] = [yRange[0] / ry, yRange[1] / ry];
-  const keep = new Set<PolygonCell>();
+  const box = unitBox(
+    xRange[0] / rx,
+    xRange[1] / rx,
+    yRange[0] / ry,
+    yRange[1] / ry
+  );
   // Rows of hexagons are 1.5 apart on v; along a row they are √3 apart on u,
-  // and row r is shifted by r/2. Scan one hexagon past the box each way.
-  const rMin = Math.floor(v0 / 1.5) - 1;
-  const rMax = Math.ceil(v1 / 1.5) + 1;
+  // and row r is shifted by r/2. Scan one hexagon past the box each way, rows
+  // from the bottom, each from the left: no order is meant, but the draw
+  // order is fixed.
+  const rMin = Math.floor(box.v0 / 1.5) - 1;
+  const rMax = Math.ceil(box.v1 / 1.5) + 1;
   for (let r = rMin; r <= rMax; r++) {
-    const qMin = Math.floor(u0 / SQRT3 - r / 2) - 1;
-    const qMax = Math.ceil(u1 / SQRT3 - r / 2) + 1;
+    const qMin = Math.floor(box.u0 / SQRT3 - r / 2) - 1;
+    const qMax = Math.ceil(box.u1 / SQRT3 - r / 2) + 1;
     for (let q = qMin; q <= qMax; q++) {
-      if (hexMeetsBox(hexCenter(q, r), u0, u1, v0, v1))
-        keep.add(cellAt(unsign(q), unsign(r)));
+      if (hexMeetsBox(hexCenter(q, r), box)) add(unsign(q), unsign(r));
     }
   }
+  // A point inside the box is in a hexagon that meets it. A point on the
+  // box's edge may fall in a hexagon that only touches the box: add those.
+  let added = false;
   for (let i = 0; i < xs.length; i++) {
     const x = xs[i];
     const y = ys[i];
-    if (typeof x === "number" && typeof y === "number") keep.add(cellOf(x, y));
+    if (typeof x !== "number" || typeof y !== "number") continue;
+    if (
+      x !== xRange[0] &&
+      x !== xRange[1] &&
+      y !== yRange[0] &&
+      y !== yRange[1]
+    )
+      continue;
+    const [q, r] = hexAt(x / rx, y / ry);
+    if (add(q, r)) added = true;
   }
-  // Rows from the bottom, each from the left: no order is meant, but the
-  // draw order is fixed.
+  const cellOf = (x: number, y: number): PolygonCell | undefined => {
+    const [q, r] = hexAt(x / rx, y / ry);
+    return byId.get(`${q},${r}`);
+  };
+  if (!added) return { cells: [...byId.values()], cellOf };
+  // Back in draw order: by row, then along it.
   const coords = (c: PolygonCell) => c.id.split(",").map(Number);
-  const cells = [...keep].sort((a, b) => {
+  const cells = [...byId.values()].sort((a, b) => {
     const [qa, ra] = coords(a);
     const [qb, rb] = coords(b);
     return ra - rb || qa - qb;
   });
-  const kept = new Set(cells);
-  return {
-    cells,
-    cellOf: (x, y) => {
-      const c = cellOf(x, y);
-      return kept.has(c) ? c : undefined;
-    },
-  };
+  return { cells, cellOf };
 }
 
 // ---------------------------------------------------------------------------
@@ -298,10 +287,11 @@ export function voronoiCells(
   const seeds = bin.seeds;
   if (!Array.isArray(seeds) || seeds.length === 0)
     throw new Error(`${where}: Bin.voronoi needs at least one seed.`);
-  // Each seed's point, and the first seed at each point.
+  // Each seed's point (the first seed at each point), and the box that
+  // holds the seeds.
   const points: Point[] = [];
-  const rows: unknown[] = [];
   const seen = new Set<string>();
+  let [xLo, xHi, yLo, yHi] = [Infinity, -Infinity, Infinity, -Infinity];
   seeds.forEach((row, i) => {
     const sx = (row as Record<string, unknown>)?.[fields.x];
     const sy = (row as Record<string, unknown>)?.[fields.y];
@@ -319,10 +309,22 @@ export function voronoiCells(
     if (seen.has(key)) return;
     seen.add(key);
     points.push([sx, sy]);
-    rows.push(row);
+    xLo = Math.min(xLo, sx);
+    xHi = Math.max(xHi, sx);
+    yLo = Math.min(yLo, sy);
+    yHi = Math.max(yHi, sy);
   });
-  const xRange = range([...xs, ...points.map((p) => p[0])], fields.x, where)!;
-  const yRange = range([...ys, ...points.map((p) => p[1])], fields.y, where)!;
+  // The box that holds the seeds and the domain.
+  const xData = numericRange(xs, where, `the column "${fields.x}"`);
+  const yData = numericRange(ys, where, `the column "${fields.y}"`);
+  const xRange = [
+    Math.min(xLo, xData?.[0] ?? Infinity),
+    Math.max(xHi, xData?.[1] ?? -Infinity),
+  ];
+  const yRange = [
+    Math.min(yLo, yData?.[0] ?? Infinity),
+    Math.max(yHi, yData?.[1] ?? -Infinity),
+  ];
   if (xRange[0] === xRange[1] || yRange[0] === yRange[1])
     throw new Error(
       `${where}: Bin.voronoi needs the data and seeds to spread out on both ` +
@@ -343,8 +345,8 @@ export function voronoiCells(
     // The ring repeats its first corner at its end.
     const outline = ring
       .slice(0, -1)
-      .map(([x, y]) => [round(x), round(y)] as const);
-    return new PolygonCell(String(i), outline, rows[i]);
+      .map(([x, y]) => [round12(x), round12(y)] as const);
+    return new PolygonCell(String(i), outline);
   });
   let last = 0;
   return {

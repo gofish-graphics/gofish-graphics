@@ -19,7 +19,7 @@ import type { HasEnclosingCircle } from "./enclosingCircle";
 
 export interface Geometry extends HasBox, HasEnclosingCircle {}
 
-export { boxOfDims } from "./box";
+export { boxOfDims, ringExtent } from "./box";
 export type { Box, HasBox } from "./box";
 export {
   enclosingCircle,
