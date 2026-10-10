@@ -100,8 +100,8 @@ export type DistributeSegment = {
 export type ComposeBudget = {
   segments: DistributeSegment[];
   /** Per axis: the plan covers it, so the layer's claim there is the composed
-   *  claim, which the layer solves σ against when it roots the axis's scope
-   *  (`buildChildScalePlan`). */
+   *  claim, which the layer solves σ against when it is a sized node on that
+   *  axis (`solveLayerScales`). */
   covered: [boolean, boolean];
 };
 

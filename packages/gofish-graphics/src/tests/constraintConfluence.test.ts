@@ -1244,13 +1244,15 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
     sigmas: [number | undefined, number | undefined],
     maps: [AxisMap | undefined, AxisMap | undefined],
     domain: (axis: 0 | 1) => ReturnType<typeof interval> | undefined = none,
-    ticks: (axis: 0 | 1) => typeof DEFAULT_AXIS_TICKS | undefined = none
+    ticks: (axis: 0 | 1) => typeof DEFAULT_AXIS_TICKS | undefined = none,
+    inSlot: [boolean, boolean] = [false, false]
   ) =>
     solveLayerScales(
       ownSize,
       spaces,
       claims,
       spaces,
+      inSlot,
       [100, 80],
       sigmas,
       maps,
@@ -1315,9 +1317,27 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
     unscaled.failedAxes.length === 1 && unscaled.failedAxes[0] === 1
   );
 
-  // A pinned node handed σ but no frame (a facet panel in its slot) is sized
-  // by its slot; a free one (a part of a chain) inherits σ.
+  // A pinned node in a slot (a facet panel) is sized by its slot; a free
+  // one (a part of a chain) inherits σ.
   const slot = solve(
+    [false, false],
+    [positionSpace, sizeSpace],
+    [impliedExtent(positionSpace), impliedExtent(sizeSpace)],
+    [2, 3],
+    [undefined, undefined],
+    none,
+    none,
+    [true, true]
+  );
+  ok(
+    "a pinned node in a slot is sized by its slot; a free one inherits",
+    slot.sigmas[0] === 10 && slot.sigmas[1] === 3
+  );
+
+  // A pinned node its parent places at a datum is handed σ but no frame,
+  // and is in its parent's set, not a slot: it inherits σ, and its frame
+  // is its own, with its 0 at the origin its parent places.
+  const atDatum = solve(
     [false, false],
     [positionSpace, sizeSpace],
     [impliedExtent(positionSpace), impliedExtent(sizeSpace)],
@@ -1325,8 +1345,11 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
     [undefined, undefined]
   );
   ok(
-    "a pinned node with no frame is sized by its slot; a free one inherits",
-    slot.sigmas[0] === 10 && slot.sigmas[1] === 3
+    "a pinned node nested at a datum inherits σ in a frame of its own",
+    atDatum.sigmas[0] === 2 &&
+      atDatum.checks.length === 0 &&
+      atDatum.frames[0]?.sigma === 2 &&
+      atDatum.frames[0]?.originPx === 0
   );
 
   // #1114: a sized node maps its keyed domain, not just its own data.

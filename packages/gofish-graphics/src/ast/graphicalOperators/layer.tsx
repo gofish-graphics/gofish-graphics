@@ -535,6 +535,7 @@ export const layer = createNodeOperatorSequential(
             layerTypes?.resolved,
             contentExtents,
             node._underlyingSpace,
+            [node.inSlot(0), node.inSlot(1)],
             size,
             inheritedScaleFactors,
             inheritedPosScales,

@@ -53,15 +53,16 @@ export const scopeFrame = (
 
 /** The frame a node with type `space` places its children in, given the
  *  scale it was handed (its parent's frame's map, and its σ). A pinned node
- *  shares its parent's frame. A free node has a frame of its own whose 0 is
- *  its baseline, `{σ, 0}` (its parent places that baseline). A node with no
- *  data 0 has no frame. */
+ *  shares its parent's frame. A free node, or a pinned one its parent nests
+ *  at a datum (handed σ but no map), has a frame of its own whose 0 is its
+ *  origin, `{σ, 0}`: its parent places that origin. A node with no data 0
+ *  has no frame. */
 export const frameOf = (
   space: UnderlyingSpace | undefined,
   handed: { sigma?: number; map?: AxisMap }
 ): AxisMap | undefined => {
-  if (originIs(space, "pinned")) return handed.map;
-  if (!originIs(space, "free")) return undefined;
+  if (originIs(space, "pinned") && handed.map !== undefined) return handed.map;
+  if (!originIs(space, "free") && !originIs(space, "pinned")) return undefined;
   const sigma = handed.map?.sigma ?? handed.sigma;
   return sigma === undefined ? undefined : { sigma, originPx: 0 };
 };

@@ -139,8 +139,10 @@ export type RenderSession = {
   scopes?: ScopeRegistry;
   /** The render's measure-keyed domains (#1114, `keyedDomains.ts`): per
    *  space root, axis and unit, the domain every sized node of that unit
-   *  maps into its size, and whether an axis is drawn over it. Built by
-   *  `layout` after the type walk, and again after each rewrite. */
+   *  maps into its size, and whether an axis is drawn over it. Built once
+   *  by `layout`, after the type walk and before chrome and labels are
+   *  elaborated; the rewrites read it and never rebuild it. Its demand half
+   *  is refreshed once the axes are assigned. */
   keyedDomains?: KeyedDomains;
 };
 
@@ -924,6 +926,18 @@ export class GoFishNode {
    *  or the content of a chart with a size of its own on `dim` — so the root
    *  of a bar chart renders an absolute value axis over its free bars.
    *  Anywhere else a free space is still waiting for its parent to place it. */
+  /** Whether this node's parent nests it in a slot of its own on `dim` (a
+   *  spread, grid or treemap slot): a set of its own that sits in a frame of
+   *  its own. A child nested at a datum is in its parent's set, so it is not
+   *  in a slot. Read by a layer's σ solve (`solveLayerScales`). */
+  public inSlot(dim: 0 | 1): boolean {
+    const p = this.parent;
+    if (p === undefined) return false;
+    const i = p.children.indexOf(this);
+    const plan = p.sharing();
+    return plan.sets[dim][i] !== 0 && plan.nested[dim].has(i);
+  }
+
   public placedSpace(space: UnderlyingSpace, dim: 0 | 1): UnderlyingSpace {
     return this.parent === undefined || this.isSizedChartContent(dim)
       ? placeBaseline(space)

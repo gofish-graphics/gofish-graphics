@@ -1251,9 +1251,15 @@ an axis when its size there is given to it rather than computed from σ:
 - a node with a literal `w`/`h`;
 - a node with a data-valued `w`/`h`, whose box its parent's σ sizes and whose
   content it maps into that box;
-- a node handed no frame that has data of its own to place: a facet panel in
-  its spread slot (a pinned part handed σ but no map), or a node handed no σ
-  at all because nothing above it could solve one. Its box is its slot.
+- a node with pinned data in a slot its parent nests it in (a spread, grid
+  or treemap slot: a facet panel), sized by its slot;
+- a node handed no σ at all because nothing above it could solve one, sized
+  by the box it is given.
+
+A node its parent places at a datum (a scatter's glyph) is not sized. It is in
+its parent's set, so it inherits its parent's σ. It is handed no map, since
+the datum places it, so its frame is its own, with its 0 at the origin its
+parent places (`frameOf` in `solver/scopes.ts`).
 
 `solveLayerScales` (`constraints/proposalPlan.ts`) is the layer's form of the
 rule. A spread of magnitudes along its direction is not sized: its parts are

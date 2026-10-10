@@ -185,10 +185,16 @@ export type LayerScales = {
  *   - it has a size of its own (`ownSize`): a literal `w`/`h`, or a
  *     data-valued one, whose box its parent's σ sizes and whose content it
  *     maps into that box;
- *   - or it is handed no frame and has data of its own to place: a layer
- *     handed no σ at all (nothing above it could solve one), or a pinned
- *     layer handed σ but no frame (a facet panel in its spread slot, a child
- *     nested at a datum). Its box is the slot its parent gives it.
+ *   - or it holds pinned data in a slot its parent nests it in (`inSlot`: a
+ *     spread, grid or treemap slot, a facet panel). Its box is that slot;
+ *   - or nothing above it solved a σ to hand it (`handedSigmas` is
+ *     undefined): it is the top of its space, and its box is the size it is
+ *     given.
+ *
+ * A child its parent places at a datum is not sized: its position is a
+ * value in its parent's frame, so it inherits its parent's σ, as a scatter's
+ * glyphs do. So is a spread of magnitudes along its direction: its parts are
+ * parts of one chain claim, solved by the sized node above it.
  *
  * A sized node maps its keyed domain (the domain of its content's unit in its
  * space, see `keyedDomains.ts`) into its size: `scope` widens its claim to
@@ -207,6 +213,8 @@ export function solveLayerScales(
   contentExtents: Size<Extent | undefined>,
   // What the layer reports upward, whose frame it has when it inherits.
   reported: Size<UnderlyingSpace> | undefined,
+  // Per axis: its parent nests it in a slot of its own (`inSlot`).
+  inSlot: Size<boolean>,
   layerSize: Size,
   handedSigmas: Size<number | undefined>,
   handedMaps: ConstraintPosScales,
@@ -231,7 +239,8 @@ export function solveLayerScales(
     const sized =
       ownSize[axis] ||
       (handedMaps[axis] === undefined &&
-        (handedSigmas[axis] === undefined || originIs(content, "pinned")));
+        (handedSigmas[axis] === undefined ||
+          (inSlot[axis] && originIs(content, "pinned"))));
     const claim = contentExtents[axis];
     if (sized && Number.isFinite(layerSize[axis]) && claim !== undefined) {
       const [space, nicedClaim] = scope(axis, content, claim);
