@@ -1,8 +1,20 @@
 """Equivalent of Partition.stories.tsx — Forward Syntax/Partition."""
 
-from gofish import Color, chart, field, partition, region, text
+from gofish import (
+    Bin,
+    Color,
+    chart,
+    circle,
+    field,
+    layer,
+    partition,
+    region,
+    scatter,
+    struct,
+    text,
+)
 from python_stories.data import PENGUINS
-from python_stories.vega_data_urls import read_json
+from python_stories.vega_data_urls import read_csv, read_json
 
 # The penguins with both a flipper length and a body mass.
 MEASURED = [
@@ -103,4 +115,127 @@ def story_nested_mass_then_flipper():
         )
         .mark(text(text=field("Body Mass (g)").count())),
         {"w": 420, "h": 320},
+    )
+
+
+def _contiguous_airports():
+    """The airports of the contiguous United States, from vega-datasets."""
+    airports = read_csv("airports.csv")
+    return airports[
+        (airports["longitude"] > -130)
+        & (airports["latitude"] > 24)
+        & (airports["latitude"] < 50)
+    ]
+
+
+# Twenty large hub airports, picked from the same table by their codes.
+HUBS = [
+    "ATL", "BOS", "CLT", "DEN", "DFW", "DTW", "IAH", "JFK", "LAX", "MCI",
+    "MIA", "MSP", "MSY", "ORD", "PDX", "PHX", "SEA", "SFO", "SLC", "STL",
+]
+
+
+def story_airport_hexbin():
+    return (
+        chart(_contiguous_airports(), color=Color.gradient("blues"), axes=True)
+        .flow(
+            partition(
+                by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=1))
+            )
+        )
+        .mark(region(fill=field("longitude").count(), stroke="white")),
+        {"w": 600, "h": 360},
+    )
+
+
+# Miles per gallon and weight have different units, so the hexagon's radius
+# is given per axis: 1.5 mpg on x and 250 lbs on y.
+def story_car_hexbin():
+    cars = read_json("cars.json")
+    cars = cars[cars["Miles_per_Gallon"].notna() & cars["Weight_in_lbs"].notna()]
+    return (
+        chart(cars, color=Color.gradient("viridis"), axes=True)
+        .flow(
+            partition(
+                by=struct(x="Miles_per_Gallon", y="Weight_in_lbs").bin(
+                    Bin.hex(radius={"x": 1.5, "y": 250})
+                )
+            )
+        )
+        .mark(region(fill=field("Miles_per_Gallon").count())),
+        {"w": 480, "h": 360},
+    )
+
+
+# Each airport goes to the nearest of twenty hubs (the black dots), and each
+# hub's cell is colored by how many airports are nearer to it than to any
+# other hub.
+def story_airports_by_nearest_hub():
+    airports = _contiguous_airports()
+    hubs = airports[airports["iata"].isin(HUBS)]
+    return (
+        layer(
+            [
+                chart(airports, color=Color.gradient("reds"))
+                .flow(
+                    partition(
+                        by=struct(x="longitude", y="latitude").bin(
+                            Bin.voronoi(seeds=hubs)
+                        )
+                    )
+                )
+                .mark(region(fill=field("iata").count(), stroke="white")),
+                chart(hubs)
+                .flow(scatter(x="longitude", y="latitude"))
+                .mark(circle(r=3, fill="black")),
+            ]
+        ),
+        {"w": 600, "h": 360, "axes": True},
+    )
+
+
+# The penguins with both beak measurements.
+BEAKED = [
+    d
+    for d in PENGUINS
+    if d["Beak Length (mm)"] is not None and d["Beak Depth (mm)"] is not None
+]
+
+
+# The Voronoi cells of the data itself (`seeds=data`): each penguin's cell is
+# the part of the plot nearer to it than to any other penguin.
+def story_penguin_beak_voronoi():
+    key = struct(x="Beak Length (mm)", y="Beak Depth (mm)")
+    return (
+        layer(
+            [
+                chart(BEAKED)
+                .flow(partition(by=key.bin(Bin.voronoi(seeds=BEAKED))))
+                .mark(region(fill="#f4f1ea", stroke="#b9b2a3", stroke_width=0.5)),
+                chart(BEAKED)
+                .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
+                .mark(circle(r=2.5, fill="Species")),
+            ]
+        ),
+        {"w": 480, "h": 360, "axes": True},
+    )
+
+
+# A text mark has a size of its own, so it sits at the center of its
+# hexagon's box, which is the hexagon's center.
+def story_airport_hex_counts():
+    airports = _contiguous_airports()
+    key = struct(x="longitude", y="latitude").bin(Bin.hex(radius=3))
+    return (
+        layer(
+            [
+                chart(airports, color=Color.gradient("blues"))
+                .flow(partition(by=key))
+                .mark(region(fill=field("iata").count(), stroke="white")),
+                chart(airports)
+                .flow(partition(by=key))
+                .mark(text(text=field("iata").count(), font_size=10)),
+            ]
+        ),
+        {"w": 600, "h": 360, "axes": True},
     )
