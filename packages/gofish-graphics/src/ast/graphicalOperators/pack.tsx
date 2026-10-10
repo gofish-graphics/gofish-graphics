@@ -116,8 +116,7 @@ export type PackOptions = {
 const packOperator = createOperator<any, PackOptions>(
   ((props: PackProps, children: GoFishAST[]) => Pack(props, children)) as any,
   {
-    split: ({ by }, d) =>
-      by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
+    split: ({ by }, d) => splitEntries(by, d),
     serialize: "pack",
   }
 );

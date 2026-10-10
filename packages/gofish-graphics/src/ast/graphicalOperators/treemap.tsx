@@ -308,10 +308,7 @@ export const treemap = createOperator<any, TreemapOptions>(
   ((props: TreemapProps, children: GoFishAST[]) =>
     Treemap(props, children)) as any,
   {
-    // With `by`: groupBy on the field (mirrors spread). Without `by`:
-    // identity split — one leaf per row.
-    split: ({ by }, d) =>
-      by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
+    split: ({ by }, d) => splitEntries(by, d),
     channels: {
       w: "size",
       h: "size",

@@ -18,7 +18,7 @@ from . import ast as _ast
 from .ast import Mark, _channel
 
 if TYPE_CHECKING:
-    from .ast import FieldAccessor, FieldPredicate
+    from .ast import ChunkKey, FieldAccessor, FieldPredicate
 
 
 # --- Nested option dicts -----------------------------------------------------
@@ -623,11 +623,11 @@ def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optio
 
 # --- Dual-form cores (dispatch stays hand-written in ast.py) -----------------
 
-def _spread_opts(*, by: Optional[str | FieldAccessor] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange children along `dir` with spacing, aligning them on the cross axis.
 
     Args:
-        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
+        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
         spacing: Gap between children, px. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
@@ -664,11 +664,11 @@ def _spread_opts(*, by: Optional[str | FieldAccessor] = None, dir: Optional[str]
             opts[_k] = _v
     return opts
 
-def _stack_opts(*, by: Optional[str | FieldAccessor] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).
 
     Args:
-        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
+        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
         spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
         glue: Spread-parity passthrough; stack always glues regardless.
@@ -705,11 +705,11 @@ def _stack_opts(*, by: Optional[str | FieldAccessor] = None, dir: Optional[str] 
             opts[_k] = _v
     return opts
 
-def _scatter_opts(*, by: Optional[str | FieldAccessor] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, x_min: Optional[int | float | str] = None, x_max: Optional[int | float | str] = None, y_min: Optional[int | float | str] = None, y_max: Optional[int | float | str] = None, dims: Optional[dict] = None, alignment: Optional[str] = None, overlap: Optional[dict] = None, axes: Optional[bool | dict] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _scatter_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, x_min: Optional[int | float | str] = None, x_max: Optional[int | float | str] = None, y_min: Optional[int | float | str] = None, y_max: Optional[int | float | str] = None, dims: Optional[dict] = None, alignment: Optional[str] = None, overlap: Optional[dict] = None, axes: Optional[bool | dict] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Position each child at an explicit (x, y) point or [min, max] span in data space.
 
     Args:
-        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
+        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         x: Point position, x.
         y: Point position, y.
         x_min: Range form: left/bottom edge, x.
@@ -744,11 +744,11 @@ def _scatter_opts(*, by: Optional[str | FieldAccessor] = None, x: Optional[int |
             opts[_k] = _v
     return opts
 
-def _group_opts(*, by: str | FieldAccessor, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _group_opts(*, by: str | FieldAccessor | ChunkKey, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Partition rows by `by` into a flat `Frame` (no layout beyond grouping).
 
     Args:
-        by: Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
+        by: Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
@@ -780,7 +780,7 @@ def _table_opts(*, by: dict, spacing: Optional[float | tuple] = None, num_cols: 
             opts[_k] = _v
     return opts
 
-def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.
 
     Args:
@@ -789,7 +789,7 @@ def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | fl
         w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.
+        by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         spacing: Gap between sibling tiles, in pixels. Default 0.
         padding: Inset around the outer edge of the treemap, in pixels. Default 0.
         round: Round pixel positions and sizes. Default true.
@@ -818,11 +818,11 @@ def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | fl
             opts[_k] = _v
     return opts
 
-def _pack_opts(*, by: Optional[str | FieldAccessor] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _pack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping, with d3's front-chain algorithm. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).
 
     Args:
-        by: Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row.
+        by: Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
@@ -834,7 +834,7 @@ def _pack_opts(*, by: Optional[str | FieldAccessor] = None, debug: Optional[bool
             opts[_k] = _v
     return opts
 
-def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.
 
     Args:
@@ -843,7 +843,7 @@ def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Option
         w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
         dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.
+        by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         spacing: Gap between sibling tiles, in pixels. Default 0.
         padding: Inset around the outer edge of the treemap, in pixels. Default 0.
         round: Round pixel positions and sizes. Default true.
@@ -874,7 +874,7 @@ def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Option
             opts[_k] = _v
     return opts
 
-def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.
 
     Args:
@@ -889,7 +889,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         h: Data-driven cross-axis extent (field/datum-sized children).
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
+        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
         spacing: Gap between children, px. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
@@ -931,7 +931,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
             opts[_k] = _v
     return opts
 
-def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, shared_scale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key` and the full box-dims group.
 
     Args:
@@ -946,7 +946,7 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
         h: Data-driven cross-axis extent (field/datum-sized children).
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
+        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
         spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
         glue: Spread-parity passthrough; stack always glues regardless.

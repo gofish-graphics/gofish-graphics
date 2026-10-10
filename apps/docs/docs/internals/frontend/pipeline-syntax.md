@@ -422,8 +422,8 @@ chart(cars)
 chart(seafood)
   .flow(
     spread("lake", { spacing: 8, dir: "x" }),
-    derive((d) => d.repeat("count").chunk(5)),
-    spread({ spacing: 2, dir: "y" }),
+    derive((d) => d.repeat("count")),
+    spread({ by: chunk(5), spacing: 2, dir: "y" }),
     spread({ spacing: 2, dir: "x" })
   )
   .mark(rect({ w: 8, h: 8, fill: "species" }));

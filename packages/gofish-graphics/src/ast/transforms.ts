@@ -1,6 +1,6 @@
 import { bin as d3bin } from "d3-array";
 import { columnType, setColumnTypes, type ColumnType } from "./schema";
-import { COUNT } from "./measure";
+import { columnQuantity, COUNT_COLUMN } from "./measure";
 
 type BinResult = { start: number; end: number; size: number; count: number };
 
@@ -37,22 +37,21 @@ function runBin<T extends Record<string, any>>(
     count: b.rows.length,
   }));
   // Quantity and unit (`HasQuantity`, `HasUnit`): `start`/`end`/`size` are
-  // amounts of the SOURCE column's quantity (its declared quantity, else its
-  // name, e.g. "Beak Length (mm)", not the column name "start"), in the
-  // source's unit: its declared unit, or else its unit variable, which the
-  // quantity names. So the edges title their axis as the source does and
-  // unify with it. `count` is a count. The column types ride the array (not
-  // each row) so they survive `derive(...)`.
+  // amounts of the SOURCE column's quantity (e.g. "Beak Length (mm)", not
+  // the column name "start"), in the source's declared unit, or else in its
+  // unit variable, which the quantity names. So the edges title their axis
+  // as the source does and unify with it. `count` is a count. The column
+  // types ride the array (not each row) so they survive `derive(...)`.
   const source = columnType(data, field);
   const edge: ColumnType = {
-    HasQuantity: { name: source?.HasQuantity?.name ?? field },
+    HasQuantity: { name: columnQuantity(field, source).name },
     ...(source?.HasUnit !== undefined ? { HasUnit: source.HasUnit } : {}),
   };
   return setColumnTypes(result, {
     start: edge,
     end: edge,
     size: edge,
-    count: { HasUnit: { unit: COUNT.name } },
+    count: COUNT_COLUMN,
   });
 }
 

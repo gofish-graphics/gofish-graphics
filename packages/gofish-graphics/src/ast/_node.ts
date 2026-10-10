@@ -485,6 +485,9 @@ export class GoFishNode {
   };
   public _scopeMap?: Map<string, GoFishNode>;
   public parent?: GoFishNode;
+  /** The union-find of unknown units a walk rooted here owns, when there is
+   *  no render session to hold it (see `walkUnits`). */
+  private units?: Units;
   public datum?: any;
   /** Paint-time reactive channels (a `live()` value per channel), stamped by the
    *  mark builders at resolve. Baked into the `liveSlots` side table at lower
@@ -892,12 +895,11 @@ export class GoFishNode {
     if (this._underlyingSpace) {
       return this._underlyingSpace;
     }
-    // The type walk runs inside the render's union-find of unknown units
-    // (measure.ts), so a binding made anywhere in the figure holds everywhere
-    // in it. The outermost call installs it; one per render, on the session.
+    // The type walk runs inside one union-find of unknown units (measure.ts),
+    // so a binding made anywhere in the figure holds everywhere in it. The
+    // outermost call, the walk's root, installs the one it owns.
     if (!hasUnits()) {
-      const units = this.renderUnits();
-      return withUnits(units, () => this.resolveUnderlyingSpace());
+      return withUnits(this.walkUnits(), () => this.resolveUnderlyingSpace());
     }
     const childSpaces = this.children.map((child) =>
       child.resolveUnderlyingSpace()
@@ -1116,8 +1118,13 @@ export class GoFishNode {
    * captured render closure observes it.
    */
   public resolveEmbedding(insideCoord: boolean = false): void {
+    // Unit equality reads the type walk's union-find.
+    if (!hasUnits()) {
+      return withUnits(this.walkUnits(), () =>
+        this.resolveEmbedding(insideCoord)
+      );
+    }
     const within = insideCoord || this.type === "coord";
-    const units = this.renderUnits();
 
     const dims = this.args?.dims as Dimensions | undefined;
     if (dims) {
@@ -1126,12 +1133,12 @@ export class GoFishNode {
         if (dim === undefined) continue;
         // Explicit emX/emY (or connect's embed()) is a hard claim — leave it.
         if (dim.embedded === true) continue;
-        let embedded = baseEmbedded(dim, units);
+        let embedded = baseEmbedded(dim);
         // Route B gate (coord-scoped): a value-sized dim positioned in a unit
         // FOREIGN to its size's unit is a foreign extent (a bubble) → ink.
         if (embedded && within) {
           for (const pos of [dim.min, dim.center, dim.max]) {
-            if (isValue(pos) && !sameValueUnit(pos, dim.size, units)) {
+            if (isValue(pos) && !sameValueUnit(pos, dim.size)) {
               embedded = false;
               break;
             }
@@ -1428,6 +1435,12 @@ export class GoFishNode {
    * way in when the two directions differ (`orientScales`).
    */
   public layout(size: Size, scales: Size<AxisScale | undefined>): Placeable {
+    // Layout re-joins a layer's position measures (`collectPositionDomains`),
+    // so it reads the type walk's union-find of units, whose bindings it
+    // must see. The outermost call installs it, as the walk's root does.
+    if (!hasUnits()) {
+      return withUnits(this.walkUnits(), () => this.layout(size, scales));
+    }
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
     const { intrinsicDims, transform, renderData } = this._layout(
@@ -2026,11 +2039,18 @@ export class GoFishNode {
     });
   }
 
-  /** The render's union-find of unknown units (`RenderSession.units`), or a
-   *  fresh one when this node has no session (nothing is then shared). */
-  private renderUnits(): Units {
+  /** The union-find of unknown units this node's walks run in (measure.ts):
+   *  the render session's when there is one (`RenderSession.units`), else the
+   *  one the root of the first walk over this node's tree owns, which that
+   *  walk creates. The layout pass and the embedding pass read the same one,
+   *  so they see the type walk's bindings. */
+  private walkUnits(): Units {
     const session = this.tryGetRenderSession();
-    return session ? (session.units ??= new Units()) : new Units();
+    if (session !== undefined) return (session.units ??= new Units());
+    for (let n: GoFishNode | undefined = this; n; n = n.parent) {
+      if (n.units !== undefined) return n.units;
+    }
+    return (this.units = new Units());
   }
 
   public getRenderSession(): RenderSession {

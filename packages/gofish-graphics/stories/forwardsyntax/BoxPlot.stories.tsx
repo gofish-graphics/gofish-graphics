@@ -6,9 +6,9 @@ import { genderPayGap, payGrade } from "../../src/data/genderPayGap";
 /**
  * A box plot from the chart builder. Each row already holds its summary
  * (`Min`, `25-Percentile`, `Median`, `75-Percentile`, `Max`), so the marks
- * read five different columns on one y axis. None of them declares a unit,
- * so their units are unknown and unify: they share the axis with no
- * annotation, and the axis is titled by their names.
+ * read five different columns on one y axis. The schema declares all five
+ * amounts of one quantity, Pay, so they share the axis and it is titled
+ * "Pay".
  */
 const meta: Meta = {
   title: "Forward Syntax/Box Plot",
@@ -26,8 +26,16 @@ export const GenderPayGap: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
+    const pay = Schema.quantity("Pay");
     chart(genderPayGap, {
-      schema: { "Pay Grade": Schema.ordered(payGrade) },
+      schema: {
+        "Pay Grade": Schema.ordered(payGrade),
+        Min: pay,
+        "25-Percentile": pay,
+        Median: pay,
+        "75-Percentile": pay,
+        Max: pay,
+      },
       axes: true,
     })
       .flow(

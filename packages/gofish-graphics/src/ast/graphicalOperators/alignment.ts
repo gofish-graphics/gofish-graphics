@@ -3,7 +3,6 @@
 // </gofish-wiki>
 
 import {
-  ORDINAL,
   UNDEFINED,
   isCONTINUOUS,
   isORDINAL,
@@ -19,6 +18,7 @@ import {
   CONTINUOUS,
   originIs,
 } from "../underlyingSpace";
+import { unionInOrder } from "../measure";
 import { Extent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import type { Size } from "../dims";
@@ -109,19 +109,22 @@ export function unionChildSpaces(
     for (const ord of ordinals) {
       if (ord.domain) for (const k of ord.domain) keys.add(k);
     }
-    // Carry the grouping field through the union so a category axis keeps
+    // Carry the grouping fields through the union so a category axis keeps
     // naming itself off its own space — e.g. a `Frame` wrapping a
-    // `spread(lake)` preserves "lake". An ordinal's units are a title and no
-    // unit, so the join only unions the titles.
-    const measure = joinAllUnits(
-      ordinals.map((o) => o.measure),
-      true,
-      { axis, where: "where categories are drawn on top of each other" }
+    // `spread(lake)` preserves "lake".
+    const titles = ordinals.reduce<string[]>(
+      (acc, o) => unionInOrder(acc, o.titles ?? []),
+      []
     );
     // Anonymous only if EVERY unioned ordinal is anonymous — one semantically
     // keyed child makes the union a real category axis.
     const anonymous = ordinals.every((o) => o.anonymous);
-    return ORDINAL(Array.from(keys), measure, anonymous);
+    return {
+      kind: "ordinal",
+      domain: Array.from(keys),
+      titles: titles.length > 0 ? titles : undefined,
+      anonymous,
+    };
   }
 
   const axisSpaces = children.map((c) => c[axis]);

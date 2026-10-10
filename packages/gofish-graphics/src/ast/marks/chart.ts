@@ -8,7 +8,6 @@ import {
   connect as Connect,
   type AnchorSpec,
 } from "../graphicalOperators/connect";
-import chunk from "lodash/chunk";
 import { GoFishNode } from "../_node";
 import {
   DatumValueImpl,
@@ -64,11 +63,7 @@ import {
   mask as Mask,
 } from "../graphicalOperators/porterDuff";
 import type { RelateFn } from "../constraints";
-import {
-  splitEntries,
-  type SplitBy,
-  type InferredRelational,
-} from "../datumProjection";
+import { splitByTiers, type InferredRelational } from "../datumProjection";
 
 export type { Mark, Operator };
 export { generatedRect as rect };
@@ -90,6 +85,7 @@ import {
   type SchemaEntry,
 } from "../schema";
 import { withWire } from "../wire";
+import { datumOfInput } from "./markResult";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
@@ -136,29 +132,22 @@ function mapOperator<T, U>(
  * Types the result carries itself win over 1 and 2 (a datetime column a
  * Python callback returns arrives typed from the widget's decode). The
  * returned array itself is left as `fn` made it: `applySchema` types a copy.
- * A result that is one object, not an array (a derive over a single datum),
- * is typed as one row and converted the same way; it is returned as an
- * object, which carries no column types.
+ * The result is a list of rows, as all data is; only the types say so, and
+ * nothing here checks its shape.
  */
 const typeLikeChartData =
   (schema: Record<string, SchemaEntry> = {}) =>
-  async <U>(out: U, input: unknown): Promise<U> => {
-    const inherited = getColumnTypes(input);
-    if (Array.isArray(out))
-      return (await applySchema(out, schema, inherited)) as U;
-    if (out !== null && typeof out === "object")
-      return (await applySchema([out], schema, inherited))[0];
-    return out;
-  };
+  async <U>(out: U[], input: unknown): Promise<U[]> =>
+    (await applySchema(out as any[], schema, getColumnTypes(input))) as U[];
 
 /** What `derive` takes besides its function: `schema`, the column types of
  *  its result, as a chart's `schema` takes them (see `typeLikeChartData`). */
 export type DeriveOptions = { schema?: Record<string, SchemaEntry> };
 
 export function derive<T, U>(
-  fn: (d: T) => U | Promise<U>,
+  fn: (rows: T[]) => U[] | Promise<U[]>,
   { schema }: DeriveOptions = {}
-): Operator<T, U> {
+): Operator<T[], U[]> {
   // The function body is not serializable; the frontend-IR emitter sees
   // an opaque `{ type: "derive" }` (with its `schema`, if any). The
   // Python-bridge widget emits its own `{ type: "derive", lambdaId }` shape.
@@ -179,10 +168,6 @@ export function derive<T, U>(
  * built by `field("day").between(lo, hi)` — which is just such a function, so
  * there is one thing to implement.
  *
- * Non-array data passes through untouched: a `filter` in a scope whose datum is
- * a single row (or a ref) has nothing to filter, and throwing there would make
- * the operator unusable in a nested pipeline.
- *
  * Typing: `filter` returns a subset of its input's row objects, so its
  * result carries the input's column types as they are, with no check of the
  * values. A predicate that changes the rows it tests is not supported.
@@ -196,7 +181,7 @@ export function derive<T, U>(
 export function filter<T>(pred: (row: T) => boolean): Operator<T[], T[]> {
   const predicate = predicateWire(pred);
   return mapOperator<T[], T[]>(
-    (d) => (Array.isArray(d) ? d.filter(pred) : d),
+    (d) => d.filter(pred),
     predicate !== undefined
       ? { type: "filter", opts: { predicate } }
       : { type: "derive", opts: {} },
@@ -211,8 +196,6 @@ export const repeat = <T, K extends keyof T>(
 ) => {
   return Array.from({ length: d[field] as unknown as number }, () => d);
 };
-
-export { chunk };
 
 export const normalize = <T, K extends keyof T>(
   data: T[],
@@ -259,8 +242,7 @@ export function resolve(
 ): Operator<any[], any[]> {
   return mapOperator<any[], any[]>(
     (rows, layerContext) => {
-      const resolved = resolveRefData(opts.from, layerContext ?? {});
-      const refs = Array.isArray(resolved) ? resolved : [resolved];
+      const refs = resolveRefData(opts.from, layerContext ?? {});
       const matchField = (r: GoFishRef): string => {
         const field = opts.key ?? (r.targetNode as any)?.__splitBy;
         if (typeof field !== "string") {
@@ -330,7 +312,6 @@ export function join<
 >(right: R[], opts: { on: string }): Operator<L[], (L & R)[]> {
   return mapOperator<L[], (L & R)[]>(
     (left) => {
-      const leftRows = Array.isArray(left) ? left : left == null ? [] : [left];
       const rightByKey = new Map<unknown, R[]>();
       for (const r of right) {
         const k = r[opts.on];
@@ -339,7 +320,7 @@ export function join<
         else rightByKey.set(k, [r]);
       }
       const joined: (L & R)[] = [];
-      for (const l of leftRows) {
+      for (const l of left) {
         for (const r of rightByKey.get(l[opts.on]) ?? []) {
           joined.push({ ...l, ...r });
         }
@@ -444,8 +425,8 @@ export function selectAll(
 //                         one connector through all the refs
 //       · split bag form — a fused mark's split is computed by `ChartBuilder`
 //                         from the flow it fuses over (see `along` below) and
-//                         partitions the bag with the same `splitEntries`
-//                         used by `group()`'s `split` hook, producing one
+//                         partitions the bag as the flow's tiers grouped its
+//                         rows (`splitByTiers`), producing one
 //                         connector PER GROUP. A refs-bag chart spells the
 //                         same shape structurally instead: `chart(selectAll(
 //                         ...)).flow(group({ by: "species" })).mark(ribbon())`.
@@ -644,7 +625,10 @@ export function createRelationalMark<O extends Record<string, unknown>>(
   produce: (
     opts: StripLive<O>,
     children: GoFishAST[],
-    inferred: InferredRelational
+    inferred: InferredRelational,
+    /** The key of the group of the default split this connector threads;
+     *  undefined when the bag is not split. */
+    key?: string
   ) => any,
   config: {
     /** A TEMPORAL connector (`time.transition()`): its path tier is the
@@ -678,29 +662,27 @@ export function createRelationalMark<O extends Record<string, unknown>>(
      *  here, not inside the bag branch below, because `produce` reads it on
      *  every branch. */
     const inferred: InferredRelational = {};
-    /** The datum of the GROUP a connector threads: each field of its operands'
-     *  data, projected with homogeneity collapse. A path through one species'
-     *  days collapses `species` to that species and `day` to undefined, which
-     *  is what a channel callback — and `pointer().datum()` on hover — should
-     *  see. Undefined when the operands carry no data. */
+    /** The datum of the GROUP a connector threads: a one-row list whose row
+     *  holds each field of its operands' rows, projected with homogeneity
+     *  collapse. A path through one species' days collapses `species` to that
+     *  species and `day` to undefined, which is what a channel callback — and
+     *  `pointer().datum()` on hover — should see. Like every datum it is a
+     *  list. Undefined when the operands carry no data. */
     const groupDatumOf = (
       operands: GoFishAST[]
-    ): Record<string, unknown> | undefined => {
-      const datums = operands
+    ): Record<string, unknown>[] | undefined => {
+      const datums: unknown[][] = operands
         .map((o) => (o as any).datum)
         .filter((d) => d !== undefined);
       if (datums.length === 0) return undefined;
       const keys = new Set<string>();
-      const collectKeys = (d: unknown): void => {
-        if (Array.isArray(d)) d.forEach(collectKeys);
-        else if (d !== null && typeof d === "object")
-          for (const k of Object.keys(d)) keys.add(k);
-      };
-      collectKeys(datums);
+      for (const row of datums.flat())
+        if (row !== null && typeof row === "object")
+          for (const k of Object.keys(row)) keys.add(k);
       if (keys.size === 0) return undefined;
       const group: Record<string, unknown> = {};
       for (const k of keys) group[k] = projectPath(datums, k);
-      return group;
+      return [group];
     };
     /** The opts `produce` is built from: each `live(...)` channel replaced by
      *  its value at the connector's datum (the same substitution a leaf mark's
@@ -781,16 +763,18 @@ export function createRelationalMark<O extends Record<string, unknown>>(
                   `{ from: selectAll(...) }) in the flow first.`
               );
             }
-            // An edge's paint is read off its own row.
-            const rowOpts = await resolveGroupPaint(type, opts, row);
+            // An edge's paint is read off its own row; its datum is the
+            // one-row list `[row]`.
+            const datum = [row];
+            const rowOpts = await resolveGroupPaint(type, opts, datum);
             return finish(
               (await produce(
-                resolveLive(rowOpts, row),
+                resolveLive(rowOpts, datum),
                 [a, b],
                 inferred
               )) as GoFishNode,
               [a, b],
-              row
+              datum
             );
           })
         );
@@ -811,7 +795,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     // from `opts` (see `tagRelationalFusable`'s doc comment). `opts.dir`, if
     // given, still wins over the inferred travel direction.
     const mark: Mark<GoFishRef[]> = async (d: GoFishRef[]) => {
-      const by = inferred.by;
+      const split = inferred.split;
       const dir = (opts as any).dir ?? inferred.dir;
       // Only allocate a copy when there's actually an inferred `dir` to
       // splice in — `produce` (line/ribbon's Connect call) reads `o.dir` off
@@ -822,13 +806,10 @@ export function createRelationalMark<O extends Record<string, unknown>>(
           ? ({ ...opts, dir } as O)
           : opts;
 
-      if (by !== undefined) {
-        const entries = splitEntries(by, d as any);
+      if (split !== undefined) {
+        const entries = splitByTiers(split, d);
         const nodes = await Promise.all(
-          [...entries.values()].map(async (group) => {
-            const groupRefs = (
-              Array.isArray(group) ? group : [group]
-            ) as GoFishRef[];
+          [...entries].map(async ([key, groupRefs]) => {
             const groupOpts = await resolveGroupPaint(
               type,
               baseOpts,
@@ -839,7 +820,8 @@ export function createRelationalMark<O extends Record<string, unknown>>(
               (await produce(
                 resolveLive(groupOpts, datum),
                 groupRefs,
-                inferred
+                inferred,
+                key
               )) as GoFishNode,
               groupRefs,
               datum
@@ -1016,7 +998,7 @@ export function blank<T extends Record<string, any>>({
   h?: number | (keyof T & string) | Value<number> | FieldExpr;
   fill?: string | (keyof T & string);
   debug?: boolean;
-} = {}): Mark<T | T[] | { item: T | T[]; key: number | string }> {
+} = {}): Mark<T[]> {
   // A rect's dims/layout/datum with rect's paint removed (and `{ type:
   // "blank" }` on the wire) — see `Blank` / `baseBlank` in shapes/rect.tsx.
   return baseBlank<T>({
@@ -1131,7 +1113,7 @@ export function layer<T>(
       resolved.push(await resolveMarkResult(result, sharedContext));
     }
     const node = await Layer(opts, resolved);
-    (node as any).datum = d;
+    node.datum = datumOfInput(d as unknown[]);
     return node;
   };
   return tagCombinator(makeRelatableMark(base), "layer", opts, marks);
@@ -1165,7 +1147,7 @@ function makePorterDuffCombinator(
         )
       );
       const node = await lowLevel(opts, [child0, child1]);
-      (node as any).datum = d;
+      node.datum = datumOfInput(d as unknown[]);
       return node;
     };
     return tagCombinator(nameableMark(base), irType, opts, marks);

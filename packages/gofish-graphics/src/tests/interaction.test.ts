@@ -48,6 +48,7 @@ const {
   button,
   spreadY,
   frame,
+  layer,
   Coord,
 } = GoFish as any;
 
@@ -543,7 +544,7 @@ async function main() {
         rect({
           h: "count",
           // Reference equality: a bar's live thunk is bound to its node datum,
-          // which is the very object `pointer().datum()` returns on hit-test.
+          // which is the very list `pointer().datum()` returns on hit-test.
           fill: live((d: any) => (d === p.datum() ? "#f00" : "#00f")),
         })
       )
@@ -1321,6 +1322,45 @@ async function main() {
       typeof plain.unmount === "function" && !(plain instanceof Promise)
     );
     plain.unmount();
+
+    // A combinator MARK passed as the node (not a thunk), as the Component
+    // Paint Only story does: `layer([...])` is a function, which the terminal
+    // reifies like a combinator child, calling it with the empty list `[]`.
+    const markHost = makeContainer();
+    await gofish(
+      markHost,
+      { w: 320, h: 200 },
+      layer([
+        spreadX({ spacing: 18 }, [
+          rect({ w: 60, h: 90, fill: live(() => "#d62728") }),
+          rect({ w: 60, h: 90, fill: "#2ca02c" }),
+          rect({ w: 60, h: 90, fill: "#e0a030" }),
+        ]),
+        text({ x: 4, y: 120, fontSize: 16, text: live(() => "state: off") }),
+      ])
+    );
+    await settle();
+    ok(
+      "gofish(container, opts, layer([...])) renders a combinator mark",
+      markHost.querySelectorAll("rect").length === 3 &&
+        (markHost.textContent ?? "").includes("state: off"),
+      markHost.innerHTML.slice(0, 200)
+    );
+
+    // The thunk form of the same shape.
+    const thunkHost = makeContainer();
+    await gofish(thunkHost, { w: 320, h: 200 }, () =>
+      layer([
+        spreadX({ spacing: 18 }, [rect({ w: 60, h: 90, fill: "#00f" })]),
+        text({ x: 4, y: 120, fontSize: 16, text: "thunk" }),
+      ])
+    );
+    await settle();
+    ok(
+      "gofish(container, opts, () => layer([...])) renders the thunk's mark",
+      thunkHost.querySelectorAll("rect").length === 1 &&
+        (thunkHost.textContent ?? "").includes("thunk")
+    );
   }
 
   /* ------------- a timer ticks only while something reads it ------------ */
@@ -1429,9 +1469,10 @@ async function main() {
       { day: 2, lon: -55, lat: -25, species: "b" },
       { day: 3, lon: -50, lat: -40, species: "b" },
     ];
-    // The stamped datum of a `line` is its group's projected datum, so the
-    // species field is readable off it — the panel-B `hot` predicate.
-    const hot = (d: any) => p.datum()?.species === d?.species;
+    // The stamped datum of a `line` is its group's projected datum, a
+    // one-row list, so the species field is readable off its row — the
+    // panel-B `hot` predicate.
+    const hot = (d: any) => p.datum()?.[0]?.species === d?.[0]?.species;
     await chart(rows, {
       coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
       axes: false,
@@ -1448,7 +1489,9 @@ async function main() {
         })
       )
       // The panel-B readout: a text tier whose CONTENT is a live channel.
-      .layer(text({ text: live(() => p.datum()?.species ?? ""), fontSize: 14 }))
+      .layer(
+        text({ text: live(() => p.datum()?.[0]?.species ?? ""), fontSize: 14 })
+      )
       .render(container, { w: 300, h: 300 });
     await settle();
     const readout = () =>

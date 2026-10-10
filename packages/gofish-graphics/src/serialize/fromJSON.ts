@@ -30,6 +30,7 @@ import { palette, gradient } from "../families/color";
 import { ref } from "../ast/shapes/ref";
 import { GoFishRef } from "../ast/_ref";
 import { sealComponent } from "../ast/withGoFish";
+import { resolveMarkResult } from "../ast/marks/markResult";
 import { Frontend } from "gofish-ir";
 import { RESOLVE_ROWS } from "../ast/channels";
 import {
@@ -198,7 +199,7 @@ export function wrapWithScope(inner: any): any {
     });
   if (typeof inner.render === "function") {
     define("render", async (container: any, options: any) => {
-      const node: any = await wrapped(undefined, undefined, undefined);
+      const node: any = await resolveMarkResult(wrapped);
       return node.render(container, options);
     });
   }
@@ -389,8 +390,10 @@ function relateClauses(
  * (the pre-#591 mark-fn contract, e.g. Scatter's pie-glyph story) pass
  * through unchanged.
  */
-function serializeMarkFnInput(data: any): { rows: any[]; inputRefs?: any[] } {
-  const items = Array.isArray(data) ? data : [data];
+function serializeMarkFnInput(items: any[]): {
+  rows: any[];
+  inputRefs?: any[];
+} {
   if (!items.some((item) => item instanceof GoFishRef)) {
     return { rows: items };
   }

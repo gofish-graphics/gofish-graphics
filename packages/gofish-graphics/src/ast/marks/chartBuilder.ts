@@ -10,8 +10,8 @@ import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
 import { fieldNameOf, isField } from "../data";
 import {
-  splitKeyFn,
   type SplitBy,
+  type TierSplit,
   type InferredRelational,
   type TimeTier,
 } from "../datumProjection";
@@ -30,6 +30,7 @@ import { expandComposedOperator } from "./compose";
 import { nameableMark } from "./createOperator";
 import {
   layerKey,
+  NO_ROWS,
   resolveMarkResult,
   stashLayerName,
   type LayerContext,
@@ -152,23 +153,26 @@ function collectLayerRegistrations(
  * node-unit way: NO flattening of array data, NO datum spreading, NO `__ref`
  * on plain objects.
  *
+ * Either way the result is a list of refs, as all data is a list:
+ *
  * - A non-string selection (token / path-array / node-backed ref) is a direct
- *   reference: it passes through unchanged as a single ref (and `selectAll`
- *   over one is an error — it requires a string layer name).
+ *   reference: the list of that one ref (and `selectAll` over one is an
+ *   error — it requires a string layer name).
  * - A string selection looks up the named layer. `multiplicity === "all"`
- *   (from `selectAll`) yields the full `GoFishRef[]`; the singular form yields
- *   the one matching `GoFishRef`, throwing if the layer matched zero or more
- *   than one node.
+ *   (from `selectAll`) yields a ref per matching node; the singular `ref`
+ *   yields the list of the one matching ref, throwing if the layer matched
+ *   zero or more than one node. Being singular is a check on how many nodes
+ *   match, not a different data shape.
  */
 export function resolveRefData(
   r: GoFishRef,
   layerContext: LayerContext
-): GoFishRef | GoFishRef[] {
+): GoFishRef[] {
   if (typeof r.selection !== "string") {
     if (r.multiplicity === "all") {
       throw new Error("selectAll requires a string layer name");
     }
-    return r;
+    return [r];
   }
 
   const layer = layerContext[r.selection];
@@ -191,23 +195,7 @@ export function resolveRefData(
       `ref("${r.selection}") matched ${refs.length} nodes; use selectAll("${r.selection}").`
     );
   }
-  return refs[0];
-}
-
-/**
- * True when chart data is already a bag of refs — a single `GoFishRef`
- * (`ref(...)`/`selectAll(...)` used as chart data) or a non-empty array of
- * them (`LayerBuilder.resolve()`'s `withData(prevRefs)` shape: one resolved
- * ref per node the previous tier named). Names the "data is already refs,
- * nothing to anchor" concept for `mark()`'s blank-fusion guard. Any NEW
- * refs-bag shape `LayerBuilder` (or `selectAll`) starts producing must be
- * added HERE, not at call sites.
- */
-function dataIsRefs(data: unknown): boolean {
-  return (
-    data instanceof GoFishRef ||
-    (Array.isArray(data) && data.length > 0 && data[0] instanceof GoFishRef)
-  );
+  return refs;
 }
 
 /* ---- Default grouping for relational marks in a flow (issue #752) ----
@@ -413,28 +401,25 @@ function resolveTravelAxis(
   return flowOrderTravelAxis(classified);
 }
 
-/** The default split key: the combination of every flow tier's `by` EXCEPT
- *  the path tier's (which orders the path and never splits). `undefined`
- *  when there's nothing to split on (no other grouping tier). Reuses
- *  `splitKeyFn` (same one `splitEntries` uses) so string/field/function `by`
- *  forms all project through `GoFishRef.datum` identically to a real
- *  operator `by` — including the function-form trap: a function `by`
- *  receives the raw bag element (a `GoFishRef`), not a datum, matching
- *  today's function-form semantics. */
-function computeDefaultBy(
+/** The default split: the combination of every flow tier's `by` EXCEPT the
+ *  path tier's (which orders the path and never splits), read off the bag
+ *  by `splitByTiers`. `undefined` when there's nothing to split on (no
+ *  other grouping tier). The path tier stays in the list: a position key
+ *  (`chunk(n)`) under it counts rows within the groups it makes. Every
+ *  tier reads the refs' rows, as its operator read them. */
+function computeDefaultSplit(
   classified: OperatorClass[],
   pathTierIndex: number | undefined
-): SplitBy | undefined {
-  const tierBys: SplitBy[] = [];
+): TierSplit | undefined {
+  const tiers: SplitBy[] = [];
+  let path: number | undefined;
   classified.forEach((cls, i) => {
-    if (i === pathTierIndex) return;
-    if (cls.by !== undefined) tierBys.push(cls.by);
+    if (cls.by === undefined) return;
+    if (i === pathTierIndex) path = tiers.length;
+    tiers.push(cls.by);
   });
-  if (tierBys.length === 0) return undefined;
-  const keyFns = tierBys.map((by) => splitKeyFn(by));
-  // Unit-separator join: a bare `join("")` would collide composite keys like
-  // ("ab","c") and ("a","bc").
-  return (r: any) => keyFns.map((fn) => fn(r)).join("\u001f");
+  const splits = tiers.length - (path === undefined ? 0 : 1);
+  return splits === 0 ? undefined : { tiers, path };
 }
 
 /**
@@ -508,8 +493,8 @@ function applyDefaultRelational(
     pathTierIndex = findPathTierIndex(classified, travelAxis);
   }
 
-  const defaultBy = computeDefaultBy(classified, pathTierIndex);
-  if (defaultBy !== undefined) fusable.inferred.by = defaultBy;
+  const split = computeDefaultSplit(classified, pathTierIndex);
+  if (split !== undefined) fusable.inferred.split = split;
   const pathBy =
     pathTierIndex === undefined ? undefined : classified[pathTierIndex].by;
   if (pathBy !== undefined) fusable.inferred.along = pathBy;
@@ -861,15 +846,19 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
 
   /** True when this builder was built from genuine row data flowing through
    *  its own operators — i.e. NOT an empty-scope `Chart()` tier
-   *  (`usesPreviousLayerMarks()`) and NOT already a refs bag (`dataIsRefs`,
-   *  e.g. `chart(selectAll(...))` or
-   *  `LayerBuilder.resolve()`'s `withData(prevRefs)`). This is the "current
+   *  (`usesPreviousLayerMarks()`) and NOT built over a selection
+   *  (`chart(ref(...))` or `chart(selectAll(...))`). This is
+   *  the "current
    *  chart's own flow" boundary shared by both relational-mark default-
    *  grouping fusion guards (issue #752): `.mark()`'s (fuse a bare relational
    *  mark into an anchor + connector) and `.layer()`'s (compute the default
    *  split/travel-direction for a bare relational-mark tier). */
   private hasOwnFlow(): boolean {
-    return !this.usesPreviousLayerMarks() && !dataIsRefs(this.state.data);
+    // A selection is a `GoFishRef` argument (a refs bag a tier binds at
+    // resolve time is caught by `usesPreviousLayerMarks()`).
+    return (
+      !this.usesPreviousLayerMarks() && !(this.state.data instanceof GoFishRef)
+    );
   }
 
   /** A copy of this builder with its data replaced — used by `LayerBuilder` to
@@ -979,17 +968,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
       composedMark = await op(composedMark);
     }
 
-    // Resolve a ref/selectAll used as chart data just before calling mark
-    let data = this.state.data;
-    if (data instanceof GoFishRef) {
-      data = resolveRefData(data, this.state.layerContext) as any;
-    }
-    // Type the data with the chart's schema (plus the time columns inferred
-    // from `Date` values): a copy of the array carrying the column types,
-    // which every operator reads off the data it splits.
-    if (Array.isArray(data)) {
-      data = (await applySchema(data, this.state.options?.schema)) as any;
-    }
+    const data = await this.resolveData();
 
     const content = (
       await resolveMarkResult(
@@ -1065,6 +1044,23 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     return result;
   }
 
+  /** The data this chart's mark gets, resolved where it enters. A selection
+   *  (`ref`/`selectAll`) resolves to its list of refs. A list, of rows or of
+   *  those refs, is typed with the chart's schema (plus the time columns
+   *  inferred from `Date` values): a copy carrying the column types, which
+   *  every operator reads off the data it splits. An empty scope has no data
+   *  of its own: inside `.layer(...)` it is given the previous tier's marks
+   *  (`withData`) before it resolves, so it reaches here only when rendered
+   *  on its own, and its mark gets the empty scope as it is. */
+  private async resolveData(): Promise<unknown> {
+    if (this.usesPreviousLayerMarks()) return this.state.data;
+    const data =
+      this.state.data instanceof GoFishRef
+        ? resolveRefData(this.state.data, this.state.layerContext)
+        : this.state.data;
+    return applySchema(data as any, this.state.options?.schema);
+  }
+
   withLayerContext(layerContext: LayerContext): ChartBuilder<TInput, TOutput> {
     return this.with({ layerContext });
   }
@@ -1074,12 +1070,13 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   }
 }
 
-// `selectAll(...)` is typed as a single `GoFishRef` but resolves, as chart
-// data, to the full `GoFishRef[]` (one ref per matching named node). This
-// overload teaches the builder that plural-ref data flows downstream as an
-// array, so `Chart(selectAll("bars"))` typechecks without a cast.
+// `ref(...)` and `selectAll(...)` are typed as a single `GoFishRef` but
+// resolve, as chart data, to a `GoFishRef[]` (one ref per matching named node;
+// exactly one for `ref`). This overload teaches the builder that selection data
+// flows downstream as a list, so `chart(selectAll("bars"))` typechecks without
+// a cast.
 export function chart(
-  data: GoFishRef & { multiplicity: "all" },
+  data: GoFishRef,
   options?: ChartOptions
 ): ChartBuilder<GoFishRef[], GoFishRef[]>;
 export function chart<T>(data: T, options?: ChartOptions): ChartBuilder<T, T>;
@@ -1261,11 +1258,16 @@ export class LayerBuilder extends RenderableBuilder {
         // previous tier's bag as its datum, uniformly. A relational mark
         // (e.g. `ribbon()`) reads it as the refs it connects; a leaf mark
         // (e.g. `rect({...})`) ignores its datum argument and renders exactly
-        // as before.
+        // as before. With no previous bag (the previous tier named nothing),
+        // the tier has no rows.
         nodes.push(
           await resolveMarkResult(
             typeof tier === "function"
-              ? (tier as Mark<any>)(prevRefs as any, undefined, sharedContext)
+              ? (tier as Mark<any>)(
+                  prevRefs ?? NO_ROWS,
+                  undefined,
+                  sharedContext
+                )
               : tier,
             sharedContext
           )

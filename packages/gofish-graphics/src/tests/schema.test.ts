@@ -31,6 +31,7 @@ import {
 } from "../ast/schema";
 import { interval } from "../util/interval";
 import { bin } from "../ast/transforms";
+import { textsOf } from "./testHelpers";
 import {
   distributeSpaceFold,
   type StackOrigin,
@@ -41,7 +42,19 @@ import {
   CONTINUOUS,
 } from "../ast/underlyingSpace";
 
-const { chart, spread, stack, rect, filter, derive, Schema, Color } = GoFish as any;
+const {
+  chart,
+  spread,
+  stack,
+  scatter,
+  rect,
+  circle,
+  filter,
+  derive,
+  chunk,
+  Schema,
+  Color,
+} = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -77,6 +90,12 @@ const rectsOf = (dl: any): Box[] => {
   dl.items.forEach(walk);
   return out;
 };
+
+
+/** A display list as JSON with its render-global node ids left out, so two
+ *  renders compare by what they draw. */
+const drawn = (dl: any): string =>
+  JSON.stringify(dl, (k, v) => (k === "id" ? undefined : v));
 
 const LEVELS5 = ["SD", "D", "N", "A", "SA"];
 const LEVELS4 = ["SD", "D", "A", "SA"];
@@ -512,6 +531,146 @@ async function main() {
       "a stray level a color scale reads is an error",
       colored !== undefined && colored.includes(`"Refused"`),
       colored
+    );
+  }
+
+  console.log("\n# a split with no `by` is a split by row identity (#998)");
+  {
+    const grades = [
+      { grade: "high", a: 1, b: 3 },
+      { grade: "low", a: 2, b: 1 },
+      { grade: "mid", a: 3, b: 2 },
+    ];
+    const dots = (by?: unknown) =>
+      chart(grades, {
+        schema: { grade: Schema.ordered(["low", "mid", "high"]) },
+        color: Color.palette(["red", "green", "blue"]),
+      })
+        .flow(scatter({ ...(by === undefined ? {} : { by }), x: "a", y: "b" }))
+        .mark(circle({ r: 3, fill: "grade" }))
+        .toDisplayList({ w: 100, h: 100 });
+    const legend = textsOf(await dots()).filter((t) =>
+      ["low", "mid", "high"].includes(t)
+    );
+    check(
+      "a mark under a scatter with no `by` keeps the column's order: the legend reads low, mid, high",
+      legend.join() === "low,mid,high",
+      legend.join()
+    );
+    // No `by` is `chunk(1)`, a position key. (A key function returning the
+    // row's position is not the same thing: its keys are values, which
+    // label an axis when axes are on.)
+    const noBy = drawn(await dots());
+    check(
+      "no `by` renders exactly as `by: chunk(1)`",
+      noBy === drawn(await dots(chunk(1)))
+    );
+
+    const units = Array.from({ length: 7 }, (_, i) => ({ i, k: i % 2 ? "x" : "y" }));
+    const grid = (by: unknown) =>
+      chart(units, { color: Color.palette(["red", "blue"]) })
+        .flow(spread({ by, dir: "y", spacing: 1 }), spread({ dir: "x", spacing: 1 }))
+        .mark(rect({ w: 4, h: 4, fill: "k" }))
+        .toDisplayList({ w: 100, h: 100 });
+    const chunked = await grid(chunk(3));
+    check(
+      "with no axes, `by: chunk(3)` renders exactly as `by` row position over 3",
+      drawn(chunked) ===
+        drawn(await grid((_r: unknown, i: number) => Math.floor(i / 3)))
+    );
+    const cells = rectsOf(chunked).filter((r: any) => r.datum !== undefined);
+    const ys = [...new Set(cells.map((r) => r.y))];
+    check(
+      "`chunk(3)` over 7 rows makes 3 rows of rects",
+      ys.length === 3 && cells.length === 7,
+      JSON.stringify(ys)
+    );
+    check(
+      "`chunk(3)` keys name no field, so they draw no axis labels",
+      textsOf(chunked).every((t) => !["0", "1", "2"].includes(t)),
+      textsOf(chunked).join()
+    );
+    // Only a position key (no `by`, or `chunk(n)`) is synthetic. A key
+    // function's keys are values like a field's: they label a category
+    // axis, which has no title, since no field names it.
+    const eras = textsOf(
+      await chart(
+        [
+          { year: 1990, v: 1 },
+          { year: 2010, v: 3 },
+          { year: 2020, v: 2 },
+        ],
+        { axes: true }
+      )
+        .flow(
+          spread({
+            by: (d: { year: number }) => (d.year > 2000 ? "new" : "old"),
+            dir: "x",
+          })
+        )
+        .mark(rect({ w: 10, h: 10 }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a key function's category axis is labeled by its keys, with no title",
+      eras.join() === "old,new",
+      eras.join()
+    );
+    const chunkAxes = textsOf(
+      await chart(units, { axes: true })
+        .flow(spread({ by: chunk(3), dir: "x" }))
+        .mark(rect({ w: 4, h: 4 }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a `chunk(n)` key draws no axis even when axes are on",
+      chunkAxes.length === 0,
+      chunkAxes.join()
+    );
+
+    // An empty scope rendered on its own has no data: its mark gets none,
+    // and the schema has nothing to type.
+    const alone = await chart({ w: 100, h: 100 })
+      .mark(rect({ x: 0, y: 0, w: 10, h: 10 }))
+      .toDisplayList({ w: 100, h: 100 })
+      .then(
+        (dl: any) => rectsOf(dl).length,
+        (e: Error) => e.message
+      );
+    check("an empty `chart()` renders on its own", alone === 1, String(alone));
+
+    const seen: unknown[] = [];
+    await chart(grades)
+      .flow(spread({ dir: "x" }))
+      .mark(
+        rect({ w: 4, h: 4 }).label((d: unknown) => {
+          seen.push(d);
+          return "";
+        })
+      )
+      .toDisplayList({ w: 100, h: 100 });
+    check(
+      "a mark under a split with no `by` gets `[row]`",
+      seen.length === 3 &&
+        seen.every((d) => Array.isArray(d) && d.length === 1),
+      JSON.stringify(seen)
+    );
+
+    const nested = [[{ v: 1 }, { v: 2 }], [{ v: 3 }]];
+    const items: unknown[] = [];
+    await chart(nested)
+      .flow(spread({ dir: "x" }))
+      .mark(
+        rect({ w: 4, h: 4 }).label((d: unknown) => {
+          items.push(d);
+          return "";
+        })
+      )
+      .toDisplayList({ w: 100, h: 100 });
+    check(
+      "a split never looks inside an item: an array item is one item, `[item]`",
+      JSON.stringify(items) === JSON.stringify(nested.map((x) => [x])),
+      JSON.stringify(items)
     );
   }
 

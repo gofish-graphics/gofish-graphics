@@ -34,6 +34,7 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import { Mark, MarkChild, Operator } from "../types";
 import {
+  datumOfInput,
   layerKey,
   resolveMarkResult,
   stashLayerName,
@@ -55,7 +56,8 @@ import type {
 } from "../channels";
 import { discretePosition } from "../data";
 import { copyColumnTypes } from "../schema";
-import { fieldNameOf } from "../data";
+import { fieldNameOf, isChunk } from "../data";
+import { splitByOf } from "../datumProjection";
 import type { MaybeValue, Value } from "../data";
 import {
   hasNormalizeOp,
@@ -135,16 +137,15 @@ export function withMarkKind<M>(mark: M, kind: MarkKind): M {
  */
 export async function applyMark<T>(
   mark: Mark<T> | Mark<T[]>,
-  group: T | T[],
+  group: T[],
   groupKey?: string | number,
   layerContext?: LayerContext
 ): Promise<GoFishNode[]> {
   const kind = getMarkKind(mark);
   if (kind === "expand") {
-    const items = Array.isArray(group) ? (group as T[]) : ([group] as T[]);
-    const result = await (mark as Mark<T[]>)(items, groupKey, layerContext);
+    const result = await (mark as Mark<T[]>)(group, groupKey, layerContext);
     return Promise.all(
-      (Array.isArray(result) ? result : [result]).map((r) =>
+      (result as unknown as GoFishNode[]).map((r) =>
         resolveMarkResult(r as any, layerContext)
       )
     );
@@ -236,9 +237,9 @@ function modifierMethod(
       const raw = await (base as any)(d, key, layerContext);
       // Expand-kind marks return an array of nodes; per-item return one.
       // Apply the modifier to each produced node either way.
-      if (Array.isArray(raw)) {
+      if (getMarkKind(base) === "expand") {
         const nodes = await Promise.all(
-          raw.map((r) => resolveMarkResult(r, layerContext))
+          (raw as GoFishNode[]).map((r) => resolveMarkResult(r, layerContext))
         );
         for (const node of nodes)
           await cfg.apply(node, layerContext, d, ...args);
@@ -312,13 +313,11 @@ export function attachModifiers<T>(
   });
   // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
   // from the shared registry, so adding one touches a single list. A mark
-  // resolves to a node by calling it with `undefined`, and plays its own
+  // resolves to a node as a root (`resolveMarkResult`), and plays its own
   // `.transition({ enter })` as a chart does (`installBuildIn`, which the
   // render options `playing` / `at` can hold). See terminals.ts.
   attachBuilderTerminals(base, async (options) => {
-    const node = (await resolveMarkResult(
-      (base as any)(undefined)
-    )) as GoFishNode;
+    const node = await resolveMarkResult(base as Mark<any>);
     installBuildIn(node, options);
     return { node, options };
   });
@@ -526,19 +525,18 @@ export function attachTransformModifiers<M extends object>(
  * What a split returns. Insertion order is preserved (ES Map spec), which
  * matters for layout ordering.
  *
- * Each bucket may be either a `Datum[]` (the typical groupBy case) or a
- * single `Datum` (the no-`by` per-item case). The downstream mark and
- * `inferSize`/`inferPos`/`inferColor` all normalise via
- * `Array.isArray(d) ? d : [d]`, so both forms work uniformly.
+ * Each bucket is a group: a list of the items the split was given. A split
+ * never looks inside an item, so an item that is itself an array is just an
+ * item. With no `by` the split is by row identity, and each group is `[item]`.
  *
  * If the split also computes opts for the layout function (the axis labels
  * `{colKeys, rowKeys}` for table, a stack's `origin`), return the wrapped
  * `{entries, layoutOpts}` form instead of a bare Map.
  */
 export type SplitResult<Datum> =
-  | Map<string | number, Datum | Datum[]>
+  | Map<string | number, Datum[]>
   | {
-      entries: Map<string | number, Datum | Datum[]>;
+      entries: Map<string | number, Datum[]>;
       layoutOpts?: Record<string, unknown>;
     };
 
@@ -693,7 +691,7 @@ export type DualModeOperator<Datum, Options> = {
   (
     opts: Options,
     marks: MarkChild[] | Promise<MarkChild[]>
-  ): NameableMark<Datum>;
+  ): NameableMark<Datum[]>;
 };
 
 export type TranslatableOperator<T, U> = Operator<T, U> & {
@@ -842,7 +840,6 @@ function applyChannels<Options extends Record<string, any>>(
   entries: Map<string | number, any> | undefined
 ): Options {
   if (!channels) return opts;
-  const wholeData = Array.isArray(d) ? d : [d];
   const out: any = { ...opts };
   const infer = (
     type: Exclude<ChannelType, "dims">,
@@ -856,7 +853,7 @@ function applyChannels<Options extends Record<string, any>>(
       flags?.entry === true,
       flags?.discrete === true,
       val,
-      wholeData,
+      d,
       entries,
       opts
     );
@@ -998,14 +995,14 @@ function stripFactoryKeys<Options extends Record<string, any>>(
 async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   channels: ChannelAnnotations<Options> | undefined,
   opts: Options,
-  d: Datum | Datum[],
-  entries: Map<string | number, Datum | Datum[]> | undefined,
+  d: Datum[],
+  entries: Map<string | number, Datum[]> | undefined,
   layoutOpts: Record<string, unknown> | undefined
 ): Promise<Options> {
   const pending = resolveChannelAccessors(opts, channels, () => {
-    const rows = new Set<unknown>(Array.isArray(d) ? d : [d]);
+    const rows = new Set<unknown>(d);
     for (const items of entries?.values() ?? []) {
-      for (const row of Array.isArray(items) ? items : [items]) rows.add(row);
+      for (const row of items) rows.add(row);
     }
     return [...rows];
   });
@@ -1032,15 +1029,15 @@ export function createOperator<Datum, Options extends Record<string, any>>(
   function dual(
     opts: Options,
     marks: MarkChild[] | Promise<MarkChild[]>
-  ): NameableMark<Datum>;
+  ): NameableMark<Datum[]>;
   function dual(
     opts: Options,
     marks?: MarkChild[] | Promise<MarkChild[]>
-  ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum> {
+  ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum[]> {
     if (marks !== undefined) {
       // Combinator form: apply each mark to the same data d, then layout.
-      const base: Mark<Datum> = async (
-        d: Datum,
+      const base: Mark<Datum[]> = async (
+        d: Datum[],
         key?: string | number,
         layerContext?: LayerContext
       ) => {
@@ -1070,7 +1067,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           undefined
         );
         const node = (await layout(lowOpts, nodes)) as GoFishNode;
-        (node as any).datum = d;
+        node.datum = datumOfInput(d);
         return node;
       };
       const combinator = nameableMark(base);
@@ -1126,16 +1123,14 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         const splitLayoutOpts =
           splitResult instanceof Map ? undefined : splitResult.layoutOpts;
         // Split leaves are fresh sub-arrays (groupBy/filter/slice) that don't
-        // inherit `d`'s column types (schema.ts). Re-tag each array leaf so a
+        // inherit `d`'s column types (schema.ts). Re-tag each leaf so a
         // MARK channel applied per leaf (createMark → inferSize/inferPos with no
         // precomputed measure) reads the column's unit off its own data — e.g.
         // a bin's `start`/`end`/`size` resolve to the source field's units, not
         // the literal field name, matching the operator-channel path (#534) —
         // and a nested split or a mark's color channel still sees an ordered
         // column.
-        for (const leaf of entries.values()) {
-          if (Array.isArray(leaf)) copyColumnTypes(leaf, d);
-        }
+        for (const leaf of entries.values()) copyColumnTypes(leaf, d);
         // Route each leaf through applyMark so expand-kind marks (e.g. `cut`)
         // can return arrays that we flatten across leaves. A per-item mark is
         // called once per leaf and applyMark wraps its node in a singleton.
@@ -1150,16 +1145,17 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             const currentKey = i;
             const leafNodes = await applyMark(
               mark,
-              leaf as Datum | Datum[],
+              leaf,
               currentKey,
               layerContext
             );
             const keyStr = currentKey?.toString() ?? "";
-            // Positional key when this operator did NOT group by a data field
-            // (an identity split — a `spread` with no `by`): the key is a bare
-            // index, so any ordinal folded from it is `anonymous` (renders no
-            // axis). A `by` grouping yields data-value keys (semantic).
-            const synthetic = (opts as any).by === undefined;
+            // Positional key when this operator splits by row position (no
+            // `by`, which is `chunk(1)`, or any `chunk(n)`): any ordinal
+            // folded from it is `anonymous` (renders no axis or labels). A
+            // field `by` or a key function yields data-value keys (semantic):
+            // a function's keys label their axis, which has no title.
+            const synthetic = isChunk(splitByOf((opts as any).by));
             for (const node of leafNodes) {
               node.setKey(keyStr);
               node._syntheticKey = synthetic;

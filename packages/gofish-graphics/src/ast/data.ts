@@ -5,7 +5,7 @@
 import { Interval } from "./dims";
 import { FieldExpr, type FieldOp } from "./fieldExpr";
 import type { ColumnType } from "./schema";
-import { resolveUnit, sameUnit, Units, type Quantity } from "./measure";
+import { sameUnitVar, unitOf, type Quantity } from "./measure";
 
 export type { FieldOp } from "./fieldExpr";
 export { FieldExpr } from "./fieldExpr";
@@ -186,8 +186,38 @@ export const isField = (v: unknown): v is FieldAccessor =>
   (v as any).type === "field" &&
   typeof (v as any).name === "string";
 
+/**
+ * The `chunk(size)` grouping key's wire shape: a bin over row position.
+ * Serializes as-is (it is plain data, not a function).
+ */
+export type ChunkKey = { type: "chunk"; size: number };
+
+/**
+ * `chunk(size)` is a `by` key that groups consecutive rows: row `i` goes to
+ * group `Math.floor(i / size)`. It is a bin of width `size` over row
+ * position, so `spread({ by: chunk(5), dir: "y" })` lays the rows out five to
+ * a group (the rows of a waffle chart). If a row-position field ever exists,
+ * this is that field binned by `size`. Like lodash `_.chunk`, Rust
+ * `chunks(n)` and Python `itertools.batched`. The key names no field, so the
+ * groups draw no axis or labels. `chunk(1)` is row identity: one group per
+ * row, which is the split an operator does when it has no `by`.
+ */
+export const chunk = (size: number): ChunkKey => {
+  if (!Number.isInteger(size) || size < 1) {
+    throw new Error(
+      `chunk(size): size must be a positive integer, got ${size}`
+    );
+  }
+  return { type: "chunk", size };
+};
+export const isChunk = (v: unknown): v is ChunkKey =>
+  typeof v === "object" &&
+  v !== null &&
+  (v as any).type === "chunk" &&
+  typeof (v as any).size === "number";
+
 /** The field name a `by`-style selector names, or `undefined` when it names
- *  none (a key function). The one reading of "which field did this group by",
+ *  none (a key function or `chunk`).The one reading of "which field did this group by",
  *  shared by every site that needs it. */
 export function fieldNameOf(by: unknown): string | undefined {
   if (typeof by === "string") return by;
@@ -244,19 +274,18 @@ export const getValue = <T>(value: MaybeValue<T>): T => {
 export const getQuantity = <T>(value: MaybeValue<T>): Quantity | undefined =>
   isValue(value) ? (value as DatumValue).quantity : undefined;
 
-/** Whether two values are in the same unit, read through the render's
- *  union-find `units` (the representative `spaceUnit` reads): one declared
- *  unit, or one class of unknowns. Two values with no quantity (literals)
- *  are; a literal and a column's value are not. */
+/** Whether two values are in the same unit, read through the type walk's
+ *  union-find (`unitOf`): one declared unit, or one class of unknowns. Two
+ *  values with no quantity (literals) are; a literal and a column's value
+ *  are not. */
 export const sameValueUnit = <T>(
   a: MaybeValue<T>,
-  b: MaybeValue<T>,
-  units: Units
+  b: MaybeValue<T>
 ): boolean => {
   const qa = getQuantity(a);
   const qb = getQuantity(b);
   if (qa === undefined || qb === undefined) return qa === qb;
-  return sameUnit(resolveUnit(units.of(qa)), resolveUnit(units.of(qb)));
+  return sameUnitVar(unitOf(qa), unitOf(qb));
 };
 
 /**
@@ -303,18 +332,14 @@ export const getValueColorOps = <T>(value: MaybeValue<T>): ColorOp[] => {
  * The intrinsic-embedding predicate: a dim's *own* extent is a coordinate-space
  * extent (so a coord warps it) iff its size is a data {@link Value} (or unsized —
  * the nest-growth case) AND its `min` is in the same unit as its size
- * ({@link sameValueUnit}, read through the render's union-find `units`; a
- * fresh one when there is no render). This is the coord-free half; the
+ * ({@link sameValueUnit}, read through the render's union-find). This is the coord-free half; the
  * {@link GoFishNode.resolveEmbedding} pass layers the Route-B unit gate on
  * top (a size in a unit *foreign* to the axis stays ink, not a coord extent).
  * Extracted so the pass is the sole author of `embedded` and the rule lives
  * in one place. See #534.
  */
-export const baseEmbedded = <T>(
-  interval: Interval<T>,
-  units: Units = new Units()
-): boolean =>
+export const baseEmbedded = <T>(interval: Interval<T>): boolean =>
   (isValue(interval.size) || interval.size === undefined) &&
   (interval.min === undefined ||
     !isValue(interval.min) ||
-    sameValueUnit(interval.min, interval.size, units));
+    sameValueUnit(interval.min, interval.size));

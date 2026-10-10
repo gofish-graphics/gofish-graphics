@@ -48,10 +48,16 @@ export const Default: StoryObj<Args> = {
       .mark(chart()
             .flow(
               derive((rows) => orderBy(rows, ["survived"], ["desc"])),
+              // Rows of √n dots. `chunk(size)` takes a fixed size, and this
+              // one depends on the cell, so the rows are built as data: each
+              // item is now one row of dots.
               derive((rows) => chunk(rows, Math.ceil(Math.sqrt(rows.length)))),
               // Fill each cell bottom-up (y-down free space: reverse so the
               // partial last row lands at the top), like a waffle that grows up.
               spread({ spacing: 2, dir: "y", reverse: true }),
+              // Each group holds one item, a row of dots: spread its dots.
+              // TODO(#1128): drop this unwrap of the one-item group.
+              derive(([dots]) => dots),
               spread({ spacing: 2, dir: "x" })
             )
             .mark(circle({ r: 4, fill: "survived" }))

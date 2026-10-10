@@ -39,6 +39,7 @@ const {
   resolve,
   layer,
   rect,
+  chunk,
   Curve,
 } = GoFish as any;
 
@@ -686,6 +687,52 @@ async function main() {
         d(await smooth((row: any) => row.date.y)) === d(await smooth("year"))
       );
     }
+  }
+
+  // -- 11. A `chunk(n)` tier in the default split counts rows within its
+  //    parent group, as the operator did, not along the whole bag. Group A
+  //    has 7 rows (chunks of 5 and 2), group B 8 (5 and 3); counting along
+  //    the bag would cut B as 3 and 5. -------------------------------------
+  {
+    const rows: any[] = [];
+    for (let i = 0; i < 7; i++) rows.push({ cat: "A", x: i, y: i % 3 });
+    for (let i = 0; i < 8; i++) rows.push({ cat: "B", x: i, y: (i * 2) % 5 });
+    const doc = await renderDisplayList(
+      chart(rows, { w: 300, h: 300 })
+        .flow(
+          spread({ by: "cat", dir: "x" }),
+          spread({ by: chunk(5), dir: "y" }),
+          scatter({ x: "x", y: "y" })
+        )
+        .mark(circle({ r: 2 }))
+        .layer(line({ curve: Curve.linear() })),
+      { w: 300, h: 300 }
+    );
+    const points = doc.items
+      .filter((it: any) => it.kind === "path")
+      .map((it: any) => (it.d.match(/[ML]/g) ?? []).length);
+    check(
+      "each chunk's line connects only that chunk's rows (5, 2, 5, 3)",
+      points.join() === "5,2,5,3",
+      points.join()
+    );
+
+    // A key function in the split reads each ref's rows, as its operator
+    // did, so it splits as the field it reads does.
+    const byCat = (by: unknown) =>
+      renderDisplayList(
+        chart(rows, { w: 300, h: 300 })
+          .flow(spread({ by, dir: "x" }), scatter({ x: "x", y: "y" }))
+          .mark(circle({ r: 2 }))
+          .layer(line({ curve: Curve.linear() })),
+        { w: 300, h: 300 }
+      );
+    const fnDoc = await byCat((d: { cat: string }) => d.cat);
+    check(
+      "a key function splits the default split by the rows it reads (2)",
+      pathCount(fnDoc) === 2,
+      `got ${pathCount(fnDoc)}`
+    );
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

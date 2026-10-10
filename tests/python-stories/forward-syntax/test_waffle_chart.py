@@ -1,6 +1,6 @@
 """Equivalent of WaffleChart.stories.tsx — Forward Syntax/Waffle Chart."""
 
-from gofish import chart, compose, spread, derive, rect, repeat
+from gofish import chart, chunk, compose, spread, derive, rect, repeat
 from python_stories.data import SEAFOOD
 
 
@@ -12,9 +12,9 @@ def story_default():
             # waffles sit on a baseline and fill upward.
             spread(by="lake", spacing=8, dir="x", axes=False, alignment="end"),
             derive(lambda d: [item for row in d for item in repeat(row, "count")]),
-            derive(lambda d: [d[i : i + 5] for i in range(0, len(d), 5)]),
-            # Reverse the rows so the ragged partial row lands at the top.
-            spread(spacing=2, dir="y", reverse=True),
+            # Rows of five units. Reverse the rows so the ragged partial row
+            # lands at the top.
+            spread(by=chunk(5), spacing=2, dir="y", reverse=True),
             spread(spacing=2, dir="x"),
         )
         .mark(rect(w=8, h=8, fill="species")),
@@ -26,17 +26,16 @@ def story_default():
 def story_composed():
     # The same waffle with its steps packaged as reusable `compose` fragments.
     # The outer fragment nests two inner ones; `.flow()` flattens them.
-    def units(count, row_size):
+    def units(count):
+        return derive(lambda d: [item for row in d for item in repeat(row, count)])
+
+    def grid(row_size):
         return compose(
-            derive(lambda d: [item for row in d for item in repeat(row, count)]),
-            derive(lambda d: [d[i : i + row_size] for i in range(0, len(d), row_size)]),
+            spread(by=chunk(row_size), spacing=2, dir="y", reverse=True),
+            spread(spacing=2, dir="x"),
         )
 
-    grid = compose(
-        spread(spacing=2, dir="y", reverse=True),
-        spread(spacing=2, dir="x"),
-    )
-    waffle = compose(units("count", 5), grid)
+    waffle = compose(units("count"), grid(5))
 
     return (
         chart(SEAFOOD, axes={"x": {"side": "end"}})

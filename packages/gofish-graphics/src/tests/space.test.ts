@@ -19,7 +19,10 @@ import {
 import { Extent, impliedExtent, niceScope } from "../ast/extent";
 import { ScopeRegistry, seatInScope } from "../ast/solver/scopes";
 import { pxOf } from "../ast/domain";
-import { GoFishNode } from "../ast/_node";
+import { debugUnderlyingSpaceTree, GoFishNode } from "../ast/_node";
+import { sameUnitVar, type UnitVar } from "../ast/measure";
+import { valueUnits } from "../ast/underlyingSpace";
+import { DatumValueImpl } from "../ast/data";
 import {
   unionChildExtents,
   unionChildSpaces,
@@ -33,10 +36,7 @@ import {
 import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
 import { positionNode } from "../ast/graphicalOperators/positionNode";
 import { value } from "../ast/data";
-import { quantityUnits, titleUnits } from "../ast/underlyingSpace";
-
-/** The measure of a column declared in unit `unit` (and named by it). */
-const u = (unit: string, name = unit) => quantityUnits({ name, unit: { name: unit, symbol: unit } });
+import { declared } from "./testHelpers";
 import {
   resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
@@ -72,8 +72,8 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
   // units. Overlaying foreign units onto one axis must be REFUSED — this is the
   // marginal-histogram unit guard. (Two-state's `every(origin === 0)` wrongly
   // took these for magnitudes and silently forgot the clash.)
-  const dollars0 = CONTINUOUS(interval(0, 100), "pinned", u("dollars"));
-  const units0 = CONTINUOUS(interval(0, 50), "pinned", u("units"));
+  const dollars0 = CONTINUOUS(interval(0, 100), "pinned", declared("dollars"));
+  const units0 = CONTINUOUS(interval(0, 50), "pinned", declared("units"));
   const msg = throws(() => unionChildSpaces([onY(dollars0), onY(units0)], 1));
   ok(
     "overlay of two origin-0 data axes with clashing units THROWS",
@@ -83,8 +83,8 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
 
   // Two baseline magnitudes in different fields on one axis are the same type
   // error: the measure policy does not depend on the origin.
-  const dollarsMag = CONTINUOUS(interval(0, 100), "free", u("dollars"));
-  const unitsMag = CONTINUOUS(interval(0, 50), "free", u("units"));
+  const dollarsMag = CONTINUOUS(interval(0, 100), "free", declared("dollars"));
+  const unitsMag = CONTINUOUS(interval(0, 50), "free", declared("units"));
   let composed: UnderlyingSpace | undefined;
   const magMsg = throws(() => {
     composed = unionChildSpaces([onY(dollarsMag), onY(unitsMag)], 1);
@@ -279,6 +279,7 @@ console.log("# space: position moves a claim with its data");
     []
   );
   const placed = positionNode({ y: value(10) }, [bar]);
+  // Standalone, with no render session: the walk's root owns its units.
   const [, space] = placed.resolveUnderlyingSpace();
   const [, claim] = placed.resolveExtent();
   ok(
@@ -426,13 +427,69 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
   );
 }
 
+console.log("# space: the type walk's root owns its units, and layout reads them");
+{
+  // An unknown unit "lo" read in the type hook and again in the layout
+  // hook, of a node with no render session: both reads are one variable.
+  const lo = () => valueUnits(new DatumValueImpl(1, { name: "lo" }))!.unit!;
+  let inType: UnitVar | undefined;
+  let inLayout: UnitVar | undefined;
+  const leaf = new GoFishNode(
+    {
+      type: "leaf",
+      resolveUnderlyingSpace: () => {
+        inType = lo();
+        return [UNDEFINED, UNDEFINED];
+      },
+      layout: () => {
+        inLayout = lo();
+        return {
+          intrinsicDims: [{}, {}],
+          transform: { translate: [undefined, undefined] },
+        };
+      },
+    },
+    []
+  );
+  const root = new GoFishNode(
+    {
+      type: "root",
+      resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
+      layout: (_shared, size, scales, children) => {
+        children[0].layout(size, scales);
+        return {
+          intrinsicDims: [{}, {}],
+          transform: { translate: [undefined, undefined] },
+        };
+      },
+    },
+    [leaf]
+  );
+  const standalone = throws(() => {
+    root.resolveUnderlyingSpace();
+    root.layout([100, 100], [undefined, undefined]);
+  });
+  ok("a standalone walk and layout need no session", standalone === null, standalone ?? "");
+  ok(
+    "layout reads the type walk's unit variables",
+    inType !== undefined && inLayout !== undefined && sameUnitVar(inType, inLayout)
+  );
+  const log = console.log;
+  const group = console.group;
+  console.log = console.group = () => {};
+  const dump = throws(() => debugUnderlyingSpaceTree(root));
+  console.log = log;
+  console.group = group;
+  ok("the debug dump of a standalone node works", dump === null, dump ?? "");
+}
+
 console.log("# space: a measure clash says what to do");
 {
   const gross = throws(() =>
     unionChildSpaces(
       [
-        onY(CONTINUOUS(interval(0, 10), "free", u("USD", "Worldwide Gross"))),
-        onY(CONTINUOUS(interval(0, 5), "free", u("EUR", "Revenue"))),
+        onY(CONTINUOUS(interval(0, 10), "free", declared("Worldwide Gross", "USD"))),
+        onY(CONTINUOUS(interval(0, 5), "free", declared("Revenue", "EUR"))),
       ],
       1
     )
@@ -450,7 +507,7 @@ console.log("# space: a measure clash says what to do");
   ok(
     "and suggests one declared unit or a chart of its own",
     gross !== null &&
-      gross.includes('schema: { "Worldwide Gross": Schema.unit("USD") }') &&
+      gross.includes('schema: { "Worldwide Gross": Schema.unit("EUR") }') &&
       gross.includes("give the inner chart its own w and h")
   );
   // A node names the axis from where it sits: inside a polar coord, the y
@@ -465,7 +522,7 @@ console.log("# space: a measure clash says what to do");
         type: "leaf",
         resolveUnderlyingSpace: () => [
           UNDEFINED,
-          CONTINUOUS(interval(0, 1), "free", u(m)),
+          CONTINUOUS(interval(0, 1), "free", declared(m)),
         ],
         layout,
       },
@@ -644,8 +701,8 @@ console.log("# space: one fold for every origin");
   // in dollars beside a category spread by "genre" is no measure clash.
   const genreThenDollars = throws(() =>
     resolveLayerBaseSpaces(
-      [[UNDEFINED, ORDINAL(["a", "b"], titleUnits("genre"))]],
-      { y: interval(0, 5), yMeasure: u("dollars") }
+      [[UNDEFINED, ORDINAL(["a", "b"], "genre")]],
+      { y: interval(0, 5), yMeasure: declared("dollars") }
     )
   );
   ok(
@@ -656,8 +713,8 @@ console.log("# space: one fold for every origin");
   const stackOfGenre = throws(() =>
     distributeSpaceFold(
       [
-        ORDINAL(["a"], titleUnits("genre")),
-        CONTINUOUS(interval(0, 3), "free", u("dollars")),
+        ORDINAL(["a"], "genre"),
+        CONTINUOUS(interval(0, 3), "free", declared("dollars")),
       ],
       ["p", "q"],
       {

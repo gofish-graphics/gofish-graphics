@@ -4,7 +4,7 @@ order: 40
 
 # scatter
 
-Positions children at per-group means (when `by` is given) or per-item (when `by` is omitted).
+Positions children at per-group means (when `by` is given) or per-item (when `by` is omitted). Without `by`, each row is its own group, and the mark gets `[row]` (see [spread](./spread#without-by)).
 
 ::: gofish
 

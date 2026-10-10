@@ -276,7 +276,7 @@ export const setColumnTypes = <T>(data: T, types: ColumnTypes): T => {
  *  column `target` does not type itself. A split leaf or a filter's result is
  *  a fresh array, so it has to be told. Without it, a mark channel over a
  *  split leaf would lose its column's order, time, and unit (a bin's `start`
- *  would fall back to the quantity "start", see `resolveQuantity`). */
+ *  would fall back to the quantity "start", see `resolveColumn`). */
 export const copyColumnTypes = <T>(target: T, source: unknown): T => {
   const types = getColumnTypes(source);
   if (types === undefined) return target;

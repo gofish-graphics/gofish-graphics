@@ -62,7 +62,8 @@ legend past it. It has two phases:
 
 1. **`resolveLabelTargets`** — a single top-down walk that pushes each node's
    `_labels` array down to its children whenever the node has children but no
-   `datum` of its own: a plain group node merely relays its label to whichever
+   rows of its own (no `datum`, or an empty one): a plain group node merely
+   relays its label to whichever
    descendant should actually carry it, while a node **with** a datum (a leaf
    shape, or a group combinator that stamped its own subdata — see
    [Operator Factory](/internals/frontend/operator-factory)) keeps its own
