@@ -864,9 +864,9 @@ def _partition_opts(*, by: FieldAccessor | dict, dir: Optional[str] = None, alig
     """Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.
 
     Args:
-        by: A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y with alignment middle. A plain field has no region and is an error.
+        by: A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y. A plain field has no region and is an error.
         dir: Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis.
-        alignment: Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Not allowed with a key per axis, where each child is centered in its cell. Default "baseline".
+        alignment: Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Applies only where nothing gives the children a cell on that axis: inside a cell of another partition, each child is placed in that cell. Not allowed with a key per axis. Default "baseline".
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}

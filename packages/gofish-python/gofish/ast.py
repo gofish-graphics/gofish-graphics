@@ -1932,7 +1932,7 @@ def partition(
         ).mark(rect(h=field("value").sum()))
 
     With one binned key per axis it divides both axes into rectangles. This is
-    the partition on x, then the partition on y with ``alignment="middle"``:
+    the partition on x, then the partition on y:
 
         chart(movies).flow(
             partition(by={
@@ -1979,7 +1979,7 @@ def partition(
         if dir is not None or "alignment" in options:
             raise ValueError(
                 "partition: a `by` keyed by axis divides both axes, so `dir` "
-                "and `alignment` do not apply. Each child is centered in its "
+                "and `alignment` do not apply. Each child is placed in its "
                 "cell."
             )
         check_key(by["x"])

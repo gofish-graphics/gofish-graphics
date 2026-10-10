@@ -1557,7 +1557,7 @@ for the API.
               "required": ["x", "y"]
             }
           ],
-          "description": "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y with alignment middle. A plain field has no region and is an error."
+          "description": "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y. A plain field has no region and is an error."
         },
         "dir": {
           "type": "string",
@@ -1565,7 +1565,7 @@ for the API.
         },
         "alignment": {
           "type": "string",
-          "description": "Alignment of the children on the other axis (\"start\" | \"middle\" | \"end\" | \"baseline\"). Not allowed with a key per axis, where each child is centered in its cell.",
+          "description": "Alignment of the children on the other axis (\"start\" | \"middle\" | \"end\" | \"baseline\"). Applies only where nothing gives the children a cell on that axis: inside a cell of another partition, each child is placed in that cell. Not allowed with a key per axis.",
           "default": "baseline"
         },
         "axes": {

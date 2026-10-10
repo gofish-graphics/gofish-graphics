@@ -72,17 +72,16 @@ partition({
 });
 ```
 
-It is the same as the 1D partition on x, then the 1D partition on y with
-`alignment: "middle"`:
+It is the same as the 1D partition on x, then the 1D partition on y:
 
 ```ts
 (partition({ by: field("a").bin({ step: 1 }), dir: "x" }),
-  partition({
-    by: field("b").bin({ step: 0.5 }),
-    dir: "y",
-    alignment: "middle",
-  }));
+  partition({ by: field("b").bin({ step: 0.5 }), dir: "y" }));
 ```
+
+A partition inside a cell of another partition gives each of its groups that
+cell on the other axis, so nesting the two in either order places the groups
+the same way. There `alignment` has nothing to align.
 
 Each group gets a rectangle: its x cell by its y cell. A
 [`region`](/js/api/marks/region) fills it, so a 2D histogram is a `region`
