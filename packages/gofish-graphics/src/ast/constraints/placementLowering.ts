@@ -71,7 +71,6 @@ class PlacementOwnershipPlan {
   private readonly initiallyPlaced = new Set<string>();
   private readonly positionPinned = new Set<string>();
   private readonly dataPositionedSet: [Set<string>, Set<string>];
-  private readonly regionPlacedSet: [Set<string>, Set<string>];
   private readonly sizes: [number, number];
 
   constructor(
@@ -79,12 +78,10 @@ class PlacementOwnershipPlan {
     constraints: PlacementConstraint[],
     posScales: ConstraintPosScales | undefined,
     sizes: [number, number],
-    dataPositioned?: [Set<string>, Set<string>],
-    regionPlaced?: [Set<string>, Set<string>]
+    dataPositioned?: [Set<string>, Set<string>]
   ) {
     this.sizes = sizes;
     this.dataPositionedSet = dataPositioned ?? [new Set(), new Set()];
-    this.regionPlacedSet = regionPlaced ?? [new Set(), new Set()];
     for (const [name, target] of targets) {
       for (const axis of AXIS_INDICES) {
         if (target.dims[axis].min !== undefined)
@@ -114,15 +111,6 @@ class PlacementOwnershipPlan {
    *  single authority the align guard consults. */
   isDataPositioned(axis: 0 | 1, name: string): boolean {
     return this.dataPositionedSet[axis].has(name);
-  }
-
-  /** Whether this (node, axis) was placed by the region its layer handed it
-   *  in its layout call (a `partition`'s cell, or the cell the partition was
-   *  itself given, `buildChildRegions`). Collected at the layer boundary and
-   *  handed in, like the data-positioned sets. The region owns the axis, so
-   *  an `align` over such targets has nothing to do and says nothing. */
-  isRegionPlaced(axis: 0 | 1, name: string): boolean {
-    return this.regionPlacedSet[axis].has(name);
   }
 
   shouldPinSelfPlacement(axis: 0 | 1, name: string): boolean {
@@ -176,8 +164,7 @@ export function lowerPlacementConstraints(
   sizes: [number, number],
   posScales?: ConstraintPosScales,
   gridTracks?: [TrackLayout, TrackLayout],
-  dataPositioned?: [Set<string>, Set<string>],
-  regionPlaced?: [Set<string>, Set<string>]
+  dataPositioned?: [Set<string>, Set<string>]
 ): LoweredPlacement {
   // A `position` pin on a grid cell overrides that cell's track centering on the
   // pinned axis (the authoritative-pin pattern) — collect which (cell, axis) a
@@ -198,8 +185,7 @@ export function lowerPlacementConstraints(
     constraints,
     posScales,
     sizes,
-    dataPositioned,
-    regionPlaced
+    dataPositioned
   );
 
   const lowerer = new PlacementProgramLowerer(targets);
@@ -210,7 +196,6 @@ export function lowerPlacementConstraints(
   const isInitiallyPlaced = ownership.isInitiallyPlaced.bind(ownership);
   const isPinned = ownership.isPinned.bind(ownership);
   const isDataPositioned = ownership.isDataPositioned.bind(ownership);
-  const isRegionPlaced = ownership.isRegionPlaced.bind(ownership);
 
   // A node that self-placed during its own layout is a hard boundary condition,
   // except where an authoritative position constraint explicitly owns the axis.
@@ -249,7 +234,6 @@ export function lowerPlacementConstraints(
           posScales,
           isPinned,
           isDataPositioned,
-          isRegionPlaced,
         });
         return;
       case "distribute":

@@ -2021,9 +2021,11 @@ on that axis is centered there by `GoFishNode.layout`. So a `rect` or a
 cell divides the cell, and a circle or a text keeps its own size and sits in
 the middle of the cell. An interval would pin both edges instead, which sets
 the child's size and would stretch a circle into an ellipse. The region
-coordinate itself lowers to no placement fact: its target is already placed
-when the solve runs, and an `align` over targets their regions placed says
-nothing (`isRegionPlaced`, `constraints/align.ts`).
+itself lowers to no placement fact: it is not in a position's `x`/`y`, and
+its target is already placed when the solve runs. An `align` loses each axis
+on which every one of its operands has a span in its region
+(`withoutRegionPlacedAligns`, `constraints/proposalPlan.ts`), since the
+regions placed them there.
 
 A layer passes the region it was handed on in its own frame, each span
 starting at 0 (`rebaseRegion`), and `GoFishNode.layout` places the layer

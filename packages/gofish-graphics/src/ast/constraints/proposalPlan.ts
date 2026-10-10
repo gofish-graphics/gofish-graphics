@@ -22,6 +22,7 @@ import {
   type ScopeSolution,
 } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
+import type { AlignConstraint } from "./align";
 import type { GridConstraint } from "./grid";
 import type { ConstraintPosScales } from "./shared";
 import { buildNestPlan, type NestPlan, type NestPlanChild } from "./nestPlan";
@@ -255,6 +256,31 @@ export function buildChildRegions(
     byName.set(name, { spans, outline });
   }
   return byName;
+}
+
+/**
+ * The layer's constraints as its placement solve sees them, once its
+ * children are laid out in their regions ({@link buildChildRegions}): an
+ * `align` loses each axis on which every one of its operands has a span in
+ * its region, since the region placed them there, and goes when it has no
+ * axis left. A partition inside another partition's cell is such a case:
+ * the cell spans the inner partition's cross axis, so its `alignment` (the
+ * fallback for an axis with no span) has nothing to do there.
+ */
+export function withoutRegionPlacedAligns(
+  constraints: ConstraintSpec[],
+  regions: Map<string, Region> | undefined
+): ConstraintSpec[] {
+  if (regions === undefined) return constraints;
+  const spanned = (c: AlignConstraint, axis: 0 | 1) =>
+    c.children.every((ref) => regions.get(ref.name)?.spans[axis] !== undefined);
+  return constraints.flatMap((c): ConstraintSpec[] => {
+    if (c.type !== "align") return [c];
+    const x = c.x !== undefined && spanned(c, 0) ? undefined : c.x;
+    const y = c.y !== undefined && spanned(c, 1) ? undefined : c.y;
+    if (x === c.x && y === c.y) return [c];
+    return x === undefined && y === undefined ? [] : [{ ...c, x, y }];
+  });
 }
 
 /** Choose the concrete size proposed to one child in a layer.

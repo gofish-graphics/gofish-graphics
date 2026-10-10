@@ -334,8 +334,7 @@ export function solvePlacementConstraints(
   gridTracks?: [TrackLayout, TrackLayout],
   dataPositioned?: [Set<string>, Set<string>],
   rigid?: Map<string, RigidAttachment>,
-  freeOrigin?: FreeOrigin,
-  regionPlaced?: [Set<string>, Set<string>]
+  freeOrigin?: FreeOrigin
 ): PlacementConflict[] {
   const lowered = lowerPlacementConstraints(
     constraints,
@@ -343,8 +342,7 @@ export function solvePlacementConstraints(
     sizes,
     posScales,
     gridTracks,
-    dataPositioned,
-    regionPlaced
+    dataPositioned
   );
   // Tie each nested operand to its container on every axis it takes part in,
   // so the solve moves the container with it (one rigid body).

@@ -95,16 +95,12 @@ export function lowerAlignPlacement(
     posScales,
     isPinned,
     isDataPositioned,
-    isRegionPlaced,
   }: {
     emitter: PlacementFactEmitter;
     targets: Map<string, Placeable>;
     posScales: ConstraintPosScales | undefined;
     isPinned: (axis: Axis, name: string) => boolean;
     isDataPositioned: (axis: 0 | 1, name: string) => boolean;
-    /** Whether the target was placed by the region its layer handed it (a
-     *  partition's cell, #1059): the region owns it on this axis. */
-    isRegionPlaced: (axis: 0 | 1, name: string) => boolean;
   }
 ): void {
   /**
@@ -214,17 +210,11 @@ export function lowerAlignPlacement(
       );
     });
     if (movable.length === 0) {
-      // Nothing this constraint can write is either a deliberate skip, which
-      // stays silent, or a genuine "every operand is already placed" no-op,
-      // which is worth an honest diagnostic (#725 item 6) rather than a
-      // silent nothing. The skips: a data-positioned target (scatter facets:
-      // `align` never fights a self-scaled panel), and a target its region
-      // placed (a partition inside another partition's cell, #1059: the
-      // cell owns the axis, so the inner partition's `alignment` has
-      // nothing to do there).
-      const allRegionPlaced = entries.every(({ child }) =>
-        isRegionPlaced(idx, child.name)
-      );
+      // Nothing this constraint can write is either the deliberate
+      // data-positioned skip (scatter facets — stay silent, `align` never
+      // fights a self-scaled panel) or a genuine "every operand is already
+      // placed" no-op, which is worth an honest diagnostic (#725 item 6)
+      // rather than a silent nothing.
       const allDataPositioned =
         nonPinned.length > 0 &&
         nonPinned.every(({ child, anchor }) => {
@@ -236,7 +226,7 @@ export function lowerAlignPlacement(
             isDataPositioned
           );
         });
-      if (!allDataPositioned && !allRegionPlaced) {
+      if (!allDataPositioned) {
         console.warn(
           `[align] ${owner} on axis "${axis}": nothing movable — every ` +
             `operand [${children.map((c) => c.name).join(", ")}] is ` +

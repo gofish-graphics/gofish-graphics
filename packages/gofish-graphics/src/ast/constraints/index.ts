@@ -365,8 +365,6 @@ export function collectPositionDomains(
  * @param dataPositioned - Per-axis sets of child names anchored to a data scale
  *   (baseline fixed at `posScale(0)`); `align` leaves these where their own scale
  *   puts them. The space/scope fact that replaced the `placementOn` guard read.
- * @param regionPlaced - Per-axis sets of child names placed by the region the
- *   layer handed them at layout (#1059); `align` leaves these silently too.
  */
 export function applyConstraints(
   constraints: ConstraintSpec[],
@@ -376,8 +374,7 @@ export function applyConstraints(
   gridTracks?: [TrackLayout, TrackLayout],
   dataPositioned?: [Set<string>, Set<string>],
   rigid?: Map<string, RigidAttachment>,
-  freeOrigin?: FreeOrigin,
-  regionPlaced?: [Set<string>, Set<string>]
+  freeOrigin?: FreeOrigin
 ): void {
   const placement = constraints.filter(
     (
@@ -414,8 +411,7 @@ export function applyConstraints(
     gridTracks,
     dataPositioned,
     rigid,
-    freeOrigin,
-    regionPlaced
+    freeOrigin
   );
 
   // An overlap constraint is not a difference constraint: it reads where the

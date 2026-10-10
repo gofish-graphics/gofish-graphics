@@ -451,12 +451,23 @@ async function main() {
         .map((r) => JSON.stringify(r))
         .sort();
     };
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args.join(" "));
     const xy = await grid("x");
     const yx = await grid("y");
+    console.warn = warn;
     check(
       "partition x then y and y then x place the same regions",
       xy.length === 9 && same(xy, yx),
       `${xy.join(" ")}\n      vs ${yx.join(" ")}`
+    );
+    // The inner partition's cross axis is spanned by its outer cell, so its
+    // \`alignment\` there is no constraint at all, not a no-op that warns.
+    check(
+      "nested partitions leave no align with nothing to move",
+      !warnings.some((w) => w.startsWith("[align]")),
+      warnings.join("\n")
     );
 
     // The product form (#1059) is the nested form, x then y, with nothing

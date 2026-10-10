@@ -77,6 +77,7 @@ import {
   buildPositionScalePlan,
   buildSpanProposalMap,
   buildChildRegions,
+  withoutRegionPlacedAligns,
   childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
@@ -912,26 +913,15 @@ export const layer = createNodeOperatorSequential(
               }
             }
 
-            // Which (child, axis) the region it was handed placed (#1059).
-            const regionPlaced: [Set<string>, Set<string>] = [
-              new Set(),
-              new Set(),
-            ];
-            for (const [name, r] of childRegions ?? []) {
-              for (const axis of [0, 1] as const)
-                if (r.spans[axis] !== undefined) regionPlaced[axis].add(name);
-            }
-
             applyConstraints(
-              node.constraints,
+              withoutRegionPlacedAligns(node.constraints, childRegions),
               nameToPlaceable,
               size,
               effectivePosScales,
               gridTracks,
               dataPositioned,
               rigid,
-              freeOrigin,
-              regionPlaced
+              freeOrigin
             );
 
             // Place any child the constraints left unplaced at its baseline
