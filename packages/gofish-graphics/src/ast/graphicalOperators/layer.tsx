@@ -20,7 +20,9 @@ import {
   isUNDEFINED,
   magnitude,
 } from "../underlyingSpace";
-import { impliedExtent, type Extent } from "../extent";
+import { Extent, impliedExtent } from "../extent";
+import * as Monotonic from "../../util/monotonic";
+import type { KeyedDomains } from "../keyedDomains";
 import { isValue } from "../data";
 import { computeSize, foldFinite } from "../../util";
 import { axisScale } from "../domain";
@@ -243,9 +245,10 @@ export const layer = createNodeOperatorSequential(
     // literal `w`/`h`, or a data-valued one) is a sized node there: at layout
     // it maps the keyed domain of its content into its box, as the root does
     // into the canvas ("a chart embeds the way it renders"). A literal size
-    // carries no data, so the layer reports its content's type and claim
-    // upward; which domain that type shares with is decided by the sharing
-    // sets, not by the size. A data-valued size is a magnitude in the
+    // carries no data, so the layer reports its content's type upward; which
+    // domain that type shares with is decided by the sharing sets, not by
+    // the size. Its claim is its own pixels, since it solves its own σ
+    // (`fixedClaim` in the claim hook). A data-valued size is a magnitude in the
     // parent's unit, so the layer reports that, and its content is nested in
     // the box. `contentExtents` is the content's claim, written by
     // `resolveExtent` and solved against the box by `layout`.
@@ -467,11 +470,41 @@ export const layer = createNodeOperatorSequential(
           // its magnitude instead; the content's claim stays inside the box.
           contentExtents[0] = resolved[0];
           contentExtents[1] = resolved[1];
-          return ([0, 1] as const).map((axis) =>
-            isValue(dims[axis].size)
-              ? impliedExtent(spaces[axis])
-              : resolved[axis]
-          ) as [Extent | undefined, Extent | undefined];
+          // What the layer claims upward. A data-valued size claims its
+          // magnitude. A literal size claims its own pixels: the box is a
+          // sized node, so its content's σ is its own, and the parent must
+          // not solve against the content as if it were data-scaled room.
+          // The claim keeps the content's split about data 0, at the σ the
+          // box solves (its content widened to its keyed domain and niced,
+          // as `layout` solves it), so the box's 0 sits where its content's
+          // does. Without a claim in σ the content claims what it did.
+          const keyed: KeyedDomains | undefined = (
+            node as GoFishNode
+          ).tryGetRenderSession()?.keyedDomains;
+          const fixedClaim = (axis: 0 | 1, px: number): Extent | undefined => {
+            const claim = resolved[axis];
+            if (claim === undefined || Monotonic.isConstant(claim.width))
+              return claim;
+            const wide: Extent =
+              keyed?.scope(
+                node as GoFishNode,
+                axis,
+                t.resolved[axis],
+                claim
+              )[1] ?? claim;
+            const sigma = wide.width.inverse(px, { upperBoundGuess: px });
+            if (sigma === undefined) return claim;
+            return Extent(
+              Monotonic.linear(0, wide.ascent.run(sigma)),
+              Monotonic.linear(0, wide.descent.run(sigma))
+            );
+          };
+          return ([0, 1] as const).map((axis) => {
+            const size = dims[axis].size;
+            if (isValue(size)) return impliedExtent(spaces[axis]);
+            if (typeof size === "number") return fixedClaim(axis, size);
+            return resolved[axis];
+          }) as [Extent | undefined, Extent | undefined];
         },
         layout: (size, scales, children, node) => {
           // This layer's y direction: its children and constraints are read

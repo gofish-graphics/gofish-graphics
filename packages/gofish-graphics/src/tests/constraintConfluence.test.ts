@@ -1313,8 +1313,11 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
     unscaled.sigmas[0] === 10
   );
   ok(
-    "a claim with no σ in it is reported",
-    unscaled.failedAxes.length === 1 && unscaled.failedAxes[0] === 1
+    // Only pixels (fixed boxes): nothing to solve, and not a failure.
+    "a claim with no σ in it is not solved, and inherits",
+    unscaled.failedAxes.length === 0 &&
+      unscaled.checks.length === 1 &&
+      unscaled.sigmas[1] === undefined
   );
 
   // A pinned node in a slot (a facet panel) is sized by its slot; a free

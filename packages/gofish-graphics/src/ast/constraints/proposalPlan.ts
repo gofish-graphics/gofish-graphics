@@ -5,7 +5,7 @@
 import { type Size } from "../dims";
 import { isValue } from "../data";
 import { originIs, type UnderlyingSpace } from "../underlyingSpace";
-import { type Extent } from "../extent";
+import { scalesWithSigma, type Extent } from "../extent";
 import type { AxisMap } from "../domain";
 import { sliceExtent } from "./folds";
 import {
@@ -242,7 +242,9 @@ export function solveLayerScales(
         (handedSigmas[axis] === undefined ||
           (inSlot[axis] && originIs(content, "pinned"))));
     const claim = contentExtents[axis];
-    if (sized && Number.isFinite(layerSize[axis]) && claim !== undefined) {
+    // A claim with no σ in it (content that is only fixed boxes) has
+    // nothing to solve: the layer inherits.
+    if (sized && Number.isFinite(layerSize[axis]) && scalesWithSigma(claim)) {
       const [space, nicedClaim] = scope(axis, content, claim);
       const solved = scopes.solveScope(
         { kind: "sized", rootKey, axis },

@@ -30,7 +30,7 @@ import {
   type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
-import { type Extent } from "./extent";
+import { scalesWithSigma } from "./extent";
 import { KeyedDomains } from "./keyedDomains";
 import {
   fromFrameStart,
@@ -468,7 +468,9 @@ export async function layout(
   // "use my default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
   // guards, the same path the layout engine already relies on.
   const UNSIZED = NaN;
-  const needsCanvas = (claim: Extent | undefined) => claim !== undefined;
+  // Only a claim with σ in it is data to scale: a box with a literal size
+  // claims its own pixels, and needs no canvas.
+  const needsCanvas = scalesWithSigma;
   // Concrete canvas for scaling a claimed axis (always a real number).
   const canvasW = w ?? DEFAULT_CANVAS_SIZE;
   const canvasH = h ?? DEFAULT_CANVAS_SIZE;

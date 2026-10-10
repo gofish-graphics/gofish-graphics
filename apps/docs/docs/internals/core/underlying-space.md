@@ -1410,8 +1410,13 @@ pixels), then niced on demand, then solved. The widen-then-nice is one method,
 and by the axis drawn over the domain.
 
 A **literal** `w`/`h` carries no data, so the node reports its content's type
-and claim upward unchanged; the size only sizes the box the node maps its
-domain into. A **data-valued** `w`/`h` (a field name, a `field(...)`
+upward unchanged, and its keyed domain is shared as the sharing sets say. Its
+claim, though, is its own pixels: the box solves its own σ, so its content's σ
+claim is not room its parent can scale. The node claims the content's claim
+at the σ it solves, which keeps the content's split about data 0 and sums to
+the size (`fixedClaim` in `layer.tsx`). A claim that is only pixels has no σ
+in it (`scalesWithSigma` in `extent.ts`): it needs no canvas at the root, and
+a sized node has nothing to solve from it. A **data-valued** `w`/`h` (a field name, a `field(...)`
 expression, a per-entry array) is a value in its parent's unit, so the node
 reports a free magnitude (`magnitude(size)`), a leaf in its parent's set like
 a rect with `w: "count"`, and its content is nested in the box: the content

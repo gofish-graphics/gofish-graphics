@@ -66,6 +66,12 @@ export const impliedExtent = (space: UnderlyingSpace): Extent | undefined => {
   return Extent(Monotonic.linear(max, 0), Monotonic.linear(-min, 0));
 };
 
+/** Whether a claim has σ in it: data-scaled room a scope can solve σ
+ *  against. A claim that is only pixels (a box with a literal size) is not:
+ *  it needs no canvas, and a scope has nothing to solve from it. */
+export const scalesWithSigma = (extent: Extent | undefined): extent is Extent =>
+  extent !== undefined && !Monotonic.isConstant(extent.width);
+
 /** {@link impliedExtent} on both axes. */
 export const impliedExtents = (
   spaces: Size<UnderlyingSpace>

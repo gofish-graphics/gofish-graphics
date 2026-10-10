@@ -9,6 +9,7 @@
  */
 import { Rect as rect } from "../ast/shapes/rect";
 import { layer } from "../ast/graphicalOperators/layer";
+import { stackX } from "../ast/graphicalOperators/stackX";
 import { Constraint } from "../ast/constraints";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
 import { value as v, datum } from "../ast/data";
@@ -91,6 +92,37 @@ async function main() {
       "the bars' datums sit the canvas width apart (domain [10, 20])",
       near(center(b) - center(a), 200),
       { a, b }
+    );
+  }
+
+  console.log("# a literal size reports a fixed pixel claim");
+  {
+    // A 100 px box of data beside a rect of 50 data units, in one 200 px
+    // stack: the box takes its 100 px, so σ solves 100 + 50σ = 200 and the
+    // rect is 100 px wide. Before, the box passed its content's σ claim up,
+    // so the stack solved (10 + 50)σ = 200 and the rect was 167 px wide.
+    const node = (stackX as any)({ spacing: 0, alignment: "start" }, [
+      (layer as any)({ w: 100, h: 20 }, [
+        (rect as any)({ w: v(10), h: 20, fill: "red" }),
+      ]),
+      (rect as any)({ w: v(50), h: 20, fill: "blue" }),
+    ]);
+    const dl = await toDisplayList(node, { w: 200, h: 50 });
+    const [blue] = byFill(dl, "blue");
+    check("the rect beside a fixed box gets the rest (σ = 2)", near(blue?.w, 100), blue);
+  }
+  {
+    // Rendered with no canvas width, a fixed box needs no canvas: it is its
+    // own 100 px, not data-scaled room the default canvas would fill.
+    const node = (layer as any)({ w: 100, h: 20 }, [
+      (rect as any)({ w: v(10), h: 20, fill: "red" }),
+    ]);
+    const dl: any = await toDisplayList(node, { h: 50 });
+    const [red] = byFill(dl, "red");
+    check(
+      "a fixed box with no render width keeps its own width",
+      near(dl.viewport.w - 2 * (red?.x ?? 0), 100),
+      { viewport: dl.viewport, red }
     );
   }
 
