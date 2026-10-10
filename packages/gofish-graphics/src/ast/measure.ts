@@ -118,6 +118,9 @@ export const resolveUnit = (v: UnitVar): Unit => {
 export const sameUnit = (a: Unit | undefined, b: Unit | undefined): boolean =>
   a !== undefined && b !== undefined && a.kind === b.kind && a.name === b.name;
 
+/** A string that names a unit: equal for two units iff {@link sameUnit}. */
+export const unitKey = (unit: Unit): string => `${unit.kind}:${unit.name}`;
+
 /**
  * The unit substitution of one render: the variable of each quantity name,
  * and the union-find over them. One per render, so a binding made anywhere

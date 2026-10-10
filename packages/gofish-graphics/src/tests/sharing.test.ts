@@ -96,15 +96,15 @@ async function main() {
     planSharing([Constraint.position({ y: 120 }, [r("b")])], kids("a", "b")),
     { x: [0, 0], y: [0, 1], ny: [] }
   );
-  // A pixel interval is a literal position too. `datumPlacedChildren` already
-  // sets its child aside from the layer's union, so it is also nested.
+  // A pixel interval is a literal position too (`positionCoordKind`): it
+  // places the child elsewhere, so it detaches it and nests nothing.
   expect(
     "position, literal pixel interval: detaches the child",
     planSharing(
       [Constraint.position({ x: [0, 50] }, [r("b")])],
       kids("a", "b")
     ),
-    { x: [0, 1], y: [0, 0], nx: [1] }
+    { x: [0, 1], y: [0, 0] }
   );
 
   expect(

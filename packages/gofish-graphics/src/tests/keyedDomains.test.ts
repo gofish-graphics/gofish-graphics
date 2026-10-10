@@ -53,6 +53,7 @@ const node = (
   return {
     uid: `n${uid++}`,
     type: opts.type ?? "layer",
+    ...(opts.type === "coord" ? { _space: {} } : {}),
     children,
     _underlyingSpace: [UNDEFINED, y],
     axisDemand: [undefined, undefined],

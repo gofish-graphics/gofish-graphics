@@ -350,6 +350,14 @@ export const shareAll: ResolveSharing = (childNodes) => ({
   nested: [new Set(), new Set()],
 });
 
+/** Every child in a set of its own on both axes, nested in a frame of its
+ *  own (a treemap's tile). */
+export const nestEach: ResolveSharing = (childNodes) => {
+  const sets = childNodes.map((_, i) => i + 1);
+  const all = () => new Set(childNodes.map((_, i) => i));
+  return { sets: [sets, [...sets]], nested: [all(), all()] };
+};
+
 /**
  * A node's size-claim hook: its per-axis {@link Extent} (undefined on an axis
  * whose type is not continuous). It runs in its own walk, after every type is

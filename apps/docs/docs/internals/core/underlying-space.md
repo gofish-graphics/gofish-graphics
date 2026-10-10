@@ -701,21 +701,25 @@ that axis in one frame. Set 0 is the layer's own set, and a child in any other
 set is detached on that axis. A literal pixel `position` detaches its child, a
 spread's `distribute` detaches each part and nests it in its slot, a grid does
 both on both axes, and `align`, a stack's glued `distribute` and `nest` join
-their children. Detaches run first and joins second, so an `align` beats a
-`position` on the same axis. The `nested` half is the datum placements plus
-the spread slots and grid cells. The plan also returns the datum placements on
-their own (`datumPlaced`), which the layer's own union leaves out. Unlike `planConstraintComposition`, the plan
-exists for every layer, point positions included. Nothing reads it yet except
-the `GOFISH_DUMP_SHARING` dump. It is step 3 of the
-[measure-keyed domains design](/internals/design/measure-keyed-domains), which
-lists what each construct contributes. `planSharing` is the layer's sharing
-rule. Like the type hook, each node type has its own rule (`resolveSharing`,
-read through `GoFishNode.sharing()`, which memoizes the plan and clears it with
-the types), and a node without one lets every child share. Three rows of the table are node-level rules: a layer with a data-valued
-`w`/`h` nests its content on that axis, a `treemap` detaches each child and
-nests it in its tile on both axes, and the `position` operator detaches its
-child on an axis with a pixel offset and keeps it shared on an axis with a
-datum offset.
+their children. One classifier, `positionCoordKind` (`constraints/position.ts`),
+says whether a coordinate is pixels (a number, or an interval of numbers) or a
+datum (a datum point, or an interval with a datum endpoint). Detaches run first
+and joins second, so an `align` beats a `position` on the same axis. The
+`nested` half is the datum placements plus the spread slots and grid cells. The
+plan also returns the datum placements on their own (`datumPlaced`), which the
+layer's own union leaves out. Unlike `planConstraintComposition`, the plan
+exists for every layer, point positions included. The layer's type hook, the
+keyed domain table and the `GOFISH_DUMP_SHARING` dump read it. It is step 3 of
+the [measure-keyed domains design](/internals/design/measure-keyed-domains),
+which lists what each construct contributes. `planSharing` is the layer's
+sharing rule. Like the type hook, each node type has its own rule
+(`resolveSharing`, read through `GoFishNode.sharing()`, which memoizes the plan
+and clears it with the types), and a node without one lets every child share
+(`shareAll`). Three rows of the table are node-level rules: a layer with a
+data-valued `w`/`h` nests its content on that axis, a `treemap` detaches each
+child and nests it in its tile on both axes (`nestEach`), and the `position`
+operator detaches its child on an axis with a pixel offset and keeps it shared
+on an axis with a datum offset.
 
 `distribute`'s `anchor` option (`"edge" | "start" | "middle" | "end" |
 "baseline"`, default `"edge"`) picks which pair of anchors the chain relates

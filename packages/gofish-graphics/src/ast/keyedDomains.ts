@@ -27,6 +27,7 @@ import {
 } from "./underlyingSpace";
 import type { Size } from "./dims";
 import { niceScope, widenScope, type Extent } from "./extent";
+import { unitKey } from "./measure";
 import { envFlag } from "../util";
 
 const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
@@ -38,8 +39,9 @@ export type KeyedNode = {
   type: string;
   children: unknown[];
   _underlyingSpace?: Size<UnderlyingSpace>;
+  /** Set on a coordinate transform: the space it opens for its subtree. */
+  _space?: unknown;
   axisDemand: [AxisTicks | undefined, AxisTicks | undefined];
-  chrome?: { content: KeyedNode };
   sharing(): SharingPlan;
 };
 
@@ -60,19 +62,12 @@ export const domainKey = (
   top: KeyedNode
 ): string => {
   const unit = spaceUnit(space)?.unit;
-  const key =
-    unit === undefined ? `set:${top.uid}` : `${unit.kind}:${unit.name}`;
+  const key = unit === undefined ? `set:${top.uid}` : unitKey(unit);
   // An origin-less space (a middle alignment) has only widths, no data
   // positions, so its domain is the unit's domain of widths, kept apart
   // from the domain of positions.
   return originIs(space, "none") ? `${key}/width` : key;
 };
-
-/** A finite interval, or undefined (an empty column, a NaN). */
-const finite = (iv: Interval.Interval): Interval.Interval | undefined =>
-  Number.isFinite(iv.min) && Number.isFinite(iv.max) && iv.min <= iv.max
-    ? iv
-    : undefined;
 
 /**
  * The keyed domains of one render. Built once after the type walk, before
@@ -120,9 +115,10 @@ export class KeyedDomains {
 
   /** Add a top's interval on `axis` to its key's domain. */
   private addTop(seat: Seat, axis: 0 | 1, space: UnderlyingSpace | undefined) {
+    // An empty column or a NaN end adds nothing.
     if (space === undefined || !isCONTINUOUS(space)) return;
-    const iv = finite(space.dataInterval);
-    if (iv === undefined) return;
+    const iv = space.dataInterval;
+    if (!Interval.isFinite(iv)) return;
     const key = domainKey(space, seat.top);
     const { domains } = this.tables(seat.spaceRoot);
     const prior = domains[axis].get(key);
@@ -159,11 +155,11 @@ export class KeyedDomains {
       if (seat.top === node) this.addTop(seat, axis, seat.topType);
     }
 
-    const children = node.children.filter(isKeyedNode);
-    if (node.type === "coord") {
+    if (node._space !== undefined) {
       // A coordinate transform starts a new space. Its children share both
       // axes (the coord overlays them), so the coord is the top of its own
       // set there, over the union of its children's types.
+      const children = node.children.filter(isKeyedNode);
       const childTypes = children.map(
         (c) => c._underlyingSpace ?? ([undefined, undefined] as any)
       );
@@ -180,18 +176,21 @@ export class KeyedDomains {
     const plan = node.sharing();
     node.children.forEach((child, i) => {
       if (!isKeyedNode(child)) return;
-      const childSeats = ([0, 1] as const).map((axis): Seat => {
-        // A child its parent detaches or nests is the top of a set of its
-        // own. Any other child is in its parent's set.
-        const own = plan.sets[axis][i] === 0 && !plan.nested[axis].has(i);
-        return own
-          ? seats[axis]
-          : {
-              spaceRoot: seats[axis].spaceRoot,
-              top: child,
-              topType: child._underlyingSpace?.[axis],
-            };
-      }) as [Seat, Seat];
+      // A child its parent detaches or nests is the top of a set of its
+      // own. Any other child is in its parent's set, and takes its seats.
+      const own = (axis: 0 | 1) =>
+        plan.sets[axis][i] === 0 && !plan.nested[axis].has(i);
+      if (own(0) && own(1)) return this.walk(child, seats);
+      const childSeats = ([0, 1] as const).map(
+        (axis): Seat =>
+          own(axis)
+            ? seats[axis]
+            : {
+                spaceRoot: seats[axis].spaceRoot,
+                top: child,
+                topType: child._underlyingSpace?.[axis],
+              }
+      ) as [Seat, Seat];
       this.walk(child, childSeats);
     });
   }

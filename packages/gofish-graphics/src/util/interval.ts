@@ -27,6 +27,15 @@ export const isEmpty = (interval: Interval): boolean => {
 };
 
 /**
+ * Checks if an interval is finite and not empty: both ends are numbers and
+ * min <= max. An empty column (min > max) or a NaN end fails.
+ */
+export const isFinite = (interval: Interval): boolean =>
+  Number.isFinite(interval.min) &&
+  Number.isFinite(interval.max) &&
+  interval.min <= interval.max;
+
+/**
  * Gets the width of an interval
  */
 export const width = (interval: Interval): number => {

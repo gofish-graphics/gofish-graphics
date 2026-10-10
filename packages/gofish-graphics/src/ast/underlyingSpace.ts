@@ -2,7 +2,12 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { interval, Interval, width as intervalWidth } from "../util/interval";
+import {
+  interval,
+  Interval,
+  isFinite as isFiniteInterval,
+  width as intervalWidth,
+} from "../util/interval";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
 import {
   getQuantity,
@@ -282,8 +287,7 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
   const iv = s.dataInterval;
   // An empty interval (min > max: a column of nulls) or a non-finite one
   // (NaN) has no ends to round, over numbers or instants alike.
-  if (!(Number.isFinite(iv.min) && Number.isFinite(iv.max) && iv.min <= iv.max))
-    return space;
+  if (!isFiniteInterval(iv)) return space;
   // An absolute axis nices its domain's ends: to round numbers, or, over
   // instants, to cell starts of its inner row. A delta axis has only a
   // width, which it nices from 0 so its steps are even (ticks 20, 40, …, 160

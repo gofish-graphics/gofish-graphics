@@ -55,7 +55,6 @@ import {
 import { impliedExtent, scaleExtent, type Extent } from "../extent";
 import { type ConstraintSpec } from ".";
 import * as Interval from "../../util/interval";
-import { isValue } from "../data";
 import {
   distributeChildrenInPlacementOrder,
   distributeOrigin,
@@ -65,11 +64,16 @@ import {
   type StackOrigin,
 } from "./distribute";
 import { type AlignConstraint } from "./align";
-import { isPositionInterval, type PositionConstraint } from "./position";
+import {
+  isPositionInterval,
+  positionCoordKind,
+  type PositionConstraint,
+} from "./position";
 import {
   axisIndex,
   buildNameIndex,
   childNameKey,
+  isPointAlign,
   type AlignAnchor,
 } from "./shared";
 import { GoFishNode } from "../_node";
@@ -112,31 +116,6 @@ export type PositionDomains = {
   xMeasure?: UnitRecord;
   yMeasure?: UnitRecord;
 };
-
-/** Per axis, the direct children a `position` constraint places by a datum
- *  coordinate (a point or an interval) on that axis. Such a child sits where
- *  its datum maps, so its own extent is in its own frame (a scatter's circle
- *  is sized in its own units), not in the axis's data. */
-function datumPlacedChildren(
-  constraints: ConstraintSpec[],
-  index: Map<string, number>
-): [Set<number>, Set<number>] {
-  const placed: [Set<number>, Set<number>] = [new Set(), new Set()];
-  for (const c of constraints) {
-    if (c.type !== "position") continue;
-    const coords = [c.x, c.y] as const;
-    for (const axis of [0, 1] as const) {
-      const coord = coords[axis];
-      if (coord === undefined || !(isValue(coord) || isPositionInterval(coord)))
-        continue;
-      for (const ref of c.children) {
-        const i = index.get(ref.name);
-        if (i !== undefined) placed[axis].add(i);
-      }
-    }
-  }
-  return placed;
-}
 
 /** `children` with the axis of every child in `placed` left out (UNDEFINED,
  *  or no claim): what the layer's own union sees once datum-placed children
@@ -388,7 +367,7 @@ export function planConstraintComposition(
       // point-anchor space fold — the target they write is UNDEFINED on this
       // axis by construction (that's the unbound-target scope), so it
       // contributes no space claim here.
-      if (typeof spec === "string" && spec !== "span" && spec !== "size")
+      if (typeof spec === "string" && isPointAlign(spec))
         alignFolds.push({ axis, anchor: spec, idx });
     }
   }
@@ -450,17 +429,6 @@ export type LayerSharingPlan = SharingPlan & {
   datumPlaced: [Set<number>, Set<number>];
 };
 
-/** Whether a `position` coordinate is a literal pixel value: a number point,
- *  or an interval whose two endpoints are numbers. */
-const isPixelCoordinate = (coord: PositionConstraint["x"]): boolean =>
-  typeof coord === "number" ||
-  (isPositionInterval(coord) && !coord.some((e) => isValue(e)));
-
-/** Whether an align spec puts its children at point anchors on its axis.
- *  `"span"` and `"size"` write an unbound target, so they share nothing. */
-const isPointAlign = (spec: AlignConstraint["x"]): boolean =>
-  spec !== undefined && spec !== "span" && spec !== "size";
-
 export function planSharing(
   constraints: ConstraintSpec[],
   childNodes: GoFishAST[]
@@ -474,12 +442,8 @@ export function planSharing(
       .map((r) => index.get(r.name))
       .filter((i): i is number => i !== undefined);
 
-  // A datum placement nests the child's own extent at its datum.
-  const datumPlaced = datumPlacedChildren(constraints, index);
-  const nested: [Set<number>, Set<number>] = [
-    new Set(datumPlaced[0]),
-    new Set(datumPlaced[1]),
-  ];
+  const datumPlaced: [Set<number>, Set<number>] = [new Set(), new Set()];
+  const nested: [Set<number>, Set<number>] = [new Set(), new Set()];
   const detached: [Set<number>, Set<number>] = [new Set(), new Set()];
   const joins: [number[][], number[][]] = [[], []];
   const detach = (axis: 0 | 1, idx: number[]) =>
@@ -491,10 +455,19 @@ export function planSharing(
     switch (c.type) {
       case "position": {
         // A literal pixel value places the child elsewhere. A datum keeps it
-        // in the own set, nested at its datum (`datumPlaced`).
+        // in the own set, nested at its datum: it sits where its datum maps,
+        // so its own extent is in a frame of its own (a scatter's circle is
+        // sized in its own units), and the layer's own union leaves it out
+        // (`datumPlaced`).
         const idx = idxOf(c.children);
-        if (isPixelCoordinate(c.x)) detach(0, idx);
-        if (isPixelCoordinate(c.y)) detach(1, idx);
+        for (const axis of [0, 1] as const) {
+          const kind = positionCoordKind(axis === 0 ? c.x : c.y);
+          if (kind === "pixel") detach(axis, idx);
+          if (kind === "datum") {
+            idx.forEach((i) => datumPlaced[axis].add(i));
+            nest(axis, idx);
+          }
+        }
         break;
       }
       case "align": {

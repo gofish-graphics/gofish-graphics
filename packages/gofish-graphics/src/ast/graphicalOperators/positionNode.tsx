@@ -14,6 +14,7 @@ import {
 import { GoFishAST } from "../_ast";
 import { Extent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
+import { positionCoordKind } from "../constraints/position";
 
 export type PositionNodeOptions = {
   key?: string;
@@ -81,7 +82,7 @@ export const positionNode = (
       // a literal `Constraint.position` detaches its child.
       resolveSharing: (childNodes) => {
         const set = (offset: MaybeValue<number> | undefined) =>
-          childNodes.map(() => (typeof offset === "number" ? 1 : 0));
+          childNodes.map(() => (positionCoordKind(offset) === "pixel" ? 1 : 0));
         return {
           sets: [set(options.x), set(options.y)],
           nested: [new Set(), new Set()],

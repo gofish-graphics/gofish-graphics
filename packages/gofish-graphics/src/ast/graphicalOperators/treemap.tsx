@@ -9,7 +9,7 @@ import {
 } from "d3-hierarchy";
 import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 
-import { GoFishNode, Placeable } from "../_node";
+import { GoFishNode, Placeable, nestEach } from "../_node";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import {
@@ -114,16 +114,7 @@ const Treemap = createNodeOperator(
         // The treemap sizes each child from data into a tile of its own, so
         // on both axes each child is detached from the others and nested in
         // its tile, as a grid cell is.
-        resolveSharing: (childNodes) => ({
-          sets: [
-            childNodes.map((_, i) => i + 1),
-            childNodes.map((_, i) => i + 1),
-          ],
-          nested: [
-            new Set(childNodes.map((_, i) => i)),
-            new Set(childNodes.map((_, i) => i)),
-          ],
-        }),
+        resolveSharing: nestEach,
         resolveUnderlyingSpace: (): Size<UnderlyingSpace> => {
           // Mirror Spread's explicit-size handling (spread.tsx:123-131): when a
           // data-driven size is declared on an axis (e.g. `h: "fare"` auto-summed

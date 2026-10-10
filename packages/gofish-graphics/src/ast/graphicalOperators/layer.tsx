@@ -730,12 +730,16 @@ export const layer = createNodeOperatorSequential(
               string,
               (typeof childPlaceables)[number]
             >();
+            // The direct child each name in `nameToPlaceable` stands for (or
+            // sits in, for a nested operand), recorded where the name is set.
+            const childOfName = new Map<string, number>();
             for (let i = 0; i < node.children.length; i++) {
               const childName = childNameKey(node.children[i]);
               // A drawing clause laid out after the solve has no placeable
               // yet, and nothing in the solve can address it.
               if (childName !== undefined && childPlaceables[i]) {
                 nameToPlaceable.set(childName, childPlaceables[i]);
+                childOfName.set(childName, i);
               }
             }
             // Operands override by resolution: a direct operand is its child's
@@ -745,6 +749,7 @@ export const layer = createNodeOperatorSequential(
             const containerKey = new Map<number, string>();
             const nested: [string, ResolvedOperand][] = [];
             for (const [name, op] of operands) {
+              childOfName.set(name, op.child);
               if (op.direct) {
                 nameToPlaceable.set(name, childPlaceables[op.child]);
                 containerKey.set(op.child, name);
@@ -757,6 +762,7 @@ export const layer = createNodeOperatorSequential(
                 container = `\u0000child:${op.child}`;
                 containerKey.set(op.child, container);
                 nameToPlaceable.set(container, childPlaceables[op.child]);
+                childOfName.set(container, op.child);
               }
               // The operand sits at a fixed pixel offset inside its container
               // (`nestedGap`); the solve sees both in this layer's axis order.
@@ -823,17 +829,13 @@ export const layer = createNodeOperatorSequential(
               new Set(),
               new Set(),
             ];
-            const childIndexOf = (name: string): number | undefined =>
-              operands.get(name)?.child ??
-              node.children.findIndex((c) => childNameKey(c) === name);
             for (const [name, cp] of nameToPlaceable) {
               const childSpace = (cp as GoFishNode)._underlyingSpace;
               if (childSpace === undefined) continue;
-              const i = childIndexOf(name);
+              const i = childOfName.get(name)!;
               for (const axis of [0, 1] as const) {
                 const s = childSpace[axis];
-                const shares =
-                  i === undefined || i < 0 || sharing.sets[axis][i] === 0;
+                const shares = sharing.sets[axis][i] === 0;
                 if (
                   shares &&
                   s !== undefined &&

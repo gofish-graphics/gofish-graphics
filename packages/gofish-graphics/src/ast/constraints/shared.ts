@@ -24,6 +24,14 @@ export type AlignAnchor = Alignment | "baseline";
  *  a box, so `position`/`distribute` do not accept them. */
 export type AlignValue = AlignAnchor | "span" | "size";
 
+/** Whether an align spec puts its targets at point anchors on its axis: one
+ *  anchor, or one per target. `"span"` and `"size"` are interval statistics
+ *  that write an unbound target, so they place nothing at a point. */
+export const isPointAlign = (
+  spec: AlignValue | AlignAnchor[] | undefined
+): spec is AlignAnchor | AlignAnchor[] =>
+  spec !== undefined && spec !== "span" && spec !== "size";
+
 /**
  * A constraint operand: a node NAME, resolved at layout from the constrained
  * layer with the same lookup `ref("name")` uses (`resolveScopedName`), and the
