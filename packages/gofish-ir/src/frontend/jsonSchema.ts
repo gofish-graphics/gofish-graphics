@@ -444,31 +444,13 @@ export const FRONTEND_IR_JSON_SCHEMA = {
               description:
                 "The partition each value is binned into: a Calendar value ({ unit, step?, start? }), { step }, or { thresholds } (a cell count or a list of edges). Absent: about 10 cells.",
               oneOf: [
-                {
-                  type: "object",
-                  required: ["unit"],
-                  properties: {
-                    unit: {
-                      enum: [
-                        "second",
-                        "minute",
-                        "hour",
-                        "day",
-                        "week",
-                        "month",
-                        "quarter",
-                        "year",
-                      ],
-                    },
-                    step: { $ref: "#/$defs/Number" },
-                    start: { enum: ["monday", "sunday"] },
-                  },
-                  additionalProperties: false,
-                },
+                { $ref: "#/$defs/Calendar" },
                 {
                   type: "object",
                   required: ["step"],
-                  properties: { step: { $ref: "#/$defs/Number" } },
+                  properties: {
+                    step: { type: "number", exclusiveMinimum: 0 },
+                  },
                   additionalProperties: false,
                 },
                 {

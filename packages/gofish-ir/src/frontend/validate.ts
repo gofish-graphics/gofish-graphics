@@ -903,19 +903,9 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
   }
 }
 
-const CALENDAR_UNITS = [
-  "second",
-  "minute",
-  "hour",
-  "day",
-  "week",
-  "month",
-  "quarter",
-  "year",
-];
-
-/** A `bin` op's partition: a Calendar value (`{ unit, step?, start? }`),
- *  `{ step }`, or `{ thresholds }` (a count or a list of edges). */
+/** A `bin` op's partition: a Calendar value (the `Calendar` option type,
+ *  `{ unit, step?, start? }`), `{ step }` with a positive step, or
+ *  `{ thresholds }` (a count or a list of edges). */
 function walkPartition(value: unknown, path: string, ctx: Context): void {
   const fail = (message: string) => ctx.errors.push({ path, message });
   if (!isObject(value)) {
@@ -924,30 +914,24 @@ function walkPartition(value: unknown, path: string, ctx: Context): void {
   }
   const keys = Object.keys(value);
   if ("unit" in value) {
-    if (!CALENDAR_UNITS.includes(value.unit as string))
-      fail(
-        `bin "partition.unit" must be one of ${CALENDAR_UNITS.join(", ")}, got ${JSON.stringify(value.unit)}`
-      );
-    if (value.step !== undefined && !isIRNumber(value.step))
-      fail('bin "partition.step" must be a number when present');
-    if (
-      value.start !== undefined &&
-      value.start !== "monday" &&
-      value.start !== "sunday"
-    )
-      fail('bin "partition.start" must be "monday" | "sunday" when present');
-    const extra = keys.filter((k) => !["unit", "step", "start"].includes(k));
-    if (extra.length > 0)
-      fail(`bin "partition" has unknown keys: ${extra.join(", ")}`);
+    walkRefType("Calendar", value, path, ctx);
     return;
   }
   if (keys.length === 1 && keys[0] === "step") {
-    if (!isIRNumber(value.step)) fail('bin "partition.step" must be a number');
+    walkFieldType(
+      t.num({ exclusiveMin: 0, finite: true }),
+      value.step,
+      `${path}.step`,
+      ctx
+    );
     return;
   }
   if (keys.length === 1 && keys[0] === "thresholds") {
-    const t = value.thresholds;
-    if (!isIRNumber(t) && !(Array.isArray(t) && t.every((e) => isIRNumber(e))))
+    const th = value.thresholds;
+    if (
+      !isIRNumber(th) &&
+      !(Array.isArray(th) && th.every((e) => isIRNumber(e)))
+    )
       fail(
         'bin "partition.thresholds" must be a number or an array of numbers'
       );

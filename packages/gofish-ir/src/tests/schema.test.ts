@@ -499,6 +499,8 @@ for (const [name, partition] of [
   ["an unknown unit", { unit: "fortnight" }],
   ["a step and thresholds", { step: 1, thresholds: 10 }],
   ["a non-numeric step", { step: "1" }],
+  ["a zero step", { step: 0 }],
+  ["a Calendar value with no unit", { step: 1, start: "sunday" }],
   ["the old flat thresholds", 10],
 ] as const) {
   check(`bin with ${name} rejected`, !validate(binBy(partition)).valid);
@@ -553,6 +555,24 @@ for (const [name, by] of [
       r.errors.every(
         (e) => e.path.includes(".by.ops") && !/did not match/.test(e.message)
       ),
+    JSON.stringify(r.errors)
+  );
+}
+// Of a partition's shapes, the one whose required keys it has (a Calendar
+// value's unit) says what is wrong.
+{
+  const r = validate(
+    chart([
+      {
+        type: "partition",
+        by: binned("a", { unit: "fortnight" }),
+        dir: "x",
+      },
+    ])
+  );
+  check(
+    "partition with an unknown unit names the unit",
+    !r.valid && r.errors.every((e) => e.path.endsWith(".partition.unit")),
     JSON.stringify(r.errors)
   );
 }

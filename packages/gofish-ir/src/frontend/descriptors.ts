@@ -705,6 +705,7 @@ const calendarPartition: FieldSpec = {
         "quarter",
         "year"
       ),
+      required: true,
       doc: "The calendar level of each cell.",
     },
     step: {
