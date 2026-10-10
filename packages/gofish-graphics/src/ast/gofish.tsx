@@ -332,17 +332,16 @@ export async function layout(
     await n.resolveAliases();
     n.clearUnderlyingSpace();
     n.resolveUnderlyingSpace();
-    resolveKeyedDomains(n);
   };
   // The measure-keyed domains (#1114): after the type walk, per space root,
   // axis and unit, the domain every sized node of that unit maps into its
-  // size. Built once the axes are assigned (an axis drawn over a domain is
-  // what nices it), read by chrome elaboration, and rebuilt after each
-  // rewrite of the tree, which re-resolves the types.
-  const resolveKeyedDomains = (n: GoFishNode) => {
-    if (contexts?.session)
-      contexts.session.keyedDomains = KeyedDomains.build(n);
-  };
+  // size. Decided once, here, before chrome and labels are elaborated:
+  // chrome only reads them. Axis ownership reads which keyed domain each
+  // axis is over, and the demand half (an axis drawn over a domain is what
+  // nices it) is refreshed once the axes are assigned.
+  const keyedDomains = contexts?.session
+    ? (contexts.session.keyedDomains = KeyedDomains.build(child))
+    : undefined;
 
   const __tAxes = perfNow();
   // Axis ownership: which node draws each axis (`resolveAxes`). Which dims
@@ -355,8 +354,6 @@ export async function layout(
   // drawn from the same stamp. A dim with rows is always enabled: a disabled
   // dim (`false`) has no options to hold them.
   const rows = perDimAxisOption(axes, "rows");
-  // Axis ownership reads which keyed domain each axis is over.
-  resolveKeyedDomains(child);
   if (axes) {
     const ticksOf = (dim: 0 | 1): AxisTicks => {
       const r = rows[dim];
@@ -373,7 +370,7 @@ export async function layout(
     }
     child.resolveAxes(new Map(), enabled);
   }
-  resolveKeyedDomains(child);
+  keyedDomains?.refreshDemand();
 
   // Chrome elaboration (src/ast/axes/elaborate.tsx): every node that owns
   // chrome wraps itself in it, as ordinary shapes + constraints — its axes,

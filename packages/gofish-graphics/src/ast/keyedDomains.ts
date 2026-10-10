@@ -74,9 +74,12 @@ const finite = (iv: Interval.Interval): Interval.Interval | undefined =>
     : undefined;
 
 /**
- * The keyed domains of one render. Built once after the type walk (and again
- * whenever a rewrite of the tree re-resolves the types), and read by every
- * sized node's σ solve, by nicing, and by axis elaboration.
+ * The keyed domains of one render. Built once after the type walk, before
+ * chrome and labels are elaborated, so chrome never decides a domain; it only
+ * reads them. The demand half is refreshed once the axes are assigned
+ * ({@link refreshDemand}). Read by every sized node's σ solve, by nicing, and
+ * by axis elaboration. A node the later rewrites add (a chrome ring, a label
+ * wrapper) has no seat of its own and reads the seat of the content it wraps.
  */
 export class KeyedDomains {
   private readonly seats = new Map<KeyedNode, [Seat, Seat]>();
@@ -100,6 +103,7 @@ export class KeyedDomains {
         topType: root._underlyingSpace?.[axis],
       })) as [Seat, Seat]
     );
+    table.refreshDemand();
     return table;
   }
 
@@ -127,23 +131,31 @@ export class KeyedDomains {
     );
   }
 
+  /** Record the axes drawn over each keyed domain, from the `axisDemand`
+   *  stamps `resolveAxes` left on the seated nodes. A continuous axis a node
+   *  draws is demand for the domain of its set's key: the domain is niced to
+   *  its ticks (#659). A category axis ticks at its keys and nices nothing.
+   *  The types are the ones the table was built from, so this reads only the
+   *  stored seats. */
+  refreshDemand(): void {
+    for (const t of this.demand.values()) t.forEach((m) => m.clear());
+    for (const [node, seats] of this.seats) {
+      for (const axis of [0, 1] as const) {
+        const ticks = node.axisDemand[axis];
+        const space = node._underlyingSpace?.[axis];
+        if (ticks === undefined || space === undefined || !isCONTINUOUS(space))
+          continue;
+        const key = this.keyOf(node, axis, space, true)!;
+        this.tables(key.spaceRoot).demand[axis].set(key.key, ticks);
+      }
+    }
+  }
+
   private walk(node: KeyedNode, seats: [Seat, Seat]): void {
     this.seats.set(node, seats);
     for (const axis of [0, 1] as const) {
       const seat = seats[axis];
       if (seat.top === node) this.addTop(seat, axis, seat.topType);
-      // A continuous axis this node draws is demand for the domain of its
-      // set's key: the domain is niced to its ticks (#659). A category axis
-      // ticks at its keys and nices nothing.
-      const ticks = node.axisDemand[axis];
-      const space = node._underlyingSpace?.[axis];
-      if (ticks !== undefined && space !== undefined && isCONTINUOUS(space)) {
-        const key = domainKey(
-          spaceUnit(space)?.unit !== undefined ? space : seat.topType,
-          seat.top
-        );
-        this.tables(seat.spaceRoot).demand[axis].set(key, ticks);
-      }
     }
 
     const children = node.children.filter(isKeyedNode);
@@ -227,13 +239,28 @@ export class KeyedDomains {
     return key === undefined ? undefined : `${key.spaceRoot.uid}/${key.key}`;
   }
 
+  /** A node's seat on `axis`. A node added after the build (a chrome ring,
+   *  a label wrapper: `wrapRing`) is seated where the content it wraps was,
+   *  since its own set is that content: it reads the content's seat. Any
+   *  other node added later (a tick, a title) has none. */
+  private seatOf(node: KeyedNode, axis: 0 | 1): Seat | undefined {
+    const seat = this.seats.get(node)?.[axis];
+    if (seat !== undefined) return seat;
+    const sets = node.sharing().sets[axis];
+    const content =
+      sets.length > 0 && sets.indexOf(0) === sets.lastIndexOf(0)
+        ? node.children[sets.indexOf(0)]
+        : undefined;
+    return isKeyedNode(content) ? this.seatOf(content, axis) : undefined;
+  }
+
   private keyOf(
     node: KeyedNode,
     axis: 0 | 1,
     space: UnderlyingSpace | undefined,
     viaSet: boolean
   ): { spaceRoot: KeyedNode; key: string } | undefined {
-    const seat = this.seats.get(node)?.[axis];
+    const seat = this.seatOf(node, axis);
     if (seat === undefined) return undefined;
     if (spaceUnit(space)?.unit !== undefined)
       return { spaceRoot: seat.spaceRoot, key: domainKey(space, seat.top) };

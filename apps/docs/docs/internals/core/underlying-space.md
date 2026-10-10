@@ -1371,14 +1371,17 @@ does not flow into it. Units meet through the one join, `joinUnits`, with
 `shared` true inside a set and false between a spread's parts.
 
 After the type walk, one pass builds the **keyed domain table**
-(`KeyedDomains` in `keyedDomains.ts`), once per render and again after each
-rewrite of the tree: per space root (the render root, each coordinate
+(`KeyedDomains` in `keyedDomains.ts`), once per render, before chrome and
+labels are elaborated: per space root (the render root, each coordinate
 transform), per axis and per unit after unification, the union of the
 intervals at the top of every sharing set with that unit. The top of a set is
 where it stops: a child its parent detaches or nests, or the space root.
 Values with no unit (literals) are keyed by their set. So two facet panels
 that plot one column share one domain, and a count histogram placed beside a
-scatter of millimeters keeps its own.
+scatter of millimeters keeps its own. Chrome never decides a domain, it only
+reads one: a ring or a label wrapper added later reads the seat of the content
+it wraps. The axes drawn over each domain are recorded once `resolveAxes` has
+assigned them (`refreshDemand`).
 
 Every sized node maps its keyed domain into its own size: before its solve,
 its claim is widened to the keyed domain (`widenScope` in `extent.ts`, the same

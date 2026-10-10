@@ -48,11 +48,13 @@ export async function wrapRing(
   inner.name(name);
   const root = (await (layer as any)([inner, ...ring.nodes])) as GoFishNode;
   // A ring's content is the box it dresses, seated in the ring's own frame:
-  // it is the ring's own set on both axes. The ring's shapes (an axis's
-  // ticks and line, a legend, a title) are chrome, which must never decide
-  // a domain (#1114), so each is a set of its own: none joins the content's
-  // domain, whatever constraint seats it. Ticks still sit at data positions
-  // in the ring's frame, through their position constraints.
+  // it is the ring's own set on both axes, so the ring reports the content's
+  // type (the literal pixel seat would otherwise detach it), and the keyed
+  // domains seat the ring where its content was (`KeyedDomains`, built
+  // before chrome, #1114). The ring's shapes (an axis's ticks and line, a
+  // legend, a title) are each a set of their own: none joins the content's
+  // type, whatever constraint seats it. Ticks still sit at data positions in
+  // the ring's frame, through their position constraints.
   root.INTERNAL_setSharing((childNodes, constraints) => {
     const plan = planSharing(constraints, childNodes);
     const sets = childNodes.map((c, k) => (c === inner ? 0 : k + 1));

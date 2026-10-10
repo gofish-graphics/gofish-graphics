@@ -334,8 +334,9 @@ alias, and underlying space passes rerun on the new tree. The color scale does
 not: it was final before the pass, and chrome adds no data colors. Label
 elaboration follows and reruns the same passes. Domain nicing is not a tree pass at
 all: each sized node nices its keyed domain at its solve, if some node draws
-an axis over that domain (`KeyedDomains`, built after the type walk and again
-after each rewrite).
+an axis over that domain (`KeyedDomains`, built once after the first type walk,
+before chrome, so chrome only reads the domains; the nodes a rewrite adds read
+the seat of the content they wrap).
 
 See [Axes](/internals/frontend/axes) for the full elaboration story (the
 two-tier structure, origin pins, negative-space gutters, and the
