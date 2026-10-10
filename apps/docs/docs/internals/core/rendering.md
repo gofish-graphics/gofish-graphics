@@ -104,7 +104,13 @@ and the y title is simply rotated `-90°`.
 
 `toPixel` is a translate, so a straight path stays straight: a shape with a curved
 path maps each of its control points through `toPixel` and re-serializes
-(`pathToPixelSVG` in `lowerHelpers.ts`), with no resampling.
+(`pathToPixelSVG` in `lowerHelpers.ts`), with no resampling. `toPixel` never
+resamples. A coordinate transform does: a closed ring of layout points (a
+`polygon`, or a `region` with an outline) is lowered by `ringItem`
+(`lowerHelpers.ts`), which draws the ring straight under a linear coordinate space
+and, under any other, maps it through the space with adaptive resampling
+(`transformPath(..., { resample: true })`), so a straight edge in data space draws as
+the curve the space makes of it. Only then does it go through `toPixel`.
 
 ## The lower pass
 
