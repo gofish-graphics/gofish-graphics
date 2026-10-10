@@ -452,6 +452,36 @@ async function main() {
       JSON.stringify(x)
     );
   }
+  {
+    // A later pass wraps the content a ring dresses (label elaboration wraps
+    // a stack that an axis ring already dresses) and puts the wrapper in its
+    // place. The ring's content is still its first child, so the ring still
+    // shares it and reports its type.
+    const content: any = await (layer as any)([
+      (rect as any)({ w: v(30), h: 10 }),
+    ]);
+    const ring: any = await wrapRing(content, "content", {
+      nodes: [(rect as any)({ w: 1, h: 1 })],
+      constraints: () => [],
+    });
+    const wrapper: any = await (layer as any)([content]);
+    ring.children[0] = wrapper;
+    wrapper.parent = ring;
+    ring.clearUnderlyingSpace();
+    ring.resolveUnderlyingSpace();
+    const plan: any = ring.sharing();
+    check(
+      "a ring whose content was replaced still shares it",
+      plan.sets[0][0] === 0 && plan.sets[0][1] !== 0,
+      JSON.stringify(plan.sets)
+    );
+    const x = ring._underlyingSpace[0];
+    check(
+      "a ring whose content was replaced reports the new content's type",
+      isCONTINUOUS(x) && x.dataInterval.max === 30,
+      JSON.stringify(x)
+    );
+  }
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

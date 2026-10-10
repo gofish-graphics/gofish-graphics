@@ -56,9 +56,12 @@ export async function wrapRing(
   // type, whatever constraint seats it. Ticks still sit at data positions in
   // the ring's frame, through their position constraints. The rule reads no
   // constraint: whatever seats the content (a literal pin, or a delta axis's
-  // datum `contentAt`), the content is neither nested nor datum-placed.
+  // datum `contentAt`), the content is neither nested nor datum-placed. The
+  // content is the ring's first child, by construction, and the rule reads
+  // it by that slot, not by identity: a later pass (label elaboration) may
+  // wrap the content and put its wrapper in the content's place.
   root.INTERNAL_setSharing((childNodes): LayerSharingPlan => {
-    const sets = childNodes.map((c, k) => (c === inner ? 0 : k + 1));
+    const sets = childNodes.map((_, k) => (k === 0 ? 0 : k + 1));
     const none = (): [Set<number>, Set<number>] => [new Set(), new Set()];
     return { sets: [sets, [...sets]], nested: none(), datumPlaced: none() };
   });
