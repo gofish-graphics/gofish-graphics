@@ -168,7 +168,7 @@ export type LayerScales = {
   /** Per axis: the σ the layer hands its children. */
   sigmas: Size<number | undefined>;
   /** Axes whose solve was attempted and failed (a claim with no σ in it). */
-  failures: { axis: 0 | 1; budget: number }[];
+  failedAxes: (0 | 1)[];
   /** Every solve, for the solver shadow hook. */
   checks: {
     axis: 0 | 1;
@@ -223,7 +223,7 @@ export function solveLayerScales(
     undefined,
   ];
   const sigmas: Size<number | undefined> = [handedSigmas[0], handedSigmas[1]];
-  const failures: LayerScales["failures"] = [];
+  const failedAxes: (0 | 1)[] = [];
   const checks: LayerScales["checks"] = [];
 
   for (const axis of [0, 1] as const) {
@@ -247,14 +247,14 @@ export function solveLayerScales(
         frames[axis] = scopeFrame(solved);
         continue;
       }
-      failures.push({ axis, budget: layerSize[axis] });
+      failedAxes.push(axis);
     }
     frames[axis] = frameOf(reported?.[axis], {
       sigma: sigmas[axis],
       map: handedMaps[axis],
     });
   }
-  return { frames, sigmas, failures, checks };
+  return { frames, sigmas, failedAxes, checks };
 }
 
 /** Select the layer's single grid constraint, if any.

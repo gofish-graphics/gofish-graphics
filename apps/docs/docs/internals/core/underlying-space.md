@@ -1184,7 +1184,7 @@ gofish.tsx (root):
   `sigma` for size, `map` for data position (they're mutually exclusive at root)
 
 layer.layout, on an axis where the layer is sized (`solveLayerScales`):
-    claim = widen(claim[axis], keyedDomain); claim = nice(claim) on demand
+    claim = KeyedDomains.scope(claim[axis]): widen to the keyed domain, nice on demand
     if claim exists → claim.width.inverse(size[axis])
     else → undefined (no σ-dependent room, e.g. an ordinal of fixed boxes)
 ```
@@ -1223,7 +1223,7 @@ per-axis `AxisScale` via the `scales` parameter and read its `sigma` in
 `layer + align + distribute`** (`spread.tsx`), so the dispatch above lives
 entirely in `layer.layout`. `solveLayerScales` is the shared layout-time
 planner: on each axis where the layer is sized it runs the solve in the
-pseudocode above (returning failures so `layer` can warn before falling back),
+pseudocode above (returning the failed axes so `layer` can warn before falling back),
 and elsewhere it inherits. `layer` recombines the per-axis σ and `map` into one
 `AxisScale` per child at `child.layout`. The result is a **fresh `childScaleFactors`
 array** handed to descendants — **no node ever mutates the inherited σ**. A scale solves

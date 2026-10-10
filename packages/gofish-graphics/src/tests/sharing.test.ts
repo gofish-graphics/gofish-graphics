@@ -247,104 +247,9 @@ async function main() {
     { x: [0, 0, 0], y: [0, 0, 0] }
   );
 
-  expect(
-    "a literal w/h on a node: nothing",
-    await planOf(
-      (layer as any)([
-        (rect as any)({ w: 40, h: 30 }),
-        (layer as any)({ w: 100, h: 80 }, [(rect as any)({ w: 10, h: 10 })]),
-      ])
-    ),
-    { x: [0, 0], y: [0, 0] }
-  );
-
-  // stack({ size }) wraps each part in a layer with a data-valued size
-  // (spread.tsx), as the nested mosaic does.
-  const share = (k: number) =>
-    (layer as any)({ h: v(k) }, [(rect as any)({ w: 10, h: v(1) })]);
-  expect(
-    "a data-valued w/h on a node: nests its content on that axis",
-    await planOf(share(0.4)),
-    { x: [0], y: [0], ny: [0] }
-  );
-  {
-    const wrapped: any = await (Spread as any)(
-      { dir: "y", glue: true, size: [v(0.4), v(0.6)] },
-      [(rect as any)({ w: 10 }), (rect as any)({ w: 10 })]
-    );
-    // The wrapper's size is an axis-named `dims` entry, which the
-    // resolveAliases pass installs.
-    expect(
-      "stack({ size }): each wrapper nests its part on the stack axis",
-      await planOf(wrapped.children[0]),
-      { x: [0], y: [0], ny: [0] }
-    );
-  }
-
-  expect(
-    "treemap: nests each child on both axes",
-    await planOf(
-      (await (treemap as any)({ by: "c", w: 200, h: 100 })(rectMark({})))([
-        { c: "p" },
-        { c: "q" },
-        { c: "r" },
-      ])
-    ),
-    { x: [1, 2, 3], y: [1, 2, 3], nx: [0, 1, 2], ny: [0, 1, 2] }
-  );
-
+  // The node-level rows: each case builds a node and reads its plan.
+  type Want = { x: number[]; y: number[]; nx?: number[]; ny?: number[] };
   const box = () => (rect as any)({ w: 10, h: v(2) });
-  expect(
-    "position operator, datum offset: the child stays shared",
-    await planOf(positionNode({ x: v(5), y: v(1) }, [box()])),
-    { x: [0], y: [0] }
-  );
-  expect(
-    "position operator, pixel offset: detaches the child on that axis",
-    await planOf(positionNode({ x: 20, y: v(1) }, [box()])),
-    { x: [1], y: [0] }
-  );
-
-  expect(
-    "offset: nothing, its child shares",
-    await planOf((offset as any)({ x: 12 }, [(rect as any)({ w: 10, h: 10 })])),
-    { x: [0], y: [0] }
-  );
-
-  expect(
-    "ref: the target takes part where the ref sits",
-    await planOf(
-      (layer as any)([
-        (rect as any)({ w: 10, h: v(4) }).name("target"),
-        ref("target"),
-      ])
-    ),
-    { x: [0, 0], y: [0, 0] }
-  );
-
-  {
-    const node: any = await (layer as any)([
-      (rect as any)({ w: 10, h: 10 }).name("a"),
-      (rect as any)({ w: 10, h: 10 }).name("b"),
-    ]).relate(({ a, b }: any) => [enclose({}, [a, b])]);
-    expect(
-      "relate drawing clauses: nothing",
-      planSharing(node.constraints, node.children),
-      { x: [0, 0, 0], y: [0, 0, 0] }
-    );
-  }
-
-  expect(
-    "enclose (and the Porter-Duff operators): like a layer",
-    await planOf(
-      (enclose as any)({}, [
-        (rect as any)({ w: 10, h: v(3) }),
-        (rect as any)({ w: 10, h: v(5) }),
-      ])
-    ),
-    { x: [0, 0], y: [0, 0] }
-  );
-
   // A space root reports nothing upward (its type hook), so its place in its
   // parent's sets carries no data. Keyed domains are per space root (step 5);
   // the plan adds nothing for it.
@@ -352,26 +257,128 @@ async function main() {
     (Frame as any)({ coord: polar(), w: 40, h: 40 }, [
       (rect as any)({ w: v(1), h: 10 }),
     ]);
-  expect(
-    "coord, frame({ coord }): the plan adds nothing",
-    await planOf((layer as any)([flower(), flower()])),
-    { x: [0, 0], y: [0, 0] }
-  );
-
-  expect(
-    "chart(): a frame with one child, nothing",
-    await planOf(
-      (Frame as any)({ w: 200, h: 100 }, [(rect as any)({ w: 10, h: v(3) })])
-    ),
-    { x: [0], y: [0] }
-  );
-  // The render root solves σ for its canvas (step 5). Its plan is the plan of
-  // the layer it is.
-  expect(
-    "render root: a layer like any other",
-    await planOf((layer as any)([bar(1), bar(2)])),
-    { x: [0, 0], y: [0, 0] }
-  );
+  const nodeCases: [string, () => Promise<SharingPlan>, Want][] = [
+    [
+      "a literal w/h on a node: nothing",
+      () =>
+        planOf(
+          (layer as any)([
+            (rect as any)({ w: 40, h: 30 }),
+            (layer as any)({ w: 100, h: 80 }, [
+              (rect as any)({ w: 10, h: 10 }),
+            ]),
+          ])
+        ),
+      { x: [0, 0], y: [0, 0] },
+    ],
+    [
+      // stack({ size }) wraps each part in a layer with a data-valued size
+      // (spread.tsx), as the nested mosaic does.
+      "a data-valued w/h on a node: nests its content on that axis",
+      () =>
+        planOf(
+          (layer as any)({ h: v(0.4) }, [(rect as any)({ w: 10, h: v(1) })])
+        ),
+      { x: [0], y: [0], ny: [0] },
+    ],
+    [
+      // The wrapper's size is an axis-named `dims` entry, which the
+      // resolveAliases pass installs.
+      "stack({ size }): each wrapper nests its part on the stack axis",
+      async () => {
+        const wrapped: any = await (Spread as any)(
+          { dir: "y", glue: true, size: [v(0.4), v(0.6)] },
+          [(rect as any)({ w: 10 }), (rect as any)({ w: 10 })]
+        );
+        return planOf(wrapped.children[0]);
+      },
+      { x: [0], y: [0], ny: [0] },
+    ],
+    [
+      "treemap: nests each child on both axes",
+      async () =>
+        planOf(
+          (await (treemap as any)({ by: "c", w: 200, h: 100 })(rectMark({})))([
+            { c: "p" },
+            { c: "q" },
+            { c: "r" },
+          ])
+        ),
+      { x: [1, 2, 3], y: [1, 2, 3], nx: [0, 1, 2], ny: [0, 1, 2] },
+    ],
+    [
+      "position operator, datum offset: the child stays shared",
+      () => planOf(positionNode({ x: v(5), y: v(1) }, [box()])),
+      { x: [0], y: [0] },
+    ],
+    [
+      "position operator, pixel offset: detaches the child on that axis",
+      () => planOf(positionNode({ x: 20, y: v(1) }, [box()])),
+      { x: [1], y: [0] },
+    ],
+    [
+      "offset: nothing, its child shares",
+      () =>
+        planOf((offset as any)({ x: 12 }, [(rect as any)({ w: 10, h: 10 })])),
+      { x: [0], y: [0] },
+    ],
+    [
+      "ref: the target takes part where the ref sits",
+      () =>
+        planOf(
+          (layer as any)([
+            (rect as any)({ w: 10, h: v(4) }).name("target"),
+            ref("target"),
+          ])
+        ),
+      { x: [0, 0], y: [0, 0] },
+    ],
+    [
+      "relate drawing clauses: nothing",
+      async () => {
+        const node: any = await (layer as any)([
+          (rect as any)({ w: 10, h: 10 }).name("a"),
+          (rect as any)({ w: 10, h: 10 }).name("b"),
+        ]).relate(({ a, b }: any) => [enclose({}, [a, b])]);
+        return planSharing(node.constraints, node.children);
+      },
+      { x: [0, 0, 0], y: [0, 0, 0] },
+    ],
+    [
+      "enclose (and the Porter-Duff operators): like a layer",
+      () =>
+        planOf(
+          (enclose as any)({}, [
+            (rect as any)({ w: 10, h: v(3) }),
+            (rect as any)({ w: 10, h: v(5) }),
+          ])
+        ),
+      { x: [0, 0], y: [0, 0] },
+    ],
+    [
+      "coord, frame({ coord }): the plan adds nothing",
+      () => planOf((layer as any)([flower(), flower()])),
+      { x: [0, 0], y: [0, 0] },
+    ],
+    [
+      "chart(): a frame with one child, nothing",
+      () =>
+        planOf(
+          (Frame as any)({ w: 200, h: 100 }, [
+            (rect as any)({ w: 10, h: v(3) }),
+          ])
+        ),
+      { x: [0], y: [0] },
+    ],
+    [
+      // The render root solves σ for its canvas (step 5). Its plan is the
+      // plan of the layer it is.
+      "render root: a layer like any other",
+      () => planOf((layer as any)([bar(1), bar(2)])),
+      { x: [0, 0], y: [0, 0] },
+    ],
+  ];
+  for (const [name, plan, want] of nodeCases) expect(name, await plan(), want);
 
   console.log("# planSharing: whole figures");
 

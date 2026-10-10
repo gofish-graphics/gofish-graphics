@@ -335,9 +335,9 @@ export type ResolveUnderlyingSpace = (
  * {@link SharingPlan}. Like the type hook, each node type has its own rule,
  * and it reads only the node's children and constraints (and the node's own
  * options), never a type or a claim. Optional: a node without a rule lets
- * every child share both axes, as a layer with no constraints does. Nothing
- * reads it to build the keyed domains (`keyedDomains.ts`) and the layer's
- * own union, and `GOFISH_DUMP_SHARING` prints it.
+ * every child share both axes, as a layer with no constraints does. The
+ * keyed domains (`keyedDomains.ts`) and the layer's own union read it, and
+ * `GOFISH_DUMP_SHARING` prints it.
  */
 export type ResolveSharing = (
   childNodes: (GoFishNode | GoFishRef)[],
@@ -526,13 +526,12 @@ export class GoFishNode {
   /** Persistent per-dim record that THIS node renders an axis, and what that
    *  axis ticks at (issues #659, #1057); undefined = no axis. Unlike `axis` —
    *  a work flag consumed and CLEARED by axis elaboration — this stamp
-   *  survives to layout time, so a σ-scope solve can ask "does any node in my
-   *  scope render an axis on this dim, and with what ticks?"
-   *  (`scopeAxisTicks`). That demand is what drives nicing: nicing is a
-   *  presentation adjustment whose demand comes from axis views, so a scope
-   *  nices its POSITION domain iff some node in the scope draws that dim's
-   *  axis, and nices it to that axis's ticks. Stamped by `resolveAxes`
-   *  wherever it sets an owning (`true`) flag. */
+   *  survives to layout time. The keyed domain table records it against the
+   *  keyed domain the axis is over (`KeyedDomains.refreshDemand`). That
+   *  demand is what drives nicing: nicing is a presentation adjustment whose
+   *  demand comes from axis views, so a keyed domain is niced iff some node
+   *  draws an axis over it, and to that axis's ticks. Stamped by
+   *  `resolveAxes` wherever it sets an owning (`true`) flag. */
   public axisDemand: [AxisTicks | undefined, AxisTicks | undefined] = [
     undefined,
     undefined,
@@ -1131,13 +1130,17 @@ export class GoFishNode {
    * Top-down walk that marks which nodes should render axes.
    *
    * `claimed` maps each dimension an ancestor already owns to a SIGNATURE of
-   * what claimed it: an ordinal axis records `"o:<keys>"`, a continuous axis (or
-   * an explicit override) records {@link AXIS_CLAIM_OPAQUE}. The signature lets
-   * ordinal axes NEST — a node claims its own ordinal axis even under an ancestor
-   * ordinal, as long as it's a DIFFERENT grouping (a finer level), so a
-   * grouped/faceted chart renders one ordinal axis per grouping level (per
-   * facet). Continuous axes stay single-owner (root-most wins): a descendant
-   * continuous axis on an already-claimed dim defers to the chart-level scale.
+   * what claimed it: an ordinal axis records `"o:<keys>"`, a continuous axis
+   * records `"c:<keyed domain>"` (`KeyedDomains.axisKey`), and anything else
+   * (an explicit override with no signature) records
+   * {@link AXIS_CLAIM_OPAQUE}. The signature lets ordinal axes NEST — a node
+   * claims its own ordinal axis even under an ancestor ordinal, as long as
+   * it's a DIFFERENT grouping (a finer level), so a grouped/faceted chart
+   * renders one ordinal axis per grouping level (per facet). Continuous axes
+   * stay single-owner: only the root-most unclaimed chart boundary
+   * (`isAxisBoundary`, #1114) claims one, and an explicit override over a
+   * keyed domain an ancestor already draws is the same axis, so it is not
+   * drawn again.
    *
    * `enabled` maps each dim the chart's `axes` option turns on to what its
    * axis ticks at ({@link AxisTicks}); a node that draws an axis stamps those

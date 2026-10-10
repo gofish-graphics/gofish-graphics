@@ -48,8 +48,8 @@ export type ConstraintPosScales = [AxisMap | undefined, AxisMap | undefined];
 
 /** Per-axis pixel at which a layer seats the baselines of its free (baseline
  *  magnitude) children (#773): the measure origin under the layer's data→pixel
- *  map when the layer is anchored, `descent·σ` for a self-scaled free stash, 0
- *  for a free layer. Layer places unconstrained free children there; the
+ *  map when the layer is anchored (a sized layer's own solved frame included),
+ *  0 for a free layer. Layer places unconstrained free children there; the
  *  solver's free-origin fallback (`solveAxisProblem`) seats a floating
  *  component's shared free baseline there. `undefined` where the layer has no
  *  origin on the axis. */

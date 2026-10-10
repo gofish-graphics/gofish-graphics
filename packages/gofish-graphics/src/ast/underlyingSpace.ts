@@ -261,15 +261,13 @@ export const axisTickPartition = (
  *  Nicing reads only the data interval and the axis's ticks (a count, or a
  *  calendar partition), never σ or pixels, so it is a pure type operation.
  *
- *  This is THE nicing operation. It is applied per σ-scope AT the scope's solve
- *  (the render root, a self-scaled region, a shared-scale scope, a datum-position
- *  scale), never as a pre-layout tree walk, so a domain that only reaches a
- *  scope through a stash cannot escape it (the original #659 bug), and a subtree
- *  that is not a scope root never nices its own subset (it inherits the scope's
- *  σ). It is DEMAND-DRIVEN: each solve site reads
- *  `GoFishNode.scopeAxisTicks`, so a scope nices its interval iff some
- *  node in its space-flow region renders an axis on the dim, and nices it to
- *  that axis's ticks. A free magnitude
+ *  This is THE nicing operation. It is applied to a keyed domain AT a sized
+ *  node's solve (the render root, a sized layer: `KeyedDomains.scope`, #1114),
+ *  never as a pre-layout tree walk, and a node that is not sized never nices
+ *  its own subset (it inherits the σ of the sized node above it). It is
+ *  DEMAND-DRIVEN: a keyed domain is niced iff some node draws an axis over it
+ *  (`KeyedDomains.ticksOf`), and it is niced to that axis's ticks. A free
+ *  magnitude
  *  renders the absolute axis of the scope that places its baseline
  *  ({@link placeBaseline}), so it nices as that axis does, about its own 0
  *  (which its interval contains), and stays free. An ordinal or undefined

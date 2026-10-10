@@ -54,7 +54,6 @@ export class GoFishRef {
    *  `(node as GoFishAST).transform` resolves on the union; external callers
    *  should not rely on this field. */
   public transform?: Transform;
-  public shared: Size<boolean>;
   public readonly selection?: string | Token | (Token | string | number)[];
   private directNode?: GoFishNode;
   private selectedNode?: GoFishNode;
@@ -64,20 +63,17 @@ export class GoFishRef {
     name,
     selection,
     node,
-    shared = [false, false],
     multiplicity,
   }: {
     name?: string | Token;
     selection?: string | Token | (Token | string | number)[];
     node?: GoFishNode;
-    shared?: Size<boolean>;
     multiplicity?: "one" | "all";
   }) {
     if (selection === undefined && !node) {
       throw new Error("Ref must have either selection or node");
     }
     this._name = name;
-    this.shared = shared;
     this.selection = selection;
     this.directNode = node;
     this.multiplicity = multiplicity;

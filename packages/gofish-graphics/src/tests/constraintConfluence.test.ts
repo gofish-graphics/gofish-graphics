@@ -1312,9 +1312,7 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
   );
   ok(
     "a claim with no σ in it is reported",
-    unscaled.failures.length === 1 &&
-      unscaled.failures[0].axis === 1 &&
-      unscaled.failures[0].budget === 80
+    unscaled.failedAxes.length === 1 && unscaled.failedAxes[0] === 1
   );
 
   // A pinned node handed σ but no frame (a facet panel in its slot) is sized
@@ -1348,11 +1346,11 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
 
   // One σ per scope (#659): the keyed domain is niced at the solve when an
   // axis is drawn over it, so positions and sizes read one domain.
-  const stash = CONTINUOUS(interval(0, 9.5), "pinned");
+  const content = CONTINUOUS(interval(0, 9.5), "pinned");
   const niced = solve(
     [false, true],
-    [UNDEFINED, stash],
-    [undefined, impliedExtent(stash)],
+    [UNDEFINED, content],
+    [undefined, impliedExtent(content)],
     [2, 3],
     [handedX, handedY],
     none,

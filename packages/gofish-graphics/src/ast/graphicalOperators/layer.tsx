@@ -547,15 +547,15 @@ export const layer = createNodeOperatorSequential(
             node.key ?? node.type
           );
           const childScaleFactors = layerScales.sigmas;
-          for (const failure of layerScales.failures) {
+          for (const axis of layerScales.failedAxes) {
             // A non-invertible fold-produced Monotonic would otherwise silently
             // vanish the content (spread's `?? 0`); name the axis and budget so
             // the failure is visible, then keep the inherited factor.
-            if (!constraintBudget?.covered[failure.axis]) continue;
+            if (!constraintBudget?.covered[axis]) continue;
             console.warn(
               `layer: could not invert distribute SIZE claim on ${
-                failure.axis === 0 ? "x" : "y"
-              } axis for budget ${failure.budget}px; keeping inherited scale factor.`,
+                axis === 0 ? "x" : "y"
+              } axis for budget ${size[axis]}px; keeping inherited scale factor.`,
               constraintBudget
             );
           }

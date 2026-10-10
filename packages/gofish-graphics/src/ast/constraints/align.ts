@@ -212,7 +212,7 @@ export function lowerAlignPlacement(
     if (movable.length === 0) {
       // Nothing this constraint can write is either the deliberate
       // data-positioned skip (scatter facets — stay silent, `align` never
-      // fights a self-scaled panel) or a genuine "every operand is already
+      // fights a panel its own data positions) or a genuine "every operand is already
       // placed" no-op, which is worth an honest diagnostic (#725 item 6)
       // rather than a silent nothing.
       const allDataPositioned =
