@@ -20,6 +20,7 @@ import { lowerToDisplayList } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
 import type { InteractionRuntime } from "../interaction/runtime";
 import { renderWithInteraction } from "../interaction/renderTerminal";
+import { resolveMarkResult } from "./marks/markResult";
 import type { ToPixel } from "./_node";
 import type { Size } from "./dims";
 import {
@@ -992,13 +993,18 @@ export function gofish(
   // the runtime only if something registered. A PLAIN node keeps today's exact
   // static behavior below (a `live()` channel on a plain node still patches at
   // paint — that's runtime-independent — it just gets no runtime/hit-testing).
+  //
+  // A function child is a thunk or a mark (`layer([...])` is one), and both
+  // reify the way a combinator child does: `resolveMarkResult` calls it with
+  // the empty list `[]` (a root has no rows; a thunk ignores it) and reifies
+  // whatever it returns.
   if (typeof child === "function") {
-    const thunk = child;
+    const build = () => resolveMarkResult(child as any);
     return renderWithInteraction(async () => {
-      const node = await thunk();
+      const node = await build();
       // A thunk can build the chart again, which `labelAngle: "auto"` needs
       // (see `GoFishNode.rebuild`).
-      node.rebuild = async () => thunk();
+      node.rebuild = build;
       return { node, options: { ...options } };
     }, container);
   }
