@@ -1306,8 +1306,8 @@ continuous axis over it**. With no axis there is no tick grid to round for, so
 axis-less content stays at the honest raw scale. `resolveAxes` leaves a
 persistent `axisDemand` stamp on every axis-owning node, and the keyed domain
 table records each stamp against the domain of the stamping node's set
-(`KeyedDomains.ticksOf`). Tick elaboration nices the same keyed domain with the
-same `niceContinuous`, so elaboration and the solve cannot disagree.
+(`KeyedDomains.ticksOf`). Tick elaboration nices the same keyed domain through
+the same `KeyedDomains.scope`, so elaboration and the solve cannot disagree.
 
 ## Scales generalize flex factors
 
@@ -1386,7 +1386,9 @@ assigned them (`refreshDemand`).
 Every sized node maps its keyed domain into its own size: before its solve,
 its claim is widened to the keyed domain (`widenScope` in `extent.ts`, the same
 arithmetic as nicing: only the data part widens, so pixel overhead keeps its
-pixels), then niced on demand, then solved.
+pixels), then niced on demand, then solved. The widen-then-nice is one method,
+`KeyedDomains.scope`, read by every sized layer's solve, by the render root,
+and by the axis drawn over the domain.
 
 A **literal** `w`/`h` carries no data, so the node reports its content's type
 and claim upward unchanged; the size only sizes the box the node maps its

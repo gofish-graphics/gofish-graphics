@@ -27,11 +27,11 @@ engine has no axis-specific code at all.
 `layout()`, _after_ `resolveUnderlyingSpace` (so domains are known) and
 `resolveAxes` (which flags which node owns an axis on each dimension — and leaves
 persistent `axisDemand` stamps that later gate demand-driven domain nicing at the
-σ-scope solves, issue #659, and carry the ticks the domain is niced to). Tick
-values come from `niceContinuous` applied node-locally, with the node's stamped
-ticks, to the owning node's POSITION domain — the same function the owning scope's
-solve applies to the same union domain, so ticks and content agree by
-construction. It walks the node tree **bottom-up**.
+σ-scope solves, issue #659, and carry the ticks the domain is niced to). An
+absolute axis's line and ticks span `KeyedDomains.scope` of the owning node's
+POSITION domain: the domain widened to its keyed domain and niced to the ticks
+of the axis drawn over it. Every sized node's solve reads the same function for
+the same keyed domain, so ticks and content agree by construction. It walks the node tree **bottom-up**.
 Each node that owns chrome is replaced by rings of `Layer`s around the original
 content. Each ring holds the rings inside it plus its own shapes, and seats its
 shapes past everything inside it:

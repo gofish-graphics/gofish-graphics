@@ -30,7 +30,7 @@ import {
   type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
-import { niceScope, widenScope, type Extent } from "./extent";
+import { type Extent } from "./extent";
 import { KeyedDomains } from "./keyedDomains";
 import {
   fromFrameStart,
@@ -442,19 +442,18 @@ export async function layout(
   // at the honest raw scale). Every root consumer below — the posScale, the
   // baseline-magnitude size solve, the equal-measure recentering,
   // `needsCanvas` — reads this one niced domain, the same domain the tick
-  // elaboration niced, so content and ticks agree by construction. Each
-  // nested sized node applies the same rule at its own solve; a coord scope
-  // never nices.
-  const keyed = contexts?.session.keyedDomains;
+  // elaboration niced (`KeyedDomains.scope`), so content and ticks agree by
+  // construction. Each nested sized node applies the same rule at its own
+  // solve; a coord scope never nices.
   const rootExtent = child.resolveExtent();
   const rootScope = (axis: 0 | 1) => {
     const space = child._underlyingSpace![axis];
-    const [wide, wideClaim] = widenScope(
-      space,
-      rootExtent[axis],
-      keyed?.domainOf(child, axis, space, true)
+    return (
+      keyedDomains?.scope(child, axis, space, rootExtent[axis]) ?? [
+        space,
+        rootExtent[axis],
+      ]
     );
-    return niceScope(wide, wideClaim, keyed?.ticksOf(child, axis, space, true));
   };
   const [niceUnderlyingSpaceX, niceExtentX] = rootScope(0);
   const [niceUnderlyingSpaceY, niceExtentY] = rootScope(1);
@@ -627,7 +626,7 @@ export async function layout(
   // Scope dump (#39 Stage 6b): every σ-scope solved during the layout pass just
   // above, as printable frame equations. No-op unless GOFISH_DUMP_SCOPES is set.
   scopes.dump();
-  keyed?.dump();
+  keyedDomains?.dump();
   // Sharing dump (#1114 step 3): every layer's sharing sets, from its
   // constraints and children. No-op unless GOFISH_DUMP_SHARING is set.
   dumpSharing(child);

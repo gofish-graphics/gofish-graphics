@@ -4,13 +4,8 @@
 
 import { type Size } from "../dims";
 import { isValue } from "../data";
-import {
-  originIs,
-  type AxisTicks,
-  type UnderlyingSpace,
-} from "../underlyingSpace";
-import { niceScope, widenScope, type Extent } from "../extent";
-import type { Interval } from "../../util/interval";
+import { originIs, type UnderlyingSpace } from "../underlyingSpace";
+import { type Extent } from "../extent";
 import type { AxisMap } from "../domain";
 import { sliceExtent } from "./folds";
 import {
@@ -195,10 +190,11 @@ export type LayerScales = {
  *     layer handed σ but no frame (a facet panel in its spread slot, a child
  *     nested at a datum). Its box is the slot its parent gives it.
  *
- * A sized node maps its keyed domain (`domain`, the domain of its content's
- * unit in its space, see `keyedDomains.ts`) into its size: its claim is
- * widened to the domain, niced when an axis is drawn over it (`ticks`), and
- * solved once through the registry (`solveScope`). Its frame is the solved
+ * A sized node maps its keyed domain (the domain of its content's unit in its
+ * space, see `keyedDomains.ts`) into its size: `scope` widens its claim to
+ * the domain and nices it when an axis is drawn over it
+ * (`KeyedDomains.scope`), and the result is solved once through the registry
+ * (`solveScope`). Its frame is the solved
  * scope's. Every other axis inherits σ, and its frame follows from its type
  * ({@link frameOf}).
  */
@@ -214,14 +210,11 @@ export function solveLayerScales(
   layerSize: Size,
   handedSigmas: Size<number | undefined>,
   handedMaps: ConstraintPosScales,
-  domain: (
+  scope: (
     axis: 0 | 1,
-    space: UnderlyingSpace | undefined
-  ) => Interval | undefined,
-  ticks: (
-    axis: 0 | 1,
-    space: UnderlyingSpace | undefined
-  ) => AxisTicks | undefined,
+    space: UnderlyingSpace | undefined,
+    claim: Extent
+  ) => [UnderlyingSpace | undefined, Extent | undefined],
   scopes: ScopeRegistry,
   rootKey: string
 ): LayerScales {
@@ -241,26 +234,17 @@ export function solveLayerScales(
         (handedSigmas[axis] === undefined || originIs(content, "pinned")));
     const claim = contentExtents[axis];
     if (sized && Number.isFinite(layerSize[axis]) && claim !== undefined) {
-      const [wide, wideClaim] = widenScope(
-        content,
-        claim,
-        domain(axis, content)
-      );
-      const [space, nicedClaim] = niceScope(
-        wide,
-        wideClaim,
-        ticks(axis, content)
-      );
-      const scope = scopes.solveScope(
+      const [space, nicedClaim] = scope(axis, content, claim);
+      const solved = scopes.solveScope(
         { kind: "sized", rootKey, axis },
         space,
         nicedClaim,
         layerSize[axis]
       );
-      checks.push({ axis, extent: nicedClaim, sigma: scope?.sigma });
-      if (scope !== undefined) {
-        sigmas[axis] = scope.sigma;
-        frames[axis] = scopeFrame(scope);
+      checks.push({ axis, extent: nicedClaim, sigma: solved?.sigma });
+      if (solved !== undefined) {
+        sigmas[axis] = solved.sigma;
+        frames[axis] = scopeFrame(solved);
         continue;
       }
       failures.push({ axis, budget: layerSize[axis] });

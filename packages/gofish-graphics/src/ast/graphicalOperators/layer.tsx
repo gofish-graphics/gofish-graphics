@@ -538,8 +538,11 @@ export const layer = createNodeOperatorSequential(
             size,
             inheritedScaleFactors,
             inheritedPosScales,
-            (axis, space) => keyed?.domainOf(node, axis, space, viaSet(axis)),
-            (axis, space) => keyed?.ticksOf(node, axis, space, viaSet(axis)),
+            (axis, space, claim) =>
+              keyed?.scope(node, axis, space, claim, viaSet(axis)) ?? [
+                space,
+                claim,
+              ],
             getScopeRegistry(node.tryGetRenderSession()),
             node.key ?? node.type
           );

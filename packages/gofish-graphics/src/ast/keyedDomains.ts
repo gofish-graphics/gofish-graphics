@@ -26,6 +26,7 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import type { Size } from "./dims";
+import { niceScope, widenScope, type Extent } from "./extent";
 import { envFlag } from "../util";
 
 const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
@@ -139,7 +140,7 @@ export class KeyedDomains {
    *  stored seats. */
   refreshDemand(): void {
     for (const t of this.demand.values()) t.forEach((m) => m.clear());
-    for (const [node, seats] of this.seats) {
+    for (const node of this.seats.keys()) {
       for (const axis of [0, 1] as const) {
         const ticks = node.axisDemand[axis];
         const space = node._underlyingSpace?.[axis];
@@ -225,6 +226,29 @@ export class KeyedDomains {
     const key = this.keyOf(node, axis, space, viaSet);
     if (key === undefined) return undefined;
     return this.tables(key.spaceRoot).demand[axis].get(key.key);
+  }
+
+  /**
+   * A sized node's scope on `axis`: its content's type `space` and claim
+   * widened to the keyed domain it maps ({@link domainOf}, `widenScope`),
+   * then niced to the ticks of the axis drawn over that domain, if any
+   * ({@link ticksOf}, `niceScope`, #659). It is the one widen-then-nice: every
+   * σ solve (a sized layer, the render root) and every axis drawn over the
+   * domain reads it, so the ticks and the marks agree by construction.
+   */
+  scope<S extends UnderlyingSpace | undefined>(
+    node: KeyedNode,
+    axis: 0 | 1,
+    space: S,
+    claim: Extent | undefined,
+    viaSet: boolean = true
+  ): [S, Extent | undefined] {
+    const [wide, wideClaim] = widenScope(
+      space,
+      claim,
+      this.domainOf(node, axis, space, viaSet)
+    );
+    return niceScope(wide, wideClaim, this.ticksOf(node, axis, space, viaSet));
   }
 
   /** A name for the keyed domain a node's axis is over (its space root and

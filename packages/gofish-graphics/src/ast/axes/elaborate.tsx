@@ -878,7 +878,12 @@ function elaborationsFor(
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
     if (axisOver(s) === "absolute") {
-      const niced = niceContinuous(s, ticksFor(dim)) as CONTINUOUS_TYPE;
+      // The axis's domain is its scope's: the widen-then-nice every σ solve
+      // over this keyed domain applies (`KeyedDomains.scope`), so the ticks
+      // and the marks agree by construction.
+      const placed = node.placedSpace(space[dim], dim);
+      const niced = (keyed?.scope(node, dim, placed, undefined)[0] ??
+        placed) as CONTINUOUS_TYPE;
       nices[dim] = [niced.dataInterval.min, niced.dataInterval.max];
       floors[dim] = nices[dim]![0];
     } else if (axisOver(s) === "delta") {

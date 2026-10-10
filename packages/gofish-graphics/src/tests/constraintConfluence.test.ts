@@ -63,7 +63,12 @@ import {
   originIs,
   DEFAULT_AXIS_TICKS,
 } from "../ast/underlyingSpace";
-import { Extent, impliedExtent } from "../ast/extent";
+import {
+  Extent,
+  impliedExtent,
+  niceScope,
+  widenScope,
+} from "../ast/extent";
 import { ScopeRegistry } from "../ast/solver/scopes";
 import { interval } from "../util/interval";
 
@@ -1249,8 +1254,11 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
       [100, 80],
       sigmas,
       maps,
-      domain,
-      ticks,
+      // `KeyedDomains.scope`, over a stand-in table.
+      (axis, space, claim) => {
+        const [wide, wideClaim] = widenScope(space, claim, domain(axis));
+        return niceScope(wide, wideClaim, ticks(axis));
+      },
       new ScopeRegistry(),
       "test"
     );
