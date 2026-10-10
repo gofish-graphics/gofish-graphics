@@ -2150,7 +2150,9 @@ object and the two columns).
   a point on the box's edge may fall in a hexagon that only touches the box.
 - **Voronoi cells.** One cell per seed (d3-delaunay, over Delaunator),
   clipped to the box that holds the domain and the seeds, so every seed has
-  a cell; seeds at one point share the first one's cell. A point goes to its
+  a cell; seeds at one point share the first one's cell. A cell's id is its
+  seed's index among all the seeds (the first one's, for seeds at one
+  point). A point goes to its
   nearest seed (`Delaunay.find`). Distances are measured in data units, so
   the cells mean something only when the two fields share a unit (longitude
   and latitude, two lengths in millimeters).

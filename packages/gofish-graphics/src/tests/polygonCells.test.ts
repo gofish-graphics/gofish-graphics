@@ -271,6 +271,25 @@ async function main() {
       "seeds at one point share one cell, that of the first",
       twice.cells.length === 3 && twice.cellOf(0, 0)!.id === "0"
     );
+    // A cell's id is its seed's index among all the seeds, so a seed after
+    // a repeated one keeps its own index.
+    const repeatedFirst = voronoiCells(
+      {
+        kind: "voronoi",
+        seeds: [seeds[0], { name: "A2", x: 0, y: 0 }, seeds[1], seeds[2]],
+      },
+      fields,
+      [],
+      [],
+      "test"
+    );
+    check(
+      "a Voronoi cell's id is its seed's index, after a repeated seed too",
+      repeatedFirst.cellOf(1, 1)!.id === "0" &&
+        repeatedFirst.cellOf(9, 1)!.id === "2" &&
+        repeatedFirst.cellOf(5, 7)!.id === "3",
+      repeatedFirst.cells.map((c) => c.id).join(" ")
+    );
     check(
       "no seeds is an error",
       /at least one seed/.test(

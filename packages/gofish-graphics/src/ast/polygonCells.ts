@@ -45,7 +45,8 @@ export class PolygonCell extends RegionCell {
 
   constructor(
     /** The cell's identity: a hexagon's grid coordinates `"q,r"`, or a
-     *  Voronoi cell's seed index. */
+     *  Voronoi cell's seed's index among the seeds (the first one's, for
+     *  seeds at one point). */
     readonly id: string,
     readonly outline: readonly Point[]
   ) {
@@ -287,9 +288,10 @@ export function voronoiCells(
   const seeds = bin.seeds;
   if (!Array.isArray(seeds) || seeds.length === 0)
     throw new Error(`${where}: Bin.voronoi needs at least one seed.`);
-  // Each seed's point (the first seed at each point), and the box that
-  // holds the seeds.
+  // Each seed's point (the first seed at each point), with that seed's
+  // index, and the box that holds the seeds.
   const points: Point[] = [];
+  const seedIndex: number[] = [];
   const seen = new Set<string>();
   let [xLo, xHi, yLo, yHi] = [Infinity, -Infinity, Infinity, -Infinity];
   seeds.forEach((row, i) => {
@@ -309,6 +311,7 @@ export function voronoiCells(
     if (seen.has(key)) return;
     seen.add(key);
     points.push([sx, sy]);
+    seedIndex.push(i);
     xLo = Math.min(xLo, sx);
     xHi = Math.max(xHi, sx);
     yLo = Math.min(yLo, sy);
@@ -341,12 +344,12 @@ export function voronoiCells(
   const cells = points.map((_, i) => {
     const ring = voronoi.cellPolygon(i);
     if (ring == null)
-      throw new Error(`${where}: seed ${i} has no Voronoi cell.`);
+      throw new Error(`${where}: seed ${seedIndex[i]} has no Voronoi cell.`);
     // The ring repeats its first corner at its end.
     const outline = ring
       .slice(0, -1)
       .map(([x, y]) => [round12(x), round12(y)] as const);
-    return new PolygonCell(String(i), outline);
+    return new PolygonCell(String(seedIndex[i]), outline);
   });
   let last = 0;
   return {
