@@ -30,7 +30,7 @@ export const Default: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    spreadY({ dir: "y", spacing: 8, alignment: "middle", sharedScale: true },
+    spreadY({ dir: "y", spacing: 8, alignment: "middle" },
       _(titanic)
         .groupBy("class")
         .map((cls) =>

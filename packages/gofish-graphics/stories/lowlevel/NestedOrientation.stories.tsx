@@ -56,7 +56,7 @@ const pieData = [
 const pie = () =>
   layer({ coord: Coord.polar() }, [
     stackX(
-      { h: 70, spacing: 0, alignment: "start", sharedScale: true },
+      { h: 70, spacing: 0, alignment: "start" },
       map(pieData, (d) => rect({ w: v(d.count), fill: d.color }))
     ),
   ]);

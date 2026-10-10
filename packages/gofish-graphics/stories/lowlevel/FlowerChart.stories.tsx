@@ -75,7 +75,6 @@ export const Default: StoryObj<Args> = {
                   h: FLOWER_RADIUS,
                   spacing: 0,
                   alignment: "start",
-                  sharedScale: true,
                 },
                 (d[0].datum as { species: string; count: number }[]).map((r) =>
                   petal({

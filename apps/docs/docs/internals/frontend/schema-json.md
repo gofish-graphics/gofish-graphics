@@ -973,11 +973,6 @@ for the API.
           "description": "Cross-axis alignment (\"start\" | \"middle\" | \"end\" | \"baseline\").",
           "default": "baseline"
         },
-        "sharedScale": {
-          "type": "boolean",
-          "description": "Share one scale across all children.",
-          "default": false
-        },
         "anchor": {
           "enum": ["edge", "start", "middle", "end", "baseline"],
           "description": "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
@@ -1069,11 +1064,6 @@ for the API.
           "type": "string",
           "description": "Cross-axis alignment (\"start\" | \"middle\" | \"end\" | \"baseline\").",
           "default": "baseline"
-        },
-        "sharedScale": {
-          "type": "boolean",
-          "description": "Share one scale across all children.",
-          "default": false
         },
         "anchor": {
           "enum": ["edge", "start", "middle", "end", "baseline"],

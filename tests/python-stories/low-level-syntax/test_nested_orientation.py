@@ -72,7 +72,6 @@ def _pie():
                 h=70,
                 spacing=0,
                 alignment="start",
-                shared_scale=True,
             )
         ],
         coord=Coord.polar(),

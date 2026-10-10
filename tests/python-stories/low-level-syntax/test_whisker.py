@@ -61,7 +61,6 @@ def story_pair_box_whisker():
             [_box_and_whisker(male, "male"), _box_and_whisker(female, "female")],
             dir="x",
             spacing=8,
-            shared_scale=True,
         ),
         _RENDER,
     )
@@ -88,7 +87,6 @@ def story_box_whisker():
             ],
             dir="x",
             spacing=8,
-            shared_scale=True,
         ),
         _RENDER,
     )
