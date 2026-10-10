@@ -2810,13 +2810,8 @@ def filter(
     if isinstance(predicate, FieldPredicate):
         return Operator("filter", predicate=dict(predicate))
     if callable(predicate):
-        # Data that is not a list (a single row) passes through unchanged,
-        # as in JS: there is nothing to filter.
-        return derive(
-            lambda rows: [row for row in rows if predicate(row)]
-            if isinstance(rows, list)
-            else rows
-        )
+        # Data always flows as a list, so the filter keeps a sublist.
+        return derive(lambda rows: [row for row in rows if predicate(row)])
     raise TypeError(
         "filter(...) expects field(name).between(lo, hi) or a function of one "
         f"row, got {type(predicate).__name__}"
@@ -2845,6 +2840,30 @@ def field(name: str) -> FieldAccessor:
         name: The field name to read from each row.
     """
     return FieldAccessor({"type": "field", "name": name})
+
+
+class ChunkKey(dict):
+    """The ``{type: "chunk", size}`` wire shape of a ``chunk(size)`` grouping
+    key. It is data, so a ``by=chunk(size)`` crosses to JS with no
+    callback."""
+
+
+def chunk(size: int) -> ChunkKey:
+    """
+    A ``by`` key that groups consecutive rows: row ``i`` goes to group
+    ``i // size``. It is a bin of width ``size`` over row position, so
+    ``spread(by=chunk(5), dir="y")`` lays the rows out five to a group (the
+    rows of a waffle chart). Like ``itertools.batched``, lodash ``_.chunk``
+    and Rust ``chunks(n)``. The key names no field, so its groups draw no
+    axis or labels. Mirrors the JS ``chunk(size)`` in
+    ``packages/gofish-graphics/src/ast/data.ts``.
+
+    Args:
+        size: How many consecutive rows go in each group (a positive integer).
+    """
+    if isinstance(size, bool) or not isinstance(size, int) or size < 1:
+        raise ValueError(f"chunk(size): size must be a positive integer, got {size!r}")
+    return ChunkKey({"type": "chunk", "size": size})
 
 
 # Data utilities (for use inside derive() callbacks)

@@ -658,6 +658,22 @@ console.log("# measure: titles are Quantity (unit)");
     declaredBox.includes("Pay (USD)"),
     declaredBox.join(" | ")
   );
+  // #998: a split with no `by` hands each mark `[row]`, tagged with the
+  // column types like any other leaf, so the declaration reaches it.
+  const noByBox = textsOf(
+    await chart(summary, {
+      schema: { lo: pay, q1: pay, q3: pay, hi: pay },
+      axes: true,
+    })
+      .flow(spread({ dir: "x" }))
+      .mark(layer([rect({ y: "lo", y2: "hi" }), rect({ y: "q1", y2: "q3" })]))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "a mark under a split with no `by` keeps the declared quantity and unit",
+    noByBox.includes("Pay (USD)"),
+    noByBox.join(" | ")
+  );
 
   const times = textsOf(
     await chart(

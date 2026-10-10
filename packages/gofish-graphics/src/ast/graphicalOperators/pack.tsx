@@ -16,6 +16,7 @@ import {
 } from "../marks/createOperator";
 import type { MarkChild } from "../types";
 import { SplitBy, splitEntries } from "../datumProjection";
+import { chunk } from "../data";
 import { boxOfDims, enclosingCircle } from "../geometry";
 
 type PackProps = {
@@ -116,8 +117,9 @@ export type PackOptions = {
 const packOperator = createOperator<any, PackOptions>(
   ((props: PackProps, children: GoFishAST[]) => Pack(props, children)) as any,
   {
-    split: ({ by }, d) =>
-      by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
+    // Without `by`, the split is by row identity, `chunk(1)`: one group
+    // `[item]` per item, keyed by position (see `splitEntries`).
+    split: ({ by }, d) => splitEntries(by ?? chunk(1), d),
     serialize: "pack",
   }
 );

@@ -475,10 +475,7 @@ export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
       )
       .mark(
         rect({ fill: "sex" }).label(
-          (d: any) => {
-            const row = Array.isArray(d) ? d[0] : d;
-            return row.people;
-          },
+          (d: any[]) => d[0].people,
           { position: "center", color: "white" }
         )
       )

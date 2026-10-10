@@ -200,19 +200,9 @@ export const OPERATOR_BUILDERS: Record<
       );
     }
     return derive(
-      async (d: any) => {
-        const rows = Array.isArray(d) ? d : d == null ? [] : [d];
-        if (rows.length === 0) {
-          return Array.isArray(d) ? d : (d ?? null);
-        }
-        const typed = await applyLambdaTyped(
-          bridge,
-          lambdaId,
-          rows,
-          opts.schema
-        );
-        return Array.isArray(d) ? typed : (typed[0] ?? null);
-      },
+      // Data always flows as a list, so the lambda gets the list itself.
+      async (d: any[]) =>
+        d.length === 0 ? d : applyLambdaTyped(bridge, lambdaId, d, opts.schema),
       { schema: opts.schema }
     );
   },

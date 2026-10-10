@@ -1,3 +1,4 @@
+import { copyColumnTypes } from "../schema";
 import { packEnclose } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
 import { boxOfDims } from "../geometry";
@@ -245,14 +246,15 @@ export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
               `"${field}" — a field-bound \`points\` reads one ring per row.`
           );
         }
-        // Each row is one ordinary `polygon` mark over that row: the mark factory
-        // resolves `fill`/`stroke` against the row exactly as it does for a
-        // literal ring (and as `rect` does), and the `value(...)` ring passes
-        // through as the data-bound reading.
+        // Each row is one ordinary `polygon` mark over that row's one-row
+        // group `[row]`, tagged with the column types like a split leaf: the
+        // mark factory resolves `fill`/`stroke` against
+        // the row exactly as it does for a literal ring (and as `rect` does),
+        // and the `value(...)` ring passes through as the data-bound reading.
         const node = (await basePolygon({
           ...opts,
           points: value(ring as Ring),
-        } as any)(row)) as GoFishNode;
+        } as any)(copyColumnTypes([row], rows))) as GoFishNode;
         node.name("");
         return node;
       })

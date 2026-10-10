@@ -213,7 +213,7 @@ Pass a function instead of a field name for computed labels.
 // Function accessor — receives the datum, returns display text
 .mark(
   rect({ w: "proportion", fill: "sex" })
-    .label((d) => d.people.toLocaleString(), { position: "center", color: "white" })
+    .label((d) => d[0].people.toLocaleString(), { position: "center", color: "white" })
 )
 ```
 

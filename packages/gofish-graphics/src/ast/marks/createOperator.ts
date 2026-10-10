@@ -135,14 +135,13 @@ export function withMarkKind<M>(mark: M, kind: MarkKind): M {
  */
 export async function applyMark<T>(
   mark: Mark<T> | Mark<T[]>,
-  group: T | T[],
+  group: T[],
   groupKey?: string | number,
   layerContext?: LayerContext
 ): Promise<GoFishNode[]> {
   const kind = getMarkKind(mark);
   if (kind === "expand") {
-    const items = Array.isArray(group) ? (group as T[]) : ([group] as T[]);
-    const result = await (mark as Mark<T[]>)(items, groupKey, layerContext);
+    const result = await (mark as Mark<T[]>)(group, groupKey, layerContext);
     return Promise.all(
       (Array.isArray(result) ? result : [result]).map((r) =>
         resolveMarkResult(r as any, layerContext)
@@ -526,19 +525,18 @@ export function attachTransformModifiers<M extends object>(
  * What a split returns. Insertion order is preserved (ES Map spec), which
  * matters for layout ordering.
  *
- * Each bucket may be either a `Datum[]` (the typical groupBy case) or a
- * single `Datum` (the no-`by` per-item case). The downstream mark and
- * `inferSize`/`inferPos`/`inferColor` all normalise via
- * `Array.isArray(d) ? d : [d]`, so both forms work uniformly.
+ * Each bucket is a group: a list of the items the split was given. A split
+ * never looks inside an item, so an item that is itself an array is just an
+ * item. With no `by` the split is by row identity, and each group is `[item]`.
  *
  * If the split also computes opts for the layout function (the axis labels
  * `{colKeys, rowKeys}` for table, a stack's `origin`), return the wrapped
  * `{entries, layoutOpts}` form instead of a bare Map.
  */
 export type SplitResult<Datum> =
-  | Map<string | number, Datum | Datum[]>
+  | Map<string | number, Datum[]>
   | {
-      entries: Map<string | number, Datum | Datum[]>;
+      entries: Map<string | number, Datum[]>;
       layoutOpts?: Record<string, unknown>;
     };
 
@@ -999,13 +997,13 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   channels: ChannelAnnotations<Options> | undefined,
   opts: Options,
   d: Datum | Datum[],
-  entries: Map<string | number, Datum | Datum[]> | undefined,
+  entries: Map<string | number, Datum[]> | undefined,
   layoutOpts: Record<string, unknown> | undefined
 ): Promise<Options> {
   const pending = resolveChannelAccessors(opts, channels, () => {
     const rows = new Set<unknown>(Array.isArray(d) ? d : [d]);
     for (const items of entries?.values() ?? []) {
-      for (const row of Array.isArray(items) ? items : [items]) rows.add(row);
+      for (const row of items) rows.add(row);
     }
     return [...rows];
   });
@@ -1126,16 +1124,14 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         const splitLayoutOpts =
           splitResult instanceof Map ? undefined : splitResult.layoutOpts;
         // Split leaves are fresh sub-arrays (groupBy/filter/slice) that don't
-        // inherit `d`'s column types (schema.ts). Re-tag each array leaf so a
+        // inherit `d`'s column types (schema.ts). Re-tag each leaf so a
         // MARK channel applied per leaf (createMark → inferSize/inferPos with no
         // precomputed measure) reads the column's unit off its own data — e.g.
         // a bin's `start`/`end`/`size` resolve to the source field's units, not
         // the literal field name, matching the operator-channel path (#534) —
         // and a nested split or a mark's color channel still sees an ordered
         // column.
-        for (const leaf of entries.values()) {
-          if (Array.isArray(leaf)) copyColumnTypes(leaf, d);
-        }
+        for (const leaf of entries.values()) copyColumnTypes(leaf, d);
         // Route each leaf through applyMark so expand-kind marks (e.g. `cut`)
         // can return arrays that we flatten across leaves. A per-item mark is
         // called once per leaf and applyMark wraps its node in a singleton.
@@ -1150,16 +1146,17 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             const currentKey = i;
             const leafNodes = await applyMark(
               mark,
-              leaf as Datum | Datum[],
+              leaf,
               currentKey,
               layerContext
             );
             const keyStr = currentKey?.toString() ?? "";
-            // Positional key when this operator did NOT group by a data field
-            // (an identity split — a `spread` with no `by`): the key is a bare
-            // index, so any ordinal folded from it is `anonymous` (renders no
-            // axis). A `by` grouping yields data-value keys (semantic).
-            const synthetic = (opts as any).by === undefined;
+            // Positional key when this operator's key names no data field
+            // (no `by`, which splits by row identity; `chunk(n)`; or a key
+            // function): any ordinal folded from it is `anonymous` (renders
+            // no axis or labels). A field `by` yields data-value keys
+            // (semantic).
+            const synthetic = fieldNameOf((opts as any).by) === undefined;
             for (const node of leafNodes) {
               node.setKey(keyStr);
               node._syntheticKey = synthetic;

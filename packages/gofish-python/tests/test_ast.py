@@ -11,6 +11,7 @@ from gofish import (
     bin,
     compose,
     field,
+    chunk,
     filter,
     log,
     ref,
@@ -139,12 +140,17 @@ class TestOperators:
         assert op.to_dict()["type"] == "derive"
         assert op.fn([{"day": 1}, {"day": 2}]) == [{"day": 2}]
 
-    def test_filter_callable_passes_a_single_row_through(self):
-        """A single row is not a list of rows, so it passes through unchanged,
-        as JS filter does for data that is not an array."""
-        op = filter(lambda row: row["day"] > 1)
-        row = {"day": 1}
-        assert op.fn(row) is row
+    def test_spread_by_chunk(self):
+        """chunk(size) is a by key that crosses the wire as data."""
+        assert chunk(5) == {"type": "chunk", "size": 5}
+        d = spread(by=chunk(5), dir="y").to_dict()
+        assert d["by"] == {"type": "chunk", "size": 5}
+
+    def test_chunk_rejects_a_size_below_one(self):
+        with pytest.raises(ValueError, match="chunk"):
+            chunk(0)
+        with pytest.raises(ValueError, match="chunk"):
+            chunk(2.5)  # type: ignore[arg-type]
 
     def test_filter_rejects_other_values(self):
         with pytest.raises(TypeError, match="filter"):

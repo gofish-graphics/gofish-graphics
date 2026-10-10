@@ -36,8 +36,7 @@ The operators retain the same left-to-right order they have in `.flow()`:
 const waffle = ({ count, chunkSize, dir }) =>
   compose(
     derive((rows) => rows.flatMap((row) => repeat(row, count))),
-    derive((rows) => chunk(rows, chunkSize)),
-    spread({ dir, reverse: true }),
+    spread({ by: chunk(chunkSize), dir, reverse: true }),
     spread({ dir: dir === "x" ? "y" : "x", alignment: "end" })
   );
 

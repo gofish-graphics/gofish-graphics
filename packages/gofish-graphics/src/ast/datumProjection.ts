@@ -22,7 +22,13 @@
 import toPath from "lodash/toPath";
 import sumBy from "lodash/sumBy";
 import { GoFishRef } from "./_ref";
-import { fieldNameOf, isField, type FieldAccessor } from "./data";
+import {
+  fieldNameOf,
+  isChunk,
+  isField,
+  type ChunkKey,
+  type FieldAccessor,
+} from "./data";
 import {
   getFieldOps,
   normalizeNotSupportedError,
@@ -125,16 +131,27 @@ export function projectBy(obj: unknown, by: SplitBy): unknown {
  *  collapse: none when no row has the field (or there are no rows), one when
  *  they agree, several when they don't. */
 export function projectByValues(obj: unknown, by: SplitBy): unknown[] {
+  if (isChunk(by)) {
+    throw new Error(
+      "chunk(size) keys a group by row position, which a single node's rows " +
+        "do not carry; it cannot be read back off a node. Group by a field."
+    );
+  }
+  // A key function reads one row here: a node's rows carry no position.
   return typeof by === "function"
-    ? projectValues(obj, [], by)
+    ? projectValues(obj, [], by as (r: unknown) => unknown)
     : projectValues(obj, toPath(fieldNameOf(by)!));
 }
 
 /** The `by` selector accepted by the split operators (group/spread/scatter):
- *  a field-path string, a key function over the row, or a `field(...)`
- *  accessor (possibly carrying a pipeline of domain ops — see
- *  {@link splitEntries}). */
-export type SplitBy = string | ((r: any) => unknown) | FieldAccessor;
+ *  a field-path string, a key function over the row (and its position), a
+ *  `field(...)` accessor (possibly carrying a pipeline of domain ops — see
+ *  {@link splitEntries}), or a `chunk(size)` bin over row position. */
+export type SplitBy =
+  | string
+  | ((r: any, i: number) => unknown)
+  | FieldAccessor
+  | ChunkKey;
 
 /**
  * The mutable cell `ChartBuilder` writes the computed default split/travel
@@ -207,8 +224,15 @@ export type TimeTier = {
  *  Projected keys are runtime strings/numbers (or `undefined` for ill-posed
  *  groups, where the bag disagrees on the field); the assertion bridges the
  *  honest `unknown` produced by projection + homogeneity collapse. */
-export function splitKeyFn(by: SplitBy): (r: any) => string | number {
-  if (typeof by === "function") return by as (r: any) => string | number;
+export function splitKeyFn(
+  by: SplitBy
+): (r: any, i: number) => string | number {
+  if (typeof by === "function")
+    return by as (r: any, i: number) => string | number;
+  if (isChunk(by)) {
+    const size = by.size;
+    return (_r, i) => Math.floor(i / size);
+  }
   const segments = toPath(fieldNameOf(by)!);
   return (r: any) => {
     const values = projectValues(r, segments);

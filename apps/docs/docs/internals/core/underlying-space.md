@@ -670,7 +670,7 @@ fold is authoritative and overrides the layer's default `unionChildSpaces` —
 **even when the fold is UNDEFINED**. This matters for an `align` over ORDINAL
 cross-axis children: the alignment fold is UNDEFINED (no anchored axis), and if
 the default union were allowed to win it would resurrect an ORDINAL space and a
-spurious axis (a waffle's chunked-row index leaking a row "axis"). The
+spurious axis (a waffle's `chunk(n)` row index leaking a row "axis"). The
 composition is planned once from the constraints and the child nodes alone
 (`planConstraintComposition`, `constraints/compose.ts`): which children each
 distribute and align covers, on which axis. The type fold
@@ -1705,7 +1705,7 @@ can declare its unit.
 resolves each channel's quantity once from its whole input array (which carries
 the column types), but a _mark_ channel runs per split leaf — and a leaf is a
 fresh sub-array (groupBy/filter/slice) that doesn't inherit them. So the
-operator re-tags each array leaf with its parent's column types at the split
+operator re-tags each leaf with its parent's column types at the split
 site (`copyColumnTypes`, `schema.ts`, applied in `createOperator`), letting a
 mark bound to a transform-output field (e.g. a bin's `start`/`end`/`size`)
 read the source quantity off its own data instead of falling back to the
@@ -1714,9 +1714,9 @@ types can't ride the rows across the Python derive-RPC bridge, so Python's
 `bin` writes them into the derive operator's `schema` instead. (Python's `bin`
 cannot see its source column's declared unit, so its edges carry only the
 source's quantity; the declaration still reaches them through the shared
-variable when the source column itself appears in the chart. Residual, #998:
-a single-`Datum` leaf, from `scatter`/`spread` with no `by`, is a row, not an
-array, so it carries no column types.)
+variable when the source column itself appears in the chart.) Every leaf is
+an array: an operator with no `by` splits by row identity (`chunk(1)`), so
+each leaf is `[row]` and is tagged like any other.
 
 This same size-vs-position comparison drives **embedding** (`baseEmbedded`,
 `data.ts`): inside a coordinate space, a dim's size becomes a swept coord
@@ -1970,7 +1970,10 @@ error rather than silently doing the wrong thing:
   the same regardless of where it sits in the chain — every other domain op
   re-derives its grouping from these filtered rows), then it groups the
   remaining rows (`Map.groupBy` via `splitKeyFn`, which reads a `field(...)`'s
-  `.name` exactly like a bare string) in order of first appearance, or in the
+  `.name` exactly like a bare string, passes a key function the row and its
+  position, and keys a `chunk(size)` by position alone, `floor(i / size)`;
+  an operator with no `by` splits by `chunk(1)`, row identity) in order of
+  first appearance, or in the
   order of the column's levels when the data declares the column ordered
   (`HasOrder`, see [Column types](#column-types-the-chart-schema)), then
   applies each remaining domain op

@@ -106,7 +106,8 @@ bars[0].datum             # the raw row-bag behind the first bar
 
 `ref.datum` is the **raw bag of rows** that flowed into the referenced node — a
 **list** of records. A fully-split leaf (one datum per node) is a **1-row
-list**; an aggregate — for example a bar produced by `rect(h="count")` over a
+list**, and so is a mark under an operator with no `by` and each slice of a
+[`cut`](/python/api/operators/cut); an aggregate — for example a bar produced by `rect(h="count")` over a
 partition, whose height auto-sums several rows — holds all the rows of its
 partition.
 

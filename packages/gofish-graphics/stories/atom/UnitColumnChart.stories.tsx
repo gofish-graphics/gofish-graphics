@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { chunk, orderBy } from "lodash";
+import { orderBy } from "lodash";
 import { initializeContainer } from "../helper";
 
-import { chart, circle, derive, spread, Color } from "../../src/lib";
+import { chart, chunk, circle, derive, spread, Color } from "../../src/lib";
 import { titanicPassengers } from "../../src/data/titanicPassengers";
 
 /**
@@ -62,9 +62,9 @@ export const Default: StoryObj<Args> = {
         chart()
           .flow(
             derive((rows) => orderBy(rows, ["survived"], ["desc"])),
-            derive((rows) => chunk(rows, args.cols)),
-            // Reverse the rows so the ragged partial row lands at the top.
-            spread({ spacing: 2, dir: "y", reverse: true }),
+            // Rows of `cols` dots. Reverse the rows so the ragged partial row
+            // lands at the top.
+            spread({ by: chunk(args.cols), spacing: 2, dir: "y", reverse: true }),
             spread({ spacing: 2, dir: "x" })
           )
           .mark(circle({ r: 4, fill: "survived" }))

@@ -243,14 +243,13 @@ const inferNumeric =
       | LiteralValue
       | Value<number>
       | undefined,
-    d: T | T[],
-    column: ColumnInfo = resolveColumn(d, accessor)
+    data: T[],
+    column: ColumnInfo = resolveColumn(data, accessor)
   ): MaybeValue<number> | undefined => {
     if (accessor === undefined) return undefined;
     if (typeof accessor === "number") return accessor;
     if (isLiteral(accessor)) return accessor.value as number;
     if (isValue(accessor)) return accessor as MaybeValue<number>;
-    const data = Array.isArray(d) ? d : [d];
     // Expression evaluation is orthogonal to this channel: the pipeline maps
     // the rows to values, and an aggregate op (`.mean()`, `.count()`, ...)
     // folds them to a singleton. The channel then applies its default

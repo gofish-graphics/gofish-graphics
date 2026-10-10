@@ -13,15 +13,25 @@
  * each group's rows), and each child's key is the value its own rows agree on.
  */
 import { splitEntries, splitKeyFn, type SplitBy } from "../ast/datumProjection";
+import { chunk, isChunk } from "../ast/data";
 
 export function groupEntries<C>(
   children: C[],
   rowsOf: (child: C) => unknown[],
   by: SplitBy | undefined
 ): Map<string | number, C[]> {
-  if (by === undefined) {
-    return new Map(children.map((child, i) => [i, [child]]));
+  // No `by` splits by identity, `chunk(1)`. A `chunk(size)` key reads only
+  // position, so it groups the children themselves, `size` at a time.
+  const key = by ?? chunk(1);
+  if (isChunk(key)) {
+    const groups = new Map<string | number, C[]>();
+    children.forEach((child, i) => {
+      const k = Math.floor(i / key.size);
+      groups.set(k, [...(groups.get(k) ?? []), child]);
+    });
+    return groups;
   }
+  by = key;
   const rows = children.map(rowsOf);
   const allRows = rows.flat() as Record<string, unknown>[];
   const groups = new Map<string | number, C[]>(
@@ -32,8 +42,8 @@ export function groupEntries<C>(
   // key function, its one value over the rows.
   const rowKey = splitKeyFn(by);
   const keyOf = (rows: unknown[]): string | number | undefined => {
-    if (typeof by !== "function") return rowKey(rows);
-    const keys = new Set(rows.map(rowKey));
+    if (typeof by !== "function") return rowKey(rows, 0);
+    const keys = new Set(rows.map((row, i) => rowKey(row, i)));
     return keys.size === 1 ? [...keys][0] : undefined;
   };
   children.forEach((child, i) => {

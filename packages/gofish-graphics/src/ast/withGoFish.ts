@@ -2,6 +2,7 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
+import { copyColumnTypes } from "./schema";
 import type { JSX } from "solid-js";
 import { GoFishAST } from "./_ast";
 import { GoFishNode } from "./_node";
@@ -433,7 +434,7 @@ export function createMark<
   cfg?: { kind?: MarkKind }
 ): <T extends Record<string, any>>(
   opts: DeriveMarkProps<ShapeProps, C, T>
-) => NameableMark<T | T[] | { item: T | T[]; key: number | string }>;
+) => NameableMark<T | T[]>;
 export function createMark(
   shapeFn: any,
   channels: Record<string, any> = {},
@@ -469,20 +470,10 @@ function buildCreatedMark(
   markOpts: Record<string, any>
 ): any {
   const baseMark: Mark<any> = async (
-    input,
-    keyParam?: string | number,
+    d,
+    key?: string | number,
     _layerContext?: LayerContext
   ) => {
-    // Unwrap input: handles T, T[], or { item, key } patterns
-    let d: any, key: number | string | undefined;
-    if (typeof input === "object" && input !== null && "item" in input) {
-      d = (input as any).item;
-      key = (input as any).key;
-    } else {
-      d = input;
-      key = keyParam;
-    }
-
     if (markOpts.debug) {
       console.log("mark", key, d);
     }
@@ -539,10 +530,13 @@ function buildCreatedMark(
     const raw = await shapeFn(shapeProps, kind === "expand" ? data : undefined);
     const result = Array.isArray(raw) ? raw : await resolveMarkResult(raw, {});
     if (Array.isArray(result)) {
-      // Expand path: stamp each slice with its own datum.
+      // Expand path: stamp each slice with its own datum, a one-row group
+      // `[row]` tagged with the column types like any split leaf. A slice
+      // past the last row (a `size` array longer than the data) has no row of
+      // its own and keeps the whole group.
       for (let i = 0; i < result.length; i++) {
         const node = result[i];
-        node.datum = data[i] ?? d;
+        node.datum = i < data.length ? copyColumnTypes([data[i]], data) : d;
         if (liveChannels) node.__gfLive = liveChannels;
       }
       return result as unknown as GoFishNode;

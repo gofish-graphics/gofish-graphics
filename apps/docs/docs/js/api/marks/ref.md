@@ -117,7 +117,8 @@ bars[0].datum; // the raw row-bag behind the first bar
 
 `ref.datum` is the **raw bag of rows** that flowed into the referenced node — an
 **array** of records. A fully-split leaf (one datum per node) is a **1-row
-array**; an aggregate — for example a bar produced by `rect({ h: "count" })` over
+array**, and so is a mark under an operator with no `by` and each slice of a
+[`cut`](/js/api/operators/cut); an aggregate — for example a bar produced by `rect({ h: "count" })` over
 a partition, whose height auto-sums several rows — holds all the rows of its
 partition.
 

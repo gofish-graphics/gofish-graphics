@@ -82,8 +82,8 @@ into N pieces, followed by a fan-in back to a single node:
 
 1. **Split.** Partition the data into pieces. For `spread`, this is
    "groupBy `by`-field"; for `table`, it's the cartesian product of two
-   fields; for `group`, it's groupBy. For `scatter` with no `by`, it's
-   "one piece per item".
+   fields; for `group`, it's groupBy. With no `by`, the split is by row
+   identity (`chunk(1)`): one piece `[item]` per item.
 2. **fmap.** Apply the user's mark to each piece, producing one
    `GoFishNode` per piece.
 3. **Combine.** Hand the array of nodes to the low-level layout function
@@ -99,8 +99,7 @@ From `src/ast/graphicalOperators/spread.tsx:430`:
 
 ```ts
 export const spread = createOperator<any, SpreadOptions>(Spread, {
-  split: ({ by }, d) =>
-    by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
+  split: ({ by }, d) => splitEntries(by ?? chunk(1), d),
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
 });
 ```
@@ -111,9 +110,15 @@ Three pieces:
    `createNodeOperator`-built node builder that already knows how to position
    children along an axis. This is the **combine** step.
 2. **`split(opts, d)`** — partition `d` into an ordered `Map<key, subdata>`.
-   Insertion order matters (it determines layout order). When `by` is omitted,
-   each item becomes its own one-element group. `spread`/`stack`/`group`/
-   `scatter` all delegate to the shared `splitEntries` helper
+   Insertion order matters (it determines layout order). Every piece is a
+   list of the items the split was given, and a split never looks inside an
+   item, so an item that is itself an array is still one item. When `by` is
+   omitted, the split is by row identity, `chunk(1)`: each item becomes its
+   own one-item group `[item]`, keyed by its position. `chunk(size)` is a `by`
+   key over row position (row `i` goes to group `floor(i / size)`), so no
+   `by` and `by: chunk(1)` are one split. A key that names no field (`chunk`,
+   or a key function) marks its keys positional (`_syntheticKey`), so they
+   draw no axis or labels. `spread`/`stack`/`group`/`scatter` all delegate to the shared `splitEntries` helper
    (`datumProjection.ts`, #700) rather than a bare `Map.groupBy`: it groups by
    `by` first (a `field(...)` accessor groups by its `.name`, identically to a
    bare string), then applies any pipeline ops the accessor carries — see
@@ -138,7 +143,7 @@ Walking `createOperator.ts:391-415`:
    `Map<key, subdata>`. (Some operators also return `layoutOpts`, opts the
    split computed that get merged into the layout opts: `table`'s row/column
    labels, or a `stack`'s `origin` when its `by` column has `HasMidpoint`.) Each
-   array leaf is then re-tagged with `d`'s column types (`copyColumnTypes`,
+   leaf (always an array) is then re-tagged with `d`'s column types (`copyColumnTypes`,
    see [Column
    types](/internals/core/underlying-space#column-types-the-chart-schema)): a
    leaf is a fresh sub-array that wouldn't otherwise inherit them, so without
@@ -355,8 +360,10 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   - A **bare string** over the group's array-of-rows datum must be constant
     across every row (true by construction for a `by`-field, since every row
     in the group shares that value) — `resolveLabelText` throws a loud error
-    if it isn't, rather than silently reading just the first row. Over a
-    scalar (non-array) datum it just reads the field directly.
+    if it isn't, rather than silently reading just the first row. An
+    operator's leaf is always an array; only a mark called directly on one
+    value (`rect({...})(box)`) has a scalar datum, and there it reads the
+    field directly.
   - A **`field(...)` aggregate** (`field("count").sum()`/`.mean()`/`.count()`/
     `.distinct()`) folds the group's rows to one value via `evalFieldValues`
     (the same evaluator the `by`/`size`/`pos` channel pipelines use) — this is

@@ -5,12 +5,20 @@ from python_stories.data import GENDER_PAY_GAP, PAY_GRADE
 
 
 def story_gender_pay_gap():
-    # Five columns on one y axis, none with a declared unit: their units are
-    # unknown, so they unify and the axis is titled by their names.
+    # Five columns on one y axis, all amounts of one quantity, Pay: they
+    # share the axis and it is titled "Pay".
+    pay = Schema.quantity("Pay")
     return (
         chart(
             GENDER_PAY_GAP,
-            schema={"Pay Grade": Schema.ordered(PAY_GRADE)},
+            schema={
+                "Pay Grade": Schema.ordered(PAY_GRADE),
+                "Min": pay,
+                "25-Percentile": pay,
+                "Median": pay,
+                "75-Percentile": pay,
+                "Max": pay,
+            },
             axes=True,
         )
         .flow(

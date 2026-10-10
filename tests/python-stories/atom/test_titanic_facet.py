@@ -35,10 +35,15 @@ def story_default():
             chart()
             .flow(
                 derive(order_by_survived),
+                # Rows of sqrt(n) dots. `chunk(size)` takes a fixed size, and
+                # this one depends on the cell, so the rows are built as data:
+                # each item is now one row of dots.
                 derive(chunk_rows),
                 # Fill each cell bottom-up (y-down free space: reverse so the
                 # partial last row lands at the top), like a waffle that grows up.
                 spread(spacing=2, dir="y", reverse=True),
+                # Each group holds one item, a row of dots: spread its dots.
+                derive(lambda group: group[0]),
                 spread(spacing=2, dir="x"),
             )
             .mark(circle(r=4, fill="survived"))

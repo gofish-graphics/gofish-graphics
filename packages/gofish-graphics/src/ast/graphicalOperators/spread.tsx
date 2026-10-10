@@ -1,6 +1,6 @@
 import { GoFishNode } from "../_node";
 import type { AxisOptions } from "../gofish";
-import { fieldNameOf, MaybeValue } from "../data";
+import { chunk, fieldNameOf, MaybeValue } from "../data";
 import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
 import { Collection } from "lodash";
 import { SplitBy, orderEntries, splitEntries } from "../datumProjection";
@@ -252,8 +252,8 @@ export type SpreadOptions<T = any> = {
 };
 
 export const spread = createOperator<any, SpreadOptions>(Spread as any, {
-  // With `by`: groupBy on the field. Without `by`: identity split — one leaf
-  // per row (the waffle grid relies on this to spread chunked sub-arrays).
+  // With `by`: groupBy on the field. Without `by`: the split is by row
+  // identity, `chunk(1)`, so each item becomes a one-item group `[item]`.
   // Expand-kind marks (e.g. `cut`) need the whole array in one leaf instead;
   // that override lives in createOperator (it dispatches on the mark's kind),
   // not here, so this split stays kind-agnostic.
@@ -264,14 +264,14 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   // reorders every level of the order the way it reorders the groups, so the
   // stack knows which way it lays the order out even in a row with one part.
   split: ({ by, glue, reverse }, d) => {
-    if (!by) return new Map(d.map((r, i) => [i, r]));
-    const entries = splitEntries(by, d);
+    const key = by ?? chunk(1);
+    const entries = splitEntries(key, d);
     if (!glue) return entries;
-    const column = fieldNameOf(by);
+    const column = fieldNameOf(key);
     const type = columnType(d, column);
     const levels = (type?.HasOrder?.levels ?? []) as (string | number)[];
     const split = orderEntries(
-      by,
+      key,
       new Map(levels.map((level) => [level, entries.get(level) ?? []]))
     );
     const origin = stackOrigin(
@@ -285,8 +285,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   },
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
   axisFields: ({ by, dir }) => {
-    const name =
-      typeof by === "string" ? by : isField(by) ? by.name : undefined;
+    const name = fieldNameOf(by);
     return name === undefined ? undefined : { [dir]: name };
   },
   // `dir` is the axis this operator lays its groups out along (`stack` is

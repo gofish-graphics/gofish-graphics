@@ -453,8 +453,11 @@ public way to add a kind, so every strategy can cross the wire (user-defined
 strategies are designed in #1101).
 
 A named type may say which Python class builds a value of it (`pyClass`):
-`FieldPredicate` here, and `FieldAccessor` in `AUTHORED_REFS`, the list of
-refs to hand-authored shapes. Such a value already carries its wire keys, so
+`FieldPredicate` here, and `FieldAccessor` and `ChunkKey` in `AUTHORED_REFS`,
+the list of refs to hand-authored shapes. `ChunkKey` is the
+`{ type: "chunk", size }` that `chunk(size)` builds, the `by` key that groups
+consecutive rows; a split operator's `by` takes a field name, a
+`FieldAccessor`, or a `ChunkKey`. Such a value already carries its wire keys, so
 the Python generator passes it through. One function, `pyType` in
 `descriptors.ts`, gives the Python type of a field: the generated factory
 signatures (the strategy modules' too) annotate with it and the Python docs
@@ -677,8 +680,8 @@ ratio?}` or `{kind: "slice"}` or ...; scatter's `overlap`; a `curve`), the gener
 `("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
 the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
 branch does not declare (`ratio` on `slice`), is a `TypeError`. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
-few refs the generator lists as already in wire form (today only
-`FieldAccessor`, built by `field(...)`), or generation fails, so a new nested
+few refs the generator lists as already in wire form (today
+`FieldAccessor`, built by `field(...)`, and `ChunkKey`, built by `chunk(...)`), or generation fails, so a new nested
 type has to be declared before Python can take it.
 
 It emits:
@@ -890,8 +893,9 @@ renders it. What differs between the hosts is only transport:
   every reader of decoded rows runs `applySchema` with its own schema
   before it reads a value. A tier is chart data; a callback's rows go
   through `applyLambdaTyped` (`registry.ts`), which a `derive` (with its
-  `schema`) and a lambda accessor both call, so a single-datum derive's
-  result and an accessor's result hold epoch milliseconds. A list becomes a
+  `schema`) and a lambda accessor both call, so a derive's result and an
+  accessor's result hold epoch milliseconds. A derive's lambda always gets
+  a list: data flows as a list, and a split with no `by` hands on `[row]`. A list becomes a
   plain array, a struct a plain object, a 64-bit integer a JS number, and a
   null stays `null`. No schema names a value inside a list or a struct, so
   a time there decodes to epoch milliseconds (a naive timestamp or a date

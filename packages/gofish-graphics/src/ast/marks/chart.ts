@@ -8,7 +8,6 @@ import {
   connect as Connect,
   type AnchorSpec,
 } from "../graphicalOperators/connect";
-import chunk from "lodash/chunk";
 import { GoFishNode } from "../_node";
 import {
   DatumValueImpl,
@@ -196,7 +195,7 @@ export function derive<T, U>(
 export function filter<T>(pred: (row: T) => boolean): Operator<T[], T[]> {
   const predicate = predicateWire(pred);
   return mapOperator<T[], T[]>(
-    (d) => (Array.isArray(d) ? d.filter(pred) : d),
+    (d) => d.filter(pred),
     predicate !== undefined
       ? { type: "filter", opts: { predicate } }
       : { type: "derive", opts: {} },
@@ -211,8 +210,6 @@ export const repeat = <T, K extends keyof T>(
 ) => {
   return Array.from({ length: d[field] as unknown as number }, () => d);
 };
-
-export { chunk };
 
 export const normalize = <T, K extends keyof T>(
   data: T[],
@@ -1016,7 +1013,7 @@ export function blank<T extends Record<string, any>>({
   h?: number | (keyof T & string) | Value<number> | FieldExpr;
   fill?: string | (keyof T & string);
   debug?: boolean;
-} = {}): Mark<T | T[] | { item: T | T[]; key: number | string }> {
+} = {}): Mark<T | T[]> {
   // A rect's dims/layout/datum with rect's paint removed (and `{ type:
   // "blank" }` on the wire) — see `Blank` / `baseBlank` in shapes/rect.tsx.
   return baseBlank<T>({

@@ -434,7 +434,7 @@ function computeDefaultBy(
   const keyFns = tierBys.map((by) => splitKeyFn(by));
   // Unit-separator join: a bare `join("")` would collide composite keys like
   // ("ab","c") and ("a","bc").
-  return (r: any) => keyFns.map((fn) => fn(r)).join("\u001f");
+  return (r: any, i: number) => keyFns.map((fn) => fn(r, i)).join("\u001f");
 }
 
 /**

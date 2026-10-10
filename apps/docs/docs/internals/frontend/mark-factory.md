@@ -152,11 +152,14 @@ diameter is `2r` for a number, a field, and an accessor alike. A data `w` or
 
 Walking `withGoFish.ts:431-477`:
 
-1. **Unwrap the input.** Marks are called with one of three shapes —
-   `T` (single datum), `T[]` (array), or `{ item, key }` (an item paired with a
-   key set by an upstream operator). Step 1 normalizes them to `(d, key)`.
+1. **Read the input.** A mark is called as `(d, key)`. Inside a flow, `d` is
+   always a list: every operator split hands each mark a group, and with no
+   `by` that group is the one-row list `[row]`.
 2. **Wrap to an array.** `data = Array.isArray(d) ? d : [d]`. The `infer*`
-   helpers all expect an array.
+   helpers all expect an array. The wrap remains for a mark called outside a
+   flow: a combinator child gets the combinator's own data, which is
+   `undefined` at the root, and a mark called directly on one value
+   (`rect({...})(box)`, so the rect's datum is `box`) gets that value.
 3. **Apply each channel.** For each prop in the user's `markOpts`:
    - `Value`-wrapped (`v(...)`) → pass through unchanged. (Already final.)
    - `"size"` channel → `inferSize(markValue, data)`. If `markValue` is a
@@ -194,7 +197,8 @@ Walking `withGoFish.ts:431-477`:
    component is a naming boundary. So a component is written with the same
    lowercase operators as a chart, and there is no separate node-level
    spelling to reach for. An expand mark's array of slice nodes passes through
-   unchanged.
+   unchanged, each slice stamped with its own one-row group `[row]`, tagged
+   with the column types like a split leaf.
 5. **Tag the node** with `datum = d` so downstream coordinators (label
    placement, `selectAll` projections) can find its row. The factory does not
    name the node after its data key: the key is data, and a name made from it

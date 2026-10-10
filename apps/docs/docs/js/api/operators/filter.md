@@ -88,7 +88,7 @@ extent and nothing else. Two ways to hold the scales still:
   data extent entirely, so filtering cannot move the map — which is why the bird
   migration examples stay put.
 - Keep the full data in the chart and vary something paint-only instead, e.g.
-  `opacity: live((d) => (d.day === day() ? 1 : 0))`.
+  `opacity: live((d) => (d[0].day === day() ? 1 : 0))`.
 
 ## Python
 
