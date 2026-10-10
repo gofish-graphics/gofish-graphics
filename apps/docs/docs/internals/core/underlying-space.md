@@ -362,13 +362,14 @@ discrete analogue of `CONTINUOUS`'s measure. It's set from the grouping operator
 own resolved space — a continuous axis by its unit, an ordinal axis by its
 grouping field (see [the layout passes](/internals/layout/passes)).
 
-An `ORDINAL` can also hold **cells** (`ORDINAL_TYPE.cells`, a key→`Cell`
-record). A split keyed by a binned key (`field(x).bin(p)`) gives each child
+An `ORDINAL` can also hold **cells** (`ORDINAL_TYPE.cells`, the cells in
+order of their starts, as `CONTINUOUS_TYPE.cells` holds them; a key is its
+cell's id). A split keyed by a binned key (`field(x).bin(p)`) gives each child
 node its cell (`keyCell`, set in `createOperator` beside the key, which is
 the cell's id), the distribute fold reads a child's cell as its key
 (`keyOf` in `compose.ts`), and `ordinalOver` builds the ordinal over those
-keys, with the cells when every key is one. `unionChildSpaces` keeps them
-when every unioned ordinal has them. The type is what tells the axis it
+keys, with the cells when every key is a cell of a line. `unionChildSpaces`
+keeps them when every unioned ordinal has them (`mergeCells`). The type is what tells the axis it
 places cells, not points: an axis over cells labels each cell between its
 boundary ticks ([Axes](/internals/frontend/axes)). It is read off the
 space, never off a datatype flag on the column.

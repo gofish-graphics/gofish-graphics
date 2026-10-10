@@ -218,6 +218,17 @@ export class CalendarPartition {
     return new CalendarPartition(this.unit, this.step, this.start, fn);
   }
 
+  /** Whether `other` cuts the time line into the same cells: the same
+   *  level, step, and week start. The labels may differ. */
+  sameCells(other: CalendarPartition | undefined): boolean {
+    return (
+      other !== undefined &&
+      other.unit === this.unit &&
+      other.step === this.step &&
+      other.start === this.start
+    );
+  }
+
   /** The level one up (the outer row of a time axis), or undefined for
    *  year. */
   get parent(): CalendarPartition | undefined {

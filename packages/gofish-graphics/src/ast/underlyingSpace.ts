@@ -117,13 +117,14 @@ export type ORDINAL_TYPE = {
    *  `distributeSpaceFold`), never sniffed back from the domain. An
    *  explicitly-keyed or `by`-grouped ordinal leaves this false. */
   anonymous?: boolean;
-  /** Set when every key is a CELL (`field(x).bin(p)`, cells.ts): each key's
-   *  cell, by key. The axis then places cells, not points: each label names
-   *  a cell and sits between the cell's two boundary ticks, and calendar
-   *  cells get an outer row of their parent level (axes/elaborate.tsx). The
-   *  cells' regions (`[start, end)`) are what a `partition` layout would read
-   *  (#1058). */
-  cells?: Readonly<Record<string, Cell>>;
+  /** Set when every key is a CELL (`field(x).bin(p)`, cells.ts): the
+   *  cells, each once, in order of their starts (the keys' order is
+   *  `domain`'s; a key is its cell's id). The axis then places cells, not
+   *  points: each label names a cell and sits between the cell's two
+   *  boundary ticks, and calendar cells get an outer row of their parent
+   *  level (axes/elaborate.tsx). A union keeps them only when every part
+   *  has them ({@link mergeCells}), as a continuous axis's cells are. */
+  cells?: readonly Cell[];
 };
 
 export type UNDEFINED_TYPE = {
@@ -348,7 +349,7 @@ export const ORDINAL = (
   domain?: string[],
   measure?: Measure,
   anonymous?: boolean,
-  cells?: Readonly<Record<string, Cell>>
+  cells?: readonly Cell[]
 ): UnderlyingSpace => ({
   kind: "ordinal",
   domain,
@@ -369,16 +370,10 @@ export const ordinalOver = (
   measure?: Measure,
   anonymous?: boolean
 ): UnderlyingSpace => {
-  const domain = keys.map(String);
-  const allCells = keys.length > 0 && keys.every((k) => k instanceof Cell);
-  return ORDINAL(
-    domain,
-    measure,
-    anonymous,
-    allCells
-      ? Object.fromEntries((keys as Cell[]).map((c) => [c.id, c]))
-      : undefined
-  );
+  const cells = keys.every((k): k is Cell => k instanceof Cell)
+    ? mergeCells([keys])
+    : undefined;
+  return ORDINAL(keys.map(String), measure, anonymous, cells);
 };
 export const isORDINAL = (space: UnderlyingSpace): space is ORDINAL_TYPE =>
   space.kind === "ordinal";

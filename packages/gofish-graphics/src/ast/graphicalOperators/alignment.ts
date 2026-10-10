@@ -128,10 +128,12 @@ export function unionChildSpaces(
     const anonymous = ordinals.every((o) => o.anonymous);
     // Over cells only if every unioned ordinal is: a union with a plain
     // category key is a plain category axis.
-    const cells = ordinals.every((o) => o.cells !== undefined)
-      ? Object.assign({}, ...ordinals.map((o) => o.cells))
-      : undefined;
-    return ORDINAL(Array.from(keys), measure, anonymous, cells);
+    return ORDINAL(
+      Array.from(keys),
+      measure,
+      anonymous,
+      mergeCells(ordinals.map((o) => o.cells))
+    );
   }
 
   const axisSpaces = children.map((c) => c[axis]);
