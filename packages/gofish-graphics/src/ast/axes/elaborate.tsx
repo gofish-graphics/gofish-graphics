@@ -860,7 +860,7 @@ function elaborationsFor(
   // into its box, not only the part of it the node's own data covers.
   const keyed = node.tryGetRenderSession()?.keyedDomains;
   const spaceFor = (dim: 0 | 1): UnderlyingSpace => {
-    const s = node.placedSpace(space[dim]);
+    const s = node.placedSpace(space[dim], dim);
     return widenScope(s, undefined, keyed?.domainOf(node, dim, s, true))[0];
   };
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;

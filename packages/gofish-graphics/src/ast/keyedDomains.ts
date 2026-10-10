@@ -20,6 +20,7 @@ import type { SharingPlan } from "./constraints/compose";
 import { unionChildSpaces } from "./graphicalOperators/alignment";
 import {
   isCONTINUOUS,
+  originIs,
   spaceUnit,
   type AxisTicks,
   type UnderlyingSpace,
@@ -58,7 +59,12 @@ export const domainKey = (
   top: KeyedNode
 ): string => {
   const unit = spaceUnit(space)?.unit;
-  return unit === undefined ? `set:${top.uid}` : `${unit.kind}:${unit.name}`;
+  const key =
+    unit === undefined ? `set:${top.uid}` : `${unit.kind}:${unit.name}`;
+  // An origin-less space (a middle alignment) has only widths, no data
+  // positions, so its domain is the unit's domain of widths, kept apart
+  // from the domain of positions.
+  return originIs(space, "none") ? `${key}/width` : key;
 };
 
 /** A finite interval, or undefined (an empty column, a NaN). */
@@ -132,7 +138,10 @@ export class KeyedDomains {
       const ticks = node.axisDemand[axis];
       const space = node._underlyingSpace?.[axis];
       if (ticks !== undefined && space !== undefined && isCONTINUOUS(space)) {
-        const key = domainKey(seat.topType, seat.top);
+        const key = domainKey(
+          spaceUnit(space)?.unit !== undefined ? space : seat.topType,
+          seat.top
+        );
         this.tables(seat.spaceRoot).demand[axis].set(key, ticks);
       }
     }
@@ -250,7 +259,7 @@ export class KeyedDomains {
         for (const [key, iv] of m) {
           const niced = this.demand.get(root)?.[axis].has(key) ? " axis" : "";
           lines.push(
-            `[domain] space=${root.type}:${root.uid} axis=${axis === 0 ? "x" : "y"} ` +
+            `[scope] domain space=${root.type}:${root.uid} axis=${axis === 0 ? "x" : "y"} ` +
               `key=${key} [${iv.min},${iv.max}]${niced}`
           );
         }

@@ -1023,6 +1023,10 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     }
 
     const node = await Frame(this.frameOptions(), [content, ...transitions]);
+    // A chart is where its axes are drawn (#1114 step 6), inside its own
+    // sized scope when it has a size of its own.
+    const { w, h } = this.frameOptions() as { w?: unknown; h?: unknown };
+    node._chartBox = [w !== undefined, h !== undefined];
 
     // A flow with a `time.sequence` plays DATA time: its marks enter and
     // leave with the data, so the build-in only checks this tier's
@@ -1274,6 +1278,9 @@ export class LayerBuilder extends RenderableBuilder {
       }
     }
     const stack = await Layer({}, nodes);
+    // The stack of tiers is one chart: it draws the axes its tiers share
+    // (#1114 step 6), and the tier charts inside it draw none of their own.
+    stack._chartBox = [false, false];
     // The hoisted coordinate space wraps the whole stack, so every tier is laid
     // out in it and its domain inference sees all of their positions at once.
     const result =

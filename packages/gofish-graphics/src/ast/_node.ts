@@ -529,6 +529,10 @@ export class GoFishNode {
     undefined,
   ];
   public _axisOverride?: { x?: boolean; y?: boolean };
+  /** Set on the node a `chart()` resolves to: per axis, whether the chart
+   *  has a size of its own (`w`/`h`). A chart is where its axes are drawn
+   *  (`isAxisBoundary`). Undefined on every other node. */
+  public _chartBox?: [boolean, boolean];
   /**
    * Set on the outermost ring of chrome that chrome elaboration
    * (`elaborateChrome` in axes/elaborate.tsx) wraps around a node: the boxes
@@ -900,13 +904,38 @@ export class GoFishNode {
     return named?.[0] ?? xy;
   }
 
-  /** One of this node's axis spaces as the axis machinery sees it: placed
-   *  ({@link placeBaseline}) when this node is the render root, the scope root
-   *  that seats a free baseline at the scope's `originPx`, so the root of a
-   *  bar chart renders an absolute value axis over its free bars. Anywhere
-   *  else a free space is still waiting for its parent to place it. */
-  public placedSpace(space: UnderlyingSpace): UnderlyingSpace {
-    return this.parent === undefined ? placeBaseline(space) : space;
+  /** One of this node's axis spaces on `dim` as the axis machinery sees it:
+   *  placed ({@link placeBaseline}) when this node is seated by a sized scope
+   *  that places a free baseline at the scope's `originPx` — the render root,
+   *  or the content of a chart with a size of its own on `dim` — so the root
+   *  of a bar chart renders an absolute value axis over its free bars.
+   *  Anywhere else a free space is still waiting for its parent to place it. */
+  public placedSpace(space: UnderlyingSpace, dim: 0 | 1): UnderlyingSpace {
+    return this.parent === undefined || this.isSizedChartContent(dim)
+      ? placeBaseline(space)
+      : space;
+  }
+
+  /** This node is the content of a `chart()` with a size of its own on
+   *  `dim`: the chart solves σ there, and seats this content in its frame. */
+  private isSizedChartContent(dim: 0 | 1): boolean {
+    const p = this.parent;
+    return p?._chartBox?.[dim] === true && p.children[0] === this;
+  }
+
+  /**
+   * Whether this node draws its continuous axes on `dim` (#1114 step 6):
+   * axes are drawn at `chart()` boundaries, inside the chart's own sized
+   * scope, so the ticks map with the σ the marks map with. A chart with no
+   * size of its own on `dim` draws them around itself (its σ is solved above
+   * it, at the sized node that contains it); a chart with a size of its own
+   * draws them around its content, inside the box it solves σ in. The render
+   * root is the outermost boundary: it draws the axes of the domains it
+   * solves, a bare low-level render's included. No other node draws one.
+   */
+  private isAxisBoundary(dim: 0 | 1): boolean {
+    if (this._chartBox !== undefined) return !this._chartBox[dim];
+    return this.parent === undefined || this.isSizedChartContent(dim);
   }
 
   /**
@@ -1175,7 +1204,7 @@ export class GoFishNode {
     // A continuous axis is named by the keyed domain it is drawn over.
     const continuousSig = (dim: 0 | 1): string | undefined => {
       const s = space?.[dim];
-      if (s === undefined || axisOver(this.placedSpace(s)) === undefined)
+      if (s === undefined || axisOver(this.placedSpace(s, dim)) === undefined)
         return undefined;
       const key = this.tryGetRenderSession()?.keyedDomains?.axisKey(
         this,
@@ -1234,9 +1263,10 @@ export class GoFishNode {
             (prior.startsWith("o:") && prior !== mySig)
           )
             sig = mySig;
-        } else if (axisOver(this.placedSpace(s)) !== undefined) {
-          // Continuous: single-owner — only the root-most unclaimed dim claims.
-          if (prior === undefined)
+        } else if (axisOver(this.placedSpace(s, dim)) !== undefined) {
+          // Continuous: single-owner — only the root-most unclaimed chart
+          // boundary claims (`isAxisBoundary`).
+          if (prior === undefined && this.isAxisBoundary(dim))
             sig = continuousSig(dim) ?? AXIS_CLAIM_OPAQUE;
         }
         if (sig !== undefined) {

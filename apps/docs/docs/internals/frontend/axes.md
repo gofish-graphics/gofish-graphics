@@ -440,6 +440,21 @@ difference axis), never off the size claim:
   that. Key discovery uses `_ordinalKeyMap` (set by operators such as `table`)
   or a subtree walk by `node.key`.
 
+## Axes are drawn at chart boundaries
+
+A continuous axis is drawn only at a `chart()` boundary (#1114 step 6), so its
+ticks map with the σ its marks map with. `GoFishNode.isAxisBoundary` is the
+rule: a chart with no size of its own on a dim draws the axis around itself
+(its σ is solved at the sized node that contains it); a chart with a size of
+its own (`_chartBox`, set by the chart builder) draws it around its content,
+inside the box it solves σ in, and its content's free baseline is placed there
+(`placedSpace`); the render root is the outermost boundary, which draws the
+axes of the domains it solves, a bare low-level render's included. A stack of
+`.layer(...)` tiers is one chart. No other node claims a continuous axis, so a
+`spreadY` that middle-aligns a caption with a chart does not. Two exceptions
+remain until #1032 and #1115: an operator's explicit `axes:` override still
+draws at its node, and an ordinal axis still nests at every grouping level.
+
 ## One axis per keyed domain
 
 `resolveAxes` (`_node.ts`) is a top-down walk: a `claimed` map threads DOWN each
