@@ -702,15 +702,16 @@ set is detached on that axis. A literal pixel `position` detaches its child, a
 spread's `distribute` detaches each part and nests it in its slot, a grid does
 both on both axes, and `align`, a stack's glued `distribute` and `nest` join
 their children. Detaches run first and joins second, so an `align` beats a
-`position` on the same axis. The `nested` half is `datumPlacedChildren` plus
-the spread slots and grid cells. Unlike `planConstraintComposition`, the plan
+`position` on the same axis. The `nested` half is the datum placements plus
+the spread slots and grid cells. The plan also returns the datum placements on
+their own (`datumPlaced`), which the layer's own union leaves out. Unlike `planConstraintComposition`, the plan
 exists for every layer, point positions included. Nothing reads it yet except
 the `GOFISH_DUMP_SHARING` dump. It is step 3 of the
 [measure-keyed domains design](/internals/design/measure-keyed-domains), which
 lists what each construct contributes. `planSharing` is the layer's sharing
 rule. Like the type hook, each node type has its own rule (`resolveSharing`,
-read through `GoFishNode.sharing()`), and a node without one lets every child
-share. Three rows of the table are node-level rules: a layer with a data-valued
+read through `GoFishNode.sharing()`, which memoizes the plan and clears it with
+the types), and a node without one lets every child share. Three rows of the table are node-level rules: a layer with a data-valued
 `w`/`h` nests its content on that axis, a `treemap` detaches each child and
 nests it in its tile on both axes, and the `position` operator detaches its
 child on an axis with a pixel offset and keeps it shared on an axis with a
@@ -1582,7 +1583,7 @@ axis with `joinUnits` — so a layer's own positioning constraints in clashing
 units (an interval coordinate with one endpoint in `mm` and the other in `inch`)
 throw at the source. The layer then merges this constraint-domain measure with
 its children's, like any other composition. A child that a datum
-position places (`datumPlacedChildren`, `compose.ts`) is left out of that
+position places (the sharing plan's `datumPlaced`, `compose.ts`) is left out of that
 union altogether: it sits where its datum maps, so its own extent and measure
 are in its own frame (a `scatter`'s circle sized in its own units, a pie glyph
 in its angle), not in the axis's data. This restores the unit tag the scatter

@@ -58,7 +58,7 @@ export async function wrapRing(
     const sets = childNodes.map((c, k) => (c === inner ? 0 : k + 1));
     const i = childNodes.indexOf(inner);
     for (const axis of [0, 1] as const) plan.nested[axis].delete(i);
-    return { sets: [sets, [...sets]], nested: plan.nested };
+    return { ...plan, sets: [sets, [...sets]] };
   });
   await root.relate((g) => [
     ...(seat.x === undefined && seat.y === undefined

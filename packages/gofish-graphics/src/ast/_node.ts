@@ -451,6 +451,7 @@ export class GoFishNode {
   public __gfVisible?: Map<object, () => boolean>;
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
   private _resolveSharing: ResolveSharing;
+  private _sharing?: SharingPlan;
   private _resolveExtent: ResolveExtent;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   public _extent?: Size<Extent | undefined> = undefined;
@@ -643,15 +644,21 @@ export class GoFishNode {
   }
 
   /** This node's sharing plan: its rule ({@link ResolveSharing}) applied to
-   *  its children and constraints. */
+   *  its children and constraints. Memoized, and cleared with the types
+   *  (`clearUnderlyingSpace`), which every rewrite of the tree re-resolves.
+   *  Callers must not mutate it. */
   public sharing(): SharingPlan {
-    return this._resolveSharing(this.children, this.constraints);
+    return (this._sharing ??= this._resolveSharing(
+      this.children,
+      this.constraints
+    ));
   }
 
   /** Give this node another sharing rule. A wrapper built by elaboration
    *  (a chrome ring) is a node kind of its own, with its own rule. */
   public INTERNAL_setSharing(rule: ResolveSharing): this {
     this._resolveSharing = rule;
+    this._sharing = undefined;
     return this;
   }
 
@@ -984,6 +991,7 @@ export class GoFishNode {
     this._underlyingSpace = undefined;
     this._yFrame = undefined;
     this._extent = undefined;
+    this._sharing = undefined;
     this.children.forEach((c) => {
       if (c instanceof GoFishNode) c.clearUnderlyingSpace();
     });

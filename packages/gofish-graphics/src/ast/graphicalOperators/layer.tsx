@@ -64,7 +64,7 @@ import {
   composePlanSpaces,
   planConstraintComposition,
   planSharing,
-  datumPlacedChildren,
+  type LayerSharingPlan,
   resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
   type ComposeBudget,
@@ -301,12 +301,16 @@ export const layer = createNodeOperatorSequential(
       // its sharing sets detach (a literal `position` places them
       // elsewhere), and those a datum position places (their own extent is
       // nested at the datum, which is what they add to the domain).
-      const sharing = node.sharing();
-      const placed = datumPlacedChildren(constraints, childNodes);
-      for (const axis of [0, 1] as const)
-        sharing.sets[axis].forEach((s, i) => {
-          if (s !== 0) placed[axis].add(i);
-        });
+      // A layer's rule is built on `planSharing`, so its plan carries
+      // `datumPlaced`.
+      const sharing = node.sharing() as LayerSharingPlan;
+      const placed = ([0, 1] as const).map(
+        (axis) =>
+          new Set([
+            ...sharing.datumPlaced[axis],
+            ...sharing.sets[axis].flatMap((s, i) => (s !== 0 ? [i] : [])),
+          ])
+      ) as [Set<number>, Set<number>];
       const base = resolveLayerBaseSpaces(
         effectiveChildren,
         posDomains,

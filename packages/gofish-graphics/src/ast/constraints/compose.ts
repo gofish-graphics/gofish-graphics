@@ -117,11 +117,10 @@ export type PositionDomains = {
  *  coordinate (a point or an interval) on that axis. Such a child sits where
  *  its datum maps, so its own extent is in its own frame (a scatter's circle
  *  is sized in its own units), not in the axis's data. */
-export function datumPlacedChildren(
+function datumPlacedChildren(
   constraints: ConstraintSpec[],
-  childNodes: GoFishAST[]
+  index: Map<string, number>
 ): [Set<number>, Set<number>] {
-  const index = buildNameIndex(childNodes);
   const placed: [Set<number>, Set<number>] = [new Set(), new Set()];
   for (const c of constraints) {
     if (c.type !== "position") continue;
@@ -444,6 +443,13 @@ export type SharingPlan = {
   nested: [Set<number>, Set<number>];
 };
 
+/** A layer's plan ({@link planSharing}): its sharing sets, and, per axis, the
+ *  children a datum `position` places. The layer's own union leaves those
+ *  out, since their own extent is nested at the datum. */
+export type LayerSharingPlan = SharingPlan & {
+  datumPlaced: [Set<number>, Set<number>];
+};
+
 /** Whether a `position` coordinate is a literal pixel value: a number point,
  *  or an interval whose two endpoints are numbers. */
 const isPixelCoordinate = (coord: PositionConstraint["x"]): boolean =>
@@ -458,7 +464,7 @@ const isPointAlign = (spec: AlignConstraint["x"]): boolean =>
 export function planSharing(
   constraints: ConstraintSpec[],
   childNodes: GoFishAST[]
-): SharingPlan {
+): LayerSharingPlan {
   const n = childNodes.length;
   const index = buildNameIndex(childNodes);
   // A ref that is not a direct child (a ref into a nested tier) has no slot
@@ -468,9 +474,12 @@ export function planSharing(
       .map((r) => index.get(r.name))
       .filter((i): i is number => i !== undefined);
 
-  // A datum placement nests the child's own extent at its datum. That is the
-  // set `datumPlacedChildren` already computes for the layer's type.
-  const nested = datumPlacedChildren(constraints, childNodes);
+  // A datum placement nests the child's own extent at its datum.
+  const datumPlaced = datumPlacedChildren(constraints, index);
+  const nested: [Set<number>, Set<number>] = [
+    new Set(datumPlaced[0]),
+    new Set(datumPlaced[1]),
+  ];
   const detached: [Set<number>, Set<number>] = [new Set(), new Set()];
   const joins: [number[][], number[][]] = [[], []];
   const detach = (axis: 0 | 1, idx: number[]) =>
@@ -482,7 +491,7 @@ export function planSharing(
     switch (c.type) {
       case "position": {
         // A literal pixel value places the child elsewhere. A datum keeps it
-        // in the own set, and `datumPlacedChildren` nests it.
+        // in the own set, nested at its datum (`datumPlaced`).
         const idx = idxOf(c.children);
         if (isPixelCoordinate(c.x)) detach(0, idx);
         if (isPixelCoordinate(c.y)) detach(1, idx);
@@ -558,7 +567,7 @@ export function planSharing(
       return s;
     });
   }
-  return { sets, nested };
+  return { sets, nested, datumPlaced };
 }
 
 /** A short label for a child in the sharing dump. */
