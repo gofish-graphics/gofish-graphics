@@ -605,11 +605,13 @@ scatterplot). The smooth curves ignore it.
 Either way, once the path tier index is settled, the path tier's own `by`
 orders the path and never splits; every _other_ flow tier's `by` becomes one
 term of a synthesized composite split key (`ChartBuilder`'s
-`computeDefaultBy`, built from `splitKeyFn` in datumProjection.ts — the same
-projection-through-`GoFishRef.datum` helper `splitEntries` uses, so
-string/field/function `by` forms behave identically to a real operator `by`,
-and a binned tier keys a ref by its cell over the domain its rows came
-from).
+`computeDefaultBy`). A ref's term for a tier is the key that tier's split
+gave the group the ref's mark is in: the `key` of the mark's ancestor that
+the split made, which `createOperator` stamps with the split's `by`
+(`GoFishNode.keyBy`). So string/field/function `by` forms key a ref exactly
+as the real operator keyed its group, and a binned tier keys it by the cell
+over the domain the split ran over, which the mark's own row does not
+carry.
 Each operator declares how it arranges its groups (`createOperator`'s
 `arrangement` config, read back by `chartBuilder.ts`'s `classifyOperator`), so
 an operator that declares nothing simply takes no part in the rule. One

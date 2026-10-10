@@ -1175,6 +1175,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
               node.setKey(keyStr);
               node._syntheticKey = synthetic;
               node.keyCell = cell;
+              node.keyBy = (opts as any).by;
             }
             // Record the (string) field this operator grouped by, so a later
             // `resolve(..., { from })` can match against it without the user

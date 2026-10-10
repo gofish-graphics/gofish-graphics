@@ -9,6 +9,7 @@
 // Type-only (erased) so no runtime cycle with solver/scopes.ts, which imports
 // RenderSession from here.
 import type { ScopeRegistry } from "./solver/scopes";
+import type { SplitBy } from "./datumProjection";
 import {
   Anchor,
   Dimensions,
@@ -475,6 +476,11 @@ export class GoFishNode {
    *  `createOperator`; read when folding the distribute ordinal, which then
    *  holds cells (`ORDINAL_TYPE.cells`, see `distributeSpaceFold`). */
   public keyCell?: RegionCell;
+  /** The `by` the operator that made this node grouped by, when it grouped
+   *  by one: the node's `key` is its group's key under it. Set in
+   *  `createOperator`; a fused relational mark's default split reads it, to
+   *  key a mark by the groups it is in (`computeDefaultBy`). */
+  public keyBy?: SplitBy;
   public _name?: string | Token;
   public _isScope: boolean = false;
   /**

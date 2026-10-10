@@ -169,7 +169,9 @@ export type SplitKey = string | number | RegionCell;
  * `chart.ts` also imports `ChartBuilder` from `chartBuilder.ts` at runtime.
  */
 export type InferredRelational = {
-  by?: SplitBy;
+  /** The default split: an operand's key, the groups of the flow it is in
+   *  (`computeDefaultBy` in chartBuilder.ts). */
+  by?: (operand: GoFishRef) => string;
   dir?: "x" | "y";
   /** The path tier's own `by`: the connection variable the connector
    *  threads its operands along, whether `along` named the tier or it was
@@ -213,12 +215,6 @@ export type TimeTier = {
    *  stretch between two keyframes. */
   msPerUnit: () => number;
 };
-
-/** The data a row, a bag of rows, or a ref reads: a ref's datum, else the
- *  value itself. A split leaf's data carries its chart's domain
- *  (`domainRows`), which a binned key's cells are over. */
-export const dataOf = (obj: unknown): unknown =>
-  obj instanceof GoFishRef ? dataOf(obj.datum) : obj;
 
 /** Build the grouping key-function for a single split. Exists so that path
  *  parsing happens once per split (closing over the parsed `segments`) rather

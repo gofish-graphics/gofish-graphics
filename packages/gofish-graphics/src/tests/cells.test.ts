@@ -756,6 +756,36 @@ async function main() {
     );
   }
 
+  console.log("\n# the default split over cells");
+  {
+    // Cells [0, 10), [10, 90), [90, 100]: three runs, one per cell.
+    const pts = [0, 5, 12, 17, 50, 95, 100].map((x, i) => ({ x, y: i % 3 }));
+    const runs = await chart(pts, { axes: false })
+      .flow(
+        spread({ by: distField("x").bin({ thresholds: [10, 90] }), dir: "x" }),
+        scatter({ x: "x", y: "y" })
+      )
+      .mark(line())
+      .toDisplayList({ w: 300, h: 100 })
+      .then(
+        (dl: any) => {
+          const paths: any[] = [];
+          const walk = (it: any) => {
+            if (it.kind === "path") paths.push(it);
+            for (const c of it.children ?? []) walk(c);
+          };
+          dl.items.forEach(walk);
+          return paths.length;
+        },
+        (e: Error) => e.message
+      );
+    check(
+      "a line keys each mark by the cell its split put it in",
+      runs === 3,
+      String(runs)
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

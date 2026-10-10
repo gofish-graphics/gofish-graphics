@@ -1924,8 +1924,12 @@ error rather than silently doing the wrong thing:
   binned struct) instead keys each row by its **cell**, and its groups are the
   cells of its partition, in order, one entry per cell, empty cells included
   (`binEntries`; see [Cells](#cells-a-binned-key)). The same key function
-  keys a stagger's children and a connector's refs by their cell, so they
-  group the same way the split did. Then it applies each remaining domain op
+  keys a stagger's children by their cell, so they group the same way the
+  split did. A fused connector's default split reads no key function: it
+  keys each ref by the keys the flow's splits gave the groups it is in (each
+  split stamps the nodes it makes with its `by`, `GoFishNode.keyBy`, beside
+  the key), since a single row does not carry the domain its cell is over.
+  Then it applies each remaining domain op
   in pipeline order: `sort` reorders the
   resulting entries, either by the group key itself or by the SUM of another
   named field over each group's rows; `reverse` reverses the entries. An

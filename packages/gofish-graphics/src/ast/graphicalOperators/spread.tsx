@@ -142,6 +142,7 @@ export const Spread = createNodeOperator(
             wrapped.setKey(child.key ?? "");
             wrapped._syntheticKey = child._syntheticKey;
             wrapped.keyCell = child.keyCell;
+            wrapped.keyBy = child.keyBy;
             (wrapped as any).__splitBy = (child as any).__splitBy;
             wrapped.datum = child.datum;
           }
