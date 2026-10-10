@@ -7,7 +7,9 @@ order: 65
 Draws the region its parent gives it, such as the cell a
 [`partition`](/python/api/operators/partition) gives each group. A region has
 no size or position of its own: it fills the space it is given on both axes.
-Today every region is a rectangle.
+A region with an outline, such as a hexagon or a Voronoi cell of a
+partition over a binned struct, is drawn as that outline; any other region is
+drawn as a rectangle.
 
 ::: gofish example:2d-histogram-of-movie-ratings hidden
 :::

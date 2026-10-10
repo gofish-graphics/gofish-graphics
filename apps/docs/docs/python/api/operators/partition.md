@@ -9,7 +9,8 @@ Divides the space into the cells of a binned key, one group per cell, and gives
 each group its cell. Each cell sits at its true place on one continuous scale,
 so a cell's width follows its width in data: a 29-day February is narrower than
 a 31-day March. An empty cell keeps its place. With one key per axis, it
-divides both axes into rectangles.
+divides both axes into rectangles. With two fields binned together, it divides
+the plane into hexagons or Voronoi cells.
 
 ::: gofish example:monthly-sales-on-a-time-axis hidden
 :::
@@ -39,9 +40,10 @@ there is no list of children to pass it.
 
 ## The key must have a region
 
-`by` must be a key whose values have a region. Today that is a binned field,
-`field(x).bin(...)`, whose values are cells. Each cell is an interval
-`[start, end)`.
+`by` must be a key whose values have a region. That is a binned field,
+`field(x).bin(...)`, whose values are cells, each an interval `[start, end)`,
+or a binned struct, `struct(x=..., y=...).bin(...)`, whose values are cells
+of the plane (see [Cells of the plane](#cells-of-the-plane)).
 
 ```python
 partition(by=field("date").bin(Calendar.month), dir="x")  # true month widths
@@ -49,7 +51,8 @@ partition(by=field("rating").bin(step=0.5), dir="x")  # a histogram
 ```
 
 A plain field has no region, so `partition(by="date", dir="x")` raises a
-`ValueError`. To give each value an equal slot instead, use
+`ValueError`, and so does a struct with no bin,
+`partition(by=struct(x="lon", y="lat"))`. To give each value an equal slot instead, use
 [`spread`](./spread) with the same key.
 
 ## Filling the cell
@@ -137,9 +140,61 @@ chart(measured, axes=True).flow(
 An empty cell is a group with no rows, so a count over it is 0, and the mark
 draws that 0.
 
+## Cells of the plane
+
+With `by` a binned struct, `partition` divides both axes at once into the
+cells of a [`Bin`](/python/api/bin) call: `Bin.hex(radius=...)` for a grid
+of hexagons, or `Bin.voronoi(seeds=...)` for one cell per seed. `dir` and
+`alignment` are not allowed.
+
+```python
+partition(by=struct(x="lon", y="lat").bin(Bin.hex(radius=0.5)))
+```
+
+Each group gets its cell's outline. A [`region`](/python/api/marks/region)
+draws it, so a hexbin is a `region` whose `fill` is a count. As in 1D, the
+cells are those of the two columns' domain in the chart's data, and an empty
+hexagon is a group with no rows, so it is drawn with a count of 0.
+
+::: gofish example:hexbin-of-us-airports hidden
+:::
+
+```python
+from gofish import Bin, Color, chart, field, partition, region, struct
+
+# airports: the airports of the contiguous United States
+chart(airports, color=Color.gradient("blues"), axes=True).flow(
+    partition(by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=1)))
+).mark(region(fill=field("longitude").count(), stroke="white")).render(w=600, h=360)
+```
+
+A mark with a size of its own is centered in its cell's box, which for a
+hexagon is its center.
+
+::: gofish example:airport-counts-in-hexagons hidden
+:::
+
+With `Bin.voronoi`, each row goes to its nearest seed.
+
+::: gofish example:us-airports-by-nearest-hub hidden
+:::
+
+```python
+from gofish import Bin, Color, chart, circle, field, layer, partition, region, scatter, struct
+
+# hubs: twenty hub airports, from the same table
+layer([
+    chart(airports, color=Color.gradient("reds")).flow(
+        partition(by=struct(x="longitude", y="latitude").bin(Bin.voronoi(seeds=hubs)))
+    ).mark(region(fill=field("iata").count(), stroke="white")),
+    chart(hubs).flow(scatter(x="longitude", y="latitude")).mark(circle(r=3, fill="black")),
+]).render(w=600, h=360, axes=True)
+```
+
 ## Axis
 
-The axis along `dir` is continuous, and with a key per axis both axes are. A binned time column gives a time axis
+The axis along `dir` is continuous, and with a key per axis or a binned
+struct both axes are. A binned time column gives a time axis
 whose inner row is the cells' own partition, with each label centered under
 its cell, and an outer row of the parent level (years under months). A binned
 number column gives a numeric axis. See

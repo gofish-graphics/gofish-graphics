@@ -9,7 +9,8 @@ Divides the space into the cells of a binned key, one group per cell, and gives
 each group its cell. Each cell sits at its true place on one continuous scale,
 so a cell's width follows its width in data: a 29-day February is narrower than
 a 31-day March. An empty cell keeps its place. With one key per axis, it
-divides both axes into rectangles.
+divides both axes into rectangles. With two fields binned together, it divides
+the plane into hexagons or Voronoi cells.
 
 ::: gofish example:monthly-sales-on-a-time-axis
 :::
@@ -19,6 +20,7 @@ divides both axes into rectangles.
 ```ts
 partition({ by, dir, alignment?, axes? })
 partition({ by: { x, y }, axes? })
+partition({ by: struct({ x, y }).bin(b), axes? })
 ```
 
 `partition` has only the operator form, used inside `.flow(...)`. Its children
@@ -31,9 +33,10 @@ are the groups of its key, so there is no list of children to pass it.
 
 ## The key must have a region
 
-`by` must be a key whose values have a region. Today that is a binned field,
-`field(x).bin(p)`, whose values are cells. Each cell is an interval
-`[start, end)`. See [the field-expression pipeline](/js/api/operators/spread#field-expression-pipeline)
+`by` must be a key whose values have a region. That is a binned field,
+`field(x).bin(p)`, whose values are cells, each an interval `[start, end)`,
+or a binned struct, `struct({ x, y }).bin(b)`, whose values are cells of the
+plane (see [Cells of the plane](#cells-of-the-plane)). See [the field-expression pipeline](/js/api/operators/spread#field-expression-pipeline)
 for the partitions `.bin` takes.
 
 ```ts
@@ -43,7 +46,8 @@ partition({ by: field("rating").bin({ step: 0.5 }), dir: "x" }); // a histogram
 
 A plain field has no region, so `partition({ by: "date", dir: "x" })` and
 `partition({ by: field("date"), dir: "x" })` are type errors in TypeScript,
-and errors when the chart renders. To give each value an equal slot instead,
+and errors when the chart renders. So is a struct with no bin,
+`partition({ by: struct({ x: "lon", y: "lat" }) })`. To give each value an equal slot instead,
 use [`spread`](./spread) with the same key.
 
 ## Filling the cell
@@ -98,9 +102,40 @@ A mark with a size of its own is centered in its rectangle.
 An empty cell is a group with no rows, so a count over it is 0, and the mark
 draws that 0.
 
+## Cells of the plane
+
+With `by` a binned struct, `partition` divides both axes at once into the
+cells of a [`Bin`](/js/api/bin) call: `Bin.hex({ radius })` for a grid of
+hexagons, or `Bin.voronoi({ seeds })` for one cell per seed. `dir` and
+`alignment` are not allowed.
+
+```ts
+partition({ by: struct({ x: "lon", y: "lat" }).bin(Bin.hex({ radius: 0.5 })) });
+```
+
+Each group gets its cell's outline. A [`region`](/js/api/marks/region) draws
+it, so a hexbin is a `region` whose `fill` is a count. As in 1D, the cells
+are those of the two columns' domain in the chart's data, and an empty
+hexagon is a group with no rows, so it is drawn with a count of 0.
+
+::: gofish example:hexbin-of-us-airports
+:::
+
+A mark with a size of its own is centered in its cell's box, which for a
+hexagon is its center.
+
+::: gofish example:airport-counts-in-hexagons
+:::
+
+With `Bin.voronoi`, each row goes to its nearest seed.
+
+::: gofish example:us-airports-by-nearest-hub
+:::
+
 ## Axis
 
-The axis along `dir` is continuous, and with a key per axis both axes are. A binned time column gives a time axis
+The axis along `dir` is continuous, and with a key per axis or a binned
+struct both axes are. A binned time column gives a time axis
 whose inner row is the cells' own partition, with each label centered under
 its cell, and an outer row of the parent level (years under months). A binned
 number column gives a numeric axis. See
