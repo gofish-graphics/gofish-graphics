@@ -56,7 +56,8 @@ import type {
 } from "../channels";
 import { discretePosition } from "../data";
 import { copyColumnTypes } from "../schema";
-import { fieldNameOf } from "../data";
+import { fieldNameOf, isChunk } from "../data";
+import { splitByOf } from "../datumProjection";
 import type { MaybeValue, Value } from "../data";
 import {
   hasNormalizeOp,
@@ -1149,12 +1150,12 @@ export function createOperator<Datum, Options extends Record<string, any>>(
               layerContext
             );
             const keyStr = currentKey?.toString() ?? "";
-            // Positional key when this operator's key names no data field
-            // (no `by`, which splits by row identity; `chunk(n)`; or a key
-            // function): any ordinal folded from it is `anonymous` (renders
-            // no axis or labels). A field `by` yields data-value keys
-            // (semantic).
-            const synthetic = fieldNameOf((opts as any).by) === undefined;
+            // Positional key when this operator splits by row position (no
+            // `by`, which is `chunk(1)`, or any `chunk(n)`): any ordinal
+            // folded from it is `anonymous` (renders no axis or labels). A
+            // field `by` or a key function yields data-value keys (semantic):
+            // a function's keys label their axis, which has no title.
+            const synthetic = isChunk(splitByOf((opts as any).by));
             for (const node of leafNodes) {
               node.setKey(keyStr);
               node._syntheticKey = synthetic;

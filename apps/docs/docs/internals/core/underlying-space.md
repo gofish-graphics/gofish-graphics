@@ -1616,37 +1616,49 @@ units (`INSTANT`, `DURATION`, `COUNT` in `measure.ts`, a share) have none: a
 count or a share is a plain number, and a time axis's ticks already read as
 dates.
 
-A unit variable is named by its **quantity**: the column's declared quantity
+A quantity whose unit is declared is that unit, a concrete term, and nothing
+more: two charts that each declare their own `"value"` column, one in USD and
+one in EUR, share nothing, and a column `"count"` declared in people is not
+the `"count"` of `.count()`. Only an unknown is a variable. A unit variable
+is named by its **quantity**: the column's declared quantity
 (`HasQuantity`, from `Schema.quantity(name)`), or, for a column a transform
 derived from another, the source column's quantity (`bin(field)`'s
 `start`/`end`/`size` are amounts of `field`), or else the column's name. The
 column name is a weak default: it makes no claim, so two columns with
 different names are different quantities until a declaration or a meeting
 says otherwise. The same name is the same variable across the whole figure. A
-variable binds to another variable or to a concrete unit, and **the binding
-holds for the whole render**: a column bound to USD on one axis is USD
-everywhere, so meeting `"count"` on another axis is a clash. That is plain
-unification with a chart-wide substitution.
+variable binds to another variable or to a concrete unit only where a join
+meets them (`joinUnits`, below), and **the binding holds for the whole
+render**: a column bound to USD on one axis is USD everywhere, so meeting
+`"count"` on another axis is a clash. That is plain unification with a
+chart-wide substitution.
 
 **The union-find.** `Units` (`measure.ts`) is the union-find over the
-render's unknowns, keyed by quantity name. There is one per render, on the
-session (`RenderSession.units`), so it is figure-wide, and union-find gives
-the same classes in any order of meetings. The type walk installs it
-(`GoFishNode.resolveUnderlyingSpace`, outermost call, via `withUnits`), and
-so does the embedding pass (`resolveEmbedding`), so a
-datum value that becomes a space anywhere in the walk (`valueUnits`, used by
-`magnitude`, a point, a rect's ends, a position constraint, a `position`
-offset) takes its variable from it, bound to the value's declared unit. A
-space holds its variable (a `UnitVar` node), so reading its unit later needs
-no walk: **`spaceUnit(space)`** returns the record with the unit replaced by
-its representative, a declared unit or the unknown its class stands for. It
-is THE accessor for "which domain is this": the titles (axis elaboration)
-read through it. Two unit variables are compared with `sameUnitVar` (one
-class, or two classes bound to one declared unit), which the #582
-recentering and the embedding gate use. Read units after the walk, when
-every binding is made. Outside `withUnits` (a test calling a fold directly,
-or the layout pass's re-join of a layer's position measures), each value
-gets a fresh variable, so nothing is shared.
+render's unknowns, keyed by quantity name. `unitOf(quantity)` reads a
+quantity's unit: a declared unit is a fresh concrete term that needs no
+table, and an unknown is the variable of its name in the installed table.
+There is one table per type walk, owned by the walk's root: the render
+session's (`RenderSession.units`) when there is one, else one the root
+node of the first walk over the tree creates and keeps
+(`GoFishNode.walkUnits`). So it is figure-wide, and union-find gives the same
+classes in any order of meetings. The outermost call of the type walk
+(`GoFishNode.resolveUnderlyingSpace`) installs it with `withUnits`, and so do
+the outermost calls of the embedding pass (`resolveEmbedding`) and the
+layout pass (`GoFishNode.layout`, whose layers re-join their position
+measures in `collectPositionDomains`). So a datum value that becomes a space
+anywhere (`valueUnits`, used by `magnitude`, a point, a rect's ends, a
+position constraint, a `position` offset) takes its variable from the one
+table, and layout sees every binding the type walk made. A standalone
+`node.resolveUnderlyingSpace()` or `node.layout(...)` needs no session. A
+read outside all three passes is an engine bug, and `currentUnits` throws an
+internal error. A space holds its variable (a `UnitVar` node), so reading its
+unit later needs no walk: **`spaceUnit(space)`** returns the record with the
+unit replaced by its representative, a declared unit or the unknown its class
+stands for. It is THE accessor for "which domain is this": the titles (axis
+elaboration) read through it. Two unit variables are compared with
+`sameUnitVar` (one class, or two classes bound to one declared unit), which
+the #582 recentering and the embedding gate use. Read units after the walk,
+when every binding is made.
 
 **Joining.** One function, `joinUnits(a, b, shared, site)`, joins the
 records that meet on one axis, in every composition: overlays and alignments
@@ -1761,9 +1773,16 @@ a grouped bar chart over a column declared in dollars and one in euros:
 > unit.
 > If they are the same kind of quantity, declare the same unit for their
 > columns in the chart's schema, e.g. schema: { "Worldwide Gross":
-> Schema.unit("USD") }.
+> Schema.unit("EUR") }.
 > If they are different kinds of quantity, each needs its own axis: give the
 > inner chart its own w and h so it scales on its own.
+
+A schema is keyed by column, so the example names a column of one side, given
+the other side's unit, even when the column declares a quantity of another
+name (each class of the union-find keeps its columns beside its quantity
+names). A side read from no column, a count or a share, has no unit a schema
+can declare, so when neither side has a column the message leaves the
+example out.
 
 Each side lists the quantities bound to its unit, so a clash that a binding
 made elsewhere caused (a variable bound to USD on one axis, meeting `"count"`

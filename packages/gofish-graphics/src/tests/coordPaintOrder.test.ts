@@ -21,7 +21,6 @@ import { Constraint } from "../ast/constraints";
 import { enclose } from "../ast/graphicalOperators/enclose";
 import { intersect } from "../ast/graphicalOperators/porterDuff";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
-import { fresh } from "./testHelpers";
 
 let passed = 0;
 let failed = 0;
@@ -40,10 +39,8 @@ function ok(name: string, cond: boolean, detail?: string): void {
 async function paintOrder(layerNode: any): Promise<any[]> {
   const root: any = await coord({ transform: polar() }, [layerNode]);
   await root.resolveAliases();
-  fresh(() => {
-    root.resolveUnderlyingSpace();
-    root.resolveEmbedding();
-  });
+  root.resolveUnderlyingSpace();
+  root.resolveEmbedding();
   root.layout([400, 400], [undefined, undefined]);
   // `layer([...])` is a spec that coord materializes into a real node; flatten
   // the materialized child (leaf marks keep their identity), mirroring how

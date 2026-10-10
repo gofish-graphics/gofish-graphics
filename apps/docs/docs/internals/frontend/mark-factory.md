@@ -443,8 +443,8 @@ forms:
 - **Bag form** — applied directly to a `GoFishRef[]` (e.g. `selectAll(...)`
   or the previous tier's marks via `.layer()`): one connector through all the
   refs, UNLESS the mark is fused over a flow, in which case `ChartBuilder`
-  computes a split and partitions the bag with `splitEntries` — the same
-  helper `group()`'s `split` hook uses — producing one connector **per
+  computes a split and partitions the bag as the flow's tiers grouped its
+  rows (`splitByTiers`), producing one connector **per
   group** (e.g. `ribbon({})` fused over `stack({ by: "species" })` draws one
   band per species; see "Default grouping" below). A refs-bag chart spells
   the same split structurally instead, via an upstream `group()`.
@@ -608,10 +608,17 @@ scatterplot). The smooth curves ignore it.
 
 Either way, once the path tier index is settled, the path tier's own `by`
 orders the path and never splits; every _other_ flow tier's `by` becomes one
-term of a synthesized composite split key (`ChartBuilder`'s
-`computeDefaultBy`, built from `splitKeyFn` in datumProjection.ts — the same
-projection-through-`GoFishRef.datum` helper `splitEntries` uses, so
-string/field/function `by` forms behave identically to a real operator `by`).
+term of a composite split key (`ChartBuilder`'s `computeDefaultSplit` lists
+the tiers, and `splitByTiers` in datumProjection.ts reads them off the bag).
+Each tier keys a ref as its operator keyed the ref's rows: a field `by`
+projects through `GoFishRef.datum`, a key function reads each row, and a
+position key (`chunk(n)`, or a key function's second argument) reads the
+row's position within the tier's parent group, the group every outer tier,
+the path tier included, put it in. That is why the path tier stays in the
+list: a `chunk(5)` under a spread by category counts five rows within each
+category, as the operator did, not along the whole bag. The group's key is
+handed to the connector (`produce`'s `key`), so `time.transition()` names a
+run by it without reading a key back off a row.
 Each operator declares how it arranges its groups (`createOperator`'s
 `arrangement` config, read back by `chartBuilder.ts`'s `classifyOperator`), so
 an operator that declares nothing simply takes no part in the rule. One

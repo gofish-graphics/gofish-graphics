@@ -96,6 +96,7 @@ export const Default: StoryObj<Args> = {
             derive((rows: any[]) => chunk(rows, rows[0]?.gridRows ?? 1)),
             spread({ spacing: 1, dir: "x" }),
             // Each group holds one item, a column of dots: spread its dots.
+            // TODO(#1128): drop this unwrap of the one-item group.
             derive(([dots]) => dots),
             spread({ spacing: 1, dir: "y", reverse: true })
           )

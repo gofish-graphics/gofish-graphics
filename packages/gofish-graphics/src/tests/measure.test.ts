@@ -210,6 +210,31 @@ console.log("# measure: the join table, shared axis");
       )
     );
   });
+  fresh(() => {
+    // A declared unit is a concrete term: it binds no variable of its name.
+    declared("value", "USD");
+    ok(
+      "a declared column leaves an unknown of the same name unknown",
+      unitOf(unknown("value"))?.kind === "unknown"
+    );
+    ok(
+      "and two declared columns of one name, USD and EUR, are two units",
+      !sameUnitVar(declared("value", "USD").unit!, declared("value", "EUR").unit!)
+    );
+  });
+  ok(
+    "reading an unknown unit outside any walk is an internal error",
+    /Internal error/.test(
+      (() => {
+        try {
+          unknown("x");
+          return "";
+        } catch (e) {
+          return (e as Error).message;
+        }
+      })()
+    )
+  );
   fresh(() =>
     ok(
       "a stack whose parts have two declared units: a MeasureClash",
@@ -460,6 +485,76 @@ console.log("# measure: declared units clash");
     "count vs a column declared mm on one axis is a MeasureClash",
     countMm !== undefined && /two different units/.test(countMm),
     countMm
+  );
+  ok(
+    "its hint declares the column, never the count, in the schema",
+    countMm !== undefined &&
+      countMm.includes('schema: { "flipper": Schema.unit("count") }') &&
+      !countMm.includes('schema: { "count"'),
+    countMm
+  );
+
+  // The hint names a COLUMN, which is what a schema is keyed by, even when
+  // the column declares a quantity of another name.
+  const payEur = await errorOf(() =>
+    chart(
+      [
+        { genre: "a", q1: 10, eu: 9 },
+        { genre: "b", q1: 20, eu: 18 },
+      ],
+      {
+        schema: {
+          q1: Schema.unit("USD").quantity("Pay"),
+          eu: Schema.unit("EUR"),
+        },
+      }
+    )
+      .flow(spread({ by: "genre", dir: "x" }))
+      .mark(layer([rect({ h: "q1" }), rect({ h: "eu" })]))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "a declared quantity's clash hint names its column, not its quantity",
+    payEur !== undefined &&
+      /"USD" \("Pay"\)/.test(payEur) &&
+      payEur.includes('schema: { "q1": Schema.unit("EUR") }') &&
+      !payEur.includes('schema: { "Pay"'),
+    payEur
+  );
+
+  // A declared column is its unit, so two charts that each declare their
+  // own "value" share nothing; each scales on its own (its own w and h).
+  const values = [
+    { genre: "a", value: 1 },
+    { genre: "b", value: 2 },
+  ];
+  const valueIn = (unit: string) =>
+    chart(values, { w: 100, h: 100, schema: { value: Schema.unit(unit) } })
+      .flow(spread({ by: "genre", dir: "x" }))
+      .mark(rect({ h: "value" }));
+  const twoValues = await errorOf(() =>
+    layer([valueIn("USD"), valueIn("EUR")]).toDisplayList(SIZE)
+  );
+  ok(
+    "two charts declaring their own column of one name, USD and EUR, render",
+    twoValues === undefined,
+    twoValues
+  );
+  const counted = [
+    { genre: "a", count: 3, v: 1 },
+    { genre: "a", count: 5, v: 2 },
+    { genre: "b", count: 4, v: 2 },
+  ];
+  const peopleCount = await errorOf(() =>
+    chart(counted, { schema: { count: Schema.unit("people") } })
+      .flow(spread({ by: "genre", dir: "x" }))
+      .mark(rect({ h: field("v").count(), w: field("count").sum() }))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    'a column "count" declared people next to a .count() renders',
+    peopleCount === undefined,
+    peopleCount
   );
 
   // Chart-wide binding: "lo" meets the USD "price" on chart A's y axis, so

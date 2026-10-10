@@ -16,13 +16,18 @@ import type { ColumnType, HasCalendar, HasUnit } from "./schema";
  * concrete units on one shared axis are a type error ({@link MeasureClash};
  * the join itself is `joinUnits` in underlyingSpace.ts).
  *
- * A unit variable is named by its QUANTITY: the column's declared quantity
- * (`HasQuantity`, from `Schema.quantity(name)` or, for a column a transform
- * derived from another such as `bin()`'s edges, the source column's), else
- * the column's name. The same name is the same variable across the whole figure, and
- * a binding holds for the whole render: a column bound to USD on one axis is
- * USD everywhere, so meeting "count" on another axis is a clash. The
- * substitution lives in one {@link Units} per render (`RenderSession.units`).
+ * A quantity whose unit is declared is that unit, a concrete term: two
+ * charts that each declare their own "value" column, one USD and one EUR,
+ * share nothing. Only an UNKNOWN unit is a variable, named by its QUANTITY:
+ * the column's declared quantity (`HasQuantity`, from `Schema.quantity(name)`
+ * or, for a column a transform derived from another such as `bin()`'s edges,
+ * the source column's), else the column's name. The same name is the same
+ * variable across the whole figure, and a binding holds for the whole
+ * render: a column bound to USD on one axis is USD everywhere, so meeting
+ * "count" on another axis is a clash. A declared unit and an unknown meet
+ * only where `joinUnits` joins them. The substitution lives in one
+ * {@link Units} per type walk, owned by the walk's root (the render
+ * session's when there is one); the layout pass reads the same one.
  *
  * The unit decides which axes may share a scale. The quantity names title
  * the axis, followed by the unit's symbol when it has one: "Pay (USD)"
@@ -36,6 +41,9 @@ export type Quantity = {
   name: string;
   /** The declared unit, if any. Absent: unknown, the variable `name`. */
   unit?: HasUnit;
+  /** The column the values were read from, when they were read from one (a
+   *  count or a share was not): what a schema declares a unit for. */
+  column?: string;
   /** The calendar the values read on, when they are instants. */
   calendar?: HasCalendar;
 };
@@ -68,6 +76,7 @@ export const columnQuantity = (
   const unit = type?.HasUnit ?? (type?.HasCalendar ? INSTANT : undefined);
   return {
     name: type?.HasQuantity?.name ?? column,
+    column,
     ...(unit !== undefined ? { unit } : {}),
     ...(type?.HasCalendar ? { calendar: type.HasCalendar } : {}),
   };
@@ -75,8 +84,8 @@ export const columnQuantity = (
 
 /**
  * A unit variable, as a node of the render's union-find. A root holds the
- * unit its class is bound to, if any, and the quantity names in its class
- * (for messages). Read it with {@link resolveUnit}.
+ * unit its class is bound to, if any, and the quantity names and columns in
+ * its class (for messages). Read it with {@link resolveUnit}.
  */
 export class UnitVar {
   /** @internal union-find parent; undefined at a root. */
@@ -85,8 +94,15 @@ export class UnitVar {
   unit?: HasUnit;
   /** @internal at a root: the quantity names in the class. */
   names: string[];
-  constructor(readonly name: string) {
+  /** @internal at a root: the columns in the class, the keys a schema
+   *  declares their unit by. */
+  columns: string[];
+  constructor(
+    readonly name: string,
+    column?: string
+  ) {
     this.names = [name];
+    this.columns = column === undefined ? [] : [column];
   }
   /** The resolved unit, so a printed or hashed space shows what it means. */
   toJSON(): string {
@@ -130,10 +146,15 @@ export const sameUnitVar = (a: UnitVar, b: UnitVar): boolean => {
   return ra === rb || (ra.unit !== undefined && ra.unit.unit === rb.unit?.unit);
 };
 
-/** A fresh unit variable for quantity `name`, bound to `unit`, outside the
- *  substitution's names (so binding it binds no column). */
-export const declaredVar = (name: string, unit: HasUnit): UnitVar => {
-  const v = new UnitVar(name);
+/** A fresh unit variable for quantity `name` (read from `column`, if any),
+ *  bound to `unit`, outside the substitution's names: a declared unit is a
+ *  concrete term, so it binds no other quantity of that name. */
+export const declaredVar = (
+  name: string,
+  unit: HasUnit,
+  column?: string
+): UnitVar => {
+  const v = new UnitVar(name, column);
   v.unit = unit;
   return v;
 };
@@ -146,42 +167,43 @@ export const unionInOrder = <T>(a: T[], b: readonly T[]): T[] => {
 };
 
 /**
- * The unit substitution of one render: the variable of each quantity name,
- * and the union-find over them. One per render, so a binding made anywhere
- * in the figure holds everywhere in it.
+ * The unit substitution of one type walk: the variable of each unknown
+ * quantity's name, and the union-find over them. One per walk, so a binding
+ * made anywhere in the figure holds everywhere in it.
  */
 export class Units {
   private readonly vars = new Map<string, UnitVar>();
 
-  /** The unit variable of `q`'s name, bound to `q`'s declared unit. */
-  of(q: Quantity): UnitVar {
+  /** The variable of unknown quantity `q`'s name, shared by every unknown
+   *  quantity of that name. */
+  variable(q: Quantity): UnitVar {
     let v = this.vars.get(q.name);
     if (v === undefined) {
       v = new UnitVar(q.name);
       this.vars.set(q.name, v);
     }
-    if (q.unit === undefined) return v;
-    // Already bound to this unit, with no symbol to add: nothing to do.
-    const bound = findRoot(v).unit;
-    if (
-      bound?.unit === q.unit.unit &&
-      (q.unit.symbol === undefined || bound.symbol !== undefined)
-    )
-      return v;
-    unify(v, declaredVar(q.name, q.unit), {
-      get where() {
-        return `where the column "${q.name}" has its unit declared`;
-      },
-    });
+    if (q.column !== undefined) {
+      const root = findRoot(v);
+      root.columns = unionInOrder(root.columns, [q.column]);
+    }
     return v;
   }
 }
 
+/** The unit of quantity `q`: its declared unit, a fresh concrete term that
+ *  needs no substitution; else the variable of its name in the installed
+ *  one ({@link currentUnits}). */
+export const unitOf = (q: Quantity): UnitVar =>
+  q.unit !== undefined
+    ? declaredVar(q.name, q.unit, q.column)
+    : currentUnits().variable(q);
+
 let current: Units | undefined;
 
-/** Run `f` with `units` as the render's substitution: every datum value that
- *  becomes a space inside `f` takes its unit variable from it. The type walk
- *  (`GoFishNode.resolveUnderlyingSpace`) installs the render session's. */
+/** Run `f` with `units` as the walk's substitution: every datum value that
+ *  becomes a space inside `f` takes its unit variable from it. The root of
+ *  the type walk (`GoFishNode.resolveUnderlyingSpace`) and of the layout pass
+ *  (`GoFishNode.layout`) install the one the root owns. */
 export function withUnits<T>(units: Units, f: () => T): T {
   const prev = current;
   current = units;
@@ -195,13 +217,19 @@ export function withUnits<T>(units: Units, f: () => T): T {
 /** Whether a substitution is installed ({@link withUnits}). */
 export const hasUnits = (): boolean => current !== undefined;
 
-/** The render's substitution, or a fresh one outside {@link withUnits},
- *  where nothing is shared. The type walk and the embedding pass install the
- *  render's; the one read outside them is the layout pass's re-join of a
- *  layer's position measures (`collectPositionDomains` in constraints/
- *  index.ts), which runs after the type walk.
- *  TODO: read those measures off the resolved spaces so this can throw. */
-export const currentUnits = (): Units => current ?? new Units();
+/** The installed substitution. Every read of a unit happens inside the type
+ *  walk, the embedding pass or the layout pass, which install it, so a read
+ *  outside them is an engine bug. */
+export const currentUnits = (): Units => {
+  if (current === undefined) {
+    throw new Error(
+      "Internal error: a unit was read outside the type walk, the embedding " +
+        "pass and the layout pass, which install the walk's unit " +
+        "substitution (withUnits in measure.ts)."
+    );
+  }
+  return current;
+};
 
 /** Bind two unit variables to one class, for the whole render. Two classes
  *  bound to different declared units are a {@link MeasureClash}: two
@@ -213,8 +241,8 @@ export function unify(a: UnitVar, b: UnitVar, site: MeasureSite): UnitVar {
   if (ra === rb) return ra;
   if (ra.unit !== undefined && rb.unit !== undefined && !sameUnitVar(ra, rb)) {
     throw new MeasureClash(
-      { unit: ra.unit.unit, names: ra.names },
-      { unit: rb.unit.unit, names: rb.names },
+      { unit: ra.unit.unit, names: ra.names, columns: ra.columns },
+      { unit: rb.unit.unit, names: rb.names, columns: rb.columns },
       site
     );
   }
@@ -226,6 +254,7 @@ export function unify(a: UnitVar, b: UnitVar, site: MeasureSite): UnitVar {
       ? rb.unit
       : (ra.unit ?? rb.unit);
   ra.names = unionInOrder(ra.names, rb.names);
+  ra.columns = unionInOrder(ra.columns, rb.columns);
   return ra;
 }
 
@@ -234,8 +263,9 @@ export function unify(a: UnitVar, b: UnitVar, site: MeasureSite): UnitVar {
  *  e.g. "where marks are lined up". */
 export type MeasureSite = { axis?: 0 | 1; where: string };
 
-/** One side of a clash: its declared unit and the quantities bound to it. */
-export type ClashSide = { unit: string; names: string[] };
+/** One side of a clash: its declared unit, and the quantities and columns
+ *  bound to it (no columns when its values are a count or a share). */
+export type ClashSide = { unit: string; names: string[]; columns: string[] };
 
 /**
  * The error for two different declared units on one axis. It is raised where
@@ -275,12 +305,20 @@ export class MeasureClash extends Error {
         : `The ${axisName ?? (site.axis === 0 ? "x" : "y")} axis combines`;
     const side = (s: ClashSide) =>
       `"${s.unit}" (${s.names.map((n) => `"${n}"`).join(", ")})`;
+    // A schema declares a unit by column, so the example names a column of
+    // one side, given the other side's unit. A side with no column is a
+    // count or a share, whose unit no schema declares.
+    const [named, other] = a.columns.length > 0 ? [a, b] : [b, a];
+    const same =
+      named.columns.length > 0
+        ? `If they are the same kind of quantity, declare the same unit for ` +
+          `their columns in the chart's schema, e.g. ` +
+          `schema: { "${named.columns[0]}": Schema.unit("${other.unit}") }.\n`
+        : "";
     return (
       `${subject} two different units, ${side(a)} and ${side(b)} ` +
       `(${site.where}). One axis can show only one unit.\n` +
-      `If they are the same kind of quantity, declare the same unit for ` +
-      `their columns in the chart's schema, e.g. ` +
-      `schema: { "${a.names[0]}": Schema.unit("${a.unit}") }.\n` +
+      same +
       `If they are different kinds of quantity, each needs its own axis: ` +
       `give the inner chart its own w and h so it scales on its own.`
     );

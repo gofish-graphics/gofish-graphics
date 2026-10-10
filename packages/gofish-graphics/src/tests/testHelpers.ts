@@ -15,13 +15,16 @@ export const textsOf = (dl: any): string[] => {
   return out;
 };
 
-/** Run `f` in a fresh render's union-find of units. */
+/** Run `f` in a union-find of units of its own, for a unit-level test that
+ *  reads unknown units outside any walk. */
 export const fresh = <T>(f: () => T): T => withUnits(new Units(), f);
 
 /** The units of a column `name` declared in unit `unit` (named by it unless
- *  given), with `unit` as its symbol. */
+ *  given), with `unit` as its symbol. A declared unit is a concrete term, so
+ *  this needs no union-find. */
 export const declared = (name: string, unit = name): UnitRecord =>
-  quantityUnits({ name, unit: { unit, symbol: unit } })!;
+  quantityUnits({ name, column: name, unit: { unit, symbol: unit } })!;
 
-/** The units of a column `name` with no declared unit. */
-export const unknown = (name: string): UnitRecord => quantityUnits({ name })!;
+/** The units of a column `name` with no declared unit (inside `fresh`). */
+export const unknown = (name: string): UnitRecord =>
+  quantityUnits({ name, column: name })!;

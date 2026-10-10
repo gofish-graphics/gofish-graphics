@@ -10,8 +10,8 @@ import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
 import { fieldNameOf, isField } from "../data";
 import {
-  splitKeyFn,
   type SplitBy,
+  type TierSplit,
   type InferredRelational,
   type TimeTier,
 } from "../datumProjection";
@@ -401,28 +401,25 @@ function resolveTravelAxis(
   return flowOrderTravelAxis(classified);
 }
 
-/** The default split key: the combination of every flow tier's `by` EXCEPT
- *  the path tier's (which orders the path and never splits). `undefined`
- *  when there's nothing to split on (no other grouping tier). Reuses
- *  `splitKeyFn` (same one `splitEntries` uses) so string/field/function `by`
- *  forms all project through `GoFishRef.datum` identically to a real
- *  operator `by` — including the function-form trap: a function `by`
- *  receives the raw bag element (a `GoFishRef`), not a datum, matching
- *  today's function-form semantics. */
-function computeDefaultBy(
+/** The default split: the combination of every flow tier's `by` EXCEPT the
+ *  path tier's (which orders the path and never splits), read off the bag
+ *  by `splitByTiers`. `undefined` when there's nothing to split on (no
+ *  other grouping tier). The path tier stays in the list: a position key
+ *  (`chunk(n)`) under it counts rows within the groups it makes. Every
+ *  tier reads the refs' rows, as its operator read them. */
+function computeDefaultSplit(
   classified: OperatorClass[],
   pathTierIndex: number | undefined
-): SplitBy | undefined {
-  const tierBys: SplitBy[] = [];
+): TierSplit | undefined {
+  const tiers: SplitBy[] = [];
+  let path: number | undefined;
   classified.forEach((cls, i) => {
-    if (i === pathTierIndex) return;
-    if (cls.by !== undefined) tierBys.push(cls.by);
+    if (cls.by === undefined) return;
+    if (i === pathTierIndex) path = tiers.length;
+    tiers.push(cls.by);
   });
-  if (tierBys.length === 0) return undefined;
-  const keyFns = tierBys.map((by) => splitKeyFn(by));
-  // Unit-separator join: a bare `join("")` would collide composite keys like
-  // ("ab","c") and ("a","bc").
-  return (r: any, i: number) => keyFns.map((fn) => fn(r, i)).join("\u001f");
+  const splits = tiers.length - (path === undefined ? 0 : 1);
+  return splits === 0 ? undefined : { tiers, path };
 }
 
 /**
@@ -496,8 +493,8 @@ function applyDefaultRelational(
     pathTierIndex = findPathTierIndex(classified, travelAxis);
   }
 
-  const defaultBy = computeDefaultBy(classified, pathTierIndex);
-  if (defaultBy !== undefined) fusable.inferred.by = defaultBy;
+  const split = computeDefaultSplit(classified, pathTierIndex);
+  if (split !== undefined) fusable.inferred.split = split;
   const pathBy =
     pathTierIndex === undefined ? undefined : classified[pathTierIndex].by;
   if (pathBy !== undefined) fusable.inferred.along = pathBy;
@@ -971,16 +968,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
       composedMark = await op(composedMark);
     }
 
-    // Resolve a ref/selectAll used as chart data just before calling mark:
-    // either way the mark gets a list of refs.
-    let data = this.state.data;
-    if (data instanceof GoFishRef) {
-      data = resolveRefData(data, this.state.layerContext) as any;
-    }
-    // Type the data with the chart's schema (plus the time columns inferred
-    // from `Date` values): a copy of the array carrying the column types,
-    // which every operator reads off the data it splits.
-    data = (await applySchema(data as any, this.state.options?.schema)) as any;
+    const data = await this.resolveData();
 
     const content = (
       await resolveMarkResult(
@@ -1054,6 +1042,23 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     }
 
     return result;
+  }
+
+  /** The data this chart's mark gets, resolved where it enters. A selection
+   *  (`ref`/`selectAll`) resolves to its list of refs. A list, of rows or of
+   *  those refs, is typed with the chart's schema (plus the time columns
+   *  inferred from `Date` values): a copy carrying the column types, which
+   *  every operator reads off the data it splits. An empty scope has no data
+   *  of its own: inside `.layer(...)` it is given the previous tier's marks
+   *  (`withData`) before it resolves, so it reaches here only when rendered
+   *  on its own, and its mark gets the empty scope as it is. */
+  private async resolveData(): Promise<unknown> {
+    if (this.usesPreviousLayerMarks()) return this.state.data;
+    const data =
+      this.state.data instanceof GoFishRef
+        ? resolveRefData(this.state.data, this.state.layerContext)
+        : this.state.data;
+    return applySchema(data as any, this.state.options?.schema);
   }
 
   withLayerContext(layerContext: LayerContext): ChartBuilder<TInput, TOutput> {

@@ -12,7 +12,6 @@ import {
   type MaybeValue,
 } from "./data";
 import {
-  currentUnits,
   declaredVar,
   DURATION,
   INSTANT,
@@ -20,6 +19,7 @@ import {
   resolveUnit,
   unify,
   unionInOrder,
+  unitOf,
   type MeasureSite,
   type Quantity,
   type Unit,
@@ -423,16 +423,16 @@ export type UnitRecord = {
   titles: string[];
 };
 
-/** The units of values of quantity `q`: its unit variable (bound to its
- *  declared unit, if any) from the render's union-find, its calendar, and
- *  its name as the title. */
+/** The units of values of quantity `q`: its unit (`unitOf`: its declared
+ *  unit, else the variable of its name in the type walk's union-find), its
+ *  calendar, and its name as the title. */
 export const quantityUnits = (
   q: Quantity | undefined
 ): UnitRecord | undefined =>
   q === undefined
     ? undefined
     : {
-        unit: currentUnits().of(q),
+        unit: unitOf(q),
         ...(q.calendar ? { calendar: q.calendar } : {}),
         titles: [q.name],
       };

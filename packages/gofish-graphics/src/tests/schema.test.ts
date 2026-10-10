@@ -557,11 +557,13 @@ async function main() {
       legend.join() === "low,mid,high",
       legend.join()
     );
+    // No `by` is `chunk(1)`, a position key. (A key function returning the
+    // row's position is not the same thing: its keys are values, which
+    // label an axis when axes are on.)
     const noBy = drawn(await dots());
-    const byRow = drawn(await dots((_r: unknown, i: number) => i));
     check(
-      "no `by` renders exactly as `by` a row-identity key function",
-      noBy === byRow
+      "no `by` renders exactly as `by: chunk(1)`",
+      noBy === drawn(await dots(chunk(1)))
     );
 
     const units = Array.from({ length: 7 }, (_, i) => ({ i, k: i % 2 ? "x" : "y" }));
@@ -572,7 +574,7 @@ async function main() {
         .toDisplayList({ w: 100, h: 100 });
     const chunked = await grid(chunk(3));
     check(
-      "`by: chunk(3)` renders exactly as `by` row position over 3",
+      "with no axes, `by: chunk(3)` renders exactly as `by` row position over 3",
       drawn(chunked) ===
         drawn(await grid((_r: unknown, i: number) => Math.floor(i / 3)))
     );
@@ -588,6 +590,54 @@ async function main() {
       textsOf(chunked).every((t) => !["0", "1", "2"].includes(t)),
       textsOf(chunked).join()
     );
+    // Only a position key (no `by`, or `chunk(n)`) is synthetic. A key
+    // function's keys are values like a field's: they label a category
+    // axis, which has no title, since no field names it.
+    const eras = textsOf(
+      await chart(
+        [
+          { year: 1990, v: 1 },
+          { year: 2010, v: 3 },
+          { year: 2020, v: 2 },
+        ],
+        { axes: true }
+      )
+        .flow(
+          spread({
+            by: (d: { year: number }) => (d.year > 2000 ? "new" : "old"),
+            dir: "x",
+          })
+        )
+        .mark(rect({ w: 10, h: 10 }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a key function's category axis is labeled by its keys, with no title",
+      eras.join() === "old,new",
+      eras.join()
+    );
+    const chunkAxes = textsOf(
+      await chart(units, { axes: true })
+        .flow(spread({ by: chunk(3), dir: "x" }))
+        .mark(rect({ w: 4, h: 4 }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a `chunk(n)` key draws no axis even when axes are on",
+      chunkAxes.length === 0,
+      chunkAxes.join()
+    );
+
+    // An empty scope rendered on its own has no data: its mark gets none,
+    // and the schema has nothing to type.
+    const alone = await chart({ w: 100, h: 100 })
+      .mark(rect({ x: 0, y: 0, w: 10, h: 10 }))
+      .toDisplayList({ w: 100, h: 100 })
+      .then(
+        (dl: any) => rectsOf(dl).length,
+        (e: Error) => e.message
+      );
+    check("an empty `chart()` renders on its own", alone === 1, String(alone));
 
     const seen: unknown[] = [];
     await chart(grades)

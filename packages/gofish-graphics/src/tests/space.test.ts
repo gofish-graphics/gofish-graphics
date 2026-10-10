@@ -19,7 +19,10 @@ import {
 import { Extent, impliedExtent, niceScope } from "../ast/extent";
 import { ScopeRegistry, seatInScope } from "../ast/solver/scopes";
 import { pxOf } from "../ast/domain";
-import { GoFishNode } from "../ast/_node";
+import { debugUnderlyingSpaceTree, GoFishNode } from "../ast/_node";
+import { sameUnitVar, type UnitVar } from "../ast/measure";
+import { valueUnits } from "../ast/underlyingSpace";
+import { DatumValueImpl } from "../ast/data";
 import {
   unionChildExtents,
   unionChildSpaces,
@@ -33,7 +36,7 @@ import {
 import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
 import { positionNode } from "../ast/graphicalOperators/positionNode";
 import { value } from "../ast/data";
-import { declared, fresh } from "./testHelpers";
+import { declared } from "./testHelpers";
 import {
   resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
@@ -243,7 +246,7 @@ console.log("# space: a type hook cannot read a claim");
     },
     [leaf]
   );
-  const msg = throws(() => fresh(() => cheat.resolveUnderlyingSpace()));
+  const msg = throws(() => cheat.resolveUnderlyingSpace());
   ok(
     "reading a claim during type inference throws",
     msg !== null && /during type inference/.test(msg),
@@ -276,7 +279,8 @@ console.log("# space: position moves a claim with its data");
     []
   );
   const placed = positionNode({ y: value(10) }, [bar]);
-  const [, space] = fresh(() => placed.resolveUnderlyingSpace());
+  // Standalone, with no render session: the walk's root owns its units.
+  const [, space] = placed.resolveUnderlyingSpace();
   const [, claim] = placed.resolveExtent();
   ok(
     "the claim reaches 10σ above and below data 0",
@@ -423,6 +427,62 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
   );
 }
 
+console.log("# space: the type walk's root owns its units, and layout reads them");
+{
+  // An unknown unit "lo" read in the type hook and again in the layout
+  // hook, of a node with no render session: both reads are one variable.
+  const lo = () => valueUnits(new DatumValueImpl(1, { name: "lo" }))!.unit!;
+  let inType: UnitVar | undefined;
+  let inLayout: UnitVar | undefined;
+  const leaf = new GoFishNode(
+    {
+      type: "leaf",
+      resolveUnderlyingSpace: () => {
+        inType = lo();
+        return [UNDEFINED, UNDEFINED];
+      },
+      layout: () => {
+        inLayout = lo();
+        return {
+          intrinsicDims: [{}, {}],
+          transform: { translate: [undefined, undefined] },
+        };
+      },
+    },
+    []
+  );
+  const root = new GoFishNode(
+    {
+      type: "root",
+      resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
+      layout: (_shared, size, scales, children) => {
+        children[0].layout(size, scales);
+        return {
+          intrinsicDims: [{}, {}],
+          transform: { translate: [undefined, undefined] },
+        };
+      },
+    },
+    [leaf]
+  );
+  const standalone = throws(() => {
+    root.resolveUnderlyingSpace();
+    root.layout([100, 100], [undefined, undefined]);
+  });
+  ok("a standalone walk and layout need no session", standalone === null, standalone ?? "");
+  ok(
+    "layout reads the type walk's unit variables",
+    inType !== undefined && inLayout !== undefined && sameUnitVar(inType, inLayout)
+  );
+  const log = console.log;
+  const group = console.group;
+  console.log = console.group = () => {};
+  const dump = throws(() => debugUnderlyingSpaceTree(root));
+  console.log = log;
+  console.group = group;
+  ok("the debug dump of a standalone node works", dump === null, dump ?? "");
+}
+
 console.log("# space: a measure clash says what to do");
 {
   const gross = throws(() =>
@@ -447,7 +507,7 @@ console.log("# space: a measure clash says what to do");
   ok(
     "and suggests one declared unit or a chart of its own",
     gross !== null &&
-      gross.includes('schema: { "Worldwide Gross": Schema.unit("USD") }') &&
+      gross.includes('schema: { "Worldwide Gross": Schema.unit("EUR") }') &&
       gross.includes("give the inner chart its own w and h")
   );
   // A node names the axis from where it sits: inside a polar coord, the y
@@ -488,9 +548,7 @@ console.log("# space: a measure clash says what to do");
     [overlayNode]
   );
   polar._space = { aliases: { x: "theta", y: "r" }, type: "polar" };
-  const inPolar = throws(() =>
-    fresh(() => overlayNode.resolveUnderlyingSpace())
-  );
+  const inPolar = throws(() => overlayNode.resolveUnderlyingSpace());
   ok(
     "inside a coordinate space the axis takes the space's name",
     inPolar !== null && inPolar.startsWith("The r axis combines"),

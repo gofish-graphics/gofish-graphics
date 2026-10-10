@@ -113,13 +113,14 @@ Three pieces:
    Insertion order matters (it determines layout order). Every piece is a
    list of the items the split was given, and a split never looks inside an
    item, so an item that is itself an array is still one item. When `by` is
-   omitted, the split is by row identity, `chunk(1)` (`splitEntries` applies
+   omitted, the split is by row identity, `chunk(1)` (`splitByOf` applies
    that default, in one place): each item becomes its
    own one-item group `[item]`, keyed by its position. `chunk(size)` is a `by`
    key over row position (row `i` goes to group `floor(i / size)`), so no
-   `by` and `by: chunk(1)` are one split. A key that names no field (`chunk`,
-   or a key function) marks its keys positional (`_syntheticKey`), so they
-   draw no axis or labels. `spread`/`stack`/`group`/`scatter` all delegate to the shared `splitEntries` helper
+   `by` and `by: chunk(1)` are one split. A position key (no `by`, or any
+   `chunk(n)`) marks its keys positional (`_syntheticKey`), so they draw no
+   axis or labels. A key function's keys are values, like a field's: they
+   label a category axis, which has no title, since no field names it. `spread`/`stack`/`group`/`scatter` all delegate to the shared `splitEntries` helper
    (`datumProjection.ts`, #700) rather than a bare `Map.groupBy`: it groups by
    `by` first (a `field(...)` accessor groups by its `.name`, identically to a
    bare string), then applies any pipeline ops the accessor carries — see

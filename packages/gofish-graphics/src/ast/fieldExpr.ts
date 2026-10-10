@@ -30,7 +30,7 @@
 import sumBy from "lodash/sumBy";
 import meanBy from "lodash/meanBy";
 import type { MaybeValue } from "./data";
-import { columnQuantity, COUNT_COLUMN, type Quantity } from "./measure";
+import { COUNT, type Quantity } from "./measure";
 import { withWire, wireOf } from "./wire";
 
 export type FieldOp =
@@ -367,8 +367,8 @@ export function evalFieldValues<T>(
   }
 }
 
-/** What `.count()` and `.distinct()` report: counts. */
-const COUNT_QUANTITY: Quantity = columnQuantity("count", COUNT_COLUMN);
+/** What `.count()` and `.distinct()` report: counts, read from no column. */
+const COUNT_QUANTITY: Quantity = { name: "count", unit: COUNT };
 
 /** The "not yet supported" error for `normalize()` outside its one valid
  *  slot (an operator's entry-flagged `size` channel), shared so every other

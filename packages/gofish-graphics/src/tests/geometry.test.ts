@@ -11,7 +11,6 @@ import { Polygon } from "../ast/shapes/polygon";
 import { Pack } from "../ast/graphicalOperators/pack";
 import { defaultGeometry, GoFishNode } from "../ast/_node";
 import { enclosingCircle, translateCircle, type Circle } from "../ast/geometry";
-import { fresh } from "./testHelpers";
 
 let passed = 0;
 let failed = 0;
@@ -33,7 +32,7 @@ const show = (c: Circle) =>
   `(${c.cx.toFixed(3)}, ${c.cy.toFixed(3)}, r=${c.r.toFixed(3)})`;
 
 function layOut<T extends GoFishNode>(node: T): T {
-  fresh(() => node.resolveUnderlyingSpace());
+  node.resolveUnderlyingSpace();
   node.layout([400, 400], [undefined, undefined]);
   return node;
 }

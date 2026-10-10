@@ -5,7 +5,7 @@
 import { Interval } from "./dims";
 import { FieldExpr, type FieldOp } from "./fieldExpr";
 import type { ColumnType } from "./schema";
-import { currentUnits, sameUnitVar, type Quantity } from "./measure";
+import { sameUnitVar, unitOf, type Quantity } from "./measure";
 
 export type { FieldOp } from "./fieldExpr";
 export { FieldExpr } from "./fieldExpr";
@@ -274,10 +274,10 @@ export const getValue = <T>(value: MaybeValue<T>): T => {
 export const getQuantity = <T>(value: MaybeValue<T>): Quantity | undefined =>
   isValue(value) ? (value as DatumValue).quantity : undefined;
 
-/** Whether two values are in the same unit, read through the render's
- *  union-find (`currentUnits`): one declared unit, or one class of
- *  unknowns. Two values with no quantity (literals) are; a literal and a
- *  column's value are not. */
+/** Whether two values are in the same unit, read through the type walk's
+ *  union-find (`unitOf`): one declared unit, or one class of unknowns. Two
+ *  values with no quantity (literals) are; a literal and a column's value
+ *  are not. */
 export const sameValueUnit = <T>(
   a: MaybeValue<T>,
   b: MaybeValue<T>
@@ -285,8 +285,7 @@ export const sameValueUnit = <T>(
   const qa = getQuantity(a);
   const qb = getQuantity(b);
   if (qa === undefined || qb === undefined) return qa === qb;
-  const units = currentUnits();
-  return sameUnitVar(units.of(qa), units.of(qb));
+  return sameUnitVar(unitOf(qa), unitOf(qb));
 };
 
 /**

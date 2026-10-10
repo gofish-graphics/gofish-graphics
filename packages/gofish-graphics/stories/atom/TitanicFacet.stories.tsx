@@ -56,6 +56,7 @@ export const Default: StoryObj<Args> = {
               // partial last row lands at the top), like a waffle that grows up.
               spread({ spacing: 2, dir: "y", reverse: true }),
               // Each group holds one item, a row of dots: spread its dots.
+              // TODO(#1128): drop this unwrap of the one-item group.
               derive(([dots]) => dots),
               spread({ spacing: 2, dir: "x" })
             )

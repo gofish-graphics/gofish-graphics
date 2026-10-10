@@ -63,11 +63,7 @@ import {
   mask as Mask,
 } from "../graphicalOperators/porterDuff";
 import type { RelateFn } from "../constraints";
-import {
-  splitEntries,
-  type SplitBy,
-  type InferredRelational,
-} from "../datumProjection";
+import { splitByTiers, type InferredRelational } from "../datumProjection";
 
 export type { Mark, Operator };
 export { generatedRect as rect };
@@ -429,8 +425,8 @@ export function selectAll(
 //                         one connector through all the refs
 //       · split bag form — a fused mark's split is computed by `ChartBuilder`
 //                         from the flow it fuses over (see `along` below) and
-//                         partitions the bag with the same `splitEntries`
-//                         used by `group()`'s `split` hook, producing one
+//                         partitions the bag as the flow's tiers grouped its
+//                         rows (`splitByTiers`), producing one
 //                         connector PER GROUP. A refs-bag chart spells the
 //                         same shape structurally instead: `chart(selectAll(
 //                         ...)).flow(group({ by: "species" })).mark(ribbon())`.
@@ -629,7 +625,10 @@ export function createRelationalMark<O extends Record<string, unknown>>(
   produce: (
     opts: StripLive<O>,
     children: GoFishAST[],
-    inferred: InferredRelational
+    inferred: InferredRelational,
+    /** The key of the group of the default split this connector threads;
+     *  undefined when the bag is not split. */
+    key?: string
   ) => any,
   config: {
     /** A TEMPORAL connector (`time.transition()`): its path tier is the
@@ -796,7 +795,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     // from `opts` (see `tagRelationalFusable`'s doc comment). `opts.dir`, if
     // given, still wins over the inferred travel direction.
     const mark: Mark<GoFishRef[]> = async (d: GoFishRef[]) => {
-      const by = inferred.by;
+      const split = inferred.split;
       const dir = (opts as any).dir ?? inferred.dir;
       // Only allocate a copy when there's actually an inferred `dir` to
       // splice in — `produce` (line/ribbon's Connect call) reads `o.dir` off
@@ -807,13 +806,10 @@ export function createRelationalMark<O extends Record<string, unknown>>(
           ? ({ ...opts, dir } as O)
           : opts;
 
-      if (by !== undefined) {
-        const entries = splitEntries(by, d as any[]) as Map<
-          string | number,
-          GoFishRef[]
-        >;
+      if (split !== undefined) {
+        const entries = splitByTiers(split, d);
         const nodes = await Promise.all(
-          [...entries.values()].map(async (groupRefs) => {
+          [...entries].map(async ([key, groupRefs]) => {
             const groupOpts = await resolveGroupPaint(
               type,
               baseOpts,
@@ -824,7 +820,8 @@ export function createRelationalMark<O extends Record<string, unknown>>(
               (await produce(
                 resolveLive(groupOpts, datum),
                 groupRefs,
-                inferred
+                inferred,
+                key
               )) as GoFishNode,
               groupRefs,
               datum
