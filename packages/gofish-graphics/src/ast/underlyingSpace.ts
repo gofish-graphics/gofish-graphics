@@ -406,10 +406,20 @@ export const withCells = <T extends CONTINUOUS_TYPE>(
 ): T => (cells === undefined ? space : { ...space, cells });
 
 /**
- * The cells of a union of parts on one axis: every part's cells, in order of
- * their starts, each once, when every part holds cells; undefined when any
- * part does not (an axis that also places points is not over cells), or
- * when there are no parts.
+ * The cells of a union of parts on one axis, when they are the cells of one
+ * partition of the line: every part's cells, in order of their starts, each
+ * once. Undefined when any part does not hold cells (an axis that also places
+ * points is not over cells), when there are no parts, and when the cells are
+ * not of one partition, as two parts binned differently are not:
+ *
+ *  - no two cells overlap (a cell in two parts is one interval in both, so
+ *    `[0, 10)` and `[5, 10)` are of two partitions), and
+ *  - calendar cells share a calendar partition (`sameCells`): an axis over
+ *    calendar cells labels them all by one partition's rows.
+ *
+ * That is what the parts agree on, not how they were binned: a `{ step }`
+ * over two domains gives cells of one partition, and a `{ thresholds }`
+ * fitted to two domains may not.
  */
 export const mergeCells = (
   parts: (readonly Cell[] | undefined)[]
@@ -417,9 +427,23 @@ export const mergeCells = (
   if (parts.length === 0 || parts.some((p) => p === undefined))
     return undefined;
   if (parts.length === 1) return parts[0];
-  const byId = new Map<string, Cell>();
-  for (const part of parts) for (const c of part!) byId.set(c.id, c);
-  return [...byId.values()].sort((a, b) => a.start - b.start);
+  const all = (parts as (readonly Cell[])[])
+    .flat()
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+  const partition = all[0]?.calendar?.partition;
+  const out: Cell[] = [];
+  for (const c of all) {
+    const p = c.calendar?.partition;
+    if (p === undefined ? partition !== undefined : !p.sameCells(partition))
+      return undefined;
+    const prev = out[out.length - 1];
+    // The same cell, from another part: the later part's stands for it.
+    if (prev !== undefined && prev.start === c.start && prev.end === c.end)
+      out[out.length - 1] = c;
+    else if (prev !== undefined && c.start < prev.end) return undefined;
+    else out.push(c);
+  }
+  return out;
 };
 
 /** `space` on `calendar` (see {@link CONTINUOUS_TYPE.calendar}), or `space`

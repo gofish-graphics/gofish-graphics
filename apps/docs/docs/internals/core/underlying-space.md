@@ -369,7 +369,9 @@ node its cell (`keyCell`, set in `createOperator` beside the key, which is
 the cell's id), the distribute fold reads a child's cell as its key
 (`keyOf` in `compose.ts`), and `ordinalOver` builds the ordinal over those
 keys, with the cells when every key is a cell of a line. `unionChildSpaces`
-keeps them when every unioned ordinal has them (`mergeCells`). The type is what tells the axis it
+keeps them when every unioned ordinal has them and they are the cells of one
+partition (`mergeCells`, see [Partition](#partition-each-group-in-its-cell)).
+The type is what tells the axis it
 places cells, not points: an axis over cells labels each cell between its
 boundary ticks ([Axes](/internals/frontend/axes)). It is read off the
 space, never off a datatype flag on the column.
@@ -2074,7 +2076,13 @@ column gives a time axis). `collectPositionDomains` reads a region's spans
 as it reads an interval (the domain, the measure, the calendar), and
 collects its cell when it is a cell of a line placed along that axis, so
 the layer's type on that axis holds the cells (`CONTINUOUS_TYPE.cells`). A union keeps them only when every part has them
-(`mergeCells`), as an ordinal over cells does. The type is what tells the
+and they are the cells of one partition (`mergeCells`), as an ordinal over
+cells does. That is read off the cells, not off how they were binned: no two
+cells overlap (a cell in two parts is one interval in both, so `[0, 10)` and
+`[5, 10)` are of two partitions), and calendar cells share a calendar
+partition (`CalendarPartition.sameCells`), since a time axis labels them all
+by one partition's rows. A `{ step }` over two domains gives the cells of one
+partition; a `{ thresholds }` fitted to two domains may not. The type is what tells the
 axis that it places cells: a time axis over calendar cells ticks at their
 partition and labels each cell between its two boundary ticks
 ([Axes](/internals/frontend/axes)). A numeric axis over numeric cells keeps

@@ -16,6 +16,7 @@ import * as GoFish from "../../dist/index.js";
 import "../lib";
 import { spawnSync } from "node:child_process";
 import { binCells, checkPartition, Cell } from "../ast/cells";
+import { mergeCells } from "../ast/underlyingSpace";
 import { inferPos } from "../ast/channels";
 import { evalFieldValues } from "../ast/fieldExpr";
 import { Calendar, loadTemporal } from "../ast/calendar";
@@ -855,6 +856,49 @@ async function main() {
         message
       );
     }
+  }
+
+  console.log("\n# a union of cells");
+  {
+    const cell = (start: number, end: number) =>
+      new Cell(start, end, `${start}–${end}`);
+    const ids = (cells: readonly Cell[] | undefined) =>
+      cells === undefined ? "none" : cells.map((c) => c.id).join(" ");
+    const sameStep = mergeCells([
+      [cell(0, 10), cell(10, 20)],
+      [cell(10, 20), cell(20, 30)],
+    ]);
+    check(
+      "the cells of one partition over two domains are one set of cells",
+      ids(sameStep) === "0 10 20",
+      ids(sameStep)
+    );
+    const overlapping = mergeCells([
+      [cell(0, 10), cell(10, 20)],
+      [cell(5, 10), cell(10, 20)],
+    ]);
+    check(
+      "cells of two partitions that overlap are not cells of one",
+      overlapping === undefined,
+      ids(overlapping)
+    );
+    const sameStart = mergeCells([[cell(0, 10)], [cell(0, 5)]]);
+    check(
+      "two cells that start together but end apart are not cells of one",
+      sameStart === undefined,
+      ids(sameStart)
+    );
+    const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
+    const calendarCells = (p: any, lo: string, hi: string) =>
+      binCells(p, [t(lo), t(hi)], "UTC", "t").cells;
+    const months = calendarCells(Calendar.month, "2024-01-10", "2024-01-20");
+    const days = calendarCells(Calendar.day, "2024-03-04", "2024-03-06");
+    const mixed = mergeCells([months, days]);
+    check(
+      "calendar cells of two partitions are not cells of one, even apart",
+      mixed === undefined,
+      ids(mixed)
+    );
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);
