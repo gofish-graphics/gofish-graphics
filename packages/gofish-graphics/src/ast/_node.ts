@@ -1538,8 +1538,8 @@ export class GoFishNode {
   /** The node's parent-frame offset (`transform.translate`) as a DERIVED VIEW of
    *  the ledger — `ledger.min − localMin` on a fully solved axis, else the written
    *  `transform.translate` (the unplaced/under-determined fallback). Uses the
-   *  CURRENT `intrinsicDims.min` (a rank-2 `setExtent` resets it to 0), never a
-   *  stale local box. */
+   *  CURRENT `intrinsicDims.min` (a rank-2 `setExtent` keeps it and sets the
+   *  size), never a stale local box. */
   private _projectTranslate(dir: Direction): number | undefined {
     const ledger = this._bbox?.[dir];
     if (!ledger?.solved) return this.transform?.translate?.[dir];
@@ -1637,8 +1637,9 @@ export class GoFishNode {
    * Write a node's per-axis extent from OWNED bbox keys (min/max/center/size)
    * — the bbox-backed primitive that `span` and an authoritative `position` pin
    * share. Two or more owned keys DETERMINE the box (size included — the
-   * size-setting case, e.g. span's two edges), so the local box is reset to
-   * `[0, size]` and the translate to the absolute min. A single owned key is a
+   * size-setting case, e.g. span's two edges): the local box keeps its min and
+   * takes the size, and the translate is the absolute min less that local
+   * min. A single owned key is a
    * position pin: the size comes from the node's own layout (the second
    * equation), the local box is left intact, and only the translate moves — so
    * the pin OVERRIDES a self-placed translate, which the write-once `place()`
@@ -1647,8 +1648,8 @@ export class GoFishNode {
    *
    * The rank-2 solve writes through the PERSISTENT per-axis ledger
    * ({@link _bbox}) so it mirrors the node's authoritative geometry: a
-   * determining constraint resets the axis (overriding the self-layout seed),
-   * matching the local-frame reset below. Cross-call over-determination
+   * determining constraint resets the axis's ledger (overriding the
+   * self-layout seed). Cross-call over-determination
    * detection (two constraints fighting over one axis) waits on the authority
    * model — a self-layout default vs a hard constraint pin.
    */
@@ -1680,9 +1681,8 @@ export class GoFishNode {
 
     // Rank-2: two+ owned keys DETERMINE the box (size included). This is an
     // overriding determination — it discards whatever the node's own layout seed
-    // (or an earlier pin) recorded for this axis, exactly as it resets the local
-    // frame to [0, size] at the absolute min. So the persistent ledger is RESET
-    // to hold just these keys — and is now the SOLE record of this axis's
+    // (or an earlier pin) recorded for this axis. So the persistent ledger is
+    // RESET to hold just these keys — and is now the SOLE record of this axis's
     // position.
     this._bbox ??= [undefined, undefined];
     const bbox = (this._bbox[dir] = new BBox());
