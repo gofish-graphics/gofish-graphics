@@ -312,9 +312,9 @@ async function main() {
       { x: [0], y: [0] },
     ],
     [
-      "position operator, pixel offset: detaches the child on that axis",
+      "position operator, pixel offset: the child stays shared (it moves paint, not data)",
       () => planOf(positionNode({ x: 20, y: v(1) }, [box()])),
-      { x: [1], y: [0] },
+      { x: [0], y: [0] },
     ],
     [
       "offset: nothing, its child shares",

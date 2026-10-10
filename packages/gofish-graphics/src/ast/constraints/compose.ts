@@ -402,9 +402,9 @@ export function planConstraintComposition(
 //
 // This is a layer's sharing rule. Each node type has its own rule, next to its
 // type hook (`ResolveSharing` in `_node.ts`), and `GoFishNode.sharing()`
-// applies it. Three rows of the note's table are node-level rules rather than
-// constraints: a data-valued `w`/`h` (`layer.tsx`, which adds to this plan),
-// `treemap` (`treemap.tsx`) and the `position` operator (`positionNode.tsx`).
+// applies it. Two rows of the note's table are node-level rules rather than
+// constraints: a data-valued `w`/`h` (`layer.tsx`, which adds to this plan)
+// and `treemap` (`treemap.tsx`). A node with no rule shares every child.
 // The plans are read by the layer's type hook (its own union is its own set),
 // by the keyed domain table (`keyedDomains.ts`), by the layer's placement
 // (which children its frame positions by data), and by the

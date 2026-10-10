@@ -14,7 +14,6 @@ import {
 import { GoFishAST } from "../_ast";
 import { Extent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
-import { positionCoordKind } from "../constraints/position";
 
 export type PositionNodeOptions = {
   key?: string;
@@ -77,17 +76,13 @@ export const positionNode = (
     {
       type: "position",
       key: options.key,
-      // A datum offset moves the child in data, so the child stays shared. A
-      // pixel offset places it elsewhere, so it is detached on that axis, as
-      // a literal `Constraint.position` detaches its child.
-      resolveSharing: (childNodes) => {
-        const set = (offset: MaybeValue<number> | undefined) =>
-          childNodes.map(() => (positionCoordKind(offset) === "pixel" ? 1 : 0));
-        return {
-          sets: [set(options.x), set(options.y)],
-          nested: [new Set(), new Set()],
-        };
-      },
+      // The child stays shared on both axes (the default rule, `shareAll`),
+      // and the type hook below reports its type upward. A datum offset
+      // moves the child in data, so the content and the offset are one
+      // unit. A pixel offset moves only paint, as `.translate()` does: the
+      // child's data still reads in its parent's frame. (A literal
+      // `Constraint.position` in a layer is different: it places its child
+      // elsewhere, so it detaches it.)
       resolveUnderlyingSpace: (children: Size<UnderlyingSpace>[]) => {
         const child = children[0] ?? [UNDEFINED, UNDEFINED];
         return [
