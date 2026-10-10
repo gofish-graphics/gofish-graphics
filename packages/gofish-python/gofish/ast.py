@@ -1915,7 +1915,7 @@ def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
 
 def partition(
     *,
-    by: Union["FieldAccessor", Dict[str, "FieldAccessor"]],
+    by: Union["FieldAccessor", Dict[str, "FieldAccessor"], "StructAccessor"],
     dir: Optional[str] = None,
     **options: Any,
 ) -> Operator:
@@ -1941,10 +1941,19 @@ def partition(
             })
         ).mark(region(fill=field("IMDB Rating").count()))
 
+    With two fields binned together, ``struct(x=..., y=...).bin(...)``, it
+    divides the plane into the polygon cells of a ``Bin`` call, hexagons or
+    Voronoi cells:
+
+        chart(airports).flow(
+            partition(by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=1)))
+        ).mark(region(fill=field("longitude").count()))
+
     Args:
         by: A key that has a region: a binned field, ``field(x).bin(...)``,
-            or a dict of one per axis, ``{"x": ..., "y": ...}``. A plain
-            field has no region and is an error.
+            a dict of one per axis, ``{"x": ..., "y": ...}``, or a binned
+            struct, ``struct(x=..., y=...).bin(...)``. A plain field, or a
+            struct with no bin, has no region and is an error.
         dir: The axis to divide: ``"x"``, ``"y"``, or an axis name the
             enclosing coordinate space declares. Required with a single key,
             and not allowed with a key per axis.
@@ -1969,7 +1978,23 @@ def partition(
                 f"value an equal slot instead, use spread(by=..., dir=...)."
             )
 
-    if isinstance(by, dict) and not isinstance(by, FieldAccessor):
+    if isinstance(by, StructAccessor):
+        if not by.get("ops"):
+            fields = by["fields"]
+            raise ValueError(
+                f"partition: `by` must be a key that has a region, and "
+                f'struct(x="{fields["x"]}", y="{fields["y"]}") has none until '
+                f"it is binned: add .bin(Bin.hex(radius=...)) or "
+                f".bin(Bin.voronoi(seeds=...)), so each group is placed in its "
+                f"cell."
+            )
+        if dir is not None or "alignment" in options:
+            raise ValueError(
+                "partition: a struct key divides both axes at once, so `dir` "
+                "and `alignment` do not apply. Each child is placed in its "
+                "cell."
+            )
+    elif isinstance(by, dict) and not isinstance(by, FieldAccessor):
         if sorted(by) != ["x", "y"]:
             raise ValueError(
                 f"partition: a `by` keyed by axis takes exactly the keys x "
@@ -2930,6 +2955,66 @@ def field(name: str, measure: Optional[str] = None) -> FieldAccessor:
     if measure is not None:
         out["measure"] = measure
     return out
+
+
+class StructAccessor(dict):
+    """
+    The ``{type: "struct", fields: {x, y}, ops?}`` wire shape: a key that
+    reads two fields at once, built by :func:`struct`. Mirrors JS's
+    ``StructExpr`` (``ast/structExpr.ts``). Its one op is ``bin``, which takes
+    a call in the ``Bin`` family; the JS side bins the rows.
+    """
+
+    def bin(self, cells: Dict[str, Any]) -> "StructAccessor":
+        """Map each row's point ``(x, y)`` to its cell in ``cells``, a call
+        in the ``Bin`` family: ``Bin.hex(radius=...)`` or
+        ``Bin.voronoi(seeds=...)``. The groups are the cells over the two
+        columns' domain in the chart's data, so every group of a split sees
+        the same cells, and empty cells are kept. Emits the wire op
+        ``{"op": "bin", "partition": ...}``."""
+        from ._generated import _OPTION_TYPES, _to_wire
+
+        if self.get("ops"):
+            raise ValueError(
+                "struct(...).bin(...) is already binned: a struct takes one bin."
+            )
+        if not isinstance(cells, dict) or "kind" not in cells:
+            raise TypeError(
+                "struct(...).bin: expected a call in the Bin family, "
+                f"Bin.hex(radius=...) or Bin.voronoi(seeds=...), got {cells!r}"
+            )
+        out = StructAccessor(self)
+        out["ops"] = [
+            {
+                "op": "bin",
+                "partition": _to_wire(_OPTION_TYPES["Bin"], cells, "struct(...).bin"),
+            }
+        ]
+        return out
+
+
+def struct(*, x: str, y: str) -> StructAccessor:
+    """
+    A key that reads two fields at once, named after polars' ``pl.struct``:
+    ``struct(x="lon", y="lat")``. ``x`` and ``y`` name the column read on each
+    axis. Bin it with ``.bin(...)``, a call in the ``Bin`` family, to give
+    each group its cell of the plane:
+
+        chart(airports).flow(
+            partition(by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=1)))
+        ).mark(region(fill=field("longitude").count()))
+
+    Mirrors JS ``struct({ x, y })``. A struct is a key only once it is binned.
+
+    Args:
+        x: The column read on the x axis.
+        y: The column read on the y axis.
+    """
+    if not isinstance(x, str) or not isinstance(y, str):
+        raise TypeError(
+            f"struct(x=..., y=...): each is a field name, got x={x!r}, y={y!r}"
+        )
+    return StructAccessor({"type": "struct", "fields": {"x": x, "y": y}})
 
 
 # Data utilities (for use inside derive() callbacks)

@@ -37,9 +37,11 @@ from gofish import (
     spread,
     scatter,
     stack,
+    struct,
     table,
     text,
     treemap,
+    Bin,
     Color,
     Overlap,
     Tile,
@@ -147,6 +149,51 @@ def test_partition_key_per_axis_checks():
         partition(by={"x": a, "y": field("b")})
     with pytest.raises(ValueError, match="`dir` names the axis"):
         partition(by=a)
+
+
+def test_partition_serializes_a_binned_struct():
+    key = struct(x="lon", y="lat").bin(Bin.hex(radius={"x": 2, "y": 500}))
+    d = partition(by=key).to_dict()
+    assert "dir" not in d
+    assert d["by"] == {
+        "type": "struct",
+        "fields": {"x": "lon", "y": "lat"},
+        "ops": [{"op": "bin", "partition": {"kind": "hex", "radius": {"x": 2, "y": 500}}}],
+    }
+    seeds = [{"lon": 1, "lat": 2}]
+    v = struct(x="lon", y="lat").bin(Bin.voronoi(seeds=seeds))
+    assert v["ops"][0]["partition"] == {"kind": "voronoi", "seeds": seeds}
+
+
+def test_partition_struct_checks():
+    with pytest.raises(ValueError, match="has none until it is binned"):
+        partition(by=struct(x="a", y="b"))
+    key = struct(x="a", y="b").bin(Bin.hex(radius=1))
+    with pytest.raises(ValueError, match="divides both axes at once"):
+        partition(by=key, dir="x")
+    with pytest.raises(ValueError, match="already binned"):
+        key.bin(Bin.hex(radius=1))
+    with pytest.raises(TypeError, match="Bin family"):
+        struct(x="a", y="b").bin({"step": 1})
+
+
+def test_bin_factories_check_their_params():
+    assert Bin.hex(radius=0.5) == {"kind": "hex", "radius": 0.5}
+    with pytest.raises(ValueError, match="must be > 0"):
+        Bin.hex(radius=0)
+    with pytest.raises(TypeError, match="missing the key 'y'"):
+        Bin.hex(radius={"x": 1})
+    with pytest.raises(TypeError, match="unexpected key 'z'"):
+        Bin.hex(radius={"x": 1, "y": 1, "z": 1})
+    with pytest.raises(ValueError, match=r"\['x'\] must be > 0"):
+        Bin.hex(radius={"x": -1, "y": 1})
+
+
+def test_voronoi_seeds_take_a_dataframe():
+    import pandas as pd
+
+    rows = Bin.voronoi(seeds=pd.DataFrame({"lon": [1.5, 2.0], "lat": [3.0, 4.0]}))
+    assert rows["seeds"] == [{"lon": 1.5, "lat": 3.0}, {"lon": 2.0, "lat": 4.0}]
 
 
 def test_region_takes_paint_only():

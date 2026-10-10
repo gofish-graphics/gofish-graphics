@@ -59,6 +59,7 @@ from .ast import (
     polygon,
     datum,
     field,
+    struct,
 )
 from .datum_projection import pluck
 from .charts import bar_chart
@@ -66,6 +67,7 @@ from .charts import bar_chart
 # Strategy families (#1013): one module per family, with a lowercase file
 # name, bound here under its capitalized name. `Curve.monotone` and
 # `from gofish.curve import monotone` are the same function.
+from . import bin as Bin
 from . import color as Color
 from . import coord as Coord
 from . import curve as Curve
@@ -129,8 +131,10 @@ __all__ = [
     "polygon",
     "datum",
     "field",
+    "struct",
     "pluck",
     "bar_chart",
+    "Bin",
     "Color",
     "Coord",
     "Curve",
