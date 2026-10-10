@@ -831,10 +831,14 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
 
 /** The refs a field may name that are not `OPTION_TYPES` entries: shapes
  *  authored by hand in schema.ts / jsonSchema.ts and walked by their own
- *  validator walkers. `pyClass` names the Python class that builds a value. */
-export const AUTHORED_REFS: Readonly<Record<string, { pyClass?: string }>> = {
-  FieldAccessor: { pyClass: "FieldAccessor" },
-  StructAccessor: { pyClass: "StructAccessor" },
+ *  validator walkers. `pyClass` names the Python class that builds a value;
+ *  `tag` is the value's `type` field, which tells it apart from the other
+ *  branches of a union (validate.ts). */
+export const AUTHORED_REFS: Readonly<
+  Record<string, { pyClass?: string; tag?: string }>
+> = {
+  FieldAccessor: { pyClass: "FieldAccessor", tag: "field" },
+  StructAccessor: { pyClass: "StructAccessor", tag: "struct" },
   LabelIR: {},
   TranslateIR: {},
   RelateClauseIR: {},
@@ -1304,16 +1308,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
     doc: "Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.",
     fields: {
       by: {
-        type: t.union(
-          t.ref("FieldAccessor"),
-          t.object({
-            x: { type: t.ref("FieldAccessor"), required: true },
-            y: { type: t.ref("FieldAccessor"), required: true },
-          }),
-          t.ref("StructAccessor")
-        ),
+        type: t.union(t.ref("FieldAccessor"), t.ref("StructAccessor")),
         required: true,
-        doc: "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.",
+        doc: "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.",
       },
       dir: {
         type: t.string,

@@ -125,16 +125,14 @@ def test_partition_requires_a_key_with_a_region():
             partition(by=by, dir="x")
 
 
-def test_partition_serializes_a_key_per_axis():
+def test_partition_key_per_axis_is_two_partitions():
     a = field("a").bin(step=1)
     b = field("b").bin(step=0.5)
-    d = partition(by={"x": a, "y": b}).to_dict()
-    assert d["type"] == "partition"
-    assert "dir" not in d
-    assert d["by"] == {
-        "x": {"type": "field", "name": "a", "ops": [{"op": "bin", "partition": {"step": 1}}]},
-        "y": {"type": "field", "name": "b", "ops": [{"op": "bin", "partition": {"step": 0.5}}]},
-    }
+    product = partition(by={"x": a, "y": b})
+    assert [op.to_dict() for op in product.operators] == [
+        partition(by=a, dir="x").to_dict(),
+        partition(by=b, dir="y").to_dict(),
+    ]
 
 
 def test_partition_key_per_axis_checks():

@@ -36,6 +36,7 @@ import {
   isTaggedInfinity,
 } from "./nonFinite.js";
 import {
+  AUTHORED_REFS,
   LABEL_OPTIONS,
   OPTION_TYPES,
   acceptedFields,
@@ -388,21 +389,23 @@ function walkFieldType(
       walkRefType(type.name, value, path, ctx);
       return;
     case "union": {
-      // A tagged union (every branch an object whose `kind` is a literal):
-      // the value's `kind` picks the one branch to check it against, as the
-      // Python generator's `_to_wire` does, so an unknown kind and a bad
-      // param each get their own message.
-      const tags = taggedBranches(type.options);
-      if (tags !== null) {
+      // A tagged union (every branch an object whose `kind` is a literal, or
+      // every branch a ref tagged by its `type`, as `field(...)` and
+      // `struct(...)` are): the value's tag picks the one branch to check it
+      // against, as the Python generator's `_to_wire` does, so an unknown
+      // tag and a bad param each get their own message.
+      const tagged = taggedBranches(type.options);
+      if (tagged !== null) {
+        const { key, byTag } = tagged;
         if (!isObject(value)) {
           fail(`expected object, got ${typeNameOf(value)}`);
           return;
         }
-        const branch = tags.get(value.kind as string);
+        const branch = byTag.get(value[key] as string);
         if (branch === undefined) {
           fail(
-            `unknown kind ${JSON.stringify(value.kind)}; expected one of ${[...tags.keys()].map((k) => JSON.stringify(k)).join(", ")}`,
-            `${path}.kind`
+            `unknown ${key} ${JSON.stringify(value[key])}; expected one of ${[...byTag.keys()].map((k) => JSON.stringify(k)).join(", ")}`,
+            `${path}.${key}`
           );
           return;
         }
@@ -473,27 +476,42 @@ function walkFieldType(
   }
 }
 
-/** The branches of a tagged union by their `kind`: every branch an object
- *  whose required `kind` field is a string literal, no two alike. Null for
- *  any other union. */
+/** A branch's tag: the field that names it, and its value. An object
+ *  whose required `kind` field is a string literal (a strategy) is tagged
+ *  by its `kind`; a hand-authored ref with a `tag` (`field(...)`,
+ *  `struct(...)`, AUTHORED_REFS) by its `type`. */
+function branchTag(
+  branch: FieldType
+): { key: "kind" | "type"; value: string } | null {
+  if (branch.kind === "ref") {
+    const tag = AUTHORED_REFS[branch.name]?.tag;
+    return tag === undefined ? null : { key: "type", value: tag };
+  }
+  if (branch.kind !== "object") return null;
+  const tag = branch.fields.kind;
+  return tag !== undefined &&
+    tag.required &&
+    tag.type.kind === "literal" &&
+    typeof tag.type.value === "string"
+    ? { key: "kind", value: tag.type.value }
+    : null;
+}
+
+/** The branches of a tagged union by their tag: every branch tagged by the
+ *  same field ({@link branchTag}), no two alike. Null for any other union. */
 function taggedBranches(
   options: readonly FieldType[]
-): Map<string, FieldType> | null {
-  const byKind = new Map<string, FieldType>();
+): { key: "kind" | "type"; byTag: Map<string, FieldType> } | null {
+  const byTag = new Map<string, FieldType>();
+  let key: "kind" | "type" | undefined;
   for (const branch of options) {
-    if (branch.kind !== "object") return null;
-    const tag = branch.fields.kind;
-    if (
-      tag === undefined ||
-      !tag.required ||
-      tag.type.kind !== "literal" ||
-      typeof tag.type.value !== "string" ||
-      byKind.has(tag.type.value)
-    )
-      return null;
-    byKind.set(tag.type.value, branch);
+    const tag = branchTag(branch);
+    if (tag === null || (key !== undefined && tag.key !== key)) return null;
+    if (byTag.has(tag.value)) return null;
+    key = tag.key;
+    byTag.set(tag.value, branch);
   }
-  return byKind;
+  return key === undefined ? null : { key, byTag };
 }
 
 /**

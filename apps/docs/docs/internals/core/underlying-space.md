@@ -2063,9 +2063,8 @@ circles, and texts of different widths).
 
 **The product form.** `partition({ by: { x, y } })` divides both axes. It is
 defined as the 1D partition on x, then the 1D partition on y, and it is
-built by that rewrite (`compose`), so it adds no layout of its own. On the
-wire, JS writes the two partitions, and the product form (which Python
-writes) rebuilds them. Empty cells are groups with no rows, as in 1D, so a
+built by that rewrite (`compose`, in JS and in Python alike), so it adds no
+layout of its own, and on the wire it is the two partitions. Empty cells are groups with no rows, as in 1D, so a
 count over one is 0 and is drawn.
 
 **Regions with an outline.** A region may also hold an outline, the same

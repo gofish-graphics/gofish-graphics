@@ -1585,22 +1585,10 @@ for the API.
               "$ref": "#/$defs/FieldAccessor"
             },
             {
-              "type": "object",
-              "properties": {
-                "x": {
-                  "$ref": "#/$defs/FieldAccessor"
-                },
-                "y": {
-                  "$ref": "#/$defs/FieldAccessor"
-                }
-              },
-              "required": ["x", "y"]
-            },
-            {
               "$ref": "#/$defs/StructAccessor"
             }
           ],
-          "description": "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error."
+          "description": "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error."
         },
         "dir": {
           "type": "string",

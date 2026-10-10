@@ -219,11 +219,6 @@ function wireShape(type: FieldType, where: string): string | null {
       if (dictBranches.length === 1) return shapes[0];
       const tagged = taggedShape(dictBranches, where);
       if (tagged !== null) return tagged;
-      // An untagged dict can mean any branch, but when no branch renames
-      // anything (an object whose keys are the same in Python and on the
-      // wire, holding values that go as they are, like partition's `{ x, y }`
-      // of field accessors), every branch sends the dict as it is.
-      if (dictBranches.every((b) => passesThrough(b, where))) return null;
       throw new Error(
         `${where}: a union with more than one dict-shaped branch, one of ` +
           `them with option keys, and the branches are not told apart by ` +
@@ -250,21 +245,6 @@ function wireShape(type: FieldType, where: string): string | null {
     default:
       return null;
   }
-}
-
-/** Whether a dict of this type goes on the wire as it is: it has no shape,
- *  or it is an object whose keys are the same in Python and on the wire and
- *  whose values go as they are. */
-function passesThrough(type: FieldType, where: string): boolean {
-  if (wireShape(type, where) === null) return true;
-  return (
-    type.kind === "object" &&
-    Object.entries(type.fields).every(
-      ([name, spec]) =>
-        pyKwarg(name) === (spec.wire ?? name) &&
-        passesThrough(spec.type, `${where}.${name}`)
-    )
-  );
 }
 
 /** The Python expression a generated function stores under a field's wire

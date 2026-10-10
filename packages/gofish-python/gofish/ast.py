@@ -1918,7 +1918,7 @@ def partition(
     by: Union["FieldAccessor", Dict[str, "FieldAccessor"], "StructAccessor"],
     dir: Optional[str] = None,
     **options: Any,
-) -> Operator:
+) -> Union[Operator, Composed]:
     """
     Partition operator: divide the space into the cells of a binned key, one
     group per cell, and give each group its cell. Each cell sits at its true
@@ -1932,7 +1932,8 @@ def partition(
         ).mark(rect(h=field("value").sum()))
 
     With one binned key per axis it divides both axes into rectangles. This is
-    the partition on x, then the partition on y:
+    the partition on x, then the partition on y, and it returns those two
+    partitions as one flow fragment (``compose``):
 
         chart(movies).flow(
             partition(by={
@@ -1961,7 +1962,7 @@ def partition(
             the docs options table.
 
     Returns:
-        Operator object
+        Operator object, or for a key per axis the fragment of two
     """
 
     def check_key(key: Any) -> None:
@@ -2009,7 +2010,10 @@ def partition(
             )
         check_key(by["x"])
         check_key(by["y"])
-        by = {"x": by["x"], "y": by["y"]}
+        return compose(
+            partition(by=by["x"], dir="x", **options),
+            partition(by=by["y"], dir="y", **options),
+        )
     else:
         check_key(by)
         if dir is None:

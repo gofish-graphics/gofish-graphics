@@ -861,11 +861,11 @@ def _pack_opts(*, by: Optional[str | FieldAccessor] = None, debug: Optional[bool
             opts[_k] = _v
     return opts
 
-def _partition_opts(*, by: FieldAccessor | dict | StructAccessor, dir: Optional[str] = None, alignment: Optional[str] = None, axes: Optional[bool | dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _partition_opts(*, by: FieldAccessor | StructAccessor, dir: Optional[str] = None, alignment: Optional[str] = None, axes: Optional[bool | dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.
 
     Args:
-        by: A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.
+        by: A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.
         dir: Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis.
         alignment: Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Applies only where nothing gives the children a cell on that axis: inside a cell of another partition, each child is placed in that cell. Not allowed with a key per axis. Default "baseline".
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.

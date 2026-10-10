@@ -447,7 +447,13 @@ may carry bounds, `t.num({ min: 0, finite: true })` for a pixel padding or
 validator and the JSON Schema (`minimum`, `exclusiveMinimum`) check. When a
 value matches no branch of an untagged union, and only one branch is of the
 value's kind (a number for `Bin.hex`'s `radius: number | { x, y }`), the
-validator reports that branch's own findings (`expected a number above 0`). The JS
+validator reports that branch's own findings (`expected a number above 0`).
+A union whose branches are all tagged by the same field is checked against
+the one branch its value's tag names: a strategy's `kind`, or the `type` of
+a hand-authored ref that declares a `tag` in `AUTHORED_REFS` (`"field"` for
+`FieldAccessor`, `"struct"` for `StructAccessor`). So `partition`'s `by`, a
+field accessor or a struct, reports what is wrong with a bad bin, not that
+no shape matched. The JS
 layout checks a strategy where it reads it, with `checkStrategy(family,
 value, where)` from `validate.ts`, the same walk the validator runs over a
 whole document. So an unknown kind, an undeclared param, and a value out of
@@ -690,13 +696,7 @@ object whose `kind` field is a literal or enum, and no two branches share a
 ratio?}` or `{kind: "slice"}` or ...; scatter's `overlap`; a `curve`), the generator emits a
 `("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
 the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
-branch does not declare (`ratio` on `slice`), is a `TypeError`. The other
-exception is a union where no branch renames anything: every dict branch is
-already in wire form, or an object whose keys are the same in Python and on
-the wire and whose values go as they are. Then any reading of the dict sends
-it unchanged, so there is nothing to guess and the field gets no shape.
-`partition`'s `by` is one: a field accessor, or `{x, y}` of field
-accessors. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
+branch does not declare (`ratio` on `slice`), is a `TypeError`. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
 few refs the generator lists as already in wire form (today only
 `FieldAccessor`, built by `field(...)`), or generation fails, so a new nested
 type has to be declared before Python can take it.

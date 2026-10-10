@@ -504,17 +504,25 @@ for (const [name, partition] of [
   check(`bin with ${name} rejected`, !validate(binBy(partition)).valid);
 }
 
-// partition's `by`: one binned key with a `dir`, or one per axis (#1059).
-const binned = (name: string) => ({
+// partition's `by`: one binned key with a `dir`, or a binned struct
+// (#1059). A key per axis is two partitions on the wire.
+const binned = (name: string, partition: unknown = { step: 1 }) => ({
   type: "field",
   name,
-  ops: [{ op: "bin", partition: { step: 1 } }],
+  ops: [{ op: "bin", partition }],
 });
 for (const [name, op] of [
   ["one key and a dir", { type: "partition", by: binned("a"), dir: "x" }],
   [
-    "a key per axis",
-    { type: "partition", by: { x: binned("a"), y: binned("b") } },
+    "a binned struct",
+    {
+      type: "partition",
+      by: {
+        type: "struct",
+        fields: { x: "a", y: "b" },
+        ops: [{ op: "bin", partition: { kind: "hex", radius: 1 } }],
+      },
+    },
   ],
 ] as const) {
   const r = validate(chart([op]));
@@ -525,13 +533,27 @@ for (const [name, op] of [
   );
 }
 for (const [name, by] of [
-  ["a key for x only", { x: binned("a") }],
-  ["an unknown axis key", { x: binned("a"), y: binned("b"), z: binned("c") }],
+  ["a key per axis", { x: binned("a"), y: binned("b") }],
   ["a string per axis", { x: "a", y: "b" }],
 ] as const) {
   check(
     `partition with ${name} rejected`,
     !validate(chart([{ type: "partition", by }])).valid
+  );
+}
+// A key's `type` picks the branch it is checked against, so a bad bin
+// reports what is wrong with the bin, not that no shape matched.
+{
+  const r = validate(
+    chart([{ type: "partition", by: binned("a", { step: "1" }), dir: "x" }])
+  );
+  check(
+    "partition with a bad bin names the bin",
+    !r.valid &&
+      r.errors.every(
+        (e) => e.path.includes(".by.ops") && !/did not match/.test(e.message)
+      ),
+    JSON.stringify(r.errors)
   );
 }
 
