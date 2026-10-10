@@ -9,7 +9,7 @@ import { splitEntries, type SplitBy } from "../datumProjection";
 import { resolveAxisName, type AxisName } from "../dims";
 import { getFieldOps, type FieldExpr } from "../fieldExpr";
 import type { AxisOptions } from "../gofish";
-import { axisOverrideOf, type GoFishNode } from "../_node";
+import { axisOverrideOf, GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
 import type { Operator } from "../types";
 import {
@@ -128,13 +128,13 @@ const noRegion = (by: unknown): Error => {
   );
 };
 
-/** The layout node's options: per child, its cell, and the columns of the
- *  key, in the key's order (one for a field, x then y for a struct), as maps
- *  from a value to its datum. */
+/** The layout node's options: the columns of the key, in the key's order
+ *  (one for a field, x then y for a struct), as maps from a value to its
+ *  datum. Each child's cell is the one its key names (`GoFishNode.keyCell`,
+ *  set by the split). */
 type PartitionNodeProps = {
   key?: string;
   dir?: AxisName;
-  cells: RegionCell[];
   columns: ColumnDatum[];
   alignment?: Alignment;
   axes?: PartitionCommon["axes"];
@@ -145,7 +145,6 @@ const PartitionNode = createNodeOperator(
     {
       key,
       dir,
-      cells,
       columns,
       alignment = "baseline",
       axes,
@@ -153,11 +152,17 @@ const PartitionNode = createNodeOperator(
     }: PartitionNodeProps,
     children: GoFishAST[]
   ) => {
-    if (children.length === 0)
-      throw new Error(
-        "partition: the key has no cells: its column has no values in the " +
-          "chart's data."
-      );
+    // Each child's cell: the one its key names. A partition has only the
+    // operator form, so every child is a group of its split.
+    const cells = children.map((child) => {
+      const cell = child instanceof GoFishNode ? child.keyCell : undefined;
+      if (cell === undefined)
+        throw new Error(
+          "partition: each child is a group of the key's split, with the " +
+            "cell its key names, but this one has none."
+        );
+      return cell;
+    });
     const names = ensureChildNames(children, "partition");
     const node = (await layer({ key, ...rest } as any, children)) as GoFishNode;
     // `dir` may be a name the enclosing coordinate space declares, so the
@@ -220,27 +225,20 @@ const partitionOperator = createOperator<
   any,
   PartitionAxisOptions | PartitionPlaneOptions
 >(
-  ((
-    { dir, cells, columns, alignment, axes, key }: any,
-    children: GoFishAST[]
-  ) =>
-    PartitionNode(
-      { key, dir, cells, columns, alignment, axes },
-      children
-    )) as any,
+  (({ dir, columns, alignment, axes, key }: any, children: GoFishAST[]) =>
+    PartitionNode({ key, dir, columns, alignment, axes }, children)) as any,
   {
     split: ({ by }, d) => {
       // A key has a region only through `.bin` (the type rules the rest out
       // in TS; the wire form from Python is checked here).
       if (!hasRegion(by)) throw noRegion(by);
       const entries = splitEntries(by as SplitBy, d);
-      const cells = [...entries.keys()];
-      if (!cells.every((k): k is RegionCell => k instanceof RegionCell))
+      if (![...entries.keys()].every((k) => k instanceof RegionCell))
         throw noRegion(by);
       const columns = isStruct(by)
         ? [columnDatum(d, by.fields.x), columnDatum(d, by.fields.y)]
         : [columnDatum(d, (by as FieldAccessor).name, by)];
-      return { entries, layoutOpts: { cells, columns } };
+      return { entries, layoutOpts: { columns } };
     },
     // The axis it divides is a value axis (the cells' positions), as a
     // scatter's span is. A coord-declared `dir` (`theta`, ...) positions

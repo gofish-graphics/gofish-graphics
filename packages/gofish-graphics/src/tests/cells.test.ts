@@ -738,6 +738,20 @@ async function main() {
       );
     }
 
+    const emptyPartition = await chart([] as { x: number }[], noAxes)
+      .flow(partition({ by: byCell(), dir: "x" }))
+      .mark(rect({}))
+      .toDisplayList({ w: 300, h: 100 })
+      .then(
+        (dl: any) => walkItems(dl).filter((it) => it.kind === "rect").length,
+        (e: Error) => e.message
+      );
+    check(
+      "a partition over no rows has no cells, and draws nothing",
+      emptyPartition === 0,
+      String(emptyPartition)
+    );
+
     check(
       "the mean of no rows has no value",
       inferPos("x", []) === undefined &&

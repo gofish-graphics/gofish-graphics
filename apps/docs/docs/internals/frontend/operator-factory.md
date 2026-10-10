@@ -153,7 +153,10 @@ Walking `createOperator.ts:391-415`:
    does the data's domain, so a nested binned key sees the chart's cells. A
    cell key becomes its id for the mark and the node (`setKey`), and the node
    keeps the cell itself as `keyCell`, which the distribute fold reads to
-   build an ordinal over cells.
+   build an ordinal over cells, and a `partition` reads to give the node its
+   cell. The node also keeps the `by` it was keyed by (`keyBy`), so a fused
+   connector's default split can read a mark's key under each tier off its
+   ancestors.
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream
