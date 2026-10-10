@@ -44,7 +44,7 @@ import type { Alignment } from "./alignment";
  * `dir`. The cell is stated as a position constraint that gives a region,
  * `Constraint.position({ region })` ({@link PositionRegion}), which also
  * makes the axis's domain and tells the axis that it places cells; the
- * layer turns it into the child's region (`buildChildRegions`). The child is
+ * layer turns it into the child's region (`buildChildProposals`). The child is
  * laid out in its region's length and places itself in it: a mark with no
  * size of its own (a `rect`, a `region`) fills its cell, and a mark with a
  * size of its own (a circle, a text) sits in the middle of it.

@@ -655,7 +655,7 @@ composes its targets' spaces into the layer's claim on that axis:
   the old `min` (on an upward y, a spread pinned across a cell drew its bars
   one cell away). The interval also sizes the target before its layout: the
   layer proposes the span's pixel length as the child's size on that axis
-  (`buildSpanProposalMap`, `constraints/proposalPlan.ts`), so the child's
+  (`buildChildProposals`, `constraints/proposalPlan.ts`), so the child's
   content fills the span it will be pinned across rather than being laid out
   in the whole layer and then stretched. `scatter` uses both
   forms of `Constraint.position`: plain `x`/`y` → a point coordinate, range
@@ -2015,7 +2015,7 @@ span `[min, max]` per axis, either of which may be missing, plus an optional
 outline, measured from the parent's origin in the axis order of whoever
 holds it (`GoFishNode.layout` reflects it into the child's own order when
 the two y directions differ). The layer builds each child's region in
-`buildChildRegions` (`constraints/proposalPlan.ts`): on an axis where the
+`buildChildProposals` (`constraints/proposalPlan.ts`): on an axis where the
 child's `region` spans, the cell's two edges mapped to pixels; on an axis
 where it spans none, the region the layer itself was handed there, if any. Each region bounds a different axis, so that is their intersection. The
 child is proposed each span's length as its size (`childLayoutSizeProposal`)
@@ -2075,12 +2075,12 @@ count over one is 0 and is drawn.
 shape the `boundary` geometry query (#974) returns, but handed from parent to
 child: a `PositionRegion` holds the cell's outline in datums (`outline`,
 `[x, y]` per corner) when the cell has one and is placed along both axes,
-`buildChildRegions` maps it
+`buildChildProposals` maps it
 through both scales into the child's region, and the `region` mark draws a
 region's outline as a path when it has one, and its box otherwise (under a
 nonlinear coordinate space, resampled, so a hexagon in polar coordinates
 draws curved). The cells of a binned struct, below, are what make outlines.
-One step is left for later (a TODO in `buildChildRegions`): a child that
+One step is left for later (a TODO in `buildChildProposals`): a child that
 gets a cell of its own does not inherit the outline of the region its layer
 was handed, which would need that outline clipped to the cell.
 

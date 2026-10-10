@@ -75,8 +75,7 @@ import {
   buildChildScalePlan,
   buildLayerConstraintLayoutPlan,
   buildPositionScalePlan,
-  buildSpanProposalMap,
-  buildChildRegions,
+  buildChildProposals,
   placementConstraints,
   childLayoutSizeProposal,
   childPosScalesFor,
@@ -650,17 +649,13 @@ export const layer = createNodeOperatorSequential(
             node.key ?? node.type
           );
           const effectivePosScales = positionScalePlan.effectivePosScales;
-          // A child pinned across an interval is laid out in that span.
-          const spanByName = buildSpanProposalMap(
-            node.constraints,
-            effectivePosScales
-          );
-          // The region each child is handed (#1059): its cell, and on the
-          // other axis the region this layer was given; or, for a child with
-          // no cell that no constraint places, the region this layer was
-          // given. A child is laid out in its region's length, and places
-          // itself in it.
-          const childRegions = buildChildRegions(
+          // What the position constraints hand each child (#1059): the
+          // span an interval pins it across, which it is laid out in, and its
+          // region: its cell, and on the other axis the region this layer was
+          // given; or, for a child with no cell that no constraint places,
+          // the region this layer was given. A child is laid out in its
+          // region's length, and places itself in it.
+          const proposals = buildChildProposals(
             node.constraints,
             effectivePosScales,
             region
@@ -758,16 +753,16 @@ export const layer = createNodeOperatorSequential(
             // over — any budget slice.
             const childRegion =
               (childName !== undefined
-                ? childRegions.byName.get(childName)
+                ? proposals.regionByName.get(childName)
                 : undefined) ??
-              (constrainedChildren.has(i) ? undefined : childRegions.passedOn);
+              (constrainedChildren.has(i) ? undefined : proposals.passedOn);
             const layoutSize = applyNestLayoutProposal(
               childLayoutSizeProposal(
                 childName,
                 size,
                 gridCellByName,
                 sliceByName,
-                spanByName,
+                proposals.spanByName,
                 childRegion
               ),
               layoutPlan.nestPlan?.byDerived.get(i),
@@ -917,7 +912,7 @@ export const layer = createNodeOperatorSequential(
             }
 
             applyConstraints(
-              placementConstraints(node.constraints, childRegions.byName),
+              placementConstraints(node.constraints, proposals.regionByName),
               nameToPlaceable,
               size,
               effectivePosScales,

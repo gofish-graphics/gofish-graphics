@@ -39,7 +39,7 @@ export type ColumnDatum = (v: number) => MaybeValue<number>;
  * The **region** a `position` constraint gives its target (#1059): the cell
  * of the key a `partition` grouped by, which the layer hands the target as
  * the REGION it is laid out in (`geometry/region.ts`). It is not a pin. At
- * layout the layer maps it to pixels (`buildChildRegions`) and passes it in
+ * layout the layer maps it to pixels (`buildChildProposals`) and passes it in
  * the target's layout call, and the target places itself in it: a mark with
  * no size of its own on an axis (a rect, a `region`) fills the cell there,
  * and a mark with a size of its own (a circle, a text) sits in the middle of
