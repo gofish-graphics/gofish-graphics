@@ -1,6 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, spread, stack, rect } from "../../src/lib";
+import {
+  chart,
+  spread,
+  stack,
+  rect,
+  selectAll,
+  group,
+  text,
+} from "../../src/lib";
 
 // Checks for measure-keyed domains (#1114): a size never splits a domain.
 // Not gallery-tagged: these are test-like checks.
@@ -49,6 +57,33 @@ export const ChartOwnSize: StoryObj = {
       .flow(spread({ by: "item", dir: "x", spacing: 12 }))
       .mark(rect({ w: 40, h: "value", fill: "item" }))
       .render(container, { axes: true });
+    return container;
+  },
+};
+
+// A `.layer()` chart whose root tier has a size of its own, rendered on a
+// larger canvas. The chart's box is hoisted over both tiers, so the bars,
+// their value labels and the y axis all map with the σ the 240 x 160 box
+// solves: the 1.1 bar's top meets the axis at 1.1.
+export const LayeredChartOwnSize: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(
+      values.filter((d) => d.group === "B"),
+      { w: 240, h: 160 }
+    )
+      .flow(spread({ by: "item", dir: "x", spacing: 12 }))
+      .mark(rect({ w: 40, h: "value", fill: "item" }).name("bars"))
+      .layer(
+        chart(selectAll("bars"))
+          .flow(group({ by: "item" }))
+          .mark(((d: any[]) =>
+            spread({ dir: "y", alignment: "middle", spacing: 6 }, [
+              text({ text: String(d[0].datum[0].value) }),
+              d[0],
+            ])) as any)
+      )
+      .render(container, { w: 400, h: 400, axes: true });
     return container;
   },
 };

@@ -13,7 +13,14 @@ import { stackX } from "../ast/graphicalOperators/stackX";
 import { Constraint } from "../ast/constraints";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
 import { value as v, datum } from "../ast/data";
-import { chart, scatter, rect as rectMark, Schema } from "../lib";
+import {
+  chart,
+  scatter,
+  spread,
+  selectAll,
+  rect as rectMark,
+  Schema,
+} from "../lib";
 
 declare const process: { exit(code: number): never };
 
@@ -43,6 +50,28 @@ const items = (dl: any): Item[] => {
 };
 const byFill = (dl: any, fill: string) =>
   items(dl).filter((i) => i.kind === "rect" && (i as any).style?.fill === fill);
+
+/** The y axis of a display list, as the map from a value to its pixel:
+ *  its tick marks (4 x 1 px rects), paired top to bottom with its numeric
+ *  labels. Undefined when there is no numeric y axis. */
+const yAxisOf = (dl: any) => {
+  const all = items(dl);
+  const ticks = all
+    .filter((i) => i.kind === "rect" && i.w === 4 && i.h === 1)
+    .map((i) => i.y! + 0.5)
+    .sort((a, b) => a - b);
+  const labels = all
+    .filter((i) => i.kind === "text" && /^-?[0-9.]+$/.test(i.text ?? ""))
+    .sort((a, b) => a.y! - b.y!)
+    .map((i) => Number(i.text));
+  if (ticks.length < 2 || ticks.length !== labels.length) return undefined;
+  const [y0, y1] = [ticks[ticks.length - 1], ticks[0]];
+  const [v0, v1] = [labels[labels.length - 1], labels[0]];
+  return {
+    ticks: ticks.length,
+    px: (v: number) => y0 + ((v - v0) / (v1 - v0)) * (y1 - y0),
+  };
+};
 
 async function main() {
   console.log("# a glyph nested at a datum inherits its parent's σ");
@@ -123,6 +152,36 @@ async function main() {
       "a fixed box with no render width keeps its own width",
       near(dl.viewport.w - 2 * (red?.x ?? 0), 100),
       { viewport: dl.viewport, red }
+    );
+  }
+
+  console.log("# a .layer() chart with a size of its own draws its axis there");
+  {
+    // The root tier is 240 x 160, rendered on a 400 x 400 canvas. Its marks
+    // map their domain into its 160 px, so the y axis must too: the 1.1 bar's
+    // top lands on the axis's pixel of 1.1. Before, the tier stack drew the
+    // axis at the canvas's σ.
+    const rows = [
+      { item: "p", value: 1.1 },
+      { item: "q", value: 0.3 },
+    ];
+    const dl = await chart(rows, { w: 240, h: 160 })
+      .flow(spread({ by: "item", dir: "x", spacing: 12 }))
+      .mark(rectMark({ w: 40, h: "value", fill: "steelblue" }).name("bars"))
+      .layer(
+        chart(selectAll("bars")).mark(rectMark({ w: 4, h: 4, fill: "red" }))
+      )
+      .toDisplayList({ w: 400, h: 400, axes: true });
+    const axis = yAxisOf(dl);
+    const tall = byFill(dl, "steelblue").sort((p, q) => p.y! - q.y!)[0];
+    check(
+      "the tallest bar's top is the axis's pixel of 1.1",
+      axis !== undefined && near(tall?.y, axis.px(1.1)),
+      { tall, axis: axis && [axis.px(0), axis.px(1.1)] }
+    );
+    check(
+      "the bars' baseline is the axis's pixel of 0",
+      axis !== undefined && near((tall?.y ?? 0) + (tall?.h ?? 0), axis.px(0))
     );
   }
 

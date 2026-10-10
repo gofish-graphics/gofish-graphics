@@ -449,8 +449,10 @@ rule: a chart with no size of its own on a dim draws the axis around itself
 its own (`_chartBox`, set by the chart builder) draws it around its content,
 inside the box it solves σ in, and its content's free baseline is placed there
 (`placedSpace`); the render root is the outermost boundary, which draws the
-axes of the domains it solves, a bare low-level render's included. A stack of
-`.layer(...)` tiers is one chart. No other node claims a continuous axis, so a
+axes of the domains it solves, a bare low-level render's included. A
+`.layer(...)` chart is one chart: the root tier's box (its `w`/`h` and its
+`coord`) is hoisted over the stack of tiers (`LayerBuilder.resolve`), so every
+tier's marks and the axis map with the σ that box solves. No other node claims a continuous axis, so a
 `spreadY` that middle-aligns a caption with a chart does not. Two exceptions
 remain until #1032 and #1115: an operator's explicit `axes:` override still
 draws at its node, and an ordinal axis still nests at every grouping level.

@@ -938,12 +938,20 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     return this.state.options ?? {};
   }
 
-  /** A copy without the `coord` option. `LayerBuilder` uses this to HOIST the
-   *  root tier's coordinate space over EVERY tier (see `LayerBuilder.resolve`),
-   *  so the root tier itself must not build a second one around its own mark. */
-  withoutCoord(): ChartBuilder<TInput, TOutput> {
-    if (this.state.options?.coord === undefined) return this;
-    const { coord: _coord, ...rest } = this.state.options;
+  /** The root tier's box: its coordinate space and its own size, the
+   *  options `LayerBuilder` HOISTS over every tier (see `LayerBuilder.resolve`). */
+  boxOptions(): Pick<ChartOptions, "coord" | "w" | "h"> {
+    const { coord, w, h } = this.state.options ?? {};
+    return { coord, w, h };
+  }
+
+  /** A copy without its box ({@link boxOptions}). `LayerBuilder` hoists the
+   *  root tier's box over every tier, so the root tier itself must not build a
+   *  second one around its own mark. */
+  withoutBox(): ChartBuilder<TInput, TOutput> {
+    const options = this.state.options;
+    if (options === undefined) return this;
+    const { coord: _coord, w: _w, h: _h, ...rest } = options;
     return this.with({ options: rest });
   }
 
@@ -1206,15 +1214,18 @@ export class LayerBuilder extends RenderableBuilder {
   async resolve(): Promise<GoFishNode> {
     const sharedContext: LayerContext = this.layerContext ?? {};
     const nodes: GoFishNode[] = [];
-    // The root tier's coordinate space is the CHART's space, not that one
-    // tier's: a basemap under `geo(...)` and the paths layered over it must
-    // share one projection, or the layer would be positioned in pixels against
-    // a map it knows nothing about. So it is hoisted here — stripped from the
-    // root tier and wrapped around every tier's nodes — and the coord's domain
-    // inference then sees all the tiers' positions at once.
+    // The root tier's box is the CHART's box, not that one tier's. Its
+    // coordinate space: a basemap under `geo(...)` and the paths layered over
+    // it must share one projection, or the layer would be positioned in pixels
+    // against a map it knows nothing about. And its size (#1114): the chart is
+    // the sized node that solves σ for every tier, and its axes are drawn
+    // inside it, so the ticks map with the σ every tier's marks map with. So
+    // the box is hoisted here, stripped from the root tier and wrapped around
+    // every tier's nodes, and the coord's domain inference then sees all the
+    // tiers' positions at once.
     const root = this.rootChart();
     const rootMeta = root.renderMeta();
-    const hoistedCoord = rootMeta.coord;
+    const box = root.boxOptions();
     // The previous tier's marks, as a `GoFishRef[]` bag — offered uniformly to
     // every tier (see class doc). `undefined` before any tier has produced
     // named nodes (the root tier, or after a producer with no name).
@@ -1226,7 +1237,7 @@ export class LayerBuilder extends RenderableBuilder {
       const hasNext = i < this.tiers.length - 1;
 
       if (tier instanceof ChartBuilder) {
-        if (i === 0 && hoistedCoord !== undefined) tier = tier.withoutCoord();
+        if (i === 0) tier = tier.withoutBox();
         // The root tier's clock, offered to every later tier the way the
         // previous tier's marks are (see `ChartBuilder.adoptTimeTier`): a
         // transition layered over a sequence's keyframes is inside that
@@ -1278,15 +1289,14 @@ export class LayerBuilder extends RenderableBuilder {
       }
     }
     const stack = await Layer({}, nodes);
-    // The stack of tiers is one chart: it draws the axes its tiers share
-    // (#1114 step 6), and the tier charts inside it draw none of their own.
-    stack._chartBox = [false, false];
-    // The hoisted coordinate space wraps the whole stack, so every tier is laid
-    // out in it and its domain inference sees all of their positions at once.
-    const result =
-      hoistedCoord !== undefined
-        ? await Frame(this.rootChart().frameOptions(), [stack])
-        : stack;
+    // The hoisted box wraps the whole stack, so every tier is laid out in it
+    // and its domain inference sees all of their positions at once. The box
+    // is one chart (#1114 step 6), whose content is the stack: it draws the
+    // axes its tiers share, around itself or, on an axis it has a size of
+    // its own, around the stack inside it. The tier charts inside it draw
+    // none of their own.
+    const result = await Frame(box, [stack]);
+    result._chartBox = [box.w !== undefined, box.h !== undefined];
     const { colorConfig } = rootMeta;
     if (colorConfig) {
       (result as any).colorConfig = colorConfig;
