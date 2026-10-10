@@ -2,6 +2,8 @@
 // @wiki Overview — /internals/layout/passes
 // </gofish-wiki>
 
+import { reflectInterval } from "../axisDirection";
+
 /**
  * A region (#1059): the space a parent gives a child to lay itself out in,
  * handed down with the size proposal in the layout call
@@ -41,9 +43,13 @@ export type Region = {
   readonly outline?: readonly Point[];
 };
 
-/** A span read the other way along its axis (`v ↦ −v`): its ends swap. */
-const reflectSpan = (s: Span | undefined): Span | undefined =>
-  s === undefined ? undefined : [-s[1], -s[0]];
+/** A span read the other way along its axis (`v ↦ −v`), as a node's box is
+ *  (`reflectInterval`): its ends swap. */
+const reflectSpan = (s: Span | undefined): Span | undefined => {
+  if (s === undefined) return undefined;
+  const { min, max } = reflectInterval({ min: s[0], max: s[1] });
+  return [min!, max!];
+};
 
 /**
  * The same region in an axis order whose y runs the other way: what a child
@@ -55,6 +61,25 @@ export function reflectRegionY(region: Region): Region {
   return {
     spans: [region.spans[0], reflectSpan(region.spans[1])],
     outline: region.outline?.map(([x, y]) => [x, -y] as const),
+  };
+}
+
+/**
+ * The same region measured from its own start on each axis: what a node that
+ * was handed `region` passes on to its children, in its own frame. The node
+ * itself is placed in `region` by `GoFishNode.layout`, which centers it in
+ * each span, so a child that fills the rebased span fills the original one.
+ */
+export function rebaseRegion(region: Region): Region {
+  const [x, y] = region.spans;
+  const at = (s: Span | undefined): Span | undefined =>
+    s === undefined ? undefined : [0, s[1] - s[0]];
+  return {
+    spans: [at(x), at(y)],
+    outline:
+      x === undefined || y === undefined
+        ? undefined
+        : region.outline?.map(([px, py]) => [px - x[0], py - y[0]] as const),
   };
 }
 

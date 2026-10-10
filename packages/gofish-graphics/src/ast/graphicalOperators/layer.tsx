@@ -755,7 +755,7 @@ export const layer = createNodeOperatorSequential(
             // over — any budget slice.
             const childRegion =
               childName !== undefined
-                ? childRegions?.byName.get(childName)
+                ? childRegions?.get(childName)
                 : undefined;
             const layoutSize = applyNestLayoutProposal(
               childLayoutSizeProposal(
@@ -917,7 +917,7 @@ export const layer = createNodeOperatorSequential(
               new Set(),
               new Set(),
             ];
-            for (const [name, r] of childRegions?.byName ?? []) {
+            for (const [name, r] of childRegions ?? []) {
               for (const axis of [0, 1] as const)
                 if (r.spans[axis] !== undefined) regionPlaced[axis].add(name);
             }
@@ -972,15 +972,8 @@ export const layer = createNodeOperatorSequential(
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
 
-          // On an axis where this layer passed its own region on to a child,
-          // it sits at its parent's origin: the region is measured from there
-          // (`buildChildRegions`), and so is where the child placed itself.
           const translate = (axis: 0 | 1, min: number): number | undefined =>
-            childRegions?.forwards[axis]
-              ? 0
-              : dims[axis].min !== undefined
-                ? dims[axis].min - min
-                : undefined;
+            dims[axis].min !== undefined ? dims[axis].min - min : undefined;
 
           return {
             // Store only the local box `(min, size)`; the `dims` getter derives

@@ -11,7 +11,7 @@ import {
   type PositionInterval,
   type PositionRegion,
 } from "./position";
-import type { Point, Region, Span } from "../geometry";
+import { rebaseRegion, type Point, type Region, type Span } from "../geometry";
 import { type AxisTicks, type UnderlyingSpace } from "../underlyingSpace";
 import { niceScope, type Extent } from "../extent";
 import { sliceExtent } from "./folds";
@@ -195,26 +195,18 @@ function edgePixel(
   return pxOf(scale, getValue(edge)!) + getValueOffset(edge);
 }
 
-/** The regions a layer hands its children, and the axes on which it passes
- *  on the region it was given (see {@link buildChildRegions}). */
-export type ChildRegions = {
-  byName: Map<string, Region>;
-  /** Per axis: whether some child gets the layer's own region there. The
-   *  layer then sits at its parent's origin on that axis, so that region
-   *  means the same thing in its frame as in its parent's. */
-  forwards: [boolean, boolean];
-};
-
 /**
  * The region each child of a layer gets (#1059, `geometry/region.ts`).
  *
  * A child the layer's `position` constraints give a region coordinate (a
  * {@link PositionRegion}: a `partition`'s cell) gets, on each axis, the
  * cell's span there, mapped to pixels by `posScales`. On an axis where it has
- * no cell, it gets the region the layer itself was given there, if any: a
- * cell on x is the whole of the layer's space on y, so a partition inside
- * another partition's cell gives its children both cells. That is the
- * intersection of the two regions, since each one bounds a different axis.
+ * no cell, it gets the region the layer itself was given there, if any, in
+ * the layer's own frame (`rebaseRegion`; `GoFishNode.layout` then places the
+ * layer in the region it was given): a cell on x is the whole of the layer's
+ * space on y, so a partition inside another partition's cell gives its
+ * children both cells. That is the intersection of the two regions, since
+ * each one bounds a different axis.
  * A child with no region coordinate gets nothing; it is placed by the rest
  * of the layer's constraints as before.
  *
@@ -230,7 +222,7 @@ export function buildChildRegions(
   constraints: readonly ConstraintSpec[],
   posScales: ConstraintPosScales,
   received: Region | undefined
-): ChildRegions | undefined {
+): Map<string, Region> | undefined {
   const cells = new Map<string, [PositionRegion?, PositionRegion?]>();
   for (const constraint of constraints) {
     if (constraint.type !== "position") continue;
@@ -247,16 +239,12 @@ export function buildChildRegions(
   }
   if (cells.size === 0) return undefined;
 
+  const local = received === undefined ? undefined : rebaseRegion(received);
   const byName = new Map<string, Region>();
-  const forwards: [boolean, boolean] = [false, false];
   for (const [name, cell] of cells) {
     const spans = ([0, 1] as const).map((axis): Span | undefined => {
       const c = cell[axis];
-      if (c === undefined) {
-        const given = received?.spans[axis];
-        if (given !== undefined) forwards[axis] = true;
-        return given;
-      }
+      if (c === undefined) return local?.spans[axis];
       const a = edgePixel(c.edges[0], posScales[axis]);
       const b = edgePixel(c.edges[1], posScales[axis]);
       if (a === undefined || b === undefined) return undefined;
@@ -276,7 +264,7 @@ export function buildChildRegions(
     }
     byName.set(name, { spans, outline });
   }
-  return { byName, forwards };
+  return byName;
 }
 
 /** Choose the concrete size proposed to one child in a layer.
