@@ -18,11 +18,11 @@ import {
   type ChromeRing,
 } from "../elaborationUtils";
 import { datum } from "../data";
+import { widenScope } from "../extent";
 import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
 import {
   isORDINAL,
   isCONTINUOUS,
-  isUNDEFINED,
   dataWidth,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
@@ -855,18 +855,34 @@ function elaborationsFor(
       tierCounts,
       timeAxes,
     };
-  // A node can own a dim (`resolveAxes` set `axis.x/y`) whose own
-  // `_underlyingSpace` is the UNDEFINED sentinel — self-scaled children
-  // collapse the union above them (see `GoFishNode.selfScaledSpace`'s doc
-  // comment), which is right for sizing/layout but leaves nothing here to
-  // build ticks from. `resolveAxes`'s sibling-unification branch handles
-  // exactly this by stashing the shared child space it verified onto
-  // `hoistedAxisSpace`; fall back to it only when the real space is missing,
-  // so an ordinary (non-self-scaled) space is never overridden.
-  const spaceFor = (dim: 0 | 1): UnderlyingSpace =>
-    !isUNDEFINED(space[dim])
-      ? node.placedSpace(space[dim])
-      : (node.hoistedAxisSpace?.[dim] ?? space[dim]);
+  // The axis shows the keyed domain of the node's set (#1114): the domain of
+  // its unit wherever that unit sits in the space, which a sized node maps
+  // into its box, not only the part of it the node's own data covers.
+  // Chrome is elaborated only inside `layout()`, which builds the table
+  // first, so there is always one here.
+  const keyed = node.getRenderSession().keyedDomains;
+  if (keyed === undefined)
+    throw new Error(
+      "axis elaboration: the keyed domains are built by layout() before chrome"
+    );
+  // Per dim, computed once: the axis's space widened to its keyed domain
+  // (`spaceFor`), and that domain widened and niced, the axis's scope
+  // (`KeyedDomains.scope`, the widen-then-nice every σ solve over the domain
+  // applies, so the ticks and the marks agree by construction). `spaceFor`
+  // stays un-niced: a time axis picks its tick partition from it, the same
+  // input the nicing picked its partition from.
+  const placed = ([0, 1] as const).map((dim) =>
+    node.placedSpace(space[dim], dim)
+  );
+  const wide = ([0, 1] as const).map(
+    (dim) =>
+      widenScope(
+        placed[dim],
+        undefined,
+        keyed.domainOf(node, dim, placed[dim], true)
+      )[0]
+  );
+  const spaceFor = (dim: 0 | 1): UnderlyingSpace => wide[dim];
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
   // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
   // axis's own line/ticks and the other axis's `crossFloor` (the plot corner),
@@ -882,7 +898,12 @@ function elaborationsFor(
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
     if (axisOver(s) === "absolute") {
-      const niced = niceContinuous(s, ticksFor(dim)) as CONTINUOUS_TYPE;
+      const niced = keyed.scope(
+        node,
+        dim,
+        placed[dim],
+        undefined
+      )[0] as CONTINUOUS_TYPE;
       nices[dim] = [niced.dataInterval.min, niced.dataInterval.max];
       floors[dim] = nices[dim]![0];
     } else if (axisOver(s) === "delta") {

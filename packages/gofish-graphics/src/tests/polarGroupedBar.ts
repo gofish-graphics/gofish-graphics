@@ -27,7 +27,7 @@ const data = [
 export const testPolarGroupedBar = () => {
   // Create the visualization structure first
   return frame({ coord: polar_DEPRECATED() }, [
-    spread({ dir: 0, spacing: 20, alignment: "end", sharedScale: true },
+    spread({ dir: 0, spacing: 20, alignment: "end" },
       Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
         spread({ dir: 0, spacing: 2, alignment: "end" },
           items.map((d) =>

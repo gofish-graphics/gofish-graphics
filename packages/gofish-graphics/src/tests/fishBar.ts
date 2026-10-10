@@ -26,7 +26,7 @@ console.log(
 );
 export const testFishBar = () =>
   stackX(
-    { spacing: 8, sharedScale: true },
+    { spacing: 8 },
     _(seafood)
       .groupBy("lake")
       .map((d, key) => rect({ key, w: 32, h: value(_(d).sumBy("count")) }))

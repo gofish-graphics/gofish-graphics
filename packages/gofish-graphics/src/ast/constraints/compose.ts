@@ -55,7 +55,6 @@ import {
 import { impliedExtent, scaleExtent, type Extent } from "../extent";
 import { type ConstraintSpec } from ".";
 import * as Interval from "../../util/interval";
-import { isValue } from "../data";
 import {
   distributeChildrenInPlacementOrder,
   distributeOrigin,
@@ -65,8 +64,17 @@ import {
   type StackOrigin,
 } from "./distribute";
 import { type AlignConstraint } from "./align";
-import { isPositionInterval, type PositionConstraint } from "./position";
-import { axisIndex, buildNameIndex, type AlignAnchor } from "./shared";
+import {
+  isPositionInterval,
+  positionCoordKind,
+  type PositionConstraint,
+} from "./position";
+import {
+  axisIndex,
+  buildNameIndex,
+  isPointAlign,
+  type AlignAnchor,
+} from "./shared";
 
 /** A position constraint whose coordinates are *purely* interval form (at least
  *  one interval axis, no point axis). It size-sets its axis without blocking
@@ -92,8 +100,8 @@ export type DistributeSegment = {
 export type ComposeBudget = {
   segments: DistributeSegment[];
   /** Per axis: the plan covers it, so the layer's claim there is the composed
-   *  claim, which the layer solves σ against when it roots the axis's scope
-   *  (`buildChildScalePlan`). */
+   *  claim, which the layer solves σ against when it is a sized node on that
+   *  axis (`solveLayerScales`). */
   covered: [boolean, boolean];
 };
 
@@ -105,32 +113,6 @@ export type PositionDomains = {
   xMeasure?: UnitRecord;
   yMeasure?: UnitRecord;
 };
-
-/** Per axis, the direct children a `position` constraint places by a datum
- *  coordinate (a point or an interval) on that axis. Such a child sits where
- *  its datum maps, so its own extent is in its own frame (a scatter's circle
- *  is sized in its own units), not in the axis's data. */
-export function datumPlacedChildren(
-  constraints: ConstraintSpec[],
-  childNodes: GoFishAST[]
-): [Set<number>, Set<number>] {
-  const index = buildNameIndex(childNodes);
-  const placed: [Set<number>, Set<number>] = [new Set(), new Set()];
-  for (const c of constraints) {
-    if (c.type !== "position") continue;
-    const coords = [c.x, c.y] as const;
-    for (const axis of [0, 1] as const) {
-      const coord = coords[axis];
-      if (coord === undefined || !(isValue(coord) || isPositionInterval(coord)))
-        continue;
-      for (const ref of c.children) {
-        const i = index.get(ref.name);
-        if (i !== undefined) placed[axis].add(i);
-      }
-    }
-  }
-  return placed;
-}
 
 /** `children` with the axis of every child in `placed` left out (UNDEFINED,
  *  or no claim): what the layer's own union sees once datum-placed children
@@ -382,7 +364,7 @@ export function planConstraintComposition(
       // point-anchor space fold — the target they write is UNDEFINED on this
       // axis by construction (that's the unbound-target scope), so it
       // contributes no space claim here.
-      if (typeof spec === "string" && spec !== "span" && spec !== "size")
+      if (typeof spec === "string" && isPointAlign(spec))
         alignFolds.push({ axis, anchor: spec, idx });
     }
   }
@@ -403,6 +385,162 @@ export function planConstraintComposition(
   }
 
   return { segments, alignFolds, spanCover };
+}
+
+// ── Sharing sets (#1114 step 3) ──────────────────────────────────────────────
+//
+// For each axis, a layer's children fall into SHARING SETS: two children in
+// one set read their data values on that axis in one frame. Set 0 is the
+// layer's own set, the one it reports upward. A child in any other set is
+// DETACHED on that axis. See
+// apps/docs/docs/internals/design/measure-keyed-domains.md, section 3.
+//
+// Like `planConstraintComposition`, the plan reads only the constraints and the
+// child nodes, never a type or a claim. Unlike it, the plan exists for every
+// layer, a point `position` or a z-order included (the marginal histogram is
+// such a layer).
+//
+// This is a layer's sharing rule. Each node type has its own rule, next to its
+// type hook (`ResolveSharing` in `_node.ts`), and `GoFishNode.sharing()`
+// applies it. Two rows of the note's table are node-level rules rather than
+// constraints: a data-valued `w`/`h` (`layer.tsx`, which adds to this plan)
+// and `treemap` (`treemap.tsx`). A node with no rule shares every child.
+// The plans are read by the layer's type hook (its own union is its own set),
+// by the keyed domain table (`keyedDomains.ts`), by the layer's placement
+// (which children its frame positions by data), and by the
+// `GOFISH_DUMP_SHARING` dump (`debug/dump.ts`).
+// A discrete position (a scatter over a category field) is not in the table:
+// `positionCoordKind` reads it as neither pixels nor a datum, so it
+// contributes nothing here.
+
+/** One layer's sharing sets, per axis. Derived, never stored on a space. */
+export type SharingPlan = {
+  /** Per axis: each child's set index. Set 0 is the node's own set. */
+  sets: [number[], number[]];
+  /** Per axis: children whose own extent sits in a frame of its own (a datum
+   *  placement, a spread slot, a grid cell). */
+  nested: [Set<number>, Set<number>];
+};
+
+/** A layer's plan ({@link planSharing}): its sharing sets, and, per axis, the
+ *  children a datum `position` places. The layer's own union leaves those
+ *  out, since their own extent is nested at the datum. */
+export type LayerSharingPlan = SharingPlan & {
+  datumPlaced: [Set<number>, Set<number>];
+};
+
+export function planSharing(
+  constraints: ConstraintSpec[],
+  childNodes: GoFishAST[]
+): LayerSharingPlan {
+  const n = childNodes.length;
+  const index = buildNameIndex(childNodes);
+  // A ref that is not a direct child (a ref into a nested tier) has no slot
+  // here, so it takes no part.
+  const idxOf = (refs: readonly { name: string }[]): number[] =>
+    refs
+      .map((r) => index.get(r.name))
+      .filter((i): i is number => i !== undefined);
+
+  const datumPlaced: [Set<number>, Set<number>] = [new Set(), new Set()];
+  const nested: [Set<number>, Set<number>] = [new Set(), new Set()];
+  const detached: [Set<number>, Set<number>] = [new Set(), new Set()];
+  const joins: [number[][], number[][]] = [[], []];
+  const detach = (axis: 0 | 1, idx: number[]) =>
+    idx.forEach((i) => detached[axis].add(i));
+  const nest = (axis: 0 | 1, idx: number[]) =>
+    idx.forEach((i) => nested[axis].add(i));
+
+  for (const c of constraints) {
+    switch (c.type) {
+      case "position": {
+        // A literal pixel value places the child elsewhere. A datum keeps it
+        // in the own set, nested at its datum: it sits where its datum maps,
+        // so its own extent is in a frame of its own (a scatter's circle is
+        // sized in its own units), and the layer's own union leaves it out
+        // (`datumPlaced`).
+        const idx = idxOf(c.children);
+        for (const axis of [0, 1] as const) {
+          const kind = positionCoordKind(axis === 0 ? c.x : c.y);
+          if (kind === "pixel") detach(axis, idx);
+          if (kind === "datum") {
+            idx.forEach((i) => datumPlaced[axis].add(i));
+            nest(axis, idx);
+          }
+        }
+        break;
+      }
+      case "align": {
+        const idx = idxOf(c.children);
+        if (isPointAlign(c.x)) joins[0].push(idx);
+        if (isPointAlign(c.y)) joins[1].push(idx);
+        break;
+      }
+      case "distribute": {
+        const axis = axisIndex(c.dir);
+        const idx = idxOf(c.children);
+        // A stack adds its parts on one axis, so they share it. A spread
+        // gives each part a slot of its own, and the layer's own type there
+        // is the ordinal of the keys.
+        if (c.glue) joins[axis].push(idx);
+        else {
+          detach(axis, idx);
+          nest(axis, idx);
+        }
+        break;
+      }
+      case "nest": {
+        // Outer and inner share. The padding is pixels.
+        const idx = idxOf(c.children);
+        if (c.x !== undefined) joins[0].push(idx);
+        if (c.y !== undefined) joins[1].push(idx);
+        break;
+      }
+      case "grid": {
+        // Both grid axes act as spread directions.
+        const idx = idxOf(c.children);
+        for (const axis of [0, 1] as const) {
+          detach(axis, idx);
+          nest(axis, idx);
+        }
+        break;
+      }
+      // z-order and overlap move no data, so they contribute nothing.
+    }
+  }
+
+  // Detaches first, then joins, so an align beats a position on one axis.
+  // Union-find over the children plus one more element, `own`, the own set.
+  const sets: [number[], number[]] = [[], []];
+  for (const axis of [0, 1] as const) {
+    const own = n;
+    const parent = Array.from({ length: n + 1 }, (_, i) => i);
+    const find = (i: number): number => {
+      while (parent[i] !== i) i = parent[i] = parent[parent[i]];
+      return i;
+    };
+    const union = (a: number, b: number) => {
+      const ra = find(a);
+      const rb = find(b);
+      if (ra === rb) return;
+      // Keep `own` a root, so a merged set that holds it is the own set.
+      if (rb === own) parent[ra] = rb;
+      else parent[rb] = ra;
+    };
+    for (let i = 0; i < n; i++) if (!detached[axis].has(i)) union(own, i);
+    for (const idx of joins[axis])
+      for (let k = 1; k < idx.length; k++) union(idx[0], idx[k]);
+
+    // Number the other sets 1, 2, ... in order of their first child.
+    const label = new Map<number, number>([[find(own), 0]]);
+    sets[axis] = Array.from({ length: n }, (_, i) => {
+      const root = find(i);
+      let s = label.get(root);
+      if (s === undefined) label.set(root, (s = label.size));
+      return s;
+    });
+  }
+  return { sets, nested, datumPlaced };
 }
 
 const foldOptions = (s: Seg) => ({

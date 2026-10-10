@@ -448,7 +448,6 @@ console.log("# the race: chained .transition() vs .layer(time.transition())");
     spread({
       by: field("name").sort("value", "desc"),
       dir: "y",
-      sharedScale: true,
       spacing: 2,
     });
   const flow = (at: number, spreadByValue = ranking()) =>

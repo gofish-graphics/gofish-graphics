@@ -20,7 +20,6 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
       spread({
         by: field("name").sort("value", "desc"),
         dir: "y",
-        sharedScale: true,
         spacing: 2,
       }).transition({ update: time.stagger({ lag: 20 }) })
     )

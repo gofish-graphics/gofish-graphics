@@ -34,7 +34,6 @@ export const testPolarBar = (size: { width: number; height: number }) =>
           dir: 0,
           spacing: 4,
           alignment: "start",
-          sharedScale: true,
         },
         data.map((d, i) =>
           rect({

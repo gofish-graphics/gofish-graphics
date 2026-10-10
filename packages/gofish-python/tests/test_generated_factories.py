@@ -357,10 +357,9 @@ def test_snake_case_kwargs_serialize_to_camel_case_wire_keys():
         "fontSize": 12,
         "textAnchor": "start",
     }
-    assert spread(by="a", dir="x", shared_scale=True).to_dict()["sharedScale"] is True
-    assert stack([], dir="x", shared_scale=True, key="k").to_dict()["options"] == {
+    assert stack([], dir="x", em_x=True, key="k").to_dict()["options"] == {
         "dir": "x",
-        "sharedScale": True,
+        "emX": True,
         "key": "k",
     }
     assert text(text="hi").label("n", font_size=9).to_dict()["label"] == [
@@ -372,7 +371,7 @@ def test_camel_case_kwargs_are_rejected():
     with pytest.raises(TypeError):
         text(text="hi", fontSize=12)
     with pytest.raises(TypeError):
-        spread(by="a", dir="x", sharedScale=True)
+        stack([], dir="x", emX=True)
 
 
 # --- Nested option dicts ------------------------------------------------------

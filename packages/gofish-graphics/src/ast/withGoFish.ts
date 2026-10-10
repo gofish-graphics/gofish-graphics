@@ -105,7 +105,6 @@ export interface PromiseWithRender<T> extends Promise<T> {
   name(name: string | Token): PromiseWithRender<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): PromiseWithRender<T>;
   setKey(key: string): PromiseWithRender<T>;
-  setShared(shared: [boolean, boolean]): PromiseWithRender<T>;
   relate(fn: RelateFn): PromiseWithRender<T>;
   zOrder(value: number): PromiseWithRender<T>;
   scope(): PromiseWithRender<T>;
@@ -149,7 +148,6 @@ const CHAINABLE_NODE_METHODS = [
   "scope",
   "label",
   "setKey",
-  "setShared",
   "relate",
   "zOrder",
 ] as const;

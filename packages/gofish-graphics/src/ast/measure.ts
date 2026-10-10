@@ -118,6 +118,9 @@ export const resolveUnit = (v: UnitVar): Unit => {
 export const sameUnit = (a: Unit | undefined, b: Unit | undefined): boolean =>
   a !== undefined && b !== undefined && a.kind === b.kind && a.name === b.name;
 
+/** A string that names a unit: equal for two units iff {@link sameUnit}. */
+export const unitKey = (unit: Unit): string => `${unit.kind}:${unit.name}`;
+
 /**
  * The unit substitution of one render: the variable of each quantity name,
  * and the union-find over them. One per render, so a binding made anywhere
@@ -240,7 +243,9 @@ export class MeasureClash extends Error {
       `their columns in the chart's schema, e.g. ` +
       `schema: { "${a.names[0]}": Schema.unit("${a.unit}") }.\n` +
       `If they are different kinds of quantity, each needs its own axis: ` +
-      `give the inner chart its own w and h so it scales on its own.`
+      `place one chart apart from the other (e.g. with Constraint.position) ` +
+      `so they do not share the axis. Two units on one shared axis wait on ` +
+      `dual axes (#528).`
     );
   }
 }

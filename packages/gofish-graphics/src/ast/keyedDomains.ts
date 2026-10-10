@@ -1,0 +1,328 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
+// ── Measure-keyed domains (#1114 step 5) ─────────────────────────────────────
+//
+// After the type walk, one pass per render builds the keyed domain table:
+// for each space root, each axis and each unit (after unification), the
+// domain is the union of the intervals at the top of every sharing set with
+// that unit in the space. A sized node maps its keyed domain into its own size
+// (`layer.tsx`, the render root in `gofish.tsx`), so values of one unit land on
+// one domain wherever they sit, and values of different units never merge.
+// See apps/docs/docs/internals/design/measure-keyed-domains.md, section 5.
+//
+// This module reads only the resolved types and the sharing plans
+// (`GoFishNode.sharing()`), never a claim or a pixel.
+
+import * as Interval from "../util/interval";
+import type { SharingPlan } from "./constraints/compose";
+import { unionChildSpaces } from "./graphicalOperators/alignment";
+import {
+  isCONTINUOUS,
+  originIs,
+  spaceUnit,
+  type AxisTicks,
+  type UnderlyingSpace,
+} from "./underlyingSpace";
+import type { Size } from "./dims";
+import { niceScope, widenScope, type Extent } from "./extent";
+import { unitKey } from "./measure";
+
+/** The part of a node the table reads (duck-typed: `_node.ts` imports this
+ *  module). */
+export type KeyedNode = {
+  readonly uid: string;
+  type: string;
+  children: unknown[];
+  _underlyingSpace?: Size<UnderlyingSpace>;
+  /** Set on a coordinate transform: the space it opens for its subtree. */
+  _space?: unknown;
+  axisDemand: [AxisTicks | undefined, AxisTicks | undefined];
+  sharing(): SharingPlan;
+};
+
+const isKeyedNode = (n: unknown): n is KeyedNode =>
+  typeof n === "object" &&
+  n !== null &&
+  typeof (n as KeyedNode).sharing === "function" &&
+  Array.isArray((n as KeyedNode).children);
+
+/** Where a node sits on one axis: the frame its domains are keyed in (a
+ *  space root, or a child nested in its parent's set, whose extent is in a
+ *  frame of its own), and the top of the sharing set it belongs to (itself,
+ *  when its parent detaches or nests it). */
+type Seat = { spaceRoot: KeyedNode; top: KeyedNode; topType?: UnderlyingSpace };
+
+/** The key of a domain: its unit's representative, or, for values with no
+ *  unit (literals), the top of their set, which is a key of its own. */
+const domainKey = (
+  space: UnderlyingSpace | undefined,
+  top: KeyedNode
+): string => {
+  const unit = spaceUnit(space)?.unit;
+  const key = unit === undefined ? `set:${top.uid}` : unitKey(unit);
+  // An origin-less space (a middle alignment) has only widths, no data
+  // positions, so its domain is the unit's domain of widths, kept apart
+  // from the domain of positions.
+  return originIs(space, "none") ? `${key}/width` : key;
+};
+
+/**
+ * The keyed domains of one render. Built once after the type walk, before
+ * chrome and labels are elaborated, so chrome never decides a domain; it only
+ * reads them. The demand half is refreshed once the axes are assigned
+ * ({@link refreshDemand}). Read by every sized node's σ solve, by nicing, and
+ * by axis elaboration. A node the later rewrites add (a chrome ring, a label
+ * wrapper) has no seat of its own and reads the seat of the content it wraps.
+ */
+export class KeyedDomains {
+  private readonly seats = new Map<KeyedNode, [Seat, Seat]>();
+  private readonly domains = new Map<
+    KeyedNode,
+    [Map<string, Interval.Interval>, Map<string, Interval.Interval>]
+  >();
+  private readonly demand = new Map<
+    KeyedNode,
+    [Map<string, AxisTicks>, Map<string, AxisTicks>]
+  >();
+
+  /** The table of the tree under `root`, the render root. */
+  static build(root: KeyedNode): KeyedDomains {
+    const table = new KeyedDomains();
+    table.walk(
+      root,
+      ([0, 1] as const).map((axis) => ({
+        spaceRoot: root,
+        top: root,
+        topType: root._underlyingSpace?.[axis],
+      })) as [Seat, Seat]
+    );
+    table.refreshDemand();
+    return table;
+  }
+
+  private tables(spaceRoot: KeyedNode) {
+    let d = this.domains.get(spaceRoot);
+    if (d === undefined)
+      this.domains.set(spaceRoot, (d = [new Map(), new Map()]));
+    let t = this.demand.get(spaceRoot);
+    if (t === undefined)
+      this.demand.set(spaceRoot, (t = [new Map(), new Map()]));
+    return { domains: d, demand: t };
+  }
+
+  /** Add a top's interval on `axis` to its key's domain. */
+  private addTop(seat: Seat, axis: 0 | 1, space: UnderlyingSpace | undefined) {
+    // An empty column or a NaN end adds nothing.
+    if (space === undefined || !isCONTINUOUS(space)) return;
+    const iv = space.dataInterval;
+    if (!Interval.isFinite(iv)) return;
+    const key = domainKey(space, seat.top);
+    const { domains } = this.tables(seat.spaceRoot);
+    const prior = domains[axis].get(key);
+    domains[axis].set(
+      key,
+      prior === undefined ? iv : Interval.union(prior, iv)
+    );
+  }
+
+  /** Record the axes drawn over each keyed domain, from the `axisDemand`
+   *  stamps `resolveAxes` left on the seated nodes. A continuous axis a node
+   *  draws is demand for the domain of its set's key: the domain is niced to
+   *  its ticks (#659). A category axis ticks at its keys and nices nothing.
+   *  The types are the ones the table was built from, so this reads only the
+   *  stored seats. */
+  refreshDemand(): void {
+    for (const t of this.demand.values()) t.forEach((m) => m.clear());
+    for (const node of this.seats.keys()) {
+      for (const axis of [0, 1] as const) {
+        const ticks = node.axisDemand[axis];
+        const space = node._underlyingSpace?.[axis];
+        if (ticks === undefined || space === undefined || !isCONTINUOUS(space))
+          continue;
+        const key = this.keyOf(node, axis, space, true)!;
+        this.tables(key.spaceRoot).demand[axis].set(key.key, ticks);
+      }
+    }
+  }
+
+  private walk(node: KeyedNode, seats: [Seat, Seat]): void {
+    this.seats.set(node, seats);
+    for (const axis of [0, 1] as const) {
+      const seat = seats[axis];
+      if (seat.top === node) this.addTop(seat, axis, seat.topType);
+    }
+
+    if (node._space !== undefined) {
+      // A coordinate transform starts a new space. Its children share both
+      // axes (the coord overlays them), so the coord is the top of its own
+      // set there, over the union of its children's types.
+      const children = node.children.filter(isKeyedNode);
+      const childTypes = children.map(
+        (c) => c._underlyingSpace ?? ([undefined, undefined] as any)
+      );
+      const inner = ([0, 1] as const).map((axis) => {
+        const type = unionChildSpaces(childTypes, axis);
+        const seat: Seat = { spaceRoot: node, top: node, topType: type };
+        this.addTop(seat, axis, type);
+        return seat;
+      }) as [Seat, Seat];
+      for (const c of children) this.walk(c, inner);
+      return;
+    }
+
+    const plan = node.sharing();
+    node.children.forEach((child, i) => {
+      if (!isKeyedNode(child)) return;
+      // A child its parent detaches or nests is the top of a set of its
+      // own. Any other child is in its parent's set, and takes its seats.
+      const own = (axis: 0 | 1) =>
+        plan.sets[axis][i] === 0 && !plan.nested[axis].has(i);
+      if (own(0) && own(1)) return this.walk(child, seats);
+      // A child nested while it stays in its parent's set (placed at a
+      // datum, or the content of a data-valued box) has its own extent in a
+      // frame of its own, measured from the datum or the box, not in its
+      // parent's frame. So it keys its domains in that frame: its interval
+      // never joins its parent's domain, even when the two share a unit. A
+      // child in a set of its own (a detached child, a spread slot) is
+      // measured in the space's frame, so its domains join the space's.
+      const ownFrame = (axis: 0 | 1) =>
+        plan.sets[axis][i] === 0 && plan.nested[axis].has(i);
+      const childSeats = ([0, 1] as const).map(
+        (axis): Seat =>
+          own(axis)
+            ? seats[axis]
+            : {
+                spaceRoot: ownFrame(axis) ? child : seats[axis].spaceRoot,
+                top: child,
+                topType: child._underlyingSpace?.[axis],
+              }
+      ) as [Seat, Seat];
+      this.walk(child, childSeats);
+    });
+  }
+
+  /**
+   * The keyed domain a node maps on `axis` when its content has type `space`:
+   * the domain of the content's unit in the node's space, or, when the
+   * content has no unit (literals), the domain of the set the node is in
+   * (`viaSet`), else the content's own interval. Undefined when the node was
+   * not in the table or the content is not continuous.
+   */
+  domainOf(
+    node: KeyedNode,
+    axis: 0 | 1,
+    space: UnderlyingSpace | undefined,
+    viaSet: boolean
+  ): Interval.Interval | undefined {
+    const key = this.keyOf(node, axis, space, viaSet);
+    if (key === undefined) return undefined;
+    return this.tables(key.spaceRoot).domains[axis].get(key.key);
+  }
+
+  /** The ticks of an axis some node draws over the same keyed domain, or
+   *  undefined when no axis is drawn over it: a keyed domain is niced iff some
+   *  chart draws an axis for its key. */
+  ticksOf(
+    node: KeyedNode,
+    axis: 0 | 1,
+    space: UnderlyingSpace | undefined,
+    viaSet: boolean
+  ): AxisTicks | undefined {
+    const key = this.keyOf(node, axis, space, viaSet);
+    if (key === undefined) return undefined;
+    return this.tables(key.spaceRoot).demand[axis].get(key.key);
+  }
+
+  /**
+   * A sized node's scope on `axis`: its content's type `space` and claim
+   * widened to the keyed domain it maps ({@link domainOf}, `widenScope`),
+   * then niced to the ticks of the axis drawn over that domain, if any
+   * ({@link ticksOf}, `niceScope`, #659). It is the one widen-then-nice: every
+   * σ solve (a sized layer, the render root) and every axis drawn over the
+   * domain reads it, so the ticks and the marks agree by construction.
+   */
+  scope<S extends UnderlyingSpace | undefined>(
+    node: KeyedNode,
+    axis: 0 | 1,
+    space: S,
+    claim: Extent | undefined,
+    viaSet: boolean = true
+  ): [S, Extent | undefined] {
+    const [wide, wideClaim] = widenScope(
+      space,
+      claim,
+      this.domainOf(node, axis, space, viaSet)
+    );
+    return niceScope(wide, wideClaim, this.ticksOf(node, axis, space, viaSet));
+  }
+
+  /** A name for the keyed domain a node's axis is over (its space root and
+   *  key), so two axes over one keyed domain can be told to be the same axis
+   *  (`resolveAxes`). Undefined when the node is not in the table. */
+  axisKey(
+    node: KeyedNode,
+    axis: 0 | 1,
+    space: UnderlyingSpace | undefined
+  ): string | undefined {
+    const key = this.keyOf(node, axis, space, true);
+    return key === undefined ? undefined : `${key.spaceRoot.uid}/${key.key}`;
+  }
+
+  /** A node's seat on `axis`. A node added after the build (a chrome ring,
+   *  a label wrapper: `wrapRing`) is seated where the content it wraps was,
+   *  since its own set is that content: it reads the content's seat. Any
+   *  other node added later (a tick, a title) has none. */
+  private seatOf(node: KeyedNode, axis: 0 | 1): Seat | undefined {
+    const seat = this.seats.get(node)?.[axis];
+    if (seat !== undefined) return seat;
+    const sets = node.sharing().sets[axis];
+    const content =
+      sets.length > 0 && sets.indexOf(0) === sets.lastIndexOf(0)
+        ? node.children[sets.indexOf(0)]
+        : undefined;
+    return isKeyedNode(content) ? this.seatOf(content, axis) : undefined;
+  }
+
+  private keyOf(
+    node: KeyedNode,
+    axis: 0 | 1,
+    space: UnderlyingSpace | undefined,
+    viaSet: boolean
+  ): { spaceRoot: KeyedNode; key: string } | undefined {
+    const seat = this.seatOf(node, axis);
+    if (seat === undefined) return undefined;
+    if (spaceUnit(space)?.unit !== undefined)
+      return { spaceRoot: seat.spaceRoot, key: domainKey(space, seat.top) };
+    if (!viaSet) return undefined;
+    return {
+      spaceRoot: seat.spaceRoot,
+      key: domainKey(seat.topType, seat.top),
+    };
+  }
+
+  /** Each keyed domain: its space root, axis, key and domain, and whether an
+   *  axis is drawn over it. Read by the scope dump (`debug/dump.ts`). */
+  forEachDomain(
+    f: (
+      spaceRoot: KeyedNode,
+      axis: 0 | 1,
+      key: string,
+      domain: Interval.Interval,
+      drawn: boolean
+    ) => void
+  ): void {
+    for (const [root, axes] of this.domains)
+      ([0, 1] as const).forEach((axis) => {
+        for (const [key, iv] of axes[axis])
+          f(
+            root,
+            axis,
+            key,
+            iv,
+            this.demand.get(root)?.[axis].has(key) ?? false
+          );
+      });
+  }
+}

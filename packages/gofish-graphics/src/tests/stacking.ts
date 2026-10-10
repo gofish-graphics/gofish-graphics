@@ -28,7 +28,7 @@ export const testStacking = (size: { width: number; height: number }) =>
     { width: size.width, height: size.height },
     frame([
       enclose({}, [
-        spreadX({ spacing: 64, sharedScale: true, alignment: "middle" }, [
+        spreadX({ spacing: 64, alignment: "middle" }, [
           rect({ w: 32, h: 32 }).name("1"),
           rect({ w: 32, h: 64 }).name("2"),
           rect({ w: 32, h: 40 }).name("3"),

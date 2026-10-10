@@ -277,7 +277,6 @@ export interface SpreadOperator
   dir?: string;
   spacing?: number;
   alignment?: string;
-  sharedScale?: boolean;
   anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   /** Stack semantics: glue children together (sizes sum into a position at
@@ -317,7 +316,6 @@ export interface StackOperator
   /** Spread-parity passthrough; stack always glues regardless. */
   glue?: boolean;
   alignment?: string;
-  sharedScale?: boolean;
   anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   /** Box position, extent, and per-entry size — see `SpreadOperator`. */

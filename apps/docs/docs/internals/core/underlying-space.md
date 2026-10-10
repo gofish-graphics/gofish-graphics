@@ -6,6 +6,7 @@ status: draft
 covers:
   - packages/gofish-graphics/src/ast/underlyingSpace.ts
   - packages/gofish-graphics/src/ast/extent.ts
+  - packages/gofish-graphics/src/ast/keyedDomains.ts
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/alignment.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
@@ -31,6 +32,7 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/nestPlan.ts
   - packages/gofish-graphics/src/ast/constraints/grid.ts
   - packages/gofish-graphics/src/ast/constraints/bbox.ts
+  - packages/gofish-graphics/src/ast/debug/dump.ts
 ---
 
 # The underlying space tree
@@ -160,9 +162,9 @@ sub-budget layer scales size against a local extent but positions against an
 inherited map (a sub-budget vs inherited split) — two honest scopes on one axis,
 the multi-scale reading of the same equation, not a slope with a redundant,
 drifting twin. A niced-ticks-vs-raw-content split is _not_ a sanctioned case:
-that was the #659 bug (a self-scaled panel's stashed domain escaping the old
-pre-layout nice walk), and since nicing moved onto the scope solve
-([below](#nicing-is-a-scope-operation-applied-on-demand)) a scope's map and σ
+that was the #659 bug (a panel's own domain escaping the old pre-layout nice
+walk), and since nicing moved onto the solve
+([below](#nicing-is-a-keyed-domain-operation-applied-on-demand)) a scope's map and σ
 read one domain by construction.
 
 ## Why an explicit IR
@@ -308,8 +310,8 @@ the two sides:
   (`nestedExtent`). Its type keeps the inner's data interval.
 - `anchorAt` puts the baseline at the given coordinate:
   `[at − descent, at + ascent]`.
-- A scope root over a free extent (the chart root, or a layer's self-scaled
-  free stash) fits the claim's `ascent + descent` to its box and seats the
+- A sized node over a free extent (the chart root, or a layer with a size of
+  its own) fits the claim's `ascent + descent` to its box and seats the
   baseline at the scope's `originPx`: `descent·σ` above the box's low edge,
   overhead below the baseline included.
 - A stack lays its parts end to end, in order, as vectors. Each part's
@@ -455,7 +457,7 @@ each inherent to what the origin states are:
 
 - **Who applies `originPx`**: one seating rule (`seatInScope` in
   `solver/scopes.ts`), used by the render root, a coord, and every layer
-  (a self-scaled stash included). A pinned child shares its parent's frame,
+  (a sized layer included). A pinned child shares its parent's frame,
   so it sits at 0 and places its data through the frame's map; a free child
   has a frame of its own whose 0 is its baseline (`{σ, 0}`, `frameOf`), so
   its parent places that baseline at the frame's `originPx`; a child with no
@@ -693,6 +695,33 @@ reach the same expressive ceiling as the spread pipeline, auto-fit included
 back to `unionChildSpaces`; the general algebra is sketched in
 [[constraints-as-core]].
 
+**Sharing sets.** A second plan reads the same inputs, the constraints and the
+child nodes: `planSharing` (`constraints/compose.ts`) splits a layer's children,
+per axis, into sharing sets. Two children in one set read their data values on
+that axis in one frame. Set 0 is the layer's own set, and a child in any other
+set is detached on that axis. A literal pixel `position` detaches its child, a
+spread's `distribute` detaches each part and nests it in its slot, a grid does
+both on both axes, and `align`, a stack's glued `distribute` and `nest` join
+their children. One classifier, `positionCoordKind` (`constraints/position.ts`),
+says whether a coordinate is pixels (a number, or an interval of numbers) or a
+datum (a datum point, or an interval with a datum endpoint). Detaches run first
+and joins second, so an `align` beats a `position` on the same axis. The
+`nested` half is the datum placements plus the spread slots and grid cells. The
+plan also returns the datum placements on their own (`datumPlaced`), which the
+layer's own union leaves out. Unlike `planConstraintComposition`, the plan
+exists for every layer, point positions included. The layer's type hook, the
+keyed domain table and the `GOFISH_DUMP_SHARING` dump read it. It is step 3 of
+the [measure-keyed domains design](/internals/design/measure-keyed-domains),
+which lists what each construct contributes. `planSharing` is the layer's
+sharing rule. Like the type hook, each node type has its own rule
+(`resolveSharing`, read through `GoFishNode.sharing()`, which memoizes the plan
+and clears it with the types), and a node without one lets every child share
+(`shareAll`). Three rows of the table are node-level rules: a layer with a
+data-valued `w`/`h` nests its content on that axis, a `treemap` detaches each
+child and nests it in its tile on both axes (`nestEach`), and the `position`
+operator detaches its child on an axis with a pixel offset and keeps it shared
+on an axis with a datum offset.
+
 `distribute`'s `anchor` option (`"edge" | "start" | "middle" | "end" |
 "baseline"`, default `"edge"`) picks which pair of anchors the chain relates
 between adjacent children: `"edge"` relates the facing edges
@@ -812,10 +841,9 @@ elaboration target.
 The same proposal plan marks datum-valued `position` targets
 (`buildPositionTargetDims`) so the layer does not also forward the consumed
 data→pixel scale to that child axis; literal pixel pins are not marked because
-they do not consume a data scale. `buildPositionScalePlan` chooses the effective
-scale the placement solver consumes: inherited/self-scaled base first, otherwise
-a local scale from the layer POSITION space when the layer owns a datum-position
-axis. Child scale forwarding itself is the same plan (`childPosScalesFor`):
+they do not consume a data scale. The placement solver resolves datum positions against the layer's frame
+(`solveLayerScales`): the frame it is handed, or its own when it is sized.
+Child scale forwarding reads the same frame (`childPosScalesFor`):
 unowned axes forward inherited/base scales, while owned axes forward the layer's
 effective scale only to non-target children whose own space is POSITION.
 
@@ -862,7 +890,7 @@ last-writer-wins an ungoverned second write would otherwise produce
 unbound-target check, and `lowerAlignPlacement` separately warns (not
 throws) when a constraint ends up with nothing movable — every listed
 operand already placed — except the deliberate `isDataPositionedAlignTarget`
-skip (a self-scaled scatter facet), which stays silent.
+skip (a data-positioned scatter facet), which stays silent.
 
 Before any of this, the layer resolves every placement operand to a node
 inside it (`resolveConstraintOperands`, `constraints/index.ts`). Every
@@ -955,8 +983,8 @@ the rounded −40. A free
 layer is itself seated by its parent at its own baseline, so its frame has
 that baseline at local 0 (`frameOf`), and so does its free-child origin:
 applying the map again would count the offset twice, and letting the component
-float would let min-normalization lift a descent off the baseline. A layer's
-self-scaled stash roots its own σ-scope, so its frame is that scope's, with its
+float would let min-normalization lift a descent off the baseline. A sized
+layer solves its own σ-scope, so its frame is that scope's, with its
 origin at the scope's `originPx` (`descent·σ`), the same rule as the chart
 root. A layer with no data 0 on the axis has no frame, and its components
 float. Anchored children share the layer's frame and stay at 0, as the next
@@ -1155,11 +1183,9 @@ gofish.tsx (root):
   pass one `AxisScale` = { sigma?, map? } downward per axis — a child reads
   `sigma` for size, `map` for data position (they're mutually exclusive at root)
 
-layer.layout, on an axis the node scopes (node.shared[axis] — set by
-`spread`/`stack`'s `sharedScale` and on every chart's content; default
-[false, false] is a no-op), when it roots the scope (no inherited σ, or a
-self-scaled stash — a chart nested in another chart's mark inherits):
-    if claim[axis] exists → claim[axis].width.inverse(size[axis])
+layer.layout, on an axis where the layer is sized (`solveLayerScales`):
+    claim = KeyedDomains.scope(claim[axis]): widen to the keyed domain, nice on demand
+    if claim exists → claim.width.inverse(size[axis])
     else → undefined (no σ-dependent room, e.g. an ordinal of fixed boxes)
 ```
 
@@ -1195,18 +1221,14 @@ per-axis `AxisScale` via the `scales` parameter and read its `sigma` in
 
 `spread`/`stack` no longer have their own `layout` — they **elaborate to
 `layer + align + distribute`** (`spread.tsx`), so the dispatch above lives
-entirely in `layer.layout`. `buildChildScalePlan` is the shared layout-time
-planner: explicit self-scaled axes first derive local maps/scale factors, a
-layer whose constraints fold to a SIZE claim then inverts that fold against its
-allotted size (`fold.inverse(size[axis])`) to derive a local scale factor for
-its constrained children (returning failures so `layer` can warn before falling
-back), and a `sharedScale` scope finally runs the per-axis solve in the
-pseudocode above. `layer` recombines the per-axis σ and `map` into one
+entirely in `layer.layout`. `solveLayerScales` is the shared layout-time
+planner: on each axis where the layer is sized it runs the solve in the
+pseudocode above (returning the failed axes so `layer` can warn before falling back),
+and elsewhere it inherits. `layer` recombines the per-axis σ and `map` into one
 `AxisScale` per child at `child.layout`. The result is a **fresh `childScaleFactors`
-array** handed to descendants — **no node ever mutates the inherited σ**. That is the
-claim-hoisting form of `sharedScale` (#549): a scale solves at the lowest node
-where its measure stops being shared, and the result flows to descendants only,
-never leaking to siblings.
+array** handed to descendants — **no node ever mutates the inherited σ**. A scale solves
+at a sized node, and the result flows to descendants only, never leaking to
+siblings.
 
 This dispatch is the practical embodiment of the underlying-space-kind
 distinction. It also happens to make the rendering pipeline more readable:
@@ -1215,142 +1237,92 @@ once you know the kind, you know which arithmetic applies.
 ## The one solve site: the σ-scope registry
 
 Every scale above resolves the same frame equation — `content(σ) = allocated`,
-inverted once by `Monotonic.inverse` — but historically that inversion was
-written out at four-plus places, each with its own pixel budget and fallback:
-the render root (`gofish.tsx`), an explicit-pixel-size axis and a composed
-distribute budget and a `sharedScale` scope (all three inside
-`buildChildScalePlan`), and a coord boundary (`coord.tsx`'s `fitAxis`). Keeping
-them consistent needed a hand-written guard (the #618 "an intermediate must
-propagate the inherited σ, not re-root against its own budget" rule).
+inverted once by `Monotonic.inverse` — and one registry does the inversion. A
+`ScopeRegistry` (`ast/solver/scopes.ts`), created once per render on the
+`RenderSession`, is the one place σ / posScale is derived: `solveScope(space,
+claim, allocated)` solves a sized node's σ and its `originPx`, and
+`solveSize(frame, allocated)` inverts a bare claim (a grid's tracks).
 
-Stage 6b makes those a **single mechanism**. A `ScopeRegistry`
-(`ast/solver/scopes.ts`), created once per render on the `RenderSession`, is the
-one place σ / posScale is derived: `solveScope(space, claim, allocated)`
-solves a scope root's σ and its `originPx`, and `solveSize(frame, allocated)`
-inverts a bare claim (a grid's tracks). The
-derivation sites are now **σ-scope roots** — the render root, an axis with an
-explicit pixel size, a constraint budget that roots its own scope, a
-`sharedScale` operator, and a coord boundary — and each calls the registry.
-**Everyone else inherits**: the #618 guard is now the structural rule "not a root
-→ don't call the solve", so the inherited σ propagates unchanged (in
-`buildChildScalePlan`, an intermediate budget simply skips the solve — the
-`inheritedScaleFactors[axis] !== undefined && selfScaledSpaces[axis] ===
-undefined` test that _was_ the guard is now the "is this a scope root?"
-predicate). Because the arithmetic is exactly what the sites ran inline, the
-solved numbers are unchanged; the registry only adds the choke-point.
+**Only a sized node solves; everyone else inherits** (#1114). A node is sized on
+an axis when its size there is given to it rather than computed from σ:
 
-Within one layer the three roots are one decision per axis, solved once: an
-explicit size roots a scope over the stashed type and claim; otherwise, when no
-ancestor owns σ, a composed constraint budget or a `sharedScale` node roots one
-over the layer's own type and claim. Each is niced at the solve on demand, so
-a budget never re-solves a stash's σ from the raw claim (that split put bar
-tops off their ticks, the #659 symptom).
+- the render root, sized by the canvas;
+- each coordinate transform, sized by its box;
+- a node with a literal `w`/`h`;
+- a node with a data-valued `w`/`h`, whose box its parent's σ sizes and whose
+  content it maps into that box;
+- a node with pinned data in a slot its parent nests it in (a spread, grid
+  or treemap slot: a facet panel), sized by its slot;
+- a node handed no σ at all because nothing above it could solve one, sized
+  by the box it is given.
+
+A node its parent places at a datum (a scatter's glyph) is not sized. It is in
+its parent's set, so it inherits its parent's σ. It is handed no map, since
+the datum places it, so its frame is its own, with its 0 at the origin its
+parent places (`frameOf` in `solver/scopes.ts`).
+
+`solveLayerScales` (`constraints/proposalPlan.ts`) is the layer's form of the
+rule. A spread of magnitudes along its direction is not sized: its parts are
+parts of one chain claim, and the sized node above it solves σ against the
+chain. Two sized nodes that map one keyed domain into unequal sizes are an
+over-constrained layout, handled like any other: each node's own size wins
+inside it.
 
 Behind `GOFISH_DUMP_SCOPES` the registry prints every scope it solved as a
-printable frame equation — the debuggability bar the σ-affine model was chosen
-for. One line per scope, e.g. a stacked bar (root POSITION scope + a shared SIZE
-scope on the same axis, agreeing on one slope) and a sunburst (a coord boundary
-re-rooting σ on the angular axis):
+printable frame equation, one line per solve, with kind `root`, `coord`,
+`sized`, `grid` or `recenter`:
 
 ```
 [scope] root   key=root  axis=y [0,140]→[0,400] = 400  σ=2.857 map=yes
-[scope] shared key=layer axis=y 140σ = 400            σ=2.857 map=no
+[scope] sized  key=layer axis=y 140σ = 150            σ=1.071 map=yes
 [scope] coord  key=coord axis=x 16σ = 6.283           σ=0.393 map=no
 ```
 
-That the root and shared scopes on one axis print the same σ is Stage 6's
-invariant made visible: **one slope per σ-scope, by construction**, because the
-frame equation is solved once and the posScale is a derived view of that solve.
+After them, `dumpKeyedDomains` prints one line per keyed domain: its space
+root, axis, key and domain, marked `axis` when an axis is drawn over it.
 
-Stage 6c makes the registry the _sole_ producer of every slope, so that "by
-construction" holds everywhere the carrier flows. Two former exceptions closed:
-a coord boundary's POSITION axis used to hand down a fabricated `σ = 1` alongside
-its map (a scope-less slope that no consumer read) — it now hands down the one
-σ its scope solves, which its map shares; and the #582 equal-measure
-recentering (equating x and y when they share a declared unit) used to rewrite
-the root's σ inline in `gofish.tsx`, off the registry's books. It is now a named
-`recenterEqualMeasure` operation _on_ the registry, so the dump records the FINAL
-σ (a `recenter` entry per axis) rather than the pre-recentering root σ. With both
-closed, the only way a carrier shows two different slopes on one axis is the
-legitimate **two-scope** case above (a SIZE scope and a POSITION scope, e.g. a
-sub-budget panel's local size scale vs an inherited position map) — each half
-still a single registry-solved scope σ, never independent state.
+Behind `GOFISH_DUMP_SHARING`, `dumpSharing` prints each layer's sharing sets
+instead, one line per layer, skipping chrome rings. A `*` marks a nested child.
+Both dumps live in `debug/dump.ts`.
+`tests/scripts/dump-scopes.ts "<filter>" --sharing` prints them for a story.
+The marginal histogram's layer prints as:
 
-### Nicing is a scope operation, applied on demand
+```
+[sharing] layer __axisContent (3) [position×3,align×2] x: own{scatter,topHist} detached {rightHist} | y: own{scatter,rightHist} detached {topHist}
+```
+
+The registry is the sole producer of every slope. A coord boundary hands down
+the one σ its scope solves, which its map shares, and the #582 equal-measure
+recentering (equating x and y when they share a declared unit) is a named
+`recenterEqualMeasure` operation _on_ the registry, so the dump records the
+FINAL σ.
+
+### Nicing is a keyed-domain operation, applied on demand
 
 Domain rounding — `d3.nice` stretching `[0, 44]` to `[0, 45]` so ticks land on
-round numbers — used to be a **pre-layout tree walk** (`resolveNiceDomains`)
-that mutated every node's POSITION domain in place. That per-node formulation
-had two failure modes (issue #659): a self-scaled region's stashed space never
-got walked, so a marginal panel's bars sized the _raw_ domain while its niced
-width solved an orphan scope (two slopes for one space — a genuine dual-slope
-bug, not the sanctioned two-scope case); and any node could in principle nice
-its own _subset_ of a shared domain differently from the union.
+round numbers — is applied once, at a sized node's solve, to its keyed domain,
+so every consumer of that domain (content sizes, the position map, axis ticks)
+reads the same rounded domain (#659). `niceContinuous` (`underlyingSpace.ts`)
+is the one nicing function, and `niceScope` (`extent.ts`) widens the claim to
+match. It nices exactly the spaces that render an axis over their interval
+(`axisOver`), or will once placed: a pinned domain's two ends, a free one's two
+ends about its 0, and a delta axis's width from 0. A **coord scope never
+nices** (its domains map into a fixed coordinate range).
 
-The settled semantics, recorded on #659: **scale resolution is per-scope; axis
-rendering is per-node. An axis is a view of a scope, drawn at whatever node
-wants one.** Nicing is therefore an operation on the _scope's_ domain — applied
-once, at the scope's solve, so every consumer in the scope (content sizes, the
-position map, axis ticks) reads the same rounded domain. `niceContinuous`
-(`underlyingSpace.ts`) is the one nicing function; the non-coord scope roots
-apply it at their solve sites — the render root (`gofish.tsx`), the self-scaled
-stash and the shared-scale step (`buildChildScalePlan`), and the layer-local
-datum-position scale (`buildPositionScalePlan`). It nices exactly the spaces
-that render an axis over their interval (`axisOver`), or will once placed: a
-pinned domain's two ends, a free one's two ends about its 0 (the absolute
-axis of the scope that places its baseline; each side of the claim widens by
-its own end), and a delta axis's width from 0, so a delta axis steps evenly
-(ticks 20, 40, …, 160 rather than 20, 40, …, 140 and a last step of 7). A
-**coord scope never
-nices** (its domains map into a fixed coordinate range; rounding them would
-break the mapping).
+A domain nices **to the ticks of the axis drawn over it** (`AxisTicks`): a tick
+count (10) on a numeric axis, rounded with `d3.nice`; on a **time** space
+(`calendar` set, see the column types below) the calendar partition of the
+axis's inner row, rounded outward to its cells (`niceToCells` in
+`calendar.ts`), so both ends of the axis are ticks. Both read the domain and the
+axis options only, never pixels.
 
-A scope nices to **the ticks of the axis that demands it** (`AxisTicks`): a
-tick count (10) on a numeric axis, rounded with `d3.nice`; on a **time**
-space (`calendar` set, see the column types below) the calendar partition of
-the axis's inner row, rounded outward to its cells (`niceToCells` in
-`calendar.ts`), so both ends of the axis are ticks. A round number of
-milliseconds means nothing on a calendar, so a time space branches on its
-kind inside the one `niceContinuous`. The partition is the axis's explicit
-inner row (`rows[0]` of the stamped `AxisTicks`: `layout` parses
-`axes.x.rows` once, and the axis is drawn from the same rows), else the one
-the domain picks for about the tick count
-(`tickPartition`, like d3's time ticks). Both read the domain and the axis
-options only, never pixels.
-
-And it is **demand-driven**: a scope nices its domain **iff at least one node
-in the scope renders an axis on that dim**. Nicing is a presentation
-adjustment whose demand comes from axis views — with no axis there is no tick
-grid to round for, so axis-less content stays at the honest raw scale; with an
-axis, content and ticks share the one niced domain, which is the contract.
-Mechanically, `resolveAxes` leaves a persistent `axisDemand` stamp on every
-axis-owning node: the axis's `AxisTicks`, which the chart's `axes` option
-sets per dim (undefined for no axis). The `axis` work flags are consumed and
-cleared by elaboration; the stamps survive to layout. Each solve site asks
-`GoFishNode.scopeAxisTicks(dim)`, which returns the ticks of an axis in the
-scope, or undefined for none: a walk over the scope's **space-flow
-region** — up from the scope root while neither a self-scaled stash nor a coord
-boundary cuts the flow, then across that region's subtree, stopping at deeper
-stashes and coords. The region is exactly the neighborhood whose axes all view
-the same underlying domain (an inner shared scope under an axis-drawing root
-inherits the root's demand, because its space is what bubbled up into the
-domain that axis draws; a stashed panel does not, because its space never
-reached the ancestor's axis). The walk scans the whole region, so the answer is
-kept on the render session, per dim, keyed by the region's root: every scope in
-a region shares it, and the region is scanned once per render however many
-scopes ask. A layer asks only when it roots a scope the answer changes (most
-layers, e.g. one per keyframe mark under a `time.sequence`, root none), so the
-solve takes the demand as a per-axis read, `axisDemand(dim)`.
-Tick elaboration nices node-locally with the same `niceContinuous`, applied to
-the axis-owning node's space — the same union that bubbled to the scope root —
-so elaboration and the solve cannot disagree.
-
-The facet corollaries fall out of the one rule: shared-scale facets all render
-the parent scope's identical niced axis, and free-scale facets are their own
-scope roots and nice per-panel — iff they draw their own axis. The marginal
-histogram's panels draw no count axis, so their scopes stay raw and the panel's
-map and σ agree on the raw domain; give a panel a count axis and its one scope
-nices once, keeping bars and ticks consistent by construction.
+And it is **demand-driven**: a keyed domain is niced **iff some node draws a
+continuous axis over it**. With no axis there is no tick grid to round for, so
+axis-less content stays at the honest raw scale. `resolveAxes` leaves a
+persistent `axisDemand` stamp on every axis-owning node, and the keyed domain
+table records each stamp against the domain of the stamping node's set
+(`KeyedDomains.ticksOf`). Tick elaboration nices the same keyed domain through
+the same `KeyedDomains.scope`, so elaboration and the solve cannot disagree.
 
 ## Scales generalize flex factors
 
@@ -1400,172 +1372,91 @@ The payoff is conceptual economy: "fill the container proportionally" is not
 a bespoke layout mode, it is what a size scale already does once its range is
 the parent's extent.
 
-## Self-scaling regions: an explicit or data-valued size absorbs an axis
+## Sized nodes and measure-keyed domains
 
-The root resolves its scales against the canvas: POSITION → a posScale onto
-the pixel box, SIZE → invert the Monotonic against the canvas size. A
-`layer` (or `frame`) given an **explicit size on a dim** — a literal pixel
-number, or a data-valued claim (a field name, a `field(...)` expression, or a
-per-entry array) — does the same thing one level down — "a chart embeds the
-way it renders." On that dim it becomes a self-contained **scaling region**:
-its data space is absorbed internally rather than contributed to whatever
-shared space its parent is building.
+A size never splits a domain (#1114, the design note
+[Measure-keyed domains](/internals/design/measure-keyed-domains)). Which
+children share an axis is a fact about a node's composition, its **sharing
+sets** (`planSharing` in `constraints/compose.ts`, one rule per node type,
+`GoFishNode.sharing()`): children of a layer share both axes, a literal
+`position` detaches a child on its axis, an `align` joins the children it
+names, a stack shares its parts, and a spread or a grid gives each part a slot
+of its own. A layer's type is the union of its own set only; a detached child
+does not flow into it. Units meet through the one join, `joinUnits`, with
+`shared` true inside a set and false between a spread's parts.
 
-The motivating case is a marginal histogram, seaborn-jointplot style: a
-center scatter in data units, with a count histogram pinned along each edge.
-The histograms are sized to a fixed pixel band (`chart(data, { h: 80 })`),
-and their count axis must not union into the scatter's shared x/y domains —
-counts and beak-length millimeters are foreign units. The explicit pixel
-size is exactly the signal that this region carries its own scale.
+After the type walk, one pass builds the **keyed domain table**
+(`KeyedDomains` in `keyedDomains.ts`), once per render, before chrome and
+labels are elaborated: per space root (the render root, each coordinate
+transform), per axis and per unit after unification, the union of the
+intervals at the top of every sharing set with that unit. The top of a set is
+where it stops: a child its parent detaches or nests, or the space root. A
+child nested while it stays in its parent's set (placed at a datum, or the
+content of a data-valued box) measures its own extent from the datum or the
+box, so its domains are keyed in a frame of its own and never widen its
+parent's, even in the same unit.
+Values with no unit (literals) are keyed by their set. So two facet panels
+that plot one column share one domain, and a count histogram placed beside a
+scatter of millimeters keeps its own. Chrome never decides a domain, it only
+reads one: a ring or a label wrapper added later reads the seat of the content
+it wraps. The axes drawn over each domain are recorded once `resolveAxes` has
+assigned them (`refreshDemand`).
 
-The rule lives in `layer`'s resolver and layout
-(`graphicalOperators/layer.tsx`), in two halves, and it branches on whether
-the explicit size is a **literal** or a **data value**:
+Every sized node maps its keyed domain into its own size: before its solve,
+its claim is widened to the keyed domain (`widenScope` in `extent.ts`, the same
+arithmetic as nicing: only the data part widens, so pixel overhead keeps its
+pixels), then niced on demand, then solved. The widen-then-nice is one method,
+`KeyedDomains.scope`, read by every sized layer's solve, by the render root,
+and by the axis drawn over the domain.
 
-- **`resolveUnderlyingSpace` and `resolveExtent`.** Both hooks follow the
-  same steps (the type hook keeps the layer's composed types from
-  `composeLayerTypes`, and the claim hook reads them, since a node resolves
-  its types before its claim and the two memos are cleared together), and
-  each stashes its own half.
-  - **Literal pixel size** (`w: 80`). After resolving each axis normally, for
-    any dim that has an explicit pixel size and whose resolved space is
-    continuous (any origin), the real type is **stashed** verbatim and
-    `UNDEFINED` is reported upward; the claim hook stashes the matching claim
-    and reports none. The stash keys on the claim, not on the type's kind:
-    a spread of magnitudes has an ORDINAL (or UNDEFINED) type, which is
-    still reported upward so its keys label the parent's axis, but its room
-    depends on σ, so the layer stashes its type and claim, roots its own
-    scope, and reports no claim. An ordinal axis with no claim has no scale
-    to absorb, so it is left untouched.
-  - **Data-valued size** (`w: "count"`, `w: field("count").normalize()`, an
-    entry-flagged `size` array). This is the "DATA-DRIVEN operator extent"
-    case (#4/#20 — nested mosaic): the layer's own `w`/`h` becomes a `SIZE`
-    claim reported **upward**, so the _enclosing_ scale scope solves this
-    layer's pixel extent — the layer is a leaf in its ancestor's scope,
-    exactly like a leaf `rect({ w: "count" })`. But that leaves the layer's
-    own _composed content_ (its children's real space) needing somewhere to
-    go: if the composed space is continuous, it is stashed as it is,
-    together with the composed claim, before being overridden by the new
-    data-valued claim. (It used to be converted to a free magnitude first, so
-    that its descendants would get a σ and not only a map; a pinned stash now
-    solves both, so the conversion, which dropped the content's position, is
-    gone.) This is what makes "data-valued size ⇒ self-scaling
-    region" the **general** rule (fixed #651 smell 1: without the stash, a
-    subtree under a data-valued size silently consumed the _ancestor's_ σ
-    instead of getting its own local scope): the node's own box is solved by
-    the ancestor scope, and its interior is a fresh scope resolved against
-    that box.
-  - A parent layer's `unionChildSpaces` ignores an axis reported `UNDEFINED`
-    (no opinion — see [The contract](#the-contract)) instead of polluting a
-    shared domain with the absorbed region's units.
-- **`layout`.** The stashed space gets a **local** scope solved against the
-  layer's own resolved box (`solveScope(stashed, stashedClaim, size[dim])`):
-  σ for every stash, and, when the stash has an origin, the layer's frame
-  (the scope's map), in which each child sits by the one seating rule
-  (`seatInScope`): a pinned child places its data through it, and a free
-  child's baseline sits at its `originPx`. These locals override the inherited posScale /
-  scale factor on that dim — definitionally, since the inherited scale is in
-  the parent's foreign units. If the size can't be resolved (NaN), the locals
-  are left undefined and the dim degrades to the inherited path rather than
-  producing NaN scales. The stashed domain participates in demand-driven
-  nicing exactly like the root's
-  ([above](#nicing-is-a-scope-operation-applied-on-demand), issue #659): if
-  the region renders an axis on the dim, the stash is niced at this solve, so
-  the local map, the local σ, and the ticks read one rounded domain; if not,
-  it stays raw. (Before #659 the stash escaped the pre-layout nice walk
-  entirely — the panel's content sized the raw domain while a niced width
-  solved an orphan scope.)
+A **literal** `w`/`h` carries no data, so the node reports its content's type
+upward unchanged, and its keyed domain is shared as the sharing sets say. Its
+claim, though, is its own pixels: the box solves its own σ, so its content's σ
+claim is not room its parent can scale. The node claims the content's claim
+at the σ it solves, which keeps the content's split about data 0 and sums to
+the size (`fixedClaim` in `layer.tsx`). A claim that is only pixels has no σ
+in it (`scalesWithSigma` in `extent.ts`): it needs no canvas at the root, and
+a sized node has nothing to solve from it. A **data-valued** `w`/`h` (a field name, a `field(...)`
+expression, a per-entry array) is a value in its parent's unit, so the node
+reports a free magnitude (`magnitude(size)`), a leaf in its parent's set like
+a rect with `w: "count"`, and its content is nested in the box: the content
+is the top of a set of its own, and the node maps the content's keyed domain
+into the box its parent's σ sized. This is the one inherent special case of
+the sharing table, and the note justifies it: a data-valued size already has
+a type on its axis, so its content is a second coordinate inside the box.
 
-Note that a histogram's count axis is **anchored, not origin-less**, at the
-frame boundary. Under start/end/baseline alignment, `resolveAlignmentSpace`
-(`alignment.ts`) folds the baseline magnitudes into `pinned [0, max]` — it
-commits the data-driven extents to an anchored axis so they can be aligned.
-Without the self-scaling rule, that count POSITION would union straight into
-the shared axes as if it were data units; the rule is what keeps the absorbed
-axis from leaking.
-
-The space reported upward is plain `UNDEFINED` for now. Issue #508's
-proposed CONSTANT kind — "this axis has a known fixed pixel extent" (a
-genuinely _constant_ width Monotonic, `linear(0, w)`, with no inverse, as
-opposed to the through-origin `linear(w, 0)` of a scaling extent) — is the
-eventual, more honest home for what a self-scaling region contributes to its
-parent.
-
-### Space-filling spines: `normalize` self-scales a stacking axis
+### Space-filling spines: `normalize` nests each part
 
 The **space-filling spine** — the conditional axis of a mosaic / marimekko —
-is now a plain instance of the general data-valued-size rule above, with no
-layout-side special case at all (#700 Phase 2; this replaced the earlier
-`stack({ normalize: true })` layout flag and its bespoke `__normalizeAxis`
-hint). Its segments should _fill_ the extent in proportion to their value,
-showing a conditional distribution (each column of a mosaic runs 0–100%
-locally): `stack({ by, dir, size: field("count").normalize() })`.
+is an instance of the data-valued size above, with no layout-side special
+case. Its segments _fill_ the extent in proportion to their value:
+`stack({ by, dir, size: field("count").normalize() })`.
 
-The split is: `.normalize()` is a **data** transform, evaluated once, up
-front, by `applyChannels` (`marks/createOperator.ts`) via
-`splitAtNormalize`/`applyEntryNormalize` in `fieldExpr.ts` — it has nothing to
-do with layout. For each of the operator's own split entries it runs the
-PRE-normalize expression exactly as any size accessor would (an aggregate op
-like `.count()` if chained, else the channel's default sum), then replaces
-those per-entry values with each entry's **share** of their sum,
-`v_e / Σv_e` — a windowed data transform over the operator's own children,
-tagged with a share [unit](#measures-units-are-types) (`"<base> share by <by>"`,
-via `shareQuantity`) so a share axis can never silently union with the base
-quantity's own axis.
+`.normalize()` is a **data** transform, evaluated once, up front, by
+`applyChannels` (`marks/createOperator.ts`) via
+`splitAtNormalize`/`applyEntryNormalize` in `fieldExpr.ts`. For each of the
+operator's own split entries it computes the entry's **share** of their sum,
+`v_e / Σv_e`, tagged with a share [unit](#measures-units-are-types)
+(`"<base> share by <by>"`, via `shareQuantity`) so a share axis can never
+silently union with the base quantity's own axis.
 
-`spread`/`stack`'s `size` option (one value per split entry, computed this
-way) then wraps **each child** in its own sized `layer({ [w|h]: size[i] },
-[child])`, before the usual align/distribute elaboration (`spread.tsx`). Each
-wrapper's `w`/`h` is a **data-valued size claim** like any other — an ordinary
-instance of the rule above, not a special stacking-axis hint. The wrapper is
-purely a sizing shim: it copies the wrapped child's key/datum/`__splitBy`
-identity onto itself so downstream ordinal-axis labeling and
+`spread`/`stack`'s `size` option then wraps **each child** in its own sized
+`layer({ [w|h]: size[i] }, [child])`, before the usual align/distribute
+elaboration (`spread.tsx`). The wrapper copies the wrapped child's
+key/datum/`__splitBy` identity onto itself so ordinal-axis labeling and
 `resolve(..., { from })` still see the un-wrapped child's identity.
 
 This is the whole trick behind **nested mosaics**. Each level plays two roles
-on its two axes: its stacking axis's per-entry `size` shares (each child a
-local, isolated self-scaling region, reporting `UNDEFINED` up from that
-child's wrapper), while its cross axis reports its raw `Σcount` SIZE _up_ from
-the operator as a whole (the ordinary data-driven-operator-extent path — the
-operator is a leaf in its ancestor's scale scope). Because the per-entry
-self-scaling regions are local and the raw count is never mutated, the
-marginal × conditional × conditional factorization composes to any depth:
-`class → sex → survived` alternates y → x → y, and every level reads `count`
-raw. See the `stack` operator and the mosaic gallery examples.
-
-An earlier iteration (the `stack({ normalize: true })` layout flag) needed a
-bake-side escape hatch: because `resolveUnderlyingSpace` reports `UNDEFINED`
-upward for a self-scaled axis, the bake's y-flip rule (since replaced by
-[axis direction](/internals/layout/passes#axis-direction)) couldn't see that
-the axis was _really_ CONTINUOUS, so a parallel `_selfScaledSpace` field on
-`GoFishNode` carried the true kind alongside the reported `UNDEFINED`, purely so
-the flip could still open over a normalized spine. The per-entry `size`-claim mechanism
-doesn't need that: each entry gets its own wrapper wired through the ordinary
-data-valued-size path above, and stacking now follows **data order** directly
-at every level rather than needing a flip to correct it — so `_selfScaledSpace`
-and its fallback were deleted outright, not generalized.
-
-A differently-shaped side channel came back later for a different consumer.
-`layer.tsx`'s self-scaling branch now also writes the real (anchored/
-difference) space it's about to replace with `UNDEFINED` into
-`GoFishNode.selfScaledSpace` — its presence (`!== undefined`) IS the "this
-dim is self-scaled" marker, so there is no separate boolean field to keep in
-sync. Nothing in layout reads it — `_underlyingSpace` is still
-`UNDEFINED` there, so sizing is exactly as before. The reader is `resolveAxes`
-(see [Axes](/internals/frontend/axes)'s "unifying duplicate axes across
-self-scaled siblings" section): a `spread` whose per-group children are each
-self-scaled to the same explicit pixel width over the same domain (a ridgeline
-chart's per-month panels) collapses the union to `UNDEFINED` at the parent
-exactly like the mosaic case above, but here the parent needs to tell "my
-children all silently agree on one real scale" apart from "my children are
-independently self-scaled" — a distinction the boolean alone can't make. The
-stash makes that comparison possible without touching layout at all.
+on its two axes: on its stacking axis each entry's wrapper is a share
+magnitude whose content is nested in it, while on its cross axis the level
+reports its content's type up. The class, sex and survived shares are three
+declared units, so each level keeps its own domain, `class → sex → survived`
+alternates y → x → y, and every level reads `count` raw.
 
 ## Measures: units are types
 
-The self-scaling region above is the heavy hammer — give a sub-chart an
-explicit pixel size and its axis stops talking to the outside entirely. But
-the marginal histogram has a subtler need at the _shared_ boundary. When the
+The sharing sets above decide which children share an axis. But the marginal
+histogram has a subtler need at the _shared_ boundary. When the
 top count histogram and the center scatter overlay on x, the union should
 succeed (both are beak lengths along x) and the count axis, folded
 into a position interval, should _not_ pollute that millimeter domain. The
@@ -1721,7 +1612,7 @@ axis with `joinUnits` — so a layer's own positioning constraints in clashing
 units (an interval coordinate with one endpoint in `mm` and the other in `inch`)
 throw at the source. The layer then merges this constraint-domain measure with
 its children's, like any other composition. A child that a datum
-position places (`datumPlacedChildren`, `compose.ts`) is left out of that
+position places (the sharing plan's `datumPlaced`, `compose.ts`) is left out of that
 union altogether: it sits where its datum maps, so its own extent and measure
 are in its own frame (a `scatter`'s circle sized in its own units, a pie glyph
 in its angle), not in the axis's data. This restores the unit tag the scatter
@@ -1759,10 +1650,10 @@ declares no names leaves `x` and `y` even inside a polar one.
 `Schema.unit` is spelled the same in Python, so one message serves both.
 
 The two remedies are the two escape hatches this essay already describes:
-declare that the units _are_ the same, or wrap the foreign region in an
-explicit pixel size so it absorbs its own axis (the [self-scaling
-region](#self-scaling-regions-an-explicit-or-data-valued-size-absorbs-an-axis)
-above) and never reaches the shared union at all.
+declare that the units _are_ the same, or place the foreign region apart
+(a literal `position` detaches it, see
+[sized nodes](#sized-nodes-and-measure-keyed-domains) above) so it never
+reaches the shared union at all.
 
 **Titles.** An axis is titled by its space's titles (`spaceTitle`), joined
 with `", "` in the order the merge met them: a histogram's edges title as
@@ -2002,7 +1893,7 @@ reports no quantity of its own, leaving
 [`resolveQuantity`](#measures-units-are-types) to the channel as before, so
 `.sum()` and `.mean()` keep the column's unit. `.normalize()`'s share values
 get their own declared unit, `shareQuantity(base, byName)` — see
-[Space-filling spines](#space-filling-spines-normalize-self-scales-a-stacking-axis)
+[Space-filling spines](#space-filling-spines-normalize-nests-each-part)
 above for why a share is a distinct unit (0–1, not the base quantity's own
 units) that must never silently union with it.
 

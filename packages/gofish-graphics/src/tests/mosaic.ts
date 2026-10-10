@@ -19,7 +19,7 @@ const data = [
 
 export const testMosaic = () =>
   stackX(
-    { spacing: 4, alignment: "start", sharedScale: true },
+    { spacing: 4, alignment: "start" },
     // TODO: I could probably make the width be uniform flexible basically
     Object.entries(_.groupBy(data, "origin")).map(([origin, items]) =>
       stackY(
@@ -28,7 +28,6 @@ export const testMosaic = () =>
           w: v(_(items).sumBy("count")),
           spacing: 2,
           alignment: "middle",
-          // sharedScale: true,
         },
         items.toReversed().map((d) =>
           rect({

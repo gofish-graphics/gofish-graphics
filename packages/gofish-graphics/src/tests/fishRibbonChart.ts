@@ -26,7 +26,7 @@ const fishColors = {
 export const testFishRibbonChart = () =>
   frame([
     stackX(
-      { spacing: 64, sharedScale: true },
+      { spacing: 64 },
       _(seafood)
         .groupBy("lake")
         .map((d) =>

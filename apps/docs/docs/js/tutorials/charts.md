@@ -393,7 +393,7 @@ not tied to an argument like `h`, we'll need to pass a `key` field to the object
 
 ```ts
 stackX(
-  { spacing: 8, sharedScale: true },
+  { spacing: 8 },
   map(_.groupBy(seafood, "lake"), (lake, key) =>
     rect({ key, w: 32, h: v(_.sumBy(lake, "count")), fill: gf.color.green[5] })
   )
@@ -555,7 +555,7 @@ gf.layer({ axes: true }, [
 ```ts
 frame([
   stackX(
-    { spacing: 64, sharedScale: true },
+    { spacing: 64 },
     map(_.groupBy(seafood, "lake"), (lake, key) =>
       stackY(
         { key, spacing: 1 },

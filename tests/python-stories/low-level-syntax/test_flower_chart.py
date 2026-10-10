@@ -52,7 +52,6 @@ def story_default():
                             h=_FLOWER_RADIUS,
                             spacing=0,
                             alignment="start",
-                            shared_scale=True,
                         ),
                     ],
                     coord=Coord.polar(),

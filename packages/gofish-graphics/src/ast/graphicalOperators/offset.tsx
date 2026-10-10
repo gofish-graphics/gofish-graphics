@@ -31,11 +31,10 @@ export const offset = createNodeOperator<{ x?: number; y?: number }, GoFishAST>(
     return new GoFishNode(
       {
         type: "offset",
-        shared: [false, false],
         resolveUnderlyingSpace: (childSpaces) => childSpaces[0] ?? [],
         resolveExtent: (childExtents) =>
           childExtents[0] ?? [undefined, undefined],
-        layout: (_shared, size, scales, layoutChildren) => {
+        layout: (size, scales, layoutChildren) => {
           const child = layoutChildren[0].layout(size, scales);
           child.place("x", 0, "baseline");
           child.place("y", 0, "baseline");

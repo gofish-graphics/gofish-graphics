@@ -65,7 +65,7 @@ export const testPolarRibbonTransposed = (size: { width: number; height: number 
     coord({ transform: polar() }, [
       layer([
         stack(
-          { y: 100, dir: 0, spacing: 0, alignment: "start", sharedScale: true },
+          { y: 100, dir: 0, spacing: 0, alignment: "start" },
           // TODO: I could probably make the width be uniform flexible basically
           Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
             stack({ dir: 1, alignment: "middle" },

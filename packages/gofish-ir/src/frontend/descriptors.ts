@@ -1021,11 +1021,6 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         default: "baseline",
         doc: 'Cross-axis alignment ("start" | "middle" | "end" | "baseline").',
       },
-      sharedScale: {
-        type: t.boolean,
-        default: false,
-        doc: "Share one scale across all children.",
-      },
       anchor: {
         type: t.enum("edge", "start", "middle", "end", "baseline"),
         default: "edge",
@@ -1074,11 +1069,6 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.string,
         default: "baseline",
         doc: 'Cross-axis alignment ("start" | "middle" | "end" | "baseline").',
-      },
-      sharedScale: {
-        type: t.boolean,
-        default: false,
-        doc: "Share one scale across all children.",
       },
       anchor: {
         type: t.enum("edge", "start", "middle", "end", "baseline"),

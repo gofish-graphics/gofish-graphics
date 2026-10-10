@@ -299,11 +299,14 @@ export function distributeSpaceFold(
 ): UnderlyingSpace {
   const n = targetSpaces.length;
   if (n === 0) return UNDEFINED;
-  // The targets' units unify as types. An ordinal target's measure is its
-  // grouping field, which names a category axis but is no unit.
+  // The targets' units meet as types. A stack adds its parts on one axis,
+  // so they share it and unify; a spread gives each part a slot of its own,
+  // so its parts do not share the axis (#1114: `planSharing`) and unify
+  // nothing. An ordinal target's measure is its grouping field, which names
+  // a category axis but is no unit.
   const childMeasure = joinAllUnits(
     targetSpaces.map((s) => (isCONTINUOUS(s) ? s.measure : undefined)),
-    true,
+    opts.glue === true,
     {
       axis: opts.axis,
       where: opts.glue

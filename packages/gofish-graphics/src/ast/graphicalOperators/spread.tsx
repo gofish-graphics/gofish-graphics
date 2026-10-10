@@ -33,9 +33,8 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
 /**
  * `Spread` arranges its children along `dir` with spacing and aligns them on the
  * cross axis. It **elaborates to `layer + distribute + align`**: #547 proved the
- * space fold, budget, and auto-fit are identical to the bespoke spread, #549 made
- * the scale handling match (fresh child array, no parent mutation), and the
- * layer honors `sharedScale` as a scale scope (layer.tsx). `stack` is
+ * space fold, budget, and auto-fit are identical to the bespoke spread, and #549
+ * made the scale handling match (fresh child array, no parent mutation). `stack` is
  * `spread({ glue: true })`; `spreadX`/`spreadY` fix `dir`. The IR keeps `spread`/
  * `stack` (the fluent operator wrapper's `serialize` tag), so this elaboration is below the IR.
  *
@@ -46,10 +45,10 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
  * unchanged — only the wrapping is new. This replaces the old `normalize`
  * layout flag: `size: field(<name>).normalize()` computes each entry's SHARE
  * of the window (see fieldExpr.ts's `applyEntryNormalize`) as a data-driven
- * SIZE claim on the wrapper, which layer.tsx's data-valued-size branch turns
- * into a local self-scaling region for that child's subtree — the same
- * space-filling-spine effect `normalize: true` used to special-case, but now
- * just the general "data-valued size ⇒ self-scaling region" rule.
+ * SIZE claim on the wrapper, whose content layer.tsx nests in the wrapper's box
+ * as a sized node — the same space-filling-spine effect `normalize: true` used
+ * to special-case, but now just the general "a data-valued size nests its
+ * content" rule.
  */
 export const Spread = createNodeOperator(
   async (
@@ -58,7 +57,6 @@ export const Spread = createNodeOperator(
       dir,
       spacing = 8,
       alignment = "baseline",
-      sharedScale = false,
       anchor = "edge",
       reverse = false,
       glue = false,
@@ -74,7 +72,6 @@ export const Spread = createNodeOperator(
       dir: AxisName | Direction;
       spacing?: number;
       alignment?: Alignment;
-      sharedScale?: boolean;
       /** How adjacent children relate on the stack axis: `"edge"` (default)
        *  chains facing edges (spacing = gap); `"start"|"middle"|"end"|
        *  "baseline"` chains that fixed anchor (spacing = anchor-to-anchor
@@ -152,8 +149,8 @@ export const Spread = createNodeOperator(
     const names = ensureChildNames(childList, "spread");
 
     // Elaborate to a layer carrying the cross-axis align + the stack distribute.
-    // `fancyDims` (explicit w/h) flow to the layer, whose self-scaling region
-    // handles an explicit size exactly as the bespoke spread did.
+    // `fancyDims` (explicit w/h) flow to the layer, which is then a sized
+    // node: it maps its keyed domain into that size.
     const node = (await layer(
       {
         key,
@@ -202,10 +199,6 @@ export const Spread = createNodeOperator(
       node.axisDir = stackDir;
     };
 
-    // `sharedScale` is a scale-scope annotation (claim hoisting, #549): the node
-    // solves σ locally and shares it with descendants. The layer honors this in
-    // `layout` (it self-solves per axis when `shared`, into a fresh array).
-    node.shared = [sharedScale, sharedScale];
     if (axes !== undefined) {
       const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
         opt === undefined ? undefined : opt === false ? false : true;
@@ -226,7 +219,6 @@ export type SpreadOptions<T = any> = {
   dir: AxisName;
   spacing?: number;
   alignment?: "start" | "middle" | "end" | "baseline";
-  sharedScale?: boolean;
   /** How adjacent children relate on the stack axis: `"edge"` (default)
    *  chains facing edges (spacing = gap); `"start"|"middle"|"end"|
    *  "baseline"` chains that fixed anchor (spacing = anchor-to-anchor pitch,
@@ -243,9 +235,9 @@ export type SpreadOptions<T = any> = {
    *  so the mark carries only non-positional channels. The space-filling spine
    *  (the mosaic/marimekko conditional axis) is `size: field(<name>).normalize()`
    *  — each entry's SHARE of the window (Σ over this operator's own split
-   *  entries) becomes a data-driven size claim, which makes that entry's
-   *  subtree a local self-scaling region so its segments fill the extent in
-   *  proportion to their share (see the `Spread` doc comment above). */
+   *  entries) becomes a data-driven size claim, whose box nests that entry's
+   *  subtree, so its segments fill the box in proportion to their share (see
+   *  the `Spread` doc comment above). */
   size?: (keyof T & string) | FieldExpr | MaybeValue<number>[];
   debug?: boolean;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };

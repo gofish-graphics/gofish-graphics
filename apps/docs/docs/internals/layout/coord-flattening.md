@@ -263,8 +263,8 @@ DATA-bound channels consume these — a plain number bypasses both (see
 `computeAesthetic`) — so a hand-sized (radian/pixel) mark is unaffected, while a
 mark that says `w: datum(count)` (the θ extent) auto-fits. Because the coord is the
 single σ-scale-root, an intermediate `distribute`/`nest` under it must NOT
-re-root (it propagates the inherited σ — see the scale-root scoping gate in
-`buildChildScalePlan`); this is what makes a flat distribute confluent with any
+re-root (it propagates the inherited σ: only a sized node solves, see
+`solveLayerScales`); this is what makes a flat distribute confluent with any
 nested grouping of the same data-driven children (see
 [Layout & Render Passes](/internals/layout/passes)).
 

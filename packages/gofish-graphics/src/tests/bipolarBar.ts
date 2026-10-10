@@ -29,7 +29,7 @@ export const testBipolarBar = (size: { width: number; height: number }) =>
     { width: size.width, height: size.height, transform: { x: 200, y: 200 } },
     coord({ transform: bipolar(), grid: true }, [
       // stack(
-      //   { direction: 0, spacing: 4, alignment: "start", sharedScale: true },
+      //   { direction: 0, spacing: 4, alignment: "start" },
       //   data.map((d, i) =>
       //     rect({ w: 20, h: /* value(d.b, "value") */ d.b / 40, emY: true, fill: i < 3 ? "none" : color6[i % 6] })
       //   )

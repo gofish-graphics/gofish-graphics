@@ -3,7 +3,7 @@ import { map, groupBy, rect, stackX, stackY, v } from "../lib";
 
 export const testOlympicMedalsStackedBars = () => {
   return stackX(
-    { spacing: 15, sharedScale: true },
+    { spacing: 15 },
     map(groupBy(olympicMedals, "Country_Code"), (d, key) =>
       stackY(
         { key: key as string, spacing: 0 },

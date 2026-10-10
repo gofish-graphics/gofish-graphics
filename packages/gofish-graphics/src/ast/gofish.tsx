@@ -30,7 +30,8 @@ import {
   type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
-import { niceScope, type Extent } from "./extent";
+import { scalesWithSigma } from "./extent";
+import { KeyedDomains } from "./keyedDomains";
 import {
   fromFrameStart,
   orientScales,
@@ -53,6 +54,7 @@ import {
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
 import { timeRowsFromOption, type TimeRowOption } from "./axes/timeRows";
 import { axisName } from "./constraints/shared";
+import { dumpKeyedDomains, dumpSharing } from "./debug/dump";
 import {
   getScopeRegistry,
   scopeFrame,
@@ -275,7 +277,7 @@ export async function layout(
     labelRowSettings?: LabelRowSettings;
   },
   child: GoFishNode | Promise<GoFishNode>,
-  contexts?: {
+  contexts: {
     session: RenderSession;
   }
 ): Promise<{
@@ -293,9 +295,7 @@ export async function layout(
   legendFields: ReadonlySet<string>;
 }> {
   child = await child;
-  if (contexts?.session) {
-    child.setRenderSession(contexts.session);
-  }
+  child.setRenderSession(contexts.session);
   // Note: callers must await `document.fonts.ready` before invoking
   // `layout()`. The public `gofish()` entry handles this; standalone
   // callers of `layout()` are responsible for the wait themselves.
@@ -323,7 +323,7 @@ export async function layout(
   // color scale is NOT re-resolved: it was final before chrome was elaborated
   // (the legend shows it), and chrome adds no data colors.
   const reresolve = async (n: GoFishNode) => {
-    if (contexts?.session) n.setRenderSession(contexts.session);
+    n.setRenderSession(contexts.session);
     n.resolveNames();
     // The inserted chrome is built from operators (Spread) whose constraints
     // install in this pass; nodes resolved before are consumed and untouched.
@@ -331,6 +331,14 @@ export async function layout(
     n.clearUnderlyingSpace();
     n.resolveUnderlyingSpace();
   };
+  // The measure-keyed domains (#1114): after the type walk, per space root,
+  // axis and unit, the domain every sized node of that unit maps into its
+  // size. Decided once, here, before chrome and labels are elaborated:
+  // chrome only reads them. Axis ownership reads which keyed domain each
+  // axis is over, and the demand half (an axis drawn over a domain is what
+  // nices it) is refreshed once the axes are assigned.
+  const keyedDomains = (contexts.session.keyedDomains =
+    KeyedDomains.build(child));
 
   const __tAxes = perfNow();
   // Axis ownership: which node draws each axis (`resolveAxes`). Which dims
@@ -359,6 +367,7 @@ export async function layout(
     }
     child.resolveAxes(new Map(), enabled);
   }
+  keyedDomains.refreshDemand();
 
   // Chrome elaboration (src/ast/axes/elaborate.tsx): every node that owns
   // chrome wraps itself in it, as ordinary shapes + constraints — its axes,
@@ -369,7 +378,7 @@ export async function layout(
   // the whole render. The legend is built here, from the root as it is laid
   // out, before any chrome wraps the nodes inside it. `legend: false` drops
   // the legend; the color scale still paints the marks.
-  const unitScale = contexts?.session.scaleContext.unit;
+  const unitScale = contexts.session.scaleContext.unit;
   const hasLegend =
     legend !== false &&
     ((isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
@@ -383,6 +392,15 @@ export async function layout(
         )
       : undefined,
   };
+  // A root chart with a size of its own draws its axes around its content
+  // (`isAxisBoundary`), so the content carries the request for their titles;
+  // each node titles only the axes it draws.
+  const rootContent = child.children[0];
+  if (
+    child._chartBox?.some((sized) => sized) &&
+    rootContent instanceof GoFishNode
+  )
+    rootContent._chromeRequest = { axes };
   const elaborated = await elaborateChrome(child, {
     sides: resolveAxisSides(axes),
     labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
@@ -414,31 +432,23 @@ export async function layout(
   }
   perfAdd("axes", perfNow() - __tAxes);
 
-  // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,
-  // applied AT the scope's solve (there is no pre-layout tree walk), and it is
-  // DEMAND-DRIVEN — the root scope nices a POSITION domain iff some node in it
-  // renders that dim's axis (`scopeAxisTicks` reads the persistent stamps
-  // `resolveAxes` left; with axes off no stamp exists, so axis-less content
-  // stays at the honest raw scale). When an axis IS drawn, every root consumer
-  // below — the posScale, the baseline-magnitude size solve, the equal-measure
-  // recentering, `needsCanvas` — reads this one niced domain, the same domain
-  // the tick elaboration niced, so content and ticks agree by construction.
-  // Each nested scope root (self-scaled region, shared-scale scope) applies the
-  // same rule at its own solve; a coord scope never nices.
-  const rootAxisDemand = [child.scopeAxisTicks(0), child.scopeAxisTicks(1)];
-  // The root's types and their size claims, niced together (a niced pinned
-  // domain implies its claim).
+  // The render root is a sized node (#1114): it maps the keyed domain of its
+  // types into the canvas. Its types and claims are widened to their keyed
+  // domains, then niced together (#659) when some chart draws an axis over
+  // the domain (with axes off no axis is drawn, so axis-less content stays
+  // at the honest raw scale). Every root consumer below — the posScale, the
+  // baseline-magnitude size solve, the equal-measure recentering,
+  // `needsCanvas` — reads this one niced domain, the same domain the tick
+  // elaboration niced (`KeyedDomains.scope`), so content and ticks agree by
+  // construction. Each nested sized node applies the same rule at its own
+  // solve; a coord scope never nices.
   const rootExtent = child.resolveExtent();
-  const [niceUnderlyingSpaceX, niceExtentX] = niceScope(
-    child._underlyingSpace![0],
-    rootExtent[0],
-    rootAxisDemand[0]
-  );
-  const [niceUnderlyingSpaceY, niceExtentY] = niceScope(
-    child._underlyingSpace![1],
-    rootExtent[1],
-    rootAxisDemand[1]
-  );
+  const rootScope = (axis: 0 | 1) => {
+    const space = child._underlyingSpace![axis];
+    return keyedDomains.scope(child, axis, space, rootExtent[axis]);
+  };
+  const [niceUnderlyingSpaceX, niceExtentX] = rootScope(0);
+  const [niceUnderlyingSpaceY, niceExtentY] = rootScope(1);
 
   if (debug) {
     console.log("🌳 Underlying Space Tree:");
@@ -458,7 +468,9 @@ export async function layout(
   // "use my default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
   // guards, the same path the layout engine already relies on.
   const UNSIZED = NaN;
-  const needsCanvas = (claim: Extent | undefined) => claim !== undefined;
+  // Only a claim with σ in it is data to scale: a box with a literal size
+  // claims its own pixels, and needs no canvas.
+  const needsCanvas = scalesWithSigma;
   // Concrete canvas for scaling a claimed axis (always a real number).
   const canvasW = w ?? DEFAULT_CANVAS_SIZE;
   const canvasH = h ?? DEFAULT_CANVAS_SIZE;
@@ -467,10 +479,10 @@ export async function layout(
   const layoutH = h ?? (needsCanvas(niceExtentY) ? canvasH : UNSIZED);
 
   // The render's σ-scope registry: the ONE place σ / posScale is derived
-  // (Stage 6b). The root is the first scope root; every other scope (self-scaled
-  // axis, constraint budget, shared, coord boundary) solves through the same
+  // (Stage 6b). The root is the first sized node; every other one (a node
+  // with a size of its own, a slot, a coord boundary) solves through the same
   // registry. Reset so a re-run layout pass starts clean.
-  const scopes = getScopeRegistry(contexts?.session);
+  const scopes = getScopeRegistry(contexts.session);
   scopes.reset();
 
   // The root σ-scope on each continuous axis, solved by the registry from the
@@ -608,6 +620,10 @@ export async function layout(
   // Scope dump (#39 Stage 6b): every σ-scope solved during the layout pass just
   // above, as printable frame equations. No-op unless GOFISH_DUMP_SCOPES is set.
   scopes.dump();
+  dumpKeyedDomains(keyedDomains);
+  // Sharing dump (#1114 step 3): every layer's sharing sets, from its
+  // constraints and children. No-op unless GOFISH_DUMP_SHARING is set.
+  dumpSharing(child);
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the
   // canvas default when the content didn't report one. Read off the root's

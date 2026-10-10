@@ -50,7 +50,7 @@ export const testSankey = (size: { width: number; height: number }) =>
   gofish(
     { width: size.width, height: size.height },
     layer([
-      spread({ dir: "y", spacing: 64, alignment: "middle", sharedScale: true },
+      spread({ dir: "y", spacing: 64, alignment: "middle" },
         // TODO: I could probably make the width be uniform flexible basically
         Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
           spread({ dir: "x", spacing: 8, alignment: "middle" },

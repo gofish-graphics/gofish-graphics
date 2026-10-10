@@ -61,7 +61,6 @@ export const testNestedMosaic = () =>
                       100,
                     spacing: 0,
                     alignment: "middle",
-                    sharedScale: true,
                   },
                   _(sItems)
                     .groupBy("survived")
@@ -92,7 +91,7 @@ export const testNestedMosaic = () =>
               .value()
           )
         // stack(
-        //   { /* w: _(items).sumBy("count") / 2, */ direction: 1, spacing: 2, alignment: "middle", sharedScale: true },
+        //   { /* w: _(items).sumBy("count") / 2, */ direction: 1, spacing: 2, alignment: "middle" },
         //   items.toReversed().map((d) =>
         //     rect({
         //       w: 20,

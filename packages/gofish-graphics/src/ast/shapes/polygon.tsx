@@ -112,7 +112,7 @@ export const Polygon = ({
               CONTINUOUS(interval(minY, maxY), "pinned"),
             ]
           : [UNDEFINED, UNDEFINED],
-      layout: (_shared, _size, scales) => {
+      layout: (_size, scales) => {
         if (!dataBound) {
           return {
             intrinsicDims: [

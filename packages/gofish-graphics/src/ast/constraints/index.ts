@@ -250,11 +250,11 @@ export function resolveConstraintOperands(
  * unit conflict among a layer's own position constraints; calendars and
  * titles join too).
  * An interval's two endpoints unify their measures the same way (an interval in
- * mixed units is a conflict). The layer's `resolveAxis` then treats this as the
- * axis's unit, PREFERRING it over the children's POSITION measure (falling back
- * to the children only for untagged literal-pixel coords) — restoring the unit
- * tag the scatter reduction dropped, without strict-unifying against a
- * self-scaling child's leaked unit.
+ * mixed units is a conflict). The layer's type hook then joins it with the
+ * units of its own set (`resolveLayerAxisSpace` in compose.ts, a shared
+ * `joinUnits`: an untagged side takes the other's unit) — restoring the unit
+ * tag the scatter reduction dropped. A child its sharing sets detach or a
+ * datum places is not in that union, so its unit takes no part.
  */
 export function collectPositionDomains(
   constraints: ConstraintSpec[]

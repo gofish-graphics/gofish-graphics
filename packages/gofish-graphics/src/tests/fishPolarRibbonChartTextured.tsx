@@ -202,7 +202,6 @@ export const testFishPolarRibbonChartTextured = (
           x: (-3 * Math.PI) / 6,
           spacing: (2 * Math.PI) / 6,
           alignment: "start",
-          sharedScale: true,
           anchor: "middle",
         },
         Object.entries(_.groupBy(seafood, "lake")).map(([lake, items]) =>

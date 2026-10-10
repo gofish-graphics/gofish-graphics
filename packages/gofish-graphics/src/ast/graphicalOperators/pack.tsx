@@ -41,7 +41,6 @@ export const Pack = createNodeOperator(
         type: "pack",
         args: { key },
         key,
-        shared: [false, false],
         // TODO(#967): pack does not fit itself to the available size; radii stay in pixels. See issue #967.
         // Its size is whatever its children's pixel sizes pack into, which is
         // what a literal-sized shape reports: no data-driven extent.
@@ -49,7 +48,7 @@ export const Pack = createNodeOperator(
           UNDEFINED,
           UNDEFINED,
         ],
-        layout: (_shared, size, scales, childAsts) => {
+        layout: (size, scales, childAsts) => {
           const placed = childAsts.map((child) => child.layout(size, scales));
           const local = placed.map((p) => enclosingCircle(p.geometry()));
           for (const c of local) {

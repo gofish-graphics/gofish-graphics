@@ -35,14 +35,14 @@ const offsetSpace = (
   // Shift the data interval by `value` and pin it: a pinned space moves by
   // `value`, a free or difference space hangs its origin at `value`. The claim
   // moves with it (see `offsetExtent` below).
-  // The offset places the content; it does not share the content's axis,
-  // so its units are not unified with the content's: the content keeps its
-  // own (or takes the offset's when it has none). A time offset puts the
+  // A datum offset moves the content in data, so the content stays shared
+  // with its parent (the node's sharing rule, below): the offset is a value
+  // in the content's unit, and their units unify. A time offset puts the
   // content on its calendar.
   return anchorAt(
     space,
     value,
-    joinUnits(space.measure, valueUnits(offset), false, {
+    joinUnits(space.measure, valueUnits(offset), true, {
       axis,
       where: "between a position offset and the content it moves",
     })
@@ -76,7 +76,13 @@ export const positionNode = (
     {
       type: "position",
       key: options.key,
-      shared: [false, false],
+      // The child stays shared on both axes (the default rule, `shareAll`),
+      // and the type hook below reports its type upward. A datum offset
+      // moves the child in data, so the content and the offset are one
+      // unit. A pixel offset moves only paint, as `.translate()` does: the
+      // child's data still reads in its parent's frame. (A literal
+      // `Constraint.position` in a layer is different: it places its child
+      // elsewhere, so it detaches it.)
       resolveUnderlyingSpace: (children: Size<UnderlyingSpace>[]) => {
         const child = children[0] ?? [UNDEFINED, UNDEFINED];
         return [
@@ -92,7 +98,7 @@ export const positionNode = (
           offsetExtent(child[1], extent[1], options.y),
         ];
       },
-      layout: (shared, size, scales, children) => {
+      layout: (size, scales, children) => {
         if (children.length !== 1) {
           throw new Error("Position operator expects exactly one child");
         }

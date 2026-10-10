@@ -333,8 +333,10 @@ Because the rewrite inserts new nodes and moves keys onto wrappers, the name,
 alias, and underlying space passes rerun on the new tree. The color scale does
 not: it was final before the pass, and chrome adds no data colors. Label
 elaboration follows and reruns the same passes. Domain nicing is not a tree pass at
-all: each σ-scope nices its own POSITION domain at its solve, if some node in
-its space-flow region renders that dim's axis.
+all: each sized node nices its keyed domain at its solve, if some node draws
+an axis over that domain (`KeyedDomains`, built once after the first type walk,
+before chrome, so chrome only reads the domains; the nodes a rewrite adds read
+the seat of the content they wrap).
 
 See [Axes](/internals/frontend/axes) for the full elaboration story (the
 two-tier structure, origin pins, negative-space gutters, and the
@@ -451,8 +453,7 @@ treat it as they treat a rect. The glyphs' own anchor (the point on the baseline
 `textAnchor` and `rotate` refer to) sits inside that box; the text lowers it from
 the origin by `glyphDy`, the box's top in pixels less the glyphs' top.
 
-It is read off the node's own resolved underlying space (for a node that roots its
-own σ-scope, the space it keeps for itself, `selfScaledSpace`), so it is local: an
+It is read off the node's own resolved underlying space, so it is local: an
 ordinal spread inside a bar chart reads top-down inside, and a bar chart inside an
 ordinal spread grows upward inside its row. A `coord` and everything inside it is
 `-1`, because a coordinate transform is math-handed; the `coord` reflects y where its
@@ -539,6 +540,8 @@ maps stay undistorted); the binding axis fills, the other gets a recentered
 posScale. Stage 6c makes this a named `recenterEqualMeasure` operation _on_ the
 scope registry rather than an inline rewrite, so it is the one post-solve σ
 adjustment on the registry's books and `GOFISH_DUMP_SCOPES` records the final σ.
+(After the scope dump, `GOFISH_DUMP_SHARING` prints each layer's sharing sets,
+see [Underlying Space](/internals/core/underlying-space). It only reads the tree.)
 It is type equality, not a knob, and a single-coordinate-space coupling
 — it does not reach sizes solved in separate nested operator scopes. After layout it
 reads the chart's _final_ extent back off the root via `child.dims[i].size`, so an

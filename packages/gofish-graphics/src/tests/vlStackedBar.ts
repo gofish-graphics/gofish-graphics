@@ -38,7 +38,7 @@ const stackedBarDataset = _(seattleWeather).groupBy((d) => {
 export const testVLStackedBar = () =>
   frame([
     stackX(
-      { spacing: 20, sharedScale: true },
+      { spacing: 20 },
       _(stackedBarDataset)
         .toPairs()
         .sortBy(([month]) => {

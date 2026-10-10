@@ -1,4 +1,5 @@
 import { GoFishNode } from "./_node";
+import type { LayerSharingPlan } from "./constraints/compose";
 import { layer } from "./graphicalOperators/layer";
 import { Constraint } from "./constraints";
 
@@ -46,6 +47,24 @@ export async function wrapRing(
 ): Promise<GoFishNode> {
   inner.name(name);
   const root = (await (layer as any)([inner, ...ring.nodes])) as GoFishNode;
+  // A ring's content is the box it dresses, seated in the ring's own frame:
+  // it is the ring's own set on both axes, so the ring reports the content's
+  // type (the literal pixel seat would otherwise detach it), and the keyed
+  // domains seat the ring where its content was (`KeyedDomains`, built
+  // before chrome, #1114). The ring's shapes (an axis's ticks and line, a
+  // legend, a title) are each a set of their own: none joins the content's
+  // type, whatever constraint seats it. Ticks still sit at data positions in
+  // the ring's frame, through their position constraints. The rule reads no
+  // constraint: whatever seats the content (a literal pin, or a delta axis's
+  // datum `contentAt`), the content is neither nested nor datum-placed. The
+  // content is the ring's first child, by construction, and the rule reads
+  // it by that slot, not by identity: a later pass (label elaboration) may
+  // wrap the content and put its wrapper in the content's place.
+  root.INTERNAL_setSharing((childNodes): LayerSharingPlan => {
+    const sets = childNodes.map((_, k) => (k === 0 ? 0 : k + 1));
+    const none = (): [Set<number>, Set<number>] => [new Set(), new Set()];
+    return { sets: [sets, [...sets]], nested: none(), datumPlaced: none() };
+  });
   await root.relate((g) => [
     ...(seat.x === undefined && seat.y === undefined
       ? []

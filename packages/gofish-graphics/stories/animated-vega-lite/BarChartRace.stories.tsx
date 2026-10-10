@@ -9,15 +9,10 @@
  * grows or shrinks at a steady rate between two years, the way the D3
  * original moves. Each brand's name is a label just past the end of its bar.
  *
- * `sharedScale: true` is the spelling of Animated Vega-Lite's `rescale: true`:
- * each year's spread solves a value scale of its own, so the longest bar always
- * spans the plot. KNOWN GAP (issue #891): under a `time.sequence` it does not
- * take effect yet. The spread does solve its own σ, but the bars size
- * themselves through the chart's anchored x map, which the shared scope leaves
- * as the root's (`buildChildScalePlan` in `src/ast/constraints/proposalPlan.ts`
- * replaces σ and not the map; `rect.tsx` prefers the map). So every year is
- * drawn against the whole run's x domain for now, Animated Vega-Lite's
- * `rescale: false` (the paper's Fig. 4B).
+ * Every year is drawn against the whole run's x domain, Animated Vega-Lite's
+ * `rescale: false` (the paper's Fig. 4B). A per-year value scale, its
+ * `rescale: true`, is issue #891: under measure-keyed domains (#1114) the
+ * years share one domain because they plot one column.
  *
  * A label is part of its mark, so the transition moves each name with its
  * bar. The names sit OUTSIDE the bars. Inside the right end, as in the D3
@@ -157,7 +152,6 @@ const race = (
       spread({
         by: field("name").sort("value", "desc"),
         dir: "y",
-        sharedScale: true,
         spacing: 2,
       })
     )
@@ -199,7 +193,6 @@ export const Animated: StoryObj<Args> = {
         spread({
           by: field("name").sort("value", "desc"),
           dir: "y",
-          sharedScale: true,
           spacing: 2,
         })
       )

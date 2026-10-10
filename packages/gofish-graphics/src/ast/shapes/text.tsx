@@ -239,7 +239,7 @@ export const Text = ({
 
         return [glyphAxis(xPos, dims[0].size), glyphAxis(yPos, dims[1].size)];
       },
-      layout: (shared, size, scales, children, node) => {
+      layout: (size, scales, children, node) => {
         const finalText = isValue(textContent)
           ? getValue(textContent)
           : textContent;

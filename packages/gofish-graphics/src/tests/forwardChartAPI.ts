@@ -89,7 +89,7 @@ pipe(
 
 export const chartRectBF = () =>
   spreadX(
-    { spacing: 2, sharedScale: true },
+    { spacing: 2 },
     map(groupBy(seafood, "species"), (d) =>
       rect({ w: 32, h: v(_.sumBy(d, "count")), fill: v(d[0].species) })
     )
@@ -98,40 +98,40 @@ export const chartRectBF = () =>
 export const chartBar = () => {
   return chart(seafood)
     .rect({ w: 32, h: "count", fill: "species" })
-    .spreadX("lake", { spacing: 2, sharedScale: true })
+    .spreadX("lake", { spacing: 2 })
     .TEST_render();
 };
 
 /* 
 Chart
   .rect({ w: 32, h: "count", fill: "species" })
-  .stackX("lake", { spacing: 2, sharedScale: true })
+  .stackX("lake", { spacing: 2 })
   .data(catchData);
 */
 
 /* 
 Chart
   .data(catchData)
-  .stackX("lake", { spacing: 2, sharedScale: true })
+  .stackX("lake", { spacing: 2 })
   .rect({ w: 32, h: "count", fill: "species" });
 */
 
 /* 
 chart(catchData)
-  .stackX("lake", { spacing: 2, sharedScale: true })
+  .stackX("lake", { spacing: 2 })
   .rect({ w: 32, h: "count", fill: "species" });
 */
 
 /* 
 Mark.rect(catchData, { w: 32, h: "count", fill: "species" })
-  .stackX("lake", { spacing: 2, sharedScale: true })
+  .stackX("lake", { spacing: 2 })
 */
 
 export const chartStackedBar = () => {
   return chart(seafood)
     .rect({ w: 32, h: "count", fill: "species" })
     .spreadY("species", { spacing: 2 })
-    .spreadX("lake", { spacing: 8, sharedScale: true })
+    .spreadX("lake", { spacing: 8 })
     .TEST_render();
 };
 
@@ -139,7 +139,7 @@ export const chartGroupedBar = () => {
   return chart(seafood)
     .rect({ w: 8, h: "count", fill: "species" })
     .spreadX("species", { spacing: 2 })
-    .spreadX("lake", { spacing: 4, sharedScale: true })
+    .spreadX("lake", { spacing: 4 })
     .TEST_render();
 };
 
@@ -147,7 +147,7 @@ export const chartFacetedBar = () => {
   return chart(seafood)
     .rect({ w: 32, h: "count", fill: "species" })
     .spreadX("lake", { spacing: 2 })
-    .spreadY("species", { spacing: 8, sharedScale: true })
+    .spreadY("species", { spacing: 8 })
     .TEST_render();
 };
 
@@ -155,7 +155,7 @@ export const chartFacetedBarHorizontal = () => {
   return chart(seafood)
     .rect({ w: 8, h: "count", fill: "species" })
     .spreadX("lake", { spacing: 2 })
-    .spreadX("species", { spacing: 8, sharedScale: true })
+    .spreadX("species", { spacing: 8 })
     .TEST_render();
 };
 
@@ -191,7 +191,7 @@ export const chartSquares = () => {
       //     .chunk(4)
       //     .reverse()
       // )
-      .spreadX("lake", { spacing: 8, sharedScale: true })
+      .spreadX("lake", { spacing: 8 })
       .TEST_render()
   );
 };

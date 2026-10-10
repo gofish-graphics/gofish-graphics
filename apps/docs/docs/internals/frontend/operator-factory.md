@@ -257,7 +257,7 @@ on an axis (`inferred.parameterAxis`; see
 `stack` declare `size: { type: "size", entry: true }` (#700 Phase 2) — a
 per-entry stack-axis extent, one value per split entry, that `Spread` wraps
 each child in its own sized `layer` with (see [Underlying
-Space](/internals/core/underlying-space#space-filling-spines-normalize-self-scales-a-stacking-axis)
+Space](/internals/core/underlying-space#space-filling-spines-normalize-nests-each-part)
 for the layout side). When that channel's value carries a `field(...)
 .normalize()` op (checked via `hasNormalizeOp`), `applyChannels` takes a
 different path than plain per-entry inference: it splits the pipeline at
