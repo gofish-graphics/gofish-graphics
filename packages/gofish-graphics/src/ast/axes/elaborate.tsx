@@ -858,11 +858,31 @@ function elaborationsFor(
   // The axis shows the keyed domain of the node's set (#1114): the domain of
   // its unit wherever that unit sits in the space, which a sized node maps
   // into its box, not only the part of it the node's own data covers.
-  const keyed = node.tryGetRenderSession()?.keyedDomains;
-  const spaceFor = (dim: 0 | 1): UnderlyingSpace => {
-    const s = node.placedSpace(space[dim], dim);
-    return widenScope(s, undefined, keyed?.domainOf(node, dim, s, true))[0];
-  };
+  // Chrome is elaborated only inside `layout()`, which builds the table
+  // first, so there is always one here.
+  const keyed = node.getRenderSession().keyedDomains;
+  if (keyed === undefined)
+    throw new Error(
+      "axis elaboration: the keyed domains are built by layout() before chrome"
+    );
+  // Per dim, computed once: the axis's space widened to its keyed domain
+  // (`spaceFor`), and that domain widened and niced, the axis's scope
+  // (`KeyedDomains.scope`, the widen-then-nice every σ solve over the domain
+  // applies, so the ticks and the marks agree by construction). `spaceFor`
+  // stays un-niced: a time axis picks its tick partition from it, the same
+  // input the nicing picked its partition from.
+  const placed = ([0, 1] as const).map((dim) =>
+    node.placedSpace(space[dim], dim)
+  );
+  const wide = ([0, 1] as const).map(
+    (dim) =>
+      widenScope(
+        placed[dim],
+        undefined,
+        keyed.domainOf(node, dim, placed[dim], true)
+      )[0]
+  );
+  const spaceFor = (dim: 0 | 1): UnderlyingSpace => wide[dim];
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
   // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
   // axis's own line/ticks and the other axis's `crossFloor` (the plot corner),
@@ -878,12 +898,12 @@ function elaborationsFor(
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
     if (axisOver(s) === "absolute") {
-      // The axis's domain is its scope's: the widen-then-nice every σ solve
-      // over this keyed domain applies (`KeyedDomains.scope`), so the ticks
-      // and the marks agree by construction.
-      const placed = node.placedSpace(space[dim], dim);
-      const niced = (keyed?.scope(node, dim, placed, undefined)[0] ??
-        placed) as CONTINUOUS_TYPE;
+      const niced = keyed.scope(
+        node,
+        dim,
+        placed[dim],
+        undefined
+      )[0] as CONTINUOUS_TYPE;
       nices[dim] = [niced.dataInterval.min, niced.dataInterval.max];
       floors[dim] = nices[dim]![0];
     } else if (axisOver(s) === "delta") {

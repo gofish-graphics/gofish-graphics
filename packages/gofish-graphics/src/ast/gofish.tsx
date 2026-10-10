@@ -277,7 +277,7 @@ export async function layout(
     labelRowSettings?: LabelRowSettings;
   },
   child: GoFishNode | Promise<GoFishNode>,
-  contexts?: {
+  contexts: {
     session: RenderSession;
   }
 ): Promise<{
@@ -295,9 +295,7 @@ export async function layout(
   legendFields: ReadonlySet<string>;
 }> {
   child = await child;
-  if (contexts?.session) {
-    child.setRenderSession(contexts.session);
-  }
+  child.setRenderSession(contexts.session);
   // Note: callers must await `document.fonts.ready` before invoking
   // `layout()`. The public `gofish()` entry handles this; standalone
   // callers of `layout()` are responsible for the wait themselves.
@@ -325,7 +323,7 @@ export async function layout(
   // color scale is NOT re-resolved: it was final before chrome was elaborated
   // (the legend shows it), and chrome adds no data colors.
   const reresolve = async (n: GoFishNode) => {
-    if (contexts?.session) n.setRenderSession(contexts.session);
+    n.setRenderSession(contexts.session);
     n.resolveNames();
     // The inserted chrome is built from operators (Spread) whose constraints
     // install in this pass; nodes resolved before are consumed and untouched.
@@ -339,9 +337,8 @@ export async function layout(
   // chrome only reads them. Axis ownership reads which keyed domain each
   // axis is over, and the demand half (an axis drawn over a domain is what
   // nices it) is refreshed once the axes are assigned.
-  const keyedDomains = contexts?.session
-    ? (contexts.session.keyedDomains = KeyedDomains.build(child))
-    : undefined;
+  const keyedDomains = (contexts.session.keyedDomains =
+    KeyedDomains.build(child));
 
   const __tAxes = perfNow();
   // Axis ownership: which node draws each axis (`resolveAxes`). Which dims
@@ -370,7 +367,7 @@ export async function layout(
     }
     child.resolveAxes(new Map(), enabled);
   }
-  keyedDomains?.refreshDemand();
+  keyedDomains.refreshDemand();
 
   // Chrome elaboration (src/ast/axes/elaborate.tsx): every node that owns
   // chrome wraps itself in it, as ordinary shapes + constraints — its axes,
@@ -381,7 +378,7 @@ export async function layout(
   // the whole render. The legend is built here, from the root as it is laid
   // out, before any chrome wraps the nodes inside it. `legend: false` drops
   // the legend; the color scale still paints the marks.
-  const unitScale = contexts?.session.scaleContext.unit;
+  const unitScale = contexts.session.scaleContext.unit;
   const hasLegend =
     legend !== false &&
     ((isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
@@ -448,12 +445,7 @@ export async function layout(
   const rootExtent = child.resolveExtent();
   const rootScope = (axis: 0 | 1) => {
     const space = child._underlyingSpace![axis];
-    return (
-      keyedDomains?.scope(child, axis, space, rootExtent[axis]) ?? [
-        space,
-        rootExtent[axis],
-      ]
-    );
+    return keyedDomains.scope(child, axis, space, rootExtent[axis]);
   };
   const [niceUnderlyingSpaceX, niceExtentX] = rootScope(0);
   const [niceUnderlyingSpaceY, niceExtentY] = rootScope(1);
@@ -488,7 +480,7 @@ export async function layout(
   // (Stage 6b). The root is the first sized node; every other one (a node
   // with a size of its own, a slot, a coord boundary) solves through the same
   // registry. Reset so a re-run layout pass starts clean.
-  const scopes = getScopeRegistry(contexts?.session);
+  const scopes = getScopeRegistry(contexts.session);
   scopes.reset();
 
   // The root σ-scope on each continuous axis, solved by the registry from the
