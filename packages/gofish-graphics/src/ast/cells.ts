@@ -203,8 +203,9 @@ export const DEFAULT_PARTITION: NumberPartition = { thresholds: 10 };
 export const round12 = (x: number): number => +x.toPrecision(12);
 
 /** The `[min, max]` of `values` (missing values skipped), or undefined when
- *  there are none. A value that is not a number is an error: `${where}:
- *  ${column} must hold numbers`. */
+ *  there are none. A value that is not a finite number is an error:
+ *  `${where}: ${column} must hold finite numbers`. An infinite value has no
+ *  cell: a line cut into cells of one width has no cell at its end. */
 export function numericRange(
   values: readonly unknown[],
   where: string,
@@ -214,10 +215,10 @@ export function numericRange(
   let hi = -Infinity;
   for (const v of values) {
     if (v == null) continue;
-    if (typeof v !== "number" || Number.isNaN(v))
+    if (typeof v !== "number" || !Number.isFinite(v))
       throw new Error(
-        `${where}: ${column} must hold numbers, but it has the value ` +
-          `${describe(v)}.`
+        `${where}: ${column} must hold finite numbers, but it has the ` +
+          `value ${describe(v)}.`
       );
     if (v < lo) lo = v;
     if (v > hi) hi = v;

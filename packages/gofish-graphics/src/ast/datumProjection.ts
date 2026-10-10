@@ -283,6 +283,15 @@ function memoByDomain<V>(): (
 
 const cellsMemo = memoByDomain<Cells>();
 
+/** The values of the column `name` over `domain`, read with the walk a
+ *  binned key reads a row with ({@link walkRows}): through a ref to the rows
+ *  it stands for, and into a bag. */
+function valuesOf(domain: unknown[], name: string): unknown[] {
+  const values: unknown[] = [];
+  walkRows(domain, [name], (v) => values.push(v));
+  return values;
+}
+
 /** The cells `field(name).bin(partition)` maps values to: the cells of the
  *  partition over the column's values in `d`'s DOMAIN (`domainRows`,
  *  schema.ts), the chart's data, not over `d` alone. */
@@ -293,11 +302,11 @@ function domainCells(
 ): Cells {
   const where = `field("${name}").bin(...)`;
   const raw = (partitionOp ?? DEFAULT_PARTITION) as object;
-  const domain = domainRows(d) as Record<string, any>[];
+  const domain = domainRows(d);
   return cellsMemo(domain, raw, name, () =>
     binCells(
       checkPartition(raw, where),
-      domain.map((r) => r?.[name]),
+      valuesOf(domain, name),
       columnType(d, name)?.HasCalendar?.zone,
       where
     )
@@ -314,13 +323,13 @@ function domainPlane(
   bin: object,
   where: string
 ): PolygonCells {
-  const domain = domainRows(d) as Record<string, any>[];
+  const domain = domainRows(d);
   return planeMemo(domain, bin, JSON.stringify([fields.x, fields.y]), () =>
     planeCells(
       bin as Parameters<typeof planeCells>[0],
       fields,
-      domain.map((r) => r?.[fields.x]),
-      domain.map((r) => r?.[fields.y]),
+      valuesOf(domain, fields.x),
+      valuesOf(domain, fields.y),
       where
     )
   );

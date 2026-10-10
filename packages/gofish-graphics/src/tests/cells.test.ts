@@ -14,6 +14,7 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import "../lib";
+import { spawnSync } from "node:child_process";
 import { binCells, checkPartition, Cell } from "../ast/cells";
 import { inferPos } from "../ast/channels";
 import { evalFieldValues } from "../ast/fieldExpr";
@@ -784,6 +785,76 @@ async function main() {
       runs === 3,
       String(runs)
     );
+  }
+
+  console.log("\n# a binned key over refs");
+  {
+    const pts = [0.5, 0.7, 2.5, 2.7, 4.2].map((x) => ({ x, y: 1 }));
+    const bars = await chart(pts)
+      .flow(scatter({ x: "x", y: "y" }))
+      .mark(circle({ r: 3 }).name("points"))
+      .layer(
+        chart(selectAll("points"))
+          .flow(spread({ by: distField("x").bin({ step: 2 }), dir: "x" }))
+          .mark(rect({ w: 3, h: 3 }))
+      )
+      .toDisplayList({ w: 300, h: 100 })
+      .then(
+        (dl: any) => dl.items.filter((it: any) => it.kind === "rect").length,
+        (e: Error) => e.message
+      );
+    check(
+      "the cells of a binned key over refs are over the rows they stand for",
+      bars === 3,
+      String(bars)
+    );
+  }
+
+  console.log("\n# a domain with no end");
+  {
+    // In a child process with a time limit, so a loop that never ends fails
+    // the check instead of hanging the suite.
+    const errorIn = (call: string): string => {
+      const cells = new URL("../ast/cells.ts", import.meta.url).href;
+      const polygons = new URL("../ast/polygonCells.ts", import.meta.url).href;
+      const code =
+        `import { binCells } from ${JSON.stringify(cells)};` +
+        `import { hexCells } from ${JSON.stringify(polygons)};` +
+        `try { ${call}; console.log("no error"); }` +
+        `catch (e) { console.log(e.message); }`;
+      const run = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "--input-type=module", "-e", code],
+        { timeout: 20000, encoding: "utf8" }
+      );
+      return run.error !== undefined
+        ? `did not finish (${run.error.message})`
+        : String(run.stdout).trim();
+    };
+    for (const [name, call, column] of [
+      [
+        "a step",
+        `binCells({ step: 1 }, [0, Infinity], undefined, 'field("x").bin(...)')`,
+        'field("x")',
+      ],
+      [
+        "a threshold count",
+        `binCells({ thresholds: 10 }, [-Infinity, 3], undefined, 'field("x").bin(...)')`,
+        'field("x")',
+      ],
+      [
+        "hexagons",
+        `hexCells({ kind: "hex", radius: 1 }, { x: "a", y: "b" }, [0, 1], [0, Infinity], "t")`,
+        'column "b"',
+      ],
+    ] as const) {
+      const message = errorIn(call);
+      check(
+        `${name} over an infinite value is an error that names the column`,
+        message.includes(column) && message.includes("finite"),
+        message
+      );
+    }
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

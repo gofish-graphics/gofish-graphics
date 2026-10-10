@@ -1979,10 +1979,14 @@ domain rows (`DOMAIN_ROWS`, see [Column types](#column-types-the-chart-schema))
 and returns the cells in order and the cell each value falls in
 (`cellOf`). `splitEntries` then gives every cell an entry, empty or not, so
 each group of a nested split sees the same cells in the same order, and a
-count picks its step from the whole domain (#763). The cells of a domain
-are built once per partition value and column (a cache keyed by the domain
-array and the op's partition object), so the groups share the very same
-`Cell` objects.
+count picks its step from the whole domain (#763). The domain's values are
+read with the walk the key function reads a row with (`walkRows`), so a
+domain of refs (`chart(selectAll(...))`) is binned over the rows they stand
+for. A value that is not a finite number is an error that names the column
+(`numericRange`): the cells of a line have no cell at an infinity. The cells
+of a domain are built once per partition value and column (a cache keyed by
+the domain array and the op's partition object), so the groups share the
+very same `Cell` objects.
 
 **A group with no rows.** An empty cell is a group with no rows, and every
 operator over it is well defined: an operator over no rows makes no
