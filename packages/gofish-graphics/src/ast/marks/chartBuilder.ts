@@ -991,12 +991,10 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
       data = (await applySchema(data, this.state.options?.schema)) as any;
     }
 
-    const content = (
-      await resolveMarkResult(
-        composedMark(data as any, undefined, this.state.layerContext),
-        this.state.layerContext
-      )
-    ).setShared([true, true]);
+    const content = await resolveMarkResult(
+      composedMark(data as any, undefined, this.state.layerContext),
+      this.state.layerContext
+    );
 
     // Populate layerContext by walking the finished tree in DFS order.
     // Tree order = parent-iteration order (because every parent operator's

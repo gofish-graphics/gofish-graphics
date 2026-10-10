@@ -237,7 +237,6 @@ export const connect = createNodeOperator(
     return new GoFishNode(
       {
         type: "connect",
-        shared: [false, false],
         // The domain-building walk (`GoFishNode.resolveColorScale`) only
         // reads a node's single `color` property to register a field-valued
         // paint into the shared discrete-color scale. Prefer whichever
@@ -252,7 +251,7 @@ export const connect = createNodeOperator(
         ) => {
           return [UNDEFINED, UNDEFINED];
         },
-        layout: (shared, size, scales, children, node) => {
+        layout: (size, scales, children, node) => {
           const defaultColor = children[0]?.color ?? "black";
 
           const paths: Path[] = [];

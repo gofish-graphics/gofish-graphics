@@ -1,4 +1,5 @@
 import { GoFishNode } from "./_node";
+import { planSharing } from "./constraints/compose";
 import { layer } from "./graphicalOperators/layer";
 import { Constraint } from "./constraints";
 
@@ -46,6 +47,17 @@ export async function wrapRing(
 ): Promise<GoFishNode> {
   inner.name(name);
   const root = (await (layer as any)([inner, ...ring.nodes])) as GoFishNode;
+  // A ring's content is the box it dresses, seated in the ring's own frame:
+  // it is the ring's own set on both axes. The ring's shapes (an axis's
+  // ticks and line, a legend, a title) are chrome, which must never decide
+  // a domain (#1114), so each is a set of its own: none joins the content's
+  // domain, whatever constraint seats it. Ticks still sit at data positions
+  // in the ring's frame, through their position constraints.
+  root.INTERNAL_setSharing((childNodes, constraints) => {
+    const plan = planSharing(constraints, childNodes);
+    const sets = childNodes.map((c, k) => (c === inner ? 0 : k + 1));
+    return { sets: [sets, [...sets]], nested: plan.nested };
+  });
   await root.relate((g) => [
     ...(seat.x === undefined && seat.y === undefined
       ? []

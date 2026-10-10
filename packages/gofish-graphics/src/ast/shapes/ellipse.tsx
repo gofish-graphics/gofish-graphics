@@ -74,7 +74,7 @@ export const Ellipse = ({
         };
         return [axisSpace(0), axisSpace(1)];
       },
-      layout: (shared, size, scales, children) => {
+      layout: (size, scales, children) => {
         let w = isValue(dims[0].size)
           ? getValue(dims[0].size!) * scales[0]?.sigma!
           : (dims[0].size ?? size[0]);

@@ -74,7 +74,7 @@ export const Petal = ({
           pointOrMagnitude(dims[1].min, dims[1].size),
         ];
       },
-      layout: (shared, size, scales, children) => {
+      layout: (size, scales, children) => {
         const w = isValue(dims[0].size)
           ? getValue(dims[0].size!) * scales[0]?.sigma!
           : (dims[0].size ?? size[0]);

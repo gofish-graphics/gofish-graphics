@@ -18,11 +18,11 @@ import {
   type ChromeRing,
 } from "../elaborationUtils";
 import { datum } from "../data";
+import { widenScope } from "../extent";
 import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
 import {
   isORDINAL,
   isCONTINUOUS,
-  isUNDEFINED,
   dataWidth,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
@@ -855,18 +855,14 @@ function elaborationsFor(
       tierCounts,
       timeAxes,
     };
-  // A node can own a dim (`resolveAxes` set `axis.x/y`) whose own
-  // `_underlyingSpace` is the UNDEFINED sentinel — self-scaled children
-  // collapse the union above them (see `GoFishNode.selfScaledSpace`'s doc
-  // comment), which is right for sizing/layout but leaves nothing here to
-  // build ticks from. `resolveAxes`'s sibling-unification branch handles
-  // exactly this by stashing the shared child space it verified onto
-  // `hoistedAxisSpace`; fall back to it only when the real space is missing,
-  // so an ordinary (non-self-scaled) space is never overridden.
-  const spaceFor = (dim: 0 | 1): UnderlyingSpace =>
-    !isUNDEFINED(space[dim])
-      ? node.placedSpace(space[dim])
-      : (node.hoistedAxisSpace?.[dim] ?? space[dim]);
+  // The axis shows the keyed domain of the node's set (#1114): the domain of
+  // its unit wherever that unit sits in the space, which a sized node maps
+  // into its box, not only the part of it the node's own data covers.
+  const keyed = node.tryGetRenderSession()?.keyedDomains;
+  const spaceFor = (dim: 0 | 1): UnderlyingSpace => {
+    const s = node.placedSpace(space[dim]);
+    return widenScope(s, undefined, keyed?.domainOf(node, dim, s, true))[0];
+  };
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
   // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
   // axis's own line/ticks and the other axis's `crossFloor` (the plot corner),

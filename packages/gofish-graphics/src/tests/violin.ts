@@ -6,7 +6,7 @@ import { density1d } from "fast-kde";
 
 export const testViolinPlot = () => {
   return spreadX(
-    { spacing: 64, sharedScale: true },
+    { spacing: 64 },
     map(groupBy(penguins, "Species"), (d, species) => {
       const density = Array.from(density1d(d.map((p) => p["Body Mass (g)"]).filter((w) => w !== null))) as {
         x: number;

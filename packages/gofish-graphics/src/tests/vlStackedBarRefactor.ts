@@ -41,7 +41,6 @@ export const testVLStackedBarRefactor = () =>
     stackedBarDataset,
     {
       spacing: 1,
-      sharedScale: true,
       groupBy: { field: "month", sort: monthNames },
     },
     (monthData) =>

@@ -30,7 +30,8 @@ import {
   type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
-import { niceScope, type Extent } from "./extent";
+import { niceScope, widenScope, type Extent } from "./extent";
+import { KeyedDomains } from "./keyedDomains";
 import {
   fromFrameStart,
   orientScales,
@@ -331,6 +332,16 @@ export async function layout(
     await n.resolveAliases();
     n.clearUnderlyingSpace();
     n.resolveUnderlyingSpace();
+    resolveKeyedDomains(n);
+  };
+  // The measure-keyed domains (#1114): after the type walk, per space root,
+  // axis and unit, the domain every sized node of that unit maps into its
+  // size. Built once the axes are assigned (an axis drawn over a domain is
+  // what nices it), read by chrome elaboration, and rebuilt after each
+  // rewrite of the tree, which re-resolves the types.
+  const resolveKeyedDomains = (n: GoFishNode) => {
+    if (contexts?.session)
+      contexts.session.keyedDomains = KeyedDomains.build(n);
   };
 
   const __tAxes = perfNow();
@@ -344,6 +355,8 @@ export async function layout(
   // drawn from the same stamp. A dim with rows is always enabled: a disabled
   // dim (`false`) has no options to hold them.
   const rows = perDimAxisOption(axes, "rows");
+  // Axis ownership reads which keyed domain each axis is over.
+  resolveKeyedDomains(child);
   if (axes) {
     const ticksOf = (dim: 0 | 1): AxisTicks => {
       const r = rows[dim];
@@ -360,6 +373,7 @@ export async function layout(
     }
     child.resolveAxes(new Map(), enabled);
   }
+  resolveKeyedDomains(child);
 
   // Chrome elaboration (src/ast/axes/elaborate.tsx): every node that owns
   // chrome wraps itself in it, as ordinary shapes + constraints — its axes,
@@ -415,31 +429,29 @@ export async function layout(
   }
   perfAdd("axes", perfNow() - __tAxes);
 
-  // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,
-  // applied AT the scope's solve (there is no pre-layout tree walk), and it is
-  // DEMAND-DRIVEN — the root scope nices a POSITION domain iff some node in it
-  // renders that dim's axis (`scopeAxisTicks` reads the persistent stamps
-  // `resolveAxes` left; with axes off no stamp exists, so axis-less content
-  // stays at the honest raw scale). When an axis IS drawn, every root consumer
-  // below — the posScale, the baseline-magnitude size solve, the equal-measure
-  // recentering, `needsCanvas` — reads this one niced domain, the same domain
-  // the tick elaboration niced, so content and ticks agree by construction.
-  // Each nested scope root (self-scaled region, shared-scale scope) applies the
-  // same rule at its own solve; a coord scope never nices.
-  const rootAxisDemand = [child.scopeAxisTicks(0), child.scopeAxisTicks(1)];
-  // The root's types and their size claims, niced together (a niced pinned
-  // domain implies its claim).
+  // The render root is a sized node (#1114): it maps the keyed domain of its
+  // types into the canvas. Its types and claims are widened to their keyed
+  // domains, then niced together (#659) when some chart draws an axis over
+  // the domain (with axes off no axis is drawn, so axis-less content stays
+  // at the honest raw scale). Every root consumer below — the posScale, the
+  // baseline-magnitude size solve, the equal-measure recentering,
+  // `needsCanvas` — reads this one niced domain, the same domain the tick
+  // elaboration niced, so content and ticks agree by construction. Each
+  // nested sized node applies the same rule at its own solve; a coord scope
+  // never nices.
+  const keyed = contexts?.session.keyedDomains;
   const rootExtent = child.resolveExtent();
-  const [niceUnderlyingSpaceX, niceExtentX] = niceScope(
-    child._underlyingSpace![0],
-    rootExtent[0],
-    rootAxisDemand[0]
-  );
-  const [niceUnderlyingSpaceY, niceExtentY] = niceScope(
-    child._underlyingSpace![1],
-    rootExtent[1],
-    rootAxisDemand[1]
-  );
+  const rootScope = (axis: 0 | 1) => {
+    const space = child._underlyingSpace![axis];
+    const [wide, wideClaim] = widenScope(
+      space,
+      rootExtent[axis],
+      keyed?.domainOf(child, axis, space, true)
+    );
+    return niceScope(wide, wideClaim, keyed?.ticksOf(child, axis, space, true));
+  };
+  const [niceUnderlyingSpaceX, niceExtentX] = rootScope(0);
+  const [niceUnderlyingSpaceY, niceExtentY] = rootScope(1);
 
   if (debug) {
     console.log("🌳 Underlying Space Tree:");
@@ -468,8 +480,8 @@ export async function layout(
   const layoutH = h ?? (needsCanvas(niceExtentY) ? canvasH : UNSIZED);
 
   // The render's σ-scope registry: the ONE place σ / posScale is derived
-  // (Stage 6b). The root is the first scope root; every other scope (self-scaled
-  // axis, constraint budget, shared, coord boundary) solves through the same
+  // (Stage 6b). The root is the first sized node; every other one (a node
+  // with a size of its own, a slot, a coord boundary) solves through the same
   // registry. Reset so a re-run layout pass starts clean.
   const scopes = getScopeRegistry(contexts?.session);
   scopes.reset();
@@ -609,6 +621,7 @@ export async function layout(
   // Scope dump (#39 Stage 6b): every σ-scope solved during the layout pass just
   // above, as printable frame equations. No-op unless GOFISH_DUMP_SCOPES is set.
   scopes.dump();
+  keyed?.dump();
   // Sharing dump (#1114 step 3): every layer's sharing sets, from its
   // constraints and children. No-op unless GOFISH_DUMP_SHARING is set.
   dumpSharing(child);

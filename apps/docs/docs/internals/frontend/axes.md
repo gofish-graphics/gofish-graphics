@@ -416,7 +416,7 @@ difference axis), never off the size claim:
   The axis's ticks reach its scope's nicing through the axis demand
   (`AxisTicks`: the tick count, and a time axis's rows), and the axis is
   drawn from the same stamp, so nicing and drawing read one source (see
-  [Underlying Space](/internals/core/underlying-space#nicing-is-a-scope-operation-applied-on-demand)).
+  [Underlying Space](/internals/core/underlying-space#nicing-is-a-keyed-domain-operation-applied-on-demand)).
 - **DIFFERENCE (continuous, `origin: "none"`)** — bare tick marks at the
   tick values over `[0, w]`, where `w` is the space's width niced from 0
   (`niceContinuous`, the same nicing the scope that sizes the content
@@ -440,65 +440,23 @@ difference axis), never off the size claim:
   that. Key discovery uses `_ordinalKeyMap` (set by operators such as `table`)
   or a subtree walk by `node.key`.
 
-## Unifying duplicate axes across self-scaled siblings
+## One axis per keyed domain
 
 `resolveAxes` (`_node.ts`) is a top-down walk: a `claimed` map threads DOWN each
 branch so a continuous axis is single-owner (root-most unclaimed wins) and an
-ordinal axis nests by grouping signature. That map never crosses siblings,
-which is fine when a group's children share their parent's ordinary
-(non-self-scaled) space — the union already happened by the time the parent is
-visited, so the parent claims once and every descendant sees the dim as
-already taken. It breaks down for a **self-scaled** group: a `spread` whose
-per-group children (e.g. a `scatter` given an explicit pixel `w`) each root
-their own σ-scope reports `UNDEFINED` on that dim to its parent (see
-[Underlying Space](/internals/core/underlying-space)'s self-scaling-region
-section) — that is correct for sizing (the parent's auto-fit must not see a
-foreign per-child scale), but it also means the parent has no domain to claim
-an axis with, so each self-scaled sibling was left to independently claim (an
-explicit `axes:{x:true}` override, having no ordinal-style dup check for the
-continuous case, drew one redundant axis per sibling) or, without an override,
-claim nothing at all (a ridgeline chart's dozen per-month density panels,
-`stories/forwardsyntax/RidgelineChart.stories.tsx`, is exactly this shape).
+ordinal axis nests by grouping signature (`"o:<keys>"`). A continuous claim
+carries a signature too: the keyed domain the axis is drawn over (its space
+root and its unit's key, `KeyedDomains.axisKey`, see
+[Underlying Space](/internals/core/underlying-space#sized-nodes-and-measure-keyed-domains)),
+as `"c:<key>"`. An explicit `axes:{x:true}` override on a node whose keyed
+domain an ancestor already draws is the same axis again, so it is
+suppressed, as an override on an already-drawn ordinal grouping is. A
+ridgeline's rows each ask for an x axis, and the chart draws the one axis
+over their shared domain.
 
-The fix keys the unification on **signature equality**, the same trick the
-ordinal branch already uses (`"o:<keys>"`), extended to self-scaled continuous
-siblings:
-
-- `layer.tsx` now stashes the real (anchored/difference) space it throws away
-  for a self-scaled dim into `GoFishNode.selfScaledSpace`, alongside the
-  `UNDEFINED` it reports upward. Its presence (`!== undefined`) is itself the
-  "this dim is self-scaled" marker — there is no separate boolean. This does
-  **not** change what layout sees — `_underlyingSpace` is still `UNDEFINED`
-  there, so sizing/auto-fit is untouched; the stash is a side channel
-  `resolveAxes` alone reads.
-- A node whose own space collapsed to `UNDEFINED` on `dim` computes
-  `sharedSelfScaledChildSignature`: if **every** direct child is self-scaled on
-  `dim` with an **identical** signature (same `dataInterval` + `origin` +
-  unit (`spaceUnit`) + titles + time zone — at least two children, so there's an actual sibling group), the
-  node claims the axis itself, right there, instead of leaving each child to
-  fend for itself. It stashes the representative shared space onto
-  `GoFishNode.hoistedAxisSpace` (elaboration reads this as a fallback wherever
-  `_underlyingSpace` is `UNDEFINED`, so it can still compute nice bounds and
-  tick values) and claims the dim with the shared signature (`"c:<domain+width
-+measure>"`) rather than the generic opaque continuous claim — so a
-  descendant whose own self-scaled signature matches is recognized as the
-  exact duplicate this hoist already drew (and suppressed), while a
-  differently-scaled or non-self-scaled sibling is left alone.
-- The same signature match gates the **override** branch's new duplicate
-  check: an explicit `axes:{x:true}` on a self-scaled node is suppressed only
-  when an ancestor's claim carries _that node's own_ self-scaled signature —
-  never for the generic opaque claim a plain single-global-scale chart makes.
-  This is what keeps small-multiples with genuinely **independent** per-facet
-  scales (each self-scaled with a different domain, each explicitly opted into
-  its own axis via `axes:{x:true}`) drawing one axis per facet exactly as
-  before — only a facet whose scale is provably identical to its siblings'
-  gets folded into the parent's single hoisted axis.
-
-Mismatches (a sibling with a different domain, or a mix of self-scaled and
-plain children) simply don't hoist — each child keeps whatever per-child claim
-it would have gotten without this mechanism at all. The hoist is additive: it
-only ever turns "no axis" or "one axis per sibling" into "one axis for the
-group," never the reverse.
+The axis shows the node's keyed domain, not only the part of it the node's
+own data covers (`elaborationsFor` widens the node's space to it), so a facet
+panel's axis spans the domain every panel maps.
 
 ## The scale-sharing seam
 

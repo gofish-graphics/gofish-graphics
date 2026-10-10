@@ -4,15 +4,20 @@
 
 import { type Size } from "../dims";
 import { isValue } from "../data";
-import { type AxisTicks, type UnderlyingSpace } from "../underlyingSpace";
-import { niceScope, type Extent } from "../extent";
+import {
+  originIs,
+  type AxisTicks,
+  type UnderlyingSpace,
+} from "../underlyingSpace";
+import { niceScope, widenScope, type Extent } from "../extent";
+import type { Interval } from "../../util/interval";
+import type { AxisMap } from "../domain";
 import { sliceExtent } from "./folds";
 import {
   frameOf,
   scopeFrame,
   seatInScope,
   type ScopeRegistry,
-  type ScopeSolution,
 } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
@@ -161,135 +166,111 @@ export function childLayoutSizeProposal(
   return sliceByName.get(childName)!;
 }
 
-export type ChildScalePlan = {
+export type LayerScales = {
   /** Per axis: the layer's frame, the map its children sit in
-   *  (`seatInScope`). */
-  basePosScales: ConstraintPosScales;
-  childScaleFactors: Size<number | undefined>;
-  budgetFailures: { axis: 0 | 1; budget: number }[];
-  sharedScaleChecks: {
+   *  (`seatInScope`) and its datum positions resolve against. */
+  frames: ConstraintPosScales;
+  /** Per axis: the σ the layer hands its children. */
+  sigmas: Size<number | undefined>;
+  /** Axes whose solve was attempted and failed (a claim with no σ in it). */
+  failures: { axis: 0 | 1; budget: number }[];
+  /** Every solve, for the solver shadow hook. */
+  checks: {
     axis: 0 | 1;
     extent: Extent | undefined;
     sigma: number | undefined;
   }[];
 };
 
-/** Build the scales a layer hands to child layout.
+/**
+ * The scales a layer hands its children, under the one rule of #1114: a
+ * SIZED node solves σ, and every other node inherits it. A layer is sized on
+ * an axis when its size there is given to it rather than computed from σ:
  *
- * Inherited scales are copied into fresh child arrays, then each axis has at
- * most one σ-scope root here, solved once (`solveScope`) from one type and
- * claim, niced at the solve when the scope renders an axis (issue #659):
- *   - an explicit size (a self-scaled stash) roots a scope over the stashed
- *     composed type and claim: σ, and the layer's own frame when the stash
- *     has an origin;
- *   - otherwise, when no ancestor owns σ on the axis, a layer whose
- *     constraint plan covers the axis (a composed budget) or that is a
- *     shared-scale scope roots one over its own type and claim.
- * Every other axis inherits ("not a root → inherit"), and the layer's frame
- * follows from its own type ({@link frameOf}).
+ *   - it has a size of its own (`ownSize`): a literal `w`/`h`, or a
+ *     data-valued one, whose box its parent's σ sizes and whose content it
+ *     maps into that box;
+ *   - or it is handed no frame and has data of its own to place: a layer
+ *     handed no σ at all (nothing above it could solve one), or a pinned
+ *     layer handed σ but no frame (a facet panel in its spread slot, a child
+ *     nested at a datum). Its box is the slot its parent gives it.
  *
- * Diagnostics stay with the caller: budget failures are reported so `layer`
- * can warn with context, and every root solve is returned for the solver
- * shadow hook. */
-export function buildChildScalePlan(
-  selfScaledSpaces: Size<UnderlyingSpace | undefined>,
-  selfScaledExtents: Size<Extent | undefined>,
-  layerSpace: Size<UnderlyingSpace> | undefined,
-  layerExtent: Size<Extent | undefined> | undefined,
+ * A sized node maps its keyed domain (`domain`, the domain of its content's
+ * unit in its space, see `keyedDomains.ts`) into its size: its claim is
+ * widened to the domain, niced when an axis is drawn over it (`ticks`), and
+ * solved once through the registry (`solveScope`). Its frame is the solved
+ * scope's. Every other axis inherits σ, and its frame follows from its type
+ * ({@link frameOf}).
+ */
+export function solveLayerScales(
+  ownSize: Size<boolean>,
+  // The layer's content: the types its children compose to and their claim.
+  // For a data-valued size this is the content inside the box, not the
+  // magnitude the layer reports.
+  contentSpaces: Size<UnderlyingSpace> | undefined,
+  contentExtents: Size<Extent | undefined>,
+  // What the layer reports upward, whose frame it has when it inherits.
+  reported: Size<UnderlyingSpace> | undefined,
   layerSize: Size,
-  inheritedScaleFactors: Size<number | undefined> | undefined,
-  inheritedPosScales: ConstraintPosScales,
-  // Per axis: the layer's constraint plan covers it (a composed budget).
-  budgetCovers: Size<boolean>,
-  shared: Size<boolean>,
-  // Demand-driven nicing (issue #659): per-dim, the ticks of the axis some
-  // node in this scope renders, or undefined for none
-  // (`GoFishNode.scopeAxisTicks`). A scope this plan roots nices its anchored
-  // POSITION domain to them iff the dim has an axis — nicing is a
-  // presentation adjustment whose demand comes from axis views, so axis-less
-  // content stays at the honest raw scale.
-  axisDemand: (axis: 0 | 1) => AxisTicks | undefined,
-  // The ONE σ-solve site. Every scale this plan roots is derived
-  // through the registry (so `GOFISH_DUMP_SCOPES` sees it and the numbers have a
-  // single source); `rootKey` labels the owning layer node in the dump.
+  handedSigmas: Size<number | undefined>,
+  handedMaps: ConstraintPosScales,
+  domain: (
+    axis: 0 | 1,
+    space: UnderlyingSpace | undefined
+  ) => Interval | undefined,
+  ticks: (
+    axis: 0 | 1,
+    space: UnderlyingSpace | undefined
+  ) => AxisTicks | undefined,
   scopes: ScopeRegistry,
   rootKey: string
-): ChildScalePlan {
-  const stashScopes: Size<ScopeSolution | undefined> = [undefined, undefined];
-  const childScaleFactors: Size<number | undefined> = [
-    inheritedScaleFactors?.[0],
-    inheritedScaleFactors?.[1],
+): LayerScales {
+  const frames: [AxisMap | undefined, AxisMap | undefined] = [
+    undefined,
+    undefined,
   ];
-  const budgetFailures: ChildScalePlan["budgetFailures"] = [];
-  const sharedScaleChecks: ChildScalePlan["sharedScaleChecks"] = [];
+  const sigmas: Size<number | undefined> = [handedSigmas[0], handedSigmas[1]];
+  const failures: LayerScales["failures"] = [];
+  const checks: LayerScales["checks"] = [];
 
   for (const axis of [0, 1] as const) {
-    if (!Number.isFinite(layerSize[axis])) continue;
-    const stashed = selfScaledSpaces[axis] !== undefined;
-    // Structural σ-scope rule: ONLY A SCOPE ROOT SOLVES. A stash always roots
-    // a scope (the layer's box is a pixel scope of its own). A budget or a
-    // shared-scale node roots one only when no ancestor scope owns σ on the
-    // axis: under an inherited σ it is an intermediate, so it inherits
-    // rather than re-deriving σ against its locally allocated size (which
-    // diverges for an equal-slice budget under a coord, where the
-    // distribute axis IS the σ-scaled axis).
-    const rootsScope =
-      stashed ||
-      (inheritedScaleFactors?.[axis] === undefined &&
-        (budgetCovers[axis] || shared[axis]));
-    if (!rootsScope) continue;
-    const [space, claim] = niceScope(
-      stashed ? selfScaledSpaces[axis] : layerSpace?.[axis],
-      stashed ? selfScaledExtents[axis] : layerExtent?.[axis],
-      axisDemand(axis)
-    );
-    if (claim === undefined) continue;
-    const scope = scopes.solveScope(
-      {
-        kind: stashed
-          ? "self-scaled"
-          : budgetCovers[axis]
-            ? "constraint-budget"
-            : "shared",
-        rootKey,
-        axis,
-      },
-      space,
-      claim,
-      layerSize[axis]
-    );
-    sharedScaleChecks.push({ axis, extent: claim, sigma: scope?.sigma });
-    if (scope === undefined) {
-      // A claim that cannot determine σ keeps the inherited factor; a
-      // composed budget reports it, since its content would otherwise vanish.
-      if (budgetCovers[axis])
-        budgetFailures.push({ axis, budget: layerSize[axis] });
-      continue;
+    const content = contentSpaces?.[axis];
+    const sized =
+      ownSize[axis] ||
+      (handedMaps[axis] === undefined &&
+        (handedSigmas[axis] === undefined || originIs(content, "pinned")));
+    const claim = contentExtents[axis];
+    if (sized && Number.isFinite(layerSize[axis]) && claim !== undefined) {
+      const [wide, wideClaim] = widenScope(
+        content,
+        claim,
+        domain(axis, content)
+      );
+      const [space, nicedClaim] = niceScope(
+        wide,
+        wideClaim,
+        ticks(axis, content)
+      );
+      const scope = scopes.solveScope(
+        { kind: "sized", rootKey, axis },
+        space,
+        nicedClaim,
+        layerSize[axis]
+      );
+      checks.push({ axis, extent: nicedClaim, sigma: scope?.sigma });
+      if (scope !== undefined) {
+        sigmas[axis] = scope.sigma;
+        frames[axis] = scopeFrame(scope);
+        continue;
+      }
+      failures.push({ axis, budget: layerSize[axis] });
     }
-    childScaleFactors[axis] = scope.sigma;
-    // The stash's scope replaces the inherited one on this axis, never the
-    // ancestor's map, whose σ is another scope's.
-    if (stashed) stashScopes[axis] = scope;
+    frames[axis] = frameOf(reported?.[axis], {
+      sigma: sigmas[axis],
+      map: handedMaps[axis],
+    });
   }
-
-  // The layer's frame: a solved stash's scope, or else the frame its own
-  // type gives it from the scale it was handed (a free layer's frame has its
-  // baseline, data 0, at local 0).
-  const basePosScales = ([0, 1] as const).map((axis) =>
-    stashScopes[axis] !== undefined
-      ? scopeFrame(stashScopes[axis])
-      : frameOf(layerSpace?.[axis], {
-          sigma: childScaleFactors[axis],
-          map: inheritedPosScales[axis],
-        })
-  ) as ConstraintPosScales;
-
-  return {
-    basePosScales,
-    childScaleFactors,
-    budgetFailures,
-    sharedScaleChecks,
-  };
+  return { frames, sigmas, failures, checks };
 }
 
 /** Select the layer's single grid constraint, if any.
@@ -341,74 +322,20 @@ export function buildPositionTargetDims(
   );
 }
 
-export type PositionScalePlan = {
-  ownsAxis: [boolean, boolean];
-  effectivePosScales: ConstraintPosScales;
-};
-
-/** Decide the scales used by this layer's datum-valued position constraints.
- *
- * If the layer owns no datum-position axis, the effective scales are just the
- * inherited/self-scaled base. Once it owns any axis, each axis gets the base
- * scale when one exists, otherwise a local scale the registry solves from the
- * layer's resolved POSITION space, its size claim, and its pixel size. This mirrors the runtime rule that
- * `applyConstraints` consumes a layer-local scale while child forwarding is
- * handled separately by `childPosScalesFor`. */
-export function buildPositionScalePlan(
-  ownsAxis: [boolean, boolean],
-  layerSpace: Size<UnderlyingSpace> | undefined,
-  layerExtent: Size<Extent | undefined> | undefined,
-  layerSize: Size,
-  basePosScales: ConstraintPosScales,
-  // Demand-driven nicing (issue #659): nice the local domain only when the
-  // scope renders an axis on that dim, so datum positions land on the same
-  // rounded scale as the ticks — and stay at the honest raw scale otherwise.
-  axisDemand: (axis: 0 | 1) => AxisTicks | undefined,
-  scopes: ScopeRegistry,
-  rootKey: string
-): PositionScalePlan {
-  const ownsPositionAxis = ownsAxis[0] || ownsAxis[1];
-  // A layer that owns a datum-position axis roots a local POSITION scope for
-  // it; the domain is niced at this solve iff the dim has axis demand.
-  const localMap = (axis: 0 | 1) => {
-    const [space, extent] = niceScope(
-      layerSpace?.[axis],
-      layerExtent?.[axis],
-      axisDemand(axis)
-    );
-    const scope = scopes.solveScope(
-      { kind: "datum-position", rootKey, axis },
-      space,
-      extent,
-      layerSize[axis]
-    );
-    return scopeFrame(scope);
-  };
-  return {
-    ownsAxis,
-    effectivePosScales: ownsPositionAxis
-      ? [basePosScales[0] ?? localMap(0), basePosScales[1] ?? localMap(1)]
-      : [basePosScales[0], basePosScales[1]],
-  };
-}
-
 /** Decide which data→pixel scales a child receives from an enclosing layer:
  * the map the one seating rule hands it in the layer's frame
- * (`seatInScope`). The frame is the layer's base frame, or on an axis the
- * layer owns through a datum position, the frame those positions resolve
- * against. A child whose placement a datum-valued position constraint owns
- * gets none, so a constrained tick never sees the scale that placed it. */
+ * (`seatInScope`). A child whose placement a datum-valued position
+ * constraint owns gets none, so a constrained tick never sees the scale that
+ * placed it. */
 export function childPosScalesFor(
   childSpace: Size<UnderlyingSpace> | undefined,
   targetDims: Set<0 | 1> | undefined,
   ownsAxis: readonly [boolean, boolean],
-  basePosScales: ConstraintPosScales,
-  effectivePosScales: ConstraintPosScales
+  frames: ConstraintPosScales
 ): ConstraintPosScales {
   const pick = (dim: 0 | 1) => {
     if (ownsAxis[dim] && targetDims?.has(dim)) return undefined;
-    const frame = ownsAxis[dim] ? effectivePosScales[dim] : basePosScales[dim];
-    return seatInScope(frame, childSpace?.[dim]).childMap;
+    return seatInScope(frames[dim], childSpace?.[dim]).childMap;
   };
   return [pick(0), pick(1)];
 }

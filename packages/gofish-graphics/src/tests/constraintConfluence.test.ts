@@ -40,14 +40,13 @@ import {
   resolveLayerBaseSpaces,
 } from "../ast/constraints/compose";
 import {
-  buildChildScalePlan,
   buildDistributeSliceMap,
   buildLayerConstraintLayoutPlan,
   buildPositionTargetDims,
-  buildPositionScalePlan,
   childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
+  solveLayerScales,
 } from "../ast/constraints/proposalPlan";
 import { discretePosition, value } from "../ast/data";
 import { quantityUnits } from "../ast/underlyingSpace";
@@ -876,108 +875,45 @@ console.log("# constraint confluence: position scale ownership planning");
 console.log("# constraint confluence: child posScale forwarding");
 {
   // AxisMaps standing in for the former closures: pxOf(map, v) reproduces them.
-  const baseX: AxisMap = { sigma: 1, originPx: 1 }; // v + 1
-  const baseY: AxisMap = { sigma: 1, originPx: 2 }; // v + 2
-  const effectiveX: AxisMap = { sigma: 10, originPx: 0 }; // v * 10
-  const effectiveY: AxisMap = { sigma: 20, originPx: 0 }; // v * 20
+  const frameX: AxisMap = { sigma: 1, originPx: 1 }; // v + 1
+  const frameY: AxisMap = { sigma: 1, originPx: 2 }; // v + 2
   const positionSpace = CONTINUOUS(interval(0, 10), "pinned");
 
-  const noOwnedAxisPlan = buildPositionScalePlan(
-    [false, false],
-    [positionSpace, positionSpace],
-    [impliedExtent(positionSpace), impliedExtent(positionSpace)],
-    [100, 200],
-    [undefined, undefined],
-    () => undefined,
-    new ScopeRegistry(),
-    "test"
-  );
-  ok(
-    "position scale plan does not synthesize local scales without owned axes",
-    noOwnedAxisPlan.effectivePosScales[0] === undefined &&
-      noOwnedAxisPlan.effectivePosScales[1] === undefined
-  );
-
-  const ownedAxisPlan = buildPositionScalePlan(
-    [true, false],
-    [positionSpace, positionSpace],
-    [impliedExtent(positionSpace), impliedExtent(positionSpace)],
-    [100, 200],
-    [baseX, undefined],
-    () => undefined,
-    new ScopeRegistry(),
-    "test"
-  );
-  ok(
-    "position scale plan preserves base scales and falls back locally when owned",
-    ownedAxisPlan.ownsAxis[0] === true &&
-      ownedAxisPlan.ownsAxis[1] === false &&
-      ownedAxisPlan.effectivePosScales[0] === baseX &&
-      pxOf(ownedAxisPlan.effectivePosScales[1]!, 5) === 100
-  );
-
-  // The one seating rule on unowned axes: a pinned child shares the base
-  // frame, a free child gets a frame of its own with its baseline at 0, and a
-  // child with no data 0 gets none.
-  const unowned = childPosScalesFor(
+  // The one seating rule: a pinned child shares the layer's frame, a free
+  // child gets a frame of its own with its baseline at 0, and a child with no
+  // data 0 gets none.
+  const seated = childPosScalesFor(
     [positionSpace, CONTINUOUS(interval(0, 3), "free")],
     undefined,
     [false, false],
-    [baseX, baseY],
-    [effectiveX, effectiveY]
+    [frameX, frameY]
   );
   ok(
-    "unowned axes seat each child in the base frame",
-    unowned[0] === baseX &&
-      unowned[1]?.sigma === baseY.sigma &&
-      unowned[1]?.originPx === 0
+    "each child is seated in the layer's frame",
+    seated[0] === frameX &&
+      seated[1]?.sigma === frameY.sigma &&
+      seated[1]?.originPx === 0
   );
-  const unownedUndefined = childPosScalesFor(
+  const seatedUndefined = childPosScalesFor(
     [UNDEFINED, UNDEFINED],
     undefined,
     [false, false],
-    [baseX, baseY],
-    [effectiveX, effectiveY]
+    [frameX, frameY]
   );
   ok(
     "a child with no data 0 gets no frame",
-    unownedUndefined[0] === undefined && unownedUndefined[1] === undefined
-  );
-
-  const ownedPosition = childPosScalesFor(
-    [positionSpace, positionSpace],
-    undefined,
-    [true, true],
-    [baseX, baseY],
-    [effectiveX, effectiveY]
-  );
-  ok(
-    "owned POSITION child receives effective posScales",
-    ownedPosition[0] === effectiveX && ownedPosition[1] === effectiveY
+    seatedUndefined[0] === undefined && seatedUndefined[1] === undefined
   );
 
   const ownedTarget = childPosScalesFor(
     [positionSpace, positionSpace],
     new Set<0 | 1>([0]),
     [true, true],
-    [baseX, baseY],
-    [effectiveX, effectiveY]
+    [frameX, frameY]
   );
   ok(
     "datum-position target suppresses only the owned target axis",
-    ownedTarget[0] === undefined && ownedTarget[1] === effectiveY
-  );
-
-  const ownedUndefined = childPosScalesFor(
-    [UNDEFINED, UNDEFINED],
-    undefined,
-    [true, true],
-    [baseX, baseY],
-    [effectiveX, effectiveY]
-  );
-  ok(
-    "owned non-POSITION child receives no posScales",
-    ownedUndefined[0] === undefined && ownedUndefined[1] === undefined
+    ownedTarget[0] === undefined && ownedTarget[1] === frameY
   );
 }
 
@@ -1289,166 +1225,135 @@ console.log("# constraint confluence: interval vs point compose bail");
   );
 }
 
-console.log("# constraint confluence: child scale factor planning");
+console.log("# constraint confluence: sized nodes solve, the rest inherit");
 {
-  const inheritedX: AxisMap = { sigma: 1, originPx: 1 }; // v + 1
-  const inheritedY: AxisMap = { sigma: 1, originPx: 2 }; // v + 2
+  const handedX: AxisMap = { sigma: 1, originPx: 1 }; // v + 1
+  const handedY: AxisMap = { sigma: 1, originPx: 2 }; // v + 2
   const positionSpace = CONTINUOUS(interval(0, 10), "pinned");
   const sizeSpace = CONTINUOUS(interval(0, 20), "free");
-
-  const selfScaled = buildChildScalePlan(
-    [positionSpace, sizeSpace],
-    [impliedExtent(positionSpace), impliedExtent(sizeSpace)],
-    [UNDEFINED, UNDEFINED],
-    [undefined, undefined],
-    [100, 80],
-    [2, 3],
-    [inheritedX, inheritedY],
-    [false, false],
-    [false, false],
-    () => undefined,
-    new ScopeRegistry(),
-    "test"
-  );
-  ok(
-    "a self-scaled axis's frame is its own scope, pinned or free",
-    pxOf(selfScaled.basePosScales[0]!, 5) === 50 &&
-      selfScaled.basePosScales[1]?.sigma === 4 &&
-      selfScaled.basePosScales[1]?.originPx === 0
-  );
-  ok(
-    "every self-scaled axis roots its own σ, pinned or free",
-    selfScaled.childScaleFactors[0] === 10 &&
-      selfScaled.childScaleFactors[1] === 4
-  );
-
-  // Scale-root scoping (#618): an INTERMEDIATE distribute — inherited scale
-  // present AND not self-scaled — is inside an ancestor scale root's σ-scope, so
-  // it must DEFER to the inherited σ rather than re-derive its own from the
-  // locally allocated size. (In a consistently sized layout the re-derived factor
-  // equals the inherited one, so this is a no-op; it diverges only when the
-  // allocated size disagrees with the inherited σ — e.g. an equal-slice budget
-  // under a coord, where the distribute axis IS the σ-scaled axis. This is what
-  // makes flat ≡ nested distribute for data-driven children — see
-  // coordConfluence.test.ts.)
-  const intermediate = buildChildScalePlan(
-    [undefined, undefined],
-    [undefined, undefined],
-    [UNDEFINED, UNDEFINED],
-    [undefined, undefined],
-    [100, 80],
-    [2, 3],
-    [inheritedX, inheritedY],
-    [true, true],
-    [false, false],
-    () => undefined,
-    new ScopeRegistry(),
-    "test"
-  );
-  ok(
-    "intermediate distribute defers to inherited child scale factor (scale-root scoping)",
-    intermediate.childScaleFactors[0] === 2 &&
-      intermediate.childScaleFactors[1] === 3
-  );
-  ok(
-    "intermediate distribute makes no budget-inversion attempt (no failures)",
-    intermediate.budgetFailures.length === 0
-  );
-
-  // When this layer IS the σ-root for the axis (no inherited scale), the budget
-  // applies: re-derive from the fold, and a non-invertible fold is reported.
-  const rootBudget = buildChildScalePlan(
-    [undefined, undefined],
-    [undefined, undefined],
-    [UNDEFINED, UNDEFINED],
-    [Extent(Monotonic.linear(10, 0)), Extent(Monotonic.linear(0, 10))],
-    [100, 80],
-    [undefined, undefined],
-    [inheritedX, inheritedY],
-    [true, true],
-    [false, false],
-    () => undefined,
-    new ScopeRegistry(),
-    "test"
-  );
-  ok(
-    "σ-root distribute re-derives child scale factor from its budget when invertible",
-    rootBudget.childScaleFactors[0] === 10
-  );
-  ok(
-    "non-invertible constraint SIZE budget on a σ-root axis is reported",
-    rootBudget.budgetFailures.length === 1 &&
-      rootBudget.budgetFailures[0].axis === 1 &&
-      rootBudget.budgetFailures[0].budget === 80
-  );
-
-  const shared = buildChildScalePlan(
-    [undefined, undefined],
-    [undefined, undefined],
-    [CONTINUOUS(interval(0, 25), "free"), UNDEFINED],
-    [impliedExtent(CONTINUOUS(interval(0, 25), "free")), undefined],
-    [100, 80],
-    [undefined, undefined],
-    [undefined, undefined],
-    [true, false],
-    [true, false],
-    () => undefined,
-    new ScopeRegistry(),
-    "test"
-  );
-  ok(
-    "a budget that is also a shared scale solves once, from the layer's claim",
-    shared.childScaleFactors[0] === 4 &&
-      shared.sharedScaleChecks.length === 1 &&
-      shared.sharedScaleChecks[0].axis === 0 &&
-      shared.sharedScaleChecks[0].sigma === 4
-  );
-  // One σ per scope (#659): a self-scaled stash that a composed budget also
-  // covers solves once, from the NICED claim. Positions (the map) and sizes
-  // (σ) read the same niced domain, so bar tops land on the ticks.
-  {
-    const stash = CONTINUOUS(interval(0, 9.5), "pinned");
-    const plan = buildChildScalePlan(
-      [undefined, stash],
-      [undefined, impliedExtent(stash)],
-      [UNDEFINED, UNDEFINED],
-      [undefined, undefined],
-      [100, 100],
-      [2, 3],
-      [inheritedX, inheritedY],
-      [false, true],
-      [false, false],
-      () => DEFAULT_AXIS_TICKS,
+  const none = () => undefined;
+  const solve = (
+    ownSize: [boolean, boolean],
+    spaces: [any, any],
+    claims: [Extent | undefined, Extent | undefined],
+    sigmas: [number | undefined, number | undefined],
+    maps: [AxisMap | undefined, AxisMap | undefined],
+    domain: (axis: 0 | 1) => ReturnType<typeof interval> | undefined = none,
+    ticks: (axis: 0 | 1) => typeof DEFAULT_AXIS_TICKS | undefined = none
+  ) =>
+    solveLayerScales(
+      ownSize,
+      spaces,
+      claims,
+      spaces,
+      [100, 80],
+      sigmas,
+      maps,
+      domain,
+      ticks,
       new ScopeRegistry(),
       "test"
     );
-    ok(
-      "a budget over a self-scaled stash keeps the niced σ",
-      plan.childScaleFactors[1] === 10 && plan.basePosScales[1]?.sigma === 10,
-      JSON.stringify([plan.childScaleFactors, plan.basePosScales])
-    );
-  }
 
-  // Only a scope root solves: a shared-scale node under an ancestor that
-  // already owns σ (a chart nested in another chart's mark) inherits it.
-  const nestedShared = buildChildScalePlan(
-    [undefined, undefined],
-    [undefined, undefined],
-    [CONTINUOUS(interval(0, 25), "free"), UNDEFINED],
-    [impliedExtent(CONTINUOUS(interval(0, 25), "free")), undefined],
-    [100, 80],
+  const sized = solve(
+    [true, true],
+    [positionSpace, sizeSpace],
+    [impliedExtent(positionSpace), impliedExtent(sizeSpace)],
     [2, 3],
-    [inheritedX, inheritedY],
-    [false, false],
-    [true, false],
-    () => undefined,
-    new ScopeRegistry(),
-    "test"
+    [handedX, handedY]
   );
   ok(
-    "a shared scale node under an inherited σ inherits it",
-    nestedShared.childScaleFactors[0] === 2 &&
-      nestedShared.sharedScaleChecks.length === 0
+    "a node with a size of its own solves σ on each axis, pinned or free",
+    sized.sigmas[0] === 10 && sized.sigmas[1] === 4
+  );
+  ok(
+    "a sized node's frame is its own scope",
+    pxOf(sized.frames[0]!, 5) === 50 &&
+      sized.frames[1]?.sigma === 4 &&
+      sized.frames[1]?.originPx === 0
+  );
+
+  // A node handed a frame is not sized: it inherits σ and the frame.
+  const inherits = solve(
+    [false, false],
+    [positionSpace, sizeSpace],
+    [impliedExtent(positionSpace), impliedExtent(sizeSpace)],
+    [2, 3],
+    [handedX, handedY]
+  );
+  ok(
+    "a node handed a frame inherits σ",
+    inherits.sigmas[0] === 2 &&
+      inherits.sigmas[1] === 3 &&
+      inherits.frames[0] === handedX &&
+      inherits.checks.length === 0
+  );
+
+  // A node handed no σ at all is sized by the box it is given (a chain of
+  // magnitudes that nothing above it could solve).
+  const unscaled = solve(
+    [false, false],
+    [UNDEFINED, UNDEFINED],
+    [Extent(Monotonic.linear(10, 0)), Extent(Monotonic.linear(0, 10))],
+    [undefined, undefined],
+    [undefined, undefined]
+  );
+  ok(
+    "a node handed no σ solves from its claim when it can",
+    unscaled.sigmas[0] === 10
+  );
+  ok(
+    "a claim with no σ in it is reported",
+    unscaled.failures.length === 1 &&
+      unscaled.failures[0].axis === 1 &&
+      unscaled.failures[0].budget === 80
+  );
+
+  // A pinned node handed σ but no frame (a facet panel in its slot) is sized
+  // by its slot; a free one (a part of a chain) inherits σ.
+  const slot = solve(
+    [false, false],
+    [positionSpace, sizeSpace],
+    [impliedExtent(positionSpace), impliedExtent(sizeSpace)],
+    [2, 3],
+    [undefined, undefined]
+  );
+  ok(
+    "a pinned node with no frame is sized by its slot; a free one inherits",
+    slot.sigmas[0] === 10 && slot.sigmas[1] === 3
+  );
+
+  // #1114: a sized node maps its keyed domain, not just its own data.
+  const keyed = solve(
+    [true, false],
+    [positionSpace, UNDEFINED],
+    [impliedExtent(positionSpace), undefined],
+    [2, 3],
+    [handedX, handedY],
+    (axis) => (axis === 0 ? interval(0, 20) : undefined)
+  );
+  ok(
+    "a sized node widens its claim to its keyed domain",
+    keyed.sigmas[0] === 5 && pxOf(keyed.frames[0]!, 20) === 100,
+    JSON.stringify(keyed.frames)
+  );
+
+  // One σ per scope (#659): the keyed domain is niced at the solve when an
+  // axis is drawn over it, so positions and sizes read one domain.
+  const stash = CONTINUOUS(interval(0, 9.5), "pinned");
+  const niced = solve(
+    [false, true],
+    [UNDEFINED, stash],
+    [undefined, impliedExtent(stash)],
+    [2, 3],
+    [handedX, handedY],
+    none,
+    () => DEFAULT_AXIS_TICKS
+  );
+  ok(
+    "a sized node keeps the niced σ",
+    niced.sigmas[1] === 8 && niced.frames[1]?.sigma === 8,
+    JSON.stringify(niced)
   );
 }
 

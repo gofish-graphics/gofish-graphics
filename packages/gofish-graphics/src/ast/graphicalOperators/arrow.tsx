@@ -52,12 +52,11 @@ export const arrow = createNodeOperator(
     return new GoFishNode(
       {
         type: "arrow",
-        shared: [false, false],
         resolveUnderlyingSpace: (
           _childSpaces: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => [UNDEFINED, UNDEFINED],
-        layout: (shared, size, scales, layoutChildren, node) => {
+        layout: (size, scales, layoutChildren, node) => {
           if (layoutChildren.length < 2) {
             return {
               intrinsicDims: [

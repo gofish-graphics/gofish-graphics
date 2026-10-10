@@ -12,9 +12,9 @@
 // imports this module, so a type can never read a claim.
 
 import * as Monotonic from "../util/monotonic";
+import { interval, union, width, type Interval } from "../util/interval";
 import type { Size } from "./dims";
 import {
-  dataWidth,
   isCONTINUOUS,
   niceContinuous,
   axisOver,
@@ -111,22 +111,57 @@ export const niceScope = <S extends UnderlyingSpace | undefined>(
   const axis = axisOver(placeBaseline(space));
   if (space === undefined || !isCONTINUOUS(space) || axis === undefined)
     return [space, extent];
-  const niced = niceContinuous(space, ticks);
-  if (extent === undefined) return [niced, undefined];
-  const widened =
-    dataWidth(niced as CONTINUOUS_TYPE) - dataWidth(space as CONTINUOUS_TYPE);
-  // A claim is measured from data 0, so each side of an absolute axis widens
-  // by its own niced end. A delta axis comes from centering (`middle`
-  // alignment), so the content sits centered in the niced width: half the
-  // widening on each side.
-  const iv = (space as CONTINUOUS_TYPE).dataInterval;
-  const nicedIv = (niced as CONTINUOUS_TYPE).dataInterval;
-  const [up, down] =
+  return widenTo(space, extent, niceContinuous(space, ticks).dataInterval);
+};
+
+/** Widen a sized node's type and claim to its keyed domain `domain` (#1114):
+ *  the node maps the whole domain of its unit into its own size, not just
+ *  the part of it its own data covers. It is the arithmetic {@link niceScope}
+ *  uses: only the data part of the claim widens, so any pixel overhead it
+ *  carries is kept. A domain the type already covers leaves both unchanged,
+ *  and so does a space with no axis over its interval (an ordinal, a spread
+ *  of magnitudes). */
+export const widenScope = <S extends UnderlyingSpace | undefined>(
+  space: S,
+  extent: Extent | undefined,
+  domain: Interval | undefined
+): [S, Extent | undefined] => {
+  if (domain === undefined || space === undefined || !isCONTINUOUS(space))
+    return [space, extent];
+  const axis = axisOver(placeBaseline(space));
+  if (axis === undefined) return [space, extent];
+  const iv = space.dataInterval;
+  // A delta axis has only a width: it widens to the domain's width, from
+  // its own low edge. An absolute axis widens to the union of the two.
+  const to =
     axis === "delta"
+      ? interval(iv.min, iv.min + Math.max(width(domain), width(iv)))
+      : union(iv, domain);
+  if (to.min === iv.min && to.max === iv.max) return [space, extent];
+  return widenTo(space, extent, to);
+};
+
+/** `space` with its data interval replaced by `to`, and its claim widened by
+ *  the same data. A claim is measured from data 0, so each side of an
+ *  absolute axis widens by its own end. A delta axis comes from centering
+ *  (`middle` alignment), so the content sits centered in the wider width:
+ *  half the widening on each side. */
+const widenTo = <S extends UnderlyingSpace | undefined>(
+  space: S,
+  extent: Extent | undefined,
+  to: Interval
+): [S, Extent | undefined] => {
+  const s = space as CONTINUOUS_TYPE;
+  const widenedSpace = { ...s, dataInterval: to } as S;
+  if (extent === undefined) return [widenedSpace, undefined];
+  const iv = s.dataInterval;
+  const widened = width(to) - width(iv);
+  const [up, down] =
+    axisOver(placeBaseline(s)) === "delta"
       ? [widened / 2, widened / 2]
-      : [nicedIv.max - iv.max, iv.min - nicedIv.min];
+      : [to.max - iv.max, iv.min - to.min];
   return [
-    niced,
+    widenedSpace,
     Extent(
       Monotonic.add(extent.ascent, Monotonic.linear(up, 0)),
       Monotonic.add(extent.descent, Monotonic.linear(down, 0))

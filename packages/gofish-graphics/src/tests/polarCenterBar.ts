@@ -33,7 +33,6 @@ export const testPolarCenterBar = (size: { width: number; height: number }) =>
           dir: 1,
           spacing: (2 * Math.PI) / 6,
           alignment: "start",
-          sharedScale: true,
           anchor: "middle",
         },
         data.map((d, i) => rect({ h: Math.random() * 15 + 5, w: value(d.b, "value"), fill: color6[i % 6] }))

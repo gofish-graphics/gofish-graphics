@@ -66,7 +66,6 @@ export const testPairBoxWhisker = () => {
   return spreadX(
     {
       spacing: 8,
-      sharedScale: true,
     },
     [
       boxAndWhisker({
@@ -93,7 +92,6 @@ export const testBoxWhiskerPlot = () =>
   spreadX(
     {
       spacing: 8,
-      sharedScale: true,
     },
     map(
       groupBy(

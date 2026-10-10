@@ -42,7 +42,7 @@ export const testFishWaffleRefactor = (size: {
 }) =>
   gofish(
     { width: size.width, height: size.height },
-    spread({ dir: "x", spacing: 8, alignment: "end", sharedScale: true },
+    spread({ dir: "x", spacing: 8, alignment: "end" },
       _(seafood)
         .groupBy("lake")
         .map((d) =>

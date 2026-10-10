@@ -142,7 +142,7 @@ export const Rect = ({
 
         return [resolveAxis(0), resolveAxis(1)];
       },
-      layout: (shared, size, scales, children) => {
+      layout: (size, scales, children) => {
         let x = computeAesthetic(
           dims[0].min,
           posFn(scales?.[0]?.map)!,

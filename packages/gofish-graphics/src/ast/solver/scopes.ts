@@ -7,11 +7,11 @@
  * (`Monotonic.inverse`). The scope's type fixes whether it has an `originPx`.
  * One mechanism covers every site:
  *
- *   - **scope roots solve** — the render root, an axis with an explicit pixel
- *     size (self-scaling region), a composed-constraint budget that roots its
- *     own scope, a `shared` operator, a coord boundary — each calls
- *     {@link ScopeRegistry.solveScope} (or {@link ScopeRegistry.solveSize}
- *     for a bare frame with no type);
+ *   - **sized nodes solve** (#1114) — the render root, a coord boundary, and
+ *     a node whose size is given to it (a literal or data-valued `w`/`h`, a
+ *     facet panel's slot), each mapping its measure-keyed domain into that
+ *     size — each calls {@link ScopeRegistry.solveScope} (or
+ *     {@link ScopeRegistry.solveSize} for a grid's bare tracks);
  *   - **everyone else INHERITS** — "not a root → inherit": a non-root site
  *     simply does not call the solve, so the inherited σ propagates unchanged.
  *     This is the structural rule that stops an intermediate from re-rooting.
@@ -32,15 +32,7 @@ import type { AxisMap } from "../domain";
 import { envFlag } from "../../util";
 import type { RenderSession } from "../_node";
 
-export type ScopeKind =
-  | "root"
-  | "self-scaled"
-  | "constraint-budget"
-  | "shared"
-  | "coord"
-  | "grid"
-  | "datum-position"
-  | "recenter";
+export type ScopeKind = "root" | "sized" | "coord" | "grid" | "recenter";
 
 /** A solved σ-scope on one axis: its slope `sigma` (px per data unit) and,
  *  when the scope's type has an origin, `originPx`, the pixel of data 0 (the

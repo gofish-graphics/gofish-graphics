@@ -48,7 +48,6 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
       return new GoFishNode(
         {
           type,
-          shared: [false, false],
           resolveUnderlyingSpace: (
             children: Size<UnderlyingSpace>[],
             _childNodes: GoFishAST[]
@@ -57,7 +56,7 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             unionChildExtents(childExtents, childSpaces, 0, spaces[0]),
             unionChildExtents(childExtents, childSpaces, 1, spaces[1]),
           ],
-          layout: (_shared, size, scales, layoutChildren) => {
+          layout: (size, scales, layoutChildren) => {
             requireTwoChildren(layoutChildren);
 
             const childPlaceables = layoutChildren.map((child) =>
@@ -226,7 +225,6 @@ export const mask = createNodeOperator(
     return new GoFishNode(
       {
         type: "mask",
-        shared: [false, false],
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
@@ -235,7 +233,7 @@ export const mask = createNodeOperator(
           unionChildExtents(childExtents, childSpaces, 0, spaces[0]),
           unionChildExtents(childExtents, childSpaces, 1, spaces[1]),
         ],
-        layout: (_shared, size, scales, layoutChildren) => {
+        layout: (size, scales, layoutChildren) => {
           requireTwoChildren(layoutChildren);
 
           const childPlaceables = layoutChildren.map((child) =>

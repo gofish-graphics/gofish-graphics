@@ -15,12 +15,10 @@ import {
   displayTranslate,
 } from "../dims";
 import {
-  UNDEFINED,
   UnderlyingSpace,
   isCONTINUOUS,
   isUNDEFINED,
   magnitude,
-  type AxisTicks,
 } from "../underlyingSpace";
 import { impliedExtent, type Extent } from "../extent";
 import { isValue } from "../data";
@@ -73,12 +71,11 @@ import {
 } from "../constraints/compose";
 import {
   buildDistributeSliceMap,
-  buildChildScalePlan,
   buildLayerConstraintLayoutPlan,
-  buildPositionScalePlan,
   childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
+  solveLayerScales,
 } from "../constraints/proposalPlan";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
@@ -242,24 +239,17 @@ export const layer = createNodeOperatorSequential(
 
     const dims = elaborateDims(options);
 
-    // SELF-SCALING REGIONS. When this layer is given an explicit pixel size on
-    // a dim, it becomes a self-contained scaling region on that dim: its scales
-    // resolve against its own box at layout time, exactly like the root resolves
-    // against the canvas ("a chart embeds the way it renders"). So in
-    // `resolveUnderlyingSpace` the real POSITION/SIZE space is stashed here and
-    // UNDEFINED is reported upward — a parent layer's union then ignores this
-    // axis rather than polluting a shared domain with foreign units (e.g. a
-    // marginal histogram's count axis vs. the center's data units). `layout`
-    // reads the stash back to build the LOCAL scale. The reported space is
-    // UNDEFINED for now; issue #508's proposed CONSTANT kind is the eventual
-    // home for "known fixed pixel extent". Indexed [x, y]; last write wins if
-    // resolveUnderlyingSpace runs more than once.
-    const selfScaledSpaces: [
-      UnderlyingSpace | undefined,
-      UnderlyingSpace | undefined,
-    ] = [undefined, undefined];
-    // The size claims of the stashed spaces, written by `resolveExtent`.
-    const selfScaledExtents: [Extent | undefined, Extent | undefined] = [
+    // SIZED NODES (#1114). A layer with a size of its own on an axis (a
+    // literal `w`/`h`, or a data-valued one) is a sized node there: at layout
+    // it maps the keyed domain of its content into its box, as the root does
+    // into the canvas ("a chart embeds the way it renders"). A literal size
+    // carries no data, so the layer reports its content's type and claim
+    // upward; which domain that type shares with is decided by the sharing
+    // sets, not by the size. A data-valued size is a magnitude in the
+    // parent's unit, so the layer reports that, and its content is nested in
+    // the box. `contentExtents` is the content's claim, written by
+    // `resolveExtent` and solved against the box by `layout`.
+    const contentExtents: [Extent | undefined, Extent | undefined] = [
       undefined,
       undefined,
     ];
@@ -269,10 +259,10 @@ export const layer = createNodeOperatorSequential(
     // claim against the allotted size and propose per-child slices.
     let constraintBudget: ComposeBudget | undefined;
 
-    // The layer's composed per-axis types BEFORE the self-scaling stash. A pure
+    // The layer's composed per-axis types: the types of its content. A pure
     // function of the children's types: the type hook computes it, reports it
-    // (after the stash), and keeps it in `layerTypes` for the claim hook,
-    // which follows the same steps.
+    // (a data-valued size reports its magnitude instead), and keeps it in
+    // `layerTypes` for the claim hook, which follows the same steps.
     const composeLayerTypes = (
       children: Size<UnderlyingSpace>[],
       childNodes: GoFishAST[],
@@ -307,7 +297,16 @@ export const layer = createNodeOperatorSequential(
       // is what lets the layer build a position scale at layout time so
       // `Constraint.position` can map data values to pixels.
       const posDomains = collectPositionDomains(constraints);
+      // The children the layer's own union leaves out on each axis: those
+      // its sharing sets detach (a literal `position` places them
+      // elsewhere), and those a datum position places (their own extent is
+      // nested at the datum, which is what they add to the domain).
+      const sharing = node.sharing();
       const placed = datumPlacedChildren(constraints, childNodes);
+      for (const axis of [0, 1] as const)
+        sharing.sets[axis].forEach((s, i) => {
+          if (s !== 0) placed[axis].add(i);
+        });
       const base = resolveLayerBaseSpaces(
         effectiveChildren,
         posDomains,
@@ -319,9 +318,8 @@ export const layer = createNodeOperatorSequential(
       // constraints match that operator image (see planConstraintComposition),
       // override the constrained axes with spread's own type folds (the
       // distribute fold on the distribute axis, the alignment fold on the
-      // cross axis); the claim hook folds their claims the same way. Applied
-      // BEFORE the self-scaling stash so an explicit-size layer roots its
-      // own scope on the folded type, exactly like spread.
+      // cross axis); the claim hook folds their claims the same way. A sized
+      // layer maps the folded type into its box, exactly like spread.
       const plan = planConstraintComposition(constraints, childNodes);
       const composed =
         plan !== undefined
@@ -370,7 +368,6 @@ export const layer = createNodeOperatorSequential(
       {
         type: options.box === true ? "box" : "layer",
         key: options.key,
-        shared: [false, false],
         // The sharing sets come from the constraints (`planSharing`). A
         // data-valued size (`w: "count"`, the mosaic's `size` wrapper) also
         // nests the content on its axis: the layer's size is a magnitude in
@@ -385,56 +382,29 @@ export const layer = createNodeOperatorSequential(
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[],
-          _shared: Size<boolean>,
-          constraints
+          constraints: ConstraintSpec[]
         ) => {
           layerTypes = composeLayerTypes(
             children,
             _childNodes,
             constraints ?? []
           );
-          // A copy: the claim hook reads the composition before the stash.
-          const resolved: Size<UnderlyingSpace> = [
-            layerTypes.resolved[0],
-            layerTypes.resolved[1],
-          ];
-
-          // Report UNDEFINED upward for a continuous dim with an explicit
-          // pixel size: a self-scaling region (see selfScaledSpaces above).
-          // Whether the region roots a σ-scope is the claim hook's decision,
-          // since only the claim says whether there is anything to scale.
-          // (Last write wins; may run more than once.) `node.selfScaledSpace`
-          // keeps the continuous type that no longer flows upward: an
-          // enclosing scope's nicing-demand walk (issue #659) must not
-          // descend past it, and `resolveAxes` reads it to detect SIBLING
-          // self-scaled regions that genuinely share one domain+extent (e.g.
-          // a spread's per-group scatter facets all given the same explicit
-          // pixel width over the same padded data domain), so it can hoist a
-          // single axis to their common ancestor. An ordinal axis still flows
-          // upward (its keys label the parent's axis), so it is not marked.
-          node.selfScaledSpace[0] = undefined;
-          node.selfScaledSpace[1] = undefined;
-          for (const axis of [0, 1] as const) {
-            const composed = resolved[axis];
+          // What the layer reports upward: its content's type, except on an
+          // axis with a DATA-valued size (`w: "count"`, #4/#20, the nested
+          // mosaic), where the layer is a free magnitude in its parent's unit,
+          // a leaf in its parent's set exactly like a rect with `w: "count"`.
+          // Its content is nested in that box (see `resolveSharing`). A
+          // literal size carries no data, so it changes nothing here.
+          return ([0, 1] as const).map((axis) => {
             const dsize = dims[axis].size;
-            if (dsize === undefined) continue;
-            if (isCONTINUOUS(composed)) node.selfScaledSpace[axis] = composed;
-            // What the layer reports upward. A DATA-valued size (`w:
-            // "count"`, #4/#20 — nested mosaic) is a free magnitude claim the
-            // ENCLOSING scale solves: the layer is a leaf in its ancestor's
-            // scope, exactly like a leaf rect with `w: "count"`. A LITERAL
-            // pixel size is a fixed box with its own units (a marginal
-            // histogram), which must NOT pollute the ancestor's data domain,
-            // so a stashed axis reports UNDEFINED.
-            if (isValue(dsize)) resolved[axis] = magnitude(dsize);
-            else if (isCONTINUOUS(composed)) resolved[axis] = UNDEFINED;
-          }
-          return resolved;
+            return isValue(dsize)
+              ? magnitude(dsize)
+              : layerTypes!.resolved[axis];
+          }) as Size<UnderlyingSpace>;
         },
         // The claim half, following the same steps as the type hook: nest
         // padding, the base union (scaled by `transform.scale`, which acts on
-        // pixels only), the constraint folds, the grid tracks, then the
-        // self-scaling stash.
+        // pixels only), the constraint folds, then the grid tracks.
         resolveExtent: (childExtents, _childSpaces, spaces) => {
           const t = layerTypes;
           if (t === undefined)
@@ -488,30 +458,18 @@ export const layer = createNodeOperatorSequential(
             for (const axis of [0, 1] as const)
               if (!isUNDEFINED(t.gridAxes[axis])) resolved[axis] = undefined;
           }
-          // The self-scaling stash. An explicit size on an axis whose content
-          // claims room roots the layer's own σ-scope there (#651 smell 1:
-          // without it, a subtree under a sized layer silently consumed the
-          // ancestor's σ). Every continuous axis claims, and so does a spread
-          // of magnitudes, whose type is ordinal or undefined but whose room
-          // depends on σ. The stash keeps the composed type and claim, which
-          // `layout` solves against the layer's box, and the layer reports
-          // what its own reported type implies (a data-valued size, or
-          // nothing).
-          selfScaledSpaces[0] = undefined;
-          selfScaledSpaces[1] = undefined;
-          selfScaledExtents[0] = undefined;
-          selfScaledExtents[1] = undefined;
-          for (const axis of [0, 1] as const) {
-            if (dims[axis].size === undefined) continue;
-            if (resolved[axis] !== undefined) {
-              selfScaledSpaces[axis] = t.resolved[axis];
-              selfScaledExtents[axis] = resolved[axis];
-            }
-            resolved[axis] = impliedExtent(spaces[axis]);
-          }
-          return resolved;
+          // The content's claim, which `layout` solves against the layer's box
+          // when the layer is sized. A data-valued size reports the claim of
+          // its magnitude instead; the content's claim stays inside the box.
+          contentExtents[0] = resolved[0];
+          contentExtents[1] = resolved[1];
+          return ([0, 1] as const).map((axis) =>
+            isValue(dims[axis].size)
+              ? impliedExtent(spaces[axis])
+              : resolved[axis]
+          ) as [Extent | undefined, Extent | undefined];
         },
-        layout: (shared, size, scales, children, node) => {
+        layout: (size, scales, children, node) => {
           // This layer's y direction: its children and constraints are read
           // in this axis order (see `axisDirection.ts`).
           const direction = node.yFrame.direction;
@@ -556,51 +514,37 @@ export const layer = createNodeOperatorSequential(
               )
             : undefined;
 
-          // Build the LOCAL scale for each self-scaled (stashed) dim against our
-          // own pixel box — see selfScaledSpaces above. The recipe (cf. the
-          // gofish.tsx root): solve the stash's scope from its type and claim
-          // (`solveScope`). Every stash sets `childScaleFactors`; a pinned one
-          // also hands its children its map in `basePosScales`, and a free
-          // one seats their baselines at its `originPx`. When the size can't
-          // be resolved (NaN) we leave the inherited value, degrading to the
-          // inherited path rather than emitting NaN scales.
-          //
-          // `basePosScales` is reused below as the floor for `effectivePosScales`
-          // and the per-child forwarding (`childScalesFor`), so the override
-          // applies regardless of `ownsPositionAxis`. `childScaleFactors` is a
-          // fresh array — never mutate the parent's inherited σ (unlike
-          // spread, which mutates intentionally for sibling sharing).
-          // Demand-driven nicing (issue #659): any scope this layer roots
-          // (self-scaled stash, shared-scale, datum-position) nices its
-          // POSITION domain only if some node in the scope renders an axis on
-          // that dim, to that axis's ticks — read off the persistent
-          // axis-demand stamps. Read only when this layer roots such a scope,
-          // and kept per region (`scopeAxisTicks`), so a region is scanned
-          // once however many layers in it ask.
-          const axisDemand = (axis: 0 | 1): AxisTicks | undefined =>
-            node.scopeAxisTicks(axis);
-          const layerExtent = node.resolveExtent();
-          const childScalePlan = buildChildScalePlan(
-            selfScaledSpaces,
-            selfScaledExtents,
+          // The scales this layer hands its children (`solveLayerScales`): on
+          // an axis where it is a sized node (a size of its own, or a slot it
+          // is given with no frame), it maps the keyed domain of its content
+          // into its box, niced when some chart draws an axis over that
+          // domain (#659); everywhere else it inherits σ. Every solve goes
+          // through the render's one σ-scope registry.
+          node.resolveExtent();
+          const keyed = node.tryGetRenderSession()?.keyedDomains;
+          // A data-valued size's content is a set of its own, so its domain
+          // is its unit's. Any other content is in this layer's set, whose
+          // domain it shares even when it carries no unit (literals).
+          const viaSet = (axis: 0 | 1) => !isValue(dims[axis].size);
+          const layerScales = solveLayerScales(
+            [dims[0].size !== undefined, dims[1].size !== undefined],
+            layerTypes?.resolved,
+            contentExtents,
             node._underlyingSpace,
-            layerExtent,
             size,
             inheritedScaleFactors,
             inheritedPosScales,
-            constraintBudget?.covered ?? [false, false],
-            shared,
-            axisDemand,
-            // Stage 6b: derive every scale this layer roots through the render's
-            // one σ-scope registry (shared with the root and coord boundaries).
+            (axis, space) => keyed?.domainOf(node, axis, space, viaSet(axis)),
+            (axis, space) => keyed?.ticksOf(node, axis, space, viaSet(axis)),
             getScopeRegistry(node.tryGetRenderSession()),
             node.key ?? node.type
           );
-          const { basePosScales, childScaleFactors } = childScalePlan;
-          for (const failure of childScalePlan.budgetFailures) {
+          const childScaleFactors = layerScales.sigmas;
+          for (const failure of layerScales.failures) {
             // A non-invertible fold-produced Monotonic would otherwise silently
             // vanish the content (spread's `?? 0`); name the axis and budget so
             // the failure is visible, then keep the inherited factor.
+            if (!constraintBudget?.covered[failure.axis]) continue;
             console.warn(
               `layer: could not invert distribute SIZE claim on ${
                 failure.axis === 0 ? "x" : "y"
@@ -608,7 +552,7 @@ export const layer = createNodeOperatorSequential(
               constraintBudget
             );
           }
-          for (const check of childScalePlan.sharedScaleChecks) {
+          for (const check of layerScales.checks) {
             // Solver shadow (#39): assert the frame equation content(σ)=allocated
             // closes for this σ-scope. No-op unless GOFISH_SOLVER_CHECK is set.
             shadowCheckScaleRoot(
@@ -630,35 +574,19 @@ export const layer = createNodeOperatorSequential(
             : undefined;
 
           // `position` constraints with a datum coordinate contribute a data
-          // domain on their axis (see collectPositionDomains); the union is what
-          // those constraints resolve against. `ownsAxis` is consumed again by
-          // the per-child posScale forwarding below (`childScalesFor`).
+          // domain on their axis (see collectPositionDomains), and resolve
+          // against the layer's frame. A child such a constraint places gets
+          // no map on that axis (`childPosScalesFor`).
           const constraintDomains = collectPositionDomains(node.constraints);
           const ownsAxis: [boolean, boolean] = [
             constraintDomains.x !== undefined,
             constraintDomains.y !== undefined,
           ];
-
-          // Scale for resolving this layer's datum `position` constraints: an
-          // inherited posScale, else a local one the scope registry solves
-          // from the layer's own pinned type, its size claim, and its pixel
-          // size (`solveScope`; the map is `sigma·d + originPx`). Only built when
-          // the layer actually owns such an axis — it is used solely by
-          // applyConstraints below, not passed to children.
-          const space = node._underlyingSpace;
-          // `basePosScales` (the inherited scales with any self-scaled dim
-          // overridden — see selfScaledSpaces above) is the floor here.
-          const positionScalePlan = buildPositionScalePlan(
-            ownsAxis,
-            space,
-            layerExtent,
-            size,
-            basePosScales,
-            axisDemand,
-            getScopeRegistry(node.tryGetRenderSession()),
-            node.key ?? node.type
-          );
-          const effectivePosScales = positionScalePlan.effectivePosScales;
+          const effectivePosScales = layerScales.frames;
+          // Which children share this layer's domain on each axis. A
+          // detached child is placed elsewhere, so the placement solve does
+          // not treat it as positioned by its data in this frame.
+          const sharing = node.sharing();
 
           // Where a child's baseline goes on each axis (#773), by the one
           // seating rule (`seatInScope`) in this layer's frame. A free child
@@ -768,7 +696,6 @@ export const layer = createNodeOperatorSequential(
               (children[i] as GoFishNode)._underlyingSpace,
               targetDims,
               ownsAxis,
-              basePosScales,
               effectivePosScales
             );
             childFrames[i] = layoutSize[1];
@@ -889,12 +816,23 @@ export const layer = createNodeOperatorSequential(
               new Set(),
               new Set(),
             ];
+            const childIndexOf = (name: string): number | undefined =>
+              operands.get(name)?.child ??
+              node.children.findIndex((c) => childNameKey(c) === name);
             for (const [name, cp] of nameToPlaceable) {
               const childSpace = (cp as GoFishNode)._underlyingSpace;
               if (childSpace === undefined) continue;
+              const i = childIndexOf(name);
               for (const axis of [0, 1] as const) {
                 const s = childSpace[axis];
-                if (s !== undefined && isCONTINUOUS(s) && s.origin !== "free")
+                const shares =
+                  i === undefined || i < 0 || sharing.sets[axis][i] === 0;
+                if (
+                  shares &&
+                  s !== undefined &&
+                  isCONTINUOUS(s) &&
+                  s.origin !== "free"
+                )
                   dataPositioned[axis].add(name);
               }
             }

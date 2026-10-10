@@ -48,7 +48,6 @@ export const testScatterPie2 = () =>
               h: _(sample.collection).sumBy("count") / 7,
               spacing: 0,
               alignment: "start",
-              sharedScale: true,
             },
             sample.collection.map((d, i) =>
               rect({
