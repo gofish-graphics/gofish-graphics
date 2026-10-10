@@ -6,8 +6,8 @@
  * the marginal histogram, a spread of charts and a stack.
  *
  * A real node's plan comes from its own sharing rule (`GoFishNode.sharing()`).
- * A data-valued `w`/`h`, `treemap` and the `position` operator are node-level
- * rules, not constraints.
+ * A data-valued `w`/`h` and `treemap` are node-level rules, not constraints.
+ * The `position` operator has no rule of its own, so it shares its child.
  *
  * Run: `tsx src/tests/sharing.test.ts` (wired as `pnpm test:sharing`).
  */
@@ -27,6 +27,9 @@ import { Rect as rect } from "../ast/shapes/rect";
 import { ref } from "../ast/shapes/ref";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { scatter, group, treemap, rect as rectMark } from "../lib";
+import { wrapRing } from "../ast/elaborationUtils";
+import { datum } from "../ast/data";
+import { isCONTINUOUS } from "../ast/underlyingSpace";
 
 declare const process: { exit(code: number): never };
 
@@ -419,6 +422,36 @@ async function main() {
     planSharing([Constraint.position({ x: 5 }, [r("elsewhere")])], kids("a")),
     { x: [0], y: [0] }
   );
+
+  console.log("# chrome rings");
+  {
+    // A delta axis seats the content it dresses at a datum (`contentAt` in
+    // axes/elaborate.tsx). The ring still reports the content's type: the
+    // content is its own set, not nested at that datum.
+    const content: any = await (layer as any)([
+      (rect as any)({ w: v(30), h: 10 }),
+    ]);
+    const ring: any = await wrapRing(
+      content,
+      "content",
+      { nodes: [], constraints: () => [] },
+      { x: datum(5), y: undefined }
+    );
+    ring.resolveUnderlyingSpace();
+    const plan: any = ring.sharing();
+    check(
+      "a ring seating its content at a datum: content shared, not nested",
+      plan.sets[0][0] === 0 &&
+        !plan.nested[0].has(0) &&
+        !(plan.datumPlaced?.[0]?.has(0) ?? false)
+    );
+    const x = ring._underlyingSpace[0];
+    check(
+      "a ring seating its content at a datum reports the content's type",
+      isCONTINUOUS(x) && x.dataInterval.min === 0 && x.dataInterval.max === 30,
+      JSON.stringify(x)
+    );
+  }
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

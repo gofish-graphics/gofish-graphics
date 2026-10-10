@@ -1,5 +1,5 @@
 import { GoFishNode } from "./_node";
-import { planSharing } from "./constraints/compose";
+import type { LayerSharingPlan } from "./constraints/compose";
 import { layer } from "./graphicalOperators/layer";
 import { Constraint } from "./constraints";
 
@@ -54,13 +54,13 @@ export async function wrapRing(
   // before chrome, #1114). The ring's shapes (an axis's ticks and line, a
   // legend, a title) are each a set of their own: none joins the content's
   // type, whatever constraint seats it. Ticks still sit at data positions in
-  // the ring's frame, through their position constraints.
-  root.INTERNAL_setSharing((childNodes, constraints) => {
-    const plan = planSharing(constraints, childNodes);
+  // the ring's frame, through their position constraints. The rule reads no
+  // constraint: whatever seats the content (a literal pin, or a delta axis's
+  // datum `contentAt`), the content is neither nested nor datum-placed.
+  root.INTERNAL_setSharing((childNodes): LayerSharingPlan => {
     const sets = childNodes.map((c, k) => (c === inner ? 0 : k + 1));
-    const i = childNodes.indexOf(inner);
-    for (const axis of [0, 1] as const) plan.nested[axis].delete(i);
-    return { ...plan, sets: [sets, [...sets]] };
+    const none = (): [Set<number>, Set<number>] => [new Set(), new Set()];
+    return { sets: [sets, [...sets]], nested: none(), datumPlaced: none() };
   });
   await root.relate((g) => [
     ...(seat.x === undefined && seat.y === undefined
