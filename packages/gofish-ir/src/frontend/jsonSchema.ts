@@ -49,6 +49,9 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
       return {
         ...(type.finite ? { type: "number" } : { $ref: "#/$defs/Number" }),
         ...(type.min !== undefined ? { minimum: type.min } : {}),
+        ...(type.exclusiveMin !== undefined
+          ? { exclusiveMinimum: type.exclusiveMin }
+          : {}),
       };
     case "boolean":
       return { type: "boolean" };
@@ -375,6 +378,34 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         ops: {
           type: "array",
           items: { $ref: "#/$defs/FieldOpIR" },
+        },
+      },
+    },
+    StructAccessor: {
+      description:
+        "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes a Bin strategy). Valid as a partition's `by` only once binned.",
+      type: "object",
+      required: ["type", "fields"],
+      additionalProperties: false,
+      properties: {
+        type: { const: "struct" },
+        fields: {
+          type: "object",
+          required: ["x", "y"],
+          additionalProperties: false,
+          properties: { x: { type: "string" }, y: { type: "string" } },
+        },
+        ops: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["op", "partition"],
+            additionalProperties: false,
+            properties: {
+              op: { const: "bin" },
+              partition: { $ref: "#/$defs/Bin" },
+            },
+          },
         },
       },
     },

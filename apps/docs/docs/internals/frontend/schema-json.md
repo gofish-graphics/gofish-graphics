@@ -271,6 +271,46 @@ for the API.
         }
       }
     },
+    "StructAccessor": {
+      "description": "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes a Bin strategy). Valid as a partition's `by` only once binned.",
+      "type": "object",
+      "required": ["type", "fields"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "struct"
+        },
+        "fields": {
+          "type": "object",
+          "required": ["x", "y"],
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "type": "string"
+            },
+            "y": {
+              "type": "string"
+            }
+          }
+        },
+        "ops": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["op", "partition"],
+            "additionalProperties": false,
+            "properties": {
+              "op": {
+                "const": "bin"
+              },
+              "partition": {
+                "$ref": "#/$defs/Bin"
+              }
+            }
+          }
+        }
+      }
+    },
     "FieldOpIR": {
       "description": "One op in a field(...) pipeline. Mirrors gofish-graphics' FieldOp (ast/fieldExpr.ts) exactly.",
       "oneOf": [
@@ -1555,9 +1595,12 @@ for the API.
                 }
               },
               "required": ["x", "y"]
+            },
+            {
+              "$ref": "#/$defs/StructAccessor"
             }
           ],
-          "description": "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y. A plain field has no region and is an error."
+          "description": "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error."
         },
         "dir": {
           "type": "string",
@@ -2433,7 +2476,7 @@ for the API.
       }
     },
     "RegionMark": {
-      "description": "Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. Today every region is a box, so it draws a rectangle.",
+      "description": "Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -3201,6 +3244,62 @@ for the API.
         }
       ],
       "description": "How a path runs through its points: the value of the `curve` option of `line` and `ribbon`. `linear`, `step`, `monotone` and `smooth` are read over the parameter of the run, from the least to the most smooth; `catmullRom` is a shape on screen; `bezier`, `orthogonal`, `arc` and `perfectArrows` route each pair of neighboring points."
+    },
+    "Bin": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "hex"
+            },
+            "radius": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "The radius in units of the x field."
+                    },
+                    "y": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "The radius in units of the y field."
+                    }
+                  },
+                  "required": ["x", "y"]
+                }
+              ],
+              "description": "The distance from a hexagon's center to its corners, in data units. A number when both fields share a unit (longitude and latitude), or `{ x, y }`, one per field, when they do not (as in ggplot2's `binwidth = c(x, y)`)."
+            }
+          },
+          "required": ["kind", "radius"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "voronoi"
+            },
+            "seeds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "description": "The seed rows, with the same two fields as the key, such as weather stations for rain gauge readings. Pass the chart's own data to give each row its own cell."
+            }
+          },
+          "required": ["kind", "seeds"]
+        }
+      ],
+      "description": "The cells a key built from two fields is binned into: the value of `struct({ x, y }).bin(...)`. Each kind divides the plane of the two fields into cells that do not overlap, and puts each row in the cell its point falls in."
     }
   }
 }

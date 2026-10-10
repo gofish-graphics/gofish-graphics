@@ -488,7 +488,9 @@ export interface PackOperator
  * `partition({ by, dir })` — divide the space along `dir` into the cells of
  * a binned key (`field(x).bin(p)`), and give each group its cell on one
  * continuous scale. `partition({ by: { x, y } })` divides both axes: it is
- * the partition on x, then the partition on y. Operator-only: its children
+ * the partition on x, then the partition on y. `partition({ by:
+ * struct({ x, y }).bin(cells) })` divides the plane into the polygon cells
+ * of a `Bin` strategy (hexagons, Voronoi cells). Operator-only: its children
  * are the groups of its key. Mirrors JS's `PartitionOptions`
  * (`graphicalOperators/partition.tsx`).
  */
@@ -499,8 +501,9 @@ export interface PartitionOperator
   type: "partition";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
-  /** A key that has a region: a binned field accessor, or one per axis. */
-  by: FieldAccessor | { x: FieldAccessor; y: FieldAccessor };
+  /** A key that has a region: a binned field accessor, one per axis, or a
+   *  binned struct of two fields. */
+  by: FieldAccessor | { x: FieldAccessor; y: FieldAccessor } | StructAccessor;
   /** The axis to divide. Required with a single key; not allowed with a
    *  key per axis. */
   dir?: string;
@@ -564,6 +567,13 @@ export type CurveIR =
       flip?: boolean;
       straights?: boolean;
     };
+
+/** The cells a key built from two fields is binned into, made by a call in
+ *  the `Bin` family (`Bin.hex({ radius })`, `Bin.voronoi({ seeds })`): the
+ *  value of `struct({ x, y }).bin(...)`. */
+export type BinIR =
+  | { kind: "hex"; radius: number | { x: number; y: number } }
+  | { kind: "voronoi"; seeds: Record<string, unknown>[] };
 
 // ---------------------------------------------------------------------------
 // Marks
@@ -781,6 +791,21 @@ export interface FieldAccessor {
   measure?: string;
   ops?: FieldOpIR[];
 }
+
+/** A key built from two fields at once, emitted by `struct({ x, y })`
+ *  (after polars' `pl.struct`), with the cells it is binned into. `fields`
+ *  names the column read on each axis. Its one op is `bin`, which takes a
+ *  `Bin` strategy; a struct is a key only once it is binned (a
+ *  `partition`'s `by`). Mirrors gofish-graphics' `StructExpr`
+ *  (`ast/structExpr.ts`). */
+export interface StructAccessor {
+  type: "struct";
+  fields: { x: string; y: string };
+  ops?: StructOpIR[];
+}
+
+/** One op in a `struct(...)` pipeline: the cells it is binned into. */
+export type StructOpIR = { op: "bin"; partition: BinIR };
 
 /** One op in a `field(...)` pipeline — mirrors gofish-graphics'
  *  `FieldOp` (`ast/fieldExpr.ts`) exactly. See {@link FieldAccessor}. */
