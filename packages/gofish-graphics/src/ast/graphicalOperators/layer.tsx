@@ -77,7 +77,7 @@ import {
   buildPositionScalePlan,
   buildSpanProposalMap,
   buildChildRegions,
-  withoutRegionPlacedAligns,
+  placementConstraints,
   childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
@@ -914,7 +914,7 @@ export const layer = createNodeOperatorSequential(
             }
 
             applyConstraints(
-              withoutRegionPlacedAligns(node.constraints, childRegions),
+              placementConstraints(node.constraints, childRegions),
               nameToPlaceable,
               size,
               effectivePosScales,

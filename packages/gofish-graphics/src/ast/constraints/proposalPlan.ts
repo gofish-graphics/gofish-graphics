@@ -260,14 +260,17 @@ export function buildChildRegions(
 
 /**
  * The layer's constraints as its placement solve sees them, once its
- * children are laid out in their regions ({@link buildChildRegions}): an
- * `align` loses each axis on which every one of its operands has a span in
- * its region, since the region placed them there, and goes when it has no
- * axis left. A partition inside another partition's cell is such a case:
- * the cell spans the inner partition's cross axis, so its `alignment` (the
- * fallback for an axis with no span) has nothing to do there.
+ * children are laid out in their regions ({@link buildChildRegions}). The
+ * regions have done their work (the domains, the axis cells, and the
+ * children's regions), so a `position` loses its `region`, and goes when it
+ * has no `x` or `y` left. An `align` loses each axis on which every one of
+ * its operands has a span in its region, since the region placed them there,
+ * and goes when it has no axis left. A partition inside another partition's
+ * cell is such a case: the cell spans the inner partition's cross axis, so
+ * its `alignment` (the fallback for an axis with no span) has nothing to do
+ * there.
  */
-export function withoutRegionPlacedAligns(
+export function placementConstraints(
   constraints: ConstraintSpec[],
   regions: Map<string, Region> | undefined
 ): ConstraintSpec[] {
@@ -275,6 +278,11 @@ export function withoutRegionPlacedAligns(
   const spanned = (c: AlignConstraint, axis: 0 | 1) =>
     c.children.every((ref) => regions.get(ref.name)?.spans[axis] !== undefined);
   return constraints.flatMap((c): ConstraintSpec[] => {
+    if (c.type === "position" && c.region !== undefined) {
+      return c.x === undefined && c.y === undefined
+        ? []
+        : [{ ...c, region: undefined }];
+    }
     if (c.type !== "align") return [c];
     const x = c.x !== undefined && spanned(c, 0) ? undefined : c.x;
     const y = c.y !== undefined && spanned(c, 1) ? undefined : c.y;
