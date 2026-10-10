@@ -141,6 +141,26 @@ withUnits(new Units(), () => {
     );
   }
 
+  console.log("# keyed domains: nested in the parent's set");
+  {
+    // A bar placed at a datum (in its parent's set, nested there) has its
+    // width [0, 4] in its own frame. It does not pull 0 into its parent's
+    // domain of the same unit.
+    const day = quantityUnits({ name: "start", unit: "day" });
+    const bar = node(CONTINUOUS(interval(0, 4), "free", day));
+    const root = node(pinned(10, 20, day), [bar], { nested: [0] });
+    const table = KeyedDomains.build(root);
+    ok(
+      "a child nested in its parent's set does not widen its parent's domain",
+      same(table.domainOf(root, 1, root._underlyingSpace![1], true), 10, 20),
+      table.domainOf(root, 1, root._underlyingSpace![1], true)
+    );
+    ok(
+      "its own interval is keyed in a frame of its own",
+      same(table.domainOf(bar, 1, bar._underlyingSpace![1], true), 0, 4)
+    );
+  }
+
   console.log("# keyed domains: space roots");
   {
     // A coordinate transform starts a new space: the same unit inside it is

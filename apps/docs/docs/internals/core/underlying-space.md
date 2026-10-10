@@ -1390,7 +1390,11 @@ After the type walk, one pass builds the **keyed domain table**
 labels are elaborated: per space root (the render root, each coordinate
 transform), per axis and per unit after unification, the union of the
 intervals at the top of every sharing set with that unit. The top of a set is
-where it stops: a child its parent detaches or nests, or the space root.
+where it stops: a child its parent detaches or nests, or the space root. A
+child nested while it stays in its parent's set (placed at a datum, or the
+content of a data-valued box) measures its own extent from the datum or the
+box, so its domains are keyed in a frame of its own and never widen its
+parent's, even in the same unit.
 Values with no unit (literals) are keyed by their set. So two facet panels
 that plot one column share one domain, and a count histogram placed beside a
 scatter of millimeters keeps its own. Chrome never decides a domain, it only

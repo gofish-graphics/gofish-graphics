@@ -48,8 +48,10 @@ const isKeyedNode = (n: unknown): n is KeyedNode =>
   typeof (n as KeyedNode).sharing === "function" &&
   Array.isArray((n as KeyedNode).children);
 
-/** Where a node sits on one axis: the space root it is in, and the top of the
- *  sharing set it belongs to (itself, when its parent detaches or nests it). */
+/** Where a node sits on one axis: the frame its domains are keyed in (a
+ *  space root, or a child nested in its parent's set, whose extent is in a
+ *  frame of its own), and the top of the sharing set it belongs to (itself,
+ *  when its parent detaches or nests it). */
 type Seat = { spaceRoot: KeyedNode; top: KeyedNode; topType?: UnderlyingSpace };
 
 /** The key of a domain: its unit's representative, or, for values with no
@@ -178,12 +180,21 @@ export class KeyedDomains {
       const own = (axis: 0 | 1) =>
         plan.sets[axis][i] === 0 && !plan.nested[axis].has(i);
       if (own(0) && own(1)) return this.walk(child, seats);
+      // A child nested while it stays in its parent's set (placed at a
+      // datum, or the content of a data-valued box) has its own extent in a
+      // frame of its own, measured from the datum or the box, not in its
+      // parent's frame. So it keys its domains in that frame: its interval
+      // never joins its parent's domain, even when the two share a unit. A
+      // child in a set of its own (a detached child, a spread slot) is
+      // measured in the space's frame, so its domains join the space's.
+      const ownFrame = (axis: 0 | 1) =>
+        plan.sets[axis][i] === 0 && plan.nested[axis].has(i);
       const childSeats = ([0, 1] as const).map(
         (axis): Seat =>
           own(axis)
             ? seats[axis]
             : {
-                spaceRoot: seats[axis].spaceRoot,
+                spaceRoot: ownFrame(axis) ? child : seats[axis].spaceRoot,
                 top: child,
                 topType: child._underlyingSpace?.[axis],
               }

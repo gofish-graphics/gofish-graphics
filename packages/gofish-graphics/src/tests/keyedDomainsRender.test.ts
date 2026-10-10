@@ -12,6 +12,7 @@ import { layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
 import { value as v, datum } from "../ast/data";
+import { chart, scatter, rect as rectMark, Schema } from "../lib";
 
 declare const process: { exit(code: number): never };
 
@@ -64,6 +65,32 @@ async function main() {
       "the glyph is centered on the pixel of its datum",
       near((red?.x ?? 0) + 10, (blue?.x ?? 0) + 100),
       { red, blue }
+    );
+  }
+
+  console.log("# a child nested at a datum does not widen its parent's domain");
+  {
+    // Bars at x = start with width `width`, both in days. The bar's own
+    // width interval [0, width] is in its own frame at the datum, so it
+    // must not pull 0 into the day domain: the domain stays [10, 20], and
+    // the bars at 10 and 20 sit the whole 200 px apart. Before, the domain
+    // was [0, 20] and they sat 100 px apart.
+    const tasks = [
+      { id: "a", start: 10, width: 2 },
+      { id: "b", start: 20, width: 4 },
+    ];
+    const dl = await chart(tasks, {
+      schema: { start: Schema.unit("day"), width: Schema.unit("day") },
+    })
+      .flow(scatter({ by: "id", x: "start" }))
+      .mark(rectMark({ w: "width", h: 10, fill: "green" }))
+      .toDisplayList({ w: 200, h: 50 });
+    const [a, b] = byFill(dl, "green").sort((p, q) => p.x! - q.x!);
+    const center = (r: Item) => r.x! + r.w! / 2;
+    check(
+      "the bars' datums sit the canvas width apart (domain [10, 20])",
+      near(center(b) - center(a), 200),
+      { a, b }
     );
   }
 
