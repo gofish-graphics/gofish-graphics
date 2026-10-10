@@ -3,13 +3,13 @@
 // </gofish-wiki>
 
 import { RegionCell } from "../cells";
-import { resolveColumn } from "../channels";
-import { DatumValueImpl, isField, type FieldAccessor } from "../data";
+import { columnValue, resolveColumn } from "../channels";
+import { isField, type FieldAccessor } from "../data";
 import { splitEntries, type SplitBy } from "../datumProjection";
 import { resolveAxisName, type AxisName } from "../dims";
 import { getFieldOps, type FieldExpr } from "../fieldExpr";
 import type { AxisOptions } from "../gofish";
-import type { GoFishNode } from "../_node";
+import { axisOverrideOf, type GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
 import type { Operator } from "../types";
 import {
@@ -191,14 +191,7 @@ const PartitionNode = createNodeOperator(
         ];
       });
     };
-    if (axes !== undefined) {
-      const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
-        opt === undefined ? undefined : opt === false ? false : true;
-      node._axisOverride =
-        typeof axes === "boolean"
-          ? { x: axes, y: axes }
-          : { x: toShow(axes.x), y: toShow(axes.y) };
-    }
+    if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
     return node;
   }
 );
@@ -212,16 +205,8 @@ function columnDatum(
   name: string,
   accessor: unknown = name
 ): ColumnDatum {
-  const { measure, type } = resolveColumn(d, accessor);
-  return (v) =>
-    new DatumValueImpl(
-      v,
-      measure,
-      undefined,
-      undefined,
-      type === undefined ? undefined : name,
-      type
-    );
+  const column = resolveColumn(d, accessor);
+  return (v) => columnValue(v, column, name);
 }
 
 /** Whether `by` has a region: a field binned by `.bin(p)`, or a struct

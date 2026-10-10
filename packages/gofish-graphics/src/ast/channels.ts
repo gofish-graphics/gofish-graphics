@@ -210,6 +210,24 @@ export const resolveMeasure = <T>(
  *  its type in the chart's schema (schema.ts). */
 export type ColumnInfo = { measure?: Measure; type?: ColumnType };
 
+/** `v` as a datum read from the column `name`: it carries what the column
+ *  says about its values ({@link ColumnInfo}: its measure, and its schema
+ *  type, such as a time column's calendar), and, when the column has a type,
+ *  the column's name. */
+export const columnValue = (
+  v: number,
+  column: ColumnInfo,
+  name: string | undefined
+): DatumValueImpl =>
+  new DatumValueImpl(
+    v,
+    column.measure,
+    undefined,
+    undefined,
+    column.type === undefined ? undefined : name,
+    column.type
+  );
+
 /** The {@link ColumnInfo} of `accessor`'s column, read off
  *  `provenanceData` (see {@link resolveMeasure}). An accessor that names no
  *  column (a function, a literal, a value) has neither. */
@@ -301,13 +319,10 @@ const inferNumeric =
       accessor,
       data
     );
-    return new DatumValueImpl(
+    return columnValue(
       agg(values as any[]),
-      pipelineMeasure ?? column.measure,
-      undefined,
-      undefined,
-      column.type === undefined ? undefined : fieldNameOf(accessor),
-      column.type
+      { measure: pipelineMeasure ?? column.measure, type: column.type },
+      fieldNameOf(accessor)
     );
   };
 

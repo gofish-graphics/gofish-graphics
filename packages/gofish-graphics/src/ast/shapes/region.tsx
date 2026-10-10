@@ -4,14 +4,13 @@
 
 import type { DisplayList } from "gofish-ir";
 import { color6, resolveColorChannel } from "../../color";
-import { path, transformPath } from "../../path";
 import { isValue, type MaybeValue } from "../data";
 import { displayDims } from "../dims";
 import type { Point } from "../geometry";
 import {
   lowerStyle,
-  pathToPixelSVG,
   rectItemFromBox,
+  ringItem,
   roleFor,
 } from "../displayList/lowerHelpers";
 import { GoFishNode } from "../_node";
@@ -141,18 +140,8 @@ export const Region = ({
                 [dx.max, dy.max],
                 [dx.min, dy.max],
               ];
-        const ring = path(points, { closed: true });
-        const drawn = linear
-          ? ring
-          : transformPath(ring, coordinateTransform, { resample: true });
         return [
-          {
-            kind: "path",
-            d: pathToPixelSVG(drawn, toPixel),
-            datum: node.datum,
-            role: roleFor(node.datum),
-            style,
-          },
+          ringItem(points, coordinateTransform, toPixel, node.datum, style),
         ];
       },
     },

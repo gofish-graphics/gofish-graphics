@@ -72,7 +72,7 @@ import { impliedExtents, type Extent } from "./extent";
 import { toJSON } from "../util/interval";
 import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
-import type { AxesOptions, ScaleContext } from "./gofish";
+import type { AxesOptions, AxisOptions, ScaleContext } from "./gofish";
 import type { ChromeRing } from "./elaborationUtils";
 import type { TokenContext } from "./tokenContext";
 import {
@@ -444,6 +444,19 @@ function sharedSelfScaledChildSpace(
     ? { sig, space: rep }
     : undefined;
 }
+
+/** An operator's `axes` option as the {@link GoFishNode._axisOverride} it
+ *  sets: one boolean for both axes, or per axis, where `false` hides the
+ *  axis and any other option shows it. */
+export const axisOverrideOf = (
+  axes: boolean | { x?: AxisOptions; y?: AxisOptions }
+): { x?: boolean; y?: boolean } => {
+  const show = (opt: AxisOptions | undefined): boolean | undefined =>
+    opt === undefined ? undefined : opt !== false;
+  return typeof axes === "boolean"
+    ? { x: axes, y: axes }
+    : { x: show(axes.x), y: show(axes.y) };
+};
 
 export class GoFishNode {
   public readonly uid: string;

@@ -242,15 +242,11 @@ export class FieldExpr<HasRegion extends boolean = boolean> {
 }
 
 /** One op's wire form: a `bin` op's partition is written as its wire form
- *  (a loud error for a partition with a JS `format`). */
+ *  (a loud error for a partition with a JS `format`). A FieldExpr's bin op
+ *  holds the builder form, which `.bin()` checked. */
 const opToJSON = (op: FieldOp): FieldOp =>
   op.op === "bin" && op.partition !== undefined
-    ? {
-        op: "bin",
-        partition: partitionToJSON(
-          checkPartition(op.partition, "field(...).bin")
-        ),
-      }
+    ? { op: "bin", partition: partitionToJSON(op.partition as Partition) }
     : op;
 
 export type BetweenOptions = {

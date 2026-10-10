@@ -33,8 +33,8 @@ export type {
   FieldPredicateWire,
 } from "./ast/fieldExpr";
 // Measure-provenance tagging: how a data transform declares that
-// its output columns are in a source field's units. The deserializer re-applies
-// it to RPC-returned rows (the array symbol can't cross the bridge).
+// its output columns are in a source field's units. JS only: the array
+// symbol does not cross the Python bridge.
 export { setMeasureProvenance } from "./ast/data";
 export type { MeasureProvenance } from "./ast/data";
 export { map } from "./ast/iterators/map";

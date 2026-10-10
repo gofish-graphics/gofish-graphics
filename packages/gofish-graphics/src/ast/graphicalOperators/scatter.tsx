@@ -1,4 +1,4 @@
-import { GoFishNode } from "../_node";
+import { axisOverrideOf, GoFishNode } from "../_node";
 import type { AxisOptions } from "../gofish";
 import { MaybeValue, type PositionValue } from "../data";
 import {
@@ -147,7 +147,7 @@ function assertLinearSpace(scope: AxisScope): void {
     );
 }
 
-export const Scatter = createNodeOperator(
+const Scatter = createNodeOperator(
   async (
     options: ScatterProps,
     children: GoFishAST[] | Collection<GoFishAST>
@@ -258,14 +258,7 @@ export const Scatter = createNodeOperator(
         return cs;
       });
     };
-    if (axes !== undefined) {
-      const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
-        opt === undefined ? undefined : opt === false ? false : true;
-      node._axisOverride =
-        typeof axes === "boolean"
-          ? { x: axes, y: axes }
-          : { x: toShow(axes.x), y: toShow(axes.y) };
-    }
+    if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
     return node;
   }
 );

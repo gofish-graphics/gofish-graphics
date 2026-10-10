@@ -1,4 +1,4 @@
-import { GoFishNode } from "../_node";
+import { axisOverrideOf, GoFishNode } from "../_node";
 import type { AxisOptions } from "../gofish";
 import { fieldNameOf, MaybeValue } from "../data";
 import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
@@ -207,14 +207,7 @@ export const Spread = createNodeOperator(
     // solves σ locally and shares it with descendants. The layer honors this in
     // `layout` (it self-solves per axis when `shared`, into a fresh array).
     node.shared = [sharedScale, sharedScale];
-    if (axes !== undefined) {
-      const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
-        opt === undefined ? undefined : opt === false ? false : true;
-      node._axisOverride =
-        typeof axes === "boolean"
-          ? { x: axes, y: axes }
-          : { x: toShow(axes.x), y: toShow(axes.y) };
-    }
+    if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
     return node;
   }
 );

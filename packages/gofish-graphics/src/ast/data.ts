@@ -39,23 +39,32 @@ export const getMeasureProvenance = (
     : undefined;
 
 /**
- * Tag a data array with a measure-provenance map under {@link MEASURE_PROVENANCE}.
- * Owns the non-enumerable encoding so the symbol rides the array (not each row,
- * not an enumerable own-key that would leak into `{...d}` spreads) and survives
- * `derive(...)`. Used by transforms like `bin()`.
+ * Tag a data array with `value` under the symbol `sym`: a non-enumerable own
+ * property, so the tag rides the array (not each row, and not an enumerable
+ * key that would leak into `{...d}` spreads). The measure provenance, the
+ * column types and the domain (schema.ts) ride a data array this way.
  */
-export const setMeasureProvenance = <T>(
-  data: T,
-  provenance: MeasureProvenance
-): T => {
-  Object.defineProperty(data, MEASURE_PROVENANCE, {
-    value: provenance,
+export const tagArray = <T>(data: T, sym: symbol, value: unknown): T => {
+  Object.defineProperty(data, sym, {
+    value,
     enumerable: false,
     configurable: true,
     writable: true,
   });
   return data;
 };
+
+/**
+ * Tag a data array with a measure-provenance map under
+ * {@link MEASURE_PROVENANCE} ({@link tagArray}), so it survives `derive(...)`.
+ * A data transform calls it to declare that its output columns are in a
+ * source field's units (a histogram's `start` and `end` are in the binned
+ * field's).
+ */
+export const setMeasureProvenance = <T>(
+  data: T,
+  provenance: MeasureProvenance
+): T => tagArray(data, MEASURE_PROVENANCE, provenance);
 
 /**
  * Copy the measure-provenance map from `source` onto `target` (both arrays), if
@@ -244,8 +253,8 @@ export type FieldAccessor = {
  * about the channel's underlying space (see {@link Measure}). It is one of the
  * three measure sources `resolveMeasure` (channels.ts) checks: a bare string
  * accessor's field-name is only a *weak default*, whereas this annotation (and
- * `bin()`'s {@link MEASURE_PROVENANCE}) is a hard claim that triggers a type
- * error if it contradicts inferred provenance.
+ * a data transform's {@link MEASURE_PROVENANCE}) is a hard claim that
+ * triggers a type error if it contradicts inferred provenance.
  */
 export const field = (name: string, measure?: Measure): FieldExpr<false> =>
   new FieldExpr<false>(name, measure);
