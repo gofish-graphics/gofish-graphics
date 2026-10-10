@@ -891,10 +891,10 @@ renders it. What differs between the hosts is only transport:
   chart declares for the column, as it reads the same string from JS data.
   The decode attaches types and converts no time to an instant itself:
   every reader of decoded rows runs `applySchema` with its own schema
-  before it reads a value. A tier is chart data; a callback's rows go
-  through `applyLambdaTyped` (`registry.ts`), which a `derive` (with its
-  `schema`) and a lambda accessor both call, so a derive's result and an
-  accessor's result hold epoch milliseconds. A derive's lambda always gets
+  before it reads a value. A tier is chart data; a lambda accessor's rows
+  go through `applyLambdaTyped` (`registry.ts`), and a `derive` types its
+  result with its own `schema` as it does a JS function's, so a derive's
+  result and an accessor's result hold epoch milliseconds. A derive's lambda always gets
   a list: data flows as a list, and a split with no `by` hands on `[row]`. A list becomes a
   plain array, a struct a plain object, a 64-bit integer a JS number, and a
   null stays `null`. No schema names a value inside a list or a struct, so

@@ -2,7 +2,7 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-import { copyColumnTypes } from "./schema";
+import { getColumnTypes, setColumnTypes } from "./schema";
 import type { JSX } from "solid-js";
 import { GoFishAST } from "./_ast";
 import { GoFishNode } from "./_node";
@@ -13,7 +13,7 @@ import { ChartBuilder, LayerBuilder } from "./marks/chart";
 import type { LayerContext } from "./marks/chart";
 // From markResult, which imports neither chartBuilder nor createOperator, so
 // the dependency between those modules keeps running one way.
-import { resolveMarkResult } from "./marks/markResult";
+import { datumOfInput, resolveMarkResult } from "./marks/markResult";
 import {
   CHANNEL_INFER,
   resolveChannelAccessors,
@@ -123,9 +123,8 @@ function hasRenderMethod(value: any): value is GoFishNode {
  * Reify one operator child into a node. A child is a thunk/mark, a chart BUILDER
  * (a single-tier `chart(...).mark(...)` or a layered `....layer(...)`), a
  * thenable, or an already-built node; `resolveMarkResult` is the one place that
- * knows all four, so both child loops below go through here. A thunk is called
- * with the empty list `[]` (a root has no rows), and whatever it returns is
- * reified in turn.
+ * knows all four, so both child loops below go through here. It calls a thunk
+ * with `NO_ROWS` (a root has no rows) and reifies whatever it returns.
  *
  * `null`/`undefined` (a thunk that opted out) comes back as `undefined` and is
  * dropped by the caller.
@@ -134,13 +133,8 @@ async function reifyChild(
   child: unknown,
   layerContext: LayerContext
 ): Promise<GoFishAST | undefined> {
-  if (typeof child === "function") {
-    const result = await (child as any)([]);
-    if (result == null) return undefined;
-    return resolveMarkResult(result, layerContext);
-  }
   if (child == null) return undefined;
-  return resolveMarkResult(child as any, layerContext);
+  return (await resolveMarkResult(child as any, layerContext)) ?? undefined;
 }
 
 /** The GoFishNode methods `addRenderMethod` republishes on a promise: each one
@@ -434,7 +428,7 @@ export function createMark<
   cfg?: { kind?: MarkKind }
 ): <T extends Record<string, any>>(
   opts: DeriveMarkProps<ShapeProps, C, T>
-) => NameableMark<T | T[]>;
+) => NameableMark<T[]>;
 export function createMark(
   shapeFn: any,
   channels: Record<string, any> = {},
@@ -455,8 +449,8 @@ export function createMark(
  * `ref("name")` lookups. Shared by `createMark` and the deserializer's
  * `wrapWithScope` (the Python `@mark` decorator), so both build the same node.
  */
-export function sealComponent(node: GoFishNode, datum: unknown): GoFishNode {
-  node.datum = datum;
+export function sealComponent(node: GoFishNode, datum: unknown[]): GoFishNode {
+  node.datum = datumOfInput(datum);
   node.scope();
   node._isComponent = true;
   return node;
@@ -470,7 +464,7 @@ function buildCreatedMark(
   markOpts: Record<string, any>
 ): any {
   const baseMark: Mark<any> = async (
-    d,
+    d: unknown[],
     key?: string | number,
     _layerContext?: LayerContext
   ) => {
@@ -478,12 +472,8 @@ function buildCreatedMark(
       console.log("mark", key, d);
     }
 
-    // A mark's input is always a list of rows (a split leaf, a chart's data,
-    // `[]` at a combinator root); nothing here inspects its shape.
-    const data = d as unknown[];
-
     // Build shape props by encoding each channel. The plain string spec
-    // ("size"/"pos"/"color"/"raw") aggregates over `data` and produces a
+    // ("size"/"pos"/"color"/"raw") aggregates over the rows `d` and produces a
     // single value. The object form `{type, entry: true}` produces a
     // per-row array — used by expand-kind marks. Unannotated props (which
     // is everything when channels is omitted/empty) pass through.
@@ -498,7 +488,7 @@ function buildCreatedMark(
       markOpts,
       d
     );
-    const pending = resolveChannelAccessors(staticOpts, channels, () => data);
+    const pending = resolveChannelAccessors(staticOpts, channels, () => d);
     const resolvedOpts = isThenable(pending) ? await pending : pending;
     for (const propName of Object.keys(resolvedOpts)) {
       if (propName === "debug") continue;
@@ -514,9 +504,9 @@ function buildCreatedMark(
         // Already a Value wrapper (e.g. v(...)) — pass through directly
         shapeProps[propName] = markValue;
       } else if (isEntry && channelType === "size") {
-        shapeProps[propName] = inferEntrySize(markValue, data);
+        shapeProps[propName] = inferEntrySize(markValue, d);
       } else if (channelType !== undefined) {
-        shapeProps[propName] = CHANNEL_INFER[channelType](markValue, data);
+        shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);
       } else {
         shapeProps[propName] = markValue;
       }
@@ -529,16 +519,22 @@ function buildCreatedMark(
     // the same `resolveMarkResult` path. The name context is fresh: the
     // component is a naming boundary. An expand mark (its kind, declared at
     // `createMark`) returns its array of slice nodes, which pass through as-is.
-    const raw = await shapeFn(shapeProps, kind === "expand" ? data : undefined);
+    const raw = await shapeFn(shapeProps, kind === "expand" ? d : undefined);
     if (kind === "expand") {
       const result = raw as GoFishNode[];
+      const types = getColumnTypes(d);
       // Expand path: stamp each slice with its own datum, a one-row group
       // `[row]` tagged with the column types like any split leaf. A slice
       // past the last row (a `size` array longer than the data) has no row of
       // its own and keeps the whole group.
       for (let i = 0; i < result.length; i++) {
         const node = result[i];
-        node.datum = i < data.length ? copyColumnTypes([data[i]], data) : d;
+        node.datum =
+          i >= d.length
+            ? datumOfInput(d)
+            : types
+              ? setColumnTypes([d[i]], types)
+              : [d[i]];
         if (liveChannels) node.__gfLive = liveChannels;
       }
       return result as unknown as GoFishNode;

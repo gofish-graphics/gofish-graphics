@@ -99,7 +99,7 @@ From `src/ast/graphicalOperators/spread.tsx:430`:
 
 ```ts
 export const spread = createOperator<any, SpreadOptions>(Spread, {
-  split: ({ by }, d) => splitEntries(by ?? chunk(1), d),
+  split: ({ by }, d) => splitEntries(by, d),
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
 });
 ```
@@ -113,7 +113,8 @@ Three pieces:
    Insertion order matters (it determines layout order). Every piece is a
    list of the items the split was given, and a split never looks inside an
    item, so an item that is itself an array is still one item. When `by` is
-   omitted, the split is by row identity, `chunk(1)`: each item becomes its
+   omitted, the split is by row identity, `chunk(1)` (`splitEntries` applies
+   that default, in one place): each item becomes its
    own one-item group `[item]`, keyed by its position. `chunk(size)` is a `by`
    key over row position (row `i` goes to group `floor(i / size)`), so no
    `by` and `by: chunk(1)` are one split. A key that names no field (`chunk`,
@@ -463,8 +464,8 @@ They live in their own registry (`terminals.ts`): a `TERMINALS` list plus
 node-resolution strategy (a `withGoFish` promise resolves by awaiting). The
 other surfaces go through the same list via `attachBuilderTerminals(target,
 resolveForRender, render)`, which lets a surface also prepare the render options
-and drive `render` through its own strategy. A combinator mark resolves by
-calling itself with `[]` (no rows) and installs the build-in its own
+and drive `render` through its own strategy. A combinator mark resolves as a
+root (`resolveMarkResult`, with `NO_ROWS`) and installs the build-in its own
 `.transition({ enter })` asks for, reading the clock's `playing`/`at`.
 `ChartBuilder` and `LayerBuilder` merge in the chart-level `axes`/`color` config,
 read the build-in clock's `playing`/`at` (which `TerminalMethods<Extra>` adds to

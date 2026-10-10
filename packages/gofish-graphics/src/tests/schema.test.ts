@@ -31,6 +31,7 @@ import {
 } from "../ast/schema";
 import { interval } from "../util/interval";
 import { bin } from "../ast/transforms";
+import { textsOf } from "./testHelpers";
 import {
   distributeSpaceFold,
   type StackOrigin,
@@ -90,15 +91,6 @@ const rectsOf = (dl: any): Box[] => {
   return out;
 };
 
-const textsOf = (dl: any): string[] => {
-  const out: string[] = [];
-  const walk = (it: any) => {
-    if (it.kind === "text") out.push(String(it.text));
-    for (const c of it.children ?? []) walk(c);
-  };
-  dl.items.forEach(walk);
-  return out;
-};
 
 /** A display list as JSON with its render-global node ids left out, so two
  *  renders compare by what they draw. */

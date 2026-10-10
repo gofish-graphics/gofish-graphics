@@ -1,6 +1,6 @@
 import { GoFishNode } from "../_node";
 import type { AxisOptions } from "../gofish";
-import { chunk, fieldNameOf, MaybeValue } from "../data";
+import { fieldNameOf, MaybeValue } from "../data";
 import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
 import { Collection } from "lodash";
 import { SplitBy, orderEntries, splitEntries } from "../datumProjection";
@@ -252,11 +252,10 @@ export type SpreadOptions<T = any> = {
 };
 
 export const spread = createOperator<any, SpreadOptions>(Spread as any, {
-  // With `by`: groupBy on the field. Without `by`: the split is by row
-  // identity, `chunk(1)`, so each item becomes a one-item group `[item]`.
-  // Expand-kind marks (e.g. `cut`) need the whole array in one leaf instead;
-  // that override lives in createOperator (it dispatches on the mark's kind),
-  // not here, so this split stays kind-agnostic.
+  // Without `by`, `splitEntries` splits by row identity. Expand-kind marks
+  // (e.g. `cut`) need the whole array in one leaf instead; that override
+  // lives in createOperator (it dispatches on the mark's kind), not here, so
+  // this split stays kind-agnostic.
   //
   // A stack over a column with HasMidpoint (from the chart's `schema`) puts its
   // origin at the midpoint of the column's order instead of at its first
@@ -264,14 +263,13 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   // reorders every level of the order the way it reorders the groups, so the
   // stack knows which way it lays the order out even in a row with one part.
   split: ({ by, glue, reverse }, d) => {
-    const key = by ?? chunk(1);
-    const entries = splitEntries(key, d);
+    const entries = splitEntries(by, d);
     if (!glue) return entries;
-    const column = fieldNameOf(key);
+    const column = fieldNameOf(by);
     const type = columnType(d, column);
     const levels = (type?.HasOrder?.levels ?? []) as (string | number)[];
     const split = orderEntries(
-      key,
+      by,
       new Map(levels.map((level) => [level, entries.get(level) ?? []]))
     );
     const origin = stackOrigin(

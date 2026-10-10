@@ -5,7 +5,7 @@
 import { Interval } from "./dims";
 import { FieldExpr, type FieldOp } from "./fieldExpr";
 import type { ColumnType } from "./schema";
-import { resolveUnit, sameUnit, Units, type Quantity } from "./measure";
+import { currentUnits, sameUnitVar, type Quantity } from "./measure";
 
 export type { FieldOp } from "./fieldExpr";
 export { FieldExpr } from "./fieldExpr";
@@ -275,18 +275,18 @@ export const getQuantity = <T>(value: MaybeValue<T>): Quantity | undefined =>
   isValue(value) ? (value as DatumValue).quantity : undefined;
 
 /** Whether two values are in the same unit, read through the render's
- *  union-find `units` (the representative `spaceUnit` reads): one declared
- *  unit, or one class of unknowns. Two values with no quantity (literals)
- *  are; a literal and a column's value are not. */
+ *  union-find (`currentUnits`): one declared unit, or one class of
+ *  unknowns. Two values with no quantity (literals) are; a literal and a
+ *  column's value are not. */
 export const sameValueUnit = <T>(
   a: MaybeValue<T>,
-  b: MaybeValue<T>,
-  units: Units
+  b: MaybeValue<T>
 ): boolean => {
   const qa = getQuantity(a);
   const qb = getQuantity(b);
   if (qa === undefined || qb === undefined) return qa === qb;
-  return sameUnit(resolveUnit(units.of(qa)), resolveUnit(units.of(qb)));
+  const units = currentUnits();
+  return sameUnitVar(units.of(qa), units.of(qb));
 };
 
 /**
@@ -333,18 +333,14 @@ export const getValueColorOps = <T>(value: MaybeValue<T>): ColorOp[] => {
  * The intrinsic-embedding predicate: a dim's *own* extent is a coordinate-space
  * extent (so a coord warps it) iff its size is a data {@link Value} (or unsized —
  * the nest-growth case) AND its `min` is in the same unit as its size
- * ({@link sameValueUnit}, read through the render's union-find `units`; a
- * fresh one when there is no render). This is the coord-free half; the
+ * ({@link sameValueUnit}, read through the render's union-find). This is the coord-free half; the
  * {@link GoFishNode.resolveEmbedding} pass layers the Route-B unit gate on
  * top (a size in a unit *foreign* to the axis stays ink, not a coord extent).
  * Extracted so the pass is the sole author of `embedded` and the rule lives
  * in one place. See #534.
  */
-export const baseEmbedded = <T>(
-  interval: Interval<T>,
-  units: Units = new Units()
-): boolean =>
+export const baseEmbedded = <T>(interval: Interval<T>): boolean =>
   (isValue(interval.size) || interval.size === undefined) &&
   (interval.min === undefined ||
     !isValue(interval.min) ||
-    sameValueUnit(interval.min, interval.size, units));
+    sameValueUnit(interval.min, interval.size));

@@ -896,8 +896,7 @@ export class GoFishNode {
     // (measure.ts), so a binding made anywhere in the figure holds everywhere
     // in it. The outermost call installs it; one per render, on the session.
     if (!hasUnits()) {
-      const units = this.renderUnits();
-      return withUnits(units, () => this.resolveUnderlyingSpace());
+      return withUnits(this.renderUnits(), () => this.resolveUnderlyingSpace());
     }
     const childSpaces = this.children.map((child) =>
       child.resolveUnderlyingSpace()
@@ -1116,8 +1115,13 @@ export class GoFishNode {
    * captured render closure observes it.
    */
   public resolveEmbedding(insideCoord: boolean = false): void {
+    // Unit equality reads the render's union-find, as the type walk does.
+    if (!hasUnits()) {
+      return withUnits(this.renderUnits(), () =>
+        this.resolveEmbedding(insideCoord)
+      );
+    }
     const within = insideCoord || this.type === "coord";
-    const units = this.renderUnits();
 
     const dims = this.args?.dims as Dimensions | undefined;
     if (dims) {
@@ -1126,12 +1130,12 @@ export class GoFishNode {
         if (dim === undefined) continue;
         // Explicit emX/emY (or connect's embed()) is a hard claim — leave it.
         if (dim.embedded === true) continue;
-        let embedded = baseEmbedded(dim, units);
+        let embedded = baseEmbedded(dim);
         // Route B gate (coord-scoped): a value-sized dim positioned in a unit
         // FOREIGN to its size's unit is a foreign extent (a bubble) → ink.
         if (embedded && within) {
           for (const pos of [dim.min, dim.center, dim.max]) {
-            if (isValue(pos) && !sameValueUnit(pos, dim.size, units)) {
+            if (isValue(pos) && !sameValueUnit(pos, dim.size)) {
               embedded = false;
               break;
             }
@@ -2026,11 +2030,10 @@ export class GoFishNode {
     });
   }
 
-  /** The render's union-find of unknown units (`RenderSession.units`), or a
-   *  fresh one when this node has no session (nothing is then shared). */
+  /** The render's union-find of unknown units (`RenderSession.units`). A
+   *  node with no session must be walked inside `withUnits(...)`. */
   private renderUnits(): Units {
-    const session = this.tryGetRenderSession();
-    return session ? (session.units ??= new Units()) : new Units();
+    return (this.getRenderSession().units ??= new Units());
   }
 
   public getRenderSession(): RenderSession {

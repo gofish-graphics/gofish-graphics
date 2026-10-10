@@ -13,9 +13,13 @@ import {
 } from "./data";
 import {
   currentUnits,
+  declaredVar,
+  DURATION,
+  INSTANT,
   MeasureClash,
   resolveUnit,
   unify,
+  unionInOrder,
   type MeasureSite,
   type Quantity,
   type Unit,
@@ -105,11 +109,12 @@ export type CONTINUOUS_TYPE = {
 export type ORDINAL_TYPE = {
   kind: "ordinal";
   domain?: string[]; // Top-level category keys for axis labels
-  /** What this ordinal axis measures: a title, the grouping field (e.g.
-   *  "lake"), and no unit, since categories set up no scale. Read by
-   *  axis-title inference so every axis names itself off its own resolved
-   *  space, not a surface field-name heuristic. Undefined = "no claim". */
-  measure?: UnitRecord;
+  /** What titles this ordinal axis: its grouping fields (e.g. "lake"). It
+   *  has no unit, since categories set up no scale. Read by axis-title
+   *  inference ({@link spaceTitle}) so every axis names itself off its own
+   *  resolved space, not a surface field-name heuristic. Undefined = "no
+   *  claim". */
+  titles?: string[];
   /** True when this ordinal's keys are POSITIONAL (a `spread` with no `by` — its
    *  children were auto-keyed by index). Such a spread carries no grouping
    *  identity, so it renders no axis (unit dots packed for layout only). Set at
@@ -157,12 +162,22 @@ export const magnitude = (
   origin: "free" | "none" = "free"
 ): CONTINUOUS_TYPE => {
   const units = valueUnits(size);
-  let measure: UnitRecord | undefined;
-  if (units !== undefined) {
-    const { calendar: _, ...rest } = units;
-    measure = rest;
-  }
-  return CONTINUOUS(interval(0, getValue(size)!), origin, measure);
+  return CONTINUOUS(
+    interval(0, getValue(size)!),
+    origin,
+    units && differenceUnits(units)
+  );
+};
+
+/** The units of a difference of two values in units `r`: an instant's
+ *  difference is a duration, on no calendar. Other units are unchanged. */
+export const differenceUnits = (r: UnitRecord): UnitRecord => {
+  const { calendar: _, ...rest } = r;
+  if (rest.unit === undefined) return rest;
+  const u = resolveUnit(rest.unit);
+  return u.kind === "declared" && u.unit === INSTANT.unit
+    ? { ...rest, unit: declaredVar(r.titles[0] ?? INSTANT.unit, DURATION) }
+    : rest;
 };
 
 /** The absolute `[min, max]` data domain of a PINNED space, or undefined for a
@@ -335,14 +350,15 @@ export const anchorAt = (
     space.coordinateTransform
   );
 
+/** An ordinal space over `domain`, titled by the grouping field `title`. */
 export const ORDINAL = (
   domain?: string[],
-  measure?: UnitRecord,
+  title?: string,
   anonymous?: boolean
 ): UnderlyingSpace => ({
   kind: "ordinal",
   domain,
-  measure,
+  titles: title === undefined ? undefined : [title],
   anonymous,
 });
 export const isORDINAL = (space: UnderlyingSpace): space is ORDINAL_TYPE =>
@@ -400,9 +416,6 @@ export const isPositioningSpace = (space: UnderlyingSpace): boolean =>
  *  - `calendar`: over instants, the calendar they read on (`HasCalendar`).
  *  - `titles`: the quantities that title the axis, in the order they met:
  *    each column's declared quantity (`HasQuantity`), else its name.
- *
- * An ordinal axis has titles (its grouping field) and no unit: categories
- * set up no scale.
  */
 export type UnitRecord = {
   unit?: UnitVar;
@@ -428,12 +441,6 @@ export const quantityUnits = (
  *  for a literal, which makes no claim. */
 export const valueUnits = (v: MaybeValue<unknown>): UnitRecord | undefined =>
   quantityUnits(getQuantity(v));
-
-/** The units of an ordinal axis grouped by `field`: a title, no unit. */
-export const titleUnits = (
-  field: string | undefined
-): UnitRecord | undefined =>
-  field === undefined ? undefined : { titles: [field] };
 
 /**
  * THE join of two unit records that meet on one axis, in every composition
@@ -464,16 +471,16 @@ export const joinUnits = (
   if (a === undefined) return b;
   if (b === undefined) return a;
   const calendar = joinCalendars(a.calendar, b.calendar);
-  const withCalendar = (r: UnitRecord): UnitRecord => {
-    const { calendar: _, ...rest } = r;
-    return calendar === undefined ? rest : { ...rest, calendar };
+  if (shared && a.unit && b.unit) unify(a.unit, b.unit, site);
+  const unit = shared ? (a.unit ?? b.unit) : a.unit;
+  const titles = shared ? unionInOrder(a.titles, b.titles) : a.titles;
+  if (unit === a.unit && titles === a.titles && calendar === a.calendar)
+    return a;
+  return {
+    ...(unit !== undefined ? { unit } : {}),
+    ...(calendar !== undefined ? { calendar } : {}),
+    titles,
   };
-  if (!shared) return withCalendar(a);
-  const unit =
-    a.unit && b.unit ? unify(a.unit, b.unit, site) : (a.unit ?? b.unit);
-  const titles = [...a.titles];
-  for (const t of b.titles) if (!titles.includes(t)) titles.push(t);
-  return withCalendar({ ...(unit !== undefined ? { unit } : {}), titles });
 };
 
 /** {@link joinUnits} folded over a list. */
@@ -517,18 +524,15 @@ export type SpaceUnits = {
 /**
  * THE accessor for a space's units: its record with the unit replaced by its
  * union-find representative (a declared unit, or the unknown its class
- * stands for), or undefined for a space with none (an UNDEFINED space, or
- * one over literals). Anything that asks which domain a space is in, which
- * calendar it reads, or what titles it, reads it here. Read it after the
+ * stands for), or undefined for a space with none (an UNDEFINED or ordinal
+ * space, or one over literals). Anything that asks which domain a space is
+ * in or what titles it reads it here. Read it after the
  * type walk, when every binding is made.
  */
 export const spaceUnit = (
   space: UnderlyingSpace | undefined
 ): SpaceUnits | undefined => {
-  const r =
-    space && (isCONTINUOUS(space) || isORDINAL(space))
-      ? space.measure
-      : undefined;
+  const r = space && isCONTINUOUS(space) ? space.measure : undefined;
   if (r === undefined) return undefined;
   const { unit, ...rest } = r;
   return unit === undefined ? rest : { ...rest, unit: resolveUnit(unit) };
@@ -537,7 +541,8 @@ export const spaceUnit = (
 /** The calendar of a space's axis, when its data are instants. */
 export const spaceCalendar = (
   space: UnderlyingSpace | undefined
-): HasCalendar | undefined => spaceUnit(space)?.calendar;
+): HasCalendar | undefined =>
+  space && isCONTINUOUS(space) ? space.measure?.calendar : undefined;
 
 /**
  * THE title a space gives its axis, in the SI style `Quantity (unit)`: its
@@ -553,6 +558,8 @@ export const spaceCalendar = (
 export const spaceTitle = (
   space: UnderlyingSpace | undefined
 ): string | undefined => {
+  if (space && isORDINAL(space))
+    return space.titles?.length ? space.titles.join(", ") : undefined;
   const r = spaceUnit(space);
   if (r === undefined || r.titles.length === 0) return undefined;
   const quantities = r.titles.join(", ");

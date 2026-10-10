@@ -230,8 +230,9 @@ primitive was elaborated from, the hit-testing / accessibility target) and `role
 (`"node"` for a data-bearing mark, `"overlay"` for chrome such as a label, axis, or
 glyph detail). `role` is a **projection of `datum`-presence**: a `lower` body
 derives it via `roleFor(node.datum)` (`lowerHelpers.ts`) — `"node"` exactly when the
-item carries a datum with rows, `"overlay"` otherwise (no datum, or the empty list a
-mark resolved at a combinator root gets) — so the two fields can never disagree
+item carries a datum (even an empty one, a group a filter emptied), `"overlay"`
+otherwise (a mark resolved at a root has no rows, `NO_ROWS`, so it has no datum) —
+so the two fields can never disagree
 and a host can split data from chrome on `role` alone. (Generated chrome carries no
 datum, so axes/legends/value-labels classify as `"overlay"` automatically; before
 this projection they were hard-coded `"node"` and mis-classified as data.) What is
@@ -329,7 +330,7 @@ signal during resolve), three things change; when it is absent — the common ca
   for a node and as a `Promise<View>` wherever a resolve comes first (a chart
   builder, a mark or combinator surface, a component thunk; `gofish()` reifies
   a function child, thunk or mark, through `resolveMarkResult`, which calls it
-  with `[]`). `unmount()` runs
+  with `NO_ROWS`). `unmount()` runs
   the full teardown, `disposeChart(container)`, but only while the container's
   state is still the object the view was made with. That identity check is
   what makes `unmount()` idempotent (the first call clears the state) and

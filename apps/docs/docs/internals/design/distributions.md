@@ -64,15 +64,17 @@ These rules were already agreed in the #773 discussion, and this note takes them
 This section lists what exists, with file and line, and where a distribution type would
 plug in.
 
-**Values and measures.** A channel value is a raw number or string, or a `datum` wrapper
-that carries the value and an optional measure
-(`packages/gofish-graphics/src/ast/data.ts:122` for the wire shape,
-`data.ts:139` for the class, `data.ts:203` for `value` and `datum`). A measure is a plain
-string (`data.ts:11`). There are three sources of a measure. The field name is a weak
-default. `field(name, measure)` is a hard annotation (`data.ts:243`). A transform such as
-`bin()` tags its output array with a provenance map under a symbol. (Since #994 that map
-is the `HasUnit` class of the array's column types, `schema.ts`.) `resolveMeasure` combines the three and throws on a
-conflict (`packages/gofish-graphics/src/ast/channels.ts:165`).
+**Values and quantities.** A channel value is a raw number or string, or a `datum`
+wrapper that carries the value and an optional quantity
+(`packages/gofish-graphics/src/ast/data.ts`, `DatumValue` for the wire shape and
+`DatumValueImpl` for the class). A quantity is a name and an optional declared unit
+(`Quantity` in `ast/measure.ts`). It comes from the column's type in the chart's schema.
+`Schema.quantity(name)` (`HasQuantity`) names it, and otherwise the column's name does.
+`Schema.unit(u)` (`HasUnit`) declares its unit. A transform such as `bin()` writes these
+types for the columns it derives, so its edges keep the source column's quantity and
+unit. `columnQuantity` (`measure.ts`) reads them, and `resolveColumn`
+(`ast/channels.ts`) applies it to a channel's column. A column with no declared unit
+has an unknown unit, which unifies with anything.
 
 **Field expressions.** `field(name)` returns a `FieldExpr` with a pipeline of operations.
 The full list is `sort`, `reverse`, `bin`, `dropNulls`, `normalize`, `sum`, `mean`,
@@ -96,8 +98,9 @@ number.
 (`packages/gofish-graphics/src/ast/underlyingSpace.ts:11`). A continuous space has three
 cases, built by `POSITION` (`underlyingSpace.ts:170`), `SIZE` (`underlyingSpace.ts:232`)
 and `DIFFERENCE` (`underlyingSpace.ts:224`). `ORDINAL` is at `underlyingSpace.ts:261`.
-Positioned spaces unify per measure, and `mergeMeasures` throws when two measures differ
-(`underlyingSpace.ts:301`). `stack` sums its children's widths into a position that starts
+Spaces that meet on one axis join their units with `joinUnits` (`underlyingSpace.ts`),
+which throws a `MeasureClash` when two different declared units share the axis. `stack`
+sums its children's widths into a position that starts
 at 0 (`packages/gofish-graphics/src/ast/constraints/distribute.ts:219` to `226`). The
 underlying space describes the layout space. It is not a datatype, but it is the
 "picture" half of the expressiveness check.

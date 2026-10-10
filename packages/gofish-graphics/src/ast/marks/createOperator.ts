@@ -34,6 +34,7 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import { Mark, MarkChild, Operator } from "../types";
 import {
+  datumOfInput,
   layerKey,
   resolveMarkResult,
   stashLayerName,
@@ -311,11 +312,11 @@ export function attachModifiers<T>(
   });
   // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
   // from the shared registry, so adding one touches a single list. A mark
-  // resolves to a node by calling it with `[]` (no rows), and plays its own
+  // resolves to a node as a root (`resolveMarkResult`), and plays its own
   // `.transition({ enter })` as a chart does (`installBuildIn`, which the
   // render options `playing` / `at` can hold). See terminals.ts.
   attachBuilderTerminals(base, async (options) => {
-    const node = (await resolveMarkResult((base as any)([]))) as GoFishNode;
+    const node = await resolveMarkResult(base as Mark<any>);
     installBuildIn(node, options);
     return { node, options };
   });
@@ -838,7 +839,6 @@ function applyChannels<Options extends Record<string, any>>(
   entries: Map<string | number, any> | undefined
 ): Options {
   if (!channels) return opts;
-  const wholeData: any[] = d;
   const out: any = { ...opts };
   const infer = (
     type: Exclude<ChannelType, "dims">,
@@ -852,7 +852,7 @@ function applyChannels<Options extends Record<string, any>>(
       flags?.entry === true,
       flags?.discrete === true,
       val,
-      wholeData,
+      d,
       entries,
       opts
     );
@@ -1066,7 +1066,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           undefined
         );
         const node = (await layout(lowOpts, nodes)) as GoFishNode;
-        (node as any).datum = d;
+        node.datum = datumOfInput(d);
         return node;
       };
       const combinator = nameableMark(base);

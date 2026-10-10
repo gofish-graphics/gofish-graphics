@@ -396,7 +396,8 @@ captured render closure observes it. Explicit `emX`/`emY` (and `connect`'s
 A dim embeds iff its size is a data value or unsized (`baseEmbedded`, `data.ts`)
 AND — the **Route B** unit gate, only inside a coordinate space — its size
 is in the same unit as the dim's own _position_ (`min`/`center`/`max`;
-`sameValueUnit` reads both through the render's union-find, so two unknowns
+`sameValueUnit` reads both through the render's union-find, which
+`resolveEmbedding` installs as the type walk does, so two unknowns
 are one unit only when they are one column or met on a shared axis). A size
 in a unit _foreign_ to where the mark sits (a scatter bubble's area ≠ its
 position) stays ink: a flat point at the mapped center, not a swept wedge.

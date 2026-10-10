@@ -30,7 +30,7 @@
 import sumBy from "lodash/sumBy";
 import meanBy from "lodash/meanBy";
 import type { MaybeValue } from "./data";
-import { COUNT, type Quantity } from "./measure";
+import { columnQuantity, COUNT_COLUMN, type Quantity } from "./measure";
 import { withWire, wireOf } from "./wire";
 
 export type FieldOp =
@@ -320,7 +320,7 @@ export const isDomainOp = (op: FieldOp): boolean => DOMAIN_OPS.has(op.op);
  * Also reports the quantity the pipeline itself determines, if any: `count` /
  * `distinct` yield counts — not the source field's units — so they report
  * the quantity "count", in the declared unit "count". Every other pipeline
- * reports none, leaving the quantity to the caller (`resolveQuantity`): a
+ * reports none, leaving the quantity to the caller (`resolveColumn`): a
  * `sum` or `mean` keeps its source column's quantity and unit.
  *
  * Domain ops (`sort`/`reverse`/`bin`) don't belong in a value slot and throw;
@@ -368,7 +368,7 @@ export function evalFieldValues<T>(
 }
 
 /** What `.count()` and `.distinct()` report: counts. */
-const COUNT_QUANTITY: Quantity = { name: COUNT.name, unit: COUNT };
+const COUNT_QUANTITY: Quantity = columnQuantity("count", COUNT_COLUMN);
 
 /** The "not yet supported" error for `normalize()` outside its one valid
  *  slot (an operator's entry-flagged `size` channel), shared so every other
@@ -455,7 +455,7 @@ export const shareQuantity = (
   byName?: string
 ): Quantity => {
   const name = `${base?.name ?? "value"} share${byName ? ` by ${byName}` : ""}`;
-  return { name, unit: { name } };
+  return { name, unit: { unit: name } };
 };
 
 /**

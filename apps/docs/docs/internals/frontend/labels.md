@@ -48,8 +48,7 @@ label is a real node, that heuristic has nothing left to do: it either fits in
 the box the layout solve gives it (like any other shape) or it overflows
 visibly, exactly like a `Text` node with a fill value written directly.
 
-`.label()` on a node with no rows of its own (no datum, or the empty list a
-combinator root gets; a group node — a spread's
+`.label()` on a node with no datum of its own (a group node — a spread's
 per-key band, a stack's per-group child) is intentionally reused for both
 per-instance and per-group labeling; see `resolveLabelTargets` below.
 

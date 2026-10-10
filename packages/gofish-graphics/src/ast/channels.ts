@@ -143,49 +143,20 @@ export type DeriveMarkProps<
     : ShapeProps[K];
 } & { debug?: boolean };
 
-/**
- * The {@link Quantity} a channel reads, from its column: named by the
- * column's declared quantity (`HasQuantity`, which a transform also writes
- * for a column it derives from another), else by the column, in the
- * column's declared unit if it has one (`HasUnit`, or an instant
- * for a time column). A column with no declared unit has an unknown unit,
- * the unit variable its quantity names (`measure.ts`).
- *
- * `data` is the array carrying the column types (the operator's whole input,
- * which retains them across `derive`). Function accessors and literals have
- * no column, so no quantity.
- */
-export const resolveQuantity = <T>(
-  data: T | T[],
-  accessor:
-    | string
-    | number
-    | ((d: T) => unknown)
-    | FieldAccessor
-    | LiteralValue
-    | undefined
-): Quantity | undefined => {
-  const field = fieldNameOf(accessor);
-  return field === undefined
-    ? undefined
-    : columnQuantity(field, columnType(data, field));
-};
-
-/** What a channel's column says about its values: its {@link Quantity} and
- *  its type in the chart's schema (schema.ts). */
+/** What a channel's column says about its values: its {@link Quantity}
+ *  (`columnQuantity` in measure.ts) and its type in the chart's schema
+ *  (schema.ts). */
 export type ColumnInfo = { quantity?: Quantity; type?: ColumnType };
 
-/** The {@link ColumnInfo} of `accessor`'s column, read off `data` (see
- *  {@link resolveQuantity}). An accessor that names no column (a function, a
+/** The {@link ColumnInfo} of `accessor`'s column, read off `data`: the array
+ *  carrying the column types (the operator's whole input, which retains them
+ *  across `derive`). An accessor that names no column (a function, a
  *  literal, a value) has neither. */
 export const resolveColumn = (data: unknown, accessor: unknown): ColumnInfo => {
   const field = fieldNameOf(accessor);
-  return field === undefined
-    ? {}
-    : {
-        quantity: resolveQuantity(data, accessor as string | FieldAccessor),
-        type: columnType(data, field),
-      };
+  if (field === undefined) return {};
+  const type = columnType(data, field);
+  return { quantity: columnQuantity(field, type), type };
 };
 
 /**

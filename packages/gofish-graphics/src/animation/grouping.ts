@@ -13,25 +13,20 @@
  * each group's rows), and each child's key is the value its own rows agree on.
  */
 import { splitEntries, splitKeyFn, type SplitBy } from "../ast/datumProjection";
-import { chunk, isChunk } from "../ast/data";
+import { isChunk } from "../ast/data";
 
 export function groupEntries<C>(
   children: C[],
   rowsOf: (child: C) => unknown[],
   by: SplitBy | undefined
 ): Map<string | number, C[]> {
-  // No `by` splits by identity, `chunk(1)`. A `chunk(size)` key reads only
+  // No `by` (row identity, `chunk(1)`) or a `chunk(size)` key reads only
   // position, so it groups the children themselves, `size` at a time.
-  const key = by ?? chunk(1);
-  if (isChunk(key)) {
-    const groups = new Map<string | number, C[]>();
-    children.forEach((child, i) => {
-      const k = Math.floor(i / key.size);
-      groups.set(k, [...(groups.get(k) ?? []), child]);
-    });
-    return groups;
-  }
-  by = key;
+  if (by === undefined || isChunk(by))
+    return splitEntries(by, children as Record<string, unknown>[]) as Map<
+      string | number,
+      C[]
+    >;
   const rows = children.map(rowsOf);
   const allRows = rows.flat() as Record<string, unknown>[];
   const groups = new Map<string | number, C[]>(
@@ -65,11 +60,10 @@ export function groupEntries<C>(
 }
 
 /** A node's or a ref's rows: its datum (always a list), or, for an operator
- *  node that has no rows of its own (no datum, or the empty list a root
- *  combinator gets), the rows of everything under it. */
+ *  node that carries none of its own, the rows of everything under it. */
 export function rowsOf(child: unknown): unknown[] {
   const datum = (child as { datum?: unknown[] }).datum;
-  if (datum !== undefined && datum.length > 0) return datum;
+  if (datum !== undefined) return datum;
   const children = (child as { children?: unknown[] }).children;
   return (children ?? []).flatMap(rowsOf);
 }

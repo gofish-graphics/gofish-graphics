@@ -106,7 +106,7 @@ produced value is tagged with its quantity so the underlying-space
 layer can unify units and title axes (see
 [Underlying Space](/internals/core/underlying-space)). When the caller doesn't
 pass a column (e.g. `createMark`'s size channel), the inferer resolves it
-locally from `data`. The quantity comes from `resolveQuantity`: named by the
+locally from `data`. The quantity comes from `resolveColumn`: named by the
 column's declared quantity (`HasQuantity`, which `bin()` also writes for its
 edges), else by the column, in the column's declared unit (`HasUnit`, or an
 instant for a time column), else in an unknown unit.
@@ -235,12 +235,13 @@ The other half of `withGoFish.ts` is `createNodeOperator` /
 `createNodeOperatorSequential`, which every low-level operator (`layer`,
 `spreadX`, `Frame`, …) is built from. They flatten the children array, await its
 promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
-shared by both loops: a thunk is called, and whatever comes out — like every other
-child — goes to `resolveMarkResult` (`marks/markResult.ts`), the single place
-that knows all the shapes. Five get in:
+shared by both loops: every child goes to `resolveMarkResult`
+(`marks/markResult.ts`), the single place that knows all the shapes. Five get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
-- a **mark** (a function) — invoked with the empty list `[]` (no rows), which is how a bare
+- a **mark** (a function) — invoked with `NO_ROWS`, the empty list a root
+  gets (a node built from it has no datum, unlike an empty group a filter
+  left), which is how a bare
   `rect({ … })` becomes a node inside `spreadX([...])`, and how a control mark
   (`slider(...)`) is rebuilt on every resolve;
 - a **thunk** (sequential form only) — called, then reified again;
@@ -272,12 +273,11 @@ The other half of `withGoFish.ts` is `createNodeOperator` /
 `createNodeOperatorSequential`, which every low-level operator (`layer`,
 `spreadX`, `Frame`, …) is built from. They flatten the children array, await its
 promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
-shared by both loops: a thunk is called, and whatever comes out — like every other
-child — goes to `resolveMarkResult` (`marks/markResult.ts`), the single place
-that knows all the shapes. Five get in:
+shared by both loops: every child goes to `resolveMarkResult`
+(`marks/markResult.ts`), the single place that knows all the shapes. Five get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
-- a **mark** (a function) — invoked with the empty list `[]` (no rows), which is how a bare
+- a **mark** (a function) — invoked with `NO_ROWS` (no rows, so no datum), which is how a bare
   `rect({ … })` becomes a node inside `spreadX([...])`;
 - a **thunk** (sequential form only) — called, then reified again;
 - a **chart builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
@@ -560,9 +560,9 @@ builder has in hand. Two call sites run it:
 
 Both guard on the same "fuses over THIS chart's own flow" boundary
 `dataNeedsAnchors` already checks — `!usesPreviousLayerMarks() &&
-!dataIsRefs(this.data)` — so a chart over a selection (`chart(ref(...))` or
-`chart(selectAll(...))`; `dataIsRefs` reads the `chart(...)` argument, never
-the items of a list) or the
+!(this.data instanceof GoFishRef)` — so a chart over a selection
+(`chart(ref(...))` or `chart(selectAll(...))`; the check reads the
+`chart(...)` argument, never the items of a list) or the
 nested `chart().flow(group({by})).mark(line())` idiom never gets a default
 injected; both keep their pre-#752 meaning exactly, and using `along` on
 either throws instead (see the previous section).

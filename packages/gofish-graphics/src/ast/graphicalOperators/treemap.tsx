@@ -20,7 +20,7 @@ import {
   deferAxisDims,
   elaborateDims,
 } from "../dims";
-import { chunk, getValue, isValue, MaybeValue } from "../data";
+import { getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
 import { UnderlyingSpace, UNDEFINED, magnitude } from "../underlyingSpace";
@@ -308,9 +308,7 @@ export const treemap = createOperator<any, TreemapOptions>(
   ((props: TreemapProps, children: GoFishAST[]) =>
     Treemap(props, children)) as any,
   {
-    // Without `by`, the split is by row identity, `chunk(1)`: one group
-    // `[item]` per item, keyed by position (see `splitEntries`).
-    split: ({ by }, d) => splitEntries(by ?? chunk(1), d),
+    split: ({ by }, d) => splitEntries(by, d),
     channels: {
       w: "size",
       h: "size",

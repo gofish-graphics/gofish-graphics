@@ -30,6 +30,7 @@ import { expandComposedOperator } from "./compose";
 import { nameableMark } from "./createOperator";
 import {
   layerKey,
+  NO_ROWS,
   resolveMarkResult,
   stashLayerName,
   type LayerContext,
@@ -195,22 +196,6 @@ export function resolveRefData(
     );
   }
   return refs;
-}
-
-/**
- * True when the chart was built over a selection — `chart(ref(...))` or
- * `chart(selectAll(...))` — so its data is drawn nodes, with nothing to
- * anchor. Names that concept for the blank-fusion guards (`hasOwnFlow`).
- *
- * This reads the `chart(...)` ARGUMENT, a selection object or rows, never
- * the items of a list. The other refs bags (`LayerBuilder.resolve()`'s
- * `withData(prevRefs)`, a layer combinator's `withData(d)`) reach a tier
- * only at resolve time, after the build-time `.mark()`/`.layer()` calls
- * that consult this guard; an empty-scope tier they bind is caught by
- * `usesPreviousLayerMarks()` instead.
- */
-function dataIsRefs(data: unknown): boolean {
-  return data instanceof GoFishRef;
 }
 
 /* ---- Default grouping for relational marks in a flow (issue #752) ----
@@ -865,14 +850,18 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   /** True when this builder was built from genuine row data flowing through
    *  its own operators — i.e. NOT an empty-scope `Chart()` tier
    *  (`usesPreviousLayerMarks()`) and NOT built over a selection
-   *  (`dataIsRefs`: `chart(ref(...))` or `chart(selectAll(...))`). This is
+   *  (`chart(ref(...))` or `chart(selectAll(...))`). This is
    *  the "current
    *  chart's own flow" boundary shared by both relational-mark default-
    *  grouping fusion guards (issue #752): `.mark()`'s (fuse a bare relational
    *  mark into an anchor + connector) and `.layer()`'s (compute the default
    *  split/travel-direction for a bare relational-mark tier). */
   private hasOwnFlow(): boolean {
-    return !this.usesPreviousLayerMarks() && !dataIsRefs(this.state.data);
+    // A selection is a `GoFishRef` argument (a refs bag a tier binds at
+    // resolve time is caught by `usesPreviousLayerMarks()`).
+    return (
+      !this.usesPreviousLayerMarks() && !(this.state.data instanceof GoFishRef)
+    );
   }
 
   /** A copy of this builder with its data replaced — used by `LayerBuilder` to
@@ -985,8 +974,8 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     // Resolve a ref/selectAll used as chart data just before calling mark:
     // either way the mark gets a list of refs.
     let data = this.state.data;
-    if (dataIsRefs(data)) {
-      data = resolveRefData(data as GoFishRef, this.state.layerContext) as any;
+    if (data instanceof GoFishRef) {
+      data = resolveRefData(data, this.state.layerContext) as any;
     }
     // Type the data with the chart's schema (plus the time columns inferred
     // from `Date` values): a copy of the array carrying the column types,
@@ -1265,12 +1254,12 @@ export class LayerBuilder extends RenderableBuilder {
         // (e.g. `ribbon()`) reads it as the refs it connects; a leaf mark
         // (e.g. `rect({...})`) ignores its datum argument and renders exactly
         // as before. With no previous bag (the previous tier named nothing),
-        // the tier gets the empty list: a mark's input is always a list.
+        // the tier has no rows.
         nodes.push(
           await resolveMarkResult(
             typeof tier === "function"
               ? (tier as Mark<any>)(
-                  (prevRefs ?? []) as any,
+                  prevRefs ?? NO_ROWS,
                   undefined,
                   sharedContext
                 )

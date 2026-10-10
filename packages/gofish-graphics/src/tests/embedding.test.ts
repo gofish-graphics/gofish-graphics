@@ -20,6 +20,7 @@ import { polar } from "../ast/coordinateTransforms/polar";
 import { Rect } from "../ast/shapes/rect";
 import { Ellipse } from "../ast/shapes/ellipse";
 import { DatumValueImpl, baseEmbedded } from "../ast/data";
+import { fresh } from "./testHelpers";
 
 /** A data value read from column `name`, i.e. an amount of that quantity. */
 const q = (v: number, name: string) => new DatumValueImpl(v, { name });
@@ -44,8 +45,10 @@ async function embedOf(
 ): Promise<[boolean | undefined, boolean | undefined]> {
   const root = await rootIn;
   await root.resolveAliases();
-  root.resolveUnderlyingSpace();
-  root.resolveEmbedding();
+  fresh(() => {
+    root.resolveUnderlyingSpace();
+    root.resolveEmbedding();
+  });
   let n = root;
   for (const i of path) n = n.children[i];
   const dims = n.args?.dims;

@@ -23,6 +23,7 @@ import toPath from "lodash/toPath";
 import sumBy from "lodash/sumBy";
 import { GoFishRef } from "./_ref";
 import {
+  chunk,
   fieldNameOf,
   isChunk,
   isField,
@@ -318,7 +319,7 @@ function reorderEntries<T>(
  *  of the order (spread.tsx), so it knows the order the split lays the
  *  levels out in even when a row has only some of them. */
 export function orderEntries<T>(
-  by: SplitBy,
+  by: SplitBy | undefined,
   entries: Map<string | number, T[]>
 ): Map<string | number, T[]> {
   for (const op of getFieldOps(by)) {
@@ -341,14 +342,17 @@ export function orderEntries<T>(
  *   - `sort` / `reverse` reorder the entries Map.
  *   - a value-slot op (`sum`/`mean`/`count`/`distinct`) in a `by` slot, or
  *     `normalize`, throws — those aren't domain ops.
+ * No `by` is a split by row identity, `chunk(1)`: one group `[row]` per
+ * row, keyed by position. This is the one place that default lives.
  * Central helper so spread/group/scatter share one split+ops pipeline —
  * `by`-string/function callers get plain `Map.groupBy` behavior unchanged
  * (they carry no ops).
  */
 export function splitEntries<T extends Record<string, any>>(
-  by: SplitBy,
+  by: SplitBy | undefined,
   d: T[]
 ): Map<string | number, T[]> {
+  by ??= chunk(1);
   const ops = getFieldOps(by);
   let rows = d;
   if (ops.some((op) => op.op === "dropNulls")) {

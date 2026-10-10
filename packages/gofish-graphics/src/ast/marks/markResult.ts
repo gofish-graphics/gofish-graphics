@@ -65,7 +65,22 @@ function isChartPipeline(raw: unknown): raw is ChartPipeline {
 }
 
 /**
- * Resolves whatever a Mark returns into a GoFishNode.
+ * The input a mark gets where there are no rows: at a root, or a mark tier
+ * with no previous bag. It is the empty list, since a mark's input is always
+ * a list, but it is not data, so a node built from it has no datum
+ * ({@link datumOfInput}). An empty group (a filter that kept nothing) is a
+ * different list, and is data.
+ */
+export const NO_ROWS: never[] = Object.freeze([]) as unknown as never[];
+
+/** The datum of a node a mark built from input `d`: `d`, or none when `d` is
+ *  {@link NO_ROWS}. */
+export const datumOfInput = <T>(d: T[]): T[] | undefined =>
+  d === NO_ROWS ? undefined : d;
+
+/**
+ * Resolves whatever a Mark returns into a GoFishNode. A mark is called with
+ * {@link NO_ROWS}.
  */
 export async function resolveMarkResult(
   raw: MarkChild,
@@ -94,9 +109,8 @@ export async function resolveMarkResult(
     return resolveMarkResult(
       // Pass layerContext through so mark wrappers (e.g. .name(...)) that
       // need to register into the layer context still see it when invoked
-      // here. A mark resolved at the root has no rows, so its input is the
-      // empty list `[]` (a mark's input is always a list).
-      (raw as Mark<any>)([] as any, undefined, layerContext),
+      // here. A mark resolved at the root has no rows.
+      (raw as Mark<any>)(NO_ROWS, undefined, layerContext),
       layerContext
     );
   return raw as unknown as GoFishNode;

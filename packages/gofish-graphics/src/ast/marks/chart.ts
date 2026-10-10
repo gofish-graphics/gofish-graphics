@@ -89,6 +89,7 @@ import {
   type SchemaEntry,
 } from "../schema";
 import { withWire } from "../wire";
+import { datumOfInput } from "./markResult";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
@@ -1000,7 +1001,7 @@ export function blank<T extends Record<string, any>>({
   h?: number | (keyof T & string) | Value<number> | FieldExpr;
   fill?: string | (keyof T & string);
   debug?: boolean;
-} = {}): Mark<T | T[]> {
+} = {}): Mark<T[]> {
   // A rect's dims/layout/datum with rect's paint removed (and `{ type:
   // "blank" }` on the wire) — see `Blank` / `baseBlank` in shapes/rect.tsx.
   return baseBlank<T>({
@@ -1115,7 +1116,7 @@ export function layer<T>(
       resolved.push(await resolveMarkResult(result, sharedContext));
     }
     const node = await Layer(opts, resolved);
-    (node as any).datum = d;
+    node.datum = datumOfInput(d as unknown[]);
     return node;
   };
   return tagCombinator(makeRelatableMark(base), "layer", opts, marks);
@@ -1149,7 +1150,7 @@ function makePorterDuffCombinator(
         )
       );
       const node = await lowLevel(opts, [child0, child1]);
-      (node as any).datum = d;
+      node.datum = datumOfInput(d as unknown[]);
       return node;
     };
     return tagCombinator(nameableMark(base), irType, opts, marks);

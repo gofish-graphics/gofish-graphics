@@ -21,12 +21,12 @@ import { paintSVG } from "./displayList/paintSVG";
 import type { InteractionRuntime } from "../interaction/runtime";
 import { renderWithInteraction } from "../interaction/renderTerminal";
 import { resolveMarkResult } from "./marks/markResult";
+import { resolveUnit, sameUnitVar } from "./measure";
 import type { ToPixel } from "./_node";
 import type { Size } from "./dims";
 import {
   continuousInterval,
   isCONTINUOUS,
-  spaceUnit,
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
   type UnderlyingSpace,
@@ -513,12 +513,17 @@ export async function layout(
   // Only a DECLARED unit counts: two unknowns that unify through overlays
   // are one domain, not a claim that a data unit is the same length on x
   // and y.
-  const unitX = spaceUnit(niceUnderlyingSpaceX)?.unit;
-  const unitY = spaceUnit(niceUnderlyingSpaceY)?.unit;
+  const unitX = isCONTINUOUS(niceUnderlyingSpaceX)
+    ? niceUnderlyingSpaceX.measure?.unit
+    : undefined;
+  const unitY = isCONTINUOUS(niceUnderlyingSpaceY)
+    ? niceUnderlyingSpaceY.measure?.unit
+    : undefined;
   if (
-    unitX?.kind === "declared" &&
-    unitY?.kind === "declared" &&
-    unitX.name === unitY.name
+    unitX !== undefined &&
+    unitY !== undefined &&
+    resolveUnit(unitX).kind === "declared" &&
+    sameUnitVar(unitX, unitY)
   ) {
     const axisInfo = ([0, 1] as const).map(
       (axis): EqualMeasureAxis | undefined => {

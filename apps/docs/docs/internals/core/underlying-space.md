@@ -244,7 +244,7 @@ type CONTINUOUS_TYPE = {
   measure?: UnitRecord; // { unit?, calendar?, titles }
   mirrored?: true;
 };
-type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: UnitRecord; ... };
+type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; titles?: string[]; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
 ```
 
@@ -346,12 +346,11 @@ the two sides:
 
 With every descent 0, all of this reduces to a single width.
 
-`ORDINAL` carries a `measure` too: a title (the grouping field, e.g.
-`"lake"`) and no unit, since categories set up no scale. It's set from the
-grouping operator (`spread`'s `by`) when the ordinal space is built
-(`distributeSpaceFold` → `ORDINAL(keys, titleUnits(by))`) and joined through
-`unionChildSpaces` by the same `joinUnits` every continuous fold uses, which
-for an ordinal only unions titles. So `spaceTitle(space)` reads a title off
+`ORDINAL` carries `titles`: its grouping fields (e.g. `"lake"`), and no
+unit, since categories set up no scale. It's set from the grouping operator
+(`spread`'s `by`) when the ordinal space is built
+(`distributeSpaceFold` → `ORDINAL(keys, by)`), and `unionChildSpaces` unions
+the titles of the ordinals it overlays, in order. So `spaceTitle(space)` reads a title off
 **both** continuous and ordinal kinds (only `UNDEFINED` has none), which is what
 lets an axis name itself off its own resolved space — a continuous axis by its
 quantity names, an ordinal axis by its grouping field (see [the layout
@@ -359,7 +358,7 @@ passes](/internals/layout/passes)).
 
 A datum value can also carry a `field`: the data field it was read from, set
 by `inferColor` when a color channel names one. That is provenance, not a
-quantity: it never enters `resolveQuantity` or unit unification, and only the
+quantity: it never enters `resolveColumn` or unit unification, and only the
 color scale reads it (see [Color Scale Resolution](/internals/layout/color-scales)).
 
 A companion predicate, **`isPositioningSpace`**, folds the two axis-bearing
@@ -1604,13 +1603,16 @@ concrete units on one axis are a type error. The concrete units are:
   time share an axis; the time zone stays in the calendar, a display
   parameter;
 - `"count"`, for `.count()`, `.distinct()`, and `bin()`'s `count`;
+- `"duration"`, for a size read from a time column: a difference of two
+  instants (`differenceUnits`, which `magnitude` applies; the calendar is
+  dropped too);
 - `"<base> share by <by>"`, for `.normalize()` (`shareQuantity`), so a share
   axis never silently unions with its base's own axis.
 
-Each declared unit is a `DeclaredUnit` (`measure.ts`): a name, which says
-which units are the same, and an optional **symbol**, which an axis title
-shows. `Schema.unit(u)` writes the symbol `u`. The engine's own units
-(`INSTANT`, `COUNT`, a share) are made without one where they are made: a
+Each declared unit is a `HasUnit` (the column type, `schema.ts`): a `unit`
+name, which says which units are the same, and an optional **symbol**, which
+an axis title shows. `Schema.unit(u)` writes the symbol `u`. The engine's own
+units (`INSTANT`, `DURATION`, `COUNT` in `measure.ts`, a share) have none: a
 count or a share is a plain number, and a time axis's ticks already read as
 dates.
 
@@ -1630,18 +1632,21 @@ unification with a chart-wide substitution.
 render's unknowns, keyed by quantity name. There is one per render, on the
 session (`RenderSession.units`), so it is figure-wide, and union-find gives
 the same classes in any order of meetings. The type walk installs it
-(`GoFishNode.resolveUnderlyingSpace`, outermost call, via `withUnits`), so a
+(`GoFishNode.resolveUnderlyingSpace`, outermost call, via `withUnits`), and
+so does the embedding pass (`resolveEmbedding`), so a
 datum value that becomes a space anywhere in the walk (`valueUnits`, used by
 `magnitude`, a point, a rect's ends, a position constraint, a `position`
 offset) takes its variable from it, bound to the value's declared unit. A
 space holds its variable (a `UnitVar` node), so reading its unit later needs
 no walk: **`spaceUnit(space)`** returns the record with the unit replaced by
 its representative, a declared unit or the unknown its class stands for. It
-is THE accessor for "which domain is this": the calendar (nicing, time
-axes), the titles (axis elaboration), the #582 recentering, and the
-embedding gate all read through it. Read it after the walk, when every
-binding is made. Outside a render (a test calling a fold directly), each
-value gets a fresh variable, so nothing is shared.
+is THE accessor for "which domain is this": the titles (axis elaboration)
+read through it. Two unit variables are compared with `sameUnitVar` (one
+class, or two classes bound to one declared unit), which the #582
+recentering and the embedding gate use. Read units after the walk, when
+every binding is made. Outside `withUnits` (a test calling a fold directly,
+or the layout pass's re-join of a layer's position measures), each value
+gets a fresh variable, so nothing is shared.
 
 **Joining.** One function, `joinUnits(a, b, shared, site)`, joins the
 records that meet on one axis, in every composition: overlays and alignments
@@ -1671,8 +1676,8 @@ except the `position` operator's offset, which places its content rather
 than sharing its axis: the content keeps its own record. The decision is by
 the units alone, never by the origin state, so overlaying a count axis onto a
 column declared in millimeters fails loudly instead of corrupting the
-domain. An ordinal axis has titles and no unit, so the same join only unions
-its titles: a datum position beside a category spread on the same axis, or a
+domain. An ordinal axis has titles and no unit, so it takes no part in the
+join: a datum position beside a category spread on the same axis, or a
 spread whose targets mix a category spread with bars, unifies only the
 continuous units.
 
@@ -1688,7 +1693,7 @@ anything, so a count and a bare length on one axis, or a price and a volume,
 render on one scale with no message. The axis title (`"count, Flipper
 Length"`) shows the mix-up. Declaring the units restores the check.
 
-**Where quantities come from.** `resolveQuantity` (`channels.ts`) reads a
+**Where quantities come from.** `resolveColumn` (`channels.ts`) reads a
 channel's quantity off its column's type (`columnQuantity`, `measure.ts`):
 named by `HasQuantity` or else the column, in the unit `HasUnit`
 (or `"instant"` for a time column), or else unknown. A function accessor or a
@@ -1722,8 +1727,8 @@ This same size-vs-position comparison drives **embedding** (`baseEmbedded`,
 `data.ts`): inside a coordinate space, a dim's size becomes a swept coord
 extent only when it is in the same unit as the dim's own position — a size in
 a foreign unit (a bubble's area) stays a flat point. It reads the units
-through the render's union-find (`sameValueUnit`, the representative
-`spaceUnit` reads), after the walk: two unknowns are the same unit only when
+through the render's union-find (`sameValueUnit`, which compares the
+variables with `sameUnitVar`), after the walk: two unknowns are the same unit only when
 they are one column or met on a shared axis. See
 the embedding-resolution pass under
 [layout passes](/internals/layout/passes#pass-8-5-embedding-resolution).
@@ -1857,9 +1862,9 @@ reads only the classes, never the builder words. Four classes exist:
   entry (which wins over the decoded type) exactly as it reads the same
   string from JS data, or in UTC without one. The decode only attaches
   types: whoever reads the rows converts them first with its own schema (a
-  chart tier is chart data, and a callback's result goes through
-  `applyLambdaTyped` in `serialize/registry.ts`, so a lambda accessor's or a
-  single-datum `derive`'s result holds epoch milliseconds). No schema names
+  chart tier is chart data, a lambda accessor's result goes through
+  `applyLambdaTyped` in `serialize/registry.ts`, and a `derive` types its
+  result with its own `schema`, so each holds epoch milliseconds). No schema names
   a value inside a list or a struct, so a time there decodes to epoch
   milliseconds (a naive one read in UTC), and a list of structs, a list of
   rows, carries its own column types. An instant has no zero. A position read from the column carries the
@@ -2025,7 +2030,7 @@ new code path for the common case.
 not the source field's own units — `evalFieldValues` reports the quantity
 `"count"`, in the declared unit `"count"`, for them. Every other pipeline
 reports no quantity of its own, leaving
-[`resolveQuantity`](#measures-units-are-types) to the channel as before, so
+[`resolveColumn`](#measures-units-are-types) to the channel as before, so
 `.sum()` and `.mean()` keep the column's unit. `.normalize()`'s share values
 get their own declared unit, `shareQuantity(base, byName)` — see
 [Space-filling spines](#space-filling-spines-normalize-self-scales-a-stacking-axis)

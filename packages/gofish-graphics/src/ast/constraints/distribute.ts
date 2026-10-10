@@ -13,7 +13,6 @@ import {
   UnderlyingSpace,
   originIs,
   joinAllUnits,
-  titleUnits,
   isCONTINUOUS,
   mirrored,
   CONTINUOUS,
@@ -320,7 +319,7 @@ export function distributeSpaceFold(
   const namedKeys = keys.filter((k): k is string => k !== undefined);
   const keyed = (): UnderlyingSpace =>
     namedKeys.length > 0
-      ? ORDINAL(namedKeys, titleUnits(opts.measure), opts.anonymous)
+      ? ORDINAL(namedKeys, opts.measure, opts.anonymous)
       : UNDEFINED;
   if (!targetSpaces.every(hasOrigin)) return keyed();
   const targets = targetSpaces as CONTINUOUS_TYPE[];

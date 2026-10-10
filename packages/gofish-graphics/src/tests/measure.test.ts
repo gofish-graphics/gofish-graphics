@@ -20,21 +20,15 @@
 import * as GoFish from "../../dist/index.js";
 import { getQuantity } from "../ast/data";
 import { columnType, copyColumnTypes, setColumnTypes } from "../ast/schema";
-import { inferSize, resolveQuantity } from "../ast/channels";
+import { inferSize, resolveColumn } from "../ast/channels";
 import {
   columnQuantity,
   MeasureClash,
   resolveUnit,
-  sameUnit,
-  Units,
-  withUnits,
+  sameUnitVar,
 } from "../ast/measure";
-import {
-  CONTINUOUS,
-  joinUnits,
-  quantityUnits,
-  type UnitRecord,
-} from "../ast/underlyingSpace";
+import { CONTINUOUS, joinUnits, type UnitRecord } from "../ast/underlyingSpace";
+import { declared, fresh, textsOf, unknown } from "./testHelpers";
 import { distributeSpaceFold } from "../ast/constraints/distribute";
 import { interval } from "../util/interval";
 
@@ -77,15 +71,6 @@ async function errorOf(fn: () => unknown): Promise<string | undefined> {
 }
 
 const SIZE = { w: 300, h: 200 };
-const textsOf = (dl: any): string[] => {
-  const out: string[] = [];
-  const walk = (it: any) => {
-    if (it.kind === "text") out.push(String(it.text));
-    for (const c of it.children ?? []) walk(c);
-  };
-  dl.items.forEach(walk);
-  return out;
-};
 
 // ── Channels: a column's quantity reaches mark channels (#534) ──────────────
 
@@ -114,15 +99,15 @@ console.log("# measure: quantities on the source array");
   const leaf = copyColumnTypes([...binned].slice(0, 1), binned);
   ok(
     "copyColumnTypes restores the source quantity",
-    resolveQuantity(leaf, "size")?.name === "Beak Length (mm)"
+    resolveColumn(leaf, "size").quantity?.name === "Beak Length (mm)"
   );
   ok(
     "a bare column has no declared unit",
-    resolveQuantity([{ v: 1 }], "v")?.unit === undefined
+    resolveColumn([{ v: 1 }], "v").quantity?.unit === undefined
   );
   ok(
     "a time column's unit is an instant",
-    columnQuantity("start", { HasCalendar: { zone: "UTC" } }).unit?.name ===
+    columnQuantity("start", { HasCalendar: { zone: "UTC" } }).unit?.unit ===
       "instant"
   );
   ok(
@@ -132,7 +117,7 @@ console.log("# measure: quantities on the source array");
   );
   ok(
     "Schema.unit declares the unit",
-    columnQuantity("gross", Schema.unit("USD").type).unit?.name === "USD"
+    columnQuantity("gross", Schema.unit("USD").type).unit?.unit === "USD"
   );
   ok(
     "and its symbol is the unit's name",
@@ -157,11 +142,6 @@ console.log("# measure: quantities on the source array");
 console.log("# measure: the join table, shared axis");
 {
   const site = { axis: 1 as const, where: "in a test" };
-  /** Run `f` in a fresh render's union-find. */
-  const fresh = <T>(f: () => T): T => withUnits(new Units(), f);
-  const declared = (name: string, unit: string) =>
-    quantityUnits({ name, unit: { name: unit, symbol: unit } });
-  const unknown = (name: string) => quantityUnits({ name });
   const unitOf = (r: UnitRecord | undefined) =>
     r?.unit === undefined ? undefined : resolveUnit(r.unit);
   const clashes = (f: () => unknown): boolean => {
@@ -177,7 +157,7 @@ console.log("# measure: the join table, shared axis");
     const r = joinUnits(declared("a", "USD"), declared("b", "USD"), true, site);
     ok(
       "declared A, declared A: one unit A",
-      unitOf(r)?.kind === "declared" && unitOf(r)?.name === "USD"
+      unitOf(r)?.kind === "declared" && unitOf(r)?.unit === "USD"
     );
   });
   fresh(() =>
@@ -193,7 +173,7 @@ console.log("# measure: the join table, shared axis");
     joinUnits(declared("a", "USD"), x, true, site);
     ok(
       "declared A, unknown x: x is bound to A",
-      unitOf(x)?.kind === "declared" && unitOf(x)?.name === "USD"
+      unitOf(x)?.kind === "declared" && unitOf(x)?.unit === "USD"
     );
   });
   fresh(() => {
@@ -209,7 +189,7 @@ console.log("# measure: the join table, shared axis");
     const r = joinUnits(x, y, true, site);
     ok(
       "unknown x, unknown y: x and y unify",
-      sameUnit(unitOf(x), unitOf(y)) && unitOf(r)?.kind === "unknown"
+      sameUnitVar(x.unit!, y.unit!) && unitOf(r)?.kind === "unknown"
     );
     ok(
       "and the titles are both names, in order",
@@ -256,10 +236,6 @@ console.log("# measure: the join table, shared axis");
 console.log("# measure: the join table, not shared");
 {
   const site = { axis: 1 as const, where: "in a test" };
-  const fresh = <T>(f: () => T): T => withUnits(new Units(), f);
-  const declared = (name: string, unit: string) =>
-    quantityUnits({ name, unit: { name: unit, symbol: unit } });
-  const unknown = (name: string) => quantityUnits({ name });
   const unitOf = (r: UnitRecord | undefined) =>
     r?.unit === undefined ? undefined : resolveUnit(r.unit);
 
@@ -269,7 +245,7 @@ console.log("# measure: the join table, not shared");
     joinUnits(a, b, false, site);
     ok(
       "declared A, declared A: one unit A",
-      sameUnit(unitOf(a), unitOf(b)) && unitOf(a)?.name === "USD"
+      sameUnitVar(a.unit!, b.unit!) && resolveUnit(a.unit!).kind === "declared"
     );
   });
   fresh(() => {
@@ -284,9 +260,9 @@ console.log("# measure: the join table, not shared");
     }
     ok(
       "declared A, declared B: two separate units, no error",
-      err === undefined && !sameUnit(unitOf(a), unitOf(b))
+      err === undefined && !sameUnitVar(a.unit!, b.unit!)
     );
-    ok("and the join keeps a's record", unitOf(r)?.name === "USD");
+    ok("and the join keeps a's record", r === a);
   });
   fresh(() => {
     const x = unknown("x");
@@ -300,7 +276,7 @@ console.log("# measure: the join table, not shared");
     const a = unknown("x");
     const b = unknown("x");
     joinUnits(a, b, false, site);
-    ok("unknown x, unknown x: one unit", sameUnit(unitOf(a), unitOf(b)));
+    ok("unknown x, unknown x: one unit", sameUnitVar(a.unit!, b.unit!));
   });
   fresh(() => {
     const x = unknown("x");
@@ -308,7 +284,7 @@ console.log("# measure: the join table, not shared");
     joinUnits(x, y, false, site);
     ok(
       "unknown x, unknown y: forget (two units)",
-      !sameUnit(unitOf(x), unitOf(y))
+      !sameUnitVar(x.unit!, y.unit!)
     );
   });
 }

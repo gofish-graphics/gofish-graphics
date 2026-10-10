@@ -1,4 +1,5 @@
-import { copyColumnTypes } from "../schema";
+import { getColumnTypes, setColumnTypes } from "../schema";
+import { datumOfInput } from "../marks/markResult";
 import { packEnclose } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
 import { boxOfDims } from "../geometry";
@@ -236,6 +237,7 @@ export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
   }
   const field = opts.points;
   const mark = async (rows: any[]) => {
+    const types = getColumnTypes(rows);
     const nodes = await Promise.all(
       rows.map(async (row) => {
         const ring = row?.[field];
@@ -255,14 +257,14 @@ export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
         const node = (await basePolygon({
           ...opts,
           points: value(ring as Ring),
-        } as any)(copyColumnTypes([row], rows))) as GoFishNode;
+        } as any)(types ? setColumnTypes([row], types) : [row])) as GoFishNode;
         node.name("");
         return node;
       })
     );
     if (nodes.length === 1) return nodes[0];
     const group = (await Layer({}, nodes)) as GoFishNode;
-    group.datum = rows;
+    group.datum = datumOfInput(rows);
     return group;
   };
   const result = nameableMark(mark);
