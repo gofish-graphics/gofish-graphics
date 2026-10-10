@@ -159,7 +159,9 @@ gone, #1058.) A binned key, `field("date").bin(Calendar.month)`, is an op in
 the field expression's `ops`: `{ "op": "bin", "partition": { "unit": "month",
 "step": 1 } }`, where the partition is a Calendar value's wire form,
 `{ "step" }`, or `{ "thresholds" }` (`PartitionIR`), and an op with no
-`partition` bins into about 10 cells. A partition with a JS `format`
+`partition` bins into about 10 cells. The op takes no other key, so the old
+flat spelling, `{ "op": "bin", "thresholds": 20 }`, is an error, not the
+default partition. A partition with a JS `format`
 function has no wire form, and serializing it is an error. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with

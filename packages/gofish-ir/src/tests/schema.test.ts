@@ -505,6 +505,26 @@ for (const [name, partition] of [
 ] as const) {
   check(`bin with ${name} rejected`, !validate(binBy(partition)).valid);
 }
+// The old flat spelling, `{ op: "bin", thresholds: 20 }`, is an unknown key
+// on the op: rejected, not read as the default partition.
+{
+  const flat = {
+    type: "field",
+    name: "d",
+    ops: [{ op: "bin", thresholds: 20 }],
+  };
+  check(
+    "bin with a key beside the partition rejected",
+    !validate(chart([{ type: "spread", dir: "x", by: flat }])).valid
+  );
+  // Where the key's `type` picks its branch, the error names the key.
+  const r = validate(chart([{ type: "partition", by: flat, dir: "x" }]));
+  check(
+    "bin with a key beside the partition rejected, naming the key",
+    !r.valid && r.errors.some((e) => e.path.endsWith(".thresholds")),
+    JSON.stringify(r)
+  );
+}
 
 // partition's `by`: one binned key with a `dir`, or a binned struct
 // (#1059). A key per axis is two partitions on the wire.

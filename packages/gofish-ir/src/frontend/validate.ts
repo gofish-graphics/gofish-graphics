@@ -894,6 +894,7 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
       }
       return;
     case "bin":
+      rejectUnknown(value, ["op", "partition"], path, ctx);
       if (value.partition !== undefined)
         walkPartition(value.partition, `${path}.partition`, ctx);
       return;

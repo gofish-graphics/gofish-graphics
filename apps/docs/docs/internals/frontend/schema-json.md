@@ -398,7 +398,8 @@ for the API.
                 }
               ]
             }
-          }
+          },
+          "additionalProperties": false
         },
         {
           "type": "object",

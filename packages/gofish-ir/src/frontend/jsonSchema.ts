@@ -469,6 +469,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
               ],
             },
           },
+          additionalProperties: false,
         },
         {
           type: "object",
