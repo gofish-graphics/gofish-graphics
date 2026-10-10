@@ -9,6 +9,7 @@
  */
 import { Rect as rect } from "../ast/shapes/rect";
 import { layer } from "../ast/graphicalOperators/layer";
+import { Frame } from "../ast/graphicalOperators/frame";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { Constraint } from "../ast/constraints";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
@@ -18,6 +19,8 @@ import {
   scatter,
   spread,
   selectAll,
+  stack,
+  Coord,
   rect as rectMark,
   Schema,
 } from "../lib";
@@ -182,6 +185,43 @@ async function main() {
     check(
       "the bars' baseline is the axis's pixel of 0",
       axis !== undefined && near((tall?.y ?? 0) + (tall?.h ?? 0), axis.px(0))
+    );
+  }
+
+  console.log("# a .layer() tier leaves the root tier's box as it was");
+  {
+    // The hoisted box is the whole box: the coord, its padding, and the
+    // size. A root tier with `padding: 0` under a coord draws the same with
+    // or without a tier layered over it. Before, the hoisted coord lost its
+    // padding and fell back to the default inset (Bird Migration E).
+    const rows = [
+      { k: "a", v: 3 },
+      { k: "b", v: 5 },
+    ];
+    const base = () =>
+      chart(rows, { coord: Coord.polar(), padding: 0 })
+        .flow(stack({ by: "k", dir: "x" }))
+        .mark(rectMark({ w: "v", h: "v", fill: "steelblue" }).name("wedges"));
+    const shapes = (dl: any) =>
+      JSON.stringify(
+        items(dl)
+          .filter((i) => (i as any).style?.fill === "steelblue")
+          .map(({ id: _id, ...rest }: any) => rest)
+      );
+    // Nested in a frame, as in the story: at the root the padding would be
+    // only canvas margin.
+    const inFrame = async (b: any) =>
+      toDisplayList((Frame as any)({ w: 300, h: 300 }, [await b.resolve()]), {
+        w: 300,
+        h: 300,
+      });
+    const alone = await inFrame(base());
+    const layered = await inFrame(
+      base().layer(chart(selectAll("wedges")).mark(rectMark({ w: 1, h: 1 })))
+    );
+    check(
+      "a layered coord chart keeps its padding",
+      shapes(alone) === shapes(layered),
     );
   }
 

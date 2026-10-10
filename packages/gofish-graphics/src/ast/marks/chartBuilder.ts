@@ -938,11 +938,12 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     return this.state.options ?? {};
   }
 
-  /** The root tier's box: its coordinate space and its own size, the
-   *  options `LayerBuilder` HOISTS over every tier (see `LayerBuilder.resolve`). */
-  boxOptions(): Pick<ChartOptions, "coord" | "w" | "h"> {
-    const { coord, w, h } = this.state.options ?? {};
-    return { coord, w, h };
+  /** The root tier's box: its coordinate space with its padding (the
+   *  coord's inset), and its own size, the options `LayerBuilder` HOISTS over
+   *  every tier (see `LayerBuilder.resolve`). */
+  boxOptions(): Pick<ChartOptions, "coord" | "padding" | "w" | "h"> {
+    const { coord, padding, w, h } = this.state.options ?? {};
+    return { coord, padding, w, h };
   }
 
   /** A copy without its box ({@link boxOptions}). `LayerBuilder` hoists the
@@ -951,7 +952,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   withoutBox(): ChartBuilder<TInput, TOutput> {
     const options = this.state.options;
     if (options === undefined) return this;
-    const { coord: _coord, w: _w, h: _h, ...rest } = options;
+    const { coord: _coord, padding: _padding, w: _w, h: _h, ...rest } = options;
     return this.with({ options: rest });
   }
 
