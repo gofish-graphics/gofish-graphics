@@ -138,6 +138,12 @@ export type {
   NumberCellFormat,
   PartitionJSON,
 } from "./ast/cells";
+// A key that reads two fields at once (#1059), binned into the cells of the
+// plane by a call in the Bin family: `struct({ x, y }).bin(Bin.hex({ radius }))`.
+export { struct, StructExpr } from "./ast/structExpr";
+export type { StructOp, StructExprWire } from "./ast/structExpr";
+export type { PolygonCell, PlaneFields } from "./ast/polygonCells";
+export * as Bin from "./families/bin";
 
 // Constraints
 export { Constraint } from "./ast/constraints";
@@ -179,6 +185,7 @@ export type {
   PartitionOptions,
   PartitionAxisOptions,
   PartitionProductOptions,
+  PartitionPlaneOptions,
 } from "./ast/graphicalOperators/partition";
 export * as Overlap from "./families/overlap";
 export {

@@ -644,8 +644,9 @@ measured from the parent's origin as a `translate` is.
   sits at its parent's origin, so the region needs no conversion.
 
 Today only `partition` makes regions (see
-[Underlying Space](/internals/core/underlying-space#partition-each-group-in-its-cell)),
-and every region is a box.
+[Underlying Space](/internals/core/underlying-space#partition-each-group-in-its-cell)).
+A region over a binned struct (`struct({ x, y }).bin(Bin.hex(...))`) also has
+an outline, the cell's polygon; every other region is a box.
 
 #### Shape geometry after layout
 

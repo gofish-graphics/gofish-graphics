@@ -36,6 +36,12 @@ import {
   type Cells,
 } from "./cells";
 import { columnType, domainRows, orderByLevels } from "./schema";
+import {
+  planeCells,
+  type PolygonCell,
+  type PolygonCells,
+} from "./polygonCells";
+import { isStruct, structBin, type StructExprWire } from "./structExpr";
 import type { Cycle } from "../timeWindow";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
@@ -140,12 +146,17 @@ export function projectByValues(obj: unknown, by: SplitBy): unknown[] {
  *  a field-path string, a key function over the row, or a `field(...)`
  *  accessor (possibly carrying a pipeline of domain ops — see
  *  {@link splitEntries}). */
-export type SplitBy = string | ((r: any) => unknown) | FieldAccessor;
+export type SplitBy =
+  | string
+  | ((r: any) => unknown)
+  | FieldAccessor
+  | StructExprWire;
 
 /** The key of one group of a split: a value of the `by` field (text or a
- *  number), or a {@link Cell} for a binned key (`field(x).bin(p)`), which
- *  stands for its id (`String(cell)`). */
-export type SplitKey = string | number | Cell;
+ *  number), a {@link Cell} for a binned key (`field(x).bin(p)`), or a
+ *  {@link PolygonCell} for a binned struct (`struct({ x, y }).bin(b)`). A
+ *  cell stands for its id (`String(cell)`). */
+export type SplitKey = string | number | Cell | PolygonCell;
 
 /**
  * The mutable cell `ChartBuilder` writes the computed default split/travel
@@ -220,6 +231,14 @@ export type TimeTier = {
  *  honest `unknown` produced by projection + homogeneity collapse. */
 export function splitKeyFn(by: SplitBy): (r: any) => string | number {
   if (typeof by === "function") return by as (r: any) => string | number;
+  // A struct's groups are the cells of its domain, which a single row does
+  // not know (`structEntries`). TODO(#1059): key a row by its cell here too,
+  // for a connector or an animation over a struct-keyed flow.
+  if (isStruct(by))
+    throw new Error(
+      "struct(...).bin(...) keys a split (partition, spread), but not yet a " +
+        "connector's or an animation's grouping."
+    );
   const segments = toPath(fieldNameOf(by)!);
   return (r: any) => {
     const values = projectValues(r, segments);
@@ -308,6 +327,77 @@ function binEntries<T extends Record<string, any>>(
   return entries;
 }
 
+/** The polygon cells of each domain, per bin and pair of columns, built
+ *  once, as {@link cellsCache} does for 1D cells. */
+const planeCache = new WeakMap<
+  object,
+  WeakMap<object, Map<string, PolygonCells>>
+>();
+
+/**
+ * Group `d` by a binned struct key, `struct({ x, y }).bin(b)`: into the cells
+ * of `b` over the two columns' DOMAIN (`domainRows`), keyed by
+ * {@link PolygonCell}, one entry per cell, empty cells included. Rows missing
+ * either value are dropped. A struct with no bin has no groups yet: it is an
+ * error.
+ */
+function structEntries<T extends Record<string, any>>(
+  by: StructExprWire,
+  d: T[]
+): Map<PolygonCell, T[]> {
+  const { x, y } = by.fields;
+  const where = `struct({ x: "${x}", y: "${y}" }).bin(...)`;
+  const bin = structBin(by);
+  if (bin === undefined)
+    throw new Error(
+      `struct({ x: "${x}", y: "${y}" }) as a key needs .bin(...): bin it ` +
+        `with a call in the Bin family, e.g. .bin(Bin.hex({ radius: 1 })), ` +
+        `so each group is a cell.`
+    );
+  const domain = domainRows(d) as Record<string, any>[];
+  let byBin = planeCache.get(domain);
+  if (byBin === undefined) {
+    byBin = new WeakMap();
+    planeCache.set(domain, byBin);
+  }
+  let byFields = byBin.get(bin);
+  if (byFields === undefined) {
+    byFields = new Map();
+    byBin.set(bin, byFields);
+  }
+  const fieldsKey = JSON.stringify([x, y]);
+  let plane = byFields.get(fieldsKey);
+  if (plane === undefined) {
+    plane = planeCells(
+      bin,
+      by.fields,
+      domain.map((r) => r?.[x]),
+      domain.map((r) => r?.[y]),
+      where
+    );
+    byFields.set(fieldsKey, plane);
+  }
+  const entries = new Map<PolygonCell, T[]>(plane.cells.map((c) => [c, []]));
+  for (const row of d) {
+    const vx = row?.[x];
+    const vy = row?.[y];
+    if (vx == null || vy == null) continue;
+    const cell =
+      typeof vx === "number" && typeof vy === "number"
+        ? plane.cellOf(vx, vy)
+        : undefined;
+    if (cell === undefined)
+      throw new Error(
+        `${where}: the point (${JSON.stringify(vx)}, ${JSON.stringify(vy)}) ` +
+          `is outside the columns' values in the chart's data, so it has no ` +
+          `cell. A derive that makes new values makes a new domain: bin ` +
+          `after it.`
+      );
+    entries.get(cell)!.push(row);
+  }
+  return entries;
+}
+
 /** Reorder `entries`: with `values` (#735), by that explicit group-key
  *  order — groups not listed are appended after, in natural sort order; with
  *  `by`, by the SUM of that field over each entry's rows; with neither, by
@@ -391,6 +481,8 @@ export function splitEntries<T extends Record<string, any>>(
   by: SplitBy,
   d: T[]
 ): Map<SplitKey, T[]> {
+  // A struct key's one op is its bin, which makes its groups.
+  if (isStruct(by)) return structEntries(by, d);
   const ops = getFieldOps(by);
   let rows = d;
   if (ops.some((op) => op.op === "dropNulls")) {

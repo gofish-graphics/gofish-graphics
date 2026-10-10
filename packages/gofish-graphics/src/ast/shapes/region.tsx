@@ -41,7 +41,7 @@ export type RegionProps = {
  * there, as it places a rect with no size.
  *
  * It draws the region's outline when the region has one (a hexagon, a
- * Voronoi cell: `Bin.hex` and `Bin.voronoi`, #1059 part B), and its box
+ * Voronoi cell, from a `partition` over `struct({ x, y }).bin(b)`), and its box
  * otherwise. Under a nonlinear coordinate space either one is resampled, so
  * a cell of a polar partition draws as the wedge it is.
  */

@@ -19,6 +19,13 @@ import {
 import { compose } from "../marks/compose";
 import { createNodeOperator } from "../withGoFish";
 import { Constraint, PositionRegion } from "../constraints";
+import type { PolygonCell } from "../polygonCells";
+import {
+  isStruct,
+  structBin,
+  type StructExpr,
+  type StructExprWire,
+} from "../structExpr";
 import { axisName, ensureChildNames } from "../constraints/shared";
 import { layer } from "./layer";
 import type { Alignment } from "./alignment";
@@ -29,10 +36,12 @@ import type { Alignment } from "./alignment";
  * place on one continuous scale, so a cell's width on screen follows its
  * width in data (a 29-day February is narrower than a 31-day March).
  *
- * Its key must have a REGION. Today only `field(x).bin(p)` makes one (a
- * {@link Cell}, cells.ts). The cells are those of the column's whole domain in
- * the chart's data, empty ones included, so an empty cell keeps its place: it
- * is a group with no rows, and it is still placed.
+ * Its key must have a REGION. `field(x).bin(p)` makes one on one axis (a
+ * {@link Cell}, cells.ts), and `struct({ x, y }).bin(b)` makes one on both
+ * axes at once (a {@link PolygonCell}, polygonCells.ts: a hexagon, a Voronoi
+ * cell). The cells are those of the columns' whole domain in the chart's
+ * data, empty ones included, so an empty cell keeps its place: it is a group
+ * with no rows, and it is still placed.
  *
  * **How a child gets its region.** Each child is handed a REGION in its
  * layout call, with its size proposal (#1059, `geometry/region.ts`): the
@@ -58,8 +67,12 @@ import type { Alignment } from "./alignment";
  * then y. It is built by that rewrite (`compose`), so it adds no behavior of
  * its own, and on the wire it is those two partitions.
  *
- * A region is a box today. A hexagon or a Voronoi cell (#1059 part B) also
- * gives the child its outline, through `PositionRegion.outline`.
+ * **The plane form**, `by: struct({ x, y }).bin(b)`, divides both axes at
+ * once into polygon cells. Each child gets one region constraint per axis,
+ * `Constraint.position({ x: region, y: region })`: its cell's box on each
+ * axis, and on both the cell's outline in data, which the layer maps through
+ * both scales into the child's region. A `region` mark draws the outline; any
+ * other mark is placed in the box (a circle sits at the box's center).
  */
 type PartitionCommon = {
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
@@ -87,10 +100,28 @@ export type PartitionProductOptions = PartitionCommon & {
   alignment?: never;
 };
 
-export type PartitionOptions = PartitionAxisOptions | PartitionProductOptions;
+/** The plane form: divide both axes at once into the polygon cells of a
+ *  binned struct, `struct({ x, y }).bin(Bin.hex({ radius }))`. */
+export type PartitionPlaneOptions = PartitionCommon & {
+  by: StructExpr<true>;
+  dir?: never;
+  alignment?: never;
+};
+
+export type PartitionOptions =
+  | PartitionAxisOptions
+  | PartitionProductOptions
+  | PartitionPlaneOptions;
 
 /** The loud error for a `by` that has no region. */
 const noRegion = (by: unknown): Error => {
+  if (isStruct(by))
+    return new Error(
+      `partition: \`by\` must be a key that has a region, and ` +
+        `struct({ x: "${by.fields.x}", y: "${by.fields.y}" }) has none until ` +
+        `it is binned: add .bin(Bin.hex({ radius })) or ` +
+        `.bin(Bin.voronoi({ seeds })), so each group is placed in its cell.`
+    );
   const name = typeof by === "string" ? by : isField(by) ? by.name : "x";
   return new Error(
     `partition: \`by\` must be a key that has a region, such as ` +
@@ -101,11 +132,12 @@ const noRegion = (by: unknown): Error => {
   );
 };
 
-/** The layout node's options: one region per child, on `dir`. */
+/** The layout node's options: per child, its region on `dir` (1D), or its
+ *  regions on x and on y (a cell of the plane, with no `dir`). */
 type PartitionNodeProps = {
   key?: string;
-  dir: AxisName;
-  regions: PositionRegion[];
+  dir?: AxisName;
+  regions: (PositionRegion | readonly [PositionRegion, PositionRegion])[];
   alignment?: Alignment;
   axes?: PartitionCommon["axes"];
 };
@@ -132,6 +164,20 @@ const PartitionNode = createNodeOperator(
     // `dir` may be a name the enclosing coordinate space declares, so the
     // constraints wait for the resolveAliases pass.
     node._elaborateInAxisScope = async (_outer, inner) => {
+      // A cell of the plane is a region on both axes, so nothing is left
+      // to align.
+      if (dir === undefined) {
+        await node.relate((g) =>
+          names.map((name, i) => {
+            const [x, y] = regions[i] as readonly [
+              PositionRegion,
+              PositionRegion,
+            ];
+            return Constraint.position({ x, y }, [g[name]]);
+          })
+        );
+        return;
+      }
       const axis = resolveAxisName(inner, dir, "partition dir");
       await node.relate((g) => {
         const refs = names.map((name) => g[name]);
@@ -158,11 +204,58 @@ const PartitionNode = createNodeOperator(
   }
 );
 
-const partitionOperator = createOperator<any, PartitionAxisOptions>(
+/** A datum read from the column `name`: it carries what the column says
+ *  about its values (its measure, and its schema type: a time column's
+ *  calendar), as a position read from the column does, so the axis it is
+ *  placed on is that column's axis. */
+function columnDatum(
+  d: unknown[],
+  name: string,
+  accessor: unknown = name
+): (v: number) => DatumValueImpl {
+  const { measure, type } = resolveColumn(d, accessor);
+  return (v) =>
+    new DatumValueImpl(
+      v,
+      measure,
+      undefined,
+      undefined,
+      type === undefined ? undefined : name,
+      type
+    );
+}
+
+/** The split of the plane form: one group per cell of the binned struct,
+ *  each with its regions on x and y (its box there, and its outline). */
+function planeSplit(by: StructExprWire, d: any[]) {
+  if (structBin(by) === undefined) throw noRegion(by);
+  const entries = splitEntries(by, d);
+  const cells = [...entries.keys()] as PolygonCell[];
+  const x = columnDatum(d, by.fields.x);
+  const y = columnDatum(d, by.fields.y);
+  return {
+    entries,
+    layoutOpts: {
+      regions: cells.map((c) => {
+        const outline = c.outline.map(([px, py]) => [x(px), y(py)] as const);
+        return [
+          new PositionRegion(c, [x(c.box.x[0]), x(c.box.x[1])], outline),
+          new PositionRegion(c, [y(c.box.y[0]), y(c.box.y[1])], outline),
+        ] as const;
+      }),
+    },
+  };
+}
+
+const partitionOperator = createOperator<
+  any,
+  PartitionAxisOptions | PartitionPlaneOptions
+>(
   (({ dir, regions, alignment, axes, key }: any, children: GoFishAST[]) =>
     PartitionNode({ key, dir, regions, alignment, axes }, children)) as any,
   {
     split: ({ by }, d) => {
+      if (isStruct(by)) return planeSplit(by, d);
       // A key has a region only through `.bin(p)` (the type rules the rest
       // out in TS; the wire form from Python is checked here).
       if (!isField(by) || !getFieldOps(by).some((op) => op.op === "bin"))
@@ -170,20 +263,7 @@ const partitionOperator = createOperator<any, PartitionAxisOptions>(
       const entries = splitEntries(by as FieldAccessor, d);
       const cells = [...entries.keys()];
       if (!cells.every((k): k is Cell => k instanceof Cell)) throw noRegion(by);
-      // Each edge carries what the column says about its values (its
-      // measure, and its schema type: a time column's calendar), as a
-      // position read from the column does, so the axis is that column's
-      // axis.
-      const { measure, type } = resolveColumn(d, by);
-      const edge = (v: number) =>
-        new DatumValueImpl(
-          v,
-          measure,
-          undefined,
-          undefined,
-          type === undefined ? undefined : by.name,
-          type
-        );
+      const edge = columnDatum(d, by.name, by);
       return {
         entries,
         layoutOpts: {
@@ -199,15 +279,19 @@ const partitionOperator = createOperator<any, PartitionAxisOptions>(
     // TODO(#838 follow-up): resolve the travel axis by name too.
     arrangement: {
       kind: "value",
-      positions: ({ dir }) => ({ x: dir === "x", y: dir === "y" }),
+      positions: ({ by, dir }) =>
+        isStruct(by)
+          ? { x: true, y: true }
+          : { x: dir === "x", y: dir === "y" },
     },
     serialize: "partition",
   }
 );
 
-/** Whether `by` is the product form's `{ x, y }` (and not a field). */
+/** Whether `by` is the product form's `{ x, y }` (and not a field or a
+ *  struct). */
 const isProductKey = (by: unknown): by is PartitionProductOptions["by"] =>
-  typeof by === "object" && by !== null && !isField(by);
+  typeof by === "object" && by !== null && !isField(by) && !isStruct(by);
 
 /**
  * Divide the space into the cells of `by`, one group per cell, each given its
@@ -216,6 +300,8 @@ const isProductKey = (by: unknown): by is PartitionProductOptions["by"] =>
  * - `partition({ by: field(x).bin(p), dir })` divides one axis.
  * - `partition({ by: { x: field(a).bin(p), y: field(b).bin(q) } })` divides
  *   both: it is the 1D partition on x, then the 1D partition on y.
+ * - `partition({ by: struct({ x: a, y: b }).bin(Bin.hex({ radius })) })`
+ *   divides both at once, into hexagons (or Voronoi cells, `Bin.voronoi`).
  *
  * It has only the operator form: its children are the groups of its key, so
  * there is no list of children to pass it.
@@ -227,8 +313,20 @@ export function partition(
   opts: PartitionProductOptions
 ): Operator<any[], any[]>;
 export function partition(
+  opts: PartitionPlaneOptions
+): TranslatableOperator<any[], any[]>;
+export function partition(
   opts: PartitionOptions
 ): TranslatableOperator<any[], any[]> | Operator<any[], any[]> {
+  if (isStruct(opts.by)) {
+    const { dir, alignment } = opts as PartitionOptions;
+    if (dir !== undefined || alignment !== undefined)
+      throw new Error(
+        "partition: a struct key divides both axes at once, so `dir` and " +
+          "`alignment` do not apply. Each child is placed in its cell."
+      );
+    return partitionOperator(opts as PartitionPlaneOptions);
+  }
   if (!isProductKey(opts.by)) {
     if ((opts as PartitionAxisOptions).dir === undefined)
       throw new Error(

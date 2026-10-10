@@ -333,6 +333,9 @@ importers:
       '@types/d3-array':
         specifier: ^3.2.1
         version: 3.2.1
+      '@types/d3-delaunay':
+        specifier: ^6.0.4
+        version: 6.0.4
       bubblesets-js:
         specifier: ^3.0.0
         version: 3.0.0
@@ -342,6 +345,9 @@ importers:
       d3-array:
         specifier: ^3.2.4
         version: 3.2.4
+      d3-delaunay:
+        specifier: ^6.0.4
+        version: 6.0.4
       d3-hierarchy:
         specifier: ^3.1.2
         version: 3.1.2
@@ -1992,6 +1998,9 @@ packages:
 
   '@types/d3-array@3.2.1':
     resolution: {integrity: sha512-Y2Jn2idRrLzUfAKV2LyRImR+y4oa2AntrgID95SHJxuMUrkNXmanDSed71sRNZysveJVt1hLLemQZIady0FpEg==}
+
+  '@types/d3-delaunay@6.0.4':
+    resolution: {integrity: sha512-ZMaSKu4THYCU6sV64Lhg6qjf1orxBthaC161plr5KuPHo3CNm8DTHiLw/5Eq2b6TsNP0W0iJrUOFscY6Q450Hw==}
 
   '@types/d3-hierarchy@3.1.7':
     resolution: {integrity: sha512-tJFtNoYBtRtkNysX1Xq4sxtjK8YgoWUNpIiUee0/jHGRwqvzYxkq0hGVbbOGSz+JgFxxRu4K8nb3YpG3CMARtg==}
@@ -6023,6 +6032,8 @@ snapshots:
   '@types/culori@4.0.1': {}
 
   '@types/d3-array@3.2.1': {}
+
+  '@types/d3-delaunay@6.0.4': {}
 
   '@types/d3-hierarchy@3.1.7': {}
 

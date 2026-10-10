@@ -128,7 +128,8 @@ An option whose value is one choice from a set of named strategies, at least
 one of which takes arguments, gets one **strategy family** (#1013): `Overlap`
 (`scatter`'s `overlap`), `Tile` (`treemap`'s `tile`), `Curve` (the `curve` of
 `line`, `ribbon`, `time.transition` and `Animation.tween`, and
-`interpolate`'s `method`), `Coord` (a chart's or a layer's `coord`), `Color`
+`interpolate`'s `method`), `Bin` (the cells of `struct({ x, y }).bin(...)`),
+`Coord` (a chart's or a layer's `coord`), `Color`
 (a chart's `color`), and `Animation` (`.transition()`'s `enter`, `exit` and
 `update`). Each family is one module with a lowercase file name,
 `src/families/<name>.ts`, which `lib.ts` binds under the capitalized name with

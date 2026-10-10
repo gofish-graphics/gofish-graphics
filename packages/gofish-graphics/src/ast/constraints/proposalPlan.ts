@@ -219,9 +219,12 @@ export type ChildRegions = {
  * of the layer's constraints as before.
  *
  * The outline is the cell's (`PositionRegion.outline`), mapped through both
- * scales. TODO(#1059 part B): a child whose cell has no outline does not get
- * the outline of the region the layer was given, which needs that outline
- * clipped to the cell; nothing makes outlines yet.
+ * scales (a cell of the plane: `struct({ x, y }).bin(b)`). TODO(#1059): a
+ * child whose cell has no outline does not get the outline of the region
+ * the layer was given (a 1D partition inside a hexagon gets the hexagon's
+ * box, cut down to its cell), which needs that outline clipped to the cell.
+ * No story needs it yet, and the clip opens a design question: whether a
+ * child of a hexagon is cut to the hexagon or to its box.
  */
 export function buildChildRegions(
   constraints: readonly ConstraintSpec[],

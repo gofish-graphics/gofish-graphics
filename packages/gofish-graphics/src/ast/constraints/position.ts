@@ -11,6 +11,7 @@ import {
 } from "../data";
 import * as Interval from "../../util/interval";
 import type { Cell } from "../cells";
+import type { PolygonCell } from "../polygonCells";
 import type { PlacementFactEmitter } from "./placementFacts";
 import type { AlignAnchor, Axis, ConstraintRef } from "./shared";
 
@@ -42,17 +43,18 @@ export const isPositionInterval = (
  * `edges` are the cell's start and end as datums of the column it bins, so
  * they carry the column's measure and type (a time column's calendar) as any
  * datum read from it does, and they make the layer's position domain on this
- * axis. The cell tells an axis over such regions that it places cells
- * (`CONTINUOUS_TYPE.cells`).
+ * axis. A 1D {@link Cell} tells an axis over such regions that it places
+ * cells (`CONTINUOUS_TYPE.cells`).
  *
- * `outline` is the cell's outline in data, `[x, y]` per vertex, for a cell
- * that is not a box (a hexagon, a Voronoi cell). It is on both axes'
- * coordinates of a two-axis cell; the layer maps it through both scales.
- * Nothing makes one yet: `Bin.hex` and `Bin.voronoi` will (#1059 part B).
+ * A cell of the plane ({@link PolygonCell}: a hexagon of `Bin.hex`, a cell of
+ * `Bin.voronoi`) is a region on both axes at once. Its `edges` on each axis
+ * are its box there, and `outline` is its outline in data, `[x, y]` per
+ * corner, on both axes' coordinates; the layer maps it through both scales.
+ * It is not a cell of either axis alone, so its axes place points.
  */
 export class PositionRegion {
   constructor(
-    readonly cell: Cell,
+    readonly cell: Cell | PolygonCell,
     readonly edges: PositionInterval,
     readonly outline?: readonly (readonly [
       MaybeValue<number>,

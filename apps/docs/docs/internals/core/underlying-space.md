@@ -16,6 +16,9 @@ covers:
   - packages/gofish-graphics/src/ast/schema.ts
   - packages/gofish-graphics/src/ast/calendar.ts
   - packages/gofish-graphics/src/ast/cells.ts
+  - packages/gofish-graphics/src/ast/polygonCells.ts
+  - packages/gofish-graphics/src/ast/structExpr.ts
+  - packages/gofish-graphics/src/families/bin.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
   - packages/gofish-graphics/src/ast/shapes/region.tsx
   - packages/gofish-graphics/src/ast/constraints/folds.ts
@@ -2053,17 +2056,62 @@ wire, JS writes the two partitions, and the product form (which Python
 writes) rebuilds them. Empty cells are groups with no rows, as in 1D, so a
 count over one is 0 and is drawn.
 
-**Regions with an outline.** A region is a box today. A hexagon or a
-Voronoi cell (#1059 part B) is a box plus an outline, the same shape the
-`boundary` geometry query (#974) returns, but handed from parent to child.
-The channel carries it already: a `PositionRegion` may hold the cell's
-outline in data (`outline`, `[x, y]` per vertex, on both axes'
-coordinates), `buildChildRegions` maps it through both scales into the
-child's region, and the `region` mark draws a region's outline as a path
-when it has one, and its box otherwise. Nothing makes an outline yet. One
-step is left for later (a TODO in `buildChildRegions`): a child that gets a
-cell of its own does not inherit the outline of the region its layer was
-handed, which would need that outline clipped to the cell.
+**Regions with an outline.** A region may also hold an outline, the same
+shape the `boundary` geometry query (#974) returns, but handed from parent to
+child: a `PositionRegion` may hold the cell's outline in data (`outline`,
+`[x, y]` per corner, on both axes' coordinates), `buildChildRegions` maps it
+through both scales into the child's region, and the `region` mark draws a
+region's outline as a path when it has one, and its box otherwise (under a
+nonlinear coordinate space, resampled, so a hexagon in polar coordinates
+draws curved). The cells of a binned struct, below, are what make outlines.
+One step is left for later (a TODO in `buildChildRegions`): a child that
+gets a cell of its own does not inherit the outline of the region its layer
+was handed, which would need that outline clipped to the cell.
+
+### Cells of the plane: a binned struct
+
+A hexagon depends on two fields together, so a `.bin` on each field cannot
+express it. `struct({ x, y })` (`structExpr.ts`, after polars' `pl.struct`)
+is a key that reads two columns, one per axis, and `.bin(b)` bins it with a
+strategy of the `Bin` family (`families/bin.ts`): `Bin.hex({ radius })` or
+`Bin.voronoi({ seeds })`. Its type carries the same phantom flag as a field
+expression (`StructExpr<true>` once binned), so `partition` over an unbinned
+struct is a type error, and the split checks the wire form. The class's own
+fields are its wire form (`{ type: "struct", fields, ops? }`), so the
+instance and the object Python sends are read the same way.
+
+`splitEntries` hands a struct key to `structEntries`, which groups the rows
+by the cells of the plane (`polygonCells.ts`). A `PolygonCell` has an id, an
+outline in data, and the box that holds it, and no order. The cells are those
+of the two columns' domain, as in 1D, so every group of a nested split sees
+the same cells and empty cells are kept (a cache keyed by the domain, the bin
+object and the two columns).
+
+- **Hexagons.** A pointy-top grid (as in d3-hexbin, ggplot2's `geom_hex` and
+  Observable Plot) with a hexagon centered on (0, 0), so the grid does not
+  move with the data, as `{ step }` cells are aligned to multiples of the
+  step. The radius is in data units, one number or one per axis; a hexagon is
+  the unit hexagon scaled by the x radius on x and the y radius on y. A point
+  goes to the hexagon with the nearest center (axial coordinates and cube
+  rounding), so a point on an edge goes to one of its two hexagons, the same
+  one every time. The cells are every hexagon whose inside meets the box of
+  the domain (a separating-axis test over the box's two axes and the
+  hexagon's three edge normals), plus the hexagon of each domain point, since
+  a point on the box's edge may fall in a hexagon that only touches the box.
+- **Voronoi cells.** One cell per seed (d3-delaunay, over Delaunator),
+  clipped to the box that holds the domain and the seeds, so every seed has
+  a cell; seeds at one point share the first one's cell. A point goes to its
+  nearest seed (`Delaunay.find`). Distances are measured in data units, so
+  the cells mean something only when the two fields share a unit (longitude
+  and latitude, two lengths in millimeters).
+
+`partition`'s plane form gives each child one region constraint per axis,
+`Constraint.position({ x: region, y: region })`, each with the cell's box on
+that axis as its edges and the cell's outline. The boxes make the axes'
+domains, and since a polygon cell is no cell of one axis alone, each axis is a
+plain continuous axis (`collectPositionDomains` collects only a 1D `Cell`). A
+`region` draws the outline; any other mark is placed in the box, so a circle
+or a text sits at a hexagon's center.
 
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always

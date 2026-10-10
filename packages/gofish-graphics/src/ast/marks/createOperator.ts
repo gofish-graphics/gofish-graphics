@@ -56,6 +56,7 @@ import type {
 import { discretePosition, copyMeasureProvenance } from "../data";
 import { copyColumnTypes } from "../schema";
 import { Cell } from "../cells";
+import { PolygonCell } from "../polygonCells";
 import type { SplitKey } from "../datumProjection";
 import { fieldNameOf } from "../data";
 import type { MaybeValue, Value } from "../data";
@@ -1154,9 +1155,12 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             // (`ensureChildNames`) and ordinal domains rely on — never global.
             // A binned key (`field(x).bin(p)`) is a cell: the node's key is
             // its id, and the node keeps the cell itself for the ordinal
-            // space it folds into (`ORDINAL_TYPE.cells`).
+            // space it folds into (`ORDINAL_TYPE.cells`). A cell of the plane
+            // (`struct({ x, y }).bin(b)`) is keyed by its id too; it is no
+            // cell of one axis.
             const cell = i instanceof Cell ? i : undefined;
-            const currentKey: string | number = i instanceof Cell ? i.id : i;
+            const currentKey: string | number =
+              i instanceof Cell || i instanceof PolygonCell ? i.id : i;
             const leafNodes = await applyMark(
               mark,
               leaf as Datum | Datum[],

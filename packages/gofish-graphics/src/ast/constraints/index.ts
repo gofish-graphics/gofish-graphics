@@ -14,7 +14,7 @@ import {
   positionCalendar,
 } from "../underlyingSpace";
 import type { HasCalendar } from "../schema";
-import type { Cell } from "../cells";
+import { Cell } from "../cells";
 import type { PositionDomains } from "./compose";
 import * as Interval from "../../util/interval";
 import { createAlignConstraint } from "./align";
@@ -331,12 +331,15 @@ export function collectPositionDomains(
     const span = coordinateSpan(coord);
     return span !== undefined ? spanDatumInterval(span) : pointInterval(coord);
   };
-  // The cell a coordinate places in: a region's. A point or an interval
-  // places none.
+  // The cell a coordinate places in: a region's 1D cell. A point, an
+  // interval, or a cell of the plane (a hexagon: no cell of this axis
+  // alone) places none.
   const coordCell = (
     coord: NonNullable<PositionConstraint["x"]>
   ): readonly Cell[] | undefined =>
-    isPositionRegion(coord) ? [coord.cell] : undefined;
+    isPositionRegion(coord) && coord.cell instanceof Cell
+      ? [coord.cell]
+      : undefined;
   const xCells: (readonly Cell[] | undefined)[] = [];
   const yCells: (readonly Cell[] | undefined)[] = [];
   for (const c of constraints) {

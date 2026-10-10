@@ -26,8 +26,8 @@
  *
  * The outline is a polygon inside the box, for a region that is not a box (a
  * hexagon, a Voronoi cell). A `region` mark draws it; every other node places
- * itself by the box. Today nothing makes an outline yet: `Bin.hex` and
- * `Bin.voronoi` will (#1059 part B).
+ * itself by the box. A `partition` over a binned struct
+ * (`struct({ x, y }).bin(Bin.hex(...))`) gives each child its cell's outline.
  */
 export type Span = readonly [number, number];
 export type Point = readonly [number, number];

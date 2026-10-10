@@ -121,7 +121,8 @@ Three pieces:
    for the domain-op (`sort`/`reverse`/`bin`) semantics. `by`-string/function
    callers are unaffected — they carry no ops, so `splitEntries` reduces to
    the old `Map.groupBy` behavior. A key is a `SplitKey`: a value of the
-   field, or a `Cell` for a binned key (`field(x).bin(p)`), which stands for
+   field, a `Cell` for a binned key (`field(x).bin(p)`), or a `PolygonCell`
+   for a binned struct (`struct({ x, y }).bin(b)`), each of which stands for
    its id.
 3. **`channels`** (optional) — per-opt data-aware encodings. Same idea as
    `createMark`'s channels: `w: "size"` means the user can pass a field name,
