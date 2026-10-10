@@ -29,23 +29,35 @@ export const isPositionInterval = (
 ): coord is PositionInterval => Array.isArray(coord);
 
 /**
- * The **region** form of a position coordinate (#1059): the space a parent
- * gives a child on this axis, a cell of the key the parent grouped by (a
- * `partition`). The target is laid out in the cell's length and its center
- * sits on the cell's center. So a mark with no size of its own on this axis
- * (a rect, a `region`) fills the cell, and a mark with a size of its own (a
- * circle, a text) sits in the middle of it, at its own size. An interval
- * instead pins both edges, and so sets the target's size.
+ * The **region** form of a position coordinate (#1059): the cell of the key a
+ * `partition` grouped by, which the layer hands the target as the REGION it
+ * is laid out in (`geometry/region.ts`). It is not a pin. At layout the
+ * layer maps the cell's edges to a pixel span (`buildChildRegions`) and
+ * passes it in the target's layout call, and the target places itself in it:
+ * a mark with no size of its own on this axis (a rect, a `region`) fills the
+ * cell, and a mark with a size of its own (a circle, a text) sits in the
+ * middle of it. An interval instead pins both edges, and so sets the
+ * target's size whatever it is.
  *
  * `edges` are the cell's start and end as datums of the column it bins, so
  * they carry the column's measure and type (a time column's calendar) as any
- * datum read from it does. The cell tells an axis over such regions that it
- * places cells (`CONTINUOUS_TYPE.cells`).
+ * datum read from it does, and they make the layer's position domain on this
+ * axis. The cell tells an axis over such regions that it places cells
+ * (`CONTINUOUS_TYPE.cells`).
+ *
+ * `outline` is the cell's outline in data, `[x, y]` per vertex, for a cell
+ * that is not a box (a hexagon, a Voronoi cell). It is on both axes'
+ * coordinates of a two-axis cell; the layer maps it through both scales.
+ * Nothing makes one yet: `Bin.hex` and `Bin.voronoi` will (#1059 part B).
  */
 export class PositionRegion {
   constructor(
     readonly cell: Cell,
-    readonly edges: PositionInterval
+    readonly edges: PositionInterval,
+    readonly outline?: readonly (readonly [
+      MaybeValue<number>,
+      MaybeValue<number>,
+    ])[]
   ) {}
 }
 
@@ -78,10 +90,10 @@ export const coordinateSpan = (
  *   - an **interval** `[min, max]`: two edges that pin the target and DETERMINE
  *     its size (the size-setting range form; each endpoint is a pixel literal
  *     or a datum, never a discrete position); OR
- *   - a **region** ({@link PositionRegion}): a cell the target is laid out in
- *     and centered in.
+ *   - a **region** ({@link PositionRegion}): a cell the layer hands the target
+ *     as the region it lays itself out in.
  * The layer derives its POSITION domain from the datum coordinates of its
- * `position` constraints (point values plus interval endpoints). At least one
+ * `position` constraints (point values plus interval and region edges). At least one
  * of `x`/`y` is required.
  */
 export interface PositionOptions {
@@ -191,24 +203,9 @@ export function lowerPositionPlacement(
 ): void {
   const emit = (axis: Axis, coordinate: PositionCoordinate | undefined) => {
     if (coordinate === undefined) return;
-    // Region form: the target's center on the cell's center. Its size is its
-    // own, from a layout in the cell's length (`buildSpanProposalMap`). Not
-    // gated by `isInitiallyPlaced`: a region places the target outright.
-    if (isPositionRegion(coordinate)) {
-      const min = resolveCoordinate(axis, coordinate.edges[0]);
-      const max = resolveCoordinate(axis, coordinate.edges[1]);
-      if (min === undefined || max === undefined) return;
-      for (const child of constraint.children) {
-        if (!targets.get(child.name)) continue;
-        emitter.pin({
-          axis,
-          target: { name: child.name, anchor: "middle" },
-          value: (min + max) / 2,
-          owner,
-        });
-      }
-      return;
-    }
+    // Region form: nothing to pin. The layer handed the target the region in
+    // its layout call, and the target placed itself there.
+    if (isPositionRegion(coordinate)) return;
     // Interval form: pin BOTH edges (start=min, end=max) as strong anchor pins.
     // Two edges are rank 2, so cell closure determines the size — the extent
     // that a size-setting range needs, which a single point pin cannot express.

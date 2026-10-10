@@ -34,31 +34,32 @@ import type { Alignment } from "./alignment";
  * the chart's data, empty ones included, so an empty cell keeps its place: it
  * is a group with no rows, and it is still placed.
  *
- * **How a child gets its region.** The cell reaches the child as a position
- * constraint that takes a region, `Constraint.position({ [dir]: region })`
- * ({@link PositionRegion}). The layer lays the child out in the cell's length
- * (its size proposal) and puts the child's center on the cell's center. So a
- * mark with no size along `dir` (a `rect`, a `region`) fills its cell, and a
- * mark with a size of its own (a circle, a text) sits in the middle of it. On
- * the other axis the child gets the whole space and is aligned by
- * `alignment`, as in `scatter`. The region's cell also tells the axis that it
- * places cells. There is no layout code of its own: it is a layer with one
- * position constraint per child and one align.
+ * **How a child gets its region.** Each child is handed a REGION in its
+ * layout call, with its size proposal (#1059, `geometry/region.ts`): the
+ * region this partition was itself handed, cut down to the child's cell on
+ * `dir`. The cell is stated as a position constraint that takes a region,
+ * `Constraint.position({ [dir]: region })` ({@link PositionRegion}), which
+ * also makes the axis's domain and tells the axis that it places cells; the
+ * layer turns it into the child's region (`buildChildRegions`). The child is
+ * laid out in its region's length and places itself in it: a mark with no
+ * size of its own (a `rect`, a `region`) fills its cell, and a mark with a
+ * size of its own (a circle, a text) sits in the middle of it.
  *
- * **The product form**, `by: { x, y }`, is two nested 1D partitions, x then
- * y, with the inner one centering its children on x (alignment `"middle"`).
- * It is built by that rewrite (`compose`), so it adds no behavior of its own,
- * and on the wire it is those two partitions. A child then gets a rectangle:
- * its y cell from the inner partition, and its x cell from the outer one,
- * which centers the inner partition's box in it. The inner partition's box
- * is as wide as its widest child, so its children, centered on one line, are
- * each centered in the x cell. The outer partition keeps the default
- * alignment, which leaves the inner partitions where their y cells put
- * them (a `"middle"` alignment would center their boxes instead).
+ * On the other axis a top-level partition gives no span, so there the
+ * children are aligned by `alignment`, as in `scatter` (bars stand on a
+ * shared baseline). A partition inside another partition's cell gives each
+ * child that cell on the other axis too, so the child sits in a rectangle,
+ * and `alignment` has nothing left to move. That is why nested 1D partitions
+ * place their children the same way in either order. There is no layout code
+ * of its own: it is a layer with one position constraint per child and one
+ * align.
+ *
+ * **The product form**, `by: { x, y }`, is the two nested 1D partitions, x
+ * then y. It is built by that rewrite (`compose`), so it adds no behavior of
+ * its own, and on the wire it is those two partitions.
  *
  * A region is a box today. A hexagon or a Voronoi cell (#1059 part B) also
- * needs its outline to reach the child; see `PositionRegion` for where it
- * goes.
+ * gives the child its outline, through `PositionRegion.outline`.
  */
 type PartitionCommon = {
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
@@ -73,13 +74,13 @@ export type PartitionAxisOptions = PartitionCommon & {
    *  name the enclosing coordinate space declares (`theta`/`r` in polar). */
   dir: AxisName;
   /** Cross-axis alignment of the children (the axis the cells do not
-   *  divide). */
+   *  divide), where nothing gives them a cell on that axis. */
   alignment?: Alignment;
 };
 
 /** The product form: divide both axes, one key per axis, as `table` takes
  *  them. The same as `partition({ by: by.x, dir: "x" })` then
- *  `partition({ by: by.y, dir: "y", alignment: "middle" })`. */
+ *  `partition({ by: by.y, dir: "y" })`. */
 export type PartitionProductOptions = PartitionCommon & {
   by: { x: FieldExpr<true>; y: FieldExpr<true> };
   dir?: never;
@@ -214,8 +215,7 @@ const isProductKey = (by: unknown): by is PartitionProductOptions["by"] =>
  *
  * - `partition({ by: field(x).bin(p), dir })` divides one axis.
  * - `partition({ by: { x: field(a).bin(p), y: field(b).bin(q) } })` divides
- *   both: it is the 1D partition on x, then the 1D partition on y centering
- *   its children on x.
+ *   both: it is the 1D partition on x, then the 1D partition on y.
  *
  * It has only the operator form: its children are the groups of its key, so
  * there is no list of children to pass it.
@@ -251,10 +251,10 @@ export function partition(
   if (dir !== undefined || alignment !== undefined)
     throw new Error(
       "partition: a `by` keyed by axis divides both axes, so `dir` and " +
-        "`alignment` do not apply. Each child is centered in its cell."
+        "`alignment` do not apply. Each child is placed in its cell."
     );
   return compose(
     partitionOperator({ ...rest, by: by.x, dir: "x" }),
-    partitionOperator({ ...rest, by: by.y, dir: "y", alignment: "middle" })
+    partitionOperator({ ...rest, by: by.y, dir: "y" })
   );
 }

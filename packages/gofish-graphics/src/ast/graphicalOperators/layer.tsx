@@ -76,6 +76,7 @@ import {
   buildLayerConstraintLayoutPlan,
   buildPositionScalePlan,
   buildSpanProposalMap,
+  buildChildRegions,
   childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
@@ -500,7 +501,7 @@ export const layer = createNodeOperatorSequential(
           }
           return resolved;
         },
-        layout: (shared, size, scales, children, node) => {
+        layout: (shared, size, scales, children, node, region) => {
           // This layer's y direction: its children and constraints are read
           // in this axis order (see `axisDirection.ts`).
           const direction = node.yFrame.direction;
@@ -653,6 +654,14 @@ export const layer = createNodeOperatorSequential(
             node.constraints,
             effectivePosScales
           );
+          // The region each child is handed (#1059): its cell, and on the
+          // other axis the region this layer was given. A child is laid out
+          // in its region's length, and places itself in it.
+          const childRegions = buildChildRegions(
+            node.constraints,
+            effectivePosScales,
+            region
+          );
 
           // Where a child's baseline goes on each axis (#773), by the one
           // seating rule (`seatInScope`) in this layer's frame. A free child
@@ -744,13 +753,18 @@ export const layer = createNodeOperatorSequential(
             // derived). Clamp ≥ 0; non-derived axes keep the normal child
             // proposal, so nest composes with — and wins on its derived axes
             // over — any budget slice.
+            const childRegion =
+              childName !== undefined
+                ? childRegions?.byName.get(childName)
+                : undefined;
             const layoutSize = applyNestLayoutProposal(
               childLayoutSizeProposal(
                 childName,
                 size,
                 gridCellByName,
                 sliceByName,
-                spanByName
+                spanByName,
+                childRegion
               ),
               layoutPlan.nestPlan?.byDerived.get(i),
               childPlaceables
@@ -767,10 +781,14 @@ export const layer = createNodeOperatorSequential(
               effectivePosScales
             );
             childFrames[i] = layoutSize[1];
-            const childPlaceable = child.layout(layoutSize, [
-              axisScale(childScaleFactors[0], childMaps[0]),
-              axisScale(childScaleFactors[1], childMaps[1]),
-            ]);
+            const childPlaceable = child.layout(
+              layoutSize,
+              [
+                axisScale(childScaleFactors[0], childMaps[0]),
+                axisScale(childScaleFactors[1], childMaps[1]),
+              ],
+              childRegion
+            );
             if (!constrainedChildren.has(i)) {
               const [bx, by] = baselineFor(childPlaceable, i);
               childPlaceable.place("x", bx, "baseline");
@@ -894,6 +912,16 @@ export const layer = createNodeOperatorSequential(
               }
             }
 
+            // Which (child, axis) the region it was handed placed (#1059).
+            const regionPlaced: [Set<string>, Set<string>] = [
+              new Set(),
+              new Set(),
+            ];
+            for (const [name, r] of childRegions?.byName ?? []) {
+              for (const axis of [0, 1] as const)
+                if (r.spans[axis] !== undefined) regionPlaced[axis].add(name);
+            }
+
             applyConstraints(
               node.constraints,
               nameToPlaceable,
@@ -902,7 +930,8 @@ export const layer = createNodeOperatorSequential(
               gridTracks,
               dataPositioned,
               rigid,
-              freeOrigin
+              freeOrigin,
+              regionPlaced
             );
 
             // Place any child the constraints left unplaced at its baseline
@@ -943,8 +972,15 @@ export const layer = createNodeOperatorSequential(
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
 
-          const translateY =
-            dims[1].min !== undefined ? dims[1].min - minY : undefined;
+          // On an axis where this layer passed its own region on to a child,
+          // it sits at its parent's origin: the region is measured from there
+          // (`buildChildRegions`), and so is where the child placed itself.
+          const translate = (axis: 0 | 1, min: number): number | undefined =>
+            childRegions?.forwards[axis]
+              ? 0
+              : dims[axis].min !== undefined
+                ? dims[axis].min - min
+                : undefined;
 
           return {
             // Store only the local box `(min, size)`; the `dims` getter derives
@@ -957,10 +993,7 @@ export const layer = createNodeOperatorSequential(
               { min: minY, size: maxY - minY },
             ],
             transform: {
-              translate: [
-                dims[0].min !== undefined ? dims[0].min - minX : undefined,
-                translateY,
-              ],
+              translate: [translate(0, minX), translate(1, minY)],
               scale: [scaleX, scaleY],
             },
           };

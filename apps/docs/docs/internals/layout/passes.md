@@ -11,6 +11,7 @@ covers:
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
+  - packages/gofish-graphics/src/ast/geometry/region.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/pack.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/overlap.ts
   - packages/gofish-graphics/src/ast/constraints/overlap.ts
@@ -618,6 +619,33 @@ For a bar chart rectangle, the layout function:
    ```
 
 The `intrinsicDims` represent the element's box in its local coordinate system (with min typically at 0, or at the negative endpoint of a negative bar), while `transform.translate` positions it in the parent's coordinate system. The node's `dims` compose the two exactly once (`combineDims`: `min = local min + translate`), so a layout must never fold its translate into `intrinsicDims.min` as well; doing so counts the offset twice (#755).
+
+#### The region a parent hands a child
+
+A parent can hand a child a **region** with its size proposal:
+`child.layout(size, scales, region)` (#1059, `src/ast/geometry/region.ts`).
+It is the top-down twin of the geometry queries below: a span `[min, max]`
+per axis, either of which may be missing, plus an optional closed outline,
+measured from the parent's origin as a `translate` is.
+
+- `GoFishNode.layout` reads the region into the node's own axis order
+  (reflecting y when the node and its parent run opposite ways) and passes
+  it to the node's `_layout` as a sixth argument.
+- After `_layout`, on each axis where the region has a span and the node did
+  not place itself, `GoFishNode.layout` centers the node in the span. The
+  parent proposed the span's length as the node's size, so a node with no
+  size of its own there (a `rect` with no `w`) fills the span, and any other
+  node keeps its size and sits in the middle.
+- A `region` mark places itself by the region (it is its spans) and draws the
+  outline as a path when there is one, else its box.
+- A `layer` builds its children's regions from its `PositionRegion`
+  coordinates and from the region it was itself handed
+  (`buildChildRegions`). On an axis where it passes its own region on, it
+  sits at its parent's origin, so the region needs no conversion.
+
+Today only `partition` makes regions (see
+[Underlying Space](/internals/core/underlying-space#partition-each-group-in-its-cell)),
+and every region is a box.
 
 #### Shape geometry after layout
 

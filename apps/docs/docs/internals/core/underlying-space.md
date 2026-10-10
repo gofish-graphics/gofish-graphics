@@ -657,10 +657,10 @@ composes its targets' spaces into the layer's claim on that axis:
   forms of `Constraint.position`: plain `x`/`y` → a point coordinate, range
   `xMin`/`xMax`/`yMin`/`yMax` → an interval coordinate (the operator no longer
   has a bespoke layout). A third form, the **region** coordinate
-  (`PositionRegion`, #1059), is what `partition` uses: the same size
-  proposal, but only one pin, the target's center on the region's center, so
-  the target keeps the size its layout gave it (see
-  [Partition](#partition-each-group-in-its-cell)). A categorical
+  (`PositionRegion`, #1059), is what `partition` uses. It is not a pin: the
+  layer turns it into the region it hands the target in its layout call,
+  and the target places itself there, keeping the size its layout gave it
+  (see [Partition](#partition-each-group-in-its-cell)). A categorical
   scatter channel such as `x: "lake"` lowers to discrete placement coordinates
   `i / count · axisSize`; those are placement coordinates, not datum values, so
   they become numeric placement facts without affecting the layer's data domain.
@@ -1997,14 +1997,33 @@ checks the wire form from Python with an error that names the fix.
 It has no layout code of its own. It is a layer with one region `position`
 constraint per child on `dir` (`Constraint.position({ [dir]: region })`,
 with a `PositionRegion` per cell) and one `align` on the other axis, as in
-a scatter. The region is how a parent hands a child its space: the cell's
-pixel length is the child's size proposal (`buildSpanProposalMap`, as for
-an interval), and one pin puts the child's center on the cell's center. So a
-`rect` or a `region` with no size there fills its cell, a `stack` or
-`spread` inside a cell divides the cell, and a circle or a text keeps its
-own size and sits in the middle of the cell. An interval would pin both
-edges instead, which sets the child's size and would stretch a circle into
-an ellipse.
+a scatter.
+
+**Regions flow down in the layout call.** A region is the space a parent
+gives a child, and it travels with the size proposal:
+`child.layout(size, scales, region)` (`geometry/region.ts`). A region is a
+span `[min, max]` per axis, either of which may be missing, plus an optional
+outline, measured from the parent's origin in the axis order of whoever
+holds it (`GoFishNode.layout` reflects it into the child's own order when
+the two y directions differ). The layer builds each child's region in
+`buildChildRegions` (`constraints/proposalPlan.ts`): on an axis where the
+child has a `PositionRegion`, the cell's two edges mapped to pixels; on an
+axis where it has none, the region the layer itself was handed there, if
+any. Each region bounds a different axis, so that is their intersection. The
+child is proposed each span's length as its size (`childLayoutSizeProposal`)
+and then places itself in the span: a node whose own layout did not place it
+on that axis is centered there by `GoFishNode.layout`. So a `rect` or a
+`region` with no size there fills its cell, a `stack` or `spread` inside a
+cell divides the cell, and a circle or a text keeps its own size and sits in
+the middle of the cell. An interval would pin both edges instead, which sets
+the child's size and would stretch a circle into an ellipse. The region
+coordinate itself lowers to no placement fact: its target is already placed
+when the solve runs, and an `align` over targets their regions placed says
+nothing (`isRegionPlaced`, `constraints/align.ts`).
+
+A layer that hands a child its own region on some axis sits at its parent's
+origin on that axis (translate 0, `buildChildRegions`' `forwards`), so the
+region means the same thing in its frame as in its parent's.
 
 The region holds its cell and the cell's two edges. Each edge is a datum
 that carries what the column says about its values (its measure, and its
@@ -2018,31 +2037,33 @@ partition and labels each cell between its two boundary ticks
 ([Axes](/internals/frontend/axes)). A numeric axis over numeric cells keeps
 its round-number ticks.
 
-The region a child gets is its cell's interval on `dir` and the whole space
-on the other axis. Two nested 1D partitions, one per axis, give each leaf
-the same rectangle in either order; only the order of the children
-differs.
+A top-level partition hands each child its cell on `dir` and no span on the
+other axis, where `alignment` places the children (bars on a shared
+baseline). Inside another partition's cell, a partition hands each child
+that cell on the other axis as well, so the child sits in a rectangle and
+`alignment` has nothing left to move. That is why two nested 1D partitions,
+one per axis, place each leaf the same way in either order; only the order
+of the children differs (`cells.test.ts` checks this for regions, rects,
+circles, and texts of different widths).
 
 **The product form.** `partition({ by: { x, y } })` divides both axes. It is
-defined as the 1D partition on x, then the 1D partition on y with alignment
-`"middle"`, and it is built by that rewrite (`compose`), so it adds no
-layout of its own. On the wire, JS writes the two partitions, and the
-product form (which Python writes) rebuilds them. A leaf gets a rectangle:
-its y cell from the inner partition, and its x cell through the inner
-partition's box, which the outer partition centers in the x cell. The inner
-partition's box is as wide as its widest child, and the inner partition
-centers its children on one line, so each child is centered in its x cell.
-The outer partition keeps the default alignment, which leaves the inner
-partitions where their y cells put them; a `"middle"` alignment there would
-center their boxes instead. Empty cells are groups with no rows, as in 1D,
-so a count over one is 0 and is drawn.
+defined as the 1D partition on x, then the 1D partition on y, and it is
+built by that rewrite (`compose`), so it adds no layout of its own. On the
+wire, JS writes the two partitions, and the product form (which Python
+writes) rebuilds them. Empty cells are groups with no rows, as in 1D, so a
+count over one is 0 and is drawn.
 
 **Regions with an outline.** A region is a box today. A hexagon or a
 Voronoi cell (#1059 part B) is a box plus an outline, the same shape the
 `boundary` geometry query (#974) returns, but handed from parent to child.
-It is one region on both axes rather than one interval per axis, and the
-`region` mark has to draw its outline, so the outline has to reach the
-child's layout with its size proposal. That step is not built yet.
+The channel carries it already: a `PositionRegion` may hold the cell's
+outline in data (`outline`, `[x, y]` per vertex, on both axes'
+coordinates), `buildChildRegions` maps it through both scales into the
+child's region, and the `region` mark draws a region's outline as a path
+when it has one, and its box otherwise. Nothing makes an outline yet. One
+step is left for later (a TODO in `buildChildRegions`): a child that gets a
+cell of its own does not inherit the outline of the region its layer was
+handed, which would need that outline clipped to the cell.
 
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always

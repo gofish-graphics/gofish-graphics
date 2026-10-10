@@ -434,10 +434,10 @@ async function main() {
 
     // Nested 1D partitions give the same regions in either order.
     const pts = [
-      { a: 0.5, b: 0.2 },
-      { a: 0.7, b: 1.7 },
-      { a: 2.2, b: 0.4 },
-      { a: 1.1, b: 2.9 },
+      { a: 0.5, b: 0.2, name: "a" },
+      { a: 0.7, b: 1.7, name: "bbbbbbbb" },
+      { a: 2.2, b: 0.4, name: "cc" },
+      { a: 1.1, b: 2.9, name: "dddd" },
     ];
     const grid = async (first: "x" | "y") => {
       const px = partition({ by: distField("a").bin({ step: 1 }), dir: "x" });
@@ -459,8 +459,10 @@ async function main() {
       `${xy.join(" ")}\n      vs ${yx.join(" ")}`
     );
 
-    // The product form (#1059) is the nested form: x, then y centering its
-    // children on x. Same cells, same marks, whatever the mark.
+    // The product form (#1059) is the nested form, x then y, with nothing
+    // added. And hand-nested partitions give the same marks in either order,
+    // whatever the mark: each child gets the region its outer partition gave
+    // its inner one, cut down to its own cell (#1059).
     const itemsOf = (dl: any): any[] => {
       const out: any[] = [];
       const walk = (it: any) => {
@@ -479,6 +481,8 @@ async function main() {
       dl.items.forEach(walk);
       return out;
     };
+    const sorted = (items: any[]) =>
+      items.map((it) => JSON.stringify(it)).sort();
     const ab = {
       x: distField("a").bin({ step: 1 }),
       y: distField("b").bin({ step: 1 }),
@@ -490,27 +494,38 @@ async function main() {
           .mark(mark)
           .toDisplayList({ w: 300, h: 300 })
       );
-    const nested = async (mark: any) =>
-      itemsOf(
+    const nested = async (mark: any, first: "x" | "y") => {
+      const px = partition({ by: ab.x, dir: "x" });
+      const py = partition({ by: ab.y, dir: "y" });
+      return itemsOf(
         await chart(pts, noAxes)
-          .flow(
-            partition({ by: ab.x, dir: "x" }),
-            partition({ by: ab.y, dir: "y", alignment: "middle" })
-          )
+          .flow(...(first === "x" ? [px, py] : [py, px]))
           .mark(mark)
           .toDisplayList({ w: 300, h: 300 })
       );
+    };
     for (const [name, mark] of [
       ["region", () => region({ fill: "steelblue" })],
+      ["rect", () => rect({ fill: "steelblue" })],
+      ["rect with a size", () => rect({ w: 10, h: 20 })],
       ["circle", () => circle({ r: 5 })],
       ["text", () => text({ text: distField("a").count() })],
+      // Children of different sizes in one column: each is centered in its
+      // own cell, not aligned with the others on their left edges.
+      ["texts of different widths", () => text({ text: distField("name") })],
     ] as const) {
       const p = await product(mark());
-      const n = await nested(mark());
+      const xFirst = await nested(mark(), "x");
+      const yFirst = await nested(mark(), "y");
       check(
         `the product form draws what the nested form draws (${name})`,
-        p.length === 9 && same(p, n),
-        `${JSON.stringify(p)}\n      vs ${JSON.stringify(n)}`
+        p.length > 0 && same(p, xFirst),
+        `${JSON.stringify(p)}\n      vs ${JSON.stringify(xFirst)}`
+      );
+      check(
+        `nested partitions draw the same in either order (${name})`,
+        xFirst.length > 0 && same(sorted(xFirst), sorted(yFirst)),
+        `${sorted(xFirst).join(" ")}\n      vs ${sorted(yFirst).join(" ")}`
       );
     }
 
@@ -550,6 +565,23 @@ async function main() {
             Math.abs((c.cy - y0 - 50) % 100) < 1e-6
         ),
       JSON.stringify(circles)
+    );
+    const named = (await product(text({ text: distField("name") }))).filter(
+      (t) => t.kind === "text"
+    );
+    // The first column holds "a", "bbbbbbbb", and an empty cell's "". Their
+    // left edges differ, and their centers agree, for any width per letter.
+    const column = named.filter((t) => t.x < x0 + 100);
+    const leftOf = (word: string) => column.find((t) => t.text === word)?.x;
+    const halfLetter = (leftOf("a")! - leftOf("bbbbbbbb")!) / (8 - 1);
+    check(
+      "texts of different widths in one column each sit at their cell's center",
+      column.length === 3 &&
+        halfLetter > 0 &&
+        column.every(
+          (t) => Math.abs(t.x + halfLetter * t.text.length - (x0 + 50)) < 1e-6
+        ),
+      JSON.stringify(column)
     );
     const fixed1D = rectsOf(
       await chart(pts, noAxes)

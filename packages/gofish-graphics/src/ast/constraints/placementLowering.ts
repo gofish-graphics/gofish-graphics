@@ -20,7 +20,11 @@ import type { NestConstraint } from "./nest";
 import { lowerNestPlacement } from "./nest";
 import { PlacementProgramLowerer } from "./placementProgramLowerer";
 import type { PositionConstraint } from "./position";
-import { coordinateSpan, lowerPositionPlacement } from "./position";
+import {
+  isPositionInterval,
+  isPositionRegion,
+  lowerPositionPlacement,
+} from "./position";
 import {
   axisIndex,
   axisName,
@@ -71,6 +75,7 @@ class PlacementOwnershipPlan {
   private readonly initiallyPlaced = new Set<string>();
   private readonly positionPinned = new Set<string>();
   private readonly dataPositionedSet: [Set<string>, Set<string>];
+  private readonly regionPlacedSet: [Set<string>, Set<string>];
   private readonly sizes: [number, number];
 
   constructor(
@@ -78,10 +83,12 @@ class PlacementOwnershipPlan {
     constraints: PlacementConstraint[],
     posScales: ConstraintPosScales | undefined,
     sizes: [number, number],
-    dataPositioned?: [Set<string>, Set<string>]
+    dataPositioned?: [Set<string>, Set<string>],
+    regionPlaced?: [Set<string>, Set<string>]
   ) {
     this.sizes = sizes;
     this.dataPositionedSet = dataPositioned ?? [new Set(), new Set()];
+    this.regionPlacedSet = regionPlaced ?? [new Set(), new Set()];
     for (const [name, target] of targets) {
       for (const axis of AXIS_INDICES) {
         if (target.dims[axis].min !== undefined)
@@ -113,6 +120,15 @@ class PlacementOwnershipPlan {
     return this.dataPositionedSet[axis].has(name);
   }
 
+  /** Whether this (node, axis) was placed by the region its layer handed it
+   *  in its layout call (a `partition`'s cell, or the cell the partition was
+   *  itself given, `buildChildRegions`). Collected at the layer boundary and
+   *  handed in, like the data-positioned sets. The region owns the axis, so
+   *  an `align` over such targets has nothing to do and says nothing. */
+  isRegionPlaced(axis: 0 | 1, name: string): boolean {
+    return this.regionPlacedSet[axis].has(name);
+  }
+
   shouldPinSelfPlacement(axis: 0 | 1, name: string): boolean {
     const key = placementKey(axisName(axis), name);
     return this.initiallyPlaced.has(key) && !this.authoritative.has(key);
@@ -135,13 +151,14 @@ class PlacementOwnershipPlan {
       const coordinate = constraint[axis];
       if (coordinate === undefined) continue;
       const idx = axisIndex(axis);
-      // An interval pins BOTH edges, and a region the center between its
+      // A region pins nothing: its target placed itself in the region it was
+      // handed at layout, so it is initially placed. An interval pins BOTH
       // edges — mark its children pinned when the edges resolve (an align
       // sources such a target). A point pins one anchor.
-      const span = coordinateSpan(coordinate);
-      if (span !== undefined) {
-        const min = compilePlacementCoordinate(span[0], posScales?.[idx]);
-        const max = compilePlacementCoordinate(span[1], posScales?.[idx]);
+      if (isPositionRegion(coordinate)) continue;
+      if (isPositionInterval(coordinate)) {
+        const min = compilePlacementCoordinate(coordinate[0], posScales?.[idx]);
+        const max = compilePlacementCoordinate(coordinate[1], posScales?.[idx]);
         if (min === undefined || max === undefined) continue;
       } else {
         const value = compilePlacementCoordinate(
@@ -164,7 +181,8 @@ export function lowerPlacementConstraints(
   sizes: [number, number],
   posScales?: ConstraintPosScales,
   gridTracks?: [TrackLayout, TrackLayout],
-  dataPositioned?: [Set<string>, Set<string>]
+  dataPositioned?: [Set<string>, Set<string>],
+  regionPlaced?: [Set<string>, Set<string>]
 ): LoweredPlacement {
   // A `position` pin on a grid cell overrides that cell's track centering on the
   // pinned axis (the authoritative-pin pattern) — collect which (cell, axis) a
@@ -185,7 +203,8 @@ export function lowerPlacementConstraints(
     constraints,
     posScales,
     sizes,
-    dataPositioned
+    dataPositioned,
+    regionPlaced
   );
 
   const lowerer = new PlacementProgramLowerer(targets);
@@ -196,6 +215,7 @@ export function lowerPlacementConstraints(
   const isInitiallyPlaced = ownership.isInitiallyPlaced.bind(ownership);
   const isPinned = ownership.isPinned.bind(ownership);
   const isDataPositioned = ownership.isDataPositioned.bind(ownership);
+  const isRegionPlaced = ownership.isRegionPlaced.bind(ownership);
 
   // A node that self-placed during its own layout is a hard boundary condition,
   // except where an authoritative position constraint explicitly owns the axis.
@@ -234,6 +254,7 @@ export function lowerPlacementConstraints(
           posScales,
           isPinned,
           isDataPositioned,
+          isRegionPlaced,
         });
         return;
       case "distribute":

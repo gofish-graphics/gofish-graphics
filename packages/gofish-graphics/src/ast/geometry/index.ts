@@ -27,3 +27,5 @@ export {
   translateCircle,
 } from "./enclosingCircle";
 export type { Circle, HasEnclosingCircle } from "./enclosingCircle";
+export { reflectRegionY, hasSpan } from "./region";
+export type { Region, Span, Point } from "./region";
