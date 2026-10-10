@@ -185,6 +185,28 @@ async function main() {
     );
   }
 
+  console.log("# a bare render with no chart draws its continuous axes");
+  {
+    // The root places its content at a literal pixel, which detaches it, so
+    // the root's type is undefined on both axes. The content's data is
+    // continuous and no chart claims it, so the render (with no chart)
+    // draws its axes where its σ is solved: around the content. Before, no
+    // continuous axis was drawn.
+    const content = (layer as any)([
+      (rect as any)({ x: v(0), y: v(10), w: 10, h: 2 }),
+      (rect as any)({ x: v(40), y: v(50), w: 10, h: 2 }),
+    ]).name("content");
+    const node = (layer as any)([content]).relate(({ content }: any) => [
+      Constraint.position({ x: 0, y: 0 }, [content]),
+    ]);
+    const dl = await toDisplayList(node, { w: 200, h: 200, axes: true });
+    const ticks = (w: number, h: number) =>
+      items(dl).filter((i) => i.kind === "rect" && i.w === w && i.h === h)
+        .length;
+    check("a detached content's y axis is drawn", ticks(4, 1) > 1, ticks(4, 1));
+    check("a detached content's x axis is drawn", ticks(1, 4) > 1, ticks(1, 4));
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

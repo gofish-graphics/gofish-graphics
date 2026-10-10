@@ -958,12 +958,31 @@ export class GoFishNode {
    * size of its own on `dim` draws them around itself (its σ is solved above
    * it, at the sized node that contains it); a chart with a size of its own
    * draws them around its content, inside the box it solves σ in. The render
-   * root is the outermost boundary: it draws the axes of the domains it
-   * solves, a bare low-level render's included. No other node draws one.
+   * root is the outermost boundary: it draws the axes of the domains its own
+   * type covers, a bare low-level render's included. Outside every chart it
+   * also stands in for a chart over the continuous keyed domains in its
+   * subtree that no chart claims: a domain its type does not cover (its
+   * content is detached, so its type there is undefined) is drawn by the
+   * root-most node that holds it with no chart above it or below it (the
+   * caller's `claimed` check picks the root-most), which is where that
+   * domain's σ is solved. A node with a chart below it leaves the chart's
+   * domains to the chart. No other node draws one.
    */
   private isAxisBoundary(dim: 0 | 1): boolean {
     if (this._chartBox !== undefined) return !this._chartBox[dim];
-    return this.parent === undefined || this.isSizedChartContent(dim);
+    if (this.parent === undefined || this.isSizedChartContent(dim)) return true;
+    for (
+      let p: GoFishNode | undefined = this.parent;
+      p !== undefined;
+      p = p.parent
+    )
+      if (p._chartBox !== undefined) return false;
+    const hasChart = (n: GoFishNode): boolean =>
+      n.children.some(
+        (c) =>
+          c instanceof GoFishNode && (c._chartBox !== undefined || hasChart(c))
+      );
+    return !hasChart(this);
   }
 
   /**

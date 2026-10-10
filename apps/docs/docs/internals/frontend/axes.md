@@ -449,7 +449,15 @@ rule: a chart with no size of its own on a dim draws the axis around itself
 its own (`_chartBox`, set by the chart builder) draws it around its content,
 inside the box it solves σ in, and its content's free baseline is placed there
 (`placedSpace`); the render root is the outermost boundary, which draws the
-axes of the domains it solves, a bare low-level render's included. A
+axes of the domains it solves, a bare low-level render's included. Outside
+every chart the render root stands in for one: it claims the continuous keyed
+domains in its subtree that no chart claims. A domain its own type does not
+cover (its content is detached by a literal `position`, so its type is
+undefined there) is drawn by the root-most node that holds it with no chart
+above it or below it, which is where that domain's σ is solved. A node with a
+chart below it leaves that chart's domains to the chart. An ordinal axis the root
+draws on a dim still owns that dim, so a continuous level below it waits for
+hierarchical axes (#1115). A
 `.layer(...)` chart is one chart: the root tier's box (its `w`/`h` and its
 `coord`) is hoisted over the stack of tiers (`LayerBuilder.resolve`), so every
 tier's marks and the axis map with the σ that box solves. No other node claims a continuous axis, so a
