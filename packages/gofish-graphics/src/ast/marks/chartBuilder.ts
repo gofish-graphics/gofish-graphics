@@ -152,23 +152,26 @@ function collectLayerRegistrations(
  * node-unit way: NO flattening of array data, NO datum spreading, NO `__ref`
  * on plain objects.
  *
+ * Either way the result is a list of refs, as all data is a list:
+ *
  * - A non-string selection (token / path-array / node-backed ref) is a direct
- *   reference: it passes through unchanged as a single ref (and `selectAll`
- *   over one is an error — it requires a string layer name).
+ *   reference: the list of that one ref (and `selectAll` over one is an
+ *   error — it requires a string layer name).
  * - A string selection looks up the named layer. `multiplicity === "all"`
- *   (from `selectAll`) yields the full `GoFishRef[]`; the singular form yields
- *   the one matching `GoFishRef`, throwing if the layer matched zero or more
- *   than one node.
+ *   (from `selectAll`) yields a ref per matching node; the singular `ref`
+ *   yields the list of the one matching ref, throwing if the layer matched
+ *   zero or more than one node. Being singular is a check on how many nodes
+ *   match, not a different data shape.
  */
 export function resolveRefData(
   r: GoFishRef,
   layerContext: LayerContext
-): GoFishRef | GoFishRef[] {
+): GoFishRef[] {
   if (typeof r.selection !== "string") {
     if (r.multiplicity === "all") {
       throw new Error("selectAll requires a string layer name");
     }
-    return r;
+    return [r];
   }
 
   const layer = layerContext[r.selection];
@@ -191,23 +194,23 @@ export function resolveRefData(
       `ref("${r.selection}") matched ${refs.length} nodes; use selectAll("${r.selection}").`
     );
   }
-  return refs[0];
+  return refs;
 }
 
 /**
- * True when chart data is already a bag of refs — a single `GoFishRef`
- * (`ref(...)`/`selectAll(...)` used as chart data) or a non-empty array of
- * them (`LayerBuilder.resolve()`'s `withData(prevRefs)` shape: one resolved
- * ref per node the previous tier named). Names the "data is already refs,
- * nothing to anchor" concept for `mark()`'s blank-fusion guard. Any NEW
- * refs-bag shape `LayerBuilder` (or `selectAll`) starts producing must be
- * added HERE, not at call sites.
+ * True when the chart was built over a selection — `chart(ref(...))` or
+ * `chart(selectAll(...))` — so its data is drawn nodes, with nothing to
+ * anchor. Names that concept for the blank-fusion guards (`hasOwnFlow`).
+ *
+ * This reads the `chart(...)` ARGUMENT, a selection object or rows, never
+ * the items of a list. The other refs bags (`LayerBuilder.resolve()`'s
+ * `withData(prevRefs)`, a layer combinator's `withData(d)`) reach a tier
+ * only at resolve time, after the build-time `.mark()`/`.layer()` calls
+ * that consult this guard; an empty-scope tier they bind is caught by
+ * `usesPreviousLayerMarks()` instead.
  */
 function dataIsRefs(data: unknown): boolean {
-  return (
-    data instanceof GoFishRef ||
-    (Array.isArray(data) && data.length > 0 && data[0] instanceof GoFishRef)
-  );
+  return data instanceof GoFishRef;
 }
 
 /* ---- Default grouping for relational marks in a flow (issue #752) ----
@@ -861,9 +864,9 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
 
   /** True when this builder was built from genuine row data flowing through
    *  its own operators — i.e. NOT an empty-scope `Chart()` tier
-   *  (`usesPreviousLayerMarks()`) and NOT already a refs bag (`dataIsRefs`,
-   *  e.g. `chart(selectAll(...))` or
-   *  `LayerBuilder.resolve()`'s `withData(prevRefs)`). This is the "current
+   *  (`usesPreviousLayerMarks()`) and NOT built over a selection
+   *  (`dataIsRefs`: `chart(ref(...))` or `chart(selectAll(...))`). This is
+   *  the "current
    *  chart's own flow" boundary shared by both relational-mark default-
    *  grouping fusion guards (issue #752): `.mark()`'s (fuse a bare relational
    *  mark into an anchor + connector) and `.layer()`'s (compute the default
@@ -979,17 +982,16 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
       composedMark = await op(composedMark);
     }
 
-    // Resolve a ref/selectAll used as chart data just before calling mark
+    // Resolve a ref/selectAll used as chart data just before calling mark:
+    // either way the mark gets a list of refs.
     let data = this.state.data;
-    if (data instanceof GoFishRef) {
-      data = resolveRefData(data, this.state.layerContext) as any;
+    if (dataIsRefs(data)) {
+      data = resolveRefData(data as GoFishRef, this.state.layerContext) as any;
     }
     // Type the data with the chart's schema (plus the time columns inferred
     // from `Date` values): a copy of the array carrying the column types,
     // which every operator reads off the data it splits.
-    if (Array.isArray(data)) {
-      data = (await applySchema(data, this.state.options?.schema)) as any;
-    }
+    data = (await applySchema(data as any, this.state.options?.schema)) as any;
 
     const content = (
       await resolveMarkResult(
@@ -1074,12 +1076,13 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   }
 }
 
-// `selectAll(...)` is typed as a single `GoFishRef` but resolves, as chart
-// data, to the full `GoFishRef[]` (one ref per matching named node). This
-// overload teaches the builder that plural-ref data flows downstream as an
-// array, so `Chart(selectAll("bars"))` typechecks without a cast.
+// `ref(...)` and `selectAll(...)` are typed as a single `GoFishRef` but
+// resolve, as chart data, to a `GoFishRef[]` (one ref per matching named node;
+// exactly one for `ref`). This overload teaches the builder that selection data
+// flows downstream as a list, so `chart(selectAll("bars"))` typechecks without
+// a cast.
 export function chart(
-  data: GoFishRef & { multiplicity: "all" },
+  data: GoFishRef,
   options?: ChartOptions
 ): ChartBuilder<GoFishRef[], GoFishRef[]>;
 export function chart<T>(data: T, options?: ChartOptions): ChartBuilder<T, T>;
@@ -1261,11 +1264,16 @@ export class LayerBuilder extends RenderableBuilder {
         // previous tier's bag as its datum, uniformly. A relational mark
         // (e.g. `ribbon()`) reads it as the refs it connects; a leaf mark
         // (e.g. `rect({...})`) ignores its datum argument and renders exactly
-        // as before.
+        // as before. With no previous bag (the previous tier named nothing),
+        // the tier gets the empty list: a mark's input is always a list.
         nodes.push(
           await resolveMarkResult(
             typeof tier === "function"
-              ? (tier as Mark<any>)(prevRefs as any, undefined, sharedContext)
+              ? (tier as Mark<any>)(
+                  (prevRefs ?? []) as any,
+                  undefined,
+                  sharedContext
+                )
               : tier,
             sharedContext
           )

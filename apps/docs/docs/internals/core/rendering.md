@@ -230,7 +230,8 @@ primitive was elaborated from, the hit-testing / accessibility target) and `role
 (`"node"` for a data-bearing mark, `"overlay"` for chrome such as a label, axis, or
 glyph detail). `role` is a **projection of `datum`-presence**: a `lower` body
 derives it via `roleFor(node.datum)` (`lowerHelpers.ts`) — `"node"` exactly when the
-item carries a datum, `"overlay"` otherwise — so the two fields can never disagree
+item carries a datum with rows, `"overlay"` otherwise (no datum, or the empty list a
+mark resolved at a combinator root gets) — so the two fields can never disagree
 and a host can split data from chrome on `role` alone. (Generated chrome carries no
 datum, so axes/legends/value-labels classify as `"overlay"` automatically; before
 this projection they were hard-coded `"node"` and mis-classified as data.) What is

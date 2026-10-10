@@ -94,9 +94,9 @@ export async function resolveMarkResult(
     return resolveMarkResult(
       // Pass layerContext through so mark wrappers (e.g. .name(...)) that
       // need to register into the layer context still see it when invoked
-      // here. Their `d`/`key` args remain undefined since this resolution
-      // path is for thunked / curried marks that don't take a datum.
-      (raw as Mark<any>)(undefined as any, undefined, layerContext),
+      // here. A mark resolved at the root has no rows, so its input is the
+      // empty list `[]` (a mark's input is always a list).
+      (raw as Mark<any>)([] as any, undefined, layerContext),
       layerContext
     );
   return raw as unknown as GoFishNode;

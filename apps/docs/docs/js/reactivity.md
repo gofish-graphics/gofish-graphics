@@ -129,7 +129,7 @@ gofish(
 
 A component mark carries no datum of its own (there is no data binding). For the
 reference-equality hover trick (`live((d) => d === p.datum())`), give each mark a
-datum by _invoking_ it with an object: `rect({ … })(box)`.
+datum by _invoking_ it with an object: `rect({ … })([box])`.
 
 ## Inputs
 

@@ -124,8 +124,8 @@ function hasRenderMethod(value: any): value is GoFishNode {
  * (a single-tier `chart(...).mark(...)` or a layered `....layer(...)`), a
  * thenable, or an already-built node; `resolveMarkResult` is the one place that
  * knows all four, so both child loops below go through here. A thunk is called
- * with just the datum slot (`undefined`), as it always has been, and whatever
- * it returns is reified in turn.
+ * with the empty list `[]` (a root has no rows), and whatever it returns is
+ * reified in turn.
  *
  * `null`/`undefined` (a thunk that opted out) comes back as `undefined` and is
  * dropped by the caller.
@@ -135,7 +135,7 @@ async function reifyChild(
   layerContext: LayerContext
 ): Promise<GoFishAST | undefined> {
   if (typeof child === "function") {
-    const result = await (child as any)(undefined);
+    const result = await (child as any)([]);
     if (result == null) return undefined;
     return resolveMarkResult(result, layerContext);
   }
@@ -478,7 +478,9 @@ function buildCreatedMark(
       console.log("mark", key, d);
     }
 
-    const data = Array.isArray(d) ? d : [d];
+    // A mark's input is always a list of rows (a split leaf, a chart's data,
+    // `[]` at a combinator root); nothing here inspects its shape.
+    const data = d as unknown[];
 
     // Build shape props by encoding each channel. The plain string spec
     // ("size"/"pos"/"color"/"raw") aggregates over `data` and produces a
@@ -525,11 +527,11 @@ function buildCreatedMark(
     // A component body may return anything a combinator child may be (a
     // built node, or a mark such as `layer([...])`), so it is reified through
     // the same `resolveMarkResult` path. The name context is fresh: the
-    // component is a naming boundary. An expand mark's array of slice nodes
-    // passes through as-is.
+    // component is a naming boundary. An expand mark (its kind, declared at
+    // `createMark`) returns its array of slice nodes, which pass through as-is.
     const raw = await shapeFn(shapeProps, kind === "expand" ? data : undefined);
-    const result = Array.isArray(raw) ? raw : await resolveMarkResult(raw, {});
-    if (Array.isArray(result)) {
+    if (kind === "expand") {
+      const result = raw as GoFishNode[];
       // Expand path: stamp each slice with its own datum, a one-row group
       // `[row]` tagged with the column types like any split leaf. A slice
       // past the last row (a `size` array longer than the data) has no row of
@@ -541,7 +543,7 @@ function buildCreatedMark(
       }
       return result as unknown as GoFishNode;
     }
-    const node = result as GoFishNode;
+    const node = await resolveMarkResult(raw, {});
     if (liveChannels) node.__gfLive = liveChannels;
     return sealComponent(node, d);
   };

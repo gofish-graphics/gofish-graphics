@@ -12,8 +12,8 @@ References another node so later marks can reuse its position or bounding box �
   [`.relate()`](/python/api/constraints/relate) clause, `ref(token).row[2]`
   anywhere — resolved at layout time against the name tree.
 - **As chart data**: `chart(ref("maxBar")).mark(text(text="peak"))` — resolved at
-  build time against the named-layer registry, where it must match **exactly one**
-  node (use [`select_all`](/python/api/selection/ref) for many). See
+  build time against the named-layer registry to a list of one ref, where it must
+  match **exactly one** node (use [`select_all`](/python/api/selection/ref) for many). See
   [ref / select_all](/python/api/selection/ref) for the chart-data role and node-unit
   selection.
 

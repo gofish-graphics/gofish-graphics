@@ -93,7 +93,7 @@ export const Default: StoryObj<Args> = {
             // `chunk(size)` takes a fixed size, and `gridRows` depends on the
             // block, so the columns are built as data: each item is now one
             // column of dots.
-            derive((rows) => chunk(rows, rows[0]?.gridRows ?? 1)),
+            derive((rows: any[]) => chunk(rows, rows[0]?.gridRows ?? 1)),
             spread({ spacing: 1, dir: "x" }),
             // Each group holds one item, a column of dots: spread its dots.
             derive(([dots]) => dots),

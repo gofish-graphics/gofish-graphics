@@ -145,7 +145,7 @@ on `species` plus two conditional encodings is `pointer()` read in `live()`:
 
 ```ts
 const hover = pointer();
-const hot = (d: Bird) => hover.datum()?.species === d.species;
+const hot = (d: Bird[]) => hover.datum()?.[0]?.species === d[0]?.species;
 
 chart(birds)
   .flow(group({ by: "species" }), scatter({ by: "day", x: "lon", y: "lat" }))
@@ -177,7 +177,7 @@ Tooltip, two options:
   Cost: a full relayout of 72 lines per pointer move. Measure it. If it is
   too slow this becomes the first concrete case for incremental layout (#674).
 
-- Fallback: a `text` mark in a fixed corner with `text: live(() => hover.datum()?.species ?? "")`.
+- Fallback: a `text` mark in a fixed corner with `text: live(() => hover.datum()?.[0]?.species ?? "")`.
   Paint-only, but not a tooltip that follows the cursor.
 
 ## Steps 3 to 5, revised (2026-09-21, after review)

@@ -114,7 +114,7 @@ async function buildSliceNode(
     h: sliceH,
     fill: "white",
   });
-  const sourceNode = await resolveMarkResult(source(undefined));
+  const sourceNode = await resolveMarkResult(source([]));
   const translated = await offsetOp(
     dirIdx === 0 ? { x: translateOffset } : { y: translateOffset },
     [sourceNode]
@@ -207,7 +207,7 @@ export function cut(
 
   // One shared probe + extent resolution; every slice awaits it.
   const geom = (async () => {
-    const probe = await resolveMarkResult(source(undefined));
+    const probe = await resolveMarkResult(source([]));
     const dirIdx: 0 | 1 = dir === "x" ? 0 : 1;
     const crossIdx: 0 | 1 = dirIdx === 0 ? 1 : 0;
     const probeArgs: any = (probe as any).args;

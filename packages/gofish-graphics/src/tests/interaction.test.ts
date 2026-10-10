@@ -543,7 +543,7 @@ async function main() {
         rect({
           h: "count",
           // Reference equality: a bar's live thunk is bound to its node datum,
-          // which is the very object `pointer().datum()` returns on hit-test.
+          // which is the very list `pointer().datum()` returns on hit-test.
           fill: live((d: any) => (d === p.datum() ? "#f00" : "#00f")),
         })
       )
@@ -1429,9 +1429,10 @@ async function main() {
       { day: 2, lon: -55, lat: -25, species: "b" },
       { day: 3, lon: -50, lat: -40, species: "b" },
     ];
-    // The stamped datum of a `line` is its group's projected datum, so the
-    // species field is readable off it — the panel-B `hot` predicate.
-    const hot = (d: any) => p.datum()?.species === d?.species;
+    // The stamped datum of a `line` is its group's projected datum, a
+    // one-row list, so the species field is readable off its row — the
+    // panel-B `hot` predicate.
+    const hot = (d: any) => p.datum()?.[0]?.species === d?.[0]?.species;
     await chart(rows, {
       coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
       axes: false,
@@ -1448,7 +1449,9 @@ async function main() {
         })
       )
       // The panel-B readout: a text tier whose CONTENT is a live channel.
-      .layer(text({ text: live(() => p.datum()?.species ?? ""), fontSize: 14 }))
+      .layer(
+        text({ text: live(() => p.datum()?.[0]?.species ?? ""), fontSize: 14 })
+      )
       .render(container, { w: 300, h: 300 });
     await settle();
     const readout = () =>

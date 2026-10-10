@@ -75,7 +75,12 @@ export function rowsReached(obj: unknown): unknown[] {
 }
 
 /** Walk `segments` from `obj`, projecting over any array encountered and
- *  through any ref's `.datum`, and `visit` each value the walk reaches. */
+ *  through any ref's `.datum`, and `visit` each value the walk reaches.
+ *
+ *  A declared domain case, not a row-vs-list sniff: projection is DEFINED
+ *  over nested bags (a bag of refs whose datums are bags of rows, a field
+ *  whose value is itself a list), so the walk maps over a list wherever one
+ *  sits on the path, at any depth. Every datum it starts from is a list. */
 function walkRows(
   obj: unknown,
   segments: string[],

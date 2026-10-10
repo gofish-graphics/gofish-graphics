@@ -48,7 +48,8 @@ label is a real node, that heuristic has nothing left to do: it either fits in
 the box the layout solve gives it (like any other shape) or it overflows
 visibly, exactly like a `Text` node with a fill value written directly.
 
-`.label()` on a node with no datum of its own (a group node — a spread's
+`.label()` on a node with no rows of its own (no datum, or the empty list a
+combinator root gets; a group node — a spread's
 per-key band, a stack's per-group child) is intentionally reused for both
 per-instance and per-group labeling; see `resolveLabelTargets` below.
 
@@ -62,7 +63,8 @@ legend past it. It has two phases:
 
 1. **`resolveLabelTargets`** — a single top-down walk that pushes each node's
    `_labels` array down to its children whenever the node has children but no
-   `datum` of its own: a plain group node merely relays its label to whichever
+   rows of its own (no `datum`, or an empty one): a plain group node merely
+   relays its label to whichever
    descendant should actually carry it, while a node **with** a datum (a leaf
    shape, or a group combinator that stamped its own subdata — see
    [Operator Factory](/internals/frontend/operator-factory)) keeps its own

@@ -152,15 +152,15 @@ diameter is `2r` for a number, a field, and an accessor alike. A data `w` or
 
 Walking `withGoFish.ts:431-477`:
 
-1. **Read the input.** A mark is called as `(d, key)`. Inside a flow, `d` is
-   always a list: every operator split hands each mark a group, and with no
-   `by` that group is the one-row list `[row]`.
-2. **Wrap to an array.** `data = Array.isArray(d) ? d : [d]`. The `infer*`
-   helpers all expect an array. The wrap remains for a mark called outside a
-   flow: a combinator child gets the combinator's own data, which is
-   `undefined` at the root, and a mark called directly on one value
-   (`rect({...})(box)`, so the rect's datum is `box`) gets that value.
-3. **Apply each channel.** For each prop in the user's `markOpts`:
+1. **Read the input.** A mark is called as `(d, key)`, and `d` is always a
+   list of rows: every operator split hands each mark a group (with no `by`,
+   the one-row list `[row]`), a chart hands its data (a `ref` or `selectAll`
+   resolves to a list of refs), a combinator child gets the combinator's own
+   list, which is `[]` at the root, and a mark called directly is called on a
+   list (`rect({...})([box])`, so the rect's datum is `[box]`). Nothing
+   inspects the input's shape; the `infer*` helpers all read it as the list
+   it is.
+2. **Apply each channel.** For each prop in the user's `markOpts`:
    - `Value`-wrapped (`v(...)`) → pass through unchanged. (Already final.)
    - `"size"` channel → `inferSize(markValue, data)`. If `markValue` is a
      string, sum that field across `data`; if a number, use as-is.
@@ -189,7 +189,7 @@ Walking `withGoFish.ts:431-477`:
      enclosing coord and writes the slots onto the mark's dims. So
      `dims: { r: { size: "count" } }` aggregates exactly like `h: "count"`.
    - Anything else → pass through.
-4. **Call the low-level shape.** The encoded shape props go into `shapeFn`,
+3. **Call the low-level shape.** The encoded shape props go into `shapeFn`,
    producing the `GoFishNode`. A component body (the no-`channels` form) may
    instead return a mark, such as `layer([...])` or `spread(opts, [...])`, or
    a chart builder. That result goes through `resolveMarkResult`, the same
@@ -199,7 +199,7 @@ Walking `withGoFish.ts:431-477`:
    spelling to reach for. An expand mark's array of slice nodes passes through
    unchanged, each slice stamped with its own one-row group `[row]`, tagged
    with the column types like a split leaf.
-5. **Tag the node** with `datum = d` so downstream coordinators (label
+4. **Tag the node** with `datum = d` so downstream coordinators (label
    placement, `selectAll` projections) can find its row. The factory does not
    name the node after its data key: the key is data, and a name made from it
    could clash with a name the user wrote (see
@@ -240,7 +240,7 @@ child — goes to `resolveMarkResult` (`marks/markResult.ts`), the single place
 that knows all the shapes. Five get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
-- a **mark** (a function) — invoked with `undefined` data, which is how a bare
+- a **mark** (a function) — invoked with the empty list `[]` (no rows), which is how a bare
   `rect({ … })` becomes a node inside `spreadX([...])`, and how a control mark
   (`slider(...)`) is rebuilt on every resolve;
 - a **thunk** (sequential form only) — called, then reified again;
@@ -277,7 +277,7 @@ child — goes to `resolveMarkResult` (`marks/markResult.ts`), the single place
 that knows all the shapes. Five get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
-- a **mark** (a function) — invoked with `undefined` data, which is how a bare
+- a **mark** (a function) — invoked with the empty list `[]` (no rows), which is how a bare
   `rect({ … })` becomes a node inside `spreadX([...])`;
 - a **thunk** (sequential form only) — called, then reified again;
 - a **chart builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
@@ -309,7 +309,8 @@ methods:
 
 - `mark.name("layerName")` — registers each produced node into the chart's
   layer context so `selectAll("layerName")` can pull the array of refs (or
-  `ref("layerName")` the single node, when the layer holds exactly one). It also
+  `ref("layerName")` the one-ref list, when the layer holds exactly one: being
+  singular is a check on the match count, not a different data shape). It also
   stashes the passed name on the returned mark function via `stashLayerName`
   (defined in `markResult.ts`, called by every `.name()` implementation, and
   carried forward by every modifier chained after it), so `.layer()`'s
@@ -450,12 +451,14 @@ forms:
 
 ### A connector's datum, and its `live()` channels
 
-A leaf mark carries the row it was drawn from. A connector threads a whole
-group, so its datum is **the group**: each field of its operands' data,
-projected with homogeneity collapse (`groupDatumOf`). A path through one
-species' daily positions collapses `species` to that species and `day` to
-`undefined` — which is exactly what a channel callback should see, and what
-`pointer().datum()` hands back when that path is hovered.
+A leaf mark carries the rows it was drawn from. A connector threads a whole
+group, so its datum is **the group**: a one-row list whose row holds each
+field of its operands' data, projected with homogeneity collapse
+(`groupDatumOf`). A path through one species' daily positions collapses
+`species` to that species and `day` to `undefined` — which is exactly what a
+channel callback should see, and what `pointer().datum()` hands back when that
+path is hovered. Like every datum it is a list; a pairwise `{ from, to }`
+connector's datum is its own row as `[row]`.
 
 `live(...)` channels on a connector are treated exactly as a leaf mark's, by one
 path: `liveChannelsOf` collects them and the factory stamps them on each produced
@@ -557,7 +560,9 @@ builder has in hand. Two call sites run it:
 
 Both guard on the same "fuses over THIS chart's own flow" boundary
 `dataNeedsAnchors` already checks — `!usesPreviousLayerMarks() &&
-!dataIsRefs(this.data)` — so a refs-bag chart (`chart(selectAll(...))`) or the
+!dataIsRefs(this.data)` — so a chart over a selection (`chart(ref(...))` or
+`chart(selectAll(...))`; `dataIsRefs` reads the `chart(...)` argument, never
+the items of a list) or the
 nested `chart().flow(group({by})).mark(line())` idiom never gets a default
 injected; both keep their pre-#752 meaning exactly, and using `along` on
 either throws instead (see the previous section).

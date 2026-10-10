@@ -1881,7 +1881,9 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
     Derive operator - apply a Python function to transform data.
 
     Args:
-        fn: Function that takes data and returns transformed data
+        fn: Function that takes the list of rows and returns the new list of
+            rows (a list of dicts, ``None``, or a dataframe). It returns a
+            list even for one row: ``lambda d: [d[0]]``, not ``d[0]``.
         schema: Column types of the result, keyed by column name, as in
             ``chart(data, schema={...})``: ``Schema.ordered(levels)`` or
             ``Schema.time(zone=...)``. Without it, a result column keeps the

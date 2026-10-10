@@ -1917,9 +1917,9 @@ since any finite number is epoch milliseconds (#1089), and
 inherited ones column by column, inference types a column of `Date`s as a
 UTC time, and `derive(fn, { schema })` overrides all of that for the columns
 it names and converts their values like a chart's schema (a datetime column
-a Python callback returns arrives typed from the widget's decode). A result
-that is one object, not an array (a derive over a single datum), is typed
-as one row and converted the same way. The operator never tags the array its
+a Python callback returns arrives typed from the widget's decode). The
+result is a list, as all data is; `derive`'s type says so and nothing checks
+it at run time. The operator never tags the array its
 function returned. `log` returns its input, types and all. A `filter`
 returns a subset of its input's row objects, so its typing rule carries the
 input's types over as they are, with no fit check (a predicate that changes

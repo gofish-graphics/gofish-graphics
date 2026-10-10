@@ -486,20 +486,6 @@ async function main() {
         getColumnTypes(inPlace)?.at?.HasCalendar?.zone === "UTC",
       JSON.stringify([inPlace[0], getColumnTypes(inPlace)])
     );
-    // A derive over one datum that returns one object: the schema converts
-    // it as one row.
-    const single = await derived(
-      (d: any) => ({ ...d, at: "2024-03-05" }),
-      { schema: { at: Schema.time({ zone: "America/New_York" }) } },
-      { n: 1 }
-    );
-    check(
-      "derive(fn, { schema }) converts a single-object result",
-      !Array.isArray(single) &&
-        single.n === 1 &&
-        single.at === Date.UTC(2024, 2, 5, 5),
-      JSON.stringify(single)
-    );
     // filter's rows are its input's, so it carries the input's types as
     // they are, with no fit check (a derive would drop this one).
     const unfit = setColumnTypes([{ day: "not a time", n: 1 }], {

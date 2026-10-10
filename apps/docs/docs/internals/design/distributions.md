@@ -545,7 +545,7 @@ import { chart, derive, normal, spread, interval } from "gofish-graphics";
 
 chart(estimates)
   .flow(
-    derive((d) => ({ ...d, sales: normal(d.mean, d.se) })),
+    derive((rows) => rows.map((d) => ({ ...d, sales: normal(d.mean, d.se) }))),
     spread({ by: "region", dir: "x" })
   )
   .mark(interval({ y: "sales" }));

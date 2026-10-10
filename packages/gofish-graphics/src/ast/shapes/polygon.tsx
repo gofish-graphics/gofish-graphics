@@ -235,11 +235,12 @@ export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
     return basePolygon(opts as any);
   }
   const field = opts.points;
-  const mark = async (d: any) => {
-    const rows: any[] = Array.isArray(d) ? d : [d];
+  const mark = async (rows: any[]) => {
     const nodes = await Promise.all(
       rows.map(async (row) => {
         const ring = row?.[field];
+        // Validates the ring COLUMN's value type (a field-bound `points`
+        // column holds coordinate arrays), not the shape of the data.
         if (!Array.isArray(ring)) {
           throw new Error(
             `polygon({ points: "${field}" }): row has no array in field ` +
@@ -261,7 +262,7 @@ export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
     );
     if (nodes.length === 1) return nodes[0];
     const group = (await Layer({}, nodes)) as GoFishNode;
-    group.datum = d;
+    group.datum = rows;
     return group;
   };
   const result = nameableMark(mark);

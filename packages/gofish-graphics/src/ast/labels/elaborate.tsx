@@ -84,8 +84,9 @@ function autoLabelColor(node: GoFishNode, position: LabelPosition): string {
 }
 
 /**
- * Push each node's `_labels` down to its children when the node has no datum
- * of its own — a group node (e.g. a spread's per-key band) merely relays a
+ * Push each node's `_labels` down to its children when the node has no rows
+ * of its own (no datum, or the empty list a combinator root gets) — a group
+ * node (e.g. a spread's per-key band) merely relays a
  * label to whichever descendant should actually carry it. A node WITH a datum
  * (a leaf shape, or a group combinator that stamped its own subdata) keeps its
  * own label rather than propagating it further. Mirrors the old
@@ -97,7 +98,7 @@ function resolveLabelTargets(node: GoFishNode): void {
     node._labels &&
     node._labels.length > 0 &&
     node.children.length > 0 &&
-    node.datum === undefined
+    !(node.datum?.length > 0)
   ) {
     for (const child of node.children) {
       if (

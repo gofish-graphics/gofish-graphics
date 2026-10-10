@@ -64,11 +64,12 @@ export function groupEntries<C>(
   return groups;
 }
 
-/** A node's or a ref's rows: its datum as a bag, or, for an operator node
- *  that carries none of its own, the rows of everything under it. */
+/** A node's or a ref's rows: its datum (always a list), or, for an operator
+ *  node that has no rows of its own (no datum, or the empty list a root
+ *  combinator gets), the rows of everything under it. */
 export function rowsOf(child: unknown): unknown[] {
-  const datum = (child as { datum?: unknown }).datum;
-  if (datum !== undefined) return Array.isArray(datum) ? datum : [datum];
+  const datum = (child as { datum?: unknown[] }).datum;
+  if (datum !== undefined && datum.length > 0) return datum;
   const children = (child as { children?: unknown[] }).children;
-  return Array.isArray(children) ? children.flatMap(rowsOf) : [];
+  return (children ?? []).flatMap(rowsOf);
 }

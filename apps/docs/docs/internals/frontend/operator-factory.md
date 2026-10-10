@@ -355,15 +355,12 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   operator's closed-over `labelState`. That's what makes both
   `.translate().label()` and `.label().translate()` work identically.
 - `resolveLabelText` (`ast/labels/labelPlacement.ts`) resolves the accessor
-  in one of three ways, depending on both the accessor's shape and the
-  datum's shape:
-  - A **bare string** over the group's array-of-rows datum must be constant
-    across every row (true by construction for a `by`-field, since every row
-    in the group shares that value) — `resolveLabelText` throws a loud error
-    if it isn't, rather than silently reading just the first row. An
-    operator's leaf is always an array; only a mark called directly on one
-    value (`rect({...})(box)`) has a scalar datum, and there it reads the
-    field directly.
+  over the node's datum, which is always a list of rows, in one of three
+  ways, depending on the accessor's shape:
+  - A **bare string** must be constant across every row (true by
+    construction for a `by`-field, since every row in the group shares that
+    value) — `resolveLabelText` throws a loud error if it isn't, rather than
+    silently reading just the first row.
   - A **`field(...)` aggregate** (`field("count").sum()`/`.mean()`/`.count()`/
     `.distinct()`) folds the group's rows to one value via `evalFieldValues`
     (the same evaluator the `by`/`size`/`pos` channel pipelines use) — this is
@@ -467,7 +464,7 @@ node-resolution strategy (a `withGoFish` promise resolves by awaiting). The
 other surfaces go through the same list via `attachBuilderTerminals(target,
 resolveForRender, render)`, which lets a surface also prepare the render options
 and drive `render` through its own strategy. A combinator mark resolves by
-calling itself with `undefined` and installs the build-in its own
+calling itself with `[]` (no rows) and installs the build-in its own
 `.transition({ enter })` asks for, reading the clock's `playing`/`at`.
 `ChartBuilder` and `LayerBuilder` merge in the chart-level `axes`/`color` config,
 read the build-in clock's `playing`/`at` (which `TerminalMethods<Extra>` adds to

@@ -143,7 +143,7 @@ export async function applyMark<T>(
   if (kind === "expand") {
     const result = await (mark as Mark<T[]>)(group, groupKey, layerContext);
     return Promise.all(
-      (Array.isArray(result) ? result : [result]).map((r) =>
+      (result as unknown as GoFishNode[]).map((r) =>
         resolveMarkResult(r as any, layerContext)
       )
     );
@@ -235,9 +235,9 @@ function modifierMethod(
       const raw = await (base as any)(d, key, layerContext);
       // Expand-kind marks return an array of nodes; per-item return one.
       // Apply the modifier to each produced node either way.
-      if (Array.isArray(raw)) {
+      if (getMarkKind(base) === "expand") {
         const nodes = await Promise.all(
-          raw.map((r) => resolveMarkResult(r, layerContext))
+          (raw as GoFishNode[]).map((r) => resolveMarkResult(r, layerContext))
         );
         for (const node of nodes)
           await cfg.apply(node, layerContext, d, ...args);
@@ -311,13 +311,11 @@ export function attachModifiers<T>(
   });
   // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
   // from the shared registry, so adding one touches a single list. A mark
-  // resolves to a node by calling it with `undefined`, and plays its own
+  // resolves to a node by calling it with `[]` (no rows), and plays its own
   // `.transition({ enter })` as a chart does (`installBuildIn`, which the
   // render options `playing` / `at` can hold). See terminals.ts.
   attachBuilderTerminals(base, async (options) => {
-    const node = (await resolveMarkResult(
-      (base as any)(undefined)
-    )) as GoFishNode;
+    const node = (await resolveMarkResult((base as any)([]))) as GoFishNode;
     installBuildIn(node, options);
     return { node, options };
   });
@@ -691,7 +689,7 @@ export type DualModeOperator<Datum, Options> = {
   (
     opts: Options,
     marks: MarkChild[] | Promise<MarkChild[]>
-  ): NameableMark<Datum>;
+  ): NameableMark<Datum[]>;
 };
 
 export type TranslatableOperator<T, U> = Operator<T, U> & {
@@ -840,7 +838,7 @@ function applyChannels<Options extends Record<string, any>>(
   entries: Map<string | number, any> | undefined
 ): Options {
   if (!channels) return opts;
-  const wholeData = Array.isArray(d) ? d : [d];
+  const wholeData: any[] = d;
   const out: any = { ...opts };
   const infer = (
     type: Exclude<ChannelType, "dims">,
@@ -996,12 +994,12 @@ function stripFactoryKeys<Options extends Record<string, any>>(
 async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   channels: ChannelAnnotations<Options> | undefined,
   opts: Options,
-  d: Datum | Datum[],
+  d: Datum[],
   entries: Map<string | number, Datum[]> | undefined,
   layoutOpts: Record<string, unknown> | undefined
 ): Promise<Options> {
   const pending = resolveChannelAccessors(opts, channels, () => {
-    const rows = new Set<unknown>(Array.isArray(d) ? d : [d]);
+    const rows = new Set<unknown>(d);
     for (const items of entries?.values() ?? []) {
       for (const row of items) rows.add(row);
     }
@@ -1030,15 +1028,15 @@ export function createOperator<Datum, Options extends Record<string, any>>(
   function dual(
     opts: Options,
     marks: MarkChild[] | Promise<MarkChild[]>
-  ): NameableMark<Datum>;
+  ): NameableMark<Datum[]>;
   function dual(
     opts: Options,
     marks?: MarkChild[] | Promise<MarkChild[]>
-  ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum> {
+  ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum[]> {
     if (marks !== undefined) {
       // Combinator form: apply each mark to the same data d, then layout.
-      const base: Mark<Datum> = async (
-        d: Datum,
+      const base: Mark<Datum[]> = async (
+        d: Datum[],
         key?: string | number,
         layerContext?: LayerContext
       ) => {
