@@ -16,7 +16,11 @@ covers:
   - packages/gofish-graphics/src/ast/schema.ts
   - packages/gofish-graphics/src/ast/calendar.ts
   - packages/gofish-graphics/src/ast/cells.ts
+  - packages/gofish-graphics/src/ast/polygonCells.ts
+  - packages/gofish-graphics/src/ast/structExpr.ts
+  - packages/gofish-graphics/src/families/bin.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
+  - packages/gofish-graphics/src/ast/shapes/region.tsx
   - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/proposalPlan.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
@@ -245,7 +249,7 @@ type CONTINUOUS_TYPE = {
   measure?: Measure;
   mirrored?: true;
   calendar?: HasCalendar; // the data are instants on this calendar
-  cells?: readonly Cell[]; // every range placed along the axis is a cell
+  cells?: readonly Cell[]; // every region placed along the axis is a cell
 };
 type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: Measure; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
@@ -358,13 +362,16 @@ discrete analogue of `CONTINUOUS`'s measure. It's set from the grouping operator
 own resolved space — a continuous axis by its unit, an ordinal axis by its
 grouping field (see [the layout passes](/internals/layout/passes)).
 
-An `ORDINAL` can also hold **cells** (`ORDINAL_TYPE.cells`, a key→`Cell`
-record). A split keyed by a binned key (`field(x).bin(p)`) gives each child
+An `ORDINAL` can also hold **cells** (`ORDINAL_TYPE.cells`, the cells in
+order of their starts, as `CONTINUOUS_TYPE.cells` holds them; a key is its
+cell's id). A split keyed by a binned key (`field(x).bin(p)`) gives each child
 node its cell (`keyCell`, set in `createOperator` beside the key, which is
 the cell's id), the distribute fold reads a child's cell as its key
 (`keyOf` in `compose.ts`), and `ordinalOver` builds the ordinal over those
-keys, with the cells when every key is one. `unionChildSpaces` keeps them
-when every unioned ordinal has them. The type is what tells the axis it
+keys, with the cells when every key is a cell of a line. `unionChildSpaces`
+keeps them when every unioned ordinal has them and they are the cells of one
+partition (`mergeCells`, see [Partition](#partition-each-group-in-its-cell)).
+The type is what tells the axis it
 places cells, not points: an axis over cells labels each cell between its
 boundary ticks ([Axes](/internals/frontend/axes)). It is read off the
 space, never off a datatype flag on the column.
@@ -650,12 +657,17 @@ composes its targets' spaces into the layer's claim on that axis:
   the old `min` (on an upward y, a spread pinned across a cell drew its bars
   one cell away). The interval also sizes the target before its layout: the
   layer proposes the span's pixel length as the child's size on that axis
-  (`buildSpanProposalMap`, `constraints/proposalPlan.ts`), so the child's
+  (`buildChildProposals`, `constraints/proposalPlan.ts`), so the child's
   content fills the span it will be pinned across rather than being laid out
   in the whole layer and then stretched. `scatter` uses both
   forms of `Constraint.position`: plain `x`/`y` → a point coordinate, range
   `xMin`/`xMax`/`yMin`/`yMax` → an interval coordinate (the operator no longer
-  has a bespoke layout). A categorical
+  has a bespoke layout). A position constraint may instead give its target
+  a **region** (`region: PositionRegion`, #1059), which is what `partition`
+  uses. It is not a pin: the
+  layer turns it into the region it hands the target in its layout call,
+  and the target places itself there, keeping the size its layout gave it
+  (see [Partition](#partition-each-group-in-its-cell)). A categorical
   scatter channel such as `x: "lake"` lowers to discrete placement coordinates
   `i / count · axisSize`; those are placement coordinates, not datum values, so
   they become numeric placement facts without affecting the layer's data domain.
@@ -1639,7 +1651,8 @@ same unit (a movie's US and worldwide gross, both dollars) say so with
 checked (not silently prioritized) in `resolveMeasure` (`channels.ts`):
 the channel aggregators use lodash's per-helper entrypoints for native ESM
 compatibility, but their semantics are still `sumBy` for size and `meanBy` for
-position.
+position, except that the mean of no rows has no value (`meanOf`, see
+[Cells](#cells-a-binned-key)) where `meanBy` gives `NaN`.
 
 1. **Explicit annotation** — `field(name, measure)` / `datum(v, measure)`
    (`data.ts`). A real type claim about the channel's unit.
@@ -1905,14 +1918,21 @@ error rather than silently doing the wrong thing:
   rows whose value at the field is `null`/`undefined` FIRST (so it composes
   the same regardless of where it sits in the chain — every other domain op
   re-derives its grouping from these filtered rows), then it groups the
-  remaining rows (`Map.groupBy` via `splitKeyFn`, which reads a `field(...)`'s
-  `.name` exactly like a bare string) in order of first appearance, or in the
-  order of the column's levels when the data declares the column ordered
-  (`HasOrder`, see [Column types](#column-types-the-chart-schema)), then
-  applies each remaining domain op
-  in pipeline order — `bin` **replaces** the base grouping entirely (re-groups
-  the rows into the cells of its partition, one entry per cell, empty cells
-  included; see [Cells](#cells-a-binned-key)); `sort` reorders the
+  remaining rows by the key `splitKeyFn` gives each row. That reads a
+  `field(...)`'s `.name` exactly like a bare string, and the groups come in
+  order of first appearance, or in the order of the column's levels when the
+  data declares the column ordered (`HasOrder`, see
+  [Column types](#column-types-the-chart-schema)). A binned key (`bin`, or a
+  binned struct) instead keys each row by its **cell**, and its groups are the
+  cells of its partition, in order, one entry per cell, empty cells included
+  (`binEntries`; see [Cells](#cells-a-binned-key)). The same key function
+  keys a stagger's children by their cell, so they group the same way the
+  split did. A fused connector's default split reads no key function: it
+  keys each ref by the keys the flow's splits gave the groups it is in (each
+  split stamps the nodes it makes with its `by`, `GoFishNode.keyBy`, beside
+  the key), since a single row does not carry the domain its cell is over.
+  Then it applies each remaining domain op
+  in pipeline order: `sort` reorders the
   resulting entries, either by the group key itself or by the SUM of another
   named field over each group's rows; `reverse` reverses the entries. An
   aggregate op or `normalize` reaching a `by` slot throws — a domain op
@@ -1961,10 +1981,29 @@ domain rows (`DOMAIN_ROWS`, see [Column types](#column-types-the-chart-schema))
 and returns the cells in order and the cell each value falls in
 (`cellOf`). `splitEntries` then gives every cell an entry, empty or not, so
 each group of a nested split sees the same cells in the same order, and a
-count picks its step from the whole domain (#763). The cells of a domain
-are built once per partition value and column (a cache keyed by the domain
-array and the op's partition object), so the groups share the very same
-`Cell` objects.
+count picks its step from the whole domain (#763). The domain's values are
+read with the walk the key function reads a row with (`walkRows`), so a
+domain of refs (`chart(selectAll(...))`) is binned over the rows they stand
+for. A value that is not a finite number is an error that names the column
+(`numericRange`): the cells of a line have no cell at an infinity. The cells
+of a domain are built once per partition value and column (a cache keyed by
+the domain array and the op's partition object), so the groups share the
+very same `Cell` objects.
+
+**A group with no rows.** An empty cell is a group with no rows, and every
+operator over it is well defined: an operator over no rows makes no
+children and draws nothing (a node with no lowering of its own and no
+children lowers to nothing, see [Rendering](/internals/core/rendering)). A
+position read from a group's rows is a statistic of them, so a group with
+no rows has none: a position channel is a mean (`inferPos`), and the mean of
+no rows is no value (`meanOf` in `fieldExpr.ts`; a sum or a count of no rows
+is 0, which is a value). A position with no value is in no domain, since
+only defined positions make position constraints. And `scatter`, which
+places each child at its position, does not draw a child that has no value
+in a placement it is given (`placedChildren` in `scatter.tsx`): there is no
+place to draw it. So `scatter({ by: field("x").bin(p), x, y })` draws one
+point per cell that holds rows, and the empty cells leave the scale of the
+others alone.
 
 A cell holds its start and not its end, and a Calendar value or a `{ step }`
 puts a value in the cell that holds it whatever the domain (March 1 is in
@@ -1977,44 +2016,155 @@ The keys of a split may now be cells (`SplitKey`). Everything that reads a
 key as text or a number reads the cell's id (its start), so `.sort()` orders
 cells by start and `time.sequence` keys its frames at cell starts.
 
-### Partition: each group across its cell
+### Partition: each group in its cell
 
 `spread`, `stack` and `table` read a cell's id and order. Only the
 `partition` operator (`graphicalOperators/partition.tsx`) reads its region:
-it places each group across its cell's interval `[start, end)` on one
-continuous scale, so a 29-day February is narrower than a 31-day March and
-an empty cell keeps its place (it is a group with no rows, and it is still
-placed). Its key must have a region. Only `.bin(p)` makes one, so the type
+it gives each group its cell's interval `[start, end)` on one continuous
+scale, so a 29-day February is narrower than a 31-day March and an empty
+cell keeps its place (it is a group with no rows, and it is still placed).
+Its key must have a region. Only `.bin(p)` makes one, so the type
 of a field expression says whether it does (`FieldExpr<true>`, a phantom
 `hasRegion` flag that domain ops keep and aggregates drop), and the split
 checks the wire form from Python with an error that names the fix.
 
-It has no layout code of its own. It is `scatter`'s range form with the span
-read off the key: its split hands `Scatter` one `{ min, max }` span per cell
-on `dir`, and `Scatter` elaborates them into interval `position`
-constraints. So the interval form above does all the work: the span is the
-child's size proposal (a `rect` with no size there fills its cell, and a
-`stack` or `spread` inside a cell divides the cell), and the pins place it.
-On the other axis the children are aligned, as in a scatter.
+It has no layout code of its own. It is a layer with one `position`
+constraint per child that gives it its cell (`Constraint.position({ region
+})`, with a `PositionRegion` per cell) and one `align` on each axis the
+key's columns are not placed along (the other axis, for a 1D key), as in a
+scatter.
 
-Each end of a span is a datum that carries what the column says about its
-values (its measure, and its schema type, so a time column gives a time
-axis), and the cell it is an edge of (`DatumValueImpl.cell`). A range whose
-two ends are edges of one cell is that cell, so `collectPositionDomains`
-collects the cells, and the layer's type on that axis holds them
-(`CONTINUOUS_TYPE.cells`). A union keeps them only when every part has them
-(`mergeCells`), as an ordinal over cells does. The type is what tells the
+**Regions flow down in the layout call.** A region is the space a parent
+gives a child, and it travels with the size proposal:
+`child.layout(size, scales, region)` (`geometry/region.ts`). A region is a
+span `[min, max]` per axis, either of which may be missing, plus an optional
+outline, measured from the parent's origin in the axis order of whoever
+holds it (`GoFishNode.layout` reflects it into the child's own order when
+the two y directions differ). The layer builds each child's region in
+`buildChildProposals` (`constraints/proposalPlan.ts`): on an axis where the
+child's `region` spans, the cell's two edges mapped to pixels; on an axis
+where it spans none, the region the layer itself was handed there, if any. Each region bounds a different axis, so that is their intersection. The
+child is proposed each span's length as its size (`childLayoutSizeProposal`)
+and then places itself in the span: a node whose own layout did not place it
+on that axis is centered there by `GoFishNode.layout`. So a `rect` or a
+`region` with no size there fills its cell, a `stack` or `spread` inside a
+cell divides the cell, and a circle or a text keeps its own size and sits in
+the middle of the cell. An interval would pin both edges instead, which sets
+the child's size and would stretch a circle into an ellipse. The region
+itself lowers to no placement fact: its target is already placed when the
+solve runs, so the layer takes it out of what the solve sees
+(`placementConstraints`, `constraints/proposalPlan.ts`). There an `align`
+also loses each axis on which every one of its operands has a span in its
+region, since the regions placed them there.
+
+A child with no region of its own gets the region the layer was handed,
+outline and all, unless the layer's constraints place it (a stack's
+children are placed by its distribute and align). So a layer of a `region`
+and a `text` as a partition's mark gives each cell to both: the region
+draws it, and the text sits at its center. A layer passes the region it was
+handed on in its own frame, each span starting at 0 (`rebaseRegion`), and
+`GoFishNode.layout` places the layer itself in the region it was handed, as
+it places any node.
+
+The region holds its cell (a `RegionCell`, cells.ts: an id, a label when it
+has one, a span per axis, and an outline when it is not a box) and the
+column each axis it is placed along reads, as a map from a value to its
+datum. It reads the cell through them once: `PositionRegion.spans` holds,
+per axis, the cell's two edges as datums, and each datum carries what the
+column says about its values (its measure, and its schema type, so a time
+column gives a time axis). `collectPositionDomains` reads a region's spans
+as it reads an interval (the domain, the measure, the calendar), and
+collects its cell when it is a cell of a line placed along that axis, so
+the layer's type on that axis holds the cells (`CONTINUOUS_TYPE.cells`). A union keeps them only when every part has them
+and they are the cells of one partition (`mergeCells`), as an ordinal over
+cells does. That is read off the cells, not off how they were binned: no two
+cells overlap (a cell in two parts is one interval in both, so `[0, 10)` and
+`[5, 10)` are of two partitions), and calendar cells share a calendar
+partition (`CalendarPartition.sameCells`), since a time axis labels them all
+by one partition's rows. A `{ step }` over two domains gives the cells of one
+partition; a `{ thresholds }` fitted to two domains may not. The type is what tells the
 axis that it places cells: a time axis over calendar cells ticks at their
 partition and labels each cell between its two boundary ticks
 ([Axes](/internals/frontend/axes)). A numeric axis over numeric cells keeps
 its round-number ticks.
 
-The region a child gets is its cell's interval on `dir` and the whole space
-on the other axis. Two nested 1D partitions, one per axis, give each leaf
-the same rectangle in either order; only the order of the children
-differs. A 2D cell that is not a product of intervals (a hexagon) cannot be
-stated as two interval pins, so a 2D partition needs a region constraint of
-its own (#1059).
+A top-level partition hands each child its cell on `dir` and no span on the
+other axis, where `alignment` places the children (bars on a shared
+baseline). Inside another partition's cell, a partition hands each child
+that cell on the other axis as well, so the child sits in a rectangle and
+`alignment` has nothing left to move. That is why two nested 1D partitions,
+one per axis, place each leaf the same way in either order; only the order
+of the children differs (`cells.test.ts` checks this for regions, rects,
+circles, and texts of different widths).
+
+**The product form.** `partition({ by: { x, y } })` divides both axes. It is
+defined as the 1D partition on x, then the 1D partition on y, and it is
+built by that rewrite (`compose`, in JS and in Python alike), so it adds no
+layout of its own, and on the wire it is the two partitions. Empty cells are groups with no rows, as in 1D, so a
+count over one is 0 and is drawn.
+
+**Regions with an outline.** A region may also hold an outline, the same
+shape the `boundary` geometry query (#974) returns, but handed from parent to
+child: a `PositionRegion` holds the cell's outline in datums (`outline`,
+`[x, y]` per corner) when the cell has one and is placed along both axes,
+`buildChildProposals` maps it
+through both scales into the child's region, and the `region` mark draws a
+region's outline as a path when it has one, and its box otherwise (under a
+nonlinear coordinate space, resampled, so a hexagon in polar coordinates
+draws curved). The cells of a binned struct, below, are what make outlines.
+One step is left for later (a TODO in `buildChildProposals`): a child that
+gets a cell of its own does not inherit the outline of the region its layer
+was handed, which would need that outline clipped to the cell.
+
+### Cells of the plane: a binned struct
+
+A hexagon depends on two fields together, so a `.bin` on each field cannot
+express it. `struct({ x, y })` (`structExpr.ts`, after polars' `pl.struct`)
+is a key that reads two columns, one per axis, and `.bin(b)` bins it with a
+strategy of the `Bin` family (`families/bin.ts`): `Bin.hex({ radius })` or
+`Bin.voronoi({ seeds })`. Its type carries the same phantom flag as a field
+expression (`StructExpr<true>` once binned), so `partition` over an unbinned
+struct is a type error, and the split checks the wire form. The class's own
+fields are its wire form (`{ type: "struct", fields, ops? }`), so the
+instance and the object Python sends are read the same way.
+
+`splitEntries` groups the rows of a struct key by the cells of the plane
+(`polygonCells.ts`), by the same key function as a binned field
+(`binKey`). A `PolygonCell` has an id, an
+outline in data, and the box that holds it (its span on each axis), and no
+order. The cells are those
+of the two columns' domain, as in 1D, so every group of a nested split sees
+the same cells and empty cells are kept (a cache keyed by the domain, the bin
+object and the two columns).
+
+- **Hexagons.** A pointy-top grid (as in d3-hexbin, ggplot2's `geom_hex` and
+  Observable Plot) with a hexagon centered on (0, 0), so the grid does not
+  move with the data, as `{ step }` cells are aligned to multiples of the
+  step. The radius is in data units, one number or one per axis; a hexagon is
+  the unit hexagon scaled by the x radius on x and the y radius on y. A point
+  goes to the hexagon with the nearest center (axial coordinates and cube
+  rounding), so a point on an edge goes to one of its two hexagons, the same
+  one every time. The cells are every hexagon whose inside meets the box of
+  the domain (a separating-axis test over the box's two axes and the
+  hexagon's three edge normals), plus the hexagon of each domain point, since
+  a point on the box's edge may fall in a hexagon that only touches the box.
+- **Voronoi cells.** One cell per seed (d3-delaunay, over Delaunator),
+  clipped to the box that holds the domain and the seeds, so every seed has
+  a cell; seeds at one point share the first one's cell. A cell's id is its
+  seed's index among all the seeds (the first one's, for seeds at one
+  point). A point goes to its
+  nearest seed (`Delaunay.find`). Distances are measured in data units, so
+  the cells mean something only when the two fields share a unit (longitude
+  and latitude, two lengths in millimeters).
+
+`partition`'s plane form is the same split and the same constraints as the
+1D form: the struct's two columns are placed along x and y, so each child's
+one `region` spans both axes (the cell's box) and holds the cell's outline,
+and no axis is left to align. The boxes make the axes' domains, and since a
+polygon cell is no cell of one axis alone, each axis is a plain continuous
+axis (`collectPositionDomains` collects only a cell of a line, a `Cell`). A
+`region` draws the outline; any other mark is placed in the box, so a circle
+or a text sits at a hexagon's center.
 
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always
@@ -2027,7 +2177,10 @@ channel's own sum/mean is the identity over that singleton, so
 `rect({ h: field("weight").mean() })` reports the mean, not
 `mean-of-a-1-element-array`-nonsense. A bare string or plain function accessor
 carries no ops, so this is a strict superset of the pre-#700 behavior, not a
-new code path for the common case.
+new code path for the common case. The color and raw channels, which read
+the first row, fold an aggregate the same way: `region({ fill:
+field("a").count() })` colors a cell by its count, and the count of a group
+with no rows is 0.
 
 **Measure implications.** `count`/`distinct` report values that are counts,
 not the source field's own units — `evalFieldValues` reports measure

@@ -483,6 +483,7 @@ const GENERATED_LEAF_MARKS = [
   "image",
   "polygon",
   "blank",
+  "region",
 ];
 
 parts.push(
@@ -692,7 +693,12 @@ function pyFStr(text: string, tail: string): string {
 function describeType(type: FieldType): string {
   switch (type.kind) {
     case "number":
-      return `a${type.finite ? " finite" : ""} number${type.min !== undefined ? ` >= ${type.min}` : ""}`;
+      return `a${type.finite ? " finite" : ""} number${type.min !== undefined ? ` >= ${type.min}` : ""}${type.exclusiveMin !== undefined ? ` > ${type.exclusiveMin}` : ""}`;
+    case "object":
+      return `a dict with the keys ${Object.keys(type.fields).map(pyKwarg).join(", ")}`;
+    case "array":
+      if (isTable(type)) return "a table (a list of dict rows, or a dataframe)";
+      throw new Error("no Python check for an array strategy param");
     case "string":
       return "a str";
     case "boolean":
@@ -719,9 +725,21 @@ function pyTypeTest(type: FieldType, v: string): string {
       return `isinstance(${v}, str)`;
     case "boolean":
       return `isinstance(${v}, bool)`;
+    case "object":
+      return `isinstance(${v}, dict)`;
+    case "array":
+      if (isTable(type)) return `isinstance(${v}, list)`;
+      throw new Error("no Python check for an array strategy param");
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }
+}
+
+/** Whether a param type is a table: an array of rows, each a record. A
+ *  Python factory takes any table `to_records` reads (a list of dict rows,
+ *  or a dataframe) and puts it on the wire as dict rows. */
+function isTable(type: FieldType): boolean {
+  return type.kind === "array" && type.items.kind === "record";
 }
 
 /** The ValueError checks for a value already known to be of `type`'s Python
@@ -746,7 +764,43 @@ function pyValueChecks(
         ...(type.min !== undefined
           ? fail(`${v} < ${type.min}`, `must be >= ${type.min}`)
           : []),
+        ...(type.exclusiveMin !== undefined
+          ? fail(
+              `${v} <= ${type.exclusiveMin}`,
+              `must be > ${type.exclusiveMin}`
+            )
+          : []),
       ];
+    case "object": {
+      // Its keys, then each value by its own type. A key is snake_case, as
+      // in any nested option dict.
+      const fields = Object.entries(type.fields);
+      const keys = fields.map(([f]) => pyKwarg(f));
+      const known = `(${keys.map(pyStr).join(", ")}${keys.length === 1 ? "," : ""})`;
+      return [
+        `for _key in ${v}:`,
+        `    if _key not in ${known}:`,
+        `        raise TypeError(${pyFStr(`${label} got an unexpected key `, `{_key!r}; expected ${keys.join(", ")}"`.slice(0, -1))})`,
+        ...fields.flatMap(([f, spec]) => {
+          const key = pyKwarg(f);
+          // The value is bound to a name first: an f-string cannot hold a
+          // quoted subscript before Python 3.12.
+          const at = `${v}_${key}`;
+          const sub = `${label}['${key}']`;
+          return [
+            ...(spec.required
+              ? [
+                  `if ${pyStr(key)} not in ${v}:`,
+                  `    raise TypeError(${pyStr(`${label} is missing the key '${key}'`)})`,
+                ]
+              : []),
+            `if ${pyStr(key)} in ${v}:`,
+            `    ${at} = ${v}[${pyStr(key)}]`,
+            ...pyParamChecks(spec.type, at, sub).map((l) => `    ${l}`),
+          ];
+        }),
+      ];
+    }
     case "enum":
       return fail(
         `${v} not in (${type.values.map((s) => JSON.stringify(s)).join(", ")}${type.values.length === 1 ? "," : ""})`,
@@ -833,6 +887,14 @@ function renderStrategyFactory(opts: {
   }
   const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
   const checks = ents.flatMap(([py, , spec]) => [
+    // A table is read into dict rows first (a dataframe, or a list of rows).
+    ...(isTable(spec.type)
+      ? [
+          `    if ${py} is not None:`,
+          `        from .arrow_utils import to_records`,
+          `        ${py} = to_records(${py})`,
+        ]
+      : []),
     `    if ${py} is not None:`,
     ...pyParamChecks(spec.type, py, `${family}.${name}(${py}=...)`).map(
       (l) => `        ${l}`

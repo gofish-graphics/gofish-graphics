@@ -135,9 +135,10 @@ class PlacementOwnershipPlan {
       const coordinate = constraint[axis];
       if (coordinate === undefined) continue;
       const idx = axisIndex(axis);
-      // An interval pins BOTH edges — mark its children pinned when the edges
-      // resolve (an align sources such a spanned target). A point pins one
-      // anchor.
+      // An interval pins BOTH edges — mark its children pinned when the
+      // edges resolve (an align sources such a target). A point pins one
+      // anchor. (A region pins nothing: its target placed itself in the
+      // region it was handed at layout, so it is initially placed.)
       if (isPositionInterval(coordinate)) {
         const min = compilePlacementCoordinate(coordinate[0], posScales?.[idx]);
         const max = compilePlacementCoordinate(coordinate[1], posScales?.[idx]);

@@ -159,7 +159,9 @@ gone, #1058.) A binned key, `field("date").bin(Calendar.month)`, is an op in
 the field expression's `ops`: `{ "op": "bin", "partition": { "unit": "month",
 "step": 1 } }`, where the partition is a Calendar value's wire form,
 `{ "step" }`, or `{ "thresholds" }` (`PartitionIR`), and an op with no
-`partition` bins into about 10 cells. A partition with a JS `format`
+`partition` bins into about 10 cells. The op takes no other key, so the old
+flat spelling, `{ "op": "bin", "thresholds": 20 }`, is an error, not the
+default partition. A partition with a JS `format`
 function has no wire form, and serializing it is an error. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
@@ -435,14 +437,25 @@ the Python generator builds `_chart_opts` from `CHART_OPTIONS`, and the docs
 build the chart options table from it (`::: gofish-ref ChartOptions`).
 
 `STRATEGIES` declares the strategy families whose values cross the wire:
-`Tile`, `Overlap` and `Curve`. For each it lists the kinds, each with its
+`Tile`, `Overlap`, `Curve` and `Bin`. For each it lists the kinds, each with its
 params (types, defaults and docs), and the presets: a factory that makes a
 kind with some params already set, such as `Overlap.sina()`, which is
 `noise` with `smoothing: "silverman"`. Each family derives its
 `OPTION_TYPES` entry, a union of one object per kind with a literal `kind`,
 so the strategy options are `t.ref("Tile")`, `t.ref("Overlap")` and
-`t.ref("Curve")`. A param may carry bounds, `t.num({ min: 0, finite: true })`
-for a pixel padding, which the validator and the JSON Schema check. The JS
+`t.ref("Curve")`, and a struct's bin op takes `OPTION_TYPES.Bin`. A param
+may carry bounds, `t.num({ min: 0, finite: true })` for a pixel padding or
+`t.num({ exclusiveMin: 0, finite: true })` for a hex radius, which the
+validator and the JSON Schema (`minimum`, `exclusiveMinimum`) check. When a
+value matches no branch of an untagged union, and only one branch is of the
+value's kind (a number for `Bin.hex`'s `radius: number | { x, y }`), the
+validator reports that branch's own findings (`expected a number above 0`).
+A union whose branches are all tagged by the same field is checked against
+the one branch its value's tag names: a strategy's `kind`, or the `type` of
+a hand-authored ref that declares a `tag` in `AUTHORED_REFS` (`"field"` for
+`FieldAccessor`, `"struct"` for `StructAccessor`). So `partition`'s `by`, a
+field accessor or a struct, reports what is wrong with a bad bin, not that
+no shape matched. The JS
 layout checks a strategy where it reads it, with `checkStrategy(family,
 value, where)` from `validate.ts`, the same walk the validator runs over a
 whole document. So an unknown kind, an undeclared param, and a value out of
@@ -453,15 +466,17 @@ functions, rebuilt from a `type`-tagged config (`COORDS`), and a color scale
 is tagged by `_tag` and takes its one argument by position.
 
 `schema.ts` keeps the TypeScript types of the strategies, `TileIR`,
-`OverlapIR` and `CurveIR`, by hand, and each family's JS type is one of them
+`OverlapIR`, `CurveIR` and `BinIR`, by hand, and each family's JS type is one of them
 (`Curve.Curve` is `CurveIR`). `descriptors.test.ts` checks that their kinds
 and params agree with `STRATEGIES`. Every family is closed: there is no
 public way to add a kind, so every strategy can cross the wire (user-defined
 strategies are designed in #1101).
 
 A named type may say which Python class builds a value of it (`pyClass`):
-`FieldPredicate` here, and `FieldAccessor` in `AUTHORED_REFS`, the list of
-refs to hand-authored shapes. Such a value already carries its wire keys, so
+`FieldPredicate` here, and `FieldAccessor` and `StructAccessor` in
+`AUTHORED_REFS`, the list of refs to hand-authored shapes (a struct key,
+`{ type: "struct", fields: { x, y }, ops? }`, is walked by its own walker,
+whose bin op is checked against `OPTION_TYPES.Bin`). Such a value already carries its wire keys, so
 the Python generator passes it through. One function, `pyType` in
 `descriptors.ts`, gives the Python type of a field: the generated factory
 signatures (the strategy modules' too) annotate with it and the Python docs
@@ -708,8 +723,8 @@ It emits:
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
 - One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
-  `gofish/overlap.py`, `gofish/curve.py`), bound in `__init__.py` under the
-  family name (`Tile`, `Overlap`, `Curve`): one factory per kind and per
+  `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`), bound in
+  `__init__.py` under the family name (`Tile`, `Overlap`, `Curve`, `Bin`): one factory per kind and per
   preset, named by `pyKwarg` (`Tile.slice_dice()`, `Curve.catmull_rom()`).
   Each returns `{"kind": ..., **params}` with snake_case param keys, and the
   option it is passed to renames them to wire keys through the family's
@@ -721,7 +736,11 @@ It emits:
   a `TypeError`, and a value out of bounds or not in an enum raises a
   `ValueError` that names the call and the kwarg
   (`Overlap.separate(padding=...) must be >= 0, got -1`). An unknown kwarg is
-  a `TypeError` from the signature. These are the same constraints
+  a `TypeError` from the signature. A dict param (`Bin.hex`'s
+  `radius={"x": 2, "y": 500}`) has its keys and each value checked the
+  same way, and a table param (an array of records: `Bin.voronoi`'s
+  `seeds`) is read first with `to_records`, so a dataframe works too, and
+  goes on the wire as dict rows. These are the same constraints
   `checkStrategy` checks on the JS side, read from the same table, so Python
   users see the error at the line that made it.
 

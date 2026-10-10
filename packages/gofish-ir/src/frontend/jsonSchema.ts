@@ -49,6 +49,9 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
       return {
         ...(type.finite ? { type: "number" } : { $ref: "#/$defs/Number" }),
         ...(type.min !== undefined ? { minimum: type.min } : {}),
+        ...(type.exclusiveMin !== undefined
+          ? { exclusiveMinimum: type.exclusiveMin }
+          : {}),
       };
     case "boolean":
       return { type: "boolean" };
@@ -378,6 +381,34 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         },
       },
     },
+    StructAccessor: {
+      description:
+        "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes a Bin strategy). Valid as a partition's `by` only once binned.",
+      type: "object",
+      required: ["type", "fields"],
+      additionalProperties: false,
+      properties: {
+        type: { const: "struct" },
+        fields: {
+          type: "object",
+          required: ["x", "y"],
+          additionalProperties: false,
+          properties: { x: { type: "string" }, y: { type: "string" } },
+        },
+        ops: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["op", "partition"],
+            additionalProperties: false,
+            properties: {
+              op: { const: "bin" },
+              partition: { $ref: "#/$defs/Bin" },
+            },
+          },
+        },
+      },
+    },
     FieldOpIR: {
       description:
         "One op in a field(...) pipeline. Mirrors gofish-graphics' FieldOp (ast/fieldExpr.ts) exactly.",
@@ -413,31 +444,13 @@ export const FRONTEND_IR_JSON_SCHEMA = {
               description:
                 "The partition each value is binned into: a Calendar value ({ unit, step?, start? }), { step }, or { thresholds } (a cell count or a list of edges). Absent: about 10 cells.",
               oneOf: [
-                {
-                  type: "object",
-                  required: ["unit"],
-                  properties: {
-                    unit: {
-                      enum: [
-                        "second",
-                        "minute",
-                        "hour",
-                        "day",
-                        "week",
-                        "month",
-                        "quarter",
-                        "year",
-                      ],
-                    },
-                    step: { $ref: "#/$defs/Number" },
-                    start: { enum: ["monday", "sunday"] },
-                  },
-                  additionalProperties: false,
-                },
+                { $ref: "#/$defs/Calendar" },
                 {
                   type: "object",
                   required: ["step"],
-                  properties: { step: { $ref: "#/$defs/Number" } },
+                  properties: {
+                    step: { type: "number", exclusiveMinimum: 0 },
+                  },
                   additionalProperties: false,
                 },
                 {
@@ -456,6 +469,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
               ],
             },
           },
+          additionalProperties: false,
         },
         {
           type: "object",

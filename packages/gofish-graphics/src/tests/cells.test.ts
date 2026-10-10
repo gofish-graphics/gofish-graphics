@@ -4,7 +4,8 @@
  * bins over (every group sees the chart's cells, empty ones included, #763),
  * the wire form, and the axis over cells (labels between boundary ticks, and
  * a year row over calendar months), and the `partition` operator, which
- * places each group across its cell on a continuous scale.
+ * gives each group its cell on a continuous scale: its 1D form, its product
+ * form (#1059), and the region each child gets.
  *
  * Run: `pnpm build && tsx src/tests/cells.test.ts` (wired as `pnpm
  * test:cells`). The rendering checks import from `dist`, like time.test.ts.
@@ -13,7 +14,11 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import "../lib";
+import { spawnSync } from "node:child_process";
 import { binCells, checkPartition, Cell } from "../ast/cells";
+import { mergeCells } from "../ast/underlyingSpace";
+import { inferPos } from "../ast/channels";
+import { evalFieldValues } from "../ast/fieldExpr";
 import { Calendar, loadTemporal } from "../ast/calendar";
 import { splitEntries } from "../ast/datumProjection";
 import { field } from "../ast/data";
@@ -24,11 +29,28 @@ import {
   Schema as SrcSchema,
 } from "../ast/schema";
 
-const { chart, spread, stack, partition, rect, Schema } = GoFish as any;
+const {
+  chart,
+  spread,
+  stack,
+  scatter,
+  group,
+  table,
+  pack,
+  treemap,
+  partition,
+  rect,
+  region,
+  text,
+  circle,
+  line,
+  selectAll,
+  Schema,
+} = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
 const distField = (GoFish as any).field;
 
-declare const process: { exit(code: number): never };
+declare const process: { exit(code: number): never; execPath: string };
 
 let passed = 0;
 let failed = 0;
@@ -432,10 +454,10 @@ async function main() {
 
     // Nested 1D partitions give the same regions in either order.
     const pts = [
-      { a: 0.5, b: 0.2 },
-      { a: 0.7, b: 1.7 },
-      { a: 2.2, b: 0.4 },
-      { a: 1.1, b: 2.9 },
+      { a: 0.5, b: 0.2, name: "a" },
+      { a: 0.7, b: 1.7, name: "bbbbbbbb" },
+      { a: 2.2, b: 0.4, name: "cc" },
+      { a: 1.1, b: 2.9, name: "dddd" },
     ];
     const grid = async (first: "x" | "y") => {
       const px = partition({ by: distField("a").bin({ step: 1 }), dir: "x" });
@@ -449,12 +471,189 @@ async function main() {
         .map((r) => JSON.stringify(r))
         .sort();
     };
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args.join(" "));
     const xy = await grid("x");
     const yx = await grid("y");
+    console.warn = warn;
     check(
       "partition x then y and y then x place the same regions",
       xy.length === 9 && same(xy, yx),
       `${xy.join(" ")}\n      vs ${yx.join(" ")}`
+    );
+    // The inner partition's cross axis is spanned by its outer cell, so its
+    // \`alignment\` there is no constraint at all, not a no-op that warns.
+    check(
+      "nested partitions leave no align with nothing to move",
+      !warnings.some((w) => w.startsWith("[align]")),
+      warnings.join("\n")
+    );
+
+    // The product form (#1059) is the nested form, x then y, with nothing
+    // added. And hand-nested partitions give the same marks in either order,
+    // whatever the mark: each child gets the region its outer partition gave
+    // its inner one, cut down to its own cell (#1059).
+    const itemsOf = (dl: any): any[] => {
+      const out: any[] = [];
+      const walk = (it: any) => {
+        if (it.kind !== "group")
+          out.push(
+            Object.fromEntries(
+              Object.entries(it).filter(
+                ([k, v]) =>
+                  k !== "id" &&
+                  (typeof v === "number" || typeof v === "string")
+              )
+            )
+          );
+        for (const c of it.children ?? []) walk(c);
+      };
+      dl.items.forEach(walk);
+      return out;
+    };
+    const sorted = (items: any[]) =>
+      items.map((it) => JSON.stringify(it)).sort();
+    const ab = {
+      x: distField("a").bin({ step: 1 }),
+      y: distField("b").bin({ step: 1 }),
+    };
+    const product = async (mark: any) =>
+      itemsOf(
+        await chart(pts, noAxes)
+          .flow(partition({ by: ab }))
+          .mark(mark)
+          .toDisplayList({ w: 300, h: 300 })
+      );
+    const nested = async (mark: any, first: "x" | "y") => {
+      const px = partition({ by: ab.x, dir: "x" });
+      const py = partition({ by: ab.y, dir: "y" });
+      return itemsOf(
+        await chart(pts, noAxes)
+          .flow(...(first === "x" ? [px, py] : [py, px]))
+          .mark(mark)
+          .toDisplayList({ w: 300, h: 300 })
+      );
+    };
+    for (const [name, mark] of [
+      ["region", () => region({ fill: "steelblue" })],
+      ["rect", () => rect({ fill: "steelblue" })],
+      ["rect with a size", () => rect({ w: 10, h: 20 })],
+      ["circle", () => circle({ r: 5 })],
+      ["text", () => text({ text: distField("a").count() })],
+      // Children of different sizes in one column: each is centered in its
+      // own cell, not aligned with the others on their left edges.
+      ["texts of different widths", () => text({ text: distField("name") })],
+    ] as const) {
+      const p = await product(mark());
+      const xFirst = await nested(mark(), "x");
+      const yFirst = await nested(mark(), "y");
+      check(
+        `the product form draws what the nested form draws (${name})`,
+        p.length > 0 && same(p, xFirst),
+        `${JSON.stringify(p)}\n      vs ${JSON.stringify(xFirst)}`
+      );
+      check(
+        `nested partitions draw the same in either order (${name})`,
+        xFirst.length > 0 && same(sorted(xFirst), sorted(yFirst)),
+        `${sorted(xFirst).join(" ")}\n      vs ${sorted(yFirst).join(" ")}`
+      );
+    }
+
+    // Each child gets its cell: a region fills it, and a mark with a size of
+    // its own sits at its center at that size. The cells are 100px squares.
+    const cellRegions = rectsOf(
+      await chart(pts, noAxes)
+        .flow(partition({ by: ab }))
+        .mark(region({ fill: "steelblue" }))
+        .toDisplayList({ w: 300, h: 300 })
+    );
+    const x0 = Math.min(...cellRegions.map((r) => r.x));
+    const y0 = Math.min(...cellRegions.map((r) => r.y));
+    check(
+      "a region fills its cell",
+      cellRegions.length === 9 &&
+        cellRegions.every(
+          (r) =>
+            Math.abs(r.w - 100) < 1e-6 &&
+            Math.abs(r.h - 100) < 1e-6 &&
+            Math.abs((r.x - x0) % 100) < 1e-6 &&
+            Math.abs((r.y - y0) % 100) < 1e-6
+        ),
+      JSON.stringify(cellRegions)
+    );
+    const circles = (await product(circle({ r: 5 }))).filter(
+      (c) => c.kind === "ellipse"
+    );
+    check(
+      "a circle keeps its size and sits at its cell's center",
+      circles.length === 9 &&
+        circles.every(
+          (c) =>
+            c.rx === 5 &&
+            c.ry === 5 &&
+            Math.abs((c.cx - x0 - 50) % 100) < 1e-6 &&
+            Math.abs((c.cy - y0 - 50) % 100) < 1e-6
+        ),
+      JSON.stringify(circles)
+    );
+    const named = (await product(text({ text: distField("name") }))).filter(
+      (t) => t.kind === "text"
+    );
+    // The first column holds "a", "bbbbbbbb", and an empty cell's "". Their
+    // left edges differ, and their centers agree, for any width per letter.
+    const column = named.filter((t) => t.x < x0 + 100);
+    const leftOf = (word: string) => column.find((t) => t.text === word)?.x;
+    const halfLetter = (leftOf("a")! - leftOf("bbbbbbbb")!) / (8 - 1);
+    check(
+      "texts of different widths in one column each sit at their cell's center",
+      column.length === 3 &&
+        halfLetter > 0 &&
+        column.every(
+          (t) => Math.abs(t.x + halfLetter * t.text.length - (x0 + 50)) < 1e-6
+        ),
+      JSON.stringify(column)
+    );
+    const fixed1D = rectsOf(
+      await chart(pts, noAxes)
+        .flow(partition({ by: ab.x, dir: "x" }))
+        .mark(rect({ w: 10, h: 10 }))
+        .toDisplayList({ w: 300, h: 300 })
+    );
+    check(
+      "in 1D, a mark with a width of its own is centered in its cell",
+      fixed1D.length === 3 &&
+        fixed1D.every(
+          (r, i) =>
+            r.w === 10 && Math.abs(r.x - fixed1D[0].x - 100 * i) < 1e-6
+        ) &&
+        Math.abs(fixed1D[1].x + 5 - (x0 + 150)) < 1e-6,
+      JSON.stringify(fixed1D)
+    );
+
+    // Empty cells are groups with no rows, as in 1D: each is still given its
+    // cell, and a count over it is 0.
+    const counts = (await product(text({ text: distField("a").count() })))
+      .map((t) => t.text)
+      .sort();
+    check(
+      "an empty cell keeps its place, and a count over it is 0",
+      same(counts, ["0", "0", "0", "0", "0", "1", "1", "1", "1"]),
+      JSON.stringify(counts)
+    );
+
+    const productErr = (opts: any) =>
+      errorOf(() => partition(opts)) ?? "no error";
+    check(
+      "a product key takes exactly x and y, and no dir",
+      productErr({ by: { x: ab.x } }).includes("exactly the keys x and y") &&
+        productErr({ by: ab, dir: "x" }).includes("divides both axes") &&
+        productErr({ by: ab.x }).includes("`dir` names the axis"),
+      [
+        productErr({ by: { x: ab.x } }),
+        productErr({ by: ab, dir: "x" }),
+        productErr({ by: ab.x }),
+      ].join(" | ")
     );
 
     const noRegion = await chart(rows)
@@ -469,6 +668,250 @@ async function main() {
       "a key with no region is an error that names .bin",
       noRegion !== undefined && noRegion.includes('field("rating").bin('),
       String(noRegion)
+    );
+  }
+
+  console.log("\n# a group with no rows");
+  {
+    const walkItems = (dl: any): any[] => {
+      const out: any[] = [];
+      const walk = (it: any) => {
+        out.push(it);
+        for (const c of it.children ?? []) walk(c);
+      };
+      dl.items.forEach(walk);
+      return out;
+    };
+    // Cells [0, 1) to [4, 5): [1, 2) and [3, 4) hold no rows.
+    const pts = [
+      { x: 0.5, y: 1 },
+      { x: 0.7, y: 2 },
+      { x: 2.5, y: 3 },
+      { x: 2.7, y: 1 },
+      { x: 4.2, y: 2 },
+      { x: 4.5, y: 0 },
+    ];
+    const byCell = () => distField("x").bin({ step: 1 });
+    const noAxes = { axes: false };
+
+    const lines = await chart(pts, noAxes)
+      .flow(spread({ by: byCell(), dir: "x" }), scatter({ x: "x", y: "y" }))
+      .mark(line())
+      .toDisplayList({ w: 300, h: 100 })
+      .then(
+        (dl: any) => walkItems(dl).filter((it) => it.kind === "path").length,
+        (e: Error) => e.message
+      );
+    check(
+      "a scatter over an empty cell draws nothing: one line per full cell",
+      lines === 3,
+      String(lines)
+    );
+
+    for (const [name, inner] of [
+      ["stack", () => stack({ by: "y", dir: "y" })],
+      ["spread", () => spread({ by: "y", dir: "y" })],
+      ["group", () => group({ by: "y" })],
+      ["scatter", () => scatter({ x: "x", y: "y" })],
+      ["table", () => table({ by: { x: "y", y: "y" } })],
+      ["pack", () => pack()],
+      ["pack by a field", () => pack({ by: "y" })],
+      ["treemap", () => treemap({ size: "y" })],
+      ["treemap by a field", () => treemap({ by: "y", size: "y" })],
+    ] as const) {
+      const got = await chart(pts, noAxes)
+        .flow(spread({ by: byCell(), dir: "x" }), inner())
+        .mark(rect({ w: 5, h: 5 }))
+        .toDisplayList({ w: 300, h: 100 })
+        .then(
+          (dl: any) => walkItems(dl).filter((it) => it.kind === "rect"),
+          (e: Error) => e.message
+        );
+      check(
+        `a ${name} over an empty cell draws nothing`,
+        Array.isArray(got) &&
+          got.length >= pts.length &&
+          got.every((r: any) =>
+            [r.x, r.y, r.w, r.h].every((v) => Number.isFinite(v))
+          ),
+        Array.isArray(got) ? JSON.stringify(got.slice(0, 3)) : String(got)
+      );
+    }
+
+    const emptyPartition = await chart([] as { x: number }[], noAxes)
+      .flow(partition({ by: byCell(), dir: "x" }))
+      .mark(rect({}))
+      .toDisplayList({ w: 300, h: 100 })
+      .then(
+        (dl: any) => walkItems(dl).filter((it) => it.kind === "rect").length,
+        (e: Error) => e.message
+      );
+    check(
+      "a partition over no rows has no cells, and draws nothing",
+      emptyPartition === 0,
+      String(emptyPartition)
+    );
+
+    check(
+      "the mean of no rows has no value",
+      inferPos("x", []) === undefined &&
+        evalFieldValues(field("x").mean(), []).values.length === 0
+    );
+    const dots = walkItems(
+      await chart(pts, noAxes)
+        .flow(scatter({ by: byCell(), x: "x", y: "y" }))
+        .mark(circle({ r: 3 }))
+        .toDisplayList({ w: 300, h: 100 })
+    ).filter((it) => it.kind === "ellipse");
+    check(
+      "a scatter places a group by its rows, so an empty cell is no point " +
+        "and leaves the others' scale alone",
+      dots.length === 3 &&
+        dots.every((d: any) => Number.isFinite(d.cx) && Number.isFinite(d.cy)),
+      JSON.stringify(dots.map((d: any) => [d.cx, d.cy]))
+    );
+  }
+
+  console.log("\n# the default split over cells");
+  {
+    // Cells [0, 10), [10, 90), [90, 100]: three runs, one per cell.
+    const pts = [0, 5, 12, 17, 50, 95, 100].map((x, i) => ({ x, y: i % 3 }));
+    const runs = await chart(pts, { axes: false })
+      .flow(
+        spread({ by: distField("x").bin({ thresholds: [10, 90] }), dir: "x" }),
+        scatter({ x: "x", y: "y" })
+      )
+      .mark(line())
+      .toDisplayList({ w: 300, h: 100 })
+      .then(
+        (dl: any) => {
+          const paths: any[] = [];
+          const walk = (it: any) => {
+            if (it.kind === "path") paths.push(it);
+            for (const c of it.children ?? []) walk(c);
+          };
+          dl.items.forEach(walk);
+          return paths.length;
+        },
+        (e: Error) => e.message
+      );
+    check(
+      "a line keys each mark by the cell its split put it in",
+      runs === 3,
+      String(runs)
+    );
+  }
+
+  console.log("\n# a binned key over refs");
+  {
+    const pts = [0.5, 0.7, 2.5, 2.7, 4.2].map((x) => ({ x, y: 1 }));
+    const bars = await chart(pts)
+      .flow(scatter({ x: "x", y: "y" }))
+      .mark(circle({ r: 3 }).name("points"))
+      .layer(
+        chart(selectAll("points"))
+          .flow(spread({ by: distField("x").bin({ step: 2 }), dir: "x" }))
+          .mark(rect({ w: 3, h: 3 }))
+      )
+      .toDisplayList({ w: 300, h: 100 })
+      .then(
+        (dl: any) => dl.items.filter((it: any) => it.kind === "rect").length,
+        (e: Error) => e.message
+      );
+    check(
+      "the cells of a binned key over refs are over the rows they stand for",
+      bars === 3,
+      String(bars)
+    );
+  }
+
+  console.log("\n# a domain with no end");
+  {
+    // In a child process with a time limit, so a loop that never ends fails
+    // the check instead of hanging the suite.
+    const errorIn = (call: string): string => {
+      const cells = new URL("../ast/cells.ts", import.meta.url).href;
+      const polygons = new URL("../ast/polygonCells.ts", import.meta.url).href;
+      const code =
+        `import { binCells } from ${JSON.stringify(cells)};` +
+        `import { hexCells } from ${JSON.stringify(polygons)};` +
+        `try { ${call}; console.log("no error"); }` +
+        `catch (e) { console.log(e.message); }`;
+      const run = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "--input-type=module", "-e", code],
+        { timeout: 20000, encoding: "utf8" }
+      );
+      return run.error !== undefined
+        ? `did not finish (${run.error.message})`
+        : String(run.stdout).trim();
+    };
+    for (const [name, call, column] of [
+      [
+        "a step",
+        `binCells({ step: 1 }, [0, Infinity], undefined, 'field("x").bin(...)')`,
+        'field("x")',
+      ],
+      [
+        "a threshold count",
+        `binCells({ thresholds: 10 }, [-Infinity, 3], undefined, 'field("x").bin(...)')`,
+        'field("x")',
+      ],
+      [
+        "hexagons",
+        `hexCells({ kind: "hex", radius: 1 }, { x: "a", y: "b" }, [0, 1], [0, Infinity], "t")`,
+        'column "b"',
+      ],
+    ] as const) {
+      const message = errorIn(call);
+      check(
+        `${name} over an infinite value is an error that names the column`,
+        message.includes(column) && message.includes("finite"),
+        message
+      );
+    }
+  }
+
+  console.log("\n# a union of cells");
+  {
+    const cell = (start: number, end: number) =>
+      new Cell(start, end, `${start}–${end}`);
+    const ids = (cells: readonly Cell[] | undefined) =>
+      cells === undefined ? "none" : cells.map((c) => c.id).join(" ");
+    const sameStep = mergeCells([
+      [cell(0, 10), cell(10, 20)],
+      [cell(10, 20), cell(20, 30)],
+    ]);
+    check(
+      "the cells of one partition over two domains are one set of cells",
+      ids(sameStep) === "0 10 20",
+      ids(sameStep)
+    );
+    const overlapping = mergeCells([
+      [cell(0, 10), cell(10, 20)],
+      [cell(5, 10), cell(10, 20)],
+    ]);
+    check(
+      "cells of two partitions that overlap are not cells of one",
+      overlapping === undefined,
+      ids(overlapping)
+    );
+    const sameStart = mergeCells([[cell(0, 10)], [cell(0, 5)]]);
+    check(
+      "two cells that start together but end apart are not cells of one",
+      sameStart === undefined,
+      ids(sameStart)
+    );
+    const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
+    const calendarCells = (p: any, lo: string, hi: string) =>
+      binCells(p, [t(lo), t(hi)], "UTC", "t").cells;
+    const months = calendarCells(Calendar.month, "2024-01-10", "2024-01-20");
+    const days = calendarCells(Calendar.day, "2024-03-04", "2024-03-06");
+    const mixed = mergeCells([months, days]);
+    check(
+      "calendar cells of two partitions are not cells of one, even apart",
+      mixed === undefined,
+      ids(mixed)
     );
   }
 
@@ -487,6 +930,13 @@ export function partitionKeyTypes(): void {
   srcPartition({ by: field("rating").bin({ step: 1 }).count(), dir: "x" });
   srcPartition({ by: field("rating").bin({ step: 1 }), dir: "x" });
   srcPartition({ by: field("rating").bin({ step: 1 }).reverse(), dir: "x" });
+  srcPartition({
+    by: { x: field("a").bin({ step: 1 }), y: field("b").bin({ step: 1 }) },
+  });
+  // @ts-expect-error each axis's key needs a region too
+  srcPartition({ by: { x: field("a"), y: field("b").bin({ step: 1 }) } });
+  // @ts-expect-error a product divides both axes, so it takes no dir
+  srcPartition({ by: { x: field("a").bin(), y: field("b").bin() }, dir: "x" });
 }
 
 main().catch((e) => {

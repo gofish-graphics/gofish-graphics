@@ -3,9 +3,16 @@
 // </gofish-wiki>
 
 import { type Size } from "../dims";
-import { getValue, getValueOffset, isValue } from "../data";
-import { pxOf } from "../domain";
-import { isPositionInterval, type PositionInterval } from "./position";
+import { isValue } from "../data";
+import { isPositionInterval, type PositionRegion } from "./position";
+import { compilePlacementCoordinate } from "./placementLowering";
+import {
+  hasSpan,
+  rebaseRegion,
+  type Point,
+  type Region,
+  type Span,
+} from "../geometry";
 import { type AxisTicks, type UnderlyingSpace } from "../underlyingSpace";
 import { niceScope, type Extent } from "../extent";
 import { sliceExtent } from "./folds";
@@ -17,6 +24,7 @@ import {
   type ScopeSolution,
 } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
+import type { AlignConstraint } from "./align";
 import type { GridConstraint } from "./grid";
 import type { ConstraintPosScales } from "./shared";
 import { buildNestPlan, type NestPlan, type NestPlanChild } from "./nestPlan";
@@ -130,54 +138,155 @@ export function buildDistributeSliceMap(
   return out.size === 0 ? undefined : out;
 }
 
-/** The pixel length of an interval position coordinate under `scale`: the
- *  distance between its two edges, each a pixel literal or a datum mapped
- *  through the scale (as `compilePlacementCoordinate` maps it when the
- *  constraint pins the edges). Undefined when a datum edge has no scale. */
-function spanPixels(
-  span: PositionInterval,
-  scale: ConstraintPosScales[number]
-): number | undefined {
-  const [a, b] = span.map((edge) => {
-    if (!isValue(edge)) return edge as number;
-    if (scale === undefined) return undefined;
-    return pxOf(scale, getValue(edge)!) + getValueOffset(edge);
-  });
-  if (a === undefined || b === undefined) return undefined;
-  return Math.abs(b - a);
+/** What a layer's `position` constraints hand its children top-down
+ *  ({@link buildChildProposals}). */
+export type ChildProposals = {
+  /** Per child, per axis, the pixel length of the interval that pins it
+   *  there (undefined where no interval constrains the child). */
+  spanByName: Map<string, Size<number | undefined>> | undefined;
+  /** The region of each child a `position` constraint gives a `region`. */
+  regionByName: Map<string, Region>;
+  /** The region every other child gets unless the layer's constraints place
+   *  it: the one the layer was given, in its own frame. */
+  passedOn: Region | undefined;
+};
+
+/**
+ * What a layer's `position` constraints hand each child before it is laid
+ * out, in one walk of the constraints: the length of each interval that pins
+ * it, and its region (#1059, `geometry/region.ts`). `posScales` are the
+ * scales the layer resolves its position constraints against; a datum edge
+ * with no scale gives nothing.
+ *
+ * **Spans.** An interval coordinate `[min, max]` pins both edges of its
+ * target, so it DETERMINES the target's extent on that axis
+ * (`lowerPositionPlacement`). This is the top-down side of that pin: the
+ * target is laid out in the span it will be pinned across, so its content
+ * fills the span (a scatter's range), rather than being laid out in the
+ * whole layer and then stretched or shrunk by the pins.
+ *
+ * **Regions.** A region is not a pin: the layer hands it to the child in the
+ * layout call. A child the layer's `position` constraints give a `region` (a
+ * {@link PositionRegion}: a `partition`'s cell) gets, on each axis, the
+ * cell's span there, mapped to pixels. On an axis where it has no cell, it
+ * gets the region the layer itself was given there, if any, in the layer's
+ * own frame (`rebaseRegion`; `GoFishNode.layout` then places the layer in
+ * the region it was given): a cell on x is the whole of the layer's space on
+ * y, so a partition inside another partition's cell gives its children both
+ * cells. That is the intersection of the two regions, since each one bounds
+ * a different axis.
+ *
+ * Every other child gets the region the layer was given, in the layer's
+ * frame, outline and all (`passedOn`), unless the layer's constraints place
+ * it: a `layer([region(...), text(...)])` in a hexagon gives the hexagon to
+ * both, and a stack's children are placed by its distribute and align.
+ *
+ * The outline is the cell's (`PositionRegion.outline`), mapped through both
+ * scales (a cell of the plane: `struct({ x, y }).bin(b)`). TODO(#1059): a
+ * child whose cell has no outline does not get the outline of the region
+ * the layer was given (a 1D partition inside a hexagon gets the hexagon's
+ * box, cut down to its cell), which needs that outline clipped to the cell.
+ * No story needs it yet, and the clip opens a design question: whether a
+ * child of a hexagon is cut to the hexagon or to its box.
+ */
+export function buildChildProposals(
+  constraints: readonly ConstraintSpec[],
+  posScales: ConstraintPosScales,
+  received: Region | undefined
+): ChildProposals {
+  const local = hasSpan(received) ? rebaseRegion(received) : undefined;
+  const spanByName = new Map<string, Size<number | undefined>>();
+  const regionByName = new Map<string, Region>();
+  for (const c of constraints) {
+    if (c.type !== "position") continue;
+    for (const axis of [0, 1] as const) {
+      const coord = axis === 0 ? c.x : c.y;
+      if (!isPositionInterval(coord)) continue;
+      const a = compilePlacementCoordinate(coord[0], posScales[axis]);
+      const b = compilePlacementCoordinate(coord[1], posScales[axis]);
+      if (a === undefined || b === undefined) continue;
+      for (const ref of c.children) {
+        if (!ref) continue;
+        const cur = spanByName.get(ref.name) ?? [undefined, undefined];
+        cur[axis] = Math.abs(b - a);
+        spanByName.set(ref.name, cur);
+      }
+    }
+    if (c.region === undefined) continue;
+    const region = cellRegion(c.region, posScales, local);
+    for (const ref of c.children) if (ref) regionByName.set(ref.name, region);
+  }
+  return {
+    spanByName: spanByName.size === 0 ? undefined : spanByName,
+    regionByName,
+    passedOn: local,
+  };
 }
 
-/** Build per-child size proposals from interval position constraints.
- *
- * An interval coordinate `[min, max]` pins both edges of its target, so it
- * DETERMINES the target's extent on that axis (`lowerPositionPlacement`).
- * This is the top-down side of that pin: the target is laid out in the span
- * it will be pinned across, so its content fills the span (a `partition`'s
- * cell, a scatter's range), rather than being laid out in the whole layer
- * and then stretched or shrunk by the pins. `posScales` are the scales the
- * layer resolves its position constraints against. Keyed by child name, one
- * entry per axis (undefined where no interval constrains the child). */
-export function buildSpanProposalMap(
-  constraints: readonly ConstraintSpec[],
-  posScales: ConstraintPosScales
-): Map<string, Size<number | undefined>> | undefined {
-  const out = new Map<string, Size<number | undefined>>();
-  for (const constraint of constraints) {
-    if (constraint.type !== "position") continue;
-    ([0, 1] as const).forEach((axis) => {
-      const coord = axis === 0 ? constraint.x : constraint.y;
-      if (!isPositionInterval(coord)) return;
-      const length = spanPixels(coord, posScales[axis]);
-      if (length === undefined) return;
-      for (const ref of constraint.children) {
-        if (!ref) continue;
-        const cur = out.get(ref.name) ?? [undefined, undefined];
-        cur[axis] = length;
-        out.set(ref.name, cur);
-      }
-    });
+/** A cell's region in pixels ({@link buildChildProposals}): its span on each
+ *  axis it has one, else `local`'s, and its outline when every corner maps. */
+function cellRegion(
+  cell: PositionRegion,
+  posScales: ConstraintPosScales,
+  local: Region | undefined
+): Region {
+  const span = (axis: 0 | 1): Span | undefined => {
+    const edges = cell.spans[axis];
+    if (edges === undefined) return local?.spans[axis];
+    const a = compilePlacementCoordinate(edges[0], posScales[axis]);
+    const b = compilePlacementCoordinate(edges[1], posScales[axis]);
+    if (a === undefined || b === undefined) return undefined;
+    return [Math.min(a, b), Math.max(a, b)];
+  };
+  let outline: Point[] | undefined;
+  if (cell.outline !== undefined) {
+    const points: Point[] = [];
+    for (const [vx, vy] of cell.outline) {
+      const x = compilePlacementCoordinate(vx, posScales[0]);
+      const y = compilePlacementCoordinate(vy, posScales[1]);
+      if (x === undefined || y === undefined) break;
+      points.push([x, y]);
+    }
+    if (points.length === cell.outline.length) outline = points;
   }
-  return out.size === 0 ? undefined : out;
+  return { spans: [span(0), span(1)], outline };
+}
+
+/**
+ * The layer's constraints as its placement solve sees them, once its
+ * children are laid out in their regions ({@link buildChildProposals}). The
+ * regions have done their work (the domains, the axis cells, and the
+ * children's regions), so a `position` loses its `region`, and goes when it
+ * has no `x` or `y` left. An `align` loses each axis on which every one of
+ * its operands has a span in its region, since the region placed them there,
+ * and goes when it has no axis left. A partition inside another partition's
+ * cell is such a case: the cell spans the inner partition's cross axis, so
+ * its `alignment` (the fallback for an axis with no span) has nothing to do
+ * there.
+ */
+export function placementConstraints(
+  constraints: ConstraintSpec[],
+  regions: Map<string, Region>
+): ConstraintSpec[] {
+  const spanned = (c: AlignConstraint, axis: 0 | 1) =>
+    c.children.every((ref) => regions.get(ref.name)?.spans[axis] !== undefined);
+  const out: ConstraintSpec[] = [];
+  for (const c of constraints) {
+    if (c.type === "position" && c.region !== undefined) {
+      if (c.x !== undefined || c.y !== undefined)
+        out.push({ ...c, region: undefined });
+      continue;
+    }
+    if (c.type !== "align") {
+      out.push(c);
+      continue;
+    }
+    const x = c.x !== undefined && spanned(c, 0) ? undefined : c.x;
+    const y = c.y !== undefined && spanned(c, 1) ? undefined : c.y;
+    if (x === c.x && y === c.y) out.push(c);
+    else if (x !== undefined || y !== undefined) out.push({ ...c, x, y });
+  }
+  return out;
 }
 
 /** Choose the concrete size proposed to one child in a layer.
@@ -189,7 +298,9 @@ export function buildSpanProposalMap(
  *   3. default layer box: unconstrained/fill proposal is the full layer size.
  *
  * An interval position (`spanByName`) then owns the axes it spans: the pins
- * set the child's extent there, whatever else proposed one.
+ * set the child's extent there, whatever else proposed one. So does the
+ * region the child is handed (`region`, {@link buildChildProposals}): the child
+ * is laid out in the length of each span it has.
  *
  * Nest proposals apply after this, because they derive a child from an already
  * laid-out source and therefore override only the derived axes. */
@@ -198,7 +309,8 @@ export function childLayoutSizeProposal(
   layerSize: Size,
   gridCellByName: Map<string, Size> | undefined,
   sliceByName: Map<string, Size> | undefined,
-  spanByName?: Map<string, Size<number | undefined>>
+  spanByName?: Map<string, Size<number | undefined>>,
+  region?: Region
 ): Size {
   let proposal: Size = layerSize;
   if (
@@ -215,8 +327,14 @@ export function childLayoutSizeProposal(
     proposal = sliceByName.get(childName)!;
   }
   const span = childName !== undefined ? spanByName?.get(childName) : undefined;
-  if (span === undefined) return proposal;
-  return [span[0] ?? proposal[0], span[1] ?? proposal[1]];
+  if (span !== undefined)
+    proposal = [span[0] ?? proposal[0], span[1] ?? proposal[1]];
+  if (region === undefined) return proposal;
+  const length = (axis: 0 | 1) => {
+    const s = region.spans[axis];
+    return s === undefined ? proposal[axis] : s[1] - s[0];
+  };
+  return [length(0), length(1)];
 }
 
 export type ChildScalePlan = {

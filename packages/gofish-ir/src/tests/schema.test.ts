@@ -499,9 +499,102 @@ for (const [name, partition] of [
   ["an unknown unit", { unit: "fortnight" }],
   ["a step and thresholds", { step: 1, thresholds: 10 }],
   ["a non-numeric step", { step: "1" }],
+  ["a zero step", { step: 0 }],
+  ["a Calendar value with no unit", { step: 1, start: "sunday" }],
   ["the old flat thresholds", 10],
 ] as const) {
   check(`bin with ${name} rejected`, !validate(binBy(partition)).valid);
+}
+// The old flat spelling, `{ op: "bin", thresholds: 20 }`, is an unknown key
+// on the op: rejected, not read as the default partition.
+{
+  const flat = {
+    type: "field",
+    name: "d",
+    ops: [{ op: "bin", thresholds: 20 }],
+  };
+  check(
+    "bin with a key beside the partition rejected",
+    !validate(chart([{ type: "spread", dir: "x", by: flat }])).valid
+  );
+  // Where the key's `type` picks its branch, the error names the key.
+  const r = validate(chart([{ type: "partition", by: flat, dir: "x" }]));
+  check(
+    "bin with a key beside the partition rejected, naming the key",
+    !r.valid && r.errors.some((e) => e.path.endsWith(".thresholds")),
+    JSON.stringify(r)
+  );
+}
+
+// partition's `by`: one binned key with a `dir`, or a binned struct
+// (#1059). A key per axis is two partitions on the wire.
+const binned = (name: string, partition: unknown = { step: 1 }) => ({
+  type: "field",
+  name,
+  ops: [{ op: "bin", partition }],
+});
+for (const [name, op] of [
+  ["one key and a dir", { type: "partition", by: binned("a"), dir: "x" }],
+  [
+    "a binned struct",
+    {
+      type: "partition",
+      by: {
+        type: "struct",
+        fields: { x: "a", y: "b" },
+        ops: [{ op: "bin", partition: { kind: "hex", radius: 1 } }],
+      },
+    },
+  ],
+] as const) {
+  const r = validate(chart([op]));
+  check(
+    `partition with ${name} accepts`,
+    r.valid,
+    r.valid ? undefined : JSON.stringify(r.errors)
+  );
+}
+for (const [name, by] of [
+  ["a key per axis", { x: binned("a"), y: binned("b") }],
+  ["a string per axis", { x: "a", y: "b" }],
+] as const) {
+  check(
+    `partition with ${name} rejected`,
+    !validate(chart([{ type: "partition", by }])).valid
+  );
+}
+// A key's `type` picks the branch it is checked against, so a bad bin
+// reports what is wrong with the bin, not that no shape matched.
+{
+  const r = validate(
+    chart([{ type: "partition", by: binned("a", { step: "1" }), dir: "x" }])
+  );
+  check(
+    "partition with a bad bin names the bin",
+    !r.valid &&
+      r.errors.every(
+        (e) => e.path.includes(".by.ops") && !/did not match/.test(e.message)
+      ),
+    JSON.stringify(r.errors)
+  );
+}
+// Of a partition's shapes, the one whose required keys it has (a Calendar
+// value's unit) says what is wrong.
+{
+  const r = validate(
+    chart([
+      {
+        type: "partition",
+        by: binned("a", { unit: "fortnight" }),
+        dir: "x",
+      },
+    ])
+  );
+  check(
+    "partition with an unknown unit names the unit",
+    !r.valid && r.errors.every((e) => e.path.endsWith(".partition.unit")),
+    JSON.stringify(r.errors)
+  );
 }
 
 check(

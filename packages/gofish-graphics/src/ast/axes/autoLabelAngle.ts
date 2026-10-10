@@ -81,7 +81,7 @@ function rotatePoint([x, y]: [number, number], deg: number): [number, number] {
 }
 
 /** The axis-aligned box around a rotated `rel`, relative to the pivot. */
-function rotatedExtent(rel: RelBox, deg: number): RelBox {
+export function rotatedExtent(rel: RelBox, deg: number): RelBox {
   if (!deg) return rel;
   const corners = [
     rotatePoint([rel.minX, rel.minY], deg),

@@ -3,7 +3,6 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-import meanBy from "lodash/meanBy";
 import sumBy from "lodash/sumBy";
 import {
   MaybeValue,
@@ -20,7 +19,12 @@ import {
   type Measure,
 } from "./data";
 import { Frontend } from "gofish-ir";
-import { evalFieldValues, type FieldExpr } from "./fieldExpr";
+import {
+  evalFieldValues,
+  getFieldOps,
+  meanOf,
+  type FieldExpr,
+} from "./fieldExpr";
 import { columnType, type ColumnType } from "./schema";
 import {
   mapAxisDims,
@@ -210,6 +214,24 @@ export const resolveMeasure = <T>(
  *  its type in the chart's schema (schema.ts). */
 export type ColumnInfo = { measure?: Measure; type?: ColumnType };
 
+/** `v` as a datum read from the column `name`: it carries what the column
+ *  says about its values ({@link ColumnInfo}: its measure, and its schema
+ *  type, such as a time column's calendar), and, when the column has a type,
+ *  the column's name. */
+export const columnValue = (
+  v: number,
+  column: ColumnInfo,
+  name: string | undefined
+): DatumValueImpl =>
+  new DatumValueImpl(
+    v,
+    column.measure,
+    undefined,
+    undefined,
+    column.type === undefined ? undefined : name,
+    column.type
+  );
+
 /** The {@link ColumnInfo} of `accessor`'s column, read off
  *  `provenanceData` (see {@link resolveMeasure}). An accessor that names no
  *  column (a function, a literal, a value) has neither. */
@@ -256,7 +278,8 @@ export const inferEntrySize = <T>(
 
 /**
  * Shared core of {@link inferSize} / {@link inferPos}: they differ only in the
- * lodash aggregation (`sumBy` vs `meanBy`). Resolves a numeric value from a
+ * aggregation (a sum vs a mean, {@link meanOf}). An aggregation with no
+ * value (the mean of no rows) is no value: the channel is undefined. Resolves a numeric value from a
  * field name, field expression, function accessor, or literal number:
  * - number / literal: passed through as a literal.
  * - `datum(...)`: already a data value, passed through as-is.
@@ -274,7 +297,7 @@ export const inferEntrySize = <T>(
  * array); when omitted it is resolved locally from `d`.
  */
 const inferNumeric =
-  (agg: typeof sumBy) =>
+  (agg: (values: any[]) => number | undefined) =>
   <T>(
     accessor:
       | string
@@ -301,25 +324,27 @@ const inferNumeric =
       accessor,
       data
     );
-    return new DatumValueImpl(
-      agg(values as any[]),
-      pipelineMeasure ?? column.measure,
-      undefined,
-      undefined,
-      column.type === undefined ? undefined : fieldNameOf(accessor),
-      column.type
+    const folded = agg(values as any[]);
+    if (folded === undefined) return undefined;
+    return columnValue(
+      folded,
+      { measure: pipelineMeasure ?? column.measure, type: column.type },
+      fieldNameOf(accessor)
     );
   };
 
 /** Infer a size value (sums the field/function across the data array). */
 export const inferSize = inferNumeric(sumBy);
 
-/** Infer a position value (averages the field/function across the data array). */
-export const inferPos = inferNumeric(meanBy);
+/** Infer a position value (averages the field/function across the data
+ *  array). Over no rows it has no value: undefined (see {@link meanOf}). */
+export const inferPos = inferNumeric(meanOf);
 
 /**
  * Shared core of the non-aggregating channels ({@link inferColor} /
- * {@link inferRaw}): resolve an accessor against the FIRST row of `data`.
+ * {@link inferRaw}): resolve an accessor against the FIRST row of `data`,
+ * or, for a field expression with an aggregate (`field(x).count()`), against
+ * the fold of all of `data`.
  * - "literal": pass the accessor's value through unchanged — a `literal(...)`
  *   wrapper, or a string that names no field on the row (e.g. a CSS color).
  * - "row": the value read off the row, with the `field` it was read from when
@@ -335,6 +360,17 @@ function firstRowValue<T extends Record<string, any>>(
   | { kind: "row"; value: unknown; field?: string }
   | { kind: "none" } {
   if (isLiteral(accessor)) return { kind: "literal", value: accessor.value };
+  if (isField(accessor) && getFieldOps(accessor).length > 0) {
+    // An expression pipeline folds the group's rows itself, as for a size
+    // channel (`evalFieldValues`): `.count()` is the number of rows, even
+    // when there are none. The value is the fold's, not a value of the
+    // field, so it records no field. A fold over no rows that has no value
+    // (the mean of nothing) is no value here either.
+    const [folded] = evalFieldValues(accessor, data).values;
+    return folded == null || Number.isNaN(folded)
+      ? { kind: "none" }
+      : { kind: "row", value: folded };
+  }
   const row = data.length > 0 && data[0] != null ? data[0] : undefined;
   if (isField(accessor)) {
     return row === undefined

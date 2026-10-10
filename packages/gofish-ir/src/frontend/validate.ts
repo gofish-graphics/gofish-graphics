@@ -36,6 +36,7 @@ import {
   isTaggedInfinity,
 } from "./nonFinite.js";
 import {
+  AUTHORED_REFS,
   LABEL_OPTIONS,
   OPTION_TYPES,
   acceptedFields,
@@ -307,6 +308,31 @@ function walkDescriptorFields(
   rejectUnknown(node, [...callerKeys, ...Object.keys(fields)], path, ctx);
 }
 
+/** Whether `value` is of the JSON kind a field type takes (a number, a
+ *  string, an object, ...), whatever its finer constraints. A channel, a
+ *  ref, or `any` takes values of several kinds, so it is never singled out. */
+function sameKind(type: FieldType, value: unknown): boolean {
+  switch (type.kind) {
+    case "number":
+      return isIRNumber(value);
+    case "string":
+    case "enum":
+      return typeof value === "string";
+    case "boolean":
+      return typeof value === "boolean";
+    case "literal":
+      return typeof value === typeof type.value;
+    case "object":
+    case "record":
+      return isObject(value) && !Array.isArray(value);
+    case "array":
+    case "tuple":
+      return Array.isArray(value);
+    default:
+      return false;
+  }
+}
+
 /** Check a single value against a descriptor `FieldType`, recording each
  *  finding in `ctx.errors`. */
 function walkFieldType(
@@ -333,6 +359,8 @@ function walkFieldType(
         fail(`expected a finite number, got ${n}`);
       else if (type.min !== undefined && !(n >= type.min))
         fail(`expected a number of at least ${type.min}, got ${n}`);
+      else if (type.exclusiveMin !== undefined && !(n > type.exclusiveMin))
+        fail(`expected a number above ${type.exclusiveMin}, got ${n}`);
       return;
     }
     case "boolean":
@@ -361,21 +389,23 @@ function walkFieldType(
       walkRefType(type.name, value, path, ctx);
       return;
     case "union": {
-      // A tagged union (every branch an object whose `kind` is a literal):
-      // the value's `kind` picks the one branch to check it against, as the
-      // Python generator's `_to_wire` does, so an unknown kind and a bad
-      // param each get their own message.
-      const tags = taggedBranches(type.options);
-      if (tags !== null) {
+      // A tagged union (every branch an object whose `kind` is a literal, or
+      // every branch a ref tagged by its `type`, as `field(...)` and
+      // `struct(...)` are): the value's tag picks the one branch to check it
+      // against, as the Python generator's `_to_wire` does, so an unknown
+      // tag and a bad param each get their own message.
+      const tagged = taggedBranches(type.options);
+      if (tagged !== null) {
+        const { key, byTag } = tagged;
         if (!isObject(value)) {
           fail(`expected object, got ${typeNameOf(value)}`);
           return;
         }
-        const branch = tags.get(value.kind as string);
+        const branch = byTag.get(value[key] as string);
         if (branch === undefined) {
           fail(
-            `unknown kind ${JSON.stringify(value.kind)}; expected one of ${[...tags.keys()].map((k) => JSON.stringify(k)).join(", ")}`,
-            `${path}.kind`
+            `unknown ${key} ${JSON.stringify(value[key])}; expected one of ${[...byTag.keys()].map((k) => JSON.stringify(k)).join(", ")}`,
+            `${path}.${key}`
           );
           return;
         }
@@ -384,10 +414,22 @@ function walkFieldType(
       }
       // Otherwise valid if ANY branch matches cleanly: each branch is
       // checked into a probe context of its own.
+      const probes: Context[] = [];
       for (const branch of type.options) {
         const probe: Context = { errors: [] };
         walkFieldType(branch, value, path, probe);
         if (probe.errors.length === 0) return;
+        probes.push(probe);
+      }
+      // When only one branch is of the value's kind (a number for a number
+      // branch, an object for an object branch), its own findings say what
+      // is wrong (`expected a number above 0`).
+      const ofKind = type.options.flatMap((b, i) =>
+        sameKind(b, value) ? [probes[i]] : []
+      );
+      if (ofKind.length === 1) {
+        ctx.errors.push(...ofKind[0].errors);
+        return;
       }
       fail(
         `value did not match any of the expected shapes: ${JSON.stringify(value)}`
@@ -434,27 +476,42 @@ function walkFieldType(
   }
 }
 
-/** The branches of a tagged union by their `kind`: every branch an object
- *  whose required `kind` field is a string literal, no two alike. Null for
- *  any other union. */
+/** A branch's tag: the field that names it, and its value. An object
+ *  whose required `kind` field is a string literal (a strategy) is tagged
+ *  by its `kind`; a hand-authored ref with a `tag` (`field(...)`,
+ *  `struct(...)`, AUTHORED_REFS) by its `type`. */
+function branchTag(
+  branch: FieldType
+): { key: "kind" | "type"; value: string } | null {
+  if (branch.kind === "ref") {
+    const tag = AUTHORED_REFS[branch.name]?.tag;
+    return tag === undefined ? null : { key: "type", value: tag };
+  }
+  if (branch.kind !== "object") return null;
+  const tag = branch.fields.kind;
+  return tag !== undefined &&
+    tag.required &&
+    tag.type.kind === "literal" &&
+    typeof tag.type.value === "string"
+    ? { key: "kind", value: tag.type.value }
+    : null;
+}
+
+/** The branches of a tagged union by their tag: every branch tagged by the
+ *  same field ({@link branchTag}), no two alike. Null for any other union. */
 function taggedBranches(
   options: readonly FieldType[]
-): Map<string, FieldType> | null {
-  const byKind = new Map<string, FieldType>();
+): { key: "kind" | "type"; byTag: Map<string, FieldType> } | null {
+  const byTag = new Map<string, FieldType>();
+  let key: "kind" | "type" | undefined;
   for (const branch of options) {
-    if (branch.kind !== "object") return null;
-    const tag = branch.fields.kind;
-    if (
-      tag === undefined ||
-      !tag.required ||
-      tag.type.kind !== "literal" ||
-      typeof tag.type.value !== "string" ||
-      byKind.has(tag.type.value)
-    )
-      return null;
-    byKind.set(tag.type.value, branch);
+    const tag = branchTag(branch);
+    if (tag === null || (key !== undefined && tag.key !== key)) return null;
+    if (byTag.has(tag.value)) return null;
+    key = tag.key;
+    byTag.set(tag.value, branch);
   }
-  return byKind;
+  return key === undefined ? null : { key, byTag };
 }
 
 /**
@@ -545,6 +602,9 @@ function walkRefType(
         return;
       }
       walkFieldAccessor(value, path, ctx);
+      return;
+    case "StructAccessor":
+      walkStructAccessor(value, path, ctx);
       return;
     default:
       // Every ref a descriptor names is in OPTION_TYPES or AUTHORED_REFS, so
@@ -717,6 +777,60 @@ function walkFieldAccessor(
   }
 }
 
+/**
+ * A key built from two fields (`struct({ x, y })`), with the cells it is
+ * binned into: `{ type: "struct", fields: { x, y }, ops?: [{ op: "bin",
+ * partition }] }`, the partition a `Bin` strategy (`OPTION_TYPES.Bin`).
+ */
+function walkStructAccessor(value: unknown, path: string, ctx: Context): void {
+  const fail = (message: string, at = path) =>
+    ctx.errors.push({ path: at, message });
+  if (!isObject(value)) {
+    fail(`expected a struct(...) accessor object, got ${typeNameOf(value)}`);
+    return;
+  }
+  if (value.type !== "struct") {
+    fail(
+      `expected type "struct", got ${JSON.stringify(value.type)}`,
+      `${path}.type`
+    );
+    return;
+  }
+  const fields = value.fields;
+  if (
+    !isObject(fields) ||
+    typeof fields.x !== "string" ||
+    typeof fields.y !== "string"
+  ) {
+    fail(
+      'struct "fields" must be { x: string, y: string }, naming the column ' +
+        "read on each axis",
+      `${path}.fields`
+    );
+  } else rejectUnknown(fields, ["x", "y"], `${path}.fields`, ctx);
+  if (value.ops !== undefined) {
+    if (!Array.isArray(value.ops)) {
+      fail('struct "ops" must be an array when present', `${path}.ops`);
+    } else {
+      value.ops.forEach((op, i) => {
+        const at = `${path}.ops[${i}]`;
+        if (!isObject(op) || op.op !== "bin") {
+          fail('a struct op must be { op: "bin", partition }', at);
+          return;
+        }
+        rejectUnknown(op, ["op", "partition"], at, ctx);
+        walkFieldType(
+          OPTION_TYPES.Bin.type,
+          op.partition,
+          `${at}.partition`,
+          ctx
+        );
+      });
+    }
+  }
+  rejectUnknown(value, ["type", "fields", "ops"], path, ctx);
+}
+
 /** Known `field(...)` pipeline op names — mirrors gofish-graphics'
  *  `FieldOp` (`ast/fieldExpr.ts`) exactly. */
 const FIELD_OP_NAMES = [
@@ -780,6 +894,7 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
       }
       return;
     case "bin":
+      rejectUnknown(value, ["op", "partition"], path, ctx);
       if (value.partition !== undefined)
         walkPartition(value.partition, `${path}.partition`, ctx);
       return;
@@ -789,19 +904,9 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
   }
 }
 
-const CALENDAR_UNITS = [
-  "second",
-  "minute",
-  "hour",
-  "day",
-  "week",
-  "month",
-  "quarter",
-  "year",
-];
-
-/** A `bin` op's partition: a Calendar value (`{ unit, step?, start? }`),
- *  `{ step }`, or `{ thresholds }` (a count or a list of edges). */
+/** A `bin` op's partition: a Calendar value (the `Calendar` option type,
+ *  `{ unit, step?, start? }`), `{ step }` with a positive step, or
+ *  `{ thresholds }` (a count or a list of edges). */
 function walkPartition(value: unknown, path: string, ctx: Context): void {
   const fail = (message: string) => ctx.errors.push({ path, message });
   if (!isObject(value)) {
@@ -810,30 +915,24 @@ function walkPartition(value: unknown, path: string, ctx: Context): void {
   }
   const keys = Object.keys(value);
   if ("unit" in value) {
-    if (!CALENDAR_UNITS.includes(value.unit as string))
-      fail(
-        `bin "partition.unit" must be one of ${CALENDAR_UNITS.join(", ")}, got ${JSON.stringify(value.unit)}`
-      );
-    if (value.step !== undefined && !isIRNumber(value.step))
-      fail('bin "partition.step" must be a number when present');
-    if (
-      value.start !== undefined &&
-      value.start !== "monday" &&
-      value.start !== "sunday"
-    )
-      fail('bin "partition.start" must be "monday" | "sunday" when present');
-    const extra = keys.filter((k) => !["unit", "step", "start"].includes(k));
-    if (extra.length > 0)
-      fail(`bin "partition" has unknown keys: ${extra.join(", ")}`);
+    walkRefType("Calendar", value, path, ctx);
     return;
   }
   if (keys.length === 1 && keys[0] === "step") {
-    if (!isIRNumber(value.step)) fail('bin "partition.step" must be a number');
+    walkFieldType(
+      t.num({ exclusiveMin: 0, finite: true }),
+      value.step,
+      `${path}.step`,
+      ctx
+    );
     return;
   }
   if (keys.length === 1 && keys[0] === "thresholds") {
-    const t = value.thresholds;
-    if (!isIRNumber(t) && !(Array.isArray(t) && t.every((e) => isIRNumber(e))))
+    const th = value.thresholds;
+    if (
+      !isIRNumber(th) &&
+      !(Array.isArray(th) && th.every((e) => isIRNumber(e)))
+    )
       fail(
         'bin "partition.thresholds" must be a number or an array of numbers'
       );

@@ -10,7 +10,6 @@ import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
 import { fieldNameOf, isField } from "../data";
 import {
-  splitKeyFn,
   type SplitBy,
   type InferredRelational,
   type TimeTier,
@@ -415,26 +414,32 @@ function resolveTravelAxis(
 
 /** The default split key: the combination of every flow tier's `by` EXCEPT
  *  the path tier's (which orders the path and never splits). `undefined`
- *  when there's nothing to split on (no other grouping tier). Reuses
- *  `splitKeyFn` (same one `splitEntries` uses) so string/field/function `by`
- *  forms all project through `GoFishRef.datum` identically to a real
- *  operator `by` — including the function-form trap: a function `by`
- *  receives the raw bag element (a `GoFishRef`), not a datum, matching
- *  today's function-form semantics. */
+ *  when there's nothing to split on (no other grouping tier).
+ *
+ *  A mark's key under a tier is the key that tier's split gave the group the
+ *  mark is in: the `key` of the mark's ancestor that the split made
+ *  (`GoFishNode.keyBy`), so it is the split's own key, whatever its form: a
+ *  field's value, a function's, or a binned key's cell among the cells over
+ *  the split's domain. Nothing is recomputed from the mark's rows, which do
+ *  not carry the domain a cell is over. */
 function computeDefaultBy(
   classified: OperatorClass[],
   pathTierIndex: number | undefined
-): SplitBy | undefined {
+): ((r: GoFishRef) => string) | undefined {
   const tierBys: SplitBy[] = [];
   classified.forEach((cls, i) => {
     if (i === pathTierIndex) return;
     if (cls.by !== undefined) tierBys.push(cls.by);
   });
   if (tierBys.length === 0) return undefined;
-  const keyFns = tierBys.map((by) => splitKeyFn(by));
+  const keyUnder = (r: GoFishRef, by: SplitBy): string | undefined => {
+    for (let n = r.targetNode; n !== undefined; n = n.parent)
+      if (n.keyBy === by) return n.key;
+    return undefined;
+  };
   // Unit-separator join: a bare `join("")` would collide composite keys like
   // ("ab","c") and ("a","bc").
-  return (r: any) => keyFns.map((fn) => fn(r)).join("\u001f");
+  return (r) => tierBys.map((by) => String(keyUnder(r, by))).join("\u001f");
 }
 
 /**

@@ -271,6 +271,46 @@ for the API.
         }
       }
     },
+    "StructAccessor": {
+      "description": "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes a Bin strategy). Valid as a partition's `by` only once binned.",
+      "type": "object",
+      "required": ["type", "fields"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "struct"
+        },
+        "fields": {
+          "type": "object",
+          "required": ["x", "y"],
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "type": "string"
+            },
+            "y": {
+              "type": "string"
+            }
+          }
+        },
+        "ops": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["op", "partition"],
+            "additionalProperties": false,
+            "properties": {
+              "op": {
+                "const": "bin"
+              },
+              "partition": {
+                "$ref": "#/$defs/Bin"
+              }
+            }
+          }
+        }
+      }
+    },
     "FieldOpIR": {
       "description": "One op in a field(...) pipeline. Mirrors gofish-graphics' FieldOp (ast/fieldExpr.ts) exactly.",
       "oneOf": [
@@ -323,36 +363,15 @@ for the API.
               "description": "The partition each value is binned into: a Calendar value ({ unit, step?, start? }), { step }, or { thresholds } (a cell count or a list of edges). Absent: about 10 cells.",
               "oneOf": [
                 {
-                  "type": "object",
-                  "required": ["unit"],
-                  "properties": {
-                    "unit": {
-                      "enum": [
-                        "second",
-                        "minute",
-                        "hour",
-                        "day",
-                        "week",
-                        "month",
-                        "quarter",
-                        "year"
-                      ]
-                    },
-                    "step": {
-                      "$ref": "#/$defs/Number"
-                    },
-                    "start": {
-                      "enum": ["monday", "sunday"]
-                    }
-                  },
-                  "additionalProperties": false
+                  "$ref": "#/$defs/Calendar"
                 },
                 {
                   "type": "object",
                   "required": ["step"],
                   "properties": {
                     "step": {
-                      "$ref": "#/$defs/Number"
+                      "type": "number",
+                      "exclusiveMinimum": 0
                     }
                   },
                   "additionalProperties": false
@@ -379,7 +398,8 @@ for the API.
                 }
               ]
             }
-          }
+          },
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1531,25 +1551,32 @@ for the API.
       }
     },
     "PartitionOperator": {
-      "description": "Divide the space along `dir` into the cells of a binned key. Each group is placed across its cell's interval on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size along `dir` fills its cell.",
+      "description": "Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.",
       "type": "object",
-      "required": ["type", "by", "dir"],
+      "required": ["type", "by"],
       "additionalProperties": true,
       "properties": {
         "type": {
           "const": "partition"
         },
         "by": {
-          "$ref": "#/$defs/FieldAccessor",
-          "description": "A key that has a region: a binned field, field(x).bin(p), whose cells divide the space. A plain field has no region and is an error."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/StructAccessor"
+            }
+          ],
+          "description": "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error."
         },
         "dir": {
           "type": "string",
-          "description": "Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r)."
+          "description": "Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis."
         },
         "alignment": {
           "type": "string",
-          "description": "Alignment of the children on the other axis (\"start\" | \"middle\" | \"end\" | \"baseline\").",
+          "description": "Alignment of the children on the other axis (\"start\" | \"middle\" | \"end\" | \"baseline\"). Applies only where nothing gives the children a cell on that axis: inside a cell of another partition, each child is placed in that cell. Not allowed with a key per axis.",
           "default": "baseline"
         },
         "axes": {
@@ -2416,6 +2443,60 @@ for the API.
         }
       }
     },
+    "RegionMark": {
+      "description": "Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "region"
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color, or a field name for a color scale."
+        },
+        "stroke": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Stroke color. Defaults to `fill`."
+        },
+        "strokeWidth": {
+          "$ref": "#/$defs/Number",
+          "description": "Stroke width in pixels.",
+          "default": 0
+        },
+        "opacity": {
+          "$ref": "#/$defs/Number",
+          "description": "Opacity, 0 to 1.",
+          "default": 1
+        },
+        "filter": {
+          "type": "string",
+          "description": "Raw SVG filter attribute."
+        },
+        "debug": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "relate": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateClauseIR"
+          }
+        },
+        "zOrder": {
+          "$ref": "#/$defs/Number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
     "LineMark": {
       "description": "Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
       "type": "object",
@@ -2665,6 +2746,9 @@ for the API.
           "$ref": "#/$defs/BlankMark"
         },
         {
+          "$ref": "#/$defs/RegionMark"
+        },
+        {
           "$ref": "#/$defs/LineMark"
         },
         {
@@ -2753,6 +2837,7 @@ for the API.
           "description": "The first day of a week (weeks only)."
         }
       },
+      "required": ["unit"],
       "description": "A calendar partition: a level (unit) at a step, e.g. Calendar.month.every(3)."
     },
     "AxesOptions": {
@@ -3128,6 +3213,62 @@ for the API.
         }
       ],
       "description": "How a path runs through its points: the value of the `curve` option of `line` and `ribbon`. `linear`, `step`, `monotone` and `smooth` are read over the parameter of the run, from the least to the most smooth; `catmullRom` is a shape on screen; `bezier`, `orthogonal`, `arc` and `perfectArrows` route each pair of neighboring points."
+    },
+    "Bin": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "hex"
+            },
+            "radius": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "The radius in units of the x field."
+                    },
+                    "y": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "The radius in units of the y field."
+                    }
+                  },
+                  "required": ["x", "y"]
+                }
+              ],
+              "description": "The distance from a hexagon's center to its corners, in data units. A number when both fields share a unit (longitude and latitude), or `{ x, y }`, one per field, when they do not (as in ggplot2's `binwidth = c(x, y)`)."
+            }
+          },
+          "required": ["kind", "radius"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "voronoi"
+            },
+            "seeds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "description": "The seed rows, with the same two fields as the key, such as weather stations for rain gauge readings. Pass the chart's own data to give each row its own cell."
+            }
+          },
+          "required": ["kind", "seeds"]
+        }
+      ],
+      "description": "The cells a key built from two fields is binned into: the value of `struct({ x, y }).bin(...)`. Each kind divides the plane of the two fields into cells that do not overlap, and puts each row in the cell its point falls in."
     }
   }
 }

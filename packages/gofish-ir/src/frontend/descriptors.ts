@@ -57,6 +57,9 @@ export type FieldType =
       kind: "number";
       /** The least value allowed (inclusive). NaN is never at least it. */
       min?: number;
+      /** A bound the value must be above (exclusive): `0` for a length that
+       *  must be positive. NaN is never above it. */
+      exclusiveMin?: number;
       /** Reject Infinity and -Infinity (NaN is never finite). */
       finite?: boolean;
     }
@@ -155,9 +158,14 @@ export function pyKwarg(fieldName: string): string {
 export const t = {
   string: { kind: "string" } as FieldType,
   number: { kind: "number" } as FieldType,
-  /** A number with bounds: at least `min`, and finite when `finite`
-   *  (`t.num({ min: 0, finite: true })` for a pixel padding). */
-  num: (bounds: { min?: number; finite?: boolean }): FieldType => ({
+  /** A number with bounds: at least `min`, above `exclusiveMin`, and finite
+   *  when `finite` (`t.num({ min: 0, finite: true })` for a pixel padding,
+   *  `t.num({ exclusiveMin: 0, finite: true })` for a hex radius). */
+  num: (bounds: {
+    min?: number;
+    exclusiveMin?: number;
+    finite?: boolean;
+  }): FieldType => ({
     kind: "number",
     ...bounds,
   }),
@@ -626,9 +634,49 @@ export const STRATEGIES = {
       },
     },
   },
+  Bin: {
+    doc: "The cells a key built from two fields is binned into: the value of `struct({ x, y }).bin(...)`. Each kind divides the plane of the two fields into cells that do not overlap, and puts each row in the cell its point falls in.",
+    kinds: {
+      hex: {
+        doc: "A grid of hexagons with a corner at the top (pointy-top, as in d3-hexbin, ggplot2's `geom_hex` and Observable Plot), with one hexagon centered on the origin (0, 0). The grid covers the domain of the two fields in the chart's data, and every hexagon in it is a cell, empty ones included.",
+        params: {
+          radius: {
+            type: t.union(
+              t.num({ exclusiveMin: 0, finite: true }),
+              t.object({
+                x: {
+                  type: t.num({ exclusiveMin: 0, finite: true }),
+                  required: true,
+                  doc: "The radius in units of the x field.",
+                },
+                y: {
+                  type: t.num({ exclusiveMin: 0, finite: true }),
+                  required: true,
+                  doc: "The radius in units of the y field.",
+                },
+              })
+            ),
+            required: true,
+            doc: "The distance from a hexagon's center to its corners, in data units. A number when both fields share a unit (longitude and latitude), or `{ x, y }`, one per field, when they do not (as in ggplot2's `binwidth = c(x, y)`).",
+          },
+        },
+      },
+      voronoi: {
+        doc: "One cell per seed: the points nearer to that seed than to any other (a Voronoi diagram). Each row goes to its nearest seed. The cells are clipped to the box that holds the data and the seeds.",
+        params: {
+          seeds: {
+            type: t.array(t.record(t.any)),
+            required: true,
+            doc: "The seed rows, with the same two fields as the key, such as weather stations for rain gauge readings. Pass the chart's own data to give each row its own cell.",
+          },
+        },
+      },
+    },
+  },
 } satisfies Record<string, StrategyFamily>;
 
-/** The name of a strategy family: `"Tile"`, `"Overlap"` or `"Curve"`. */
+/** The name of a strategy family: `"Tile"`, `"Overlap"`, `"Curve"` or
+ *  `"Bin"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
 /** The value type of a strategy family: a union of one object per kind, told
@@ -657,6 +705,7 @@ const calendarPartition: FieldSpec = {
         "quarter",
         "year"
       ),
+      required: true,
       doc: "The calendar level of each cell.",
     },
     step: {
@@ -783,9 +832,14 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
 
 /** The refs a field may name that are not `OPTION_TYPES` entries: shapes
  *  authored by hand in schema.ts / jsonSchema.ts and walked by their own
- *  validator walkers. `pyClass` names the Python class that builds a value. */
-export const AUTHORED_REFS: Readonly<Record<string, { pyClass?: string }>> = {
-  FieldAccessor: { pyClass: "FieldAccessor" },
+ *  validator walkers. `pyClass` names the Python class that builds a value;
+ *  `tag` is the value's `type` field, which tells it apart from the other
+ *  branches of a union (validate.ts). */
+export const AUTHORED_REFS: Readonly<
+  Record<string, { pyClass?: string; tag?: string }>
+> = {
+  FieldAccessor: { pyClass: "FieldAccessor", tag: "field" },
+  StructAccessor: { pyClass: "StructAccessor", tag: "struct" },
   LabelIR: {},
   TranslateIR: {},
   RelateClauseIR: {},
@@ -828,6 +882,9 @@ export function pyType(
     case "union":
       return [...new Set(f.options.map((o) => pyType(o, use)))].join(" | ");
     case "array":
+      // An array of records is a table: Python reads a dataframe too.
+      if (f.items.kind === "record")
+        return use === "doc" ? "list | DataFrame" : "Any";
       return "list";
     case "tuple":
       return "tuple";
@@ -1249,22 +1306,21 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   }),
 
   partition: operator("partition", {
-    doc: "Divide the space along `dir` into the cells of a binned key. Each group is placed across its cell's interval on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size along `dir` fills its cell.",
+    doc: "Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.",
     fields: {
       by: {
-        type: t.ref("FieldAccessor"),
+        type: t.union(t.ref("FieldAccessor"), t.ref("StructAccessor")),
         required: true,
-        doc: "A key that has a region: a binned field, field(x).bin(p), whose cells divide the space. A plain field has no region and is an error.",
+        doc: "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.",
       },
       dir: {
         type: t.string,
-        required: true,
-        doc: "Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r).",
+        doc: "Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis.",
       },
       alignment: {
         type: t.string,
         default: "baseline",
-        doc: 'Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline").',
+        doc: 'Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Applies only where nothing gives the children a cell on that axis: inside a cell of another partition, each child is placed in that cell. Not allowed with a key per axis.',
       },
       axes: { type: t.ref("AxesOptions") },
     },
@@ -1497,6 +1553,17 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       fill: ch.color(
         "Fill color. A blank never paints; `fill` only seeds the shared color scale."
       ),
+      debug: {
+        type: t.boolean,
+        doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
+      },
+    },
+  }),
+
+  region: leafMark("region", {
+    doc: "Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
+    include: [paint],
+    fields: {
       debug: {
         type: t.boolean,
         doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",

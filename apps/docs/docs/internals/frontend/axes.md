@@ -414,13 +414,14 @@ difference axis), never off the size claim:
   d3's time ticks, and like a numeric axis's ~10 ticks), and the outer row
   is that level's parent. Both choices read the domain only, never pixels.
   A time axis over calendar **cells** (`CONTINUOUS_TYPE.cells`, the months a
-  `partition` places its groups across; see
-  [Underlying Space](/internals/core/underlying-space#partition-each-group-across-its-cell))
+  `partition` gives its groups; see
+  [Underlying Space](/internals/core/underlying-space#partition-each-group-in-its-cell))
   ticks at the cells' own partition instead (`cellPartition`, read by
   `axisTickPartition`, so the nicing and the drawing agree), with its parent
-  as the outer row. A row whose partition is the cells' names cells, not
-  points: each label is the cell's label, centered between the cell's two
-  boundary ticks. Any other row, and every row of an axis over points, keeps
+  as the outer row. A row that cuts the same cells as the cells' partition
+  (`CalendarPartition.sameCells`: the same level, step, and week start)
+  names cells, not points: each label is the row's label of the cell,
+  centered between the cell's two boundary ticks. Any other row, and every row of an axis over points, keeps
   its labels on its ticks.
   The axis's ticks reach its scope's nicing through the axis demand
   (`AxisTicks`: the tick count, and a time axis's rows), and the axis is
@@ -466,7 +467,8 @@ difference axis), never off the size claim:
   start-aligned with the run's first cell (the first visible point of the
   parent cell, as a time axis's outer row puts it), with a long tick where
   the run starts. The outer row sits past the inner labels by the inner
-  labels' depth, as rotated.
+  labels' depth, as rotated (the box `rotatedExtent` in `autoLabelAngle.ts`
+  measures).
 
 ## Unifying duplicate axes across self-scaled siblings
 

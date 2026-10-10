@@ -121,7 +121,8 @@ Three pieces:
    for the domain-op (`sort`/`reverse`/`bin`) semantics. `by`-string/function
    callers are unaffected — they carry no ops, so `splitEntries` reduces to
    the old `Map.groupBy` behavior. A key is a `SplitKey`: a value of the
-   field, or a `Cell` for a binned key (`field(x).bin(p)`), which stands for
+   field, a `Cell` for a binned key (`field(x).bin(p)`), or a `PolygonCell`
+   for a binned struct (`struct({ x, y }).bin(b)`), each of which stands for
    its id.
 3. **`channels`** (optional) — per-opt data-aware encodings. Same idea as
    `createMark`'s channels: `w: "size"` means the user can pass a field name,
@@ -152,7 +153,10 @@ Walking `createOperator.ts:391-415`:
    does the data's domain, so a nested binned key sees the chart's cells. A
    cell key becomes its id for the mark and the node (`setKey`), and the node
    keeps the cell itself as `keyCell`, which the distribute fold reads to
-   build an ordinal over cells.
+   build an ordinal over cells, and a `partition` reads to give the node its
+   cell. The node also keeps the `by` it was keyed by (`keyBy`), so a fused
+   connector's default split can read a mark's key under each tier off its
+   ancestors.
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream

@@ -33,8 +33,8 @@ export type {
   FieldPredicateWire,
 } from "./ast/fieldExpr";
 // Measure-provenance tagging: how a data transform declares that
-// its output columns are in a source field's units. The deserializer re-applies
-// it to RPC-returned rows (the array symbol can't cross the bridge).
+// its output columns are in a source field's units. JS only: the array
+// symbol does not cross the Python bridge.
 export { setMeasureProvenance } from "./ast/data";
 export type { MeasureProvenance } from "./ast/data";
 export { map } from "./ast/iterators/map";
@@ -138,6 +138,12 @@ export type {
   NumberCellFormat,
   PartitionJSON,
 } from "./ast/cells";
+// A key that reads two fields at once (#1059), binned into the cells of the
+// plane by a call in the Bin family: `struct({ x, y }).bin(Bin.hex({ radius }))`.
+export { struct, StructExpr } from "./ast/structExpr";
+export type { StructOp, StructExprWire } from "./ast/structExpr";
+export type { PolygonCell, PlaneFields } from "./ast/polygonCells";
+export * as Bin from "./families/bin";
 
 // Constraints
 export { Constraint } from "./ast/constraints";
@@ -175,7 +181,12 @@ export type { TreemapOptions } from "./ast/graphicalOperators/treemap";
 export { pack } from "./ast/graphicalOperators/pack";
 export type { PackOptions } from "./ast/graphicalOperators/pack";
 export { partition } from "./ast/graphicalOperators/partition";
-export type { PartitionOptions } from "./ast/graphicalOperators/partition";
+export type {
+  PartitionOptions,
+  PartitionAxisOptions,
+  PartitionProductOptions,
+  PartitionPlaneOptions,
+} from "./ast/graphicalOperators/partition";
 export * as Overlap from "./families/overlap";
 export {
   enclose,
@@ -195,6 +206,7 @@ export { petal } from "./ast/shapes/petal";
 export { polygon } from "./ast/shapes/polygon";
 export { text } from "./ast/shapes/text";
 export { image } from "./ast/shapes/image";
+export { region } from "./ast/shapes/region";
 
 /* Chart Syntax */
 export {

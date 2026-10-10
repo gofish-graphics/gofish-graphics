@@ -42,6 +42,7 @@ import {
   type AxisDirection,
 } from "../axisDirection";
 import { defaultTimeRows, rowLabels } from "./timeRows";
+import { rotatedExtent } from "./autoLabelAngle";
 import type { Cell } from "../cells";
 
 /**
@@ -606,16 +607,18 @@ function elaborateTimeAxis(
   const zone = space.calendar!.zone;
   const rows = ticks.rows ?? defaultTimeRows(axisTickPartition(space, ticks));
   const starts = rows.map((row) => rowLabels(row, lo, hi, zone));
-  // A row whose partition is that of the cells the axis places names those
-  // cells: each label sits midway between its cell's two boundary ticks
-  // (#1058). Any other row names points: each label sits on its tick.
+  // A row that cuts the same cells as the cells the axis places names
+  // those cells: each label sits midway between its cell's two boundary
+  // ticks (#1058). Any other row names points: each label sits on its tick.
   const cells = space.cells;
-  const cellsOf = cellPartition(space);
   const labels = rows.map((row, k) =>
-    cells !== undefined && String(row) === String(cellsOf)
+    cells !== undefined && row.sameCells(cellPartition(space))
       ? cells
           .filter((c) => c.start >= lo && c.end <= hi)
-          .map((c) => ({ at: (c.start + c.end) / 2, text: c.label }))
+          .map((c) => ({
+            at: (c.start + c.end) / 2,
+            text: row.label(c.calendar!.fields, zone),
+          }))
       : starts[k]
   );
 
@@ -747,11 +750,11 @@ function elaborateOrdinalAxis(
       ? ["baseline", "middle"]
       : ["middle", "middle"];
 
-  const cells = space.cells;
+  const cellOf = new Map(space.cells?.map((c) => [c.id, c]));
   const nodes: GoFishNode[] = [];
   keys.forEach((k, i) => {
     const label = Text({
-      text: cells?.[k]?.label ?? k,
+      text: cellOf.get(k)?.label ?? k,
       fontSize: LABEL_FONT_SIZE,
       fill: AXIS_COLOR,
       rotate: labelRotation?.rotate,
@@ -791,10 +794,10 @@ function elaborateOrdinalAxis(
     return cs;
   };
 
-  if (cells === undefined) return { nodes, constraints };
+  if (space.cells === undefined) return { nodes, constraints };
   const rows = cellAxisRows(
     dim,
-    keys.map((k) => cells[k]),
+    keys.map((k) => cellOf.get(k)!),
     rName,
     prefix,
     side,
@@ -876,14 +879,15 @@ function cellAxisRows(
   // y, as rotated), then the gap between two rows of a time axis.
   const font = (t: string) =>
     estimateTextDimensions(t, LABEL_FONT_SIZE, FALLBACK_FONT_FAMILY);
-  const a = ((labelRotation?.rotate ?? 0) * Math.PI) / 180;
   const depth = Math.max(
     0,
     ...cells.map((c) => {
       const { width, height } = font(c.label);
-      const along = dim === 0 ? height : width;
-      const across = dim === 0 ? width : height;
-      return Math.abs(along * Math.cos(a)) + Math.abs(across * Math.sin(a));
+      const box = rotatedExtent(
+        { minX: 0, minY: 0, maxX: width, maxY: height },
+        labelRotation?.rotate ?? 0
+      );
+      return dim === 0 ? box.maxY - box.minY : box.maxX - box.minX;
     })
   );
   const outerGap = ORDINAL_LABEL_GAP + depth + TIME_ROW_GAP;

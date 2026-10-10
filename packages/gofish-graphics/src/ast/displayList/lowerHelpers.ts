@@ -12,7 +12,13 @@ import type { DisplayList } from "gofish-ir";
 import type { GoFishNode, ToPixel } from "../_node";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { displayTranslate, type Transform } from "../dims";
-import { type Path, type Point, pathToSVGPath } from "../../path";
+import {
+  path,
+  transformPath,
+  type Path,
+  type Point,
+  pathToSVGPath,
+} from "../../path";
 import { orderChildrenForPaint } from "../paintOrder";
 
 /**
@@ -50,6 +56,31 @@ export const pathToPixelSVG = (path: Path, toPixel: ToPixel): string =>
           }
     )
   );
+
+/** A closed ring of layout points as a path item, drawn straight under a
+ *  linear coordinate space and adaptively resampled under any other, so a
+ *  straight edge in data space draws as the curve the space makes of it.
+ *  Shared by the polygon and region lower bodies. */
+export const ringItem = (
+  points: Point[],
+  coordinateTransform: CoordinateTransform | undefined,
+  toPixel: ToPixel,
+  datum: DisplayList.PathItem["datum"],
+  style: DisplayList.Style
+): DisplayList.PathItem => {
+  const ring = path(points, { closed: true });
+  const drawn =
+    coordinateTransform === undefined || coordinateTransform.type === "linear"
+      ? ring
+      : transformPath(ring, coordinateTransform, { resample: true });
+  return {
+    kind: "path",
+    d: pathToPixelSVG(drawn, toPixel),
+    datum,
+    role: roleFor(datum),
+    style,
+  };
+};
 
 /** Map the two diagonal corners of an axis-aligned box through `toPixel` and
  *  return the SVG rect: top-left = component-wise min, w/h = abs of the mapped

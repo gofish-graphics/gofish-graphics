@@ -3,7 +3,7 @@
 // </gofish-wiki>
 
 import type { StackOrigin } from "./constraints/distribute";
-import { copyMeasureProvenance } from "./data";
+import { copyMeasureProvenance, tagArray } from "./data";
 import { loadTemporal, temporal } from "./calendar";
 
 /**
@@ -210,15 +210,8 @@ export const columnType = (
   column === undefined ? undefined : getColumnTypes(data)?.[column];
 
 /** Tag a data array with column types. */
-export const setColumnTypes = <T>(data: T, types: ColumnTypes): T => {
-  Object.defineProperty(data, COLUMN_TYPES, {
-    value: types,
-    enumerable: false,
-    configurable: true,
-    writable: true,
-  });
-  return data;
-};
+export const setColumnTypes = <T>(data: T, types: ColumnTypes): T =>
+  tagArray(data, COLUMN_TYPES, types);
 
 /**
  * Well-known symbol under which a data ARRAY carries its DOMAIN: the rows of
@@ -241,15 +234,8 @@ export const domainRows = (data: unknown): unknown[] => {
   return own ?? (Array.isArray(data) ? data : [data]);
 };
 
-const setDomainRows = <T>(data: T, rows: unknown[]): T => {
-  Object.defineProperty(data, DOMAIN_ROWS, {
-    value: rows,
-    enumerable: false,
-    configurable: true,
-    writable: true,
-  });
-  return data;
-};
+const setDomainRows = <T>(data: T, rows: unknown[]): T =>
+  tagArray(data, DOMAIN_ROWS, rows);
 
 /** Copy `source`'s column types onto `target` (both arrays), for every
  *  column `target` does not type itself, and its domain

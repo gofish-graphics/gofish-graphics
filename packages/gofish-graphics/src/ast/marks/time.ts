@@ -34,12 +34,7 @@ import { Frame } from "../graphicalOperators/frame";
 import { tween } from "../graphicalOperators/tween";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import {
-  projectBy,
-  projectPath,
-  splitEntries,
-  type TimeTier,
-} from "../datumProjection";
+import { projectPath, splitEntries, type TimeTier } from "../datumProjection";
 import { timer, type Timer } from "../../interaction/inputs";
 import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
@@ -460,7 +455,7 @@ export const transition = createRelationalMark<TransitionOptions>(
       "time.transition()",
       by,
       inferred.by !== undefined && children.length > 0
-        ? projectBy(children[0], inferred.by)
+        ? inferred.by(children[0] as GoFishRef)
         : undefined
     );
     const run = unrollOrder(times, cycle);

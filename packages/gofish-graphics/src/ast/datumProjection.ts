@@ -33,9 +33,12 @@ import {
   checkPartition,
   Cell,
   DEFAULT_PARTITION,
+  type RegionCell,
   type Cells,
 } from "./cells";
 import { columnType, domainRows, orderByLevels } from "./schema";
+import { planeCells, type PolygonCells } from "./polygonCells";
+import { isStruct, structBin, type StructExprWire } from "./structExpr";
 import type { Cycle } from "../timeWindow";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
@@ -140,12 +143,17 @@ export function projectByValues(obj: unknown, by: SplitBy): unknown[] {
  *  a field-path string, a key function over the row, or a `field(...)`
  *  accessor (possibly carrying a pipeline of domain ops — see
  *  {@link splitEntries}). */
-export type SplitBy = string | ((r: any) => unknown) | FieldAccessor;
+export type SplitBy =
+  | string
+  | ((r: any) => unknown)
+  | FieldAccessor
+  | StructExprWire;
 
 /** The key of one group of a split: a value of the `by` field (text or a
- *  number), or a {@link Cell} for a binned key (`field(x).bin(p)`), which
- *  stands for its id (`String(cell)`). */
-export type SplitKey = string | number | Cell;
+ *  number), or a cell ({@link RegionCell}): a {@link Cell} for a binned key
+ *  (`field(x).bin(p)`), a `PolygonCell` for a binned struct
+ *  (`struct({ x, y }).bin(b)`). A cell stands for its id (`String(cell)`). */
+export type SplitKey = string | number | RegionCell;
 
 /**
  * The mutable cell `ChartBuilder` writes the computed default split/travel
@@ -161,7 +169,9 @@ export type SplitKey = string | number | Cell;
  * `chart.ts` also imports `ChartBuilder` from `chartBuilder.ts` at runtime.
  */
 export type InferredRelational = {
-  by?: SplitBy;
+  /** The default split: an operand's key, the groups of the flow it is in
+   *  (`computeDefaultBy` in chartBuilder.ts). */
+  by?: (operand: GoFishRef) => string;
   dir?: "x" | "y";
   /** The path tier's own `by`: the connection variable the connector
    *  threads its operands along, whether `along` named the tier or it was
@@ -212,14 +222,23 @@ export type TimeTier = {
  *  once rather than re-checked for every row.
  *
  *  A `field(...)` accessor grouping-keys off its `.name`, identical to
- *  passing the bare field-name string — its pipeline ops (if any) are applied
- *  separately, over the grouped Map, by {@link splitEntries}.
+ *  passing the bare field-name string — its reordering ops (if any) are
+ *  applied separately, over the grouped Map, by {@link splitEntries}. A
+ *  binned key (`field(x).bin(p)`, `struct({ x, y }).bin(b)`) keys each row by
+ *  its CELL among the cells over `data`'s domain ({@link binKey}), the same
+ *  cell objects every split over that domain is keyed by.
  *
- *  Projected keys are runtime strings/numbers (or `undefined` for ill-posed
- *  groups, where the bag disagrees on the field); the assertion bridges the
- *  honest `unknown` produced by projection + homogeneity collapse. */
-export function splitKeyFn(by: SplitBy): (r: any) => string | number {
-  if (typeof by === "function") return by as (r: any) => string | number;
+ *  Projected keys are runtime strings/numbers/cells (or `undefined` for
+ *  ill-posed groups, where the bag disagrees on the key, and for a row with
+ *  no value); the assertion bridges the honest `unknown` produced by
+ *  projection + homogeneity collapse. */
+export function splitKeyFn(
+  by: SplitBy,
+  data: unknown
+): (r: any) => SplitKey | undefined {
+  if (typeof by === "function") return by as (r: any) => SplitKey;
+  const binned = binKey(by, data);
+  if (binned !== undefined) return binned.key;
   const segments = toPath(fieldNameOf(by)!);
   return (r: any) => {
     const values = projectValues(r, segments);
@@ -238,11 +257,40 @@ function compareKeys(a: unknown, b: unknown): number {
   return String(a).localeCompare(String(b));
 }
 
-/** The cells of each domain, per partition and column, built once, so every
- *  group of a split over one domain gets the same `Cell` objects in the same
- *  order. Keyed by the partition value the `bin` op holds (the same object
- *  each time the op runs). */
-const cellsCache = new WeakMap<object, WeakMap<object, Map<string, Cells>>>();
+/**
+ * A memo of what is built once per domain (`domainRows`), per op object (the
+ * value a `bin` op holds, the same object each time the op runs), and per
+ * column key: so every group of a split over one domain gets the same cell
+ * objects, in the same order.
+ */
+function memoByDomain<V>(): (
+  domain: object,
+  op: object,
+  key: string,
+  build: () => V
+) => V {
+  const byDomain = new WeakMap<object, WeakMap<object, Map<string, V>>>();
+  return (domain, op, key, build) => {
+    let byOp = byDomain.get(domain);
+    if (byOp === undefined) byDomain.set(domain, (byOp = new WeakMap()));
+    let byKey = byOp.get(op);
+    if (byKey === undefined) byOp.set(op, (byKey = new Map()));
+    let v = byKey.get(key);
+    if (v === undefined) byKey.set(key, (v = build()));
+    return v;
+  };
+}
+
+const cellsMemo = memoByDomain<Cells>();
+
+/** The values of the column `name` over `domain`, read with the walk a
+ *  binned key reads a row with ({@link walkRows}): through a ref to the rows
+ *  it stands for, and into a bag. */
+function valuesOf(domain: unknown[], name: string): unknown[] {
+  const values: unknown[] = [];
+  walkRows(domain, [name], (v) => values.push(v));
+  return values;
+}
 
 /** The cells `field(name).bin(partition)` maps values to: the cells of the
  *  partition over the column's values in `d`'s DOMAIN (`domainRows`,
@@ -254,56 +302,152 @@ function domainCells(
 ): Cells {
   const where = `field("${name}").bin(...)`;
   const raw = (partitionOp ?? DEFAULT_PARTITION) as object;
-  const domain = domainRows(d) as Record<string, any>[];
-  let byPartition = cellsCache.get(domain);
-  if (byPartition === undefined) {
-    byPartition = new WeakMap();
-    cellsCache.set(domain, byPartition);
-  }
-  let byName = byPartition.get(raw);
-  if (byName === undefined) {
-    byName = new Map();
-    byPartition.set(raw, byName);
-  }
-  let cells = byName.get(name);
-  if (cells === undefined) {
-    cells = binCells(
+  const domain = domainRows(d);
+  return cellsMemo(domain, raw, name, () =>
+    binCells(
       checkPartition(raw, where),
-      domain.map((r) => r?.[name]),
+      valuesOf(domain, name),
       columnType(d, name)?.HasCalendar?.zone,
       where
-    );
-    byName.set(name, cells);
-  }
-  return cells;
+    )
+  );
 }
 
-/** Bin `d` by the field `fieldName` into the cells of `partitionOp` over the
- *  column's domain (see {@link domainCells}). REPLACES the base grouping:
- *  entries are keyed by {@link Cell}, in order, one per cell of the domain,
- *  so a cell that none of `rows` (`d`, after any `dropNulls`) falls in is
- *  kept, with no rows. Rows with a missing value are dropped. */
-function binEntries<T extends Record<string, any>>(
-  fieldName: string,
-  d: T[],
-  rows: T[],
-  partitionOp: unknown
-): Map<Cell, T[]> {
-  const { cells, cellOf } = domainCells(fieldName, d, partitionOp);
-  const entries = new Map<Cell, T[]>(cells.map((c) => [c, []]));
-  for (const row of rows) {
-    const v = row?.[fieldName];
-    if (v == null) continue;
-    const cell = typeof v === "number" ? cellOf(v) : undefined;
-    if (cell === undefined) {
-      throw new Error(
-        `field("${fieldName}").bin(...): the value ${JSON.stringify(v)} is ` +
-          `outside the column's values in the chart's data, so it has no ` +
-          `cell. A derive that makes new values makes a new domain: bin ` +
-          `after it.`
-      );
+const planeMemo = memoByDomain<PolygonCells>();
+
+/** The cells of `struct({ x, y }).bin(bin)` over the two columns' values in
+ *  `d`'s DOMAIN (`domainRows`), as {@link domainCells} does in 1D. */
+function domainPlane(
+  fields: { x: string; y: string },
+  d: unknown,
+  bin: object,
+  where: string
+): PolygonCells {
+  const domain = domainRows(d);
+  return planeMemo(domain, bin, JSON.stringify([fields.x, fields.y]), () =>
+    planeCells(
+      bin as Parameters<typeof planeCells>[0],
+      fields,
+      valuesOf(domain, fields.x),
+      valuesOf(domain, fields.y),
+      where
+    )
+  );
+}
+
+/** The loud error for a value a binned key has no cell for. */
+const outsideDomain = (where: string, what: string, v: string): Error =>
+  new Error(
+    `${where}: the ${what} ${v} is outside the ${what === "point" ? "columns'" : "column's"} ` +
+      `values in the chart's data, so it has no cell. A derive that makes ` +
+      `new values makes a new domain: bin after it.`
+  );
+
+/**
+ * A binned key's cells over `data`'s domain, in order, and the key it gives
+ * a row, a bag of rows, or a ref: the cell its rows fall in, collapsed over
+ * the rows as any key is (undefined when they fall in different cells, or
+ * have no value). Undefined when `by` is not binned.
+ *
+ *  - `field(x).bin(p)`: the cells of `p` over the column's domain
+ *    ({@link domainCells}), each a {@link Cell}.
+ *  - `struct({ x, y }).bin(b)`: the cells of `b` over the two columns'
+ *    domain ({@link domainPlane}), each a `PolygonCell`. A struct with
+ *    no bin has no cells yet: it is an error.
+ *
+ * A value outside the domain has no cell, which is an error.
+ */
+function binKey(
+  by: SplitBy,
+  data: unknown
+):
+  | {
+      cells: readonly RegionCell[];
+      key: (r: unknown) => RegionCell | undefined;
     }
-    entries.get(cell)!.push(row);
+  | undefined {
+  // The one cell `cellsOf` gives `r`'s rows, if they agree.
+  const collapse =
+    (cellsOf: (r: unknown, add: (c: RegionCell) => void) => void) =>
+    (r: unknown): RegionCell | undefined => {
+      const seen = new Set<RegionCell>();
+      cellsOf(r, (c) => seen.add(c));
+      return seen.size === 1 ? [...seen][0] : undefined;
+    };
+  if (isStruct(by)) {
+    const { x, y } = by.fields;
+    const where = `struct({ x: "${x}", y: "${y}" }).bin(...)`;
+    const bin = structBin(by);
+    if (bin === undefined)
+      throw new Error(
+        `struct({ x: "${x}", y: "${y}" }) as a key needs .bin(...): bin it ` +
+          `with a call in the Bin family, e.g. .bin(Bin.hex({ radius: 1 })), ` +
+          `so each group is a cell.`
+      );
+    const plane = domainPlane(by.fields, data, bin, where);
+    return {
+      cells: plane.cells,
+      key: collapse((r, add) =>
+        walkRows(r, [], (row) => {
+          const vx = (row as Record<string, unknown>)?.[x];
+          const vy = (row as Record<string, unknown>)?.[y];
+          if (vx == null || vy == null) return;
+          const cell =
+            typeof vx === "number" && typeof vy === "number"
+              ? plane.cellOf(vx, vy)
+              : undefined;
+          if (cell === undefined)
+            throw outsideDomain(
+              where,
+              "point",
+              `(${JSON.stringify(vx)}, ${JSON.stringify(vy)})`
+            );
+          add(cell);
+        })
+      ),
+    };
+  }
+  const op = getFieldOps(by).find((o) => o.op === "bin");
+  if (op === undefined) return undefined;
+  if (!isField(by))
+    throw new Error(
+      "field(...).bin() requires a field(name) accessor as `by`, not a function."
+    );
+  const name = by.name;
+  const { cells, cellOf } = domainCells(
+    name,
+    data as Record<string, any>[],
+    op.partition
+  );
+  return {
+    cells,
+    key: collapse((r, add) =>
+      walkRows(r, [name], (v) => {
+        const cell = typeof v === "number" ? cellOf(v) : undefined;
+        if (cell === undefined)
+          throw outsideDomain(
+            `field("${name}").bin(...)`,
+            "value",
+            JSON.stringify(v)
+          );
+        add(cell);
+      })
+    ),
+  };
+}
+
+/** Group `rows` by a binned key ({@link binKey}) over `d`'s domain: keyed by
+ *  cell, in order, one entry per cell of the domain, so a cell none of
+ *  `rows` falls in is kept, with no rows. Rows with a missing value are
+ *  dropped. */
+function binEntries<T extends Record<string, any>>(
+  binned: NonNullable<ReturnType<typeof binKey>>,
+  rows: T[]
+): Map<RegionCell, T[]> {
+  const entries = new Map<RegionCell, T[]>(binned.cells.map((c) => [c, []]));
+  for (const row of rows) {
+    const cell = binned.key(row);
+    if (cell !== undefined) entries.get(cell)!.push(row);
   }
   return entries;
 }
@@ -371,15 +515,14 @@ export function orderEntries<T>(
 /**
  * Group `d` by `by` (via {@link splitKeyFn}): in the order of the column's
  * levels when the data declares the column ordered (`HasOrder`, see
- * schema.ts), else in order of first appearance. Then apply any pipeline ops
- * carried by a `field(...)` accessor (read via `getFieldOps`) IN ORDER:
+ * schema.ts), else in order of first appearance. A binned key (`bin`, or a
+ * binned struct) is grouped by its cells instead, over the column's domain,
+ * keyed by cell, one entry per cell, in order, empty cells included (see
+ * `binEntries`). Then apply any pipeline ops carried by a `field(...)`
+ * accessor (read via `getFieldOps`) IN ORDER:
  *   - `dropNulls` filters out rows whose value at `by`'s field is
- *     `null`/`undefined`, BEFORE grouping — since grouping always happens
- *     first (`bin` re-derives its own grouping from the same filtered rows),
- *     this is equivalent regardless of where `dropNulls` sits in the chain.
- *   - `bin` REPLACES the base grouping: it re-groups the rows into the
- *     cells of its partition over the column's domain, keyed by `Cell`, one
- *     entry per cell, empty cells included (see `binEntries`).
+ *     `null`/`undefined`, BEFORE grouping, so it is equivalent regardless of
+ *     where `dropNulls` sits in the chain.
  *   - `sort` / `reverse` reorder the entries Map.
  *   - a value-slot op (`sum`/`mean`/`count`/`distinct`) in a `by` slot, or
  *     `normalize`, throws — those aren't domain ops.
@@ -405,29 +548,29 @@ export function splitEntries<T extends Record<string, any>>(
       return v !== null && v !== undefined;
     });
   }
-  let entries: Map<SplitKey, T[]> = Map.groupBy(rows, splitKeyFn(by));
-  // An ordered column (HasOrder, from the chart's `schema`) groups in the
-  // order of its levels, not in order of first appearance. The ops below
-  // reorder from there.
-  const column = fieldNameOf(by);
-  const type = columnType(d, column);
-  if (type?.HasOrder) {
-    const keys = orderByLevels(column!, type.HasOrder, [...entries.keys()]);
-    entries = new Map(keys.map((k) => [k, entries.get(k)!]));
+  // A binned key's groups are its cells, in order, empty ones included
+  // (`binEntries`). Any other key's are its values, in order of first
+  // appearance, or in the order of the column's levels when the chart's
+  // `schema` declares it ordered (HasOrder). The ops below reorder from
+  // there.
+  const binned = binKey(by, d);
+  let entries: Map<SplitKey, T[]>;
+  if (binned !== undefined) entries = binEntries(binned, rows);
+  else {
+    entries = Map.groupBy(rows, splitKeyFn(by, d) as (r: T) => SplitKey);
+    const column = fieldNameOf(by);
+    const type = columnType(d, column);
+    if (type?.HasOrder) {
+      const keys = orderByLevels(column!, type.HasOrder, [...entries.keys()]);
+      entries = new Map(keys.map((k) => [k, entries.get(k)!]));
+    }
   }
   for (const op of ops) {
     switch (op.op) {
       case "dropNulls":
         break; // filtered above, before grouping
-      case "bin": {
-        if (!isField(by)) {
-          throw new Error(
-            "field(...).bin() requires a field(name) accessor as `by`, not a function."
-          );
-        }
-        entries = binEntries(by.name, d, rows, op.partition);
-        break;
-      }
+      case "bin":
+        break; // grouped by its cells above
       case "sort":
       case "reverse":
         entries = reorderEntries(entries, op);

@@ -98,8 +98,9 @@ needs one.
 
 `inferSize` and `inferPos` are two instantiations of one numeric-inference
 factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumBy`
-vs `meanBy`, imported through lodash's per-helper entrypoints so this path is
-safe under native ESM). Both take an optional third argument, the accessor's
+vs `meanOf`, `fieldExpr.ts`, lodash's `meanBy` except that the mean of no
+rows is undefined, not `NaN`). An aggregation with no value makes the channel
+undefined, so a position read off a group with no rows has no value. Both take an optional third argument, the accessor's
 resolved column (`ColumnInfo`, from `resolveColumn(data, accessor)`): its
 `Measure` and its type in the chart's `schema`. A string/`field()` accessor's
 produced value is tagged with its unit-of-measure so the underlying-space
@@ -166,7 +167,11 @@ Walking `withGoFish.ts:431-477`:
      picks it up; otherwise treat the string as a literal color. A value
      read from a named field (a field-name string or `field(...)`) records
      that field as its provenance, `DatumValueImpl.field`, so the color
-     scale knows which field it maps; a function accessor records none. It
+     scale knows which field it maps; a function accessor records none. A
+     `field(...)` with an aggregate (`field("a").count()`) is the
+     exception: it folds all of `data` (`evalFieldValues`), as a size
+     channel does, and records no field, because the value is the fold's.
+     It
      also records the field's type from the chart's `schema`
      (`DatumValueImpl.fieldType`), read off `data`, so a color scale over an
      ordered column lists its domain in that order. (A `derive` types its
@@ -405,7 +410,7 @@ Today's channels are `"size"` and `"color"`. To add (say) `"angle"`:
 
 1. Add `"angle"` to the `ChannelType` union in `channels.ts`.
 2. If a numeric aggregation fits, instantiate the existing factory —
-   `export const inferAngle = inferNumeric(meanBy)` (or whatever aggregation
+   `export const inferAngle = inferNumeric(meanOf)` (or whatever aggregation
    makes sense) — and measure tagging comes along for free. Otherwise write
    `inferAngle(accessor, data, measure?)` next to it with the same signature.
 3. Extend `DeriveMarkProps`'s conditional with the input type for `"angle"`.
@@ -600,9 +605,13 @@ scatterplot). The smooth curves ignore it.
 Either way, once the path tier index is settled, the path tier's own `by`
 orders the path and never splits; every _other_ flow tier's `by` becomes one
 term of a synthesized composite split key (`ChartBuilder`'s
-`computeDefaultBy`, built from `splitKeyFn` in datumProjection.ts — the same
-projection-through-`GoFishRef.datum` helper `splitEntries` uses, so
-string/field/function `by` forms behave identically to a real operator `by`).
+`computeDefaultBy`). A ref's term for a tier is the key that tier's split
+gave the group the ref's mark is in: the `key` of the mark's ancestor that
+the split made, which `createOperator` stamps with the split's `by`
+(`GoFishNode.keyBy`). So string/field/function `by` forms key a ref exactly
+as the real operator keyed its group, and a binned tier keys it by the cell
+over the domain the split ran over, which the mark's own row does not
+carry.
 Each operator declares how it arranges its groups (`createOperator`'s
 `arrangement` config, read back by `chartBuilder.ts`'s `classifyOperator`), so
 an operator that declares nothing simply takes no part in the rule. One
