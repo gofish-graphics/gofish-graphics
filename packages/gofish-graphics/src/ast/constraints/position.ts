@@ -10,8 +10,7 @@ import {
   type PositionValue,
 } from "../data";
 import * as Interval from "../../util/interval";
-import type { Cell } from "../cells";
-import type { PolygonCell } from "../polygonCells";
+import type { Cell, RegionCell } from "../cells";
 import type { PlacementFactEmitter } from "./placementFacts";
 import type { AlignAnchor, Axis, ConstraintRef } from "./shared";
 
@@ -22,66 +21,79 @@ import type { AlignAnchor, Axis, ConstraintRef } from "./shared";
  *  are pixel literals or datums (`value(n)`), never discrete positions. */
 export type PositionInterval = [MaybeValue<number>, MaybeValue<number>];
 
+/** A point or interval position coordinate: what pins a target. */
+export type PositionCoordinate = PositionValue | PositionInterval;
+
 /** Distinguish a position coordinate's interval form (a two-element array) from
  *  its point form. Point coordinates (`number` / `Value` / `DiscretePosition`)
  *  are never arrays, so this test is exact. */
 export const isPositionInterval = (
-  coord: PositionValue | PositionInterval | PositionRegion | undefined
+  coord: PositionCoordinate | undefined
 ): coord is PositionInterval => Array.isArray(coord);
 
+/** A value along a column, as the datum read from that column: it carries
+ *  the column's measure and type (a time column's calendar). */
+export type ColumnDatum = (v: number) => MaybeValue<number>;
+
 /**
- * The **region** form of a position coordinate (#1059): the cell of the key a
- * `partition` grouped by, which the layer hands the target as the REGION it
- * is laid out in (`geometry/region.ts`). It is not a pin. At layout the
- * layer maps the cell's edges to a pixel span (`buildChildRegions`) and
- * passes it in the target's layout call, and the target places itself in it:
- * a mark with no size of its own on this axis (a rect, a `region`) fills the
- * cell, and a mark with a size of its own (a circle, a text) sits in the
- * middle of it. An interval instead pins both edges, and so sets the
- * target's size whatever it is.
+ * The **region** a `position` constraint gives its target (#1059): the cell
+ * of the key a `partition` grouped by, which the layer hands the target as
+ * the REGION it is laid out in (`geometry/region.ts`). It is not a pin. At
+ * layout the layer maps it to pixels (`buildChildRegions`) and passes it in
+ * the target's layout call, and the target places itself in it: a mark with
+ * no size of its own on an axis (a rect, a `region`) fills the cell there,
+ * and a mark with a size of its own (a circle, a text) sits in the middle of
+ * it. An interval instead pins both edges, and so sets the target's size
+ * whatever it is.
  *
- * `edges` are the cell's start and end as datums of the column it bins, so
- * they carry the column's measure and type (a time column's calendar) as any
- * datum read from it does, and they make the layer's position domain on this
- * axis. A 1D {@link Cell} tells an axis over such regions that it places
- * cells (`CONTINUOUS_TYPE.cells`).
- *
- * A cell of the plane ({@link PolygonCell}: a hexagon of `Bin.hex`, a cell of
- * `Bin.voronoi`) is a region on both axes at once. Its `edges` on each axis
- * are its box there, and `outline` is its outline in data, `[x, y]` per
- * corner, on both axes' coordinates; the layer maps it through both scales.
- * It is not a cell of either axis alone, so its axes place points.
+ * `columns` names, per axis, the column the cell is placed along there, as
+ * a map from a value to its datum. A cell of a line ({@link Cell}) is placed
+ * along one axis, the partition's `dir`; a cell of the plane (a hexagon of
+ * `Bin.hex`, a cell of `Bin.voronoi`) along both. The region reads the cell
+ * through them once: `spans` holds, per axis, the cell's two edges as datums
+ * of its column, so they carry the column's measure and type as any datum
+ * read from it does, and they make the layer's position domain on that axis.
+ * `outline` is the cell's outline in datums, `[x, y]` per corner, when the
+ * cell has one and is placed along both axes.
  */
 export class PositionRegion {
+  readonly spans: readonly [
+    PositionInterval | undefined,
+    PositionInterval | undefined,
+  ];
+  readonly outline?: readonly (readonly [
+    MaybeValue<number>,
+    MaybeValue<number>,
+  ])[];
+
   constructor(
-    readonly cell: Cell | PolygonCell,
-    readonly edges: PositionInterval,
-    readonly outline?: readonly (readonly [
-      MaybeValue<number>,
-      MaybeValue<number>,
-    ])[]
-  ) {}
+    readonly cell: RegionCell,
+    columns: readonly [ColumnDatum | undefined, ColumnDatum | undefined]
+  ) {
+    const [x, y] = columns;
+    const along = (axis: 0 | 1): PositionInterval | undefined => {
+      const datum = columns[axis];
+      if (datum === undefined) return undefined;
+      const [a, b] = cell.span(axis);
+      return [datum(a), datum(b)];
+    };
+    this.spans = [along(0), along(1)];
+    this.outline =
+      x === undefined || y === undefined
+        ? undefined
+        : cell.outline?.map(([px, py]) => [x(px), y(py)] as const);
+  }
 }
 
-export const isPositionRegion = (coord: unknown): coord is PositionRegion =>
-  coord instanceof PositionRegion;
-
-/** Any position coordinate: a point, an interval, or a region. */
-export type PositionCoordinate =
-  | PositionValue
-  | PositionInterval
-  | PositionRegion;
-
-/** The two edges a coordinate spans on its axis: an interval's own, or a
- *  region's cell edges. A point spans none. */
-export const coordinateSpan = (
-  coord: PositionCoordinate | undefined
-): PositionInterval | undefined =>
-  isPositionInterval(coord)
-    ? coord
-    : isPositionRegion(coord)
-      ? coord.edges
-      : undefined;
+/** Every coordinate a position constraint gives on `axis`: its point or
+ *  interval there, and its region's span there. */
+export const axisCoordinates = (
+  c: PositionConstraint,
+  axis: 0 | 1
+): PositionCoordinate[] =>
+  [axis === 0 ? c.x : c.y, c.region?.spans[axis]].filter(
+    (coord): coord is PositionCoordinate => coord !== undefined
+  );
 
 /**
  * Options for a `position` constraint. Mirrors how you position a shape (or use
@@ -91,16 +103,19 @@ export const coordinateSpan = (
  *     through the layer's position scale; OR
  *   - an **interval** `[min, max]`: two edges that pin the target and DETERMINE
  *     its size (the size-setting range form; each endpoint is a pixel literal
- *     or a datum, never a discrete position); OR
- *   - a **region** ({@link PositionRegion}): a cell the layer hands the target
- *     as the region it lays itself out in.
+ *     or a datum, never a discrete position).
+ * A `region` ({@link PositionRegion}) instead gives the target a cell, which
+ * the layer hands it as the region it lays itself out in.
  * The layer derives its POSITION domain from the datum coordinates of its
- * `position` constraints (point values plus interval and region edges). At least one
- * of `x`/`y` is required.
+ * `position` constraints (point values plus interval and region edges). At
+ * least one of `x`, `y`, and `region` is required.
  */
 export interface PositionOptions {
   x?: PositionCoordinate;
   y?: PositionCoordinate;
+  /** The cell the target is placed in (what `partition` gives each child),
+   *  on each axis its column is placed along. */
+  region?: PositionRegion;
   /** Which anchor of the target lands on the coordinate. Defaults to "middle"
    *  (the target's center sits on the value), matching how `scatter`/`position`
    *  place marks at their center. `"baseline"` pins the target's origin.
@@ -124,6 +139,7 @@ export interface PositionConstraint {
   type: "position";
   x?: PositionCoordinate;
   y?: PositionCoordinate;
+  region?: PositionRegion;
   anchor: AlignAnchor;
   override: boolean;
   children: ConstraintRef[];
@@ -141,31 +157,41 @@ const validateInterval = (axis: Axis, interval: PositionInterval): void => {
 };
 
 export const createPositionConstraint = (
-  { x, y, anchor, override }: PositionOptions,
+  { x, y, region, anchor, override }: PositionOptions,
   children: ConstraintRef[]
 ): PositionConstraint => {
-  if (x === undefined && y === undefined) {
+  if (x === undefined && y === undefined && region === undefined) {
     throw new Error(
-      "Constraint.position: at least one of `x` or `y` must be specified"
+      "Constraint.position: at least one of `x`, `y`, or `region` must be " +
+        "specified"
     );
   }
-  const spanX = coordinateSpan(x);
-  const spanY = coordinateSpan(y);
-  if (spanX !== undefined) validateInterval("x", spanX);
-  if (spanY !== undefined) validateInterval("y", spanY);
+  (["x", "y"] as const).forEach((axis, i) => {
+    const coord = axis === "x" ? x : y;
+    if (isPositionInterval(coord)) validateInterval(axis, coord);
+    if (coord !== undefined && region?.spans[i] !== undefined)
+      throw new Error(
+        `Constraint.position: \`${axis}\` and a \`region\` that spans ` +
+          `${axis} both place the target on ${axis}; give one.`
+      );
+  });
   // `override` is a point-form no-op-escape: it repositions a self-placed
   // target. An interval or a region already places the target outright, so
   // the combination is meaningless — reject it rather than silently ignore.
-  if ((override ?? false) && (spanX !== undefined || spanY !== undefined)) {
+  if (
+    (override ?? false) &&
+    (isPositionInterval(x) || isPositionInterval(y) || region !== undefined)
+  ) {
     throw new Error(
       "Constraint.position: `override` applies to point coordinates only, " +
-        "not interval `[min, max]` or region coordinates"
+        "not interval `[min, max]` coordinates or a region"
     );
   }
   return {
     type: "position",
     x,
     y,
+    ...(region !== undefined ? { region } : {}),
     anchor: anchor ?? "middle",
     override: override ?? false,
     children,
@@ -203,11 +229,10 @@ export function lowerPositionPlacement(
     ) => number | undefined;
   }
 ): void {
+  // A region pins nothing: the layer handed the target its region in its
+  // layout call, and the target placed itself there.
   const emit = (axis: Axis, coordinate: PositionCoordinate | undefined) => {
     if (coordinate === undefined) return;
-    // Region form: nothing to pin. The layer handed the target the region in
-    // its layout call, and the target placed itself there.
-    if (isPositionRegion(coordinate)) return;
     // Interval form: pin BOTH edges (start=min, end=max) as strong anchor pins.
     // Two edges are rank 2, so cell closure determines the size — the extent
     // that a size-setting range needs, which a single point pin cannot express.

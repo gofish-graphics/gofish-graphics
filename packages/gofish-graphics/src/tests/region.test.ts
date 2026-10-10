@@ -11,7 +11,8 @@ import { Region } from "../ast/shapes/region";
 import { Ellipse } from "../ast/shapes/ellipse";
 import { Rect } from "../ast/shapes/rect";
 import { Constraint, PositionRegion } from "../ast/constraints";
-import { Cell } from "../ast/cells";
+import { RegionCell } from "../ast/cells";
+import { PolygonCell } from "../ast/polygonCells";
 import { value } from "../ast/data";
 import type { GoFishNode } from "../ast/_node";
 
@@ -75,32 +76,33 @@ async function main() {
 
   console.log("# a region draws its outline, else its box");
   {
-    const cell = new Cell(0, 2, "0–2");
-    const edges = [value(0), value(2)] as [any, any];
-    const diamond = [
+    // A diamond in [0, 2] × [0, 2], and a box cell [2, 4] × [0, 2].
+    const diamond = new PolygonCell("d", [
       [1, 0],
       [2, 1],
       [1, 2],
       [0, 1],
-    ].map(([x, y]) => [value(x), value(y)] as const);
+    ]);
+    class BoxCell extends RegionCell {
+      readonly id = "b";
+      readonly label = undefined;
+      span(axis: 0 | 1): readonly [number, number] {
+        return axis === 0 ? [2, 4] : [0, 2];
+      }
+    }
     const a = Region({ fill: "red" });
     a.name("a");
     const b = Region({ fill: "blue" });
     b.name("b");
     const node = (await layer({}, [a, b])) as GoFishNode;
+    const columns = [value, value] as const;
     await node.relate((g: any) => [
       Constraint.position(
-        {
-          x: new PositionRegion(cell, edges, diamond),
-          y: new PositionRegion(cell, edges, diamond),
-        },
+        { region: new PositionRegion(diamond, columns) },
         [g.a]
       ),
       Constraint.position(
-        {
-          x: new PositionRegion(new Cell(2, 4, "2–4"), [value(2), value(4)]),
-          y: new PositionRegion(cell, edges),
-        },
+        { region: new PositionRegion(new BoxCell(), columns) },
         [g.b]
       ),
     ]);

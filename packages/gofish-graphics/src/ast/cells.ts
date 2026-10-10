@@ -68,13 +68,36 @@ export type CalendarCellInfo = {
 };
 
 /**
- * One cell: the half-open interval `[start, end)` (numbers, or epoch
- * milliseconds for a calendar cell), its label, and, for a calendar cell, its
- * calendar fields. Its id is its start, as text: cells of one partition do not
- * overlap, so no two share a start. A cell stands for itself as a group key:
- * `String(cell)` is its id.
+ * A cell of a binned key, as a `partition` places it (#1059): what a cell of
+ * a line ({@link Cell}) and a cell of the plane (a `PolygonCell`,
+ * polygonCells.ts) share. Everything is in data units. A cell stands for
+ * itself as a group key: `String(cell)` is its id.
  */
-export class Cell {
+export abstract class RegionCell {
+  /** The cell's identity among the cells of its key. */
+  abstract get id(): string;
+  /** The text an axis shows for the cell, when it has one. */
+  abstract get label(): string | undefined;
+  /** The cell's `[min, max]` along `axis`. A cell of a line lies along
+   *  whichever axis its column is placed on, so its span is the same on
+   *  both. */
+  abstract span(axis: 0 | 1): readonly [number, number];
+  /** The cell's outline, `[x, y]` per corner, for a cell that is not a box
+   *  (a hexagon, a Voronoi cell); undefined for a cell of a line. */
+  declare readonly outline?: readonly (readonly [number, number])[];
+
+  toString(): string {
+    return this.id;
+  }
+}
+
+/**
+ * One cell of a line: the half-open interval `[start, end)` (numbers, or
+ * epoch milliseconds for a calendar cell), its label, and, for a calendar
+ * cell, its calendar fields. Its id is its start, as text: cells of one
+ * partition do not overlap, so no two share a start.
+ */
+export class Cell extends RegionCell {
   constructor(
     readonly start: number,
     readonly end: number,
@@ -82,15 +105,17 @@ export class Cell {
      *  default ("Jan" for a month, "0.5–1" for numbers). */
     readonly label: string,
     readonly calendar?: CalendarCellInfo
-  ) {}
+  ) {
+    super();
+  }
 
   /** The cell's identity: its start, as text. */
   get id(): string {
     return String(this.start);
   }
 
-  toString(): string {
-    return this.id;
+  span(): readonly [number, number] {
+    return [this.start, this.end];
   }
 }
 

@@ -23,6 +23,7 @@
 import { Delaunay } from "d3-delaunay";
 import type { Frontend } from "gofish-ir";
 import type { Point } from "./geometry";
+import { RegionCell } from "./cells";
 
 /** The two columns a key reads, one per axis of the plane. */
 export type PlaneFields = { readonly x: string; readonly y: string };
@@ -33,7 +34,7 @@ export type PlaneFields = { readonly x: string; readonly y: string };
  * holds the outline. A cell stands for itself as a group key: `String(cell)`
  * is its id.
  */
-export class PolygonCell {
+export class PolygonCell extends RegionCell {
   /** The box that holds the outline: `[min, max]` on x and on y. */
   readonly box: {
     readonly x: readonly [number, number];
@@ -48,6 +49,7 @@ export class PolygonCell {
     /** For a Voronoi cell, the seed row whose cell it is. */
     readonly seed?: unknown
   ) {
+    super();
     const xs = outline.map((p) => p[0]);
     const ys = outline.map((p) => p[1]);
     this.box = {
@@ -56,8 +58,13 @@ export class PolygonCell {
     };
   }
 
-  toString(): string {
-    return this.id;
+  get label(): undefined {
+    return undefined;
+  }
+
+  /** The box on `axis`. */
+  span(axis: 0 | 1): readonly [number, number] {
+    return axis === 0 ? this.box.x : this.box.y;
   }
 }
 

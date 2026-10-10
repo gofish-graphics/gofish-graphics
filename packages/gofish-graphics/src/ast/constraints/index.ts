@@ -27,9 +27,10 @@ import {
 } from "./zorder";
 import { createNestConstraint } from "./nest";
 import {
-  coordinateSpan,
-  isPositionRegion,
+  axisCoordinates,
+  isPositionInterval,
   spanDatumInterval,
+  type PositionCoordinate,
 } from "./position";
 import type { AlignConstraint, AlignOptions } from "./align";
 import type { DistributeConstraint, DistributeOptions } from "./distribute";
@@ -71,11 +72,7 @@ export type {
   PositionInterval,
   PositionOptions,
 } from "./position";
-export {
-  isPositionInterval,
-  isPositionRegion,
-  PositionRegion,
-} from "./position";
+export { isPositionInterval, PositionRegion } from "./position";
 export type {
   ZAboveConstraint,
   ZBelowConstraint,
@@ -280,27 +277,15 @@ export function resolveConstraintOperands(
 export function collectPositionDomains(
   constraints: ConstraintSpec[]
 ): PositionDomains {
-  let x: Interval.Interval | undefined;
-  let y: Interval.Interval | undefined;
-  let xMeasure: Measure | undefined;
-  let yMeasure: Measure | undefined;
-  // The calendar of time datums (`CONTINUOUS_TYPE.calendar`); literals carry
-  // none.
-  let xCalendar: HasCalendar | undefined;
-  let yCalendar: HasCalendar | undefined;
-  // An interval or a region reads as its two edges; a point as itself.
-  const coordCalendar = (
-    coord: PositionConstraint["x"] | undefined
-  ): HasCalendar | undefined => {
-    if (coord === undefined) return undefined;
-    const span = coordinateSpan(coord);
-    return span !== undefined
-      ? mergeCalendars([positionCalendar(span[0]), positionCalendar(span[1])])
+  // An interval reads as its two edges; a point as itself.
+  const coordCalendar = (coord: PositionCoordinate): HasCalendar | undefined =>
+    isPositionInterval(coord)
+      ? mergeCalendars([positionCalendar(coord[0]), positionCalendar(coord[1])])
       : positionCalendar(coord);
-  };
-  const pointInterval = (
-    coord: PositionConstraint["x"]
+  const coordInterval = (
+    coord: PositionCoordinate
   ): Interval.Interval | undefined => {
+    if (isPositionInterval(coord)) return spanDatumInterval(coord);
     if (!isValue(coord)) return undefined;
     const n = getValue(coord as MaybeValue<number>);
     return Interval.interval(n, n);
@@ -312,62 +297,56 @@ export function collectPositionDomains(
   // A point datum's measure; literals carry none. An interval's `[min,max]`
   // endpoints unify their two measures the same way (mixed units are a conflict).
   const coordMeasure = (
-    coord: PositionConstraint["x"] | undefined,
+    coord: PositionCoordinate,
     axis: 0 | 1
-  ): Measure | undefined => {
-    if (coord === undefined) return undefined;
-    const span = coordinateSpan(coord);
-    return span !== undefined
-      ? mergeMeasures(getMeasure(span[0]), getMeasure(span[1]), {
+  ): Measure | undefined =>
+    isPositionInterval(coord)
+      ? mergeMeasures(getMeasure(coord[0]), getMeasure(coord[1]), {
           axis,
           where: "at the two ends of a position range",
         })
       : getMeasure(coord);
+
+  const axisDomain = (axis: 0 | 1) => {
+    let domain: Interval.Interval | undefined;
+    let measure: Measure | undefined;
+    // The calendar of time datums (`CONTINUOUS_TYPE.calendar`); literals
+    // carry none.
+    let calendar: HasCalendar | undefined;
+    // The cells each coordinate places on this axis: a region's cell, when
+    // it is a cell of a line placed along this axis alone. A point, an
+    // interval, or a cell of the plane (a hexagon: no cell of this axis
+    // alone) places none.
+    const cells: (readonly Cell[] | undefined)[] = [];
+    for (const c of constraints) {
+      if (c.type !== "position") continue;
+      for (const coord of axisCoordinates(c, axis)) {
+        domain = unionIv(domain, coordInterval(coord));
+        measure = mergeMeasures(measure, coordMeasure(coord, axis), {
+          axis,
+          where: "across position constraints",
+        });
+        calendar = mergeCalendars([calendar, coordCalendar(coord)]);
+        const cell = c.region?.cell;
+        cells.push(
+          coord === c.region?.spans[axis] && cell instanceof Cell
+            ? [cell]
+            : undefined
+        );
+      }
+    }
+    return { domain, measure, calendar, cells: mergeCells(cells) };
   };
-  const coordInterval = (
-    coord: PositionConstraint["x"] | undefined
-  ): Interval.Interval | undefined => {
-    if (coord === undefined) return undefined;
-    const span = coordinateSpan(coord);
-    return span !== undefined ? spanDatumInterval(span) : pointInterval(coord);
-  };
-  // The cell a coordinate places in: a region's 1D cell. A point, an
-  // interval, or a cell of the plane (a hexagon: no cell of this axis
-  // alone) places none.
-  const coordCell = (
-    coord: NonNullable<PositionConstraint["x"]>
-  ): readonly Cell[] | undefined =>
-    isPositionRegion(coord) && coord.cell instanceof Cell
-      ? [coord.cell]
-      : undefined;
-  const xCells: (readonly Cell[] | undefined)[] = [];
-  const yCells: (readonly Cell[] | undefined)[] = [];
-  for (const c of constraints) {
-    if (c.type !== "position") continue;
-    x = unionIv(x, coordInterval(c.x));
-    y = unionIv(y, coordInterval(c.y));
-    xMeasure = mergeMeasures(xMeasure, coordMeasure(c.x, 0), {
-      axis: 0,
-      where: "across position constraints",
-    });
-    yMeasure = mergeMeasures(yMeasure, coordMeasure(c.y, 1), {
-      axis: 1,
-      where: "across position constraints",
-    });
-    xCalendar = mergeCalendars([xCalendar, coordCalendar(c.x)]);
-    yCalendar = mergeCalendars([yCalendar, coordCalendar(c.y)]);
-    if (c.x !== undefined) xCells.push(coordCell(c.x));
-    if (c.y !== undefined) yCells.push(coordCell(c.y));
-  }
+  const [x, y] = [axisDomain(0), axisDomain(1)];
   return {
-    x,
-    y,
-    xMeasure,
-    yMeasure,
-    xCalendar,
-    yCalendar,
-    xCells: mergeCells(xCells),
-    yCells: mergeCells(yCells),
+    x: x.domain,
+    y: y.domain,
+    xMeasure: x.measure,
+    yMeasure: y.measure,
+    xCalendar: x.calendar,
+    yCalendar: y.calendar,
+    xCells: x.cells,
+    yCells: y.cells,
   };
 }
 

@@ -33,6 +33,7 @@ import {
   checkPartition,
   Cell,
   DEFAULT_PARTITION,
+  type RegionCell,
   type Cells,
 } from "./cells";
 import { columnType, domainRows, orderByLevels } from "./schema";
@@ -153,10 +154,10 @@ export type SplitBy =
   | StructExprWire;
 
 /** The key of one group of a split: a value of the `by` field (text or a
- *  number), a {@link Cell} for a binned key (`field(x).bin(p)`), or a
- *  {@link PolygonCell} for a binned struct (`struct({ x, y }).bin(b)`). A
- *  cell stands for its id (`String(cell)`). */
-export type SplitKey = string | number | Cell | PolygonCell;
+ *  number), or a cell ({@link RegionCell}): a {@link Cell} for a binned key
+ *  (`field(x).bin(p)`), a {@link PolygonCell} for a binned struct
+ *  (`struct({ x, y }).bin(b)`). A cell stands for its id (`String(cell)`). */
+export type SplitKey = string | number | RegionCell;
 
 /**
  * The mutable cell `ChartBuilder` writes the computed default split/travel

@@ -71,19 +71,23 @@ import {
   type StackOrigin,
 } from "./distribute";
 import { type AlignConstraint } from "./align";
-import { coordinateSpan, type PositionConstraint } from "./position";
+import {
+  axisCoordinates,
+  isPositionInterval,
+  type PositionConstraint,
+} from "./position";
 import { axisIndex, buildNameIndex, type AlignAnchor } from "./shared";
 
-/** A position constraint whose coordinates all span (intervals or regions: at
- *  least one such axis, no point axis). It places its axis across a span
- *  without blocking composition. A position carrying any *point*
+/** A position constraint that places its target only across spans: its
+ *  `x`/`y` are intervals where given, or it gives a region. It places its
+ *  axes without blocking composition. A position carrying any *point*
  *  coordinate is conservatively NOT span-like — it bails composition to the
  *  layer's default union (the distribute-relative-to-a-pin solve is deferred). */
-const isPureIntervalPosition = (c: ConstraintSpec): c is PositionConstraint =>
+const isSpanPosition = (c: ConstraintSpec): c is PositionConstraint =>
   c.type === "position" &&
-  (c.x === undefined || coordinateSpan(c.x) !== undefined) &&
-  (c.y === undefined || coordinateSpan(c.y) !== undefined) &&
-  (c.x !== undefined || c.y !== undefined);
+  (c.x === undefined || isPositionInterval(c.x)) &&
+  (c.y === undefined || isPositionInterval(c.y)) &&
+  (c.x !== undefined || c.y !== undefined || c.region !== undefined);
 
 /** One distribute's slice of the layout budget: equal shares of the axis size
  *  among its covered children (consumed by `layer.tsx`'s `layout`). */
@@ -130,14 +134,11 @@ export function datumPlacedChildren(
   const placed: [Set<number>, Set<number>] = [new Set(), new Set()];
   for (const c of constraints) {
     if (c.type !== "position") continue;
-    const coords = [c.x, c.y] as const;
     for (const axis of [0, 1] as const) {
-      const coord = coords[axis];
-      if (
-        coord === undefined ||
-        !(isValue(coord) || coordinateSpan(coord) !== undefined)
-      )
-        continue;
+      const datum = axisCoordinates(c, axis).some(
+        (coord) => isValue(coord) || isPositionInterval(coord)
+      );
+      if (!datum) continue;
       for (const ref of c.children) {
         const i = index.get(ref.name);
         if (i !== undefined) placed[axis].add(i);
@@ -341,7 +342,7 @@ export function planConstraintComposition(
   // the cross-axis align fold (SIZE→POSITION) must still run (e.g. a histogram =
   // interval position on x, align on y; the align fold is what makes the count
   // axis).
-  const spans = constraints.filter(isPureIntervalPosition);
+  const spans = constraints.filter(isSpanPosition);
   // Compose only layers that are PURELY distributes + aligns + interval
   // positions. A *point* position pin (or z-order) puts the layer in a different
   // regime — the distribute-relative-to-a-pin solve is deferred

@@ -7,7 +7,6 @@ import { getValue, getValueOffset, isValue, type MaybeValue } from "../data";
 import { pxOf } from "../domain";
 import {
   isPositionInterval,
-  isPositionRegion,
   type PositionInterval,
   type PositionRegion,
 } from "./position";
@@ -158,8 +157,7 @@ function spanPixels(
  * range), rather than being laid out in the whole layer and then stretched
  * or shrunk by the pins. `posScales` are the scales the layer resolves its
  * position constraints against. Keyed by child name, one entry per axis
- * (undefined where no interval constrains the child). A region coordinate
- * is not a pin: the layer hands it to the child in the layout call
+ * (undefined where no interval constrains the child). A region is not a pin: the layer hands it to the child in the layout call
  * ({@link buildChildRegions}). */
 export function buildSpanProposalMap(
   constraints: readonly ConstraintSpec[],
@@ -198,7 +196,7 @@ function edgePixel(
 /**
  * The region each child of a layer gets (#1059, `geometry/region.ts`).
  *
- * A child the layer's `position` constraints give a region coordinate (a
+ * A child the layer's `position` constraints give a `region` (a
  * {@link PositionRegion}: a `partition`'s cell) gets, on each axis, the
  * cell's span there, mapped to pixels by `posScales`. On an axis where it has
  * no cell, it gets the region the layer itself was given there, if any, in
@@ -207,7 +205,7 @@ function edgePixel(
  * space on y, so a partition inside another partition's cell gives its
  * children both cells. That is the intersection of the two regions, since
  * each one bounds a different axis.
- * A child with no region coordinate gets nothing; it is placed by the rest
+ * A child with no region gets nothing; it is placed by the rest
  * of the layer's constraints as before.
  *
  * The outline is the cell's (`PositionRegion.outline`), mapped through both
@@ -223,19 +221,12 @@ export function buildChildRegions(
   posScales: ConstraintPosScales,
   received: Region | undefined
 ): Map<string, Region> | undefined {
-  const cells = new Map<string, [PositionRegion?, PositionRegion?]>();
+  const cells = new Map<string, PositionRegion>();
   for (const constraint of constraints) {
-    if (constraint.type !== "position") continue;
-    ([0, 1] as const).forEach((axis) => {
-      const coord = axis === 0 ? constraint.x : constraint.y;
-      if (!isPositionRegion(coord)) return;
-      for (const ref of constraint.children) {
-        if (!ref) continue;
-        const cur = cells.get(ref.name) ?? [];
-        cur[axis] = coord;
-        cells.set(ref.name, cur);
-      }
-    });
+    if (constraint.type !== "position" || constraint.region === undefined)
+      continue;
+    for (const ref of constraint.children)
+      if (ref) cells.set(ref.name, constraint.region);
   }
   if (cells.size === 0) return undefined;
 
@@ -243,24 +234,23 @@ export function buildChildRegions(
   const byName = new Map<string, Region>();
   for (const [name, cell] of cells) {
     const spans = ([0, 1] as const).map((axis): Span | undefined => {
-      const c = cell[axis];
-      if (c === undefined) return local?.spans[axis];
-      const a = edgePixel(c.edges[0], posScales[axis]);
-      const b = edgePixel(c.edges[1], posScales[axis]);
+      const edges = cell.spans[axis];
+      if (edges === undefined) return local?.spans[axis];
+      const a = edgePixel(edges[0], posScales[axis]);
+      const b = edgePixel(edges[1], posScales[axis]);
       if (a === undefined || b === undefined) return undefined;
       return [Math.min(a, b), Math.max(a, b)];
     }) as [Span | undefined, Span | undefined];
-    const outlined = cell[0]?.outline ?? cell[1]?.outline;
     let outline: Point[] | undefined;
-    if (outlined !== undefined) {
+    if (cell.outline !== undefined) {
       const points: Point[] = [];
-      for (const [vx, vy] of outlined) {
+      for (const [vx, vy] of cell.outline) {
         const x = edgePixel(vx, posScales[0]);
         const y = edgePixel(vy, posScales[1]);
         if (x === undefined || y === undefined) break;
         points.push([x, y]);
       }
-      if (points.length === outlined.length) outline = points;
+      if (points.length === cell.outline.length) outline = points;
     }
     byName.set(name, { spans, outline });
   }

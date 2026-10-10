@@ -659,8 +659,9 @@ composes its targets' spaces into the layer's claim on that axis:
   in the whole layer and then stretched. `scatter` uses both
   forms of `Constraint.position`: plain `x`/`y` → a point coordinate, range
   `xMin`/`xMax`/`yMin`/`yMax` → an interval coordinate (the operator no longer
-  has a bespoke layout). A third form, the **region** coordinate
-  (`PositionRegion`, #1059), is what `partition` uses. It is not a pin: the
+  has a bespoke layout). A position constraint may instead give its target
+  a **region** (`region: PositionRegion`, #1059), which is what `partition`
+  uses. It is not a pin: the
   layer turns it into the region it hands the target in its layout call,
   and the target places itself there, keeping the size its layout gave it
   (see [Partition](#partition-each-group-in-its-cell)). A categorical
@@ -1997,10 +1998,11 @@ of a field expression says whether it does (`FieldExpr<true>`, a phantom
 `hasRegion` flag that domain ops keep and aggregates drop), and the split
 checks the wire form from Python with an error that names the fix.
 
-It has no layout code of its own. It is a layer with one region `position`
-constraint per child on `dir` (`Constraint.position({ [dir]: region })`,
-with a `PositionRegion` per cell) and one `align` on the other axis, as in
-a scatter.
+It has no layout code of its own. It is a layer with one `position`
+constraint per child that gives it its cell (`Constraint.position({ region
+})`, with a `PositionRegion` per cell) and one `align` on each axis the
+key's columns are not placed along (the other axis, for a 1D key), as in a
+scatter.
 
 **Regions flow down in the layout call.** A region is the space a parent
 gives a child, and it travels with the size proposal:
@@ -2010,9 +2012,8 @@ outline, measured from the parent's origin in the axis order of whoever
 holds it (`GoFishNode.layout` reflects it into the child's own order when
 the two y directions differ). The layer builds each child's region in
 `buildChildRegions` (`constraints/proposalPlan.ts`): on an axis where the
-child has a `PositionRegion`, the cell's two edges mapped to pixels; on an
-axis where it has none, the region the layer itself was handed there, if
-any. Each region bounds a different axis, so that is their intersection. The
+child's `region` spans, the cell's two edges mapped to pixels; on an axis
+where it spans none, the region the layer itself was handed there, if any. Each region bounds a different axis, so that is their intersection. The
 child is proposed each span's length as its size (`childLayoutSizeProposal`)
 and then places itself in the span: a node whose own layout did not place it
 on that axis is centered there by `GoFishNode.layout`. So a `rect` or a
@@ -2024,16 +2025,20 @@ coordinate itself lowers to no placement fact: its target is already placed
 when the solve runs, and an `align` over targets their regions placed says
 nothing (`isRegionPlaced`, `constraints/align.ts`).
 
-A layer that hands a child its own region on some axis sits at its parent's
-origin on that axis (translate 0, `buildChildRegions`' `forwards`), so the
-region means the same thing in its frame as in its parent's.
+A layer passes the region it was handed on in its own frame, each span
+starting at 0 (`rebaseRegion`), and `GoFishNode.layout` places the layer
+itself in the region it was handed, as it places any node.
 
-The region holds its cell and the cell's two edges. Each edge is a datum
-that carries what the column says about its values (its measure, and its
-schema type, so a time column gives a time axis). `collectPositionDomains`
-reads a region's edges as it reads an interval's (the domain, the measure,
-the calendar), and collects its cell, so the layer's type on that axis holds
-the cells (`CONTINUOUS_TYPE.cells`). A union keeps them only when every part has them
+The region holds its cell (a `RegionCell`, cells.ts: an id, a label when it
+has one, a span per axis, and an outline when it is not a box) and the
+column each axis it is placed along reads, as a map from a value to its
+datum. It reads the cell through them once: `PositionRegion.spans` holds,
+per axis, the cell's two edges as datums, and each datum carries what the
+column says about its values (its measure, and its schema type, so a time
+column gives a time axis). `collectPositionDomains` reads a region's spans
+as it reads an interval (the domain, the measure, the calendar), and
+collects its cell when it is a cell of a line placed along that axis, so
+the layer's type on that axis holds the cells (`CONTINUOUS_TYPE.cells`). A union keeps them only when every part has them
 (`mergeCells`), as an ordinal over cells does. The type is what tells the
 axis that it places cells: a time axis over calendar cells ticks at their
 partition and labels each cell between its two boundary ticks
@@ -2058,8 +2063,9 @@ count over one is 0 and is drawn.
 
 **Regions with an outline.** A region may also hold an outline, the same
 shape the `boundary` geometry query (#974) returns, but handed from parent to
-child: a `PositionRegion` may hold the cell's outline in data (`outline`,
-`[x, y]` per corner, on both axes' coordinates), `buildChildRegions` maps it
+child: a `PositionRegion` holds the cell's outline in datums (`outline`,
+`[x, y]` per corner) when the cell has one and is placed along both axes,
+`buildChildRegions` maps it
 through both scales into the child's region, and the `region` mark draws a
 region's outline as a path when it has one, and its box otherwise (under a
 nonlinear coordinate space, resampled, so a hexagon in polar coordinates
@@ -2082,7 +2088,8 @@ instance and the object Python sends are read the same way.
 
 `splitEntries` hands a struct key to `structEntries`, which groups the rows
 by the cells of the plane (`polygonCells.ts`). A `PolygonCell` has an id, an
-outline in data, and the box that holds it, and no order. The cells are those
+outline in data, and the box that holds it (its span on each axis), and no
+order. The cells are those
 of the two columns' domain, as in 1D, so every group of a nested split sees
 the same cells and empty cells are kept (a cache keyed by the domain, the bin
 object and the two columns).
@@ -2105,11 +2112,12 @@ object and the two columns).
   the cells mean something only when the two fields share a unit (longitude
   and latitude, two lengths in millimeters).
 
-`partition`'s plane form gives each child one region constraint per axis,
-`Constraint.position({ x: region, y: region })`, each with the cell's box on
-that axis as its edges and the cell's outline. The boxes make the axes'
-domains, and since a polygon cell is no cell of one axis alone, each axis is a
-plain continuous axis (`collectPositionDomains` collects only a 1D `Cell`). A
+`partition`'s plane form is the same split and the same constraints as the
+1D form: the struct's two columns are placed along x and y, so each child's
+one `region` spans both axes (the cell's box) and holds the cell's outline,
+and no axis is left to align. The boxes make the axes' domains, and since a
+polygon cell is no cell of one axis alone, each axis is a plain continuous
+axis (`collectPositionDomains` collects only a cell of a line, a `Cell`). A
 `region` draws the outline; any other mark is placed in the box, so a circle
 or a text sits at a hexagon's center.
 

@@ -15,7 +15,7 @@ import {
 } from "./data";
 import { nice as d3Nice } from "d3-array";
 import type { HasCalendar } from "./schema";
-import { Cell } from "./cells";
+import { Cell, type RegionCell } from "./cells";
 import { niceToCells, tickPartition, type CalendarPartition } from "./calendar";
 
 // This module is the TYPE half of an axis: what the axis means, with no σ in
@@ -359,10 +359,11 @@ export const ORDINAL = (
 
 /** An ordinal axis's keys: plain text, or cells (`field(x).bin(p)`), which
  *  stand for their ids. */
-export type OrdinalKey = string | Cell;
+export type OrdinalKey = string | RegionCell;
 
 /** The ORDINAL over `keys`, in order: over cells when every key is a cell
- *  ({@link ORDINAL_TYPE.cells}). */
+ *  of a line ({@link ORDINAL_TYPE.cells}). A cell of the plane lies along
+ *  no one axis, so an ordinal over those is over its keys' ids. */
 export const ordinalOver = (
   keys: readonly OrdinalKey[],
   measure?: Measure,
