@@ -97,7 +97,6 @@ export const NestedForm: StoryObj<Args> = {
         partition({
           by: field("Body Mass (g)").bin({ step: 500 }),
           dir: "y",
-          alignment: "middle",
         })
       )
       .mark(region({ fill: field("Body Mass (g)").count() }))
@@ -125,6 +124,45 @@ export const PenguinCellCounts: StoryObj<Args> = {
             x: field("Flipper Length (mm)").bin({ step: 10 }),
             y: field("Body Mass (g)").bin({ step: 500 }),
           },
+        })
+      )
+      .mark(text({ text: field("Body Mass (g)").count() }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+// Hand-nested partitions place their children the same way in either order:
+// each child is handed its x cell and its y cell, so a count of any width
+// sits at the center of its rectangle. These two draw the same chart.
+export const NestedFlipperThenMass: StoryObj<Args> = {
+  args: { w: 420, h: 320 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(measured, { axes: true })
+      .flow(
+        partition({
+          by: field("Flipper Length (mm)").bin({ step: 10 }),
+          dir: "x",
+        }),
+        partition({ by: field("Body Mass (g)").bin({ step: 500 }), dir: "y" })
+      )
+      .mark(text({ text: field("Body Mass (g)").count() }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+export const NestedMassThenFlipper: StoryObj<Args> = {
+  args: { w: 420, h: 320 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(measured, { axes: true })
+      .flow(
+        partition({ by: field("Body Mass (g)").bin({ step: 500 }), dir: "y" }),
+        partition({
+          by: field("Flipper Length (mm)").bin({ step: 10 }),
+          dir: "x",
         })
       )
       .mark(text({ text: field("Body Mass (g)").count() }))

@@ -56,11 +56,7 @@ def story_nested_form():
         chart(MEASURED, color=Color.gradient("blues"), axes=True)
         .flow(
             partition(by=field("Flipper Length (mm)").bin(step=10), dir="x"),
-            partition(
-                by=field("Body Mass (g)").bin(step=500),
-                dir="y",
-                alignment="middle",
-            ),
+            partition(by=field("Body Mass (g)").bin(step=500), dir="y"),
         )
         .mark(region(fill=field("Body Mass (g)").count())),
         {"w": 320, "h": 320},
@@ -77,6 +73,33 @@ def story_penguin_cell_counts():
                     "y": field("Body Mass (g)").bin(step=500),
                 }
             )
+        )
+        .mark(text(text=field("Body Mass (g)").count())),
+        {"w": 420, "h": 320},
+    )
+
+
+# Hand-nested partitions place their children the same way in either order:
+# each child is handed its x cell and its y cell, so a count of any width
+# sits at the center of its rectangle. These two draw the same chart.
+def story_nested_flipper_then_mass():
+    return (
+        chart(MEASURED, axes=True)
+        .flow(
+            partition(by=field("Flipper Length (mm)").bin(step=10), dir="x"),
+            partition(by=field("Body Mass (g)").bin(step=500), dir="y"),
+        )
+        .mark(text(text=field("Body Mass (g)").count())),
+        {"w": 420, "h": 320},
+    )
+
+
+def story_nested_mass_then_flipper():
+    return (
+        chart(MEASURED, axes=True)
+        .flow(
+            partition(by=field("Body Mass (g)").bin(step=500), dir="y"),
+            partition(by=field("Flipper Length (mm)").bin(step=10), dir="x"),
         )
         .mark(text(text=field("Body Mass (g)").count())),
         {"w": 420, "h": 320},
