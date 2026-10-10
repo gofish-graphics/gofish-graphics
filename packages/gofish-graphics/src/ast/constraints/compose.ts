@@ -72,12 +72,9 @@ import {
 import {
   axisIndex,
   buildNameIndex,
-  childNameKey,
   isPointAlign,
   type AlignAnchor,
 } from "./shared";
-import { GoFishNode } from "../_node";
-import { envFlag } from "../../util";
 
 /** A position constraint whose coordinates are *purely* interval form (at least
  *  one interval axis, no point axis). It size-sets its axis without blocking
@@ -408,10 +405,13 @@ export function planConstraintComposition(
 // applies it. Three rows of the note's table are node-level rules rather than
 // constraints: a data-valued `w`/`h` (`layer.tsx`, which adds to this plan),
 // `treemap` (`treemap.tsx`) and the `position` operator (`positionNode.tsx`).
-// Nothing reads the plans yet except the `GOFISH_DUMP_SHARING` dump
-// ({@link dumpSharing}).
-// A discrete position (a scatter over a category field) is not in the table.
-// It contributes nothing here, as in `datumPlacedChildren`.
+// The plans are read by the layer's type hook (its own union is its own set),
+// by the keyed domain table (`keyedDomains.ts`), by the layer's placement
+// (which children its frame positions by data), and by the
+// `GOFISH_DUMP_SHARING` dump (`debug/dump.ts`).
+// A discrete position (a scatter over a category field) is not in the table:
+// `positionCoordKind` reads it as neither pixels nor a datum, so it
+// contributes nothing here.
 
 /** One layer's sharing sets, per axis. Derived, never stored on a space. */
 export type SharingPlan = {
@@ -541,91 +541,6 @@ export function planSharing(
     });
   }
   return { sets, nested, datumPlaced };
-}
-
-/** A short label for a child in the sharing dump. */
-const childLabel = (child: GoFishAST, i: number): string => {
-  const name = childNameKey(child);
-  if (name !== undefined) return name;
-  const node = child as { key?: unknown; type?: unknown };
-  if (typeof node.key === "string" && node.key !== "") return node.key;
-  return `${typeof node.type === "string" ? node.type : "child"}#${i}`;
-};
-
-/** One axis of a plan, printed: the own set, then the detached sets. A `*`
- *  marks a nested child. Long lists are cut, since a spread of 300 bars has
- *  300 sets. */
-export function printSharingAxis(
-  plan: SharingPlan,
-  axis: 0 | 1,
-  childNodes: GoFishAST[]
-): string {
-  const MAX = 6;
-  const groups = new Map<number, string[]>();
-  plan.sets[axis].forEach((s, i) => {
-    const label =
-      childLabel(childNodes[i], i) + (plan.nested[axis].has(i) ? "*" : "");
-    const g = groups.get(s);
-    if (g) g.push(label);
-    else groups.set(s, [label]);
-  });
-  const cut = (xs: string[], sep: string, unit = "") =>
-    xs.length <= MAX
-      ? xs.join(sep)
-      : `${xs.slice(0, MAX - 2).join(sep)}${sep}…+${xs.length - (MAX - 2)}${unit}`;
-  const own = cut(groups.get(0) ?? [], ",");
-  const others = [...groups.entries()]
-    .filter(([s]) => s !== 0)
-    .map(([, g]) => `{${cut(g, ",")}}`);
-  return others.length === 0
-    ? `own{${own}}`
-    : `own{${own}} detached ${cut(others, " ", " sets")}`;
-}
-
-/** Whether the sharing dump is on. Off (and near-zero-cost) in prod. */
-const DUMP_SHARING = envFlag("GOFISH_DUMP_SHARING");
-
-/** A layer's constraints, counted by type: `position×14,align`. */
-const printConstraintTypes = (constraints: ConstraintSpec[]): string => {
-  const counts = new Map<string, number>();
-  for (const c of constraints)
-    counts.set(c.type, (counts.get(c.type) ?? 0) + 1);
-  return [...counts]
-    .map(([type, k]) => (k === 1 ? type : `${type}×${k}`))
-    .join(",");
-};
-
-/** Behind `GOFISH_DUMP_SHARING`, print the sharing plan of every node under
- *  `root` that has more than one child, any constraint, or a child that is
- *  detached or nested, one line per node, indented by depth. A node's chrome rings (axes, titles) are skipped, and
- *  only its content is walked, since chrome must not decide domains. It only
- *  reads the tree. */
-export function dumpSharing(root: GoFishAST): void {
-  if (!DUMP_SHARING) return;
-  const walk = (node: GoFishAST, depth: number) => {
-    if (!(node instanceof GoFishNode)) return;
-    if (node.chrome !== undefined && node.chrome.content !== node) {
-      walk(node.chrome.content, depth);
-      return;
-    }
-    const { children, constraints, type } = node;
-    const plan = node.sharing();
-    const moved = ([0, 1] as const).some(
-      (axis) =>
-        plan.nested[axis].size > 0 || plan.sets[axis].some((s) => s !== 0)
-    );
-    if (children.length > 1 || constraints.length > 0 || moved) {
-      const name = childNameKey(node) ?? node.key ?? "";
-      console.log(
-        `[sharing] ${"  ".repeat(depth)}${type}${name ? ` ${name}` : ""}` +
-          ` (${children.length}) [${printConstraintTypes(constraints)}]` +
-          ` x: ${printSharingAxis(plan, 0, children)}` +
-          ` | y: ${printSharingAxis(plan, 1, children)}`
-      );
-    }
-    children.forEach((c) => walk(c, depth + 1));
-  };
-  walk(root, 0);
 }
 
 const foldOptions = (s: Seg) => ({

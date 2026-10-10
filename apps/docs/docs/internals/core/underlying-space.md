@@ -32,6 +32,7 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/nestPlan.ts
   - packages/gofish-graphics/src/ast/constraints/grid.ts
   - packages/gofish-graphics/src/ast/constraints/bbox.ts
+  - packages/gofish-graphics/src/ast/debug/dump.ts
 ---
 
 # The underlying space tree
@@ -1271,8 +1272,12 @@ printable frame equation, one line per solve, with kind `root`, `coord`,
 [scope] coord  key=coord axis=x 16σ = 6.283           σ=0.393 map=no
 ```
 
+After them, `dumpKeyedDomains` prints one line per keyed domain: its space
+root, axis, key and domain, marked `axis` when an axis is drawn over it.
+
 Behind `GOFISH_DUMP_SHARING`, `dumpSharing` prints each layer's sharing sets
 instead, one line per layer, skipping chrome rings. A `*` marks a nested child.
+Both dumps live in `debug/dump.ts`.
 `tests/scripts/dump-scopes.ts "<filter>" --sharing` prints them for a story.
 The marginal histogram's layer prints as:
 

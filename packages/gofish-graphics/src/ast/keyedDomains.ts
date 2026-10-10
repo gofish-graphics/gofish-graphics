@@ -28,9 +28,6 @@ import {
 import type { Size } from "./dims";
 import { niceScope, widenScope, type Extent } from "./extent";
 import { unitKey } from "./measure";
-import { envFlag } from "../util";
-
-const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
 
 /** The part of a node the table reads (duck-typed: `_node.ts` imports this
  *  module). */
@@ -57,7 +54,7 @@ type Seat = { spaceRoot: KeyedNode; top: KeyedNode; topType?: UnderlyingSpace };
 
 /** The key of a domain: its unit's representative, or, for values with no
  *  unit (literals), the top of their set, which is a key of its own. */
-export const domainKey = (
+const domainKey = (
   space: UnderlyingSpace | undefined,
   top: KeyedNode
 ): string => {
@@ -294,27 +291,27 @@ export class KeyedDomains {
     };
   }
 
-  /** Behind `GOFISH_DUMP_SCOPES`, print one line per keyed domain: its
-   *  space root, axis, key and domain, and whether an axis is drawn over it. */
-  dump(): void {
-    if (!DUMP_SCOPES) return;
-    for (const line of this.print()) console.log(line);
-  }
-
-  /** One line per keyed domain. */
-  print(): string[] {
-    const lines: string[] = [];
-    for (const [root, axes] of this.domains) {
-      axes.forEach((m, axis) => {
-        for (const [key, iv] of m) {
-          const niced = this.demand.get(root)?.[axis].has(key) ? " axis" : "";
-          lines.push(
-            `[scope] domain space=${root.type}:${root.uid} axis=${axis === 0 ? "x" : "y"} ` +
-              `key=${key} [${iv.min},${iv.max}]${niced}`
+  /** Each keyed domain: its space root, axis, key and domain, and whether an
+   *  axis is drawn over it. Read by the scope dump (`debug/dump.ts`). */
+  forEachDomain(
+    f: (
+      spaceRoot: KeyedNode,
+      axis: 0 | 1,
+      key: string,
+      domain: Interval.Interval,
+      drawn: boolean
+    ) => void
+  ): void {
+    for (const [root, axes] of this.domains)
+      ([0, 1] as const).forEach((axis) => {
+        for (const [key, iv] of axes[axis])
+          f(
+            root,
+            axis,
+            key,
+            iv,
+            this.demand.get(root)?.[axis].has(key) ?? false
           );
-        }
       });
-    }
-    return lines;
   }
 }
