@@ -1,0 +1,1174 @@
+<title>Background and Hull API</title>
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap");
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --fg: #1d232b;
+    --muted: #5b6573;
+    --line: #dde2e8;
+    --accent: #0f6e74;
+    --accent-soft: #e3f1f1;
+    --code-bg: #eef1f4;
+    --img-bg: #ffffff;
+    --warn: #8a5a00;
+    --warn-soft: #fbf1dc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181d;
+      --surface: #1b2027;
+      --fg: #e4e8ed;
+      --muted: #9aa5b3;
+      --line: #2d343e;
+      --accent: #5cc0c4;
+      --accent-soft: #1d3134;
+      --code-bg: #20262e;
+      --img-bg: #ffffff;
+      --warn: #e0b45a;
+      --warn-soft: #2e2717;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181d;
+    --surface: #1b2027;
+    --fg: #e4e8ed;
+    --muted: #9aa5b3;
+    --line: #2d343e;
+    --accent: #5cc0c4;
+    --accent-soft: #1d3134;
+    --code-bg: #20262e;
+    --img-bg: #ffffff;
+    --warn: #e0b45a;
+    --warn-soft: #2e2717;
+    color-scheme: dark;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    margin: 0;
+    padding: 32px 16px 64px;
+    font:
+      15.5px/1.6 "IBM Plex Sans",
+      system-ui,
+      sans-serif;
+  }
+  main {
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 30px;
+    line-height: 1.2;
+    margin: 0 0 6px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 21px;
+    margin: 48px 0 10px;
+    font-weight: 600;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  h3 {
+    font-size: 16.5px;
+    margin: 28px 0 8px;
+    font-weight: 600;
+  }
+  p,
+  li {
+    max-width: 68ch;
+  }
+  a {
+    color: var(--accent);
+  }
+  .eyebrow {
+    font:
+      500 12px/1 "IBM Plex Mono",
+      monospace;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .lede {
+    color: var(--muted);
+    font-size: 16.5px;
+  }
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.88em;
+    background: var(--code-bg);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    margin: 8px 0;
+    max-width: 100%;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    font-size: 12.8px;
+    line-height: 1.55;
+    white-space: pre;
+  }
+  .rec {
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 14px 18px;
+    margin: 20px 0;
+  }
+  .rec p {
+    margin: 6px 0;
+  }
+  .lang {
+    font:
+      500 11px/1 "IBM Plex Mono",
+      monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 12px 0 2px;
+  }
+  figure {
+    margin: 0;
+  }
+  .shot {
+    background: var(--img-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px;
+    display: block;
+  }
+  .shot img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+  }
+  figcaption {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin-top: 6px;
+    line-height: 1.45;
+  }
+  .grid4 {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 12px;
+  }
+  .grid3 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 12px;
+  }
+  .grid2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 12px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .card h4 {
+    margin: 0 0 4px;
+    font:
+      500 13.5px/1.3 "IBM Plex Mono",
+      monospace;
+    color: var(--accent);
+  }
+  .card p {
+    font-size: 13.5px;
+    margin: 6px 0 0;
+    color: var(--muted);
+  }
+  .ex {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+    margin: 14px 0 26px;
+  }
+  .ex > div {
+    min-width: 0;
+  }
+  .pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+    margin: 10px 0;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .tablewrap {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .tag {
+    display: inline-block;
+    font:
+      500 11px/1.6 "IBM Plex Mono",
+      monospace;
+    padding: 0 6px;
+    border-radius: 3px;
+    background: var(--code-bg);
+    color: var(--muted);
+  }
+  .tag.ok {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .tag.dep {
+    background: var(--warn-soft);
+    color: var(--warn);
+  }
+  .note {
+    background: var(--warn-soft);
+    color: var(--fg);
+    border-radius: 4px;
+    padding: 10px 14px;
+    font-size: 14px;
+    max-width: none;
+  }
+  ol.decisions {
+    padding-left: 22px;
+  }
+  ol.decisions li {
+    margin: 6px 0;
+  }
+  .small {
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  .noimg {
+    background: var(--code-bg);
+    border: 1px dashed var(--line);
+    border-radius: 6px;
+    padding: 28px 10px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  @media (max-width: 860px) {
+    .grid4 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .grid3 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .ex {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 520px) {
+    .grid4,
+    .grid3,
+    .grid2,
+    .pair {
+      grid-template-columns: 1fr;
+    }
+    h1 {
+      font-size: 25px;
+    }
+  }
+</style>
+
+<main>
+  <div class="eyebrow">GoFish API proposal · background / hull</div>
+  <h1>One <code>enclose</code>, three shapes: box, hull, spine</h1>
+  <p class="lede">
+    GoFish already has a box-only <code>enclose</code> (also exported as
+    <code>background</code>). This proposal turns it into one relational mark
+    that draws a box, a hull, or a spine around a set of nodes. The shape is a
+    value of a new strategy family, <code>Shape</code>, chosen with a
+    <code>shape</code> option the way <code>Curve</code> is chosen with
+    <code>curve</code> on <code>line</code>. It keeps working around fresh
+    children, refs and mixes, and gains the bag form, so one hull per group
+    needs no loop.
+  </p>
+
+  <div class="rec">
+    <p>
+      <strong>Recommendation.</strong> Rebuild <code>enclose</code> with
+      <code>createRelationalMark</code> and give it
+      <code
+        >shape: Shape.box() | Shape.hull({ alpha }) | Shape.spine({ avoiding,
+        via })</code
+      >, with <code>padding</code> and paint shared on <code>enclose</code>.
+      Delete the <code>background</code> alias. Do not add a
+      <code>.background()</code> modifier yet; it is the runner-up, to add later
+      as exact sugar.
+    </p>
+    <pre><code>// one hull per species: bag form, fused over the flow
+chart(penguins)
+  .flow(group({ by: "Species" }), scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+  .mark(circle({ r: 3, fill: "Species" }))
+  .layer(enclose({ shape: Shape.hull(), padding: 6, fill: "Species", opacity: 0.2 }))
+
+// contains a and c but not b: combinator form over refs
+layer([a, b, c]).relate(({ a, b, c }) =&gt; [
+  enclose({ shape: Shape.spine({ avoiding: [b] }), fill: "#ff2400" }, [a, c]),
+])</code></pre>
+  </div>
+  <p class="small">
+    Every picture below is a real render of a throwaway prototype story
+    (<code>stories/_proposals/BackgroundHull.stories.tsx</code>). Since
+    <code>Shape</code> does not exist, the stories place members at fixed pixel
+    positions and compute outlines with story-local code (convex hull, an alpha
+    shape on Delaunay triangles, and <code>bubblesets-js</code> for the spine),
+    drawn with <code>polygon</code>. Box panels use the real
+    <code>enclose</code>. The code beside each picture is the proposed spelling,
+    not the story's code.
+  </p>
+
+  <h2>Strategy grid</h2>
+  <p>
+    Same members (blue U-shaped cluster) and the same two non-members (gray) in
+    each panel, <code>padding: 8</code>.
+  </p>
+  <div class="grid4">
+    <div class="card">
+      <h4>Shape.box()</h4>
+      <div class="shot">
+        <img src="img/strategy-box.png" alt="Box around the U cluster" />
+      </div>
+      <p>
+        The padded bounding box. Real <code>enclose</code>; note its fill
+        painting over the gray dots (#986).
+      </p>
+    </div>
+    <div class="card">
+      <h4>Shape.hull()</h4>
+      <div class="shot">
+        <img
+          src="img/strategy-hull-convex.png"
+          alt="Convex hull around the U cluster"
+        />
+      </div>
+      <p>Convex hull of the padded member outlines. Never has dents.</p>
+    </div>
+    <div class="card">
+      <h4>Shape.hull({ alpha: 40 })</h4>
+      <div class="shot">
+        <img
+          src="img/strategy-hull-concave.png"
+          alt="Concave alpha shape around the U cluster"
+        />
+      </div>
+      <p>
+        Alpha shape: openings wider than a 40 px disc are carved out. Depends
+        only on the members.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Shape.spine({ avoiding })</h4>
+      <div class="shot">
+        <img
+          src="img/strategy-spine.png"
+          alt="Bubble-set spine around the U cluster"
+        />
+      </div>
+      <p>
+        Connects the members with a tree that bends around the listed
+        non-members, then draws a smooth outline around it.
+      </p>
+    </div>
+  </div>
+  <p class="small">
+    The concave hull and the spine look alike here but answer different
+    questions. The hull's dent comes from the members' spacing and ignores the
+    gray dots; the spine's dent comes from the <code>avoiding</code> list. The
+    Topology example is the case only the spine can draw.
+  </p>
+
+  <h2>Josh's three tensions</h2>
+  <div class="grid3">
+    <div class="card">
+      <h4>Relational mark or operator?</h4>
+      <p>
+        Not a choice of construct. #707 showed the operand kind decides it: all
+        fresh children act like an operator, all refs plus ink act like a
+        connector, a mix is an open term. <code>enclose</code> already lives in
+        all three rows. Over fresh children the combinator form <em>is</em> the
+        component: it takes space, can be named and pointed at. A user-supplied
+        outline (Bluefish's background callback) becomes the
+        <code>Shape</code> family's function escape hatch (#1101).
+      </p>
+    </div>
+    <div class="card">
+      <h4>A SwiftUI modifier?</h4>
+      <p>
+        SwiftUI's <code>.background</code> decorates one view.
+        <code>enclose(opts, [node])</code> already does that, so a
+        <code>.background()</code> modifier would be exact sugar, and on an
+        operator it could give one background per group like
+        <code>.label()</code>. It cannot reach nodes that live in different
+        places (Topology, hyperedges, one species across lakes). Kept as the
+        runner-up.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Containment or connection?</h4>
+      <p>
+        Both, and the literature says so: the set survey files Bubble Sets as
+        regions, the hypergraph survey as node-link, and KelpFusion is one dial
+        from spanning tree to convex hull. So the design keeps it in the
+        relational-mark family (with <code>line</code>, <code>ribbon</code>),
+        orders <code>shape</code> from box to spine, and lets
+        <code>Shape.spine({ via })</code> take real connections as its skeleton.
+      </p>
+    </div>
+  </div>
+
+  <h2>
+    Approach A: <code>enclose</code> becomes a relational mark
+    <span class="tag ok">recommended</span>
+  </h2>
+  <p>
+    Built with <code>createRelationalMark</code> instead of
+    <code>createNodeOperator</code>. Keeps the combinator form; gains the bag
+    form, fusion, the #752 split, per-group paint and the paint-below default.
+  </p>
+
+  <h3>The component case: fresh children</h3>
+  <div class="ex">
+    <div>
+      <div class="lang">JS</div>
+      <pre><code>enclose({ padding: 20, fill: "#252150", stroke: "none",
+          shape: Shape.box({ rx: 16, ry: 16 }) }, [
+  spread({ dir: "x", spacing: 50, alignment: "middle" },
+         planets.map((d) =&gt; circle(d))),
+])</code></pre>
+      <div class="lang">Python</div>
+      <pre><code>enclose([spread([circle(**d) for d in planets],
+                dir="x", spacing=50, alignment="middle")],
+        padding=20, fill="#252150", stroke="none",
+        shape=Shape.box(rx=16, ry=16))</code></pre>
+    </div>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/planets-box-component.png"
+          alt="Planets on a dark rounded background"
+        />
+      </div>
+      <figcaption>
+        Real render of today's tutorial <code>background(...)</code>. Only the
+        corner option moves.
+      </figcaption>
+    </figure>
+  </div>
+
+  <h3>One hull per group: Palmer penguins</h3>
+  <div class="ex">
+    <div>
+      <div class="lang">JS</div>
+      <pre><code>chart(penguins)
+  .flow(group({ by: "Species" }),
+        scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+  .mark(circle({ r: 3, fill: "Species" }))
+  .layer(enclose({ shape: Shape.hull(), padding: 6,
+                   fill: "Species", opacity: 0.2 }))</code></pre>
+      <div class="lang">Python</div>
+      <pre><code>(chart(penguins)
+   .flow(group(by="Species"),
+         scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
+   .mark(circle(r=3, fill="Species"))
+   .layer(enclose(shape=Shape.hull(), padding=6,
+                  fill="Species", opacity=0.2)))</code></pre>
+      <p class="small">
+        One hull per species comes from #752's default split; no option is
+        written.
+      </p>
+    </div>
+    <div class="pair">
+      <figure>
+        <div class="shot">
+          <img
+            src="img/penguins-hull-per-species.png"
+            alt="Convex hull per penguin species"
+          />
+        </div>
+        <figcaption><code>Shape.hull()</code></figcaption>
+      </figure>
+      <figure>
+        <div class="shot">
+          <img
+            src="img/penguins-box-per-species.png"
+            alt="Box per penguin species"
+          />
+        </div>
+        <figcaption>
+          <code>Shape.box()</code>: the boxes overlap too much to separate
+          species.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <h3>A set that avoids a point: Bluefish Topology</h3>
+  <div class="ex">
+    <div>
+      <div class="lang">JS</div>
+      <pre><code>layer([a, b, c]).relate(({ a, b, c }) =&gt; [
+  enclose({ shape: Shape.hull(), padding: 16,
+            fill: "#009dff" }, [a, b]),
+  enclose({ shape: Shape.spine({ avoiding: [b] }),
+            padding: 14, fill: "#ff2400" }, [a, c]),
+])</code></pre>
+      <div class="lang">Python</div>
+      <pre><code>layer([a, b, c]).relate(lambda a, b, c: [
+    enclose([a, b], shape=Shape.hull(), padding=16, fill="#009dff"),
+    enclose([a, c], shape=Shape.spine(avoiding=[b]),
+            padding=14, fill="#ff2400"),
+])</code></pre>
+      <p class="small">
+        Today this set is a hand-transcribed 16-segment Bezier
+        <code>polygon</code> (#717).
+      </p>
+    </div>
+    <div class="pair">
+      <figure>
+        <div class="shot">
+          <img
+            src="img/topology-ac-convex-hull-covers-b.png"
+            alt="Convex hull of a and c covering b"
+          />
+        </div>
+        <figcaption>Hull of {a, c}: must cover b.</figcaption>
+      </figure>
+      <figure>
+        <div class="shot">
+          <img
+            src="img/topology-ac-spine-avoiding-b.png"
+            alt="Spine of a and c routed around b"
+          />
+        </div>
+        <figcaption>Spine of {a, c} avoiding b.</figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <h3>Hyperedges over a node-link diagram</h3>
+  <div class="ex">
+    <div>
+      <div class="lang">JS</div>
+      <pre><code>layer([
+  graph, // nodes named "nodes", edges named "edges"
+  chart(memberships) // rows: { set, node }
+    .flow(resolve(["node"], { from: selectAll("nodes") }),
+          group({ by: "set" }))
+    .mark(enclose({
+      members: "node", // new: the ref column, like line's from/to
+      shape: Shape.spine({ via: selectAll("edges"),
+                           avoiding: selectAll("nodes") }),
+      padding: 9, fill: "set", opacity: 0.25,
+    })),
+])</code></pre>
+      <div class="lang">Python</div>
+      <pre><code>layer([
+    graph,
+    chart(memberships)
+      .flow(resolve(["node"], from_=select_all("nodes")),
+            group(by="set"))
+      .mark(enclose(members="node",
+                    shape=Shape.spine(via=select_all("edges"),
+                                      avoiding=select_all("nodes")),
+                    padding=9, fill="set", opacity=0.25)),
+])</code></pre>
+      <p class="small">
+        Rule: avoid each listed node that is not a member, so
+        <code>selectAll("nodes")</code> works without a set difference. Node 3
+        is in A and C.
+      </p>
+    </div>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/hyperedges-spine-over-graph.png"
+          alt="Three overlapping set regions drawn along graph edges"
+        />
+      </div>
+      <figcaption>
+        Each set's spine runs along the graph's own edges (<code>via</code>), so
+        connection and containment are drawn from the same edges.
+      </figcaption>
+    </figure>
+  </div>
+
+  <h3>Members that are not next to each other</h3>
+  <div class="ex">
+    <div>
+      <div class="lang">JS</div>
+      <pre><code>chart(catch)
+  .flow(spread({ by: "lake", dir: "x" }),
+        spread({ by: "species", dir: "x", spacing: 9 }))
+  .mark(rect({ h: "count", fill: "species" }).name("bars"))
+  .layer(
+    chart(selectAll("bars"))
+      .flow(filter((d) =&gt; d.species === "trout"))
+      .mark(enclose({
+        shape: Shape.spine({ avoiding: selectAll("bars") }),
+        stroke: "#d6580c" })))</code></pre>
+    </div>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/bars-trout-spine-across-lakes.png"
+          alt="Spine around the trout bars across four lakes"
+        />
+      </div>
+      <figcaption>
+        The hardest case, shown honestly: where no route exists between
+        neighbors, the spine crosses the tops of non-member bars. (Prototype
+        passes the trout bar tops as <code>via</code>.)
+      </figcaption>
+    </figure>
+  </div>
+
+  <h3>How it composes</h3>
+  <ul>
+    <li>
+      <code>enclose(opts, operands)</code> = <code>layer(operands)</code> + one
+      outline computed after the operands are placed (the #713 framing). The
+      outline reads each operand's <code>boundary</code> (#974; box corners as
+      fallback). No new core node kind.
+    </li>
+    <li>
+      Outlines are computed in screen space after placement, like curves, so
+      coordinate transforms need nothing special. The outline's box is the box
+      of the drawn ink (#707's rule).
+    </li>
+    <li>
+      Overlaps: <code>layer</code> is an exact composition;
+      <code>Constraint.nest</code> with a rect and <code>align span</code> agree
+      with box mode in a small degenerate case (share the padded-union code); a
+      two-member spine resembles a thick <code>line</code>;
+      <code>avoiding</code> is not <code>subtract</code> (it routes, it does not
+      cut).
+    </li>
+  </ul>
+
+  <h2>
+    Approach B: a <code>.background()</code> modifier only
+    <span class="tag">foil</span>
+  </h2>
+  <div class="ex">
+    <div>
+      <div class="lang">JS</div>
+      <pre><code>text("H").background({ padding: 4, fill: "#ffe8a3" })
+
+chart(catch)
+  .flow(spread({ by: "lake", dir: "x" })
+          .background({ padding: 8, fill: "#f0f1f3" }),
+        spread({ by: "species", dir: "x", spacing: 9 }))
+  .mark(rect({ h: "count", fill: "species" }))</code></pre>
+      <div class="lang">Python</div>
+      <pre><code>(chart(catch)
+   .flow(spread(by="lake", dir="x")
+           .background(padding=8, fill="#f0f1f3"),
+         spread(by="species", dir="x", spacing=9))
+   .mark(rect(h="count", fill="species")))</code></pre>
+    </div>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/bars-box-per-lake-group.png"
+          alt="A light box behind each lake group"
+        />
+      </div>
+      <figcaption>
+        One box per group the operator makes, like <code>.label()</code> on an
+        operator. Short and familiar, but it fails Topology, hyperedges and the
+        trout set: none is a single node of the tree.
+      </figcaption>
+    </figure>
+  </div>
+
+  <h2>
+    Approach C: A plus the modifier as sugar <span class="tag">runner-up</span>
+  </h2>
+  <p>
+    Everything in A, plus <code>x.background(opts)</code> defined as
+    <code>enclose(opts, [x])</code> (per group on operators). That is the "exact
+    composition" regime, so it is allowed, but one concept gets two names, or
+    the modifier is spelled <code>.enclose()</code>, which reads oddly on a text
+    mark. <strong>What would make it the pick:</strong> real examples where
+    per-node or per-group backgrounds inside a flow are the common case (label
+    pills, panel backgrounds, zebra stripes).
+  </p>
+
+  <h2>Strategy spelling (independent axis)</h2>
+  <div class="grid3">
+    <div class="card">
+      <h4>S1 · shape: Shape.*</h4>
+      <p>
+        <span class="tag ok">recommended</span>
+        <code>Shape.box({ rx, ry })</code>, <code>Shape.hull({ alpha })</code>,
+        <code>Shape.spine({ avoiding, via })</code>. <code>padding</code> and
+        paint stay on <code>enclose</code>; each strategy carries only its own
+        knobs. Default is <code>Shape.box()</code>.
+      </p>
+    </div>
+    <div class="card">
+      <h4>S2 · box() / hull() / spine()</h4>
+      <p>
+        One function per shape, like ggforce's <code>geom_mark_*</code>. Splits
+        one concept into three operators; changing shape means changing the
+        function.
+      </p>
+    </div>
+    <div class="card">
+      <h4>S3 · shape: "hull" + flat options</h4>
+      <p>
+        Josh's #717 sketch. Ruled out by #1013 (families with arguments are
+        calls), and flat <code>alpha</code>/<code>avoiding</code> would be
+        accepted and ignored by other shapes.
+      </p>
+    </div>
+  </div>
+  <p>
+    <strong>The hull knob.</strong> <code>concavity</code> (ggforce) grows
+    toward convex; <code>alpha</code> is a radius in CGAL but an inverse radius
+    in Python's alphashape. Proposed: <code>alpha</code> as a
+    <em>pixel radius</em> of the carving disc, so the unit fixes the direction
+    (bigger is more convex) and <code>Infinity</code>, the default, is the
+    convex hull. Cost: a pixel length changes meaning when the visualization is
+    resized.
+  </p>
+  <p>
+    <strong>The third name.</strong> <code>spine</code> (Josh's) names the
+    mechanism, the connecting skeleton that makes the shape a hyperedge, and
+    reads well with <code>via</code>. <code>bubble</code> (Bubble Sets,
+    bubblesets-js, #717) names the look and is the literature's term. The docs
+    use "space-filling spine" descriptively for mosaics; that prose could be
+    reworded if <code>spine</code> becomes an API name.
+  </p>
+
+  <h2>Precedent</h2>
+  <div class="grid4">
+    <div class="card">
+      <h4>SwiftUI</h4>
+      <div class="noimg">no image obtained</div>
+      <pre><code>view.background(.blue,
+  in: RoundedRectangle(cornerRadius: 8))</code></pre>
+      <p>
+        Modifier on one view; shape is a value.
+        <a
+          href="https://developer.apple.com/documentation/swiftui/view/background(alignment:content:)"
+          >docs</a
+        >
+      </p>
+    </div>
+    <div class="card">
+      <h4>Bluefish</h4>
+      <div class="shot">
+        <img
+          src="precedent/bluefish-background-planets.png"
+          alt="Bluefish Background"
+        />
+      </div>
+      <pre><code>Background({ padding: 40 },
+  [Ref("label"), Ref("mercury")])</code></pre>
+      <p>
+        Relation over refs, filed beside Arrow; box only.
+        <a
+          href="https://github.com/joshpoll/bluefish-monorepo/blob/main/docs/learn/tutorial-2-relations.md"
+          >source</a
+        >
+      </p>
+    </div>
+    <div class="card">
+      <h4>TikZ fit</h4>
+      <div class="shot">
+        <img
+          src="precedent/tikz-fit-box-circle.png"
+          alt="TikZ fit box and circle"
+        />
+      </div>
+      <pre><code>\node[draw, circle,
+  fit=(a)(b)(c)] {};</code></pre>
+      <p>
+        A node fitted to nodes; outline shape separate.
+        <a href="https://tikz.dev/library-fit">source</a>
+      </p>
+    </div>
+    <div class="card">
+      <h4>Graphviz</h4>
+      <div class="shot">
+        <img src="precedent/graphviz-cluster.svg" alt="Graphviz clusters" />
+      </div>
+      <pre><code>subgraph cluster_0 { a0 -&gt; a1 }</code></pre>
+      <p>
+        Structural group the layout honors; box, tree only.
+        <a href="https://graphviz.org/Gallery/directed/cluster.html">source</a>
+      </p>
+    </div>
+    <div class="card">
+      <h4>ggforce</h4>
+      <div class="shot">
+        <img
+          src="precedent/ggforce-mark-hull.png"
+          alt="ggforce geom_mark_hull"
+        />
+      </div>
+      <pre><code>geom_mark_hull(aes(fill = Species),
+  concavity = 1, expand = unit(5, "mm"))</code></pre>
+      <p>
+        One geom per shape; shared <code>expand</code>, <code>radius</code>.
+        <a
+          href="https://ggforce.data-imaginist.com/reference/geom_mark_hull.html"
+          >source</a
+        >
+      </p>
+    </div>
+    <div class="card">
+      <h4>Observable Plot</h4>
+      <div class="shot">
+        <img src="precedent/observable-plot-hull.jpg" alt="Plot hull" />
+      </div>
+      <pre><code>Plot.hull(penguins,
+  { x, y, fill: "species" })</code></pre>
+      <p>
+        Convex only; groups by fill.
+        <a href="https://observablehq.com/@observablehq/plot-convex-hull"
+          >source</a
+        >
+      </p>
+    </div>
+    <div class="card">
+      <h4>bubblesets-js</h4>
+      <div class="shot">
+        <img src="precedent/bubblesets-js.png" alt="bubblesets-js output" />
+      </div>
+      <pre><code>createOutline(members,
+  nonMembers, edges, options)</code></pre>
+      <p>
+        Members, non-members, real edges in.
+        <a href="https://github.com/upsetjs/bubblesets-js">source</a>
+      </p>
+    </div>
+    <div class="card">
+      <h4>KelpFusion</h4>
+      <div class="shot">
+        <img
+          src="precedent/alsallakh-setvis-hybrid-kelpfusion.png"
+          alt="KelpFusion figure"
+        />
+      </div>
+      <pre><code>(paper; no API)</code></pre>
+      <p>
+        One dial from spanning tree to convex hull.
+        <a
+          href="https://vis.uib.no/wp-content/papercite-data/pdfs/Alsallakh_et_al-2016-Computer_Graphics_Forum.pdf"
+          >Alsallakh et al. 2016</a
+        >
+      </p>
+    </div>
+  </div>
+
+  <h2>Nearby GoFish decisions</h2>
+  <div class="tablewrap">
+    <table>
+      <tr>
+        <th>Decision</th>
+        <th>Fit</th>
+        <th>How</th>
+      </tr>
+      <tr>
+        <td>Strategy namespaces (#1013)</td>
+        <td><span class="tag ok">matches</span></td>
+        <td>
+          <code>Shape.*</code> calls, type <code>Shape.Shape</code>, Python
+          <code>from gofish import Shape</code>.
+        </td>
+      </tr>
+      <tr>
+        <td>Closed families + function hatch (#1101)</td>
+        <td><span class="tag ok">matches</span></td>
+        <td>Bluefish's custom background becomes the escape hatch.</td>
+      </tr>
+      <tr>
+        <td>
+          <code>curve</code> on <code>line</code>/<code>ribbon</code> (#637)
+        </td>
+        <td><span class="tag ok">matches</span></td>
+        <td>
+          <code>shape</code> is to <code>enclose</code> what
+          <code>curve</code> is to <code>line</code>; screen-space geometry.
+        </td>
+      </tr>
+      <tr>
+        <td>
+          Relational marks paint below; <code>.layer()</code> scope (#745)
+        </td>
+        <td><span class="tag ok">matches</span></td>
+        <td>Inherited from <code>createRelationalMark</code>.</td>
+      </tr>
+      <tr>
+        <td>Blank fusion (#748); default split (#752)</td>
+        <td><span class="tag ok">matches</span></td>
+        <td>
+          One hull per group with no option; no <code>over</code>/<code
+            >along</code
+          >
+          word proposed.
+        </td>
+      </tr>
+      <tr>
+        <td>Plural refs never auto-map (#707)</td>
+        <td><span class="tag ok">matches</span></td>
+        <td>
+          A selection is one outline; per element needs <code>.each</code>.
+        </td>
+      </tr>
+      <tr>
+        <td><code>relate()</code> drawing clauses (#930)</td>
+        <td><span class="tag ok">matches</span></td>
+        <td>Inherits the #986 paint-order gap (visible in the box panel).</td>
+      </tr>
+      <tr>
+        <td><code>padding</code> vs <code>spacing</code> (#1005)</td>
+        <td><span class="tag ok">matches</span></td>
+        <td><code>padding</code> grows every outline.</td>
+      </tr>
+      <tr>
+        <td>Geometry queries (#966, #974)</td>
+        <td><span class="tag ok">matches</span></td>
+        <td>Hull and spine are <code>boundary</code>'s first user.</td>
+      </tr>
+      <tr>
+        <td>
+          Modifier vs option (jitter dropped, <code>overlap</code> stays an
+          option)
+        </td>
+        <td><span class="tag">consistent</span></td>
+        <td>
+          A background passes "applies to anything", so B/C are legitimate;
+          deferred on one-spelling grounds.
+        </td>
+      </tr>
+      <tr>
+        <td><code>.label()</code> on operators (#741, #750)</td>
+        <td><span class="tag">precedent</span></td>
+        <td>Per-group modifier semantics for B/C.</td>
+      </tr>
+      <tr>
+        <td>
+          Refs as strategy arguments (<code>Curve.bundle({ via })</code> note)
+        </td>
+        <td><span class="tag ok">matches</span></td>
+        <td>
+          Reuses <code>via</code>; new wire detail: a strategy param holding
+          refs.
+        </td>
+      </tr>
+      <tr>
+        <td>No back-compat; no accepted-and-ignored options</td>
+        <td><span class="tag dep">changes code</span></td>
+        <td>
+          <code>background</code> alias deleted; <code>rx</code>/<code>ry</code>
+          move into <code>Shape.box()</code>; <code>avoiding</code> only on
+          spine.
+        </td>
+      </tr>
+      <tr>
+        <td>Josh's #717 sketch; #397 <code>bubbleset: true</code></td>
+        <td><span class="tag dep">departs</span></td>
+        <td>
+          Strings become a family; <code>avoiding</code> moves onto spine;
+          ellipse deferred; a boolean cannot hold three shapes.
+        </td>
+      </tr>
+      <tr>
+        <td>Python kwargs, snake_case (#1008)</td>
+        <td><span class="tag ok">matches</span></td>
+        <td><code>enclose([a, c], shape=Shape.spine(avoiding=[b]))</code>.</td>
+      </tr>
+    </table>
+  </div>
+  <p class="small">Not re-asked: #935, #954, #1053/#1054, #290 (parked).</p>
+
+  <h2>Trade-offs</h2>
+  <div class="tablewrap">
+    <table>
+      <tr>
+        <th></th>
+        <th>A · relational mark</th>
+        <th>B · modifier only</th>
+        <th>C · A + modifier</th>
+      </tr>
+      <tr>
+        <td>Hard examples</td>
+        <td>All five</td>
+        <td>Only one-node and per-group</td>
+        <td>All five</td>
+      </tr>
+      <tr>
+        <td>Names for the concept</td>
+        <td>One</td>
+        <td>One, but needs <code>enclose</code> for refs anyway</td>
+        <td>Two</td>
+      </tr>
+      <tr>
+        <td>Per-group background in a flow</td>
+        <td>Longer (<code>selectAll</code> + <code>group</code>)</td>
+        <td>Short</td>
+        <td>Short</td>
+      </tr>
+      <tr>
+        <td>New terms</td>
+        <td>
+          <code>Shape</code>, <code>alpha</code>, <code>spine</code>,
+          <code>avoiding</code>, <code>via</code>
+        </td>
+        <td><code>.background()</code></td>
+        <td>Both</td>
+      </tr>
+      <tr>
+        <td>Core change</td>
+        <td>Enclose node gains a geometry strategy</td>
+        <td>Same</td>
+        <td>Same</td>
+      </tr>
+    </table>
+  </div>
+
+  <h2>Decisions for Josh</h2>
+  <ol class="decisions">
+    <li>
+      Keep <code>enclose</code> as the one name and delete
+      <code>background</code>? (Or keep <code>background</code>; or rename to
+      <code>hull</code>.)
+    </li>
+    <li>
+      Make <code>enclose</code> a relational mark now and defer any
+      <code>.background()</code> modifier?
+    </li>
+    <li>
+      Strategy names <code>box</code>, <code>hull</code>, <code>spine</code>:
+      keep <code>spine</code>, or use <code>bubble</code>?
+    </li>
+    <li>
+      Option key and family <code>shape: Shape.*</code>, or
+      <code>outline: Outline.*</code>?
+    </li>
+    <li>Hull knob <code>alpha</code> as a pixel radius, convex by default?</li>
+    <li>
+      <code>avoiding</code> and <code>via</code> only on
+      <code>Shape.spine()</code>, avoiding listed non-members only?
+    </li>
+    <li>
+      Leave <code>Shape.ellipse()</code> / <code>Shape.circle()</code> for
+      later?
+    </li>
+    <li>
+      Move <code>rx</code>/<code>ry</code> into
+      <code>Shape.box({ rx, ry })</code>?
+    </li>
+    <li>
+      For rows that carry refs, name the ref column with <code>members</code>,
+      like <code>line({ from, to })</code>?
+    </li>
+  </ol>
+
+  <h2>Syntax changes to review</h2>
+  <div class="tablewrap">
+    <table>
+      <tr>
+        <th>Today</th>
+        <th>Proposed</th>
+      </tr>
+      <tr>
+        <td>
+          <code>background({ padding: 20, rx: 16, ry: 16, fill }, [x])</code>
+        </td>
+        <td>
+          <code
+            >enclose({ padding: 20, shape: Shape.box({ rx: 16, ry: 16 }), fill
+            }, [x])</code
+          >
+        </td>
+      </tr>
+      <tr>
+        <td><code>enclose({ padding: 6 }, [a, b, c])</code></td>
+        <td>unchanged (default <code>Shape.box()</code>)</td>
+      </tr>
+      <tr>
+        <td>no per-group outline</td>
+        <td>
+          <code>.layer(enclose({ shape: Shape.hull() }))</code> over a grouped
+          flow
+        </td>
+      </tr>
+      <tr>
+        <td>hand-drawn concave <code>polygon</code></td>
+        <td>
+          <code
+            >enclose({ shape: Shape.spine({ avoiding: [b] }) }, [a, c])</code
+          >
+        </td>
+      </tr>
+      <tr>
+        <td>Python <code>background = enclose</code></td>
+        <td>
+          removed;
+          <code>enclose([...], shape=Shape.hull(alpha=40), padding=8)</code>
+        </td>
+      </tr>
+    </table>
+  </div>
+  <p class="note">
+    Docs follow-up if approved: the handwritten Basics and Diagrams tutorials
+    teach <code>background()</code>. Their code blocks can migrate; the prose
+    would get an issue, not a rewrite.
+  </p>
+
+  <h2>Related issues</h2>
+  <p class="small">
+    #397 bubble-set enclosure after <code>wrap</code> was deleted · #717 concave
+    hulls; Josh's <code>shape</code> + <code>avoiding</code> sketch · #974
+    <code>boundary</code> query · #1138 roadmap "Hulls" · #707 operators over
+    placed nodes · #929 relate() open-term steps · #986 paint-below missing in
+    relate clauses · #935 parked relate() follow-ups · #752 default split for
+    relational marks · #1101 strategy extensibility · #1013 strategy namespaces
+    · #802 operators cannot be named · #844 ref to constraint-placed sibling at
+    origin · #171 nested waffle enclose · #1109 annotation tutorial · #1084 Venn
+    example · #396/#713/#714/#716 enclose history.
+  </p>
+</main>
