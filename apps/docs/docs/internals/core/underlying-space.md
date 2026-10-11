@@ -2030,7 +2030,9 @@ same facts.
 
 For a longer treatment, see the "Underlying Space Tree" section of
 GoFish's thesis chapter (parts/theory/underlying-space.typ in the
-companion thesis repo).
+companion thesis repo). The first write-up of the data, underlying, and
+display spaces, from before the tree was built, is kept in
+[Spaces](/internals/design-evolution/spaces).
 
 ## Pointers
 

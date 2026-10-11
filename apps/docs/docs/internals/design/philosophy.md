@@ -62,3 +62,5 @@ one at a time.
 
 The rules that turn these ideas into concrete API choices are collected in
 [API Design](/internals/design/api-design).
+The project's first statement of these ideas, from its old GitHub wiki, is kept
+in [Designed Like a Language](/internals/design/designed-like-a-language).
