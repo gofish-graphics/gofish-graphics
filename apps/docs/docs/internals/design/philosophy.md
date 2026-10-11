@@ -59,3 +59,6 @@ something composable that still has no taste. Lean only on graphic design and yo
 get beautiful one-offs that do not generalize. GoFish's design philosophy is the
 refusal to pick — and the three essays in this section are the three ingredients,
 one at a time.
+
+The rules that turn these ideas into concrete API choices are collected in
+[API Design](/internals/design/api-design).

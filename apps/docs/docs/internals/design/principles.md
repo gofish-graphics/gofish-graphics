@@ -198,6 +198,9 @@ This one principle explains much of the rest of GoFish:
   GoFish](/internals/overview/why#5-loud-errors-instead-of-broken-charts)
   motivates it.
 
+The concrete rules these lead to, for factoring operators, naming, data types
+and the Python surface, are collected in [API Design](/internals/design/api-design).
+
 ## More PL ideas
 
 The compiler-pipeline framing is the spine of this pillar, but not all of it. Other

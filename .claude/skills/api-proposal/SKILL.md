@@ -37,6 +37,14 @@ on its own. Read the ones that bear on the feature before step 3.
 - `internals/design/composition-not-enumeration.md`: grammars that list legal
   arrangements versus GoFish, which composes them. Read "What GoFish does
   instead" when an approach starts to look like a new chart type.
+- API design rules: `internals/design/api-design.md`, the project's rules for
+  operators and marks (one concept is one operator, which overlaps are fine,
+  the general rule over a case split, data flows as lists), data types (meaning
+  lives on the type, units are types, `Has<Thing>` / `Can<Verb>` names), naming
+  (survey precedent first, existing words over coinages, settled names), the
+  Python surface, change and dependencies, and how a design gets decided (hard
+  examples, rendered candidates, syntax signed off before implementation).
+  Read the whole page; it is short.
 - Related systems: `internals/overview/other-grammars.md` (the table "What GoFish
   takes from each") and `internals/overview/why.md` §1 and §4 (GoFish covers
   charts, diagrams and other visualizations on one substrate, so test approaches
@@ -53,41 +61,10 @@ on its own. Read the ones that bear on the feature before step 3.
   `build-in-animation.md`) and the notes in `notes/design/`. Many have a
   precedent or prior-art section worth reusing for a related feature.
 
-**In Claude's project memory** for this repo (files named by slug next to
-`MEMORY.md`). These record Josh's design feedback that is not yet written down in
-the repo. Read the full file, not just the gloss:
-- `feedback_api_precedent_check`: survey precedent unprompted before proposing
-  any spelling, and lead with it.
-- `feedback_orthogonality_shared_kernel`: two operators may overlap on a small
-  degenerate case, or one may be exactly a composition of others; a large but
-  partial overlap is the bad case.
-- `feedback_one_operator`, `feedback_radical_unification`,
-  `feedback_principled_over_hack`, `feedback_data_flows_as_lists`: one concept is
-  one operator with a strategy option; prefer the simple general rule (often a
-  known math or PL framing) to a case split.
-- `feedback_hard_examples_central`: stress designs with hard real examples (time,
-  H3 grids, map regions, published pre-aggregated data); add a type only where a
-  real example forces it.
-- `feedback_axes_visualize_datatypes`, `feedback_measures_are_types`,
-  `feedback_typeclass_naming`: semantics live on the data type; capabilities are
-  named `Has<Thing>` / `Can<Verb>`; a type mismatch is an error, not an override.
-- `feedback_plain_language_terms`, `feedback_no_facet_term`,
-  `feedback_porterduff_naming`, `feedback_ref_selectall_naming`,
-  `feedback_api_signature_style`, `feedback_dsl_embedding_style`: naming rules
-  (existing words over coinages, `by` not `xBy`, semantic roles above the axis
-  split, Figma names over Porter-Duff names).
-- `feedback_python_kwargs_consistency`, `feedback_python_snake_case`: Python takes
-  children positionally and options as snake_case kwargs; the wire stays camelCase.
-- `feedback_no_back_compat`, `feedback_best_in_class_deps`: break cleanly; a new
-  dependency must be best in class, platform standard first.
-- `feedback_approve_syntax_before_impl`, `feedback_research_doc_format`: show
-  candidate spellings on the real examples, rendered for real.
-- `project_*` notes: most past design threads have one (check the `MEMORY.md`
-  index). Read the ones whose topic touches the feature; they record decisions
-  Josh has already made and questions he asked not to be re-asked.
-
-If memory is not available (another agent or another machine), the repo sources
-above still apply, and the glosses here are the short form of the rest.
+**In Claude's project memory** for this repo: the `project_*` notes (check the
+`MEMORY.md` index) record past design decisions and parked questions. Read the
+ones whose topic touches the feature; they record decisions Josh has already
+made and questions he asked not to be re-asked.
 
 ## 1. Read the notes closely
 
