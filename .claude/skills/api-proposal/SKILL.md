@@ -87,12 +87,16 @@ memory for it before guessing.
   strategy families (`Curve`, `Tile`, `Overlap`, …), the `STRATEGIES` table in
   gofish-ir, and how they cross to Python. Note what the new feature could reuse
   and what it would desugar into.
+- **Nearby API decisions, for consistency.** Find the recent GoFish designs
+  that answered the same kinds of questions this feature raises: where an
+  option lives, how its values are spelled, how a variant takes parameters,
+  how a construct crosses to Python. Read each one's issue, PR discussion and
+  any `project_*` memory, and record what was decided and why. The proposal
+  should match those answers, or say plainly where it departs and why.
 - **Issues and PRs.** Search open and closed issues for related work and
   prior decisions (`gh api "repos/gofish-graphics/gofish-graphics/issues?state=all&per_page=100"`
-  and paginate; GraphQL is unavailable, so use REST). Recently finished
-  features of similar shape (e.g. binning, overlaps) are the best model for
-  structure and naming. List every related issue in the proposal, each with a
-  few words on what it is.
+  and paginate; GraphQL is unavailable, so use REST). List every related issue
+  in the proposal, each with a few words on what it is.
 - **The story corpus.** Find existing stories under
   `packages/gofish-graphics/stories/` that the feature would simplify or that
   currently work around its absence. These are the first candidate examples.
