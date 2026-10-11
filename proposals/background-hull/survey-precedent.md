@@ -685,6 +685,41 @@ The routing order of virtual edges is a hidden choice that changes the shape.
 Alsallakh et al., crop of page 243; source PDF:
 https://vis.uib.no/wp-content/papercite-data/pdfs/Alsallakh_et_al-2016-Computer_Graphics_Forum.pdf).
 
+**Verified from the primary papers (added for section 6b of the proposal).**
+
+- KelpFusion (Meulemans et al., TVCG 2013; author copy
+  https://www.microsoft.com/en-us/research/wp-content/uploads/2016/12/kelpfusion_tvcg2013.pdf).
+  Input: node points and sets. Each node has an allocation area (Voronoi cell
+  ∩ disc of radius `r`); edges have width `w`. Phase 1: reachability graph of
+  shortest routes between member pairs avoiding all other allocation areas with
+  clearance `w/2`; shortest-path graph SPG(t), `t ≥ 1`, edge weight `|e|^t`,
+  edge kept iff it is a shortest path (Algorithm 2). SPG(1) is the complete
+  graph, "its outline being the convex hull"; SPG(∞) is the Euclidean MST;
+  nested in `t`; for `t ≥ 2` (and `r = w = 0`) a subset of the Delaunay
+  triangulation; the implementation restricts candidates to Delaunay edges,
+  `O(|S|² log |S|)` (else `O(|S|⁴)`). Optional weight `(|e| + C)^t` adds short
+  edges first. Phase 2: face filled iff area/(1 + |nodes|) < `A`, no
+  non-member node inside, no lower-set edge under it, shared edges with a lower
+  set only if all nodes are in it. Phase 3: union of bubbles, edges, faces;
+  smoothed; non-member allocation areas subtracted. Stability under added or
+  removed items is listed as future work. Study: 13 participants, overlapping
+  sets on a map; accuracy 86.5% (KelpFusion), 84.3% (LineSets), 54.5% (Bubble
+  Sets); time 12.4 s, 14.2 s, 17.2 s.
+- Bubble Sets (Collins et al., TVCG 2009; author copy
+  https://vialab.ca/wp-content/publication_media/pdf/col2009c.pdf). Energy
+  `w (R1 − d)² / (R1 − R0)²` per item within `R1`; members and edges weight 1,
+  non-members −0.8. Virtual edges: members visited from the centroid outward,
+  each joined to the visited member minimizing distance × obstacles crossed,
+  then rerouted around obstacle box corners (+ buffer `R1`, reduced on
+  failure) up to an iteration limit; only the nearest segment of a route
+  contributes energy. Marching squares; threshold lowered, then weights
+  changed, until all members are inside. Cannot guarantee non-members are
+  excluded; they are highlighted. `O(KN(N + HW))`.
+- Images: `precedent/kelpfusion-fig5-t-sweep.png` (KelpFusion Figure 5, page
+  5), `precedent/kelpfusion-fig1-vs-bubblesets-linesets.jpg` (Figure 1, page
+  2), `precedent/bubblesets-fig3-virtual-edge-routing.png` (Bubble Sets Figure
+  3, page 1012). Cropped from the author PDFs above.
+
 ---
 
 ## 4. Design tools

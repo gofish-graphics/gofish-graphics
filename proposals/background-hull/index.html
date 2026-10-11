@@ -350,10 +350,10 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
     (<code>stories/_proposals/BackgroundHull.stories.tsx</code>). Since
     <code>Shape</code> does not exist, the stories place members at fixed pixel
     positions and compute outlines with story-local code (convex hull, an alpha
-    shape on Delaunay triangles, and <code>bubblesets-js</code> for the spine),
-    drawn with <code>polygon</code>. Box panels use the real
-    <code>enclose</code>. The code beside each picture is the proposed spelling,
-    not the story's code.
+    shape on Delaunay triangles, a bubble set assembled from
+    <code>bubblesets-js</code> parts, and a KelpFusion prototype), drawn with
+    <code>polygon</code>. Box panels use the real <code>enclose</code>. The code
+    beside each picture is the proposed spelling, not the story's code.
   </p>
 
   <h2>Strategy grid</h2>
@@ -415,6 +415,354 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
     gray dots; the spine's dent comes from the <code>avoiding</code> list. The
     Topology example is the case only the spine can draw.
   </p>
+
+  <h2>KelpFusion and bubble sets</h2>
+  <p>
+    Josh asked whether KelpFusion has the convex hull as a special case, and how
+    it compares to a bubble set. This section answers from the two papers, then
+    puts both, and the convex hull, on the same four examples.
+  </p>
+  <p class="small">
+    Sources:
+    <a
+      href="https://www.microsoft.com/en-us/research/wp-content/uploads/2016/12/kelpfusion_tvcg2013.pdf"
+      >Meulemans, Henry Riche, Speckmann, Alper, Dwyer, "KelpFusion: A Hybrid
+      Set Visualization Technique", IEEE TVCG 2013</a
+    >;
+    <a href="https://vialab.ca/wp-content/publication_media/pdf/col2009c.pdf"
+      >Collins, Penn, Carpendale, "Bubble Sets", IEEE TVCG 2009</a
+    >. Kelp Diagrams (Dinkla et al. 2012) and LineSets (Alper et al. 2011) are
+    described as the KelpFusion paper describes them; I did not read those two
+    papers directly.
+  </p>
+
+  <h3>How KelpFusion is built</h3>
+  <p>KelpFusion draws each set separately, in three steps.</p>
+  <ol>
+    <li>
+      <strong>Connect the members.</strong> For every pair of members, the
+      candidate edge is the shortest route between them that stays clear of
+      every other node, member or not. "Clear" means outside each node's
+      <em>allocation area</em> (a disc of radius <code>r</code>, cut down to the
+      node's Voronoi cell, the part of the plane closer to it than to any other
+      node), with an extra margin of half the edge width <code>w</code>. Then it
+      keeps some of those candidates, using a <em>shortest-path graph</em> with
+      one parameter <code>t ≥ 1</code>: each edge weighs its length to the power
+      <code>t</code>, and an edge is kept only if no other path between its ends
+      is lighter. At <code>t = 1</code> every candidate is kept, and the outline
+      is the convex hull. As <code>t</code> grows, long edges lose to chains of
+      short ones, and at the limit the graph is the
+      <em>minimum spanning tree</em> (the tree of shortest total length joining
+      all members). The steps are nested: an edge kept at some <code>t</code> is
+      kept at every smaller <code>t</code>. The paper's implementation only
+      considers pairs that are neighbors in the
+      <em>Delaunay triangulation</em> (the standard way to split a point set
+      into well-shaped triangles).
+    </li>
+    <li>
+      <strong>Fill some faces.</strong> A <em>face</em> is a region fully
+      enclosed by kept edges. It is filled only if (1) its area divided by one
+      more than its number of corner nodes is below a second parameter
+      <code>A</code>, (2) it contains no node outside the set, and (3, 4) it
+      does not hide edges of a set drawn beneath it, or share an edge with one
+      unless all its nodes belong to that set.
+    </li>
+    <li>
+      <strong>Draw.</strong> The union of node discs, edges of width
+      <code>w</code> and filled faces, smoothed, with every non-member's
+      allocation area cut back out.
+    </li>
+  </ol>
+  <figure>
+    <div class="shot">
+      <img
+        src="precedent/kelpfusion-fig5-t-sweep.png"
+        alt="KelpFusion paper Figure 5: t from 4.5 down to 1"
+      />
+    </div>
+    <figcaption>
+      The paper's Figure 5: <code>t</code> from 4.5 (a tree) down to 1 (the
+      convex hull).
+    </figcaption>
+  </figure>
+  <div class="rec">
+    <p>
+      <strong>Is the convex hull an exact special case?</strong> For the graph,
+      yes: at <code>t = 1</code> the outline of the shortest-path graph is
+      exactly the convex hull of the member points, and the paper says so. For
+      the drawn shape, only under conditions: <code>A</code> must be large
+      enough, and no non-member may sit inside the hull, because rule 2 leaves
+      any face that holds one open. Even then the drawing is the hull plus discs
+      of radius <code>r</code> and strips of half-width <code>w/2</code>, not
+      the hull grown evenly by a padding. So at <code>t = 1</code> KelpFusion
+      gives the convex hull minus the faces that would cover a non-member: a
+      set-aware hull. Our <code>Shape.hull()</code> ignores non-members.
+    </p>
+  </div>
+
+  <h3>How a bubble set is built</h3>
+  <ol>
+    <li>
+      <strong>Connect the members with virtual edges.</strong> Starting from the
+      member nearest the set's center and working outward, each member is joined
+      to the already visited member that minimizes distance times the number of
+      non-members on the straight line between them. A
+      <em>virtual edge</em> that crosses a non-member's bounding box is bent
+      around a corner of that box, pushed out by a buffer; if that fails, other
+      corners and smaller buffers are tried, up to an iteration limit. Real data
+      edges can be used instead.
+    </li>
+    <li>
+      <strong>Build an energy field.</strong> Every pixel gets a score: members
+      and edges add energy that falls from 1 at distance <code>R0</code> to 0 at
+      <code>R1</code>; non-members subtract (weight −0.8). Only the nearest
+      segment of each routed edge counts, to avoid bulges at the bends.
+    </li>
+    <li>
+      <strong>Trace the outline</strong> where the energy equals a threshold (an
+      <em>isocontour</em>), with marching squares. If a member ends up outside,
+      the threshold is lowered, then the weights are changed, until all members
+      are inside. The result is smoothed with splines. The paper says it "cannot
+      guarantee that non-set member items will be excluded"; such items get a
+      white border instead.
+    </li>
+  </ol>
+  <figure>
+    <div class="shot">
+      <img
+        src="precedent/bubblesets-fig3-virtual-edge-routing.png"
+        alt="Bubble Sets paper Figure 3: routing a virtual edge around obstacles"
+      />
+    </div>
+    <figcaption>Bubble Sets paper, Figure 3: virtual edge routing.</figcaption>
+  </figure>
+
+  <h3>Side by side on the same data</h3>
+  <p>
+    Each grid reads from line-like to area-like: KelpFusion at
+    <code>t = ∞</code>, 2, 1.5 and 1, then the plain convex hull and a bubble
+    set. KelpFusion is a story-local prototype of the paper's three steps with
+    <code>A = ∞</code> (fill every allowed face). Declared simplifications:
+    allocation areas are discs (or the bar grown by the padding) without the
+    Voronoi cut, filled faces keep straight sides even where an edge bends,
+    rules 3 and 4 are skipped (they only matter between overlapping sets), and
+    there is no smoothing pass.
+  </p>
+  <figure>
+    <div class="shot">
+      <img
+        src="img/kelp-compare-topology.png"
+        alt="Topology a and c: KelpFusion at four t values, convex hull, bubble set"
+      />
+    </div>
+    <figcaption>
+      Topology, {a, c} avoiding b. With two members there is one edge, so every
+      <code>t</code> gives the same bent tube. Only the convex hull covers b.
+    </figcaption>
+  </figure>
+  <figure style="margin-top: 16px">
+    <div class="shot">
+      <img
+        src="img/kelp-compare-hyperedges.png"
+        alt="Set C of the hyperedge example: KelpFusion, convex hull, bubble set"
+      />
+    </div>
+    <figcaption>
+      Set C of the hyperedge example. KelpFusion uses positions only, so its
+      edges do not follow the graph's edges; at <code>t = 1</code> it fills the
+      triangle 3, 7, 9 over the graph edges 4 to 6 and 6 to 7. The bubble set
+      uses the graph edges as its skeleton (<code>via</code>).
+    </figcaption>
+  </figure>
+  <figure style="margin-top: 16px">
+    <div class="shot">
+      <img
+        src="img/kelp-compare-bars.png"
+        alt="Trout across lakes: KelpFusion, convex hull, bubble set"
+      />
+    </div>
+    <figcaption>
+      Trout across lakes. Every face between trout bars holds a bass or perch
+      bar, so rule 2 keeps all faces empty and KelpFusion stays lines at every
+      <code>t</code>; lower <code>t</code> only adds longer routed edges. The
+      hull end of the dial cannot be reached here.
+    </figcaption>
+  </figure>
+  <figure style="margin-top: 16px">
+    <div class="shot">
+      <img
+        src="img/kelp-compare-penguins.png"
+        alt="Gentoo penguins among the other species: KelpFusion, convex hull, bubble set"
+      />
+    </div>
+    <figcaption>
+      One species (Gentoo) among the others. KelpFusion's best case: at
+      <code>t = 2</code> and 1.5 the dense core fills in while stragglers stay
+      attached by lines. At <code>t = 1</code> it is the convex hull with a bite
+      taken out where other species sit inside it.
+    </figcaption>
+  </figure>
+
+  <div class="tablewrap">
+    <table>
+      <tr>
+        <th></th>
+        <th>KelpFusion</th>
+        <th>Bubble set</th>
+      </tr>
+      <tr>
+        <td>Input</td>
+        <td>
+          Node positions and membership. Builds its own graph; does not take
+          data edges.
+        </td>
+        <td>
+          Item shapes (boxes) and membership; can follow real data edges instead
+          of virtual ones.
+        </td>
+      </tr>
+      <tr>
+        <td>Non-members</td>
+        <td>
+          Every edge routed around every other node's allocation area; faces
+          that hold a non-member stay open; non-member areas cut out after
+          smoothing.
+        </td>
+        <td>
+          Virtual edges bent around non-member boxes by a corner heuristic with
+          an iteration limit; negative energy pushes the outline away. Can still
+          enclose a non-member, which is then marked.
+        </td>
+      </tr>
+      <tr>
+        <td>Extremes</td>
+        <td>
+          <code>t = ∞</code>: minimum spanning tree as lines and node discs.
+          <code>t = 1</code>: the convex hull, minus faces holding non-members.
+        </td>
+        <td>
+          None built in. Large <code>R1</code> gives blobs, small
+          <code>R1</code> thin tubes; the skeleton is always a tree or the given
+          edges.
+        </td>
+      </tr>
+      <tr>
+        <td>Parameters</td>
+        <td>
+          <code>t</code>: graph density, larger is sparser; unitless, so the
+          graph does not change when the drawing is scaled. <code>A</code>:
+          largest face to fill, an area per node, so it does change with scale.
+          <code>r</code>, <code>w</code>: drawing sizes.
+        </td>
+        <td>
+          <code>R0</code>, <code>R1</code> for nodes and for edges, the routing
+          buffer, energy weights, threshold and its decay. All pixel distances
+          or weights.
+        </td>
+      </tr>
+      <tr>
+        <td>Stability</td>
+        <td>
+          Discrete. Each edge switches on at its own <code>t</code>, which can
+          be precomputed, so dragging <code>t</code> is fast but the shape
+          jumps. The paper lists stability under added or removed items as
+          future work. Inferred: a small move can change Delaunay neighbors, and
+          so edges and faces.
+        </td>
+        <td>
+          Discrete too (inferred): the visiting order, the corner chosen for a
+          bend, and the threshold loop can all flip under a small move.
+        </td>
+      </tr>
+      <tr>
+        <td>Cost</td>
+        <td>
+          <code>O(n⁴)</code> with full routing; <code>O(n² log n)</code> with
+          Delaunay pairs (paper).
+        </td>
+        <td>
+          <code>O(K·N·(N + H·W))</code> for <code>K</code> sets,
+          <code>N</code> items, an <code>H × W</code> grid (paper).
+        </td>
+      </tr>
+      <tr>
+        <td>User study</td>
+        <td colspan="2">
+          13 people, four overlapping sets on a map. Accuracy: KelpFusion 86.5%,
+          LineSets 84.3%, Bubble Sets 54.5%. Mean time: 12.4 s, 14.2 s, 17.2 s.
+          People rated KelpFusion less cluttered and better at showing groups
+          than Bubble Sets. The authors note Bubble Sets was designed for sets
+          that do not overlap, which the study did not test. The Bubble Sets
+          paper itself has case studies, not a controlled comparison.
+        </td>
+      </tr>
+    </table>
+  </div>
+  <p>
+    <strong>The line end of the spectrum.</strong> LineSets draws each set as
+    one smooth curve through its members, which reads as an order even when the
+    set has none; it is pure connection. Kelp Diagrams draws node discs joined
+    by a sparse graph: a minimum spanning tree plus extra edges that shorten
+    detours enough, routed around other nodes. KelpFusion keeps the Kelp look
+    and replaces the detour rule with the shortest-path graph, which adds short
+    edges inside clusters first and so makes small faces worth filling.
+  </p>
+
+  <h3>What it means for the strategy factoring</h3>
+  <p>
+    KelpFusion's dial looks like an argument for merging hull and spine into one
+    strategy with a parameter. The renders say it is not quite that.
+  </p>
+  <ul>
+    <li>
+      <strong>Its hull end is not our hull.</strong> At <code>t = 1</code> it
+      avoids non-members, and its outline is discs plus strips, not an even
+      padding. <code>Shape.hull()</code> is the plain padded hull that Plot and
+      ggforce draw, and <code>alpha</code> (dents from the members' own spacing)
+      has no KelpFusion equivalent.
+    </li>
+    <li>
+      <strong>Its line end is not our spine.</strong> It ignores real edges, so
+      it cannot do <code>via</code>, which is the point of the hyperedge
+      example. Its edges are straight polylines, not a smooth outline.
+    </li>
+    <li>
+      <strong>Its middle is new.</strong> "Filled where dense, lines where
+      sparse" (penguins at <code>t = 1.5</code>) is something neither hull nor
+      spine draws.
+    </li>
+  </ul>
+  <p>
+    So KelpFusion overlaps both strategies in part and replaces neither. Adding
+    it as a fourth member would leave users choosing between strategies that
+    each draw some of the same pictures.
+  </p>
+  <p>
+    What it does show is a better kernel. All three non-box strategies can be
+    built as one pipeline:
+    <strong
+      >a skeleton graph, a rule for which of its faces to fill, and an outline
+      grown from the result by <code>padding</code></strong
+    >. The convex hull is the complete graph with every face filled. The alpha
+    shape is the Delaunay triangulation with triangles larger than
+    <code>alpha</code> left empty. The spine is a tree routed around non-members
+    (or the <code>via</code> edges) with no faces. KelpFusion is the
+    shortest-path graph at <code>t</code> with faces up to a size. Growing the
+    result by <code>padding</code> with round joins, instead of tracing an
+    energy field, also gives the clean, even tubes that the bubble-set renders
+    here needed careful tuning to approach.
+  </p>
+  <div class="rec">
+    <p>
+      <strong>Recommendation.</strong> Keep the three strategies as proposed,
+      but implement <code>hull</code> and <code>spine</code> on that shared
+      kernel rather than on two libraries (Delaunay for hulls, bubblesets-js for
+      spines). Do not add <code>Shape.kelp()</code> in the first cut. If a real
+      example wants "dense core plus stragglers", add it later as
+      <code>Shape.kelp({ t })</code> on the same kernel, with no new mechanism
+      (decision 10).
+    </p>
+  </div>
 
   <h2>Josh's three tensions</h2>
   <div class="grid3">
@@ -582,6 +930,13 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
         <figcaption>Spine of {a, c} avoiding b.</figcaption>
       </figure>
     </div>
+    <p>
+      Future work, not part of this proposal: this example may be drawn best by
+      placing the points and the region together, with an energy that pushes
+      shapes apart and rewards symmetry, as Penrose and Keenan Crane's work do.
+      Every strategy here draws around shapes that are already placed, so that
+      would be a change to layout, not a new shape.
+    </p>
   </div>
 
   <h3>Hyperedges over a node-link diagram</h3>
@@ -646,19 +1001,40 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
         shape: Shape.spine({ avoiding: selectAll("bars") }),
         stroke: "#d6580c" })))</code></pre>
     </div>
-    <figure>
-      <div class="shot">
-        <img
-          src="img/bars-trout-spine-across-lakes.png"
-          alt="Spine around the trout bars across four lakes"
-        />
+    <div>
+      <div class="pair">
+        <figure>
+          <div class="shot">
+            <img
+              src="img/bars-trout-spine-across-lakes.png"
+              alt="Spine around the trout bars, routed over the bar tops"
+            />
+          </div>
+          <figcaption>
+            <code>avoiding</code>: the other bars and the axis band.
+          </figcaption>
+        </figure>
+        <figure>
+          <div class="shot">
+            <img
+              src="img/bars-trout-spine-avoiding-bars-only.png"
+              alt="Spine around the trout bars, one connection routed under the axis"
+            />
+          </div>
+          <figcaption><code>avoiding</code>: the other bars only.</figcaption>
+        </figure>
       </div>
-      <figcaption>
-        The hardest case, shown honestly: where no route exists between
-        neighbors, the spine crosses the tops of non-member bars. (Prototype
-        passes the trout bar tops as <code>via</code>.)
-      </figcaption>
-    </figure>
+      <p class="small">
+        The hardest case. With the other bars as the only obstacles, the
+        bubble-set routing sends the Huron to Michigan connection under the
+        baseline, because it goes around whichever side of a box cuts off less
+        of it. With the axis line and its labels also treated as an obstacle,
+        every connection runs as a thin tube over the bar tops and no non-member
+        bar is covered. The spelling does not say that yet: either the axis is
+        listed in <code>avoiding</code>, or the spine stays inside the plot area
+        by rule (decision 11).
+      </p>
+    </div>
   </div>
 
   <h3>How it composes</h3>
@@ -887,13 +1263,14 @@ chart(catch)
       <h4>KelpFusion</h4>
       <div class="shot">
         <img
-          src="precedent/alsallakh-setvis-hybrid-kelpfusion.png"
-          alt="KelpFusion figure"
+          src="precedent/kelpfusion-fig5-t-sweep.png"
+          alt="KelpFusion t sweep from tree to convex hull"
         />
       </div>
       <pre><code>(paper; no API)</code></pre>
       <p>
-        One dial from spanning tree to convex hull.
+        Graph dial <code>t</code> from spanning tree to convex hull, plus a
+        face-size limit <code>A</code> (see "KelpFusion and bubble sets").
         <a
           href="https://vis.uib.no/wp-content/papercite-data/pdfs/Alsallakh_et_al-2016-Computer_Graphics_Forum.pdf"
           >Alsallakh et al. 2016</a
@@ -1104,6 +1481,15 @@ chart(catch)
     <li>
       For rows that carry refs, name the ref column with <code>members</code>,
       like <code>line({ from, to })</code>?
+    </li>
+    <li>
+      Build <code>hull</code> and <code>spine</code> on one shared kernel
+      (skeleton graph, filled faces, outline grown by <code>padding</code>), and
+      leave <code>Shape.kelp({ t })</code> out of the first cut?
+    </li>
+    <li>
+      In a chart, should a spine stay inside the plot area by rule, or should
+      the user list the axis in <code>avoiding</code>?
     </li>
   </ol>
 

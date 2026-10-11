@@ -12,7 +12,16 @@ import {
   spread,
   circle,
 } from "../../src/lib";
-import { BubbleSets } from "bubblesets-js";
+import {
+  Area as BSArea,
+  Circle as BSCircle,
+  Rectangle as BSRectangle,
+  calculatePotentialOutline,
+  calculateVirtualEdges,
+  createGenericInfluenceArea,
+  createRectangleInfluenceArea,
+  defaultOptions,
+} from "bubblesets-js";
 // throwaway: delaunator is in the pnpm store but not a direct dependency
 import Delaunator from "../../../../node_modules/.pnpm/delaunator@5.1.0/node_modules/delaunator/index.js";
 import { penguins } from "../../src/data/penguins";
@@ -199,26 +208,80 @@ const toBS = (m: Member) =>
     ? { x: m.cx - m.r, y: m.cy - m.r, width: 2 * m.r, height: 2 * m.r }
     : { x: m.x, y: m.y, width: m.w, height: m.h };
 
-/** Spine strategy: bubblesets-js over members, avoiding non-members, along `via` edges. */
-const spineOutline = (
-  members: Member[],
-  opts: { avoiding?: Member[]; via?: [Pt, Pt][]; pad?: number } = {}
-): Pt[] => {
-  const pad = opts.pad ?? 8;
-  const bs = new BubbleSets({
-    virtualEdges: !opts.via,
-    nodeR0: pad + 2,
-    nodeR1: pad + 30,
-    edgeR0: pad,
-    edgeR1: pad + 12,
-    morphBuffer: pad + 2,
-    pixelGroup: 2,
+/**
+ * Spine strategy, closer to the Bubble Sets paper (Collins et al. 2009) than
+ * bubblesets-js's own `compute()`, using the library's exported pieces:
+ *  - virtual edges are routed around each non-member's box grown by `clearance`
+ *    (tube half-width + gap), so the drawn tube, not just its center line, clears it;
+ *  - each routed edge is ONE influence area whose distance is the distance to its
+ *    nearest segment (paper, section 3.2: "only the edge segment closest to the pixel
+ *    group contributes energy"); bubblesets-js adds every segment, which bulges at bends;
+ *  - circles stay circles (round caps), and energy falls off over a short distance,
+ *    so neighboring fields do not add up into lumps.
+ */
+type Spine2Opts = {
+  avoiding?: Member[]; via?: [Pt, Pt][]; pad?: number; tube?: number; gap?: number;
+  falloff?: number; pixelGroup?: number; debug?: { edges: [Pt, Pt][] }; extra?: Record<string, any>;
+};
+const spineOutline2 = (members: Member[], o: Spine2Opts = {}): Pt[] => {
+  const pad = o.pad ?? 8, tube = o.tube ?? Math.max(4, pad * 0.6), gap = o.gap ?? 4;
+  const falloff = o.falloff ?? Math.max(4, pad * 0.5), pg = o.pixelGroup ?? 1;
+  const opt = {
+    ...defaultOptions,
+    nodeR0: pad, nodeR1: pad + falloff, edgeR0: tube, edgeR1: tube + falloff,
+    morphBuffer: 2, pixelGroup: pg, ...(o.extra ?? {}),
+  };
+  const shape = (m: Member, grow = 0): any =>
+    m.kind === "circle" ? BSCircle.from({ cx: m.cx, cy: m.cy, radius: m.r + grow })
+      : BSRectangle.from({ x: m.x - grow, y: m.y - grow, width: m.w + 2 * grow, height: m.h + 2 * grow });
+  const asRect = (m: Member, grow = 0) => {
+    const b = toBS(m);
+    return BSRectangle.from({ x: b.x - grow, y: b.y - grow, width: b.width + 2 * grow, height: b.height + 2 * grow });
+  };
+  const memObjs = members.map((m) => shape(m));
+  const nonObjs = (o.avoiding ?? []).map((m) => shape(m));
+  // 1. virtual edges (or the given real edges), as line segments
+  const segs: [Pt, Pt][] = o.via
+    ? o.via
+    : calculateVirtualEdges(memObjs, (o.avoiding ?? []).map((m) => asRect(m, tube + gap)), 100, opt.morphBuffer).map(
+        (l: any) => [[l.x1, l.y1], [l.x2, l.y2]] as [Pt, Pt]
+      );
+  // 2. group segments into routes: chains joined at bend points (not at member centers)
+  const key = (p: Pt) => `${Math.round(p[0] * 100)},${Math.round(p[1] * 100)}`;
+  const centers = new Set(memObjs.map((m: any) => key([m.cx, m.cy])));
+  const parent = segs.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const byPt = new Map<string, number[]>();
+  segs.forEach(([p, q], i) => [p, q].forEach((x) => { const k = key(x); if (!centers.has(k)) byPt.set(k, [...(byPt.get(k) ?? []), i]); }));
+  for (const ids of byPt.values()) for (const i of ids.slice(1)) parent[find(i)] = find(ids[0]);
+  const routes = new Map<number, [Pt, Pt][]>();
+  segs.forEach((s, i) => routes.set(find(i), [...(routes.get(find(i)) ?? []), s]));
+  // 3. potential field over the active region
+  const all = [...memObjs, ...segs.map(([p, q]) => BSRectangle.from({ x: Math.min(p[0], q[0]), y: Math.min(p[1], q[1]), width: Math.abs(q[0] - p[0]), height: Math.abs(q[1] - p[1]) }))];
+  const bb = all.slice(1).reduce((r: any, x: any) => (r.add(x), r), BSRectangle.from(all[0]));
+  const margin = Math.max(opt.nodeR1, opt.edgeR1) + 4;
+  const area = BSArea.fromPixelRegion(BSRectangle.from({ x: bb.x - margin, y: bb.y - margin, width: bb.width + 2 * margin, height: bb.height + 2 * margin }), pg);
+  const infl = (m: any, R: number) =>
+    m instanceof BSRectangle ? createRectangleInfluenceArea(m, area, R) : createGenericInfluenceArea(m, area, R);
+  const memAreas = memObjs.map((m: any) => infl(m, opt.nodeR1));
+  const nonAreas = nonObjs.map((m: any) => infl(m, opt.nodeR1));
+  const segDist2 = (s: [Pt, Pt], x: number, y: number) => {
+    const [[x1, y1], [x2, y2]] = s, dx = x2 - x1, dy = y2 - y1, L = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / L));
+    return (x - x1 - t * dx) ** 2 + (y - y1 - t * dy) ** 2;
+  };
+  const edgeAreas = [...routes.values()].map((rs) => {
+    const xs = rs.flatMap(([p, q]) => [p[0], q[0]]), ys = rs.flatMap(([p, q]) => [p[1], q[1]]);
+    const x = Math.min(...xs), y = Math.min(...ys);
+    return createGenericInfluenceArea(
+      { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y, distSquare: (px: number, py: number) => Math.min(...rs.map((s) => segDist2(s, px, py))) },
+      area, opt.edgeR1
+    );
   });
-  bs.pushMember(...members.map(toBS));
-  if (opts.avoiding) bs.pushNonMember(...opts.avoiding.map(toBS));
-  if (opts.via) bs.pushEdge(...opts.via.map(([p, q]) => ({ x1: p[0], y1: p[1], x2: q[0], y2: q[1] })));
-  const path = bs.compute().sample(8).simplify(0).bSplines().simplify(0);
-  return path.points.map((p) => [p.x, p.y] as Pt);
+  const path = calculatePotentialOutline(area, memAreas, edgeAreas, nonAreas, (p: any) => p.containsElements(memObjs), opt);
+  if (o.debug) o.debug.edges.push(...segs);
+  const smooth = path.sample(Math.max(2, Math.round(8 / pg))).simplify(0).bSplines().simplify(0);
+  return smooth.points.map((p: any) => [p.x, p.y] as Pt);
 };
 
 // ── drawing helpers ─────────────────────────────────────────────────────────
@@ -292,7 +355,7 @@ export const StrategyHullConvex: StoryObj = { render: () => renderPanel(region(h
 export const StrategyHullConcave: StoryObj = { render: () => renderPanel(region(hullOutline(U, 8, 40), BLUE)) };
 // enclose({ padding: 10, shape: Shape.spine({ avoiding: others }) }, members)
 export const StrategySpine: StoryObj = {
-  render: () => renderPanel(region(spineOutline(U, { avoiding: NON, pad: 8 }), BLUE)),
+  render: () => renderPanel(region(spineOutline2(U, { avoiding: NON, pad: 8, tube: 6, gap: 4, falloff: 16 }), BLUE)),
 };
 
 // ── (b1) penguins: one hull per species ────────────────────────────────────
@@ -366,7 +429,7 @@ const topo = (ac: Pt[]) => {
 export const TopologyHull: StoryObj = { render: () => topo(hullOutline([TA, TC], 16)) };
 // right: the spine routes around b
 export const TopologySpine: StoryObj = {
-  render: () => topo(spineOutline([TA, TC], { avoiding: [{ ...TB, r: 22 }], pad: 14 })),
+  render: () => topo(spineOutline2([TA, TC], { avoiding: [TB], pad: 14, tube: 10, gap: 10, falloff: 12 })),
 };
 
 // ── (b3) hyperedges over a node-link diagram ───────────────────────────────
@@ -407,7 +470,7 @@ export const Hyperedges: StoryObj = {
       const via = EDGES.filter(([p, q]) => s.nodes.includes(p) && s.nodes.includes(q)).map(
         ([p, q]) => [NODES[p], NODES[q]] as [Pt, Pt]
       );
-      return region(spineOutline(members, { avoiding: others, via, pad: 9 }), s.color, 0.25, 2);
+      return region(spineOutline2(members, { avoiding: others, via, pad: 9, tube: 5, gap: 3, falloff: 8 }), s.color, 0.25, 2);
     });
     layer([
       ...outlines,
@@ -435,38 +498,48 @@ const LAKES = ["Erie", "Huron", "Michigan", "Ontario"];
 const SPECIES = ["bass", "trout", "perch"];
 const SP_COLORS = ["#9ecae9", "#f58518", "#bab0ac"];
 const COUNTS = [[40, 95, 60], [70, 55, 85], [30, 110, 45], [80, 70, 50]];
-const barsScene = (withBackgrounds: boolean, highlight: boolean) => {
-  const BW = 20, GAP = 9, GROUP = 3 * BW + 2 * GAP, GG = 34, BASE = 170, X0 = 20;
-  const bars: { m: Extract<Member, { kind: "rect" }>; sp: number }[] = [];
-  LAKES.forEach((_, li) =>
-    SPECIES.forEach((_, si) => {
-      const h = COUNTS[li][si] * 1.3;
-      bars.push({ m: { kind: "rect", x: X0 + li * (GROUP + GG) + si * (BW + GAP), y: BASE - h, w: BW, h }, sp: si });
-    })
-  );
+type Bar = Extract<Member, { kind: "rect" }>;
+const BW = 20, GAP = 9, GROUP = 3 * BW + 2 * GAP, GG = 34, BASE = 170, X0 = 20;
+const BARS: { m: Bar; sp: number }[] = LAKES.flatMap((_, li) =>
+  SPECIES.map((_, si) => {
+    const h = COUNTS[li][si] * 1.3;
+    return { m: { kind: "rect", x: X0 + li * (GROUP + GG) + si * (BW + GAP), y: BASE - h, w: BW, h } as Bar, sp: si };
+  })
+);
+const TROUT = BARS.filter((b) => b.sp === 1).map((b) => b.m);
+const NOT_TROUT = BARS.filter((b) => b.sp !== 1).map((b) => b.m);
+// The axis line and its labels: the outline must not cover them either.
+const AXIS_BAND: Bar = { kind: "rect", x: X0 - 6, y: BASE, w: 4 * GROUP + 3 * GG + 12, h: 24 };
+const barsScene = (withBackgrounds: boolean, outline: any[] = [], legend = true) => {
   const ink: any[] = [];
   if (withBackgrounds)
     LAKES.forEach((_, li) =>
-      ink.push(...region(boxOutline(bars.filter((_, i) => Math.floor(i / 3) === li).map((b) => b.m), 8), "#8892a0", 0.12, 0))
+      ink.push(...region(boxOutline(BARS.filter((_, i) => Math.floor(i / 3) === li).map((b) => b.m), 8), "#8892a0", 0.12, 0))
     );
-  if (highlight) {
-    const mem = bars.filter((b) => b.sp === 1).map((b) => b.m);
-    const oth = bars.filter((b) => b.sp !== 1).map((b) => b.m);
-    const via = mem.slice(1).map((m, i) => [[mem[i].x + BW / 2, mem[i].y + 6], [m.x + BW / 2, m.y + 6]] as [Pt, Pt]);
-    ink.push(...region(spineOutline(mem, { avoiding: oth, via, pad: 4 }), "#d6580c", 0.18, 2));
-  }
   return layer([
     ...ink,
-    ...bars.map((b) => bar(b.m, SP_COLORS[b.sp])),
+    ...outline,
+    ...BARS.map((b) => bar(b.m, SP_COLORS[b.sp])),
     position({ x: X0 - 6, y: BASE }, [rect({ w: 4 * GROUP + 3 * GG + 12, h: 1, fill: "#666" })]),
     ...LAKES.map((l, li) => label(X0 + li * (GROUP + GG) + GROUP / 2 - l.length * 3.3, BASE + 14, l)),
-    ...SPECIES.map((s, si) => label(X0 + si * 70, -30, s, { fill: si === 1 ? "#d6580c" : "#666", fontWeight: "bold" })),
+    ...(legend ? SPECIES.map((s, si) => label(X0 + si * 70, -30, s, { fill: si === 1 ? "#d6580c" : "#666", fontWeight: "bold" })) : []),
   ]);
 };
+const TROUT_SPINE: Spine2Opts = { pad: 4, tube: 4, gap: 4, falloff: 8 };
+// avoiding: the other bars and the axis band. Routed edges go over the bar tops.
 export const NonAdjacentSpine: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    barsScene(false, true).render(container, { w: 400, h: 240 });
+    barsScene(false, region(spineOutline2(TROUT, { ...TROUT_SPINE, avoiding: [...NOT_TROUT, AXIS_BAND] }), "#d6580c", 0.18, 2)).render(container, { w: 400, h: 240 });
+    return container;
+  },
+};
+// avoiding: the other bars only. Bubble Sets routes each blocked edge around the side of the
+// obstacle that cuts off less of the box, which here is below the baseline.
+export const NonAdjacentSpineBarsOnly: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    barsScene(false, region(spineOutline2(TROUT, { ...TROUT_SPINE, avoiding: NOT_TROUT }), "#d6580c", 0.18, 2)).render(container, { w: 400, h: 240 });
     return container;
   },
 };
@@ -475,7 +548,7 @@ export const NonAdjacentSpine: StoryObj = {
 export const PerGroupBackgrounds: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    barsScene(true, false).render(container, { w: 400, h: 240 });
+    barsScene(true).render(container, { w: 400, h: 240 });
     return container;
   },
 };
@@ -500,3 +573,285 @@ export const PlanetsBox: StoryObj = {
     return container;
   },
 };
+
+// ── (c) KelpFusion (Meulemans et al., TVCG 2013), story-local prototype ─────
+//
+// Follows the paper's three phases for ONE set at a time:
+//  1. Reachability graph G: for each pair of member nodes, the shortest route that
+//     avoids every other node's allocation area (members and non-members) with
+//     clearance w/2. As in the paper's own implementation (section 3.4), pairs are
+//     restricted to the Delaunay triangulation of the members.
+//     Shortest-path graph SPG(t): edges of G in increasing length; add e unless the
+//     SPG already has a path between its ends with weight < |e|^t (Algorithm 2).
+//     t = 1 keeps every edge (the triangulation, whose outline is the convex hull);
+//     t = Infinity keeps the minimum spanning tree.
+//  2. Fill a bounded face f iff area(f) / (1 + |nodes(f)|) < A and f contains no
+//     non-member node (the paper's conditions 1 and 2).
+//  3. Draw the union of node bubbles (radius r), edges (width w) and filled faces.
+// Simplifications, declared: the allocation area is a disc (or the bar grown by
+// `pad`), not clipped to the node's Voronoi cell; a filled face is drawn with
+// straight sides even where its edges bend around a node; conditions 3 and 4 (which only matter between several
+// sets drawn on top of each other) are skipped; no smoothing pass.
+
+type Poly = Pt[];
+const centerOf = (m: Member): Pt => (m.kind === "circle" ? [m.cx, m.cy] : [m.x + m.w / 2, m.y + m.h / 2]);
+const discPoly = (c: Pt, R: number, n = 28): Poly =>
+  Array.from({ length: n }, (_, i) => [c[0] + R * Math.cos((2 * Math.PI * i) / n), c[1] + R * Math.sin((2 * Math.PI * i) / n)] as Pt);
+/** A node's allocation area grown by `grow`, as a convex polygon. */
+const allocPoly = (m: Member, pad: number, grow = 0, n = 28): Poly =>
+  m.kind === "circle" ? discPoly([m.cx, m.cy], (m.r + pad + grow) / Math.cos(Math.PI / n), n) : convexHull(samples(m, pad + grow));
+const insideConvex = (p: Pt, poly: Poly) => inPoly(p, poly);
+const bboxOf = (poly: Poly) => {
+  const xs = poly.map((p) => p[0]), ys = poly.map((p) => p[1]);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+};
+/** Does segment ab pass through the interior of convex polygon `poly`? (Cyrus–Beck clipping) */
+const segHitsPoly = (a: Pt, b: Pt, poly: Poly, bb = bboxOf(poly)) => {
+  if (Math.max(a[0], b[0]) < bb[0] || Math.min(a[0], b[0]) > bb[2] || Math.max(a[1], b[1]) < bb[1] || Math.min(a[1], b[1]) > bb[3]) return false;
+  let area2 = 0;
+  for (let i = 0; i < poly.length; i++) area2 += cross([0, 0], poly[i], poly[(i + 1) % poly.length]);
+  const sgn = area2 > 0 ? 1 : -1;
+  let t0 = 0, t1 = 1;
+  const d: Pt = [b[0] - a[0], b[1] - a[1]];
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i], q = poly[(i + 1) % poly.length];
+    // inside means sgn * cross(p, q, x) > 0
+    const num = sgn * cross(p, q, a);
+    const den = sgn * ((q[0] - p[0]) * d[1] - (q[1] - p[1]) * d[0]);
+    if (Math.abs(den) < 1e-12) { if (num <= 1e-9) return false; continue; }
+    const t = -num / den;
+    if (den > 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
+    if (t1 - t0 <= 1e-6) return false;
+  }
+  return (t1 - t0) * Math.hypot(d[0], d[1]) > 1e-3;
+};
+/** Shortest route from a to b around convex obstacles (visibility graph + Dijkstra),
+ *  using only obstacles near the straight segment (a local search, for speed). */
+const routeAround = (a: Pt, b: Pt, allObstacles: Poly[]): Pt[] | null => {
+  const M = Math.max(40, dist(a, b) * 0.6);
+  const near = allObstacles
+    .map((o) => ({ o, bb: bboxOf(o) }))
+    .filter(({ bb }) => bb[2] > Math.min(a[0], b[0]) - M && bb[0] < Math.max(a[0], b[0]) + M && bb[3] > Math.min(a[1], b[1]) - M && bb[1] < Math.max(a[1], b[1]) + M);
+  const blocked = (p: Pt, q: Pt) => near.some(({ o, bb }) => segHitsPoly(p, q, o, bb));
+  if (!blocked(a, b)) return [a, b];
+  const pts: Pt[] = [a, b, ...near.flatMap(({ o }) => o)];
+  const n = pts.length, D = new Array(n).fill(Infinity), prev = new Array(n).fill(-1), done = new Array(n).fill(false);
+  D[0] = 0;
+  for (let it = 0; it < n; it++) {
+    let u = -1;
+    for (let i = 0; i < n; i++) if (!done[i] && (u < 0 || D[i] < D[u])) u = i;
+    if (u < 0 || D[u] === Infinity || u === 1) break;
+    done[u] = true;
+    for (let v = 0; v < n; v++) {
+      if (done[v]) continue;
+      const d = D[u] + dist(pts[u], pts[v]);
+      if (d < D[v] && !blocked(pts[u], pts[v])) { D[v] = d; prev[v] = u; }
+    }
+  }
+  if (D[1] === Infinity) return null;
+  const path: Pt[] = [];
+  for (let v = 1; v >= 0; v = prev[v]) path.unshift(pts[v]);
+  return path;
+};
+const polyLen = (p: Pt[]) => p.slice(1).reduce((s, q, i) => s + dist(p[i], q), 0);
+
+type KelpOpts = { avoiding?: Member[]; t: number; pad: number; w: number; A?: number };
+type Kelp = { bubbles: Poly[]; edges: Pt[][]; faces: Poly[] };
+const kelpFusion = (members: Member[], o: KelpOpts): Kelp => {
+  const P = members.map(centerOf), n = P.length, A = o.A ?? Infinity;
+  const others = o.avoiding ?? [];
+  // Phase 1a: candidate pairs = Delaunay edges of the members (all pairs if fewer than 3)
+  const tri: [number, number, number][] = [];
+  const pairs = new Map<string, [number, number]>();
+  const ek = (i: number, j: number) => (i < j ? `${i},${j}` : `${j},${i}`);
+  if (n >= 3) {
+    const d = Delaunator.from(P);
+    for (let k = 0; k < d.triangles.length; k += 3) {
+      const [i, j, l] = [d.triangles[k], d.triangles[k + 1], d.triangles[k + 2]];
+      tri.push([i, j, l]);
+      for (const [u, v] of [[i, j], [j, l], [l, i]]) pairs.set(ek(u, v), [Math.min(u, v), Math.max(u, v)]);
+    }
+  }
+  if (tri.length === 0) for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) pairs.set(ek(i, j), [i, j]);
+  // Phase 1b: reachability routes avoiding every other allocation area (clearance w/2)
+  const memObs = members.map((m) => allocPoly(m, o.pad, o.w / 2, 10));
+  const nonObs = others.map((m) => allocPoly(m, o.pad, o.w / 2, 10));
+  const G: { i: number; j: number; route: Pt[]; len: number; routed: boolean }[] = [];
+  for (const [i, j] of pairs.values()) {
+    // skip obstacles that contain an endpoint (the paper's Voronoi clipping would shrink them)
+    const obs = [...memObs.filter((_, k) => k !== i && k !== j), ...nonObs].filter(
+      (poly) => !insideConvex(P[i], poly) && !insideConvex(P[j], poly)
+    );
+    const route = routeAround(P[i], P[j], obs);
+    if (route) G.push({ i, j, route, len: polyLen(route), routed: route.length > 2 });
+  }
+  // Phase 1c: shortest-path graph for parameter t (Algorithm 2)
+  G.sort((a, b) => a.len - b.len);
+  const adj: { to: number; w: number }[][] = P.map(() => []);
+  const weight = (len: number) => (isFinite(o.t) ? Math.pow(len, o.t) : len);
+  const spDist = (s: number, goal: number, bound: number) => {
+    const D = new Array(n).fill(Infinity), done = new Array(n).fill(false);
+    D[s] = 0;
+    for (;;) {
+      let u = -1;
+      for (let k = 0; k < n; k++) if (!done[k] && D[k] < Infinity && (u < 0 || D[k] < D[u])) u = k;
+      if (u < 0 || D[u] >= bound) return Infinity;
+      if (u === goal) return D[u];
+      done[u] = true;
+      for (const { to, w } of adj[u]) if (D[u] + w < D[to]) D[to] = D[u] + w;
+    }
+  };
+  const spg = new Map<string, (typeof G)[number]>();
+  // t = Infinity: the minimum spanning tree (Kruskal), the limit of Algorithm 2
+  const root = P.map((_, k) => k);
+  const find = (k: number): number => (root[k] === k ? k : (root[k] = find(root[k])));
+  for (const e of G) {
+    if (!isFinite(o.t)) {
+      if (find(e.i) !== find(e.j)) { root[find(e.i)] = find(e.j); spg.set(ek(e.i, e.j), e); }
+      continue;
+    }
+    const we = weight(e.len);
+    if (spDist(e.i, e.j, we) >= we) {
+      spg.set(ek(e.i, e.j), e);
+      adj[e.i].push({ to: e.j, w: we });
+      adj[e.j].push({ to: e.i, w: we });
+    }
+  }
+  // Phase 2: bounded faces = groups of Delaunay triangles joined across non-SPG edges
+  const triOf = new Map<string, number[]>();
+  tri.forEach(([i, j, l], k) => [[i, j], [j, l], [l, i]].forEach(([u, v]) => triOf.set(ek(u, v), [...(triOf.get(ek(u, v)) ?? []), k])));
+  const tr = tri.map((_, k) => k);
+  const tfind = (k: number): number => (tr[k] === k ? k : (tr[k] = tfind(tr[k])));
+  for (const [key, ks] of triOf) if (ks.length === 2 && !spg.has(key)) tr[tfind(ks[0])] = tfind(ks[1]);
+  const bad = new Set<number>();
+  for (const [key, ks] of triOf) {
+    if (ks.length === 1 && !spg.has(key)) bad.add(tfind(ks[0])); // open to the outside
+  }
+  const groups = new Map<number, number[]>();
+  tri.forEach((_, k) => groups.set(tfind(k), [...(groups.get(tfind(k)) ?? []), k]));
+  const faces: Poly[] = [];
+  for (const [g, ks] of groups) {
+    if (bad.has(g)) continue;
+    const polys = ks.map((k) => tri[k].map((v) => P[v]) as Poly);
+    const area = polys.reduce((s, q) => s + Math.abs(cross(q[0], q[1], q[2])) / 2, 0);
+    const boundary = new Set<number>();
+    for (const k of ks) for (const [u, v] of [[tri[k][0], tri[k][1]], [tri[k][1], tri[k][2]], [tri[k][2], tri[k][0]]])
+      if ((triOf.get(ek(u, v)) ?? []).filter((x) => tfind(x) === g).length === 1) { boundary.add(u); boundary.add(v); }
+    if (area / (1 + boundary.size) >= A) continue; // condition 1
+    if (others.some((m) => polys.some((q) => inPoly(centerOf(m), q)))) continue; // condition 2
+    faces.push(...polys);
+  }
+  // Phase 3 (pieces; drawn as one union by kelpInk)
+  const bubbles = members.map((m) => allocPoly(m, o.pad));
+  return { bubbles, edges: [...spg.values()].map((e) => e.route), faces };
+};
+
+const mixWhite = (hex: string, k: number) => {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return "#" + c.map((v) => Math.round(255 - (255 - v) * k).toString(16).padStart(2, "0")).join("");
+};
+/** Draw the union of the kelp pieces: every piece stroked first, then every piece filled on top. */
+const kelpInk = (k: Kelp, color: string, w: number, tint = 0.3) => {
+  const light = mixWhite(color, tint);
+  const segPolys = k.edges.flatMap((route) => [
+    ...route.slice(1).map((q, i) => {
+      const p = route[i], L = dist(p, q) || 1, nx = (-(q[1] - p[1]) / L) * (w / 2), ny = ((q[0] - p[0]) / L) * (w / 2);
+      return [[p[0] + nx, p[1] + ny], [q[0] + nx, q[1] + ny], [q[0] - nx, q[1] - ny], [p[0] - nx, p[1] - ny]] as Poly;
+    }),
+    ...route.slice(1, -1).map((p) => discPoly(p, w / 2, 12)),
+  ]);
+  const pieces = [...k.faces, ...k.bubbles, ...segPolys];
+  return [
+    ...pieces.map((q) => polygon({ points: q, fill: "none", stroke: color, strokeWidth: 3 })),
+    ...pieces.map((q) => polygon({ points: q, fill: light, stroke: light, strokeWidth: 0.8 })),
+  ];
+};
+
+// One comparison row: convex hull | KelpFusion at several t | bubble set.
+const KELP_TS = [Infinity, 2, 1.5, 1];
+const colTitle = (t: number) => (t === Infinity ? "KelpFusion, t = ∞" : `KelpFusion, t = ${t}`);
+const compareRow = (o: {
+  w: number; h: number; panel: (outline: any[]) => any; members: Member[]; avoiding: Member[];
+  color: string; pad: number; kelpW: number; spine: Spine2Opts; cols?: number;
+}) => {
+  const container = initializeContainer();
+  const cols: [string, any[]][] = [
+    ...KELP_TS.map((t) => [colTitle(t), kelpInk(kelpFusion(o.members, { avoiding: o.avoiding, t, pad: o.pad, w: o.kelpW }), o.color, o.kelpW)] as [string, any[]]),
+    ["convex hull", region(hullOutline(o.members, o.pad), o.color, 0.25, 1.5)],
+    ["bubble set", region(spineOutline2(o.members, { avoiding: o.avoiding, ...o.spine }), o.color, 0.25, 1.5)],
+  ];
+  const top = 22, nc = o.cols ?? 3;
+  layer(
+    cols.map(([title, ink], i) =>
+      position({ x: (i % nc) * o.w, y: Math.floor(i / nc) * (o.h + top) }, [
+        layer([
+          position({ x: 8, y: 0 }, [text({ text: title, fontSize: 13, fontWeight: "bold", fill: "#333" })]),
+          position({ x: 0, y: top }, [o.panel(ink)]),
+        ]),
+      ])
+    )
+  ).render(container, { w: nc * o.w, h: Math.ceil(cols.length / nc) * (o.h + top) });
+  return container;
+};
+
+// Row 1: the Topology a/c set, avoiding b.
+export const KelpRowTopology: StoryObj = {
+  render: () =>
+    compareRow({
+      w: 270, h: 150, members: [TA, TC], avoiding: [TB], color: "#ff2400", pad: 14, kelpW: 10,
+      spine: { pad: 14, tube: 10, gap: 10, falloff: 12 },
+      panel: (ink) => layer([...ink, ...[TA, TB, TC].map((m) => dot(m, "black")),
+        label(35, 80, "a", { fontStyle: "italic", fontSize: 16 }), label(125, 80, "b", { fontStyle: "italic", fontSize: 16 }),
+        label(215, 80, "c", { fontStyle: "italic", fontSize: 16 })]),
+    }),
+};
+
+// Row 2: set C of the hyperedge example over the graph (members 3, 7, 8, 9).
+const hyperNode = (id: string) => C(NODES[id][0], NODES[id][1], 9);
+const hyperPanel = (ink: any[]) =>
+  layer([
+    ...ink,
+    ...EDGES.map(([p, q]) => {
+      const [a, b] = [NODES[p], NODES[q]], L = dist(a, b), nx = (-(b[1] - a[1]) / L) * 0.75, ny = ((b[0] - a[0]) / L) * 0.75;
+      return polygon({ points: [[a[0] + nx, a[1] + ny], [b[0] + nx, b[1] + ny], [b[0] - nx, b[1] - ny], [a[0] - nx, a[1] - ny]], fill: "#555" });
+    }),
+    ...Object.keys(NODES).map((id) => dot(hyperNode(id), "white")),
+    ...Object.keys(NODES).flatMap((id) => [
+      polygon({ points: samples(hyperNode(id), 0), fill: "none", stroke: "#333", strokeWidth: 1.5 }),
+      label(NODES[id][0] - (id.length > 2 ? 8 : 5), NODES[id][1] - 6, id.slice(1), { fontSize: 10 }),
+    ]),
+  ]);
+export const KelpRowHyperedges: StoryObj = {
+  render: () => {
+    const set = SETS[2];
+    const members = set.nodes.map(hyperNode);
+    const avoiding = Object.keys(NODES).filter((id) => !set.nodes.includes(id)).map(hyperNode);
+    return compareRow({
+      w: 350, h: 220, members, avoiding, color: set.color, pad: 6, kelpW: 7,
+      spine: { pad: 9, tube: 5, gap: 3, falloff: 8 }, panel: hyperPanel,
+    });
+  },
+};
+
+// Row 3: trout across lakes.
+export const KelpRowBars: StoryObj = {
+  render: () =>
+    compareRow({
+      w: 460, h: 215, cols: 2, members: TROUT, avoiding: [...NOT_TROUT, AXIS_BAND], color: "#d6580c", pad: 4, kelpW: 6,
+      spine: TROUT_SPINE, panel: (ink) => position({ x: 0, y: 10 }, [barsScene(false, ink, false)]),
+    }),
+};
+
+// Row 4: one penguin species (Gentoo) in the beak scatter; the other species are non-members.
+export const KelpRowPenguins: StoryObj = {
+  render: () => {
+    const pts = (s: string) => pen.filter((d) => d.Species === s).map((d) => C(xs(d["Beak Length (mm)"]), ys(d["Beak Depth (mm)"]), 2.5));
+    const members = pts("Gentoo"), avoiding = [...pts("Adelie"), ...pts("Chinstrap")];
+    return compareRow({
+      w: 430, h: 290, cols: 2, members, avoiding, color: SPECIES_COLORS.Gentoo, pad: 3, kelpW: 3,
+      spine: { pad: 5, tube: 3, gap: 2, falloff: 8 },
+      panel: (ink) => layer([...axes(), ...ink, ...avoiding.map((m) => dot(m, "#b8bcc2")), ...members.map((m) => dot(m, SPECIES_COLORS.Gentoo))]),
+    });
+  },
+};
+
