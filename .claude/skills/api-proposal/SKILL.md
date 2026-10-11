@@ -11,6 +11,8 @@ allowed-tools:
   - Grep
   - WebSearch
   - WebFetch
+  - Artifact
+  - Skill
 ---
 
 # Propose an API
@@ -183,9 +185,34 @@ records as decided or parked.
 
 ## Output
 
-Write the proposal to `proposals/<feature-slug>/proposal.md` (create the
-directory), with images alongside it in the same folder. Lead with a
-three-line summary and the recommendation, then the sections above. Write in
-plain American English and give the gist of each issue number you cite. Then tell
-Josh where it is and offer to open an issue labeled `API design` from it; don't
-open one unasked.
+Josh reviews the proposal as a published artifact page, with a markdown copy
+in the repo.
+
+**The artifact is the review surface.** Pictures next to code are what make a
+proposal quick to judge, so build the page around side-by-side comparisons:
+- **Precedent grid:** one card per system from step 3 with its spelling and
+  its output for the same example (a screenshot or reference image with its
+  source), so the differences are visible at a glance.
+- **Strategy grid:** when the feature has variants (interpolation curves,
+  label placements, overlap strategies), render the same data once per variant
+  in a grid with each variant's name and one-line behavior.
+- **Syntax next to output:** for each approach, each example's JS (and Python
+  where the shape differs) beside its rendered picture. For a syntax change,
+  show the current spelling and the proposed one in two columns over the same
+  picture.
+- Then the trade-offs, the recommendation, and the decisions as short
+  questions, as in steps 4 and 5.
+
+Render the pictures for real with `pnpm capture-one` (see the `iterate-example`
+skill) from prototype stories, not hand-drawn guesses, wherever GoFish can
+draw it; mark any sketch as a sketch. Follow the `Artifact` tool's instructions
+(load its design skill first) and embed the PNGs in the page.
+
+**The repo copy.** Also write the proposal to
+`proposals/<feature-slug>/proposal.md` (create the directory) with the images
+beside it, so it can become an issue. Lead with a three-line summary and the
+recommendation, then the sections above.
+
+Write in plain American English and give the gist of each issue number you
+cite. Then give Josh the artifact link and the file path, and offer to open an
+issue labeled `API design` from it; don't open one unasked.
