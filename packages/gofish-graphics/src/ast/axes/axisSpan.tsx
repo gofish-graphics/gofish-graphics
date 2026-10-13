@@ -23,7 +23,9 @@ export type SpanEnd = { node: GoFishNode; edge: "start" | "end" };
  * seats it past the content.
  *
  * With `line`, it draws a line one pixel wide in its middle, `cross` pixels
- * long: a divider centered in the gap between two groups. Without, it draws
+ * long: a divider centered in the gap between two groups. A divider
+ * separates regions, so the axis makes it as long as the rows whose regions
+ * break in its gap (see `elaborateOrdinalAxis`). Without, it draws
  * nothing and is only a box to center a label on.
  */
 export function axisSpan(opts: {

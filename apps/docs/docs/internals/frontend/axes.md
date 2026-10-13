@@ -419,7 +419,12 @@ difference axis), never off the size claim:
   y axis) plus a gap, so the axis emits all its rows in one elaboration
   rather than one axis per row. Rows are independent
   partitions, so they need not nest. A tick both rows share is drawn once,
-  short; an outer-row tick between inner ticks is longer. The rows are the
+  short; an outer-row tick between inner ticks is longer. This is the
+  opposite of an ordinal axis's dividers (below), on purpose. A time tick
+  marks a point and aims at the middle of its label, so an outer tick stops
+  where an inner row has its own tick and label at that point (they are
+  aligned), and runs through the inner rows that lack one (unaligned) to
+  reach its own label. The rows are the
   axis's [levels](#levels) (`timeRows`): a Calendar entry names a row, the
   outer row follows the inner row as named, and `false` hides a row's ticks
   and labels. The axis stamps its rows on its axis demand when it is
@@ -506,6 +511,14 @@ difference axis), never off the size claim:
   it, `LevelFold.ordinal`). A grouped bar chart's month dividers thus run
   from the plot edge through the inner row and the month row, and the
   divider between two years runs on through the year row.
+
+  This is the opposite of a time axis's ticks, on purpose. A divider
+  separates regions, so it runs through every level whose regions also
+  break at that gap (they are aligned) and stops at a level whose region
+  continues across it (unaligned). A time tick marks a point, so it runs
+  through the rows that do not share it to reach its label. It is the same
+  points-versus-cells rule that places labels: a point's label centers on
+  its tick, and a cell's label is placed by its region.
 
   Where a level's labels sit along the axis is the axis's `labelAlign`
   option, per depth like `labelAngle`, else inferred from what the label

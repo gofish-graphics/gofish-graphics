@@ -606,7 +606,11 @@ function elaborateContinuousAxis(
  * row) sits past the ticks, as a continuous axis's labels do, and each
  * further row sits past the one before it. Each tick is drawn once. A tick the
  * inner row has is short; an outer-row tick that falls between inner ticks
- * is longer, so it stands out.
+ * is longer, so it stands out. A tick marks a point and aims at the middle
+ * of its label, so it stops where an inner row has its own tick there and
+ * runs through the rows that lack one to reach its label: the opposite of
+ * an ordinal axis's dividers, which separate regions (see
+ * `elaborateOrdinalAxis`).
  *
  * `nice` is the axis's domain, niced outward to the cells of the inner row
  * (`niceContinuous` with the axis's `ticks`, the same nicing its scope's
@@ -1033,7 +1037,10 @@ function elaborateOrdinalAxis(
   // run of neighboring rows that break there gets one divider, through those
   // rows; the first row's divider starts at the plot edge, a later one's at
   // the far edge of the row before it. A run of the dim's innermost level
-  // alone draws none.
+  // alone draws none. A divider separates regions, so it runs through the
+  // levels whose regions also break here and stops at one whose region
+  // continues: the opposite of a time axis's ticks, which mark points and run
+  // through the rows that lack them to reach their labels.
   type Row = { start: number; end: number; outer: boolean; k?: number };
   const rows: Row[] = [];
   if (rowsBelow > 0) rows.push({ start: 0, end: rowsBelow, outer: false });
