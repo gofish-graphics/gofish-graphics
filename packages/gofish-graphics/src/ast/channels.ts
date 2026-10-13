@@ -14,7 +14,6 @@ import {
   fieldNameOf,
   isLiteral,
   isValue,
-  getMeasureProvenance,
   type FieldAccessor,
   type LiteralValue,
   type Measure,
@@ -149,24 +148,24 @@ export type DeriveMarkProps<
  * as TYPES (the field/datum/literal trichotomy). The three sources, in checking
  * order:
  *   1. Explicit annotation — `field(name, measure)`. A real type claim.
- *   2. Inferred provenance — the {@link getMeasureProvenance} map a transform
- *      like `bin()` attached to the data array. Also a real type claim.
+ *   2. The column's unit — the `HasUnit` class of its column type (schema.ts),
+ *      which a transform like `bin()` writes into the data array's column
+ *      types. Also a real type claim.
  *   3. Field-name default — a bare string accessor's field name. A WEAK default
  *      binding, not a claim.
  *
  * Checking rule:
- *   - annotation AND provenance both present and disagree → THROW immediately
- *     here (before any space union runs), naming the field and both measures;
+ *   - annotation AND unit both present and disagree → THROW immediately here
+ *     (before any space union runs), naming the field and both measures;
  *   - annotation present (no conflict) → annotation (refines the weak default);
- *   - no annotation → provenance ?? field-name default.
+ *   - no annotation → unit ?? field-name default.
  *
- * `provenanceData` is the provenance-bearing array (the operator's whole input,
- * which retains the symbol across `derive`); when omitted it falls back to the
- * value array. Function accessors and literals have no field identity → no
- * measure.
+ * `data` is the array carrying the column types (the operator's whole input,
+ * which retains them across `derive`). Function accessors and literals have
+ * no field identity → no measure.
  */
 export const resolveMeasure = <T>(
-  provenanceData: T | T[],
+  data: T | T[],
   accessor:
     | string
     | number
@@ -185,47 +184,33 @@ export const resolveMeasure = <T>(
   } else {
     return undefined; // function / number / literal: no field identity
   }
-  // Only an array can carry the provenance symbol (a transform tags the array,
-  // not each row), so skip the lookup for a single datum.
-  const provenance = Array.isArray(provenanceData)
-    ? getMeasureProvenance(provenanceData)?.[fieldName]
-    : undefined;
-  if (
-    annotation !== undefined &&
-    provenance !== undefined &&
-    annotation !== provenance
-  ) {
+  const unit = columnType(data, fieldName)?.HasUnit?.unit;
+  if (annotation !== undefined && unit !== undefined && annotation !== unit) {
     throw new Error(
       `Measure conflict on field "${fieldName}": annotated as "${annotation}" ` +
-        `via field(name, measure) but its provenance (e.g. bin()) says ` +
-        `"${provenance}". These are contradictory type claims — drop the ` +
+        `via field(name, measure) but its column's unit (e.g. from bin()) is ` +
+        `"${unit}". These are contradictory type claims — drop the ` +
         `annotation or fix the upstream transform.`
     );
   }
   if (annotation !== undefined) return annotation;
-  return provenance ?? fieldName;
+  return unit ?? fieldName;
 };
 
 /** What a channel's column says about its values: its {@link Measure} and
  *  its type in the chart's schema (schema.ts). */
 export type ColumnInfo = { measure?: Measure; type?: ColumnType };
 
-/** The {@link ColumnInfo} of `accessor`'s column, read off
- *  `provenanceData` (see {@link resolveMeasure}). An accessor that names no
- *  column (a function, a literal, a value) has neither. */
-export const resolveColumn = (
-  provenanceData: unknown,
-  accessor: unknown
-): ColumnInfo => {
+/** The {@link ColumnInfo} of `accessor`'s column, read off `data` (see
+ *  {@link resolveMeasure}). An accessor that names no column (a function, a
+ *  literal, a value) has neither. */
+export const resolveColumn = (data: unknown, accessor: unknown): ColumnInfo => {
   const field = fieldNameOf(accessor);
   return field === undefined
     ? {}
     : {
-        measure: resolveMeasure(
-          provenanceData,
-          accessor as string | FieldAccessor
-        ),
-        type: columnType(provenanceData, field),
+        measure: resolveMeasure(data, accessor as string | FieldAccessor),
+        type: columnType(data, field),
       };
 };
 
@@ -270,8 +255,8 @@ export const inferEntrySize = <T>(
  * the chart's schema, when it has one, so a position over a time column
  * (`HasCalendar`) builds a time space. A value with a column type also
  * records the field it was read from. The caller may pass the column
- * (createOperator resolves it once per channel from the provenance-bearing
- * array); when omitted it is resolved locally from `d`.
+ * (createOperator resolves it once per channel from the array carrying the
+ * column types); when omitted it is resolved locally from `d`.
  */
 const inferNumeric =
   (agg: typeof sumBy) =>
@@ -511,8 +496,8 @@ export function resolveChannelAccessors<O extends Record<string, any>>(
  * (`applyChannels` in marks/createOperator.ts).
  *
  * `measure` is the channel's resolved {@link Measure}, computed once per
- * channel from the whole input array (which carries the measure-provenance
- * symbol even when `data` is a per-entry slice that does not) and passed down
+ * channel from the whole input array (which carries the column types even
+ * when `data` is a per-entry slice that does not) and passed down
  * so `inferSize`/`inferPos` don't recompute it per split entry. Only they
  * consume it.
  */

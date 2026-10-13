@@ -13,67 +13,6 @@ export type Measure = string;
 
 export const measure = (unit: string): Measure => unit;
 
-/**
- * Well-known symbol used to tag a data ARRAY with the *measure provenance* of
- * its columns — a map from field name to the {@link Measure} that produced it.
- * This is how a data-transform like `bin()` declares that its output `start`/
- * `end`/`size` columns are still expressed in the *source* field's units (e.g.
- * "Beak Length (mm)") rather than the literal field-name "start". The symbol
- * rides the array (not each row) so it survives `derive(...)`, which passes the
- * transformed array straight through to the next operator.
- *
- * Channel inference (`resolveMeasure` in channels.ts) reads this as one of the
- * three measure sources; see issue #266 for the field/datum/literal trichotomy.
- */
-export const MEASURE_PROVENANCE: unique symbol = Symbol.for(
-  "gofish.measureProvenance"
-);
-export type MeasureProvenance = Record<string, Measure>;
-
-/** Read the measure-provenance map a data array carries, if any. */
-export const getMeasureProvenance = (
-  data: unknown
-): MeasureProvenance | undefined =>
-  data != null
-    ? ((data as any)[MEASURE_PROVENANCE] as MeasureProvenance | undefined)
-    : undefined;
-
-/**
- * Tag a data array with a measure-provenance map under {@link MEASURE_PROVENANCE}.
- * Owns the non-enumerable encoding so the symbol rides the array (not each row,
- * not an enumerable own-key that would leak into `{...d}` spreads) and survives
- * `derive(...)`. Used by transforms like `bin()`.
- */
-export const setMeasureProvenance = <T>(
-  data: T,
-  provenance: MeasureProvenance
-): T => {
-  Object.defineProperty(data, MEASURE_PROVENANCE, {
-    value: provenance,
-    enumerable: false,
-    configurable: true,
-    writable: true,
-  });
-  return data;
-};
-
-/**
- * Copy the measure-provenance map from `source` onto `target` (both arrays), if
- * `source` carries one. A split leaf is a FRESH sub-array (groupBy/filter/slice)
- * that doesn't inherit the operator input's symbol, so without this a MARK
- * channel bound to a transform-output field (e.g. `bin()`'s `start`/`end`/`size`)
- * sees no provenance and falls back to the literal field name — making a
- * legitimate overlay against the source-field axis a false measure conflict.
- * Re-tagging each leaf with its parent's provenance lets `inferSize`/`inferPos`
- * read the source measure off their own `data` argument, so marks and operators
- * share one mechanism. See {@link resolveMeasure} and #534.
- */
-export const copyMeasureProvenance = <T>(target: T, source: unknown): T => {
-  const provenance = getMeasureProvenance(source);
-  if (provenance !== undefined) setMeasureProvenance(target, provenance);
-  return target;
-};
-
 export type Value<T> = T | DatumValue | DatumValueImpl;
 export type MaybeValue<T> = T | Value<T>;
 
@@ -244,8 +183,9 @@ export type FieldAccessor = {
  * about the channel's underlying space (see {@link Measure}). It is one of the
  * three measure sources `resolveMeasure` (channels.ts) checks: a bare string
  * accessor's field-name is only a *weak default*, whereas this annotation (and
- * `bin()`'s {@link MEASURE_PROVENANCE}) is a hard claim that triggers a type
- * error if it contradicts inferred provenance.
+ * the unit a column's type carries, `HasUnit` in schema.ts, which `bin()`
+ * writes) is a hard claim that triggers a type error if it contradicts the
+ * column's unit.
  */
 export const field = (name: string, measure?: Measure): FieldExpr =>
   new FieldExpr(name, measure);

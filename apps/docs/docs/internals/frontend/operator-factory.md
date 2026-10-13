@@ -138,15 +138,14 @@ Walking `createOperator.ts:391-415`:
    `Map<key, subdata>`. (Some operators also return `layoutOpts`, opts the
    split computed that get merged into the layout opts: `table`'s row/column
    labels, or a `stack`'s `origin` when its `by` column has `HasMidpoint`.) Each
-   array leaf is then re-tagged with `d`'s measure provenance
-   (`copyMeasureProvenance`): a leaf is a fresh sub-array that wouldn't
-   otherwise inherit the `MEASURE_PROVENANCE` symbol, so without this a _mark_
-   channel applied per leaf would lose a transform's measure (e.g. a bin's
-   `start`/`end`/`size`) and fall back to the literal field name — see
-   [underlying space](/internals/core/underlying-space) and #534. The chart's
-   column types ride along the same way (`copyColumnTypes`, see [Column
-   types](/internals/core/underlying-space#column-types-the-chart-schema)), so
-   a nested split or a color channel still sees an ordered column.
+   array leaf is then re-tagged with `d`'s column types (`copyColumnTypes`,
+   see [Column
+   types](/internals/core/underlying-space#column-types-the-chart-schema)): a
+   leaf is a fresh sub-array that wouldn't otherwise inherit them, so without
+   this a _mark_ channel applied per leaf would lose a transform's unit (e.g.
+   a bin's `start`/`end`/`size`, `HasUnit`) and fall back to the literal
+   field name — see [underlying space](/internals/core/underlying-space) and
+   #534 — and a nested split or a color channel would lose an ordered column.
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream

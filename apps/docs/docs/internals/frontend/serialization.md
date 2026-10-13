@@ -777,7 +777,8 @@ Only an `OPERATOR_BUILDERS` entry sees the bridge.
 
 Five operators keep a hand-written builder in `OPERATOR_BUILDERS`, because
 their IR is not their factory's options object: `derive` (it calls a Python
-lambda through the bridge and puts back the rows' measure provenance),
+lambda through the bridge and types the returned rows with its `schema`,
+which also carries the units a Python `bin` declares),
 `resolve` (the IR names a layer, the factory takes a selection), `join` and
 `log` (their factories take positional arguments), and `filter` (the IR
 describes a field predicate, the factory takes the predicate function, which

@@ -1,5 +1,5 @@
 import { bin as d3bin } from "d3-array";
-import { setMeasureProvenance, type MeasureProvenance } from "./data";
+import { setColumnTypes } from "./schema";
 
 type BinResult = { start: number; end: number; size: number; count: number };
 
@@ -35,18 +35,18 @@ function runBin<T extends Record<string, any>>(
     size: b.end - b.start,
     count: b.rows.length,
   }));
-  // Provenance: `start`/`end`/`size` are still in the SOURCE field's units
-  // (e.g. "Beak Length (mm)"), not the literal column-name "start"; `count` is
-  // a count. This rides the array (not each row) so it survives `derive(...)`,
-  // letting channel inference unify a histogram's edges with the raw field's
-  // axis instead of seeing a false measure conflict (see resolveMeasure).
-  const provenance: MeasureProvenance = {
-    start: field,
-    end: field,
-    size: field,
-    count: "count",
-  };
-  return setMeasureProvenance(result, provenance);
+  // Units (`HasUnit`): `start`/`end`/`size` are still in the SOURCE field's
+  // units (e.g. "Beak Length (mm)"), not the literal column-name "start";
+  // `count` is a count. The column types ride the array (not each row) so
+  // they survive `derive(...)`, letting channel inference unify a histogram's
+  // edges with the raw field's axis instead of seeing a false measure
+  // conflict (see resolveMeasure).
+  return setColumnTypes(result, {
+    start: { HasUnit: { unit: field } },
+    end: { HasUnit: { unit: field } },
+    size: { HasUnit: { unit: field } },
+    count: { HasUnit: { unit: "count" } },
+  });
 }
 
 export function bin<T extends Record<string, any>>(
