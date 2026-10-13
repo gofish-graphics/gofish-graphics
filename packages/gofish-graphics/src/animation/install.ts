@@ -89,7 +89,7 @@ export function installBuildIn(
   options: BuildClockOptions = {}
 ): (() => void) | undefined {
   // PROTOTYPE (animation grammar): the `.relate()` timelines play on clocks
-  // the same render options hold. DECLARED SHORTCUT: each is a clock of its
+  // the same render options hold. PROTOTYPE SHORTCUT: each is a clock of its
   // own beside the build-in's; one chart clock for both is open.
   const stopTimelines = installTimelines(root, options);
   const stopBuild = installBuild(root, options);

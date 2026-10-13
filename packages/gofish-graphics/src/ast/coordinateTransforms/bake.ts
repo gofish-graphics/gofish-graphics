@@ -37,7 +37,7 @@ const bakeTranslate = (node: GoFishAST): [number, number] => [
  * so the bake must treat them as leaves — flattening through one would drop
  * its own geometry and re-emit the marks it is derived from.
  */
-const RELATIONAL_TYPES = new Set(["connect", "tween"]);
+const RELATIONAL_TYPES = new Set(["connect", "tween", "relationTween"]);
 const isRelational = (node: GoFishAST): boolean =>
   RELATIONAL_TYPES.has((node as { type?: string }).type ?? "");
 

@@ -18,6 +18,10 @@
  * `A#1`. This is Figma Smart Animate's and Motion's `layoutId` rule (match by
  * name), with a chart's data key standing in for a name it never had to write.
  *
+ * PROTOTYPE SHORTCUT: identities are read off the resolved tree, so chrome a
+ * later pass adds (axes, legends) has none: it stays with its keyframe and
+ * switches at the keyframe's band edge instead of moving.
+ *
  * Names the library generates for itself (`__spread#31`) are not names a
  * person wrote, so they are not identities.
  */

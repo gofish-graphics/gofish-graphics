@@ -749,6 +749,8 @@ function sequenceOver(
     (frame as any).datum = d;
     return frame;
   };
+  // PROTOTYPE SHORTCUT: `.transition` is set on this one mark, so it must
+  // come before `.name()` / `.zOrder()` (which re-decorate without it).
   const mark = attachModifiers(base, [nameModifier, zOrderModifier]) as any;
   mark.transition = (spec: { update?: TweenEffect }) =>
     sequenceOver(opts, children, spec.update);

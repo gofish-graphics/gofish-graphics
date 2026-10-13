@@ -64,6 +64,9 @@ function runsOf(maps: Map<string, GoFishNode>[]): Map<string, Entry[]> {
 
 /** The node an arrow's operand ref points at, found by name inside the
  *  keyframe (a relate operand is a name). */
+// PROTOTYPE SHORTCUT: before layout a relate operand is a string ref, so it
+// is found by name (the first node with that name in the keyframe) rather
+// than by the ref's own scoped lookup.
 function operandOf(ref: GoFishRef, ids: Identities): GoFishNode | undefined {
   if (ref.targetNode !== undefined) return ref.targetNode;
   const name = ref.selection;
@@ -113,6 +116,10 @@ export async function morph(
   }
 
   // Arrows, by the identities of what they join.
+  // PROTOTYPE SHORTCUT: only `arrow` is drawn again from moving operands.
+  // Other relational marks (line, background/enclose, connect) stay with
+  // their keyframe and switch at its band edge; the general fix is one
+  // "relational mark over moving operands" rule for every relational node.
   const arrowMaps = ids.map((i) => {
     const map = new Map<string, GoFishNode>();
     for (const node of i.relational) {
@@ -145,6 +152,8 @@ export async function morph(
         sequence,
         method: o.method,
         ease: o.ease,
+        // PROTOTYPE SHORTCUT: the first keyframe's arrow options for the
+        // whole run, so a stroke that changes between states does not mix.
         props: arrowPropsOf(run[0].node)!,
         from: operand(pf),
         to: operand(pt),

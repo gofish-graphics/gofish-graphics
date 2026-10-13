@@ -6,8 +6,8 @@
  * Each example has a live story and a FILMSTRIP story: the same example held
  * still at several playheads. A sequence holds through its own options
  * (`playing: false, at` in child-index units); a `.relate()` timeline through
- * the render options (`at` in ms). `Frame` renders one example at one
- * playhead from story args, for recording GIFs.
+ * the render options (`at` in ms). The `gif frames` stories hold one loop at
+ * up to 60 playheads in a grid, which the GIF recorder cuts into frames.
  *
  * Not gallery-tagged: a prototype for review, not a docs example.
  */
@@ -28,6 +28,9 @@ type Example = {
   unit: "step" | "ms";
   /** One loop, for the GIF recorder: [start, end] in `unit`. */
   loop: [number, number];
+  /** One loop in wall-clock ms, and the size of a GIF frame. */
+  loopMs: number;
+  cell: [number, number];
 };
 
 export const EXAMPLES: Record<string, Example> = {
@@ -37,6 +40,8 @@ export const EXAMPLES: Record<string, Example> = {
     frames: [0, 0.2, 0.4, 0.6, 0.8, 1, 1.5],
     unit: "step",
     loop: [0, 2],
+    loopMs: 4000,
+    cell: [620, 340],
   },
   e1b: {
     title: "E1b · stacked ↔ grouped, layer + relate",
@@ -44,6 +49,8 @@ export const EXAMPLES: Record<string, Example> = {
     frames: [0, 800, 1000, 1200, 1500, 1800, 2600, 3200],
     unit: "ms",
     loop: [0, 3600],
+    loopMs: 3600,
+    cell: [620, 340],
   },
   e1c: {
     title: "E1c · staggered by lake",
@@ -51,6 +58,8 @@ export const EXAMPLES: Record<string, Example> = {
     frames: [0, 0.2, 0.4, 0.6, 0.8, 1],
     unit: "step",
     loop: [0, 2],
+    loopMs: 4000,
+    cell: [620, 340],
   },
   e1d: {
     title: "E1d · two-stage (x, then y)",
@@ -58,6 +67,17 @@ export const EXAMPLES: Record<string, Example> = {
     frames: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5],
     unit: "step",
     loop: [0, 4],
+    loopMs: 6000,
+    cell: [620, 340],
+  },
+  e2: {
+    title: "E2 · linked-list insertion (magic move)",
+    file: "e2-linked-list",
+    frames: [0, 0.3, 0.6, 1, 1.3, 1.6, 2, 2.5],
+    unit: "step",
+    loop: [0, 3],
+    loopMs: 6000,
+    cell: [540, 130],
   },
 };
 
@@ -122,18 +142,45 @@ export const E1cLive = live("e1c");
 export const E1cFilmstrip = filmstrip("e1c");
 export const E1dLive = live("e1d");
 export const E1dFilmstrip = filmstrip("e1d");
+export const E2Live = live("e2");
+export const E2Filmstrip = filmstrip("e2");
 
-/** One example held at one playhead, from story args (the GIF recorder sets
- *  them through the iframe URL: `&args=example:e1a;at:0.5`). */
-export const Frame: StoryObj<{ example: string; at: number }> = {
-  args: { example: "e1a", at: 0 },
-  render: ({ example, at }) => {
+/** GIF frames: one loop of the example at up to 60 evenly spaced playheads,
+ *  each in a fixed-size cell of a 2-wide grid (the capture viewport is 1264 px), for the recorder to cut. */
+export const GIF_COLUMNS = 2;
+export const gifFrameCount = (example: Example) =>
+  Math.min(60, Math.round(example.loopMs / 50));
+const gifFrames = (key: string): StoryObj => ({
+  name: `${EXAMPLES[key].title} · gif frames`,
+  render: () => {
+    const example = EXAMPLES[key];
+    const [w, h] = example.cell;
+    const n = gifFrameCount(example);
     const page = initializeContainer();
-    const box = document.createElement("div");
-    box.id = "frame";
-    Object.assign(box.style, { display: "inline-block", background: "white" });
-    page.appendChild(box);
-    run(box, EXAMPLES[example], held(EXAMPLES[example], Number(at)));
+    Object.assign(page.style, {
+      display: "grid",
+      gridTemplateColumns: `repeat(${GIF_COLUMNS}, ${w}px)`,
+      gridAutoRows: `${h}px`,
+      gap: "0",
+      padding: "0",
+      margin: "0",
+      background: "white",
+      width: `${GIF_COLUMNS * w}px`,
+      maxWidth: "none",
+    });
+    const [a, b] = example.loop;
+    for (let i = 0; i < n; i++) {
+      const cell = document.createElement("div");
+      Object.assign(cell.style, { overflow: "hidden", background: "white" });
+      page.appendChild(cell);
+      run(cell, example, held(example, a + ((b - a) * i) / n));
+    }
     return page;
   },
-};
+});
+
+export const E1aGifFrames = gifFrames("e1a");
+export const E1bGifFrames = gifFrames("e1b");
+export const E1cGifFrames = gifFrames("e1c");
+export const E1dGifFrames = gifFrames("e1d");
+export const E2GifFrames = gifFrames("e2");

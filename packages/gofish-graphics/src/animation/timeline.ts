@@ -163,6 +163,9 @@ export async function installTimeline(
   layer: GoFishNode,
   clauses: TemporalClause[]
 ): Promise<GoFishNode[]> {
+  // PROTOTYPE SHORTCUT: an operand is the first node with its name under the
+  // layer; a child that is itself a timed container (a sequence) keeps its
+  // own clock and has zero length here, so time containers do not nest yet.
   const nodeOf = (o: RelateOperand) => nodeNamed(layer, o.name);
   const start = new Map<GoFishNode, number>();
   const s = (n: GoFishNode) => start.get(n) ?? 0;
@@ -178,6 +181,8 @@ export async function installTimeline(
       start.set(nodeOf(c.b), 0);
     }
   }
+  // PROTOTYPE SHORTCUT: "at least" constraints by longest path, not the
+  // equalities the spatial difference-graph solver solves (see the header).
   // Longest path (see the header): raise each start to what the clauses ask,
   // until nothing moves. A static child has zero length, so its end is its
   // start.
