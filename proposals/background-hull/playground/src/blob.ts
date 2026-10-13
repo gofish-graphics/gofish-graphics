@@ -385,11 +385,12 @@ const contours = (
   res: number
 ): Pt[][] => {
   const at = (i: number, j: number) => F[j * W + i];
-  const pt = (e: string): Pt => {
-    const [kind, si, sj] = e.split(":"),
-      i = +si,
-      j = +sj;
-    if (kind === "h") {
+  // an edge is a number: 2 (j W + i) for the horizontal edge from (i, j), plus 1 for the vertical one
+  const pt = (e: number): Pt => {
+    const c = e >> 1,
+      i = c % W,
+      j = (c - i) / W;
+    if (!(e & 1)) {
       const a = at(i, j),
         b = at(i + 1, j),
         t = a / (a - b);
@@ -422,7 +423,8 @@ const contours = (
     13: [[2, 1]],
     14: [[3, 2]],
   };
-  const next = new Map<string, string>();
+  const next = new Int32Array(2 * W * H).fill(-1),
+    order: number[] = [];
   for (let j = 0; j < H - 1; j++)
     for (let i = 0; i < W - 1; i++) {
       const tl = at(i, j) >= 0 ? 1 : 0,
@@ -431,24 +433,23 @@ const contours = (
         bl = at(i, j + 1) >= 0 ? 1 : 0;
       const c = tl * 8 + tr * 4 + br * 2 + bl;
       if (c === 0 || c === 15) continue;
-      const E = [
-        `h:${i}:${j}`,
-        `v:${i + 1}:${j}`,
-        `h:${i}:${j + 1}`,
-        `v:${i}:${j}`,
-      ]; // top, right, bottom, left
-      for (const [a, b] of SEGS[c]) next.set(E[a], E[b]);
+      const k = j * W + i,
+        E = [2 * k, 2 * (k + 1) + 1, 2 * (k + W), 2 * k + 1]; // top, right, bottom, left
+      for (const [a, b] of SEGS[c]) {
+        if (next[E[a]] < 0) order.push(E[a]);
+        next[E[a]] = E[b];
+      }
     }
   const loops: Pt[][] = [],
-    seen = new Set<string>();
-  for (const s0 of next.keys()) {
-    if (seen.has(s0)) continue;
+    seen = new Uint8Array(2 * W * H);
+  for (const s0 of order) {
+    if (seen[s0]) continue;
     const loop: Pt[] = [];
-    let cur: string | undefined = s0;
-    while (cur !== undefined && !seen.has(cur)) {
-      seen.add(cur);
+    let cur = s0;
+    while (cur >= 0 && !seen[cur]) {
+      seen[cur] = 1;
       loop.push(pt(cur));
-      cur = next.get(cur);
+      cur = next[cur];
     }
     if (loop.length > 8) loops.push(loop);
   }
@@ -582,8 +583,12 @@ const tubeComp = remember((h: number, s: number) =>
     : bisect((a) => Phi((a - h) / s) - Phi((-a - h) / s) - 0.5, h, h + 4 * s)
 );
 
+/** The rounded field: B, the blurred indicator I of the region before any cut, times the avoided
+ *  zones' soft cut (when there are any; `cut` gives its value and derivatives). The outline is
+ *  the level 1/2 of B * cut. */
 type Field = {
   I: Float64Array;
+  cut?: (x: number, y: number) => number[];
   W: number;
   H: number;
   x0: number;
@@ -611,9 +616,14 @@ const rowSpans = (I: Float64Array, W: number, H: number) => {
   }
   return sp;
 };
-/** The blurred field and its derivatives at (x, y): [B, Bx, By, Bxx, Bxy, Byy]. */
-const fieldJet = (fd: Field, x: number, y: number): number[] => {
-  const { I, W, H, x0, y0, res, sigma: s, z } = fd;
+/** One blurred grid and its derivatives at (x, y): [B, Bx, By, Bxx, Bxy, Byy]. */
+const blurJet = (
+  I: Float64Array,
+  fd: Field,
+  x: number,
+  y: number
+): number[] => {
+  const { W, H, x0, y0, res, sigma: s, z } = fd;
   const rad = Math.ceil((5 * s) / res),
     fx = (x - x0) / res,
     fy = (y - y0) / res;
@@ -621,6 +631,7 @@ const fieldJet = (fd: Field, x: number, y: number): number[] => {
     i1 = Math.min(W - 1, Math.ceil(fx) + rad);
   const j0 = Math.max(0, Math.floor(fy) - rad),
     j1 = Math.min(H - 1, Math.ceil(fy) + rad);
+  if (i1 < i0 || j1 < j0) return [0, 0, 0, 0, 0, 0]; // off the grid: no field, no gradient
   const s2 = s * s,
     nx = i1 - i0 + 1,
     span = rowSpans(I, W, H);
@@ -672,6 +683,21 @@ const fieldJet = (fd: Field, x: number, y: number): number[] => {
   const zz = z * z;
   return [B / zz, Bx / zz, By / zz, Bxx / zz, Bxy / zz, Byy / zz];
 };
+/** The outline's field B * cut and its derivatives at (x, y) (the product rule). */
+const fieldJet = (fd: Field, x: number, y: number): number[] => {
+  const b = blurJet(fd.I, fd, x, y);
+  if (!fd.cut) return b;
+  const [B, Bx, By, Bxx, Bxy, Byy] = b,
+    [u, ux, uy, uxx, uxy, uyy] = fd.cut(x, y);
+  return [
+    B * u,
+    Bx * u + B * ux,
+    By * u + B * uy,
+    Bxx * u + 2 * Bx * ux + B * uxx,
+    Bxy * u + Bx * uy + By * ux + B * uxy,
+    Byy * u + 2 * By * uy + B * uyy,
+  ];
+};
 /** Curvature of the level line through (x, y), positive where the region is convex. */
 const levelCurvature = (j: number[]) => {
   const [, Bx, By, Bxx, Bxy, Byy] = j;
@@ -707,6 +733,9 @@ const project = (fd: Field, p: Pt, level = 0.5): Pt => {
       g2 = Bx * Bx + By * By;
     if (g2 < 1e-14) break;
     const step = (B - level) / g2;
+    // a traced point starts within a cell of the level line, so a long step means the field is
+    // nearly flat here (deep inside a cut zone): keep the point rather than jump away
+    if (Math.abs(step) * Math.sqrt(g2) > Math.max(2, fd.sigma)) break;
     x -= step * Bx;
     y -= step * By;
     if (Math.abs(step) * Math.sqrt(g2) < 1e-4) break;
@@ -922,22 +951,9 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
     faceEdges = new Set<string>();
   for (const [i, j, l] of tri) {
     const q = [P[i], P[j], P[l]];
+    // A face is filled whatever it holds: an avoided node inside it becomes a hole, cut
+    // later as exactly its clearance zone (step 2). Only links route around avoided nodes.
     if (circumR(q[0], q[1], q[2]) > alpha) continue;
-    const tb = bboxOf(q);
-    if (
-      others.some((mm) => {
-        const c = centerOf(mm),
-          r = keep(mm) + 1e-6; // (an avoided node beyond the box's reach is skipped)
-        return (
-          c[0] > tb[0] - r &&
-          c[0] < tb[2] + r &&
-          c[1] > tb[1] - r &&
-          c[1] < tb[3] + r &&
-          triDist(c, q) < keep(mm)
-        );
-      })
-    )
-      continue;
     faces.push(q);
     [ek(i, j), ek(j, l), ek(l, i)].forEach((e) => faceEdges.add(e));
   }
@@ -977,15 +993,17 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
   for (const [key, [i, j]] of cand) {
     if (faceEdges.has(key)) {
       links.push({ route: [P[i], P[j]], h: Math.min(R[i], R[j]) });
-      for (const a of owner[i])
-        for (const b of owner[j])
-          if (a !== b && !routed.has(mk(a, b)))
-            routed.set(mk(a, b), {
-              a,
-              b,
-              route: [P[i], P[j]],
-              len: dist(P[i], P[j]),
-            });
+      // the edge carries the spanning tree only when no hole will be cut across it
+      if (clearOf(P[i], P[j], obstaclesFor(P[i], P[j], hw(i, j))))
+        for (const a of owner[i])
+          for (const b of owner[j])
+            if (a !== b && !routed.has(mk(a, b)))
+              routed.set(mk(a, b), {
+                a,
+                b,
+                route: [P[i], P[j]],
+                len: dist(P[i], P[j]),
+              });
       continue;
     }
     // a short candidate joins as drawn when nothing blocks it (it is never rerouted)
@@ -1078,81 +1096,95 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
 };
 
 type SmoothOpts = SkelOpts & {
-  smoothing?: number;
+  roundness?: number;
   res?: number;
   compensate?: boolean;
 };
-type Smooth = { loops: Pt[][]; field: Field | null; skel: Skeleton };
-/** Steps 2-4: union, closing, cut, Gaussian smoothing, exact tracing. */
+type Smooth = { loops: Pt[][]; field: Field; skel: Skeleton; sigma: number };
+/** Steps 2-4: union, cut, Gaussian rounding (which never changes the topology), exact tracing. */
 const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
   const sk = skeleton(members, o);
   const pad = o.pad,
-    s = o.smoothing ?? pad,
     clearance = o.clearance ?? 4,
     others = o.avoiding ?? [];
-  // The blur may not be wider than the thinnest piece (a member's radius, a tube's
-  // half-width, an avoided node's keep-out radius), or it would erase that piece.
-  const thinnest = Math.min(
-    ...sk.R,
-    ...sk.links.map((e) => e.h),
-    ...others.map((m) => memberRadius(m) + clearance)
-  );
-  const sigma = Math.min(s, thinnest) / 2;
+  // `roundness` is the blur's reach: a Gaussian of width sigma = roundness / 2. It is at most the
+  // thinnest piece (a member's grown radius, a tube's half-width): each piece is drawn slightly
+  // larger so that, alone, it ends exactly where it should after the blur, and that holds where
+  // pieces meet only while the blur is narrower than they are. A member's own arc already has
+  // radius R, so rounding further would cost padding.
+  const thinnest = Math.min(...sk.R, ...sk.links.map((e) => e.h));
+  const asked = Math.max(0, Math.min(o.roundness ?? pad, thinnest)) / 2;
   const comp = o.compensate ?? true;
-  const res =
-    o.res ?? (sigma > 0 ? Math.min(0.5, Math.max(0.25, sigma / 4)) : 0.5);
-  type Piece = { bb: number[]; d: (x: number, y: number) => number };
+  // one grid cell for every roundness, so the reference below (a blur one cell wide) is the same
+  const res = o.res ?? 0.5;
+  // roundness 0 is a blur of one grid cell: the sharp region at the drawing's own resolution
+  const want = Math.max(asked, res);
+  // The pieces: each member grown by `pad`, each link a tube, each filled face. For a blur of
+  // width sigma a piece is drawn slightly larger, so that alone it ends exactly where it should
+  // (discComp, tubeComp). How much larger depends only on its kind and size, so the pieces are
+  // grouped by those: a group's field is built once, and each blur width adds one offset to it.
+  type Piece = {
+    bb: number[];
+    d: (x: number, y: number) => number;
+    group: string;
+  };
+  const grow = new Map<string, (sigma: number) => number>();
+  const disc = (R: number) => {
+    const g = `disc ${R}`;
+    if (!grow.has(g)) grow.set(g, (s) => (comp ? discComp(R, s) - R : 0));
+    return g;
+  };
+  const tube = (h: number) => {
+    const g = `tube ${h}`;
+    if (!grow.has(g)) grow.set(g, (s) => (comp ? tubeComp(h, s) - h : 0));
+    return g;
+  };
+  grow.set("face", () => 0);
+  const segD = (a: Pt, b: Pt, x: number, y: number) =>
+    Math.sqrt(segDist2([a, b], x, y));
+  const segBox = (a: Pt, b: Pt, h: number) => [
+    Math.min(a[0], b[0]) - h,
+    Math.min(a[1], b[1]) - h,
+    Math.max(a[0], b[0]) + h,
+    Math.max(a[1], b[1]) + h,
+  ];
   const pieces: Piece[] = [];
   members.forEach((m, k) => {
-    const Rk = comp ? discComp(sk.R[k], sigma) : sk.R[k];
+    const R = sk.R[k];
     if (m.kind === "circle")
       pieces.push({
-        bb: [m.cx - Rk, m.cy - Rk, m.cx + Rk, m.cy + Rk],
-        d: (x, y) => Math.hypot(x - m.cx, y - m.cy) - Rk,
+        bb: [m.cx - R, m.cy - R, m.cx + R, m.cy + R],
+        d: (x, y) => Math.hypot(x - m.cx, y - m.cy) - R,
+        group: disc(R),
       });
-    else if (m.kind === "segment") {
-      // a segment member: its whole length grown by `pad` (a tube of half-width w/2 + pad)
-      const h = comp ? tubeComp(sk.R[k], sigma) : sk.R[k],
-        { a, b } = m;
+    // a segment member: its whole length grown by `pad` (a tube of half-width w/2 + pad)
+    else if (m.kind === "segment")
       pieces.push({
-        bb: [
-          Math.min(a[0], b[0]) - h,
-          Math.min(a[1], b[1]) - h,
-          Math.max(a[0], b[0]) + h,
-          Math.max(a[1], b[1]) + h,
-        ],
-        d: (x, y) => Math.sqrt(segDist2([a, b], x, y)) - h,
+        bb: segBox(m.a, m.b, R),
+        d: (x, y) => segD(m.a, m.b, x, y) - R,
+        group: tube(R),
       });
-    } else {
-      const pk = comp ? tubeComp(pad, sigma) : pad;
+    else
       pieces.push({
-        bb: [m.x - pk, m.y - pk, m.x + m.w + pk, m.y + m.h + pk],
+        bb: [m.x - pad, m.y - pad, m.x + m.w + pad, m.y + m.h + pad],
         d: (x, y) =>
           Math.hypot(
             Math.max(m.x - x, 0, x - m.x - m.w),
             Math.max(m.y - y, 0, y - m.y - m.h)
-          ) - pk,
+          ) - pad,
+        group: tube(pad),
       });
-    }
   });
-  const segD = (a: Pt, b: Pt, x: number, y: number) =>
-    Math.sqrt(segDist2([a, b], x, y));
-  for (const e of sk.links) {
-    const h = comp ? tubeComp(e.h, sigma) : e.h;
+  for (const e of sk.links)
     for (let k = 1; k < e.route.length; k++) {
       const a = e.route[k - 1],
         b = e.route[k];
       pieces.push({
-        bb: [
-          Math.min(a[0], b[0]) - h,
-          Math.min(a[1], b[1]) - h,
-          Math.max(a[0], b[0]) + h,
-          Math.max(a[1], b[1]) + h,
-        ],
-        d: (x, y) => segD(a, b, x, y) - h,
+        bb: segBox(a, b, e.h),
+        d: (x, y) => segD(a, b, x, y) - e.h,
+        group: tube(e.h),
       });
     }
-  }
   for (const q of sk.faces)
     pieces.push({
       bb: bboxOf(q),
@@ -1166,7 +1198,9 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
             )
           : e;
       },
+      group: "face",
     });
+  const most = Math.max(0, ...[...grow.values()].map((g) => g(want)));
   const bb = pieces.reduce(
     (r, p) => [
       Math.min(r[0], p.bb[0]),
@@ -1176,99 +1210,279 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
     ],
     [Infinity, Infinity, -Infinity, -Infinity]
   );
-  const M = s + 5 * sigma + 6,
-    x0 = bb[0] - M,
-    y0 = bb[1] - M;
+  // the grid's cells sit on multiples of res, whatever the margin, so every roundness samples the
+  // region at the same points (and the reference blur below is the same for all of them)
+  const M = 5 * want + most + 6,
+    x0 = Math.floor((bb[0] - M) / res) * res,
+    y0 = Math.floor((bb[1] - M) / res) * res;
   const W = Math.ceil((bb[2] - bb[0] + 2 * M) / res) + 1,
     H = Math.ceil((bb[3] - bb[1] + 2 * M) / res) + 1;
-  // Once a cell is "settled", how far inside it is is never read, so the remaining pieces skip it.
-  // With a closing (s > 0) that is any cell within s of the union: the closing replaces its value.
-  // Without one, it is a cell more than two cells deep. Every piece's value changes by at most one
-  // cell per cell, so the outline can pass beside such a cell only where a keep-out zone cuts in,
-  // and there the cut's value replaces it.
-  const settled = s > 0 ? s : -2 * res;
-  const f = new Float64Array(W * H).fill(1e9);
+  // Each group's distance field (the least distance to its pieces' edges, negative inside). A cell
+  // more than two cells deep in any group is "settled": every offset is at least 0, so its
+  // indicator is 1 however deep it is, and all remaining pieces skip it (a piece's value changes
+  // by at most one cell per cell).
+  const fields = new Map<string, Float32Array>(),
+    deep = new Uint8Array(W * H);
   for (const p of pieces) {
-    const i0 = Math.max(0, Math.floor((p.bb[0] - s - 3 - x0) / res)),
-      i1 = Math.min(W - 1, Math.ceil((p.bb[2] + s + 3 - x0) / res));
-    const j0 = Math.max(0, Math.floor((p.bb[1] - s - 3 - y0) / res)),
-      j1 = Math.min(H - 1, Math.ceil((p.bb[3] + s + 3 - y0) / res));
+    let f = fields.get(p.group);
+    if (!f) fields.set(p.group, (f = new Float32Array(W * H).fill(1e9)));
+    const r = most + 3;
+    const i0 = Math.max(0, Math.floor((p.bb[0] - r - x0) / res)),
+      i1 = Math.min(W - 1, Math.ceil((p.bb[2] + r - x0) / res));
+    const j0 = Math.max(0, Math.floor((p.bb[1] - r - y0) / res)),
+      j1 = Math.min(H - 1, Math.ceil((p.bb[3] + r - y0) / res));
     for (let j = j0; j <= j1; j++)
       for (let i = i0; i <= i1; i++) {
         const k = j * W + i;
-        if (f[k] <= settled) continue;
+        if (deep[k]) continue;
         const v = p.d(x0 + i * res, y0 + j * res);
-        if (v < f[k]) f[k] = v;
+        if (v < f[k]) {
+          f[k] = v;
+          if (v <= -2 * res) deep[k] = 1;
+        }
       }
   }
-  // closing by s (exact distance transform), F > 0 inside
-  const F = new Float64Array(W * H);
-  if (s > 0) {
-    const outside = new Uint8Array(W * H);
-    for (let k = 0; k < W * H; k++) outside[k] = f[k] > s ? 1 : 0;
-    const dOut = edtTo(outside, W, H);
-    for (let k = 0; k < W * H; k++)
-      F[k] = outside[k] ? -f[k] : dOut[k] * res - s;
-  } else for (let k = 0; k < W * H; k++) F[k] = -f[k];
-  // cut the keep-out zones
-  for (const m of others) {
-    const kr =
-      m.kind === "circle"
-        ? comp
-          ? discComp(memberRadius(m) + clearance, sigma)
-          : memberRadius(m) + clearance
-        : 0;
-    const cl =
-      m.kind === "rect" ? (comp ? tubeComp(clearance, sigma) : clearance) : 0;
-    const mb =
-      m.kind === "circle"
-        ? [m.cx - kr, m.cy - kr, m.cx + kr, m.cy + kr]
-        : [m.x - cl, m.y - cl, m.x + m.w + cl, m.y + m.h + cl];
-    const i0 = Math.max(0, Math.floor((mb[0] - x0) / res) - 2),
-      i1 = Math.min(W - 1, Math.ceil((mb[2] - x0) / res) + 2);
-    const j0 = Math.max(0, Math.floor((mb[1] - y0) / res) - 2),
-      j1 = Math.min(H - 1, Math.ceil((mb[3] - y0) / res) + 2);
-    for (let j = j0; j <= j1; j++)
-      for (let i = i0; i <= i1; i++) {
-        const x = x0 + i * res,
-          y = y0 + j * res;
-        const dk =
-          m.kind === "circle"
-            ? Math.hypot(x - m.cx, y - m.cy) - kr
-            : Math.hypot(
-                Math.max(m.x - x, 0, x - m.x - m.w),
-                Math.max(m.y - y, 0, y - m.y - m.h)
-              ) - cl;
-        const k = j * W + i;
-        if (dk < F[k]) F[k] = dk;
+  /** The region before any cut, for a blur of width sigma, as a field F > 0 inside: each group
+   *  grown by its offset for sigma, then their union. */
+  const regionFor = (sigma: number) => {
+    const F = new Float64Array(W * H).fill(-1e9);
+    for (const [g, f] of fields) {
+      const up = grow.get(g)!(sigma);
+      for (let k = 0; k < W * H; k++) {
+        const v = up - f[k];
+        if (v > F[k]) F[k] = v;
       }
-  }
-  if (sigma <= 0) {
-    const loops = contours(F, W, H, x0, y0, res).map((l) => relax(l, 3));
-    return {
-      loops: loops.filter((l) => loopArea(l) > 40 * res * res),
-      field: null,
-      skel: sk,
+    }
+    return F;
+  };
+  // The avoided nodes' keep-out zones (each node grown by `clearance`), cut out of the region: a
+  // zone inside the region is a hole, one across its edge a notch. A zone is its exact signed
+  // distance d (negative inside), never blurred, so a hole is exactly its zone at any roundness.
+  // `nearest` writes the nearest point of the node's own geometry into q and says whether that
+  // point is a corner (a center, a segment's end, a rectangle's corner), where d curves.
+  type Zone = { m: Member; c: Pt; R: number; reach: number };
+  const zones: Zone[] = others.map((m) => {
+    const R =
+      (m.kind === "circle" ? m.r : m.kind === "segment" ? m.w / 2 : 0) +
+      clearance;
+    const e =
+      m.kind === "rect"
+        ? Math.hypot(m.w, m.h) / 2
+        : m.kind === "segment"
+          ? dist(m.a, m.b) / 2
+          : 0;
+    return { m, c: centerOf(m), R, reach: e + R };
+  });
+  const q = new Float64Array(2);
+  const nearest = (z: Zone, x: number, y: number): boolean => {
+    const m = z.m;
+    if (m.kind === "circle") {
+      q[0] = m.cx;
+      q[1] = m.cy;
+      return true;
+    }
+    if (m.kind === "segment") {
+      const dx = m.b[0] - m.a[0],
+        dy = m.b[1] - m.a[1],
+        t = ((x - m.a[0]) * dx + (y - m.a[1]) * dy) / (dx * dx + dy * dy || 1);
+      const u = Math.max(0, Math.min(1, t));
+      q[0] = m.a[0] + u * dx;
+      q[1] = m.a[1] + u * dy;
+      return u !== t;
+    }
+    q[0] = Math.max(m.x, Math.min(m.x + m.w, x));
+    q[1] = Math.max(m.y, Math.min(m.y + m.h, y));
+    return q[0] !== x && q[1] !== y;
+  };
+  const zoneD = (z: Zone, x: number, y: number) => {
+    nearest(z, x, y);
+    return Math.hypot(x - q[0], y - q[1]) - z.R;
+  };
+  // Each zone's signed distance at the cells it can reach, on a grid `step` cells apart. It does
+  // not depend on the blur width, so it is computed once per grid and reused by every width.
+  const zoneCells = new Map<number, { k: Int32Array; d: Float32Array }[]>();
+  const cellsOf = (step: number) => {
+    let all = zoneCells.get(step);
+    if (all) return all;
+    const r2 = res * step,
+      W2 = Math.ceil(W / step),
+      H2 = Math.ceil(H / step),
+      reachOut = 6 * want + 2 * r2;
+    all = zones.map((z) => {
+      const r = z.reach + reachOut,
+        ks: number[] = [],
+        ds: number[] = [];
+      const i0 = Math.max(0, Math.floor((z.c[0] - r - x0) / r2)),
+        i1 = Math.min(W2 - 1, Math.ceil((z.c[0] + r - x0) / r2));
+      const j0 = Math.max(0, Math.floor((z.c[1] - r - y0) / r2)),
+        j1 = Math.min(H2 - 1, Math.ceil((z.c[1] + r - y0) / r2));
+      for (let j = j0; j <= j1; j++)
+        for (let i = i0; i <= i1; i++) {
+          const d = zoneD(z, x0 + i * r2, y0 + j * r2);
+          if (d < 6 * want) {
+            ks.push(j * W2 + i);
+            ds.push(d);
+          }
+        }
+      return { k: Int32Array.from(ks), d: Float32Array.from(ds) };
+    });
+    zoneCells.set(step, all);
+    return all;
+  };
+  /** The same factor u and its derivatives at any point: [u, ux, uy, uxx, uxy, uyy]. With
+   *  u = exp(G), G = sum of log Phi(d / sigma), the derivatives follow from d's gradient (a unit
+   *  vector n) and its Hessian ((I - n n^T) / r at a corner, 0 along a straight side). Zones are
+   *  bucketed in square cells as wide as their reach, so a point reads only its own cell and the
+   *  eight around it. */
+  const cutAt = (sigma: number) => {
+    const cell = Math.max(1, ...zones.map((z) => z.reach)) + 6 * sigma,
+      buckets = new Map<number, Zone[]>();
+    const key = (a: number, b: number) => a * 1048576 + b;
+    for (const z of zones) {
+      const k = key(Math.floor(z.c[0] / cell), Math.floor(z.c[1] / cell));
+      if (!buckets.has(k)) buckets.set(k, []);
+      buckets.get(k)!.push(z);
+    }
+    return (x: number, y: number): number[] => {
+      const ix = Math.floor(x / cell),
+        iy = Math.floor(y / cell);
+      let G = 0,
+        Gx = 0,
+        Gy = 0,
+        Gxx = 0,
+        Gxy = 0,
+        Gyy = 0;
+      for (let a = ix - 1; a <= ix + 1; a++)
+        for (let b = iy - 1; b <= iy + 1; b++) {
+          const list = buckets.get(key(a, b));
+          if (list)
+            for (const z of list) {
+              const corner = nearest(z, x, y),
+                vx = x - q[0],
+                vy = y - q[1],
+                r = Math.hypot(vx, vy),
+                t = (r - z.R) / sigma;
+              if (t >= 6) continue;
+              const P = Phi(t);
+              if (P < 1e-300) return [0, 0, 0, 0, 0, 0];
+              const lam = Math.exp(-0.5 * t * t) / Math.sqrt(2 * Math.PI) / P,
+                dlam = -lam * (t + lam);
+              const nx = r > 0 ? vx / r : 0,
+                ny = r > 0 ? vy / r : 0,
+                c = corner && r > 0 ? 1 / r : 0;
+              G += Math.log(P);
+              Gx += (lam * nx) / sigma;
+              Gy += (lam * ny) / sigma;
+              Gxx +=
+                (dlam * nx * nx) / (sigma * sigma) +
+                (lam * c * ny * ny) / sigma;
+              Gxy +=
+                (dlam * nx * ny) / (sigma * sigma) -
+                (lam * c * nx * ny) / sigma;
+              Gyy +=
+                (dlam * ny * ny) / (sigma * sigma) +
+                (lam * c * nx * nx) / sigma;
+            }
+        }
+      const u = Math.exp(G);
+      return [
+        u,
+        u * Gx,
+        u * Gy,
+        u * (Gxx + Gx * Gx),
+        u * (Gxy + Gx * Gy),
+        u * (Gyy + Gy * Gy),
+      ];
     };
+  };
+  // Rounding: blur the region's (anti-aliased) indicator with a Gaussian of width sigma, multiply
+  // by the zones' soft cut, and trace the level 1/2 of the product exactly. Where the region is
+  // solid that level is each zone's edge, and away from the zones it is the blurred region's.
+  // The blur may only change curvature: if it would merge or split pieces, or open or close a
+  // hole, its width is narrowed until it does not. The topology to keep is the region's at the
+  // grid's own scale (blurred by one cell), so a wall or gap thinner than a cell does not count.
+  // Pieces and holes are counted on the traced loops themselves, the ones that are drawn: a hole
+  // runs the other way round from the largest loop.
+  const count = (loops: Pt[][]): [number, number] => {
+    if (!loops.length) return [0, 0];
+    const areas = loops.map(signedArea),
+      big = areas.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a));
+    const pieces = areas.filter((a) => Math.sign(a) === Math.sign(big)).length;
+    return [pieces, loops.length - pieces];
+  };
+  /** Blur on the grid, or on one `step` cells apart (sampling every step-th cell), and trace. */
+  const blurAt = (sigma: number, F: Float64Array, step = 1) => {
+    const r2 = res * step,
+      W2 = Math.ceil(W / step),
+      H2 = Math.ceil(H / step),
+      I = new Float64Array(W2 * H2);
+    for (let j = 0; j < H2; j++)
+      for (let i = 0; i < W2; i++)
+        I[j * W2 + i] = Math.max(
+          0,
+          Math.min(1, 0.5 + F[j * step * W + i * step] / r2)
+        );
+    const { out: P, z } = gaussBlur(I, W2, H2, sigma / r2);
+    // the zones' soft cut, the product over zones of Phi(d / sigma) (1/2 exactly on each zone's
+    // edge); it only lowers the value, so it is applied only where the value is still above 1/2
+    for (const { k, d } of cellsOf(step))
+      for (let i = 0; i < k.length; i++)
+        if (P[k[i]] > 0.5 && d[i] < 6 * sigma) P[k[i]] *= Phi(d[i] / sigma);
+    for (let k = 0; k < W2 * H2; k++) P[k] -= 0.5;
+    const loops = contours(P, W2, H2, x0, y0, r2);
+    return { I, z, loops, topo: count(loops) };
+  };
+  const eq = (a: [number, number], b: [number, number]) =>
+    a[0] === b[0] && a[1] === b[1];
+  const floor = res,
+    base = blurAt(floor, regionFor(floor));
+  let sigma = want,
+    b = want > floor ? blurAt(want, regionFor(want)) : base;
+  if (!eq(b.topo, base.topo)) {
+    // Search for the widest blur that keeps the topology on a grid twice as coarse (an eighth of
+    // the work per step), then confirm it on the full grid (twice at most: the width found, then
+    // half of it), else keep the reference.
+    const coarse = blurAt(floor, regionFor(floor), 2).topo;
+    let lo = floor,
+      hi = want;
+    for (let it = 0; it < 5; it++) {
+      const mid = (lo + hi) / 2;
+      if (eq(blurAt(mid, regionFor(mid), 2).topo, coarse)) lo = mid;
+      else hi = mid;
+    }
+    b = base;
+    sigma = floor;
+    for (
+      let s = lo, tries = 0;
+      s > floor + 0.02 && tries < 2;
+      s = floor + 0.5 * (s - floor), tries++
+    ) {
+      const t = blurAt(s, regionFor(s));
+      if (eq(t.topo, base.topo)) {
+        b = t;
+        sigma = s;
+        break;
+      }
+    }
   }
-  // smoothing: blur the (anti-aliased) indicator, trace level 1/2 exactly
-  const I = new Float64Array(W * H);
-  for (let k = 0; k < W * H; k++)
-    I[k] = Math.max(0, Math.min(1, 0.5 + F[k] / res));
-  const { out: Bg, z } = gaussBlur(I, W, H, sigma / res);
-  const fd: Field = { I, W, H, x0, y0, res, sigma, z };
-  const G = new Float64Array(W * H);
-  for (let k = 0; k < W * H; k++) G[k] = Bg[k] - 0.5;
-  const raw = contours(G, W, H, x0, y0, res).filter(
-    (l) => loopArea(l) > 40 * res * res
-  );
-  const loops = raw.map((l) =>
+  const fd: Field = {
+    I: b.I,
+    cut: zones.length ? cutAt(sigma) : undefined,
+    W,
+    H,
+    x0,
+    y0,
+    res,
+    sigma,
+    z: b.z,
+  };
+  const loops = b.loops.map((l) =>
     resampleLoop(
       resampleLoop(l, 1).map((p) => project(fd, p)),
       1
     ).map((p) => project(fd, p))
   );
-  return { loops, field: fd, skel: sk };
+  return { loops, field: fd, skel: sk, sigma };
 };
 
 export {

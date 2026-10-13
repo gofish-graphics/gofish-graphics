@@ -2,11 +2,11 @@
 
 **Summary.**
 GoFish already has a box-only `enclose` (also exported as `background`). This proposal turns it into one relational mark that draws an outline around a set of nodes: a box, or a smooth region built from discs around the members and links between them.
-The outlines are values of one strategy family, `Shape`, chosen with a `shape` option, the same way `Curve` is chosen with `curve` on `line`. The region member, `Shape.blob()`, fills the space between members with the alpha shape's rule (dialed by `convexity`), links them with a spanning tree so the set stays in one piece, and blurs the result so the outline's curvature never jumps. The convex hull and the spine are two shortcuts of it, the way `sina()` and `jitter()` are shortcuts of `noise()`.
+The outlines are values of one strategy family, `Shape`, chosen with a `shape` option, the same way `Curve` is chosen with `curve` on `line`. The region member, `Shape.blob()`, fills the space between members with the alpha shape's rule (dialed by `convexity`), links them with a spanning tree so the set stays in one piece, and blurs the result so the outline's curvature never jumps. Two knobs shape it, and they do not overlap. `convexity` alone decides what is filled. `roundness` changes only how sharply the outline bends, and never fills a gap, opens a hole or joins two pieces. The convex hull and the spine are two shortcuts of it, the way `sina()` and `jitter()` are shortcuts of `noise()`.
 The construct keeps working in all three places `enclose` works today (around fresh children, around refs, and mixed), and gains the bag form that `line` and `ribbon` have. A member can be any placed shape, so a graph's edges can be members next to its nodes.
 The design idea is a discrete choice followed by continuous tuning: pick a shape from a small set (box, hull, blob, spine), then adjust the blob's parameters to taste.
 
-**Recommendation.** Rebuild `enclose` with `createRelationalMark` and give it `shape: Shape.box({ rx, ry }) | Shape.blob({ convexity, neck, smoothing, avoiding, clearance })`, with two shortcuts, `Shape.hull(opts)` = `Shape.blob({ convexity: 1, neck: 1, ...opts })` and `Shape.spine(opts)` = `Shape.blob({ convexity: 0, ...opts })`. `padding` and paint stay on `enclose`. Delete the `background` alias. Do not add a `.background()` modifier now; keep it as the runner-up, to add later as exact sugar if per-group backgrounds turn out to be common.
+**Recommendation.** Rebuild `enclose` with `createRelationalMark` and give it `shape: Shape.box({ rx, ry }) | Shape.blob({ convexity, roundness, neck, avoiding, clearance })`, with two shortcuts, `Shape.hull(opts)` = `Shape.blob({ convexity: 1, neck: 1, ...opts })` and `Shape.spine(opts)` = `Shape.blob({ convexity: 0, ...opts })`. `padding` and paint stay on `enclose`. Delete the `background` alias. Do not add a `.background()` modifier now; keep it as the runner-up, to add later as exact sugar if per-group backgrounds turn out to be common.
 
 The page has three parts. The top is the current proposal only. The middle is context: Josh's tensions, alternatives, nearby GoFish decisions, precedent and related issues. The bottom, "History", holds the earlier versions and the retired decisions.
 
@@ -36,9 +36,11 @@ story's code.
 - **Delaunay triangulation.** The standard way to split a point set into triangles: no point lies inside the circle through any triangle's three corners. Its outer boundary is the convex hull.
 - **Minimum spanning tree.** The tree of shortest total length that connects all members.
 - **Alpha shape.** The Delaunay triangles whose circumradius (the radius of the circle through the three corners) is at most a length alpha, filled. A large alpha fills every triangle and gives the convex hull; a small alpha follows the points closely and can fall apart into pieces.
-- **Morphological closing.** Grow a shape by _s_, then shrink the result by _s_. Convex parts come back unchanged, every concave corner gets rounded with radius _s_, and every gap narrower than about 2 _s_ is filled.
+- **Morphological closing.** Grow a shape by _s_, then shrink the result by _s_. Convex parts come back unchanged, every concave corner gets rounded with radius _s_, and every gap narrower than about 2 _s_ is filled. The current construction does not use it (History, v6).
 - **Gaussian blur.** Replacing each point's value by a weighted average of the values around it, with weights that fall off as a bell curve of width σ (sigma).
 - **Curvature.** How sharply the outline bends at a point: 1 divided by the radius of the circle that fits the outline best there. A straight run has curvature 0 and a circle of radius _R_ has curvature 1/_R_.
+- **Topology.** Here, how many separate pieces an outline has and how many holes. Two outlines have the same topology when one can be bent into the other without cutting, joining or filling anything.
+- **Sensitivity matrix.** A table with one row per measured property of the outline and one column per knob. Each cell says how much that knob alone moves that property, from 0 (not at all) to 1 (as much as the property ever moves). Knobs that do not overlap give a table with one large cell per row.
 - **Curvature-continuous (G2).** An outline whose direction never jumps (no corners) and whose curvature never jumps either. A circle joined to a straight line that touches it has no corner, but its curvature jumps from 1/_R_ to 0 at once.
 
 ## 2. The syntax
@@ -68,7 +70,6 @@ layer([a, b, c]).relate(({ a, b, c }) => [
       shape: Shape.spine({
         avoiding: [b],
         neck: 0.85,
-        smoothing: 40,
         clearance: 6,
       }),
       padding: 22,
@@ -105,7 +106,7 @@ enclose(
          .mark(enclose(shape=Shape.hull(), padding=6, fill="Species", opacity=0.2))))
 
 layer([a, b, c]).relate(lambda a, b, c: [
-    enclose([a, c], shape=Shape.spine(avoiding=[b], neck=0.85, smoothing=40, clearance=6),
+    enclose([a, c], shape=Shape.spine(avoiding=[b], neck=0.85, clearance=6),
             padding=22, fill="#ff2400"),
 ])
 
@@ -115,41 +116,127 @@ enclose([spread([circle(**d) for d in planets], dir="x", spacing=50, alignment="
 
 ### Members and presets
 
-| Value               | Is exactly                                       | Draws                                                                 |
-| ------------------- | ------------------------------------------------ | --------------------------------------------------------------------- |
-| `Shape.box(opts)`   | its own member; options `rx`, `ry`               | the padded bounding box with rounded corners; the default `shape`     |
-| `Shape.blob(opts)`  | the general region                               | discs, links and filled triangles, smoothed (section 2, construction) |
-| `Shape.hull(opts)`  | `Shape.blob({ convexity: 1, neck: 1, ...opts })` | the convex hull grown by `padding`, smoothed (section 4)              |
-| `Shape.spine(opts)` | `Shape.blob({ convexity: 0, ...opts })`          | the spanning tree of tubes, smoothed                                  |
+| Value               | Is exactly                                       | Draws                                                                |
+| ------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
+| `Shape.box(opts)`   | its own member; options `rx`, `ry`               | the padded bounding box with rounded corners; the default `shape`    |
+| `Shape.blob(opts)`  | the general region                               | discs, links and filled triangles, rounded (section 2, construction) |
+| `Shape.hull(opts)`  | `Shape.blob({ convexity: 1, neck: 1, ...opts })` | the convex hull grown by `padding`, rounded (section 4)              |
+| `Shape.spine(opts)` | `Shape.blob({ convexity: 0, ...opts })`          | the routed spanning tree of tubes and nothing else, rounded          |
 
-As `sina()` and `jitter()` do over `noise()` (#1018, which made the scatter overlap strategy one `noise()` with two presets), a shortcut makes the same object as the general call (`kind: "blob"`), declared once as a preset in the `STRATEGIES` table, and any option overrides the preset. So `Shape.hull({ avoiding: others })` is legal and draws a hull that leaves out triangles touching other nodes. `Shape.box()` stays separate: a box is a rectangle grown by padding, not a union of discs, so no blob setting draws it.
+As `sina()` and `jitter()` do over `noise()` (#1018, which made the scatter overlap strategy one `noise()` with two presets), a shortcut makes the same object as the general call (`kind: "blob"`), declared once as a preset in the `STRATEGIES` table, and any option overrides the preset. So `Shape.hull({ avoiding: others })` is legal and draws the hull with each other node inside it cut out as a round hole, and `Shape.hull({ roundness: 15 })` is legal and draws a hull with softer corners. `Shape.box()` stays separate: a box is a rectangle grown by padding, not a union of discs, so no blob setting draws it.
 
-So the four values are a small discrete menu, and the blob's parameters are the continuous dials behind three of them. A user picks the shape that reads best first (dataset (c) shows the four side by side), and only then tunes `convexity`, `neck` and `smoothing`.
+So the four values are a small discrete menu, and the blob's parameters are the continuous dials behind three of them. A user picks the shape that reads best first (dataset (c) shows the four side by side), and only then tunes `convexity`, `roundness` and `neck`.
 
 ### Parameters
 
-| Parameter             | On           | Meaning                                                                                                                                       | Direction                         | Default           |
-| --------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ----------------- |
-| `padding`             | `enclose`    | The bulge around each member, from the member's own outline (for a line, around its whole length). Exact for a member on its own.             | Bigger is fatter.                 | as today          |
-| `fill`, `stroke`, ... | `enclose`    | Paint, shared by every member of the family.                                                                                                  |                                   | as today          |
-| `rx`, `ry`            | `Shape.box`  | Corner rounding, as on `rect`.                                                                                                                | Bigger is rounder.                | 0                 |
-| `convexity`           | `Shape.blob` | How much of the space between members is filled, from 0 (a spanning tree of links) to 1 (every Delaunay triangle: the convex hull). Unitless. | Bigger is fuller and more convex. | 0.5               |
-| `neck`                | `Shape.blob` | Width of links that do not bound a filled triangle, as a fraction of the bulge.                                                               | Bigger is thicker; 1 is as thick. | 1                 |
-| `smoothing`           | `Shape.blob` | Closing radius in pixels; it also sets the blur, so the curvature changes gradually over a length that grows with it.                         | Bigger is smoother and fuller.    | same as `padding` |
-| `avoiding`            | `Shape.blob` | Nodes to keep out. Each listed node that is not a member is avoided, so the user never computes a set difference.                             |                                   | none              |
-| `clearance`           | `Shape.blob` | Gap in pixels kept from each avoided node.                                                                                                    | Bigger keeps farther away.        | 4                 |
+| Parameter             | On           | Meaning                                                                                                                                                                                                                                                                                             | Direction                         | Default           |
+| --------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ----------------- |
+| `padding`             | `enclose`    | The bulge around each member, from the member's own outline (for a line, around its whole length). Exact for a member on its own.                                                                                                                                                                   | Bigger is fatter.                 | as today          |
+| `fill`, `stroke`, ... | `enclose`    | Paint, shared by every member of the family.                                                                                                                                                                                                                                                        |                                   | as today          |
+| `rx`, `ry`            | `Shape.box`  | Corner rounding, as on `rect`.                                                                                                                                                                                                                                                                      | Bigger is rounder.                | 0                 |
+| `convexity`           | `Shape.blob` | How much of the space between members is filled, from 0 (a spanning tree of links) to 1 (every Delaunay triangle: the convex hull). Unitless. It is the only parameter that fills gaps, so it alone decides the pieces, the holes and the filled area.                                              | Bigger is fuller and more convex. | 0.5               |
+| `roundness`           | `Shape.blob` | How far the outline's corners are rounded, in pixels (the blur width σ is half of it). It changes curvature only: the pieces and holes stay the same, and the filled area moves by a few percent at most. It takes effect up to the thinnest piece, a member's grown radius or a link's half-width. | Bigger is rounder.                | same as `padding` |
+| `neck`                | `Shape.blob` | Width of links that do not bound a filled triangle, as a fraction of the bulge.                                                                                                                                                                                                                     | Bigger is thicker; 1 is as thick. | 1                 |
+| `avoiding`            | `Shape.blob` | Nodes to keep out. Each listed node that is not a member is avoided, so the user never computes a set difference.                                                                                                                                                                                   |                                   | none              |
+| `clearance`           | `Shape.blob` | Gap in pixels kept from each avoided node.                                                                                                                                                                                                                                                          | Bigger keeps farther away.        | 4                 |
 
 ### How the blob is built
 
 `Shape.blob()` draws one set in five steps, after layout, in screen space (so it works under polar and other coordinate transforms the way curves do).
 
-1. **Skeleton.** Each member is its own geometry: a node is its center, and a line member (such as a graph edge) is its segment, which already links its two ends. Take the Delaunay triangulation of the members' points (node centers and line ends). Fill a triangle when its circumradius is at most alpha and no avoided node's keep-out zone (the node grown by `clearance`) touches it. The links are the edges of the filled triangles, the other Delaunay edges no longer than 2 alpha that no avoided node blocks, and the minimum spanning tree over the members, routed around the avoided nodes (always, so the set stays in one piece). A spanning-tree link runs between the closest points of two members' geometries, so members that touch, like an edge and its end node, are joined at no cost.
-2. **Pieces.** Each member grown by `padding` (its bulge, radius _R_; for a line member, a tube around its whole length). Each link that bounds a filled triangle is a tube as wide as the bulge; every other link is a tube `neck` times the bulge. The filled triangles.
-3. **Closing.** The union of the pieces is closed by a disc of radius `smoothing`.
-4. **Cut.** Each avoided node's keep-out zone is cut back out.
-5. **Blur.** The region is blurred with a Gaussian of width σ = ½ min(`smoothing`, thinnest piece), and the outline is where the blurred value is ½. A blurred region is a sum of smooth bumps, so this outline is curvature-continuous. Blurring pulls a bulge of radius _r_ in by about σ²/(2 _r_), so discs, tubes and cut zones are drawn slightly larger to cancel it: a lone member ends exactly at `padding`, a lone link at its half-width, and the cut at `clearance`.
+1. **Skeleton.** Each member is its own geometry: a node is its center, and a line member (such as a graph edge) is its segment, which already links its two ends. Take the Delaunay triangulation of the members' points (node centers and line ends). Fill every triangle whose circumradius is at most alpha, whatever it holds. The links are the edges of the filled triangles, the other Delaunay edges no longer than 2 alpha that no avoided node blocks, and the minimum spanning tree over the members, routed around the avoided nodes (always, so the set stays in one piece). A spanning-tree link runs between the closest points of two members' geometries, so members that touch, like an edge and its end node, are joined at no cost.
+2. **Pieces.** Each member grown by `padding` (its bulge, radius _R_; for a line member, a tube around its whole length). Each link that bounds a filled triangle is a tube as wide as the bulge; every other link is a tube `neck` times the bulge. The filled triangles. The union of these pieces is the region, and nothing else fills it.
+3. **Cut.** Each avoided node's keep-out zone (the node grown by `clearance`) is cut out of the region. A zone inside the region becomes a hole that is exactly that circle. A zone across the region's edge becomes a round notch.
+4. **Rounding.** The region is blurred with a Gaussian of width σ = `roundness` / 2 and multiplied by a smooth step that is ½ exactly on each keep-out zone's edge. The outline is where the product is ½. A blurred region is a sum of smooth bumps, so this outline is curvature-continuous, and each hole stays an exact circle at any `roundness`. Blurring pulls a bulge of radius _r_ in by about σ²/(2 _r_), so discs and tubes are drawn slightly larger to cancel it, and a lone member ends exactly at `padding` and a lone link at its half-width.
+5. **Topology check.** If the blur would join two pieces, split one, or open or close a hole, σ is narrowed by bisection until it does not. So `roundness` never changes the topology. Its effect also stops at the thinnest piece, because a member's own arc already has radius _R_, and rounding it further would cost padding.
+
+**Holes and detours.** Step 1 decides whether an avoided node becomes a hole or the outline goes around it, and the user does not choose. A node inside a filled triangle is inside the region, so it becomes a hole. A node that no filled triangle covers stays outside, and the links route around it. In the Topology example, a and c form no triangle, so b is never inside, and the band passes under b at every `convexity`.
 
 **The convexity scale.** `convexity` maps to alpha as alpha = _m_ × `convexity` / (1 − `convexity`), where _m_ is the median link length of the members' minimum spanning tree (a typical distance between neighbors). So 0 fills nothing, 0.5 fills triangles up to about the typical spacing, and 1 fills everything. Measuring alpha in units of _m_ makes the rule depend only on the shape of the point set, not on the chart's size. The name says its direction, which avoids the trap where ggforce's `concavity` and the alpha of alpha shapes run in opposite directions.
+
+### Why these knobs are orthogonal
+
+Josh found that `convexity` and the old `smoothing` overlapped. They did, because both filled gaps. `convexity` fills the Delaunay triangles whose circumradius is at most alpha. The old `smoothing` was a morphological closing by a radius _s_, and on discs of radius _R_ a closing fills the same triangles as an alpha shape with alpha = _R_ + _s_, because the closing's disc fits in a triangle's gap exactly when that triangle's empty circle is wider than _R_ + _s_. So the two knobs ran one operation twice at two scales. The blur, the only step that changed curvature alone, had no knob of its own, since its width was half of `smoothing`.
+
+Now `convexity` decides topology and filled area, and `roundness` decides only curvature. The closing is gone, so every fill comes from `convexity`'s triangles, and the blur is the `roundness` knob.
+
+To check this, we measured eight properties of the outline over a full grid of the knobs: `convexity` at 0, 0.25, 0.5, 0.75 and 1; the second knob at 0, ½, 1 and 2 times the padding; `neck` at 0.5, 0.75 and 1; and `padding` and `clearance` at three values each. We used four datasets: the U, the Gentoo penguins with the other species avoided, Topology, and the hyperedges with edges as members. The properties are these.
+
+- **Fill.** The area beyond the padded spanning tree, as a share of the padded convex hull.
+- **Gap.** The radius of the widest empty disc inside the padded hull that is neither filled nor a keep-out zone.
+- **Radius.** The smallest radius of curvature on the outline (capped at 40 px).
+- **Padding.** The measured distance from the outermost members to the outline.
+- **Neck.** The narrowest link width, as a share of the bulge.
+- **Clearance.** The measured gap at avoided nodes the outline comes near.
+- **Hole shape.** A hole's area divided by its keep-out circle's area, where 1 is an exact circle.
+- **Topology.** Whether the number of pieces or holes changes.
+
+Each cell is the average, over all settings of the other knobs, of how far the property moves along this knob alone, divided by how far it moves over the whole grid. For topology, the cell is the share of sweeps along which the count changes. The four datasets are averaged.
+
+| Before     | `convexity` | `smoothing` | `neck` | `padding` | `clearance` |
+| ---------- | ----------: | ----------: | -----: | --------: | ----------: |
+| Fill       |        0.55 |        0.19 |   0.14 |      0.10 |        0.03 |
+| Gap        |        0.44 |        0.03 |   0.06 |      0.21 |        0.20 |
+| Radius     |        0.23 |        0.51 |   0.12 |      0.10 |        0.08 |
+| Padding    |        0.01 |        0.03 |   0.00 |      0.94 |        0.00 |
+| Neck       |        0.13 |        0.05 |   0.42 |      0.05 |        0.29 |
+| Clearance  |        0.04 |        0.03 |   0.01 |      0.25 |        0.57 |
+| Hole shape |        0.12 |        0.23 |   0.21 |      0.21 |        0.31 |
+| Topology   |        0.88 |        0.48 |   0.45 |      0.37 |        0.49 |
+
+| After      | `convexity` | `roundness` | `neck` | `padding` | `clearance` |
+| ---------- | ----------: | ----------: | -----: | --------: | ----------: |
+| Fill       |        0.62 |    **0.11** |   0.10 |      0.08 |        0.04 |
+| Gap        |        0.67 |    **0.04** |   0.04 |      0.17 |        0.14 |
+| Radius     |        0.47 |    **0.26** |   0.15 |      0.12 |        0.05 |
+| Padding    |        0.01 |    **0.01** |   0.00 |      0.96 |        0.00 |
+| Neck       |        0.15 |    **0.09** |   0.38 |      0.05 |        0.28 |
+| Clearance  |        0.02 |    **0.11** |   0.04 |      0.19 |        0.52 |
+| Hole shape |        0.00 |    **0.01** |   0.00 |      0.06 |        0.93 |
+| Topology   |        1.00 |    **0.00** |   0.54 |      0.49 |        0.46 |
+
+The rows that move with `padding`, `clearance` and `neck` are expected. Those knobs are distances, and a distance can join two pieces or close a hole, so the claim is about the two shape knobs only.
+
+Before, `smoothing` moved the filled area (0.19), the hole shape (0.23) and the topology (along 48% of its sweeps), and `convexity` moved the smallest radius (0.23), so each knob did part of the other's job. After, `roundness` changes the topology along none of its sweeps (0.00) and the hole shape not at all (0.01). Its largest effect is on the radius (0.26), which is its job. Its smaller effects on fill and clearance are the bit of area that rounding a concave corner adds, and the lips of a notch moving as they round. `convexity` still moves the radius, because filling triangles makes new corners, so that is the shape changing, not a second rounding control. The hole shape now depends on `clearance` alone (0.93).
+
+The topology check, on its own: each dataset (with the hyperedges both with edges as members and with `via`) at seven values of `convexity` (0, 0.25, 0.5, 0.65, 0.75, 0.9 and 1), with the second knob swept over 0, ¼, ½, 1, 1.5, 2, 3 and 4 times the padding. A cell lists pieces/holes along the sweep.
+
+Before, the counts stayed the same along 26 of 35 sweeps; after, along 35 of 35, with roundness 0 included. The sweeps that changed before:
+
+| dataset           | convexity | before (`smoothing`)            | after (`roundness`)             |
+| ----------------- | --------: | ------------------------------- | ------------------------------- |
+| U                 |       0.9 | 1/2 1/2 1/2 1/3 1/2 1/2 1/2 1/2 | 1/2 1/2 1/2 1/2 1/2 1/2 1/2 1/2 |
+| U                 |         1 | 1/2 1/2 1/2 1/3 1/2 1/2 1/2 1/2 | 1/2 1/2 1/2 1/2 1/2 1/2 1/2 1/2 |
+| Gentoo            |         0 | 1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0 | 1/4 1/4 1/4 1/4 1/4 1/4 1/4 1/4 |
+| Gentoo            |      0.25 | 1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0 | 1/4 1/4 1/4 1/4 1/4 1/4 1/4 1/4 |
+| Gentoo            |       0.5 | 1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0 | 1/3 1/3 1/3 1/3 1/3 1/3 1/3 1/3 |
+| Gentoo            |      0.65 | 1/2 1/2 1/2 1/0 2/0 2/0 2/0 1/0 | 1/2 1/2 1/2 1/2 1/2 1/2 1/2 1/2 |
+| Gentoo            |      0.75 | 1/0 1/0 1/0 1/0 2/0 2/0 1/0 1/0 | 1/0 1/0 1/0 1/0 1/0 1/0 1/0 1/0 |
+| hyperedges, `via` |         0 | 3/3 3/3 3/3 3/3 3/1 3/0 3/0 3/0 | 3/3 3/3 3/3 3/3 3/3 3/3 3/3 3/3 |
+| hyperedges, `via` |      0.25 | 3/3 3/3 3/3 3/3 3/1 3/0 3/0 3/0 | 3/3 3/3 3/3 3/3 3/3 3/3 3/3 3/3 |
+
+Josh's two cases, before and after. On the U at high convexity, the old smoothing first left triangle-shaped holes, then half-rounded them, and only at high values cut just the circles. Now the holes are the clearance circles at every roundness, and roundness only softens the corners, from the angular hull at 0 to the softest the members' 15 px radius allows. Convexity 0.65 is the third case Josh named: there too only the corners soften.
+
+| Before: `smoothing` across, at convexity 0.65, 0.9 and 1 (the hull) |
+| ------------------------------------------------------------------- |
+| ![U, old smoothing](img/before-smoothing-u.png)                     |
+
+| After: `roundness` across, same rows |
+| ------------------------------------ |
+| ![U, roundness](img/roundness-u.png) |
+
+On the hyperedges at convexity 0.25, the old smoothing filled the three cycles at 12 px and above, which looked like a higher convexity. With roundness the cycles stay open at every value. The holes get smaller as their corners round, because a triangle's corners are the part of it that is cut.
+
+| Before: `smoothing` across, at convexity 0.25 (with `via`)        |
+| ----------------------------------------------------------------- |
+| ![hyperedges, old smoothing](img/before-smoothing-hyperedges.png) |
+
+| After: `roundness` across, same row                                                  |
+| ------------------------------------------------------------------------------------ |
+| ![hyperedges, roundness](img/roundness-hyperedges.png)                               |
+| ![hyperedges with edges as members, roundness](img/roundness-hyperedges-members.png) |
+
+With edges as members (the second row), roundness changes little, because the edge members are slim tubes (6.75 px), and roundness stops at the thinnest piece.
 
 ### Custom shapes and the ellipse
 
@@ -168,36 +255,36 @@ From Python, the function would cross the bridge the way derive lambdas do. If e
 
 ## 3. Dataset explorer
 
-One grid per dataset, all with the same two parameters. **Columns are `convexity` (0, 0.5, 0.8, 1) and rows are `smoothing` (half the padding, equal to it, twice it), because these are the two blob knobs that change the outline's character, how much space between members is filled and how gently it bends, while `padding` and `clearance` are plain distances whose effect reads from their names.** The teal frame marks the recommended defaults cell (`convexity: 0.5`, `neck: 1`, `smoothing` equal to `padding`). Where convexity does nothing on a dataset, the columns are `neck` instead, and the grid's header says so. Every cell is a render of the current construction.
+One grid per dataset, all with the same two parameters. **Columns are `convexity` (0, 0.25, 0.5, 0.75, 1) and rows are `roundness` (0, half the padding, equal to it, twice it), because these are the two blob knobs that change the outline's character: what is filled, and how sharply the outline bends. `padding` and `clearance` are plain distances whose effect reads from their names.** Down a column the pieces and holes never change. The teal frame marks the recommended defaults cell (`convexity: 0.5`, `neck: 1`, `roundness` equal to `padding`). Where convexity does nothing on a dataset, the columns are `neck` instead, and the grid's header says so. Every cell is a render of the current construction.
 
 ### (a) Topology: {a, c} avoiding b
 
 ```js
 enclose(
   {
-    shape: Shape.spine({ avoiding: [b], neck, smoothing, clearance: 6 }),
+    shape: Shape.spine({ avoiding: [b], neck, roundness, clearance: 6 }),
     padding: 22,
   },
   [a, c]
 );
 ```
 
-![a, c avoiding b: neck by smoothing](img/explore-topology.png)
+![a, c avoiding b: neck by roundness](img/explore-round-topology.png)
 
-Columns are `neck` (0.5, 0.7, 0.85, 1), because with two members there is no triangle to fill and the one link is always kept, so every `convexity` draws the same thing. Rows are `smoothing` 11, 22 and 44 px. The band always detours under b at the clearance, and the joins to the circles stay smooth at every setting. The spelling in section 2 (`neck: 0.85`, `smoothing: 40`) sits between the bottom two rows of the third column.
+Columns are `neck` (0.5, 0.7, 0.85, 1), because with two members there is no triangle to fill and the one link is always kept, so every `convexity` draws the same thing. Rows are `roundness` 0, 11, 22 and 44 px. The band always passes under b, because a and c form no triangle that could hold b. Roundness rounds the joins between the band and the circles, up to the band's half-width (14.5 px at `neck: 0.5`, 23 px at 0.85), so 44 px draws nearly what 22 px draws. The spelling in section 2 (`neck: 0.85`, `roundness` at its default of 22) is the third row of the third column.
 
 ### (b) The U-shaped point cloud with non-members inside
 
 ```js
 enclose(
-  { shape: Shape.blob({ convexity, smoothing, avoiding: others }), padding: 8 },
+  { shape: Shape.blob({ convexity, roundness, avoiding: others }), padding: 8 },
   members
 );
 ```
 
-![U cloud: convexity by smoothing](img/explore-u.png)
+![U cloud: convexity by roundness](img/explore-round-u.png)
 
-At 0 the U is a tree of tubes, slightly wavy along the arms. At 0.5 the two-dot-thick arms fill and get straight sides with rounded joins, and the opening stays clear. At 0.8 and 1 the triangles across the opening fill except where they touch a gray dot, which leaves holes (drawn white) shaped by the triangles that were left out. With more smoothing the closing fills those triangle gaps, and the holes shrink to even rings around the gray dots.
+At 0 the U is a tree of tubes, wavy along the arms. At 0.5 the two-dot-thick arms fill and get straight sides, and the opening stays clear. At 0.75 the triangles across the bottom of the opening fill, so the lower gray dot is inside and becomes a round hole (drawn white), while the upper one sits in a notch. At 1 both gray dots are round holes. The holes are the clearance circles at every roundness, so the half-rounded triangles of the old grid (History, v6) are gone. Down each column only the corners change, and the waves between neighboring dots flatten. At 0 and 4 px the spine keeps narrow slits between touching dots. At 4 px the blur would pinch each slit's mouth shut and make a new hole, so the topology check holds the blur back; at 8 px the slits fill completely, which keeps the topology.
 
 ### (c) Penguins: the discrete choice, then the dials
 
@@ -218,15 +305,15 @@ chart(penguins)
 
 The boxes overlap so much that the species blur together. The hulls separate them well and are easy to read, with a sliver of overlap between each pair. The blob and the spine follow the points closely and show where each species is dense; on data this dense they look almost the same, because the discs already touch and there is little space left for `convexity: 0.5` to fill. Box and hull are reasonable choices here; blob and spine trade a calm outline for a closer fit.
 
-Then the dials. The same three species in every cell, convexity by smoothing.
+Then the dials. The same three species in every cell, convexity by roundness.
 
 ```js
-.layer(enclose({ shape: Shape.blob({ convexity, smoothing }), padding: 6, fill: "Species", opacity: 0.15 }))
+.layer(enclose({ shape: Shape.blob({ convexity, roundness }), padding: 6, fill: "Species", opacity: 0.15 }))
 ```
 
-![penguins: convexity by smoothing](img/explore-penguins.png)
+![penguins: convexity by roundness](img/explore-round-penguins.png)
 
-The defaults cell is the `Shape.blob()` panel above, and the convexity 1 column is the `Shape.hull()` panel. At 0.8 each species becomes one calm region that still leaves out its empty corners, which is the step between the blob and the hull. More smoothing calms the wobble of the low-convexity outlines. Adding `avoiding: selectAll("points")` to the blob would cut each species' outline away from the other species' points, as dataset (b) shows for the U.
+The defaults cell is the `Shape.blob()` panel above, and the convexity 1 column is the `Shape.hull()` panel. At 0.75 each species becomes one calm region that still leaves out its empty corners, which is the step between the blob and the hull. Down each column the pieces and holes stay the same, and roundness only calms the small bumps between neighboring points. Roundness stops at the points' grown radius (8.5 px here), so 12 px draws what 8.5 px draws. Adding `avoiding: selectAll("points")` to the blob would cut each species' outline away from the other species' points, as dataset (b) shows for the U.
 
 ### (d) Hyperedges over a node-link graph
 
@@ -270,9 +357,9 @@ As a spine (top row) the two differ. With edges as members, each set is its node
 
 The grid on the proposed version:
 
-![hyperedges with edges as members: convexity by smoothing](img/explore-hyperedges-members.png)
+![hyperedges with edges as members: convexity by roundness](img/explore-round-hyperedges-members.png)
 
-At 0 each set is a tube along its own edges. From 0.5 the triangles fill. At 0.8 and 1 set C fills the triangle 3, 8, 9, which covers the graph edges 6 to 7 and 4 to 6; nodes 4 and 6 stay outside. This is the same as with `via`: edges as members add what must be inside, and say nothing about what must stay out.
+At 0 and 0.25 each set is a tube along its own edges. From 0.5 the triangles fill. At 0.75 and 1 set C fills the triangle 3, 8, 9, which covers the graph edges 6 to 7 and 4 to 6; nodes 4 and 6 stay outside. This is the same as with `via`: edges as members add what must be inside, and say nothing about what must stay out.
 
 Two harder cases, both as a spine:
 
@@ -327,13 +414,13 @@ chart(catch)
   .layer(
     chart(selectAll("bars"))
       .flow(filter((d) => d.species === "trout"))
-      .mark(enclose({ shape: Shape.spine({ avoiding: selectAll("bars"), neck, smoothing }), padding: 4, stroke: "#d6580c" }))
+      .mark(enclose({ shape: Shape.spine({ avoiding: selectAll("bars"), neck, roundness }), padding: 4, stroke: "#d6580c" }))
   );
 ```
 
-![trout: neck by smoothing](img/explore-trout.png)
+![trout: neck by roundness](img/explore-round-trout.png)
 
-Columns are `neck` (0.5, 0.7, 0.85, 1), because `convexity` does nothing here: every triangle between trout bars holds another bar, and every direct link is blocked, so all four convexity columns render the same. The prototype also avoids the axis line and its labels (decision 10). Each link runs over the bar tops as the shortest path that clears the other bars; `neck` sets the tube's thickness, and `smoothing` rounds the bends.
+Columns are `neck` (0.5, 0.7, 0.85, 1), because the spine is the useful setting here: the trout bars stand among other bars, and a filled triangle between them would hold those bars as holes. The prototype also avoids the axis line and its labels (decision 10). Each link runs over the bar tops as the shortest path that clears the other bars. `neck` sets the tube's thickness, and `roundness` rounds the bends.
 
 ### (f) Munkres' three-point topology
 
@@ -346,7 +433,7 @@ layer([a, b, c]).relate(({ a, b, c }) => [
   enclose({ shape: oval, padding: 16 }, [b, c]),
   enclose(
     {
-      shape: Shape.spine({ avoiding: [b], neck, smoothing, clearance: 6 }),
+      shape: Shape.spine({ avoiding: [b], neck, roundness, clearance: 6 }),
       padding: 22,
     },
     [a, c]
@@ -354,9 +441,9 @@ layer([a, b, c]).relate(({ a, b, c }) => [
 ]);
 ```
 
-![Munkres panel: neck by smoothing](img/explore-munkres.png)
+![Munkres panel: neck by roundness](img/explore-round-munkres.png)
 
-Columns are `neck`, as in (a). The whole set and the pairs {a, b} and {b, c} are ellipses through the custom-shape function. The recommended spelling (`neck: 0.85`, `smoothing: 40`, `padding: 22`) on its own, next to the reference:
+Columns are `neck`, as in (a). The whole set and the pairs {a, b} and {b, c} are ellipses through the custom-shape function. The recommended spelling (`neck: 0.85`, `padding: 22`, `roundness` at its default) on its own, next to the reference:
 
 | Current construction                                    | Reference (Munkres, Figure 12.1; image from Math3ma)                       |
 | ------------------------------------------------------- | -------------------------------------------------------------------------- |
@@ -366,19 +453,19 @@ Matched: even margins around a and c, a thick band, and smooth joins. Still diff
 
 ## 4. The hull preset is within half a pixel
 
-Before the blur the hull shortcut is exact: with nothing avoided, every Delaunay triangle is filled and every hull edge is a tube as wide as the bulge, so the union is the convex hull grown by the bulge, and closing a convex shape changes nothing. The blur rounds the hull's corners, and the slightly larger discs that cancel the blur on a lone member stand out by a fraction of a pixel near the corners. Measured against a true padded convex hull (black line): never inside it, and at most 0.5 px outside it with `smoothing` equal to `padding` (U and Gentoo), 0.9 px with `smoothing: 20`.
+Before the blur the hull shortcut is exact: with nothing avoided, every Delaunay triangle is filled and every hull edge is a tube as wide as the bulge, so the union is the convex hull grown by the bulge. The blur rounds the hull's corners, and the slightly larger discs that cancel the blur on a lone member stand out by a fraction of a pixel near the corners. Measured against a true padded convex hull (black line), the outline is never inside it. It is at most 0.3 px outside it with `roundness` equal to `padding` (U and Gentoo), and 0.8 px outside at `roundness: 15`, the most the U allows.
 
 ![hull shortcut vs true hull](img/smooth-hull-preset-vs-true-hull.png)
 
-The spine shortcut draws exactly the members and the spanning tree, smoothed: at `convexity: 0` alpha is 0, so no triangle is filled and no extra edge is added.
+The spine shortcut draws exactly the members and the routed spanning tree, rounded. At `convexity: 0` alpha is 0, so no triangle is filled and no extra edge is added, and since there is no closing, nothing else is filled either.
 
 ## 5. The curvature never jumps
 
-Josh's requirement was "I don't want to see a shape curvature change when the circle connects to the link." The plot below is the {a, c} outline of section 2's spelling. Left: the outline with its curvature comb, a short tooth across the outline at many points with length proportional to the curvature there. Right: curvature against distance along the outline, starting at the leftmost point, computed exactly from the blurred field. The gray lines mark 1/_R_ (a's circle) and −1/40 (the closing radius).
+Josh's requirement was "I don't want to see a shape curvature change when the circle connects to the link." The plot below is the {a, c} outline of section 2's spelling. Left: the outline with its curvature comb, a short tooth across the outline at many points with length proportional to the curvature there. Right: curvature against distance along the outline, starting at the leftmost point, computed exactly from the blurred field. The gray lines mark 1/_R_ (a's circle) and −1/40 for scale.
 
 ![curvature of the current outline](img/current-curvature-topology-ac.png)
 
-The curve moves smoothly between 1/_R_ around the circles, about 0 along the band, and negative values at the joins, with every change spread over about 20 px of outline. It keeps its promises: padding at a is 22.0 px (asked 22) and the gap to b's ring is 6.2 px (asked 6).
+The curve moves smoothly between 1/_R_ around the circles, about 0 along the band, and negative values at the joins, with every change spread over about 20 px of outline. It keeps its promises: padding at a is 22.0 px (asked 22), and the gap to b's ring is 11.0 px, more than the 6 px asked. `clearance` is a minimum, and with no closing nothing pulls the band up toward b, so the band keeps the distance its route gives it.
 
 ## 6. One outline per group: penguins and `by`
 
@@ -404,15 +491,16 @@ Not part of this proposal: the Munkres example may be drawn best by placing the 
 2. Make `enclose` a relational mark now, and defer any `.background()` modifier?
 3. One general member with two shortcuts: name it `blob` (or `kelp`, `bubble`), and keep the shortcut names `hull` and `spine`?
 4. Option key and family `shape: Shape.*`, or `outline: Outline.*`?
-5. The blob's parameters and defaults: `convexity` 0.5, `neck` 1, `smoothing` equal to `padding`, `clearance` 4 px (the teal cells in section 3)?
-6. `avoiding` on `Shape.blob()`, so also on both shortcuts, with "avoid each listed node that is not a member", and `Shape.hull({ avoiding })` drawing a hull that leaves out triangles touching other nodes?
+5. The blob's parameters and defaults: `convexity` 0.5, `roundness` equal to `padding`, `neck` 1, `clearance` 4 px (the teal cells in section 3)?
+6. `avoiding` on `Shape.blob()`, so also on both shortcuts, with "avoid each listed node that is not a member", and `Shape.hull({ avoiding })` drawing the hull with each other node inside it cut out as a round hole?
 7. Draw ellipses through the #1101 custom-shape function first, and add `Shape.ellipse()` only when examples call for it?
 8. Move `rx`/`ry` from `enclose` into `Shape.box({ rx, ry })`?
 9. For rows that carry refs (the hyperedge example), name the ref column with a `members` option, by analogy with `line({ from, to })`? The same example also needs `resolve` to take a list of selections (dataset (d)).
 10. In a chart, should a spine stay inside the plot area by rule, or should the user list the axis in `avoiding` (the trout example)?
-11. `convexity` as the name, with alpha = _m_ × `convexity` / (1 − `convexity`) and _m_ the median spanning-tree link, so it does not change with a resize? (Alternatives: a length relative to `padding`; or a pixel `alpha`.)
-12. Keep all smoothing inside `Shape.blob()` (the region blur), and add no `curve` key to `enclose`? (History, v4, shows why a curve through the outline cannot keep `padding` or `clearance`.)
+11. The two shape knobs: `convexity` (what is filled, 0 to 1, scaled to the point spacing) and `roundness` (corner rounding in pixels, never changing the topology)? Is `roundness` the right name? (Alternative: `cornerRadius`, the pixel corner radius of Vega-Lite's marks and Figma.)
+12. Keep all rounding inside `Shape.blob()` (the region blur), and add no `curve` key to `enclose`? (History, v4, shows why a curve through the outline cannot keep `padding` or `clearance`.)
 13. Confirm: drop `via` in favor of enclosing the edges themselves as members (dataset (d)). Box and hull contain line members too, since members are just shapes, and the blob reads their geometry through #974's `boundary` query.
+14. Should `roundness` go past the thinnest piece, so a hull's corners can round more than the members' grown radius? The cost is that `padding` becomes a minimum and the area grows near the corners.
 
 ---
 
@@ -456,7 +544,7 @@ How the strategies are spelled is a separate axis (section 11); all three approa
 - `subtract` (region compositing): not an overlap. `avoiding` routes the outline around a node; `subtract` would cut a hole of the node's shape.
 - `pack`: its enclosing circle is a possible future `Shape.circle()`, not an overlap.
 
-**Trade-offs.** One name, one mental model, every hard example expressible. New terms: `Shape`, `blob`, `hull`, `spine`, `convexity`, `neck`, `smoothing`, `avoiding`, `clearance`. Cost to extend: a new member of a closed family, or #1101's function hatch. Awkward: the per-group "background behind each lake" needs `chart(selectAll("bars")).flow(group({ by: "lake" })).mark(enclose())`, which is longer than a modifier would be.
+**Trade-offs.** One name, one mental model, every hard example expressible. New terms: `Shape`, `blob`, `hull`, `spine`, `convexity`, `roundness`, `neck`, `avoiding`, `clearance`. Cost to extend: a new member of a closed family, or #1101's function hatch. Awkward: the per-group "background behind each lake" needs `chart(selectAll("bars")).flow(group({ by: "lake" })).mark(enclose())`, which is longer than a modifier would be.
 
 ### Approach B: a `.background()` modifier only (SwiftUI)
 
@@ -550,7 +638,7 @@ What GoFish should take overall: one name with a shape value (SwiftUI, Compose, 
 
 **The general member's name.** Candidates: `kelp`, `bubble`, `blob`, `region`, `outline`, `set`. `kelp` credits KelpFusion, but the word means nothing to most readers and the construction differs from the paper. `bubble` is the Bubble Sets word, but Bubble Sets is a different algorithm (an energy field), and in KelpFusion a bubble is one node's disc. `region` collides with GoFish's region-compositing operators. `outline` is a candidate for the option key itself (decision 4) and also means a stroke. `set` names the data, not the drawing, and shadows JavaScript's `Set`. `blob` is an everyday word for a rounded free-form region and is the name Bluefish already uses for a hand-drawn set outline (`Blob` in the Math3ma example). This proposal uses `blob` (decision 3).
 
-**The knobs.** Libraries disagree on the direction of a hull's concavity knob: `concavity` in ggforce and concaveman gets _more convex_ as it grows; `alpha` is a radius in CGAL (bigger is more convex) and an inverse radius in Python's `alphashape` (bigger is more concave); Shapely's `ratio` and PostGIS's `pctconvex` are fractions toward convex. `convexity` reads its direction from the name and has no unit. `smoothing` is a pixel radius, bigger is smoother and fuller, the same direction as `smoothing` on `noise()`, though there it is in data units. `neck` is the everyday word for the narrow part that joins two bulges, and it is also Glassner's word for the part of a glob between its circles.
+**The knobs.** Libraries disagree on the direction of a hull's concavity knob: `concavity` in ggforce and concaveman gets _more convex_ as it grows; `alpha` is a radius in CGAL (bigger is more convex) and an inverse radius in Python's `alphashape` (bigger is more concave); Shapely's `ratio` and PostGIS's `pctconvex` are fractions toward convex. `convexity` reads its direction from the name and has no unit. `roundness` is a pixel length, bigger is rounder. It is the plain word for the property, and its unit matches the pixel corner radius that CSS (`border-radius`), Vega-Lite (`cornerRadius`) and Figma use. It is not called `smoothing`, because `smoothing` on `noise()` and the old blob knob both change what is filled, and `roundness` never does. `neck` is the everyday word for the narrow part that joins two bulges, and it is also Glassner's word for the part of a glob between its circles.
 
 ## 14. Related issues
 
@@ -584,9 +672,9 @@ What GoFish should take overall: one name with a shape value (SwiftUI, Compose, 
 | `background({ padding: 20, rx: 16, ry: 16, fill }, [x])` | `enclose({ padding: 20, shape: Shape.box({ rx: 16, ry: 16 }), fill }, [x])`                     |
 | `enclose({ padding: 6 }, [a, b, c])`                     | unchanged (default `Shape.box()`)                                                               |
 | no way to draw one outline per group                     | `.layer(chart(selectAll("points")).flow(group({ by })).mark(enclose({ shape: Shape.hull() })))` |
-| hand-drawn concave `polygon` (Topology)                  | `enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.85, smoothing: 40 }) }, [a, c])`         |
+| hand-drawn concave `polygon` (Topology)                  | `enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.85 }) }, [a, c])`                        |
 | no in-between shape                                      | `enclose({ shape: Shape.blob({ convexity: 0.5, avoiding }) }, members)`                         |
-| `background = enclose` in Python                         | removed; `enclose([...], shape=Shape.spine(smoothing=40), padding=8)`                           |
+| `background = enclose` in Python                         | removed; `enclose([...], shape=Shape.spine(), padding=8)`                                       |
 | new import                                               | `import { Shape } from "gofish-graphics"` / `from gofish import Shape`                          |
 
 Docs follow-up if approved: the handwritten Basics and Diagrams tutorials teach `background()`. Their code blocks can be migrated, but their prose names the construct "background", so an issue would record what went stale rather than rewriting it.
@@ -594,9 +682,9 @@ Docs follow-up if approved: the handwritten Basics and Diagrams tutorials teach 
 ## 16. Prototype notes
 
 - The stories live in `packages/gofish-graphics/stories/_proposals/BackgroundHull.stories.tsx` (title "Proposals/Background Hull"). They are throwaway and import `delaunator` by a relative path into the pnpm store, since it is not a declared dependency.
-- The current construction is story section (e), `smoothBlob`. It builds the alpha complex and spanning tree, routes blocked links on a visibility graph around polygons standing in for the avoided nodes, rasterizes the pieces on a grid of 0.25 to 0.5 px, closes and cuts with exact distance transforms, blurs an anti-aliased version of the region with a separable Gaussian, and traces the level ½ with marching squares. Each traced point is then moved onto the exact level line by Newton steps on the field, so the outline has no grid waviness. Curvature for the plot comes from the field's first and second derivatives. The compensation (drawing discs, tubes and cut zones slightly larger) is solved numerically per radius. Holes are painted white instead of cut out. Links start from member centers, or from the closest point of a line member; links from outlines (#974) are needed for exact hulls of mixed shapes. Line members (`kind: "segment"`) are new in section (g); section (f) keeps the `via` stories for History.
-- The dataset grids are story section (f), the `Grid*` stories. Wide grids are shrunk with CSS `zoom` to fit the 1264 px capture root, and every PNG was trimmed to its content with a small pngjs script.
-- Current images: `img/explore-topology.png`, `img/explore-u.png`, `img/penguins-four-shapes.png`, `img/explore-penguins.png` (now all three species), `img/hyperedges-members-vs-via.png`, `img/explore-hyperedges-members.png`, `img/hyperedges-members-routed-link.png`, `img/hyperedges-members-near-edge.png`, `img/explore-trout.png`, `img/explore-munkres.png`, `img/topology-munkres-panel-smooth.png`, `img/smooth-hull-preset-vs-true-hull.png`, `img/current-curvature-topology-ac.png`, `img/penguins-hull-per-species.png` (now the hull preset), `img/penguins-box-per-species.png`, `img/planets-box-component.png`, `img/bars-box-per-lake-group.png`.
+- The current construction is story section (e), `smoothBlob`. It builds the alpha complex and spanning tree, routes blocked links on a visibility graph around polygons standing in for the avoided nodes, rasterizes the pieces on a grid of 0.25 to 0.5 px, blurs an anti-aliased version of the region with a separable Gaussian, multiplies it by the keep-out zones' smooth step (computed exactly from distances), and traces the level ½ with marching squares. Each traced point is then moved onto the exact level line by Newton steps on the field, so the outline has no grid waviness. The topology check counts pieces and holes on the grid (any of at least 4 px²) before and after the blur. Curvature for the plot comes from the field's first and second derivatives. The compensation (drawing discs and tubes slightly larger) is solved numerically per radius, and pieces with the same compensation share one distance field, so a bisection step costs one blur. Holes are painted white instead of cut out. Links start from member centers, or from the closest point of a line member; links from outlines (#974) are needed for exact hulls of mixed shapes. Line members (`kind: "segment"`) are new in section (g); section (f) keeps the `via` stories for History.
+- The dataset grids are story section (f), the `Grid*` stories, and the rows in "Why these knobs are orthogonal" are section (h), the `Roundness*` stories. The "before" rows were rendered once from the previous version of the stories file. The measurements are scripts in `tests/tmp/orth/` (`metrics.ts`, `sens.mjs`, `topotable.mjs`). Wide grids are shrunk with CSS `zoom` to fit the 1264 px capture root, and every PNG was trimmed to its content with a small pngjs script.
+- Current images: `img/explore-round-topology.png`, `img/explore-round-u.png`, `img/penguins-four-shapes.png`, `img/explore-round-penguins.png`, `img/hyperedges-members-vs-via.png`, `img/explore-round-hyperedges-members.png`, `img/hyperedges-members-routed-link.png`, `img/hyperedges-members-near-edge.png`, `img/explore-round-trout.png`, `img/explore-round-munkres.png`, `img/before-smoothing-u.png`, `img/roundness-u.png`, `img/before-smoothing-hyperedges.png`, `img/roundness-hyperedges.png`, `img/roundness-hyperedges-members.png`, `img/topology-munkres-panel-smooth.png`, `img/smooth-hull-preset-vs-true-hull.png`, `img/current-curvature-topology-ac.png`, `img/penguins-hull-per-species.png` (now the hull preset), `img/penguins-box-per-species.png`, `img/planets-box-component.png`, `img/bars-box-per-lake-group.png`.
 
 ---
 
@@ -762,8 +850,33 @@ enclose({
 
 v5 also showed the Gentoo species alone, with the other two avoided and cropped to its cluster; the dataset now shows all three species.
 
+## v6: `smoothing`, replaced by `roundness`
+
+Josh: convexity and smoothing overlapped; both fill gaps. Until v6 the blob had a closing step and a different rule for avoided nodes:
+
+- A triangle was filled only when no avoided node's keep-out zone touched it, so an avoided node inside the set left a hole shaped like the triangles around it.
+- The union of the pieces was closed by a disc of radius `smoothing`, which filled gaps narrower than about twice that radius.
+- The blur width was σ = ½ min(`smoothing`, thinnest piece).
+
+So `smoothing` filled gaps the way `convexity` does, and it also reshaped the holes: small values left triangle holes, middle values half-rounded them, and only large values filled the triangles back in and cut just the circles. The section "Why these knobs are orthogonal" measures the overlap. The old dataset grids, with columns `convexity` (0, 0.5, 0.8, 1) and rows `smoothing` (half the padding, equal to it, twice it), or columns `neck` where convexity did nothing:
+
+![a, c avoiding b: neck by smoothing](img/explore-topology.png)
+
+![U cloud: convexity by smoothing](img/explore-u.png)
+
+![penguins: convexity by smoothing](img/explore-penguins.png)
+
+![hyperedges with edges as members: convexity by smoothing](img/explore-hyperedges-members.png)
+
+![trout: neck by smoothing](img/explore-trout.png)
+
+![Munkres panel: neck by smoothing](img/explore-munkres.png)
+
 ## Retired decisions
 
+- **`smoothing` on `Shape.blob()`** (v6). Replaced by `roundness`. Josh: convexity and smoothing overlapped; both fill gaps.
+- **Leave out triangles that touch an avoided node** (v6). Replaced by filling them and cutting the node's clearance circle out, so an avoided node inside the set is always a round hole.
+- **`convexity` alone as decision 11** (v6). Decision 11 now asks about both shape knobs.
 - **`via` on `Shape.blob()`** (v5). Replaced by edges as members (decision 13).
 
 - **`alpha` as a pixel radius on `Shape.hull()`** (v1 question 5). Retired in v3; alpha came back in v4 as `convexity`.

@@ -5,9 +5,9 @@ import { DATASETS } from "./src/datasets";
 import { computeDataset, type Params } from "./src/compute";
 
 const settings: [string, (pad: number) => Partial<Params>][] = [
-  ["defaults", (pad) => ({ convexity: 0.5, neck: 1, smoothing: pad })],
-  ["hull", (pad) => ({ convexity: 1, neck: 1, smoothing: pad })],
-  ["spine", (pad) => ({ convexity: 0, neck: 1, smoothing: pad })],
+  ["defaults", (pad) => ({ convexity: 0.5, neck: 1, roundness: pad })],
+  ["hull", (pad) => ({ convexity: 1, neck: 1, roundness: pad })],
+  ["spine", (pad) => ({ convexity: 0, neck: 1, roundness: pad })],
 ];
 const drag = Number(process.env.DRAG_RES ?? 1);
 let bad = 0;

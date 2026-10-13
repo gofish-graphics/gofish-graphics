@@ -305,8 +305,9 @@
   <h1>Blob playground</h1>
   <p class="lede">
     Move the sliders to redraw <code>Shape.blob()</code> live with the current
-    construction: a Delaunay skeleton, discs and tubes, a closing, the avoided
-    nodes cut out, then a Gaussian blur traced at level ½.
+    construction: a Delaunay skeleton, discs and tubes, the avoided nodes cut
+    out, then a Gaussian blur traced at level ½. Convexity alone decides what is
+    filled; roundness only changes curvature.
     <a href="https://claude.ai/artifact/2esKYS7PvWVMdoyVny6uLP"
       >Back to the proposal</a
     >.
@@ -345,7 +346,8 @@
           ></label>
           <input type="range" id="convexity" min="0" max="1" step="0.01" />
           <div class="hint">
-            0 is a spanning tree of links; 1 fills every triangle (the hull)
+            0 is a spanning tree of links; 1 fills every triangle (the hull).
+            The only knob that fills gaps.
           </div>
         </div>
         <div class="field">
@@ -358,13 +360,14 @@
           </div>
         </div>
         <div class="field">
-          <label for="smoothing"
-            >smoothing <output id="smoothing-out" for="smoothing"></output
+          <label for="roundness"
+            >roundness <output id="roundness-out" for="roundness"></output
           ></label>
-          <input type="range" id="smoothing" min="0" max="24" step="0.5" />
+          <input type="range" id="roundness" min="0" max="24" step="0.5" />
           <div class="hint">
-            closing radius in px; blur σ = ½ min(smoothing, thinnest piece).
-            <span id="smoothing-hint"></span>
+            how far corners are rounded, in px (blur σ = roundness ÷ 2); never
+            fills, splits or opens anything.
+            <span id="roundness-hint"></span>
           </div>
         </div>
       </section>

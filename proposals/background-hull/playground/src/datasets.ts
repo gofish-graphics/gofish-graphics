@@ -109,7 +109,7 @@ const topology: Dataset = {
   over: ringInk(MB) + topoPoints(),
   call: "[a, c]",
   shapeArgs: "avoiding: [b]",
-  note: "Two members, so there is no triangle to fill: convexity does nothing here. Try neck and smoothing.",
+  note: "Two members, so there is no triangle to fill: convexity does nothing here. Try neck and roundness.",
 };
 
 const oval = (cx: number, w: number, h: number) =>
@@ -139,7 +139,7 @@ const munkres: Dataset = {
     topoPoints(),
   call: "[a, c]",
   shapeArgs: "avoiding: [b]",
-  note: "Munkres' ninth panel. The ovals are the custom-shape escape hatch; only {a, c} is a blob. The proposal's spelling is neck 0.85, smoothing 40.",
+  note: "Munkres' ninth panel. The ovals are the custom-shape escape hatch; only {a, c} is a blob. The proposal's spelling is neck 0.85.",
 };
 
 // ── (b) the U-shaped cloud ───────────────────────────────────────────────────

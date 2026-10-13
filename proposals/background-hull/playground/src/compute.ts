@@ -4,11 +4,11 @@ import type { Dataset } from "./datasets";
 export type Params = {
   convexity: number;
   neck: number;
-  smoothing: number;
+  roundness: number;
   padding: number;
   clearance: number;
 };
-export type SetResult = { loops: Pt[][]; skel: Skeleton };
+export type SetResult = { loops: Pt[][]; skel: Skeleton; sigma: number };
 
 /** One smoothBlob call per set, exactly as the stories call it. `res` (grid cell, px)
  *  overrides the construction's own choice; the page passes a coarser one while dragging. */
@@ -24,9 +24,9 @@ export const computeDataset = (
       pad: p.padding,
       convexity: p.convexity,
       neck: p.neck,
-      smoothing: p.smoothing,
+      roundness: p.roundness,
       clearance: p.clearance,
       ...(res ? { res } : {}),
     });
-    return { loops: r.loops, skel: r.skel };
+    return { loops: r.loops, skel: r.skel, sigma: r.sigma };
   });

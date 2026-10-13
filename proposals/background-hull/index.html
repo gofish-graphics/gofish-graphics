@@ -418,6 +418,19 @@
       columns: 1;
     }
   }
+  td.heat {
+    background: color-mix(
+      in srgb,
+      var(--accent) calc(var(--v) * 55%),
+      transparent
+    );
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  td.num {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
 </style>
 
 <main>
@@ -436,12 +449,16 @@
     <code>Shape.blob()</code>, fills the space between members with the alpha
     shape's rule (dialed by <code>convexity</code>), links them with a spanning
     tree so the set stays in one piece, and blurs the result so the outline's
-    curvature never jumps. The convex hull and the spine are shortcuts of it,
-    the way <code>sina()</code> and <code>jitter()</code> are shortcuts of
-    <code>noise()</code>. A member can be any placed shape, so a graph's edges
-    can be members next to its nodes. The design idea is a discrete choice
-    followed by continuous tuning: pick a shape from a small set (box, hull,
-    blob, spine), then adjust the blob's parameters to taste.
+    curvature never jumps. Two knobs shape it, and they do not overlap:
+    <code>convexity</code> alone decides what is filled, and
+    <code>roundness</code> changes only how sharply the outline bends, never
+    filling a gap, opening a hole or joining two pieces. The convex hull and the
+    spine are shortcuts of it, the way <code>sina()</code> and
+    <code>jitter()</code> are shortcuts of <code>noise()</code>. A member can be
+    any placed shape, so a graph's edges can be members next to its nodes. The
+    design idea is a discrete choice followed by continuous tuning: pick a shape
+    from a small set (box, hull, blob, spine), then adjust the blob's parameters
+    to taste.
   </p>
 
   <div class="rec">
@@ -449,7 +466,7 @@
       <strong>Recommendation.</strong> Rebuild <code>enclose</code> with
       <code>createRelationalMark</code> and give it
       <code
-        >shape: Shape.box({ rx, ry }) | Shape.blob({ convexity, neck, smoothing,
+        >shape: Shape.box({ rx, ry }) | Shape.blob({ convexity, roundness, neck,
         avoiding, clearance })</code
       >, with two shortcuts: <code>Shape.hull(opts)</code> =
       <code>Shape.blob({ convexity: 1, neck: 1, ...opts })</code> and
@@ -480,6 +497,7 @@
   <ol class="toc">
     <li><a href="#terms">Terms</a></li>
     <li><a href="#syntax">The syntax</a></li>
+    <li><a href="#orthogonal">Why these knobs are orthogonal</a></li>
     <li><a href="#explorer">Dataset explorer</a></li>
     <li><a href="#hull-check">The hull preset is within half a pixel</a></li>
     <li><a href="#curvature">The curvature never jumps</a></li>
@@ -550,10 +568,20 @@
     <div class="card">
       <h4>Closing, blur, curvature</h4>
       <p>
-        Closing grows a shape by <em>s</em> and shrinks it back, which rounds
-        dents and fills narrow gaps. A Gaussian blur averages nearby values with
-        bell-curve weights. Curvature is 1 over the radius of the best-fitting
-        circle; an outline is G2 when its curvature never jumps.
+        A morphological closing grows a shape by <em>s</em> and shrinks it back,
+        which rounds dents and fills gaps narrower than about 2<em>s</em>; the
+        current construction does not use it. A Gaussian blur averages nearby
+        values with bell-curve weights. Curvature is 1 over the radius of the
+        best-fitting circle; an outline is G2 when its curvature never jumps.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Topology, sensitivity matrix</h4>
+      <p>
+        Topology here is how many pieces an outline has and how many holes. A
+        sensitivity matrix has one row per measured property of the outline and
+        one column per knob; each cell says how much that knob alone moves the
+        property, from 0 (not at all) to 1 (as much as it ever moves).
       </p>
     </div>
   </div>
@@ -575,7 +603,7 @@ chart(penguins)
 // contains a and c but not b: combinator form over refs
 layer([a, b, c]).relate(({ a, b, c }) =&gt; [
   enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.85,
-                                 smoothing: 40, clearance: 6 }),
+                                 clearance: 6 }),
             padding: 22, fill: "#ff2400" }, [a, c]),
 ])
 
@@ -599,7 +627,7 @@ enclose({ padding: 20, fill: "#252150", stroke: "none",
 layer([a, b, c]).relate(lambda a, b, c: [
     enclose([a, c],
             shape=Shape.spine(avoiding=[b], neck=0.85,
-                              smoothing=40, clearance=6),
+                              clearance=6),
             padding=22, fill="#ff2400"),
 ])
 
@@ -629,20 +657,20 @@ enclose([spread([circle(**d) for d in planets],
       <tr>
         <td><code>Shape.blob(opts)</code></td>
         <td>the general region</td>
-        <td>discs, links and filled triangles, smoothed (below)</td>
+        <td>discs, links and filled triangles, rounded (below)</td>
       </tr>
       <tr>
         <td><code>Shape.hull(opts)</code></td>
         <td><code>Shape.blob({ convexity: 1, neck: 1, ...opts })</code></td>
         <td>
-          the convex hull grown by <code>padding</code>, smoothed (within half a
+          the convex hull grown by <code>padding</code>, rounded (within half a
           pixel)
         </td>
       </tr>
       <tr>
         <td><code>Shape.spine(opts)</code></td>
         <td><code>Shape.blob({ convexity: 0, ...opts })</code></td>
-        <td>the spanning tree of tubes, smoothed</td>
+        <td>the routed spanning tree of tubes and nothing else, rounded</td>
       </tr>
     </table>
   </div>
@@ -652,15 +680,17 @@ enclose([spread([circle(**d) for d in planets],
     <code>noise()</code> with two presets), a shortcut makes the same object as
     the general call (<code>kind: "blob"</code>), declared once as a preset, and
     any option overrides the preset. So
-    <code>Shape.hull({ avoiding: others })</code> is legal and draws a hull that
-    leaves out triangles touching other nodes. <code>Shape.box()</code> stays
-    separate: a box is a rectangle grown by padding, not a union of discs.
+    <code>Shape.hull({ avoiding: others })</code> is legal and draws the hull
+    with each other node inside it cut out as a round hole, and
+    <code>Shape.hull({ roundness: 15 })</code> is legal and draws a hull with
+    softer corners. <code>Shape.box()</code> stays separate: a box is a
+    rectangle grown by padding, not a union of discs.
   </p>
   <p>
     So the four values are a small discrete menu, and the blob's parameters are
     the continuous dials behind three of them. A user picks the shape that reads
     best first (the penguins tab shows the four side by side), and only then
-    tunes <code>convexity</code>, <code>neck</code> and <code>smoothing</code>.
+    tunes <code>convexity</code>, <code>roundness</code> and <code>neck</code>.
   </p>
 
   <h3>Parameters</h3>
@@ -703,10 +733,24 @@ enclose([spread([circle(**d) for d in planets],
         <td>
           How much of the space between members is filled, from 0 (a spanning
           tree of links) to 1 (every Delaunay triangle: the convex hull).
-          Unitless.
+          Unitless. It is the only parameter that fills gaps, so it alone
+          decides the pieces, the holes and the filled area.
         </td>
         <td>Bigger is fuller and more convex.</td>
         <td>0.5</td>
+      </tr>
+      <tr>
+        <td><code>roundness</code></td>
+        <td><code>Shape.blob</code></td>
+        <td>
+          How far the outline's corners are rounded, in pixels (the blur width σ
+          is half of it). It changes curvature only: the pieces and holes stay
+          the same, and the filled area moves by a few percent at most. It takes
+          effect up to the thinnest piece, a member's grown radius or a link's
+          half-width.
+        </td>
+        <td>Bigger is rounder.</td>
+        <td>same as <code>padding</code></td>
       </tr>
       <tr>
         <td><code>neck</code></td>
@@ -717,16 +761,6 @@ enclose([spread([circle(**d) for d in planets],
         </td>
         <td>Bigger is thicker; 1 is as thick.</td>
         <td>1</td>
-      </tr>
-      <tr>
-        <td><code>smoothing</code></td>
-        <td><code>Shape.blob</code></td>
-        <td>
-          Closing radius in pixels; it also sets the blur, so the curvature
-          changes gradually over a length that grows with it.
-        </td>
-        <td>Bigger is smoother and fuller.</td>
-        <td>same as <code>padding</code></td>
       </tr>
       <tr>
         <td><code>avoiding</code></td>
@@ -759,9 +793,8 @@ enclose([spread([circle(**d) for d in planets],
       <strong>Skeleton.</strong> Each member is its own geometry: a node is its
       center, and a line member (such as a graph edge) is its segment, which
       already links its two ends. Take the Delaunay triangulation of the
-      members' points (node centers and line ends). Fill a triangle when its
-      circumradius is at most alpha and no avoided node's keep-out zone (the
-      node grown by <code>clearance</code>) touches it. The links are the edges
+      members' points (node centers and line ends). Fill every triangle whose
+      circumradius is at most alpha, whatever it holds. The links are the edges
       of the filled triangles, the other Delaunay edges no longer than 2 alpha
       that no avoided node blocks, and the minimum spanning tree over the
       members, routed around the avoided nodes (always, so the set stays in one
@@ -774,26 +807,42 @@ enclose([spread([circle(**d) for d in planets],
       bulge, radius <em>R</em>; for a line member, a tube around its whole
       length). Each link that bounds a filled triangle is a tube as wide as the
       bulge; every other link is a tube <code>neck</code> times the bulge. The
-      filled triangles.
+      filled triangles. The union of these pieces is the region, and nothing
+      else fills it.
     </li>
     <li>
-      <strong>Closing.</strong> The union of the pieces is closed by a disc of
-      radius <code>smoothing</code>.
+      <strong>Cut.</strong> Each avoided node's keep-out zone (the node grown by
+      <code>clearance</code>) is cut out of the region. A zone inside the region
+      becomes a hole that is exactly that circle. A zone across the region's
+      edge becomes a round notch.
     </li>
     <li>
-      <strong>Cut.</strong> Each avoided node's keep-out zone is cut back out.
+      <strong>Rounding.</strong> The region is blurred with a Gaussian of width
+      σ = <code>roundness</code> / 2 and multiplied by a smooth step that is ½
+      exactly on each keep-out zone's edge. The outline is where the product is
+      ½. A blurred region is a sum of smooth bumps, so this outline is
+      curvature-continuous, and each hole stays an exact circle at any
+      <code>roundness</code>. Blurring pulls a bulge of radius <em>r</em> in by
+      about σ²/(2<em>r</em>), so discs and tubes are drawn slightly larger to
+      cancel it, and a lone member ends exactly at <code>padding</code> and a
+      lone link at its half-width.
     </li>
     <li>
-      <strong>Blur.</strong> The region is blurred with a Gaussian of width σ =
-      ½ min(<code>smoothing</code>, thinnest piece), and the outline is where
-      the blurred value is ½. A blurred region is a sum of smooth bumps, so this
-      outline is curvature-continuous. Blurring pulls a bulge of radius
-      <em>r</em> in by about σ²/(2<em>r</em>), so discs, tubes and cut zones are
-      drawn slightly larger to cancel it: a lone member ends exactly at
-      <code>padding</code>, a lone link at its half-width, and the cut at
-      <code>clearance</code>.
+      <strong>Topology check.</strong> If the blur would join two pieces, split
+      one, or open or close a hole, σ is narrowed by bisection until it does
+      not. So <code>roundness</code> never changes the topology. Its effect also
+      stops at the thinnest piece, because a member's own arc already has radius
+      <em>R</em>, and rounding it further would cost padding.
     </li>
   </ol>
+  <p>
+    <strong>Holes and detours.</strong> Step 1 decides whether an avoided node
+    becomes a hole or the outline goes around it, and the user does not choose.
+    A node inside a filled triangle is inside the region, so it becomes a hole.
+    A node that no filled triangle covers stays outside, and the links route
+    around it. In the Topology example, a and c form no triangle, so b is never
+    inside, and the band passes under b at every <code>convexity</code>.
+  </p>
   <p>
     <strong>The convexity scale.</strong> alpha = <em>m</em> ×
     <code>convexity</code> / (1 − <code>convexity</code>), where <em>m</em> is
@@ -803,6 +852,386 @@ enclose([spread([circle(**d) for d in planets],
     of <em>m</em> makes the rule depend only on the shape of the point set, not
     on the chart's size.
   </p>
+
+  <h3 id="orthogonal">Why these knobs are orthogonal</h3>
+  <p>
+    Josh found that <code>convexity</code> and the old
+    <code>smoothing</code> overlapped. They did, because both filled gaps.
+    <code>convexity</code> fills the Delaunay triangles whose circumradius is at
+    most alpha. The old <code>smoothing</code> was a morphological closing by a
+    radius <em>s</em>, and on discs of radius <em>R</em> a closing fills the
+    same triangles as an alpha shape with alpha = <em>R</em> + <em>s</em>,
+    because the closing's disc fits in a triangle's gap exactly when that
+    triangle's empty circle is wider than <em>R</em> + <em>s</em>. So the two
+    knobs ran one operation twice at two scales. The blur, the only step that
+    changed curvature alone, had no knob of its own, since its width was half of
+    <code>smoothing</code>.
+  </p>
+  <p class="rec">
+    <strong
+      >Now <code>convexity</code> decides topology and filled area, and
+      <code>roundness</code> decides only curvature.</strong
+    >
+    The closing is gone, so every fill comes from <code>convexity</code>'s
+    triangles, and the blur is the <code>roundness</code> knob.
+  </p>
+  <p>
+    To check this, we measured eight properties of the outline over a full grid
+    of the knobs: <code>convexity</code> at 0, 0.25, 0.5, 0.75 and 1; the second
+    knob at 0, ½, 1 and 2 times the padding; <code>neck</code> at 0.5, 0.75 and
+    1; and <code>padding</code> and <code>clearance</code> at three values each.
+    We used four datasets: the U, the Gentoo penguins with the other species
+    avoided, Topology, and the hyperedges with edges as members. The properties
+    are these.
+  </p>
+  <ul>
+    <li>
+      <strong>Fill.</strong> The area beyond the padded spanning tree, as a
+      share of the padded convex hull.
+    </li>
+    <li>
+      <strong>Gap.</strong> The radius of the widest empty disc inside the
+      padded hull that is neither filled nor a keep-out zone.
+    </li>
+    <li>
+      <strong>Radius.</strong> The smallest radius of curvature on the outline
+      (capped at 40 px).
+    </li>
+    <li>
+      <strong>Padding.</strong> The measured distance from the outermost members
+      to the outline.
+    </li>
+    <li>
+      <strong>Neck.</strong> The narrowest link width, as a share of the bulge.
+    </li>
+    <li>
+      <strong>Clearance.</strong> The measured gap at avoided nodes the outline
+      comes near.
+    </li>
+    <li>
+      <strong>Hole shape.</strong> A hole's area divided by its keep-out
+      circle's area, where 1 is an exact circle.
+    </li>
+    <li>
+      <strong>Topology.</strong> Whether the number of pieces or holes changes.
+    </li>
+  </ul>
+  <p>
+    Each cell is the average, over all settings of the other knobs, of how far
+    the property moves along this knob alone, divided by how far it moves over
+    the whole grid. For topology, the cell is the share of sweeps along which
+    the count changes. The four datasets are averaged. Darker cells move more.
+  </p>
+  <div class="tablewrap">
+    <table>
+      <tr>
+        <th>Before</th>
+        <th><code>convexity</code></th>
+        <th><code>smoothing</code></th>
+        <th><code>neck</code></th>
+        <th><code>padding</code></th>
+        <th><code>clearance</code></th>
+      </tr>
+      <tr>
+        <td>Fill</td>
+        <td class="heat" style="--v: 0.55">0.55</td>
+        <td class="heat" style="--v: 0.19">0.19</td>
+        <td class="heat" style="--v: 0.14">0.14</td>
+        <td class="heat" style="--v: 0.1">0.10</td>
+        <td class="heat" style="--v: 0.03">0.03</td>
+      </tr>
+      <tr>
+        <td>Gap</td>
+        <td class="heat" style="--v: 0.44">0.44</td>
+        <td class="heat" style="--v: 0.03">0.03</td>
+        <td class="heat" style="--v: 0.06">0.06</td>
+        <td class="heat" style="--v: 0.21">0.21</td>
+        <td class="heat" style="--v: 0.2">0.20</td>
+      </tr>
+      <tr>
+        <td>Radius</td>
+        <td class="heat" style="--v: 0.23">0.23</td>
+        <td class="heat" style="--v: 0.51">0.51</td>
+        <td class="heat" style="--v: 0.12">0.12</td>
+        <td class="heat" style="--v: 0.1">0.10</td>
+        <td class="heat" style="--v: 0.08">0.08</td>
+      </tr>
+      <tr>
+        <td>Padding</td>
+        <td class="heat" style="--v: 0.01">0.01</td>
+        <td class="heat" style="--v: 0.03">0.03</td>
+        <td class="heat" style="--v: 0">0.00</td>
+        <td class="heat" style="--v: 0.94">0.94</td>
+        <td class="heat" style="--v: 0">0.00</td>
+      </tr>
+      <tr>
+        <td>Neck</td>
+        <td class="heat" style="--v: 0.13">0.13</td>
+        <td class="heat" style="--v: 0.05">0.05</td>
+        <td class="heat" style="--v: 0.42">0.42</td>
+        <td class="heat" style="--v: 0.05">0.05</td>
+        <td class="heat" style="--v: 0.29">0.29</td>
+      </tr>
+      <tr>
+        <td>Clearance</td>
+        <td class="heat" style="--v: 0.04">0.04</td>
+        <td class="heat" style="--v: 0.03">0.03</td>
+        <td class="heat" style="--v: 0.01">0.01</td>
+        <td class="heat" style="--v: 0.25">0.25</td>
+        <td class="heat" style="--v: 0.57">0.57</td>
+      </tr>
+      <tr>
+        <td>Hole shape</td>
+        <td class="heat" style="--v: 0.12">0.12</td>
+        <td class="heat" style="--v: 0.23">0.23</td>
+        <td class="heat" style="--v: 0.21">0.21</td>
+        <td class="heat" style="--v: 0.21">0.21</td>
+        <td class="heat" style="--v: 0.31">0.31</td>
+      </tr>
+      <tr>
+        <td>Topology</td>
+        <td class="heat" style="--v: 0.88">0.88</td>
+        <td class="heat" style="--v: 0.48">0.48</td>
+        <td class="heat" style="--v: 0.45">0.45</td>
+        <td class="heat" style="--v: 0.37">0.37</td>
+        <td class="heat" style="--v: 0.49">0.49</td>
+      </tr>
+    </table>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <tr>
+        <th>After</th>
+        <th><code>convexity</code></th>
+        <th><code>roundness</code></th>
+        <th><code>neck</code></th>
+        <th><code>padding</code></th>
+        <th><code>clearance</code></th>
+      </tr>
+      <tr>
+        <td>Fill</td>
+        <td class="heat" style="--v: 0.62">0.62</td>
+        <td class="heat" style="--v: 0.11">0.11</td>
+        <td class="heat" style="--v: 0.1">0.10</td>
+        <td class="heat" style="--v: 0.08">0.08</td>
+        <td class="heat" style="--v: 0.04">0.04</td>
+      </tr>
+      <tr>
+        <td>Gap</td>
+        <td class="heat" style="--v: 0.67">0.67</td>
+        <td class="heat" style="--v: 0.04">0.04</td>
+        <td class="heat" style="--v: 0.04">0.04</td>
+        <td class="heat" style="--v: 0.17">0.17</td>
+        <td class="heat" style="--v: 0.14">0.14</td>
+      </tr>
+      <tr>
+        <td>Radius</td>
+        <td class="heat" style="--v: 0.47">0.47</td>
+        <td class="heat" style="--v: 0.26">0.26</td>
+        <td class="heat" style="--v: 0.15">0.15</td>
+        <td class="heat" style="--v: 0.12">0.12</td>
+        <td class="heat" style="--v: 0.05">0.05</td>
+      </tr>
+      <tr>
+        <td>Padding</td>
+        <td class="heat" style="--v: 0.01">0.01</td>
+        <td class="heat" style="--v: 0.01">0.01</td>
+        <td class="heat" style="--v: 0">0.00</td>
+        <td class="heat" style="--v: 0.96">0.96</td>
+        <td class="heat" style="--v: 0">0.00</td>
+      </tr>
+      <tr>
+        <td>Neck</td>
+        <td class="heat" style="--v: 0.15">0.15</td>
+        <td class="heat" style="--v: 0.09">0.09</td>
+        <td class="heat" style="--v: 0.38">0.38</td>
+        <td class="heat" style="--v: 0.05">0.05</td>
+        <td class="heat" style="--v: 0.28">0.28</td>
+      </tr>
+      <tr>
+        <td>Clearance</td>
+        <td class="heat" style="--v: 0.02">0.02</td>
+        <td class="heat" style="--v: 0.11">0.11</td>
+        <td class="heat" style="--v: 0.04">0.04</td>
+        <td class="heat" style="--v: 0.19">0.19</td>
+        <td class="heat" style="--v: 0.52">0.52</td>
+      </tr>
+      <tr>
+        <td>Hole shape</td>
+        <td class="heat" style="--v: 0">0.00</td>
+        <td class="heat" style="--v: 0.01">0.01</td>
+        <td class="heat" style="--v: 0">0.00</td>
+        <td class="heat" style="--v: 0.06">0.06</td>
+        <td class="heat" style="--v: 0.93">0.93</td>
+      </tr>
+      <tr>
+        <td>Topology</td>
+        <td class="heat" style="--v: 1">1.00</td>
+        <td class="heat" style="--v: 0">0.00</td>
+        <td class="heat" style="--v: 0.54">0.54</td>
+        <td class="heat" style="--v: 0.49">0.49</td>
+        <td class="heat" style="--v: 0.46">0.46</td>
+      </tr>
+    </table>
+  </div>
+  <p>
+    The rows that move with <code>padding</code>, <code>clearance</code> and
+    <code>neck</code> are expected. Those knobs are distances, and a distance
+    can join two pieces or close a hole, so the claim is about the two shape
+    knobs only.
+  </p>
+  <p>
+    Before, <code>smoothing</code> moved the filled area (0.19), the hole shape
+    (0.23) and the topology (along 48% of its sweeps), and
+    <code>convexity</code> moved the smallest radius (0.23), so each knob did
+    part of the other's job. After, <code>roundness</code> changes the topology
+    along none of its sweeps (0.00) and the hole shape not at all (0.01). Its
+    largest effect is on the radius (0.26), which is its job. Its smaller
+    effects on fill and clearance are the bit of area that rounding a concave
+    corner adds, and the lips of a notch moving as they round.
+    <code>convexity</code> still moves the radius, because filling triangles
+    makes new corners, so that is the shape changing, not a second rounding
+    control. The hole shape now depends on <code>clearance</code> alone (0.93).
+  </p>
+  <p>
+    The topology check, on its own: each dataset (with the hyperedges both with
+    edges as members and with <code>via</code>) at seven values of
+    <code>convexity</code> (0, 0.25, 0.5, 0.65, 0.75, 0.9 and 1), with the
+    second knob swept over 0, ¼, ½, 1, 1.5, 2, 3 and 4 times the padding. A cell
+    lists pieces/holes along the sweep.
+  </p>
+  <p>
+    Before, the counts stayed the same along 26 of 35 sweeps; after, along 35 of
+    35, with roundness 0 included. The sweeps that changed before:
+  </p>
+  <div class="tablewrap">
+    <table>
+      <tr>
+        <th>dataset</th>
+        <th>convexity</th>
+        <th>before (<code>smoothing</code>)</th>
+        <th>after (<code>roundness</code>)</th>
+      </tr>
+      <tr>
+        <td>U</td>
+        <td class="num">0.9</td>
+        <td class="num">1/2 1/2 1/2 1/3 1/2 1/2 1/2 1/2</td>
+        <td class="num">1/2 1/2 1/2 1/2 1/2 1/2 1/2 1/2</td>
+      </tr>
+      <tr>
+        <td>U</td>
+        <td class="num">1</td>
+        <td class="num">1/2 1/2 1/2 1/3 1/2 1/2 1/2 1/2</td>
+        <td class="num">1/2 1/2 1/2 1/2 1/2 1/2 1/2 1/2</td>
+      </tr>
+      <tr>
+        <td>Gentoo</td>
+        <td class="num">0</td>
+        <td class="num">1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0</td>
+        <td class="num">1/4 1/4 1/4 1/4 1/4 1/4 1/4 1/4</td>
+      </tr>
+      <tr>
+        <td>Gentoo</td>
+        <td class="num">0.25</td>
+        <td class="num">1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0</td>
+        <td class="num">1/4 1/4 1/4 1/4 1/4 1/4 1/4 1/4</td>
+      </tr>
+      <tr>
+        <td>Gentoo</td>
+        <td class="num">0.5</td>
+        <td class="num">1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0</td>
+        <td class="num">1/3 1/3 1/3 1/3 1/3 1/3 1/3 1/3</td>
+      </tr>
+      <tr>
+        <td>Gentoo</td>
+        <td class="num">0.65</td>
+        <td class="num">1/2 1/2 1/2 1/0 2/0 2/0 2/0 1/0</td>
+        <td class="num">1/2 1/2 1/2 1/2 1/2 1/2 1/2 1/2</td>
+      </tr>
+      <tr>
+        <td>Gentoo</td>
+        <td class="num">0.75</td>
+        <td class="num">1/0 1/0 1/0 1/0 2/0 2/0 1/0 1/0</td>
+        <td class="num">1/0 1/0 1/0 1/0 1/0 1/0 1/0 1/0</td>
+      </tr>
+      <tr>
+        <td>hyperedges, <code>via</code></td>
+        <td class="num">0</td>
+        <td class="num">3/3 3/3 3/3 3/3 3/1 3/0 3/0 3/0</td>
+        <td class="num">3/3 3/3 3/3 3/3 3/3 3/3 3/3 3/3</td>
+      </tr>
+      <tr>
+        <td>hyperedges, <code>via</code></td>
+        <td class="num">0.25</td>
+        <td class="num">3/3 3/3 3/3 3/3 3/1 3/0 3/0 3/0</td>
+        <td class="num">3/3 3/3 3/3 3/3 3/3 3/3 3/3 3/3</td>
+      </tr>
+    </table>
+  </div>
+  <p>
+    Josh's two cases, before and after. On the U at high convexity, the old
+    smoothing first left triangle-shaped holes, then half-rounded them, and only
+    at high values cut just the circles. Now the holes are the clearance circles
+    at every roundness, and roundness only softens the corners, from the angular
+    hull at 0 to the softest the members' 15 px radius allows. Convexity 0.65 is
+    the third case Josh named; there too only the corners soften.
+  </p>
+  <figure>
+    <div class="shot wide">
+      <img
+        src="img/before-smoothing-u.png"
+        alt="Before: the U at convexity 0.65, 0.9 and 1 with the old smoothing at 0, 4, 8, 16 and 24 px; the holes go from triangles to half-rounded shapes to circles"
+      />
+    </div>
+    <figcaption>Before: <code>smoothing</code> across.</figcaption>
+  </figure>
+  <figure>
+    <div class="shot wide">
+      <img
+        src="img/roundness-u.png"
+        alt="After: the U at convexity 0.65, 0.9 and 1 with roundness at 0, 4, 8, 12 and 15 px; the holes are circles in every cell and only the corners soften"
+      />
+    </div>
+    <figcaption>After: <code>roundness</code> across, same rows.</figcaption>
+  </figure>
+  <p>
+    On the hyperedges at convexity 0.25, the old smoothing filled the three
+    cycles at 12 px and above, which looked like a higher convexity. With
+    roundness the cycles stay open at every value. The holes get smaller as
+    their corners round, because a triangle's corners are the part of it that is
+    cut. With edges as members (the last row), roundness changes little, because
+    the edge members are slim tubes (6.75 px), and roundness stops at the
+    thinnest piece.
+  </p>
+  <figure>
+    <div class="shot wide">
+      <img
+        src="img/before-smoothing-hyperedges.png"
+        alt="Before: hyperedges with via at convexity 0.25, old smoothing 0 to 24 px; the cycles fill from 12 px"
+      />
+    </div>
+    <figcaption>
+      Before: <code>smoothing</code> across, with <code>via</code>.
+    </figcaption>
+  </figure>
+  <figure>
+    <div class="shot wide">
+      <img
+        src="img/roundness-hyperedges.png"
+        alt="After: hyperedges with via at convexity 0.25, roundness 0 to 15 px; the three cycles stay open"
+      />
+    </div>
+    <figcaption>After: <code>roundness</code> across, same row.</figcaption>
+  </figure>
+  <figure>
+    <div class="shot wide">
+      <img
+        src="img/roundness-hyperedges-members.png"
+        alt="After: hyperedges with edges as members at convexity 0.25, roundness 0 to 15 px"
+      />
+    </div>
+    <figcaption>After, with edges as members.</figcaption>
+  </figure>
 
   <h3>Custom shapes and the ellipse</h3>
   <p>
@@ -841,18 +1270,18 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
   <p>
     One grid per dataset, all with the same two parameters.
     <strong
-      >Columns are <code>convexity</code> (0, 0.5, 0.8, 1) and rows are
-      <code>smoothing</code> (half the padding, equal to it, twice it), because
-      these are the two blob knobs that change the outline's character, how much
-      space between members is filled and how gently it bends, while
+      >Columns are <code>convexity</code> (0, 0.25, 0.5, 0.75, 1) and rows are
+      <code>roundness</code> (0, half the padding, equal to it, twice it),
+      because these are the two blob knobs that change the outline's character:
+      what is filled, and how sharply the outline bends.
       <code>padding</code> and <code>clearance</code> are plain distances whose
       effect reads from their names.</strong
     >
-    The teal frame marks the recommended defaults cell (<code
-      >convexity: 0.5</code
-    >, <code>neck: 1</code>, <code>smoothing</code> equal to
-    <code>padding</code>). Where convexity does nothing on a dataset, the
-    columns are <code>neck</code> instead, and the grid's header says so.
+    Down a column the pieces and holes never change. The teal frame marks the
+    recommended defaults cell (<code>convexity: 0.5</code>,
+    <code>neck: 1</code>, <code>roundness</code> equal to <code>padding</code>).
+    Where convexity does nothing on a dataset, the columns are
+    <code>neck</code> instead, and the grid's header says so.
   </p>
 
   <div role="tablist" aria-label="Datasets" id="ds-tabs" hidden>
@@ -918,23 +1347,26 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
     tabindex="0"
   >
     <h3>(a) a, b, c with {a, c} avoiding b</h3>
-    <pre><code>enclose({ shape: Shape.spine({ avoiding: [b], neck, smoothing, clearance: 6 }),
+    <pre><code>enclose({ shape: Shape.spine({ avoiding: [b], neck, roundness, clearance: 6 }),
           padding: 22 }, [a, c])</code></pre>
     <figure>
       <div class="shot wide">
         <img
-          src="img/explore-topology.png"
-          alt="Grid of the a, c set avoiding b: neck 0.5 to 1 across, smoothing 11, 22, 44 px down"
+          src="img/explore-round-topology.png"
+          alt="Grid of the a, c set avoiding b: neck 0.5 to 1 across, roundness 0, 11, 22, 44 px down"
         />
       </div>
       <figcaption>
         <strong>Columns are <code>neck</code></strong> (0.5, 0.7, 0.85, 1): with
         two members there is no triangle to fill and the one link is always
         kept, so every <code>convexity</code> draws the same thing. Rows are
-        <code>smoothing</code> 11, 22 and 44 px. The band always detours under b
-        at the clearance, and the joins to the circles stay smooth at every
-        setting. The spelling in the syntax section (<code>neck: 0.85</code>,
-        <code>smoothing: 40</code>) sits between the bottom two rows of the
+        <code>roundness</code> 0, 11, 22 and 44 px. The band always passes under
+        b, because a and c form no triangle that could hold b. Roundness rounds
+        the joins between the band and the circles, up to the band's half-width
+        (14.5 px at <code>neck: 0.5</code>, 23 px at 0.85), so 44 px draws
+        nearly what 22 px draws. The spelling in the syntax section (<code
+          >neck: 0.85</code
+        >, <code>roundness</code> at its default of 22) is the third row of the
         third column.
       </figcaption>
     </figure>
@@ -942,23 +1374,28 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
 
   <section role="tabpanel" id="ds-u" aria-labelledby="tab-u" tabindex="0">
     <h3>(b) The U-shaped point cloud with non-members inside</h3>
-    <pre><code>enclose({ shape: Shape.blob({ convexity, smoothing, avoiding: others }),
+    <pre><code>enclose({ shape: Shape.blob({ convexity, roundness, avoiding: others }),
           padding: 8 }, members)</code></pre>
     <figure>
       <div class="shot wide">
         <img
-          src="img/explore-u.png"
-          alt="Grid of the U cloud: convexity 0 to 1 across, smoothing 4, 8, 16 px down"
+          src="img/explore-round-u.png"
+          alt="Grid of the U cloud: convexity 0 to 1 across, roundness 0, 4, 8, 16 px down"
         />
       </div>
       <figcaption>
-        At 0 the U is a tree of tubes, slightly wavy along the arms. At 0.5 the
-        two-dot-thick arms fill and get straight sides with rounded joins, and
-        the opening stays clear. At 0.8 and 1 the triangles across the opening
-        fill except where they touch a gray dot, which leaves holes (drawn
-        white) shaped by the triangles that were left out. With more smoothing
-        the closing fills those gaps, and the holes shrink to even rings around
-        the gray dots.
+        At 0 the U is a tree of tubes, wavy along the arms. At 0.5 the
+        two-dot-thick arms fill and get straight sides, and the opening stays
+        clear. At 0.75 the triangles across the bottom of the opening fill, so
+        the lower gray dot is inside and becomes a round hole (drawn white),
+        while the upper one sits in a notch. At 1 both gray dots are round
+        holes. The holes are the clearance circles at every roundness, so the
+        half-rounded triangles of the old grid (History, v6) are gone. Down each
+        column only the corners change, and the waves between neighboring dots
+        flatten. At 0 and 4 px the spine keeps narrow slits between touching
+        dots. At 4 px the blur would pinch each slit's mouth shut and make a new
+        hole, so the topology check holds the blur back; at 8 px the slits fill
+        completely, which keeps the topology.
       </figcaption>
     </figure>
   </section>
@@ -1000,23 +1437,25 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
     </figure>
     <p>
       Then the dials. The same three species in every cell, convexity by
-      smoothing.
+      roundness.
     </p>
-    <pre><code>.layer(enclose({ shape: Shape.blob({ convexity, smoothing }),
+    <pre><code>.layer(enclose({ shape: Shape.blob({ convexity, roundness }),
                 padding: 6, fill: "Species", opacity: 0.15 }))</code></pre>
     <figure>
       <div class="shot wide">
         <img
-          src="img/explore-penguins.png"
-          alt="Grid of the three penguin species: convexity 0 to 1 across, smoothing 3, 6, 12 px down"
+          src="img/explore-round-penguins.png"
+          alt="Grid of the three penguin species: convexity 0 to 1 across, roundness 0, 3, 6, 12 px down"
         />
       </div>
       <figcaption>
         The defaults cell is the <code>Shape.blob()</code> panel above, and the
-        convexity 1 column is the <code>Shape.hull()</code> panel. At 0.8 each
+        convexity 1 column is the <code>Shape.hull()</code> panel. At 0.75 each
         species becomes one calm region that still leaves out its empty corners,
-        the step between the blob and the hull. More smoothing calms the wobble
-        of the low-convexity outlines. Adding
+        the step between the blob and the hull. Down each column the pieces and
+        holes stay the same, and roundness only calms the small bumps between
+        neighboring points. Roundness stops at the points' grown radius (8.5 px
+        here), so 12 px draws what 8.5 px draws. Adding
         <code>avoiding: selectAll("points")</code> to the blob would cut each
         species' outline away from the other species' points, as the U tab
         shows.
@@ -1099,17 +1538,17 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
     <figure>
       <div class="shot wide">
         <img
-          src="img/explore-hyperedges-members.png"
-          alt="Grid of the three sets with edges as members: convexity 0 to 1 across, smoothing 3, 6, 12 px down"
+          src="img/explore-round-hyperedges-members.png"
+          alt="Grid of the three sets with edges as members: convexity 0 to 1 across, roundness 0, 3, 6, 12 px down"
         />
       </div>
       <figcaption>
-        The grid on the proposed version. At 0 each set is a tube along its own
-        edges. From 0.5 the triangles fill. At 0.8 and 1 set C fills the
-        triangle 3, 8, 9, which covers the graph edges 6 to 7 and 4 to 6; nodes
-        4 and 6 stay outside. This is the same as with <code>via</code>: edges
-        as members add what must be inside, and say nothing about what must stay
-        out.
+        The grid on the proposed version. At 0 and 0.25 each set is a tube along
+        its own edges. From 0.5 the triangles fill. At 0.75 and 1 set C fills
+        the triangle 3, 8, 9, which covers the graph edges 6 to 7 and 4 to 6;
+        nodes 4 and 6 stay outside. This is the same as with <code>via</code>:
+        edges as members add what must be inside, and say nothing about what
+        must stay out.
       </figcaption>
     </figure>
     <figure>
@@ -1248,23 +1687,22 @@ set_members = [
   .layer(chart(selectAll("bars"))
     .flow(filter((d) =&gt; d.species === "trout"))
     .mark(enclose({ shape: Shape.spine({ avoiding: selectAll("bars"),
-                                         neck, smoothing }),
+                                         neck, roundness }),
                     padding: 4, stroke: "#d6580c" })))</code></pre>
     <figure>
       <div class="shot wide">
         <img
-          src="img/explore-trout.png"
-          alt="Grid of the trout set: neck 0.5 to 1 across, smoothing 2, 4, 8 px down"
+          src="img/explore-round-trout.png"
+          alt="Grid of the trout set: neck 0.5 to 1 across, roundness 0, 2, 4, 8 px down"
         />
       </div>
       <figcaption>
-        <strong>Columns are <code>neck</code></strong> (0.5, 0.7, 0.85, 1):
-        <code>convexity</code> does nothing here, because every triangle between
-        trout bars holds another bar and every direct link is blocked, so all
-        four convexity columns rendered the same. Each link runs over the bar
-        tops as the shortest path that clears the other bars;
-        <code>neck</code> sets the tube's thickness, and
-        <code>smoothing</code> rounds the bends. The prototype also avoids the
+        <strong>Columns are <code>neck</code></strong> (0.5, 0.7, 0.85, 1),
+        because the spine is the useful setting here: the trout bars stand among
+        other bars, and a filled triangle between them would hold those bars as
+        holes. Each link runs over the bar tops as the shortest path that clears
+        the other bars. <code>neck</code> sets the tube's thickness, and
+        <code>roundness</code> rounds the bends. The prototype also avoids the
         axis line and its labels (decision 10).
       </figcaption>
     </figure>
@@ -1289,15 +1727,15 @@ set_members = [
   enclose({ shape: oval, padding: 30 }, [a, b, c]),
   enclose({ shape: oval, padding: 16 }, [a, b]),
   enclose({ shape: oval, padding: 16 }, [b, c]),
-  enclose({ shape: Shape.spine({ avoiding: [b], neck, smoothing,
+  enclose({ shape: Shape.spine({ avoiding: [b], neck, roundness,
                                  clearance: 6 }),
             padding: 22 }, [a, c]),
 ])</code></pre>
     <figure>
       <div class="shot wide">
         <img
-          src="img/explore-munkres.png"
-          alt="Grid of the Munkres panel: neck 0.5 to 1 across, smoothing 11, 22, 44 px down"
+          src="img/explore-round-munkres.png"
+          alt="Grid of the Munkres panel: neck 0.5 to 1 across, roundness 0, 11, 22, 44 px down"
         />
       </div>
       <figcaption>
@@ -1315,7 +1753,7 @@ set_members = [
         </div>
         <figcaption>
           The recommended spelling on its own (<code>neck: 0.85</code>,
-          <code>smoothing: 40</code>, <code>padding: 22</code>).
+          <code>padding: 22</code>, <code>roundness</code> at its default).
         </figcaption>
       </figure>
       <figure>
@@ -1346,12 +1784,12 @@ set_members = [
   <p>
     Before the blur the hull shortcut is exact: with nothing avoided, every
     Delaunay triangle is filled and every hull edge is a tube as wide as the
-    bulge, so the union is the convex hull grown by the bulge, and closing a
-    convex shape changes nothing. The blur rounds the corners, and the slightly
-    larger discs that cancel the blur stand out by a fraction of a pixel near
-    them. Measured against a true padded convex hull (black line): never inside
-    it, and at most 0.5 px outside it with <code>smoothing</code> equal to
-    <code>padding</code> (U and Gentoo), 0.9 px with <code>smoothing: 20</code>.
+    bulge, so the union is the convex hull grown by the bulge. The blur rounds
+    the corners, and the slightly larger discs that cancel the blur stand out by
+    a fraction of a pixel near them. Measured against a true padded convex hull
+    (black line), the outline is never inside it. It is at most 0.3 px outside
+    it with <code>roundness</code> equal to <code>padding</code> (U and Gentoo),
+    and 0.8 px outside at <code>roundness: 15</code>, the most the U allows.
   </p>
   <figure>
     <div class="shot">
@@ -1362,9 +1800,10 @@ set_members = [
     </div>
   </figure>
   <p>
-    The spine shortcut draws exactly the members and the spanning tree,
-    smoothed: at <code>convexity: 0</code> alpha is 0, so no triangle is filled
-    and no extra edge is added.
+    The spine shortcut draws exactly the members and the routed spanning tree,
+    rounded. At <code>convexity: 0</code> alpha is 0, so no triangle is filled
+    and no extra edge is added, and since there is no closing, nothing else is
+    filled either.
   </p>
 
   <h2 id="curvature">The curvature never jumps</h2>
@@ -1377,7 +1816,7 @@ set_members = [
     point, computed exactly from the blurred field. The gray lines mark 1/<em
       >R</em
     >
-    (a's circle) and −1/40 (the closing radius).
+    (a's circle) and −1/40 for scale.
   </p>
   <figure>
     <div class="shot wide">
@@ -1389,8 +1828,10 @@ set_members = [
     <figcaption>
       The curve moves smoothly between 1/<em>R</em> around the circles, about 0
       along the band, and negative values at the joins, with every change spread
-      over about 20 px of outline. Padding at a is 22.0 px (asked 22) and the
-      gap to b's ring is 6.2 px (asked 6).
+      over about 20 px of outline. Padding at a is 22.0 px (asked 22), and the
+      gap to b's ring is 11.0 px, more than the 6 px asked:
+      <code>clearance</code> is a minimum, and with no closing nothing pulls the
+      band up toward b.
     </figcaption>
   </figure>
 
@@ -1483,14 +1924,14 @@ set_members = [
     </li>
     <li>
       The blob's parameters and defaults: <code>convexity</code> 0.5,
-      <code>neck</code> 1, <code>smoothing</code> equal to <code>padding</code>,
+      <code>roundness</code> equal to <code>padding</code>, <code>neck</code> 1,
       <code>clearance</code> 4 px (the teal cells in the explorer)?
     </li>
     <li>
       <code>avoiding</code> on <code>Shape.blob()</code>, so on both shortcuts,
       avoiding listed non-members only, with
-      <code>Shape.hull({ avoiding })</code> leaving out triangles that touch
-      other nodes?
+      <code>Shape.hull({ avoiding })</code> drawing the hull with each other
+      node inside it cut out as a round hole?
     </li>
     <li>
       Draw ellipses through the #1101 custom-shape function first, and add
@@ -1510,13 +1951,14 @@ set_members = [
       the user list the axis in <code>avoiding</code> (the trout example)?
     </li>
     <li>
-      <code>convexity</code> as the name, with alpha = <em>m</em> ×
-      <code>convexity</code> / (1 − <code>convexity</code>) and <em>m</em> the
-      median spanning-tree link, so it does not change with a resize? (Or a
-      length relative to <code>padding</code>, or a pixel <code>alpha</code>.)
+      The two shape knobs: <code>convexity</code> (what is filled, 0 to 1,
+      scaled to the point spacing) and <code>roundness</code> (corner rounding
+      in pixels, never changing the topology)? Is <code>roundness</code> the
+      right name? (Alternative: <code>cornerRadius</code>, the pixel corner
+      radius of Vega-Lite's marks and Figma.)
     </li>
     <li>
-      Keep all smoothing inside <code>Shape.blob()</code> (the region blur), and
+      Keep all rounding inside <code>Shape.blob()</code> (the region blur), and
       add no <code>curve</code> key to <code>enclose</code>? (History, v4, shows
       why a curve through the outline cannot keep <code>padding</code> or
       <code>clearance</code>.)
@@ -1526,6 +1968,12 @@ set_members = [
       edges themselves as members (the hyperedges tab)? Box and hull contain
       line members too, since members are just shapes, and the blob reads their
       geometry through #974's <code>boundary</code> query.
+    </li>
+    <li>
+      Should <code>roundness</code> go past the thinnest piece, so a hull's
+      corners can round more than the members' grown radius? The cost is that
+      <code>padding</code> becomes a minimum and the area grows near the
+      corners.
     </li>
   </ol>
 
@@ -1620,7 +2068,7 @@ set_members = [
     <strong>Trade-offs.</strong> One name, one mental model, every hard example
     expressible. New terms: <code>Shape</code>, <code>blob</code>,
     <code>hull</code>, <code>spine</code>, <code>convexity</code>,
-    <code>neck</code>, <code>smoothing</code>, <code>avoiding</code>,
+    <code>roundness</code>, <code>neck</code>, <code>avoiding</code>,
     <code>clearance</code>. Awkward: the per-group background behind each lake
     needs
     <code
@@ -2078,7 +2526,12 @@ chart(catch)
     <code>concavity</code> grows more convex; alpha is a radius in CGAL and an
     inverse radius in Python's <code>alphashape</code>.
     <code>convexity</code> reads its direction from the name and has no unit.
-    <code>smoothing</code> runs the same direction as on <code>noise()</code>.
+    <code>roundness</code> is a pixel length, bigger is rounder; it is the plain
+    word for the property, and its unit matches the pixel corner radius of CSS
+    (<code>border-radius</code>), Vega-Lite (<code>cornerRadius</code>) and
+    Figma. It is not called <code>smoothing</code>, because
+    <code>smoothing</code> on <code>noise()</code> and the old blob knob both
+    change what is filled, and <code>roundness</code> never does.
     <code>neck</code> is the everyday word for the narrow join, and also
     Glassner's word for the part of a glob between its circles.
   </p>
@@ -2197,8 +2650,8 @@ chart(catch)
         <td>hand-drawn concave <code>polygon</code> (Topology)</td>
         <td>
           <code
-            >enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.85,
-            smoothing: 40 }) }, [a, c])</code
+            >enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.85 }) }, [a,
+            c])</code
           >
         </td>
       </tr>
@@ -2215,9 +2668,7 @@ chart(catch)
         <td><code>background = enclose</code> in Python</td>
         <td>
           removed;
-          <code
-            >enclose([...], shape=Shape.spine(smoothing=40), padding=8)</code
-          >
+          <code>enclose([...], shape=Shape.spine(), padding=8)</code>
         </td>
       </tr>
       <tr>
@@ -2680,8 +3131,100 @@ chart(catch)
   </details>
 
   <details class="hist">
+    <summary>
+      v6: <code>smoothing</code>, replaced by <code>roundness</code>
+    </summary>
+    <p>
+      Josh: convexity and smoothing overlapped; both fill gaps. Until v6 the
+      blob had a closing step and a different rule for avoided nodes.
+    </p>
+    <ul>
+      <li>
+        A triangle was filled only when no avoided node's keep-out zone touched
+        it, so an avoided node inside the set left a hole shaped like the
+        triangles around it.
+      </li>
+      <li>
+        The union of the pieces was closed by a disc of radius
+        <code>smoothing</code>, which filled gaps narrower than about twice that
+        radius.
+      </li>
+      <li>
+        The blur width was σ = ½ min(<code>smoothing</code>, thinnest piece).
+      </li>
+    </ul>
+    <p>
+      So <code>smoothing</code> filled gaps the way <code>convexity</code> does,
+      and it also reshaped the holes. Small values left triangle holes, middle
+      values half-rounded them, and only large values filled the triangles back
+      in and cut just the circles. "Why these knobs are orthogonal" measures the
+      overlap. The old dataset grids, with columns <code>convexity</code> (0,
+      0.5, 0.8, 1) and rows <code>smoothing</code> (half the padding, equal to
+      it, twice it), or columns <code>neck</code> where convexity did nothing:
+    </p>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-topology.png"
+          alt="Old grid: a, c avoiding b, neck by smoothing"
+        />
+      </div>
+    </figure>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-u.png"
+          alt="Old grid: the U cloud, convexity by smoothing, with triangle-shaped holes"
+        />
+      </div>
+    </figure>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-penguins.png"
+          alt="Old grid: penguins, convexity by smoothing"
+        />
+      </div>
+    </figure>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-hyperedges-members.png"
+          alt="Old grid: hyperedges with edges as members, convexity by smoothing"
+        />
+      </div>
+    </figure>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-trout.png"
+          alt="Old grid: trout, neck by smoothing"
+        />
+      </div>
+    </figure>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-munkres.png"
+          alt="Old grid: Munkres panel, neck by smoothing"
+        />
+      </div>
+    </figure>
+  </details>
+
+  <details class="hist">
     <summary>Retired decisions</summary>
     <ul>
+      <li>
+        <strong><code>smoothing</code> on <code>Shape.blob()</code></strong>
+        (v6). Replaced by <code>roundness</code>. Josh: convexity and smoothing
+        overlapped; both fill gaps.
+      </li>
+      <li>
+        <strong>Leave out triangles that touch an avoided node</strong> (v6).
+        Replaced by filling them and cutting the node's clearance circle out, so
+        an avoided node inside the set is always a round hole.
+      </li>
       <li>
         <strong><code>via</code> on <code>Shape.blob()</code></strong> (v5).
         Replaced by edges as members (open decision 13).

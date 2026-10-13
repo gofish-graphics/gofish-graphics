@@ -8,15 +8,15 @@ type State = Params & {
   skeleton: boolean;
   edgesAsMembers: boolean;
 };
-const DEFAULTS = { convexity: 0.5, neck: 1 }; // smoothing defaults to padding; clearance to 4
+const DEFAULTS = { convexity: 0.5, neck: 1 }; // roundness defaults to padding; clearance to 4
 const DRAFT_RES = 1; // grid cell (px) while a slider is being dragged; release recomputes at full resolution
-const KEY = "blob-playground-v1";
+const KEY = "blob-playground-v2";
 
 const ds0 = DATASETS[1];
 let state: State = {
   dataset: ds0.id,
   ...DEFAULTS,
-  smoothing: ds0.padding,
+  roundness: ds0.padding,
   padding: ds0.padding,
   clearance: ds0.clearance,
   skeleton: false,
@@ -46,25 +46,27 @@ const $ = <T extends HTMLElement>(id: string) =>
 const num = (v: number) => String(+v.toFixed(2));
 
 // ── sliders ──────────────────────────────────────────────────────────────────
-type Key = "convexity" | "neck" | "smoothing" | "padding" | "clearance";
+type Key = "convexity" | "neck" | "roundness" | "padding" | "clearance";
 const SLIDERS: Key[] = [
   "convexity",
   "neck",
-  "smoothing",
+  "roundness",
   "padding",
   "clearance",
 ];
 const unit = (k: Key) => (k === "convexity" || k === "neck" ? "" : " px");
 
 const syncControls = () => {
-  const s = $<HTMLInputElement>("smoothing");
+  const s = $<HTMLInputElement>("roundness");
   s.max = String(3 * state.padding);
   for (const k of SLIDERS) {
     $<HTMLInputElement>(k).value = String(state[k]);
     $(`${k}-out`).textContent = num(state[k]) + unit(k);
   }
-  $("smoothing-hint").textContent =
-    `0 to 3 × padding (${num(3 * state.padding)} px)`;
+  $("roundness-hint").textContent =
+    applied === null
+      ? ""
+      : `In effect: ${num(applied)} px${applied < state.roundness - 0.01 ? " (the thinnest piece, or less where more would change the topology)" : ""}.`;
   $<HTMLInputElement>("skeleton").checked = state.skeleton;
   for (const b of document.querySelectorAll<HTMLButtonElement>("[data-ds]")) {
     const on = b.dataset.ds === state.dataset;
@@ -86,15 +88,20 @@ const syncControls = () => {
 // ── presets and the spelling ─────────────────────────────────────────────────
 const eq = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 const presetOf = () => {
-  if (!eq(state.smoothing, state.padding) || !eq(state.neck, 1))
-    return "custom";
-  if (eq(state.convexity, 1)) return "hull";
+  // hull and spine are named by convexity alone: roundness (and, for spine, neck) are overrides
+  if (eq(state.convexity, 1) && eq(state.neck, 1)) return "hull";
   if (eq(state.convexity, 0)) return "spine";
-  if (eq(state.convexity, 0.5)) return "blob defaults";
+  if (
+    eq(state.convexity, 0.5) &&
+    eq(state.neck, 1) &&
+    eq(state.roundness, state.padding)
+  )
+    return "blob defaults";
   return "custom";
 };
 /** The call these settings stand for. Defaults are left out, and convexity 0 or 1 is spelled
- *  with its shortcut, since `Shape.spine(opts)` is exactly `Shape.blob({ convexity: 0, ...opts })`. */
+ *  with its shortcut, since `Shape.spine(opts)` is exactly `Shape.blob({ convexity: 0, ...opts })`
+ *  (and both shortcuts take roundness, e.g. `Shape.hull({ roundness: 15 })`). */
 const spelling = () => {
   const d = dataset(),
     o: string[] = [];
@@ -104,17 +111,18 @@ const spelling = () => {
   else if (!eq(state.convexity, 0.5))
     o.push(`convexity: ${num(state.convexity)}`);
   if (fn !== "hull" && !eq(state.neck, 1)) o.push(`neck: ${num(state.neck)}`);
-  if (!eq(state.smoothing, state.padding))
-    o.push(`smoothing: ${num(state.smoothing)}`);
+  if (!eq(state.roundness, state.padding))
+    o.push(`roundness: ${num(state.roundness)}`);
   o.push(d.shapeArgs);
   if (!eq(state.clearance, 4)) o.push(`clearance: ${num(state.clearance)}`);
   const shape = `Shape.${fn}(${o.length ? `{ ${o.join(", ")} }` : ""})`;
   return `enclose({ shape: ${shape}, padding: ${num(state.padding)} }, ${d.call})`;
 };
 const PRESETS: Record<string, () => Partial<State>> = {
-  hull: () => ({ convexity: 1, neck: 1, smoothing: state.padding }),
-  spine: () => ({ convexity: 0, neck: 1, smoothing: state.padding }),
-  "blob defaults": () => ({ ...DEFAULTS, smoothing: state.padding }),
+  // the shortcuts keep the current roundness, so "hull, then drag roundness" works
+  hull: () => ({ convexity: 1, neck: 1 }),
+  spine: () => ({ convexity: 0, neck: 1 }),
+  "blob defaults": () => ({ ...DEFAULTS, roundness: state.padding }),
 };
 
 // ── drawing ──────────────────────────────────────────────────────────────────
@@ -167,7 +175,8 @@ const drawResults = (results: SetResult[]) => {
 // Computation runs on the main thread, one set per task, so a slow dataset never freezes the
 // sliders. A newer request cancels an older one. While dragging, the grid is DRAFT_RES px.
 let gen = 0,
-  pending: number | null = null;
+  pending: number | null = null,
+  applied: number | null = null; // the roundness the last drawing used (2 sigma), the least over sets
 const recompute = (draft: boolean) => {
   const my = ++gen,
     d = dataset(),
@@ -191,6 +200,8 @@ const recompute = (draft: boolean) => {
       return;
     }
     drawResults(out);
+    applied = Math.min(...out.map((r) => 2 * r.sigma));
+    syncControls();
     const ms = performance.now() - t0;
     lastMs[`${d.id}:${draft}`] = ms;
     $("status").textContent =
@@ -229,9 +240,9 @@ const update = (patch: Partial<State>, draft = false) => {
 const setSlider = (k: Key, v: number, draft: boolean) => {
   const patch: Partial<State> = { [k]: v };
   if (k === "padding") {
-    // smoothing follows padding while it sits at its default (equal to padding)
-    if (eq(state.smoothing, state.padding)) patch.smoothing = v;
-    else patch.smoothing = Math.min(state.smoothing, 3 * v);
+    // roundness follows padding while it sits at its default (equal to padding)
+    if (eq(state.roundness, state.padding)) patch.roundness = v;
+    else patch.roundness = Math.min(state.roundness, 3 * v);
   }
   update(patch, draft);
 };
@@ -262,13 +273,13 @@ tabs.innerHTML = DATASETS.map(
 const pickDataset = (id: string) => {
   if (id === state.dataset) return;
   const d = DATASETS.find((x) => x.id === id)!;
-  const ratio = state.padding > 0 ? state.smoothing / state.padding : 1;
+  const ratio = state.padding > 0 ? state.roundness / state.padding : 1;
   state = {
     ...state,
     dataset: id,
     padding: d.padding,
     clearance: d.clearance,
-    smoothing: Math.round(2 * ratio * d.padding) / 2,
+    roundness: Math.round(2 * ratio * d.padding) / 2,
   };
   drawScene();
   update({}, false);
