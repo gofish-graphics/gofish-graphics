@@ -46,6 +46,7 @@ import {
 import { groupEntries, rowsOf } from "./grouping";
 import { projectPath } from "../ast/datumProjection";
 import { makeRule } from "./paint";
+import { installTimelines } from "./timeline";
 import { solveSchedule, type Arrangement, type Clip } from "./schedule";
 import {
   checkPhases,
@@ -58,7 +59,14 @@ import {
  *  which mirror `time.sequence`'s. `playing: false` holds the chart still at
  *  `at` (ms into the build, default 0), which is what a screenshot or a test
  *  wants. */
-export type BuildClockOptions = { playing?: boolean; at?: number };
+export type BuildClockOptions = {
+  playing?: boolean;
+  at?: number;
+  /** PROTOTYPE (animation grammar): start a `.relate()` timeline's clock
+   *  over at its end (`src/animation/timeline.ts`). The build-in plays once
+   *  either way. */
+  loop?: boolean;
+};
 
 /** A leaf as the walk reads it off a node: the effects its marks enter with,
  *  as written, and the marks. */
@@ -79,6 +87,22 @@ type Leaf = { effects: TimedEffect[]; targets: GoFishNode[] };
 export function installBuildIn(
   root: GoFishNode,
   options: BuildClockOptions = {}
+): (() => void) | undefined {
+  // PROTOTYPE (animation grammar): the `.relate()` timelines play on clocks
+  // the same render options hold. DECLARED SHORTCUT: each is a clock of its
+  // own beside the build-in's; one chart clock for both is open.
+  const stopTimelines = installTimelines(root, options);
+  const stopBuild = installBuild(root, options);
+  if (stopTimelines === undefined) return stopBuild;
+  return () => {
+    stopTimelines();
+    stopBuild?.();
+  };
+}
+
+function installBuild(
+  root: GoFishNode,
+  options: BuildClockOptions
 ): (() => void) | undefined {
   const draft = clipOf(root, false);
   if (draft === undefined) return undefined;

@@ -90,6 +90,7 @@ import type { ConstraintSpec } from "./constraints";
 import { relateEnv, resolveConstraintOperands } from "./constraints";
 import {
   computeRelateSchedule,
+  installTimelineOf,
   resolveRelateClauses,
   type RelateFn,
   type RelateSchedule,
@@ -2125,11 +2126,26 @@ export class GoFishNode {
     // A later call replaces the drawing clauses of an earlier one.
     this.children = this.children.filter((c) => !isRelateClause(c));
     const env = relateEnv(this);
-    const { constraints, nodes } = await resolveRelateClauses(fn(env), env);
+    const { constraints, nodes, temporal } = await resolveRelateClauses(
+      fn(env),
+      env
+    );
     this.constraints = constraints;
     for (const node of nodes) {
       node.parent = this;
       this.children.push(node);
+    }
+    // PROTOTYPE (animation grammar): time clauses lower to lifetimes on this
+    // layer's children and to moving marks, which are drawing clauses like an
+    // arrow (laid out after the spatial solve).
+    if (temporal.length > 0) {
+      const moving = await installTimelineOf(this, temporal);
+      moving.forEach((node, i) => {
+        node._relateClause = nodes.length + i + 1;
+        node.parent = this;
+        this.children.push(node);
+      });
+      nodes.push(...moving);
     }
     this._hasRelateClauses = nodes.length > 0;
     return this;

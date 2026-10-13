@@ -66,6 +66,7 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode, type Placeable, type ToPixel } from "../_node";
 import { GoFishRef } from "../_ref";
 import { resolveColorChannel } from "../../color";
+import { mixColor } from "../../colorModes";
 import {
   fadeItem,
   lowerStyle,
@@ -136,14 +137,14 @@ export type TweenOptions = {
 };
 
 /** The leaves a transition can move, by how each one moves. A BOX shape's
- *  extent is one of its channels, so its whole box is interpolated. A TEXT's
- *  extent is the measure of its string, which is not something to blend, so
- *  it moves RIGIDLY: its position is interpolated and it keeps the source
- *  keyframe's own drawing (string, font, paint), the way a box leaf keeps the
- *  source keyframe's color. A build-in `grow` collapses the same box shapes
- *  (`src/animation/effects.ts`). */
+ *  extent is one of its channels, so its whole box is interpolated, its fill
+ *  and stroke mixed, and a rect and an ellipse morph into each other. Any
+ *  other leaf (a text, whose extent is the measure of its string, which is
+ *  not something to blend) moves RIGIDLY: its position is interpolated and it
+ *  keeps the source keyframe's own drawing (string, font, paint), or, where
+ *  that drawing changes between keyframes, CROSS-FADES between them. A
+ *  build-in `grow` collapses the same box shapes (`src/animation/effects.ts`). */
 export const BOX_SHAPES = new Set(["ellipse", "rect", "blank"]);
-const RIGID_SHAPES = new Set(["text"]);
 
 /**
  * The leaves of one keyframe mark, in structural order: the leaves of its own
@@ -191,9 +192,11 @@ type Track = {
 } & (
   | {
       kind: "box";
-      /** The shape every keyframe of the leaf is: the shape the moving leaf
-       *  is. */
-      shape: string;
+      /** The shape of the leaf at each keyframe. One shape for the whole run
+       *  paints that shape; a run that mixes rect and ellipse MORPHS, painted
+       *  as a rect whose corner radius is interpolated (an ellipse is a rect
+       *  with rx = w/2 and ry = h/2). */
+      shapes: string[];
       /** The four quantities a box leaf interpolates: its center and its
        *  extent on each axis, each read from every keyframe's placed box. */
       x: Channel;
@@ -225,7 +228,7 @@ type Painter = (at: KnotLocation, source: number) => DisplayList.DisplayItem[];
  * mark's own opacity; it ramps over the stretch by the same (eased) parameter
  * the motion uses, and is 0 wherever the mark is absent.
  */
-function lifecycle(
+export function lifecycle(
   knots: number[],
   sequence: number[] | undefined,
   ease: ((u: number) => number) | undefined
@@ -292,7 +295,7 @@ type Run = {
  * size, paint — is the keyframe the method is holding rather than a held
  * position wearing the next keyframe's paint.
  */
-function sampleRun(
+export function sampleRun(
   knots: number[],
   t: number,
   method: InterpolationMethod,
@@ -386,18 +389,15 @@ export const tween = createNodeOperator(
           // only), the leaves cannot be paired, and each moving mark falls
           // back to one run of itself, its attachments left to the keyframes
           // (they hold and snap with them).
+          // Leaves pair up by position whatever their shapes: a row whose
+          // shape changes is morphed (rect <-> ellipse) or cross-faded
+          // (anything else), see `MORPH_SHAPES` below.
           const leafSets = moved.map((marks) => marks.flatMap(markLeaves));
-          const shapesOf = (leaves: GoFishNode[]) =>
-            leaves.map((l) => l.type).join("/");
           const matched =
             leafSets.length > 0 &&
             leafSets.every(
               (leaves) =>
-                leaves.length > 0 &&
-                shapesOf(leaves) === shapesOf(leafSets[0]) &&
-                leaves.every(
-                  (l) => BOX_SHAPES.has(l.type) || RIGID_SHAPES.has(l.type)
-                )
+                leaves.length > 0 && leaves.length === leafSets[0].length
             );
           if (
             !matched &&
@@ -415,40 +415,21 @@ export const tween = createNodeOperator(
             ? leafSets[0].map((_, j) => leafSets.map((leaves) => leaves[j]))
             : (moved[0] ?? []).map((_, j) => moved.map((marks) => marks[j]));
 
-          // Every leaf of a row is one mark moving, so the row is checked as
-          // one: a shape the transition can move, the same for every
-          // keyframe. Matched rows may be text, which moves rigidly; a
-          // fallback row is a moving mark itself, so it must be a box.
-          for (const row of rows) {
-            const shapes = new Set(row.map((n) => n.type));
-            for (const shape of shapes) {
-              if (
-                !BOX_SHAPES.has(shape) &&
-                !(matched && RIGID_SHAPES.has(shape))
-              ) {
-                throw new Error(
-                  `[gofish] time.transition(): cannot move a "${shape}" mark — a ` +
-                    `transition paints its keyframes' own shape, and so far that ` +
-                    `is ${[...BOX_SHAPES].join(" / ")}, or marks built of ` +
-                    `those and text. Use one of those as the keyframe mark, ` +
-                    `or open an issue for "${shape}".`
-                );
+          // A fallback row is a moving mark itself (its own leaves did not
+          // pair up), so it must be a box: it is interpolated as one.
+          if (!matched) {
+            for (const row of rows) {
+              for (const shape of new Set(row.map((n) => n.type))) {
+                if (!BOX_SHAPES.has(shape)) {
+                  throw new Error(
+                    `[gofish] time.transition(): cannot move a "${shape}" ` +
+                      `mark whose parts differ between keyframes — such a ` +
+                      `mark moves as one box, so it must be ` +
+                      `${[...BOX_SHAPES].join(" / ")}. Give every keyframe ` +
+                      `of the run the same parts.`
+                  );
+                }
               }
-            }
-            // ONE shape for the whole run, because the shape is a layout-time
-            // fact like the rest of the run: the moving mark is a single
-            // display item whose attributes the playhead patches, and no
-            // attribute turns a circle into a rectangle. A run is one key's
-            // marks from one mark factory, so this is homogeneous in practice;
-            // saying so loudly beats painting whichever shape the playhead
-            // happened to start on.
-            if (shapes.size > 1) {
-              throw new Error(
-                `[gofish] time.transition(): a transition paints ONE shape for ` +
-                  `the whole run, and these keyframes are ` +
-                  `${[...shapes].join(" / ")}. Use the same mark for every ` +
-                  `keyframe of a run.`
-              );
             }
           }
 
@@ -463,7 +444,7 @@ export const tween = createNodeOperator(
               return bbox(x.min!, x.max!, y.min!, y.max!);
             });
             allBoxes.push(...boxes);
-            const shape = leaves[0].type;
+            const shapes = leaves.map((leaf) => leaf.type);
             const cx = boxes.map((b) => (b.minX + b.maxX) / 2);
             const cy = boxes.map((b) => (b.minY + b.maxY) / 2);
             // Every leaf the transition moves draws nothing of its own: the
@@ -472,7 +453,10 @@ export const tween = createNodeOperator(
             // playhead is, and a box leaf's gives the moving mark its paint.
             leaves.forEach((leaf) => leaf.INTERNAL_emitNothing());
             const origins = stands.map((s) => displayTranslate(s.transform));
-            if (RIGID_SHAPES.has(shape)) {
+            // A row of box shapes is interpolated as a box, morphing between
+            // a rect and an ellipse where its shape changes. Any other row
+            // moves rigidly, cross-fading where its drawing changes.
+            if (!shapes.every((s) => BOX_SHAPES.has(s))) {
               return {
                 kind: "rigid",
                 leaves,
@@ -487,7 +471,7 @@ export const tween = createNodeOperator(
               kind: "box",
               leaves,
               origins,
-              shape,
+              shapes,
               x: channel(cx),
               y: channel(cy),
               w: channel(boxes.map(width)),
@@ -573,18 +557,76 @@ export const tween = createNodeOperator(
           const boxPainter = (
             track: Extract<Track, { kind: "box" }>
           ): Painter => {
-            const { shape } = track;
+            const { shapes } = track;
             const styles = track.leaves.map((_, k) => ({
               ...drawingAt(track, k)[0]?.style,
               ...declared,
             }));
+            const single = shapes.every((s) => s === shapes[0]);
+            /** Each keyframe's corner radii in pixels, for a run that morphs:
+             *  an ellipse's are half its size, a rect's its own. */
+            const radii = track.leaves.map((_, k) => {
+              const item = drawingAt(track, k)[0] as
+                | DisplayList.DisplayItem
+                | undefined;
+              if (item?.kind === "ellipse") return [item.rx, item.ry];
+              if (item?.kind === "rect") return [item.rx ?? 0, item.ry ?? 0];
+              return [0, 0];
+            });
+            /** The paint at a location: the source keyframe's, with fill and
+             *  stroke mixed toward the next keyframe's while the run moves
+             *  between two that differ (under `"step"` nothing moves, so
+             *  nothing mixes). */
+            const styleAt = (at: KnotLocation, source: number) => {
+              const style = styles[source];
+              const [a, b] = [styles[at.i], styles[at.i + 1]];
+              if (method === "step" || b === undefined || at.u <= 0) {
+                return style;
+              }
+              const mixed = { ...style };
+              let changed = false;
+              for (const key of ["fill", "stroke"] as const) {
+                const [ca, cb] = [a[key], b[key]];
+                if (
+                  typeof ca === "string" &&
+                  typeof cb === "string" &&
+                  ca !== cb
+                ) {
+                  mixed[key] = mixColor(ca, cb, at.u);
+                  changed = true;
+                }
+              }
+              return changed ? mixed : style;
+            };
             return (at, source) => {
               const x = track.x(at);
               const y = track.y(at);
               const bw = track.w(at);
               const bh = track.h(at);
-              const style = styles[source];
-              if (shape === "ellipse") {
+              const style = styleAt(at, source);
+              if (!single) {
+                // A morph: one rect whose corners round from one keyframe's
+                // radii to the next one's, never past half its size.
+                const [ra, rb] = [radii[at.i], radii[at.i + 1] ?? radii[at.i]];
+                const u = Math.max(0, Math.min(1, at.u));
+                return [
+                  {
+                    ...rectItemFromBox(
+                      x - bw / 2,
+                      x + bw / 2,
+                      y - bh / 2,
+                      y + bh / 2,
+                      toLocalPixel
+                    ),
+                    rx: Math.min(Math.abs(bw) / 2, ra[0] + (rb[0] - ra[0]) * u),
+                    ry: Math.min(Math.abs(bh) / 2, ra[1] + (rb[1] - ra[1]) * u),
+                    style,
+                    datum,
+                    role,
+                  },
+                ];
+              }
+              if (shapes[0] === "ellipse") {
                 const [px, py] = toLocalPixel([x, y]);
                 return [
                   {
@@ -628,6 +670,36 @@ export const tween = createNodeOperator(
             const { cx, cy } = track;
             const drawn = track.leaves.map((_, k) => drawingAt(track, k));
             const centers = cx.map((x, k) => toLocalPixel([x, cy[k]]));
+            // A drawing that changes between keyframes (a text's string, a
+            // shape that is not a box) CROSS-FADES: every keyframe's own
+            // drawing moves with the run, the two the playhead is between
+            // weighted by where it is, the rest at 0. Every keyframe keeps
+            // its items in every frame, so the paint tier patches a fixed
+            // list.
+            const signature = (items: DisplayList.DisplayItem[]) =>
+              JSON.stringify(
+                items.map((item) => [
+                  item.kind,
+                  (item as { text?: string }).text,
+                  item.style?.fill,
+                ])
+              );
+            const same = drawn.every(
+              (items) => signature(items) === signature(drawn[0])
+            );
+            if (!same && method !== "step") {
+              return (at) => {
+                const [toX, toY] = toLocalPixel([track.x(at), track.y(at)]);
+                const u = Math.max(0, Math.min(1, at.u));
+                return drawn.flatMap((items, k) => {
+                  const weight = k === at.i ? 1 - u : k === at.i + 1 ? u : 0;
+                  const [fromX, fromY] = centers[k];
+                  return items.map((item) =>
+                    fadeItem(moveItem(item, toX - fromX, toY - fromY), weight)
+                  );
+                });
+              };
+            }
             return (at, source) => {
               const [fromX, fromY] = centers[source];
               const [toX, toY] = toLocalPixel([track.x(at), track.y(at)]);
@@ -660,7 +732,11 @@ export const tween = createNodeOperator(
               : items.map((item) => fadeItem(item, phase.alpha));
           };
 
-          const items = build(t);
+          // The playhead as it is NOW, not as it was when the node was built:
+          // a clock that is only set when the chart renders (a `.relate()`
+          // timeline's, which the render options hold) has moved since.
+          const now = live ? readLive(readPlayhead) : t;
+          const items = build(now);
           if (live) {
             // The paint tier's half of the split: one thunk per attribute of
             // each moving item, each re-reading the playhead in JSX attribute
@@ -680,7 +756,7 @@ export const tween = createNodeOperator(
               "opacity",
             ]);
             setLiveItems(items, channels, readPlayhead, build, {
-              key: t,
+              key: now,
               items,
             });
           }

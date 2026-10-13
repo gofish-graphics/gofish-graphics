@@ -68,7 +68,24 @@ import {
   type Effect,
   type TweenEffect,
 } from "../../animation/effects";
-import { checkSequencePhases } from "../../animation/transition";
+import { checkSequencePhases, markDataTime } from "../../animation/transition";
+import { morph } from "../../animation/morph";
+import {
+  after,
+  align,
+  temporalTransition,
+  type TemporalClause,
+  type TemporalTransitionOptions,
+} from "../../animation/timeline";
+import { RelateOperand } from "../constraints/relate";
+import {
+  attachModifiers,
+  nameModifier,
+  resolveMarkResult,
+  zOrderModifier,
+} from "./createOperator";
+import type { MarkChild } from "../types";
+import type { LayerContext } from "./markResult";
 
 export type SequenceOptions = {
   /** The data field whose values are the keyframes. Must be numeric: the
@@ -156,7 +173,7 @@ const CLOCK_OPTIONS = ["duration", "loop", "playing", "at"] as const;
  * so two charts on a page keep their own time — unless `on` hands them the
  * same one.
  */
-export function sequence(opts: SequenceOptions) {
+function sequenceFlow(opts: SequenceOptions) {
   /** The field's values, sorted and distinct: the keyframes, and the clock's
    *  domain from the first to the last. */
   let keyframes: number[] = [];
@@ -391,7 +408,7 @@ export type TransitionOptions = {
  * tier with its own `group({ by })` spells the split. The sugar and the
  * spelled-out form resolve to the same geometry.
  */
-export const transition = createRelationalMark<TransitionOptions>(
+const relationalTransition = createRelationalMark<TransitionOptions>(
   "time.transition",
   (o, children, inferred) => {
     const tier = inferred.time;
@@ -623,4 +640,169 @@ function knotOf(child: GoFishAST, by: string): number {
   return value;
 }
 
-export const time = { sequence, history, transition, stagger, parallel };
+/* ---- PROTOTYPE (animation grammar proposal): temporal composition ---- */
+
+export type SequenceOverOptions = {
+  /** Wall-clock ms one pass through every child takes, as for the flow
+   *  form. Default 5000. */
+  duration?: number;
+  /** Start over at the first child after the last. Default true. */
+  loop?: boolean;
+  /** Start the clock. Default true. */
+  playing?: boolean;
+  /** Where the playhead starts, in CHILD INDEX units, the combinator's
+   *  counterpart of the flow form's field units: child `i` is the keyframe at
+   *  `t = i`, so `at: 1.5` is halfway from the second child to the third. */
+  at?: number;
+  /** The children are a cycle: the last one moves on into the first, and the
+   *  last child's band runs up to `t = n` (the flow form's `cyclic`, with a
+   *  period of one child per unit). */
+  cyclic?: boolean;
+};
+
+/** What `time.sequence(opts, children)` returns: a mark whose
+ *  `.transition({ update })` moves the matched marks between the children. */
+export type SequenceMark = Mark<any> & {
+  transition(spec: { update?: TweenEffect }): SequenceMark;
+  name(name: string): SequenceMark;
+  render(container: HTMLElement, options?: Record<string, unknown>): unknown;
+};
+
+/**
+ * `time.sequence(opts, [k0, k1, ...])` — the COMBINATOR form: each child is a
+ * keyframe, and child `i` owns the band `[i, i + 1)` of the playhead, exactly
+ * as the flow form's keyframe groups own the bands of their field's values
+ * (and through the same machinery: one Frame over the keyframes, their
+ * visibility held per band by `sequenceWindow`). The children replace each
+ * other (Rhombus pict's `switch`).
+ *
+ * `.transition({ update: Animation.tween() })` threads a tween through the
+ * children: their marks are matched by identity (`src/animation/identity.ts`)
+ * and each matched mark moves, morphs or cross-fades (`src/animation/morph.ts`),
+ * the way the flow form's chained `update` moves the marks of one key.
+ */
+function sequenceOver(
+  opts: SequenceOverOptions,
+  children: MarkChild[],
+  update?: TweenEffect
+): SequenceMark {
+  const n = children.length;
+  if (n < 2) {
+    throw new Error(
+      `[gofish] time.sequence(opts, children): a sequence plays from one ` +
+        `child to the next, so it needs at least two children (got ${n}).`
+    );
+  }
+  const knots = children.map((_, i) => i);
+  const cycle: Cycle | undefined = opts.cyclic
+    ? { origin: 0, period: n }
+    : undefined;
+  const span = cycle === undefined ? n - 1 : n;
+  const clock = timer<number>({
+    domain: [0, span],
+    duration: opts.duration ?? 5000,
+    loop: opts.loop ?? true,
+    playing: opts.playing ?? true,
+  });
+  if (opts.at !== undefined) clock.set(opts.at);
+  const playhead = () => clock();
+  const base: Mark<any> = async (d, key) => {
+    // Registers the clock with the chart's interaction runtime, as the flow
+    // form's first read does.
+    readLive(playhead);
+    // Each child resolves in a name context of its own: the children are
+    // alternatives, not siblings, so a name in one never sees another's.
+    const keyframes: GoFishNode[] = [];
+    for (const child of children) {
+      const context: LayerContext = {};
+      const result =
+        typeof child === "function"
+          ? (child as Mark<any>)(d, key, context)
+          : child;
+      keyframes.push(
+        (await resolveMarkResult(result as any, context)) as GoFishNode
+      );
+    }
+    // A keyframe's key is its time, which is what `keyframeOf` reads.
+    keyframes.forEach((k, i) => k.setKey(String(i)));
+    const moving =
+      update === undefined
+        ? []
+        : await morph(keyframes, {
+            knots,
+            at: playhead,
+            method: update.curve,
+            ease: update.ease,
+            msPerUnit: () => clock.duration / span,
+            cycle,
+          });
+    const frame = await Frame({}, [...keyframes, ...moving]);
+    const shown = sequenceWindow(
+      () => knots,
+      playhead,
+      () => cycle
+    );
+    markSequence(frame, shown);
+    hold(keyframes, shown);
+    // Data time: the build-in leaves its marks alone.
+    markDataTime(frame);
+    (frame as any).datum = d;
+    return frame;
+  };
+  const mark = attachModifiers(base, [nameModifier, zOrderModifier]) as any;
+  mark.transition = (spec: { update?: TweenEffect }) =>
+    sequenceOver(opts, children, spec.update);
+  return mark as SequenceMark;
+}
+
+/** `time.sequence` in both forms: in the flow (`time.sequence({ by })`), one
+ *  keyframe per value of a field; over explicit children
+ *  (`time.sequence(opts, [a, b])`), one keyframe per child. */
+export function sequence(
+  opts: SequenceOptions
+): ReturnType<typeof sequenceFlow>;
+export function sequence(
+  opts: SequenceOverOptions,
+  children: MarkChild[]
+): SequenceMark;
+export function sequence(
+  opts: SequenceOptions | SequenceOverOptions,
+  children?: MarkChild[]
+) {
+  return children === undefined
+    ? sequenceFlow(opts as SequenceOptions)
+    : sequenceOver(opts as SequenceOverOptions, children);
+}
+
+/** `time.transition` in both forms: the relational mark over keyframe marks
+ *  (`time.transition({ curve })`, in a flow with a `time.sequence`), and the
+ *  TEMPORAL CLAUSE of a `.relate()` callback, a magic move from one named
+ *  child of a layer into another (`time.transition(a, b, { duration })`). */
+export function transition(
+  a: RelateOperand,
+  b: RelateOperand,
+  opts?: TemporalTransitionOptions
+): TemporalClause;
+export function transition(
+  options?: TransitionOptions
+): ReturnType<typeof relationalTransition>;
+export function transition(
+  options: TransitionOptions | undefined,
+  children: GoFishAST[]
+): ReturnType<typeof relationalTransition>;
+export function transition(...args: any[]): any {
+  if (args[0] instanceof RelateOperand) {
+    return temporalTransition(args[0], args[1], args[2]);
+  }
+  return (relationalTransition as any)(...args);
+}
+
+export const time = {
+  sequence,
+  history,
+  transition,
+  stagger,
+  parallel,
+  after,
+  align,
+};

@@ -45,11 +45,109 @@ const defaultArrowOpts: Required<
   start: false,
 };
 
+type ArrowProps = typeof defaultArrowOpts & ArrowOpts;
+
+/** An operand's box, `(x, y)` its min corner, in the arrow's frame. */
+export type ArrowBox = { x: number; y: number; w: number; h: number };
+
+/** The arrow's geometry between two boxes: its start, control and end
+ *  points and its end angle. A pure function of the operands' boxes, so a
+ *  transition that moves the operands can draw the arrow again at every frame
+ *  (`src/animation/relationTween.tsx`). */
+export function arrowGeometry(from: ArrowBox, to: ArrowBox, props: ArrowProps) {
+  const t = getBoxToBoxArrow(
+    from.x,
+    from.y,
+    from.w,
+    from.h,
+    to.x,
+    to.y,
+    to.w,
+    to.h,
+    props
+  );
+  return {
+    sx: t[0],
+    sy: t[1],
+    cx: t[2],
+    cy: t[3],
+    ex: t[4],
+    ey: t[5],
+    ae: t[6],
+    as: t[7],
+    ec: t[8],
+  };
+}
+
+/** The arrow's own items (start dot, body, head), with its points mapped to
+ *  pixels by `own`. */
+export function arrowItems(
+  data: ReturnType<typeof arrowGeometry>,
+  props: ArrowProps,
+  own: ToPixel
+): DisplayList.DisplayItem[] {
+  const sw = props.strokeWidth ?? 0;
+  const endAngle = data.ae; // radians
+  const px = (x: number, y: number) => own([x, y]).join(",");
+  const stroke = props.stroke;
+  const items: DisplayList.DisplayItem[] = [];
+
+  if (props.start) {
+    const [cx, cy] = own([data.sx, data.sy]);
+    items.push({
+      kind: "ellipse",
+      cx,
+      cy,
+      rx: (4 / 3) * sw,
+      ry: (4 / 3) * sw,
+      role: "overlay",
+      style: lowerStyle({ fill: stroke }),
+    });
+  }
+
+  // Quadratic body M sx,sy Q cx,cy ex,ey.
+  items.push({
+    kind: "path",
+    d: `M${px(data.sx, data.sy)} Q${px(data.cx, data.cy)} ${px(data.ex, data.ey)}`,
+    role: "overlay",
+    style: lowerStyle({ fill: "none", stroke, strokeWidth: sw }),
+  });
+
+  // Arrowhead: rotate each head point by the end angle, translate to
+  // (ex, ey), then map. SVG `rotate(θ)` = [[cosθ,-sinθ],[sinθ,cosθ]].
+  const cos = Math.cos(endAngle);
+  const sin = Math.sin(endAngle);
+  const head = [
+    [0, -2],
+    [4, 0],
+    [0, 2],
+  ]
+    .map(([x, y]) => [x * sw, y * sw])
+    .map(([x, y]) => [
+      data.ex + (x * cos - y * sin),
+      data.ey + (x * sin + y * cos),
+    ])
+    .map(([x, y]) => px(x, y));
+  items.push({
+    kind: "path",
+    d: `M${head[0]} L${head[1]} L${head[2]} Z`,
+    role: "overlay",
+    style: lowerStyle({ fill: stroke }),
+  });
+  return items;
+}
+
+/** Each arrow node's resolved options, for a transition that draws it again
+ *  from moving operands. */
+const arrowProps = new WeakMap<GoFishNode, ArrowProps>();
+export const arrowPropsOf = (node: GoFishNode): ArrowProps | undefined =>
+  arrowProps.get(node);
+
 export const arrow = createNodeOperator(
   (opts: ArrowOpts, children: GoFishAST[]) => {
-    const props = { ...defaultArrowOpts, ...opts };
+    const props: ArrowProps = { ...defaultArrowOpts, ...opts };
 
-    return new GoFishNode(
+    const self = new GoFishNode(
       {
         type: "arrow",
         shared: [false, false],
@@ -79,18 +177,12 @@ export const arrow = createNodeOperator(
           );
           const fromDims = childPlaceables[0].dims;
           const toDims = childPlaceables[1].dims;
-
-          const arrowTuple = getBoxToBoxArrow(
-            fromDims[0].min!,
-            fromDims[1].min!,
-            fromDims[0].size!,
-            fromDims[1].size!,
-            toDims[0].min!,
-            toDims[1].min!,
-            toDims[0].size!,
-            toDims[1].size!,
-            props
-          );
+          const boxOf = (dims: typeof fromDims): ArrowBox => ({
+            x: dims[0].min!,
+            y: dims[1].min!,
+            w: dims[0].size!,
+            h: dims[1].size!,
+          });
 
           const combinedBBox = union(
             bbox(
@@ -116,17 +208,7 @@ export const arrow = createNodeOperator(
               },
             ],
             transform: { translate: [0, 0] },
-            renderData: {
-              sx: arrowTuple[0],
-              sy: arrowTuple[1],
-              cx: arrowTuple[2],
-              cy: arrowTuple[3],
-              ex: arrowTuple[4],
-              ey: arrowTuple[5],
-              ae: arrowTuple[6],
-              as: arrowTuple[7],
-              ec: arrowTuple[8],
-            },
+            renderData: arrowGeometry(boxOf(fromDims), boxOf(toDims), props),
           };
         },
         // IR lowering. The arrow's parts live under the node's translate, so
@@ -137,9 +219,6 @@ export const arrow = createNodeOperator(
           _children,
           node
         ): DisplayList.DisplayItem[] => {
-          const data = renderData!;
-          const sw = props.strokeWidth ?? 0;
-          const endAngle = data.ae; // radians
           const [tx, ty] = displayTranslate(transform);
           const session = node.getRenderSession();
           const outer = session.toPixel!;
@@ -147,53 +226,7 @@ export const arrow = createNodeOperator(
           // arrow's own points are in its axis order, placed by `local`.
           const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
           const own: ToPixel = (p) => outer(local(p));
-          const px = (x: number, y: number) => own([x, y]).join(",");
-
-          const stroke = props.stroke;
-          const items: DisplayList.DisplayItem[] = [];
-
-          if (props.start) {
-            const [cx, cy] = own([data.sx, data.sy]);
-            items.push({
-              kind: "ellipse",
-              cx,
-              cy,
-              rx: (4 / 3) * sw,
-              ry: (4 / 3) * sw,
-              role: "overlay",
-              style: lowerStyle({ fill: stroke }),
-            });
-          }
-
-          // Quadratic body M sx,sy Q cx,cy ex,ey.
-          items.push({
-            kind: "path",
-            d: `M${px(data.sx, data.sy)} Q${px(data.cx, data.cy)} ${px(data.ex, data.ey)}`,
-            role: "overlay",
-            style: lowerStyle({ fill: "none", stroke, strokeWidth: sw }),
-          });
-
-          // Arrowhead: rotate each head point by the end angle, translate to
-          // (ex, ey), then map. SVG `rotate(θ)` = [[cosθ,-sinθ],[sinθ,cosθ]].
-          const cos = Math.cos(endAngle);
-          const sin = Math.sin(endAngle);
-          const head = [
-            [0, -2],
-            [4, 0],
-            [0, 2],
-          ]
-            .map(([x, y]) => [x * sw, y * sw])
-            .map(([x, y]) => [
-              data.ex + (x * cos - y * sin),
-              data.ey + (x * sin + y * cos),
-            ])
-            .map(([x, y]) => px(x, y));
-          items.push({
-            kind: "path",
-            d: `M${head[0]} L${head[1]} L${head[2]} Z`,
-            role: "overlay",
-            style: lowerStyle({ fill: stroke }),
-          });
+          const items = arrowItems(renderData!, props, own);
 
           // Children lower under the same translate, in the shared paint
           // order (#982). Which child is the source and which the target is
@@ -210,6 +243,8 @@ export const arrow = createNodeOperator(
       },
       children
     );
+    arrowProps.set(self, props);
+    return self;
   }
 );
 

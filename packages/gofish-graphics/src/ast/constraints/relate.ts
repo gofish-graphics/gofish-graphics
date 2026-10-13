@@ -126,7 +126,11 @@ async function flattenClausesAsync(c: unknown): Promise<unknown[]> {
 export async function resolveRelateClauses(
   result: unknown,
   env: RelateEnv
-): Promise<{ constraints: ConstraintSpec[]; nodes: GoFishNode[] }> {
+): Promise<{
+  constraints: ConstraintSpec[];
+  nodes: GoFishNode[];
+  temporal: unknown[];
+}> {
   const awaited = isThenable(result) ? await result : result;
   if (!Array.isArray(awaited)) {
     throw new Error(
@@ -139,10 +143,15 @@ export async function resolveRelateClauses(
     ? await flattenClausesAsync(awaited)
     : flattenClausesSync(awaited);
   const constraints: ConstraintSpec[] = [];
+  const temporal: unknown[] = [];
   const terms: { term: unknown; position: number }[] = [];
   clauses.forEach((c, i) => {
     const position = i + 1;
     if (isConstraintSpec(c)) constraints.push(c);
+    // PROTOTYPE (animation grammar): a time clause (`time.after`,
+    // `time.align`, `time.transition(a, b)`) places lifetimes on t, and is
+    // solved by `src/animation/timeline.ts` (see `registerTimeline`).
+    else if (isTemporal(c)) temporal.push(c);
     else if (c instanceof RelateOperand || c instanceof GoFishRef) {
       throw new Error(
         `.relate(): clause ${position} is a bare reference${
@@ -168,7 +177,24 @@ export async function resolveRelateClauses(
     node._relateClause = position;
     nodes.push(node);
   }
-  return { constraints, nodes };
+  return { constraints, nodes, temporal };
+}
+
+/** Whether `c` is a time clause (`src/animation/timeline.ts`). Tested by
+ *  shape here because that module depends on this one. */
+const isTemporal = (c: unknown): boolean =>
+  typeof c === "object" &&
+  c !== null &&
+  typeof (c as { __temporal?: unknown }).__temporal === "string";
+
+/** Lower a layer's time clauses (`installTimeline`). Imported when called:
+ *  that module depends on this one. */
+export async function installTimelineOf(
+  layer: GoFishNode,
+  clauses: unknown[]
+): Promise<GoFishNode[]> {
+  const { installTimeline } = await import("../../animation/timeline");
+  return installTimeline(layer, clauses as any);
 }
 
 /** Every ref in `node`'s subtree (a ref has no children of its own). */

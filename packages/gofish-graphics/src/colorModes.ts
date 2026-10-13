@@ -54,3 +54,27 @@ export function paintedRgb(color: Color): Rgb {
     b: to8Bit(b) / 255,
   };
 }
+
+/**
+ * `a` and `b` mixed by `u` (0 is `a`, 1 is `b`) in CIE Lab, as a hex string:
+ * the color a mark passes through while a tween moves it from one keyframe's
+ * paint to the next one's. A paint that is not a color (`"none"`, a pattern
+ * url) cannot be mixed, so it switches at the halfway point instead.
+ */
+export function mixColor(a: string, b: string, u: number): string {
+  if (a === b || u <= 0) return a;
+  if (u >= 1) return b;
+  const ca = parse(a);
+  const cb = parse(b);
+  if (ca === undefined || cb === undefined) return u < 0.5 ? a : b;
+  const la = toLab65(ca);
+  const lb = toLab65(cb);
+  return formatHex(
+    toRgb({
+      mode: "lab65",
+      l: la.l + (lb.l - la.l) * u,
+      a: la.a + (lb.a - la.a) * u,
+      b: la.b + (lb.b - la.b) * u,
+    })
+  );
+}
