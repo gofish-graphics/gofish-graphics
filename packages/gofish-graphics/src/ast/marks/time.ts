@@ -45,6 +45,11 @@ import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
 import { assertOneRowPerKnot, resolveMethod } from "../../interpolate";
 import type { Curve } from "../../families/curve";
+import { resolveCurve } from "../graphicalOperators/routers";
+
+/** The curves that route a pair of placed boxes on screen. `linear` is also
+ *  a data-space method, and reads the same either way for a box's center. */
+const ROUTE_KINDS = new Set(["bezier", "orthogonal", "arc", "perfectArrows"]);
 import {
   historiesIn,
   historyOf,
@@ -371,6 +376,9 @@ export type TransitionOptions = {
    *  next keyframe's own time arrives, and then jumps — the same picture the
    *  keyframes alone draw. */
   curve?: Curve;
+  /** PROTOTYPE (ribbon particles): the main axis of a screen-space route
+   *  curve (`Curve.bezier()` etc.), as a `ribbon`'s `dir`. Default "x". */
+  dir?: "x" | "y";
   /** Time warp inside one keyframe interval, `u -> u'` on `[0, 1]`. */
   ease?: (u: number) => number;
   fill?: MaybeValue<string>;
@@ -430,7 +438,23 @@ const relationalTransition = createRelationalMark<TransitionOptions>(
       );
     }
     checkSequencePhases(o, "time.transition()");
-    const method = resolveMethod(o.curve, "time.transition({ curve })");
+    // PROTOTYPE (ribbon particles): a curve that is a pairwise screen-space
+    // ROUTE (bezier, orthogonal, arc, perfectArrows) is read on screen
+    // between neighboring keyframes' placed boxes, the path a connector with
+    // the same curve draws; the box's extent is read linearly over time. Every
+    // other curve is a data-space interpolation of each channel, as before.
+    // The right shape is #950's split of the two meanings of `curve`.
+    const route =
+      o.curve !== undefined && ROUTE_KINDS.has(o.curve.kind)
+        ? {
+            ...resolveCurve(o.curve),
+            dir: (o.dir === "y" ? 1 : 0) as 0 | 1,
+          }
+        : undefined;
+    const method =
+      route !== undefined
+        ? "linear"
+        : resolveMethod(o.curve, "time.transition({ curve })");
     // Both halves of "which run, read where" can be written out instead of
     // inferred: `along` names the keyframes' time field and `at` supplies the
     // playhead. Explicit wins, and either one alone is enough to drop the
@@ -501,6 +525,7 @@ const relationalTransition = createRelationalMark<TransitionOptions>(
         ease: o.ease,
         msPerUnit: tier?.msPerUnit,
         moves: o.moves,
+        route,
         fill: o.fill,
         stroke: o.stroke,
         strokeWidth: o.strokeWidth,

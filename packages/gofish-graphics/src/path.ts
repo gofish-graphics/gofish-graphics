@@ -63,6 +63,31 @@ export const evenStep = (segments: PathSegment[]): Step => ({
   spans: segments.map(() => 1 / segments.length),
 });
 
+/** The point a path is at when a fraction `u` of it has been traversed, its
+ *  segments taking equal shares of `u` and each read by its own parameter
+ *  (not by arc length). PROTOTYPE (ribbon particles): what a transition whose
+ *  curve is a screen-space route reads (`tween.tsx`). */
+export const pointOnPath = (path: Path, u: number): Point => {
+  const n = path.length;
+  const scaled = Math.max(0, Math.min(1, u)) * n;
+  const j = Math.min(n - 1, Math.floor(scaled));
+  const s = scaled - j;
+  const seg = path[j];
+  if (seg.type === "line") return lerpPoint(seg.points[0], seg.points[1], s);
+  const r = 1 - s;
+  const [a, b, c, d] = [r * r * r, 3 * r * r * s, 3 * r * s * s, s * s * s];
+  return [
+    a * seg.start[0] +
+      b * seg.control1[0] +
+      c * seg.control2[0] +
+      d * seg.end[0],
+    a * seg.start[1] +
+      b * seg.control1[1] +
+      c * seg.control2[1] +
+      d * seg.end[1],
+  ];
+};
+
 /** A segment traversed from its end to its start: the same points. */
 export const reverseSegment = (seg: PathSegment): PathSegment =>
   seg.type === "line"

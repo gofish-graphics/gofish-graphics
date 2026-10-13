@@ -89,6 +89,8 @@ import {
   type KnotLocation,
 } from "../../interpolate";
 import { bbox, height, unionAll, width } from "../../util/bbox";
+import type { Router } from "./routers";
+import { pointOnPath } from "../../path";
 import { targetOf } from "./layer";
 import { chainedMarks } from "../../animation/transition";
 import type { TweenEffect } from "../../animation/effects";
@@ -130,6 +132,15 @@ export type TweenOptions = {
    *  `ChartBuilder.resolve`). Omitted (the selection form), it moves the
    *  marks that chained any, or each operand itself when none did. */
   moves?: TweenEffect;
+  /** PROTOTYPE (ribbon particles): a SCREEN-SPACE route between neighboring
+   *  keyframes. Without one, every channel is read over the run's knots by
+   *  `method` (a data-space interpolation, one channel at a time). With one,
+   *  the mark's CENTER travels the route a connector with this curve draws
+   *  from one keyframe's placed box to the next one's (`routers.ts`), at the
+   *  route's own parameter, and only its extent is read by `method`. This is
+   *  the reading "the transition's curve is the connector's curve": a lane of
+   *  a `ribbon` and a particle moving down it trace one bezier. */
+  route?: { router: Router; options: Record<string, any>; dir: 0 | 1 };
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -323,6 +334,7 @@ export const tween = createNodeOperator(
       ease,
       msPerUnit,
       moves,
+      route,
       fill,
       stroke,
       strokeWidth,
@@ -447,6 +459,26 @@ export const tween = createNodeOperator(
             const shapes = leaves.map((leaf) => leaf.type);
             const cx = boxes.map((b) => (b.minX + b.maxX) / 2);
             const cy = boxes.map((b) => (b.minY + b.maxY) / 2);
+            /** The center channels: read over the knots by `method`, or,
+             *  under a screen-space route, along the route from each
+             *  keyframe's placed box to the next one's. */
+            const center = (axis: 0 | 1): Channel => {
+              const values = axis === 0 ? cx : cy;
+              if (route === undefined || boxes.length < 2) {
+                return channel(values);
+              }
+              const dims = boxes.map((b) => [
+                { min: b.minX, max: b.maxX, size: b.maxX - b.minX },
+                { min: b.minY, max: b.maxY, size: b.maxY - b.minY },
+              ]);
+              const paths = dims.slice(0, -1).map((d, k) =>
+                route.router(d, dims[k + 1], {
+                  dir: route.dir,
+                  opts: route.options,
+                })
+              );
+              return ({ i, u }) => pointOnPath(paths[i], u)[axis];
+            };
             // Every leaf the transition moves draws nothing of its own: the
             // moving mark is its drawing. Each lends that drawing to the
             // moving mark at lowering: a rigid leaf's is placed where the
@@ -463,8 +495,8 @@ export const tween = createNodeOperator(
                 origins,
                 cx,
                 cy,
-                x: channel(cx),
-                y: channel(cy),
+                x: center(0),
+                y: center(1),
               };
             }
             return {
@@ -472,8 +504,8 @@ export const tween = createNodeOperator(
               leaves,
               origins,
               shapes,
-              x: channel(cx),
-              y: channel(cy),
+              x: center(0),
+              y: center(1),
               w: channel(boxes.map(width)),
               h: channel(boxes.map(height)),
             };
