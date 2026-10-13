@@ -182,6 +182,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 LayerBuilder,
                 Mark,
                 _collect_mark_lambdas,
+                _collect_operator_lambdas,
                 _MarkFn,
                 _InputRef,
                 tiers_arrow_bytes,
@@ -234,6 +235,10 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 for op in chart.operators:
                     if isinstance(op, DeriveOperator):
                         register(op.lambda_id, op.fn)
+                for lambda_id, rows_fn in _collect_operator_lambdas(
+                    chart.operators
+                ):
+                    register(lambda_id, rows_fn)
                 if isinstance(chart._mark, _MarkFn):
                     register(chart._mark.lambda_id, mark_fn(chart._mark.fn))
                 elif chart._mark is not None:

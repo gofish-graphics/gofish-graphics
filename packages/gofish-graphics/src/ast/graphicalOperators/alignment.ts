@@ -3,17 +3,13 @@
 // </gofish-wiki>
 
 import {
-  ORDINAL,
   UNDEFINED,
   isCONTINUOUS,
   isORDINAL,
   isUNDEFINED,
-  mergeAllMeasures,
-  forgetAllMeasures,
+  joinAllUnits,
   dataWidth,
   allMirrored,
-  mergeCalendars,
-  withCalendar,
   mirrored,
   type CONTINUOUS_TYPE,
   type MeasureSite,
@@ -22,6 +18,7 @@ import {
   CONTINUOUS,
   originIs,
 } from "../underlyingSpace";
+import { unionInOrder } from "../measure";
 import { Extent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import type { Size } from "../dims";
@@ -68,7 +65,7 @@ export const seatedUnion = (
  * The one overlay fold: the union of the children's seated intervals, with
  * the origin the operator gives the result and the children's measures
  * unified as types, whatever their origin (a clash is an error; see
- * {@link mergeMeasures}). Children that all hold amounts on both sides of 0
+ * {@link joinUnits}). Children that all hold amounts on both sides of 0
  * still do together, when the result has a 0.
  */
 function overlay(
@@ -77,15 +74,13 @@ function overlay(
   origin: Origin,
   site: MeasureSite
 ): UnderlyingSpace {
-  const measure = mergeAllMeasures(
+  const measure = joinAllUnits(
     conts.map((s) => s.measure),
+    true,
     site
   );
   return mirrored(
-    withCalendar(
-      CONTINUOUS(seatedUnion(conts, seat, origin), origin, measure),
-      mergeCalendars(conts.map((s) => s.calendar))
-    ),
+    CONTINUOUS(seatedUnion(conts, seat, origin), origin, measure),
     origin !== "none" && allMirrored(conts)
   );
 }
@@ -114,14 +109,22 @@ export function unionChildSpaces(
     for (const ord of ordinals) {
       if (ord.domain) for (const k of ord.domain) keys.add(k);
     }
-    // Carry the grouping measure through the union (FORGET on a real clash, as
-    // the magnitude path does) so a category axis keeps naming itself off its
-    // own space — e.g. a `Frame` wrapping a `spread(lake)` preserves "lake".
-    const measure = forgetAllMeasures(ordinals.map((o) => o.measure));
+    // Carry the grouping fields through the union so a category axis keeps
+    // naming itself off its own space — e.g. a `Frame` wrapping a
+    // `spread(lake)` preserves "lake".
+    const titles = ordinals.reduce<string[]>(
+      (acc, o) => unionInOrder(acc, o.titles ?? []),
+      []
+    );
     // Anonymous only if EVERY unioned ordinal is anonymous — one semantically
     // keyed child makes the union a real category axis.
     const anonymous = ordinals.every((o) => o.anonymous);
-    return ORDINAL(Array.from(keys), measure, anonymous);
+    return {
+      kind: "ordinal",
+      domain: Array.from(keys),
+      titles: titles.length > 0 ? titles : undefined,
+      anonymous,
+    };
   }
 
   const axisSpaces = children.map((c) => c[axis]);

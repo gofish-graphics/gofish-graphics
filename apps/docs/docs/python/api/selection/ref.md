@@ -7,8 +7,9 @@
   it resolves at layout time against the name tree, hygienically scoped (see
   [scoping](#hygienic-scoping)).
 - **As chart data** — `chart(ref("maxBar")).mark(text(...))` — it resolves at
-  build time against the named-layer registry and stands in for the one node
-  registered under that name.
+  build time against the named-layer registry to a list of one ref, the node
+  registered under that name. Like all chart data it is a list; being singular
+  is a check that exactly one node matched.
 
 `select_all(name)` is the **plural** chart-data verb: it returns an **array of
 refs**, one per node a named mark produced (node-unit; aggregate or not, no
@@ -38,7 +39,7 @@ layer([
 ## Signature
 
 ```python
-ref(name: str) -> Ref            # singular; resolves to exactly one node
+ref(name: str) -> Ref            # singular; as chart data, a list of exactly one ref
 select_all(name: str) -> list[Ref]  # one ref per matching node
 ```
 
@@ -58,7 +59,7 @@ When you pass `ref(name)` as chart data it must resolve to **exactly one** node:
   reference refuses to silently pick one.
 
 ```python
-chart(ref("kpi")).mark(text(text="peak"))  # one ref; raises on 0 or >1 nodes
+chart(ref("kpi")).mark(text(text="peak"))  # a list of one ref; raises on 0 or >1 nodes
 ```
 
 ## Node-unit selection
@@ -147,10 +148,38 @@ share a lake) but `by="species"` does not until you disaggregate. See
 [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by) for the
 full explanation.
 
-::: info `pluck` is JavaScript only
-The JS package exports `pluck(source, path)` — the un-collapsed counterpart to
-`by`'s path projection, returning every distinct value present at a path. The
-Python wrapper does not expose it yet ([issue #514](https://github.com/gofish-graphics/gofish-graphics/issues/514));
-until then, enumerate multi-valued fields in a [`derive`](/python/api/operators/derive)
-callback.
-:::
+## `pluck(source, path)` — every value at a path {#pluck}
+
+Where `by`'s path projection **collapses** a row-bag to a single scalar (and goes
+`None` when the bag disagrees), `pluck` is its un-collapsed counterpart: it
+returns the full list of **distinct values** present at a path, in the order
+they first appear.
+
+```python
+from gofish import pluck
+
+pluck(ref, "species")  # → ["Bass", "Trout", ...] (distinct across the bag)
+```
+
+`source` may be a ref that a
+[mark function](/python/api/core/mark#mark-fn-over-refs-value-labels) received
+(`pluck` reads its `datum` bag), a list of rows, or a single row. `path` is a field name
+or a dotted path (`"a.b"`); a list met along the path is read element by
+element, and a row that lacks the field adds no value. Reach for `pluck` when a
+field is multi-valued in the current bag and you want to enumerate its values
+rather than group by it — the case where `by="field"` would resolve to `None`.
+
+`pluck` runs in Python, on the rows the mark function received, and returns
+plain Python values. Here it counts the species in each lake for a label:
+
+```python
+def label(d):
+    species = pluck(d[0], "species")
+    return spread([text(text=f"{len(species)} spp"), d[0]],
+                  dir="y", alignment="middle", spacing=10)
+
+chart(seafood, axes=True) \
+    .flow(spread(by="lake", dir="x")) \
+    .mark(rect(h="count")) \
+    .layer(chart().flow(group(by="lake")).mark(label))
+```

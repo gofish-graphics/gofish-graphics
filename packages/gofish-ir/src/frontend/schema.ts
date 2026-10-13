@@ -168,6 +168,7 @@ export type OperatorIR =
   | DeriveOperator
   | ResolveOperator
   | JoinOperator
+  | FilterOperator
   | SpreadOperator
   | StackOperator
   | GroupOperator
@@ -188,16 +189,13 @@ export interface DeriveOperator
     OperatorFlagsIR {
   type: "derive";
   lambdaId?: string;
-  /** Measure provenance a transform (e.g. `bin`) declares for its output
-   *  columns — a map from output field name to the measure it carries (the
-   *  source field's units). Travels in the IR because the JS-side array symbol
-   *  can't ride the data rows across the derive RPC; the deserializer re-applies
-   *  it via `setMeasureProvenance`. */
-  provenance?: Record<string, string>;
   /** The column types of the derive's result, keyed by column name, in the
    *  wire form of a chart's `schema` (e.g. `{ HasOrder: { levels } }`). They
    *  type the result over the types it keeps or infers, and convert values
-   *  as a chart's schema does. */
+   *  as a chart's schema does. A transform (e.g. Python's `bin`) writes the
+   *  quantities of its output columns here (`{ HasQuantity: { name } }`), since the
+   *  column types the JS-side array carries can't ride the rows across the
+   *  derive RPC. */
   schema?: Record<string, Record<string, unknown>>;
 }
 
@@ -241,6 +239,36 @@ export interface JoinOperator
   right: Record<string, unknown>[];
 }
 
+/**
+ * `filter(field(name).between(lo, hi, { closed }))` — keep the rows whose
+ * `field` value lies in `[lo, hi]`, compared by value; `closed` picks the
+ * inclusive ends (default `"both"`, as in polars' `is_between`). Only a field
+ * predicate has this form: a hand-written JS predicate is a live callback, so
+ * that filter serializes as an opaque `derive`. The predicate is its own
+ * value, not a field-expression op (`FieldExprWire.ops`).
+ */
+export interface FilterOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "filter";
+  predicate: FieldPredicateIR;
+}
+
+/** A `by` key that groups consecutive rows, as `chunk(size)` builds it: row
+ *  `i` goes to group `floor(i / size)`, a bin over row position. */
+export interface ChunkKeyIR {
+  type: "chunk";
+  size: number;
+}
+
+/** A field predicate: the field it reads and the interval it tests. */
+export interface FieldPredicateIR {
+  field: string;
+  between: [number, number];
+  closed?: "both" | "left" | "right" | "none";
+}
+
 export interface SpreadOperator
   extends BaseIRNode,
     TranslatableIR,
@@ -251,7 +279,7 @@ export interface SpreadOperator
    *  subdata. String accessors round-trip; function accessors don't (see
    *  `LabelIR`/`labelIRField` in createOperator.ts). */
   label?: LabelIR;
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
   /** `x`/`y`, or an axis name the enclosing coordinate space declares. */
   dir?: string;
   spacing?: number;
@@ -286,7 +314,7 @@ export interface StackOperator
   type: "stack";
   /** See `SpreadOperator.label` — `stack` is `spread({glue: true})` re-tagged. */
   label?: LabelIR;
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
   /** See `SpreadOperator.dir`. */
   dir?: string;
   /** Spread-parity passthrough: the JS `stack` is `Spread({...props, glue:
@@ -315,7 +343,7 @@ export interface GroupOperator
   type: "group";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
-  by: string | FieldAccessor;
+  by: string | FieldAccessor | ChunkKeyIR;
 }
 
 export interface ScatterOperator
@@ -325,7 +353,7 @@ export interface ScatterOperator
   type: "scatter";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
   x?: ChannelValue;
   y?: ChannelValue;
   xMin?: ChannelValue;
@@ -425,7 +453,7 @@ export interface TreemapOperator
   /** Field to partition rows by; also accepts a field(...) accessor carrying
    *  domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is
    *  emitted per row. */
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
   /** Gap between sibling tiles, in pixels. Default 0. */
   spacing?: number;
   /** Inset around the outer edge of the treemap, in pixels. Default 0. */
@@ -462,7 +490,7 @@ export interface PackOperator
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
   /** Field to partition rows by. Without `by`, one child per row. */
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
 }
 
 // ---------------------------------------------------------------------------
@@ -577,7 +605,19 @@ export type CombinatorMarkType =
  * cannot precisely express the union of channel values per shape, so the
  * index signature is permissive — mirrors the existing widget interface.
  */
-export interface LeafMarkIR extends BaseIRNode {
+/** Fields the Python wrapper writes on a mark and the renderer reads (the
+ *  serialization essay's "Bridge extensions"). Declared in
+ *  `MARK_BASE_FIELDS`, so the validator checks them like any other field. */
+export interface MarkBridgeFieldsIR {
+  /** The mark is a component (the `@mark` decorator's output). */
+  __scope?: true;
+  /** `bind_data()`: the datum the mark is pre-bound to. */
+  __datum?: unknown;
+  /** `bind_data()`: the key the mark is pre-bound to. */
+  __key?: string | number;
+}
+
+export interface LeafMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   type: LeafMarkType;
   name?: string;
   label?: LabelIR;
@@ -592,7 +632,7 @@ export interface LeafMarkIR extends BaseIRNode {
  * Distinguished from the operator-form by the `__combinator: true` flag
  * and the presence of `children`.
  */
-export interface CombinatorMarkIR extends BaseIRNode {
+export interface CombinatorMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   type: CombinatorMarkType;
   __combinator: true;
   options?: Record<string, unknown>;
@@ -701,9 +741,7 @@ export interface AxisInterval {
  */
 export type AxisDims = Record<string, ChannelValue | AxisInterval>;
 
-/** Explicit field-accessor form, emitted by `field(name, measure?)`. The
- *  optional `measure` is a unit annotation on the channel's underlying space
- *  (a type claim — see gofish-graphics' `resolveMeasure`). `ops` is the
+/** Explicit field-accessor form, emitted by `field(name)`. `ops` is the
  *  optional chained pipeline (#700 Phase 1/2), e.g. `field("site").sort("yield")`
  *  or `field("count").normalize()` — see `FieldOpIR` and gofish-graphics'
  *  `fieldExpr.ts` (`FieldOp`), which this mirrors exactly. Two disjoint
@@ -714,7 +752,6 @@ export type AxisDims = Record<string, ChannelValue | AxisInterval>;
 export interface FieldAccessor {
   type: "field";
   name: string;
-  measure?: string;
   ops?: FieldOpIR[];
 }
 
@@ -889,6 +926,7 @@ export const OPERATOR_TYPES = [
   "derive",
   "resolve",
   "join",
+  "filter",
   "spread",
   "stack",
   "group",

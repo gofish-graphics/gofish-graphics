@@ -363,9 +363,10 @@ async function main() {
       { k: "b", angle: 2, lo: 2, hi: 4, name: "q" },
       { k: "c", angle: 3, lo: 3, hi: 5, name: "r" },
     ];
-    // The two ends of a span share one measure.
-    const lo = field("lo", "span");
-    const hi = field("hi", "span");
+    // The two ends of a span: two columns with no declared unit, which
+    // unify on one axis.
+    const lo = field("lo");
+    const hi = field("hi");
     const dots = async (opts: any, coord?: any) =>
       (
         await chart(rows, coord ? { coord } : {})

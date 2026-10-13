@@ -14,6 +14,7 @@ import {
   type ResolvedOperand,
 } from "./index";
 import { childNameKey, type ConstraintRef } from "./shared";
+import { isThenable } from "../../util";
 
 /**
  * An operand of a `.relate()` callback: a variable that names a node inside
@@ -81,9 +82,6 @@ function isConstraintSpec(c: unknown): c is ConstraintSpec {
     Object.prototype.hasOwnProperty.call(CONSTRAINT_TYPES, type)
   );
 }
-
-const isThenable = (c: unknown): c is PromiseLike<unknown> =>
-  c !== null && typeof (c as PromiseLike<unknown>)?.then === "function";
 
 const containsThenable = (c: unknown): boolean =>
   isThenable(c) || (Array.isArray(c) && c.some(containsThenable));

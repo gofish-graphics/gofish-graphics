@@ -5,14 +5,9 @@
  *   1. Ask `derive-server.py` to import the story and emit its IR.
  *   2. Wrap the result into a `FrontendIRDocument` (Python's `to_dict()`
  *      returns the root only; the wrapper adds `irVersion`/`ir`).
- *   3. Run it through `gofish-ir`'s validator in permissive mode (bridge
- *      sentinels like `__gofish_lambda` and `__scope` aren't part of the
- *      public schema, so strict mode would reject them).
- *
- * Strict-mode validation against bridge-extended IRs is out of scope for
- * v0 — the canonical schema captures the public form; a separate
- * `FrontendIRWithBridge` schema covering the bridge extensions can land
- * in a follow-up commit.
+ *   3. Run it through `gofish-ir`'s validator. An unknown field is an error.
+ *      The bridge fields Python emits (`__gofish_lambda`, `__scope`,
+ *      `__datum`/`__key`, ...) are declared in the schema like any other.
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
@@ -166,11 +161,6 @@ async function main() {
   let failed = 0;
   let skipped = 0;
   const failures: { story: string; errors: string }[] = [];
-  // Leaf-mark channel warnings (unknown/mistyped fields the validator
-  // deliberately does NOT fail on during the descriptor rollout). Collected
-  // and printed so the "silently dropped channel" signal is visible; the
-  // warn→strict flip depends on this staying empty across the corpus.
-  const warnings: { story: string; warnings: string }[] = [];
 
   for (const story of stories) {
     const label = `${story.path}`;
@@ -202,13 +192,7 @@ async function main() {
         Object.keys((doc.root as any).mark ?? {})
       );
     }
-    const result = Frontend.validate(doc, { strict: false });
-    if (result.warnings?.length) {
-      warnings.push({
-        story: label,
-        warnings: JSON.stringify(result.warnings).slice(0, 300),
-      });
-    }
+    const result = Frontend.validate(doc);
     if (result.valid) {
       passed += 1;
       if (process.env.DEBUG) console.log(`  ok   ${label}`);
@@ -225,14 +209,6 @@ async function main() {
   console.log(
     `\n${passed} passed, ${failed} failed, ${skipped} skipped (out of ${stories.length})`
   );
-  if (warnings.length > 0) {
-    console.log(`\nLeaf-mark channel warnings (${warnings.length} stories):`);
-    for (const w of warnings.slice(0, 20)) {
-      console.log(`  WARN ${w.story}: ${w.warnings}`);
-    }
-  } else {
-    console.log("No leaf-mark channel warnings.");
-  }
   if (failures.length > 0) {
     console.error("\nValidation failures:");
     for (const f of failures.slice(0, 10)) {

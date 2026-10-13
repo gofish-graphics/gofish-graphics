@@ -29,16 +29,15 @@ never mistaken for data.
 
 ## Parameters
 
-| Parameter        | Type                           | Description                                                                                                                                                                              |
-| ---------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data`           | `T`                            | The dataset to visualize                                                                                                                                                                 |
-| `options.w`      | `number`                       | Width hint for the chart frame                                                                                                                                                           |
-| `options.h`      | `number`                       | Height hint for the chart frame                                                                                                                                                          |
-| `options.coord`  | `Coord.Coord`                  | Coordinate transform (e.g. `Coord.polar()`)                                                                                                                                              |
-| `options.color`  | `Color.Color`                  | Color scale applied to all marks in this chart. Use [`Color.palette()`](/js/api/color/palette) for categorical data or [`Color.gradient()`](/js/api/color/gradient) for continuous data. |
-| `options.axes`   | `AxesOptions`                  | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                                        |
-| `options.legend` | `boolean`                      | Whether to draw the color-scale legend. Default `true`. See [Legend](#legend) below.                                                                                                     |
-| `options.schema` | `Record<string, ColumnSchema>` | Column types, keyed by column name, e.g. `{ response: Schema.ordered(LEVELS).diverging() }` or `{ date: Schema.time() }`. See [`Schema`](/js/api/core/schema).                           |
+`data` (`T`) is the dataset to visualize.
+
+`options` holds the chart-level options. See [Axes](#axes) for the full `axes`
+shape, [Legend](#legend) for `legend`, [`Color.palette()`](/js/api/color/palette) and
+[`Color.gradient()`](/js/api/color/gradient) for `color`, and
+[`Schema`](/js/api/core/schema) for `schema`.
+
+::: gofish-ref ChartOptions
+:::
 
 Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js/api/core/mark), [`.render()`](/js/api/core/render), [`.zOrder()`](#zorder), and [`.name()`](#name) methods.
 
@@ -95,37 +94,37 @@ Use it when the legend would cost more than it explains: a map colored by 72
 species, where the swatch column would take more room than the map itself, or a
 chart whose colors are already labeled in place.
 
-## Equal scale from a shared measure
+## Equal scale from a shared unit
 
 By default each axis resolves its data→pixel scale independently — `x` against
 the width, `y` against the height — so a circle in data space becomes an ellipse.
 That is correct when the axes are different quantities. But when **x and y are
-the same unit of measure**, "1 unit on x" and "1 unit on y" are the _same_
+in the same unit**, "1 unit on x" and "1 unit on y" are the _same_
 quantity, so their scales must be equal — a circle stays circular, a 45° line
 looks 45°. The way maps, geometric data, and correlation plots need.
 
-GoFish does this from the **measure**, not a knob: tag both channels with the
-same measure via `field(name, measure)` (or `datum(value, measure)`) and the
-shared scale follows.
+GoFish does this from the **unit**, not a knob: declare both columns in the
+same unit with [`Schema.unit`](/js/api/core/schema) and the shared scale
+follows.
 
 ```ts
-chart(data)
-  .flow(scatter({ x: field("x", "plane"), y: field("y", "plane") }))
+chart(data, { schema: { x: Schema.unit("plane"), y: Schema.unit("plane") } })
+  .flow(scatter({ x: "x", y: "y" }))
   .mark(circle({ r: 4 }))
   .render(container, { w: 640, h: 380 }); // a true circle, not an ellipse
 ```
 
 This is the same rule the `circle` mark already obeys one level down:
 `circle({ r })` lowers to a `w` and `h` driven by one value, which share a
-measure and therefore one scale factor — so a circle can never distort into an
+unit and therefore one scale factor — so a circle can never distort into an
 ellipse. Equal scale at the chart level is exactly that, lifted to x and y.
 
 The binding (more constrained) axis fills its dimension; the other is centered in
 the leftover space. It applies to axes that carry a data-driven scale (a position
 scale over a data domain, or a data-driven size); an axis with nothing to scale
-(a category axis) leaves it a no-op. Tagging the two axes the same is a unit
-claim — `bill_length` and `bill_depth` (both mm, but _different_ measures) stay
-independent, while `predicted` vs `actual` (both `"price"`) share a scale.
+(a category axis) leaves it a no-op. Two columns with no declared unit stay
+independent (`bill_length` and `bill_depth`), while `predicted` and `actual`,
+both declared `Schema.unit("price")`, share a scale.
 
 ## Example
 

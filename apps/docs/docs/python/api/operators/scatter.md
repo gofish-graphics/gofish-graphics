@@ -244,6 +244,7 @@ chart(data).flow(scatter(by="lake", x="x", y="y")).mark(circle(r=8))
 ## Notes
 
 - With `by`, each group is positioned at the mean of its members' `x`/`y`.
-  Without `by`, every row is positioned individually.
+  Without `by`, every row is positioned individually, and the mark gets the
+  one-row group `[row]` (see [spread](./spread#without-by)).
 - Use the range accessors (`x_min`/`x_max`/`y_min`/`y_max`) when a group should span
   an interval rather than sit at a point.

@@ -134,7 +134,10 @@ anything. Three callers share it:
   `resolveForRender` runs domain inference + layout over the builder's spec.
 - the low-level `gofish()` terminal (`gofish.tsx`) when handed a **component
   thunk** — `gofish(container, opts, () => node)`, a raw shape/operator
-  composition with no `chart()` builder and no data binding.
+  composition with no `chart()` builder and no data binding — or a mark such
+  as `layer([...])`. Either is a function child, reified like a combinator
+  child through `resolveMarkResult`, which calls it with `NO_ROWS` (the
+  empty list a root gets; a node built from it has no datum).
 
 The component case is what proves the reactive layer is not tied to the chart
 pipeline. Paint reactivity already is: a `live()` channel bakes its per-item

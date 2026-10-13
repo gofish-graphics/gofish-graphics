@@ -24,8 +24,11 @@ import { orderChildrenForPaint } from "../paintOrder";
  * disagreeing, so a host can trust `role` alone to split data from chrome
  * without also inspecting `datum`. Shape `lower` bodies call this instead of
  * hard-coding `role: "node"`, which previously mis-tagged datum-less chrome.
+ * An empty datum (a group a filter emptied) is still data.
  */
-export const roleFor = (datum: unknown): DisplayList.DisplayItem["role"] =>
+export const roleFor = (
+  datum: readonly unknown[] | undefined
+): DisplayList.DisplayItem["role"] =>
   datum !== undefined ? "node" : "overlay";
 
 /** Map every point of a path through `toPixel`, then serialize to an SVG `d`.

@@ -36,16 +36,14 @@
 // pin) is not yet modeled; the distribute claim wins on a shared axis for now.
 
 import type { GoFishAST } from "../_ast";
-import type { HasCalendar } from "../schema";
 import { Size } from "../dims";
 import {
   UNDEFINED,
   UnderlyingSpace,
   isCONTINUOUS,
-  mergeMeasures,
+  joinUnits,
   CONTINUOUS,
-  withCalendar,
-  mergeCalendars,
+  type UnitRecord,
 } from "../underlyingSpace";
 import {
   resolveAlignmentExtent,
@@ -57,7 +55,7 @@ import {
 import { impliedExtent, scaleExtent, type Extent } from "../extent";
 import { type ConstraintSpec } from ".";
 import * as Interval from "../../util/interval";
-import { isValue, type Measure } from "../data";
+import { isValue } from "../data";
 import {
   distributeChildrenInPlacementOrder,
   distributeOrigin,
@@ -102,12 +100,10 @@ export type ComposeBudget = {
 export type PositionDomains = {
   x?: Interval.Interval;
   y?: Interval.Interval;
-  xMeasure?: Measure;
-  yMeasure?: Measure;
-  /** The calendar of the datum positions on each axis, when they are times
-   *  (see `CONTINUOUS_TYPE.calendar`). */
-  xCalendar?: HasCalendar;
-  yCalendar?: HasCalendar;
+  /** The units of the datum positions on each axis (with their calendar,
+   *  when they are times). */
+  xMeasure?: UnitRecord;
+  yMeasure?: UnitRecord;
 };
 
 /** Per axis, the direct children a `position` constraint places by a datum
@@ -162,8 +158,7 @@ function resolveLayerAxisSpace(
   base: UnderlyingSpace,
   axis: 0 | 1,
   positionDomain: Interval.Interval | undefined,
-  positionMeasure: Measure | undefined,
-  positionCalendar?: HasCalendar
+  positionMeasure: UnitRecord | undefined
 ): UnderlyingSpace {
   if (positionDomain === undefined) return base;
   const merged = seatedUnion(
@@ -178,23 +173,18 @@ function resolveLayerAxisSpace(
   // unify as types (a clash is an error; an untagged side takes the other's
   // unit). An ordinal union's measure is its grouping field, which names a
   // category axis but is no unit, so it takes no part.
-  return withCalendar(
-    CONTINUOUS(
-      merged,
-      "pinned",
-      mergeMeasures(
-        positionMeasure,
-        isCONTINUOUS(base) ? base.measure : undefined,
-        {
-          axis,
-          where: "between a position constraint and the marks it sits among",
-        }
-      )
-    ),
-    mergeCalendars([
-      positionCalendar,
-      isCONTINUOUS(base) ? base.calendar : undefined,
-    ])
+  return CONTINUOUS(
+    merged,
+    "pinned",
+    joinUnits(
+      positionMeasure,
+      isCONTINUOUS(base) ? base.measure : undefined,
+      true,
+      {
+        axis,
+        where: "between a position constraint and the marks it sits among",
+      }
+    )
   );
 }
 
@@ -216,7 +206,6 @@ export function resolveLayerBaseSpaces(
   const spaces: Size<UnderlyingSpace> = [UNDEFINED, UNDEFINED];
   const domains = [positionDomains.x, positionDomains.y];
   const measures = [positionDomains.xMeasure, positionDomains.yMeasure];
-  const calendars = [positionDomains.xCalendar, positionDomains.yCalendar];
   for (const axis of [0, 1] as const) {
     union[axis] = unionChildSpaces(
       withoutPlaced(childSpaces, axis, placed[axis], UNDEFINED),
@@ -226,8 +215,7 @@ export function resolveLayerBaseSpaces(
       union[axis],
       axis,
       domains[axis],
-      measures[axis],
-      calendars[axis]
+      measures[axis]
     );
   }
   return { union, spaces };

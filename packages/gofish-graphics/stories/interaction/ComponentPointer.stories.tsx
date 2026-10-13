@@ -16,10 +16,10 @@
  * wants pointer hit-testing must use the thunk form.
  *
  * The reference-equality trick: a low-level mark carries no datum on its own (there is
- * no data binding), so we give each box one by INVOKING the mark with a small
- * object — `rect({…})(box)`. That object becomes the box's datum, and it is the
- * very object `pointer().datum()` returns on hit-test — so `d === p.datum()`
- * identifies the hovered box.
+ * no data binding), so we give each box one by INVOKING the mark with a
+ * one-row list — `rect({…})([box])` (a mark's input is always a list). That
+ * list becomes the box's datum, and it is the very list `pointer().datum()`
+ * returns on hit-test — so `d === p.datum()` identifies the hovered box.
  *
  * capture-one snapshots the initial (un-hovered) state: expect five boxes, all
  * in the base color.
@@ -53,16 +53,16 @@ export const Default: StoryObj<Args> = {
       spreadX(
         { spacing: 14, alignment: "middle" },
         boxes.map((box) =>
-          // Invoke the mark with `box` so this rect's datum IS `box`. Reading
+          // Invoke the mark with `[box]` so this rect's datum IS that list. Reading
           // pointer() in live() (at resolve, under the ambient context)
           // registers the input → the runtime attaches for hit-testing. `d` is
           // this box's datum; `p.datum()` is the hovered box's datum — the same
-          // object by reference on a hit.
+          // list by reference on a hit.
           rect({
             w: 70,
             h: 60 + box.i * 18,
             fill: live((d) => (d === p.datum() ? "#d62728" : "#6b9bd1")),
-          })(box)
+          })([box])
         )
       )
     );

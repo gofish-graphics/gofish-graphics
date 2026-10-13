@@ -50,12 +50,13 @@ import {
   selectGridConstraint,
 } from "../ast/constraints/proposalPlan";
 import { discretePosition, value } from "../ast/data";
+import { declared } from "./testHelpers";
 import { pxOf, type AxisMap } from "../ast/domain";
 import {
   UNDEFINED,
   continuousInterval,
   dataWidth,
-  spaceMeasure,
+  spaceUnit,
   CONTINUOUS,
   originIs,
   DEFAULT_AXIS_TICKS,
@@ -621,10 +622,10 @@ console.log("# constraint confluence: nest size dependency planning");
     [
       [
         CONTINUOUS(interval(0, 10), "free"),
-        CONTINUOUS(interval(5, 15), "pinned", "child"),
+        CONTINUOUS(interval(5, 15), "pinned", declared("child")),
       ],
     ],
-    { y: interval(0, 20), yMeasure: "pin" },
+    { y: interval(0, 20), yMeasure: declared("pin") },
     [new Set(), new Set([0])]
   );
   ok(
@@ -638,7 +639,7 @@ console.log("# constraint confluence: nest size dependency planning");
       [
         [
           CONTINUOUS(interval(0, 10), "free"),
-          CONTINUOUS(interval(5, 15), "pinned", "child"),
+          CONTINUOUS(interval(5, 15), "pinned", declared("child")),
         ],
       ],
       0,
@@ -654,20 +655,20 @@ console.log("# constraint confluence: nest size dependency planning");
     pinned !== undefined &&
       pinned.min === 0 &&
       pinned.max === 20 &&
-      spaceMeasure(resolved[1]) === "pin"
+      spaceUnit(resolved[1])?.titles.join() === "pin"
   );
   let clash: string | undefined;
   try {
     resolveLayerBaseSpaces(
-      [[UNDEFINED, CONTINUOUS(interval(5, 15), "pinned", "child")]],
-      { y: interval(0, 20), yMeasure: "pin" }
+      [[UNDEFINED, CONTINUOUS(interval(5, 15), "pinned", declared("child"))]],
+      { y: interval(0, 20), yMeasure: declared("pin") }
     );
   } catch (e) {
     clash = (e as Error).message;
   }
   ok(
     "an unplaced child in another unit than the datum domain is a type error",
-    clash !== undefined && /different measures/.test(clash)
+    clash !== undefined && /different units/.test(clash)
   );
 }
 

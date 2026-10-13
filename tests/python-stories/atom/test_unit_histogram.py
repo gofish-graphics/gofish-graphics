@@ -4,7 +4,7 @@ import math
 
 import pandas as pd
 
-from gofish import chart, circle, derive, field, spread, Color
+from gofish import chart, chunk, circle, derive, field, spread, Color
 
 
 def _age_decade(age):
@@ -40,9 +40,6 @@ def story_default():
     def order_by_survived(rows):
         return sorted(rows, key=lambda row: row["survived"], reverse=True)
 
-    def chunk_rows(rows):
-        size = 3
-        return [rows[i : i + size] for i in range(0, len(rows), size)]
 
     return (
         chart(
@@ -66,9 +63,8 @@ def story_default():
             chart()
             .flow(
                 derive(order_by_survived),
-                derive(chunk_rows),
                 # Reverse so the ragged partial row lands at the top.
-                spread(spacing=1.5, dir="y", reverse=True),
+                spread(by=chunk(3), spacing=1.5, dir="y", reverse=True),
                 spread(spacing=1.5, dir="x"),
             )
             .mark(circle(r=3, fill="survived"))

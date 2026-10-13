@@ -15,6 +15,7 @@ import {
 import { glyphAxis } from "../underlyingSpace";
 import { FALLBACK_FONT_FAMILY } from "./fontUtils";
 import { createMark } from "../withGoFish";
+import { MARK_CHANNELS } from "../markChannels.generated";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
@@ -425,12 +426,4 @@ export const Text = ({
   return node;
 };
 
-export const text = createMark(
-  Text,
-  {
-    dims: "dims",
-    fill: "color",
-    text: "raw",
-  },
-  "text"
-);
+export const text = createMark(Text, MARK_CHANNELS.text, "text");

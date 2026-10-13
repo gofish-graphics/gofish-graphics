@@ -24,9 +24,9 @@ ChartBuilder.flow(*operators) -> ChartBuilder
 
 ## Parameters
 
-| Parameter    | Type       | Description                                  |
-| ------------ | ---------- | -------------------------------------------- |
-| `*operators` | `Operator` | One or more operators, applied left to right |
+| Parameter    | Type                   | Description                                                         |
+| ------------ | ---------------------- | ------------------------------------------------------------------- |
+| `*operators` | `Operator \| Composed` | One or more operators or `compose` fragments, applied left to right |
 
 Returns a new `ChartBuilder` with the operators appended.
 
@@ -40,6 +40,33 @@ previous one. In the example above:
 2. `stack(by="species", dir="y")` stacks each lake's rows by species along y.
 
 The [mark](/python/api/core/mark) then draws every leaf row.
+
+## Reusable flow fragments
+
+Use `compose` to package a sequence of operators as one reusable fragment. The
+operators keep the same left-to-right order they have in `.flow()`:
+
+```python
+from gofish import chart, compose, derive, rect, repeat, spread
+
+def waffle(count, row_size):
+    return compose(
+        derive(lambda rows: [u for row in rows for u in repeat(row, count)]),
+        derive(lambda rows: [rows[i : i + row_size] for i in range(0, len(rows), row_size)]),
+        spread(spacing=2, dir="y", reverse=True),
+        spread(spacing=2, dir="x"),
+    )
+
+chart(seafood).flow(
+    spread(by="lake", spacing=8, dir="x", alignment="end"),
+    waffle("count", 5),
+).mark(rect(w=8, h=8, fill="species")).render()
+```
+
+Fragments may be nested. `compose()` with no arguments adds no operators. When
+a fragment is passed to `.flow()`, GoFish expands it into its constituent
+operators, so a composed flow behaves exactly like the same operators written
+out one by one.
 
 ## Available operators
 

@@ -10,11 +10,12 @@ import {
   allExamples,
   validate,
   checkStrategy,
-  encodeNonFinite,
+  encodeIR,
   decodeNonFinite,
   FRONTEND_IR_JSON_SCHEMA,
   type FrontendIRDocument,
 } from "../frontend/index.js";
+import { encodeNonFinite } from "../frontend/nonFinite.js";
 
 declare const process: { exit(code: number): never };
 
@@ -32,24 +33,14 @@ function check(name: string, ok: boolean, detail?: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Examples accept (permissive and strict)
+// Examples accept
 // ---------------------------------------------------------------------------
 
-console.log("\n# Examples validate (permissive)");
+console.log("\n# Examples validate");
 for (const { name, doc } of allExamples) {
   const r = validate(doc);
   check(
-    `${name} accepts in permissive mode`,
-    r.valid,
-    r.valid ? undefined : JSON.stringify(r.errors)
-  );
-}
-
-console.log("\n# Examples validate (strict)");
-for (const { name, doc } of allExamples) {
-  const r = validate(doc, { strict: true });
-  check(
-    `${name} accepts in strict mode`,
+    `${name} accepts`,
     r.valid,
     r.valid ? undefined : JSON.stringify(r.errors)
   );
@@ -182,65 +173,46 @@ check(
 );
 
 // ---------------------------------------------------------------------------
-// Strict-mode rejects unknown fields
+// Unknown fields are rejected
 // ---------------------------------------------------------------------------
 
-console.log("\n# Strict mode rejects unknown fields");
+console.log("\n# Unknown fields are rejected");
 
 check(
-  "unknown root field rejected in strict",
-  !validate(
-    {
-      irVersion: 0,
-      ir: "gofish-frontend",
-      root: { type: "chart", mark: { type: "rect" } },
-      extraTopLevel: "no",
-    } as unknown as FrontendIRDocument,
-    { strict: true }
-  ).valid
-);
-
-check(
-  "unknown root field accepted in permissive",
-  validate({
+  "unknown root field rejected",
+  !validate({
     irVersion: 0,
     ir: "gofish-frontend",
     root: { type: "chart", mark: { type: "rect" } },
-    extraTopLevel: "shrug",
+    extraTopLevel: "no",
   } as unknown as FrontendIRDocument).valid
 );
 
 check(
-  "unknown chart field rejected in strict",
-  !validate(
-    {
-      irVersion: 0,
-      ir: "gofish-frontend",
-      root: { type: "chart", mark: { type: "rect" }, unexpected: 1 },
-    } as unknown as FrontendIRDocument,
-    { strict: true }
-  ).valid
+  "unknown chart field rejected",
+  !validate({
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root: { type: "chart", mark: { type: "rect" }, unexpected: 1 },
+  } as unknown as FrontendIRDocument).valid
 );
 
 check(
-  "leaf marks allow unknown channel-valued fields even in strict",
-  validate(
-    {
-      irVersion: 0,
-      ir: "gofish-frontend",
-      root: {
-        type: "chart",
-        mark: {
-          type: "rect",
-          h: "count",
-          w: 5,
-          fill: "red",
-          customChannel: "foo",
-        },
+  "an unknown leaf-mark field is rejected",
+  !validate({
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root: {
+      type: "chart",
+      mark: {
+        type: "rect",
+        h: "count",
+        w: 5,
+        fill: "red",
+        customChannel: "foo",
       },
-    } as unknown as FrontendIRDocument,
-    { strict: true }
-  ).valid
+    },
+  } as unknown as FrontendIRDocument).valid
 );
 
 // ---------------------------------------------------------------------------
@@ -293,9 +265,113 @@ check(
   ).valid
 );
 
+// `AxisDimsValue` is declared in OPTION_TYPES: an interval is an object like
+// any other declared object, so an unknown key and a mistyped anchor are both
+// rejected.
 check(
   "scatter dims interval with a non-anchor key rejected",
   !validate(chart([{ type: "scatter", dims: { lon: { width: 2 } } }])).valid
+);
+
+check(
+  "scatter dims interval with a non-boolean embedded rejected",
+  !validate(chart([{ type: "scatter", dims: { lon: { embedded: "yes" } } }]))
+    .valid
+);
+
+check(
+  "scatter dims interval with an untagged object anchor rejected",
+  !validate(chart([{ type: "scatter", dims: { lon: { min: { name: "a" } } } }]))
+    .valid
+);
+
+check(
+  "scatter dims with a field(...) value accepts",
+  validate(
+    chart([
+      {
+        type: "scatter",
+        dims: { lon: { type: "field", name: "lon" }, lat: { size: 4 } },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "an untagged object in a channel slot rejected",
+  !validate(chart([{ type: "scatter", x: { name: "hp" } }])).valid
+);
+
+// ChartIR.options is walked against CHART_OPTIONS.
+function chartWithOptions(options: unknown) {
+  return {
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root: { type: "chart", mark: { type: "rect" }, options },
+  } as unknown as FrontendIRDocument;
+}
+
+check(
+  "chart options accept every CHART_OPTIONS key",
+  validate(
+    chartWithOptions({
+      w: 400,
+      h: 300,
+      coord: { type: "polar" },
+      color: { type: "palette", values: "tableau10" },
+      axes: { x: { title: "Year", labelAngle: 45, side: "end" }, y: true },
+      legend: false,
+      padding: 20,
+      schema: { response: { type: "ordered", levels: ["a", "b"] } },
+    })
+  ).valid
+);
+
+check(
+  "chart options with a mistyped value rejected",
+  !validate(chartWithOptions({ legend: "no" })).valid
+);
+
+check(
+  "chart options with a bad nested axis option rejected",
+  !validate(chartWithOptions({ axes: { x: { side: "left" } } })).valid
+);
+
+check(
+  "chart options with an unknown key rejected",
+  !validate(chartWithOptions({ bogus: 1 })).valid
+);
+
+check("chart options must be an object", !validate(chartWithOptions(5)).valid);
+
+check(
+  "JSON Schema ChartIR.options refers to the generated ChartOptions $def",
+  (FRONTEND_IR_JSON_SCHEMA as any).$defs.ChartIR.properties.options.$ref ===
+    "#/$defs/ChartOptions" &&
+    JSON.stringify(
+      Object.keys(
+        (FRONTEND_IR_JSON_SCHEMA as any).$defs.ChartOptions.properties
+      )
+    ) ===
+      JSON.stringify([
+        "w",
+        "h",
+        "coord",
+        "color",
+        "axes",
+        "legend",
+        "padding",
+        "schema",
+      ])
+);
+
+check(
+  "JSON Schema AxisDimsValue is generated: a channel value or an AxisInterval",
+  JSON.stringify((FRONTEND_IR_JSON_SCHEMA as any).$defs.AxisDimsValue.anyOf) ===
+    JSON.stringify([
+      { $ref: "#/$defs/ChannelValue" },
+      { $ref: "#/$defs/AxisInterval" },
+    ])
 );
 
 check(
@@ -362,6 +438,42 @@ check(
 );
 
 check(
+  "filter with a field predicate accepts",
+  validate(
+    chart([
+      {
+        type: "filter",
+        predicate: { field: "day", between: [100, 120], closed: "right" },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "filter predicate with a non-numeric bound rejected",
+  !validate(
+    chart([{ type: "filter", predicate: { field: "day", between: [1, "x"] } }])
+  ).valid
+);
+
+check(
+  "filter predicate with an unknown closed rejected",
+  !validate(
+    chart([
+      {
+        type: "filter",
+        predicate: { field: "day", between: [1, 2], closed: "open" },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "filter without a predicate rejected",
+  !validate(chart([{ type: "filter" }])).valid
+);
+
+check(
   "derive with non-string lambdaId rejected",
   !validate(chart([{ type: "derive", lambdaId: 42 }])).valid
 );
@@ -389,17 +501,11 @@ check(
   !validate(chart([{ type: "scatter", x: { type: "literal" } }])).valid
 );
 
-console.log("\n# Strict mode rejects unknown operator fields");
+console.log("\n# Unknown operator fields are rejected");
 
 check(
-  "unknown spread field rejected in strict",
-  !validate(chart([{ type: "spread", by: "lake", quux: 1 }]), { strict: true })
-    .valid
-);
-
-check(
-  "unknown spread field accepted in permissive",
-  validate(chart([{ type: "spread", by: "lake", quux: 1 }])).valid
+  "unknown spread field rejected",
+  !validate(chart([{ type: "spread", by: "lake", quux: 1 }])).valid
 );
 
 // Per-operator `axes` override — boolean and object forms (matches the
@@ -407,21 +513,17 @@ check(
 console.log("\n# Per-operator axes overrides");
 
 check(
-  "spread with axes: true accepts (strict)",
-  validate(chart([{ type: "spread", by: "lake", dir: "x", axes: true }]), {
-    strict: true,
-  }).valid
+  "spread with axes: true accepts",
+  validate(chart([{ type: "spread", by: "lake", dir: "x", axes: true }])).valid
 );
 
 check(
-  "spread with axes: false accepts (strict)",
-  validate(chart([{ type: "spread", by: "lake", dir: "x", axes: false }]), {
-    strict: true,
-  }).valid
+  "spread with axes: false accepts",
+  validate(chart([{ type: "spread", by: "lake", dir: "x", axes: false }])).valid
 );
 
 check(
-  "spread with axes object form accepts (strict)",
+  "spread with axes object form accepts",
   validate(
     chart([
       {
@@ -430,23 +532,20 @@ check(
         dir: "x",
         axes: { x: false, y: { title: "Count" } },
       },
-    ]),
-    { strict: true }
+    ])
   ).valid
 );
 
 check(
-  "stack with axes accepts (strict)",
-  validate(chart([{ type: "stack", by: "s", dir: "y", axes: { y: true } }]), {
-    strict: true,
-  }).valid
+  "stack with axes accepts",
+  validate(chart([{ type: "stack", by: "s", dir: "y", axes: { y: true } }]))
+    .valid
 );
 
 check(
-  "scatter with axes accepts (strict)",
+  "scatter with axes accepts",
   validate(
-    chart([{ type: "scatter", x: "hp", y: "mpg", axes: { x: true, y: true } }]),
-    { strict: true }
+    chart([{ type: "scatter", x: "hp", y: "mpg", axes: { x: true, y: true } }])
   ).valid
 );
 
@@ -461,14 +560,12 @@ check(
 );
 
 check(
-  "axes object with unknown sub-key rejected in strict",
-  !validate(chart([{ type: "spread", axes: { z: true } as any }]), {
-    strict: true,
-  }).valid
+  "axes object with unknown sub-key rejected",
+  !validate(chart([{ type: "spread", axes: { z: true } as any }])).valid
 );
 
 check(
-  "axis side and labelAngle accept (strict)",
+  "axis side and labelAngle accept",
   validate(
     chart([
       {
@@ -480,16 +577,14 @@ check(
           y: { labelAngle: "auto" },
         },
       },
-    ]),
-    { strict: true }
+    ])
   ).valid
 );
 
 check(
-  "axis option with unknown key rejected in strict",
+  "axis option with unknown key rejected",
   !validate(
-    chart([{ type: "spread", axes: { x: { label_angle: 45 } } as any }]),
-    { strict: true }
+    chart([{ type: "spread", axes: { x: { label_angle: 45 } } as any }])
   ).valid
 );
 
@@ -503,7 +598,7 @@ check(
 // JS types an axis title `string | false`: `false` suppresses the inferred
 // title, and `true` is not a title.
 check(
-  "axis title false and a string accept (strict)",
+  "axis title false and a string accept",
   validate(
     chart([
       {
@@ -512,8 +607,7 @@ check(
         dir: "x",
         axes: { x: { title: false }, y: { title: "Count" } },
       },
-    ]),
-    { strict: true }
+    ])
   ).valid
 );
 
@@ -542,21 +636,19 @@ function chartWithLabel(label: any) {
 
 check(
   "label: true accepts (boolean shorthand)",
-  validate(chartWithLabel(true), { strict: true }).valid
+  validate(chartWithLabel(true)).valid
 );
 check(
   "label: false accepts (boolean shorthand)",
-  validate(chartWithLabel(false), { strict: true }).valid
+  validate(chartWithLabel(false)).valid
 );
 check(
   "label: 'field' is rejected (bare-string shorthand was dropped)",
-  !validate(chartWithLabel("amount"), { strict: true }).valid
+  !validate(chartWithLabel("amount")).valid
 );
 check(
   "label: [{ accessor }] accepts (array-of-specs form)",
-  validate(chartWithLabel([{ accessor: "amount", position: "outset" }]), {
-    strict: true,
-  }).valid
+  validate(chartWithLabel([{ accessor: "amount", position: "outset" }])).valid
 );
 check(
   "label: [{ accessor }, { accessor }] accepts (multiple specs)",
@@ -564,15 +656,12 @@ check(
     chartWithLabel([
       { accessor: "amount", position: "outset" },
       { accessor: "count", position: "center", fontWeight: "bold" },
-    ]),
-    { strict: true }
+    ])
   ).valid
 );
 check(
   "label: { accessor } is rejected (bare object shorthand was dropped; must be an array)",
-  !validate(chartWithLabel({ accessor: "amount", position: "outset" }), {
-    strict: true,
-  }).valid
+  !validate(chartWithLabel({ accessor: "amount", position: "outset" })).valid
 );
 check(
   "label: number is rejected (not a recognized shape)",
@@ -685,6 +774,28 @@ console.log("\n# Non-finite numbers");
     "encode and decode share an unchanged value",
     encodeNonFinite(finite) === finite && decodeNonFinite(finite) === finite
   );
+  {
+    // encodeIR: IR value instances become their plain form in the same
+    // pass; data rows with nothing to encode are shared, and a Date stays.
+    class Tagged {
+      constructor(readonly v: number) {}
+      toJSON() {
+        return { type: "datum", datum: this.v };
+      }
+    }
+    const when = new Date(0);
+    const rows = [{ t: when, n: 1 }];
+    const doc = { mark: { h: new Tagged(Infinity) }, rows };
+    const enc = encodeIR(doc) as any;
+    check(
+      "encodeIR writes an IR value instance as its plain form, encoded",
+      enc.mark.h.type === "datum" &&
+        enc.mark.h.datum.$numberDouble === "Infinity" &&
+        Object.getPrototypeOf(enc.mark.h) === Object.prototype
+    );
+    check("encodeIR shares unchanged data rows", enc.rows === rows);
+    check("encodeIR leaves a Date as it is", enc.rows[0].t === when);
+  }
   check(
     "a look-alike object with another key is not decoded",
     (decodeNonFinite({ x: { $numberDouble: "Infinity", y: 1 } }) as any).x

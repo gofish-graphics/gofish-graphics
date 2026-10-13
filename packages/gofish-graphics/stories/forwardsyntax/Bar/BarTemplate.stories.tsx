@@ -130,7 +130,7 @@ export const VerticalWithCustomMark: StoryObj<Args> = {
     barChart(testData, {
       x: "category",
       y: "value",
-      mark: circle,
+      mark: ({ h, fill }: any) => circle({ r: 5, cy: h, fill }),
       axes: true,
     }).render(container, { w: args.w, h: args.h });
 
@@ -147,7 +147,7 @@ export const HorizontalWithCustomMark: StoryObj<Args> = {
       x: "value",
       y: "category",
       orientation: "x",
-      mark: circle,
+      mark: ({ w, fill }: any) => circle({ r: 5, cx: w, fill }),
       axes: true,
     }).render(container, { w: args.w, h: args.h });
 
@@ -164,7 +164,7 @@ export const VerticalWithCustomMarkAndFill: StoryObj<Args> = {
       x: "category",
       y: "value",
       fill: "#45b7d1",
-      mark: circle,
+      mark: ({ h, fill }: any) => circle({ r: 5, cy: h, fill }),
       axes: true,
     }).render(container, { w: args.w, h: args.h });
 
@@ -182,7 +182,7 @@ export const HorizontalWithCustomMarkAndFill: StoryObj<Args> = {
       y: "category",
       orientation: "x",
       fill: "#f9ca24",
-      mark: circle,
+      mark: ({ w, fill }: any) => circle({ r: 5, cx: w, fill }),
       axes: true,
     }).render(container, { w: args.w, h: args.h });
 

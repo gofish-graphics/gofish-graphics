@@ -8,6 +8,11 @@ from gofish import (
     spread,
     stack,
     derive,
+    bin,
+    compose,
+    field,
+    chunk,
+    filter,
     log,
     ref,
     select_all,
@@ -85,7 +90,10 @@ class TestOperators:
         )
         expected = {
             "month": {"HasOrder": {"levels": ["Jan", "Feb"]}},
-            "at": {"HasCalendar": {"zone": "America/New_York"}},
+            "at": {
+                "HasCalendar": {"zone": "America/New_York"},
+                "HasUnit": {"unit": "instant"},
+            },
         }
         assert op.to_dict()["schema"] == expected
         assert op.translate(x=1).to_dict()["schema"] == expected
@@ -108,12 +116,91 @@ class TestOperators:
         assert d["type"] == "log"
         assert "prefix" not in d
 
+    def test_filter_field_predicate(self):
+        """A field predicate filter serializes as {type: filter, predicate}."""
+        op = filter(field("day").between(100, 120, closed="right"))
+        assert op.to_dict() == {
+            "type": "filter",
+            "predicate": {"field": "day", "between": [100, 120], "closed": "right"},
+        }
+
+    def test_filter_field_predicate_default_closed(self):
+        """An unset `closed` stays off the wire (JS defaults it to "both")."""
+        op = filter(field("day").between(1, 2))
+        assert op.to_dict() == {
+            "type": "filter",
+            "predicate": {"field": "day", "between": [1, 2]},
+        }
+
+    def test_between_rejects_pipeline_ops(self):
+        """A predicate is not a value slot: ops on the field are an error."""
+        with pytest.raises(ValueError, match="does not apply the expression"):
+            field("x").bin(10).between(0, 1)
+
+    def test_filter_callable_is_derive(self):
+        """A Python function predicate runs through the derive bridge."""
+        op = filter(lambda row: row["day"] > 1)
+        assert op.to_dict()["type"] == "derive"
+        assert op.fn([{"day": 1}, {"day": 2}]) == [{"day": 2}]
+
+    def test_spread_by_chunk(self):
+        """chunk(size) is a by key that crosses the wire as data."""
+        assert chunk(5) == {"type": "chunk", "size": 5}
+        d = spread(by=chunk(5), dir="y").to_dict()
+        assert d["by"] == {"type": "chunk", "size": 5}
+
+    def test_chunk_rejects_a_size_below_one(self):
+        with pytest.raises(ValueError, match="chunk"):
+            chunk(0)
+        with pytest.raises(ValueError, match="chunk"):
+            chunk(2.5)  # type: ignore[arg-type]
+
+    def test_filter_rejects_other_values(self):
+        with pytest.raises(TypeError, match="filter"):
+            filter("day")
+
     def test_log_operator_with_prefix(self):
         """Test log operator with prefix."""
         op = log("my label")
         d = op.to_dict()
         assert d["type"] == "log"
         assert d["prefix"] == "my label"
+
+
+class TestCompose:
+    """Test compose() flow fragments."""
+
+    def test_flow_expands_fragment_in_order(self):
+        """A fragment in .flow() becomes its operators, left to right."""
+        ir = (
+            chart([{"category": "A"}])
+            .flow(compose(spread(by="category", dir="x"), stack(dir="y")))
+            .mark(rect(w=1, h=1))
+            .to_ir()
+        )
+        ops = ir["operators"]
+        assert [op["type"] for op in ops] == ["spread", "stack"]
+        assert ops[0]["by"] == "category"
+
+    def test_nested_fragments_flatten(self):
+        """Nested fragments flatten and keep their order."""
+        a, b, c = spread(dir="x"), stack(dir="y"), log("c")
+        fragment = compose(a, compose(b, compose(c)))
+        assert fragment.operators == (a, b, c)
+        builder = chart([]).flow(fragment)
+        assert builder.operators == [a, b, c]
+
+    def test_empty_compose_is_identity(self):
+        """compose() adds no operators."""
+        op = spread(dir="x")
+        assert chart([]).flow(compose(), op, compose()).operators == [op]
+
+    def test_fragment_keeps_derive_lambdas(self):
+        """A derive inside a fragment is still registered with the bridge."""
+        d = derive(lambda rows: rows)
+        builder = chart([{"a": 1}]).flow(compose(d, spread(dir="x")))
+        ops = builder.mark(rect(w=1, h=1)).to_ir()["operators"]
+        assert ops[0] == {"type": "derive", "lambdaId": d.lambda_id}
 
 
 class TestMarkName:
@@ -589,6 +676,70 @@ class TestSchema:
     def test_ordered_is_has_order(self):
         assert Schema.ordered(["a", "b"]) == {"HasOrder": {"levels": ["a", "b"]}}
 
+    def test_unit_is_has_unit(self):
+        assert Schema.unit("USD") == {"HasUnit": {"unit": "USD", "symbol": "USD"}}
+        with pytest.raises(TypeError):
+            Schema.unit(3)  # type: ignore[arg-type]
+
+    def test_quantity_is_has_quantity(self):
+        assert Schema.quantity("Pay") == {"HasQuantity": {"name": "Pay"}}
+        assert Schema.quantity("Pay").unit("USD") == {
+            "HasUnit": {"unit": "USD", "symbol": "USD"},
+            "HasQuantity": {"name": "Pay"},
+        }
+        # Either order gives the same column type.
+        assert Schema.quantity("Pay").unit("USD") == Schema.unit("USD").quantity(
+            "Pay"
+        )
+        with pytest.raises(TypeError, match=r"^name must be a string, got 3$"):
+            Schema.quantity(3)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match=r"^name must be a string, got 3$"):
+            Schema.unit("USD").quantity(3)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match=r"^unit must be a string, got 3$"):
+            Schema.unit(3)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match=r"^unit must be a string, got 3$"):
+            Schema.quantity("Pay").unit(3)  # type: ignore[arg-type]
+
+    def test_a_column_has_one_unit(self):
+        # `Schema.time()` writes the instant, so a second unit raises.
+        with pytest.raises(
+            TypeError, match=r'^\.unit: the column already has the unit "instant"\.$'
+        ):
+            Schema.time().unit("USD")
+        with pytest.raises(TypeError, match='already has the unit "USD"'):
+            Schema.unit("USD").unit("EUR")
+        assert Schema.time().quantity("When") == {
+            "HasCalendar": {"zone": "UTC"},
+            "HasUnit": {"unit": "instant"},
+            "HasQuantity": {"name": "When"},
+        }
+
+    def test_levels_fit_the_column_classes(self):
+        # Text levels are not amounts; a Likert scale's numbers are.
+        message = (
+            r'^schema: the column has the level "low", which is not a value '
+            r"HasUnit accepts\.$"
+        )
+        with pytest.raises(TypeError, match=message):
+            Schema.ordered(["low", "mid", "high"]).unit("pts")
+        with pytest.raises(TypeError, match=message):
+            Schema.ordered(["low", "high"]).diverging().unit("pts")
+        assert Schema.ordered([1, 2, 3, 4, 5]).unit("pts") == {
+            "HasOrder": {"levels": [1, 2, 3, 4, 5]},
+            "HasUnit": {"unit": "pts", "symbol": "pts"},
+        }
+
+    def test_field_takes_no_unit(self):
+        # A column's unit lives in the schema, not on a channel.
+        assert field("x") == {"type": "field", "name": "x"}
+        with pytest.raises(TypeError):
+            field("x", "plane")  # type: ignore[call-arg]
+
+    def test_bin_edges_are_amounts_of_the_source_quantity(self):
+        types = bin("flipper")._gofish_column_types
+        assert types["start"] == {"HasQuantity": {"name": "flipper"}}
+        assert types["count"] == {"HasUnit": {"unit": "count"}}
+
     def test_diverging_defaults_the_midpoint_to_half_the_levels(self):
         assert Schema.ordered(["a", "b"]).diverging() == {
             "HasOrder": {"levels": ["a", "b"]},
@@ -653,9 +804,14 @@ class TestTime:
     columns crossing the bridge (#1057)."""
 
     def test_schema_time_record(self):
-        assert Schema.time() == {"HasCalendar": {"zone": "UTC"}}
+        # A time's unit is the instant, the same INSTANT as JS measure.ts.
+        assert Schema.time() == {
+            "HasCalendar": {"zone": "UTC"},
+            "HasUnit": {"unit": "instant"},
+        }
         assert Schema.time(zone="America/New_York") == {
-            "HasCalendar": {"zone": "America/New_York"}
+            "HasCalendar": {"zone": "America/New_York"},
+            "HasUnit": {"unit": "instant"},
         }
 
     def test_calendar_wire_form(self):
@@ -723,7 +879,9 @@ class TestTime:
             .mark(rect(w=1))
             .to_ir()
         )
-        assert ir["options"]["schema"] == {"t": {"HasCalendar": {"zone": "Asia/Tokyo"}}}
+        assert ir["options"]["schema"] == {
+            "t": {"HasCalendar": {"zone": "Asia/Tokyo"}, "HasUnit": {"unit": "instant"}}
+        }
 
     def test_strings_are_never_inferred(self):
         ir = chart([{"t": "2024-01-01", "n": 1}]).mark(rect(w=1)).to_ir()

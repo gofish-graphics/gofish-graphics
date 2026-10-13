@@ -38,14 +38,14 @@ def story_default():
     sc = (
         chart(data)
         .flow(scatter(by="id", x="Beak Length (mm)", y="Beak Depth (mm)"))
-        .mark(circle(r=3, fill="steelblue", fillOpacity=0.6))
+        .mark(circle(r=3, fill="steelblue", fill_opacity=0.6))
         .name("scatter")
     )
 
-    # bin()'s measure provenance now rides the derive operator's IR across the
-    # RPC bridge (#537), so the bin edges auto-tag with the source field's
-    # measure — no explicit field(name, measure=...) needed. The bare "start"/
-    # "end" channels unify on the source axis just like the JS story.
+    # bin()'s column types ride the derive operator's IR `schema` across the
+    # RPC bridge (#537), so the bin edges are amounts of the source field's
+    # quantity: the bare "start"/"end" channels title and unify on the
+    # source axis just like the JS story.
     top_hist = (
         chart(data, h=80)
         .flow(

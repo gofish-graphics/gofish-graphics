@@ -8,7 +8,6 @@ import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
 import {
-  getMeasure,
   getValue,
   isAesthetic,
   isValue,
@@ -25,21 +24,23 @@ import {
   FancySize,
   Size,
   Transform,
+  centerOf,
+  startAtCenter,
 } from "../dims";
+import { glyphAxis } from "../underlyingSpace";
 import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
 import { computeAesthetic, computeSize } from "../../util";
 import {
   UNDEFINED,
   UnderlyingSpace,
-  mergeMeasures,
+  joinUnits,
   CONTINUOUS,
-  mergeCalendars,
-  positionCalendar,
-  withCalendar,
   magnitude,
+  valueUnits,
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
+import { MARK_CHANNELS } from "../markChannels.generated";
 import { attachCut } from "../graphicalOperators/cut";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -102,17 +103,17 @@ export const Rect = ({
       ) => {
         const resolveAxis = (axis: 0 | 1): UnderlyingSpace => {
           const d = dims[axis];
+          // A box placed by its center is a glyph, as a text or an image is.
+          const center = centerOf(d);
+          if (center !== undefined) return glyphAxis(center, d.size);
           if (isValue(d.min) && isValue(d.max)) {
-            return withCalendar(
-              CONTINUOUS(
-                interval(getValue(d.min)!, getValue(d.max)!),
-                "pinned",
-                mergeMeasures(getMeasure(d.min), getMeasure(d.max), {
-                  axis,
-                  where: "between a rect's two ends",
-                })
-              ),
-              mergeCalendars([positionCalendar(d.min), positionCalendar(d.max)])
+            return CONTINUOUS(
+              interval(getValue(d.min)!, getValue(d.max)!),
+              "pinned",
+              joinUnits(valueUnits(d.min), valueUnits(d.max), true, {
+                axis,
+                where: "between a rect's two ends",
+              })
             );
           }
           if (!isValue(d.min) && !isValue(d.size)) {
@@ -132,9 +133,10 @@ export const Rect = ({
           // has position (data-driven), maybe with literal/no size → POSITION.
           const min = isValue(d.min) ? getValue(d.min)! : 0;
           const size = isValue(d.size) ? getValue(d.size)! : 0;
-          return withCalendar(
-            CONTINUOUS(interval(min, min + size), "pinned", getMeasure(d.min)),
-            positionCalendar(d.min)
+          return CONTINUOUS(
+            interval(min, min + size),
+            "pinned",
+            valueUnits(d.min)
           );
         };
 
@@ -251,6 +253,14 @@ export const Rect = ({
             h = containedW / aspectRatio;
           }
         }
+
+        // A box placed by its center starts half its pixel size before it.
+        const c0 = centerOf(dims[0]);
+        if (c0 !== undefined)
+          x = startAtCenter(c0, posFn(scales?.[0]?.map)!, w);
+        const c1 = centerOf(dims[1]);
+        if (c1 !== undefined)
+          y = startAtCenter(c1, posFn(scales?.[1]?.map)!, h);
 
         return {
           intrinsicDims: {
@@ -431,23 +441,7 @@ export const Rect = ({
   return node;
 };
 
-const RECT_CHANNELS = {
-  w: "size",
-  h: "size",
-  x: "pos",
-  y: "pos",
-  l: "pos",
-  r: "pos",
-  t: "pos",
-  b: "pos",
-  cx: "pos",
-  cy: "pos",
-  dims: "dims",
-  fill: "color",
-  stroke: "color",
-} as const;
-
-const baseRect = createMark(Rect, RECT_CHANNELS, "rect");
+const baseRect = createMark(Rect, MARK_CHANNELS.rect, "rect");
 
 export const rect: typeof baseRect = ((opts: any) =>
   attachCut(baseRect(opts))) as typeof baseRect;
@@ -476,6 +470,7 @@ export const Blank = (opts: Parameters<typeof Rect>[0]): GoFishNode => {
 };
 
 /** The `blank` mark factory — `marks/chart.ts`'s `blank()` is the typed,
- *  documented front for this. Same channels as `rect` (a blank's `w`/`h` can be
- *  data-driven; its `fill` still seeds the unit color scale), IR type `blank`. */
-export const baseBlank = createMark(Blank, RECT_CHANNELS, "blank");
+ *  documented front for this. Its channels are the ones `blank()` takes: a
+ *  data-driven `w`/`h`, and a `fill` that still seeds the unit color scale.
+ *  IR type `blank`. */
+export const baseBlank = createMark(Blank, MARK_CHANNELS.blank, "blank");

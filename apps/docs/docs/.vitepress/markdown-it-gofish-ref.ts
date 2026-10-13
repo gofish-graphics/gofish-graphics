@@ -18,6 +18,9 @@
  * TS-ish type; Python pages (`docs/python/**`) show the snake_case kwarg names and a
  * Python type — the language is detected from `env.relativePath`.
  *
+ * A name may also be an object option type (`OPTION_TYPES` in
+ * descriptors.ts): `::: gofish-ref ChartOptions` renders the chart-level
+ * options as one table.
  * A field marked `wireOnly` (a Python bridge handle such as `derive`'s
  * `lambdaId`) is left out: it is on the wire, not an option a user passes.
  *
@@ -41,11 +44,13 @@ import {
   COORDS,
   LEAF_MARKS,
   OPERATORS,
+  OPTION_TYPES,
   SHARED_FIELD_GROUPS,
-  STRATEGIES,
   pyKwarg,
+  pyType,
   resolveFields,
   type ConstructDescriptor,
+  type FieldGroup,
   type FieldSpec,
   type FieldType,
 } from "../../../../packages/gofish-ir/src/frontend/descriptors";
@@ -128,49 +133,6 @@ function tsType(f: FieldType): string {
   }
 }
 
-function pyType(f: FieldType): string {
-  switch (f.kind) {
-    case "string":
-    case "enum":
-      return "str";
-    case "number":
-      return "float";
-    case "boolean":
-      return "bool";
-    case "literal":
-      // Python spelling of the one value: False/True, or a repr.
-      return typeof f.value === "boolean"
-        ? f.value
-          ? "True"
-          : "False"
-        : JSON.stringify(f.value);
-    case "channel":
-      switch (f.inner) {
-        case "number":
-          return "int | float | str";
-        case "boolean":
-          return "bool";
-        default:
-          return "str";
-      }
-    case "union":
-      return [...new Set(f.options.map(pyType))].join(" | ");
-    case "array":
-      return "list";
-    case "tuple":
-      return "tuple";
-    case "object":
-    case "record":
-      return "dict";
-    case "ref":
-      // A strategy family is a module of factories in Python too
-      // (`Tile.squarify()`), so its name reads the same in both languages.
-      return f.name in STRATEGIES ? f.name : "Any";
-    case "any":
-      return "Any";
-  }
-}
-
 /** π-aware number formatting, so `centralAngle`'s default reads `2π` rather
  *  than `6.283185307179586`. */
 function formatNumber(n: number): string {
@@ -249,7 +211,8 @@ function optionsTable(
     "| --- | --- | --- | --- |",
   ];
   const body = rows.map(([name, spec]) => {
-    const type = lang === "python" ? pyType(spec.type) : tsType(spec.type);
+    const type =
+      lang === "python" ? pyType(spec.type, "doc") : tsType(spec.type);
     const required = spec.required ? "**Required.** " : "";
     const doc = spec.doc ? cell(spec.doc) : "";
     return `| ${code(fieldName(name, lang))} | ${code(type)} | ${code(
@@ -307,12 +270,27 @@ function renderName(
   name: string,
   opts: { lang: Lang; md: { render(src: string): string }; titled: boolean }
 ): string {
+  const optionType = OPTION_TYPES[name];
+  if (optionType !== undefined) {
+    if (optionType.type.kind !== "object") {
+      throw new Error(
+        `gofish-ref ${name}: the option type is not an object, so it has no ` +
+          `options table.`
+      );
+    }
+    const heading = opts.titled ? opts.md.render(`### \`${name}\``) : "";
+    return (
+      heading +
+      optionsTable(Object.entries(optionType.type.fields), opts.lang, opts.md)
+    );
+  }
   const found = lookupConstructs(name);
   if (found.length === 0) {
     throw new Error(
       `Unknown gofish-ref construct "${name}". It must be a construct in ` +
         `packages/gofish-ir/src/frontend/descriptors.ts (OPERATORS, LEAF_MARKS, ` +
-        `COMBINATOR_MARKS or COORDS), named by its wire type or its pyName.`
+        `COMBINATOR_MARKS or COORDS), named by its wire type or its pyName, ` +
+        `or an object option type in OPTION_TYPES (e.g. ChartOptions).`
     );
   }
   const byFields = new Map<string, ConstructDescriptor[]>();

@@ -21,17 +21,21 @@ export { value as v } from "./ast/data";
 // accessor; `literal(x)` is an explicit constant.
 export { datum, field, literal } from "./ast/data";
 export type { FieldAccessor, LiteralValue } from "./ast/data";
+// `chunk(size)` — a `by` key that groups consecutive rows `size` at a time
+// (a bin over row position).
+export { chunk } from "./ast/data";
+export type { ChunkKey } from "./ast/data";
 // `field(name)` returns a `FieldExpr` — a chainable pipeline expression
 // (`.sort()`, `.bin()`, `.normalize()`, aggregates); `FieldOp` is one step of
 // its serialized `ops` pipeline. Exported so consumers can type against the
 // value the operator docs describe.
 export { FieldExpr, between } from "./ast/fieldExpr";
-export type { FieldOp, BetweenOptions } from "./ast/fieldExpr";
-// Measure-provenance tagging: how a data transform (e.g. `bin`) declares that
-// its output columns are in a source field's units. The deserializer re-applies
-// it to RPC-returned rows (the array symbol can't cross the bridge).
-export { setMeasureProvenance } from "./ast/data";
-export type { MeasureProvenance } from "./ast/data";
+export type {
+  FieldOp,
+  BetweenOptions,
+  FieldPredicate,
+  FieldPredicateWire,
+} from "./ast/fieldExpr";
 export { map } from "./ast/iterators/map";
 
 // Strategy families (#1013): an option whose value is one choice from a set
@@ -110,6 +114,8 @@ export type {
   HasOrder,
   HasMidpoint,
   HasCalendar,
+  HasUnit,
+  HasQuantity,
   Level,
   SchemaEntry,
 } from "./ast/schema";

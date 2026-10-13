@@ -32,7 +32,9 @@ A naming note before anything else: internally, these surfaces were "v1",
 otherwise retired the version-numbered framing — it papered over the fact that
 all three desugar onto the same core AST, and made the newest surface sound
 provisional in a way it isn't. They are three _surfaces_ over one core, not
-three _versions_ of a library that supersedes itself.
+three _versions_ of a library that supersedes itself. An earlier framing of
+the same split, as four API levels, is kept in [The API
+Levels](/internals/design-evolution/api-levels).
 
 Casing used to be the user-visible seam between the surfaces. The capitalized,
 component-style surface once had a capitalized spelling for most operators, and

@@ -21,6 +21,7 @@ import {
 import { aesthetic, continuous, Domain } from "../domain";
 import { UnderlyingSpace, pointOrMagnitude } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import { MARK_CHANNELS } from "../markChannels.generated";
 /* Implementation inspired by https://web.archive.org/web/20220808041640/http://bl.ocks.org/herrstucki/6199768 */
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Petal = ({
@@ -199,14 +200,4 @@ export const Petal = ({
   return node;
 };
 
-export const petal = createMark(
-  Petal,
-  {
-    w: "size",
-    h: "size",
-    dims: "dims",
-    fill: "color",
-    stroke: "color",
-  },
-  "petal"
-);
+export const petal = createMark(Petal, MARK_CHANNELS.petal, "petal");

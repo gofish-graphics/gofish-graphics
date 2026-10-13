@@ -1,11 +1,6 @@
-"""Equivalent of BarWithLabels.stories.tsx — Forward Syntax/Bar/With Labels.
+"""Equivalent of BarWithLabels.stories.tsx — Forward Syntax/Bar/With Labels."""
 
-Only `Default` is ported (`story_default`). `SpeciesCountPerLake` uses
-`pluck()`, which has no Python wrapper yet — a separate follow-up from #591's
-ref/datum mark-fn bridge implemented here.
-"""
-
-from gofish import chart, spread, rect, text, group
+from gofish import chart, spread, rect, text, group, pluck
 from python_stories.data import SEAFOOD
 
 
@@ -20,6 +15,30 @@ def story_default():
         # A spread on y reads top-down: the label above its bar.
         return spread(
             [text(text=str(total)), d[0]],
+            dir="y",
+            alignment="middle",
+            spacing=10,
+        )
+
+    chart_builder = (
+        chart(SEAFOOD, axes=True)
+        .flow(spread(by="lake", dir="x"))
+        .mark(rect(h="count"))
+        .layer(chart().flow(group(by="lake")).mark(label_mark))
+    )
+    return (chart_builder, {"w": 400, "h": 400})
+
+
+# Demonstrates `pluck`, the uncollapsed sibling of the `by="field"` homogeneity
+# collapse. Within a lake the `species` field is multi-valued, so
+# `by="species"` would NOT resolve. `pluck` asks for every distinct value:
+# here, the count of species in each lake.
+def story_species_count_per_lake():
+    def label_mark(d):
+        # `pluck(d[0], "species")` -> the distinct species in this lake's bag.
+        species = pluck(d[0], "species")
+        return spread(
+            [text(text=f"{len(species)} spp"), d[0]],
             dir="y",
             alignment="middle",
             spacing=10,

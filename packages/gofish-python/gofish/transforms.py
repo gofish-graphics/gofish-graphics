@@ -161,17 +161,19 @@ def bin(
         def binner(data: List[dict]) -> List[dict]:
             return _run_bin(data, field_name, thresholds)
 
-        # The bin edges (`start`/`end`/`size`) are still in the SOURCE field's
-        # units, not the literal column names "start"/"end"; `count` is a count.
-        # Mirror the JS bin's measure provenance. It can't ride the data rows
-        # across the derive RPC bridge, so it travels in the derive operator's
-        # IR and is re-applied JS-side via setMeasureProvenance (see
-        # DeriveOperator.to_dict and serialize/registry.ts).
-        binner._gofish_measure_provenance = {
-            "start": field_name,
-            "end": field_name,
-            "size": field_name,
-            "count": "count",
+        # The bin edges (`start`/`end`/`size`) are amounts of the SOURCE
+        # field's quantity, not of the columns "start"/"end": they title the
+        # axis as the source does and share its unit; `count` is a count.
+        # Mirror the JS bin's column types (`HasQuantity`, `HasUnit`). They
+        # can't ride the data rows across the derive RPC bridge, so `derive`
+        # puts them in the operator's `schema` (see `derive` and
+        # serialize/registry.ts).
+        edge = {"HasQuantity": {"name": field_name}}
+        binner._gofish_column_types = {
+            "start": edge,
+            "end": edge,
+            "size": edge,
+            "count": {"HasUnit": {"unit": "count"}},
         }
         return binner
     if field is None:

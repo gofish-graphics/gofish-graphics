@@ -198,14 +198,16 @@ signature cannot list names that only exist at render time, and the earlier
 approach (the four polar names as top-level kwargs, from a hand-kept list)
 drifted: geo's `lon`/`lat` were silently dropped. So the names moved into one
 named kwarg, `dims={...}`, on the box-dims marks and on `scatter`. Its keys
-are open (`t.record(t.ref("AxisDimsValue"))`, a dict in Python), and every
+are open (`t.record(t.ref("AxisDimsValue"))`, a dict in Python; the values
+are still checked), and every
 other kwarg stays closed. The top-level `x/y/w/h` keys keep working in every
 coordinate space, where they mean axis 0 and axis 1.
 
-Strictness rolls out gradually: the generated Python signatures are closed
-immediately (that's where autocomplete lives); `validate.ts` can start
-warning rather than rejecting unknown leaf-mark fields until the enumerated
-lists have been proven against the story corpus, then flip to strict.
+Strictness rolled out gradually: the generated Python signatures were closed
+immediately (that's where autocomplete lives); `validate.ts` warned rather
+than rejecting unknown leaf-mark fields until the enumerated lists had been
+proven against the story corpus. That flip has now happened: the validator
+has one mode, and an unknown field is an error everywhere.
 
 ## What a descriptor entry looks like
 
@@ -217,10 +219,10 @@ small field-type DSL (`t.*`):
 ```ts
 // Shared field groups — declared once, included by reference.
 const boxDims = group({
-  x: ch.num("Left edge position."),        cx: ch.num("Center x."),
-  x2: ch.num("Right edge position."),      w: ch.num("Width."),
+  x: ch.pos("Left edge position."),        cx: ch.pos("Center x."),
+  x2: ch.pos("Right edge position."),      w: ch.size("Width."),
   emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
-  y: ch.num(), cy: ch.num(), y2: ch.num(), h: ch.num(),
+  y: ch.pos(), cy: ch.pos(), y2: ch.pos(), h: ch.size(),
   emY: { type: t.boolean },
   // Axis names a coordinate space declares — resolved by resolveAliases.
   dims: { type: t.record(t.ref("AxisDimsValue")) },
@@ -273,9 +275,11 @@ mark("inside", {
 });
 ```
 
-`ch.num(doc?)` / `ch.color(doc?)` are shorthand for
-`{ type: t.channel(number|color) }` — a `ChannelValue` slot accepting a
-literal, a field name, or a `datum()` wrapper. The Python kwarg for a field
+`ch.size(doc?)` / `ch.pos(doc?)` / `ch.color(doc?)` / `ch.raw(inner, doc?)`
+are shorthand for `{ type: t.channel(inner, infer) }`, a `ChannelValue` slot
+accepting a literal, a field name, or a `datum()` wrapper. `infer` is how the
+JS mark infers the value (sum, mean, color scale, or as is); the JS mark
+factories' channel maps are generated from it. The Python kwarg for a field
 is its name in snake case (`strokeWidth` becomes `stroke_width`), computed by
 one function, `pyKwarg`, which adds a trailing underscore when the name is a
 Python keyword (`line`'s `from` field becomes `from_`).
@@ -419,6 +423,45 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   behind the JS type and lacked `side` and `labelAngle`. See
   [§ Generating the Python factory layer](/internals/frontend/serialization#generating-the-python-factory-layer).
 
+- **Closed signatures on every leaf mark (#1007).** `circle`, `ellipse`,
+  `petal`, and `blank` used to end in an open `**kwargs` that sent any
+  unknown key to the wire unchanged. That let a camel case name through
+  (`circle(fillOpacity=0.6)`) and sent a snake case one unconverted, which
+  JS then ignored. The four now have closed signatures like every other
+  generated factory, so an unknown kwarg is a `TypeError`. The one key a
+  story used that the descriptors lacked, `fillOpacity`, is now a real
+  option: JS `Ellipse` paints it as `fill-opacity`, `circle` passes it
+  through, and both descriptors declare it (`fill_opacity` in Python). The
+  bar chart template stories pass `circle` as the custom mark, and the
+  template calls it with `h` or `w`, which `circle` did not take. `circle`
+  now takes `ellipse`'s box dimensions, and `w` or `h` sets its diameter
+  (#851); the stories pass a small mark function that draws a dot at the
+  value (`circle({ r: 5, cy: h })`). No escape hatch was needed.
+
+- **The last unchecked option surfaces (#1010).** `dims` values are
+  checked: `AxisInterval` and `AxisDimsValue` moved into `OPTION_TYPES`,
+  replacing their hand-written JSON Schema `$defs` and validator walker.
+  `_to_wire` passes a `field(...)` or `datum(...)` value through by its
+  class, since it is already in wire form, so a channel branch no longer
+  counts against the one-dict-branch rule and any other dict in a `dims`
+  entry is an interval whose keys are checked. On the JS side, a channel
+  value that is an untagged object is now an error, which is what lets the
+  validator's generic union walk read such an object only as an interval.
+  The validator walks `ChartIR.options` against `CHART_OPTIONS`, the JSON
+  Schema emits a `ChartOptions` `$def` for it, and the `chart` reference
+  pages build their options table from it with `::: gofish-ref ChartOptions`
+  instead of a hand-written copy. The JSON Schema now writes every
+  descriptor union as `anyOf`, matching the validator's "any branch"
+  reading (a `datum(...)` object fits both branches of `AxisDimsValue`).
+  The `axes` option of `.render(...)` was already converted in the widget
+  constructor; a test now covers it on charts, marks, and layers.
+
+- **One validator mode.** The validator's permissive mode is gone: an
+  unknown field is an error on the envelope, on operators, on leaf marks
+  (no longer a warning), and in a combinator mark's `options`. The Python
+  bridge fields the renderer reads (`__scope`, `__datum`, `__key`) are
+  declared in `MARK_BASE_FIELDS`. Every Python story validates.
+
 **Deliberately deferred**, not follow-up bugs:
 
 - **The relate ref-walk** (`RelatableMark.relate`'s Python-side
@@ -439,6 +482,3 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   passthrough that the fluent operators' IR doesn't expose; `descriptors.ts`
   documents this as IR truth rather than resolving it (see the `NOTE`
   comments on `OPERATORS.spread`/`OPERATORS.stack`).
-- **Flipping leaf-mark validation from warn to strict** — waiting on the
-  enumerated channel lists being checked against the full story corpus,
-  per the gradual-rollout stance in § The mark-channel decision above.

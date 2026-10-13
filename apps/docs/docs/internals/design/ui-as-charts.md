@@ -145,6 +145,31 @@ standard library of marks, operators, and templates _fast_. Compositional
 design is the long-term right answer, but only if it is constantly pulled
 back to concrete examples.
 
+## The Programming Languages perspective... and the danger of the Turing tar-pit
+
+This essay was adapted from the _Our Central Hypothesis: A Chart Is a Special
+Kind of User Interface_ page of the project's GitHub wiki (last edited November
+2025). This section of that page is kept here verbatim, since the essay above
+only summarizes it.
+
+There is a core tension in programming language design (I am including frameworks and libraries in this case, too) between designing a not-very compositional system for a narrow set of use cases and a very compositional system for a wide set of use cases. In the short term, the not-very compositional system often wins: LaTeX, React hooks & Svelte reactivity, C++, Coq, GoG. However, in the long term, if designed well, the more compositional systems tend to win: Typst, Solid signals, Rust, Lean.
+
+This tends to be due to a kind of "closure" property. If you provide the basic functionality, some user will want just a _little_ bit more and a little bit more until all of a sudden you need every kind of nesting and composition possible. If you did not design it this way from the beginning, you will Frankenstein together a somewhat compositional, somewhat recursive language. For example, React hooks have really weird rules about how they can't appear in conditionals and must be carefully memoized. On the other hand, if you design your system to be compositional from the beginning, all of that new functionality users want can be expressed in your language, because you designed it that way. For example, Solid signals can be nested anywhere and even passed as first-class values! Similarly, Typst, Rust, and Lean provide macro systems that work in harmony with their base languages, rather than having to tack on another layer of confusing, inconsistent API. And the GoG has faceting, which is not very compositional and quite limited.
+
+These more compositional systems are hard to design without a reference not-very compositional system. I think it's pretty rare that they're built first. And that's because first you need to figure out what the real problems are and build directly towards them. The _danger_ of shooting for this more compositional system is that you fall into the ["Turing tar-pit"](http://weblog.raganwald.com/2004/10/beware-of-turing-tar-pit.html).
+
+> The danger of the tar-pit is that instead of developing a solution to a problem, you develop a tool for solving problems. And invariably, the wider the class of problems the tool can solve, the less useful it is for solving any one problem.
+
+> In my own case, I often find myself engaging in "[bottom-up programming](http://www.paulgraham.com/progbot.html)," trying to invent the perfect programming language for expressing the program I’m trying to write. When I find myself working on language syntaxes, I realize I’m mired in tar and I need to reset.
+
+> The Turing tar-pit's lure is that it is situated right in the centre of some of the most attractive real-estate in your imagination. Tools that solve whole classes of problems in generic ways offer the potential for vast improvements is productivity.
+
+I do think one of the greatest risks of the GoFish project is getting stuck in the tar-pit. But I don't think that's a reason to run away. Also from the tar-pit article:
+
+> I believe that to do really great work, you must be prepared to skirt very close to the edge of the tar-pit. Hopefully you have an iron will and can avoid disaster with ease.
+
+**The way out of the tar-pit is to stay close to end-user problems and to build a lot of examples and standard-library functions very fast.** But this should not come at the cost of designing the language itself. Both ways of working are possible given enough time and resources. And I think the result of that will be a very magical system indeed.
+
 ## Sources
 
 - [Bluefish: Composing Diagrams with Declarative

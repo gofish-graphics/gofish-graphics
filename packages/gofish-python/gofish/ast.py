@@ -1,6 +1,7 @@
 """AST classes for building GoFish chart specifications."""
 
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+import datetime
 import decimal
 import inspect
 import json
@@ -8,7 +9,8 @@ import math
 import re
 import uuid
 
-from ._nonfinite import encode_non_finite
+from . import _nonfinite
+from ._nonfinite import KEEP, encode_non_finite
 
 T = TypeVar("T")
 
@@ -18,6 +20,9 @@ class Operator:
 
     def __init__(self, op_type: str, **kwargs):
         self.op_type = op_type
+        # A callable in a channel option was wrapped as an accessor by the
+        # factory (`_channel`); one anywhere else has no meaning on the wire.
+        self._accessors = _scan_options(op_type, kwargs)
         self.kwargs = kwargs
         self._translate: Optional[dict] = None
         # One entry per `.label(accessor, options?)` call, in call order —
@@ -79,7 +84,10 @@ class Operator:
 
     def to_dict(self) -> dict:
         """Convert operator to dictionary for JSON IR."""
-        d = {"type": self.op_type, **self.kwargs}
+        d = {
+            "type": self.op_type,
+            **_wire_options(self.kwargs, self._accessors),
+        }
         if self._translate:
             d["translate"] = self._translate
         if self._labels:
@@ -93,7 +101,6 @@ class DeriveOperator(Operator):
     def __init__(
         self,
         fn: Callable,
-        provenance: Optional[dict] = None,
         schema: Optional[dict] = None,
     ):
         super().__init__("derive")
@@ -103,12 +110,6 @@ class DeriveOperator(Operator):
         # the wire form of a chart's ``schema``; JS applies them to the rows
         # the callback returns.
         self.schema = schema
-        # Measure provenance a data transform (e.g. `bin`) declares for its
-        # output columns. It can't ride the data rows across the derive RPC
-        # bridge, so it travels in the operator IR and is re-applied JS-side via
-        # `setMeasureProvenance` — mirroring the JS bin's array-symbol
-        # provenance so a histogram's edges unify on the source field's axis.
-        self.provenance = provenance
 
     def translate(
         self,
@@ -117,7 +118,7 @@ class DeriveOperator(Operator):
         y: Optional[float] = None,
     ) -> "DeriveOperator":
         """Translate a derived operator while preserving its lambda handle."""
-        new_op = DeriveOperator(self.fn, self.provenance, self.schema)
+        new_op = DeriveOperator(self.fn, self.schema)
         new_op.lambda_id = self.lambda_id
         new_op._labels = list(self._labels)
         new_op._translate = {
@@ -138,10 +139,8 @@ class DeriveOperator(Operator):
         )
 
     def to_dict(self) -> dict:
-        """Convert to dict - return lambda ID (+ measure provenance, if any)."""
+        """Convert to dict - return lambda ID (+ result column types, if any)."""
         out = {"type": "derive", "lambdaId": self.lambda_id}
-        if self.provenance:
-            out["provenance"] = self.provenance
         if self.schema is not None:
             out["schema"] = self.schema
         if self._translate:
@@ -151,6 +150,38 @@ class DeriveOperator(Operator):
 
 def _collect_derive_operators(ops: List[Operator]) -> List[DeriveOperator]:
     return [op for op in ops if isinstance(op, DeriveOperator)]
+
+
+class Composed:
+    """A reusable flow fragment: a left-to-right sequence of operators.
+
+    Built by :func:`compose`. It holds its operators already flattened, and
+    ``ChartBuilder.flow()`` expands it into them, so the IR carries the
+    constituent operators and has no compose node. Mirrors JS
+    ``compose(...ops)`` (ast/marks/compose.ts).
+    """
+
+    def __init__(self, operators: List[Operator]):
+        self.operators: tuple = tuple(operators)
+
+
+def _expand_composed(op: Union[Operator, Composed]) -> tuple:
+    return op.operators if isinstance(op, Composed) else (op,)
+
+
+def compose(*ops: Union[Operator, Composed]) -> Composed:
+    """Package a left-to-right sequence of operators as one flow fragment.
+
+    Nested fragments are flattened, and ``compose()`` with no arguments is
+    the identity fragment. Pass the result to ``.flow()`` like an operator;
+    it expands into its constituent operators.
+
+    Example::
+
+        grid = compose(spread(dir="y"), spread(dir="x"))
+        chart(data).flow(spread(by="lake", dir="x"), grid).mark(rect(w=8, h=8))
+    """
+    return Composed([o for op in ops for o in _expand_composed(op)])
 
 
 class _MarkFn:
@@ -173,13 +204,14 @@ class _MarkFn:
 
 
 class _PendingAccessor:
-    """Sentinel wrapping a Python callable used as a mark kwarg accessor.
+    """Sentinel wrapping a Python callable used as an accessor in a mark or
+    operator option (top-level, or nested as in `dims={"r": {"size": fn}}`).
 
     JS's `createMark` accepts a callable for encoding channels like
     `text({text: (d) => `${d.amount}%`})`. The harness can't ship a Python
     callable to JS, so the factory wraps it here with a fresh `lambda_id`
     (same UUID shape as `DeriveOperator`, sharing one registry).
-    `Mark.to_dict()` serializes it as `{"__gofish_lambda": id}`; the
+    `_wire` serializes it as `{"__gofish_lambda": id}`; the
     harness/widget swaps that sentinel for an `async (d) => fetch
     /derive/<id>(d)` arrow at render time, so JS sees a real accessor
     function whose body happens to RPC into Python.
@@ -190,35 +222,106 @@ class _PendingAccessor:
         self.lambda_id = str(uuid.uuid4())
 
 
-def _channel(v: Any) -> Any:
-    """Wrap a bare callable channel value in `_PendingAccessor`.
+def _is_tagged(v: Any) -> bool:
+    """A `field(...)` or `datum(...)` value: a dict subclass that already holds
+    wire data, so the option walks treat it as a leaf."""
+    return isinstance(v, (FieldAccessor, DatumValue))
 
-    Generalizes what `text()` already did for its `text=` kwarg (the only
-    channel that supported an accessor lambda) to any generated leaf-mark
-    channel kwarg — a plain literal/field-name/`datum()` passes through
-    unchanged, a callable `(row) -> value` gets wrapped so
-    `_collect_mark_lambdas` can register it with the derive RPC bridge.
+
+def _channel(v: Any) -> Any:
+    """Wrap every callable in a channel option's value in `_PendingAccessor`.
+
+    A channel value is a literal, a field name, a tagged value (`datum()`,
+    `field(...)`), or a plain dict/list/tuple of those
+    (`dims={"r": {"size": ...}}`). A callable `(row) -> value` may sit at any
+    depth, so this wraps each one; the `Mark` or `Operator` built from the
+    options records the accessors (`_scan_options`). The generated factories
+    call it only on options the descriptor declares as channels. A value with
+    no callable comes back as the same object.
     """
-    if v is not None and not isinstance(v, (str, int, float, bool)) and callable(v):
-        return _PendingAccessor(v)
-    return v
+    return _nonfinite.walk(
+        v,
+        lambda x: x
+        if _is_tagged(x)
+        else _PendingAccessor(x)
+        if callable(x) and not isinstance(x, _PendingAccessor)
+        else KEEP,
+    )
+
+
+def _scan_options(construct: str, options: Dict[str, Any]) -> Dict[str, List["_PendingAccessor"]]:
+    """The accessors in a construct's options, by option key, in one walk.
+
+    A Python callable crosses to JS only as a channel accessor, which the
+    generated factories wrap with `_channel` for the options the descriptor
+    declares as channels. A raw callable anywhere else (a `by`, a `dir`, ...)
+    would reach JS as an RPC handle it never resolves, so it fails loudly
+    here. The `Mark` / `Operator` keeps the result, so serializing and
+    registering its accessors never walks large options (`join`'s rows) again.
+    """
+    found: Dict[str, List[_PendingAccessor]] = {}
+    for key, value in options.items():
+        accessors: List[_PendingAccessor] = []
+
+        def visit(x: Any, key: str = key, accessors: list = accessors) -> Any:
+            if isinstance(x, _PendingAccessor):
+                accessors.append(x)
+                return x
+            if _is_tagged(x):
+                return x
+            if callable(x):
+                raise TypeError(
+                    f"{construct}: {key} holds a function, but only channel "
+                    f"options take a function. Pass a field name or a "
+                    f"field(...) accessor."
+                )
+            return KEEP
+
+        _nonfinite.walk(value, visit)
+        if accessors:
+            found[key] = accessors
+    return found
+
+
+def _wire_options(options: Dict[str, Any], accessors: Dict[str, list]) -> Dict[str, Any]:
+    """The options as the wire carries them: each `_PendingAccessor` becomes
+    its `{"__gofish_lambda": id}` sentinel, at any depth. Only the options
+    `_scan_options` found accessors in are walked; the rest are the same
+    objects. The JS deserializer turns each sentinel back into an accessor
+    that calls into Python."""
+    return {
+        k: _nonfinite.walk(
+            v,
+            lambda x: {"__gofish_lambda": x.lambda_id}
+            if isinstance(x, _PendingAccessor)
+            else x
+            if _is_tagged(x)
+            else KEEP,
+        )
+        if k in accessors
+        else v
+        for k, v in options.items()
+    }
+
+
+def _lambda_pairs(accessors: Dict[str, list]) -> List[tuple]:
+    """`(lambda_id, rows_fn)` for every accessor a construct recorded.
+    `rows_fn` adapts the user's `(row) -> value` callable to the rows-in /
+    rows-out shape the `/derive/<id>` endpoint expects, so accessors and
+    `derive()` operators share one registry and one endpoint."""
+    return [
+        (acc.lambda_id, lambda rows, _fn=acc.fn: [_fn(r) for r in rows])
+        for accs in accessors.values()
+        for acc in accs
+    ]
 
 
 def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
     """Walk a Mark tree, yielding `(lambda_id, rows_fn)` pairs for every
-    `_PendingAccessor` in mark kwargs (and recursively in combinator
-    `_children` and in the marks of `.relate(...)` clauses). `rows_fn`
-    adapts the user's `(row) -> value` callable to the rows-in / rows-out
-    shape the existing `/derive/<id>` endpoint expects, so mark accessors
-    and `derive()` operators share one registry and one endpoint.
+    `_PendingAccessor` in mark kwargs, at any depth (and recursively in
+    combinator `_children` and in the marks of `.relate(...)` clauses).
     """
-    pairs: List[tuple] = []
-    for val in mark.kwargs.values():
-        if isinstance(val, _PendingAccessor):
-            fn = val.fn
-            pairs.append(
-                (val.lambda_id, lambda rows, _fn=fn: [_fn(r) for r in rows])
-            )
+    pairs = _lambda_pairs(mark._accessors)
     if mark._children is not None:
         for child in mark._children:
             pairs.extend(_collect_mark_lambdas(child))
@@ -227,6 +330,12 @@ def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
         if isinstance(clause, Mark):
             pairs.extend(_collect_mark_lambdas(clause))
     return pairs
+
+
+def _collect_operator_lambdas(ops: List["Operator"]) -> List[tuple]:
+    """`(lambda_id, rows_fn)` for every accessor in the options of a chart's
+    operators (e.g. `scatter(dims={"r": lambda d: ...})`)."""
+    return [pair for op in ops for pair in _lambda_pairs(op._accessors)]
 
 
 class Token:
@@ -291,6 +400,8 @@ class Mark:
         **kwargs,
     ):
         self.mark_type = mark_type
+        # As on Operator: only channel options may hold a callable.
+        self._accessors = _scan_options(mark_type, kwargs)
         self.kwargs = kwargs
         self._name: Optional[Union[str, "Token"]] = None
         # One entry per `.label(accessor, options?)` call, in call order —
@@ -451,17 +562,12 @@ class Mark:
 
     def to_dict(self) -> dict:
         """Convert mark to dictionary for JSON IR."""
-        # Replace `_PendingAccessor` kwarg values with their lambda-id
+        # Replace each `_PendingAccessor` (at any depth) with its lambda-id
         # sentinel. The derive-server walks the Mark tree separately to
         # register the underlying callable in the shared registry; the JS
         # harness/widget substitutes the sentinel for a real `(d) => ...`
         # arrow function whose body RPCs into Python.
-        def _wire(v):
-            if isinstance(v, _PendingAccessor):
-                return {"__gofish_lambda": v.lambda_id}
-            return v
-
-        serialized_kwargs = {k: _wire(v) for k, v in self.kwargs.items()}
+        serialized_kwargs = _wire_options(self.kwargs, self._accessors)
         if self._children is not None:
             # Combinator form: emit a nested payload the JS side reconstructs
             # via the operator's `(opts, marks)` overload.
@@ -1157,12 +1263,13 @@ class ChartBuilder:
         self._z_order = z_order
         self._name: Optional[Union[str, "Token"]] = None
 
-    def flow(self, *ops: Operator) -> "ChartBuilder":
+    def flow(self, *ops: Union[Operator, Composed]) -> "ChartBuilder":
         """
         Add operators to the flow pipeline.
 
         Args:
-            *ops: One or more operators (spread, stack, derive, etc.)
+            *ops: One or more operators (spread, stack, derive, etc.) or
+                ``compose(...)`` fragments, which expand into their operators
 
         Returns:
             New ChartBuilder with operators added
@@ -1170,7 +1277,10 @@ class ChartBuilder:
         return ChartBuilder(
             self.data,
             self.options,
-            operators=[*self.operators, *ops],
+            operators=[
+                *self.operators,
+                *(o for op in ops for o in _expand_composed(op)),
+            ],
             z_order=self._z_order,
         )
 
@@ -1772,7 +1882,9 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
     Derive operator - apply a Python function to transform data.
 
     Args:
-        fn: Function that takes data and returns transformed data
+        fn: Function that takes the list of rows and returns the new list of
+            rows (a list of dicts, ``None``, or a dataframe). It returns a
+            list even for one row: ``lambda d: [d[0]]``, not ``d[0]``.
         schema: Column types of the result, keyed by column name, as in
             ``chart(data, schema={...})``: ``Schema.ordered(levels)`` or
             ``Schema.time(zone=...)``. Without it, a result column keeps the
@@ -1784,14 +1896,19 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
     Returns:
         DeriveOperator object
 
-    A transform may declare measure provenance for its output columns by
-    setting `_gofish_measure_provenance` on the callable (e.g. `bin`); it is
-    carried into the operator IR so the JS side can re-tag the rows after the
-    RPC. This is what lets `derive(bin("X"))` produce `start`/`end` edges that
-    unify on X's axis without an explicit `field(name, measure=...)`.
+    A transform may declare the column types of its output by setting
+    `_gofish_column_types` on the callable (e.g. `bin`, whose `start`/`end`
+    columns are amounts of the source field's quantity, ``HasQuantity``). They go
+    into the operator's ``schema`` so the JS side types the rows after the
+    RPC; a ``schema`` entry for the same column replaces the transform's,
+    since a schema entry is a column's whole type. This is what lets
+    `derive(bin("X"))` produce `start`/`end` edges that title their axis "X"
+    and take X's unit.
     """
-    provenance = getattr(fn, "_gofish_measure_provenance", None)
-    return DeriveOperator(fn, provenance, schema)
+    column_types = getattr(fn, "_gofish_column_types", None)
+    if column_types:
+        schema = {**column_types, **(schema or {})}
+    return DeriveOperator(fn, schema)
 
 
 def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
@@ -2064,8 +2181,13 @@ class ColumnSchema(dict):
     column has, keyed by class name (the wire form JS reads as is).
 
     Mirrors JS ``ColumnSchema``. Build one with ``Schema.ordered(levels)``;
-    each method adds one class.
+    each method adds one class. Constructing one checks that an order's
+    levels fit the column's other classes (``_check_levels_fit``).
     """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        _check_levels_fit("schema: the column", self)
 
     def diverging(self, midpoint: Optional[float] = None) -> "ColumnSchema":
         """Give the column a midpoint (``HasMidpoint``) along its order.
@@ -2090,12 +2212,7 @@ class ColumnSchema(dict):
         # word for word.
         order = (
             "the edges of the order ["
-            + ", ".join(
-                json.dumps(level, ensure_ascii=False)
-                if isinstance(level, str)
-                else _js_number(level)
-                for level in levels
-            )
+            + ", ".join(_show_level(level) for level in levels)
             + "]"
         )
         if (
@@ -2112,6 +2229,79 @@ class ColumnSchema(dict):
                 f"diverging: midpoint {_js_number(at)} is outside 0..{n}, {order}."
             )
         return ColumnSchema({**self, "HasMidpoint": {"at": at}})
+
+    def quantity(self, name: str) -> "ColumnSchema":
+        """Say what the column's values are amounts of (``HasQuantity``): the
+        quantity ``name``, which titles the axis in place of the column's
+        name."""
+        return ColumnSchema(
+            {**self, "HasQuantity": {"name": _require_str(name, "name")}}
+        )
+
+    def unit(self, unit: str) -> "ColumnSchema":
+        """Say what unit the column's values are in (``HasUnit``): the unit
+        ``unit``, whose symbol follows the quantity in the axis title,
+        "Pay (USD)". A column has one unit, so ``.unit`` on a column that has
+        one (``Schema.time()`` writes the instant) raises a TypeError, with
+        the message of JS ``checkNoUnit`` in schema.ts."""
+        if "HasUnit" in self:
+            raise TypeError(
+                ".unit: the column already has the unit "
+                f"{json.dumps(self['HasUnit']['unit'], ensure_ascii=False)}."
+            )
+        name = _require_str(unit, "unit")
+        return ColumnSchema({**self, "HasUnit": {"unit": name, "symbol": name}})
+
+
+def _require_str(value: Any, what: str) -> str:
+    """``value``, checked to be a string; ``what`` names it in the message."""
+    if not isinstance(value, str):
+        raise TypeError(f"{what} must be a string, got {value!r}")
+    return value
+
+
+# The unit of a time column, which ``Schema.time()`` writes beside
+# ``HasCalendar``: JS ``INSTANT`` in measure.ts.
+_INSTANT = {"unit": "instant"}
+
+
+def _is_number(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+# Which values each class accepts, given the class's own record: JS
+# ``ACCEPTS`` in schema.ts. A datetime is an instant.
+_ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
+    "HasCalendar": lambda v, c: v is None
+    or (_is_number(v) and math.isfinite(v))
+    or isinstance(v, datetime.date),
+    "HasOrder": lambda v, c: v is None or isinstance(v, str) or _is_number(v),
+    "HasMidpoint": lambda v, c: True,
+    "HasUnit": lambda v, c: v is None
+    or _is_number(v)
+    or (c.get("unit") == _INSTANT["unit"] and isinstance(v, datetime.date)),
+    "HasQuantity": lambda v, c: True,
+}
+
+
+def _check_levels_fit(who: str, column_type: Dict[str, Any]) -> None:
+    """Raise when one of an order's levels is not a value one of the
+    column's classes accepts, with the message of JS ``checkLevelsFit`` in
+    schema.ts, which explains the rule."""
+    for level in column_type.get("HasOrder", {}).get("levels", []):
+        for cls, accepts in _ACCEPTS.items():
+            if cls in column_type and not accepts(level, column_type[cls]):
+                raise TypeError(
+                    f"{who} has the level {_show_level(level)}, which is not "
+                    f"a value {cls} accepts."
+                )
+
+
+def _show_level(level: Any) -> str:
+    """``level`` as JS ``showLevel`` in schema.ts writes it."""
+    if isinstance(level, str):
+        return json.dumps(level, ensure_ascii=False)
+    return _js_number(level) if _is_number(level) else repr(level)
 
 
 def _js_number(x: Union[int, float]) -> str:
@@ -2145,8 +2335,9 @@ class Schema:
 
     @staticmethod
     def time(zone: str = "UTC") -> ColumnSchema:
-        """A column whose values are instants (``HasCalendar``), read on the
-        calendar of ``zone``, an IANA time zone (``"UTC"`` by default).
+        """A column whose values are instants (``HasCalendar``) in the
+        instant unit (``HasUnit``), read on the calendar of ``zone``, an IANA
+        time zone (``"UTC"`` by default).
 
         A value may be an ISO 8601 string (``"2024-03-05"`` is the start of
         that day in ``zone``; a string without an offset is a wall-clock time
@@ -2158,7 +2349,30 @@ class Schema:
             raise TypeError(
                 f"Schema.time: zone must be an IANA time zone name, got {zone!r}"
             )
-        return ColumnSchema({"HasCalendar": {"zone": zone}})
+        return ColumnSchema(
+            {"HasCalendar": {"zone": zone}, "HasUnit": dict(_INSTANT)}
+        )
+
+    @staticmethod
+    def unit(unit: str) -> ColumnSchema:
+        """A column whose values are amounts in the unit ``unit``
+        (``HasUnit``), an opaque name such as ``"USD"`` or ``"mm"``.
+
+        Columns in the same unit may share an axis; two different units on
+        one axis are an error. A column with no unit declared may share an
+        axis with any other. An axis title shows the unit after its
+        quantity: "Pay (USD)".
+        """
+        return ColumnSchema({}).unit(unit)
+
+    @staticmethod
+    def quantity(name: str) -> ColumnSchema:
+        """A column whose values are amounts of the quantity ``name``
+        (``HasQuantity``), e.g. ``"Pay"``. The quantity titles the axis in
+        place of the column's name, and columns of one quantity share one
+        unit.
+        """
+        return ColumnSchema({}).quantity(name)
 
 
 # Calendar partitions
@@ -2510,7 +2724,7 @@ def datum(value: Any) -> DatumValue:
 
 class FieldAccessor(dict):
     """
-    The `{type: "field", name, measure?, ops?}` wire shape, as a dict
+    The `{type: "field", name, ops?}` wire shape, as a dict
     subclass so `field(name)` supports the same chainable pipeline syntax as
     JS's `FieldExpr` (`ast/fieldExpr.ts`) — a Polars-column-expression-style
     builder where each method returns a NEW accessor with one more op
@@ -2609,45 +2823,112 @@ class FieldAccessor(dict):
         field. Valid only in a value (size/pos) slot."""
         return self._with_op({"op": "distinct"})
 
+    def between(
+        self, lo: float, hi: float, *, closed: Optional[str] = None
+    ) -> "FieldPredicate":
+        """A row predicate for :func:`filter`: is this field's value in
+        ``[lo, hi]``? ``closed`` picks which ends are inclusive (``"both"``,
+        the default, ``"left"``, ``"right"`` or ``"none"``), as in polars'
+        ``is_between``.
 
-def field(name: str, measure: Optional[str] = None) -> FieldAccessor:
+        Not a pipeline op. Mirrors JS ``field(name).between(lo, hi,
+        { closed })``, which returns a predicate rather than appending to
+        ``ops``, so it raises when the expression already carries ops: the
+        predicate would test the raw field and silently drop them.
+        """
+        ops = self.get("ops", [])
+        if ops:
+            names = ", ".join(op["op"] for op in ops)
+            raise ValueError(
+                f'field("{self["name"]}").between(...) does not apply the '
+                f"expression pipeline ({names}): a predicate is not a value "
+                "slot. Filter on the raw field, or derive the binned/sorted "
+                "column first."
+            )
+        pred = FieldPredicate(field=self["name"], between=[lo, hi])
+        if closed is not None:
+            pred["closed"] = closed
+        return pred
+
+
+class FieldPredicate(dict):
+    """The ``{field, between: [lo, hi], closed?}`` wire shape of a field
+    predicate, built by ``field(name).between(lo, hi, closed=...)`` and
+    consumed by :func:`filter`. It is data, so a filter over it crosses to JS
+    with no callback."""
+
+
+def filter(
+    predicate: Union[FieldPredicate, Callable[[dict], bool]],
+) -> Operator:
+    """Keep the rows a predicate accepts, and drop the rest.
+
+    Mirrors JS ``filter(pred)``. A field predicate,
+    ``field("day").between(100, 120, closed="right")``, goes on the wire as
+    ``{type: "filter", predicate}``. A plain Python function of one row is a
+    callback, so that filter is a :func:`derive` and runs in Python, like
+    JS's ``filter`` over a hand-written predicate.
+
+    Returns:
+        Operator object for use inside ``.flow()``.
+    """
+    if isinstance(predicate, FieldPredicate):
+        return Operator("filter", predicate=dict(predicate))
+    if callable(predicate):
+        # Data always flows as a list, so the filter keeps a sublist.
+        return derive(lambda rows: [row for row in rows if predicate(row)])
+    raise TypeError(
+        "filter(...) expects field(name).between(lo, hi) or a function of one "
+        f"row, got {type(predicate).__name__}"
+    )
+
+
+def field(name: str) -> FieldAccessor:
     """
     Explicit field-accessor wrapper. Mirrors the JS `field(...)` constructor
     in `packages/gofish-graphics/src/ast/data.ts` (the field/datum/literal
-    trichotomy). Equivalent to passing a bare field-name string, plus an
-    optional **measure annotation** — a unit-of-measure type claim for the
-    channel (see the underlying-space measure system).
+    trichotomy). Equivalent to passing a bare field-name string. Use it when
+    a field name could be read as a literal, or to chain a pipeline.
 
-    Use the measure annotation when YOUR OWN derive transform has renamed
-    fields so the weak field-name default would mis-tag the channel — e.g. a
-    lambda that renames a length column to "lo"/"hi":
+    A column's unit is declared in the chart's schema
+    (``Schema.unit("USD")``), not here. A column with no declared unit may
+    share an axis with any other.
 
-        scatter(
-            x_min=field("lo", measure="Beak Length (mm)"),
-            x_max=field("hi", measure="Beak Length (mm)"),
-        )
-
-    Built-in transforms like `bin()` declare their output provenance, which now
-    travels in the derive operator's IR (see DeriveOperator), so a binned
-    histogram's `start`/`end` edges auto-tag with the source field's units — no
-    explicit annotation needed.
-
-    The returned `FieldAccessor` is also chainable, mirroring JS's
+    The returned `FieldAccessor` is chainable, mirroring JS's
     `field(...)` pipeline syntax — `field("site").sort("yield")` as an
     operator's `by`, or `field("count").normalize()` as a `spread`/`stack`
     `size` channel (see `FieldAccessor` for the full method list).
 
-    Emits the canonical `{type: "field", name, measure?, ops?}` wire shape; an
-    annotation that contradicts known provenance is a type error.
+    Emits the canonical `{type: "field", name, ops?}` wire shape.
 
     Args:
         name: The field name to read from each row.
-        measure: Optional unit-of-measure annotation for the channel.
     """
-    out = FieldAccessor({"type": "field", "name": name})
-    if measure is not None:
-        out["measure"] = measure
-    return out
+    return FieldAccessor({"type": "field", "name": name})
+
+
+class ChunkKey(dict):
+    """The ``{type: "chunk", size}`` wire shape of a ``chunk(size)`` grouping
+    key. It is data, so a ``by=chunk(size)`` crosses to JS with no
+    callback."""
+
+
+def chunk(size: int) -> ChunkKey:
+    """
+    A ``by`` key that groups consecutive rows: row ``i`` goes to group
+    ``i // size``. It is a bin of width ``size`` over row position, so
+    ``spread(by=chunk(5), dir="y")`` lays the rows out five to a group (the
+    rows of a waffle chart). Like ``itertools.batched``, lodash ``_.chunk``
+    and Rust ``chunks(n)``. The key names no field, so its groups draw no
+    axis or labels. Mirrors the JS ``chunk(size)`` in
+    ``packages/gofish-graphics/src/ast/data.ts``.
+
+    Args:
+        size: How many consecutive rows go in each group (a positive integer).
+    """
+    if isinstance(size, bool) or not isinstance(size, int) or size < 1:
+        raise ValueError(f"chunk(size): size must be a positive integer, got {size!r}")
+    return ChunkKey({"type": "chunk", "size": size})
 
 
 # Data utilities (for use inside derive() callbacks)
