@@ -2,13 +2,13 @@ import { computeAesthetic } from "../../util";
 import { posFn } from "../domain";
 import { GoFishNode, placeUnplacedChild } from "../_node";
 import { Size } from "../dims";
-import { getMeasure, getValue, isValue, MaybeValue } from "../data";
+import { getValue, isValue, MaybeValue } from "../data";
 import {
   anchorAt,
+  differenceUnits,
   isCONTINUOUS,
-  mergeCalendars,
-  positionCalendar,
-  withCalendar,
+  joinUnits,
+  valueUnits,
   UNDEFINED,
   UnderlyingSpace,
 } from "../underlyingSpace";
@@ -24,7 +24,8 @@ export type PositionNodeOptions = {
 
 const offsetSpace = (
   space: UnderlyingSpace,
-  offset: MaybeValue<number> | undefined
+  offset: MaybeValue<number> | undefined,
+  axis: 0 | 1
 ): UnderlyingSpace => {
   // A raw number is a pixel offset (layout below translates by it as is), so
   // it moves no data: only a datum offset shifts the data space.
@@ -35,10 +36,27 @@ const offsetSpace = (
   // Shift the data interval by `value` and pin it: a pinned space moves by
   // `value`, a free or difference space hangs its origin at `value`. The claim
   // moves with it (see `offsetExtent` below).
-  // A time offset puts the content on its calendar.
-  return withCalendar(
-    anchorAt(space, value, space.measure ?? getMeasure(offset)),
-    mergeCalendars([space.calendar, positionCalendar(offset)])
+  //
+  // The result is a point plus a difference on one shared axis. When the
+  // content is pinned, it is the point and the offset the difference that
+  // moves it; otherwise the content is a difference (a magnitude, a width)
+  // and the offset is the point it hangs from. Either way the difference
+  // must be in the point's difference units (`differenceUnits`): a time
+  // position moves by a duration (or a plain number, which becomes one), and
+  // a USD position by USD. The result takes the point's unit and calendar,
+  // titled by both sides.
+  const offsetUnits = valueUnits(offset);
+  const pinned = space.origin === "pinned";
+  const point = pinned ? space.measure : offsetUnits;
+  const difference = pinned ? offsetUnits : space.measure;
+  const joined = joinUnits(point && differenceUnits(point), difference, true, {
+    axis,
+    where: "between a position offset and the content it moves",
+  });
+  return anchorAt(
+    space,
+    value,
+    point && joined ? { ...point, titles: joined.titles } : joined
   );
 };
 
@@ -73,8 +91,8 @@ export const positionNode = (
       resolveUnderlyingSpace: (children: Size<UnderlyingSpace>[]) => {
         const child = children[0] ?? [UNDEFINED, UNDEFINED];
         return [
-          offsetSpace(child[0], options.x),
-          offsetSpace(child[1], options.y),
+          offsetSpace(child[0], options.x, 0),
+          offsetSpace(child[1], options.y, 1),
         ];
       },
       resolveExtent: (childExtents, childSpaces) => {

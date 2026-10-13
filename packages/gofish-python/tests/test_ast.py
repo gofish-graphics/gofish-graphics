@@ -10,6 +10,7 @@ from gofish import (
     derive,
     compose,
     field,
+    chunk,
     filter,
     log,
     ref,
@@ -88,7 +89,10 @@ class TestOperators:
         )
         expected = {
             "month": {"HasOrder": {"levels": ["Jan", "Feb"]}},
-            "at": {"HasCalendar": {"zone": "America/New_York"}},
+            "at": {
+                "HasCalendar": {"zone": "America/New_York"},
+                "HasUnit": {"unit": "instant"},
+            },
         }
         assert op.to_dict()["schema"] == expected
         assert op.translate(x=1).to_dict()["schema"] == expected
@@ -164,12 +168,17 @@ class TestOperators:
         assert op.to_dict()["type"] == "derive"
         assert op.fn([{"day": 1}, {"day": 2}]) == [{"day": 2}]
 
-    def test_filter_callable_passes_a_single_row_through(self):
-        """A single row is not a list of rows, so it passes through unchanged,
-        as JS filter does for data that is not an array."""
-        op = filter(lambda row: row["day"] > 1)
-        row = {"day": 1}
-        assert op.fn(row) is row
+    def test_spread_by_chunk(self):
+        """chunk(size) is a by key that crosses the wire as data."""
+        assert chunk(5) == {"type": "chunk", "size": 5}
+        d = spread(by=chunk(5), dir="y").to_dict()
+        assert d["by"] == {"type": "chunk", "size": 5}
+
+    def test_chunk_rejects_a_size_below_one(self):
+        with pytest.raises(ValueError, match="chunk"):
+            chunk(0)
+        with pytest.raises(ValueError, match="chunk"):
+            chunk(2.5)  # type: ignore[arg-type]
 
     def test_filter_rejects_other_values(self):
         with pytest.raises(TypeError, match="filter"):
@@ -692,6 +701,65 @@ class TestSchema:
     def test_ordered_is_has_order(self):
         assert Schema.ordered(["a", "b"]) == {"HasOrder": {"levels": ["a", "b"]}}
 
+    def test_unit_is_has_unit(self):
+        assert Schema.unit("USD") == {"HasUnit": {"unit": "USD", "symbol": "USD"}}
+        with pytest.raises(TypeError):
+            Schema.unit(3)  # type: ignore[arg-type]
+
+    def test_quantity_is_has_quantity(self):
+        assert Schema.quantity("Pay") == {"HasQuantity": {"name": "Pay"}}
+        assert Schema.quantity("Pay").unit("USD") == {
+            "HasUnit": {"unit": "USD", "symbol": "USD"},
+            "HasQuantity": {"name": "Pay"},
+        }
+        # Either order gives the same column type.
+        assert Schema.quantity("Pay").unit("USD") == Schema.unit("USD").quantity(
+            "Pay"
+        )
+        with pytest.raises(TypeError, match=r"^name must be a string, got 3$"):
+            Schema.quantity(3)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match=r"^name must be a string, got 3$"):
+            Schema.unit("USD").quantity(3)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match=r"^unit must be a string, got 3$"):
+            Schema.unit(3)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match=r"^unit must be a string, got 3$"):
+            Schema.quantity("Pay").unit(3)  # type: ignore[arg-type]
+
+    def test_a_column_has_one_unit(self):
+        # `Schema.time()` writes the instant, so a second unit raises.
+        with pytest.raises(
+            TypeError, match=r'^\.unit: the column already has the unit "instant"\.$'
+        ):
+            Schema.time().unit("USD")
+        with pytest.raises(TypeError, match='already has the unit "USD"'):
+            Schema.unit("USD").unit("EUR")
+        assert Schema.time().quantity("When") == {
+            "HasCalendar": {"zone": "UTC"},
+            "HasUnit": {"unit": "instant"},
+            "HasQuantity": {"name": "When"},
+        }
+
+    def test_levels_fit_the_column_classes(self):
+        # Text levels are not amounts; a Likert scale's numbers are.
+        message = (
+            r'^schema: the column has the level "low", which is not a value '
+            r"HasUnit accepts\.$"
+        )
+        with pytest.raises(TypeError, match=message):
+            Schema.ordered(["low", "mid", "high"]).unit("pts")
+        with pytest.raises(TypeError, match=message):
+            Schema.ordered(["low", "high"]).diverging().unit("pts")
+        assert Schema.ordered([1, 2, 3, 4, 5]).unit("pts") == {
+            "HasOrder": {"levels": [1, 2, 3, 4, 5]},
+            "HasUnit": {"unit": "pts", "symbol": "pts"},
+        }
+
+    def test_field_takes_no_unit(self):
+        # A column's unit lives in the schema, not on a channel.
+        assert field("x") == {"type": "field", "name": "x"}
+        with pytest.raises(TypeError):
+            field("x", "plane")  # type: ignore[call-arg]
+
     def test_diverging_defaults_the_midpoint_to_half_the_levels(self):
         assert Schema.ordered(["a", "b"]).diverging() == {
             "HasOrder": {"levels": ["a", "b"]},
@@ -756,9 +824,14 @@ class TestTime:
     columns crossing the bridge (#1057)."""
 
     def test_schema_time_record(self):
-        assert Schema.time() == {"HasCalendar": {"zone": "UTC"}}
+        # A time's unit is the instant, the same INSTANT as JS measure.ts.
+        assert Schema.time() == {
+            "HasCalendar": {"zone": "UTC"},
+            "HasUnit": {"unit": "instant"},
+        }
         assert Schema.time(zone="America/New_York") == {
-            "HasCalendar": {"zone": "America/New_York"}
+            "HasCalendar": {"zone": "America/New_York"},
+            "HasUnit": {"unit": "instant"},
         }
 
     def test_calendar_wire_form(self):
@@ -826,7 +899,9 @@ class TestTime:
             .mark(rect(w=1))
             .to_ir()
         )
-        assert ir["options"]["schema"] == {"t": {"HasCalendar": {"zone": "Asia/Tokyo"}}}
+        assert ir["options"]["schema"] == {
+            "t": {"HasCalendar": {"zone": "Asia/Tokyo"}, "HasUnit": {"unit": "instant"}}
+        }
 
     def test_strings_are_never_inferred(self):
         ir = chart([{"t": "2024-01-01", "n": 1}]).mark(rect(w=1)).to_ir()

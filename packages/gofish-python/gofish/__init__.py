@@ -58,6 +58,7 @@ from .ast import (
     polygon,
     datum,
     field,
+    chunk,
 )
 from .datum_projection import pluck
 from .charts import bar_chart
@@ -127,6 +128,7 @@ __all__ = [
     "polygon",
     "datum",
     "field",
+    "chunk",
     "pluck",
     "bar_chart",
     "Color",

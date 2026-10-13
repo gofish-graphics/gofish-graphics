@@ -12,8 +12,8 @@ References another node so later marks can reuse its position or bounding box �
   a [`.relate()`](/js/api/constraints/relate) clause, `ref(token).row[2]`
   anywhere — resolved at layout time against the name tree.
 - **As chart data**: `chart(ref("maxBar")).mark(text(...))` — resolved at build
-  time against the named-layer registry, where it must match **exactly one**
-  node (use [`selectAll`](/js/api/selection/ref) for many). See
+  time against the named-layer registry to a list of one ref, where it must
+  match **exactly one** node (use [`selectAll`](/js/api/selection/ref) for many). See
   [ref / selectAll](/js/api/selection/ref) for the chart-data role and node-unit
   selection.
 
@@ -117,7 +117,8 @@ bars[0].datum; // the raw row-bag behind the first bar
 
 `ref.datum` is the **raw bag of rows** that flowed into the referenced node — an
 **array** of records. A fully-split leaf (one datum per node) is a **1-row
-array**; an aggregate — for example a bar produced by `rect({ h: "count" })` over
+array**, and so is a mark under an operator with no `by` and each slice of a
+[`cut`](/js/api/operators/cut); an aggregate — for example a bar produced by `rect({ h: "count" })` over
 a partition, whose height auto-sums several rows — holds all the rows of its
 partition.
 

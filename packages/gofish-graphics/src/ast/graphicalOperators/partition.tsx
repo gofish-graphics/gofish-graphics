@@ -29,7 +29,7 @@ import { Scatter } from "./scatter";
  *
  * It is `scatter`'s range form with the span read off the key: the split
  * hands the layout one `{ min, max }` span per cell (the cell's start and
- * end, carrying the column's measure and type, so a time column gives a time
+ * end, carrying the column's quantity, unit and type, so a time column gives a time
  * axis), and `Scatter` elaborates that into one interval position constraint
  * per child. The two edges of that constraint set the child's size along
  * `dir`, so a mark with no size there fills its cell. There is no layout code
@@ -78,15 +78,16 @@ const partitionOperator = createOperator<any, PartitionOptions>(
       const entries = splitEntries(by as FieldAccessor, d);
       const cells = [...entries.keys()];
       if (!cells.every((k): k is Cell => k instanceof Cell)) throw noRegion(by);
-      // Each end carries what the column says about its values (its measure,
-      // and its schema type: a time column's calendar), as a position read
-      // from the column does, so the axis is that column's axis.
-      const { measure, type } = resolveColumn(d, by);
+      // Each end carries what the column says about its values (its
+      // quantity, with the column's declared unit, and its schema type: a
+      // time column's calendar), as a position read from the column does, so
+      // the axis is that column's axis.
+      const { quantity, type } = resolveColumn(d, by);
       // Each end also names its cell, so the axis knows it places cells.
       const edge = (cell: Cell, v: number) =>
         new DatumValueImpl(
           v,
-          measure,
+          quantity,
           undefined,
           undefined,
           type === undefined ? undefined : by.name,

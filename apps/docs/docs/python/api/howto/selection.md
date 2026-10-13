@@ -137,7 +137,7 @@ from gofish import layer, chart, scatter, blank, text, ref, select_all
 
 layer([
     chart(data).flow(scatter(by="id", x="x", y="y")).mark(blank().name("origin")),
-    # ref("origin") returns one ref; errors if "origin" matched 0 or >1 nodes
+    # ref("origin") is a list of one ref; errors if "origin" matched 0 or >1 nodes
     chart(ref("origin")).mark(text(text="start")),
 ])
 ```

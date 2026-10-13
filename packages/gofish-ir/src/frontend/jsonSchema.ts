@@ -361,21 +361,26 @@ export const FRONTEND_IR_JSON_SCHEMA = {
     // — see GENERATED_DEFS below.
     FieldAccessor: {
       description:
-        'Explicit field-accessor form, emitted by field(name, measure?). Optionally carries a chained pipeline (ops) — field("site").sort("yield") or field("count").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator\'s entry-flagged size channel, normalize.',
+        'Explicit field-accessor form, emitted by field(name). Optionally carries a chained pipeline (ops) — field("site").sort("yield") or field("count").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator\'s entry-flagged size channel, normalize.',
       type: "object",
       required: ["type", "name"],
       properties: {
         type: { const: "field" },
         name: { type: "string" },
-        measure: {
-          type: "string",
-          description:
-            "Optional unit annotation for the channel's underlying space (a type claim; see field(name, measure)).",
-        },
         ops: {
           type: "array",
           items: { $ref: "#/$defs/FieldOpIR" },
         },
+      },
+    },
+    ChunkKey: {
+      description:
+        "A `by` key that groups consecutive rows, emitted by chunk(size): row i goes to group floor(i / size), a bin over row position. It names no field, so its groups draw no axis or labels.",
+      type: "object",
+      required: ["type", "size"],
+      properties: {
+        type: { const: "chunk" },
+        size: { type: "integer", minimum: 1 },
       },
     },
     FieldOpIR: {
@@ -552,7 +557,6 @@ export const FRONTEND_IR_JSON_SCHEMA = {
                 properties: {
                   type: { const: "datum" },
                   datum: {},
-                  measure: { type: "string" },
                   offset: { $ref: "#/$defs/Number" },
                   colorOps: {
                     type: "array",
@@ -713,7 +717,6 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           properties: {
             type: { const: "datum" },
             datum: {},
-            measure: { type: "string" },
             offset: {
               $ref: "#/$defs/Number",
               description:

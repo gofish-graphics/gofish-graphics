@@ -7,8 +7,9 @@
   — it resolves at layout time against the name tree, hygienically scoped (see
   [scoping](#hygienic-scoping)). This is the [`ref`](/js/api/marks/ref) mark.
 - **As chart data** — `chart(ref("maxBar")).mark(text(...))` — it resolves at
-  build time against the named-layer registry and stands in for the one node
-  registered under that name.
+  build time against the named-layer registry to a list of one ref, the node
+  registered under that name. Like all chart data it is a list; being singular
+  is a check that exactly one node matched.
 
 `selectAll(name)` is the **plural** chart-data verb: it returns an **array of
 refs**, one per node a named mark produced (node-unit; aggregate or not, no
@@ -76,7 +77,7 @@ gf.layer([
     .chart(data)
     .flow(/* ... */)
     .mark(gf.rect({ h: "total" }).name("kpi")),
-  // ref("kpi") as chart data: one node; throws on 0 or >1 nodes
+  // ref("kpi") as chart data: a list of one ref; throws on 0 or >1 nodes
   gf.chart(gf.ref("kpi")).mark(gf.text({ text: "peak" })),
 ]);
 ```

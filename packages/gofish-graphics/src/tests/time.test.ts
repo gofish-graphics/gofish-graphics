@@ -36,11 +36,18 @@ import {
 import {
   CONTINUOUS,
   niceContinuous,
-  withCalendar,
+  type CONTINUOUS_TYPE,
 } from "../ast/underlyingSpace";
 import { interval } from "../util/interval";
 
-const { chart, scatter, spread, line, circle, Schema } = GoFish as any;
+/** `space` over instants read on `calendar`: a time column's measure. */
+const withCalendar = (
+  space: CONTINUOUS_TYPE,
+  calendar: { zone: string }
+): CONTINUOUS_TYPE => ({ ...space, measure: { titles: ["t"], calendar } });
+
+const { chart, scatter, spread, stack, rect, field, line, circle, Schema } =
+  GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
 
 declare const process: { exit(code: number): never };
@@ -279,7 +286,7 @@ async function main() {
     const typed = await applySchema(rows);
     check(
       "a Date column is inferred as a UTC time",
-      same(getColumnTypes(typed), { when: { HasCalendar: { zone: "UTC" } } })
+      same(getColumnTypes(typed), { when: SrcSchema.time().type })
     );
     check(
       "its values become epoch ms, in copied rows",
@@ -347,8 +354,8 @@ async function main() {
       "a derive's Date column is a time, in epoch ms",
       fromJs[0].at === at &&
         same(getColumnTypes(fromJs), {
-          day: { HasCalendar: { zone: "UTC" } },
-          at: { HasCalendar: { zone: "UTC" } },
+          day: SrcSchema.time().type,
+          at: SrcSchema.time().type,
         }),
       JSON.stringify([fromJs[0], getColumnTypes(fromJs)])
     );
@@ -484,24 +491,10 @@ async function main() {
         getColumnTypes(inPlace)?.at?.HasCalendar?.zone === "UTC",
       JSON.stringify([inPlace[0], getColumnTypes(inPlace)])
     );
-    // A derive over one datum that returns one object: the schema converts
-    // it as one row.
-    const single = await derived(
-      (d: any) => ({ ...d, at: "2024-03-05" }),
-      { schema: { at: Schema.time({ zone: "America/New_York" }) } },
-      { n: 1 }
-    );
-    check(
-      "derive(fn, { schema }) converts a single-object result",
-      !Array.isArray(single) &&
-        single.n === 1 &&
-        single.at === Date.UTC(2024, 2, 5, 5),
-      JSON.stringify(single)
-    );
     // filter's rows are its input's, so it carries the input's types as
     // they are, with no fit check (a derive would drop this one).
     const unfit = setColumnTypes([{ day: "not a time", n: 1 }], {
-      day: { HasCalendar: { zone: "UTC" } },
+      day: SrcSchema.time().type,
     });
     let filteredUnfit: any;
     await (
@@ -743,7 +736,7 @@ async function main() {
     check(
       "a column whose first value is null is still inferred from its Dates",
       rows[1].d === at &&
-        same(getColumnTypes(rows), { d: { HasCalendar: { zone: "UTC" } } }),
+        same(getColumnTypes(rows), { d: SrcSchema.time().type }),
       JSON.stringify([rows, getColumnTypes(rows)])
     );
   }
@@ -762,9 +755,9 @@ async function main() {
         },
       ],
       {
-        naive: { HasCalendar: { zone: "UTC" } },
-        day: { HasCalendar: { zone: "UTC" } },
-        aware: { HasCalendar: { zone: "UTC" } },
+        naive: SrcSchema.time().type,
+        day: SrcSchema.time().type,
+        aware: SrcSchema.time().type,
       }
     );
     const ny = SrcSchema.time({ zone: "America/New_York" });
@@ -814,19 +807,17 @@ async function main() {
       empty === undefined,
       empty
     );
-    const nan = withCalendar(
-      CONTINUOUS(interval(NaN, NaN), "pinned"),
-      { zone: "UTC" }
-    );
+    const nan = withCalendar(CONTINUOUS(interval(NaN, NaN), "pinned"), {
+      zone: "UTC",
+    });
     check(
       "a non-finite time domain is not niced",
       Number.isNaN((niceContinuous(nan) as any).dataInterval.min)
     );
     const [hi, lo] = [Date.UTC(2024, 1, 2, 7), Date.UTC(2024, 1, 1, 7)];
-    const backwards = withCalendar(
-      CONTINUOUS({ min: hi, max: lo }, "pinned"),
-      { zone: "UTC" }
-    );
+    const backwards = withCalendar(CONTINUOUS({ min: hi, max: lo }, "pinned"), {
+      zone: "UTC",
+    });
     const kept = (niceContinuous(backwards) as any).dataInterval;
     check(
       "an empty time domain (min > max) is not niced",
@@ -925,6 +916,23 @@ async function main() {
       .flow(scatter({ by: "date", x: "date", y: "price" }))
       .mark(line())
       .toDisplayList({ w: 560, h: 200 });
+    // A count over a time column is a count, not an instant: a stack of
+    // `field("date").count()` bars keeps a numeric axis.
+    const counts = textsOf(
+      await chart(
+        prices.map((p, i) => ({ ...p, month: p.date.slice(0, 7), k: i % 2 })),
+        { schema: { date: Schema.time() }, axes: true }
+      )
+        .flow(spread({ by: "month", dir: "x" }), stack({ by: "k", dir: "y" }))
+        .mark(rect({ h: field("date").count() }))
+        .toDisplayList({ w: 560, h: 200 })
+    ).map((t) => t.text);
+    check(
+      "a stacked count over a time column has a numeric axis",
+      !counts.some((w) => /AM|PM/.test(w)) && counts.includes("0"),
+      counts.join(" ")
+    );
+
     const texts = textsOf(dl);
     const words = texts.map((t) => t.text);
     check(

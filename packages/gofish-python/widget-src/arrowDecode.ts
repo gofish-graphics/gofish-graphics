@@ -39,7 +39,7 @@
  */
 
 import * as Arrow from "apache-arrow";
-import { Serialize } from "gofish-graphics";
+import { Schema, Serialize } from "gofish-graphics";
 
 /** Decode base64 Arrow IPC streams, one per chart tier, into each tier's
  *  rows (see the module comment). This is the widget's `tier_arrow` trait
@@ -106,14 +106,14 @@ function fromArrowNested(type: Arrow.DataType): Convert | undefined {
 }
 
 /** The column types of a table's (or a list of structs') `fields`: each
- *  timestamp or date column is a time, `HasCalendar` in the timestamp's time
- *  zone, or UTC for a naive one or a date. */
+ *  timestamp or date column is a time, `Schema.time({ zone })`'s type in the
+ *  timestamp's time zone, or UTC for a naive one or a date. */
 function columnTypes(fields: Arrow.Field[]): Serialize.ColumnTypes {
   const types: Serialize.ColumnTypes = {};
   for (const { name, type } of fields) {
     if (Arrow.DataType.isTimestamp(type) || Arrow.DataType.isDate(type)) {
       const zone = (Arrow.DataType.isTimestamp(type) && type.timezone) || "UTC";
-      types[name] = { HasCalendar: { zone } };
+      types[name] = Schema.time({ zone }).type;
     }
   }
   return types;

@@ -20,12 +20,13 @@ import { lowerToDisplayList } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
 import type { InteractionRuntime } from "../interaction/runtime";
 import { renderWithInteraction } from "../interaction/renderTerminal";
+import { resolveMarkResult } from "./marks/markResult";
+import { resolveUnit, sameUnitVar } from "./measure";
 import type { ToPixel } from "./_node";
 import type { Size } from "./dims";
 import {
   continuousInterval,
   isCONTINUOUS,
-  spaceMeasure,
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
   type UnderlyingSpace,
@@ -508,9 +509,22 @@ export async function layout(
   // registry (Stage 6c: the ONE post-solve σ adjustment, so every slope stays
   // registry-sourced and the dump shows the FINAL σ). Silently skipped when an
   // axis has no solved scope to equate.
-  const measureX = spaceMeasure(niceUnderlyingSpaceX);
-  const measureY = spaceMeasure(niceUnderlyingSpaceY);
-  if (measureX !== undefined && measureX === measureY) {
+  //
+  // Only a DECLARED unit counts: two unknowns that unify through overlays
+  // are one domain, not a claim that a data unit is the same length on x
+  // and y.
+  const unitX = isCONTINUOUS(niceUnderlyingSpaceX)
+    ? niceUnderlyingSpaceX.measure?.unit
+    : undefined;
+  const unitY = isCONTINUOUS(niceUnderlyingSpaceY)
+    ? niceUnderlyingSpaceY.measure?.unit
+    : undefined;
+  if (
+    unitX !== undefined &&
+    unitY !== undefined &&
+    resolveUnit(unitX).kind === "declared" &&
+    sameUnitVar(unitX, unitY)
+  ) {
     const axisInfo = ([0, 1] as const).map(
       (axis): EqualMeasureAxis | undefined => {
         const space = rootSpaces[axis];
@@ -984,13 +998,18 @@ export function gofish(
   // the runtime only if something registered. A PLAIN node keeps today's exact
   // static behavior below (a `live()` channel on a plain node still patches at
   // paint — that's runtime-independent — it just gets no runtime/hit-testing).
+  //
+  // A function child is a thunk or a mark (`layer([...])` is one), and both
+  // reify the way a combinator child does: `resolveMarkResult` calls it with
+  // the empty list `[]` (a root has no rows; a thunk ignores it) and reifies
+  // whatever it returns.
   if (typeof child === "function") {
-    const thunk = child;
+    const build = () => resolveMarkResult(child as any);
     return renderWithInteraction(async () => {
-      const node = await thunk();
+      const node = await build();
       // A thunk can build the chart again, which `labelAngle: "auto"` needs
       // (see `GoFishNode.rebuild`).
-      node.rebuild = async () => thunk();
+      node.rebuild = build;
       return { node, options: { ...options } };
     }, container);
   }
