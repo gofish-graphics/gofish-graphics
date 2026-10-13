@@ -141,17 +141,16 @@ Walking `createOperator.ts:391-415`:
    `Map<key, subdata>`. (Some operators also return `layoutOpts`, opts the
    split computed that get merged into the layout opts: `table`'s row/column
    labels, or a `stack`'s `origin` when its `by` column has `HasMidpoint`.) Each
-   array leaf is then re-tagged with `d`'s measure provenance
-   (`copyMeasureProvenance`): a leaf is a fresh sub-array that wouldn't
-   otherwise inherit the `MEASURE_PROVENANCE` symbol, so without this a _mark_
-   channel applied per leaf would lose a transform's measure (e.g. a
-   histogram's `start`/`end`) and fall back to the literal field name — see
-   [underlying space](/internals/core/underlying-space) and #534. The chart's
-   column types ride along the same way (`copyColumnTypes`, see [Column
-   types](/internals/core/underlying-space#column-types-the-chart-schema)), so
-   a nested split or a color channel still sees an ordered column, and so
-   does the data's domain, so a nested binned key sees the chart's cells. A
-   cell key becomes its id for the mark and the node (`setKey`), and the node
+   array leaf is then re-tagged with `d`'s column types (`copyColumnTypes`,
+   see [Column
+   types](/internals/core/underlying-space#column-types-the-chart-schema)): a
+   leaf is a fresh sub-array that wouldn't otherwise inherit them, so without
+   this a _mark_ channel applied per leaf would lose a transform's unit
+   (`HasUnit`) and fall back to the literal field name — see [underlying
+   space](/internals/core/underlying-space) and #534 — and a nested split or
+   a color channel would lose an ordered column. The data's domain rides
+   along the same way, so a nested binned key sees the chart's cells. A cell
+   key becomes its id for the mark and the node (`setKey`), and the node
    keeps the cell itself as `keyCell`, which the distribute fold reads to
    build an ordinal over cells, and a `partition` reads to give the node its
    cell. The node also keeps the `by` it was keyed by (`keyBy`), so a fused

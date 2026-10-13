@@ -32,11 +32,6 @@ export type {
   FieldPredicate,
   FieldPredicateWire,
 } from "./ast/fieldExpr";
-// Measure-provenance tagging: how a data transform declares that
-// its output columns are in a source field's units. JS only: the array
-// symbol does not cross the Python bridge.
-export { setMeasureProvenance } from "./ast/data";
-export type { MeasureProvenance } from "./ast/data";
 export { map } from "./ast/iterators/map";
 
 // Strategy families (#1013): an option whose value is one choice from a set
@@ -114,6 +109,7 @@ export type {
   HasOrder,
   HasMidpoint,
   HasCalendar,
+  HasUnit,
   Level,
   SchemaEntry,
 } from "./ast/schema";
