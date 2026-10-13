@@ -143,8 +143,8 @@ area (2 — both axes sweep into a wedge). That flag is authored before layout b
 the `resolveEmbedding` pass (wired into the pipeline in `gofish.tsx`; see
 [Layout & Render Passes](/internals/layout/passes) and
 [Underlying Space](/internals/core/underlying-space)): a value-sized dim embeds
-only when its measure matches the axis it sits in, so a foreign-measure size (a
-scatter bubble's area) stays a flat point even under a coord.
+only when it is the same quantity as the position it sits at, so a size of a
+foreign quantity (a scatter bubble's area) stays a flat point even under a coord.
 
 ### Boundaries re-walk their own subtree
 

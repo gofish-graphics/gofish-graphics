@@ -6,7 +6,6 @@ import {
   line,
   circle,
   rect,
-  field,
   derive,
   spread,
   Schema,
@@ -225,15 +224,9 @@ export const QuarterlyBars: StoryObj<Args> = {
         y: true,
       },
     })
-      // The two ends are one kind of quantity (dates), so they share a
-      // measure.
-      .flow(
-        scatter({
-          by: "start",
-          xMin: field("start", "date"),
-          xMax: field("end", "date"),
-        })
-      )
+      // The two ends are times, whose unit is an instant, so they share
+      // the x axis.
+      .flow(scatter({ by: "start", xMin: "start", xMax: "end" }))
       .mark(rect({ h: "amount" }))
       .render(container, { w: args.w, h: args.h });
     return container;

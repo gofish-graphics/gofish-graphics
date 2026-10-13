@@ -4,7 +4,6 @@
 
 import type { StackOrigin } from "./constraints/distribute";
 import { loadTemporal, temporal } from "./calendar";
-import type { Measure } from "./data";
 
 /**
  * Column types (#984): `chart(data, { schema })` declares, per column, the
@@ -24,12 +23,14 @@ import type { Measure } from "./data";
  *    calendar in a time zone. Declared with `Schema.time()`, or inferred from
  *    JS `Date` values. The values become epoch milliseconds (UTC) when the
  *    schema is applied, and an axis over them is a time axis whose ticks are
- *    calendar cells (calendar.ts). A time has no zero.
- *  - {@link HasUnit}: the column's values are amounts in the unit `unit`, the
- *    measure a channel over the column resolves to (`resolveMeasure` in
- *    channels.ts). A transform writes it for the columns it makes: `bin()`
- *    says its `start`/`end`/`size` are in the source field's unit and its
- *    `count` is a count.
+ *    calendar cells (calendar.ts). A time has no zero. Its unit is an
+ *    instant, so two time columns may share an axis.
+ *  - {@link HasUnit}: the column's values are amounts. Declared with
+ *    `Schema.unit(unit)`, which says what unit they are in; without it a
+ *    column's unit is unknown and unifies with any other (`measure.ts`). A
+ *    transform writes it for the columns it makes: `bin()` says its
+ *    `start`/`end`/`size` are amounts of its source column's quantity, in
+ *    the source's unit, and its `count` is a count.
  *
  * A column type is a record keyed by class name, so a later class (`HasZero`,
  * `HasCycle`, ...) is one more optional key. The record is also the wire form:
@@ -62,10 +63,16 @@ export type HasMidpoint = { at: number };
  *  starts at local midnight) and how labels read. An instant has no zero. */
 export type HasCalendar = { zone: string };
 
-/** The class of a column whose values are amounts in the unit `unit` (a
- *  {@link Measure}), e.g. `bin()`'s `start` in its source field's unit. Two
- *  channels share an axis only when their units agree. */
-export type HasUnit = { unit: Measure };
+/** The class of a column whose values are amounts of a quantity:
+ *
+ *  - `unit`: the declared unit (`Schema.unit("USD")`). Two declared units
+ *    that differ never share an axis. Absent: the unit is unknown, a unit
+ *    variable that unifies with any unit (`measure.ts`).
+ *  - `quantity`: the name of the quantity, when it is not the column's own
+ *    name: `bin()`'s `start` is an amount of its source column's quantity.
+ *    The quantity names the axis title and the unit variable.
+ */
+export type HasUnit = { unit?: string; quantity?: string };
 
 /** A column's type: the classes it has, keyed by class name. */
 export type ColumnType = {
@@ -157,6 +164,13 @@ export const Schema = {
   }> {
     return new ColumnSchema({ HasCalendar: { zone } });
   },
+  /** A column whose values are amounts in the unit `unit` (`HasUnit`), an
+   *  opaque name such as `"USD"` or `"mm"`. Columns in the same unit may
+   *  share an axis; two different units on one axis are an error. A column
+   *  with no unit declared may share an axis with any other. */
+  unit(unit: string): ColumnSchema<{ HasUnit: HasUnit }> {
+    return new ColumnSchema({ HasUnit: { unit } });
+  },
 };
 
 /** What `chart`'s `schema` option takes per column: a builder, or the record
@@ -234,7 +248,7 @@ export const setColumnTypes = <T>(data: T, types: ColumnTypes): T => {
  *  column `target` does not type itself. A split leaf or a filter's result is
  *  a fresh array, so it has to be told. Without it, a mark channel over a
  *  split leaf would lose its column's order, time, and unit (a bin's `start`
- *  would fall back to the measure "start", see `resolveMeasure`). */
+ *  would fall back to the quantity "start", see `resolveQuantity`). */
 export const copyColumnTypes = <T>(target: T, source: unknown): T => {
   const types = getColumnTypes(source);
   if (types === undefined) return target;

@@ -193,7 +193,7 @@ export interface DeriveOperator
    *  wire form of a chart's `schema` (e.g. `{ HasOrder: { levels } }`). They
    *  type the result over the types it keeps or infers, and convert values
    *  as a chart's schema does. A transform (e.g. Python's `bin`) writes the
-   *  units of its output columns here (`{ HasUnit: { unit } }`), since the
+   *  units of its output columns here (`{ HasUnit: { quantity } }`), since the
    *  column types the JS-side array carries can't ride the rows across the
    *  derive RPC. */
   schema?: Record<string, Record<string, unknown>>;
@@ -734,9 +734,7 @@ export interface AxisInterval {
  */
 export type AxisDims = Record<string, ChannelValue | AxisInterval>;
 
-/** Explicit field-accessor form, emitted by `field(name, measure?)`. The
- *  optional `measure` is a unit annotation on the channel's underlying space
- *  (a type claim — see gofish-graphics' `resolveMeasure`). `ops` is the
+/** Explicit field-accessor form, emitted by `field(name)`. `ops` is the
  *  optional chained pipeline (#700 Phase 1/2), e.g. `field("site").sort("yield")`
  *  or `field("count").normalize()` — see `FieldOpIR` and gofish-graphics'
  *  `fieldExpr.ts` (`FieldOp`), which this mirrors exactly. Two disjoint
@@ -747,7 +745,6 @@ export type AxisDims = Record<string, ChannelValue | AxisInterval>;
 export interface FieldAccessor {
   type: "field";
   name: string;
-  measure?: string;
   ops?: FieldOpIR[];
 }
 

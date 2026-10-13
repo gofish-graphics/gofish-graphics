@@ -11,7 +11,8 @@ import {
 import chunk from "lodash/chunk";
 import { GoFishNode } from "../_node";
 import {
-  getMeasure,
+  DatumValueImpl,
+  getQuantity,
   getValue,
   isValue,
   value,
@@ -366,7 +367,7 @@ type CircleProps = XYWHDims<MaybeValue<number>> & {
 
 /** Twice a size channel's value, in the same measure: a radius as a diameter. */
 const twice = (r: MaybeValue<number>): MaybeValue<number> =>
-  isValue(r) ? value(2 * getValue(r), getMeasure(r)) : 2 * r;
+  isValue(r) ? new DatumValueImpl(2 * getValue(r), getQuantity(r)) : 2 * r;
 
 /**
  * A circle: an ellipse locked to a 1:1 aspect ratio. It takes the same box

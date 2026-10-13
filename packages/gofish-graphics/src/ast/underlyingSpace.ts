@@ -5,14 +5,24 @@
 import { interval, Interval, width as intervalWidth } from "../util/interval";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
 import {
-  getMeasure,
+  getQuantity,
   getValue,
-  getValueFieldType,
   isAesthetic,
   isValue,
   type MaybeValue,
-  type Measure,
 } from "./data";
+import {
+  currentUnits,
+  MeasureClash,
+  resolveUnit,
+  unify,
+  type MeasureSite,
+  type Quantity,
+  type Unit,
+  type UnitVar,
+} from "./measure";
+
+export { MeasureClash, type MeasureSite } from "./measure";
 import { nice as d3Nice } from "d3-array";
 import type { HasCalendar } from "./schema";
 import { niceToCells, tickPartition, type CalendarPartition } from "./calendar";
@@ -72,9 +82,15 @@ export type CONTINUOUS_TYPE = {
   dataInterval: Interval;
   /** Where the local origin sits. See {@link Origin}. */
   origin: Origin;
-  /** The measure (unit) of this axis. Spaces unify per measure — see
-   *  {@link mergeMeasures}. Undefined = "no claim" (permissive). */
-  measure?: Measure;
+  /** What this axis measures: its unit, its titles, and, over instants, its
+   *  calendar ({@link UnitRecord}). Spaces join records with
+   *  {@link joinUnits}; read one with {@link spaceUnit}. Undefined = "no
+   *  claim" (permissive). The calendar is set when the data along this axis
+   *  are instants (`HasCalendar`, from a `Schema.time()` column): epoch
+   *  milliseconds read on the calendar of its zone. An axis over it is a time
+   *  axis: its ticks are calendar cells (axes/timeRows.ts), and its domain is
+   *  niced outward to the cells of its inner row ({@link niceContinuous}). */
+  measure?: UnitRecord;
   coordinateTransform?: CoordinateTransform;
   /** True when both sides of the 0 hold nonnegative amounts measured away from
    *  it, rather than signed values (#984's "mirrored side": magnitudes with a
@@ -84,24 +100,16 @@ export type CONTINUOUS_TYPE = {
    *  part has it ({@link allMirrored}).
    *  TODO(#995): layer axis merging, a coord's declared window, and anchorAt drop it. */
   mirrored?: true;
-  /** Set when the data along this axis are instants (`HasCalendar`, from a
-   *  `Schema.time()` column): epoch milliseconds read on the calendar of
-   *  `zone`. An axis over it is a time axis: its ticks are calendar cells
-   *  (axes/timeRows.ts), and its domain is niced outward to the cells of its
-   *  inner row ({@link niceContinuous}). A union keeps it from any part that
-   *  has it ({@link mergeCalendars}). */
-  calendar?: HasCalendar;
 };
 
 export type ORDINAL_TYPE = {
   kind: "ordinal";
   domain?: string[]; // Top-level category keys for axis labels
-  /** The measure (the grouping field, e.g. "lake") this ordinal axis encodes —
-   *  the discrete analogue of a CONTINUOUS space's {@link CONTINUOUS_TYPE.measure}.
-   *  Read by axis-title inference so every axis names itself off its own resolved
-   *  space (continuous → measure unit, ordinal → grouping field), not a surface
-   *  field-name heuristic. Undefined = "no claim". */
-  measure?: Measure;
+  /** What this ordinal axis measures: a title, the grouping field (e.g.
+   *  "lake"), and no unit, since categories set up no scale. Read by
+   *  axis-title inference so every axis names itself off its own resolved
+   *  space, not a surface field-name heuristic. Undefined = "no claim". */
+  measure?: UnitRecord;
   /** True when this ordinal's keys are POSITIONAL (a `spread` with no `by` — its
    *  children were auto-keyed by index). Such a spread carries no grouping
    *  identity, so it renders no axis (unit dots packed for layout only). Set at
@@ -125,7 +133,7 @@ export type UnderlyingSpace = CONTINUOUS_TYPE | ORDINAL_TYPE | UNDEFINED_TYPE;
 export const CONTINUOUS = (
   dataInterval: Interval,
   origin: Origin,
-  measure?: Measure,
+  measure?: UnitRecord,
   coordinateTransform?: CoordinateTransform
 ): CONTINUOUS_TYPE => ({
   kind: "continuous",
@@ -138,14 +146,24 @@ export const isCONTINUOUS = (
   space: UnderlyingSpace
 ): space is CONTINUOUS_TYPE => space.kind === "continuous";
 
-/** The space of a datum magnitude `size`: `[0, v]` with the datum's measure.
+/** The space of a datum magnitude `size`: `[0, v]` with the datum's units.
  *  Free by default (its parent places its baseline); `"none"` when the mark's
- *  position is an aesthetic, so the magnitude has only a width. */
+ *  position is an aesthetic, so the magnitude has only a width. A size is
+ *  never an instant (a span of time is a duration, and `.count()` over a
+ *  time column is a count), so it reads on no calendar: only a position read
+ *  from a time column does. */
 export const magnitude = (
   size: MaybeValue<number | undefined>,
   origin: "free" | "none" = "free"
-): CONTINUOUS_TYPE =>
-  CONTINUOUS(interval(0, getValue(size)!), origin, getMeasure(size));
+): CONTINUOUS_TYPE => {
+  const units = valueUnits(size);
+  let measure: UnitRecord | undefined;
+  if (units !== undefined) {
+    const { calendar: _, ...rest } = units;
+    measure = rest;
+  }
+  return CONTINUOUS(interval(0, getValue(size)!), origin, measure);
+};
 
 /** The absolute `[min, max]` data domain of a PINNED space, or undefined for a
  *  free magnitude or a difference. */
@@ -273,12 +291,12 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
   // interval means nothing, so it stays.
   const [lo, hi] =
     axis === "absolute"
-      ? s.calendar !== undefined
+      ? spaceCalendar(s) !== undefined
         ? niceToCells(
             iv.min,
             iv.max,
             axisTickPartition(s, ticks),
-            s.calendar.zone
+            spaceCalendar(s)!.zone
           )
         : d3Nice(iv.min, iv.max, ticks.count)
       : [iv.min, iv.min + d3Nice(0, iv.max - iv.min, ticks.count)[1]];
@@ -308,21 +326,18 @@ export const allMirrored = (spaces: CONTINUOUS_TYPE[]): boolean =>
 export const anchorAt = (
   space: CONTINUOUS_TYPE,
   at: number,
-  measure?: Measure
+  measure?: UnitRecord
 ): CONTINUOUS_TYPE =>
-  withCalendar(
-    CONTINUOUS(
-      interval(space.dataInterval.min + at, space.dataInterval.max + at),
-      "pinned",
-      measure ?? space.measure,
-      space.coordinateTransform
-    ),
-    space.calendar
+  CONTINUOUS(
+    interval(space.dataInterval.min + at, space.dataInterval.max + at),
+    "pinned",
+    measure ?? space.measure,
+    space.coordinateTransform
   );
 
 export const ORDINAL = (
   domain?: string[],
-  measure?: Measure,
+  measure?: UnitRecord,
   anonymous?: boolean
 ): UnderlyingSpace => ({
   kind: "ordinal",
@@ -337,51 +352,11 @@ export const UNDEFINED: UnderlyingSpace = { kind: "undefined" };
 export const isUNDEFINED = (space: UnderlyingSpace): space is UNDEFINED_TYPE =>
   space.kind === "undefined";
 
-/** The space of a datum point: a pinned zero-width interval at `pos`, on a
- *  calendar when the datum is a time ({@link positionCalendar}). */
+/** The space of a datum point: a pinned zero-width interval at `pos`, with
+ *  the datum's units (on a calendar when the datum is a time). */
 const pointAt = (pos: MaybeValue<number | undefined>): CONTINUOUS_TYPE => {
   const at = getValue(pos) ?? 0;
-  return withCalendar(
-    CONTINUOUS(interval(at, at), "pinned", getMeasure(pos)),
-    positionCalendar(pos)
-  );
-};
-
-/** The calendar of a datum position read from a time column (`HasCalendar`
- *  in the chart's schema), if it is one. */
-export const positionCalendar = (
-  pos: MaybeValue<unknown>
-): HasCalendar | undefined => getValueFieldType(pos)?.HasCalendar;
-
-/** `space` on `calendar` (see {@link CONTINUOUS_TYPE.calendar}), or `space`
- *  unchanged when there is none. */
-export const withCalendar = <T extends CONTINUOUS_TYPE>(
-  space: T,
-  calendar: HasCalendar | undefined
-): T => (calendar === undefined ? space : { ...space, calendar });
-
-/**
- * The calendar of a union of spaces on one axis: the one their time parts
- * share, or undefined when no part is a time. A part with no calendar makes no
- * claim (a literal position among times), like an untagged measure. Two parts
- * on different zones are an error: one axis reads one calendar.
- */
-export const mergeCalendars = (
-  calendars: (HasCalendar | undefined)[]
-): HasCalendar | undefined => {
-  let out: HasCalendar | undefined;
-  for (const c of calendars) {
-    if (c === undefined) continue;
-    if (out !== undefined && out.zone !== c.zone) {
-      throw new Error(
-        `Two time columns on one axis are read in different time zones, ` +
-          `"${out.zone}" and "${c.zone}". One axis reads one calendar: give ` +
-          `both columns the same zone in Schema.time({ zone }).`
-      );
-    }
-    out ??= c;
-  }
-  return out;
+  return CONTINUOUS(interval(at, at), "pinned", valueUnits(pos));
 };
 
 /** One axis of a mark sized about a point (an ellipse, a petal): a datum
@@ -415,130 +390,161 @@ export const glyphAxis = (
 export const isPositioningSpace = (space: UnderlyingSpace): boolean =>
   originIs(space, "pinned") || isORDINAL(space);
 
-/** Read the measure of any space, or undefined for the measureless kind
- *  (UNDEFINED). Both CONTINUOUS (unit) and ORDINAL (grouping field) carry one. */
-export const spaceMeasure = (
-  space: UnderlyingSpace | undefined
-): Measure | undefined =>
-  space && (isCONTINUOUS(space) || isORDINAL(space))
-    ? space.measure
-    : undefined;
-
 /**
- * Unify two measures as TYPES. Undefined is permissive — it means "no claim",
- * so it unifies with anything and yields the other side. Two equal measures
- * unify to themselves. Two *different* defined measures are a type error:
- * unioning extents in incompatible units onto one axis (a marginal
- * histogram's count axis vs. a scatter's millimeters) would give two units one
- * σ, so we throw loudly instead.
+ * What the values along one axis measure:
  *
- * This is the one policy for every continuous composition (overlays,
- * alignments, spreads, stacks, coords, a layer's datum domain), whatever the
- * origin of the extents: the measures of an axis decide how many σ-scopes it
- * needs, which is part of setting up the layout problem, not of solving it.
- * One axis holds one measure; an axis that needs two (a dual-axis chart) is
- * multi-scale (#525), not a forgotten unit.
+ *  - `unit`: their unit, a term of the render's union-find (`measure.ts`):
+ *    a declared unit, or an unknown that unifies with anything. Two
+ *    declared units that differ on one shared axis are a type error
+ *    ({@link joinUnits}).
+ *  - `calendar`: over instants, the calendar they read on (`HasCalendar`).
+ *  - `titles`: the column names that title the axis, in the order they met.
+ *    Never a declared unit.
+ *
+ * An ordinal axis has titles (its grouping field) and no unit: categories
+ * set up no scale.
  */
-export const mergeMeasures = (
-  a: Measure | undefined,
-  b: Measure | undefined,
-  site: MeasureSite
-): Measure | undefined => {
-  if (a === undefined) return b;
-  if (b === undefined) return a;
-  if (a === b) return a;
-  throw new MeasureClash(a, b, site);
+export type UnitRecord = {
+  unit?: UnitVar;
+  calendar?: HasCalendar;
+  titles: string[];
 };
 
-/** Where two measures meet: the axis (0 or 1) when the clash is on an axis,
- *  and a plain phrase for the composition, read as "(... )" in the message,
- *  e.g. "where marks are lined up". */
-export type MeasureSite = { axis?: 0 | 1; where: string };
+/** The units of values of quantity `q`: its unit variable (bound to its
+ *  declared unit, if any) from the render's union-find, its calendar, and
+ *  its name as the title. */
+export const quantityUnits = (
+  q: Quantity | undefined
+): UnitRecord | undefined =>
+  q === undefined
+    ? undefined
+    : {
+        unit: currentUnits().of(q),
+        ...(q.calendar ? { calendar: q.calendar } : {}),
+        titles: [q.name],
+      };
+
+/** The units of a datum value: of the quantity it was read from; undefined
+ *  for a literal, which makes no claim. */
+export const valueUnits = (v: MaybeValue<unknown>): UnitRecord | undefined =>
+  quantityUnits(getQuantity(v));
+
+/** The units of an ordinal axis grouped by `field`: a title, no unit. */
+export const titleUnits = (
+  field: string | undefined
+): UnitRecord | undefined =>
+  field === undefined ? undefined : { titles: [field] };
 
 /**
- * The error for two different measures on one axis. It is raised where the
- * measures meet, which knows the axis index but not the axis's name (`x`,
- * `y`, or a coordinate space's own name such as `r`). The node whose type
- * hook raised it names the axis from where it sits in the tree
- * ({@link MeasureClash.named}) before it reaches the user.
+ * THE join of two unit records that meet on one axis, in every composition
+ * (overlays, alignments, spreads, stacks, coords, a layer's datum domain, a
+ * rect's two ends, a `position` offset). An absent record makes no claim and
+ * yields the other side. `shared` says whether the two sides share the axis:
+ *
+ * | Meeting              | shared                         | not shared        |
+ * | -------------------- | ------------------------------ | ----------------- |
+ * | declared A, A        | one unit A                     | one unit A        |
+ * | declared A, B        | {@link MeasureClash} (to #528) | two units, forget |
+ * | declared A, unknown x| x is bound to A                | forget            |
+ * | unknown x, x         | one unit                       | one unit          |
+ * | unknown x, y         | x and y unify                  | forget            |
+ *
+ * A binding holds for the whole render, so an unknown bound to two
+ * different declared units is a {@link MeasureClash} too. "Forget" records
+ * nothing and raises nothing: the result keeps `a`'s record. A shared join
+ * unions the titles. Either way the calendars must agree: one axis reads one
+ * calendar.
  */
-export class MeasureClash extends Error {
-  constructor(
-    readonly a: Measure,
-    readonly b: Measure,
-    readonly site: MeasureSite,
-    readonly axisName?: string
-  ) {
-    super(MeasureClash.message(a, b, site, axisName));
-    this.name = "MeasureClash";
-  }
+export const joinUnits = (
+  a: UnitRecord | undefined,
+  b: UnitRecord | undefined,
+  shared: boolean,
+  site: MeasureSite
+): UnitRecord | undefined => {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  const calendar = joinCalendars(a.calendar, b.calendar);
+  const withCalendar = (r: UnitRecord): UnitRecord => {
+    const { calendar: _, ...rest } = r;
+    return calendar === undefined ? rest : { ...rest, calendar };
+  };
+  if (!shared) return withCalendar(a);
+  const unit =
+    a.unit && b.unit ? unify(a.unit, b.unit, site) : (a.unit ?? b.unit);
+  const titles = [...a.titles];
+  for (const t of b.titles) if (!titles.includes(t)) titles.push(t);
+  return withCalendar({ ...(unit !== undefined ? { unit } : {}), titles });
+};
 
-  /** This clash with its axis named, or itself when it has no axis or is
-   *  already named. */
-  named(name: (axis: 0 | 1) => string): MeasureClash {
-    return this.site.axis === undefined || this.axisName !== undefined
-      ? this
-      : new MeasureClash(this.a, this.b, this.site, name(this.site.axis));
-  }
+/** {@link joinUnits} folded over a list. */
+export const joinAllUnits = (
+  records: (UnitRecord | undefined)[],
+  shared: boolean,
+  site: MeasureSite
+): UnitRecord | undefined =>
+  records.reduce<UnitRecord | undefined>(
+    (acc, r) => joinUnits(acc, r, shared, site),
+    undefined
+  );
 
-  static message(
-    a: Measure,
-    b: Measure,
-    site: MeasureSite,
-    axisName: string | undefined
-  ): string {
-    const subject =
-      site.axis === undefined
-        ? "This chart combines"
-        : `The ${axisName ?? (site.axis === 0 ? "x" : "y")} axis combines`;
-    return (
-      `${subject} two different measures, "${a}" and "${b}" (${site.where}). ` +
-      `One axis can show only one measure.\n` +
-      `If both are the same kind of quantity, give them the same measure, ` +
-      `e.g. if both are dollars, field("${a}", "dollars") and ` +
-      `field("${b}", "dollars"). To title the axis, use the axes option ` +
-      `(its title).\n` +
-      `If they are different kinds of quantity, each needs its own axis: ` +
-      `give the inner chart its own w and h so it scales on its own.`
+/** The calendar of one axis: the one its time parts share. A part with no
+ *  calendar (a literal among times) makes no claim. Two parts on different
+ *  zones are an error: one axis reads one calendar. */
+const joinCalendars = (
+  a: HasCalendar | undefined,
+  b: HasCalendar | undefined
+): HasCalendar | undefined => {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  if (a.zone !== b.zone) {
+    throw new Error(
+      `Two time columns on one axis are read in different time zones, ` +
+        `"${a.zone}" and "${b.zone}". One axis reads one calendar: give ` +
+        `both columns the same zone in Schema.time({ zone }).`
     );
   }
-}
-
-/**
- * Like {@link mergeMeasures}, but a conflict *forgets* (returns undefined)
- * instead of throwing. Used only for ORDINAL axes, whose measure is the
- * grouping field that names a category axis: categories set up no σ, so two
- * grouping fields on one axis lose the name, not the scale.
- */
-const forgetOnConflict = (
-  a: Measure | undefined,
-  b: Measure | undefined
-): Measure | undefined => {
-  if (a === undefined) return b;
-  if (b === undefined) return a;
-  return a === b ? a : undefined;
+  return a;
 };
 
-/** Fold an array of measures with a pairwise merge. */
-const foldMeasures = (
-  ms: (Measure | undefined)[],
-  merge: (a: Measure | undefined, b: Measure | undefined) => Measure | undefined
-): Measure | undefined => ms.reduce(merge, undefined);
+/** A space's {@link UnitRecord} as {@link spaceUnit} reads it: the unit
+ *  replaced by its representative in the render's union-find. */
+export type SpaceUnits = {
+  unit?: Unit;
+  calendar?: HasCalendar;
+  titles: string[];
+};
 
 /**
- * Fold an array of measures with {@link mergeMeasures} (throws on a real
- * conflict). The array form of the pairwise unify-as-types guard.
+ * THE accessor for a space's units: its record with the unit replaced by its
+ * union-find representative (a declared unit, or the unknown its class
+ * stands for), or undefined for a space with none (an UNDEFINED space, or
+ * one over literals). Anything that asks which domain a space is in, which
+ * calendar it reads, or what titles it, reads it here. Read it after the
+ * type walk, when every binding is made.
  */
-export const mergeAllMeasures = (
-  ms: (Measure | undefined)[],
-  site: MeasureSite
-): Measure | undefined =>
-  foldMeasures(ms, (acc, m) => mergeMeasures(acc, m, site));
+export const spaceUnit = (
+  space: UnderlyingSpace | undefined
+): SpaceUnits | undefined => {
+  const r =
+    space && (isCONTINUOUS(space) || isORDINAL(space))
+      ? space.measure
+      : undefined;
+  if (r === undefined) return undefined;
+  const { unit, ...rest } = r;
+  return unit === undefined ? rest : { ...rest, unit: resolveUnit(unit) };
+};
 
-/**
- * Fold an array of measures with {@link forgetOnConflict} (a conflict forgets
- * to undefined). The array form of the permissive composition merge.
- */
-export const forgetAllMeasures = (
-  ms: (Measure | undefined)[]
-): Measure | undefined => foldMeasures(ms, forgetOnConflict);
+/** The calendar of a space's axis, when its data are instants. */
+export const spaceCalendar = (
+  space: UnderlyingSpace | undefined
+): HasCalendar | undefined => spaceUnit(space)?.calendar;
+
+/** The title a space gives its axis: its titles (column names), joined. */
+export const spaceTitle = (
+  space: UnderlyingSpace | undefined
+): string | undefined => {
+  const titles = spaceUnit(space)?.titles;
+  return titles === undefined || titles.length === 0
+    ? undefined
+    : titles.join(", ");
+};

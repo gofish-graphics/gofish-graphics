@@ -101,16 +101,15 @@ factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumBy`
 vs `meanBy`, imported through lodash's per-helper entrypoints so this path is
 safe under native ESM). Both take an optional third argument, the accessor's
 resolved column (`ColumnInfo`, from `resolveColumn(data, accessor)`): its
-`Measure` and its type in the chart's `schema`. A string/`field()` accessor's
-produced value is tagged with its unit-of-measure so the underlying-space
-layer can unify scales per measure (see
+`Quantity` and its type in the chart's `schema`. A string/`field()` accessor's
+produced value is tagged with its quantity so the underlying-space
+layer can unify units and title axes (see
 [Underlying Space](/internals/core/underlying-space)). When the caller doesn't
 pass a column (e.g. `createMark`'s size channel), the inferer resolves it
-locally from `data`. The measure comes from `resolveMeasure` — explicit
-`field(name, measure)` annotation, else the column's unit (`HasUnit`) in the
-column types riding the data array (`bin()` tags its output), else the field
-name as a weak default; a contradictory annotation-vs-unit pair throws at the
-channel.
+locally from `data`. The quantity comes from `resolveQuantity`: named by the
+column (or by its source column, `HasUnit.quantity`, which `bin()` writes),
+in the column's declared unit (`HasUnit.unit`, or an instant for a time
+column), else in an unknown unit.
 `createOperator` hoists `resolveColumn` to once per channel and passes the
 result down, since the accessor and what the data carries are loop-invariant
 across split entries. A value read from a column with a type also records

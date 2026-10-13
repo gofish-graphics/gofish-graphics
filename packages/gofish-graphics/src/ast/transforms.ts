@@ -1,5 +1,6 @@
 import { bin as d3bin } from "d3-array";
-import { setColumnTypes } from "./schema";
+import { columnType, setColumnTypes, type HasUnit } from "./schema";
+import { COUNT } from "./measure";
 
 type BinResult = { start: number; end: number; size: number; count: number };
 
@@ -35,17 +36,22 @@ function runBin<T extends Record<string, any>>(
     size: b.end - b.start,
     count: b.rows.length,
   }));
-  // Units (`HasUnit`): `start`/`end`/`size` are still in the SOURCE field's
-  // units (e.g. "Beak Length (mm)"), not the literal column-name "start";
-  // `count` is a count. The column types ride the array (not each row) so
-  // they survive `derive(...)`, letting channel inference unify a histogram's
-  // edges with the raw field's axis instead of seeing a false measure
-  // conflict (see resolveMeasure).
+  // Units (`HasUnit`): `start`/`end`/`size` are amounts of the SOURCE
+  // column's quantity (e.g. "Beak Length (mm)", not the column name
+  // "start"), in the source's unit: its declared unit, or else its unit
+  // variable, which the quantity names. So the edges title their axis as the
+  // source does and unify with it. `count` is a count. The column types ride
+  // the array (not each row) so they survive `derive(...)`.
+  const source = columnType(data, field)?.HasUnit;
+  const edge: HasUnit = {
+    ...(source?.unit !== undefined ? { unit: source.unit } : {}),
+    quantity: source?.quantity ?? field,
+  };
   return setColumnTypes(result, {
-    start: { HasUnit: { unit: field } },
-    end: { HasUnit: { unit: field } },
-    size: { HasUnit: { unit: field } },
-    count: { HasUnit: { unit: "count" } },
+    start: { HasUnit: edge },
+    end: { HasUnit: edge },
+    size: { HasUnit: edge },
+    count: { HasUnit: { unit: COUNT } },
   });
 }
 

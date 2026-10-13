@@ -19,7 +19,10 @@ import { coord } from "../ast/coordinateTransforms/coord";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { Rect } from "../ast/shapes/rect";
 import { Ellipse } from "../ast/shapes/ellipse";
-import { value, baseEmbedded } from "../ast/data";
+import { DatumValueImpl, baseEmbedded } from "../ast/data";
+
+/** A data value read from column `name`, i.e. an amount of that quantity. */
+const q = (v: number, name: string) => new DatumValueImpl(v, { name });
 
 let passed = 0;
 let failed = 0;
@@ -49,18 +52,18 @@ async function embedOf(
   return [dims?.[0]?.embedded, dims?.[1]?.embedded];
 }
 
-console.log("# embedding: baseEmbedded predicate (measure-free half)");
+console.log("# embedding: baseEmbedded predicate (coord-free half)");
 {
-  ok("data size embeds", baseEmbedded({ size: value(5, "amount") }) === true);
+  ok("data size embeds", baseEmbedded({ size: q(5, "amount") }) === true);
   ok("pixel (number) size does not embed", baseEmbedded({ size: 10 }) === false);
   ok("unsized embeds (nest-growth case)", baseEmbedded({}) === true);
   ok(
     "min in a clashing measure blocks embed",
-    baseEmbedded({ size: value(5, "pop"), min: value(2, "amount") }) === false
+    baseEmbedded({ size: q(5, "pop"), min: q(2, "amount") }) === false
   );
   ok(
     "min in the same measure still embeds",
-    baseEmbedded({ size: value(5, "amount"), min: value(2, "amount") }) === true
+    baseEmbedded({ size: q(5, "amount"), min: q(2, "amount") }) === true
   );
 }
 
@@ -69,7 +72,7 @@ console.log("# embedding: Route B in context");
   // Cartesian bar: pixel width, data height → line (bar). No coord, no gate.
   ok(
     "cartesian bar: x ink, y embedded",
-    JSON.stringify(await embedOf(Rect({ w: 10, h: value(5, "amount") }))) ===
+    JSON.stringify(await embedOf(Rect({ w: 10, h: q(5, "amount") }))) ===
       JSON.stringify([false, true])
   );
 
@@ -79,7 +82,7 @@ console.log("# embedding: Route B in context");
     JSON.stringify(
       await embedOf(
         coord({ transform: polar() }, [
-          Rect({ w: value(3, "amount"), h: value(5, "amount") }),
+          Rect({ w: q(3, "amount"), h: q(5, "amount") }),
         ]),
         [0]
       )
@@ -95,10 +98,10 @@ console.log("# embedding: Route B in context");
       await embedOf(
         coord({ transform: polar() }, [
           Ellipse({
-            w: value(5, "pop"),
-            h: value(5, "pop"),
-            cx: value(2, "amount"),
-            cy: value(3, "amount"),
+            w: q(5, "pop"),
+            h: q(5, "pop"),
+            cx: q(2, "amount"),
+            cy: q(3, "amount"),
           }),
         ]),
         [0]
@@ -114,10 +117,10 @@ console.log("# embedding: Route B in context");
     JSON.stringify(
       await embedOf(
         Ellipse({
-          w: value(5, "pop"),
-          h: value(5, "pop"),
-          cx: value(2, "amount"),
-          cy: value(3, "amount"),
+          w: q(5, "pop"),
+          h: q(5, "pop"),
+          cx: q(2, "amount"),
+          cy: q(3, "amount"),
         })
       )
     ) === JSON.stringify([true, true])
@@ -130,10 +133,10 @@ console.log("# embedding: Route B in context");
       await embedOf(
         coord({ transform: polar() }, [
           Rect({
-            w: value(5, "pop"),
-            h: value(5, "pop"),
-            cx: value(2, "amount"),
-            cy: value(3, "amount"),
+            w: q(5, "pop"),
+            h: q(5, "pop"),
+            cx: q(2, "amount"),
+            cy: q(3, "amount"),
             emX: true,
             emY: true,
           }),

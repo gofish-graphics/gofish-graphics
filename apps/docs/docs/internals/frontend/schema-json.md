@@ -249,7 +249,7 @@ for the API.
       }
     },
     "FieldAccessor": {
-      "description": "Explicit field-accessor form, emitted by field(name, measure?). Optionally carries a chained pipeline (ops) — field(\"site\").sort(\"yield\") or field(\"count\").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator's entry-flagged size channel, normalize.",
+      "description": "Explicit field-accessor form, emitted by field(name). Optionally carries a chained pipeline (ops) — field(\"site\").sort(\"yield\") or field(\"count\").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator's entry-flagged size channel, normalize.",
       "type": "object",
       "required": ["type", "name"],
       "properties": {
@@ -258,10 +258,6 @@ for the API.
         },
         "name": {
           "type": "string"
-        },
-        "measure": {
-          "type": "string",
-          "description": "Optional unit annotation for the channel's underlying space (a type claim; see field(name, measure))."
         },
         "ops": {
           "type": "array",
@@ -500,9 +496,6 @@ for the API.
                     "const": "datum"
                   },
                   "datum": {},
-                  "measure": {
-                    "type": "string"
-                  },
                   "offset": {
                     "$ref": "#/$defs/Number"
                   },
@@ -785,9 +778,6 @@ for the API.
               "const": "datum"
             },
             "datum": {},
-            "measure": {
-              "type": "string"
-            },
             "offset": {
               "$ref": "#/$defs/Number",
               "description": "Pixel offset applied after the datum maps through its scale (datum(v) + px)."

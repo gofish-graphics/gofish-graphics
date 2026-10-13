@@ -106,57 +106,44 @@ derive(lambda d: normalize(d, "count"))
 - Because it round-trips to Python, a `derive` step is a callback, not a static
   transform; it re-runs whenever the chart re-renders.
 
-## Measures: keeping units across a transform
+## Units: keeping axes shared across a transform
 
-A channel that encodes a field carries that field's **measure** — its
-unit-of-measure, like `"Beak Depth (mm)"` or `"count"`. GoFish uses measures to
-decide when two axes may share a scale: overlaying or aligning marks whose axes
-have the _same_ measure merges their domains, while mixing _different_ measures
-(say, a count axis with a millimeter axis) is refused with an error rather than
-silently corrupting the shared domain.
+A channel that encodes a column carries the column's **unit**. GoFish uses
+units to decide when two axes may share a scale. A column with no declared
+unit has an unknown unit, which shares an axis with any column, so the
+columns a `derive` computes (`lo`, `hi`, a box plot's quartiles) share an
+axis with no annotation. Two different declared units on one axis are an
+error. See [`Schema.unit`](/python/api/core/schema).
 
-By default the measure is just the field name, which is usually right. A
-built-in transform like `bin()` declares the measure of its output columns —
-the bin edges `start`/`end` are still in the source field's units, not the
-literal column names — and that **provenance now travels in the operator's IR
-across the bridge**, so a binned histogram's edges auto-unify on the source
-axis with no annotation:
+A built-in transform like `bin()` types its output columns: the bin edges
+`start`/`end` are amounts of the source column, not of the columns "start"
+and "end", so they title their axis as the source does and share its unit.
+Those types travel in the operator's IR across the bridge:
 
 ```python
 from gofish import bin, chart, derive, rect, scatter
 
-# bin edges auto-tag as "Beak Length (mm)" — no field(..., measure=...) needed:
+# The x axis is titled "Beak Length (mm)", with no annotation:
 chart(penguins, h=80).flow(
     derive(bin("Beak Length (mm)")),
     scatter(x_min="start", x_max="end"),
 ).mark(rect(h="count"))
 ```
 
-Your **own** `derive` lambda is opaque to GoFish — once it returns new columns,
-GoFish only knows their names, not their units. When such a derived column is
-really in some existing unit and its axis should share with that unit's axis,
-annotate the channel with `field(name, measure=...)`:
+Your **own** `derive` lambda can declare the unit of a column it makes with
+its `schema`:
 
 ```python
-from gofish import chart, derive, field, rect, scatter
+from gofish import Schema, derive
 
-chart(data, h=80).flow(
-    derive(my_transform),  # renames a length column to "lo"/"hi"
-    scatter(x_min=field("lo", measure="Beak Length (mm)"),
-            x_max=field("hi", measure="Beak Length (mm)")),
-).mark(rect(h="count"))
+derive(quartiles, schema={"lo": Schema.unit("USD"), "hi": Schema.unit("USD")})
 ```
 
-`datum(v)` values can carry a measure the same way on the JS side.
+An axis is titled by the names of its columns, never by a unit.
 
-If you hit **"Cannot unify underlying spaces with different measures"**, you
-have two remedies:
+If an axis combines two different units, you have two remedies:
 
-1. If the units really are the same, say so with `field(name, measure=...)` so
-   the axes collapse to one measure and merge.
+1. If the units really are the same, declare the same unit for both columns.
 2. If the units really differ, give the inner chart an explicit `w`/`h`
    (`chart(data, h=80)`) so it becomes a self-contained scale region and never
    shares that axis.
-
-An annotation that contradicts known provenance is itself an error — measures
-are type claims, and two contradictory claims fail fast at the channel.

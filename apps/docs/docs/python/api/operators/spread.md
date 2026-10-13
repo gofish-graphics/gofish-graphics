@@ -202,9 +202,8 @@ chart(data).flow(
 ).mark(rect(h=field("weight").mean()))
 ```
 
-`.count()` and `.distinct()` report measure `"count"` (they're counts, not the
-source field's own units) unless you annotate the accessor explicitly:
-`field("id", measure="my-measure").distinct()`.
+`.count()` and `.distinct()` are in the unit `"count"` (they're counts, not the
+source field's own units).
 
 ## Space-filling spines (mosaic / marimekko) {#space-filling-spines-mosaic-marimekko}
 

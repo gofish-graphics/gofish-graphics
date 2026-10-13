@@ -1895,12 +1895,12 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
 
     A transform may declare the column types of its output by setting
     `_gofish_column_types` on the callable (e.g. `bin`, whose `start`/`end`
-    columns carry the source field's unit, ``HasUnit``). They go into the
-    operator's ``schema`` so the JS side types the rows after the RPC; a
-    ``schema`` entry for the same column replaces the transform's, since a
-    schema entry is a column's whole type. This is what lets
-    `derive(bin("X"))` produce `start`/`end` edges that unify on X's axis
-    without an explicit `field(name, measure=...)`.
+    columns are amounts of the source field's quantity, ``HasUnit``). They go
+    into the operator's ``schema`` so the JS side types the rows after the
+    RPC; a ``schema`` entry for the same column replaces the transform's,
+    since a schema entry is a column's whole type. This is what lets
+    `derive(bin("X"))` produce `start`/`end` edges that title their axis "X"
+    and take X's unit.
     """
     column_types = getattr(fn, "_gofish_column_types", None)
     if column_types:
@@ -2274,6 +2274,19 @@ class Schema:
             )
         return ColumnSchema({"HasCalendar": {"zone": zone}})
 
+    @staticmethod
+    def unit(unit: str) -> ColumnSchema:
+        """A column whose values are amounts in the unit ``unit``
+        (``HasUnit``), an opaque name such as ``"USD"`` or ``"mm"``.
+
+        Columns in the same unit may share an axis; two different units on
+        one axis are an error. A column with no unit declared may share an
+        axis with any other.
+        """
+        if not isinstance(unit, str):
+            raise TypeError(f"Schema.unit: unit must be a string, got {unit!r}")
+        return ColumnSchema({"HasUnit": {"unit": unit}})
+
 
 # Calendar partitions
 
@@ -2624,7 +2637,7 @@ def datum(value: Any) -> DatumValue:
 
 class FieldAccessor(dict):
     """
-    The `{type: "field", name, measure?, ops?}` wire shape, as a dict
+    The `{type: "field", name, ops?}` wire shape, as a dict
     subclass so `field(name)` supports the same chainable pipeline syntax as
     JS's `FieldExpr` (`ast/fieldExpr.ts`) — a Polars-column-expression-style
     builder where each method returns a NEW accessor with one more op
@@ -2788,45 +2801,28 @@ def filter(
     )
 
 
-def field(name: str, measure: Optional[str] = None) -> FieldAccessor:
+def field(name: str) -> FieldAccessor:
     """
     Explicit field-accessor wrapper. Mirrors the JS `field(...)` constructor
     in `packages/gofish-graphics/src/ast/data.ts` (the field/datum/literal
-    trichotomy). Equivalent to passing a bare field-name string, plus an
-    optional **measure annotation** — a unit-of-measure type claim for the
-    channel (see the underlying-space measure system).
+    trichotomy). Equivalent to passing a bare field-name string. Use it when
+    a field name could be read as a literal, or to chain a pipeline.
 
-    Use the measure annotation when YOUR OWN derive transform has renamed
-    fields so the weak field-name default would mis-tag the channel — e.g. a
-    lambda that renames a length column to "lo"/"hi":
+    A column's unit is declared in the chart's schema
+    (``Schema.unit("USD")``), not here. A column with no declared unit may
+    share an axis with any other.
 
-        scatter(
-            x_min=field("lo", measure="Beak Length (mm)"),
-            x_max=field("hi", measure="Beak Length (mm)"),
-        )
-
-    Built-in transforms like `bin()` declare the units of their output
-    columns, which travel in the derive operator's ``schema`` (see `derive`),
-    so a binned
-    histogram's `start`/`end` edges auto-tag with the source field's units — no
-    explicit annotation needed.
-
-    The returned `FieldAccessor` is also chainable, mirroring JS's
+    The returned `FieldAccessor` is chainable, mirroring JS's
     `field(...)` pipeline syntax — `field("site").sort("yield")` as an
     operator's `by`, or `field("count").normalize()` as a `spread`/`stack`
     `size` channel (see `FieldAccessor` for the full method list).
 
-    Emits the canonical `{type: "field", name, measure?, ops?}` wire shape; an
-    annotation that contradicts the column's known unit is a type error.
+    Emits the canonical `{type: "field", name, ops?}` wire shape.
 
     Args:
         name: The field name to read from each row.
-        measure: Optional unit-of-measure annotation for the channel.
     """
-    out = FieldAccessor({"type": "field", "name": name})
-    if measure is not None:
-        out["measure"] = measure
-    return out
+    return FieldAccessor({"type": "field", "name": name})
 
 
 # Data utilities (for use inside derive() callbacks)

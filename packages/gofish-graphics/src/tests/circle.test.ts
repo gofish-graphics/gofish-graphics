@@ -33,12 +33,12 @@ function check(name: string, ok: boolean, detail?: string): void {
 }
 
 /** The size the built ellipse asks for on each axis: a number (pixels) or a
- *  data value `{ datum, measure }`. */
+ *  data value `{ datum, measure }` (`measure`: its quantity's name). */
 const sizesOf = async (mark: any, rows: unknown) => {
   const node = await mark(rows);
   return node.args.dims.map((d: any) =>
     d.size !== null && typeof d.size === "object"
-      ? { datum: d.size.datum, measure: d.size.measure }
+      ? { datum: d.size.datum, measure: d.size.quantity?.name }
       : d.size
   );
 };

@@ -108,28 +108,28 @@ Per-operator overrides use the same shape on
 chart(data, axes=True).flow(spread(by="species", dir="x", axes={"x": True, "y": False}))
 ```
 
-## Equal scale from a shared measure
+## Equal scale from a shared unit
 
 By default each axis resolves its data→pixel scale independently, so a circle in
-data space becomes an ellipse. But when **x and y are the same unit of measure**,
+data space becomes an ellipse. But when **x and y are in the same unit**,
 their scales must be equal — a circle stays circular. GoFish does this from the
-**measure**, not a knob: tag both channels with the same measure via
-`field(name, measure)` and the shared scale follows.
+**unit**, not a knob: declare both columns in the same unit with
+[`Schema.unit`](/python/api/core/schema) and the shared scale follows.
 
 ```python
 (
-    chart(data)
-    .flow(scatter(x=field("x", "plane"), y=field("y", "plane")))
+    chart(data, schema={"x": Schema.unit("plane"), "y": Schema.unit("plane")})
+    .flow(scatter(x="x", y="y"))
     .mark(circle(r=4))
     .render(w=640, h=380)  # a true circle, not an ellipse
 )
 ```
 
 This is the same rule the `circle` mark obeys one level down: `circle(r=...)`
-lowers to a `w` and `h` that share a measure, so it can never distort. The
+lowers to a `w` and `h` that share a unit, so it can never distort. The
 binding axis fills its dimension; the other centers in the leftover space.
-Tagging the two axes the same is a unit claim — different measures (e.g.
-`bill_length` vs `bill_depth`, both mm) stay independent.
+Two columns with no declared unit (e.g. `bill_length` vs `bill_depth`) stay
+independent.
 
 ## The builder
 
