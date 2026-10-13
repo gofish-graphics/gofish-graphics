@@ -199,8 +199,8 @@ const recompute = (draft: boolean) => {
   };
   setTimeout(() => step(0), 0);
 };
-// A dataset whose draft still takes longer than SLOW_MS (the penguins: the routing around ~200
-// avoided points dominates, and it does not depend on the grid) is redrawn on release only.
+// A safety net only: a dataset whose draft takes longer than SLOW_MS is redrawn on release only.
+// Every current dataset drafts in well under 100 ms, so none of them hits it.
 const SLOW_MS = 500;
 const lastMs: Record<string, number> = {};
 const schedule = (draft: boolean) => {

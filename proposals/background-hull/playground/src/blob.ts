@@ -119,8 +119,36 @@ const bboxOf = (poly: Poly) => {
     ys = poly.map((p) => p[1]);
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
 };
+/** A polygon's bounding box and winding sign, computed once per polygon. */
+const polyInfoMemo = new WeakMap<Poly, { bb: number[]; sg: number }>();
+const polyInfo = (poly: Poly) => {
+  let v = polyInfoMemo.get(poly);
+  if (!v) {
+    let area2 = 0;
+    for (let i = 0; i < poly.length; i++)
+      area2 += cross([0, 0], poly[i], poly[(i + 1) % poly.length]);
+    polyInfoMemo.set(poly, (v = { bb: bboxOf(poly), sg: area2 > 0 ? 1 : -1 }));
+  }
+  return v;
+};
+/** Is p inside polygon `poly`? The same as inPoly, with a bounding-box test first. */
+const inPolyFast = (p: Pt, poly: Poly) => {
+  const { bb } = polyInfo(poly);
+  return (
+    p[0] >= bb[0] - 1e-6 &&
+    p[0] <= bb[2] + 1e-6 &&
+    p[1] >= bb[1] - 1e-6 &&
+    p[1] <= bb[3] + 1e-6 &&
+    inPoly(p, poly)
+  );
+};
 /** Does segment ab pass through the interior of convex polygon `poly`? (Cyrus–Beck clipping) */
-const segHitsPoly = (a: Pt, b: Pt, poly: Poly, bb = bboxOf(poly)) => {
+const segHitsPoly = (
+  a: Pt,
+  b: Pt,
+  poly: Poly,
+  { bb, sg: sgn } = polyInfo(poly)
+) => {
   if (
     Math.max(a[0], b[0]) < bb[0] ||
     Math.min(a[0], b[0]) > bb[2] ||
@@ -128,10 +156,6 @@ const segHitsPoly = (a: Pt, b: Pt, poly: Poly, bb = bboxOf(poly)) => {
     Math.min(a[1], b[1]) > bb[3]
   )
     return false;
-  let area2 = 0;
-  for (let i = 0; i < poly.length; i++)
-    area2 += cross([0, 0], poly[i], poly[(i + 1) % poly.length]);
-  const sgn = area2 > 0 ? 1 : -1;
   let t0 = 0,
     t1 = 1;
   const d: Pt = [b[0] - a[0], b[1] - a[1]];
@@ -152,12 +176,100 @@ const segHitsPoly = (a: Pt, b: Pt, poly: Poly, bb = bboxOf(poly)) => {
   }
   return (t1 - t0) * Math.hypot(d[0], d[1]) > 1e-3;
 };
+type Obstacle = { o: Poly; bb: number[]; sg: number };
+/** A uniform grid over convex obstacles' bounding boxes, about one obstacle per cell, so a segment
+ *  is tested only against the obstacles in the cells it crosses. `hits(p, q)`: does pq pass through
+ *  any obstacle? `buried(v, k)`: is v more than 0.01 px inside an obstacle other than the k-th? */
+const obstacleGrid = (obs: Obstacle[]) => {
+  let X0 = Infinity,
+    Y0 = Infinity,
+    X1 = -Infinity,
+    Y1 = -Infinity,
+    size = 0;
+  for (const { bb } of obs) {
+    X0 = Math.min(X0, bb[0]);
+    Y0 = Math.min(Y0, bb[1]);
+    X1 = Math.max(X1, bb[2]);
+    Y1 = Math.max(Y1, bb[3]);
+    size += Math.max(bb[2] - bb[0], bb[3] - bb[1]);
+  }
+  const g = Math.max(size / obs.length, (X1 - X0) / 64, (Y1 - Y0) / 64, 1e-6);
+  const nx = Math.floor((X1 - X0) / g) + 1,
+    ny = Math.floor((Y1 - Y0) / g) + 1;
+  const cx = (x: number) =>
+    Math.max(0, Math.min(nx - 1, Math.floor((x - X0) / g)));
+  const cy = (y: number) =>
+    Math.max(0, Math.min(ny - 1, Math.floor((y - Y0) / g)));
+  const cells: number[][] = Array.from({ length: nx * ny }, () => []);
+  obs.forEach(({ bb }, k) => {
+    for (let j = cy(bb[1]); j <= cy(bb[3]); j++)
+      for (let i = cx(bb[0]); i <= cx(bb[2]); i++) cells[j * nx + i].push(k);
+  });
+  const stamp = new Int32Array(obs.length);
+  let gen = 0;
+  const hits = (p: Pt, q: Pt) => {
+    const xa = Math.min(p[0], q[0]),
+      xb = Math.max(p[0], q[0]),
+      ya = Math.min(p[1], q[1]),
+      yb = Math.max(p[1], q[1]);
+    if (xb < X0 || xa > X1 || yb < Y0 || ya > Y1) return false;
+    gen++;
+    const dy = q[1] - p[1];
+    for (let j = cy(ya); j <= cy(yb); j++) {
+      // the segment's x-range within row j, widened by a cell on each side against rounding
+      let lo = xa,
+        hi = xb;
+      if (dy !== 0) {
+        const s0 = (Y0 + j * g - p[1]) / dy,
+          s1 = (Y0 + (j + 1) * g - p[1]) / dy;
+        const ta = Math.max(0, Math.min(s0, s1)),
+          tb = Math.min(1, Math.max(s0, s1));
+        const xA = p[0] + ta * (q[0] - p[0]),
+          xB = p[0] + tb * (q[0] - p[0]);
+        lo = Math.min(xA, xB);
+        hi = Math.max(xA, xB);
+      }
+      for (
+        let i = Math.max(0, cx(lo) - 1);
+        i <= Math.min(nx - 1, cx(hi) + 1);
+        i++
+      )
+        for (const k of cells[j * nx + i]) {
+          if (stamp[k] === gen) continue;
+          stamp[k] = gen;
+          if (segHitsPoly(p, q, obs[k].o, obs[k])) return true;
+        }
+    }
+    return false;
+  };
+  const deep = (v: Pt, { o, sg }: Obstacle) => {
+    for (let i = 0; i < o.length; i++) {
+      const p = o[i],
+        q = o[(i + 1) % o.length];
+      if ((sg * cross(p, q, v)) / (dist(p, q) || 1) <= 0.01) return false;
+    }
+    return true;
+  };
+  const buried = (v: Pt, k: number) =>
+    cells[cy(v[1]) * nx + cx(v[0])].some((j) => {
+      const n = obs[j];
+      return (
+        j !== k &&
+        v[0] > n.bb[0] &&
+        v[0] < n.bb[2] &&
+        v[1] > n.bb[1] &&
+        v[1] < n.bb[3] &&
+        deep(v, n)
+      );
+    });
+  return { hits, buried };
+};
 /** Shortest route from a to b around convex obstacles (visibility graph + Dijkstra),
  *  using only obstacles near the straight segment (a local search, for speed). */
 const routeAround = (a: Pt, b: Pt, allObstacles: Poly[]): Pt[] | null => {
   const M = Math.max(40, dist(a, b) * 0.6);
   const near = allObstacles
-    .map((o) => ({ o, bb: bboxOf(o) }))
+    .map((o) => ({ o, ...polyInfo(o) }))
     .filter(
       ({ bb }) =>
         bb[2] > Math.min(a[0], b[0]) - M &&
@@ -165,39 +277,14 @@ const routeAround = (a: Pt, b: Pt, allObstacles: Poly[]): Pt[] | null => {
         bb[3] > Math.min(a[1], b[1]) - M &&
         bb[1] < Math.max(a[1], b[1]) + M
     );
-  const blocked = (p: Pt, q: Pt) =>
-    near.some(({ o, bb }) => segHitsPoly(p, q, o, bb));
-  if (!blocked(a, b)) return [a, b];
-  // [playground] drop vertices buried inside another obstacle (see port.mjs; same routes)
-  const deepInside = (v: Pt, poly: Poly) => {
-    let s2 = 0;
-    for (let i = 0; i < poly.length; i++)
-      s2 += cross([0, 0], poly[i], poly[(i + 1) % poly.length]);
-    const sg = s2 > 0 ? 1 : -1;
-    for (let i = 0; i < poly.length; i++) {
-      const p = poly[i],
-        q = poly[(i + 1) % poly.length];
-      if ((sg * cross(p, q, v)) / (dist(p, q) || 1) <= 0.01) return false;
-    }
-    return true;
-  };
+  if (!near.some((n) => segHitsPoly(a, b, n.o, n))) return [a, b];
+  const grid = obstacleGrid(near);
+  // A vertex more than 0.01 px inside another obstacle can never be on a route: every segment
+  // from it runs that far through the obstacle, which counts as blocked. So it is left out.
   const pts: Pt[] = [
     a,
     b,
-    ...near.flatMap(({ o, bb }, k) =>
-      o.filter(
-        (v) =>
-          !near.some(
-            (n, j) =>
-              j !== k &&
-              v[0] > n.bb[0] &&
-              v[0] < n.bb[2] &&
-              v[1] > n.bb[1] &&
-              v[1] < n.bb[3] &&
-              deepInside(v, n.o)
-          )
-      )
-    ),
+    ...near.flatMap(({ o }, k) => o.filter((v) => !grid.buried(v, k))),
   ];
   const n = pts.length,
     D = new Array(n).fill(Infinity),
@@ -212,7 +299,7 @@ const routeAround = (a: Pt, b: Pt, allObstacles: Poly[]): Pt[] | null => {
     for (let v = 0; v < n; v++) {
       if (done[v]) continue;
       const d = D[u] + dist(pts[u], pts[v]);
-      if (d < D[v] && !blocked(pts[u], pts[v])) {
+      if (d < D[v] && !grid.hits(pts[u], pts[v])) {
         D[v] = d;
         prev[v] = u;
       }
@@ -223,6 +310,9 @@ const routeAround = (a: Pt, b: Pt, allObstacles: Poly[]): Pt[] | null => {
   for (let v = 1; v >= 0; v = prev[v]) path.unshift(pts[v]);
   return path;
 };
+/** Is the straight segment ab clear of every obstacle? (exactly when routeAround returns [a, b]) */
+const clearOf = (a: Pt, b: Pt, obstacles: Poly[]) =>
+  !obstacles.some((o) => segHitsPoly(a, b, o));
 const polyLen = (p: Pt[]) =>
   p.slice(1).reduce((s, q, i) => s + dist(p[i], q), 0);
 
@@ -468,13 +558,29 @@ const bisect = (g: (a: number) => number, lo: number, hi: number) => {
   return (lo + hi) / 2;
 };
 /** Disc radius whose blurred level 1/2 lands at radius R (also a hole's cut radius for clearance R). */
-const discComp = (R: number, s: number) =>
-  s <= 0 ? R : bisect((a) => discBlur(R, a, s) - 0.5, R, R + 4 * s);
+/** Remember a slow pure function of two numbers (the compensations below: a bisection over a
+ *  numeric integral, asked again and again for the same few radii). */
+const remember = (fn: (a: number, b: number) => number) => {
+  const seen = new Map<string, number>();
+  return (a: number, b: number) => {
+    const key = `${a},${b}`;
+    let v = seen.get(key);
+    if (v === undefined) {
+      if (seen.size > 4096) seen.clear();
+      seen.set(key, (v = fn(a, b)));
+    }
+    return v;
+  };
+};
+const discComp = remember((R: number, s: number) =>
+  s <= 0 ? R : bisect((a) => discBlur(R, a, s) - 0.5, R, R + 4 * s)
+);
 /** Tube half-width whose blurred level 1/2 lands at half-width h. */
-const tubeComp = (h: number, s: number) =>
+const tubeComp = remember((h: number, s: number) =>
   s <= 0
     ? h
-    : bisect((a) => Phi((a - h) / s) - Phi((-a - h) / s) - 0.5, h, h + 4 * s);
+    : bisect((a) => Phi((a - h) / s) - Phi((-a - h) / s) - 0.5, h, h + 4 * s)
+);
 
 type Field = {
   I: Float64Array;
@@ -485,6 +591,25 @@ type Field = {
   res: number;
   sigma: number;
   z: number;
+};
+/** Where each row of a grid is nonzero: its first and last nonzero column (computed once per grid). */
+const rowSpanMemo = new WeakMap<
+  Float64Array,
+  { lo: Int32Array; hi: Int32Array }
+>();
+const rowSpans = (I: Float64Array, W: number, H: number) => {
+  let sp = rowSpanMemo.get(I);
+  if (!sp) {
+    sp = { lo: new Int32Array(H).fill(W), hi: new Int32Array(H).fill(-1) };
+    for (let j = 0; j < H; j++)
+      for (let i = 0; i < W; i++)
+        if (I[j * W + i] !== 0) {
+          if (sp.lo[j] === W) sp.lo[j] = i;
+          sp.hi[j] = i;
+        }
+    rowSpanMemo.set(I, sp);
+  }
+  return sp;
 };
 /** The blurred field and its derivatives at (x, y): [B, Bx, By, Bxx, Bxy, Byy]. */
 const fieldJet = (fd: Field, x: number, y: number): number[] => {
@@ -497,7 +622,8 @@ const fieldJet = (fd: Field, x: number, y: number): number[] => {
   const j0 = Math.max(0, Math.floor(fy) - rad),
     j1 = Math.min(H - 1, Math.ceil(fy) + rad);
   const s2 = s * s,
-    nx = i1 - i0 + 1;
+    nx = i1 - i0 + 1,
+    span = rowSpans(I, W, H);
   const g = new Float64Array(nx),
     g1 = new Float64Array(nx),
     g2 = new Float64Array(nx);
@@ -524,7 +650,12 @@ const fieldJet = (fd: Field, x: number, y: number): number[] => {
       S1 = 0,
       S2 = 0;
     const row = j * W;
-    for (let i = i0; i <= i1; i++) {
+    // (zeros add nothing, so each row runs over its nonzero span only)
+    for (
+      let i = Math.max(i0, span.lo[j]), last = Math.min(i1, span.hi[j]);
+      i <= last;
+      i++
+    ) {
       const v = I[row + i];
       if (v === 0) continue;
       S0 += v * g[i - i0];
@@ -582,7 +713,11 @@ const project = (fd: Field, p: Pt, level = 0.5): Pt => {
   }
   return [x, y];
 };
-/** Separable Gaussian blur of a grid, normalized so a constant stays constant. */
+/** Separable Gaussian blur of a grid of values in [0, 1], normalized so a constant stays constant.
+ *  For speed, a window of zeros gives 0 and a whole window of ones gives 1 without summing, and
+ *  a sum skips the zeros at either end of its window. The result is the plain weighted sum, bit
+ *  for bit: adding a zero changes nothing, and a window of ones adds up the weights in the same
+ *  order as their total z. */
 const gaussBlur = (
   A: Float64Array,
   W: number,
@@ -594,22 +729,50 @@ const gaussBlur = (
   for (let i = -rad; i <= rad; i++)
     k[i + rad] = Math.exp(-(i * i) / (2 * sigmaCells * sigmaCells));
   const z = k.reduce((a, b) => a + b, 0);
+  const N = Math.max(W, H),
+    nonzero = new Int32Array(N + 1),
+    nonone = new Int32Array(N + 1);
+  const nextNZ = new Int32Array(N),
+    prevNZ = new Int32Array(N);
+  /** Blur one line of n values from src into dst. */
+  const line = (src: Float64Array, dst: Float64Array, n: number) => {
+    for (let t = 0; t < n; t++) {
+      nonzero[t + 1] = nonzero[t] + (src[t] !== 0 ? 1 : 0);
+      nonone[t + 1] = nonone[t] + (src[t] !== 1 ? 1 : 0);
+    }
+    for (let t = n - 1, nx = n; t >= 0; t--)
+      nextNZ[t] = nx = src[t] !== 0 ? t : nx;
+    for (let t = 0, pv = -1; t < n; t++) prevNZ[t] = pv = src[t] !== 0 ? t : pv;
+    for (let t = 0; t < n; t++) {
+      const lo = Math.max(-rad, -t),
+        hi = Math.min(rad, n - 1 - t),
+        a = t + lo,
+        e = t + hi;
+      if (nonzero[e + 1] === nonzero[a]) {
+        dst[t] = 0;
+        continue;
+      }
+      if (lo === -rad && hi === rad && nonone[e + 1] === nonone[a]) {
+        dst[t] = 1;
+        continue;
+      }
+      let s = 0;
+      for (let u = nextNZ[a], last = prevNZ[e]; u <= last; u++)
+        s += src[u] * k[u - t + rad];
+      dst[t] = s / z;
+    }
+  };
   const tmp = new Float64Array(W * H),
     out = new Float64Array(W * H);
   for (let j = 0; j < H; j++)
-    for (let i = 0; i < W; i++) {
-      let s = 0;
-      for (let q = Math.max(-rad, -i); q <= Math.min(rad, W - 1 - i); q++)
-        s += A[j * W + i + q] * k[q + rad];
-      tmp[j * W + i] = s / z;
-    }
-  for (let j = 0; j < H; j++)
-    for (let i = 0; i < W; i++) {
-      let s = 0;
-      for (let q = Math.max(-rad, -j); q <= Math.min(rad, H - 1 - j); q++)
-        s += tmp[(j + q) * W + i] * k[q + rad];
-      out[j * W + i] = s / z;
-    }
+    line(A.subarray(j * W, (j + 1) * W), tmp.subarray(j * W, (j + 1) * W), W);
+  const col = new Float64Array(H),
+    colOut = new Float64Array(H);
+  for (let i = 0; i < W; i++) {
+    for (let j = 0; j < H; j++) col[j] = tmp[j * W + i];
+    line(col, colOut, H);
+    for (let j = 0; j < H; j++) out[j * W + i] = colOut[j];
+  }
   return { out, z };
 };
 const triDist = (p: Pt, q: Pt[]) =>
@@ -760,7 +923,21 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
   for (const [i, j, l] of tri) {
     const q = [P[i], P[j], P[l]];
     if (circumR(q[0], q[1], q[2]) > alpha) continue;
-    if (others.some((mm) => triDist(centerOf(mm), q) < keep(mm))) continue;
+    const tb = bboxOf(q);
+    if (
+      others.some((mm) => {
+        const c = centerOf(mm),
+          r = keep(mm) + 1e-6; // (an avoided node beyond the box's reach is skipped)
+        return (
+          c[0] > tb[0] - r &&
+          c[0] < tb[2] + r &&
+          c[1] > tb[1] - r &&
+          c[1] < tb[3] + r &&
+          triDist(c, q) < keep(mm)
+        );
+      })
+    )
+      continue;
     faces.push(q);
     [ek(i, j), ek(j, l), ek(l, i)].forEach((e) => faceEdges.add(e));
   }
@@ -772,18 +949,15 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
           32
         )
       : convexHull(samples(mm, clearance + grow));
-  const obstacleCache = new Map<number, Pt[][]>(); // [playground]
-  const obstaclesAt = (h: number) => {
-    let v = obstacleCache.get(h);
-    if (!v) obstacleCache.set(h, (v = others.map((mm) => obstacle(mm, h))));
-    return v;
+  // the keep-out polygons depend only on the tube half-width, so they are built once per width
+  const byWidth = new Map<number, Poly[]>();
+  const obstaclesFor = (p: Pt, q: Pt, h: number) => {
+    let all = byWidth.get(h);
+    if (!all) byWidth.set(h, (all = others.map((mm) => obstacle(mm, h))));
+    return all.filter((poly) => !inPolyFast(p, poly) && !inPolyFast(q, poly));
   };
   const routeFor = (p: Pt, q: Pt, h: number) =>
-    routeAround(
-      p,
-      q,
-      obstaclesAt(h).filter((poly) => !inPoly(p, poly) && !inPoly(q, poly))
-    ); // [playground] memoized, see port.mjs
+    routeAround(p, q, obstaclesFor(p, q, h));
   const links: { route: Pt[]; h: number }[] = [];
   // spanning-tree candidates, between members: a face edge as drawn, else the routed closest-point link
   const mk = (a: number, b: number) => (a < b ? `${a},${b}` : `${b},${a}`);
@@ -814,9 +988,12 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
             });
       continue;
     }
-    const route = routeFor(P[i], P[j], hw(i, j));
-    if (route && route.length === 2 && dist(P[i], P[j]) / 2 <= alpha)
-      links.push({ route, h: hw(i, j) });
+    // a short candidate joins as drawn when nothing blocks it (it is never rerouted)
+    if (
+      dist(P[i], P[j]) / 2 <= alpha &&
+      clearOf(P[i], P[j], obstaclesFor(P[i], P[j], hw(i, j)))
+    )
+      links.push({ route: [P[i], P[j]], h: hw(i, j) });
   }
   const pairs = new Set<string>();
   for (const [i, j] of cand.values())
@@ -833,26 +1010,65 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
     if (mm.kind === "segment")
       for (let b = 0; b < nm; b++) if (b !== a) pairs.add(mk(a, b));
   });
+  // A pair's link is routed only when the spanning tree reaches it: until then its straight
+  // length stands in, a lower bound on the routed length (lazy Kruskal; ties keep their order).
+  type Link = {
+    a: number;
+    b: number;
+    len: number;
+    order: number;
+    route?: Pt[];
+    h?: number;
+    ends?: [Pt, Pt];
+  };
+  const queue: Link[] = [...routed.values()].map((e, order) => ({
+    ...e,
+    order,
+  }));
   for (const key of pairs) {
     if (routed.has(key)) continue;
     const [a, b] = key.split(",").map(Number),
-      [p, q] = closestPair(members[a], members[b]);
-    if (dist(p, q) < 0.5) {
-      routed.set(key, { a, b, route: [p, q], len: 0 });
-      continue;
-    }
-    const h = neck * Math.min(radiusAt(p), radiusAt(q)),
-      route = routeFor(p, q, h);
-    if (route) routed.set(key, { a, b, route, len: polyLen(route), h });
+      [p, q] = closestPair(members[a], members[b]),
+      order = queue.length;
+    if (dist(p, q) < 0.5) queue.push({ a, b, route: [p, q], len: 0, order });
+    else
+      queue.push({
+        a,
+        b,
+        len: dist(p, q),
+        order,
+        ends: [p, q],
+        h: neck * Math.min(radiusAt(p), radiusAt(q)),
+      });
   }
+  const before = (x: Link, y: Link) =>
+    x.len < y.len || (x.len === y.len && x.order < y.order);
+  queue.sort((x, y) => x.len - y.len || x.order - y.order);
   // the spanning tree over routed links keeps the set in one piece (members that touch join for free)
   const r2 = members.map((_, k) => k);
   const f2 = (k: number): number => (r2[k] === k ? k : (r2[k] = f2(r2[k])));
-  for (const e of [...routed.values()].sort((x, y) => x.len - y.len))
-    if (f2(e.a) !== f2(e.b)) {
-      r2[f2(e.a)] = f2(e.b);
-      if (e.len > 0) links.push({ route: e.route, h: e.h ?? hm(e.a, e.b) });
+  while (queue.length) {
+    const e = queue.shift()!;
+    if (f2(e.a) === f2(e.b)) continue;
+    if (e.ends) {
+      const route = routeFor(e.ends[0], e.ends[1], e.h!);
+      if (!route) continue;
+      const done: Link = {
+        a: e.a,
+        b: e.b,
+        route,
+        len: polyLen(route),
+        order: e.order,
+        h: e.h,
+      };
+      let at = 0;
+      while (at < queue.length && before(queue[at], done)) at++;
+      queue.splice(at, 0, done);
+      continue;
     }
+    r2[f2(e.a)] = f2(e.b);
+    if (e.len > 0) links.push({ route: e.route!, h: e.h ?? hm(e.a, e.b) });
+  }
   for (const [a, b] of o.via ?? []) {
     const i = P.findIndex((q) => dist(a, q) < 0.5),
       j = P.findIndex((q) => dist(b, q) < 0.5);
@@ -965,6 +1181,12 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
     y0 = bb[1] - M;
   const W = Math.ceil((bb[2] - bb[0] + 2 * M) / res) + 1,
     H = Math.ceil((bb[3] - bb[1] + 2 * M) / res) + 1;
+  // Once a cell is "settled", how far inside it is is never read, so the remaining pieces skip it.
+  // With a closing (s > 0) that is any cell within s of the union: the closing replaces its value.
+  // Without one, it is a cell more than two cells deep. Every piece's value changes by at most one
+  // cell per cell, so the outline can pass beside such a cell only where a keep-out zone cuts in,
+  // and there the cut's value replaces it.
+  const settled = s > 0 ? s : -2 * res;
   const f = new Float64Array(W * H).fill(1e9);
   for (const p of pieces) {
     const i0 = Math.max(0, Math.floor((p.bb[0] - s - 3 - x0) / res)),
@@ -973,8 +1195,9 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
       j1 = Math.min(H - 1, Math.ceil((p.bb[3] + s + 3 - y0) / res));
     for (let j = j0; j <= j1; j++)
       for (let i = i0; i <= i1; i++) {
-        const v = p.d(x0 + i * res, y0 + j * res),
-          k = j * W + i;
+        const k = j * W + i;
+        if (f[k] <= settled) continue;
+        const v = p.d(x0 + i * res, y0 + j * res);
         if (v < f[k]) f[k] = v;
       }
   }

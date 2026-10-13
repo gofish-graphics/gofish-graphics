@@ -30,49 +30,6 @@ for (const [start, stop] of BLOCKS) {
   while (e > a && /^(\/\*\*| \*|\/\/|\s*$)/.test(src[e - 1])) e--; // drop the next definition's comment
   out.push(...src.slice(a, e), "");
 }
-// The one change, for speed, with identical output. routeAround's visibility graph uses
-// every vertex of every nearby obstacle. A vertex lying deeper than 0.01 px inside another
-// obstacle can never be on a route: every segment ending there runs at least 0.01 px through
-// that obstacle's interior, which segHitsPoly reports as blocked (its threshold is 0.001 px).
-// Dropping those vertices up front leaves every route unchanged and makes dense data (the
-// penguins: ~200 overlapping keep-out zones per species) about an order of magnitude faster.
-const ROUTE_FROM = "  const pts: Pt[] = [a, b, ...near.flatMap(({ o }) => o)];";
-const ROUTE_TO = `  // [playground] drop vertices buried inside another obstacle (see port.mjs; same routes)
-  const deepInside = (v: Pt, poly: Poly) => {
-    let s2 = 0;
-    for (let i = 0; i < poly.length; i++) s2 += cross([0, 0], poly[i], poly[(i + 1) % poly.length]);
-    const sg = s2 > 0 ? 1 : -1;
-    for (let i = 0; i < poly.length; i++) {
-      const p = poly[i], q = poly[(i + 1) % poly.length];
-      if ((sg * cross(p, q, v)) / (dist(p, q) || 1) <= 0.01) return false;
-    }
-    return true;
-  };
-  const pts: Pt[] = [a, b, ...near.flatMap(({ o, bb }, k) => o.filter((v) => !near.some((n, j) => j !== k &&
-    v[0] > n.bb[0] && v[0] < n.bb[2] && v[1] > n.bb[1] && v[1] < n.bb[3] && deepInside(v, n.o))))];`;
-const at = out.indexOf(ROUTE_FROM);
-if (at < 0)
-  throw new Error("routeAround's vertex list moved; update ROUTE_FROM");
-out[at] = ROUTE_TO;
-
-// Second speedup, also identical output: skeleton's routeFor rebuilt every avoided node's
-// obstacle polygon on every call; the polygons depend only on the tube half-width h, so they
-// are built once per h.
-const OBST_FROM =
-  "    routeAround(p, q, others.map((mm) => obstacle(mm, h)).filter((poly) => !inPoly(p, poly) && !inPoly(q, poly)));";
-const OBST_TO =
-  "    routeAround(p, q, obstaclesAt(h).filter((poly) => !inPoly(p, poly) && !inPoly(q, poly))); // [playground] memoized, see port.mjs";
-const ob = out.indexOf(OBST_FROM);
-if (ob < 0 || !out[ob - 1].startsWith("  const routeFor = "))
-  throw new Error("routeFor moved; update OBST_FROM");
-out[ob] = OBST_TO;
-out.splice(
-  ob - 1,
-  0,
-  "  const obstacleCache = new Map<number, Pt[][]>(); // [playground]",
-  "  const obstaclesAt = (h: number) => { let v = obstacleCache.get(h); if (!v) obstacleCache.set(h, (v = others.map((mm) => obstacle(mm, h)))); return v; };"
-);
-
 out.push(
   "export { smoothBlob, signedArea, loopArea, discPoly, centerOf, memberRadius, dist };",
   "export type { Pt, Member, SmoothOpts, Smooth, Skeleton };",
