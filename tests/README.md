@@ -196,7 +196,7 @@ Stories with `derive()` (and lambda accessors and mark functions) use a Python H
 
 ### Sync enforcement
 
-`pnpm test:visual:check-sync` checks that when a JS story changes in a PR, the corresponding Python story is also updated. Stories listed in `tests/.python-sync-exempt` are excluded.
+`pnpm test:visual:check-sync` checks that when a JS story changes in a PR, the corresponding Python story is also updated. Stories listed in `tests/.python-sync-exempt` are excluded: a whole file, or one export (`file::Export`), in which case a change confined to exempt exports needs no Python update.
 
 ## Directory Structure
 
