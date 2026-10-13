@@ -393,13 +393,15 @@ export type AxisOptions =
 
 /** A Calendar value's wire form (`Calendar.month.every(3)` is
  *  `{ kind: "month", step: 3 }`): a calendar level, its `kind`, at a step.
- *  Only a week has a `start`, its first day. The kinds of the `CALENDAR`
- *  family in descriptors.ts. */
+ *  Only a week and a weekday have a `start`, the first day of the week, and
+ *  a weekday has no `step`. The kinds of the `CALENDAR` family in
+ *  descriptors.ts. */
 export type CalendarPartitionIR =
   | {
       kind: "second" | "minute" | "hour" | "day" | "month" | "quarter" | "year";
       step?: number;
     }
+  | { kind: "weekday"; start?: "monday" | "sunday" }
   | { kind: "week"; step?: number; start?: "monday" | "sunday" };
 
 export interface TableOperator

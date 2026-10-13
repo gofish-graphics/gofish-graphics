@@ -2860,6 +2860,20 @@ for the API.
           "type": "object",
           "properties": {
             "kind": {
+              "const": "weekday"
+            },
+            "start": {
+              "enum": ["monday", "sunday"],
+              "description": "The first day of a week. Monday is the ISO 8601 default.",
+              "default": "monday"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
               "const": "week"
             },
             "step": {
@@ -3108,6 +3122,20 @@ for the API.
               "minimum": 1,
               "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
               "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "weekday"
+            },
+            "start": {
+              "enum": ["monday", "sunday"],
+              "description": "The first day of a week. Monday is the ISO 8601 default.",
+              "default": "monday"
             }
           },
           "required": ["kind"]

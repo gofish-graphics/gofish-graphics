@@ -750,6 +750,13 @@ const calendarStep: FieldSpec = {
   doc: "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
 };
 
+/** The first day of a week, for a week or a day of the week. */
+const weekStart: FieldSpec = {
+  type: t.enum("monday", "sunday"),
+  default: "monday",
+  doc: "The first day of a week. Monday is the ISO 8601 default.",
+};
+
 /** A Calendar kind whose only param is its step. */
 const calendarKind = (doc: string): StrategyKind => ({
   doc,
@@ -777,16 +784,13 @@ export const CALENDAR = {
     minute: calendarKind("Cells of a minute."),
     hour: calendarKind("Cells of an hour."),
     day: calendarKind("Cells of a day, from local midnight."),
+    weekday: {
+      doc: "Cells of a day, labeled by the day of the week. Binned alone, a part of a week: the seven days of the week, from its first day, so all Mondays are one cell. It has no steps.",
+      params: { start: weekStart },
+    },
     week: {
       doc: "Cells of a week, from its first day.",
-      params: {
-        step: calendarStep,
-        start: {
-          type: t.enum("monday", "sunday"),
-          default: "monday",
-          doc: "The first day of a week. Monday is the ISO 8601 default.",
-        },
-      },
+      params: { step: calendarStep, start: weekStart },
     },
     month: calendarKind("Cells of a month, from its first day."),
     quarter: calendarKind(

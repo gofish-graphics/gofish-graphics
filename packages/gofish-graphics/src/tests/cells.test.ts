@@ -318,6 +318,184 @@ async function main() {
     );
   }
 
+  console.log("\n# Calendar.weekday: a day of the week");
+  {
+    const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
+    // 2024-01-01 was a Monday.
+    const twoWeeks = [t("2024-01-01"), t("2024-01-03"), t("2024-01-08")];
+    const days = binCells(Calendar.weekday, twoWeeks, "UTC", "t");
+    const labels = (cs: any): string[] => cs.cells.map((c) => c.label);
+    check(
+      "a weekday alone gives the 7 days of the week, from Monday",
+      same(labels(days), ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) &&
+        days.cells.every((c) => c instanceof CycleCell),
+      labels(days).join(" ")
+    );
+    const mon = days.cells[0] as CycleCell;
+    check(
+      "a weekday is a part of a week; its id is the ISO day of the week",
+      mon.cycle.of === "week" &&
+        mon.cycle.cells.length === 7 &&
+        same(
+          days.cells.map((c) => c.id),
+          ["1", "2", "3", "4", "5", "6", "7"]
+        )
+    );
+    check(
+      "the Mondays of two weeks pool into one cell",
+      days.cellOf(t("2024-01-01")) === days.cellOf(t("2024-01-08")) &&
+        days.cellOf(t("2024-01-03"))?.label === "Wed"
+    );
+    const sunday = binCells(
+      Calendar.weekday({ start: "sunday" }),
+      twoWeeks,
+      "UTC",
+      "t"
+    );
+    check(
+      'Calendar.weekday({ start: "sunday" }) orders the days from Sunday',
+      same(labels(sunday), [
+        "Sun",
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+      ]) &&
+        sunday.cells[0].id === "7" &&
+        sunday.cellOf(t("2024-01-01"))?.label === "Mon",
+      labels(sunday).join(" ")
+    );
+    const fields: any[] = [];
+    binCells(
+      Calendar.weekday.format((c) => (fields.push(c), `${c.weekday}`)),
+      twoWeeks,
+      "UTC",
+      "t"
+    );
+    check(
+      "a weekday's format reads the ISO weekday; it has no day or month",
+      fields.length === 7 &&
+        same(
+          fields.map((f) => f.weekday),
+          [1, 2, 3, 4, 5, 6, 7]
+        ) &&
+        Number.isNaN(fields[0].day) &&
+        Number.isNaN(fields[0].month) &&
+        Number.isNaN(fields[0].start)
+    );
+    const monthFields: any[] = [];
+    binCells(
+      Calendar.month.format((c) => (monthFields.push(c), "")),
+      twoWeeks,
+      "UTC",
+      "t"
+    );
+    check(
+      "a month of the year has no weekday",
+      Number.isNaN(monthFields[0].weekday)
+    );
+    const line = binCells(Calendar.week, twoWeeks, "UTC", "t").cells as Cell[];
+    check(
+      "a line cell's fields carry its ISO weekday",
+      (line[0].calendar?.fields as any).weekday === 1
+    );
+    check(
+      "a weekday has no steps",
+      errorOf(() => Calendar.weekday.every(2))?.includes("has no steps") ===
+        true
+    );
+    check(
+      "a weekday's wire form has a start and no step",
+      same(Calendar.weekday, { kind: "weekday", start: "monday" }) &&
+        same(Calendar.weekday({ start: "sunday" }), {
+          kind: "weekday",
+          start: "sunday",
+        }) &&
+        checkPartition({ kind: "weekday", start: "sunday" }, "w").start ===
+          "sunday"
+    );
+    check(
+      "a weekday step on the wire is a loud error",
+      errorOf(() =>
+        checkPartition({ kind: "weekday", step: 2 } as any, "w")
+      )?.includes("w.step") === true,
+      errorOf(() => checkPartition({ kind: "weekday", step: 2 } as any, "w"))
+    );
+
+    // Products and chains: a weekday is a part of a week (with the same
+    // start), and a weekday is a day, so an hour is a part of it.
+    const weekDays = binCells(
+      [Calendar.week, Calendar.weekday],
+      [t("2024-01-01"), t("2024-01-09")],
+      "UTC",
+      "t"
+    );
+    check(
+      "[Calendar.week, Calendar.weekday]: each day, labeled by both",
+      weekDays.cells.length === 9 &&
+        weekDays.cells.every((c) => c instanceof Cell) &&
+        weekDays.cells[0].label === "Mon, Jan 1",
+      labels(weekDays).slice(0, 3).join(" | ")
+    );
+    const mismatch = errorOf(() =>
+      checkBinStep(
+        [Calendar.week({ start: "sunday" }), Calendar.weekday],
+        "by"
+      )
+    );
+    check(
+      "a weekday of a week that starts on another day is an error",
+      mismatch?.includes("Give both the same start") === true,
+      mismatch
+    );
+    check(
+      "a weekday is a part of a week only: [Calendar.month, Calendar.weekday] is an error",
+      errorOf(() =>
+        checkBinStep([Calendar.month, Calendar.weekday], "by")
+      )?.includes("is a part of a week, not of a month") === true
+    );
+    const weekHours = binCells(
+      [Calendar.weekday, Calendar.hour],
+      twoWeeks,
+      "UTC",
+      "t"
+    );
+    check(
+      "[Calendar.weekday, Calendar.hour]: the 168 hours of the week",
+      weekHours.cells.length === 168 &&
+        weekHours.cells[0].label === "Mon 12 AM" &&
+        weekHours.cellOf(t("2024-01-08"))?.id === "1-0",
+      String(weekHours.cells.length) + " " + weekHours.cells[0]?.label
+    );
+    const chainHours = chainCells(
+      [Calendar.weekday, Calendar.hour],
+      twoWeeks,
+      "UTC",
+      "t"
+    );
+    check(
+      ".bin(Calendar.weekday).bin(Calendar.hour): the hours of each weekday",
+      chainHours.cells.length === 168 &&
+        (chainHours.cells[25] as CycleCell).parent?.label === "Tue" &&
+        chainHours.cells[25].label === "1 AM",
+      chainHours.cells[25]?.label
+    );
+    const weekChain = chainCells(
+      [Calendar.week, Calendar.weekday],
+      [t("2024-01-01"), t("2024-01-09")],
+      "UTC",
+      "t"
+    );
+    check(
+      ".bin(Calendar.week).bin(Calendar.weekday): the days of each week",
+      weekChain.cells.length === 9 &&
+        weekChain.cells[7].label === "Mon" &&
+        (weekChain.cells[7] as Cell).parent?.label === "Jan 8"
+    );
+  }
+
   console.log("\n# a product: one cell where its levels meet");
   {
     const t = (s: string) => Date.parse(`${s}T00:00:00Z`);

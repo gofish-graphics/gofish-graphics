@@ -1,7 +1,7 @@
 # Calendar
 
 Partitions of the time line into calendar cells: seconds, minutes, hours,
-days, weeks, months, quarters and years, over a time column (see
+days, days of the week, weeks, months, quarters and years, over a time column (see
 [`Schema.time`](/python/api/core/schema)). A Calendar value has two uses. It
 bins a time column's rows into cells, as the partition of
 [`field(name).bin(...)`](/python/api/operators/spread#field-expression-pipeline).
@@ -27,6 +27,8 @@ Calendar.second
 Calendar.minute
 Calendar.hour
 Calendar.day
+Calendar.weekday                 # the day of the week, from Monday
+Calendar.weekday(start="sunday")
 Calendar.week                    # weeks start on Monday
 Calendar.week(start="sunday")
 Calendar.month
@@ -36,6 +38,7 @@ Calendar.year
 Calendar.month.every(3)          # cells of 3 months
 
 field("date").bin(Calendar.month)                    # the month of the year
+field("date").bin(Calendar.weekday)                  # the day of the week
 field("date").bin([Calendar.year, Calendar.month])   # each month of each year
 field("date").bin(Calendar.year).bin(Calendar.month) # the months of each year
 axes={"x": {"levels": [Calendar.month, Calendar.year]}}
@@ -43,13 +46,14 @@ axes={"x": {"levels": [Calendar.month, Calendar.year]}}
 
 ## Parameters
 
-| Parameter | Type                   | Description                                                                              |
-| --------- | ---------------------- | ---------------------------------------------------------------------------------------- |
-| `n`       | `int`                  | `.every(n)`: how many units one cell spans. A whole number, 1 or more. Default `1`.      |
-| `start`   | `"monday" \| "sunday"` | `Calendar.week(start=...)`: the first day of a week. Default `"monday"`, as in ISO 8601. |
+| Parameter | Type                   | Description                                                                                                             |
+| --------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `n`       | `int`                  | `.every(n)`: how many units one cell spans. A whole number, 1 or more. Default `1`.                                     |
+| `start`   | `"monday" \| "sunday"` | `Calendar.week(start=...)`, `Calendar.weekday(start=...)`: the first day of a week. Default `"monday"`, as in ISO 8601. |
 
 A Calendar value is a dict, its wire form: `Calendar.month.every(3)` is
-`{"kind": "month", "step": 3}`. Custom labels (`.format(fn)` in JS) are
+`{"kind": "month", "step": 3}`, and `Calendar.weekday` is
+`{"kind": "weekday", "start": "monday"}`, with no step. Custom labels (`.format(fn)` in JS) are
 JS-only: a function has no wire form.
 
 ## Behavior
@@ -66,6 +70,8 @@ JS-only: a function has no wire form.
   `Calendar.year.every(5)` starts on years divisible by 5. Weeks count from
   the week of 1970-01-01.
 - `Calendar.quarter` is months in steps of 3, labeled `Q1` to `Q4`.
+- `Calendar.weekday` is days, labeled by the day of the week (`Mon`). It has
+  no steps: `Calendar.weekday.every(n)` is an error.
 
 **Bins.**
 
@@ -79,13 +85,16 @@ JS-only: a function has no wire form.
   | `Calendar.minute`  | the 60 minutes of an hour  | `00` to `59`           |
   | `Calendar.hour`    | the 24 hours of a day      | `12 AM` to `11 PM`     |
   | `Calendar.day`     | the 31 days of a month     | `1` to `31`            |
+  | `Calendar.weekday` | the 7 days of a week       | `Mon` to `Sun`         |
   | `Calendar.month`   | the 12 months of a year    | `Jan` to `Dec`         |
   | `Calendar.quarter` | the 4 quarters of a year   | `Q1` to `Q4`           |
   | `Calendar.week`    | weeks on the time line     | its first day, `Jan 1` |
   | `Calendar.year`    | years on the time line     | `2024`                 |
 
-  A week is a part of nothing (weeks do not nest in months or years), and
-  nothing holds a year, so they stay on the time line. A step counts from
+  A weekday's days start on the week's first day: with
+  `Calendar.weekday(start="sunday")` they are `Sun` to `Sat`. A week is a
+  part of nothing (weeks do not nest in months or years), and nothing holds
+  a year, so they stay on the time line. A step counts from
   the level above: `Calendar.month.every(3)` alone is 4 cells, starting in
   January, April, July and October.
 
@@ -98,6 +107,10 @@ JS-only: a function has no wire form.
   region on the time line. With a first level that is a part,
   `[Calendar.month, Calendar.day]`, the cells are the parts of a cycle (the
   366 days of a year).
+- A weekday is a part of a week that starts on the same day, so
+  `[Calendar.week, Calendar.weekday]` is each day, labeled `Mon, Jan 1`. A
+  weekday is a day, so an hour is a part of it:
+  `[Calendar.weekday, Calendar.hour]` is the 168 hours of a week.
 - A second `.bin(...)` splits each cell of the first, a chain:
   `.bin(Calendar.year).bin(Calendar.month)` gives the months of each year.
   On the time line, the next bin must be finer, and a cell it shares with
@@ -107,8 +120,9 @@ JS-only: a function has no wire form.
   key shows one level per bin (a month level, then a year level).
 - A product's levels must be in order, at a step of 1 before the last:
   `[Calendar.year, Calendar.day]` is an error (a day is a part of a month),
-  and so are `[Calendar.month]` and a numeric bin. A chain whose next bin
-  is not finer is an error.
+  and so are `[Calendar.month]`, a numeric bin, and a weekday of a week
+  that starts on another day. A chain whose next bin is not finer is an
+  error.
 - A part of a cycle has no one region on the time line, so
   [`partition`](/python/api/operators/partition) over one is an error that
   names the product and the chain.
@@ -135,8 +149,8 @@ JS-only: a function has no wire form.
   seconds and minutes (1, 5, 15, 30), hours (1, 3, 6, 12), days (1, 2),
   months (1, 2, 3), and years (1, 2, 5, 10, 20, 50, ...). The
   outer row is the inner row's parent: minutes for seconds, hours for
-  minutes, days for hours, months for days and weeks, years for months and
-  quarters. Year has no parent, so a year row is the only row.
+  minutes, days for hours, months for days and weeks, weeks for weekdays
+  (with the same first day), years for months and quarters. Year has no parent, so a year row is the only row.
 - In `"levels"`, a Calendar value names a row's partition, and the outer
   row follows the inner row as named. `False` hides a row: its ticks and
   labels are not drawn, and the domain is still rounded to the inner row's
@@ -145,7 +159,7 @@ JS-only: a function has no wire form.
 - A domain of one instant spans the day that holds it.
 - Default labels come from `Intl.DateTimeFormat` in English (`en-US`),
   whatever the browser's locale: `12 AM` for an hour, `Feb 29` for a day or
-  week, `Jan` for a month, `2024` for a year. A locale option is
+  week, `Mon` for a weekday, `Jan` for a month, `2024` for a year. A locale option is
   [#1098](https://github.com/gofish-graphics/gofish-graphics/issues/1098).
 - `"label_angle"` does not rotate the labels of a time axis.
 - In a faceted chart, the rows of the time axes inside the facets are the

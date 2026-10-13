@@ -234,7 +234,8 @@ it instead), and a Calendar value names its cells: a time row's partition
 (`timeRows` in `elaborate.tsx`), or, on an ordinal axis over cells of time,
 the cells that group its slots (`calendarLevel`: each slot's cell of the
 partition, read off a timeline cell's start, or off a part of a cycle's cell
-in the reference cycle, `CycleCell.ref`). An axis with no axis above it on
+in the reference cycle, `CycleCell.ref`; a part of a week is grouped only by
+a weekday that starts the week on the same day). An axis with no axis above it on
 its dim (`hasOuterAxis` reads the ancestors' still-set `axis` flags) also
 takes the Calendar entries past its inferred levels, as more levels. An entry
 that cannot apply records an issue, and `layout` raises the first one, or an

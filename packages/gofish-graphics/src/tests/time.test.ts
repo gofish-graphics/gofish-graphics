@@ -753,6 +753,12 @@ async function main() {
       monthStart
     );
     check(
+      "a weekday takes a start on the wire",
+      calendarPartition({ kind: "weekday", start: "sunday" }, "w").start ===
+        "sunday" &&
+        calendarPartition({ kind: "weekday" }, "w").start === "monday"
+    );
+    check(
       "a valid wire week start is read",
       calendarPartition({ kind: "week", step: 1, start: "sunday" }, "w")
         .start === "sunday"
@@ -951,6 +957,23 @@ async function main() {
       .flow(scatter({ by: "date", x: "date", y: "price" }))
       .mark(line())
       .toDisplayList({ w: 560, h: 200 });
+    const weekDl = await chart(prices.slice(0, 10), {
+      schema: { date: Schema.time() },
+      axes: { x: { title: false, levels: [DistCalendar.weekday] }, y: false },
+    })
+      .flow(scatter({ by: "date", x: "date", y: "price" }))
+      .mark(line())
+      .toDisplayList({ w: 560, h: 200 });
+    const weekWords = textsOf(weekDl).map((t) => t.text);
+    check(
+      "a weekday level labels each day of a time axis by its weekday, " +
+        "with its week below",
+      // 2023-11-01 was a Wednesday; its week starts on Monday, Oct 30.
+      same(weekWords.slice(0, 3), ["Wed", "Thu", "Fri"]) &&
+        weekWords.includes("Oct 30") &&
+        weekWords.includes("Nov 6"),
+      weekWords.join(" ")
+    );
     const texts = textsOf(dl);
     const words = texts.map((t) => t.text);
     check(

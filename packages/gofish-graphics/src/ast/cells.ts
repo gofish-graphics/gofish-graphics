@@ -365,7 +365,20 @@ const partExample = (unit: CalendarUnit): string =>
     day: "Calendar.hour",
     hour: "Calendar.minute",
     minute: "Calendar.second",
+    week: "Calendar.weekday",
+    weekday: "Calendar.hour",
   })[unit as string] ?? "none: nothing is a part of it";
+
+/** Why `next` is not a part of `prev` ({@link CalendarPartition.hasPart}),
+ *  for error messages: a part of another level, or a weekday of a week
+ *  that starts on another day. */
+const notAPart = (prev: CalendarPartition, next: CalendarPartition): string =>
+  next.cycle === prev.unit
+    ? `${String(next)} is a part of a week that starts on ${next.start}, and ` +
+      `${String(prev)} starts on ${prev.start}. Give both the same start.`
+    : `${String(next)} is a part of a ${next.cycle}, not of a ${prev.unit}. ` +
+      `To split each ${prev.unit} into ${next.unit}s, chain the bins: ` +
+      `.bin(${String(prev)}).bin(${String(next)}).`;
 
 /** Whether `p`, binned alone or first in a product, gives parts of a
  *  cycle rather than cells of the line: a calendar level that is a part of a
@@ -425,12 +438,10 @@ function checkProduct(list: readonly unknown[], where: string): Product {
           `not nest in months or years, and nothing holds a year), so it ` +
           `can only come first in a product.`
       );
-    if (next.cycle !== prev.unit)
+    if (!prev.hasPart(next))
       throw new Error(
         `${at(i)}: each level of a product after the first is a part of the ` +
-          `one before it, but ${String(next)} is a part of a ${next.cycle}, ` +
-          `not of a ${prev.unit}. To split each ${prev.unit} into ` +
-          `${next.unit}s, chain the bins: .bin(${String(prev)}).bin(${String(next)}).`
+          `one before it, but ${notAPart(prev, next)}`
       );
     if (prev.step !== 1)
       throw new Error(
@@ -482,7 +493,7 @@ export function checkChain(steps: readonly BinStep[], where: string): void {
       if (
         !(p instanceof CalendarPartition) ||
         !(prev instanceof CalendarPartition) ||
-        p.cycle !== prev.unit ||
+        !prev.hasPart(p) ||
         prev.step !== 1
       )
         throw new Error(
@@ -758,7 +769,7 @@ function cycleCells(
     Array.isArray(s) ? [...s] : [s as CalendarPartition]
   );
   const of = levels[0].cycle!;
-  const [rlo, rhi] = referencePeriod(of);
+  const [rlo, rhi] = referencePeriod(of, levels[0].start);
   const leaf = levels[levels.length - 1];
   const reference = leaf
     .cells(rlo, rhi - 1, "UTC")

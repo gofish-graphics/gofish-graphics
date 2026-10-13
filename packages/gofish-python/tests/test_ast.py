@@ -804,6 +804,26 @@ class TestTime:
         }
         assert Calendar.week(start="sunday").every(2)["step"] == 2
 
+    def test_calendar_weekday_wire_form(self):
+        assert Calendar.weekday == {"kind": "weekday", "start": "monday"}
+        assert Calendar.weekday(start="sunday") == {
+            "kind": "weekday",
+            "start": "sunday",
+        }
+        assert field("d").bin(Calendar.weekday)["ops"] == [
+            {"op": "bin", "partition": {"kind": "weekday", "start": "monday"}}
+        ]
+        assert field("d").bin([Calendar.week, Calendar.weekday])["ops"][0][
+            "partition"
+        ] == [
+            {"kind": "week", "step": 1, "start": "monday"},
+            {"kind": "weekday", "start": "monday"},
+        ]
+        with pytest.raises(ValueError, match="has no steps"):
+            Calendar.weekday.every(2)
+        with pytest.raises(ValueError, match="monday"):
+            Calendar.weekday(start="friday")
+
     def test_calendar_old_unit_form_is_rejected(self):
         with pytest.raises(TypeError, match="expected a Calendar value"):
             field("d").bin({"unit": "month", "step": 1})

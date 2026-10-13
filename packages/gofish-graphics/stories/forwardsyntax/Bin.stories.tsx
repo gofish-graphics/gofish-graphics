@@ -11,6 +11,8 @@ import {
   Schema,
   Calendar,
   Bin,
+  table,
+  Color,
 } from "../../src/lib";
 
 const meta: Meta = {
@@ -378,6 +380,59 @@ export const MonthBarsProductTrueWidths: StoryObj<Args> = {
       .mark(
         rect({ h: field("precipitation").sum(), fill: "steelblue", inset: 1 })
       )
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+export const WeekdayTemperature: StoryObj<Args> = {
+  args: { w: 420, h: 220 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Seattle Highs by Day of the Week",
+      description:
+        "Seattle's average daily high temperature on each day of the week from 2012 to 2015, with every Monday of four years pooled into one Monday bar.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(weather, { schema: { date: Schema.time() }, axes: true })
+      .flow(spread({ by: field("date").bin(Calendar.weekday), dir: "x" }))
+      .mark(rect({ h: field("temp_max").mean(), fill: "steelblue" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+export const CalendarHeatmap: StoryObj<Args> = {
+  args: { w: 760, h: 150 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Seattle Highs Calendar Heatmap",
+      description:
+        "Fifty-two weeks of Seattle weather from the end of 2014 to the end of 2015, one square per day in a column per week and a row per day of the week, shaded by the day's high temperature.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    // Whole weeks, Monday to Sunday, so every square has a day.
+    chart(between("2014-12-29", "2015-12-28"), {
+      schema: { date: Schema.time() },
+      color: Color.gradient(["#fee8c8", "#fd8d3c", "#bd0026"]),
+      axes: { x: false, y: true },
+    })
+      .flow(
+        spread({ by: field("date").bin(Calendar.weekday), dir: "y", spacing: 2 }),
+        spread({
+          by: field("date").bin(Calendar.week),
+          dir: "x",
+          spacing: 2,
+          axes: false,
+        })
+      )
+      .mark(rect({ w: 11, h: 11, fill: field("temp_max").mean() }))
       .render(container, { w: args.w, h: args.h });
     return container;
   },

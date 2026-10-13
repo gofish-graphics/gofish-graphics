@@ -771,6 +771,13 @@ function calendarLevel(
           `the slots are parts of a ${of} (${c.bin ?? "a cycle"}), and ` +
           `${String(p)} ${p.cycle === undefined ? "is a part of nothing" : `is a part of a ${p.cycle}`}, so it does not group them`
         );
+      // A week's parts depend on the day it starts on.
+      const start = c.cycle.levels[0].start;
+      if (of === "week" && p.start !== start)
+        return (
+          `the slots are parts of a week that starts on ${start}, and ` +
+          `${String(p)} starts on ${p.start}, so it does not group them`
+        );
       const [s, e] = c.ref;
       const part = p.part(zoned(s, "UTC"));
       if (p.part(zoned(e - 1, "UTC")) !== part)

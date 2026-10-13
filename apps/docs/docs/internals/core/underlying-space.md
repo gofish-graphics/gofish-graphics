@@ -2029,9 +2029,17 @@ when it sits on an edge, as in numpy's `histogram` and d3's `bin`.
 
 **Cycles, products and chains.** A calendar level binned alone is a part
 of the next larger level (`CalendarPartition.cycle`): `Calendar.month` is
-the month of the year, so all Junes are one cell. A week is a part of
-nothing (weeks do not nest in months or years) and nothing holds a year, so
-those stay on the line. The parts are not cells of the line: a
+the month of the year, so all Junes are one cell, and `Calendar.weekday` (a
+day, labeled by its day of the week) is the day of the week, so all Mondays
+are one cell. A week is a part of nothing (weeks do not nest in months or
+years) and nothing holds a year, so those stay on the line. A week's parts
+depend on its first day, so a weekday carries a `start`, its reference week
+starts on that day (`REFERENCE_WEEK`), and a weekday is a part of a week
+only when both start on the same day (`CalendarPartition.hasPart`). A
+weekday is a day, so an hour is a part of it (`[Calendar.weekday,
+Calendar.hour]`, the hours of the week). Its part, and the `weekday` field of
+every calendar cell, is the ISO day of the week (1 for Monday), whatever the
+start; the start only orders the parts. The parts are not cells of the line: a
 `CycleCell` (cells.ts) has an id (its field values, `"6"` for June), a
 label, its place in the cycle, and no region. The cells of a cycle are read
 off one cell of the cycle unit, the reference cycle (`referencePeriod` in

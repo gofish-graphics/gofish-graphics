@@ -460,7 +460,8 @@ and the JS layout checks a bin on its key with `checkBin(key, value,
 where)`, which names the right key for a kind of the other one.
 
 A field's bin op takes a Calendar value, `{ kind: "month", step? }` or
-`{ kind: "week", step?, start? }`, or a `Bin` kind that cuts one field's line.
+`{ kind: "week", step?, start? }` or `{ kind: "weekday", start? }` (a weekday
+has no step), or a `Bin` kind that cuts one field's line.
 The `CALENDAR` family declares the Calendar kinds, one per level, in the
 same shape as a `STRATEGIES` family, and `OPTION_TYPES.Calendar` is its
 union. `OPTION_TYPES.Partition` is one tagged union of the Calendar kinds

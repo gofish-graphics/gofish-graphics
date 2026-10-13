@@ -2387,6 +2387,7 @@ _CALENDAR_UNITS = (
     "minute",
     "hour",
     "day",
+    "weekday",
     "week",
     "month",
     "quarter",
@@ -2400,7 +2401,8 @@ class CalendarPartition(dict):
     (``{"kind": "month", "step": 3}``), a kind of the Calendar family in
     gofish-ir's descriptors.ts. Mirrors JS ``CalendarPartition``; build one from
     ``Calendar``. Used in ``field(x).bin(...)`` and in an axis's levels,
-    ``axes={"x": {"levels": [...]}}``.
+    ``axes={"x": {"levels": [...]}}``. A weekday has no step, so its wire form
+    has none (``{"kind": "weekday", "start": "monday"}``).
     """
 
     def __init__(self, unit: str, step: int = 1, start: Optional[str] = None):
@@ -2414,7 +2416,15 @@ class CalendarPartition(dict):
                 f"Calendar.{unit}.every({step!r}): the step must be a whole "
                 f"number of {unit}s, 1 or more."
             )
-        wire: dict = {"kind": unit, "step": step}
+        if unit == "weekday" and step != 1:
+            raise ValueError(
+                f"Calendar.weekday.every({step!r}): a weekday is one day of the "
+                f"week, so it has no steps. For cells of several days, use "
+                f"Calendar.day.every({step!r})."
+            )
+        wire: dict = {"kind": unit}
+        if unit != "weekday":
+            wire["step"] = step
         if start is not None:
             wire["start"] = start
         super().__init__(wire)
@@ -2426,16 +2436,17 @@ class CalendarPartition(dict):
         return CalendarPartition(self["kind"], n, self.get("start"))
 
 
-class _WeekPartition(CalendarPartition):
-    """``Calendar.week``: Monday-start weeks, also callable as
-    ``Calendar.week(start="sunday")``."""
+class _StartPartition(CalendarPartition):
+    """``Calendar.week`` or ``Calendar.weekday``: Monday-start, also callable
+    as ``Calendar.week(start="sunday")``."""
 
     def __call__(self, start: str = "monday") -> CalendarPartition:
         if start not in ("monday", "sunday"):
             raise ValueError(
-                f'Calendar.week: start must be "monday" or "sunday", not {start!r}.'
+                f"Calendar.{self['kind']}: start must be \"monday\" or "
+                f"\"sunday\", not {start!r}."
             )
-        return CalendarPartition("week", 1, start)
+        return CalendarPartition(self["kind"], 1, start)
 
 
 class Calendar:
@@ -2445,11 +2456,13 @@ class Calendar:
     Mirrors JS ``Calendar``::
 
         field("date").bin(Calendar.month)                  # the month of the year
+        field("date").bin(Calendar.weekday)                # the day of the week
         field("date").bin([Calendar.year, Calendar.month])  # each month of each year
         field("date").bin(Calendar.year).bin(Calendar.month)
         chart(data, axes={"x": {"levels": [Calendar.week, Calendar.month]}})
         Calendar.hour.every(6)
         Calendar.week(start="sunday")
+        Calendar.weekday(start="sunday")
 
     A custom ``format`` for a level's labels is JS-only for now.
     """
@@ -2458,7 +2471,8 @@ class Calendar:
     minute = CalendarPartition("minute")
     hour = CalendarPartition("hour")
     day = CalendarPartition("day")
-    week = _WeekPartition("week", 1, "monday")
+    weekday = _StartPartition("weekday", 1, "monday")
+    week = _StartPartition("week", 1, "monday")
     month = CalendarPartition("month")
     quarter = CalendarPartition("quarter")
     year = CalendarPartition("year")
