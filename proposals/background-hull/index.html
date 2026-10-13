@@ -321,9 +321,12 @@
     a new strategy family, <code>Shape</code>, chosen with a
     <code>shape</code> option the way <code>Curve</code> is chosen with
     <code>curve</code> on <code>line</code>. The region member,
-    <code>Shape.blob()</code>, generalizes KelpFusion; the convex hull and the
-    spine are exact shortcuts of it, the way <code>sina()</code> and
-    <code>jitter()</code> are shortcuts of <code>noise()</code>.
+    <code>Shape.blob()</code>, fills the space between members with the alpha
+    shape's rule (dialed by <code>convexity</code>), links them with a spanning
+    tree, and blurs the result so the outline's curvature never jumps. The
+    convex hull and the spine are shortcuts of it, the way
+    <code>sina()</code> and <code>jitter()</code> are shortcuts of
+    <code>noise()</code>.
   </p>
 
   <div class="rec">
@@ -331,13 +334,13 @@
       <strong>Recommendation.</strong> Rebuild <code>enclose</code> with
       <code>createRelationalMark</code> and give it
       <code
-        >shape: Shape.box({ rx, ry }) | Shape.blob({ density, neck, smoothing,
+        >shape: Shape.box({ rx, ry }) | Shape.blob({ convexity, neck, smoothing,
         avoiding, via, clearance })</code
       >, with two shortcuts: <code>Shape.hull(opts)</code> =
-      <code>Shape.blob({ density: 1, neck: 1, ...opts })</code> and
+      <code>Shape.blob({ convexity: 1, neck: 1, ...opts })</code> and
       <code>Shape.spine(opts)</code> =
-      <code>Shape.blob({ density: 0, ...opts })</code>. <code>padding</code> and
-      paint stay on <code>enclose</code>. Delete the
+      <code>Shape.blob({ convexity: 0, ...opts })</code>.
+      <code>padding</code> and paint stay on <code>enclose</code>. Delete the
       <code>background</code> alias. Do not add a
       <code>.background()</code> modifier yet; it is the runner-up, to add later
       as exact sugar.
@@ -354,8 +357,8 @@ chart(penguins)
 
 // contains a and c but not b: combinator form over refs
 layer([a, b, c]).relate(({ a, b, c }) =&gt; [
-  enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.7, smoothing: 40 }),
-            padding: 21, fill: "#ff2400" }, [a, c]),
+  enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.85, smoothing: 40 }),
+            padding: 22, fill: "#ff2400" }, [a, c]),
 ])</code></pre>
   </div>
   <p class="small">
@@ -431,17 +434,61 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
     Topology example is the case only the spine can draw.
   </p>
 
-  <h2>One construction: the blob, with hull and spine as shortcuts</h2>
+  <h2>One construction: a smooth region, with hull and spine as shortcuts</h2>
   <p>
     Josh asked whether KelpFusion could be generalized, by making the size of
     the circles around the points configurable, so that it covers the usual
-    hull, and whether it and the alpha shape could be unified. The answer
-    changes the recommendation: hull and spine become two shortcuts of one
-    general member, <code>Shape.blob()</code>, the way <code>sina()</code> and
+    hull, and whether it and the alpha shape could be unified. The previous
+    version (v3) answered with <code>Shape.blob()</code>, a generalized
+    KelpFusion with hull and spine as shortcuts, the way <code>sina()</code> and
     <code>jitter()</code> are shortcuts of <code>noise()</code> (#1018, which
     made the scatter overlap strategy one <code>noise()</code> with two
-    presets).
+    presets). This version (v4) keeps that factoring and changes how the region
+    is built.
   </p>
+
+  <h3>What changed in v4, and why</h3>
+  <div class="note">
+    <p>Josh's review of v3:</p>
+    <ol>
+      <li>
+        "Alpha shapes still seem to have a nice aesthetic to them because
+        they're a bit more convex than the kelp comparisons."
+      </li>
+      <li>The Munkres {a, c} outline "still feels too shrinkwrapped."</li>
+      <li>
+        "I don't want to see a shape curvature change when the circle connects
+        to the link."
+      </li>
+    </ol>
+  </div>
+  <p>
+    The third point is a hard requirement, and v3 could not meet it. Its outline
+    was a union of circle arcs, straight tube sides and closing arcs. Where an
+    arc meets a straight side the outline has no corner, but its curvature jumps
+    at once from 1/<em>R</em> to 0 (G1, not G2). v4 changes three things:
+  </p>
+  <ul>
+    <li>
+      <strong>Smoothing ends with a Gaussian blur of the region.</strong> The
+      outline is the level ½ of the blurred region, which is
+      curvature-continuous everywhere.
+    </li>
+    <li>
+      <strong
+        ><code>density</code> is replaced by <code>convexity</code>.</strong
+      >
+      The alpha shape's fill rule comes back as the dial from spine to hull,
+      unitless, with a spanning tree that keeps the set in one piece.
+    </li>
+    <li>
+      <strong
+        >Links that bound a filled triangle are drawn at full width,</strong
+      >
+      so filled parts get the alpha shape's even, straight sides instead of
+      scallops.
+    </li>
+  </ul>
   <div class="grid2">
     <div class="card">
       <h4>Delaunay triangulation</h4>
@@ -480,6 +527,63 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
         In Edelsbrunner, Kirkpatrick and Seidel (1983), the alpha hull is what
         remains when every disc of radius alpha that holds no point is removed.
         The alpha shape is the same with straight edges instead of arcs.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Curvature</h4>
+      <p>
+        How sharply the outline bends: 1 over the radius of the best-fitting
+        circle. A straight run has 0, a circle of radius <em>R</em> has
+        1/<em>R</em>. Positive where the outline bulges out, negative where it
+        dents in.
+      </p>
+    </div>
+    <div class="card">
+      <h4>G1 and G2 continuity</h4>
+      <p>
+        G1: the direction never jumps (no corners). G2: the curvature never
+        jumps either. A circle meeting a tangent line is G1, not G2. Josh's
+        requirement is G2.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Curvature plot and comb</h4>
+      <p>
+        The plot draws curvature against distance along the outline. The comb
+        draws teeth across the outline with length proportional to curvature; a
+        jump shows as a step in the line through the tips.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Implicit field, iso-contour</h4>
+      <p>
+        A field gives every point a number; its iso-contour at level
+        <em>c</em> is the curve where the field equals <em>c</em>. A smooth
+        field has a smooth iso-contour wherever it is not flat.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Convolution surface</h4>
+      <p>
+        A field made by adding a smooth bump along a skeleton of points,
+        segments and triangles, drawn as one iso-contour (Bloomenthal and
+        Shoemake, SIGGRAPH 1991; from memory). Bubble Sets' energy is of this
+        kind.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Gaussian blur</h4>
+      <p>
+        Replace each value by a weighted average of its neighbors, with weights
+        falling off as a bell curve of width σ.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Circumradius, alpha complex</h4>
+      <p>
+        Circumradius: the radius of the circle through a triangle's corners. The
+        alpha complex: the Delaunay triangles with circumradius at most alpha,
+        and edges at most 2 alpha long. Filled, it is the alpha shape.
       </p>
     </div>
   </div>
@@ -574,32 +678,138 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
     the end.
   </p>
 
-  <h3>The construction</h3>
-  <ol>
+  <h3>Three ways to get a curvature-continuous outline</h3>
+  <p>
+    All three start from the same skeleton (member points, links, filled
+    triangles), prototyped in story section (e).
+  </p>
+  <div class="grid3">
+    <div class="card">
+      <h4>(a) Convolution surface</h4>
+      <p>
+        A Gaussian bump added up along the skeleton, weighted so each piece
+        alone ends at its target offset; one iso-contour. Smooth, and close to
+        Bubble Sets. But fields add up where pieces meet, so the lobes swell
+        past the promised padding (dashed rings) and the U dents in toward b.
+        <code>padding</code> stops being a promise. Out.
+      </p>
+    </div>
+    <div class="card">
+      <h4>(b) A closed curve through v3</h4>
+      <p>
+        Points every few pixels along the v3 outline, then a closed curve
+        through them: centripetal Catmull-Rom (G1, the foil), a periodic natural
+        cubic spline (C2), or a Yuksel-style C2 blend of circles (Yuksel, ACM
+        TOG 2020, listed in #957; my own variant of it, inferred). Today's
+        <code>Curve</code> members do not apply: the data-space ones interpolate
+        <em>y</em>(<em>x</em>), the connectors join two ends, and
+        <code>catmullRom</code> is open and G1 (verified in
+        <code>src/families/curve.ts</code>).
+      </p>
+    </div>
+    <div class="card">
+      <h4>(c) Blur the region (chosen)</h4>
+      <p>
+        Keep v3's region, blur it with a Gaussian, draw the level ½: one step of
+        Merriman, Bence and Osher's curvature-flow scheme (1992; from memory).
+        Straight sides stay; a bulge of radius <em>r</em> moves in by about
+        σ²/(2<em>r</em>), a dent moves out as much. Discs, tubes and cut zones
+        are drawn slightly larger to cancel it, so a lone member ends exactly at
+        <code>padding</code> and the cut at <code>clearance</code>.
+      </p>
+    </div>
+  </div>
+  <figure>
+    <div class="shot">
+      <img
+        src="img/smooth-candidates-field-vs-curve.png"
+        alt="Topology a/c set and the U, drawn by v3 and the three candidates"
+      />
+    </div>
+    <figcaption>
+      Top: the Topology {a, c} set avoiding b, dashed rings at the promised
+      padding. Bottom: the U at <code>convexity: 0.5</code>. Columns: v3, (a),
+      (b) natural spline with knots 25 px apart (12 px on the U), (c).
+    </figcaption>
+  </figure>
+
+  <h3>The curvature plot</h3>
+  <p>
+    The {a, c} set with v3's parameters (<code>padding: 21</code>,
+    <code>neck: 0.7</code>, <code>smoothing: 40</code>,
+    <code>clearance: 10</code>). Left: the outline with its curvature comb.
+    Right: curvature against distance along the outline from the leftmost point;
+    gray lines at 1/<em>R</em> (a's circle) and −1/40 (the closing radius). The
+    numbers are measured on each outline.
+  </p>
+  <figure>
+    <div class="shot">
+      <img
+        src="img/smooth-curvature-topology-ac.png"
+        alt="Curvature combs and curvature plots for v3, the blurred region, and three closed curves"
+      />
+    </div>
+  </figure>
+  <ul>
     <li>
-      <strong>Links.</strong> Candidates are the Delaunay edges between member
-      centers, plus any <code>via</code> edges, which are always kept. Each is
-      routed as the shortest path that keeps a <code>clearance</code> gap from
-      every avoided node. The links kept are SPG(<em>t</em>) with <em>t</em> = 1
-      / <code>density</code>: 0 is the minimum spanning tree, 1 keeps every
-      candidate.
+      <strong>v3</strong> (measured from the traced outline, so noisy) jumps
+      between 1/<em>R</em>, 0 and −1/40 at every join: the changes Josh saw.
     </li>
     <li>
-      <strong>Faces.</strong> A face closed off by kept links is filled when it
-      holds no avoided node (KelpFusion's size limit <em>A</em> is left out).
+      <strong>(c)</strong>, computed exactly from the field, moves smoothly
+      between the same values, each change spread over about 20 px. Padding at a
+      is 26.0 px (asked 26), the gap to b's ring 10.1 px (asked 10), and it
+      stays within 1.9 px of v3.
+    </li>
+    <li>
+      <strong>(b)</strong> cannot do both. With knots 10 px apart the spline
+      follows v3 to 0.3 px but keeps its sudden changes, squeezed between two
+      knots. With knots 25 px apart the changes spread, but the natural spline
+      and the Yuksel blend ripple, and all three cut into b's clearance (8.1 to
+      8.5 px instead of 10). Catmull-Rom jumps at every knot. A curve through
+      points knows only the points, not the padding or the avoided nodes.
+    </li>
+  </ul>
+  <p>
+    <strong>Where a <code>curve</code> key would fit.</strong> The idea was
+    <code>enclose({ shape: Shape.hull(), curve: Curve.&lt;x&gt;() })</code>,
+    reusing the relational marks' <code>curve</code> key. Recommendation: do not
+    add it (decision 14). No <code>Curve</code> member is closed today, a curve
+    through outline points breaks <code>padding</code> and
+    <code>clearance</code>, and it would be a second smoothing control next to
+    <code>smoothing</code>. The findings feed #957 (better screen-space curves
+    than Catmull-Rom, which asks whether its candidates "work for closed curves
+    (enclosures)"): a closed Yuksel-style blend is easy and C2, and it ripples
+    where point spacing is uneven. A closed C2 member would have other users,
+    such as smooth polygon outlines or the custom-shape function's output.
+  </p>
+
+  <h3>The construction (v4)</h3>
+  <ol>
+    <li>
+      <strong>Skeleton.</strong> Delaunay triangulation of the member centers.
+      Fill a triangle when its circumradius is at most alpha (from
+      <code>convexity</code>) and no avoided node's keep-out zone touches it.
+      Links: the filled triangles' edges, other Delaunay edges at most 2 alpha
+      long that no avoided node blocks, the minimum spanning tree over links
+      routed around avoided nodes (always), and <code>via</code> edges.
     </li>
     <li>
       <strong>Pieces.</strong> Each member grown by <code>padding</code> (its
-      bulge), each link a tube <code>neck</code> times as wide as the bulge, and
-      the filled faces.
+      bulge, radius <em>R</em>); links bounding a filled triangle as tubes as
+      wide as the bulge, other links <code>neck</code> times as wide; the filled
+      triangles.
     </li>
     <li>
-      <strong>Smoothing.</strong> The closing of their union by a disc of radius
-      <code>smoothing</code>.
+      <strong>Closing</strong> by a disc of radius <code>smoothing</code>, as in
+      v3.
     </li>
+    <li><strong>Cut</strong> each avoided node's keep-out zone.</li>
     <li>
-      <strong>Cut.</strong> Each avoided node, grown by <code>clearance</code>,
-      is cut back out, and the cut's corners are rounded slightly.
+      <strong>Blur</strong> with σ = ½ min(<code>smoothing</code>, thinnest
+      piece) and draw the level ½. A wider blur would erase the thinnest piece.
+      The prototype traces it with marching squares, then moves each point onto
+      the exact level line with Newton steps, so v3's grid waviness is gone.
     </li>
   </ol>
   <div class="tablewrap">
@@ -612,28 +822,34 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
       </tr>
       <tr>
         <td><code>padding</code> (on <code>enclose</code>)</td>
-        <td>The bulge around each member: the size of KelpFusion's circles.</td>
+        <td>The bulge around each member. Exact for a member on its own.</td>
         <td>Bigger is fatter.</td>
         <td>as today</td>
       </tr>
       <tr>
-        <td><code>density</code></td>
+        <td><code>convexity</code></td>
         <td>
-          How many links are kept, 0 (a spanning tree) to 1 (every neighbor
-          link); 1/<em>t</em> in KelpFusion. No unit, so it survives a resize.
+          How much of the space between members is filled: 0 is a spanning tree
+          of links, 1 every Delaunay triangle (the convex hull). Unitless.
         </td>
-        <td>Bigger is more filled in.</td>
+        <td>Bigger is fuller and more convex.</td>
         <td>0.5</td>
       </tr>
       <tr>
         <td><code>neck</code></td>
-        <td>Link width as a fraction of the bulge.</td>
-        <td>Bigger is thicker; 1 is as thick as the bulges.</td>
+        <td>
+          Width of links that do not bound a filled triangle, as a fraction of
+          the bulge.
+        </td>
+        <td>Bigger is thicker; 1 is as thick.</td>
         <td>1</td>
       </tr>
       <tr>
         <td><code>smoothing</code></td>
-        <td>Closing radius in pixels.</td>
+        <td>
+          Closing radius in pixels; it also sets the blur, so the bend changes
+          over a length that grows with it.
+        </td>
         <td>Bigger is smoother and fuller.</td>
         <td>same as <code>padding</code></td>
       </tr>
@@ -658,41 +874,69 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
     </table>
   </div>
 
-  <h3>The parameter grid</h3>
+  <h3>Convexity: the alpha fill rule, back</h3>
+  <p>
+    alpha = <em>m</em> × <code>convexity</code> / (1 − <code>convexity</code>),
+    where <em>m</em> is the median link of the members' minimum spanning tree (a
+    typical neighbor distance). 0 fills nothing, 0.5 fills triangles up to about
+    the typical spacing, 1 fills everything. The name says its direction, which
+    avoids the survey's trap (ggforce's <code>concavity</code> and alpha run in
+    opposite directions).
+  </p>
+  <ul>
+    <li>
+      <strong>Units.</strong> A pixel alpha fills different triangles after a
+      resize; measured in units of <em>m</em>, the rule depends only on the
+      point set's shape. Tying it to <code>padding</code> would still change on
+      resize.
+    </li>
+    <li>
+      <strong>Pieces.</strong> The alpha complex falls apart below the widest
+      gap; the spanning tree is always added, so the set stays one region.
+    </li>
+    <li>
+      <strong>Avoided nodes.</strong> A triangle touching a keep-out zone is
+      never filled, and the zone is cut out at the end.
+    </li>
+    <li>
+      <strong><code>density</code> is dropped.</strong> Convexity covers the
+      same range, tree to hull, and its middle looks like the alpha shapes Josh
+      liked. KelpFusion's own middle (long links without the triangles around
+      them) is no longer reachable; no example needs it.
+    </li>
+  </ul>
   <figure>
     <div class="shot">
       <img
-        src="img/blob-parameter-grid.png"
-        alt="Twelve panels of the U data under different density, smoothing and padding values"
+        src="img/smooth-convexity-grid-u.png"
+        alt="U data: classic alpha shape, v3, and v4 at four convexity values"
       />
     </div>
     <figcaption>
-      Row 1: <code>density</code> 0, 0.5, 0.75, 1 (<code>padding: 8</code>,
-      <code>smoothing: 8</code>; the last panel avoids nothing). Row 2:
-      <code>smoothing</code> 0, 8, 20, 40 at <code>density: 0</code>. Row 3:
-      <code>padding</code> 3, 8, 14, 20 at <code>density: 0</code>,
-      <code>neck: 0.5</code>, <code>smoothing: 4</code>.
+      U data (<code>padding: 8</code>, <code>smoothing: 8</code>, gray dots
+      avoided): classic alpha shape (alpha 40), v3 at <code>density: 0.5</code>,
+      v4 at <code>convexity</code> 0, 0.5, 0.8, 1. At 0.5 the arms fill and get
+      straight sides with rounded joins. At 0.8 and 1 the triangles across the
+      opening fill except near the gray dots, leaving holes shaped by the
+      triangles left out: faithful to the rule, not pretty.
     </figcaption>
   </figure>
-  <ul>
-    <li>
-      <strong>Density</strong> moves the shape from a tree of tubes to the hull.
-      At 0.75 the links across the top of the U are kept, so the faces between
-      them fill, but faces holding a gray dot stay open (drawn as holes). That
-      is KelpFusion's middle.
-    </li>
-    <li>
-      <strong>Smoothing</strong> turns the tree into a concave hull. At 40 it
-      looks like the alpha shape with alpha 40, because closing by a disc is how
-      the alpha hull is defined.
-    </li>
-    <li>
-      <strong>Padding</strong> with thin necks gives the Kelp look when small
-      and fat merged bubbles when large. Big circles alone do not give the hull:
-      the union of discs is scalloped and keeps every dent wider than the discs.
-      <code>smoothing</code> and <code>density</code> close the shape.
-    </li>
-  </ul>
+  <figure>
+    <div class="shot">
+      <img
+        src="img/smooth-convexity-grid-penguins.png"
+        alt="Gentoo penguins: classic alpha shape, v3, and v4 at four convexity values"
+      />
+    </div>
+    <figcaption>
+      Gentoo (green), the other species avoided (gray), <code>padding: 4</code>,
+      <code>smoothing: 6</code>, classic alpha 12. The classic alpha shape
+      leaves stray points out; v4 keeps them, linked by the tree. At 0.8 it is
+      close to the alpha look. One member at the top left is walled in by gray
+      points, so no link reaches it; it is its own small region below
+      <code>convexity: 1</code>.
+    </figcaption>
+  </figure>
 
   <h3>The shortcuts</h3>
   <div class="tablewrap">
@@ -704,77 +948,74 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
       </tr>
       <tr>
         <td><code>Shape.hull(opts)</code></td>
-        <td><code>Shape.blob({ density: 1, neck: 1, ...opts })</code></td>
-        <td>the convex hull grown by <code>padding</code></td>
+        <td><code>Shape.blob({ convexity: 1, neck: 1, ...opts })</code></td>
+        <td>the convex hull grown by <code>padding</code>, smoothed</td>
       </tr>
       <tr>
         <td><code>Shape.spine(opts)</code></td>
-        <td><code>Shape.blob({ density: 0, ...opts })</code></td>
-        <td>a tree of thick tubes, smoothed</td>
+        <td><code>Shape.blob({ convexity: 0, ...opts })</code></td>
+        <td>the spanning tree of thick tubes, smoothed</td>
       </tr>
     </table>
   </div>
   <p>
-    As with <code>sina()</code> and <code>jitter()</code> over
-    <code>noise()</code>, a shortcut makes the same object as the general call
-    (<code>kind: "blob"</code>), declared once as a preset in the
-    <code>STRATEGIES</code> table, and any option overrides the preset. So
-    <code>Shape.hull({ avoiding: others })</code> is legal and draws a hull that
-    leaves out faces holding other nodes: KelpFusion at <em>t</em> = 1.
+    A shortcut makes the same object as the general call (<code
+      >kind: "blob"</code
+    >), declared once as a preset in the <code>STRATEGIES</code> table, and any
+    option overrides the preset, so
+    <code>Shape.hull({ avoiding: others })</code> draws a hull that leaves out
+    triangles touching other nodes. The spine shortcut is exactly the spanning
+    tree (plus <code>via</code>), smoothed.
   </p>
   <div class="ex">
     <div>
       <p>
-        <strong>The hull shortcut is exact.</strong> With nothing avoided,
-        <code>density: 1</code> keeps every Delaunay edge and fills every face.
-        The union is the hull of the centers, plus tubes along its edges, plus
-        discs at its corners. That is exactly the hull grown by the bulge,
-        because any point that close to a convex shape is inside it or nearest
-        to its boundary. Closing a convex shape returns it unchanged. This holds
-        for points and round members of one size (the scatterplot case); for
-        mixed shapes, links would start from the members' outlines (#974) to
-        stay exact, an implementation detail.
+        <strong
+          >The hull shortcut is within half a pixel, no longer exact.</strong
+        >
+        Before the blur it is exact, as in v3: every triangle is filled and
+        every hull edge is a tube as wide as the bulge, so the union is the hull
+        grown by the bulge, and closing a convex shape changes nothing. The blur
+        rounds the corners, and the slightly larger discs that cancel it on a
+        lone member stand out a little near corners. Measured against a true
+        padded hull: never inside, at most 0.5 px outside with
+        <code>smoothing</code> equal to <code>padding</code>, 0.9 px with
+        <code>smoothing: 20</code>.
       </p>
     </div>
     <figure>
       <div class="shot">
         <img
-          src="img/blob-hull-shortcut-vs-true-hull.png"
-          alt="Hull shortcut fill with a true padded convex hull drawn as a black line on top"
+          src="img/smooth-hull-preset-vs-true-hull.png"
+          alt="Hull shortcut fill with a true padded convex hull drawn as a black line"
         />
       </div>
       <figcaption>
-        Black line: a true padded convex hull. Fill: the shortcut. They agree to
-        within a pixel.
+        Black line: a true padded convex hull. Fill: the shortcut.
       </figcaption>
     </figure>
   </div>
+
+  <h3>The previous version (v3), for reference</h3>
+  <p>
+    v3 picked links with KelpFusion's SPG(<em>t</em>), <em>t</em> = 1 /
+    <code>density</code>, filled every closed face without an avoided node, and
+    smoothed only by closing. Its outlines were G1 (the main reason for the
+    change), its middle was less full than the alpha shape, and its Topology
+    outline was shrink-wrapped.
+  </p>
   <figure>
     <div class="shot">
       <img
-        src="img/blob-smoothing-vs-alpha-shape.png"
-        alt="Alpha shape next to the spine shortcut with smoothing 40"
+        src="img/blob-parameter-grid.png"
+        alt="v3 parameter grid: density, smoothing and padding on the U data"
       />
     </div>
     <figcaption>
-      The alpha shape is approximated, not reproduced. Left: the old alpha
-      shape, alpha 40. Middle and right:
-      <code>Shape.spine({ smoothing: 40 })</code> without and with
-      <code>avoiding</code>. The closing is a little fuller and always one
-      piece. An exact alpha shape would need a second link rule; no example
-      needs it, so <code>alpha</code> is dropped (decision 10).
+      v3: <code>density</code> 0, 0.5, 0.75, 1; <code>smoothing</code> 0, 8, 20,
+      40; <code>padding</code> 3, 8, 14, 20.
     </figcaption>
   </figure>
-  <p>
-    <strong>What the generalization adds to KelpFusion.</strong>
-    <code>via</code>: KelpFusion builds its own graph from positions and cannot
-    follow a graph's real edges; here given edges are links that are always
-    kept, and SPG(<em>t</em>) only joins the pieces they leave apart.
-    <strong>Thick, smooth necks</strong>: KelpFusion's edges have a fixed width;
-    here the width is tied to the bulge (<code>neck</code>) and the closing
-    rounds every join. <strong>Routing</strong> is KelpFusion's own idea; the
-    prototype routes around avoided nodes only.
-  </p>
 
   <h3>Custom shapes and the ellipse</h3>
   <p>
@@ -1133,7 +1374,7 @@ enclose({ shape: oval, padding: 30 }, [a, b])</code></pre>
         regions, the hypergraph survey as node-link, and KelpFusion is one dial
         from spanning tree to convex hull. So the design keeps it in the
         relational-mark family (with <code>line</code>, <code>ribbon</code>),
-        makes connection versus containment one dial (<code>density</code>) on
+        makes connection versus containment one dial (<code>convexity</code>) on
         one member, and lets <code>via</code> take real connections as links.
       </p>
     </div>
@@ -1209,7 +1450,8 @@ enclose({ shape: oval, padding: 30 }, [a, b])</code></pre>
           />
         </div>
         <figcaption>
-          <code>Shape.hull()</code>: exactly this padded convex hull.
+          <code>Shape.hull()</code>: this padded convex hull, to within half a
+          pixel.
         </figcaption>
       </figure>
       <figure>
@@ -1269,16 +1511,16 @@ enclose({ shape: oval, padding: 30 }, [a, b])</code></pre>
       <pre><code>layer([a, b, c]).relate(({ a, b, c }) =&gt; [
   enclose({ shape: Shape.hull(), padding: 16,
             fill: "#009dff" }, [a, b]),
-  enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.7,
-                                 smoothing: 40, clearance: 10 }),
-            padding: 21, fill: "#ff2400" }, [a, c]),
+  enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.85,
+                                 smoothing: 40, clearance: 6 }),
+            padding: 22, fill: "#ff2400" }, [a, c]),
 ])</code></pre>
       <div class="lang">Python</div>
       <pre><code>layer([a, b, c]).relate(lambda a, b, c: [
     enclose([a, b], shape=Shape.hull(), padding=16, fill="#009dff"),
-    enclose([a, c], shape=Shape.spine(avoiding=[b], neck=0.7,
-                                      smoothing=40, clearance=10),
-            padding=21, fill="#ff2400"),
+    enclose([a, c], shape=Shape.spine(avoiding=[b], neck=0.85,
+                                      smoothing=40, clearance=6),
+            padding=22, fill="#ff2400"),
 ])</code></pre>
     </div>
     <figure>
@@ -1295,37 +1537,58 @@ enclose({ shape: oval, padding: 30 }, [a, b])</code></pre>
       </figcaption>
     </figure>
   </div>
+  <figure>
+    <div class="shot">
+      <img
+        src="img/smooth-topology-ac-before-after.png"
+        alt="The a/c set: v3, v4 with the same parameters, v4 fuller, and v4 with b as a wall"
+      />
+    </div>
+    <figcaption>
+      v3 (<code>padding: 21</code>, <code>neck: 0.7</code>,
+      <code>smoothing: 40</code>); v4 with the same parameters (same margins and
+      gap, no curvature jumps); v4 fuller (<code>padding: 22</code>,
+      <code>neck: 0.85</code>); v4 with b as a wall during the closing (decision
+      13).
+    </figcaption>
+  </figure>
   <div class="grid2">
     <figure>
       <div class="shot">
         <img
-          src="img/topology-ac-blob-neck-smoothing.png"
-          alt="The a/c set before, and with three neck and smoothing settings"
+          src="img/topology-munkres-panel-smooth.png"
+          alt="Munkres' last panel redrawn with v4"
         />
       </div>
       <figcaption>
-        Before (bubble-set spine), then the spine shortcut:
-        <code>neck: 0.4</code> unsmoothed is the thin Kelp look;
-        <code>neck: 1</code> is one sausage;
-        <code>neck: 0.7, smoothing: 40</code> has bulges, a thick band and
-        smooth joins.
+        Munkres' last panel with v4: ellipses through the custom-shape function,
+        {a, c} with the spine shortcut as in the code above.
       </figcaption>
     </figure>
     <figure>
       <div class="shot">
         <img
-          src="img/topology-munkres-panel-blob.png"
-          alt="Munkres' last panel redrawn with ellipses and the a/c spine"
+          src="img/topology-munkres-panel-smooth-walls.png"
+          alt="Munkres' last panel redrawn with v4, b as a wall"
         />
       </div>
       <figcaption>
-        Munkres' last panel redrawn: ellipses through the custom-shape function,
-        {a, c} with the spine shortcut. Close to the reference; the band's
-        bottom is a wide V (shortest path around b) where Munkres draws a
-        flatter U.
+        The same with b as a wall: the band's top wraps b in a U at the
+        clearance, as in the reference.
       </figcaption>
     </figure>
   </div>
+  <p>
+    <strong>How close it gets now.</strong> Matched: even margins around a and
+    c, a thick band, and smooth joins with no visible change in bend where the
+    circles meet the band. Closer than v3
+    (<code>img/topology-munkres-panel-blob.png</code>): a fuller band, and with
+    b as a wall a U around b. Still different: the band's bottom is a wide V
+    rather than Munkres' flatter bottom, since the link is the shortest path
+    around b, and the wall version has a short flat shelf between a and b. A
+    link rule that follows b's outline at a fixed gap would get closer; that is
+    routing, not a new parameter.
+  </p>
   <div class="pair">
     <figure>
       <div class="shot">
@@ -1346,10 +1609,6 @@ enclose({ shape: oval, padding: 30 }, [a, b])</code></pre>
       <figcaption>Earlier bubble-set spine of {a, c} avoiding b.</figcaption>
     </figure>
   </div>
-  <p>
-    A link rule that follows the avoided node's outline at an even gap would
-    give Munkres' U; that refines the routing and adds no parameter.
-  </p>
   <p>
     Future work, not part of this proposal: this example may be drawn best by
     placing the points and the region together, with an energy that pushes
@@ -1415,7 +1674,7 @@ enclose({ shape: oval, padding: 30 }, [a, b])</code></pre>
     <figure>
       <div class="shot">
         <img
-          src="img/hyperedges-blob-spine.png"
+          src="img/hyperedges-smooth-spine.png"
           alt="Three set regions drawn along graph edges with the blob spine"
         />
       </div>
@@ -1475,7 +1734,7 @@ enclose({ shape: oval, padding: 30 }, [a, b])</code></pre>
       <figure>
         <div class="shot">
           <img
-            src="img/bars-trout-blob-spine.png"
+            src="img/bars-trout-smooth-spine.png"
             alt="Blob spine around the trout bars, routed over the bar tops"
           />
         </div>
@@ -1568,7 +1827,7 @@ chart(catch)
         <span class="tag ok">recommended</span>
         <code>Shape.box({ rx, ry })</code> and
         <code
-          >Shape.blob({ density, neck, smoothing, avoiding, via, clearance
+          >Shape.blob({ convexity, neck, smoothing, avoiding, via, clearance
           })</code
         >, with <code>Shape.hull()</code> and <code>Shape.spine()</code> as
         presets. <code>padding</code> and paint stay on <code>enclose</code>.
@@ -1589,7 +1848,7 @@ chart(catch)
       <h4>S3 · shape: "hull" + flat options</h4>
       <p>
         Josh's #717 sketch. Ruled out by #1013 (families with arguments are
-        calls), and flat <code>density</code>/<code>avoiding</code> would be
+        calls), and flat <code>convexity</code>/<code>avoiding</code> would be
         accepted and ignored by other shapes.
       </p>
     </div>
@@ -1598,13 +1857,14 @@ chart(catch)
     <strong>The knobs.</strong> Libraries disagree on the direction of a hull's
     concavity knob: <code>concavity</code> (ggforce) grows toward convex;
     <code>alpha</code> is a radius in CGAL but an inverse radius in Python's
-    alphashape. The blob replaces the earlier <code>alpha</code> with knobs
-    whose direction reads from the name: <code>density</code> (more links, more
-    filled in; no unit, so it survives a resize) and
-    <code>smoothing</code> (pixels; bigger is smoother, the same direction as
-    <code>smoothing</code> on <code>noise()</code>, though there it is in data
-    units). Risk: <code>density</code> can also mean data density, as in a
-    density plot. <code>neck</code> is the everyday word for the narrow part
+    alphashape. v3 replaced the earlier <code>alpha</code> with
+    <code>density</code>; v4 brings alpha back as <code>convexity</code>, whose
+    direction reads from the name (more convexity is more convex), which has no
+    unit (alpha is measured against the members' typical spacing, so it survives
+    a resize), and which avoids <code>density</code>'s clash with density plots.
+    <code>smoothing</code> is in pixels; bigger is smoother, the same direction
+    as <code>smoothing</code> on <code>noise()</code>, though there it is in
+    data units. <code>neck</code> is the everyday word for the narrow part
     joining two bulges.
   </p>
   <p>
@@ -1877,8 +2137,8 @@ chart(catch)
         <td><span class="tag dep">departs</span></td>
         <td>
           Strings become a family; <code>avoiding</code> moves onto the blob;
-          ellipse via the custom-shape function; <code>alpha</code> dropped; a
-          boolean cannot hold these shapes.
+          ellipse via the custom-shape function; alpha becomes
+          <code>convexity</code>; a boolean cannot hold these shapes.
         </td>
       </tr>
       <tr>
@@ -1921,7 +2181,7 @@ chart(catch)
         <td>New terms</td>
         <td>
           <code>Shape</code>, <code>blob</code>, <code>hull</code>,
-          <code>spine</code>, <code>density</code>, <code>neck</code>,
+          <code>spine</code>, <code>convexity</code>, <code>neck</code>,
           <code>smoothing</code>, <code>avoiding</code>, <code>via</code>,
           <code>clearance</code>
         </td>
@@ -1944,17 +2204,21 @@ chart(catch)
     <strong>Strategies:</strong> the earlier three members,
     <code>Shape.box()</code>, <code>Shape.hull({ alpha })</code>,
     <code>Shape.spine({ avoiding, via })</code>. It would win if real examples
-    needed an exact alpha shape (dents from the members' own spacing, possibly
-    splitting a set into pieces), or if the blob's parameters proved hard to
-    explain, so that two members with fewer knobs read better than one member
-    with shortcuts.
+    needed an alpha shape that splits into pieces, or if the blob's parameters
+    proved hard to explain, so that two members with fewer knobs read better
+    than one member with shortcuts. <strong>Smoothing:</strong> a closed C2
+    curve through the outline (candidate (b)). It would win if a curve could
+    keep a promised distance from given points, which none of the tested ones
+    can.
   </p>
 
   <h2>Decisions for Josh</h2>
   <p class="small">
     Earlier questions 5 (<code>alpha</code> as a pixel radius) and 10 (a shared
-    kernel, <code>Shape.kelp({ t })</code> later) are retired: the blob replaces
-    both.
+    kernel, <code>Shape.kelp({ t })</code> later) were retired in v3. In v4,
+    question 5 is rewritten for the new parameters, question 10 (leave alpha
+    out) is retired because alpha is back as <code>convexity</code>, and 12 to
+    14 are new.
   </p>
   <ol class="decisions">
     <li>
@@ -1976,10 +2240,12 @@ chart(catch)
       <code>outline: Outline.*</code>?
     </li>
     <li>
-      The blob's parameters: <code>density</code> (0 to 1, a tree to every
-      link), <code>neck</code> (link width as a fraction of the bulge),
-      <code>smoothing</code> (pixels, default same as <code>padding</code>) and
-      <code>clearance</code> (pixels)?
+      The blob's parameters: <code>convexity</code> (0 to 1, a tree to the hull;
+      default 0.5), <code>neck</code> (width of links that do not bound a filled
+      triangle, as a fraction of the bulge; default 1),
+      <code>smoothing</code> (pixels; closing radius, which also sets the blur;
+      default same as <code>padding</code>) and <code>clearance</code> (pixels;
+      default 4)? <code>density</code> is dropped.
     </li>
     <li>
       <code>avoiding</code> and <code>via</code> on <code>Shape.blob()</code>,
@@ -1999,14 +2265,26 @@ chart(catch)
       For rows that carry refs, name the ref column with <code>members</code>,
       like <code>line({ from, to })</code>?
     </li>
-    <li>
-      Leave the exact alpha shape and KelpFusion's face-size limit
-      <code>A</code> out of the first cut (every face with no avoided node
-      inside is filled)?
-    </li>
+    <li>(Retired in v4: alpha is back, as <code>convexity</code>.)</li>
     <li>
       In a chart, should a spine stay inside the plot area by rule, or should
       the user list the axis in <code>avoiding</code>?
+    </li>
+    <li>
+      <code>convexity</code> as the name, with alpha = <em>m</em> ×
+      <code>convexity</code> / (1 − <code>convexity</code>) and <em>m</em> the
+      median spanning-tree link, so it does not change with a resize? (Or a
+      length relative to <code>padding</code>, or a pixel <code>alpha</code>.)
+    </li>
+    <li>
+      Should an avoided node inside the set (inside the members' convex hull) be
+      a wall during the closing, so the outline wraps it in a U, or should the
+      outline only detour around it (the default here)?
+    </li>
+    <li>
+      Keep all smoothing inside <code>Shape.blob()</code> (the region blur), no
+      <code>curve</code> key on <code>enclose</code>, and take the closed-curve
+      findings to #957?
     </li>
   </ol>
 
@@ -2045,8 +2323,8 @@ chart(catch)
         <td>hand-drawn concave <code>polygon</code></td>
         <td>
           <code
-            >enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.7, smoothing:
-            40 }) }, [a, c])</code
+            >enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.85,
+            smoothing: 40 }) }, [a, c])</code
           >
         </td>
       </tr>
@@ -2054,7 +2332,7 @@ chart(catch)
         <td>no in-between shape</td>
         <td>
           <code
-            >enclose({ shape: Shape.blob({ density: 0.5, avoiding }) },
+            >enclose({ shape: Shape.blob({ convexity: 0.5, avoiding }) },
             members)</code
           >
         </td>

@@ -1275,3 +1275,728 @@ export const BlobTroutBars: StoryObj = {
   },
 };
 
+// ── (e) v4: curvature-continuous outlines ───────────────────────────────────
+//
+// Josh's v3 feedback: no curvature jump where a member's circle meets a link,
+// alpha's fuller (more convex) look back, and a less shrink-wrapped Topology.
+//
+// Construction ("smoothed union"), for one set:
+//  1. Skeleton = alpha complex of the member centers + spanning tree.
+//     alpha = m * convexity / (1 - convexity), where m is the median link of the
+//     members' Euclidean minimum spanning tree (so the rule is unchanged by a
+//     resize). A Delaunay triangle is filled when its circumradius <= alpha and no
+//     avoided node's keep-out zone touches it. Links: the filled triangles' edges,
+//     Delaunay edges with half-length <= alpha that no avoided node blocks, the
+//     minimum spanning tree over links routed around avoided nodes (always, so the
+//     set stays one piece), and `via` edges. convexity 0 = the tree, 1 = every face.
+//  2. Pieces and closing as in v3 (discs of radius R = member radius + padding,
+//     tubes of half-width neck * R, filled faces; closing by `smoothing`), then the
+//     avoided keep-out zones are cut out.
+//  3. Smoothing: the region's indicator is blurred with a Gaussian of width
+//     sigma = smoothing / 2 and the outline is the level 1/2 of the result (one step
+//     of Merriman-Bence-Osher curvature flow). The blurred field is a finite sum of
+//     Gaussians, so it is infinitely differentiable, and its level line has
+//     continuous curvature wherever the gradient is not zero.
+//     Blurring pulls a convex arc of radius r in by about sigma^2 / (2r); discs,
+//     tubes and cut zones are drawn slightly larger so that an isolated member
+//     ends exactly at `padding`, a lone tube at its half-width, and the cut at the
+//     clearance (exact for isolated pieces, approximate where pieces meet).
+//  4. Tracing: marching squares on the grid, then every vertex is moved onto the
+//     exact level line by Newton steps on the analytic field (no grid waviness).
+//
+// Candidate (a), "convolution surface": one weighted Gaussian sum over the same
+// skeleton (points, link samples, face samples), with weights set so each
+// isolated piece alone ends at its target offset. Pieces add where they meet.
+//
+// Candidate (b), "curve through the v3 outline": the v3 outline resampled every
+// `spacing` px is the control polygon of a closed interpolating curve: centripetal
+// Catmull-Rom (C1, the foil), periodic natural cubic spline (C2), or a Yuksel-style
+// C2 blend of circles through consecutive point triples.
+
+const erf = (x: number) => {
+  const s = Math.sign(x), a = Math.abs(x), t = 1 / (1 + 0.3275911 * a);
+  return s * (1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-a * a));
+};
+const Phi = (x: number) => 0.5 * (1 + erf(x / Math.SQRT2));
+/** e^{-x} I0(x) (Abramowitz and Stegun 9.8.1-2). */
+const i0e = (x: number) => {
+  const ax = Math.abs(x);
+  if (ax < 3.75) {
+    const y = (x / 3.75) ** 2;
+    return Math.exp(-ax) * (1 + y * (3.5156229 + y * (3.0899424 + y * (1.2067492 + y * (0.2659732 + y * (0.0360768 + y * 0.0045813))))));
+  }
+  const y = 3.75 / ax;
+  return (1 / Math.sqrt(ax)) * (0.39894228 + y * (0.01328592 + y * (0.00225319 + y * (-0.00157565 + y * (0.00916281 + y * (-0.02057706 + y * (0.02635537 + y * (-0.01647633 + y * 0.00392377))))))));
+};
+/** Gaussian-blurred (width s) indicator of a disc of radius a, at distance r from its center. */
+const discBlur = (r: number, a: number, s: number) => {
+  const lo = Math.max(0, r - 8 * s), hi = Math.min(a, r + 8 * s);
+  if (hi <= lo) return 0;
+  const N = 200, h = (hi - lo) / N;
+  let sum = 0;
+  for (let k = 0; k <= N; k++) {
+    const rho = lo + k * h;
+    const f = (rho / (s * s)) * Math.exp(-((rho - r) ** 2) / (2 * s * s)) * i0e((r * rho) / (s * s));
+    sum += f * (k === 0 || k === N ? 1 : k % 2 ? 4 : 2);
+  }
+  return (sum * h) / 3;
+};
+const bisect = (g: (a: number) => number, lo: number, hi: number) => {
+  for (let k = 0; k < 50; k++) { const mid = (lo + hi) / 2; if (g(mid) < 0) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+};
+/** Disc radius whose blurred level 1/2 lands at radius R (also a hole's cut radius for clearance R). */
+const discComp = (R: number, s: number) => (s <= 0 ? R : bisect((a) => discBlur(R, a, s) - 0.5, R, R + 4 * s));
+/** Tube half-width whose blurred level 1/2 lands at half-width h. */
+const tubeComp = (h: number, s: number) => (s <= 0 ? h : bisect((a) => Phi((a - h) / s) - Phi((-a - h) / s) - 0.5, h, h + 4 * s));
+
+type Field = { I: Float64Array; W: number; H: number; x0: number; y0: number; res: number; sigma: number; z: number };
+/** The blurred field and its derivatives at (x, y): [B, Bx, By, Bxx, Bxy, Byy]. */
+const fieldJet = (fd: Field, x: number, y: number): number[] => {
+  const { I, W, H, x0, y0, res, sigma: s, z } = fd;
+  const rad = Math.ceil((5 * s) / res), fx = (x - x0) / res, fy = (y - y0) / res;
+  const i0 = Math.max(0, Math.floor(fx) - rad), i1 = Math.min(W - 1, Math.ceil(fx) + rad);
+  const j0 = Math.max(0, Math.floor(fy) - rad), j1 = Math.min(H - 1, Math.ceil(fy) + rad);
+  const s2 = s * s, nx = i1 - i0 + 1;
+  const g = new Float64Array(nx), g1 = new Float64Array(nx), g2 = new Float64Array(nx);
+  for (let i = i0; i <= i1; i++) {
+    const d = x - (x0 + i * res), e = Math.exp(-(d * d) / (2 * s2));
+    g[i - i0] = e; g1[i - i0] = (-d / s2) * e; g2[i - i0] = ((d * d) / (s2 * s2) - 1 / s2) * e;
+  }
+  let B = 0, Bx = 0, By = 0, Bxx = 0, Bxy = 0, Byy = 0;
+  for (let j = j0; j <= j1; j++) {
+    const d = y - (y0 + j * res), e = Math.exp(-(d * d) / (2 * s2));
+    const h0 = e, h1 = (-d / s2) * e, h2 = ((d * d) / (s2 * s2) - 1 / s2) * e;
+    let S0 = 0, S1 = 0, S2 = 0;
+    const row = j * W;
+    for (let i = i0; i <= i1; i++) {
+      const v = I[row + i];
+      if (v === 0) continue;
+      S0 += v * g[i - i0]; S1 += v * g1[i - i0]; S2 += v * g2[i - i0];
+    }
+    B += h0 * S0; Bx += h0 * S1; By += h1 * S0; Bxx += h0 * S2; Bxy += h1 * S1; Byy += h2 * S0;
+  }
+  const zz = z * z;
+  return [B / zz, Bx / zz, By / zz, Bxx / zz, Bxy / zz, Byy / zz];
+};
+/** Curvature of the level line through (x, y), positive where the region is convex. */
+const levelCurvature = (j: number[]) => {
+  const [, Bx, By, Bxx, Bxy, Byy] = j;
+  return -(Bxx * By * By - 2 * Bxy * Bx * By + Byy * Bx * Bx) / Math.pow(Bx * Bx + By * By, 1.5);
+};
+const resampleLoop = (loop: Pt[], ds: number): Pt[] => {
+  const n = loop.length, cum = [0];
+  for (let i = 1; i <= n; i++) cum.push(cum[i - 1] + dist(loop[i - 1], loop[i % n]));
+  const L = cum[n], m = Math.max(8, Math.round(L / ds)), out: Pt[] = [];
+  let k = 0;
+  for (let q = 0; q < m; q++) {
+    const t = (q / m) * L;
+    while (cum[k + 1] < t) k++;
+    const u = (t - cum[k]) / (cum[k + 1] - cum[k] || 1), a = loop[k], b = loop[(k + 1) % n];
+    out.push([a[0] + u * (b[0] - a[0]), a[1] + u * (b[1] - a[1])]);
+  }
+  return out;
+};
+/** Move a point onto the level 1/2 of the field by Newton steps along the gradient. */
+const project = (fd: Field, p: Pt, level = 0.5): Pt => {
+  let [x, y] = p;
+  for (let k = 0; k < 6; k++) {
+    const [B, Bx, By] = fieldJet(fd, x, y), g2 = Bx * Bx + By * By;
+    if (g2 < 1e-14) break;
+    const step = (B - level) / g2;
+    x -= step * Bx; y -= step * By;
+    if (Math.abs(step) * Math.sqrt(g2) < 1e-4) break;
+  }
+  return [x, y];
+};
+/** Separable Gaussian blur of a grid, normalized so a constant stays constant. */
+const gaussBlur = (A: Float64Array, W: number, H: number, sigmaCells: number) => {
+  const rad = Math.ceil(5 * sigmaCells), k = new Float64Array(2 * rad + 1);
+  for (let i = -rad; i <= rad; i++) k[i + rad] = Math.exp(-(i * i) / (2 * sigmaCells * sigmaCells));
+  const z = k.reduce((a, b) => a + b, 0);
+  const tmp = new Float64Array(W * H), out = new Float64Array(W * H);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    let s = 0;
+    for (let q = Math.max(-rad, -i); q <= Math.min(rad, W - 1 - i); q++) s += A[j * W + i + q] * k[q + rad];
+    tmp[j * W + i] = s / z;
+  }
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    let s = 0;
+    for (let q = Math.max(-rad, -j); q <= Math.min(rad, H - 1 - j); q++) s += tmp[(j + q) * W + i] * k[q + rad];
+    out[j * W + i] = s / z;
+  }
+  return { out, z };
+};
+const triDist = (p: Pt, q: Pt[]) =>
+  inPoly(p, q) ? 0 : Math.sqrt(Math.min(segDist2([q[0], q[1]], p[0], p[1]), segDist2([q[1], q[2]], p[0], p[1]), segDist2([q[2], q[0]], p[0], p[1])));
+const circumR = (a: Pt, b: Pt, c: Pt) => (dist(a, b) * dist(b, c) * dist(c, a)) / (2 * Math.abs(cross(a, b, c)) || 1e-12);
+
+type SkelOpts = { avoiding?: Member[]; via?: [Pt, Pt][]; pad: number; convexity: number; neck?: number; clearance?: number };
+type Skeleton = { P: Pt[]; R: number[]; links: { route: Pt[]; h: number }[]; faces: Pt[][]; alpha: number };
+/** Step 1: the alpha complex of the centers plus the routed spanning tree. */
+const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
+  const neck = o.neck ?? 0.7, clearance = o.clearance ?? 4, others = o.avoiding ?? [];
+  const P = members.map(centerOf), n = P.length, R = members.map((m) => memberRadius(m) + o.pad);
+  const ek = (i: number, j: number) => (i < j ? `${i},${j}` : `${j},${i}`);
+  const tri: [number, number, number][] = [], cand = new Map<string, [number, number]>();
+  if (n >= 3) {
+    const d = Delaunator.from(P);
+    for (let k = 0; k < d.triangles.length; k += 3) {
+      const [i, j, l] = [d.triangles[k], d.triangles[k + 1], d.triangles[k + 2]];
+      if (Math.abs(cross(P[i], P[j], P[l])) < 1e-9) continue;
+      tri.push([i, j, l]);
+      for (const [u, v] of [[i, j], [j, l], [l, i]]) cand.set(ek(u, v), [Math.min(u, v), Math.max(u, v)]);
+    }
+  }
+  if (tri.length === 0) for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) cand.set(ek(i, j), [i, j]);
+  // the scale: median link of the Euclidean minimum spanning tree
+  const root = P.map((_, k) => k);
+  const find = (k: number): number => (root[k] === k ? k : (root[k] = find(root[k])));
+  const mst: number[] = [];
+  for (const [i, j] of [...cand.values()].sort((a, b) => dist(P[a[0]], P[a[1]]) - dist(P[b[0]], P[b[1]])))
+    if (find(i) !== find(j)) { root[find(i)] = find(j); mst.push(dist(P[i], P[j])); }
+  mst.sort((a, b) => a - b);
+  const m = mst.length ? mst[Math.floor(mst.length / 2)] : 0;
+  const c = Math.max(0, Math.min(1, o.convexity));
+  const alpha = c >= 1 ? Infinity : (m * c) / (1 - c);
+  const keep = (mm: Member) => memberRadius(mm) + clearance;
+  const hw = (i: number, j: number) => neck * Math.min(R[i], R[j]);
+  const faces: Pt[][] = [], faceEdges = new Set<string>();
+  for (const [i, j, l] of tri) {
+    const q = [P[i], P[j], P[l]];
+    if (circumR(q[0], q[1], q[2]) > alpha) continue;
+    if (others.some((mm) => triDist(centerOf(mm), q) < keep(mm))) continue;
+    faces.push(q);
+    [ek(i, j), ek(j, l), ek(l, i)].forEach((e) => faceEdges.add(e));
+  }
+  const obstacle = (mm: Member, grow: number) =>
+    mm.kind === "circle" ? discPoly([mm.cx, mm.cy - 0.01], (keep(mm) + grow) / Math.cos(Math.PI / 32), 32) : convexHull(samples(mm, clearance + grow));
+  const links: { route: Pt[]; h: number }[] = [];
+  const routed: { i: number; j: number; route: Pt[]; len: number }[] = [];
+  for (const [key, [i, j]] of cand) {
+    if (faceEdges.has(key)) { links.push({ route: [P[i], P[j]], h: Math.min(R[i], R[j]) }); routed.push({ i, j, route: [P[i], P[j]], len: dist(P[i], P[j]) }); continue; }
+    const obs = others.map((mm) => obstacle(mm, hw(i, j))).filter((poly) => !inPoly(P[i], poly) && !inPoly(P[j], poly));
+    const route = routeAround(P[i], P[j], obs);
+    if (!route) continue;
+    if (route.length === 2 && dist(P[i], P[j]) / 2 <= alpha) links.push({ route, h: hw(i, j) });
+    routed.push({ i, j, route, len: polyLen(route) });
+  }
+  // the spanning tree over routed links keeps the set in one piece
+  const r2 = P.map((_, k) => k);
+  const f2 = (k: number): number => (r2[k] === k ? k : (r2[k] = f2(r2[k])));
+  for (const e of routed.sort((a, b) => a.len - b.len))
+    if (f2(e.i) !== f2(e.j)) { r2[f2(e.i)] = f2(e.j); links.push({ route: e.route, h: hw(e.i, e.j) }); }
+  for (const [a, b] of o.via ?? []) {
+    const i = P.findIndex((q) => dist(a, q) < 0.5), j = P.findIndex((q) => dist(b, q) < 0.5);
+    if (i >= 0 && j >= 0) links.push({ route: [P[i], P[j]], h: hw(i, j) });
+  }
+  return { P, R, links, faces, alpha };
+};
+
+type SmoothOpts = SkelOpts & { smoothing?: number; res?: number; compensate?: boolean; walls?: boolean };
+type Smooth = { loops: Pt[][]; field: Field | null; skel: Skeleton };
+/** Steps 2-4: union, closing, cut, Gaussian smoothing, exact tracing. */
+const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
+  const sk = skeleton(members, o);
+  const pad = o.pad, s = o.smoothing ?? pad, clearance = o.clearance ?? 4, others = o.avoiding ?? [];
+  // The blur may not be wider than the thinnest piece (a member's radius, a tube's
+  // half-width, an avoided node's keep-out radius), or it would erase that piece.
+  const thinnest = Math.min(...sk.R, ...sk.links.map((e) => e.h), ...others.map((m) => memberRadius(m) + clearance));
+  const sigma = Math.min(s, thinnest) / 2;
+  const comp = o.compensate ?? true;
+  const res = o.res ?? (sigma > 0 ? Math.min(0.5, Math.max(0.25, sigma / 4)) : 0.5);
+  type Piece = { bb: number[]; d: (x: number, y: number) => number };
+  const pieces: Piece[] = [];
+  members.forEach((m, k) => {
+    const Rk = comp ? discComp(sk.R[k], sigma) : sk.R[k];
+    if (m.kind === "circle") pieces.push({ bb: [m.cx - Rk, m.cy - Rk, m.cx + Rk, m.cy + Rk], d: (x, y) => Math.hypot(x - m.cx, y - m.cy) - Rk });
+    else {
+      const pk = comp ? tubeComp(pad, sigma) : pad;
+      pieces.push({
+        bb: [m.x - pk, m.y - pk, m.x + m.w + pk, m.y + m.h + pk],
+        d: (x, y) => Math.hypot(Math.max(m.x - x, 0, x - m.x - m.w), Math.max(m.y - y, 0, y - m.y - m.h)) - pk,
+      });
+    }
+  });
+  const segD = (a: Pt, b: Pt, x: number, y: number) => Math.sqrt(segDist2([a, b], x, y));
+  for (const e of sk.links) {
+    const h = comp ? tubeComp(e.h, sigma) : e.h;
+    for (let k = 1; k < e.route.length; k++) {
+      const a = e.route[k - 1], b = e.route[k];
+      pieces.push({ bb: [Math.min(a[0], b[0]) - h, Math.min(a[1], b[1]) - h, Math.max(a[0], b[0]) + h, Math.max(a[1], b[1]) + h], d: (x, y) => segD(a, b, x, y) - h });
+    }
+  }
+  for (const q of sk.faces) pieces.push({ bb: bboxOf(q), d: (x, y) => { const e = triDist([x, y], q); return e === 0 ? -Math.min(segD(q[0], q[1], x, y), segD(q[1], q[2], x, y), segD(q[2], q[0], x, y)) : e; } });
+  const bb = pieces.reduce((r, p) => [Math.min(r[0], p.bb[0]), Math.min(r[1], p.bb[1]), Math.max(r[2], p.bb[2]), Math.max(r[3], p.bb[3])], [Infinity, Infinity, -Infinity, -Infinity]);
+  const M = s + 5 * sigma + 6, x0 = bb[0] - M, y0 = bb[1] - M;
+  const W = Math.ceil((bb[2] - bb[0] + 2 * M) / res) + 1, H = Math.ceil((bb[3] - bb[1] + 2 * M) / res) + 1;
+  const f = new Float64Array(W * H).fill(1e9);
+  for (const p of pieces) {
+    const i0 = Math.max(0, Math.floor((p.bb[0] - s - 3 - x0) / res)), i1 = Math.min(W - 1, Math.ceil((p.bb[2] + s + 3 - x0) / res));
+    const j0 = Math.max(0, Math.floor((p.bb[1] - s - 3 - y0) / res)), j1 = Math.min(H - 1, Math.ceil((p.bb[3] + s + 3 - y0) / res));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const v = p.d(x0 + i * res, y0 + j * res), k = j * W + i;
+      if (v < f[k]) f[k] = v;
+    }
+  }
+  // Avoided nodes that sit inside the members' convex hull are walls during the
+  // closing: the closing fills up to their keep-out zone, which is then cut out.
+  // (So the outline wraps snugly around a node in the middle of the set.)
+  const P = sk.P, hullP = P.length >= 3 ? convexHull(P) : P;
+  const inside = (c: Pt, r: number) =>
+    P.length >= 3 ? polySigned(c, hullP) < r : P.length === 2 ? Math.sqrt(segDist2([P[0], P[1]], c[0], c[1])) < r : false;
+  if (s > 0 && (o.walls ?? false))
+    for (const m of others) {
+      const kr = memberRadius(m) + clearance;
+      if (!inside(centerOf(m), kr)) continue;
+      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+        const x = x0 + i * res, y = y0 + j * res;
+        const dk = m.kind === "circle" ? Math.hypot(x - m.cx, y - m.cy) - kr
+          : Math.hypot(Math.max(m.x - x, 0, x - m.x - m.w), Math.max(m.y - y, 0, y - m.y - m.h)) - clearance;
+        const k = j * W + i;
+        if (dk < f[k]) f[k] = dk;
+      }
+    }
+  // closing by s (exact distance transform), F > 0 inside
+  const F = new Float64Array(W * H);
+  if (s > 0) {
+    const outside = new Uint8Array(W * H);
+    for (let k = 0; k < W * H; k++) outside[k] = f[k] > s ? 1 : 0;
+    const dOut = edtTo(outside, W, H);
+    for (let k = 0; k < W * H; k++) F[k] = outside[k] ? -f[k] : dOut[k] * res - s;
+  } else for (let k = 0; k < W * H; k++) F[k] = -f[k];
+  // cut the keep-out zones
+  for (const m of others) {
+    const kr = m.kind === "circle" ? (comp ? discComp(memberRadius(m) + clearance, sigma) : memberRadius(m) + clearance) : 0;
+    const cl = m.kind === "rect" ? (comp ? tubeComp(clearance, sigma) : clearance) : 0;
+    const mb = m.kind === "circle" ? [m.cx - kr, m.cy - kr, m.cx + kr, m.cy + kr] : [m.x - cl, m.y - cl, m.x + m.w + cl, m.y + m.h + cl];
+    const i0 = Math.max(0, Math.floor((mb[0] - x0) / res) - 2), i1 = Math.min(W - 1, Math.ceil((mb[2] - x0) / res) + 2);
+    const j0 = Math.max(0, Math.floor((mb[1] - y0) / res) - 2), j1 = Math.min(H - 1, Math.ceil((mb[3] - y0) / res) + 2);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const x = x0 + i * res, y = y0 + j * res;
+      const dk = m.kind === "circle" ? Math.hypot(x - m.cx, y - m.cy) - kr
+        : Math.hypot(Math.max(m.x - x, 0, x - m.x - m.w), Math.max(m.y - y, 0, y - m.y - m.h)) - cl;
+      const k = j * W + i;
+      if (dk < F[k]) F[k] = dk;
+    }
+  }
+  if (sigma <= 0) {
+    const loops = contours(F, W, H, x0, y0, res).map((l) => relax(l, 3));
+    return { loops: loops.filter((l) => loopArea(l) > 40 * res * res), field: null, skel: sk };
+  }
+  // smoothing: blur the (anti-aliased) indicator, trace level 1/2 exactly
+  const I = new Float64Array(W * H);
+  for (let k = 0; k < W * H; k++) I[k] = Math.max(0, Math.min(1, 0.5 + F[k] / res));
+  const { out: Bg, z } = gaussBlur(I, W, H, sigma / res);
+  const fd: Field = { I, W, H, x0, y0, res, sigma, z };
+  const G = new Float64Array(W * H);
+  for (let k = 0; k < W * H; k++) G[k] = Bg[k] - 0.5;
+  const raw = contours(G, W, H, x0, y0, res).filter((l) => loopArea(l) > 40 * res * res);
+  const loops = raw.map((l) => resampleLoop(resampleLoop(l, 1).map((p) => project(fd, p)), 1).map((p) => project(fd, p)));
+  return { loops, field: fd, skel: sk };
+};
+
+/** Candidate (a): a convolution surface, one Gaussian sum over the skeleton. */
+const convolutionBlob = (members: Member[], o: SmoothOpts): Pt[][] => {
+  const sk = skeleton(members, o), s = o.smoothing ?? o.pad, sigma = s / 2, s2 = sigma * sigma;
+  const G: [number, number, number][] = []; // x, y, log weight
+  sk.P.forEach((p, k) => G.push([p[0], p[1], (sk.R[k] ** 2) / (2 * s2)]));
+  const dl = sigma / 3;
+  for (const e of sk.links)
+    for (let k = 1; k < e.route.length; k++) {
+      const a = e.route[k - 1], b = e.route[k], L = dist(a, b), nseg = Math.max(1, Math.ceil(L / dl));
+      for (let q = 0; q < nseg; q++) {
+        const t = (q + 0.5) / nseg;
+        G.push([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), Math.log(L / nseg / (Math.sqrt(2 * Math.PI) * sigma)) + (e.h * e.h) / (2 * s2)]);
+      }
+    }
+  const Rf = Math.min(...sk.R);
+  for (const q of sk.faces) {
+    const [a, b, c] = q, A = Math.abs(cross(a, b, c)) / 2, nn = Math.max(2, Math.ceil(Math.sqrt(A) / dl));
+    const lw = Math.log(A / (nn * nn) / (2 * Math.PI * s2 * Phi(-Rf / sigma)));
+    for (let u = 0; u < nn; u++) for (let v = 0; v < nn - u; v++)
+      for (const flip of [0, 1]) {
+        if (flip && u + v >= nn - 1) continue;
+        const uu = flip ? (u + 2 / 3) / nn : (u + 1 / 3) / nn, vv = flip ? (v + 2 / 3) / nn : (v + 1 / 3) / nn;
+        G.push([a[0] + uu * (b[0] - a[0]) + vv * (c[0] - a[0]), a[1] + uu * (b[1] - a[1]) + vv * (c[1] - a[1]), lw]);
+      }
+  }
+  const xs = G.map((g) => g[0]), ys = G.map((g) => g[1]), Rm = Math.max(...sk.R) + 4 * sigma;
+  const res = 0.5, x0 = Math.min(...xs) - Rm, y0 = Math.min(...ys) - Rm;
+  const W = Math.ceil((Math.max(...xs) + Rm - x0) / res), H = Math.ceil((Math.max(...ys) + Rm - y0) / res);
+  const Fv = new Float64Array(W * H);
+  for (const [gx, gy, lw] of G) {
+    const r = Math.sqrt(2 * s2 * Math.max(1, lw + 12));
+    const i0 = Math.max(0, Math.floor((gx - r - x0) / res)), i1 = Math.min(W - 1, Math.ceil((gx + r - x0) / res));
+    const j0 = Math.max(0, Math.floor((gy - r - y0) / res)), j1 = Math.min(H - 1, Math.ceil((gy + r - y0) / res));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const dx = x0 + i * res - gx, dy = y0 + j * res - gy;
+      Fv[j * W + i] += Math.exp(lw - (dx * dx + dy * dy) / (2 * s2));
+    }
+  }
+  for (let k = 0; k < W * H; k++) Fv[k] = Math.log(Fv[k] + 1e-300);
+  for (const mm of o.avoiding ?? []) {
+    const kr = memberRadius(mm) + (o.clearance ?? 4), [cx, cy] = centerOf(mm);
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const d = Math.hypot(x0 + i * res - cx, y0 + j * res - cy) - kr;
+      if (d < Fv[j * W + i]) Fv[j * W + i] = d;
+    }
+  }
+  return contours(Fv, W, H, x0, y0, res).map((l) => relax(l, 2)).filter((l) => loopArea(l) > 20);
+};
+
+// ── candidate (b): closed interpolating curves through a control polygon ──
+type CurveKind = "catmullRom" | "natural" | "yuksel";
+type ClosedCurve = { n: number; at: (i: number, u: number) => Pt };
+const closedCurve = (ctrl: Pt[], kind: CurveKind): ClosedCurve => {
+  const n = ctrl.length, P = (i: number) => ctrl[((i % n) + n) % n];
+  if (kind === "catmullRom") {
+    // centripetal (Barry-Goldman), C1 at the knots
+    return {
+      n, at: (i, u) => {
+        const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+        const t0 = 0, t1 = t0 + (Math.sqrt(dist(p0, p1)) || 1e-6), t2 = t1 + (Math.sqrt(dist(p1, p2)) || 1e-6), t3 = t2 + (Math.sqrt(dist(p2, p3)) || 1e-6);
+        const t = t1 + u * (t2 - t1);
+        const L = (a: Pt, b: Pt, ta: number, tb: number): Pt => [((tb - t) * a[0] + (t - ta) * b[0]) / (tb - ta), ((tb - t) * a[1] + (t - ta) * b[1]) / (tb - ta)];
+        const A1 = L(p0, p1, t0, t1), A2 = L(p1, p2, t1, t2), A3 = L(p2, p3, t2, t3);
+        return L(L(A1, A2, t0, t2), L(A2, A3, t1, t3), t1, t2);
+      },
+    };
+  }
+  if (kind === "natural") {
+    // periodic cubic spline per coordinate with chord-length knots: C2
+    const h = Array.from({ length: n }, (_, i) => dist(P(i), P(i + 1)) || 1e-6);
+    const solve = (c: 0 | 1) => {
+      const A = Array.from({ length: n }, () => new Float64Array(n)), b = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        const hm = h[(i - 1 + n) % n], hi = h[i];
+        A[i][(i - 1 + n) % n] += hm; A[i][i] += 2 * (hm + hi); A[i][(i + 1) % n] += hi;
+        b[i] = 6 * ((P(i + 1)[c] - P(i)[c]) / hi - (P(i)[c] - P(i - 1)[c]) / hm);
+      }
+      for (let k = 0; k < n; k++) {
+        let piv = k;
+        for (let r = k + 1; r < n; r++) if (Math.abs(A[r][k]) > Math.abs(A[piv][k])) piv = r;
+        [A[k], A[piv]] = [A[piv], A[k]]; [b[k], b[piv]] = [b[piv], b[k]];
+        for (let r = k + 1; r < n; r++) {
+          const fct = A[r][k] / A[k][k];
+          if (fct === 0) continue;
+          for (let q = k; q < n; q++) A[r][q] -= fct * A[k][q];
+          b[r] -= fct * b[k];
+        }
+      }
+      const Mv = new Float64Array(n);
+      for (let k = n - 1; k >= 0; k--) { let sum = b[k]; for (let q = k + 1; q < n; q++) sum -= A[k][q] * Mv[q]; Mv[k] = sum / A[k][k]; }
+      return Mv;
+    };
+    const Mx = solve(0), My = solve(1);
+    const ev = (Mv: Float64Array, c: 0 | 1, i: number, u: number) => {
+      const hi = h[i], t = u * hi, a = P(i)[c], b = P(i + 1)[c], m0 = Mv[i], m1 = Mv[(i + 1) % n];
+      return (m0 * (hi - t) ** 3) / (6 * hi) + (m1 * t ** 3) / (6 * hi) + (a / hi - (m0 * hi) / 6) * (hi - t) + (b / hi - (m1 * hi) / 6) * t;
+    };
+    return { n, at: (i, u) => { const ii = ((i % n) + n) % n; return [ev(Mx, 0, ii, u), ev(My, 1, ii, u)]; } };
+  }
+  // Yuksel-style C2 blend: C(θ) = cos²θ F_i(θ) + sin²θ F_{i+1}(θ - π/2), with F_i the circle
+  // through P(i-1), P(i), P(i+1), P(i) at θ = 0 and the neighbors at ∓π/2. The arc angle is
+  // one quadratic in θ across P(i) (our choice), so each F_i is smooth and the blend is C2.
+  const interp = (i: number) => {
+    const a = P(i - 1), b = P(i), c = P(i + 1), cr = cross(a, b, c);
+    if (Math.abs(cr) < 1e-6 * dist(a, c) ** 2) {
+      return (th: number): Pt => {
+        const t = th / (Math.PI / 2);
+        return [b[0] + (t * (c[0] - a[0])) / 2 + (t * t * (a[0] + c[0] - 2 * b[0])) / 2, b[1] + (t * (c[1] - a[1])) / 2 + (t * t * (a[1] + c[1] - 2 * b[1])) / 2];
+      };
+    }
+    const d = 2 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]));
+    const ux = ((a[0] ** 2 + a[1] ** 2) * (b[1] - c[1]) + (b[0] ** 2 + b[1] ** 2) * (c[1] - a[1]) + (c[0] ** 2 + c[1] ** 2) * (a[1] - b[1])) / d;
+    const uy = ((a[0] ** 2 + a[1] ** 2) * (c[0] - b[0]) + (b[0] ** 2 + b[1] ** 2) * (a[0] - c[0]) + (c[0] ** 2 + c[1] ** 2) * (b[0] - a[0])) / d;
+    const r = Math.hypot(b[0] - ux, b[1] - uy), ang = (p: Pt) => Math.atan2(p[1] - uy, p[0] - ux);
+    const wrap = (x: number) => { while (x > Math.PI) x -= 2 * Math.PI; while (x < -Math.PI) x += 2 * Math.PI; return x; };
+    // angles of a and c measured from b, going the way that passes through b on the arc from a to c
+    let phiA = wrap(ang(a) - ang(b)), phiC = wrap(ang(c) - ang(b));
+    if (Math.sign(phiA) === Math.sign(phiC)) { if (Math.abs(phiA) > Math.abs(phiC)) phiA -= Math.sign(phiA) * 2 * Math.PI; else phiC -= Math.sign(phiC) * 2 * Math.PI; }
+    const q = Math.PI / 2, k1 = (phiC - phiA) / (2 * q), k2 = (phiC + phiA) / (2 * q * q), b0 = ang(b);
+    return (th: number): Pt => { const ph = b0 + k1 * th + k2 * th * th; return [ux + r * Math.cos(ph), uy + r * Math.sin(ph)]; };
+  };
+  const Fs = Array.from({ length: n }, (_, i) => interp(i));
+  return {
+    n, at: (i, u) => {
+      const ii = ((i % n) + n) % n, th = u * (Math.PI / 2), A = Fs[ii](th), B = Fs[(ii + 1) % n](th - Math.PI / 2);
+      const c2 = Math.cos(th) ** 2, s2 = Math.sin(th) ** 2;
+      return [c2 * A[0] + s2 * B[0], c2 * A[1] + s2 * B[1]];
+    },
+  };
+};
+/** Sample a closed curve, with curvature from derivatives in the parameter (inside each segment). */
+const sampleCurve = (cv: ClosedCurve, per = 12): { pts: Pt[]; kappa: number[] } => {
+  const pts: Pt[] = [], kappa: number[] = [], e = 1e-3;
+  for (let i = 0; i < cv.n; i++)
+    for (let q = 0; q < per; q++) {
+      const u = (q + 0.5) / per, p = cv.at(i, u), a = cv.at(i, u - e), b = cv.at(i, u + e);
+      const d1: Pt = [(b[0] - a[0]) / (2 * e), (b[1] - a[1]) / (2 * e)], d2: Pt = [(b[0] - 2 * p[0] + a[0]) / (e * e), (b[1] - 2 * p[1] + a[1]) / (e * e)];
+      pts.push(p);
+      kappa.push((d1[0] * d2[1] - d1[1] * d2[0]) / Math.pow(d1[0] ** 2 + d1[1] ** 2, 1.5));
+    }
+  const sg = Math.sign(signedArea(pts));
+  return { pts, kappa: kappa.map((k) => k * sg) };
+};
+/** Numeric curvature of a traced loop: circle through the points k samples before and after. */
+const loopCurvature = (loop: Pt[], k: number) => {
+  const n = loop.length, sg = Math.sign(signedArea(loop));
+  return loop.map((p, i) => {
+    const a = loop[(i - k + n) % n], c = loop[(i + k) % n];
+    return (sg * 2 * cross(a, p, c)) / (dist(a, p) * dist(p, c) * dist(c, a) || 1);
+  });
+};
+/** Candidate (b): the v3 outline as a control polygon, then a closed curve through it. */
+const curveThrough = (loop: Pt[], kind: CurveKind, spacing: number) => sampleCurve(closedCurve(resampleLoop(loop, spacing), kind), 16);
+/** The smoothed-union outline with analytic curvature at each traced point. */
+const smoothWithCurvature = (sm: Smooth) => {
+  const loop = sm.loops.reduce((a, b) => (loopArea(a) > loopArea(b) ? a : b));
+  const fine = resampleLoop(loop, 0.5).map((p) => project(sm.field!, p));
+  return { pts: fine, kappa: fine.map((p) => levelCurvature(fieldJet(sm.field!, p[0], p[1]))) };
+};
+
+// ── v4 figures ──────────────────────────────────────────────────────────────
+const RED = "#ff2400";
+const loopInk = (loops: Pt[][], color: string, fillOpacity = 0.22, strokeWidth = 1.5) => blobInk(loops, color, fillOpacity, strokeWidth);
+/** An open polyline drawn as a polygon that goes out and back along the same points. */
+const polyline = (pts: Pt[], stroke: string, strokeWidth = 1.2) =>
+  polygon({ points: [...pts, ...pts.slice().reverse()], fill: "none", stroke, strokeWidth });
+/** Curvature comb: a tooth along the outward normal at each sample, length k * kappa. */
+const comb = (pts: Pt[], kappa: number[], k: number, every: number, color = "#2b7a78") => {
+  const n = pts.length, sg = Math.sign(signedArea(pts)), tips: Pt[] = [], teeth: any[] = [];
+  for (let i = 0; i < n; i += every) {
+    const a = pts[(i - 1 + n) % n], b = pts[(i + 1) % n], tx = b[0] - a[0], ty = b[1] - a[1], L = Math.hypot(tx, ty) || 1;
+    // outward normal for a loop of positive signed area (y down) is (ty, -tx) * sg
+    const nx = (sg * ty) / L, ny = (-sg * tx) / L, len = k * kappa[i];
+    const tip: Pt = [pts[i][0] + nx * len, pts[i][1] + ny * len];
+    tips.push(tip);
+    teeth.push(polyline([pts[i], tip], color, 0.6));
+  }
+  return [...teeth, polygon({ points: tips, fill: "none", stroke: color, strokeWidth: 1 })];
+};
+/** Curvature against arc length, starting at the leftmost point. */
+const kappaPlot = (pts: Pt[], kappa: number[], o: { w: number; h: number; kmax: number; color: string; title: string; refs?: [number, string][] }) => {
+  const n = pts.length;
+  let start = 0;
+  for (let i = 1; i < n; i++) if (pts[i][0] < pts[start][0]) start = i;
+  const s: number[] = [0];
+  for (let q = 1; q < n; q++) s.push(s[q - 1] + dist(pts[(start + q - 1) % n], pts[(start + q) % n]));
+  const L = s[n - 1] + dist(pts[(start + n - 1) % n], pts[start]);
+  const X = (v: number) => 40 + (v / L) * (o.w - 50), Y = (k: number) => o.h / 2 - (Math.max(-o.kmax, Math.min(o.kmax, k)) / o.kmax) * (o.h / 2 - 12);
+  const line: Pt[] = s.map((v, q) => [X(v), Y(kappa[(start + q) % n])]);
+  return layer([
+    polygon({ points: [[40, 12], [o.w - 10, 12], [o.w - 10, o.h - 12], [40, o.h - 12]], fill: "#fafafa", stroke: "#ddd", strokeWidth: 1 }),
+    polyline([[40, Y(0)], [o.w - 10, Y(0)]], "#999", 0.8),
+    ...(o.refs ?? []).map(([k]) => polyline([[40, Y(k)], [o.w - 10, Y(k)]], "#bbb", 0.6)),
+    ...(o.refs ?? []).map(([k, t]) => label(o.w - 8, Y(k) - 4, t, { fontSize: 9, fill: "#888" })),
+    label(2, Y(o.kmax) - 2, `+${o.kmax}`, { fontSize: 9, fill: "#666" }),
+    label(6, Y(0) - 4, "0", { fontSize: 9, fill: "#666" }),
+    label(2, Y(-o.kmax) - 2, `−${o.kmax}`, { fontSize: 9, fill: "#666" }),
+    polyline(line, o.color, 1.3),
+    label(44, 0, o.title, { fontSize: 11, fill: "#333" }),
+    label(o.w / 2 - 40, o.h - 10, "arc length →", { fontSize: 9, fill: "#888" }),
+  ]);
+};
+
+// Topology a/c avoiding b (points 100 apart, rings of radius 14 as in Munkres).
+const AC_PAD = 21, AC_CLEAR = 10;
+const acV3 = () => blob([MA, MC], spinePreset({ avoiding: [ring(MB)], pad: AC_PAD, neck: 0.7, smoothing: 40, clearance: AC_CLEAR, res: 0.25 }));
+const acV4 = (o: Partial<SmoothOpts> = {}) =>
+  smoothBlob([MA, MC], { avoiding: [ring(MB)], pad: AC_PAD, convexity: 0, neck: 1, smoothing: 40, clearance: AC_CLEAR, ...o });
+const topoBase = () => [ringInk(MB), ...topoPoints()];
+const targetRing = (m: Extract<Member, { kind: "circle" }>, R: number) =>
+  polygon({ points: discPoly([m.cx, m.cy], R, 64), fill: "none", stroke: "#888", strokeWidth: 0.8, strokeDasharray: "3 3" });
+
+type KRow = { title: string; note?: string; pts: Pt[]; kappa: number[]; color: string };
+const minDistTo = (pts: Pt[], c: Pt) => Math.min(...pts.map((p) => dist(p, c)));
+/** Measured: padding at a's far side, gap to b's ring, and worst distance from the v3 outline. */
+const measure = (pts: Pt[], v3?: Pt[]) => {
+  const left = pts.reduce((a, b) => (b[0] < a[0] ? b : a));
+  const padA = MA.cx - left[0], gapB = minDistTo(pts, [MB.cx, MB.cy]) - 14;
+  const dev = v3 ? Math.max(...pts.map((p) => minDistTo(v3, p))) : 0;
+  return `R at a ${padA.toFixed(1)} (want ${MA.r + AC_PAD}), gap to b ${gapB.toFixed(1)} (want ${AC_CLEAR})` + (v3 ? `, off v3 ≤ ${dev.toFixed(1)}` : "");
+};
+const curvatureRows = (): KRow[] => {
+  const v3 = resampleLoop(acV3().reduce((a, b) => (loopArea(a) > loopArea(b) ? a : b)), 0.5);
+  const v3k = loopCurvature(v3, 10);
+  const f = smoothWithCurvature(acV4({ convexity: 0, neck: 0.7, smoothing: 40 }));
+  const nat10 = curveThrough(v3, "natural", 10), nat = curveThrough(v3, "natural", 25), yuk = curveThrough(v3, "yuksel", 25), cr = curveThrough(v3, "catmullRom", 25);
+  const rows: [string, { pts: Pt[]; kappa: number[] }, string, boolean][] = [
+    ["v3: union + closing (measured from the outline)", { pts: v3, kappa: v3k }, "#c0392b", false],
+    ["field: smoothed union (exact, from the field)", f, "#1f6f8b", true],
+    ["curve: natural cubic spline through v3, knots 10 px apart", nat10, "#7b4ea3", true],
+    ["curve: natural cubic spline through v3, knots 25 px apart", nat, "#7b4ea3", true],
+    ["curve: Yuksel-style C2 blend of circles, 25 px", yuk, "#3c8d2f", true],
+    ["curve: centripetal Catmull-Rom (C1 foil), 25 px", cr, "#b9770e", true],
+  ];
+  return rows.map(([t, r, color, cmp]) => {
+    const m = measure(r.pts, cmp ? v3 : undefined);
+    console.error(`[v4 curvature] ${t}: ${m}`);
+    return { title: t, note: m, pts: r.pts, kappa: r.kappa, color };
+  });
+};
+export const V4Curvature: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    const rows = curvatureRows(), RH = 150, invR = 1 / (MA.r + AC_PAD);
+    layer(
+      rows.flatMap((r, i) => [
+        position({ x: 0, y: i * RH }, [layer([
+          polygon({ points: r.pts, fill: r.color, opacity: 0.12, stroke: "none" }),
+          ...comb(r.pts, r.kappa, 300, 2, r.color),
+          polygon({ points: r.pts, fill: "none", stroke: "#111", strokeWidth: 1.2 }),
+          ...topoBase(),
+        ])]),
+        position({ x: 330, y: i * RH + 8 }, [kappaPlot(r.pts, r.kappa, { w: 520, h: RH - 14, kmax: 0.08, color: r.color, title: r.title, refs: [[invR, "1/R"], [-1 / 40, "−1/40"]] })]),
+        label(376, i * RH + 22, r.note ?? "", { fontSize: 9, fill: "#555" }),
+      ])
+    ).render(container, { w: 860, h: rows.length * RH });
+    return container;
+  },
+};
+
+// Signed distance from p to a closed polygon's boundary (positive outside).
+const polySigned = (p: Pt, poly: Pt[]) => {
+  let d = Infinity;
+  for (let i = 0; i < poly.length; i++) d = Math.min(d, Math.sqrt(segDist2([poly[i], poly[(i + 1) % poly.length]], p[0], p[1])));
+  return inPoly(p, poly) ? -d : d;
+};
+const biggest = (loops: Pt[][]) => loops.reduce((a, b) => (loopArea(a) > loopArea(b) ? a : b));
+
+// The three candidates for task 1 side by side, on the Topology set and the U.
+const U_V4 = { avoiding: NON, pad: 8 };
+export const V4Candidates: StoryObj = {
+  render: () => {
+    const acOpts = { avoiding: [ring(MB)], pad: AC_PAD, convexity: 0, neck: 0.7, smoothing: 40, clearance: AC_CLEAR };
+    const v3ac = acV3(), v3u = blob(U, { avoiding: NON, pad: 8, density: 0.5, smoothing: 8 });
+    const acPanel = (ink: any[]) => layer([...ink, targetRing(MA, MA.r + AC_PAD), targetRing(MC, MC.r + AC_PAD), ...topoBase()]);
+    const cols: [string, any, any][] = [
+      ["v3: union + closing (G1)", acPanel(loopInk(v3ac, RED, 0.25, 2)), uPanel(blobInk(v3u, BLUE))],
+      ["(a) convolution surface", acPanel(loopInk(convolutionBlob([MA, MC], acOpts), RED, 0.25, 2)), uPanel(blobInk(convolutionBlob(U, { ...U_V4, convexity: 0.5, smoothing: 8 }), BLUE))],
+      ["(b) natural spline through v3", acPanel(loopInk([curveThrough(biggest(v3ac), "natural", 25).pts], RED, 0.25, 2)), uPanel(blobInk(v3u.map((l) => curveThrough(l, "natural", 12).pts), BLUE))],
+      ["(c) smoothed union (chosen)", acPanel(loopInk(smoothBlob([MA, MC], acOpts).loops, RED, 0.25, 2)), uPanel(blobInk(smoothBlob(U, { ...U_V4, convexity: 0.5, smoothing: 8 }).loops, BLUE))],
+    ];
+    return titledGrid([...cols.map(([t, a]) => [t, a] as [string, any]), ...cols.map(([t, , u]) => [t, u] as [string, any])], { w: 300, h: 225, cols: 4 });
+  },
+};
+
+// Topology a/c avoiding b: v3 against the new construction.
+// {a, c} for the Munkres panel. Without walls the link detours under b (a boomerang);
+// with walls, b is a wall for the closing, so the outline fills up to b's keep-out zone.
+const MUNK = { avoiding: [ring(MB)], pad: 22, convexity: 0, neck: 0.85, smoothing: 40, clearance: 6 };
+const MUNK_WALLS = { ...MUNK, pad: 20, neck: 0.8, walls: true };
+export const V4Topology: StoryObj = {
+  render: () => titledGrid([
+    ["v3: padding 21, neck 0.7, smoothing 40", layer([...loopInk(acV3(), RED, 0.3, 2), ...topoBase()])],
+    ["new, same parameters", layer([...loopInk(acV4({ neck: 0.7 }).loops, RED, 0.3, 2), ...topoBase()])],
+    ["new: padding 22, neck 0.85", layer([...loopInk(smoothBlob([MA, MC], MUNK).loops, RED, 0.3, 2), ...topoBase()])],
+    ["new, b as a wall: padding 20, neck 0.8", layer([...loopInk(smoothBlob([MA, MC], MUNK_WALLS).loops, RED, 0.3, 2), ...topoBase()])],
+  ], { w: 340, h: 150, cols: 2 }),
+};
+// Munkres' ninth panel (Topology, 2nd ed., Figure 12.1) with the new construction for {a, c}.
+const munkresPanel = (o: SmoothOpts) => {
+  const oval = (cx: number, w: number, h: number) =>
+    position({ x: cx - w / 2, y: 70 - h / 2 }, [ellipse({ w, h, fill: "none", stroke: "#111", strokeWidth: 2.5 })]);
+  return position({ x: 28, y: 24 }, [layer([
+    oval(160, 372, 184), oval(110, 176, 104), oval(210, 176, 104),
+    ...outlineOnly(smoothBlob([MA, MC], o).loops),
+    ...[MA, MB, MC].map(ringInk), ...topoPoints(),
+  ])]);
+};
+export const V4TopologyMunkres: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    layer([munkresPanel(MUNK)]).render(container, { w: 380, h: 190 });
+    return container;
+  },
+};
+export const V4TopologyMunkresWalls: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    layer([munkresPanel(MUNK_WALLS)]).render(container, { w: 380, h: 190 });
+    return container;
+  },
+};
+
+// Convexity on the U and on one penguin species, against the classic alpha shape and v3.
+const convexityCells = (o: {
+  members: Extract<Member, { kind: "circle" }>[]; avoiding: Member[]; pad: number; alpha: number; smoothing: number;
+  panel: (ink: any[]) => any; color: string;
+}): [string, any][] => {
+  const sb = (c: number) => o.panel(blobInk(smoothBlob(o.members, { avoiding: o.avoiding, pad: o.pad, convexity: c, smoothing: o.smoothing }).loops, o.color));
+  return [
+    [`alpha shape (classic), alpha ${o.alpha}`, o.panel(region(hullOutline(o.members, o.pad, o.alpha), o.color))],
+    ["v3 blob, density 0.5", o.panel(blobInk(blob(o.members, { avoiding: o.avoiding, pad: o.pad, density: 0.5, smoothing: o.smoothing }), o.color))],
+    ["new, convexity 0 (spine)", sb(0)],
+    ["new, convexity 0.5", sb(0.5)],
+    ["new, convexity 0.8", sb(0.8)],
+    ["new, convexity 1 (hull)", sb(1)],
+  ];
+};
+export const V4ConvexityU: StoryObj = {
+  render: () => titledGrid(convexityCells({ members: U, avoiding: NON, pad: 8, alpha: 40, smoothing: 8, panel: uPanel, color: BLUE }), { w: 265, h: 225, cols: 3 }),
+};
+const gentooPts = () => pen.filter((d) => d.Species === "Gentoo").map((d) => C(xs(d["Beak Length (mm)"]), ys(d["Beak Depth (mm)"]), 2.5));
+const otherPts = () => pen.filter((d) => d.Species !== "Gentoo").map((d) => C(xs(d["Beak Length (mm)"]), ys(d["Beak Depth (mm)"]), 2.5));
+export const V4ConvexityPenguins: StoryObj = {
+  render: () => {
+    // crop to the Gentoo cluster: shift coordinates so its box sits in the panel, and keep
+    // only the other species' points that fall inside the panel (plus a margin)
+    const g = gentooPts(), PWc = 300, PHc = 160;
+    const ox = Math.min(...g.map((m) => m.cx)) - 25, oy = Math.min(...g.map((m) => m.cy)) - 15;
+    const sh = (m: Extract<Member, { kind: "circle" }>) => C(m.cx - ox, m.cy - oy, m.r);
+    const members = g.map(sh);
+    const avoiding = otherPts().map(sh).filter((m) => m.cx > -10 && m.cx < PWc + 10 && m.cy > -10 && m.cy < PHc + 10);
+    const shown = avoiding.filter((m) => m.cx > 3 && m.cx < PWc - 3 && m.cy > 3 && m.cy < PHc - 3);
+    const panel = (ink: any[]) => layer([
+      polygon({ points: [[0, 0], [PWc, 0], [PWc, PHc], [0, PHc]], fill: "none", stroke: "#e3e3e3", strokeWidth: 1 }),
+      ...ink, ...shown.map((m) => dot(m, "#b8bcc2")), ...members.map((m) => dot(m, SPECIES_COLORS.Gentoo)),
+    ]);
+    return titledGrid(convexityCells({ members, avoiding, pad: 4, alpha: 12, smoothing: 6, panel, color: SPECIES_COLORS.Gentoo }), { w: PWc + 20, h: PHc + 10, cols: 3 });
+  },
+};
+
+// The hull preset (convexity 1, neck 1) against the true padded convex hull (black line).
+export const V4HullExact: StoryObj = {
+  render: () => {
+    const g = gentooPts(), ox = Math.min(...g.map((m) => m.cx)) - 20, oy = Math.min(...g.map((m) => m.cy)) - 20;
+    const gentoo = g.map((m) => C(m.cx - ox, m.cy - oy, m.r));
+    const cell = (name: string, ms: Extract<Member, { kind: "circle" }>[], pad: number, smoothing: number): [string, any] => {
+      const truth = hullOutline(ms, pad);
+      const loops = smoothBlob(ms, { pad, convexity: 1, neck: 1, smoothing }).loops;
+      const ds = biggest(loops).map((p) => polySigned(p, truth));
+      const note = `${name}, smoothing ${smoothing}: ${Math.max(0, -Math.min(...ds)).toFixed(1)} px in, ${Math.max(...ds).toFixed(1)} px out`;
+      console.error(`[v4 hull] ${note}`);
+      return [note, layer([...blobInk(loops, BLUE, 0.22, 1.5), polygon({ points: truth, fill: "none", stroke: "#111", strokeWidth: 0.8 }), ...ms.map((m) => dot(m, BLUE))])];
+    };
+    return titledGrid([cell("U", U, 8, 8), cell("U", U, 8, 20), cell("Gentoo", gentoo, 6, 6)], { w: 300, h: 200, cols: 3 });
+  },
+};
+
+// The spine preset on the hyperedges and on trout across lakes.
+export const V4Hyperedges: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    const outlines = SETS.flatMap((s) => {
+      const members = s.nodes.map(hyperNode);
+      const others = Object.keys(NODES).filter((id) => !s.nodes.includes(id)).map(hyperNode);
+      const via = EDGES.filter(([p, q]) => s.nodes.includes(p) && s.nodes.includes(q)).map(([p, q]) => [NODES[p], NODES[q]] as [Pt, Pt]);
+      return blobInk(smoothBlob(members, { avoiding: others, via, pad: 6, convexity: 0, neck: 0.75, smoothing: 10, clearance: 3 }).loops, s.color, 0.25, 2);
+    });
+    layer([
+      ...outlines,
+      hyperPanel([]),
+      ...SETS.map((s, i) => label(20 + i * 50, 215, `set ${s.name}`, { fill: s.color, fontWeight: "bold" })),
+    ]).render(container, { w: 360, h: 240 });
+    return container;
+  },
+};
+export const V4TroutBars: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    barsScene(false, blobInk(smoothBlob(TROUT, { avoiding: [...NOT_TROUT, AXIS_BAND], pad: 4, convexity: 0, neck: 0.5, smoothing: 8, clearance: 4 }).loops, "#d6580c", 0.18, 2)).render(container, { w: 400, h: 240 });
+    return container;
+  },
+};
+
