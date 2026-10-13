@@ -3,7 +3,7 @@
 import math
 from datetime import datetime, timedelta, timezone
 
-from gofish import chart, rect, field, spread, stack, partition, Schema, Calendar, Bin, Color
+from gofish import chart, rect, field, spread, stack, partition, table, Schema, Calendar, Bin, Color
 from python_stories.data import SEATTLE_WEATHER
 
 # Seventy-two movie ratings from 1 to 9.5, none from 2 to 2.5: a hump around
@@ -236,20 +236,27 @@ def story_weekday_temperature():
 
 
 def story_calendar_heatmap():
-    # Whole weeks, Monday to Sunday, so every square has a day.
     return (
         chart(
-            _between("2014-12-29", "2015-12-28"),
+            WEATHER,
             schema={"date": Schema.time()},
             color=Color.gradient(["#fee8c8", "#fd8d3c", "#bd0026"]),
-            axes={"x": False, "y": True},
+            axes={
+                "x": {"title": False, "levels": [False, Calendar.month, Calendar.year]},
+                "y": {"title": False},
+            },
         )
         .flow(
-            spread(by=field("date").bin(Calendar.weekday), dir="y", spacing=2),
-            spread(
-                by=field("date").bin(Calendar.week), dir="x", spacing=2, axes=False
-            ),
+            # Weeks from Sunday, as GitHub's calendar has them: 2012 starts
+            # on a Sunday, so the first column is the first week of 2012.
+            table(
+                by={
+                    "x": field("date").bin(Calendar.week(start="sunday")),
+                    "y": field("date").bin(Calendar.weekday(start="sunday")),
+                },
+                spacing=1,
+            )
         )
-        .mark(rect(w=11, h=11, fill=field("temp_max").mean())),
-        {"w": 760, "h": 150},
+        .mark(rect(fill=field("temp_max").mean())),
+        {"w": 1100, "h": 120},
     )

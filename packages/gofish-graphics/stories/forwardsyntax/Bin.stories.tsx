@@ -406,33 +406,37 @@ export const WeekdayTemperature: StoryObj<Args> = {
 };
 
 export const CalendarHeatmap: StoryObj<Args> = {
-  args: { w: 760, h: 150 },
+  args: { w: 1100, h: 120 },
   tags: ["gallery"],
   parameters: {
     gallery: {
       title: "Seattle Highs Calendar Heatmap",
       description:
-        "Fifty-two weeks of Seattle weather from the end of 2014 to the end of 2015, one square per day in a column per week and a row per day of the week, shaded by the day's high temperature.",
+        "Four years of Seattle weather, one square per day in a column per week and a row per day of the week, shaded by the day's high temperature, with each week under the month it starts in.",
     },
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    // Whole weeks, Monday to Sunday, so every square has a day.
-    chart(between("2014-12-29", "2015-12-28"), {
+    chart(weather, {
       schema: { date: Schema.time() },
       color: Color.gradient(["#fee8c8", "#fd8d3c", "#bd0026"]),
-      axes: { x: false, y: true },
+      axes: {
+        x: { title: false, levels: [false, Calendar.month, Calendar.year] },
+        y: { title: false },
+      },
     })
       .flow(
-        spread({ by: field("date").bin(Calendar.weekday), dir: "y", spacing: 2 }),
-        spread({
-          by: field("date").bin(Calendar.week),
-          dir: "x",
-          spacing: 2,
-          axes: false,
+        table({
+          // Weeks from Sunday, as GitHub's calendar has them: 2012 starts
+          // on a Sunday, so the first column is the first week of 2012.
+          by: {
+            x: field("date").bin(Calendar.week({ start: "sunday" })),
+            y: field("date").bin(Calendar.weekday({ start: "sunday" })),
+          },
+          spacing: 1,
         })
       )
-      .mark(rect({ w: 11, h: 11, fill: field("temp_max").mean() }))
+      .mark(rect({ fill: field("temp_max").mean() }))
       .render(container, { w: args.w, h: args.h });
     return container;
   },
