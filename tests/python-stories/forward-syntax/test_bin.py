@@ -145,7 +145,7 @@ def story_month_bars_product():
         chart(
             _between("2014-07-01", "2015-07-01"),
             schema={"date": Schema.time()},
-            axes={"x": {"label_angle": "auto"}, "y": True},
+            axes={"x": {"label": {"angle": "auto"}}, "y": True},
         )
         .flow(spread(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"))
         .mark(rect(h=field("precipitation").sum(), fill="steelblue")),
@@ -178,7 +178,7 @@ def story_grouped_month_bars():
         chart(
             WINTER,
             schema={"date": Schema.time()},
-            axes={"x": {"label_angle": "auto"}, "y": True},
+            axes={"x": {"label": {"angle": "auto"}}, "y": True},
         )
         .flow(
             spread(

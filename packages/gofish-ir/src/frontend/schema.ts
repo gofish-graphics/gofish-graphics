@@ -384,8 +384,9 @@ export interface ScatterOperator
  *
  * `AxisOptions` per-dim is either a boolean (show/hide, infer title) or an
  * object: `title` (string for a custom title, `false` to suppress), `side`
- * (the frame edge), `labelAngle` (label rotation in degrees), `labelAlign`
- * (each level's labels centered or at the start of each run), and `levels`
+ * (the frame edge), `label` (how its labels are drawn: `angle`, their
+ * rotation in degrees, and `align`, each level's labels centered or at the
+ * start of each run), and `levels`
  * (the axis's bands of labels by depth, nearest the plot first: `true`
  * keeps one, `false` hides it, a Calendar value names its cells).
  */
@@ -395,10 +396,17 @@ export type AxisOptions =
   | {
       title?: string | false;
       side?: "start" | "end";
-      labelAngle?: number | number[] | "auto";
-      labelAlign?: "start" | "center" | ("start" | "center" | true)[];
+      label?: AxisLabelOptions;
       levels?: (boolean | CalendarPartitionIR)[];
     };
+
+/** How one axis's labels are drawn (`axes.x.label`): `angle` and `align`,
+ *  each one value for every level or an array per level, nearest the plot
+ *  first. */
+export type AxisLabelOptions = {
+  angle?: number | number[] | "auto";
+  align?: "start" | "center" | ("start" | "center" | true)[];
+};
 
 /** A Calendar value's wire form (`Calendar.month.every(3)` is
  *  `{ kind: "month", step: 3 }`): a calendar level, its `kind`, at a step.

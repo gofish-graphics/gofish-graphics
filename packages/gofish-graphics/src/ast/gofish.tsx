@@ -140,51 +140,9 @@ export type AxisOptions =
   | {
       title?: string | false;
       side?: "start" | "end";
-      /** Rotate tick/category labels by this many degrees, clockwise on screen
-       *  — matches Vega-Lite's `labelAngle` (e.g. `45` slants a label down to
-       *  the right, `90` reads top-to-bottom).
-       *
-       *  **`"auto"`** picks the angle for you, separately for each label row
-       *  (each level of the axis): the first of 0°, 45°, 90° at
-       *  which no two labels in that row collide (at least 2px apart). A
-       *  category row that collides at every angle is hidden and takes no
-       *  space; a continuous tick row cannot be hidden and keeps the angle
-       *  with the least overlap. So a grouped bar chart's crowded inner row
-       *  can slant (or disappear) while its roomy outer row stays upright.
-       *  Collisions are counted across the whole chart. The chart is
-       *  laid out once per angle tried, so it must be rebuildable: a chart
-       *  builder or a component thunk, not a prebuilt node (see
-       *  axes/autoLabelAngle.ts). "auto" cannot be an entry of a per-level
-       *  array.
-       *
-       *  A plain **number** applies to every level of the axis (e.g. both
-       *  the city and year rows of a grouped bar chart). An **array** is per
-       *  level, by the depths of `levels`, nearest the plot first — `[45]`
-       *  rotates only the innermost level (e.g. the year row directly under
-       *  grouped bars) and leaves outer levels (e.g. the city row)
-       *  unrotated; `[45, 0]` is the explicit two-level form. An index
-       *  beyond the array's length means unrotated/undefined. A numeric axis
-       *  is one level, so in a faceted chart its ticks take the first entry
-       *  and the facets' labels the next. */
-      labelAngle?: number | number[] | "auto";
-      /** Where each level's labels sit along the axis: `"center"` centers a
-       *  label under what it names, `"start"` puts it at the start of its
-       *  run, just past the divider before it (the axis's first run starts
-       *  at the axis start). By default an ordinal axis's outer level over
-       *  ordered groups (cells of time, numeric bins, or a column the
-       *  `schema` declares ordered) starts its runs, since each label marks
-       *  where a run of ordered values begins, as a calendar's month labels
-       *  do; an outer level over unordered categories centers, since its
-       *  label collects the groups beneath it; and the innermost level, one
-       *  label per slot, centers. A continuous axis's labels name points,
-       *  so they center on their ticks, and `"start"` there is an error.
-       *
-       *  A plain value applies to every level of the axis. An **array** is
-       *  per level, by the depths of `levels`, nearest the plot first, like
-       *  `labelAngle`'s; `true`, or a depth past the array's end, keeps the
-       *  level's inferred alignment (`[true, "center"]` centers only the
-       *  second level). */
-      labelAlign?: LabelAlign | (LabelAlign | true)[];
+      /** How the axis's labels are drawn: their `angle` and `align`, each
+       *  per level (see `AxisLabelOptions`). */
+      label?: AxisLabelOptions;
       /** The levels of the axis: its bands of labels, by depth, nearest the
        *  plot first. Every axis on the dim has levels, nested ones counted
        *  from the inside out: a numeric axis has one (its ticks), a time
@@ -209,10 +167,59 @@ export type AxisOptions =
        *  axis of the dim, Calendar entries past its inferred levels add
        *  levels. An entry that cannot apply (a Calendar value over slots
        *  that are not times or finer than the slots, `false` on a numeric axis, an entry past the
-       *  last level) is an error that lists the axis's levels. `labelAngle`
-       *  arrays use the same depths. */
+       *  last level) is an error that lists the axis's levels. `label.angle`
+       *  and `label.align` arrays use the same depths. */
       levels?: LevelOption[];
     };
+
+/** How one axis's labels are drawn (`axes.x.label`). */
+export type AxisLabelOptions = {
+  /** Rotate tick/category labels by this many degrees, clockwise on screen
+   *  — matches Vega-Lite's `labelAngle` (e.g. `45` slants a label down to
+   *  the right, `90` reads top-to-bottom).
+   *
+   *  **`"auto"`** picks the angle for you, separately for each label row
+   *  (each level of the axis): the first of 0°, 45°, 90° at
+   *  which no two labels in that row collide (at least 2px apart). A
+   *  category row that collides at every angle is hidden and takes no
+   *  space; a continuous tick row cannot be hidden and keeps the angle
+   *  with the least overlap. So a grouped bar chart's crowded inner row
+   *  can slant (or disappear) while its roomy outer row stays upright.
+   *  Collisions are counted across the whole chart. The chart is
+   *  laid out once per angle tried, so it must be rebuildable: a chart
+   *  builder or a component thunk, not a prebuilt node (see
+   *  axes/autoLabelAngle.ts). "auto" cannot be an entry of a per-level
+   *  array.
+   *
+   *  A plain **number** applies to every level of the axis (e.g. both
+   *  the city and year rows of a grouped bar chart). An **array** is per
+   *  level, by the depths of `levels`, nearest the plot first — `[45]`
+   *  rotates only the innermost level (e.g. the year row directly under
+   *  grouped bars) and leaves outer levels (e.g. the city row)
+   *  unrotated; `[45, 0]` is the explicit two-level form. An index
+   *  beyond the array's length means unrotated/undefined. A numeric axis
+   *  is one level, so in a faceted chart its ticks take the first entry
+   *  and the facets' labels the next. */
+  angle?: number | number[] | "auto";
+  /** Where each level's labels sit along the axis: `"center"` centers a
+   *  label under what it names, `"start"` puts it at the start of its
+   *  run, just past the divider before it (the axis's first run starts
+   *  at the axis start). By default an ordinal axis's outer level over
+   *  ordered groups (cells of time, numeric bins, or a column the
+   *  `schema` declares ordered) starts its runs, since each label marks
+   *  where a run of ordered values begins, as a calendar's month labels
+   *  do; an outer level over unordered categories centers, since its
+   *  label collects the groups beneath it; and the innermost level, one
+   *  label per slot, centers. A continuous axis's labels name points,
+   *  so they center on their ticks, and `"start"` there is an error.
+   *
+   *  A plain value applies to every level of the axis. An **array** is
+   *  per level, by the depths of `levels`, nearest the plot first, like
+   *  `angle`'s; `true`, or a depth past the array's end, keeps the
+   *  level's inferred alignment (`[true, "center"]` centers only the
+   *  second level). */
+  align?: LabelAlign | (LabelAlign | true)[];
+};
 
 /** Read one `AxisOptions` field per dim, AS AUTHORED — `undefined` wherever the
  *  caller did not specify it, so an elaboration can tell an explicit value apart
@@ -222,10 +229,58 @@ function perDimAxisOption<K extends keyof Extract<AxisOptions, object>>(
   axes: AxesOptions | undefined,
   key: K
 ): [Extract<AxisOptions, object>[K], Extract<AxisOptions, object>[K]] {
-  const read = (o: AxisOptions | undefined) =>
-    o && typeof o === "object" ? o[key] : undefined;
-  if (axes && typeof axes === "object") return [read(axes.x), read(axes.y)];
+  const read = (o: AxisOptions | undefined, axis: "x" | "y") => {
+    if (!o || typeof o !== "object") return undefined;
+    checkKeys(o, AXIS_OPTION_KEYS, `axes.${axis}`);
+    return o[key];
+  };
+  if (axes && typeof axes === "object")
+    return [read(axes.x, "x"), read(axes.y, "y")];
   return [undefined, undefined];
+}
+
+/** Read one `AxisLabelOptions` field per dim (`axes.x.label.angle`), as
+ *  authored, like `perDimAxisOption`. */
+function perDimLabelOption<K extends keyof AxisLabelOptions>(
+  axes: AxesOptions | undefined,
+  key: K
+): [AxisLabelOptions[K], AxisLabelOptions[K]] {
+  const [x, y] = perDimAxisOption(axes, "label");
+  const read = (o: AxisLabelOptions | undefined, axis: "x" | "y") => {
+    if (o === undefined) return undefined;
+    if (!o || typeof o !== "object" || Array.isArray(o))
+      throw new Error(
+        `axes.${axis}.label: expected an object of ` +
+          `${LABEL_OPTION_KEYS.join(", ")}, got ${JSON.stringify(o)}.`
+      );
+    checkKeys(o, LABEL_OPTION_KEYS, `axes.${axis}.label`);
+    return o[key];
+  };
+  return [read(x, "x"), read(y, "y")];
+}
+
+/** The keys an `AxisOptions` / `AxisLabelOptions` object takes. Typed so a
+ *  key added to or removed from the type has to be listed here. */
+const AXIS_OPTION_KEYS = Object.keys({
+  title: true,
+  side: true,
+  label: true,
+  levels: true,
+} satisfies Record<keyof Extract<AxisOptions, object>, true>);
+const LABEL_OPTION_KEYS = Object.keys({
+  angle: true,
+  align: true,
+} satisfies Record<keyof AxisLabelOptions, true>);
+
+/** Reject a key an options object does not take, for untyped callers
+ *  (Python, plain JS), naming the keys it does take. */
+function checkKeys(o: object, keys: readonly string[], path: string): void {
+  for (const k of Object.keys(o))
+    if (!keys.includes(k))
+      throw new Error(
+        `${path}: unknown option "${k}"; expected one of ` +
+          `${keys.map((key) => JSON.stringify(key)).join(", ")}.`
+      );
 }
 
 export const resolveAxisSides = (
@@ -235,25 +290,25 @@ export const resolveAxisSides = (
 
 type LabelAngleOption = number | number[] | "auto" | undefined;
 
-/** Reject a malformed `labelAngle` (see `AxisOptions.labelAngle`). The type
+/** Reject a malformed `label.angle` (see `AxisLabelOptions.angle`). The type
  *  already forbids these; this catches untyped callers (Python, plain JS). */
 function checkLabelAngle(v: unknown, axis: "x" | "y"): LabelAngleOption {
   if (v === undefined || v === "auto" || typeof v === "number") return v;
   if (Array.isArray(v)) {
     if (v.includes("auto"))
       throw new Error(
-        `axes.${axis}.labelAngle: "auto" applies to the whole axis, so it ` +
-          `cannot be one entry of a per-level array; use labelAngle: "auto".`
+        `axes.${axis}.label.angle: "auto" applies to the whole axis, so it ` +
+          `cannot be one entry of a per-level array; use angle: "auto".`
       );
     if (v.every((a) => typeof a === "number")) return v as number[];
   }
   throw new Error(
-    `axes.${axis}.labelAngle: unknown value ${JSON.stringify(v)} ` +
+    `axes.${axis}.label.angle: unknown value ${JSON.stringify(v)} ` +
       `(expected a number, an array of numbers, or "auto").`
   );
 }
 
-/** Reject a malformed `labelAlign` (see `AxisOptions.labelAlign`), for
+/** Reject a malformed `label.align` (see `AxisLabelOptions.align`), for
  *  untyped callers (Python, plain JS). */
 function checkLabelAlign(v: unknown, axis: "x" | "y"): LabelAlignOpt {
   const ok = (a: unknown) => a === "start" || a === "center";
@@ -261,30 +316,30 @@ function checkLabelAlign(v: unknown, axis: "x" | "y"): LabelAlignOpt {
   if (Array.isArray(v) && v.every((a) => a === true || ok(a)))
     return v as (LabelAlign | true)[];
   throw new Error(
-    `axes.${axis}.labelAlign: unknown value ${JSON.stringify(v)} ` +
+    `axes.${axis}.label.align: unknown value ${JSON.stringify(v)} ` +
       `(expected "start", "center", or an array of those and true, one ` +
       `per level).`
   );
 }
 
-/** Each axis's `labelAlign`, checked. */
+/** Each axis's `label.align`, checked. */
 export const resolveAxisLabelAligns = (
   axes: AxesOptions | undefined
 ): [LabelAlignOpt, LabelAlignOpt] => {
-  const [x, y] = perDimAxisOption(axes, "labelAlign");
+  const [x, y] = perDimLabelOption(axes, "align");
   return [checkLabelAlign(x, "x"), checkLabelAlign(y, "y")];
 };
 
 /** A `number` applies to every level; a `number[]` is per level, innermost first;
- *  `"auto"` is chosen per axis by `runLayout` (see `AxisOptions.labelAngle`). */
+ *  `"auto"` is chosen per axis by `runLayout` (see `AxisLabelOptions.angle`). */
 export const resolveAxisLabelAngles = (
   axes: AxesOptions | undefined
 ): [LabelAngleOption, LabelAngleOption] => {
-  const [x, y] = perDimAxisOption(axes, "labelAngle");
+  const [x, y] = perDimLabelOption(axes, "angle");
   return [checkLabelAngle(x, "x"), checkLabelAngle(y, "y")];
 };
 
-/** The label-row settings a manual `labelAngle` describes. "auto" has none of
+/** The label-row settings a manual `label.angle` describes. "auto" has none of
  *  its own: `runLayout` chooses them and hands them to `layout()` directly. */
 function manualLabelRowSettings(
   axes: AxesOptions | undefined
@@ -292,7 +347,7 @@ function manualLabelRowSettings(
   const angles = resolveAxisLabelAngles(axes);
   if (angles[0] === "auto" || angles[1] === "auto") {
     throw new Error(
-      'labelAngle: "auto" must be resolved before layout(); render through ' +
+      'label.angle: "auto" must be resolved before layout(); render through ' +
         "gofish(), a chart builder, or runLayout()."
     );
   }
@@ -327,7 +382,7 @@ export async function layout(
     axes?: AxesOptions;
     legend?: boolean;
     /** Internal: how each axis label row is drawn, as chosen by
-     *  `labelAngle: "auto"` (see `runLayout`). Overrides the angles in `axes`. */
+     *  `label.angle: "auto"` (see `runLayout`). Overrides the angles in `axes`. */
     labelRowSettings?: LabelRowSettings;
   },
   child: GoFishNode | Promise<GoFishNode>,
@@ -824,7 +879,7 @@ type LayoutData = {
  * measured layout data. The single place the pipeline is driven — shared by
  * the live `gofish()` render path and the `gofishToSVG*` export paths.
  *
- * An axis with `labelAngle: "auto"` is the one case that lays out more than
+ * An axis with `label.angle: "auto"` is the one case that lays out more than
  * once: the chart is rebuilt and laid out once per candidate angle, and the
  * winning run's layout is returned as is (see axes/autoLabelAngle.ts). A chart
  * without "auto" takes the single `layoutOnce` below, unchanged.
@@ -1058,7 +1113,7 @@ export function gofish(
     const build = () => resolveMarkResult(child as any);
     return renderWithInteraction(async () => {
       const node = await build();
-      // A thunk can build the chart again, which `labelAngle: "auto"` needs
+      // A thunk can build the chart again, which `label.angle: "auto"` needs
       // (see `GoFishNode.rebuild`).
       node.rebuild = build;
       return { node, options: { ...options } };

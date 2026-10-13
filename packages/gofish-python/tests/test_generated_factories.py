@@ -486,27 +486,27 @@ def test_camel_case_kwargs_are_rejected():
 # descriptors.ts). Dicts whose keys are data pass through untouched.
 
 
-def test_nested_axes_keys_serialize_to_camel_case_wire_keys():
+def test_nested_axes_keys_serialize_to_wire_keys():
     ir = (
         chart(
             [{"a": "x", "v": 1}],
-            axes={"x": {"label_angle": 45, "side": "end"}, "y": True},
+            axes={"x": {"label": {"angle": 45}, "side": "end"}, "y": True},
         )
         .flow(
             spread(
                 by="a",
                 dir="x",
-                axes={"y": {"label_angle": [90], "title": False}},
+                axes={"y": {"label": {"angle": [90]}, "title": False}},
             )
         )
         .mark(rect(h="v"))
         .to_ir()
     )
     assert ir["options"]["axes"] == {
-        "x": {"labelAngle": 45, "side": "end"},
+        "x": {"label": {"angle": 45}, "side": "end"},
         "y": True,
     }
-    assert ir["operators"][0]["axes"] == {"y": {"labelAngle": [90], "title": False}}
+    assert ir["operators"][0]["axes"] == {"y": {"label": {"angle": [90]}, "title": False}}
     # The boolean forms pass through at both levels.
     assert chart([], axes=False).mark(rect()).to_ir()["options"]["axes"] is False
     assert stack([], dir="x", axes={"x": False}).to_dict()["options"]["axes"] == {
@@ -514,9 +514,15 @@ def test_nested_axes_keys_serialize_to_camel_case_wire_keys():
     }
 
 
-def test_nested_camel_case_key_is_rejected():
-    with pytest.raises(TypeError, match="did you mean 'label_angle'"):
-        chart([], axes={"x": {"labelAngle": 45}})
+def test_nested_unknown_key_is_rejected():
+    # The flat label keys the nested `label` dict replaced are unknown keys,
+    # and the error lists the keys an axis takes, `label` among them.
+    with pytest.raises(TypeError, match="unexpected key 'label_angle'.*'label'"):
+        chart([], axes={"x": {"label_angle": 45}})
+    with pytest.raises(TypeError, match="unexpected key 'labelAlign'.*'label'"):
+        chart([], axes={"x": {"labelAlign": "center"}})
+    with pytest.raises(TypeError, match="unexpected key 'rotate'.*'angle'"):
+        chart([], axes={"x": {"label": {"rotate": 45}}})
     with pytest.raises(TypeError, match="unexpected key 'z'"):
         spread(by="a", dir="x", axes={"z": True})
     with pytest.raises(TypeError, match="unexpected key 'colour'"):
@@ -525,7 +531,7 @@ def test_nested_camel_case_key_is_rejected():
 
 def test_unknown_chart_option_is_rejected():
     with pytest.raises(TypeError):
-        chart([], labelAngle=45)
+        chart([], label_angle=45)
 
 
 def test_data_keyed_dicts_are_untouched():
@@ -556,12 +562,12 @@ def test_layer_of_charts_takes_js_layer_options():
     # on the wire, and a render option such as `padding` is rejected.
     c1 = chart([{"v": 1}]).mark(rect(h="v"))
     c2 = chart([{"v": 2}]).mark(rect(h="v"))
-    ir = layer([c1, c2], axes={"x": {"label_angle": 45}}).to_ir()
-    assert ir["options"] == {"axes": {"x": {"labelAngle": 45}}}
-    with pytest.raises(TypeError, match="did you mean 'label_angle'"):
-        layer([c1, c2], axes={"x": {"labelAngle": 45}})
+    ir = layer([c1, c2], axes={"x": {"label": {"angle": 45}}}).to_ir()
+    assert ir["options"] == {"axes": {"x": {"label": {"angle": 45}}}}
+    with pytest.raises(TypeError, match="unexpected key 'label_angle'"):
+        layer([c1, c2], axes={"x": {"label_angle": 45}})
     with pytest.raises(TypeError):
-        layer([c1, c2], labelAngle=45)
+        layer([c1, c2], label_angle=45)
     with pytest.raises(TypeError):
         layer([c1, c2], padding=80)
 
@@ -572,12 +578,12 @@ def test_render_axes_convert_on_every_render_path():
     # an unknown key raises TypeError.
     c = chart([{"v": 1}]).mark(rect(h="v"))
     for renderable in [c, rect(w=10, h=10), layer([c])]:
-        widget = renderable.render(axes={"x": {"label_angle": 45}, "y": False})
-        assert widget.axes == {"x": {"labelAngle": 45}, "y": False}
+        widget = renderable.render(axes={"x": {"label": {"angle": 45}}, "y": False})
+        assert widget.axes == {"x": {"label": {"angle": 45}}, "y": False}
         assert renderable.render(axes=True).axes is True
         assert renderable.render().axes is None
-        with pytest.raises(TypeError, match="did you mean 'label_angle'"):
-            renderable.render(axes={"x": {"labelAngle": 45}})
+        with pytest.raises(TypeError, match="unexpected key 'label_angle'"):
+            renderable.render(axes={"x": {"label_angle": 45}})
 
 
 # --- Axis-name dims -----------------------------------------------------------

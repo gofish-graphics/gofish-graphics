@@ -901,7 +901,7 @@ async function main() {
     const mid = (w: string) => at(w).x + textWidth(w) / 2;
     check(
       "each year starts its run of months, past the month level (see " +
-        "# labelAlign)",
+        "# label.align)",
       at("2023").y > at("Nov").y &&
         at("2023").x < at("Nov").x &&
         at("2024").x < at("Jan").x + textWidth("Jan"),
@@ -1144,7 +1144,7 @@ async function main() {
       JSON.stringify([nAt("a").y, nAt("Nov").y, plotEdge, cAt("Nov").y, cEdge])
     );
 
-    console.log("\n# labelAlign");
+    console.log("\n# label.align");
     // A chained key: the outer (year) level is over cells, so ordered.
     const yearX = (dl: any) => textsOf(dl).find((t) => t.text === "2024")!.x;
     const chainedBarsX = rectsOf(chainedDl).filter((r) => r.w === 30);
@@ -1163,7 +1163,7 @@ async function main() {
     );
     const centered = await render(chainKey, {
       title: false,
-      labelAlign: [true, "center"],
+      label: { align: [true, "center"] },
     });
     const cTexts = textsOf(centered);
     const cMid = (w: string) => {
@@ -1172,7 +1172,7 @@ async function main() {
     };
     const cBars = rectsOf(centered).filter((r) => r.w === 30);
     check(
-      "labelAlign [true, \"center\"] centers the year level",
+      "label.align [true, \"center\"] centers the year level",
       Math.abs(cMid("2023") - (cBars[0].x + cBars[1].x + 30) / 2) < 0.5,
       `${cMid("2023")}`
     );
@@ -1206,24 +1206,37 @@ async function main() {
       JSON.stringify([ordered.left, ordered.bars[2].x])
     );
     const startErr = await errorOfAsync(() =>
-      chart([{ v: 1, w: 2 }], { axes: { x: { labelAlign: "start" }, y: false } })
+      chart([{ v: 1, w: 2 }], {
+        axes: { x: { label: { align: "start" } }, y: false },
+      })
         .flow(scatter({ x: "v", y: "w" }))
         .mark(circle({ r: 2 }))
         .toDisplayList({ w: 100, h: 100 })
     );
     check(
-      "labelAlign \"start\" on a continuous axis is an error",
-      startErr?.includes("axes.x.labelAlign") === true &&
+      "label.align \"start\" on a continuous axis is an error",
+      startErr?.includes("axes.x.label.align") === true &&
         startErr.includes("continuous"),
       startErr
     );
     const badAlign = await errorOfAsync(() =>
-      render(chainKey, { title: false, labelAlign: "left" })
+      render(chainKey, { title: false, label: { align: "left" } })
     );
     check(
-      "an unknown labelAlign value is an error",
-      badAlign?.includes("axes.x.labelAlign: unknown value") === true,
+      "an unknown label.align value is an error",
+      badAlign?.includes("axes.x.label.align: unknown value") === true,
       badAlign
+    );
+    // The flat key this nested option replaced is an unknown key now; the
+    // error names the keys an axis takes, `label` among them.
+    const flatAlign = await errorOfAsync(() =>
+      render(chainKey, { title: false, labelAlign: "center" } as any)
+    );
+    check(
+      "the old flat labelAlign key is an error naming label",
+      flatAlign?.includes('axes.x: unknown option "labelAlign"') === true &&
+        flatAlign.includes('"label"'),
+      flatAlign
     );
 
     console.log("\n# table over binned keys");

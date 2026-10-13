@@ -381,11 +381,29 @@ export const LABEL_OPTIONS: FieldGroup = group({
 // Option types — named nested option objects
 // ---------------------------------------------------------------------------
 
+/** How one axis's labels are drawn (`axes.x.label`). */
+const axisLabelOptions: FieldSpec = {
+  doc: "How one axis's labels are drawn: their angle and their alignment, each per level by the same depths as `levels`.",
+  type: t.object({
+    angle: {
+      type: t.union(t.number, t.array(t.number), t.enum("auto")),
+      doc: 'Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite\'s labelAngle). A number applies to every level of the axis; an array is per level, by the same depths as `levels`, nearest the plot first; "auto" picks 0, 45, or 90 degrees per level so labels do not collide.',
+    },
+    align: {
+      type: t.union(
+        t.enum("start", "center"),
+        t.array(t.union(t.enum("start", "center"), t.literal(true)))
+      ),
+      doc: 'Where each level\'s labels sit along the axis: "center" centers a label under what it names, "start" puts it at the start of its run, just past the divider before it (the first run starts at the axis start). Omitted, an ordinal axis\'s outer level over ordered groups (cells of time, numeric bins, or a column the schema declares ordered) starts its runs, and every other level centers: an outer level over unordered categories, the innermost level (one label per slot), and a continuous axis, whose labels name points, so "start" there is an error. A plain value applies to every level; an array is per level, by the same depths as `levels`, nearest the plot first, with true keeping a level\'s inferred alignment.',
+    },
+  }),
+};
+
 /** One axis's options: a boolean (show or hide it, title inferred) or an
  *  object of named options. Mirrors the JS `AxisOptions` in
  *  `gofish-graphics/src/ast/gofish.tsx`. */
 const axisOptions: FieldSpec = {
-  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, labelAlign, and its levels.",
+  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, label (angle and align), and its levels.",
   type: t.union(
     t.boolean,
     t.object({
@@ -397,16 +415,9 @@ const axisOptions: FieldSpec = {
         type: t.enum("start", "end"),
         doc: 'Which frame edge the axis sits on: "start" is the near (origin) edge, "end" the far edge. Omitted, a continuous x-axis sits at the visual bottom.',
       },
-      labelAngle: {
-        type: t.union(t.number, t.array(t.number), t.enum("auto")),
-        doc: 'Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite\'s labelAngle). A number applies to every level of the axis; an array is per level, by the same depths as `levels`, nearest the plot first; "auto" picks 0, 45, or 90 degrees per level so labels do not collide.',
-      },
-      labelAlign: {
-        type: t.union(
-          t.enum("start", "center"),
-          t.array(t.union(t.enum("start", "center"), t.literal(true)))
-        ),
-        doc: 'Where each level\'s labels sit along the axis: "center" centers a label under what it names, "start" puts it at the start of its run, just past the divider before it (the first run starts at the axis start). Omitted, an ordinal axis\'s outer level over ordered groups (cells of time, numeric bins, or a column the schema declares ordered) starts its runs, and every other level centers: an outer level over unordered categories, the innermost level (one label per slot), and a continuous axis, whose labels name points, so "start" there is an error. A plain value applies to every level; an array is per level, by the same depths as `levels`, nearest the plot first, with true keeping a level\'s inferred alignment.',
+      label: {
+        type: t.ref("AxisLabelOptions"),
+        doc: "How the axis's labels are drawn: their angle and their alignment, per level.",
       },
       levels: {
         type: t.array(t.union(t.boolean, t.ref("Calendar"))),
@@ -848,13 +859,14 @@ export const CHART_OPTIONS: FieldGroup = group({
  *  consumer resolves a ref through this table: `jsonSchema.ts` emits one
  *  `$def` per entry, `validate.ts` walks the value with the generic field-type
  *  interpreter, and the Python generator renames the keys of a nested dict
- *  with `pyKwarg`, the same rule as the top-level kwargs
- *  (`axes={"x": {"label_angle": 45}}` serializes as `labelAngle`).
+ *  with `pyKwarg`, the same rule as the top-level kwargs (a camelCase key
+ *  such as `strokeWidth` is `stroke_width` in a Python dict).
  *
  *  A ref that is not in this table names a hand-authored envelope `$def`
  *  (LabelIR, TranslateIR, FieldAccessor, ...). */
 export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   AxisOptions: axisOptions,
+  AxisLabelOptions: axisLabelOptions,
   Calendar: { doc: CALENDAR.doc, type: strategyType(CALENDAR) },
   AxesOptions: {
     doc: "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own.",

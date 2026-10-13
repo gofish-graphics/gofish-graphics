@@ -666,7 +666,7 @@ export class GoFishNode {
   /** Set on a tick or category label `Text` made by axis elaboration: the
    *  label row it belongs to — which axis (`dim`), whether it labels
    *  categories or continuous ticks (`kind`), and which ordinal tier
-   *  (0 = innermost; always 0 on a continuous axis). `labelAngle: "auto"` reads
+   *  (0 = innermost; always 0 on a continuous axis). `label.angle: "auto"` reads
    *  these tags after layout to score label collisions per row across the
    *  whole chart (see axes/autoLabelAngle.ts). */
   public axisLabel?: {
@@ -679,7 +679,7 @@ export class GoFishNode {
   /** Set on a ROOT node by the surface that built it (a chart builder or a
    *  component thunk): builds a fresh, unlaid-out copy of the same chart.
    *  Layout writes each node's box once, so a choice that must lay the chart
-   *  out once per candidate (`labelAngle: "auto"`) needs a new tree for each
+   *  out once per candidate (`label.angle: "auto"`) needs a new tree for each
    *  run (see `runLayout` in gofish.tsx). A node built by hand has none. */
   public rebuild?: () => Promise<GoFishNode>;
   /**

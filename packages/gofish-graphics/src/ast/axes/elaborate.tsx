@@ -119,9 +119,9 @@ export type AxisElaboration = {
   contentAt?: { dim: 0 | 1; at: number };
 };
 
-/** A `labelAngle` value as authored: a plain number applies to every level
+/** A `label.angle` value as authored: a plain number applies to every level
  *  of the axis; an array is per level, by the depths of `levels`, nearest the
- *  plot first (see `AxisOptions.labelAngle` in `gofish.tsx`). */
+ *  plot first (see `AxisLabelOptions.angle` in `gofish.tsx`). */
 type LabelAngleOpt = number | number[] | undefined;
 
 /** Select the angle for the level at depth `tier` (0 = nearest the plot,
@@ -134,10 +134,10 @@ function angleForTier(opt: LabelAngleOpt, tier: number): number | undefined {
 }
 
 /** Where a level's labels sit along the axis: centered under what each
- *  names, or at the start of each run (see `AxisOptions.labelAlign`). */
+ *  names, or at the start of each run (see `AxisLabelOptions.align`). */
 export type LabelAlign = "start" | "center";
 
-/** A `labelAlign` value as authored: one alignment for every level, or one
+/** A `label.align` value as authored: one alignment for every level, or one
  *  entry per level by the depths of `levels`, nearest the plot first, where
  *  `true` (or a depth past the end) keeps the level's inferred alignment. */
 export type LabelAlignOpt = LabelAlign | (LabelAlign | true)[] | undefined;
@@ -169,15 +169,15 @@ export type LabelRowSetting = number | "hidden" | undefined;
 /** The setting of every label row. Axis elaboration asks it once per row. */
 export type LabelRowSettings = (row: LabelRow) => LabelRowSetting;
 
-/** The row settings a manual `labelAngle` per axis describes (see
- *  `AxisOptions.labelAngle`): a number for every level, or per level. */
+/** The row settings a manual `label.angle` per axis describes (see
+ *  `AxisLabelOptions.angle`): a number for every level, or per level. */
 export const labelRowSettingsFromAngles =
   (angles: [LabelAngleOpt, LabelAngleOpt]): LabelRowSettings =>
   (row) =>
     angleForTier(angles[row.dim], row.tier);
 
 /**
- * How a `labelAngle`-rotated label is anchored to its tick/key — the
+ * How a `label.angle`-rotated label is anchored to its tick/key — the
  * "hanging point" rule: the point of the rotated label nearest the axis line
  * is the point placed at the band/tick center, not the rotated bbox's
  * middle. `trackAlign` picks the `Constraint.align`/`Spread` anchor mode
@@ -422,8 +422,8 @@ function positionAxis(opts: {
   /** Extra labels placed at a data position, with no tick of their own:
    *  the delta labels of a difference axis, and the row labels of a time
    *  axis. Each sits `offset` pixels past the line (default: past the ticks,
-   *  where a continuous axis's labels sit). `labelAngle` does not rotate
-   *  them, so they carry no `axisLabel` tag and `labelAngle: "auto"` does
+   *  where a continuous axis's labels sit). `label.angle` does not rotate
+   *  them, so they carry no `axisLabel` tag and `label.angle: "auto"` does
    *  not score them. */
   extraLabels?: ExtraLabel[];
   /** The other dim's scale floor, when it also carries a position-like axis —
@@ -620,7 +620,7 @@ function elaborateContinuousAxis(
  * ({@link timeRows}); a hidden row draws no ticks and no labels.
  *
  * Like a numeric axis, a time axis labels every tick and never drops a
- * label; choosing ticks from the labels' room is #1063. `labelAngle` does
+ * label; choosing ticks from the labels' room is #1063. `label.angle` does
  * not rotate its labels yet: a rotated row would need its depth, and so the
  * offset of the rows past it, from its rotated label boxes.
  */
@@ -742,7 +742,7 @@ function elaborateDifferenceAxis(
 type LevelReport = { names: string[]; issues: LevelIssue[] };
 
 /** How one level of an ordinal axis is drawn, as its depth's settings say:
- *  hidden (by `levels` or by `labelAngle: "auto"`), or with its labels
+ *  hidden (by `levels` or by `label.angle: "auto"`), or with its labels
  *  rotated. */
 type LevelSetting = { hidden: boolean; rotation?: LabelRotation };
 
@@ -1081,7 +1081,7 @@ function elaborateOrdinalAxis(
   const dividedAt = (a: number, k: number) =>
     dividers.some((d) => d.at === a - 1 && d.ks.includes(k));
 
-  // Where each level's labels sit along the axis: as `labelAlign` says, else
+  // Where each level's labels sit along the axis: as `label.align` says, else
   // at the start of each run for an outer level over ordered groups (each
   // label begins a run of ordered values, next to the divider before it),
   // else centered (a label collects the unordered groups, or the one slot,
@@ -1454,12 +1454,12 @@ function elaborationsFor(
     fold.names[dim].push("the numeric ticks");
   };
   // A continuous axis labels points (its ticks), so its labels center on
-  // them: `labelAlign: "start"` at one of its depths cannot apply.
+  // them: `label.align: "start"` at one of its depths cannot apply.
   const centeredLevels = (dim: 0 | 1, from: number, count: number) => {
     for (let depth = from; depth < from + count; depth++)
       if (alignForTier(labelAligns[dim], depth) === "start")
         throw new Error(
-          `axes.${axisName(dim)}.labelAlign${Array.isArray(labelAligns[dim]) ? `[${depth}]` : ""}: ` +
+          `axes.${axisName(dim)}.label.align${Array.isArray(labelAligns[dim]) ? `[${depth}]` : ""}: ` +
             `"start" cannot apply at depth ${depth}: it is a continuous ` +
             `axis's level, whose labels name points (its ticks), so they ` +
             `are centered on them. Only an ordinal axis's labels can start ` +
@@ -1598,7 +1598,7 @@ export type ChromeOptions = {
   /** Per-dim `levels` entries, nearest the plot first (see
    *  `AxisOptions.levels`); undefined = every level as inferred. */
   levels?: [LevelEntry[] | undefined, LevelEntry[] | undefined];
-  /** Per-dim `labelAlign` (see `AxisOptions.labelAlign`); undefined = every
+  /** Per-dim `label.align` (see `AxisLabelOptions.align`); undefined = every
    *  level's alignment as inferred. */
   labelAligns?: [LabelAlignOpt, LabelAlignOpt];
 };
@@ -1620,7 +1620,7 @@ export type ChromeOptions = {
  * `elaborationsFor` adds this node's own levels. That gives each level its
  * depth among the levels of its dim, 0 nearest the plot (a grouped bar
  * chart's year labels, then its city labels), which picks its `levels`
- * entry and its entry of a per-level `labelAngle` array. Sibling subtrees
+ * entry and its entry of a per-level `label.angle` array. Sibling subtrees
  * don't interfere: each call only sees what ITS OWN children folded. `layout`
  * reads the root's fold to check every `levels` entry applied.
  */

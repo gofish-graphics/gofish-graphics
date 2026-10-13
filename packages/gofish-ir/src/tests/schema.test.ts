@@ -320,7 +320,10 @@ check(
       h: 300,
       coord: { type: "polar" },
       color: { type: "palette", values: "tableau10" },
-      axes: { x: { title: "Year", labelAngle: 45, side: "end" }, y: true },
+      axes: {
+        x: { title: "Year", label: { angle: 45 }, side: "end" },
+        y: true,
+      },
       legend: false,
       padding: 20,
       schema: { response: { type: "ordered", levels: ["a", "b"] } },
@@ -762,7 +765,7 @@ check(
 );
 
 check(
-  "axis side and labelAngle accept",
+  "axis side and label.angle accept",
   validate(
     chart([
       {
@@ -770,8 +773,8 @@ check(
         by: "lake",
         dir: "x",
         axes: {
-          x: { side: "end", labelAngle: [45] },
-          y: { labelAngle: "auto" },
+          x: { side: "end", label: { angle: [45] } },
+          y: { label: { angle: "auto" } },
         },
       },
     ])
@@ -785,15 +788,30 @@ check(
   ).valid
 );
 
+{
+  // The flat keys this nested object replaced are unknown keys now, and the
+  // error lists the accepted ones, `label` among them.
+  const result = validate(
+    chart([{ type: "spread", axes: { x: { labelAngle: 45 } } as any }])
+  );
+  check(
+    "the old flat labelAngle key is rejected, naming label",
+    !result.valid &&
+      result.errors.some(
+        (e) => e.message.includes("labelAngle") && e.message.includes("label")
+      )
+  );
+}
+
 check(
-  "axis labelAngle of the wrong type rejected",
+  "axis label.angle of the wrong type rejected",
   !validate(
-    chart([{ type: "spread", axes: { x: { labelAngle: "45" } } as any }])
+    chart([{ type: "spread", axes: { x: { label: { angle: "45" } } } as any }])
   ).valid
 );
 
 check(
-  "axis labelAlign accepts a value or a per-level array with true",
+  "axis label.align accepts a value or a per-level array with true",
   validate(
     chart([
       {
@@ -801,8 +819,8 @@ check(
         by: "lake",
         dir: "x",
         axes: {
-          x: { labelAlign: [true, "start"] },
-          y: { labelAlign: "center" },
+          x: { label: { align: [true, "start"] } },
+          y: { label: { align: "center" } },
         },
       },
     ])
@@ -810,9 +828,11 @@ check(
 );
 
 check(
-  "axis labelAlign of an unknown value rejected",
+  "axis label.align of an unknown value rejected",
   !validate(
-    chart([{ type: "spread", axes: { x: { labelAlign: "left" } } as any }])
+    chart([
+      { type: "spread", axes: { x: { label: { align: "left" } } } as any },
+    ])
   ).valid
 );
 

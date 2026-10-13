@@ -28,7 +28,8 @@ if TYPE_CHECKING:
 # ("tuple", (shape, ...)), ("record", value_shape),
 # ("tagged", tag_key, {tag_value: shape}); None passes a value through.
 _OPTION_TYPES: Dict[str, Any] = {
-    "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label_angle": ("labelAngle", None), "label_align": ("labelAlign", None), "levels": ("levels", ("array", ("ref", "Calendar")))}),
+    "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label": ("label", ("ref", "AxisLabelOptions")), "levels": ("levels", ("array", ("ref", "Calendar")))}),
+    "AxisLabelOptions": ("object", {"angle": ("angle", None), "align": ("align", None)}),
     "Calendar": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "step": ("step", None)}), "minute": ("object", {"kind": ("kind", None), "step": ("step", None)}), "hour": ("object", {"kind": ("kind", None), "step": ("step", None)}), "day": ("object", {"kind": ("kind", None), "step": ("step", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "step": ("step", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "step": ("step", None)}), "quarter": ("object", {"kind": ("kind", None), "step": ("step", None)}), "year": ("object", {"kind": ("kind", None), "step": ("step", None)})}),
     "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
     "AxisInterval": ("object", {"min": ("min", None), "center": ("center", None), "max": ("max", None), "size": ("size", None), "embedded": ("embedded", None)}),
@@ -48,9 +49,10 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
     """Rename the keys of a nested option value from Python to wire spelling.
 
     `shape` is the value's declared type, compiled from the descriptor table,
-    so only declared option keys are renamed (`label_angle` to `labelAngle`,
-    by the same rule as top-level kwargs). A key the type does not declare
-    raises TypeError, as an unknown kwarg does. Record keys (column names,
+    so only declared option keys are renamed (a snake_case key to its
+    camelCase wire key, by the same rule as top-level kwargs). A key the
+    type does not declare raises TypeError, as an unknown kwarg does.
+    Record keys (column names,
     axis names) and values of any other type pass through unchanged. A
     tagged union picks its branch by the dict's tag key (`kind`); a missing
     or unknown tag raises TypeError. A channel value built by field(...) or

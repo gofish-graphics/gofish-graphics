@@ -3451,8 +3451,8 @@ def chart(
         axes=False                     # no axes
         axes={"x": True, "y": False}   # per-dimension on/off
         axes={"x": {"title": "Year"}}  # custom title (title=False suppresses it)
-        axes={"x": {"label_angle": 45}}  # rotate x labels (also "side")
-        axes={"x": {"label_align": ["center", "start"]}}  # per-level label alignment
+        axes={"x": {"label": {"angle": 45}}}  # rotate x labels (also "side")
+        axes={"x": {"label": {"align": ["center", "start"]}}}  # per-level label alignment
 
         chart(data, axes=True)
         chart(data, axes={"x": {"title": "Year"}, "y": True})
@@ -3467,8 +3467,8 @@ def chart(
         chart(survey, schema={"response": Schema.ordered(LEVELS).diverging()})
 
     Keys inside the per-axis dict are snake_case like every kwarg; an
-    unknown key (or a camelCase one such as ``"labelAngle"``) raises
-    TypeError.
+    unknown key (such as the old flat ``"label_angle"``) raises TypeError
+    naming the keys it takes.
 
     Args:
         data: Input data, or `ref(name)` / `select_all(name)` for cross-chart

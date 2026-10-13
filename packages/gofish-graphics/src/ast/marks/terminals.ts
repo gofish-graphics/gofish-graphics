@@ -146,7 +146,7 @@ export function attachBuilderTerminals(
             pass
           );
           // The surface can build its chart again, which a choice that lays
-          // the chart out once per candidate needs (`labelAngle: "auto"`, see
+          // the chart out once per candidate needs (`label.angle: "auto"`, see
           // `GoFishNode.rebuild`). A rebuild is the same resolve for the same
           // render pass.
           surface.node.rebuild = async () => (await resolveHere(pass)).node;

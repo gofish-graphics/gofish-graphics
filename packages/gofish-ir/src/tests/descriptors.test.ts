@@ -31,6 +31,7 @@ import type {
   AxisInterval,
   FieldPredicateIR,
   AxisOptions,
+  AxisLabelOptions,
   BinIR,
   CurveIR,
   LabelSpecIR,
@@ -182,10 +183,13 @@ const SCHEMA_OPTION_TYPE_KEYS: Record<string, Record<string, true>> = {
   AxisOptions: {
     title: true,
     side: true,
-    labelAngle: true,
-    labelAlign: true,
+    label: true,
     levels: true,
   } satisfies Record<keyof Exclude<AxisOptions, boolean>, true>,
+  AxisLabelOptions: {
+    angle: true,
+    align: true,
+  } satisfies Record<keyof AxisLabelOptions, true>,
   AxesOptions: {
     x: true,
     y: true,

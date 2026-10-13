@@ -3,7 +3,7 @@
 // </gofish-wiki>
 
 /**
- * `labelAngle: "auto"`: pick each label ROW's angle (one row per axis tier)
+ * `label.angle: "auto"`: pick each label ROW's angle (one row per axis tier)
  * from 0°, 45°, and 90°, in that order of preference, taking the first angle
  * at which no two labels of that row collide.
  *
@@ -284,7 +284,7 @@ export async function layoutWithAutoLabelAngles<
   const rebuild = root.rebuild;
   if (!rebuild) {
     throw new Error(
-      'labelAngle: "auto" needs a rebuildable chart (a chart builder such as ' +
+      'label.angle: "auto" needs a rebuildable chart (a chart builder such as ' +
         "chart(...).render(...), or a component thunk passed to gofish()): " +
         "it lays the chart out once per candidate angle, and a prebuilt node " +
         "can be laid out only once."
@@ -382,10 +382,10 @@ export function warnUnlabeledRows(
     const axis = row.dim === 0 ? "x" : "y";
     console.warn(
       field !== undefined
-        ? `labelAngle: "auto": hid the ${axis}-axis "${field}" labels because ` +
+        ? `label.angle: "auto": hid the ${axis}-axis "${field}" labels because ` +
             `they overlap at every angle, and no legend shows "${field}"; ` +
             `the categories are not labeled.`
-        : `labelAngle: "auto": hid a row of ${axis}-axis labels because they ` +
+        : `label.angle: "auto": hid a row of ${axis}-axis labels because they ` +
             `overlap at every angle; the categories are not labeled.`
     );
   }

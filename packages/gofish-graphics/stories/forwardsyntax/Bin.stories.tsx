@@ -258,7 +258,7 @@ export const MonthBarsProduct: StoryObj<Args> = {
     const container = initializeContainer();
     chart(between("2014-07-01", "2015-07-01"), {
       schema: { date: Schema.time() },
-      axes: { x: { labelAngle: "auto" }, y: true },
+      axes: { x: { label: { angle: "auto" } }, y: true },
     })
       .flow(
         spread({ by: field("date").bin([Calendar.year, Calendar.month]), dir: "x" })
@@ -317,7 +317,7 @@ export const GroupedMonthBars: StoryObj<Args> = {
     const container = initializeContainer();
     chart(winter, {
       schema: { date: Schema.time() },
-      axes: { x: { labelAngle: "auto" }, y: true },
+      axes: { x: { label: { angle: "auto" } }, y: true },
     })
       .flow(
         spread({

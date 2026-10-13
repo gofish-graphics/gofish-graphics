@@ -1415,7 +1415,7 @@ function rejectUnknown(
     if (!knownKeys.includes(k)) {
       ctx.errors.push({
         path: `${path}.${k}`,
-        message: `unknown field "${k}"`,
+        message: `unknown field "${k}"; expected one of ${knownKeys.map((key) => JSON.stringify(key)).join(", ")}`,
       });
     }
   }

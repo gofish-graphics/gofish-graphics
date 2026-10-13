@@ -27,7 +27,7 @@
  *    `_label_opts` for `.label(accessor, **options)` (LABEL_OPTIONS).
  *  - `_OPTION_TYPES` + `_to_wire`: the key structure of each named option
  *    type (OPTION_TYPES) and the one interpreter that renames the keys of a
- *    nested option dict (`axes={"x": {"label_angle": 45}}`) to wire keys by
+ *    nested option dict (`axes={"x": {"label": {"angle": 45}}}`) to wire keys by
  *    the field's declared type, raising TypeError on an undeclared key.
  *  - The strategy family modules, `gofish/<family>.py` (`tile.py`,
  *    `overlap.py`, `curve.py`), one factory per kind and per preset of the
@@ -404,9 +404,10 @@ parts.push(
       `    """Rename the keys of a nested option value from Python to wire spelling.`,
       ``,
       `    \`shape\` is the value's declared type, compiled from the descriptor table,`,
-      `    so only declared option keys are renamed (\`label_angle\` to \`labelAngle\`,`,
-      `    by the same rule as top-level kwargs). A key the type does not declare`,
-      `    raises TypeError, as an unknown kwarg does. Record keys (column names,`,
+      `    so only declared option keys are renamed (a snake_case key to its`,
+      `    camelCase wire key, by the same rule as top-level kwargs). A key the`,
+      `    type does not declare raises TypeError, as an unknown kwarg does.`,
+      `    Record keys (column names,`,
       `    axis names) and values of any other type pass through unchanged. A`,
       `    tagged union picks its branch by the dict's tag key (\`kind\`); a missing`,
       `    or unknown tag raises TypeError. A channel value built by field(...) or`,

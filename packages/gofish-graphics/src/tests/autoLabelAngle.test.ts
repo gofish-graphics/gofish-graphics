@@ -1,5 +1,5 @@
 /**
- * Unit tests for `labelAngle: "auto"`: the generic whole-chart choice
+ * Unit tests for `label.angle: "auto"`: the generic whole-chart choice
  * (`src/ast/choice/choose.ts`), the per-row label collision score
  * (`src/ast/axes/autoLabelAngle.ts`), and the option's validation. Run:
  * `tsx src/tests/autoLabelAngle.test.ts` (wired into `pnpm test` as
@@ -276,7 +276,7 @@ ok(
   '"auto" inside a per-level array is an error',
   (
     await errorOf(() =>
-      resolveAxisLabelAngles({ x: { labelAngle: ["auto"] as any } })
+      resolveAxisLabelAngles({ x: { label: { angle: ["auto"] as any } } })
     )
   ).includes("per-level array")
 );
@@ -284,15 +284,23 @@ ok(
   "an unknown string is an error",
   (
     await errorOf(() =>
-      resolveAxisLabelAngles({ x: { labelAngle: "sideways" as any } })
+      resolveAxisLabelAngles({ x: { label: { angle: "sideways" as any } } })
     )
   ).includes("unknown value")
 );
 ok(
+  "the old flat labelAngle key is an error naming label",
+  (
+    await errorOf(() =>
+      resolveAxisLabelAngles({ x: { labelAngle: 45 } as any })
+    )
+  ).includes('"label"')
+);
+ok(
   '"auto" and numbers pass through',
   resolveAxisLabelAngles({
-    x: { labelAngle: "auto" },
-    y: { labelAngle: [45, 0] },
+    x: { label: { angle: "auto" } },
+    y: { label: { angle: [45, 0] } },
   }).join("|") === "auto|45,0"
 );
 ok(
@@ -300,7 +308,7 @@ ok(
   (
     await errorOf(() =>
       runLayout(
-        { w: 100, h: 100, axes: { x: { labelAngle: "auto" } } },
+        { w: 100, h: 100, axes: { x: { label: { angle: "auto" } } } },
         Rect({ w: 10, h: 10 })
       )
     )
@@ -325,7 +333,7 @@ const regionProduct = [
   }))
 );
 const groupedProducts = () =>
-  chart(regionProduct, { axes: { x: { labelAngle: "auto" } } })
+  chart(regionProduct, { axes: { x: { label: { angle: "auto" } } } })
     .flow(
       spread({ by: "region", dir: "x", spacing: 24 }),
       spread({ by: "product", dir: "x", spacing: 0 })
@@ -379,7 +387,7 @@ console.log("end to end");
     const node = await builder.resolve();
     node.rebuild = () => builder.resolve();
     const data = await runLayout(
-      { w, h: 210, legend: false, axes: { x: { labelAngle: "auto" } } },
+      { w, h: 210, legend: false, axes: { x: { label: { angle: "auto" } } } },
       node
     );
     const scores = [
@@ -394,7 +402,7 @@ console.log("end to end");
     );
   }
 
-  // Labels that `labelAngle` does not rotate are not scored by "auto": a
+  // Labels that `label.angle` does not rotate are not scored by "auto": a
   // difference axis's delta labels, and a time axis's row labels.
   {
     const deltaChart = chart([
@@ -437,7 +445,7 @@ console.log("end to end");
 
   // A continuous axis: stacked tick labels never collide, so they stay upright.
   const doc = await chart(regionProduct, {
-    axes: { y: { labelAngle: "auto" } },
+    axes: { y: { label: { angle: "auto" } } },
   })
     .flow(
       spread({ by: "region", dir: "x" }),
@@ -468,7 +476,7 @@ const warningsOf = async (
   opts: { legend?: boolean; viaIR?: boolean } = {}
 ): Promise<string[]> => {
   let builder: any = chart(regionProduct, {
-    axes: { x: { labelAngle: "auto" } },
+    axes: { x: { label: { angle: "auto" } } },
   })
     .flow(
       spread({ by: "region", dir: "x", spacing: 24 }),
@@ -492,13 +500,13 @@ const warningsOf = async (
     await builder.toDisplayList({
       w: 90,
       h: 210,
-      axes: { x: { labelAngle: "auto" } },
+      axes: { x: { label: { angle: "auto" } } },
       ...(opts.legend === false ? { legend: false } : {}),
     });
   } finally {
     console.warn = warn;
   }
-  return warnings.filter((w) => w.includes('labelAngle: "auto"'));
+  return warnings.filter((w) => w.includes('label.angle: "auto"'));
 };
 
 console.log("unlabeled-categories warning");
