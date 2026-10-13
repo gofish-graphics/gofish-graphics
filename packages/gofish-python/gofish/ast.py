@@ -1895,7 +1895,7 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
 
     A transform may declare the column types of its output by setting
     `_gofish_column_types` on the callable (e.g. `bin`, whose `start`/`end`
-    columns are amounts of the source field's quantity, ``HasUnit``). They go
+    columns are amounts of the source field's quantity, ``HasQuantity``). They go
     into the operator's ``schema`` so the JS side types the rows after the
     RPC; a ``schema`` entry for the same column replaces the transform's,
     since a schema entry is a column's whole type. This is what lets
@@ -2227,6 +2227,18 @@ class ColumnSchema(dict):
             )
         return ColumnSchema({**self, "HasMidpoint": {"at": at}})
 
+    def quantity(self, name: str) -> "ColumnSchema":
+        """Say what the column's values are amounts of (``HasQuantity``): the
+        quantity ``name``, which titles the axis in place of the column's
+        name."""
+        return ColumnSchema({**self, "HasQuantity": {"name": _quantity_name(name)}})
+
+
+def _quantity_name(name: Any) -> str:
+    if not isinstance(name, str):
+        raise TypeError(f"Schema.quantity: name must be a string, got {name!r}")
+    return name
+
 
 def _js_number(x: Union[int, float]) -> str:
     """``x`` as JS ``String(x)`` writes it (6.0 is "6", 1e-05 is "0.00001"),
@@ -2281,11 +2293,21 @@ class Schema:
 
         Columns in the same unit may share an axis; two different units on
         one axis are an error. A column with no unit declared may share an
-        axis with any other.
+        axis with any other. An axis title shows the unit after its
+        quantity: "Pay (USD)".
         """
         if not isinstance(unit, str):
             raise TypeError(f"Schema.unit: unit must be a string, got {unit!r}")
-        return ColumnSchema({"HasUnit": {"unit": unit}})
+        return ColumnSchema({"HasUnit": {"unit": unit, "symbol": unit}})
+
+    @staticmethod
+    def quantity(name: str) -> ColumnSchema:
+        """A column whose values are amounts of the quantity ``name``
+        (``HasQuantity``), e.g. ``"Pay"``. The quantity titles the axis in
+        place of the column's name, and columns of one quantity share one
+        unit.
+        """
+        return ColumnSchema({"HasQuantity": {"name": _quantity_name(name)}})
 
 
 # Calendar partitions

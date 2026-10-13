@@ -115,7 +115,9 @@ error. See [`Schema.unit`](/js/api/core/schema).
   });
   ```
 
-An axis is titled by the names of its columns, never by a unit.
+An axis is titled by the quantities of its columns (each column's name,
+unless its schema declares a quantity), then a declared unit in parentheses:
+`"Pay (USD)"`. See [`Schema.quantity`](/js/api/core/schema).
 
 If an axis combines two different units, you have two remedies:
 

@@ -1,5 +1,5 @@
 import { bin as d3bin } from "d3-array";
-import { columnType, setColumnTypes, type HasUnit } from "./schema";
+import { columnType, setColumnTypes, type ColumnType } from "./schema";
 import { COUNT } from "./measure";
 
 type BinResult = { start: number; end: number; size: number; count: number };
@@ -36,22 +36,23 @@ function runBin<T extends Record<string, any>>(
     size: b.end - b.start,
     count: b.rows.length,
   }));
-  // Units (`HasUnit`): `start`/`end`/`size` are amounts of the SOURCE
-  // column's quantity (e.g. "Beak Length (mm)", not the column name
-  // "start"), in the source's unit: its declared unit, or else its unit
-  // variable, which the quantity names. So the edges title their axis as the
-  // source does and unify with it. `count` is a count. The column types ride
-  // the array (not each row) so they survive `derive(...)`.
-  const source = columnType(data, field)?.HasUnit;
-  const edge: HasUnit = {
-    ...(source?.unit !== undefined ? { unit: source.unit } : {}),
-    quantity: source?.quantity ?? field,
+  // Quantity and unit (`HasQuantity`, `HasUnit`): `start`/`end`/`size` are
+  // amounts of the SOURCE column's quantity (its declared quantity, else its
+  // name, e.g. "Beak Length (mm)", not the column name "start"), in the
+  // source's unit: its declared unit, or else its unit variable, which the
+  // quantity names. So the edges title their axis as the source does and
+  // unify with it. `count` is a count. The column types ride the array (not
+  // each row) so they survive `derive(...)`.
+  const source = columnType(data, field);
+  const edge: ColumnType = {
+    HasQuantity: { name: source?.HasQuantity?.name ?? field },
+    ...(source?.HasUnit !== undefined ? { HasUnit: source.HasUnit } : {}),
   };
   return setColumnTypes(result, {
-    start: { HasUnit: edge },
-    end: { HasUnit: edge },
-    size: { HasUnit: edge },
-    count: { HasUnit: { unit: COUNT } },
+    start: edge,
+    end: edge,
+    size: edge,
+    count: { HasUnit: { unit: COUNT.name } },
   });
 }
 

@@ -2,12 +2,13 @@
  * Units as gradual types with inference (#955; `measure.ts`).
  *
  * A column with no declared unit has an unknown unit, a unit variable named
- * by its quantity (the column, or the source column of a `bin()` edge),
+ * by its quantity (its declared `Schema.quantity`, the source column's for a
+ * `bin()` edge, else the column),
  * which unifies with anything. A declared unit (`Schema.unit`, the
  * "instant" of `Schema.time()`, the "count" of `.count()`) is concrete, and
  * two different declared units on one axis are a `MeasureClash`. A binding
- * holds for the whole render. The quantity names title the axis; a declared
- * unit never does.
+ * holds for the whole render. The quantity names title the axis, followed by
+ * a declared unit's symbol: "Pay (USD)".
  *
  * The first part pins the channel contract (a column's quantity reaches mark
  * channels over split leaves, #534) and the unifier itself, from source. The
@@ -89,7 +90,7 @@ const textsOf = (dl: any): string[] => {
 // ── Channels: a column's quantity reaches mark channels (#534) ──────────────
 
 // A bin()-shaped array: `size` is an amount of the source column's quantity.
-const mm = { HasUnit: { quantity: "Beak Length (mm)" } };
+const mm = { HasQuantity: { name: "Beak Length (mm)" } };
 const binned = setColumnTypes(
   [
     { start: 0, end: 10, size: 10, count: 3 },
@@ -121,11 +122,33 @@ console.log("# measure: quantities on the source array");
   );
   ok(
     "a time column's unit is an instant",
-    columnQuantity("start", { HasCalendar: { zone: "UTC" } }).unit === "instant"
+    columnQuantity("start", { HasCalendar: { zone: "UTC" } }).unit?.name ===
+      "instant"
+  );
+  ok(
+    "and an instant has no symbol",
+    columnQuantity("start", { HasCalendar: { zone: "UTC" } }).unit?.symbol ===
+      undefined
   );
   ok(
     "Schema.unit declares the unit",
-    columnQuantity("gross", Schema.unit("USD").type).unit === "USD"
+    columnQuantity("gross", Schema.unit("USD").type).unit?.name === "USD"
+  );
+  ok(
+    "and its symbol is the unit's name",
+    columnQuantity("gross", Schema.unit("USD").type).unit?.symbol === "USD"
+  );
+  ok(
+    "Schema.quantity names the quantity in place of the column",
+    columnQuantity("q1", Schema.quantity("Pay").type).name === "Pay"
+  );
+  ok(
+    ".quantity() after .unit() keeps both classes",
+    JSON.stringify(Schema.unit("USD").quantity("Pay").type) ===
+      JSON.stringify({
+        HasUnit: { unit: "USD", symbol: "USD" },
+        HasQuantity: { name: "Pay" },
+      })
   );
 }
 
@@ -137,7 +160,7 @@ console.log("# measure: the join table, shared axis");
   /** Run `f` in a fresh render's union-find. */
   const fresh = <T>(f: () => T): T => withUnits(new Units(), f);
   const declared = (name: string, unit: string) =>
-    quantityUnits({ name, unit });
+    quantityUnits({ name, unit: { name: unit, symbol: unit } });
   const unknown = (name: string) => quantityUnits({ name });
   const unitOf = (r: UnitRecord | undefined) =>
     r?.unit === undefined ? undefined : resolveUnit(r.unit);
@@ -235,7 +258,7 @@ console.log("# measure: the join table, not shared");
   const site = { axis: 1 as const, where: "in a test" };
   const fresh = <T>(f: () => T): T => withUnits(new Units(), f);
   const declared = (name: string, unit: string) =>
-    quantityUnits({ name, unit });
+    quantityUnits({ name, unit: { name: unit, symbol: unit } });
   const unknown = (name: string) => quantityUnits({ name });
   const unitOf = (r: UnitRecord | undefined) =>
     r?.unit === undefined ? undefined : resolveUnit(r.unit);
@@ -489,10 +512,80 @@ console.log("# measure: declared units clash");
   );
 }
 
-// ── Titles: quantity names, never a declared unit ───────────────────────────
+// ── Titles: quantities, then the unit's symbol ──────────────────────────────
 
-console.log("# measure: titles come from quantity names");
+console.log("# measure: titles are Quantity (unit)");
 {
+  /** The texts of a one-bar-per-genre chart over `rows`, its y read by
+   *  `mark`, with `schema`. */
+  const bars = async (rows: any[], schema: any, mark: any, opts: any = {}) =>
+    textsOf(
+      await chart(rows, { schema, axes: true, ...opts })
+        .flow(spread({ by: "genre", dir: "x" }))
+        .mark(mark)
+        .toDisplayList(SIZE)
+    );
+  const gross = [
+    { genre: "a", "Production Budget": 10 },
+    { genre: "b", "Production Budget": 20 },
+  ];
+
+  const plain = await bars(gross, {}, rect({ h: "Production Budget" }));
+  ok(
+    "a plain column titles by its name",
+    plain.includes("Production Budget"),
+    plain.join(" | ")
+  );
+
+  const usd = await bars(
+    gross,
+    { "Production Budget": Schema.unit("USD") },
+    rect({ h: "Production Budget" })
+  );
+  ok(
+    "a declared unit follows its quantity in parentheses",
+    usd.includes("Production Budget (USD)"),
+    usd.join(" | ")
+  );
+
+  const explicit = await bars(
+    gross,
+    { "Production Budget": Schema.unit("USD") },
+    rect({ h: "Production Budget" }),
+    { axes: { y: { title: "Budget" } } }
+  );
+  ok(
+    "an explicit axes title wins",
+    explicit.includes("Budget") && !explicit.includes("Production Budget (USD)"),
+    explicit.join(" | ")
+  );
+
+  const suffixed = await bars(
+    [
+      { genre: "a", "Flipper Length (mm)": 190 },
+      { genre: "b", "Flipper Length (mm)": 210 },
+    ],
+    { "Flipper Length (mm)": Schema.unit("mm") },
+    rect({ h: "Flipper Length (mm)" })
+  );
+  ok(
+    "a name that already ends with the symbol is not suffixed again",
+    suffixed.includes("Flipper Length (mm)") &&
+      !suffixed.some((t) => t.includes("(mm) (mm)")),
+    suffixed.join(" | ")
+  );
+
+  const counted = await bars(
+    penguins.map((p) => ({ ...p, genre: p.sp })),
+    {},
+    rect({ h: field("flipper").count() })
+  );
+  ok(
+    ".count() titles as count, with no unit",
+    counted.includes("count") && !counted.some((t) => /\(count\)/.test(t)),
+    counted.join(" | ")
+  );
+
   const hist = textsOf(
     await chart(penguins, { axes: true })
       .flow(derive(bin("flipper")), scatter({ xMin: "start", xMax: "end" }))
@@ -504,24 +597,25 @@ console.log("# measure: titles come from quantity names");
     hist.includes("flipper") && !hist.some((t) => /start|end/.test(t)),
     hist.join(" | ")
   );
-  ok("bin counts title as count", hist.includes("count"), hist.join(" | "));
+  ok(
+    "bin counts title as count, with no unit",
+    hist.includes("count") && !hist.some((t) => /\(count\)/.test(t)),
+    hist.join(" | ")
+  );
 
-  const declared = textsOf(
-    await chart(
-      [
-        { genre: "a", "Worldwide Gross": 10 },
-        { genre: "b", "Worldwide Gross": 20 },
-      ],
-      { schema: { "Worldwide Gross": Schema.unit("USD") }, axes: true }
-    )
-      .flow(spread({ by: "genre", dir: "x" }))
-      .mark(rect({ h: "Worldwide Gross" }))
+  const histMm = textsOf(
+    await chart(penguins, {
+      schema: { flipper: Schema.unit("mm").quantity("Flipper") },
+      axes: true,
+    })
+      .flow(derive(bin("flipper")), scatter({ xMin: "start", xMax: "end" }))
+      .mark(rect({ h: "count" }))
       .toDisplayList(SIZE)
   );
   ok(
-    "a declared column titles by its name, never its unit",
-    declared.includes("Worldwide Gross") && !declared.includes("USD"),
-    declared.join(" | ")
+    "bin edges take the source's declared quantity and unit",
+    histMm.includes("Flipper (mm)"),
+    histMm.join(" | ")
   );
 
   const several = textsOf(
@@ -538,6 +632,49 @@ console.log("# measure: titles come from quantity names");
     "an axis over several names titles them all, joined",
     several.includes("lo, hi"),
     several.join(" | ")
+  );
+
+  // A box plot: four summary columns, one declared quantity and unit.
+  const summary = [
+    { genre: "a", lo: 1, q1: 3, q3: 6, hi: 9 },
+    { genre: "b", lo: 2, q1: 4, q3: 7, hi: 10 },
+  ];
+  const box = (schema: any) =>
+    bars(
+      summary,
+      schema,
+      layer([rect({ y: "lo", y2: "hi" }), rect({ y: "q1", y2: "q3" })])
+    );
+  const undeclared = await box({});
+  ok(
+    "a box plot with no declarations titles by its column names",
+    undeclared.includes("lo, hi, q1, q3"),
+    undeclared.join(" | ")
+  );
+  const pay = Schema.unit("USD").quantity("Pay");
+  const declaredBox = await box({ lo: pay, q1: pay, q3: pay, hi: pay });
+  ok(
+    "one declared quantity over four columns titles once, with its unit",
+    declaredBox.includes("Pay (USD)"),
+    declaredBox.join(" | ")
+  );
+
+  const times = textsOf(
+    await chart(
+      [
+        { day: "2024-03-01", price: 1 },
+        { day: "2024-03-09", price: 3 },
+      ],
+      { schema: { day: Schema.time() }, axes: true }
+    )
+      .flow(scatter({ x: "day", y: "price" }))
+      .mark(rect({ w: 4, h: 4 }))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "a time axis titles by its column, with no (instant)",
+    times.includes("day") && !times.some((t) => t.includes("instant")),
+    times.join(" | ")
   );
 }
 

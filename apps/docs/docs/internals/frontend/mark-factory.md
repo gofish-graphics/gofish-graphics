@@ -107,9 +107,9 @@ layer can unify units and title axes (see
 [Underlying Space](/internals/core/underlying-space)). When the caller doesn't
 pass a column (e.g. `createMark`'s size channel), the inferer resolves it
 locally from `data`. The quantity comes from `resolveQuantity`: named by the
-column (or by its source column, `HasUnit.quantity`, which `bin()` writes),
-in the column's declared unit (`HasUnit.unit`, or an instant for a time
-column), else in an unknown unit.
+column's declared quantity (`HasQuantity`, which `bin()` also writes for its
+edges), else by the column, in the column's declared unit (`HasUnit`, or an
+instant for a time column), else in an unknown unit.
 `createOperator` hoists `resolveColumn` to once per channel and passes the
 result down, since the accessor and what the data carries are loop-invariant
 across split entries. A value read from a column with a type also records

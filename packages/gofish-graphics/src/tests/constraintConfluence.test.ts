@@ -53,7 +53,7 @@ import { discretePosition, value } from "../ast/data";
 import { quantityUnits } from "../ast/underlyingSpace";
 
 /** The measure of a column declared in unit `unit` (and named by it). */
-const u = (unit: string) => quantityUnits({ name: unit, unit });
+const u = (unit: string) => quantityUnits({ name: unit, unit: { name: unit, symbol: unit } });
 import { pxOf, type AxisMap } from "../ast/domain";
 import {
   UNDEFINED,

@@ -178,7 +178,7 @@ export const OPERATOR_BUILDERS: Record<
   // The IR names a Python lambda: the rebuilt operator calls it through the
   // bridge and types the returned rows by the operator's `schema`. The
   // schema also puts back the column types the rows lose on the way (e.g. a
-  // `bin`'s units, `HasUnit`, which Python writes into it).
+  // `bin`'s quantities and units, which Python writes into it).
   derive: (opts, bridge) => {
     const lambdaId = opts.lambdaId;
     if (!lambdaId) {

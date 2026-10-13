@@ -143,7 +143,7 @@ Walking `createOperator.ts:391-415`:
    types](/internals/core/underlying-space#column-types-the-chart-schema)): a
    leaf is a fresh sub-array that wouldn't otherwise inherit them, so without
    this a _mark_ channel applied per leaf would lose a transform's unit (e.g.
-   a bin's `start`/`end`/`size`, `HasUnit`) and fall back to the literal
+   a bin's `start`/`end`/`size`, `HasQuantity`) and fall back to the literal
    field name — see [underlying space](/internals/core/underlying-space) and
    #534 — and a nested split or a color channel would lose an ordered column.
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with

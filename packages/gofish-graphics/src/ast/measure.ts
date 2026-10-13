@@ -16,48 +16,67 @@ import type { ColumnType, HasCalendar } from "./schema";
  * concrete units on one shared axis are a type error ({@link MeasureClash};
  * the join itself is `joinUnits` in underlyingSpace.ts).
  *
- * A unit variable is named by its QUANTITY: the column's name, or, for a
- * column a transform derived from another (`bin()`'s edges), the source
- * column's. The same name is the same variable across the whole figure, and
+ * A unit variable is named by its QUANTITY: the column's declared quantity
+ * (`HasQuantity`, from `Schema.quantity(name)` or, for a column a transform
+ * derived from another such as `bin()`'s edges, the source column's), else
+ * the column's name. The same name is the same variable across the whole figure, and
  * a binding holds for the whole render: a column bound to USD on one axis is
  * USD everywhere, so meeting "count" on another axis is a clash. The
  * substitution lives in one {@link Units} per render (`RenderSession.units`).
  *
  * The unit decides which axes may share a scale. The quantity names title
- * the axis. The two are separate: a declared unit never becomes a title.
+ * the axis, followed by the unit's symbol when it has one: "Pay (USD)"
+ * (`spaceTitle` in underlyingSpace.ts).
  */
 
 /** What one channel's values are amounts of, as its column says (pure data,
  *  carried by a datum value). */
 export type Quantity = {
-  /** The quantity's name: its column's (or the source column's, for a
-   *  column derived from another), or a pipeline's (`"count"`). It titles
-   *  the axis and names the unit variable. */
+  /** The quantity's name: its column's declared quantity (`HasQuantity`,
+   *  which a transform writes for a column it derives from another), else
+   *  the column's name, or a pipeline's (`"count"`). It titles the axis and
+   *  names the unit variable. */
   name: string;
   /** The declared unit, if any. Absent: unknown, the variable `name`. */
-  unit?: string;
+  unit?: DeclaredUnit;
   /** The calendar the values read on, when they are instants. */
   calendar?: HasCalendar;
 };
 
+/** A declared unit: its `name`, which says which units are the same, and
+ *  the `symbol` an axis title shows it by, "Pay (USD)". A unit the user
+ *  declares (`Schema.unit(u)`) has the symbol `u`. The engine's own units
+ *  ({@link INSTANT}, {@link COUNT}, a normalize share) have none: a count or
+ *  a share is a plain number, and a time axis's ticks already read as
+ *  dates. */
+export type DeclaredUnit = { name: string; symbol?: string };
+
 /** The unit a time column (`HasCalendar`) declares: an instant. Its zone is
  *  a display parameter, kept in the calendar. */
-export const INSTANT = "instant";
+export const INSTANT: DeclaredUnit = { name: "instant" };
 
 /** The unit `.count()`, `.distinct()` and `bin()`'s `count` declare. */
-export const COUNT = "count";
+export const COUNT: DeclaredUnit = { name: "count" };
 
 /** The {@link Quantity} of column `column`, whose type is `type`: named by
- *  the type's `HasUnit.quantity` (a derived column's source), else the
- *  column; in the declared unit of `HasUnit.unit`, else an instant for a time
+ *  the type's `HasQuantity` (declared, or a derived column's source), else
+ *  the column; in the declared unit of `HasUnit`, else an instant for a time
  *  column, else unknown. */
 export const columnQuantity = (
   column: string,
   type: ColumnType | undefined
 ): Quantity => {
-  const unit = type?.HasUnit?.unit ?? (type?.HasCalendar ? INSTANT : undefined);
+  const declared = type?.HasUnit;
+  const unit: DeclaredUnit | undefined = declared
+    ? {
+        name: declared.unit,
+        ...(declared.symbol !== undefined ? { symbol: declared.symbol } : {}),
+      }
+    : type?.HasCalendar
+      ? INSTANT
+      : undefined;
   return {
-    name: type?.HasUnit?.quantity ?? column,
+    name: type?.HasQuantity?.name ?? column,
     ...(unit !== undefined ? { unit } : {}),
     ...(type?.HasCalendar ? { calendar: type.HasCalendar } : {}),
   };
@@ -72,7 +91,7 @@ export class UnitVar {
   /** @internal union-find parent; undefined at a root. */
   parent?: UnitVar;
   /** @internal at a root: the declared unit the class is bound to. */
-  unit?: string;
+  unit?: DeclaredUnit;
   /** @internal at a root: the quantity names in the class. */
   names: string[];
   constructor(readonly name: string) {
@@ -81,7 +100,7 @@ export class UnitVar {
   /** The resolved unit, so a printed or hashed space shows what it means. */
   toJSON(): string {
     const root = findRoot(this);
-    return root.unit ?? `'${root.name}`;
+    return root.unit?.name ?? `'${root.name}`;
   }
 }
 
@@ -102,14 +121,14 @@ const findRoot = (v: UnitVar): UnitVar => {
  *  (named by one of its quantities). Two units are the same iff
  *  {@link sameUnit}. */
 export type Unit =
-  | { kind: "declared"; name: string }
+  | { kind: "declared"; name: string; symbol?: string }
   | { kind: "unknown"; name: string };
 
 /** What a unit variable stands for now. */
 export const resolveUnit = (v: UnitVar): Unit => {
   const root = findRoot(v);
   return root.unit !== undefined
-    ? { kind: "declared", name: root.unit }
+    ? { kind: "declared", ...root.unit }
     : { kind: "unknown", name: root.name };
 };
 
@@ -174,15 +193,24 @@ export function unify(a: UnitVar, b: UnitVar, site: MeasureSite): UnitVar {
   const ra = findRoot(a);
   const rb = findRoot(b);
   if (ra === rb) return ra;
-  if (ra.unit !== undefined && rb.unit !== undefined && ra.unit !== rb.unit) {
+  if (
+    ra.unit !== undefined &&
+    rb.unit !== undefined &&
+    ra.unit.name !== rb.unit.name
+  ) {
     throw new MeasureClash(
-      { unit: ra.unit, names: ra.names },
-      { unit: rb.unit, names: rb.names },
+      { unit: ra.unit.name, names: ra.names },
+      { unit: rb.unit.name, names: rb.names },
       site
     );
   }
   rb.parent = ra;
-  ra.unit ??= rb.unit;
+  // One unit declared twice keeps a symbol either side gives it, so the
+  // title does not depend on which side met first.
+  ra.unit =
+    ra.unit && rb.unit && ra.unit.symbol === undefined
+      ? rb.unit
+      : (ra.unit ?? rb.unit);
   for (const n of rb.names) if (!ra.names.includes(n)) ra.names.push(n);
   return ra;
 }
