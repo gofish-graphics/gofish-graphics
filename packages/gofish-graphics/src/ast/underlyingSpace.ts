@@ -552,11 +552,9 @@ export const spaceCalendar = (
  * quantities, joined with ", ", then the symbol of its unit in parentheses
  * when the unit is declared and has a symbol ("Pay (USD)"). A unit with no
  * symbol (a count, a share, an instant) adds nothing, and neither does an
- * unknown unit.
- *
- * A declared heuristic: when every quantity name already ends with the
- * suffix (a column named "Flipper Length (mm)" declared in "mm"), the names
- * already show the unit, so the suffix is not added again.
+ * unknown unit. The rule reads no names, so a column named "Flipper Length
+ * (mm)" in "mm" titles "Flipper Length (mm) (mm)": declare its quantity
+ * (`Schema.unit("mm").quantity("Flipper Length")`) or set the axis title.
  */
 export const spaceTitle = (
   space: UnderlyingSpace | undefined
@@ -567,9 +565,5 @@ export const spaceTitle = (
   if (r === undefined || r.titles.length === 0) return undefined;
   const quantities = r.titles.join(", ");
   const symbol = r.unit?.kind === "declared" ? r.unit.symbol : undefined;
-  if (symbol === undefined) return quantities;
-  const suffix = ` (${symbol})`;
-  return r.titles.every((t) => t.endsWith(suffix))
-    ? quantities
-    : quantities + suffix;
+  return symbol === undefined ? quantities : `${quantities} (${symbol})`;
 };

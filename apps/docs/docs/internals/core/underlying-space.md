@@ -1818,10 +1818,11 @@ symbol of the axis's unit in parentheses when that unit is declared and has
 a symbol. A histogram's edges title as their source column, an axis over
 `lo` and `hi` reads `"lo, hi"`, and the four summary columns of a box plot
 declared `Schema.unit("USD").quantity("Pay")` read `"Pay (USD)"`. A count, a
-share, a time, and an unknown unit add nothing. One declared heuristic: when
-every quantity name already ends with the suffix (a column named `"Flipper
-Length (mm)"` declared in `"mm"`), the names already show the unit, so it is
-not added twice. The `axes` option's `title` overrides all of this.
+share, a time, and an unknown unit add nothing. The rule never reads the
+names, so a column named `"Flipper Length (mm)"` declared in `"mm"` titles
+`"Flipper Length (mm) (mm)"`. The clean title comes from declaring the
+quantity (`Schema.unit("mm").quantity("Flipper Length")`) or from the `axes`
+option's `title`, which overrides all of this.
 
 **Stage 2.** This is Stage 1: one unit per axis, unified or refused. The
 sequel is a unit-keyed _family_ of underlying spaces per axis — true

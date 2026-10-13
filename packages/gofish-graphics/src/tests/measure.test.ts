@@ -748,10 +748,26 @@ console.log("# measure: titles are Quantity (unit)");
     rect({ h: "Flipper Length (mm)" })
   );
   ok(
-    "a name that already ends with the symbol is not suffixed again",
-    suffixed.includes("Flipper Length (mm)") &&
-      !suffixed.some((t) => t.includes("(mm) (mm)")),
+    "a name that ends with the symbol is still suffixed: names are not read",
+    suffixed.includes("Flipper Length (mm) (mm)"),
     suffixed.join(" | ")
+  );
+
+  const declaredQuantity = await bars(
+    [
+      { genre: "a", "Flipper Length (mm)": 190 },
+      { genre: "b", "Flipper Length (mm)": 210 },
+    ],
+    {
+      "Flipper Length (mm)": Schema.unit("mm").quantity("Flipper Length"),
+    },
+    rect({ h: "Flipper Length (mm)" })
+  );
+  ok(
+    "a declared quantity titles it cleanly",
+    declaredQuantity.includes("Flipper Length (mm)") &&
+      !declaredQuantity.some((t) => t.includes("(mm) (mm)")),
+    declaredQuantity.join(" | ")
   );
 
   const counted = await bars(

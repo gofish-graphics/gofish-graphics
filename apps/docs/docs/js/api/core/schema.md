@@ -115,9 +115,11 @@ point along an order. `.quantity(name)` may follow any builder.
 - When x and y have the same unit, they get one scale: one data unit is the
   same length on both axes.
 - An axis title shows a declared unit after its quantities, in
-  parentheses: `"Production Budget (USD)"`. When every quantity name on the
-  axis already ends with the unit in parentheses (`"Flipper Length (mm)"` in
-  `"mm"`), the unit is not added again.
+  parentheses: `"Production Budget (USD)"`. The rule does not read the
+  names, so a column named `"Flipper Length (mm)"` in `"mm"` titles
+  `"Flipper Length (mm) (mm)"`. Declare its quantity
+  (`Schema.unit("mm").quantity("Flipper Length")`) or set the axis `title`
+  for `"Flipper Length (mm)"`.
 - `.count()` and `.distinct()` are in the unit `"count"`. The edges of
   `bin(field)` (`start`, `end`, `size`) are amounts of `field`'s quantity:
   they title their axis as `field` does and take its unit. Its `count` is in
