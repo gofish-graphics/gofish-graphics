@@ -149,8 +149,8 @@ export type DeriveMarkProps<
  * order:
  *   1. Explicit annotation — `field(name, measure)`. A real type claim.
  *   2. The column's unit — the `HasUnit` class of its column type (schema.ts),
- *      which a transform like `bin()` writes into the data array's column
- *      types. Also a real type claim.
+ *      which a transform writes into the data array's column types. Also a
+ *      real type claim.
  *   3. Field-name default — a bare string accessor's field name. A WEAK default
  *      binding, not a claim.
  *
@@ -188,7 +188,7 @@ export const resolveMeasure = <T>(
   if (annotation !== undefined && unit !== undefined && annotation !== unit) {
     throw new Error(
       `Measure conflict on field "${fieldName}": annotated as "${annotation}" ` +
-        `via field(name, measure) but its column's unit (e.g. from bin()) is ` +
+        `via field(name, measure) but its column's unit is ` +
         `"${unit}". These are contradictory type claims — drop the ` +
         `annotation or fix the upstream transform.`
     );

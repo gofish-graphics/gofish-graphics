@@ -1,7 +1,7 @@
 /**
  * A column's unit must reach MARK channels, not only operator channels (#534).
  *
- * `bin()` tags its output array with column types whose `HasUnit` says the
+ * A binning transform tags its output array with column types whose `HasUnit` says the
  * `start`/`end`/`size` columns are still in the SOURCE field's units. An
  * operator splits that array into fresh per-leaf sub-arrays (groupBy/filter/
  * slice) that don't inherit them; the operator re-tags each leaf
@@ -27,7 +27,7 @@ function ok(name: string, cond: boolean, detail?: string): void {
   }
 }
 
-// A bin()-shaped array: `size` is denominated in the source field's units.
+// A histogram-shaped array: `size` is denominated in the source field's units.
 const mm = { HasUnit: { unit: "Beak Length (mm)" } };
 const binned = setColumnTypes(
   [
