@@ -1309,11 +1309,17 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
     fields: {
       by: {
         type: t.object({
-          x: { type: t.string, required: true },
-          y: { type: t.string, required: true },
+          x: {
+            type: t.union(t.string, t.ref("FieldAccessor"), t.ref("ChunkKey")),
+            required: true,
+          },
+          y: {
+            type: t.union(t.string, t.ref("FieldAccessor"), t.ref("ChunkKey")),
+            required: true,
+          },
         }),
         required: true,
-        doc: "Grouping fields for the column/row keys — the table operator can't run without both.",
+        doc: "The column key (x) and the row key (y), both required. Each takes what spread's `by` takes: a field name, a field(...) key (sorted, binned, a chain or product of bins, a part of a cycle), or chunk(size). A binned key's columns or rows are its cells, empty ones included. Each cell of the table holds the rows in both its column and its row.",
       },
       spacing: {
         type: t.union(t.number, t.tuple(t.number, t.number)),

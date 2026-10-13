@@ -793,7 +793,7 @@ def _table_opts(*, by: dict, spacing: Optional[float | tuple] = None, num_cols: 
     """Arrange cells in a `numCols`-wide grid (or a `{x, y}` keyed grid via `by`).
 
     Args:
-        by: Grouping fields for the column/row keys — the table operator can't run without both.
+        by: The column key (x) and the row key (y), both required. Each takes what spread's `by` takes: a field name, a field(...) key (sorted, binned, a chain or product of bins, a part of a cycle), or chunk(size). A binned key's columns or rows are its cells, empty ones included. Each cell of the table holds the rows in both its column and its row.
         spacing: Cell gap: a single number for both axes, or [x, y]. Default 0.
         num_cols: Explicit column count (falls back to the number of distinct column keys).
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.

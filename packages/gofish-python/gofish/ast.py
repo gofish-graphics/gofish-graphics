@@ -2242,15 +2242,18 @@ def pack(
 
 def table(
     *,
-    by: Optional[Dict[str, str]] = None,
+    by: Optional[Dict[str, Union[str, "FieldAccessor"]]] = None,
     **options: Any,
 ) -> Operator:
     """
-    Table operator — cross-product over two fields, lay out as a 2D grid.
+    Table operator — cross-product over two keys, lay out as a 2D grid.
 
     Args:
-        by: Dict with `x` and `y` keys naming the two fields, e.g.
-            ``table(by={"x": "model", "y": "year"})``.
+        by: Dict with `x` (the column key) and `y` (the row key). Each
+            takes what ``spread``'s ``by`` takes: a field name or a
+            ``field(...)`` key, e.g. ``table(by={"x": "model", "y": "year"})``
+            or ``table(by={"x": field("date").bin(Calendar.week),
+            "y": field("date").bin(Calendar.weekday)})``.
         **options: The generated ``_table_opts`` core's options; see the
             docs options table.
 

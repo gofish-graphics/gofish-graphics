@@ -420,7 +420,11 @@ export interface TableOperator
   type: "table";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
-  by: { x: string; y: string };
+  /** The column and row keys, each what `SpreadOperator.by` takes. */
+  by: {
+    x: string | FieldAccessor | ChunkKeyIR;
+    y: string | FieldAccessor | ChunkKeyIR;
+  };
   spacing?: number | [number, number];
   numCols?: number;
 }

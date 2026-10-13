@@ -842,7 +842,10 @@ claim (no fill to absorb the slack), the grid claim is inverted against the
 allocated size by the same scope registry that solves any other frame equation.
 Because a categorical track axis cannot simultaneously be a SIZE magnitude, the
 grid's _reported_ space stays ORDINAL over the columns/rows (`gridSpaces`, for
-axis rendering) while the size claim is consumed at layout time by the track
+axis rendering; `ordinalOver` the keys `table`'s split found, so a binned
+column or row key gives an ordinal over its cells, as a spread's does: the
+split runs `splitEntries` once per key, as `spread` does, and each cell of
+the table holds the rows in both groups) while the size claim is consumed at layout time by the track
 resolution. The layout budget sizes fill cells to their track extent; the
 authoritative **placement tracks** are recomputed from the actual laid-out cell
 sizes (`gridTracksFromSizes`) so each cell pins to the real geometry — one source

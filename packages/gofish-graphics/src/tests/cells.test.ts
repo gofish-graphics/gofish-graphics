@@ -1197,6 +1197,43 @@ async function main() {
       badAlign?.includes("axes.x.labelAlign: unknown value") === true,
       badAlign
     );
+
+    console.log("\n# table over binned keys");
+    // Three days: a Monday and a Tuesday in January 2024, a Monday in
+    // February (Jan 1, 2024 is a Monday).
+    const days = ["2024-01-01", "2024-01-02", "2024-02-05"].map((date) => ({
+      date,
+      v: 1,
+    }));
+    const tableDl = await chart(days, {
+      schema: { date: Schema.time() },
+      axes: { x: { title: false }, y: { title: false } },
+    })
+      .flow(
+        table({
+          by: {
+            x: distField("date").bin(DistCalendar.year).bin(DistCalendar.month),
+            y: distField("date").bin(DistCalendar.weekday),
+          },
+        })
+      )
+      .mark(rect({ w: 10, h: 10, fill: "steelblue" }))
+      .toDisplayList({ w: 200, h: 200 });
+    const tableWords = textsOf(tableDl).map((t) => t.text);
+    check(
+      "table takes binned keys: a chained month column level with a year " +
+        "level, and the seven weekdays as rows, the empty ones kept",
+      ["Jan", "Feb", "2024", "Mon", "Tue", "Sun"].every((w) =>
+        tableWords.includes(w)
+      ) && !tableWords.some((w) => w.includes("[object")),
+      tableWords.join(" ")
+    );
+    const tableCells = rectsOf(tableDl).filter((r) => r.w === 10);
+    check(
+      "a table over binned keys has one cell per column and row (2 × 7)",
+      tableCells.length === 14,
+      `${tableCells.length}`
+    );
   }
 
   console.log("\n# partition");

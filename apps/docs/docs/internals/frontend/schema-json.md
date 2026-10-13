@@ -1332,14 +1332,34 @@ for the API.
           "type": "object",
           "properties": {
             "x": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/FieldAccessor"
+                },
+                {
+                  "$ref": "#/$defs/ChunkKey"
+                }
+              ]
             },
             "y": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/FieldAccessor"
+                },
+                {
+                  "$ref": "#/$defs/ChunkKey"
+                }
+              ]
             }
           },
           "required": ["x", "y"],
-          "description": "Grouping fields for the column/row keys — the table operator can't run without both."
+          "description": "The column key (x) and the row key (y), both required. Each takes what spread's `by` takes: a field name, a field(...) key (sorted, binned, a chain or product of bins, a part of a cycle), or chunk(size). A binned key's columns or rows are its cells, empty ones included. Each cell of the table holds the rows in both its column and its row."
         },
         "spacing": {
           "anyOf": [
