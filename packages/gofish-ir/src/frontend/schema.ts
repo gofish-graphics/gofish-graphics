@@ -189,16 +189,13 @@ export interface DeriveOperator
     OperatorFlagsIR {
   type: "derive";
   lambdaId?: string;
-  /** Measure provenance a transform (e.g. `bin`) declares for its output
-   *  columns — a map from output field name to the measure it carries (the
-   *  source field's units). Travels in the IR because the JS-side array symbol
-   *  can't ride the data rows across the derive RPC; the deserializer re-applies
-   *  it via `setMeasureProvenance`. */
-  provenance?: Record<string, string>;
   /** The column types of the derive's result, keyed by column name, in the
    *  wire form of a chart's `schema` (e.g. `{ HasOrder: { levels } }`). They
    *  type the result over the types it keeps or infers, and convert values
-   *  as a chart's schema does. */
+   *  as a chart's schema does. A transform (e.g. Python's `bin`) writes the
+   *  units of its output columns here (`{ HasUnit: { unit } }`), since the
+   *  column types the JS-side array carries can't ride the rows across the
+   *  derive RPC. */
   schema?: Record<string, Record<string, unknown>>;
 }
 

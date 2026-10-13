@@ -6,8 +6,8 @@
  * check, the centered stack's extent fold, the stray-level and signed-part
  * errors (checked where the order is used, so a `filter` in the flow can drop
  * a stray), the HasOrder prerequisite of HasMidpoint, a spread of centered
- * stacks lining up on their midpoints, and the schema keeping the measure
- * provenance its data carries.
+ * stacks lining up on their midpoints, and the schema keeping the column
+ * types (bin()'s units) its data carries.
  *
  * Run: `pnpm build && tsx src/tests/schema.test.ts` (wired as
  * `pnpm test:schema`). The rendering checks import from `dist` for the same
@@ -29,7 +29,6 @@ import {
   stackOrigin,
   type ColumnType,
 } from "../ast/schema";
-import { getMeasureProvenance } from "../ast/data";
 import { interval } from "../util/interval";
 import { bin } from "../ast/transforms";
 import {
@@ -449,13 +448,19 @@ async function main() {
     const binned = bin([{ x: 1 }, { x: 2 }, { x: 7 }], "x");
     const typed = await applySchema(binned, { count: Schema.ordered([0, 1, 2]) });
     check(
-      "bin()'s measure provenance survives a schema",
-      getMeasureProvenance(typed)?.start === "x",
-      JSON.stringify(getMeasureProvenance(typed))
+      "bin()'s unit survives a schema for another column",
+      getColumnTypes(typed)?.start?.HasUnit?.unit === "x",
+      JSON.stringify(getColumnTypes(typed))
+    );
+    check(
+      "a schema entry is the column's whole type",
+      JSON.stringify(getColumnTypes(typed)?.count) ===
+        JSON.stringify({ HasOrder: { levels: [0, 1, 2] } }),
+      JSON.stringify(getColumnTypes(typed)?.count)
     );
     check(
       "applySchema does not tag the caller's array",
-      getColumnTypes(binned) === undefined
+      getColumnTypes(binned)?.count?.HasOrder === undefined
     );
   }
 

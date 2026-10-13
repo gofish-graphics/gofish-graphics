@@ -70,8 +70,8 @@ that carries the value and an optional measure
 `data.ts:139` for the class, `data.ts:203` for `value` and `datum`). A measure is a plain
 string (`data.ts:11`). There are three sources of a measure. The field name is a weak
 default. `field(name, measure)` is a hard annotation (`data.ts:243`). A transform such as
-`bin()` tags its output array with a provenance map under a symbol
-(`MEASURE_PROVENANCE`, `data.ts:27`). `resolveMeasure` combines the three and throws on a
+`bin()` tags its output array with a provenance map under a symbol. (Since #994 that map
+is the `HasUnit` class of the array's column types, `schema.ts`.) `resolveMeasure` combines the three and throws on a
 conflict (`packages/gofish-graphics/src/ast/channels.ts:165`).
 
 **Field expressions.** `field(name)` returns a `FieldExpr` with a pipeline of operations.
@@ -122,7 +122,8 @@ is a spread on the time axis, which is the direction a hypothetical outcome plot
 1. **A column type.** Something has to record that a column holds `Dist<T>` and what `T`
    is. Today the only per-column record is the measure string and the provenance symbol.
    Either the measure grows into a structured type (a carrier type, a unit and a set of
-   capabilities), or a second sidecar like `MEASURE_PROVENANCE` carries column types. The
+   capabilities), or a second sidecar like the provenance symbol carries column types.
+   (Since #994 there is one record: the unit is the `HasUnit` class of a column type.) The
    #773 work on putting the origin on the datatype needs the same record, so the two
    should share it.
 2. **Channel inference.** `inferNumeric` in `channels.ts` is where a `Dist<T>` value would

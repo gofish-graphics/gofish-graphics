@@ -184,7 +184,7 @@ export const t = {
   tuple: (...items: FieldType[]): FieldType => ({ kind: "tuple", items }),
   object: (fields: FieldGroup): FieldType => ({ kind: "object", fields }),
   /** `Record<string, valueType>` — a string-keyed bag with no fixed key set
-   *  (e.g. `derive`'s `provenance`: output field name → measure string). */
+   *  (e.g. `derive`'s `schema`: column name → column type). */
   record: (valueType: FieldType = { kind: "string" }): FieldType => ({
     kind: "record",
     valueType,
@@ -944,11 +944,6 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.string,
         wireOnly: true,
         doc: "Python-bridge handle for the remote callable.",
-      },
-      provenance: {
-        type: t.record(t.string),
-        wireOnly: true,
-        doc: "Measure provenance a transform (e.g. bin) declares for its output columns — output field name → measure.",
       },
       schema: {
         type: t.record(t.any),

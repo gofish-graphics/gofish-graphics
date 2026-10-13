@@ -818,13 +818,6 @@ for the API.
           "type": "string",
           "description": "Python-bridge handle for the remote callable."
         },
-        "provenance": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          },
-          "description": "Measure provenance a transform (e.g. bin) declares for its output columns — output field name → measure."
-        },
         "schema": {
           "type": "object",
           "additionalProperties": {},

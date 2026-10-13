@@ -1618,36 +1618,40 @@ position.
 
 1. **Explicit annotation** — `field(name, measure)` / `datum(v, measure)`
    (`data.ts`). A real type claim about the channel's unit.
-2. **Inferred provenance** — a transform tags its output array. `bin()`
-   (`transforms.ts`) attaches a field→measure map under the well-known
-   `MEASURE_PROVENANCE` symbol (`data.ts`): its `start`/`end`/`size` columns
-   are still in the _source_ field's units (e.g. millimeters), and `count` is
-   `"count"`. The symbol rides the array, not each row, so it survives
+2. **The column's unit** — the `HasUnit` class of the column's type
+   ([column types](#column-types-the-chart-schema), `schema.ts`).
+   A transform writes it into its output array's column types: `bin()`
+   (`transforms.ts`) says its `start`/`end`/`size` columns are still in the
+   _source_ field's units (e.g. millimeters), and `count` is `"count"`. The
+   column types ride the array, not each row, so they survive
    `derive(...)`. Also a real type claim.
 3. **Field-name default** — a bare string accessor's field name. A _weak_
    binding, not a claim; it yields to either of the above.
 
-`resolveMeasure` reads annotation and provenance together: if both are present
+`resolveMeasure` reads annotation and unit together: if both are present
 and **disagree**, it throws immediately at the channel — before any space union
 runs — naming the field and both measures. Otherwise annotation refines the
-weak default, and with no annotation the result is `provenance ?? field-name`.
+weak default, and with no annotation the result is `unit ?? field-name`.
 This completes the field/datum/literal trichotomy of issue #266: a literal has
 no field identity (no measure), a bare field name is a weak default, and an
-annotation or provenance is a hard claim. `inferSize`/`inferPos` tag the
+annotation or a column's unit is a hard claim. `inferSize`/`inferPos` tag the
 `value(...)` they emit with this resolved measure, which is what eventually
 lands on the space.
 
-**Provenance must reach mark channels, not only operator channels.** An operator
+**Units must reach mark channels, not only operator channels.** An operator
 resolves each channel's measure once from its whole input array (which carries
-the `MEASURE_PROVENANCE` symbol), but a _mark_ channel runs per split leaf — and
-a leaf is a fresh sub-array (groupBy/filter/slice) that doesn't inherit the
-symbol. So the operator re-tags each array leaf with its parent's provenance at
-the split site (`copyMeasureProvenance`, `data.ts`, applied in `createOperator`),
-letting a mark bound to a transform-output field (e.g. a bin's `start`/`end`/
-`size`) read the source measure off its own data instead of falling back to the
+the column types), but a _mark_ channel runs per split leaf — and a leaf is a
+fresh sub-array (groupBy/filter/slice) that doesn't inherit them. So the
+operator re-tags each array leaf with its parent's column types at the split
+site (`copyColumnTypes`, `schema.ts`, applied in `createOperator`), letting a
+mark bound to a transform-output field (e.g. a bin's `start`/`end`/`size`)
+read the source measure off its own data instead of falling back to the
 literal field name — which would otherwise turn a legitimate same-unit overlay
-into a false conflict. (Residual, tracked in #534: single-`Datum` leaves and the
-Python derive-RPC bridge still need a wrap-time / RPC-carried tag.)
+into a false conflict. The column types can't ride the rows across the Python
+derive-RPC bridge, so Python's `bin` writes its units into the derive
+operator's `schema` instead. (Residual, #998: a single-`Datum` leaf, from
+`scatter`/`spread` with no `by`, is a row, not an array, so it carries no
+column types.)
 
 This same size-vs-position measure comparison drives **embedding** (`baseEmbedded`,
 `data.ts`): inside a coordinate space, a dim's size becomes a swept coord extent
@@ -1718,7 +1722,7 @@ chart(survey, { schema: { response: Schema.ordered(LEVELS).diverging() } });
 ```
 
 A column type is a record keyed by class name (`ColumnType`), and the engine
-reads only the classes, never the builder words. Three classes exist:
+reads only the classes, never the builder words. Four classes exist:
 
 - `HasOrder` (`Schema.ordered(levels)`): the values are the levels of a fixed
   order. `splitEntries` groups a `by` over the column in that order instead
@@ -1794,11 +1798,16 @@ reads only the classes, never the builder words. Three classes exist:
   times alike. Calendar cells
   (`CalendarPartition`) live in `calendar.ts`, which runs all calendar math
   on Temporal, native or the polyfill it loads when the runtime has none.
+- `HasUnit` (`{ unit }`, #994): the values are amounts in the unit `unit`,
+  the [measure](#measures-units-are-types) a channel over the column
+  resolves to. No builder declares it yet; a transform writes it for the
+  columns it makes (`bin()`'s `start`/`end`/`size` in the source field's
+  unit, its `count` in `"count"`).
 
-The types ride the chart's data array under the `COLUMN_TYPES` symbol, the
-same way a transform's measure provenance does: `ChartBuilder` copies the
-array and tags it (`applySchema`, which keeps the measure provenance the
-array already carries), `createOperator` copies the tag onto each
+The types ride the chart's data array under the `COLUMN_TYPES` symbol:
+`ChartBuilder` copies the array and tags it (`applySchema`, which keeps the
+types the array already carries, such as a bin's units), `createOperator`
+copies the tag onto each
 split leaf, and each data-transform operator (`mapOperator` in
 `marks/chart.ts`) types its result by its own typing rule. A `derive`
 (`typeLikeChartData`, also `resolve` and `join`) types its result with
@@ -1806,8 +1815,8 @@ split leaf, and each data-transform operator (`mapOperator` in
 types, whether or not the function returned its input array. It keeps only
 those that still fit the result's values: each class has one predicate for
 the values it accepts as they stand (`ACCEPTS` in `schema.ts`: a time holds
-instants, epoch milliseconds or `Date`s, and an order holds text or
-numbers), and a type fits a value when every class it has accepts it, the
+instants, epoch milliseconds or `Date`s, an order holds text or numbers,
+and a unit holds numbers), and a type fits a value when every class it has accepts it, the
 predicates built once per column. A `Date` is an instant, so a time column
 of `Date`s keeps its inherited type, zone included, and its Dates become
 epoch milliseconds; a string needs a zone to read, so it does not fit. The
@@ -1836,8 +1845,11 @@ its `by` column's type off the data it splits, and a color channel's
 lets the categorical color scale list its domain in the column's order. A
 later class (`HasZero`, `HasCycle`, ...) is one more key on the record.
 
-TODO(#984): measure provenance is the unit part of the same per-column record
-and could fold into it; it stays a separate symbol for now.
+A column's unit is one of these classes, `HasUnit: { unit }`, so a measure
+moves with the rest of the column's type, by the same rules: it survives a
+split, a `filter`, and a `derive` whose column still holds numbers, and a
+`schema` entry that names the column replaces it with the rest of the type
+(#994). Nothing declares a unit in a `schema` yet; only transforms write it.
 
 ## Field expressions: a pipeline orthogonal to channel aggregation
 
@@ -1920,8 +1932,8 @@ new code path for the common case.
 not the source field's own units — `evalFieldValues` reports measure
 `"count"` for them (an explicit `field(name, measure)` annotation still wins
 over this pipeline-determined default, following the same precedence
-[`resolveMeasure`](#measures-units-are-types) already applies to provenance
-vs. annotation). Every other pipeline reports no measure of its own, leaving
+[`resolveMeasure`](#measures-units-are-types) already applies to a column's
+unit vs. annotation). Every other pipeline reports no measure of its own, leaving
 resolution to the channel as before. `.normalize()`'s share values get their
 own tag, `shareMeasure(base, byName)` — see
 [Space-filling spines](#space-filling-spines-normalize-self-scales-a-stacking-axis)
