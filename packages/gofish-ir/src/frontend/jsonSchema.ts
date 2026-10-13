@@ -373,6 +373,16 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         },
       },
     },
+    ChunkKey: {
+      description:
+        "A `by` key that groups consecutive rows, emitted by chunk(size): row i goes to group floor(i / size), a bin over row position. It names no field, so its groups draw no axis or labels.",
+      type: "object",
+      required: ["type", "size"],
+      properties: {
+        type: { const: "chunk" },
+        size: { type: "integer", minimum: 1 },
+      },
+    },
     FieldOpIR: {
       description:
         "One op in a field(...) pipeline. Mirrors gofish-graphics' FieldOp (ast/fieldExpr.ts) exactly.",

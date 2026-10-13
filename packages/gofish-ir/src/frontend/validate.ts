@@ -546,6 +546,25 @@ function walkRefType(
       }
       walkFieldAccessor(value, path, ctx);
       return;
+    case "ChunkKey":
+      if (!isObject(value) || value.type !== "chunk") {
+        ctx.errors.push({
+          path,
+          message: `expected a chunk(size) key, got ${JSON.stringify(value)}`,
+        });
+        return;
+      }
+      if (
+        typeof value.size !== "number" ||
+        !Number.isInteger(value.size) ||
+        value.size < 1
+      ) {
+        ctx.errors.push({
+          path: `${path}.size`,
+          message: `chunk size must be a positive integer, got ${JSON.stringify(value.size)}`,
+        });
+      }
+      return;
     default:
       // Every ref a descriptor names is in OPTION_TYPES or AUTHORED_REFS, so
       // this is a descriptor that names a shape no walker knows.

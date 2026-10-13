@@ -34,7 +34,9 @@ derive(fn, schema={...}) -> DeriveOperator
 
 `fn` (required, `Callable`) receives the current group's rows and returns the
 new ones: a list of dicts, `None`, or a dataframe from any backend
-[narwhals](https://narwhals-dev.github.io/narwhals/) supports. The options:
+[narwhals](https://narwhals-dev.github.io/narwhals/) supports. It returns a
+list even for one row (`lambda d: [d[0]]`); a bare dict is not data. The
+options:
 
 ::: gofish-ref derive
 :::

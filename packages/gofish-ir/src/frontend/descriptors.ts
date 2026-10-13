@@ -786,6 +786,7 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
  *  validator walkers. `pyClass` names the Python class that builds a value. */
 export const AUTHORED_REFS: Readonly<Record<string, { pyClass?: string }>> = {
   FieldAccessor: { pyClass: "FieldAccessor" },
+  ChunkKey: { pyClass: "ChunkKey" },
   LabelIR: {},
   TranslateIR: {},
   RelateClauseIR: {},
@@ -850,6 +851,14 @@ export function pyType(
 // ---------------------------------------------------------------------------
 // Shared field groups
 // ---------------------------------------------------------------------------
+
+/** A split operator's `by`: a field name, a `field(...)` accessor, or a
+ *  `chunk(size)` key. */
+const splitBy = (doc: string, required = false): FieldSpec => ({
+  type: t.union(t.string, t.ref("FieldAccessor"), t.ref("ChunkKey")),
+  ...(required ? { required: true } : {}),
+  doc,
+});
 
 /** A `dims` option: axis name → value or interval (`AxisDims` in schema.ts).
  *  The names are `x`/`y` plus whatever the enclosing coordinate space
@@ -1001,10 +1010,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   spread: operator("spread", {
     doc: "Arrange children along `dir` with spacing, aligning them on the cross axis.",
     fields: {
-      by: {
-        type: t.union(t.string, t.ref("FieldAccessor")),
-        doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
-      },
+      by: splitBy(
+        "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
+      ),
       // IR truth: optional here even though Python's spread() requires dir —
       // matches validate.ts's optionalField("dir", ...) today.
       dir: {
@@ -1049,10 +1057,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   stack: operator("stack", {
     doc: "`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).",
     fields: {
-      by: {
-        type: t.union(t.string, t.ref("FieldAccessor")),
-        doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
-      },
+      by: splitBy(
+        "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
+      ),
       dir: {
         type: t.string,
         doc: "Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).",
@@ -1098,21 +1105,19 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   group: operator("group", {
     doc: "Partition rows by `by` into a flat `Frame` (no layout beyond grouping).",
     fields: {
-      by: {
-        type: t.union(t.string, t.ref("FieldAccessor")),
-        required: true,
-        doc: "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
-      },
+      by: splitBy(
+        "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows.",
+        true
+      ),
     },
   }),
 
   scatter: operator("scatter", {
     doc: "Position each child at an explicit (x, y) point or [min, max] span in data space.",
     fields: {
-      by: {
-        type: t.union(t.string, t.ref("FieldAccessor")),
-        doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
-      },
+      by: splitBy(
+        "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
+      ),
       x: ch.pos("Point position, x."),
       y: ch.pos("Point position, y."),
       xMin: ch.pos("Range form: left/bottom edge, x."),
@@ -1203,10 +1208,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       dims: axisDims(
         "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
       ),
-      by: {
-        type: t.union(t.string, t.ref("FieldAccessor")),
-        doc: "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.",
-      },
+      by: splitBy(
+        "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
+      ),
       spacing: {
         type: t.number,
         default: 0,
@@ -1241,10 +1245,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   pack: operator("pack", {
     doc: "Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping, with d3's front-chain algorithm. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).",
     fields: {
-      by: {
-        type: t.union(t.string, t.ref("FieldAccessor")),
-        doc: "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row.",
-      },
+      by: splitBy(
+        "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
+      ),
     },
   }),
 };

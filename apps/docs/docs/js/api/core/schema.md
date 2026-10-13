@@ -12,24 +12,27 @@ Declares the types of a chart's columns. Pass a record of column types as the
 Schema.ordered(levels); // HasOrder
 Schema.ordered(levels).diverging(); // HasOrder and HasMidpoint
 Schema.ordered(levels).diverging({ midpoint }); // HasOrder and HasMidpoint
-Schema.time(); // HasCalendar, in UTC
-Schema.time({ zone }); // HasCalendar, in the time zone `zone`
+Schema.time(); // HasCalendar and HasUnit (the instant), in UTC
+Schema.time({ zone }); // the same, in the time zone `zone`
 Schema.unit(unit); // HasUnit, in the unit `unit`
 Schema.quantity(name); // HasQuantity, amounts of the quantity `name`
-Schema.unit(unit).quantity(name); // HasUnit and HasQuantity
+Schema.quantity(name).unit(unit); // HasUnit and HasQuantity
 ```
 
-A column type is a set of classes. Each builder method adds one class, and
-`.diverging()` exists only after `.ordered(...)`, because a midpoint is a
-point along an order. `.quantity(name)` may follow any builder.
+A column type is a set of classes. Each builder method adds the classes its
+row below lists, and `.diverging()` exists only after `.ordered(...)`, because
+a midpoint is a point along an order. `.quantity(name)` and `.unit(unit)` may
+follow any builder, but a column has one unit, so `.unit(unit)` after
+`Schema.time()` is a type error, and an ordered column takes a unit only when
+its levels are numbers.
 
-| Builder                  | Class         | Meaning                                                 |
-| ------------------------ | ------------- | ------------------------------------------------------- |
-| `Schema.ordered(levels)` | `HasOrder`    | The column's values are `levels`, in this order.        |
-| `.diverging()`           | `HasMidpoint` | The order has a midpoint, a point along it. See below.  |
-| `Schema.time()`          | `HasCalendar` | The column's values are instants, read on a calendar.   |
-| `Schema.unit(unit)`      | `HasUnit`     | The column's values are amounts in the unit `unit`.     |
-| `Schema.quantity(name)`  | `HasQuantity` | The column's values are amounts of the quantity `name`. |
+| Builder                                     | Class                    | Meaning                                                 |
+| ------------------------------------------- | ------------------------ | ------------------------------------------------------- |
+| `Schema.ordered(levels)`                    | `HasOrder`               | The column's values are `levels`, in this order.        |
+| `.diverging()`                              | `HasMidpoint`            | The order has a midpoint, a point along it. See below.  |
+| `Schema.time()`                             | `HasCalendar`, `HasUnit` | The column's values are instants, read on a calendar.   |
+| `Schema.unit(unit)` / `.unit(unit)`         | `HasUnit`                | The column's values are amounts in the unit `unit`.     |
+| `Schema.quantity(name)` / `.quantity(name)` | `HasQuantity`            | The column's values are amounts of the quantity `name`. |
 
 ## Parameters
 
@@ -115,9 +118,11 @@ point along an order. `.quantity(name)` may follow any builder.
 - When x and y have the same unit, they get one scale: one data unit is the
   same length on both axes.
 - An axis title shows a declared unit after its quantities, in
-  parentheses: `"Production Budget (USD)"`. When every quantity name on the
-  axis already ends with the unit in parentheses (`"Flipper Length (mm)"` in
-  `"mm"`), the unit is not added again.
+  parentheses: `"Production Budget (USD)"`. The rule does not read the
+  names, so a column named `"Flipper Length (mm)"` in `"mm"` titles
+  `"Flipper Length (mm) (mm)"`. Declare its quantity
+  (`Schema.quantity("Flipper Length").unit("mm")`) or set the axis `title`
+  for `"Flipper Length (mm)"`.
 - `.count()` and `.distinct()` are in the unit `"count"`. The edges of
   `bin(field)` (`start`, `end`, `size`) are amounts of `field`'s quantity:
   they title their axis as `field` does and take its unit. Its `count` is in
@@ -204,7 +209,7 @@ chart(prices, { schema: { date: Schema.time() }, axes: true })
 Five summary columns of one quantity title their axis once:
 
 ```ts
-const pay = Schema.unit("USD").quantity("Pay");
+const pay = Schema.quantity("Pay").unit("USD");
 
 chart(boxes, {
   schema: { lo: pay, q1: pay, q3: pay, hi: pay },

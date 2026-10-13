@@ -21,6 +21,10 @@ export { value as v } from "./ast/data";
 // accessor; `literal(x)` is an explicit constant.
 export { datum, field, literal } from "./ast/data";
 export type { FieldAccessor, LiteralValue } from "./ast/data";
+// `chunk(size)` — a `by` key that groups consecutive rows `size` at a time
+// (a bin over row position).
+export { chunk } from "./ast/data";
+export type { ChunkKey } from "./ast/data";
 // `field(name)` returns a `FieldExpr` — a chainable pipeline expression
 // (`.sort()`, `.bin()`, `.normalize()`, aggregates); `FieldOp` is one step of
 // its serialized `ops` pipeline. Exported so consumers can type against the
