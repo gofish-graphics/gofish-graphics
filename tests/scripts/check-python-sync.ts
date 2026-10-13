@@ -123,7 +123,11 @@ function isExportExempt(
 // Spec-neutral change detection.
 //
 // A modified JS story whose spec-relevant content is unchanged does not
-// require a Python update. These kinds of difference are spec-neutral:
+// require a Python update. The comparison is per `StoryObj` export, so a
+// modified file whose spec changes all fall in per-export exempt stories
+// (`file::Export` in the exempt list) needs no Python update either; a spec
+// change outside every export (a shared helper, a dataset, the meta) counts
+// against the whole file. These kinds of difference are spec-neutral:
 //
 //   - **Storybook chrome** — story-level `title`, `tags`, and `parameters`
 //     (e.g. the gallery annotation) are presentation metadata. Python stories
@@ -506,10 +510,59 @@ function canonicalizeRetiredApiNames(source: string): string {
     .replace(STRATEGY_FAMILY_PREFIX_RE, "");
 }
 
-/** True when the file's change between baseRef's merge-base and HEAD touches
- * only spec-neutral content (Storybook chrome, unread args, retired API
- * names, imports, import aliases, type annotations, comments, whitespace). */
-function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
+/** The source split into its `export const Foo: StoryObj` statements, keyed
+ * by export name, and the rest of the file (`shared`) with them cut out. */
+function splitStoryExports(source: string): {
+  stories: Map<string, string>;
+  shared: string;
+} {
+  const file = ts.createSourceFile(
+    "story.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ false,
+    ts.ScriptKind.TSX
+  );
+  const stories = new Map<string, string>();
+  let shared = "";
+  let pos = 0;
+  for (const stmt of file.statements) {
+    if (!ts.isVariableStatement(stmt)) continue;
+    const exported = stmt.modifiers?.some(
+      (m) => m.kind === ts.SyntaxKind.ExportKeyword
+    );
+    const decls = stmt.declarationList.declarations;
+    const decl = decls.length === 1 ? decls[0] : undefined;
+    if (
+      !exported ||
+      !decl ||
+      !ts.isIdentifier(decl.name) ||
+      !decl.type?.getText(file).startsWith("StoryObj")
+    ) {
+      continue;
+    }
+    shared += source.slice(pos, stmt.getStart(file));
+    pos = stmt.getEnd();
+    stories.set(decl.name.text, source.slice(stmt.getStart(file), pos));
+  }
+  return { stories, shared: shared + source.slice(pos) };
+}
+
+/** The `StoryObj` exports whose spec changed between baseRef's merge-base and
+ * HEAD, ignoring spec-neutral content (Storybook chrome, unread args, retired
+ * API names, imports, import aliases, type annotations, comments,
+ * whitespace). An export added or removed counts as changed. An empty list
+ * means the change is spec-neutral. Returns `undefined` when a spec change
+ * lies outside every story export (a shared helper, a dataset, the meta), so
+ * it cannot be pinned to one export, or when the comparison cannot be made.
+ *
+ * The whole-file passes (unread args, import aliases, imports) run before the
+ * split, since what they drop depends on the whole file; the rest run on
+ * each piece. */
+function changedStoryExports(
+  jsFile: string,
+  baseRef: string
+): string[] | undefined {
   try {
     const mergeBase = execSync(`git merge-base "${baseRef}" HEAD`, {
       cwd: ROOT_DIR,
@@ -521,19 +574,27 @@ function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
       maxBuffer: 16 * 1024 * 1024,
     });
     const headContent = readFileSync(join(ROOT_DIR, jsFile), "utf-8");
+    const split = (s: string) =>
+      splitStoryExports(stripImports(resolveImportAliases(dropUnreadArgs(s))));
     const normalize = (s: string) =>
       stripComments(
-        eraseTypes(
-          canonicalizeRetiredApiNames(
-            stripStorybookChrome(
-              stripImports(resolveImportAliases(dropUnreadArgs(s)))
-            )
-          )
-        )
+        eraseTypes(canonicalizeRetiredApiNames(stripStorybookChrome(s)))
       );
-    return normalize(baseContent) === normalize(headContent);
+    const base = split(baseContent);
+    const head = split(headContent);
+    if (normalize(base.shared) !== normalize(head.shared)) return undefined;
+    const names = new Set([...base.stories.keys(), ...head.stories.keys()]);
+    return [...names].filter((name) => {
+      const before = base.stories.get(name);
+      const after = head.stories.get(name);
+      return (
+        before === undefined ||
+        after === undefined ||
+        normalize(before) !== normalize(after)
+      );
+    });
   } catch {
-    return false; // can't prove it — fall through to the strict check
+    return undefined; // can't prove it — fall through to the strict check
   }
 }
 
@@ -888,26 +949,43 @@ for (const jsFile of modifiedJs) {
   const pythonModified = allChangedFiles.has(pythonFile);
 
   if (!pythonModified) {
-    if (isSpecNeutralChange(jsFile, baseRef)) {
+    // A changed export needs its Python story updated unless it is exempt
+    // per export (`file::Export` in the exempt list).
+    const changed = changedStoryExports(jsFile, baseRef);
+    const needPython = changed?.filter(
+      (e) => !isExportExempt(exemptSet, jsFile, e)
+    );
+    if (changed && needPython!.length === 0) {
+      const message =
+        changed.length === 0
+          ? `Only spec-neutral content changed (Storybook chrome / unread args / retired API names / comments) — no Python update needed`
+          : `Only exempt exports changed (${changed.join(", ")}) — no Python update needed`;
       results.push({
         jsFile,
         pythonFile,
         changeType: "modified",
         status: "ok",
-        message: `Only spec-neutral content changed (Storybook chrome / unread args / retired API names / comments) — no Python update needed`,
+        message,
       });
-      console.log(`  OK (spec-neutral): ${jsFile}`);
+      console.log(
+        changed.length === 0
+          ? `  OK (spec-neutral): ${jsFile}`
+          : `  OK (exempt exports ${changed.join(", ")}): ${jsFile}`
+      );
       continue;
     }
+    const what = needPython
+      ? `export(s) ${needPython.join(", ")} changed`
+      : `changed`;
     results.push({
       jsFile,
       pythonFile,
       changeType: "modified",
       status: "error",
-      message: `JS story modified but Python counterpart was not updated (${pythonFile})`,
+      message: `JS story ${what} but Python counterpart was not updated (${pythonFile})`,
     });
     console.error(
-      `  ERROR: ${jsFile} changed but ${pythonFile} was not updated`
+      `  ERROR: ${jsFile} ${what} but ${pythonFile} was not updated`
     );
     errors++;
   } else {
