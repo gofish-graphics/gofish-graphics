@@ -11,3 +11,4 @@ Closes #
 - [ ] Python wrapper and parity stories updated for cross-language constructs (see the `add-cross-language-construct` skill)
 - [ ] Wiki essays updated for edited files that have a `@wiki` header
 - [ ] Visual changes: gallery-worthy stories tagged `gallery`, and screenshots attached below
+- [ ] User-facing API changes: a before/after example of the call (and its render, if any) is shown below
