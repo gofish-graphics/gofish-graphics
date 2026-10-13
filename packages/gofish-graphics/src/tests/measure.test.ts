@@ -121,13 +121,11 @@ console.log("# measure: quantities on the source array");
   );
   ok(
     "a time column's unit is an instant",
-    columnQuantity("start", { HasCalendar: { zone: "UTC" } }).unit?.unit ===
-      "instant"
+    columnQuantity("start", Schema.time().type).unit?.unit === "instant"
   );
   ok(
     "and an instant has no symbol",
-    columnQuantity("start", { HasCalendar: { zone: "UTC" } }).unit?.symbol ===
-      undefined
+    columnQuantity("start", Schema.time().type).unit?.symbol === undefined
   );
   ok(
     "Schema.unit declares the unit",
@@ -146,17 +144,17 @@ console.log("# measure: quantities on the source array");
   const classes = (t: Record<string, unknown>) =>
     JSON.stringify(Object.entries(t).sort(([a], [b]) => a.localeCompare(b)));
   ok(
-    ".unit() after .quantity() keeps both classes",
-    classes(Schema.quantity("Pay").unit("USD").type) ===
-      classes({
-        HasUnit: { unit: "USD", symbol: "USD" },
-        HasQuantity: { name: "Pay" },
-      })
-  );
-  ok(
-    "and either order gives the same column type",
-    classes(Schema.quantity("Pay").unit("USD").type) ===
-      classes(Schema.unit("USD").quantity("Pay").type)
+    ".unit() and .quantity() chain in either order to the same column type",
+    [Schema.quantity("Pay").unit("USD"), Schema.unit("USD").quantity("Pay")]
+      .map((s) => classes(s.type))
+      .every(
+        (c) =>
+          c ===
+          classes({
+            HasUnit: { unit: "USD", symbol: "USD" },
+            HasQuantity: { name: "Pay" },
+          })
+      )
   );
 }
 

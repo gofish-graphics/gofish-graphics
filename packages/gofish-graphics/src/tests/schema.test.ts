@@ -5,21 +5,17 @@
  * inside a level, and at either end, a missing level), the midpoint's range
  * check, the centered stack's extent fold, the stray-level and signed-part
  * errors (checked where the order is used, so a `filter` in the flow can drop
- * a stray), the HasOrder prerequisite of HasMidpoint, HasUnit's conflict with
- * HasCalendar and HasOrder, a spread of centered
- * stacks lining up on their midpoints, and the schema keeping the column
- * types (bin()'s units) its data carries.
+ * a stray), the HasOrder prerequisite of HasMidpoint, the one-unit rule, the
+ * levels-fit rule, a spread of centered stacks lining up on their midpoints,
+ * and the schema keeping the column types (bin()'s units) its data carries.
  *
  * Run: `pnpm build && tsx src/tests/schema.test.ts` (wired as
  * `pnpm test:schema`). The rendering checks import from `dist` for the same
  * lodash-ESM reason as `axisDims.test.ts`.
  *
- * The type-level rules (`.diverging()` exists only after `.ordered(...)`;
- * `.unit()` exists only on a builder without `HasCalendar` or `HasOrder`) are
- * enforced by the `this` types of `ColumnSchema#diverging` and
- * `ColumnSchema#unit`. The repo's test files are not typechecked, so this
- * file checks the runtime counterparts (such records as they would arrive
- * from the wire).
+ * The repo's test files are not typechecked, so this file checks the runtime
+ * counterparts of the builder's type-level rules (schema.ts), on records as
+ * they would arrive from the wire.
  */
 
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
@@ -30,6 +26,7 @@ import {
   getColumnTypes,
   orderByLevels,
   stackOrigin,
+  Schema as SrcSchema,
   type ColumnType,
 } from "../ast/schema";
 import { interval } from "../util/interval";
@@ -93,7 +90,6 @@ const rectsOf = (dl: any): Box[] => {
   dl.items.forEach(walk);
   return out;
 };
-
 
 /** A display list as JSON with its render-global node ids left out, so two
  *  renders compare by what they draw. */
@@ -426,8 +422,8 @@ async function main() {
         message.includes(".diverging()"),
       message
     );
-    // `.unit()` excludes HasCalendar and HasOrder in its `this` type; a wire
-    // record is checked for the same conflict.
+    // The one-unit rule: a wire record's HasCalendar writes the instant unit,
+    // as `Schema.time()` does, so its HasUnit USD is a second unit.
     const timeUnit = await errorOf(() =>
       columnTypeOf("t", {
         HasCalendar: { zone: "UTC" },
@@ -435,22 +431,50 @@ async function main() {
       })
     );
     check(
-      "a HasUnit record with HasCalendar is an error",
-      timeUnit ===
-        `schema: column "t" has HasUnit, but an instant already has the unit "instant".`,
+      "a time record with another unit is an error",
+      timeUnit === `schema: column "t" already has the unit "instant".`,
       timeUnit
     );
-    const orderUnit = await errorOf(() =>
+    const builtTime = await errorOf(() => Schema.time().unit("USD"));
+    check(
+      "and so is the builder's",
+      builtTime === `.unit: the column already has the unit "instant".`,
+      builtTime
+    );
+    check(
+      "a time record is read as Schema.time() wrote it",
+      columnTypeOf("t", { HasCalendar: { zone: "UTC" } }).HasUnit?.unit ===
+        "instant"
+    );
+    // The levels-fit rule: text levels are not amounts, numbers are.
+    const textUnit = await errorOf(() =>
       columnTypeOf("r", {
         HasOrder: { levels: LEVELS5 },
         HasUnit: { unit: "pts" },
       })
     );
     check(
-      "a HasUnit record with HasOrder is an error",
-      orderUnit ===
-        `schema: column "r" has HasUnit, but an ordered column's levels are categories, not amounts.`,
-      orderUnit
+      "a record with text levels and a unit is an error",
+      textUnit ===
+        `schema: column "r" has the level "SD", which is not a value HasUnit accepts.`,
+      textUnit
+    );
+    const builtText = await errorOf(() =>
+      Schema.ordered(["low", "mid", "high"]).unit("pts")
+    );
+    check(
+      "and so is the builder's",
+      builtText ===
+        'schema: the column has the level "low", which is not a value HasUnit accepts.',
+      builtText
+    );
+    check(
+      "numeric levels take a unit",
+      Schema.ordered([1, 2, 3, 4, 5]).unit("pts").type.HasUnit.unit === "pts" &&
+        columnTypeOf("likert", {
+          HasOrder: { levels: [1, 2, 3, 4, 5] },
+          HasUnit: { unit: "pts" },
+        }).HasUnit?.unit === "pts"
     );
   }
 
@@ -494,7 +518,9 @@ async function main() {
   console.log("\n# a schema keeps what the data array already carries");
   {
     const binned = bin([{ x: 1 }, { x: 2 }, { x: 7 }], "x");
-    const typed = await applySchema(binned, { count: Schema.ordered([0, 1, 2]) });
+    const typed = await applySchema(binned, {
+      count: SrcSchema.ordered([0, 1, 2]),
+    });
     check(
       "bin()'s unit survives a schema for another column",
       getColumnTypes(typed)?.start?.HasQuantity?.name === "x",
@@ -595,10 +621,16 @@ async function main() {
       noBy === drawn(await dots(chunk(1)))
     );
 
-    const units = Array.from({ length: 7 }, (_, i) => ({ i, k: i % 2 ? "x" : "y" }));
+    const units = Array.from({ length: 7 }, (_, i) => ({
+      i,
+      k: i % 2 ? "x" : "y",
+    }));
     const grid = (by: unknown) =>
       chart(units, { color: Color.palette(["red", "blue"]) })
-        .flow(spread({ by, dir: "y", spacing: 1 }), spread({ dir: "x", spacing: 1 }))
+        .flow(
+          spread({ by, dir: "y", spacing: 1 }),
+          spread({ dir: "x", spacing: 1 })
+        )
         .mark(rect({ w: 4, h: 4, fill: "k" }))
         .toDisplayList({ w: 100, h: 100 });
     const chunked = await grid(chunk(3));

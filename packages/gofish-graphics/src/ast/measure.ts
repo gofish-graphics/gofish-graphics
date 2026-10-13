@@ -55,8 +55,9 @@ export type Quantity = {
 // none: a count or a share is a plain number, and a time axis's ticks
 // already read as dates.
 
-/** The unit a time column (`HasCalendar`) declares: an instant. Its zone is
- *  a display parameter, kept in the calendar. */
+/** The unit of a time column, an instant, which `Schema.time()` writes
+ *  beside `HasCalendar`. Its zone is a display parameter, kept in the
+ *  calendar. */
 export const INSTANT: HasUnit = { unit: "instant" };
 
 /** The unit of a difference of two instants: a duration. */
@@ -73,7 +74,7 @@ export const columnQuantity = (
   column: string,
   type: ColumnType | undefined
 ): Quantity => {
-  const unit = type?.HasUnit ?? (type?.HasCalendar ? INSTANT : undefined);
+  const unit = type?.HasUnit;
   return {
     name: type?.HasQuantity?.name ?? column,
     column,

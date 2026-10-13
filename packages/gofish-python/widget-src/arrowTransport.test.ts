@@ -215,9 +215,9 @@ function testTimeColumnsDecodeAsTimes(): boolean {
     rows[1].n === 2 &&
     JSON.stringify(types) ===
       JSON.stringify({
-        ny: { HasCalendar: { zone: "America/New_York" } },
-        naive: { HasCalendar: { zone: "UTC" } },
-        d: { HasCalendar: { zone: "UTC" } },
+        ny: Schema.time({ zone: "America/New_York" }).type,
+        naive: Schema.time().type,
+        d: Schema.time().type,
       });
   console.log(
     ok ? "  ✓ PASSED" : `  ✗ FAILED ${JSON.stringify({ rows, types })}`
@@ -414,9 +414,9 @@ function testNestedTimesDecodeAsEpochMs(): boolean {
     rows[0].points[1] === null &&
     JSON.stringify(Serialize.getColumnTypes(rows[0].points)) ===
       JSON.stringify({
-        naive: { HasCalendar: { zone: "UTC" } },
-        ny: { HasCalendar: { zone: "America/New_York" } },
-        d: { HasCalendar: { zone: "UTC" } },
+        naive: Schema.time().type,
+        ny: Schema.time({ zone: "America/New_York" }).type,
+        d: Schema.time().type,
       }) &&
     JSON.stringify(rows[0].stamps) === JSON.stringify([ms, null]) &&
     rows[0].at.naive === ms &&

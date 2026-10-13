@@ -1599,9 +1599,9 @@ concrete units on one axis are a type error. The concrete units are:
 
 - a column's `Schema.unit(u)` (`HasUnit`, see
   [column types](#column-types-the-chart-schema));
-- `"instant"`, for every time column (`HasCalendar`), so a start and an end
-  time share an axis; the time zone stays in the calendar, a display
-  parameter;
+- `"instant"`, which `Schema.time()` writes as the `HasUnit` of every time
+  column, so a start and an end time share an axis; the time zone stays in
+  the calendar, a display parameter;
 - `"count"`, for `.count()`, `.distinct()`, and `bin()`'s `count`;
 - `"duration"`, for a size read from a time column: a difference of two
   instants (`differenceUnits`, which `magnitude` applies; the calendar is
@@ -1717,8 +1717,8 @@ Length"`) shows the mix-up. Declaring the units restores the check.
 
 **Where quantities come from.** `resolveColumn` (`channels.ts`) reads a
 channel's quantity off its column's type (`columnQuantity`, `measure.ts`):
-named by `HasQuantity` or else the column, in the unit `HasUnit`
-(or `"instant"` for a time column), or else unknown. A function accessor or a
+named by `HasQuantity` or else the column, in the unit `HasUnit` (a time
+column's is `"instant"`), or else unknown. A function accessor or a
 literal has no column, so no quantity: its value makes no claim.
 `inferSize`/`inferPos` tag the `value(...)` they emit with it, and a pipeline
 that determines its own quantity (`.count()`) overrides it; `.sum()` and
@@ -1906,8 +1906,9 @@ reads only the classes, never the builder words. Four classes exist:
   (`joinUnits`) keeps it through every fold that builds a continuous
   space from parts (the overlay fold, a layer's datum-position domain in
   `compose.ts`, a rect's two ends, the `position` operator's offset), and
-  two parts on different zones are an error. The unit of a time column is
-  `"instant"`, so two time columns share an axis. A time space
+  two parts on different zones are an error. `Schema.time()` also writes
+  the unit `"instant"` (`HasUnit`), so two time columns share an axis. A
+  time space
   is niced to the cells of its axis's inner row (`niceToCells`: the
   smallest run of whole cells that covers the domain, so a domain of one
   instant, which `tickPartition` ticks at days, spans the day that holds
@@ -1919,13 +1920,12 @@ reads only the classes, never the builder words. Four classes exist:
   on Temporal, native or the polyfill it loads when the runtime has none.
 - `HasUnit` (`{ unit, symbol? }`, #994, #955): the values are amounts in
   the declared unit `unit`. Both `Schema.unit(u)` and `.unit(u)` (after
-  another builder, but not after a time or an ordered column) declare the
-  unit `u` and write the symbol `u`. A column without it has an unknown
-  unit, a unit variable (see [measures](#measures-units-are-types)). It
-  excludes `HasCalendar` (an instant's unit is `"instant"`) and `HasOrder`
-  (levels are categories, which `HasUnit` does not accept): `.unit()`'s
-  `this` type rules them out, `columnTypeOf` rejects a wire record that has
-  both (`unitConflict`), and Python's `.unit` raises a `TypeError`.
+  another builder) declare the unit `u` and write the symbol `u`. A column
+  without it has an unknown unit, a unit variable (see
+  [measures](#measures-units-are-types)). A column has one unit, and an
+  order's levels must fit its other classes, so a time or a text-level
+  column takes no other unit (`checkNoUnit` and `checkLevelsFit` in
+  `schema.ts`).
 - `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
   `name` (`Schema.quantity(name)`, or `.quantity(name)` after another
   builder), when it is not the column's own name. It titles the axis and
@@ -1945,8 +1945,8 @@ types, whether or not the function returned its input array. It keeps only
 those that still fit the result's values: each class has one predicate for
 the values it accepts as they stand (`ACCEPTS` in `schema.ts`: a time holds
 instants, epoch milliseconds or `Date`s, an order holds text or numbers,
-and a unit holds numbers), and a type fits a value when every class it has accepts it, the
-predicates built once per column. A `Date` is an instant, so a time column
+and a unit holds numbers, plus `Date`s in the instant unit), and a type
+fits a value when every class it has accepts it. A `Date` is an instant, so a time column
 of `Date`s keeps its inherited type, zone included, and its Dates become
 epoch milliseconds; a string needs a zone to read, so it does not fit. The
 inherited types never reinterpret or check values, so a date rewritten to

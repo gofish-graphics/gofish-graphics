@@ -90,7 +90,10 @@ class TestOperators:
         )
         expected = {
             "month": {"HasOrder": {"levels": ["Jan", "Feb"]}},
-            "at": {"HasCalendar": {"zone": "America/New_York"}},
+            "at": {
+                "HasCalendar": {"zone": "America/New_York"},
+                "HasUnit": {"unit": "instant"},
+            },
         }
         assert op.to_dict()["schema"] == expected
         assert op.translate(x=1).to_dict()["schema"] == expected
@@ -688,29 +691,42 @@ class TestSchema:
         assert Schema.quantity("Pay").unit("USD") == Schema.unit("USD").quantity(
             "Pay"
         )
-        with pytest.raises(TypeError):
-            Schema.quantity("Pay").unit(3)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match=r"^Schema\.quantity: "):
+        with pytest.raises(TypeError, match=r"^name must be a string, got 3$"):
             Schema.quantity(3)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match=r"^\.quantity: "):
+        with pytest.raises(TypeError, match=r"^name must be a string, got 3$"):
             Schema.unit("USD").quantity(3)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match=r"^Schema\.unit: "):
+        with pytest.raises(TypeError, match=r"^unit must be a string, got 3$"):
             Schema.unit(3)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match=r"^\.unit: "):
+        with pytest.raises(TypeError, match=r"^unit must be a string, got 3$"):
             Schema.quantity("Pay").unit(3)  # type: ignore[arg-type]
 
-    def test_unit_does_not_follow_time_or_ordered(self):
-        # An instant's unit is the instant, and levels are not amounts.
-        with pytest.raises(TypeError, match='the unit "instant"'):
+    def test_a_column_has_one_unit(self):
+        # `Schema.time()` writes the instant, so a second unit raises.
+        with pytest.raises(
+            TypeError, match=r'^\.unit: the column already has the unit "instant"\.$'
+        ):
             Schema.time().unit("USD")
-        with pytest.raises(TypeError, match="categories, not amounts"):
-            Schema.ordered(["low", "mid", "high"]).unit("pts")
-        with pytest.raises(TypeError, match="categories, not amounts"):
-            Schema.ordered(["low", "high"]).diverging().unit("pts")
-        # `.quantity` may follow any builder.
+        with pytest.raises(TypeError, match='already has the unit "USD"'):
+            Schema.unit("USD").unit("EUR")
         assert Schema.time().quantity("When") == {
             "HasCalendar": {"zone": "UTC"},
+            "HasUnit": {"unit": "instant"},
             "HasQuantity": {"name": "When"},
+        }
+
+    def test_levels_fit_the_column_classes(self):
+        # Text levels are not amounts; a Likert scale's numbers are.
+        message = (
+            r'^schema: the column has the level "low", which is not a value '
+            r"HasUnit accepts\.$"
+        )
+        with pytest.raises(TypeError, match=message):
+            Schema.ordered(["low", "mid", "high"]).unit("pts")
+        with pytest.raises(TypeError, match=message):
+            Schema.ordered(["low", "high"]).diverging().unit("pts")
+        assert Schema.ordered([1, 2, 3, 4, 5]).unit("pts") == {
+            "HasOrder": {"levels": [1, 2, 3, 4, 5]},
+            "HasUnit": {"unit": "pts", "symbol": "pts"},
         }
 
     def test_field_takes_no_unit(self):
@@ -788,9 +804,14 @@ class TestTime:
     columns crossing the bridge (#1057)."""
 
     def test_schema_time_record(self):
-        assert Schema.time() == {"HasCalendar": {"zone": "UTC"}}
+        # A time's unit is the instant, the same INSTANT as JS measure.ts.
+        assert Schema.time() == {
+            "HasCalendar": {"zone": "UTC"},
+            "HasUnit": {"unit": "instant"},
+        }
         assert Schema.time(zone="America/New_York") == {
-            "HasCalendar": {"zone": "America/New_York"}
+            "HasCalendar": {"zone": "America/New_York"},
+            "HasUnit": {"unit": "instant"},
         }
 
     def test_calendar_wire_form(self):
@@ -858,7 +879,9 @@ class TestTime:
             .mark(rect(w=1))
             .to_ir()
         )
-        assert ir["options"]["schema"] == {"t": {"HasCalendar": {"zone": "Asia/Tokyo"}}}
+        assert ir["options"]["schema"] == {
+            "t": {"HasCalendar": {"zone": "Asia/Tokyo"}, "HasUnit": {"unit": "instant"}}
+        }
 
     def test_strings_are_never_inferred(self):
         ir = chart([{"t": "2024-01-01", "n": 1}]).mark(rect(w=1)).to_ir()
