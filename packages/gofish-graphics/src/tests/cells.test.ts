@@ -1263,6 +1263,39 @@ async function main() {
       `${tableCells.length}`
     );
 
+    console.log("\n# partition over the parts of a cycle");
+    const cycleErr = async (step: any) =>
+      await errorOfAsync(() =>
+        chart(days, { schema: { date: Schema.time() }, axes: false })
+          .flow(partition({ by: distField("date").bin(step), dir: "x" }))
+          .mark(rect({ h: 10 }))
+          .toDisplayList({ w: 200, h: 100 })
+      );
+    const weekdayErr = await cycleErr(DistCalendar.weekday);
+    check(
+      "the error over a weekday names the week fixes, not the year",
+      weekdayErr?.includes("parts of a week") === true &&
+        weekdayErr.includes(
+          'field("date").bin([Calendar.week({ start: "monday" }), ' +
+            'Calendar.weekday({ start: "monday" })])'
+        ) &&
+        weekdayErr.includes(
+          'field("date").bin(Calendar.week({ start: "monday" })).bin('
+        ) &&
+        !weekdayErr.includes("year"),
+      weekdayErr
+    );
+    const monthErr = await cycleErr(DistCalendar.month);
+    check(
+      "the error over a month of the year names the year fixes",
+      monthErr?.includes("parts of a year") === true &&
+        monthErr.includes(
+          'field("date").bin([Calendar.year, Calendar.month])'
+        ) &&
+        monthErr.includes('field("date").bin(Calendar.year).bin(Calendar.month)'),
+      monthErr
+    );
+
     console.log("\n# a color with no value");
     const heat = async (fill: any) =>
       rectsOf(

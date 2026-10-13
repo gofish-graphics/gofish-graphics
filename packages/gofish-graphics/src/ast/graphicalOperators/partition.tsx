@@ -129,20 +129,31 @@ const noRegion = (by: unknown): Error => {
 };
 
 /** The loud error for a key binned into the parts of a cycle
- *  (`field("date").bin(Calendar.month)`, the month of the year): a part is
- *  every June, in any year, so it has no one region on the time line. */
-const cycleHasNoRegion = (by: FieldAccessor): Error =>
-  new Error(
-    `partition: field("${by.name}").bin(...) bins into the parts of a ` +
-      `cycle (such as the month of the year: all Junes are one cell), and ` +
-      `a part has no one region on the time line to place its group in. ` +
-      `To place each month of each year at its place in time, bin by the ` +
-      `year too: field("${by.name}").bin([Calendar.year, Calendar.month]) ` +
-      `(one cell per month, labeled "Jun 2015"), or ` +
-      `field("${by.name}").bin(Calendar.year).bin(Calendar.month) (the ` +
-      `months of each year). To give each part an equal slot, use ` +
-      `spread({ by, dir }).`
+ *  (`field("date").bin(Calendar.month)`, the month of the year; `Calendar.
+ *  weekday`, the day of the week): a part is the same part of every cycle
+ *  (every June, every Monday), so it has no one region on the time line. The
+ *  fix bins by the cycle too, as a product or a chain, written for the bin
+ *  `cell` came from. */
+const cycleHasNoRegion = (by: FieldAccessor, cell: CycleCell): Error => {
+  const { of, levels } = cell.cycle;
+  const parts = levels.map(String).join(", ");
+  const start = levels[0].start;
+  const cycle =
+    of === "week" && start !== undefined
+      ? `Calendar.week({ start: "${start}" })`
+      : `Calendar.${of}`;
+  const bin = cell.bin ?? (levels.length === 1 ? parts : `[${parts}]`);
+  const f = `field("${by.name}")`;
+  return new Error(
+    `partition: ${f}.bin(${bin}) bins into the parts of a ${of} (the same ` +
+      `part of every ${of} is one cell), and a part has no one region on ` +
+      `the time line to place its group in. To place each part of each ` +
+      `${of} at its place in time, bin by the ${of} too: ` +
+      `${f}.bin([${cycle}, ${parts}]) (one cell per part of each ${of}), or ` +
+      `${f}.bin(${cycle}).bin(${bin}) (the parts of each ${of}). To give ` +
+      `each part an equal slot, use spread({ by, dir }).`
   );
+};
 
 /** The layout node's options: the columns of the key, in the key's order
  *  (one for a field, x then y for a struct), as maps from a value to its
@@ -249,8 +260,9 @@ const partitionOperator = createOperator<
       // in TS; the wire form from Python is checked here).
       if (!hasRegion(by)) throw noRegion(by);
       const entries = splitEntries(by as SplitBy, d);
-      if ([...entries.keys()].some((k) => k instanceof CycleCell))
-        throw cycleHasNoRegion(by as FieldAccessor);
+      const part = [...entries.keys()].find((k) => k instanceof CycleCell);
+      if (part !== undefined)
+        throw cycleHasNoRegion(by as FieldAccessor, part as CycleCell);
       if (![...entries.keys()].every((k) => k instanceof RegionCell))
         throw noRegion(by);
       const columns = isStruct(by)
