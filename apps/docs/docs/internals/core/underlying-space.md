@@ -1683,12 +1683,22 @@ must agree (two time zones on one axis throw). Two errors remain, both
 units among them), and one unknown bound to two declared units (a column
 that meets `"count"` on one shared axis and `"mm"` on another).
 
-Nothing computes sharing yet, so every composition passes `shared: true`,
-except the `position` operator's offset, which places its content rather
-than sharing its axis: the content keeps its own record. The decision is by
-the units alone, never by the origin state, so overlaying a count axis onto a
-column declared in millimeters fails loudly instead of corrupting the
-domain. An ordinal axis has titles and no unit, so it takes no part in the
+Nothing computes sharing yet, so every composition passes `shared: true`.
+The `false` column is for the axes a sharing plan will resolve as
+independent (#1032). The decision is by the units alone, never by the origin
+state, so overlaying a count axis onto a column declared in millimeters
+fails loudly instead of corrupting the domain.
+
+The `position` operator's offset meets its content on one shared axis too,
+but as a point plus a difference, not two points. When the content is
+pinned, it is the point and the offset is the difference that moves it.
+Otherwise the content is a difference (a magnitude, a width) and the offset
+is the point it hangs from. The difference must be in the point's difference
+units (`differenceUnits`), so the join is between `differenceUnits(point)`
+and the difference: a USD position moves by USD, and a time position moves
+by a duration, or by a plain number, which is bound to one. Two instants
+clash (`"instant"` against `"duration"`), since a time does not move a time.
+The result takes the point's unit and calendar, titled by both sides. An ordinal axis has titles and no unit, so it takes no part in the
 join: a datum position beside a category spread on the same axis, or a
 spread whose targets mix a category spread with bars, unifies only the
 continuous units.

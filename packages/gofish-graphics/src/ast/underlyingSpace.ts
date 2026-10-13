@@ -445,8 +445,11 @@ export const valueUnits = (v: MaybeValue<unknown>): UnitRecord | undefined =>
 /**
  * THE join of two unit records that meet on one axis, in every composition
  * (overlays, alignments, spreads, stacks, coords, a layer's datum domain, a
- * rect's two ends, a `position` offset). An absent record makes no claim and
- * yields the other side. `shared` says whether the two sides share the axis:
+ * rect's two ends, a `position` offset, in its difference units). An absent
+ * record makes no claim and yields the other side. `shared` says whether the
+ * two sides share the axis. Every composition today shares it; `false` is
+ * kept for axes that will be resolved as independent (#1032's sharing plan
+ * passes it there):
  *
  * | Meeting              | shared                         | not shared        |
  * | -------------------- | ------------------------------ | ----------------- |

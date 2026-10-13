@@ -5,6 +5,7 @@ import { Size } from "../dims";
 import { getValue, isValue, MaybeValue } from "../data";
 import {
   anchorAt,
+  differenceUnits,
   isCONTINUOUS,
   joinUnits,
   valueUnits,
@@ -35,17 +36,27 @@ const offsetSpace = (
   // Shift the data interval by `value` and pin it: a pinned space moves by
   // `value`, a free or difference space hangs its origin at `value`. The claim
   // moves with it (see `offsetExtent` below).
-  // The offset places the content; it does not share the content's axis,
-  // so its units are not unified with the content's: the content keeps its
-  // own (or takes the offset's when it has none). A time offset puts the
-  // content on its calendar.
+  //
+  // The result is a point plus a difference on one shared axis. When the
+  // content is pinned, it is the point and the offset the difference that
+  // moves it; otherwise the content is a difference (a magnitude, a width)
+  // and the offset is the point it hangs from. Either way the difference
+  // must be in the point's difference units (`differenceUnits`): a time
+  // position moves by a duration (or a plain number, which becomes one), and
+  // a USD position by USD. The result takes the point's unit and calendar,
+  // titled by both sides.
+  const offsetUnits = valueUnits(offset);
+  const pinned = space.origin === "pinned";
+  const point = pinned ? space.measure : offsetUnits;
+  const difference = pinned ? offsetUnits : space.measure;
+  const joined = joinUnits(point && differenceUnits(point), difference, true, {
+    axis,
+    where: "between a position offset and the content it moves",
+  });
   return anchorAt(
     space,
     value,
-    joinUnits(space.measure, valueUnits(offset), false, {
-      axis,
-      where: "between a position offset and the content it moves",
-    })
+    point && joined ? { ...point, titles: joined.titles } : joined
   );
 };
 

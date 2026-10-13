@@ -27,7 +27,18 @@ import {
   resolveUnit,
   sameUnitVar,
 } from "../ast/measure";
-import { CONTINUOUS, joinUnits, type UnitRecord } from "../ast/underlyingSpace";
+import {
+  CONTINUOUS,
+  joinUnits,
+  quantityUnits,
+  spaceUnit,
+  type CONTINUOUS_TYPE,
+  type UnitRecord,
+} from "../ast/underlyingSpace";
+import { GoFishNode } from "../ast/_node";
+import { DatumValueImpl } from "../ast/data";
+import { positionNode } from "../ast/graphicalOperators/positionNode";
+import { DURATION, INSTANT, type Quantity } from "../ast/measure";
 import { declared, fresh, textsOf, unknown } from "./testHelpers";
 import { distributeSpaceFold } from "../ast/constraints/distribute";
 import { interval } from "../util/interval";
@@ -91,7 +102,10 @@ console.log("# measure: quantities on the source array");
     getQuantity(inferSize("size", binned))?.name === "Beak Length (mm)"
   );
   const rawLeaf = [...binned].slice(0, 1);
-  ok("an untagged split leaf has no type", columnType(rawLeaf, "size") === undefined);
+  ok(
+    "an untagged split leaf has no type",
+    columnType(rawLeaf, "size") === undefined
+  );
   ok(
     "and falls back to the column's own name",
     getQuantity(inferSize("size", rawLeaf))?.name === "size"
@@ -219,7 +233,10 @@ console.log("# measure: the join table, shared axis");
     );
     ok(
       "and two declared columns of one name, USD and EUR, are two units",
-      !sameUnitVar(declared("value", "USD").unit!, declared("value", "EUR").unit!)
+      !sameUnitVar(
+        declared("value", "USD").unit!,
+        declared("value", "EUR").unit!
+      )
     );
   });
   ok(
@@ -314,11 +331,99 @@ console.log("# measure: the join table, not shared");
   });
 }
 
+// ── A position offset: a point plus a difference ───────────────────────────
+
+console.log("# measure: a position offset joins in difference units");
+{
+  // A leaf whose y space is pinned (a point) or free (a magnitude) at
+  // [0, 10], in the units of quantity `q`, read inside the walk.
+  const leaf = (origin: "pinned" | "free", q?: Quantity) =>
+    new GoFishNode(
+      {
+        type: "leaf",
+        resolveUnderlyingSpace: () => [
+          CONTINUOUS(interval(0, 0), "pinned"),
+          CONTINUOUS(interval(0, 10), origin, quantityUnits(q)),
+        ],
+        layout: () => ({
+          intrinsicDims: [{}, {}],
+          transform: { translate: [undefined, undefined] },
+        }),
+      },
+      []
+    );
+  const by = (v: number, q: Quantity) => new DatumValueImpl(v, q);
+  const usd: Quantity = {
+    name: "price",
+    column: "price",
+    unit: { unit: "USD", symbol: "USD" },
+  };
+  const count: Quantity = { name: "n", column: "n", unit: { unit: "count" } };
+  const shift: Quantity = { name: "shift", column: "shift" };
+  const date: Quantity = {
+    name: "date",
+    column: "date",
+    unit: INSTANT,
+    calendar: { zone: "UTC" },
+  };
+  const lag: Quantity = { name: "lag", column: "lag", unit: DURATION };
+  const yOf = (node: GoFishNode) =>
+    node.resolveUnderlyingSpace()[1] as CONTINUOUS_TYPE;
+
+  const a = yOf(positionNode({ y: by(5, shift) }, [leaf("pinned", usd)]));
+  ok(
+    "(a) a USD position with an unknown offset is fine and stays USD",
+    spaceUnit(a)?.unit?.kind === "declared" &&
+      (spaceUnit(a)!.unit as any).unit === "USD" &&
+      JSON.stringify(a.dataInterval) === JSON.stringify(interval(5, 15))
+  );
+  const b = await errorOf(() =>
+    positionNode({ y: by(5, count) }, [
+      leaf("pinned", usd),
+    ]).resolveUnderlyingSpace()
+  );
+  ok(
+    "(b) a USD position with a count offset is a MeasureClash",
+    b !== undefined && /USD/.test(b) && /count/.test(b),
+    b
+  );
+  const c1 = yOf(positionNode({ y: by(5, shift) }, [leaf("pinned", date)]));
+  ok(
+    "(c) a time position with a numeric offset: the offset is a duration",
+    (spaceUnit(c1)!.unit as any).unit === "instant" &&
+      c1.measure?.calendar?.zone === "UTC"
+  );
+  const c2 = yOf(positionNode({ y: by(5, lag) }, [leaf("pinned", date)]));
+  ok(
+    "(c) a time position with a duration offset stays on its calendar",
+    (spaceUnit(c2)!.unit as any).unit === "instant" &&
+      c2.measure?.calendar?.zone === "UTC"
+  );
+  const twoTimes = await errorOf(() =>
+    positionNode({ y: by(5, date) }, [
+      leaf("pinned", date),
+    ]).resolveUnderlyingSpace()
+  );
+  ok("a time does not move a time", twoTimes !== undefined, twoTimes);
+  const hung = yOf(positionNode({ y: by(5, date) }, [leaf("free", lag)]));
+  ok(
+    "a duration hung at a time is a time on its calendar",
+    (spaceUnit(hung)!.unit as any).unit === "instant" &&
+      hung.measure?.calendar?.zone === "UTC" &&
+      JSON.stringify(hung.measure?.titles) === JSON.stringify(["date", "lag"])
+  );
+}
+
 // ── Rendering: the benchmark failures now render with no annotation ─────────
 
 const penguins = [
   170, 175, 181, 186, 190, 193, 195, 197, 200, 210, 215, 220, 230,
-].map((f, i) => ({ id: i, flipper: f, mass: 3000 + f * 5, sp: i % 2 ? "A" : "B" }));
+].map((f, i) => ({
+  id: i,
+  flipper: f,
+  mass: 3000 + f * 5,
+  sp: i % 2 ? "A" : "B",
+}));
 const myBins = (rows: any[]) =>
   [170, 190, 210].map((s) => ({
     start: s,
@@ -572,7 +677,9 @@ console.log("# measure: declared units clash");
       { k: "v", lo: 3 },
     ])
       .flow(spread({ by: "k", dir: "y" }))
-      .mark(layer([rect({ w: "lo", h: 5 }), rect({ w: field("lo").count(), h: 5 })]));
+      .mark(
+        layer([rect({ w: "lo", h: 5 }), rect({ w: field("lo").count(), h: 5 })])
+      );
   const alone = await errorOf(() => b().toDisplayList(SIZE));
   ok("chart B alone renders (its lo is unknown)", alone === undefined, alone);
   const wide = await errorOf(() => a().layer(b()).toDisplayList(SIZE));
@@ -627,7 +734,8 @@ console.log("# measure: titles are Quantity (unit)");
   );
   ok(
     "an explicit axes title wins",
-    explicit.includes("Budget") && !explicit.includes("Production Budget (USD)"),
+    explicit.includes("Budget") &&
+      !explicit.includes("Production Budget (USD)"),
     explicit.join(" | ")
   );
 
