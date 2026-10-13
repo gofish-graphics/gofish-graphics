@@ -171,3 +171,19 @@ Three reasons the formal sketch is worth keeping:
 - The categorical reading (Mark as a traversal, Operator as an arrow) is
   flagged as future work in the [PL
   essay](/internals/design/principles#more-pl-ideas).
+
+## Origin
+
+This essay began as the _Mid-Level API_ page of the project's GitHub wiki (last
+edited November 2025), where the fluent builder was called the "mid-level API"
+and the combinator form the "low-level API" (see [The API
+Levels](/internals/design-evolution/api-levels)). That page opened with this
+framing, kept here verbatim:
+
+> The mid-level API is built as a pipeline intended to mirror a data transformation pipeline such as the ones in tidyr and pandas/polars.
+>
+> This description is a little bit "PL-ish" as the mid-level API is basically constructed as a lifted, continuation-passing transformation of the low-level API.
+
+It also linked [a note on continuation passing and
+monads](https://stackoverflow.com/a/6974256) and [a note on
+lifting](https://stackoverflow.com/a/2395956).

@@ -24,7 +24,12 @@ documents the _current_ system belongs in Frontend, Core, or Python.
 
 ## Contents
 
+- [The API Levels](/internals/design-evolution/api-levels) — the four API
+  levels GoFish was planned around in late 2025, moved from the GitHub wiki.
 - [Three Surfaces](/internals/design-evolution/three-surfaces) — `lib.ts`
   exports three surfaces (functional, component-style, fluent) for the same
   chart. How they relate, what each was reacting to, why the wiki has retired
   the version-numbered framing.
+- [Spaces](/internals/design-evolution/spaces) — the data, underlying, and
+  display spaces as first described before underlying space was built, moved
+  from the GitHub wiki.
