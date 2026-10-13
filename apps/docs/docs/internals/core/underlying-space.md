@@ -1245,7 +1245,8 @@ claim, allocated)` solves a sized node's σ and its `originPx`, and
 **Only a sized node solves; everyone else inherits** (#1114). A node is sized on
 an axis when its size there is given to it rather than computed from σ:
 
-- the render root, sized by the canvas;
+- the render root, on an axis the render gives a `w`/`h`, sized by the
+  canvas;
 - each coordinate transform, sized by its box;
 - a node with a literal `w`/`h`;
 - a node with a data-valued `w`/`h`, whose box its parent's σ sizes and whose
@@ -1266,6 +1267,18 @@ parts of one chain claim, and the sized node above it solves σ against the
 chain. Two sized nodes that map one keyed domain into unequal sizes are an
 over-constrained layout, handled like any other: each node's own size wins
 inside it.
+
+A render with no `w`/`h` on an axis does not size its root there: the
+default canvas is a fallback, not a size. The root shrink-wraps its content
+and maps its keyed domain at the σ the domain is solved at below it. A
+sized node with a literal size records that σ in the claim walk
+(`_solvedSigma`, `layer.tsx`), and `KeyedDomains.solvedSigmas` lists the ones
+over the root's keyed domain. When they agree, the root's canvas on the axis
+is its claim at that σ, so the axis it draws lines up with the marks (the
+`NestedCharts` story: four mini charts 160 px tall, rendered with no size).
+When no sized node below solves the domain (the common
+`chart(...).render(el, {})`), or they solve it at different σs, the root
+solves at the default canvas, as below.
 
 Behind `GOFISH_DUMP_SCOPES` the registry prints every scope it solved as a
 printable frame equation, one line per solve, with kind `root`, `coord`,

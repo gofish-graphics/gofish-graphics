@@ -173,7 +173,7 @@ The marginal histogram needs this order (section 6).
 | Porter-Duff operators, `enclose`                     | Like a layer.                                                                                                                                                                                                                   |
 | `coord`, `frame({ coord })`                          | A space root. It reports nothing upward, as today, and each instance starts its own space, so repeated instances of one spec do not share.                                                                                      |
 | `chart()`                                            | Nothing. A chart is a frame with one child. A chart draws axes (section 5), and its `w`/`h` is a literal size.                                                                                                                  |
-| render root                                          | A space root and a sized node.                                                                                                                                                                                                  |
+| render root                                          | A space root, and a sized node on each axis the render sizes.                                                                                                                                                                   |
 
 Two rows are rules of a node rather than constraints of a layer: a
 data-valued `w`/`h` and `treemap`. Each node type has a sharing rule next to its
@@ -303,7 +303,10 @@ not needed once demand is per key.
 
 These are the sized nodes on an axis:
 
-- the render root, sized by the canvas;
+- the render root, sized by the canvas, on an axis the render gives a size.
+  With no render size the default canvas is a fallback, not a size: the
+  root maps its keyed domain at the σ the sized nodes below solve it at
+  when they agree, and uses the default canvas only when none does;
 - each coordinate transform, sized by its box;
 - a node with a literal `w`/`h`;
 - a node with a data-valued `w`/`h`, sized by its parent's σ, which then maps its

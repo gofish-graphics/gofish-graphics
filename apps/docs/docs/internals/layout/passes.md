@@ -522,7 +522,11 @@ omitted dimension is resolved per axis from the root's size claim on it:
 - An axis with a **claim** (a scatter axis, bar heights `= value`, or bar
   widths `= value` laid side by side, whose spread is ordinal but whose room is
   σ-dependent) has data to scale into pixels, so it falls back to a concrete
-  canvas (`DEFAULT_CANVAS_SIZE = 400`).
+  canvas (`DEFAULT_CANVAS_SIZE = 400`). The exception is a keyed domain that
+  sized nodes below the root already solve, all at one σ: the root is not a
+  sized node on an axis the render does not size, so its canvas there is its
+  claim at that σ (`canvasFor` in `gofish.tsx`; see
+  [sized nodes](/internals/core/underlying-space#sized-nodes-and-measure-keyed-domains)).
 - An axis with **no claim** (a bar chart's category axis, or a bare
   fixed-size shape) has nothing to scale, so it lays out _unsized_: marks keep
   their default sizes (a mark treats a non-finite size as "use my default" via its

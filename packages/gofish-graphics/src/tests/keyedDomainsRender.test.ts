@@ -11,6 +11,7 @@ import { Rect as rect } from "../ast/shapes/rect";
 import { layer } from "../ast/graphicalOperators/layer";
 import { Frame } from "../ast/graphicalOperators/frame";
 import { stackX } from "../ast/graphicalOperators/stackX";
+import { spreadX } from "../ast/graphicalOperators/spreadX";
 import { Constraint } from "../ast/constraints";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
 import { value as v, datum } from "../ast/data";
@@ -245,6 +246,45 @@ async function main() {
         .length;
     check("a detached content's y axis is drawn", ticks(4, 1) > 1, ticks(4, 1));
     check("a detached content's x axis is drawn", ticks(1, 4) > 1, ticks(1, 4));
+  }
+
+  console.log("# an unsized render maps its axis at the σ solved below it");
+  {
+    // NestedCharts: a bare spread of mini charts, each 160 px tall, rendered
+    // with no w or h. The default canvas is a fallback, not a size, so the
+    // root does not solve its own σ at 400 px: every node that maps the
+    // domain solves it at 160 px, and the root's y axis maps it there too.
+    // The tick for 90 lands on the top of the 90 bar. Before, the axis
+    // spanned 400 px and 90 read as 36.
+    const mini = (bars: number[], key: string) =>
+      (spreadX as any)(
+        { key, spacing: 4, alignment: "start", h: 160 },
+        bars.map((b, i) =>
+          (rect as any)({
+            key: `${key}-${i}`,
+            w: 12,
+            h: v(b),
+            fill: b === 90 ? "red" : "steelblue",
+          })
+        )
+      );
+    const node = (spreadX as any)({ spacing: 40, alignment: "start" }, [
+      mini([30, 55, 40], "Q1"),
+      mini([70, 45, 90], "Q2"),
+    ]);
+    const dl = await toDisplayList(node, { axes: true });
+    const axis = yAxisOf(dl);
+    const [ninety] = byFill(dl, "red");
+    check(
+      "the tick for 90 is at the top of the 90 bar",
+      axis !== undefined && near(ninety?.y, axis.px(90)),
+      { ninety, axis: axis && [axis.px(0), axis.px(90)] }
+    );
+    check(
+      "the bars' baseline is the axis's pixel of 0",
+      axis !== undefined &&
+        near((ninety?.y ?? 0) + (ninety?.h ?? 0), axis.px(0))
+    );
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);
