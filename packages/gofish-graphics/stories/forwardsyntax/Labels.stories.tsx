@@ -474,10 +474,10 @@ export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
         stack({ by: field("sex").sort(), dir: "x", size: field("people").normalize() })
       )
       .mark(
-        rect({ fill: "sex" }).label(
-          (d: any[]) => d[0].people,
-          { position: "center", color: "white" }
-        )
+        rect({ fill: "sex" }).label("people", {
+          position: "center",
+          color: "white",
+        })
       )
       .render(container, { w: args.w, h: args.h });
 
