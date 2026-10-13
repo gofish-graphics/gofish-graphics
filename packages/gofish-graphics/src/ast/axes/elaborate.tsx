@@ -96,7 +96,7 @@ const AXIS_CONTENT_GAP = 6; // gap between axis line and content
 const LABEL_FONT_SIZE = 10;
 const AXIS_COLOR = "gray";
 const TIME_OUTER_TICK_LEN = 8; // a time axis's ticks for its outer rows
-const TIME_ROW_GAP = 2; // gap between two label rows of a time axis
+const ROW_GAP = 2; // gap between two label rows of an axis on one dim
 
 /** Per-dim [x, y] axis edge, in the owner's axis order; undefined = none
  *  given (an option) or no axis on that dim (an owner's result). */
@@ -656,7 +656,7 @@ function elaborateTimeAxis(
   let offset = TICK_LEN + LABEL_TICK_GAP;
   rows.forEach((_, k) => {
     rowOffset.push(offset);
-    offset += rowDepth(k) + TIME_ROW_GAP;
+    offset += rowDepth(k) + ROW_GAP;
   });
 
   return positionAxis({
@@ -852,10 +852,14 @@ function inferredOrdinalLevels(
  * outer axis stacks below the inner one instead of overlapping it; each row
  * sits past the rows before it.
  *
- * Ticks: the innermost ordinal level on a dim has none. Every outer level
- * draws one divider in each gap between neighboring groups, a line centered
- * in the gap from the content's edge down through its own row; a gap that
- * several levels divide gets one divider, as deep as the outermost of them.
+ * The rows of a dim are one stack from the plot edge, whichever axis draws
+ * them: `rowsBelow` is how deep the inner axes' rows reach (see
+ * {@link LevelFold}), and this axis's rows follow them `ROW_GAP` apart, as
+ * one chained key's levels do. It returns where its last row ends.
+ *
+ * Ticks: a divider runs through the rows of every level with a boundary in
+ * its gap, from the plot edge (or the row before) outward; the innermost
+ * level of the dim alone draws none (see the divider code below).
  * `dividersAtFirst` says whether this axis's first level is an outer one (an
  * ordinal axis is drawn below it on the dim).
  */
@@ -869,8 +873,13 @@ function elaborateOrdinalAxis(
   entries: readonly (LevelEntry | undefined)[],
   outermost: boolean,
   dividersAtFirst: boolean,
-  depth0: number
-): { elaboration: AxisElaboration; report: LevelReport } {
+  depth0: number,
+  rowsBelow: number
+): {
+  elaboration: AxisElaboration;
+  report: LevelReport;
+  rowEnd: number;
+} {
   const keys = (space.domain ?? []).filter((k) => keyMap[k] !== undefined);
   const trackAxis = axisName(dim); // labels track their key along the axis dim
   const gutterDir = crossName(dim); // labels sit in the cross gutter
@@ -955,11 +964,17 @@ function elaborateOrdinalAxis(
       })
     )
   );
+  // Every offset is from the plot edge: the rows of the dim's inner axes
+  // (`rowsBelow` deep) come first, then this axis's rows, each
+  // `ROW_GAP` past the one before, whichever axis draws them.
   const rowOffset: number[] = [];
-  let offset = ORDINAL_LABEL_GAP;
+  let offset = rowsBelow > 0 ? rowsBelow + ROW_GAP : ORDINAL_LABEL_GAP;
+  let rowEnd = rowsBelow;
   levels.forEach((_, k) => {
     rowOffset.push(offset);
-    if (!settings[k].hidden) offset += rowDepth[k] + TIME_ROW_GAP;
+    if (settings[k].hidden) return;
+    rowEnd = offset + rowDepth[k];
+    offset = rowEnd + ROW_GAP;
   });
 
   const lName = (k: number, r: number) =>
@@ -1012,25 +1027,45 @@ function elaborateOrdinalAxis(
     });
   });
 
-  // Dividers: in each gap, as deep as the outermost visible outer level
-  // whose groups break there.
-  const dividers: { at: number; depth: number }[] = [];
-  for (let i = 0; i + 1 < slots.length; i++) {
-    let deepest: number | undefined;
-    levels.forEach((level, k) => {
-      const outer = k > 0 || dividersAtFirst;
-      if (
-        outer &&
-        !settings[k].hidden &&
-        level.groups[i].id !== level.groups[i + 1].id
-      )
-        deepest = k;
+  // Dividers. The rows of the dim, nearest the plot first: the inner axes'
+  // rows (a group of an inner axis never crosses this axis's slots, so they
+  // break at every gap), then this axis's visible levels. In each gap, every
+  // run of neighboring rows that break there gets one divider, through those
+  // rows; the first row's divider starts at the plot edge, a later one's at
+  // the far edge of the row before it. A run of the dim's innermost level
+  // alone draws none.
+  type Row = { start: number; end: number; outer: boolean; k?: number };
+  const rows: Row[] = [];
+  if (rowsBelow > 0) rows.push({ start: 0, end: rowsBelow, outer: false });
+  levels.forEach((_, k) => {
+    if (settings[k].hidden) return;
+    rows.push({
+      start: rows[rows.length - 1]?.end ?? 0,
+      end: rowOffset[k] + rowDepth[k],
+      outer: k > 0 || dividersAtFirst,
+      k,
     });
-    if (deepest !== undefined)
-      dividers.push({
-        at: i,
-        depth: rowOffset[deepest] + rowDepth[deepest],
-      });
+  });
+  const breaks = (row: Row, i: number) =>
+    row.k === undefined ||
+    levels[row.k].groups[i].id !== levels[row.k].groups[i + 1].id;
+  const dividers: { at: number; start: number; end: number }[] = [];
+  for (let i = 0; i + 1 < slots.length; i++) {
+    let run: Row[] = [];
+    const close = () => {
+      if (run.some((r) => r.outer))
+        dividers.push({
+          at: i,
+          start: run[0].start,
+          end: run[run.length - 1].end,
+        });
+      run = [];
+    };
+    for (const row of rows) {
+      if (breaks(row, i)) run.push(row);
+      else close();
+    }
+    close();
   }
   dividers.forEach((d, n) =>
     nodes.push(
@@ -1038,19 +1073,20 @@ function elaborateOrdinalAxis(
         dim,
         from: { node: slots[d.at].node, edge: "end" },
         to: { node: slots[d.at + 1].node, edge: "start" },
-        cross: d.depth,
+        cross: d.end - d.start,
         line: { color: AXIS_COLOR },
       }).name(dName(n))
     )
   );
 
-  // Seat `node` `spacing` past the content's gutter edge. `side` picks the
-  // edge: "start" seats it before the content (node → content), "end"
+  // Seat `node` `at` past the plot edge, which lies `rowsBelow` inside the
+  // content's gutter edge (the inner axes' rows are past it). `side` picks
+  // the edge: "start" seats it before the content (node → content), "end"
   // after it (content → node), flipping which frame edge (top/bottom or
   // left/right) the axis lands on.
-  const seat = (g: Record<string, any>, node: any, spacing: number) =>
+  const seat = (g: Record<string, any>, node: any, at: number) =>
     Constraint.distribute(
-      { dir: gutterDir, spacing },
+      { dir: gutterDir, spacing: at - rowsBelow },
       side === "end" ? [g[INNER_REF_NAME], node] : [node, g[INNER_REF_NAME]]
     );
   const constraints = (g: Record<string, any>) => {
@@ -1069,7 +1105,7 @@ function elaborateOrdinalAxis(
       );
       cs.push(seat(g, g[label], rowOffset[k]));
     }
-    dividers.forEach((_, n) => cs.push(seat(g, g[dName(n)], 0)));
+    dividers.forEach((d, n) => cs.push(seat(g, g[dName(n)], d.start)));
     return cs;
   };
 
@@ -1077,6 +1113,7 @@ function elaborateOrdinalAxis(
   return {
     elaboration: { nodes: [...slotNodes.flat(), ...nodes], constraints },
     report: { names, issues },
+    rowEnd,
   };
 }
 
@@ -1147,16 +1184,21 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
  *  {@link elaborateChrome}: the names of the levels drawn so far, nearest
  *  the plot first (so the next axis out starts at that depth), whether one
  *  of them is an ordinal level (so the next ordinal level out is an outer
- *  one, with dividers), and the `levels` entries that could not apply. */
+ *  one, with dividers), how far past the plot edge the ordinal label rows
+ *  drawn so far reach (so the next ordinal axis out stacks its rows and
+ *  dividers on them; 0 when none is drawn, or when a continuous axis is
+ *  drawn past them), and the `levels` entries that could not apply. */
 export type LevelFold = {
   names: [string[], string[]];
   ordinal: [boolean, boolean];
+  rowEnd: [number, number];
   issues: LevelIssue[];
 };
 
 const emptyFold = (): LevelFold => ({
   names: [[], []],
   ordinal: [false, false],
+  rowEnd: [0, 0],
   issues: [],
 });
 
@@ -1215,6 +1257,7 @@ function elaborationsFor(
   const fold: LevelFold = {
     names: [[...below.names[0]], [...below.names[1]]],
     ordinal: [...below.ordinal],
+    rowEnd: [...below.rowEnd],
     issues: [...below.issues],
   };
   const space = node._underlyingSpace;
@@ -1386,7 +1429,7 @@ function elaborationsFor(
           ? { hidden: true }
           : { hidden: false, rotation: resolvedLabelRotation(row) };
       };
-      const { elaboration, report } = elaborateOrdinalAxis(
+      const { elaboration, report, rowEnd } = elaborateOrdinalAxis(
         dim,
         s,
         keyMap,
@@ -1396,15 +1439,19 @@ function elaborationsFor(
         entriesFor(dim),
         !hasOuterAxis(node, dim),
         fold.ordinal[dim],
-        depth0
+        depth0,
+        fold.rowEnd[dim]
       );
       refBased.push(elaboration);
+      fold.rowEnd[dim] = rowEnd;
       fold.names[dim].push(...report.names);
       fold.issues.push(...report.issues);
       fold.ordinal[dim] = true;
     } else {
       continue;
     }
+    // A continuous axis's gutter lies past the ordinal rows inside it.
+    if (!isORDINAL(s)) fold.rowEnd[dim] = 0;
     owned[dim] = true;
     if (dim === 0) node.axis.x = undefined;
     else node.axis.y = undefined;
@@ -1493,6 +1540,7 @@ export async function elaborateChrome(
         if (res.fold.names[dim].length > below.names[dim].length)
           below.names[dim] = res.fold.names[dim];
         below.ordinal[dim] ||= res.fold.ordinal[dim];
+        below.rowEnd[dim] = Math.max(below.rowEnd[dim], res.fold.rowEnd[dim]);
       }
       below.issues.push(...res.fold.issues);
       if (res.node !== child) {

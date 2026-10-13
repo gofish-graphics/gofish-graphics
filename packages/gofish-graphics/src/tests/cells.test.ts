@@ -1074,6 +1074,46 @@ async function main() {
         dividers.length === 4,
       `${groupedWords.join(" ")} / ${dividers.length}`
     );
+
+    // One boundary rule for nested splits and chained levels: a divider
+    // runs from the plot edge through every row that breaks in its gap.
+    const nested = await chart(
+      daily.flatMap((d) => ["a", "b"].map((g) => ({ ...d, g }))),
+      {
+        schema: { date: Schema.time() },
+        axes: { x: { title: false }, y: false },
+      }
+    )
+      .flow(spread({ by: chainKey, dir: "x" }), spread({ by: "g", dir: "x" }))
+      .mark(rect({ w: 10, h: distField("value").sum() }))
+      .toDisplayList({ w: 400, h: 100 });
+    const nestedTexts = textsOf(nested);
+    const nAt = (w: string) => nestedTexts.find((t) => t.text === w)!;
+    const nBars = rectsOf(nested).filter((r) => r.w === 10);
+    const plotEdge = Math.max(...nBars.map((b) => b.y + b.h));
+    const nLines = rectsOf(nested).filter((r) => r.w === 1);
+    const deep = nLines.filter((l) => l.y + l.h > nAt("2023").y);
+    check(
+      "nested splits: every divider starts at the plot edge, through the " +
+        "inner row; only the one between the years runs through the year row",
+      nLines.length === 4 &&
+        nLines.every((l) => Math.abs(l.y - plotEdge) < 1e-6) &&
+        nLines.every((l) => l.y + l.h > nAt("Nov").y) &&
+        deep.length === 1,
+      JSON.stringify({ plotEdge, nLines })
+    );
+    const cAt = (w: string) => texts.find((t) => t.text === w)!;
+    const chainedBars = rectsOf(chainedDl).filter((r) => r.w === 30);
+    const cEdge = Math.max(...chainedBars.map((b) => b.y + b.h));
+    check(
+      "nested splits stack their rows like one chained key: the same gaps " +
+        "from the plot edge to the first row and between rows",
+      Math.abs(nAt("a").y - plotEdge - (cAt("Nov").y - cEdge)) < 1e-6 &&
+        Math.abs(nAt("Nov").y - nAt("a").y - (cAt("2023").y - cAt("Nov").y)) <
+          1e-6 &&
+        Math.abs(lines[0].y - cEdge) < 1e-6,
+      JSON.stringify([nAt("a").y, nAt("Nov").y, plotEdge, cAt("Nov").y, cEdge])
+    );
   }
 
   console.log("\n# partition");

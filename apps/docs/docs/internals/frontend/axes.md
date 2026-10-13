@@ -480,19 +480,34 @@ difference axis), never off the size claim:
   centered on an `axisSpan` (`axes/axisSpan.tsx`) from the run's first slot's
   start to its last slot's end: a node whose layout reads the two nodes
   through `ref`s, as a label reads its slot, so it is placed along the axis
-  by its own layout and is free across it. Each row sits past the rows
-  before it by their depth, as rotated (the box `rotatedExtent` in
-  `autoLabelAngle.ts` measures).
+  by its own layout and is free across it.
 
-  The innermost ordinal level of a dim draws no ticks. Every level outside
-  it (a later level of the same axis, or the first level of an axis with an
-  ordinal axis below it, `LevelFold.ordinal`) draws one divider in each gap
-  between neighboring groups: an `axisSpan` from one slot's end to the next
-  slot's start, which draws a 1px line in its middle, seated at the content's
-  edge and as deep as the bottom of its row. A gap that several levels divide
-  gets one divider, as deep as the outermost of them. A slot is a key node,
-  so for an outer axis it is a group with its own axes, and the dividers start
-  past the inner axes' labels. `axisSpan` is a bake boundary
+  The label rows of a dim form one stack measured from the plot edge,
+  whichever axis draws them: the first row sits `ORDINAL_LABEL_GAP` past the
+  edge and each later row `ROW_GAP` past the one before, by its depth as
+  rotated (the box `rotatedExtent` in `autoLabelAngle.ts` measures). So one
+  chained key and the same levels as nested splits stack alike. An outer
+  axis learns how deep the rows inside it reach from the fold
+  (`LevelFold.rowEnd`, the deepest any child drew) and seats its rows past
+  them. This assumes the inner rows are the outermost part of the content
+  on that side, which holds when the inner groups share a plot edge.
+
+  Boundary marks follow one rule: a divider runs through the rows of every
+  level that has a boundary in its gap. In each gap between neighboring
+  slots, the dim's visible rows, nearest the plot first, are the inner axes'
+  rows and then this axis's levels. The inner axes' rows break in every gap,
+  since an inner group never crosses this axis's slots. Each run of
+  neighboring rows that break there gets one divider, an `axisSpan` from one
+  slot's end to the next slot's start, which draws a 1px line in its middle
+  across those rows. The first row's divider starts at the plot edge, and a
+  later one's at the far edge of the row before it. The innermost level of
+  the dim alone draws none, so a run needs a level outside it (a later level
+  of the same axis, or the first level of an axis with an ordinal axis below
+  it, `LevelFold.ordinal`). A grouped bar chart's month dividers thus run
+  from the plot edge through the inner row and the month row, and the
+  divider between two years runs on through the year row.
+
+  `axisSpan` is a bake boundary
   (`BAKE_BOUNDARY_TYPES` in `bake.ts`), since it draws itself and its
   children are `ref` stand-ins.
 
