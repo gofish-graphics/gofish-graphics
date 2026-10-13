@@ -680,10 +680,16 @@ class TestSchema:
 
     def test_quantity_is_has_quantity(self):
         assert Schema.quantity("Pay") == {"HasQuantity": {"name": "Pay"}}
-        assert Schema.unit("USD").quantity("Pay") == {
+        assert Schema.quantity("Pay").unit("USD") == {
             "HasUnit": {"unit": "USD", "symbol": "USD"},
             "HasQuantity": {"name": "Pay"},
         }
+        # Either order gives the same column type.
+        assert Schema.quantity("Pay").unit("USD") == Schema.unit("USD").quantity(
+            "Pay"
+        )
+        with pytest.raises(TypeError):
+            Schema.quantity("Pay").unit(3)  # type: ignore[arg-type]
         with pytest.raises(TypeError):
             Schema.quantity(3)  # type: ignore[arg-type]
 

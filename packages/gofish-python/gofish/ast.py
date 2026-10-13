@@ -2235,6 +2235,14 @@ class ColumnSchema(dict):
         name."""
         return ColumnSchema({**self, "HasQuantity": {"name": _quantity_name(name)}})
 
+    def unit(self, unit: str) -> "ColumnSchema":
+        """Say what unit the column's values are in (``HasUnit``): the unit
+        ``unit``, whose symbol follows the quantity in the axis title,
+        "Pay (USD)"."""
+        if not isinstance(unit, str):
+            raise TypeError(f"Schema.unit: unit must be a string, got {unit!r}")
+        return ColumnSchema({**self, "HasUnit": {"unit": unit, "symbol": unit}})
+
 
 def _quantity_name(name: Any) -> str:
     if not isinstance(name, str):
@@ -2298,9 +2306,7 @@ class Schema:
         axis with any other. An axis title shows the unit after its
         quantity: "Pay (USD)".
         """
-        if not isinstance(unit, str):
-            raise TypeError(f"Schema.unit: unit must be a string, got {unit!r}")
-        return ColumnSchema({"HasUnit": {"unit": unit, "symbol": unit}})
+        return ColumnSchema({}).unit(unit)
 
     @staticmethod
     def quantity(name: str) -> ColumnSchema:
@@ -2309,7 +2315,7 @@ class Schema:
         place of the column's name, and columns of one quantity share one
         unit.
         """
-        return ColumnSchema({"HasQuantity": {"name": _quantity_name(name)}})
+        return ColumnSchema({}).quantity(name)
 
 
 # Calendar partitions

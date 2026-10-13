@@ -8,7 +8,7 @@ def story_gender_pay_gap():
     # Five columns on one y axis, all amounts of one quantity, Pay, in USD:
     # they share the axis and it is titled "Pay (USD)". (The dataset's
     # currency is not recorded; USD is illustrative.)
-    pay = Schema.unit("USD").quantity("Pay")
+    pay = Schema.quantity("Pay").unit("USD")
     return (
         chart(
             GENDER_PAY_GAP,

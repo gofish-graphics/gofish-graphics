@@ -26,7 +26,8 @@ import { loadTemporal, temporal } from "./calendar";
  *    calendar cells (calendar.ts). A time has no zero. Its unit is an
  *    instant, so two time columns may share an axis.
  *  - {@link HasUnit}: the column's values are amounts. Declared with
- *    `Schema.unit(unit)`, which says what unit they are in; without it a
+ *    `Schema.unit(unit)` (or `.unit(unit)` after another builder), which
+ *    says what unit they are in; without it a
  *    column's unit is unknown and unifies with any other (`measure.ts`).
  *  - {@link HasQuantity}: what the column's values are amounts of, its
  *    quantity, when that is not the column's name. Declared with
@@ -165,6 +166,12 @@ export class ColumnSchema<C extends ColumnType = ColumnType> {
     return new ColumnSchema({ ...this.type, HasQuantity: { name } });
   }
 
+  /** Say what unit the column's values are in (`HasUnit`): the unit `unit`,
+   *  whose symbol follows the quantity in the axis title, "Pay (USD)". */
+  unit(unit: string): ColumnSchema<C & { HasUnit: HasUnit }> {
+    return new ColumnSchema({ ...this.type, HasUnit: { unit, symbol: unit } });
+  }
+
   toJSON(): C {
     return this.type;
   }
@@ -191,13 +198,13 @@ export const Schema = {
    *  share an axis; two different units on one axis are an error. A column
    *  with no unit declared may share an axis with any other. */
   unit(unit: string): ColumnSchema<{ HasUnit: HasUnit }> {
-    return new ColumnSchema({ HasUnit: { unit, symbol: unit } });
+    return new ColumnSchema({}).unit(unit);
   },
   /** A column whose values are amounts of the quantity `name`
    *  (`HasQuantity`), e.g. `"Pay"`. The quantity titles the axis in place of
    *  the column's name, and columns of one quantity share one unit. */
   quantity(name: string): ColumnSchema<{ HasQuantity: HasQuantity }> {
-    return new ColumnSchema({ HasQuantity: { name } });
+    return new ColumnSchema({}).quantity(name);
   },
 };
 

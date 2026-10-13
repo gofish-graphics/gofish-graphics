@@ -1817,11 +1817,11 @@ quantities), joined with `", "` in the order the merge met them, then the
 symbol of the axis's unit in parentheses when that unit is declared and has
 a symbol. A histogram's edges title as their source column, an axis over
 `lo` and `hi` reads `"lo, hi"`, and the four summary columns of a box plot
-declared `Schema.unit("USD").quantity("Pay")` read `"Pay (USD)"`. A count, a
+declared `Schema.quantity("Pay").unit("USD")` read `"Pay (USD)"`. A count, a
 share, a time, and an unknown unit add nothing. The rule never reads the
 names, so a column named `"Flipper Length (mm)"` declared in `"mm"` titles
 `"Flipper Length (mm) (mm)"`. The clean title comes from declaring the
-quantity (`Schema.unit("mm").quantity("Flipper Length")`) or from the `axes`
+quantity (`Schema.quantity("Flipper Length").unit("mm")`) or from the `axes`
 option's `title`, which overrides all of this.
 
 **Stage 2.** This is Stage 1: one unit per axis, unified or refused. The
@@ -1918,8 +1918,8 @@ reads only the classes, never the builder words. Four classes exist:
   (`CalendarPartition`) live in `calendar.ts`, which runs all calendar math
   on Temporal, native or the polyfill it loads when the runtime has none.
 - `HasUnit` (`{ unit, symbol? }`, #994, #955): the values are amounts in
-  the declared unit `unit` (`Schema.unit(u)`, which also writes the symbol
-  `u`). A column without it has an unknown unit, a unit variable (see
+  the declared unit `unit` (`Schema.unit(u)`, or `.unit(u)` after another builder, which also
+  writes the symbol `u`). A column without it has an unknown unit, a unit variable (see
   [measures](#measures-units-are-types)).
 - `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
   `name` (`Schema.quantity(name)`, or `.quantity(name)` after another

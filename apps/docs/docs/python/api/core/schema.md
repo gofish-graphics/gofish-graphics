@@ -31,12 +31,12 @@ Schema.time()                        # HasCalendar, in UTC
 Schema.time(zone=zone)               # HasCalendar, in the time zone `zone`
 Schema.unit(unit)                    # HasUnit, in the unit `unit`
 Schema.quantity(name)                # HasQuantity, amounts of the quantity `name`
-Schema.unit(unit).quantity(name)     # HasUnit and HasQuantity
+Schema.quantity(name).unit(unit)     # HasUnit and HasQuantity
 ```
 
 A column type is a set of classes. Each builder method adds one class, and
 `.diverging()` needs the order that `.ordered(...)` gives, because a midpoint
-is a point along an order. `.quantity(name)` may follow any builder.
+is a point along an order. `.quantity(name)` and `.unit(unit)` may follow any builder.
 
 | Builder                  | Class         | Meaning                                                 |
 | ------------------------ | ------------- | ------------------------------------------------------- |
@@ -138,7 +138,7 @@ is a point along an order. `.quantity(name)` may follow any builder.
   parentheses: `"Production Budget (USD)"`. The rule does not read the
   names, so a column named `"Flipper Length (mm)"` in `"mm"` titles
   `"Flipper Length (mm) (mm)"`. Declare its quantity
-  (`Schema.unit("mm").quantity("Flipper Length")`) or set the axis `title`
+  (`Schema.quantity("Flipper Length").unit("mm")`) or set the axis `title`
   for `"Flipper Length (mm)"`.
 - `.count()` and `.distinct()` are in the unit `"count"`. The edges of
   `bin(field)` (`start`, `end`, `size`) are amounts of `field`: they title
@@ -202,7 +202,7 @@ chart(prices, schema={"date": Schema.time()}, axes=True).flow(
 Five summary columns of one quantity title their axis once:
 
 ```python
-pay = Schema.unit("USD").quantity("Pay")
+pay = Schema.quantity("Pay").unit("USD")
 
 chart(
     boxes,

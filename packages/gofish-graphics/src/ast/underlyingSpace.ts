@@ -554,7 +554,7 @@ export const spaceCalendar = (
  * symbol (a count, a share, an instant) adds nothing, and neither does an
  * unknown unit. The rule reads no names, so a column named "Flipper Length
  * (mm)" in "mm" titles "Flipper Length (mm) (mm)": declare its quantity
- * (`Schema.unit("mm").quantity("Flipper Length")`) or set the axis title.
+ * (`Schema.quantity("Flipper Length").unit("mm")`) or set the axis title.
  */
 export const spaceTitle = (
   space: UnderlyingSpace | undefined

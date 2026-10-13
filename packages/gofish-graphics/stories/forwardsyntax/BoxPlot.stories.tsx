@@ -27,7 +27,7 @@ export const GenderPayGap: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    const pay = Schema.unit("USD").quantity("Pay");
+    const pay = Schema.quantity("Pay").unit("USD");
     chart(genderPayGap, {
       schema: {
         "Pay Grade": Schema.ordered(payGrade),

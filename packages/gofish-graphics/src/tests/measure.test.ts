@@ -141,13 +141,22 @@ console.log("# measure: quantities on the source array");
     "Schema.quantity names the quantity in place of the column",
     columnQuantity("q1", Schema.quantity("Pay").type).name === "Pay"
   );
+  // A column type is a record keyed by class, so compare it with its classes
+  // in a fixed order: the order the builders ran in is not part of the type.
+  const classes = (t: Record<string, unknown>) =>
+    JSON.stringify(Object.entries(t).sort(([a], [b]) => a.localeCompare(b)));
   ok(
-    ".quantity() after .unit() keeps both classes",
-    JSON.stringify(Schema.unit("USD").quantity("Pay").type) ===
-      JSON.stringify({
+    ".unit() after .quantity() keeps both classes",
+    classes(Schema.quantity("Pay").unit("USD").type) ===
+      classes({
         HasUnit: { unit: "USD", symbol: "USD" },
         HasQuantity: { name: "Pay" },
       })
+  );
+  ok(
+    "and either order gives the same column type",
+    classes(Schema.quantity("Pay").unit("USD").type) ===
+      classes(Schema.unit("USD").quantity("Pay").type)
   );
 }
 
@@ -609,7 +618,7 @@ console.log("# measure: declared units clash");
       ],
       {
         schema: {
-          q1: Schema.unit("USD").quantity("Pay"),
+          q1: Schema.quantity("Pay").unit("USD"),
           eu: Schema.unit("EUR"),
         },
       }
@@ -759,7 +768,7 @@ console.log("# measure: titles are Quantity (unit)");
       { genre: "b", "Flipper Length (mm)": 210 },
     ],
     {
-      "Flipper Length (mm)": Schema.unit("mm").quantity("Flipper Length"),
+      "Flipper Length (mm)": Schema.quantity("Flipper Length").unit("mm"),
     },
     rect({ h: "Flipper Length (mm)" })
   );
@@ -800,7 +809,7 @@ console.log("# measure: titles are Quantity (unit)");
 
   const histMm = textsOf(
     await chart(penguins, {
-      schema: { flipper: Schema.unit("mm").quantity("Flipper") },
+      schema: { flipper: Schema.quantity("Flipper").unit("mm") },
       axes: true,
     })
       .flow(derive(bin("flipper")), scatter({ xMin: "start", xMax: "end" }))
@@ -846,7 +855,7 @@ console.log("# measure: titles are Quantity (unit)");
     undeclared.includes("lo, hi, q1, q3"),
     undeclared.join(" | ")
   );
-  const pay = Schema.unit("USD").quantity("Pay");
+  const pay = Schema.quantity("Pay").unit("USD");
   const declaredBox = await box({ lo: pay, q1: pay, q3: pay, hi: pay });
   ok(
     "one declared quantity over four columns titles once, with its unit",
