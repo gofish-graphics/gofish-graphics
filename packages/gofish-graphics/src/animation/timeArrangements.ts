@@ -28,13 +28,14 @@ import { Frame } from "../ast/graphicalOperators/frame";
 import { targetOf } from "../ast/graphicalOperators/layer";
 import { GoFishAST } from "../ast/_ast";
 import { GoFishNode } from "../ast/_node";
+import { GoFishRef } from "../ast/_ref";
 import { axisScale } from "../ast/domain";
 import { UNDEFINED, type UnderlyingSpace } from "../ast/underlyingSpace";
 import type { Size } from "../ast/dims";
 import { createNodeOperator } from "../ast/withGoFish";
 import type { SplitBy } from "../ast/datumProjection";
 import { bbox, height, unionAll, width } from "../util/bbox";
-import type { Effect } from "./effects";
+import { resolveEase, type Ease, type Effect } from "./effects";
 import type { StaggerFrom } from "./schedule";
 import { groupEntries, rowsOf } from "./grouping";
 import {
@@ -45,8 +46,13 @@ import {
 import type { Operator } from "../ast/types";
 
 export type StaggerOptions = {
-  /** Milliseconds between the starts of neighboring groups. */
-  lag?: number;
+  /** Milliseconds between the starts of neighboring groups, or a function of
+   *  the wave index `w` (1, 2, …) giving the gap before wave `w`.
+   *  PROTOTYPE (gun-deaths): the function form. */
+  lag?: number | ((w: number) => number);
+  /** Warp the start times across the run (GSAP / Motion `stagger({ ease
+   *  })`); with a number `lag` or a `dwell`. PROTOTYPE (gun-deaths). */
+  ease?: Ease;
   /** Milliseconds between one group's end and the next one's start;
    *  `spacing: 0` is one after another. */
   spacing?: number;
@@ -61,9 +67,28 @@ export type StaggerOptions = {
   from?: StaggerFrom;
 };
 
+/** The rows an item of the flow stands for: a selected mark's (a ref or a
+ *  node), or, in a chart's own flow (`chart(rows).flow(time.stagger({ by
+ *  }))`), the data row itself. PROTOTYPE (gun-deaths): the flow form used to
+ *  read only refs. */
+const itemRows = (item: unknown): unknown[] =>
+  item instanceof GoFishRef || item instanceof GoFishNode
+    ? rowsOf(item)
+    : [item];
+
 type TimeArrangementOperator = Operator<any, any> & TimeArrangement;
 
-function timeOperator(spec: ArrangementSpec): TimeArrangementOperator {
+function timeOperator(
+  spec: ArrangementSpec,
+  children?: unknown[]
+): TimeArrangementOperator {
+  if (children !== undefined && spec.by !== undefined) {
+    throw new Error(
+      `[gofish] time.${spec.kind}({ by }, [...]): in the combinator form the ` +
+        `children are given, one group each, so there is nothing to split ` +
+        `by. Drop \`by\`, or use time.${spec.kind}({ by }) in a .flow(...).`
+    );
+  }
   const operator = createOperator<any, ArrangementSpec>(
     async (_opts, children) => {
       const node = (await Frame({}, children)) as GoFishNode;
@@ -73,23 +98,39 @@ function timeOperator(spec: ArrangementSpec): TimeArrangementOperator {
       return node;
     },
     {
-      split: (o, refs) => groupEntries(refs, rowsOf, o.by),
+      split: (o, items) => groupEntries(items, itemRows, o.by),
       // Positions nothing in space.
       arrangement: { kind: "none" },
     }
-  )(spec) as unknown as TimeArrangementOperator;
+    // PROTOTYPE (gun-deaths): the combinator form, `time.stagger(opts,
+    // [a, b, …])`, as every other operator has (`stack(opts, [a, b])`): the
+    // children are the groups, in the order given.
+  )(spec, children as any) as unknown as TimeArrangementOperator;
   Object.defineProperty(operator, "__timeArrangement", { value: spec });
   return operator;
 }
 
 /** Start the children one after another, `lag` apart (or `spacing` after
- *  each other's end, or at a `dwell`). */
-export const stagger = (opts: StaggerOptions): TimeArrangementOperator =>
-  timeOperator({ kind: "stagger", ...opts });
+ *  each other's end, or at a `dwell`). With a list of children it is a
+ *  combinator over them (PROTOTYPE, gun-deaths). */
+export const stagger = (
+  opts: StaggerOptions,
+  children?: unknown[]
+): TimeArrangementOperator => {
+  const { ease, ...rest } = opts;
+  return timeOperator(
+    {
+      kind: "stagger",
+      ...rest,
+      ...(ease === undefined ? {} : { ease: resolveEase(ease) }),
+    },
+    children
+  );
+};
 
 /** Start the children together. */
-export const parallel = (): TimeArrangementOperator =>
-  timeOperator({ kind: "parallel" });
+export const parallel = (children?: unknown[]): TimeArrangementOperator =>
+  timeOperator({ kind: "parallel" }, children);
 
 /**
  * The selection form's leaf: the marks `operands` point at enter with the

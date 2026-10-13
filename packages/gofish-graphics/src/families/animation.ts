@@ -21,6 +21,7 @@ import {
 
 export {
   appear,
+  draw,
   fadeIn,
   fadeOut,
   grow,

@@ -31,8 +31,19 @@ export type Arrangement =
   | { kind: "parallel" }
   | {
       kind: "stagger";
-      /** Milliseconds between the starts of neighboring groups. */
-      lag?: number;
+      /** Milliseconds between the starts of neighboring groups. Or a
+       *  function of the wave index `w` (1, 2, …) giving the milliseconds
+       *  between the start of wave `w − 1` and wave `w`: an uneven stagger
+       *  (GSAP's function-valued `stagger`). PROTOTYPE (gun-deaths). */
+      lag?: number | ((w: number) => number);
+      /** A warp of the START times across the run (GSAP / Motion
+       *  `stagger({ ease })`): with a number `lag` (or a `dwell`) the run of
+       *  starts spans the same total, `(W − 1)·lag`, and wave `w` starts at
+       *  that total times `ease(w / (W − 1))`. An ease that rises fast and
+       *  then flattens (an "out" ease) makes the starts come faster and
+       *  faster. Resolved to a function by `time.stagger`. PROTOTYPE
+       *  (gun-deaths). */
+      ease?: (u: number) => number;
       /** Milliseconds between one group's end and the next group's start.
        *  `spacing: 0` is "one after another" (Canis's "start after
        *  previous"). */
@@ -112,7 +123,7 @@ function layoutGroup(
     return { offsets, duration: end(offsets) };
   }
 
-  const { lag, spacing, dwell } = arrangement;
+  const { lag, spacing, dwell, ease } = arrangement;
   const given = [lag, spacing, dwell].filter((v) => v !== undefined).length;
   if (given !== 1) {
     throw new Error(
@@ -121,8 +132,19 @@ function layoutGroup(
         `\`dwell\` (the share of the time spent between starts, 0 to 1).`
     );
   }
+  if (
+    ease !== undefined &&
+    (spacing !== undefined || typeof lag === "function")
+  ) {
+    throw new Error(
+      `[gofish] time.stagger({ ease }): an ease warps the start times across ` +
+        `a run of a known length, so it goes with a number \`lag\` or a ` +
+        `\`dwell\`, not with \`spacing\` (which waits on each group's end) or ` +
+        `a function \`lag\` (which already gives every gap).`
+    );
+  }
   for (const [name, v] of [
-    ["lag", lag],
+    ["lag", typeof lag === "function" ? undefined : lag],
     ["spacing", spacing],
   ] as const) {
     if (v !== undefined && !(Number.isFinite(v) && v >= 0)) {
@@ -161,10 +183,33 @@ function layoutGroup(
   // total, so δ = w·d / (W − w·(W − 1)): 0 at w = 0 (together) and d at
   // w = 1 (each wave starts as the one before it ends).
   const W = waves.length;
+  if (typeof lag === "function") {
+    // An uneven stagger: each gap is the function's value for its wave.
+    let t = 0;
+    waves.forEach((wave, w) => {
+      if (w > 0) {
+        const gap = lag(w);
+        if (!(Number.isFinite(gap) && gap >= 0)) {
+          throw new Error(
+            `[gofish] time.stagger({ lag: (w) => … }): lag(${w}) is ${gap}; ` +
+              `each gap must be a number of milliseconds, 0 or more.`
+          );
+        }
+        t += gap;
+      }
+      for (const g of wave) offsets[g] = t;
+    });
+    return { offsets, duration: end(offsets) };
+  }
   const d = Math.max(0, ...durations);
   const step = lag !== undefined ? lag : (dwell! * d) / (W - dwell! * (W - 1));
+  // Without an ease the starts are evenly spaced; with one, the same span of
+  // starts is warped.
+  const span = (W - 1) * step;
   waves.forEach((wave, w) => {
-    for (const g of wave) offsets[g] = w * step;
+    const at =
+      ease === undefined || W < 2 ? w * step : span * ease(w / (W - 1));
+    for (const g of wave) offsets[g] = at;
   });
   return { offsets, duration: end(offsets) };
 }

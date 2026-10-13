@@ -48,9 +48,14 @@ import {
   nameModifier,
   labelModifier,
   zOrderModifier,
+  transitionModifier,
   LayerContext,
 } from "./createOperator";
 import type { ModifierConfig, ZOrderValue } from "./createOperator";
+import type {
+  MarkTransition,
+  OperatorTransition,
+} from "../../animation/transition";
 import { layer as Layer } from "../graphicalOperators/layer";
 import {
   // `over` stays internal (not re-exported from lib) — it backs the
@@ -1047,6 +1052,7 @@ export type RelatableMark<T> = Mark<T> & {
   label(accessor: LabelAccessor, options?: LabelOptions): RelatableMark<T>;
   zOrder(value: ZOrderValue<T>): RelatableMark<T>;
   relate(fn: RelateFn): RelatableMark<T>;
+  transition(spec: MarkTransition | OperatorTransition): RelatableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
     options: Parameters<GoFishNode["render"]>[1]
@@ -1080,6 +1086,9 @@ function makeRelatableMark<T>(base: Mark<T>): RelatableMark<T> {
     labelModifier,
     relateModifier,
     zOrderModifier,
+    // PROTOTYPE (gun-deaths): `layer([...]).transition({ enter:
+    // time.stagger(...) })` arranges the layer's children in time.
+    transitionModifier,
   ]) as unknown as RelatableMark<T>;
 }
 

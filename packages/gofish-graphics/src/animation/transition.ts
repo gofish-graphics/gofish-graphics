@@ -98,8 +98,18 @@ export function setNodeTransition(
 /** A mark's `.transition(spec)`, recorded on one node it produced. */
 export function recordMarkTransition(
   node: GoFishNode,
-  spec: MarkTransition
+  spec: MarkTransition | OperatorTransition
 ): void {
+  // A combinator (`layer([a, b])`, `time.stagger(opts, [a, b])`) is a mark
+  // whose node has children: given an arrangement in time it arranges them,
+  // as an operator's `.transition()` does. PROTOTYPE (gun-deaths): told
+  // apart by the value, the way `checkPhases` tells phases apart.
+  const phases = [spec.enter, spec.update, spec.exit];
+  if (phases.some((v) => (v as any)?.__timeArrangement !== undefined)) {
+    recordOperatorTransition(node, spec as OperatorTransition);
+    return;
+  }
+  spec = spec as MarkTransition;
   const where = "mark.transition()";
   if (spec.update !== undefined && !isTween(spec.update)) {
     throw new Error(
