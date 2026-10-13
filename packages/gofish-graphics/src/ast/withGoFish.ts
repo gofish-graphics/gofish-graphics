@@ -34,7 +34,10 @@ import { Mark, MarkChild } from "./types";
 import type { RelateFn } from "./constraints";
 import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
 import type { Token } from "./createName";
-import type { MarkTransition } from "../animation/transition";
+import type {
+  MarkTransition,
+  OperatorTransition,
+} from "../animation/transition";
 import { attachTerminals } from "./marks/terminals";
 import { withWire } from "./wire";
 import { isThenable } from "../util";
@@ -359,7 +362,7 @@ export type NameableMark<T> = Mark<T> & {
   zOrder(value: ZOrderValue<T>): NameableMark<T>;
   /** How the mark looks in each phase of an animation: `Animation.grow()`,
    *  `Animation.fadeIn()`, … (see `src/animation/`). */
-  transition(spec: MarkTransition): NameableMark<T>;
+  transition(spec: MarkTransition | OperatorTransition): NameableMark<T>;
   translate(opts: TranslateModifierOptions): NameableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],

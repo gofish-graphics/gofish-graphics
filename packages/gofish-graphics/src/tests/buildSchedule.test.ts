@@ -298,6 +298,37 @@ console.log("# 4c, one city after another across all months (spacing 0)");
   );
 }
 
+console.log("# gun deaths prototype: an uneven stagger (lag as a function)");
+{
+  const s = startsOf(
+    group({ kind: "stagger", lag: (w) => 100 / w }, [
+      leaf(10, "a"),
+      leaf(10, "b"),
+      leaf(10, "c"),
+      leaf(10, "d"),
+    ])
+  );
+  ok(
+    "each gap is lag(w): 100, 50, 33.3",
+    same(s.starts(["a", "b", "c", "d"]), [0, 100, 150, 150 + 100 / 3])
+  );
+}
+
+console.log("# gun deaths prototype: an ease warps the start times");
+{
+  const s = startsOf(
+    group({ kind: "stagger", lag: 100, ease: (u) => u * u }, [
+      leaf(10, "a"),
+      leaf(10, "b"),
+      leaf(10, "c"),
+    ])
+  );
+  ok(
+    "the span is (W − 1)·lag = 200 and wave w starts at 200·ease(w / 2)",
+    same(s.starts(["a", "b", "c"]), [0, 50, 200])
+  );
+}
+
 console.log("# errors");
 {
   const bad = (arrangement: Arrangement) => {
@@ -313,6 +344,14 @@ console.log("# errors");
   ok("a dwell over 1", bad({ kind: "stagger", dwell: 1.5 }));
   ok("a negative lag", bad({ kind: "stagger", lag: -5 }));
   ok("an index past the end", bad({ kind: "stagger", lag: 5, from: 7 }));
+  ok(
+    "an ease with spacing",
+    bad({ kind: "stagger", spacing: 0, ease: (u) => u })
+  );
+  ok(
+    "a negative gap from a lag function",
+    bad({ kind: "stagger", lag: () => -1 })
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

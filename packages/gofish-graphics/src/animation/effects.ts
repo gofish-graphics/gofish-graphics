@@ -16,6 +16,15 @@
 import type { DisplayList } from "gofish-ir";
 import { fadeItem } from "../ast/displayList/lowerHelpers";
 import type { InterpolationMethod } from "../interpolate";
+import {
+  curve,
+  evenStep,
+  pathToSVGPath,
+  segment,
+  type Path,
+  type Point,
+} from "../path";
+import { windowPath } from "../timeWindow";
 
 /** A time warp `u -> u'` on [0, 1], or the name of a standard one. */
 export type Ease =
@@ -75,7 +84,14 @@ export type WipeOptions = EffectOptions & {
   shape?: "circle";
 };
 
-type EffectKind = "grow" | "shrink" | "fadeIn" | "fadeOut" | "appear" | "wipe";
+type EffectKind =
+  | "grow"
+  | "shrink"
+  | "fadeIn"
+  | "fadeOut"
+  | "appear"
+  | "wipe"
+  | "draw";
 
 /** What an effect does to a mark at a progress `p` in [0, 1]. */
 type Look = {
@@ -282,6 +298,77 @@ export const wipe = (opts: WipeOptions = {}): Effect =>
       opts.shape
     )
   );
+
+/**
+ * Draw the mark's stroke from its start to its end: at progress `p` the path
+ * is cut at the parameter `p` of its run (each segment taking an even share
+ * of it, and a cubic cut by de Casteljau, `windowPath` in `timeWindow.ts`).
+ * So the pen moves along the curve's own PARAMETER, not its arc length, which
+ * is how the Periscopic arcs are drawn: one cubic, split where x is the age
+ * at death, each part drawn linearly in its parameter. PROTOTYPE
+ * (gun-deaths): for path items only (a `bezier` or a `line`).
+ */
+export const draw = (opts?: EffectOptions): Effect =>
+  effect("draw", opts, drawing);
+
+const drawing: Look = {
+  host: (item, p) => {
+    if (p === 1 || item.kind !== "path") return item;
+    return { ...item, d: pathToSVGPath(cutPath(parsePathData(item.d), p)) };
+  },
+  rider: waits,
+  channels: (item) => (item.kind === "path" ? ["d"] : []),
+  fits: (item) => {
+    if (item === "path") return;
+    throw new Error(
+      `[gofish] Animation.draw(): draws a stroke along its path, and this ` +
+        `mark ${drawnAs(item)}. Use Animation.wipe() or Animation.fadeIn() ` +
+        `for it.`
+    );
+  },
+};
+
+/** The part of `path` from its start to parameter `p` of its whole run. */
+const cutPath = (path: Path, p: number): Path =>
+  p <= 0 ? [] : windowPath([evenStep(path)], [0, 1], { from: 0, to: p });
+
+/**
+ * Path data back to segments, for the absolute `M` / `L` / `C` commands that
+ * GoFish lowers paths to (`pathToSVGPath`).
+ * PROTOTYPE SHORTCUT: the effect sees only the lowered display item, so it
+ * re-reads the `d` string it was given. Any other command (an arc, a
+ * relative command, a close) throws rather than draw something else. A real
+ * version would keep the lowered segments on the item, or lower the cut.
+ */
+function parsePathData(d: string): Path {
+  const tokens = d.match(/[A-Za-z]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/g) ?? [];
+  const out: Path = [];
+  let at: Point | undefined;
+  let i = 0;
+  const num = () => Number(tokens[i++]);
+  const pt = (): Point => [num(), num()];
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+    if (cmd === "M") at = pt();
+    else if (cmd === "L" && at) {
+      const q = pt();
+      out.push(segment(at, q));
+      at = q;
+    } else if (cmd === "C" && at) {
+      const c1 = pt();
+      const c2 = pt();
+      const q = pt();
+      out.push(curve(at, c1, c2, q));
+      at = q;
+    } else {
+      throw new Error(
+        `[gofish] Animation.draw(): cannot read path command "${cmd}" ` +
+          `(this prototype reads the absolute M / L / C paths GoFish draws).`
+      );
+    }
+  }
+  return out;
+}
 
 const isEffect = (v: unknown): v is Effect =>
   typeof v === "object" && v !== null && (v as Effect).__effect === true;
