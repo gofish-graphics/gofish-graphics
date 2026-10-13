@@ -1262,6 +1262,59 @@ async function main() {
       tableCells.length === 14,
       `${tableCells.length}`
     );
+
+    console.log("\n# a color with no value");
+    const heat = async (fill: any) =>
+      rectsOf(
+        await chart(days, {
+          schema: { date: Schema.time() },
+          axes: false,
+          legend: false,
+        })
+          .flow(
+            table({
+              by: {
+                x: distField("date")
+                  .bin(DistCalendar.year)
+                  .bin(DistCalendar.month),
+                y: distField("date").bin(DistCalendar.weekday),
+              },
+            })
+          )
+          .mark(rect({ w: 10, h: 10, fill }))
+          .toDisplayList({ w: 200, h: 200 })
+      ).filter((r) => r.w === 10);
+    const meanCells = await heat(distField("v").mean());
+    check(
+      "a mark whose color is the mean of no rows is not drawn; the cells " +
+        "with rows are",
+      meanCells.length === 3,
+      `${meanCells.length}`
+    );
+    check(
+      "a color that is the sum or count of no rows is 0 and draws",
+      (await heat(distField("v").sum())).length === 14 &&
+        (await heat(distField("v").count())).length === 14
+    );
+    const placed = await chart(days, {
+      schema: { date: Schema.time() },
+      axes: false,
+      legend: false,
+    })
+      .flow(
+        spread({ by: distField("date").bin(DistCalendar.weekday), dir: "x" })
+      )
+      .mark(rect({ w: 10, h: 10, fill: distField("v").mean() }))
+      .toDisplayList({ w: 200, h: 100 });
+    const placedRects = rectsOf(placed).filter((r) => r.w === 10);
+    check(
+      "a mark that is not drawn keeps its place: the drawn weekdays sit in " +
+        "their own slots",
+      placedRects.length === 2 &&
+        placedRects[1].x - placedRects[0].x > 0 &&
+        placedRects[1].x - placedRects[0].x < 30,
+      JSON.stringify(placedRects.map((r) => r.x))
+    );
   }
 
   console.log("\n# partition");

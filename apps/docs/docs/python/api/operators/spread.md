@@ -242,7 +242,9 @@ The groups are the cells over the column's values in the **chart's data**
 (or the result of the last `derive`), not over the rows of one group. So
 every group of a nested split has the same cells in the same order, a cell
 with no rows is kept as an empty group, and a count picks its step from the
-chart's values. Ops after `.bin` reorder the cells.
+chart's values. Ops after `.bin` reorder the cells. The mean of an empty
+group has no value, so a mark whose color is that mean is not drawn, and
+keeps its slot; a sum or a count of no rows is 0, and draws.
 
 Each group's key is its cell. Its id is the cell's start, as text, or, for
 a part of a cycle, its field values (`"6"` for June). An axis over cells

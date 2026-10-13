@@ -174,7 +174,14 @@ Walking `withGoFish.ts:431-477`:
      `field(...)` with an aggregate (`field("a").count()`) is the
      exception: it folds all of `data` (`evalFieldValues`), as a size
      channel does, and records no field, because the value is the fold's.
-     It
+     A fold with no value (the mean of no rows) gives no color, and a mark
+     given a color channel that has no value is **not drawn**: the factory
+     makes its whole subtree emit nothing (`INTERNAL_emitNothing`), and it
+     keeps its place in the layout, so a heatmap's empty day is a blank
+     square in its slot. This is the rule a position with no value follows
+     (a scatter does not draw a child it cannot place), and Vega-Lite's
+     default (`invalid: "filter"`). A sum or a count of no rows is 0, a
+     value, so it draws. It
      also records the field's type from the chart's `schema`
      (`DatumValueImpl.fieldType`), read off `data`, so a color scale over an
      ordered column lists its domain in that order. (A `derive` types its
