@@ -9,6 +9,7 @@ import {
   field,
   layer,
   Constraint,
+  Bin,
 } from "../../src/lib";
 import { penguins } from "../../src/data/penguins";
 
@@ -64,7 +65,7 @@ export const Default: StoryObj<Args> = {
       const topHist = await chart(data, { h: 80 })
         .flow(
           partition({
-            by: field("Beak Length (mm)").bin({ step: 2 }),
+            by: field("Beak Length (mm)").bin(Bin.step(2)),
             dir: "x",
           })
         )
@@ -75,7 +76,7 @@ export const Default: StoryObj<Args> = {
       const rightHist = await chart(data, { w: 80 })
         .flow(
           partition({
-            by: field("Beak Depth (mm)").bin({ step: 1 }),
+            by: field("Beak Depth (mm)").bin(Bin.step(1)),
             dir: "y",
           })
         )

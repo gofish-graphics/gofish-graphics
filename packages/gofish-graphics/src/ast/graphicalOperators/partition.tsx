@@ -122,7 +122,7 @@ const noRegion = (by: unknown): Error => {
   return new Error(
     `partition: \`by\` must be a key that has a region, such as ` +
       `field("${name}").bin(Calendar.month) or ` +
-      `field("${name}").bin({ step: 1 }). Each group is placed in its ` +
+      `field("${name}").bin(Bin.step(1)). Each group is placed in its ` +
       `cell, so the key must say what the cells are. To give each value an ` +
       `equal slot instead, use spread({ by, dir }).`
   );

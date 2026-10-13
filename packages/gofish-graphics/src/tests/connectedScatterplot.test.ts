@@ -49,6 +49,7 @@ const {
   selectAll,
   spread,
   field,
+  Bin,
   time,
   Animation,
   Curve,
@@ -490,7 +491,7 @@ async function main(): Promise<void> {
           .toDisplayList(OPTIONS)
       );
     const [binned, plain] = [
-      await tip(offStart, field("year").bin({ thresholds: starts.slice(1) })),
+      await tip(offStart, field("year").bin(Bin.thresholds(starts.slice(1)))),
       await tip(atStart, "year"),
     ];
     ok(

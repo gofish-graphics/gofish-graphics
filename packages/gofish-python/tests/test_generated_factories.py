@@ -126,8 +126,8 @@ def test_partition_requires_a_key_with_a_region():
 
 
 def test_partition_key_per_axis_is_two_partitions():
-    a = field("a").bin(step=1)
-    b = field("b").bin(step=0.5)
+    a = field("a").bin(Bin.step(1))
+    b = field("b").bin(Bin.step(0.5))
     product = partition(by={"x": a, "y": b})
     assert [op.to_dict() for op in product.operators] == [
         partition(by=a, dir="x").to_dict(),
@@ -136,7 +136,7 @@ def test_partition_key_per_axis_is_two_partitions():
 
 
 def test_partition_key_per_axis_checks():
-    a = field("a").bin(step=1)
+    a = field("a").bin(Bin.step(1))
     with pytest.raises(ValueError, match="exactly the keys x and y"):
         partition(by={"x": a})
     with pytest.raises(ValueError, match="divides both axes"):
@@ -172,7 +172,9 @@ def test_partition_struct_checks():
     with pytest.raises(ValueError, match="already binned"):
         key.bin(Bin.hex(radius=1))
     with pytest.raises(TypeError, match="Bin family"):
-        struct(x="a", y="b").bin({"step": 1})
+        struct(x="a", y="b").bin({"size": 1})
+    with pytest.raises(TypeError, match=r"field\(x\)\.bin\(Bin\.step"):
+        struct(x="a", y="b").bin(Bin.step(1))
 
 
 def test_bin_factories_check_their_params():

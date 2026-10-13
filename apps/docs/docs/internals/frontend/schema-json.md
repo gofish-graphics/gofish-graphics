@@ -272,7 +272,7 @@ for the API.
       }
     },
     "StructAccessor": {
-      "description": "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes a Bin strategy). Valid as a partition's `by` only once binned.",
+      "description": "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes Bin.hex or Bin.voronoi). Valid as a partition's `by` only once binned.",
       "type": "object",
       "required": ["type", "fields"],
       "additionalProperties": false,
@@ -304,7 +304,7 @@ for the API.
                 "const": "bin"
               },
               "partition": {
-                "$ref": "#/$defs/Bin"
+                "$ref": "#/$defs/StructBin"
               }
             }
           }
@@ -360,41 +360,13 @@ for the API.
               "const": "bin"
             },
             "partition": {
-              "description": "The partition each value is binned into: a Calendar value ({ unit, step?, start? }), { step }, or { thresholds } (a cell count or a list of edges). Absent: about 10 cells.",
+              "description": "The partition each value is binned into: a Calendar value ({ unit, step?, start? }), or Bin.step(size) or Bin.thresholds(countOrEdges). Absent: about 10 cells.",
               "oneOf": [
                 {
                   "$ref": "#/$defs/Calendar"
                 },
                 {
-                  "type": "object",
-                  "required": ["step"],
-                  "properties": {
-                    "step": {
-                      "type": "number",
-                      "exclusiveMinimum": 0
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "required": ["thresholds"],
-                  "properties": {
-                    "thresholds": {
-                      "oneOf": [
-                        {
-                          "$ref": "#/$defs/Number"
-                        },
-                        {
-                          "type": "array",
-                          "items": {
-                            "$ref": "#/$defs/Number"
-                          }
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
+                  "$ref": "#/$defs/FieldBin"
                 }
               ]
             }
@@ -1568,7 +1540,7 @@ for the API.
               "$ref": "#/$defs/StructAccessor"
             }
           ],
-          "description": "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error."
+          "description": "A key that has a region: a binned field, field(x).bin(p) with p a Calendar value, Bin.step(size) or Bin.thresholds(countOrEdges), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error."
         },
         "dir": {
           "type": "string",
@@ -2966,6 +2938,105 @@ for the API.
       ],
       "description": "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval."
     },
+    "FieldBin": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "step"
+            },
+            "size": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "The width of each cell, in data units."
+            }
+          },
+          "required": ["kind", "size"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "thresholds"
+            },
+            "thresholds": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 1
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              ],
+              "description": "A count: about that many cells, with the width a numeric axis with that many ticks would use, so the edges are round numbers. Or a list of edges: the cells end and start at them, with the domain's ends as the outer edges, and an edge outside the domain cuts nothing."
+            }
+          },
+          "required": ["kind", "thresholds"]
+        }
+      ],
+      "description": "The cells `field(x).bin(...)` cuts a numeric field's line into: Bin.step(size) or Bin.thresholds(countOrEdges)."
+    },
+    "StructBin": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "hex"
+            },
+            "radius": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "The radius in units of the x field."
+                    },
+                    "y": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "The radius in units of the y field."
+                    }
+                  },
+                  "required": ["x", "y"]
+                }
+              ],
+              "description": "The distance from a hexagon's center to its corners, in data units. A number when both fields share a unit (longitude and latitude), or `{ x, y }`, one per field, when they do not (as in ggplot2's `binwidth = c(x, y)`)."
+            }
+          },
+          "required": ["kind", "radius"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "voronoi"
+            },
+            "seeds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "description": "The seed rows, with the same two fields as the key, such as weather stations for rain gauge readings. Pass the chart's own data to give each row its own cell."
+            }
+          },
+          "required": ["kind", "seeds"]
+        }
+      ],
+      "description": "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Bin.hex({ radius }) or Bin.voronoi({ seeds })."
+    },
     "Tile": {
       "anyOf": [
         {
@@ -3220,6 +3291,44 @@ for the API.
           "type": "object",
           "properties": {
             "kind": {
+              "const": "step"
+            },
+            "size": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "The width of each cell, in data units."
+            }
+          },
+          "required": ["kind", "size"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "thresholds"
+            },
+            "thresholds": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 1
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              ],
+              "description": "A count: about that many cells, with the width a numeric axis with that many ticks would use, so the edges are round numbers. Or a list of edges: the cells end and start at them, with the domain's ends as the outer edges, and an edge outside the domain cuts nothing."
+            }
+          },
+          "required": ["kind", "thresholds"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
               "const": "hex"
             },
             "radius": {
@@ -3268,7 +3377,7 @@ for the API.
           "required": ["kind", "seeds"]
         }
       ],
-      "description": "The cells a key built from two fields is binned into: the value of `struct({ x, y }).bin(...)`. Each kind divides the plane of the two fields into cells that do not overlap, and puts each row in the cell its point falls in."
+      "description": "The cells a key is binned into. `step` and `thresholds` cut the line of one field into intervals: the value of `field(x).bin(...)`. `hex` and `voronoi` divide the plane of two fields into polygons: the value of `struct({ x, y }).bin(...)`. Each kind makes cells that do not overlap, and puts each row in the cell its value falls in."
     }
   }
 }

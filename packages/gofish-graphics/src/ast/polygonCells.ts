@@ -365,7 +365,7 @@ export function voronoiCells(
 
 /** The cells of `bin` (a `Bin` strategy) over the domain `xs × ys`. */
 export function planeCells(
-  bin: Frontend.BinIR,
+  bin: Frontend.StructBinIR,
   fields: PlaneFields,
   xs: readonly unknown[],
   ys: readonly unknown[],

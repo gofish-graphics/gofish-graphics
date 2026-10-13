@@ -130,13 +130,12 @@ export class FieldExpr<HasRegion extends boolean = boolean> {
   }
 
   /** Map each value to its CELL in `partition` (cells.ts): a Calendar value
-   *  (`Calendar.month`), `{ step }`, or `{ thresholds }` (a count or a list
-   *  of edges); about 10 cells when omitted. The groups are the cells, in
-   *  order, over the column's whole domain in the chart's data, so every
-   *  group of a split sees the same cells, and empty cells are kept. A
-   *  numeric partition takes a label `format: (cell) => string`, as a
-   *  Calendar value takes `.format(fn)`. Valid only in a `by` (domain)
-   *  slot. */
+   *  (`Calendar.month`), `Bin.step(size)`, or `Bin.thresholds(countOrEdges)`
+   *  (a count or a list of edges); about 10 cells when omitted. The groups
+   *  are the cells, in order, over the column's whole domain in the chart's
+   *  data, so every group of a split sees the same cells, and empty cells
+   *  are kept. Each takes a label `.format(fn)`, a function of the cell.
+   *  Valid only in a `by` (domain) slot. */
   bin(partition?: Partition): FieldExpr<true> {
     return this._withOp({
       op: "bin",
@@ -214,7 +213,7 @@ export class FieldExpr<HasRegion extends boolean = boolean> {
     // fight every concrete row type at the call site.
   ): FieldPredicate {
     // The predicate is outside the op pipeline, so an expression carrying ops
-    // would silently drop them (`field("x").bin({ step: 10 }).between(...)` would test the
+    // would silently drop them (`field("x").bin(Bin.step(10)).between(...)` would test the
     // RAW x). Say so instead of ignoring them.
     if (this._ops.length > 0) {
       throw new Error(

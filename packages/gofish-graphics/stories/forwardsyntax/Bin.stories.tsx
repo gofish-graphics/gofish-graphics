@@ -9,6 +9,7 @@ import {
   partition,
   Schema,
   Calendar,
+  Bin,
 } from "../../src/lib";
 
 const meta: Meta = {
@@ -51,7 +52,7 @@ export const RatingHistogram: StoryObj<Args> = {
     chart(movies, { axes: true })
       .flow(
         spread({
-          by: field("rating").bin({ step: 0.5 }),
+          by: field("rating").bin(Bin.step(0.5)),
           dir: "x",
           spacing: 1,
         })
@@ -140,7 +141,7 @@ export const RatingHistogramContinuous: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(movies, { axes: true })
-      .flow(partition({ by: field("rating").bin({ step: 0.5 }), dir: "x" }))
+      .flow(partition({ by: field("rating").bin(Bin.step(0.5)), dir: "x" }))
       .mark(rect({ h: field("rating").count(), fill: "steelblue", inset: 0.5 }))
       .render(container, { w: args.w, h: args.h });
     return container;

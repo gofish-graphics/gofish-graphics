@@ -3,31 +3,71 @@
 // </gofish-wiki>
 
 /**
- * The `Bin` family: the cells a key built from two fields is binned into,
- * the value of `struct({ x, y }).bin(...)` (#1059, #48).
+ * The `Bin` family: the cells a key is binned into (#1058, #1059, #48).
+ * `Bin.step(size)` and `Bin.thresholds(countOrEdges)` cut the line of one
+ * field into intervals, the value of `field(x).bin(...)`; `Bin.hex({ radius })`
+ * and `Bin.voronoi({ seeds })` divide the plane of two fields into polygons,
+ * the value of `struct({ x, y }).bin(...)`. A kind is valid only on its key.
+ * A Calendar value (`Calendar.month`) is the other value `field(x).bin(...)`
+ * takes, for a time column; it is its own namespace.
  *
  * `lib.ts` binds this module as `Bin` (`Bin.hex({ radius: 0.5 })`), and
- * `gofish-graphics/bin` exports the same module. A strategy is a plain object
- * made by a function call, `{ kind, ...params }`, and that object is also its
- * wire form, so it crosses the Python bridge as IR. The kinds and their
- * params are declared once, in gofish-ir's `STRATEGIES` table, which checks a
- * strategy where `struct(...).bin` reads it. The cells themselves are made in
- * `ast/polygonCells.ts`.
- *
- * A 1D partition of one field (`{ step }`, `{ thresholds }`, a Calendar
- * value) is not in this family: it is the argument of `field(x).bin(p)`.
+ * `gofish-graphics/bin` exports the same module. A strategy's own keys are
+ * its wire form, `{ kind, ...params }`, so it crosses the Python bridge as
+ * IR. The kinds and their params are declared once, in gofish-ir's
+ * `STRATEGIES` table, which checks a strategy where `.bin` reads it
+ * (`Frontend.checkBin`). `Bin.step` and `Bin.thresholds` are objects of a
+ * class (`StepBin`, `ThresholdsBin`, ast/cells.ts) for their `.format(fn)`,
+ * which labels their cells; the cells themselves are made in `ast/cells.ts`
+ * (a line) and `ast/polygonCells.ts` (the plane).
  */
 import type { Frontend } from "gofish-ir";
+import { StepBin, ThresholdsBin } from "../ast/cells";
 
-/** Every built-in way to bin two fields together: the value of
- *  `struct({ x, y }).bin(...)`. */
-export type Bin = Frontend.BinIR;
+export type { StepBin, ThresholdsBin } from "../ast/cells";
 
 /** `hex()`: a grid of hexagons. See {@link hex}. */
-export type HexBin = Extract<Bin, { kind: "hex" }>;
+export type HexBin = Extract<Frontend.StructBinIR, { kind: "hex" }>;
 
 /** `voronoi()`: one cell per seed. See {@link voronoi}. */
-export type VoronoiBin = Extract<Bin, { kind: "voronoi" }>;
+export type VoronoiBin = Extract<Frontend.StructBinIR, { kind: "voronoi" }>;
+
+/** The kinds that cut the line of one field: the `Bin` value of
+ *  `field(x).bin(...)`. */
+export type FieldBin = StepBin | ThresholdsBin;
+
+/** The kinds that divide the plane of two fields: the value of
+ *  `struct({ x, y }).bin(...)`. */
+export type StructBin = HexBin | VoronoiBin;
+
+/** Every built-in way to bin a key. */
+export type Bin = FieldBin | StructBin;
+
+/**
+ * Cells of one width, aligned to multiples of it: a value is in the cell
+ * that starts at the largest multiple of `size` at or below it, whatever the
+ * domain. `.format(fn)` labels the cells by a function of the cell.
+ *
+ * @param size The width of each cell, in data units: a finite number above 0.
+ */
+export function step(size: number): StepBin {
+  return new StepBin(size);
+}
+
+/**
+ * Cells fitted to the domain of the field in the chart's data, which they
+ * cover with both ends included: a value on the last edge falls in the last
+ * cell, as in numpy's `histogram` and d3's `bin`. `.format(fn)` labels the
+ * cells by a function of the cell.
+ *
+ * @param countOrEdges A count: about that many cells, with the width a
+ *   numeric axis with that many ticks would use, so the edges are round
+ *   numbers. Or a list of edges: the cells end and start at them, with the
+ *   domain's ends as the outer edges.
+ */
+export function thresholds(countOrEdges: number | number[]): ThresholdsBin {
+  return new ThresholdsBin(countOrEdges);
+}
 
 /**
  * A grid of hexagons. Each hexagon has a corner at the top (pointy-top, as in

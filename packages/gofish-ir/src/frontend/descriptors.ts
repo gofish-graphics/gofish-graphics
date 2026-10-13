@@ -418,6 +418,11 @@ const axisOptions: FieldSpec = {
 export interface StrategyKind {
   doc: string;
   params: FieldGroup;
+  /** The factory takes the kind's one param as its argument, not in an
+   *  options object: `Bin.step(0.5)`, not `Bin.step({ size: 0.5 })`. In
+   *  Python it is a positional-only parameter. The wire form is the same
+   *  either way (`{ kind: "step", size: 0.5 }`). */
+  positional?: true;
 }
 
 /** A factory that makes a kind with some of its params already set
@@ -635,8 +640,33 @@ export const STRATEGIES = {
     },
   },
   Bin: {
-    doc: "The cells a key built from two fields is binned into: the value of `struct({ x, y }).bin(...)`. Each kind divides the plane of the two fields into cells that do not overlap, and puts each row in the cell its point falls in.",
+    doc: "The cells a key is binned into. `step` and `thresholds` cut the line of one field into intervals: the value of `field(x).bin(...)`. `hex` and `voronoi` divide the plane of two fields into polygons: the value of `struct({ x, y }).bin(...)`. Each kind makes cells that do not overlap, and puts each row in the cell its value falls in.",
     kinds: {
+      step: {
+        doc: "Cells of one width, aligned to multiples of it: a value is in the cell that starts at the largest multiple of the width at or below it. Every value has a cell, whatever the domain.",
+        positional: true,
+        params: {
+          size: {
+            type: t.num({ exclusiveMin: 0, finite: true }),
+            required: true,
+            doc: "The width of each cell, in data units.",
+          },
+        },
+      },
+      thresholds: {
+        doc: "Cells fitted to the domain of the field in the chart's data, which they cover with both ends included: a value on the last edge falls in the last cell, as in numpy's `histogram` and d3's `bin`.",
+        positional: true,
+        params: {
+          thresholds: {
+            type: t.union(
+              t.num({ min: 1, finite: true }),
+              t.array(t.num({ finite: true }))
+            ),
+            required: true,
+            doc: "A count: about that many cells, with the width a numeric axis with that many ticks would use, so the edges are round numbers. Or a list of edges: the cells end and start at them, with the domain's ends as the outer edges, and an edge outside the domain cuts nothing.",
+          },
+        },
+      },
       hex: {
         doc: "A grid of hexagons with a corner at the top (pointy-top, as in d3-hexbin, ggplot2's `geom_hex` and Observable Plot), with one hexagon centered on the origin (0, 0). The grid covers the domain of the two fields in the chart's data, and every hexagon in it is a cell, empty ones included.",
         params: {
@@ -679,13 +709,30 @@ export const STRATEGIES = {
  *  `"Bin"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
-/** The value type of a strategy family: a union of one object per kind, told
- *  apart by its `kind`. */
-function strategyType(family: StrategyFamily): FieldType {
+/** The `Bin` kinds by the key they bin: one field, `field(x).bin(b)`, whose
+ *  cells are intervals of a line, or two fields together,
+ *  `struct({ x, y }).bin(b)`, whose cells are polygons of the plane. A kind
+ *  is valid only on its key. */
+export const BIN_KINDS = {
+  field: ["step", "thresholds"],
+  struct: ["hex", "voronoi"],
+} as const satisfies Record<
+  "field" | "struct",
+  readonly (keyof typeof STRATEGIES.Bin.kinds)[]
+>;
+
+/** The value type of a strategy family: a union of one object per kind (or
+ *  per kind in `only`), told apart by its `kind`. */
+function strategyType(
+  family: StrategyFamily,
+  only?: readonly string[]
+): FieldType {
   return t.union(
-    ...Object.entries(family.kinds).map(([kind, { params }]) =>
-      t.object({ kind: { type: t.literal(kind), required: true }, ...params })
-    )
+    ...Object.entries(family.kinds)
+      .filter(([kind]) => only === undefined || only.includes(kind))
+      .map(([kind, { params }]) =>
+        t.object({ kind: { type: t.literal(kind), required: true }, ...params })
+      )
   );
 }
 
@@ -820,6 +867,18 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   AxisDimsValue: {
     doc: "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval.",
     type: t.union(t.channel("number", "pos"), t.ref("AxisInterval")),
+  },
+  // The Bin kinds valid on each key (BIN_KINDS). A `field(x).bin(...)`
+  // partition is a Calendar value or a FieldBin; it is not one tagged union
+  // because a Calendar value's wire form has no `kind` (validate.ts
+  // `walkPartition`).
+  FieldBin: {
+    doc: "The cells `field(x).bin(...)` cuts a numeric field's line into: Bin.step(size) or Bin.thresholds(countOrEdges).",
+    type: strategyType(STRATEGIES.Bin, BIN_KINDS.field),
+  },
+  StructBin: {
+    doc: "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Bin.hex({ radius }) or Bin.voronoi({ seeds }).",
+    type: strategyType(STRATEGIES.Bin, BIN_KINDS.struct),
   },
   // Each strategy family (`STRATEGIES`) is one entry, under its family name.
   ...Object.fromEntries(
@@ -1311,7 +1370,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       by: {
         type: t.union(t.ref("FieldAccessor"), t.ref("StructAccessor")),
         required: true,
-        doc: "A key that has a region: a binned field, field(x).bin(p), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.",
+        doc: "A key that has a region: a binned field, field(x).bin(p) with p a Calendar value, Bin.step(size) or Bin.thresholds(countOrEdges), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.",
       },
       dir: {
         type: t.string,

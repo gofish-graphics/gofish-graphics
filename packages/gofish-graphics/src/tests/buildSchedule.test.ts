@@ -11,7 +11,7 @@
  * is a nested time frame whose children start when its slot starts.
  */
 // The library first, so its modules initialize in their usual order.
-import { field } from "../lib";
+import { Bin, field } from "../lib";
 import {
   solveSchedule,
   wavesOf,
@@ -245,7 +245,7 @@ console.log("# by: equal keys start together, groups in the key's order");
   const cells = groupEntries(
     binnedChildren,
     rowsOf,
-    field("v").bin({ step: 1 })
+    field("v").bin(Bin.step(1))
   );
   ok(
     "a binned key groups the children by their cell, in the cells' order",

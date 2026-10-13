@@ -10,11 +10,15 @@
  *
  *  - a Calendar value (`Calendar.month`, `Calendar.hour.every(6)`,
  *    `Calendar.week({ start: "sunday" })`, calendar.ts), for a time column;
- *  - `{ step }`: cells `step` wide, aligned to multiples of `step`;
- *  - `{ thresholds: n }`: about `n` cells, with the step a numeric axis with
+ *  - `Bin.step(size)`: cells `size` wide, aligned to multiples of `size`;
+ *  - `Bin.thresholds(n)`: about `n` cells, with the step a numeric axis with
  *    `n` ticks would use, so the edges are round numbers;
- *  - `{ thresholds: [t1, t2, ...] }`: cells that end and start at the given
+ *  - `Bin.thresholds([t1, t2, ...])`: cells that end and start at the given
  *    edges, with the domain's ends as the outer edges.
+ *
+ * The two `Bin` kinds are {@link StepBin} and {@link ThresholdsBin}: each is
+ * its Bin strategy object, `{ kind, ...params }`, with a `.format(fn)` for
+ * its cells' labels, as a Calendar value has one.
  *
  * A {@link Cell} is one cell: the interval `[start, end)` (its region), an id,
  * and its label. Cells are ordered by their start.
@@ -23,17 +27,17 @@
  * group: {@link binCells} takes every value the column has in the chart's data
  * (see `domainRows` in schema.ts), so each group of a split sees the same cells,
  * in the same order, empty cells included. A count-based partition
- * (`{ thresholds: 20 }`) picks its step from that domain too.
+ * (`Bin.thresholds(20)`) picks its step from that domain too.
  *
- * A cell holds its start and not its end. A Calendar value or a `{ step }`
+ * A cell holds its start and not its end. A Calendar value or a `Bin.step`
  * puts every value in the cell that holds it, whatever the domain: March 1
- * is in March. A `{ thresholds }` partition is fitted to the domain, so it
+ * is in March. A `Bin.thresholds` partition is fitted to the domain, so it
  * covers the domain with its ends included: when the largest value sits on
  * a cell boundary, it falls in the cell that ends there rather than in a new
  * cell of its own, as numpy's `histogram` and d3's `bin` do.
  */
 import { tickIncrement } from "d3-array";
-import type { Frontend } from "gofish-ir";
+import { Frontend } from "gofish-ir";
 import {
   calendarPartition,
   CalendarPartition,
@@ -45,17 +49,125 @@ import {
 /** A custom label for a numeric partition's cells: a function of the cell. */
 export type NumberCellFormat = (cell: Cell) => string;
 
-/** A partition of the number line: `{ step }` or `{ thresholds }`, with an
- *  optional label `format` (JS only: a function has no wire form). */
-export type NumberPartition =
-  | { step: number; format?: NumberCellFormat }
-  | { thresholds: number | number[]; format?: NumberCellFormat };
+/**
+ * A partition of the number line, made by a call in the `Bin` family
+ * (families/bin.ts). Its own keys are its wire form, `{ kind, ...params }`,
+ * as for every `Bin` strategy. `.format(fn)` labels its cells; a function
+ * cannot be serialized, so a partition with one has no wire form, as a
+ * Calendar value with a `.format(fn)` has none.
+ */
+abstract class NumberBin {
+  readonly #format: NumberCellFormat | undefined;
+
+  constructor(format: NumberCellFormat | undefined) {
+    this.#format = format;
+  }
+
+  /** The cells' custom label, if any (`.format(fn)`); else the default,
+   *  the cell's two edges. Not an own key, so the strategy's own keys stay
+   *  its wire form. */
+  get formatCell(): NumberCellFormat | undefined {
+    return this.#format;
+  }
+
+  /** The partition's params, without a format. */
+  protected abstract wire(): Frontend.FieldBinIR;
+
+  /** The builder spelling, `Bin.step(0.5)`, for error messages. */
+  protected abstract spelling(): string;
+
+  /** `fn`, checked to be a function of the cell, for `.format(fn)`. */
+  protected checkFormat(fn: unknown): NumberCellFormat {
+    if (typeof fn !== "function") {
+      throw new Error(
+        `${String(this)}.format: expected a function of the cell, ` +
+          `(cell) => string.`
+      );
+    }
+    return fn as NumberCellFormat;
+  }
+
+  /** The wire form. A partition with a `.format(fn)` has none (a loud
+   *  error). */
+  toJSON(): Frontend.FieldBinIR {
+    if (this.#format !== undefined) {
+      throw new Error(
+        `field(...).bin(${String(this)}) has no wire form: its format is a ` +
+          `JS function, which cannot be serialized (to Python or the IR). ` +
+          `Drop the .format(...) to use the default labels.`
+      );
+    }
+    return this.wire();
+  }
+
+  toString(): string {
+    return this.#format === undefined
+      ? this.spelling()
+      : `${this.spelling()}.format(...)`;
+  }
+}
+
+/** `Bin.step(size)`: cells `size` wide, aligned to multiples of `size`. */
+export class StepBin extends NumberBin {
+  readonly kind = "step" as const;
+  readonly size: number;
+
+  constructor(size: number, format?: NumberCellFormat) {
+    super(format);
+    this.size = size;
+  }
+
+  /** The same cells, labeled by `fn`, a function of the cell. JS only: a
+   *  partition with a format has no wire form. */
+  format(fn: NumberCellFormat): StepBin {
+    return new StepBin(this.size, this.checkFormat(fn));
+  }
+
+  protected wire(): Frontend.FieldBinIR {
+    return { kind: "step", size: this.size };
+  }
+
+  protected spelling(): string {
+    return `Bin.step(${describe(this.size)})`;
+  }
+}
+
+/** `Bin.thresholds(countOrEdges)`: about `count` cells with round edges, or
+ *  the cells between the given edges. */
+export class ThresholdsBin extends NumberBin {
+  readonly kind = "thresholds" as const;
+  readonly thresholds: number | number[];
+
+  constructor(thresholds: number | number[], format?: NumberCellFormat) {
+    super(format);
+    this.thresholds = thresholds;
+  }
+
+  /** The same cells, labeled by `fn`, a function of the cell. JS only: a
+   *  partition with a format has no wire form. */
+  format(fn: NumberCellFormat): ThresholdsBin {
+    return new ThresholdsBin(this.thresholds, this.checkFormat(fn));
+  }
+
+  protected wire(): Frontend.FieldBinIR {
+    return { kind: "thresholds", thresholds: this.thresholds };
+  }
+
+  protected spelling(): string {
+    return `Bin.thresholds(${describe(this.thresholds)})`;
+  }
+}
+
+/** A partition of the number line: `Bin.step(size)` or
+ *  `Bin.thresholds(countOrEdges)`. */
+export type NumberPartition = StepBin | ThresholdsBin;
 
 /** What `field(x).bin(p)` takes: a Calendar value or a numeric partition. */
 export type Partition = CalendarPartition | NumberPartition;
 
 /** A partition's wire form: a Calendar value's (`{ unit, step?, start? }`),
- *  `{ step }`, or `{ thresholds }`. */
+ *  or a numeric partition's (`{ kind: "step", size }`,
+ *  `{ kind: "thresholds", thresholds }`). */
 export type PartitionJSON = Frontend.PartitionIR;
 
 /** One cell of a calendar partition, as a {@link Cell} carries it: the
@@ -133,68 +245,33 @@ const isCalendar = (p: unknown): p is CalendarPartition | CalendarJSON =>
   p instanceof CalendarPartition ||
   (typeof p === "object" && p !== null && "unit" in p);
 
-/** The loud error for a value that is not a partition. */
-const notAPartition = (where: string, p: unknown): Error =>
-  new Error(
-    `${where}: expected a partition: a Calendar value (Calendar.month, ` +
-      `Calendar.hour.every(6), ...), { step: number }, or { thresholds: ` +
-      `number | number[] }; got ${describe(p)}.`
-  );
-
 /** Check a partition as the user (or the wire) wrote it, and return it in
- *  its builder form: a CalendarPartition, or a checked numeric partition. */
+ *  its builder form: a CalendarPartition, a {@link StepBin}, or a
+ *  {@link ThresholdsBin}. A `Bin` kind that bins two fields (`Bin.hex`) is
+ *  an error naming `struct({ x, y }).bin` (`Frontend.checkBin`). */
 export function checkPartition(p: unknown, where: string): Partition {
   if (isCalendar(p)) return calendarPartition(p, where);
-  if (typeof p !== "object" || p === null) throw notAPartition(where, p);
-  const o = p as Record<string, unknown>;
-  const keys = Object.keys(o).filter((k) => k !== "format");
-  if (o.format !== undefined && typeof o.format !== "function") {
+  if (typeof p !== "object" || p === null || !("kind" in p)) {
     throw new Error(
-      `${where}: format must be a function of the cell, (cell) => string.`
+      `${where}: expected a partition: a Calendar value (Calendar.month, ` +
+        `Calendar.hour.every(6), ...), Bin.step(size), or ` +
+        `Bin.thresholds(countOrEdges); got ${describe(p)}.`
     );
   }
-  if (keys.length === 1 && keys[0] === "step") {
-    if (typeof o.step !== "number" || !Number.isFinite(o.step) || o.step <= 0) {
-      throw new Error(
-        `${where}: step must be a positive number, got ${describe(o.step)}.`
-      );
-    }
-    return p as NumberPartition;
-  }
-  if (keys.length === 1 && keys[0] === "thresholds") {
-    const t = o.thresholds;
-    const count = typeof t === "number" && Number.isInteger(t) && t >= 1;
-    const edges =
-      Array.isArray(t) &&
-      t.length > 0 &&
-      t.every((e) => typeof e === "number" && Number.isFinite(e));
-    if (!count && !edges) {
-      throw new Error(
-        `${where}: thresholds must be a whole number of cells (1 or more) ` +
-          `or a list of edges, got ${describe(t)}.`
-      );
-    }
-    return p as NumberPartition;
-  }
-  throw notAPartition(where, p);
+  Frontend.checkBin("field", p, where);
+  if (p instanceof StepBin || p instanceof ThresholdsBin) return p;
+  const wire = p as Frontend.FieldBinIR;
+  return wire.kind === "step"
+    ? new StepBin(wire.size)
+    : new ThresholdsBin(wire.thresholds);
 }
 
-/** A partition's wire form. A partition with a `format` has none (a loud
+/** A partition's wire form. A partition with a format has none (a loud
  *  error), as a Calendar value with a `.format(fn)` has none. */
-export function partitionToJSON(p: Partition): PartitionJSON {
-  if (p instanceof CalendarPartition) return p.toJSON();
-  if (p.format !== undefined) {
-    throw new Error(
-      `field(...).bin(${describe(p)}) has no wire form: its format is a JS ` +
-        `function, which cannot be serialized (to Python or the IR). Drop ` +
-        `the format to use the default labels.`
-    );
-  }
-  return "step" in p ? { step: p.step } : { thresholds: p.thresholds };
-}
+export const partitionToJSON = (p: Partition): PartitionJSON => p.toJSON();
 
 /** The default partition of `.bin()` with no argument: about 10 cells. */
-export const DEFAULT_PARTITION: NumberPartition = { thresholds: 10 };
+export const DEFAULT_PARTITION: NumberPartition = new ThresholdsBin(10);
 
 /** `x` rounded to 12 significant digits, so `3 * 0.1` is 0.3. Cell edges are
  *  computed as multiples of a step, and a step like 0.1 has no exact binary
@@ -235,7 +312,7 @@ const numberLabel = (start: number, end: number): string =>
  *  holding `hi` holds its start, not its end); a thresholds partition's last
  *  edge is `hi` or above (it covers the closed domain). */
 function numberEdges(p: NumberPartition, lo: number, hi: number): number[] {
-  if ("thresholds" in p && Array.isArray(p.thresholds)) {
+  if (p.kind === "thresholds" && Array.isArray(p.thresholds)) {
     // Explicit edges: the domain's ends are the outer edges, and an edge
     // outside the domain cuts nothing.
     const inner = [...new Set(p.thresholds)]
@@ -247,9 +324,9 @@ function numberEdges(p: NumberPartition, lo: number, hi: number): number[] {
   // step (d3's `tickIncrement`: a whole number, or the inverse of one, so the
   // edges are exact decimals).
   let at: (k: number) => number;
-  const isStep = "step" in p;
-  if ("step" in p) {
-    const step = p.step;
+  const isStep = p.kind === "step";
+  if (p.kind === "step") {
+    const step = p.size;
     at = (k) => round12(k * step);
   } else {
     const inc = lo === hi ? 1 : tickIncrement(lo, hi, p.thresholds as number);
@@ -309,7 +386,7 @@ export function binCells(
     );
   } else {
     const edges = numberEdges(p, lo, hi);
-    const format = p.format;
+    const format = p.formatCell;
     cells = edges.slice(0, -1).map((start, i) => {
       const end = edges[i + 1];
       const cell = new Cell(start, end, numberLabel(start, end));

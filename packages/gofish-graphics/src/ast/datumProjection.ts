@@ -20,6 +20,7 @@
 // `pluck` is the un-collapsed sibling — the full set of distinct values — for
 // when you genuinely want "every possible value" rather than a scalar key.
 import toPath from "lodash/toPath";
+import { Frontend } from "gofish-ir";
 import sumBy from "lodash/sumBy";
 import { GoFishRef } from "./_ref";
 import { fieldNameOf, isField, type FieldAccessor } from "./data";
@@ -384,6 +385,8 @@ function binKey(
           `with a call in the Bin family, e.g. .bin(Bin.hex({ radius: 1 })), ` +
           `so each group is a cell.`
       );
+    // A struct from the wire (Python) did not pass `.bin`'s check.
+    Frontend.checkBin("struct", bin, where);
     const plane = domainPlane(by.fields, data, bin, where);
     return {
       cells: plane.cells,

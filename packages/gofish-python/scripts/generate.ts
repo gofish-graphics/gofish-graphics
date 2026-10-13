@@ -698,7 +698,7 @@ function describeType(type: FieldType): string {
       return `a dict with the keys ${Object.keys(type.fields).map(pyKwarg).join(", ")}`;
     case "array":
       if (isTable(type)) return "a table (a list of dict rows, or a dataframe)";
-      throw new Error("no Python check for an array strategy param");
+      return `a list, each item ${describeType(type.items)}`;
     case "string":
       return "a str";
     case "boolean":
@@ -728,8 +728,7 @@ function pyTypeTest(type: FieldType, v: string): string {
     case "object":
       return `isinstance(${v}, dict)`;
     case "array":
-      if (isTable(type)) return `isinstance(${v}, list)`;
-      throw new Error("no Python check for an array strategy param");
+      return `isinstance(${v}, list)`;
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }
@@ -770,6 +769,15 @@ function pyValueChecks(
               `must be > ${type.exclusiveMin}`
             )
           : []),
+      ];
+    case "array":
+      // A table's rows are data; any other list is checked item by item.
+      if (isTable(type)) return [];
+      return [
+        `for ${v}_item in ${v}:`,
+        ...pyParamChecks(type.items, `${v}_item`, `${label} item`).map(
+          (l) => `    ${l}`
+        ),
       ];
     case "object": {
       // Its keys, then each value by its own type. A key is snake_case, as
@@ -856,8 +864,10 @@ function renderStrategyFactory(opts: {
   params: FieldGroup;
   preset: Record<string, unknown>;
   doc: string;
+  /** The kind's one param is positional-only (`StrategyKind.positional`). */
+  positional?: true;
 }): string {
-  const { family, name, kind, params, preset, doc } = opts;
+  const { family, name, kind, params, preset, doc, positional } = opts;
   const ents = entries(params);
   // A preset value is this factory's default for that param.
   const docLines = ents
@@ -896,9 +906,11 @@ function renderStrategyFactory(opts: {
         ]
       : []),
     `    if ${py} is not None:`,
-    ...pyParamChecks(spec.type, py, `${family}.${name}(${py}=...)`).map(
-      (l) => `        ${l}`
-    ),
+    ...pyParamChecks(
+      spec.type,
+      py,
+      positional ? `${family}.${name}(${py})` : `${family}.${name}(${py}=...)`
+    ).map((l) => `        ${l}`),
   ]);
   const body = [
     ...checks,
@@ -910,7 +922,10 @@ function renderStrategyFactory(opts: {
     `            out[_k] = _v`,
     `    return out`,
   ].join("\n");
-  return [`def ${name}(*, ${sig}) -> Dict[str, Any]:`, docstring, body].join(
+  if (positional && ents.length !== 1)
+    throw new Error(`${family}.${name}: a positional kind takes one param`);
+  const paramList = positional ? `${sig}, /` : `*, ${sig}`;
+  return [`def ${name}(${paramList}) -> Dict[str, Any]:`, docstring, body].join(
     "\n"
   );
 }
@@ -927,6 +942,7 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
       params: k.params,
       preset: {},
       doc: k.doc,
+      positional: k.positional,
     })),
     ...Object.entries(spec.presets ?? {}).map(([name, p]) => ({
       family,

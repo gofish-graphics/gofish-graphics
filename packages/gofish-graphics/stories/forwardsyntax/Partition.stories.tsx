@@ -57,8 +57,8 @@ export const MovieRatingsHeatmap: StoryObj<Args> = {
       .flow(
         partition({
           by: {
-            x: field("IMDB Rating").bin({ step: 0.5 }),
-            y: field("Rotten Tomatoes Rating").bin({ step: 5 }),
+            x: field("IMDB Rating").bin(Bin.step(0.5)),
+            y: field("Rotten Tomatoes Rating").bin(Bin.step(5)),
           },
         })
       )
@@ -78,8 +78,8 @@ export const ProductForm: StoryObj<Args> = {
       .flow(
         partition({
           by: {
-            x: field("Flipper Length (mm)").bin({ step: 10 }),
-            y: field("Body Mass (g)").bin({ step: 500 }),
+            x: field("Flipper Length (mm)").bin(Bin.step(10)),
+            y: field("Body Mass (g)").bin(Bin.step(500)),
           },
         })
       )
@@ -96,11 +96,11 @@ export const NestedForm: StoryObj<Args> = {
     chart(measured, { color: Color.gradient("blues"), axes: true })
       .flow(
         partition({
-          by: field("Flipper Length (mm)").bin({ step: 10 }),
+          by: field("Flipper Length (mm)").bin(Bin.step(10)),
           dir: "x",
         }),
         partition({
-          by: field("Body Mass (g)").bin({ step: 500 }),
+          by: field("Body Mass (g)").bin(Bin.step(500)),
           dir: "y",
         })
       )
@@ -126,8 +126,8 @@ export const PenguinCellCounts: StoryObj<Args> = {
       .flow(
         partition({
           by: {
-            x: field("Flipper Length (mm)").bin({ step: 10 }),
-            y: field("Body Mass (g)").bin({ step: 500 }),
+            x: field("Flipper Length (mm)").bin(Bin.step(10)),
+            y: field("Body Mass (g)").bin(Bin.step(500)),
           },
         })
       )
@@ -147,10 +147,10 @@ export const NestedFlipperThenMass: StoryObj<Args> = {
     chart(measured, { axes: true })
       .flow(
         partition({
-          by: field("Flipper Length (mm)").bin({ step: 10 }),
+          by: field("Flipper Length (mm)").bin(Bin.step(10)),
           dir: "x",
         }),
-        partition({ by: field("Body Mass (g)").bin({ step: 500 }), dir: "y" })
+        partition({ by: field("Body Mass (g)").bin(Bin.step(500)), dir: "y" })
       )
       .mark(text({ text: field("Body Mass (g)").count() }))
       .render(container, { w: args.w, h: args.h });
@@ -164,9 +164,9 @@ export const NestedMassThenFlipper: StoryObj<Args> = {
     const container = initializeContainer();
     chart(measured, { axes: true })
       .flow(
-        partition({ by: field("Body Mass (g)").bin({ step: 500 }), dir: "y" }),
+        partition({ by: field("Body Mass (g)").bin(Bin.step(500)), dir: "y" }),
         partition({
-          by: field("Flipper Length (mm)").bin({ step: 10 }),
+          by: field("Flipper Length (mm)").bin(Bin.step(10)),
           dir: "x",
         })
       )

@@ -1937,8 +1937,8 @@ def partition(
 
         chart(movies).flow(
             partition(by={
-                "x": field("IMDB Rating").bin(step=0.5),
-                "y": field("Rotten Tomatoes Rating").bin(step=5),
+                "x": field("IMDB Rating").bin(Bin.step(0.5)),
+                "y": field("Rotten Tomatoes Rating").bin(Bin.step(5)),
             })
         ).mark(region(fill=field("IMDB Rating").count()))
 
@@ -1974,7 +1974,7 @@ def partition(
             raise ValueError(
                 f"partition: `by` must be a key that has a region, such as "
                 f'field("{name}").bin(Calendar.month) or '
-                f'field("{name}").bin(step=1). Each group is placed in its '
+                f'field("{name}").bin(Bin.step(1)). Each group is placed in its '
                 f"cell, so the key must say what the cells are. To give each "
                 f"value an equal slot instead, use spread(by=..., dir=...)."
             )
@@ -2786,46 +2786,21 @@ class FieldAccessor(dict):
         return self._with_op({"op": "reverse"})
 
     def bin(
-        self,
-        partition: Optional["CalendarPartition"] = None,
-        *,
-        step: Optional[float] = None,
-        thresholds: Optional[Union[int, List[float]]] = None,
+        self, partition: Optional[Union["CalendarPartition", Dict[str, Any]]] = None
     ) -> "FieldAccessor":
         """Map each value to its CELL in a partition: a Calendar value
-        (``field("date").bin(Calendar.month)``), cells ``step`` wide
-        (``.bin(step=0.5)``), or ``thresholds``, a cell count or a list of
-        edges (``.bin(thresholds=20)``). About 10 cells when none is given.
-        The groups are the cells, in order, over the column's whole domain
-        in the chart's data, so every group of a split sees the same cells,
-        and empty cells are kept. Valid only in a `by` (domain) slot. Emits
-        the wire op ``{"op": "bin", "partition": ...}``."""
-        given = [
-            name
-            for name, v in (
-                ("a Calendar value", partition),
-                ("step", step),
-                ("thresholds", thresholds),
-            )
-            if v is not None
-        ]
-        if len(given) > 1:
-            raise TypeError(
-                "field(...).bin: give one partition, not " + " and ".join(given)
-            )
+        (``field("date").bin(Calendar.month)``), cells of one width
+        (``.bin(Bin.step(0.5))``), or ``Bin.thresholds(...)``, a cell count
+        or a list of edges (``.bin(Bin.thresholds(20))``). About 10 cells
+        when none is given. The groups are the cells, in order, over the
+        column's whole domain in the chart's data, so every group of a split
+        sees the same cells, and empty cells are kept. Valid only in a `by`
+        (domain) slot. Emits the wire op ``{"op": "bin", "partition": ...}``."""
         op: dict = {"op": "bin"}
-        if partition is not None:
-            if not isinstance(partition, CalendarPartition):
-                raise TypeError(
-                    "field(...).bin: the partition must be a Calendar value "
-                    "(Calendar.month, ...); use step= or thresholds= for "
-                    f"numbers, got {partition!r}"
-                )
+        if isinstance(partition, CalendarPartition):
             op["partition"] = dict(partition)
-        elif step is not None:
-            op["partition"] = {"step": step}
-        elif thresholds is not None:
-            op["partition"] = {"thresholds": thresholds}
+        elif partition is not None:
+            op["partition"] = _check_bin("field", partition, "field(...).bin")
         return self._with_op(op)
 
     def drop_nulls(self) -> "FieldAccessor":
@@ -2961,6 +2936,43 @@ def field(name: str, measure: Optional[str] = None) -> FieldAccessor:
     return out
 
 
+def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
+    """A ``Bin`` strategy on the key that takes it, in its wire form:
+    ``"field"`` for ``field(x).bin(...)``, which takes ``Bin.step`` and
+    ``Bin.thresholds``, and ``"struct"`` for ``struct(x=..., y=...).bin(...)``,
+    which takes ``Bin.hex`` and ``Bin.voronoi``. A kind of the other key is a
+    TypeError naming the key that takes it. The kinds of each key are the
+    ``FieldBin`` and ``StructBin`` option types (gofish-ir ``BIN_KINDS``).
+    Mirrors JS ``Frontend.checkBin``."""
+    from ._generated import _OPTION_TYPES, _to_wire
+
+    own, other = ("FieldBin", "StructBin") if key == "field" else ("StructBin", "FieldBin")
+    kind = value.get("kind") if isinstance(value, dict) else None
+    if kind in _OPTION_TYPES[other][2]:
+        if key == "field":
+            raise TypeError(
+                f"{where}: Bin.{kind} bins two fields together into cells of "
+                f"the plane. Bin them with struct(x=..., y=...).bin(Bin.{kind}(...)); "
+                "field(x).bin takes Bin.step(size), Bin.thresholds(count_or_edges), "
+                "or a Calendar value."
+            )
+        raise TypeError(
+            f"{where}: Bin.{kind} bins one field. Bin each field with "
+            f"field(x).bin(Bin.{kind}(...)); struct(x=..., y=...).bin takes "
+            "Bin.hex(radius=...) or Bin.voronoi(seeds=...)."
+        )
+    if kind not in _OPTION_TYPES[own][2]:
+        expected = (
+            "a Calendar value (Calendar.month, ...), Bin.step(size), or "
+            "Bin.thresholds(count_or_edges)"
+            if key == "field"
+            else "a call in the Bin family, Bin.hex(radius=...) or "
+            "Bin.voronoi(seeds=...)"
+        )
+        raise TypeError(f"{where}: expected {expected}, got {value!r}")
+    return _to_wire(_OPTION_TYPES[own], value, where)
+
+
 class StructAccessor(dict):
     """
     The ``{type: "struct", fields: {x, y}, ops?}`` wire shape: a key that
@@ -2976,18 +2988,11 @@ class StructAccessor(dict):
         columns' domain in the chart's data, so every group of a split sees
         the same cells, and empty cells are kept. Emits the wire op
         ``{"op": "bin", "partition": ...}``."""
-        from ._generated import _OPTION_TYPES, _to_wire
-
         if self.get("ops"):
             raise ValueError(
                 "struct(...).bin(...) is already binned: a struct takes one bin."
             )
-        if not isinstance(cells, dict) or "kind" not in cells:
-            raise TypeError(
-                "struct(...).bin: expected a call in the Bin family, "
-                f"Bin.hex(radius=...) or Bin.voronoi(seeds=...), got {cells!r}"
-            )
-        wire = _to_wire(_OPTION_TYPES["Bin"], cells, "struct(...).bin")
+        wire = _check_bin("struct", cells, "struct(...).bin")
         if wire.get("kind") == "voronoi" and isinstance(wire.get("seeds"), list):
             # A seed is read only at the struct's two fields, so the wire
             # carries those and not every column of the seed rows.

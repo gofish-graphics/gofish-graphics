@@ -15,7 +15,8 @@
 import * as GoFish from "../../dist/index.js";
 import "../lib";
 import { spawnSync } from "node:child_process";
-import { binCells, checkPartition, Cell } from "../ast/cells";
+import { binCells, checkPartition, Cell, StepBin } from "../ast/cells";
+import * as Bin from "../families/bin";
 import { mergeCells } from "../ast/underlyingSpace";
 import { inferPos } from "../ast/channels";
 import { evalFieldValues } from "../ast/fieldExpr";
@@ -49,6 +50,7 @@ const {
 } = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
 const distField = (GoFish as any).field;
+const DistBin = (GoFish as any).Bin;
 
 declare const process: { exit(code: number): never; execPath: string };
 
@@ -80,7 +82,7 @@ async function main() {
 
   console.log("\n# numeric partitions");
   {
-    const step = binCells({ step: 0.5 }, [1.2, 2.6, 3], undefined, "t");
+    const step = binCells(Bin.step(0.5), [1.2, 2.6, 3], undefined, "t");
     check(
       "a step covers the domain with cells aligned to its multiples",
       same(edges(step.cells), [
@@ -102,7 +104,7 @@ async function main() {
         String(step.cells[1]) === "1.5" &&
         step.cells[1].label === "1.5–2"
     );
-    const tenth = binCells({ step: 0.1 }, [0, 0.3], undefined, "t");
+    const tenth = binCells(Bin.step(0.1), [0, 0.3], undefined, "t");
     check(
       "edges are rounded multiples of the step",
       same(
@@ -112,7 +114,7 @@ async function main() {
       JSON.stringify(tenth.cells.map((c) => c.start))
     );
 
-    const count = binCells({ thresholds: 10 }, [0, 37, 99], undefined, "t");
+    const count = binCells(Bin.thresholds(10), [0, 37, 99], undefined, "t");
     check(
       "a count picks a round step from the domain, as axis ticks do",
       count.cells.length === 10 &&
@@ -120,14 +122,14 @@ async function main() {
         count.cells[9].end === 100,
       JSON.stringify(edges(count.cells))
     );
-    const closed = binCells({ thresholds: 10 }, [0, 100], undefined, "t");
+    const closed = binCells(Bin.thresholds(10), [0, 100], undefined, "t");
     check(
       "a thresholds partition puts the domain's top value in the last cell",
       closed.cells.length === 10 && closed.cellOf(100)?.start === 90,
       JSON.stringify(edges(closed.cells))
     );
     const list = binCells(
-      { thresholds: [2, 5, 50] },
+      Bin.thresholds([2, 5, 50]),
       [1, 3, 9],
       undefined,
       "t"
@@ -142,7 +144,7 @@ async function main() {
       JSON.stringify(edges(list.cells))
     );
     const formatted = binCells(
-      { step: 10, format: (c: Cell) => `${c.start}–${c.end - 1}` },
+      Bin.step(10).format((c: Cell) => `${c.start}–${c.end - 1}`),
       [25, 34],
       undefined,
       "t"
@@ -154,7 +156,7 @@ async function main() {
     );
     check(
       "no values, no cells",
-      binCells({ step: 1 }, [null, undefined], undefined, "t").cells.length ===
+      binCells(Bin.step(1), [null, undefined], undefined, "t").cells.length ===
         0
     );
   }
@@ -210,17 +212,50 @@ async function main() {
     check(
       "the wire forms check",
       checkPartition({ unit: "month", step: 3 }, "t") instanceof Object &&
-        same(checkPartition({ step: 2 }, "t"), { step: 2 })
+        checkPartition({ kind: "step", size: 2 }, "t") instanceof StepBin &&
+        same(checkPartition({ kind: "step", size: 2 }, "t"), {
+          kind: "step",
+          size: 2,
+        })
+    );
+    check(
+      "a Bin strategy's own keys are its wire form",
+      same(Object.keys(Bin.step(0.5)).sort(), ["kind", "size"]) &&
+        same(
+          Object.keys(Bin.thresholds(20).format(() => "")).sort(),
+          ["kind", "thresholds"]
+        )
     );
     for (const [name, p] of [
-      ["a negative step", { step: -1 }],
-      ["a fractional count", { thresholds: 2.5 }],
-      ["two partitions", { step: 1, thresholds: 3 }],
+      ["a negative step", Bin.step(-1)],
+      ["an infinite step", Bin.step(Infinity)],
+      ["a count below 1", Bin.thresholds(0)],
+      ["two partitions", { kind: "step", size: 1, thresholds: 3 }],
       ["a bare number", 10],
+      ["the untagged step", { step: 1 }],
+      ["the untagged thresholds", { thresholds: 10 }],
     ] as const) {
       check(
         `${name} is an error`,
         errorOf(() => checkPartition(p, "t")) !== undefined
+      );
+    }
+    {
+      const why = errorOf(() =>
+        field("x").bin(Bin.hex({ radius: 1 }) as any)
+      );
+      check(
+        "a Bin kind of two fields on a field is an error naming struct",
+        why?.includes("struct({ x, y }).bin(Bin.hex(...))") === true,
+        why
+      );
+    }
+    {
+      const why = errorOf(() => checkPartition({ step: 1 }, "t"));
+      check(
+        "the untagged form's error names Bin.step",
+        why?.includes("Bin.step(size)") === true,
+        why
       );
     }
     check(
@@ -228,12 +263,12 @@ async function main() {
       same(field("d").bin(Calendar.month.every(3)).toJSON().ops, [
         { op: "bin", partition: { unit: "month", step: 3 } },
       ]) &&
-        same(field("x").bin({ step: 0.5 }).toJSON().ops, [
-          { op: "bin", partition: { step: 0.5 } },
+        same(field("x").bin(Bin.step(0.5)).toJSON().ops, [
+          { op: "bin", partition: { kind: "step", size: 0.5 } },
         ])
     );
     const noWire = errorOf(() =>
-      JSON.stringify(field("x").bin({ step: 1, format: () => "" }))
+      JSON.stringify(field("x").bin(Bin.step(1).format(() => "")))
     );
     check(
       "a partition with a format has no wire form",
@@ -256,7 +291,7 @@ async function main() {
     // (createOperator copies it with the column types).
     const groups = splitEntries("g", rows);
     for (const leaf of groups.values()) copyColumnTypes(leaf, rows);
-    const byCell = field("x").bin({ step: 2 });
+    const byCell = field("x").bin(Bin.step(2));
     const a = splitEntries(byCell, groups.get("A")!);
     const b = splitEntries(byCell, groups.get("B")!);
     check(
@@ -282,7 +317,7 @@ async function main() {
         )
     );
     const sorted = splitEntries(
-      field("x").bin({ step: 2 }).reverse(),
+      field("x").bin(Bin.step(2)).reverse(),
       groups.get("A")!
     );
     check(
@@ -317,7 +352,7 @@ async function main() {
     };
     const rows = [1.2, 1.4, 2.6, 2.7, 2.8].map((rating) => ({ rating }));
     const dl = await chart(rows, { axes: { x: { title: false }, y: false } })
-      .flow(spread({ by: distField("rating").bin({ step: 0.5 }), dir: "x" }))
+      .flow(spread({ by: distField("rating").bin(DistBin.step(0.5)), dir: "x" }))
       .mark(rect({ w: 20, h: distField("rating").count() }))
       .toDisplayList({ w: 300, h: 100 });
     const words = textsOf(dl).map((t) => t.text);
@@ -382,7 +417,7 @@ async function main() {
     const hist = rectsOf(
       await chart(rows, noAxes)
         .flow(
-          partition({ by: distField("rating").bin({ step: 0.5 }), dir: "x" })
+          partition({ by: distField("rating").bin(DistBin.step(0.5)), dir: "x" })
         )
         .mark(rect({ h: distField("rating").count() }))
         .toDisplayList({ w: 400, h: 100 })
@@ -460,8 +495,8 @@ async function main() {
       { a: 1.1, b: 2.9, name: "dddd" },
     ];
     const grid = async (first: "x" | "y") => {
-      const px = partition({ by: distField("a").bin({ step: 1 }), dir: "x" });
-      const py = partition({ by: distField("b").bin({ step: 1 }), dir: "y" });
+      const px = partition({ by: distField("a").bin(DistBin.step(1)), dir: "x" });
+      const py = partition({ by: distField("b").bin(DistBin.step(1)), dir: "y" });
       return rectsOf(
         await chart(pts, noAxes)
           .flow(...(first === "x" ? [px, py] : [py, px]))
@@ -515,8 +550,8 @@ async function main() {
     const sorted = (items: any[]) =>
       items.map((it) => JSON.stringify(it)).sort();
     const ab = {
-      x: distField("a").bin({ step: 1 }),
-      y: distField("b").bin({ step: 1 }),
+      x: distField("a").bin(DistBin.step(1)),
+      y: distField("b").bin(DistBin.step(1)),
     };
     const product = async (mark: any) =>
       itemsOf(
@@ -691,7 +726,7 @@ async function main() {
       { x: 4.2, y: 2 },
       { x: 4.5, y: 0 },
     ];
-    const byCell = () => distField("x").bin({ step: 1 });
+    const byCell = () => distField("x").bin(DistBin.step(1));
     const noAxes = { axes: false };
 
     const lines = await chart(pts, noAxes)
@@ -778,7 +813,7 @@ async function main() {
     const pts = [0, 5, 12, 17, 50, 95, 100].map((x, i) => ({ x, y: i % 3 }));
     const runs = await chart(pts, { axes: false })
       .flow(
-        spread({ by: distField("x").bin({ thresholds: [10, 90] }), dir: "x" }),
+        spread({ by: distField("x").bin(DistBin.thresholds([10, 90])), dir: "x" }),
         scatter({ x: "x", y: "y" })
       )
       .mark(line())
@@ -810,7 +845,7 @@ async function main() {
       .mark(circle({ r: 3 }).name("points"))
       .layer(
         chart(selectAll("points"))
-          .flow(spread({ by: distField("x").bin({ step: 2 }), dir: "x" }))
+          .flow(spread({ by: distField("x").bin(DistBin.step(2)), dir: "x" }))
           .mark(rect({ w: 3, h: 3 }))
       )
       .toDisplayList({ w: 300, h: 100 })
@@ -833,7 +868,7 @@ async function main() {
       const cells = new URL("../ast/cells.ts", import.meta.url).href;
       const polygons = new URL("../ast/polygonCells.ts", import.meta.url).href;
       const code =
-        `import { binCells } from ${JSON.stringify(cells)};` +
+        `import { binCells, StepBin, ThresholdsBin } from ${JSON.stringify(cells)};` +
         `import { hexCells } from ${JSON.stringify(polygons)};` +
         `try { ${call}; console.log("no error"); }` +
         `catch (e) { console.log(e.message); }`;
@@ -849,12 +884,12 @@ async function main() {
     for (const [name, call, column] of [
       [
         "a step",
-        `binCells({ step: 1 }, [0, Infinity], undefined, 'field("x").bin(...)')`,
+        `binCells(new StepBin(1), [0, Infinity], undefined, 'field("x").bin(...)')`,
         'field("x")',
       ],
       [
         "a threshold count",
-        `binCells({ thresholds: 10 }, [-Infinity, 3], undefined, 'field("x").bin(...)')`,
+        `binCells(new ThresholdsBin(10), [-Infinity, 3], undefined, 'field("x").bin(...)')`,
         'field("x")',
       ],
       [
@@ -927,16 +962,21 @@ export function partitionKeyTypes(): void {
   // @ts-expect-error a field with no `.bin(p)` has no region
   srcPartition({ by: field("rating"), dir: "x" });
   // @ts-expect-error an aggregate folds the region away
-  srcPartition({ by: field("rating").bin({ step: 1 }).count(), dir: "x" });
-  srcPartition({ by: field("rating").bin({ step: 1 }), dir: "x" });
-  srcPartition({ by: field("rating").bin({ step: 1 }).reverse(), dir: "x" });
+  srcPartition({ by: field("rating").bin(Bin.step(1)).count(), dir: "x" });
+  srcPartition({ by: field("rating").bin(Bin.step(1)), dir: "x" });
+  srcPartition({ by: field("rating").bin(Bin.step(1)).reverse(), dir: "x" });
   srcPartition({
-    by: { x: field("a").bin({ step: 1 }), y: field("b").bin({ step: 1 }) },
+    by: { x: field("a").bin(Bin.step(1)), y: field("b").bin(Bin.step(1)) },
   });
   // @ts-expect-error each axis's key needs a region too
-  srcPartition({ by: { x: field("a"), y: field("b").bin({ step: 1 }) } });
+  srcPartition({ by: { x: field("a"), y: field("b").bin(Bin.step(1)) } });
   // @ts-expect-error a product divides both axes, so it takes no dir
   srcPartition({ by: { x: field("a").bin(), y: field("b").bin() }, dir: "x" });
+  field("a").bin(Bin.thresholds([0, 5, 10]).format((c) => String(c.start)));
+  // @ts-expect-error Bin.hex bins two fields together, not one
+  field("a").bin(Bin.hex({ radius: 1 }));
+  // @ts-expect-error the untagged form is gone: write Bin.step(1)
+  field("a").bin({ step: 1 });
 }
 
 main().catch((e) => {

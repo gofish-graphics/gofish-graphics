@@ -35,8 +35,8 @@ def story_movie_ratings_heatmap():
         .flow(
             partition(
                 by={
-                    "x": field("IMDB Rating").bin(step=0.5),
-                    "y": field("Rotten Tomatoes Rating").bin(step=5),
+                    "x": field("IMDB Rating").bin(Bin.step(0.5)),
+                    "y": field("Rotten Tomatoes Rating").bin(Bin.step(5)),
                 }
             )
         )
@@ -53,8 +53,8 @@ def story_product_form():
         .flow(
             partition(
                 by={
-                    "x": field("Flipper Length (mm)").bin(step=10),
-                    "y": field("Body Mass (g)").bin(step=500),
+                    "x": field("Flipper Length (mm)").bin(Bin.step(10)),
+                    "y": field("Body Mass (g)").bin(Bin.step(500)),
                 }
             )
         )
@@ -67,8 +67,8 @@ def story_nested_form():
     return (
         chart(MEASURED, color=Color.gradient("blues"), axes=True)
         .flow(
-            partition(by=field("Flipper Length (mm)").bin(step=10), dir="x"),
-            partition(by=field("Body Mass (g)").bin(step=500), dir="y"),
+            partition(by=field("Flipper Length (mm)").bin(Bin.step(10)), dir="x"),
+            partition(by=field("Body Mass (g)").bin(Bin.step(500)), dir="y"),
         )
         .mark(region(fill=field("Body Mass (g)").count())),
         {"w": 320, "h": 320},
@@ -81,8 +81,8 @@ def story_penguin_cell_counts():
         .flow(
             partition(
                 by={
-                    "x": field("Flipper Length (mm)").bin(step=10),
-                    "y": field("Body Mass (g)").bin(step=500),
+                    "x": field("Flipper Length (mm)").bin(Bin.step(10)),
+                    "y": field("Body Mass (g)").bin(Bin.step(500)),
                 }
             )
         )
@@ -98,8 +98,8 @@ def story_nested_flipper_then_mass():
     return (
         chart(MEASURED, axes=True)
         .flow(
-            partition(by=field("Flipper Length (mm)").bin(step=10), dir="x"),
-            partition(by=field("Body Mass (g)").bin(step=500), dir="y"),
+            partition(by=field("Flipper Length (mm)").bin(Bin.step(10)), dir="x"),
+            partition(by=field("Body Mass (g)").bin(Bin.step(500)), dir="y"),
         )
         .mark(text(text=field("Body Mass (g)").count())),
         {"w": 420, "h": 320},
@@ -110,8 +110,8 @@ def story_nested_mass_then_flipper():
     return (
         chart(MEASURED, axes=True)
         .flow(
-            partition(by=field("Body Mass (g)").bin(step=500), dir="y"),
-            partition(by=field("Flipper Length (mm)").bin(step=10), dir="x"),
+            partition(by=field("Body Mass (g)").bin(Bin.step(500)), dir="y"),
+            partition(by=field("Flipper Length (mm)").bin(Bin.step(10)), dir="x"),
         )
         .mark(text(text=field("Body Mass (g)").count())),
         {"w": 420, "h": 320},

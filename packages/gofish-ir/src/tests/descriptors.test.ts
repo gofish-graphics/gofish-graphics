@@ -291,6 +291,8 @@ const SCHEMA_STRATEGY_KEYS: Record<
     },
   } satisfies StrategyKeys<CurveIR>,
   Bin: {
+    step: { size: true },
+    thresholds: { thresholds: true },
     hex: { radius: true },
     voronoi: { seeds: true },
   } satisfies StrategyKeys<BinIR>,

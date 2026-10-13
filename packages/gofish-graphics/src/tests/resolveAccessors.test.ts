@@ -12,6 +12,7 @@
 
 import "../lib";
 import { field } from "../ast/data";
+import * as Bin from "../families/bin";
 import { RESOLVE_ROWS, resolveChannelAccessors } from "../ast/channels";
 import { splitEntries } from "../ast/datumProjection";
 
@@ -151,7 +152,7 @@ console.log("# splits hand inference the input's own rows");
   check("a function split", sameRows(splitEntries((d: any) => d.k, rows)));
   check(
     "a bin split",
-    sameRows(splitEntries(field("v").bin({ thresholds: 2 } as any), rows))
+    sameRows(splitEntries(field("v").bin(Bin.thresholds(2)), rows))
   );
   check(
     "a sorted, null-dropping split",

@@ -28,6 +28,7 @@ from gofish import (
     Schema,
     ColumnSchema,
     Calendar,
+    Bin,
     datum,
     scatter,
     arrow,
@@ -130,11 +131,11 @@ class TestOperators:
     def test_between_rejects_pipeline_ops(self):
         """A predicate is not a value slot: ops on the field are an error."""
         with pytest.raises(ValueError, match="does not apply the expression"):
-            field("x").bin(step=10).between(0, 1)
+            field("x").bin(Bin.step(10)).between(0, 1)
 
     def test_bin_partitions_wire(self):
-        """`.bin` takes a Calendar value, step= or thresholds=, and writes the
-        partition's wire form (camelCase keys, as JS reads them)."""
+        """`.bin` takes a Calendar value, Bin.step or Bin.thresholds, and
+        writes the partition's wire form (camelCase keys, as JS reads them)."""
         assert field("d").bin(Calendar.month.every(3))["ops"] == [
             {"op": "bin", "partition": {"unit": "month", "step": 3}}
         ]
@@ -144,19 +145,29 @@ class TestOperators:
                 "partition": {"unit": "week", "step": 1, "start": "sunday"},
             }
         ]
-        assert field("x").bin(step=0.5)["ops"] == [
-            {"op": "bin", "partition": {"step": 0.5}}
+        assert field("x").bin(Bin.step(0.5))["ops"] == [
+            {"op": "bin", "partition": {"kind": "step", "size": 0.5}}
         ]
-        assert field("x").bin(thresholds=[1, 2, 5])["ops"] == [
-            {"op": "bin", "partition": {"thresholds": [1, 2, 5]}}
+        assert field("x").bin(Bin.thresholds([1, 2, 5]))["ops"] == [
+            {"op": "bin", "partition": {"kind": "thresholds", "thresholds": [1, 2, 5]}}
         ]
         assert field("x").bin()["ops"] == [{"op": "bin"}]
 
-    def test_bin_rejects_two_partitions(self):
-        with pytest.raises(TypeError, match="give one partition"):
-            field("x").bin(step=1, thresholds=10)
+    def test_bin_rejects_other_partitions(self):
+        """The untagged forms and the removed kwargs are gone, and a Bin kind
+        of two fields names the key that takes it."""
         with pytest.raises(TypeError, match="Calendar value"):
             field("x").bin({"step": 1})
+        with pytest.raises(TypeError):
+            field("x").bin(step=1)
+        with pytest.raises(TypeError, match=r"struct\(x=\.\.\., y=\.\.\.\)\.bin\(Bin\.hex"):
+            field("x").bin(Bin.hex(radius=1))
+        with pytest.raises(ValueError, match="must be > 0"):
+            Bin.step(0)
+        with pytest.raises(ValueError, match=">= 1"):
+            Bin.thresholds(0)
+        with pytest.raises(TypeError):
+            Bin.step(size=1)
 
     def test_filter_callable_is_derive(self):
         """A Python function predicate runs through the derive bridge."""

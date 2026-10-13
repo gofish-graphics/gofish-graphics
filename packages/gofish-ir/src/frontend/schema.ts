@@ -568,10 +568,20 @@ export type CurveIR =
       straights?: boolean;
     };
 
-/** The cells a key built from two fields is binned into, made by a call in
- *  the `Bin` family (`Bin.hex({ radius })`, `Bin.voronoi({ seeds })`): the
- *  value of `struct({ x, y }).bin(...)`. */
-export type BinIR =
+/** The cells a key is binned into, made by a call in the `Bin` family.
+ *  `Bin.step(size)` and `Bin.thresholds(countOrEdges)` bin one field
+ *  (`field(x).bin(...)`, {@link FieldBinIR}); `Bin.hex({ radius })` and
+ *  `Bin.voronoi({ seeds })` bin two together (`struct({ x, y }).bin(...)`,
+ *  {@link StructBinIR}). */
+export type BinIR = FieldBinIR | StructBinIR;
+
+/** The `Bin` kinds that cut the line of one field into intervals. */
+export type FieldBinIR =
+  | { kind: "step"; size: number }
+  | { kind: "thresholds"; thresholds: number | number[] };
+
+/** The `Bin` kinds that divide the plane of two fields into polygons. */
+export type StructBinIR =
   | { kind: "hex"; radius: number | { x: number; y: number } }
   | { kind: "voronoi"; seeds: Record<string, unknown>[] };
 
@@ -778,12 +788,10 @@ export type AxisDims = Record<string, ChannelValue | AxisInterval>;
  *  (`sort`/`reverse`/`bin`); a value (size/pos) channel slot accepts the
  *  aggregate ops (`sum`/`mean`/`count`/`distinct`) and, only on an
  *  operator's entry-flagged `size` channel, `normalize`. */
-/** A partition's wire form (`field(x).bin(p)`): a Calendar value, cells
- *  `step` wide, or `thresholds` (a cell count, or a list of edges). */
-export type PartitionIR =
-  | CalendarPartitionIR
-  | { step: number }
-  | { thresholds: number | number[] };
+/** A partition's wire form (`field(x).bin(p)`): a Calendar value, or a
+ *  `Bin` kind that bins one field (`Bin.step(size)`,
+ *  `Bin.thresholds(countOrEdges)`). */
+export type PartitionIR = CalendarPartitionIR | FieldBinIR;
 
 export interface FieldAccessor {
   type: "field";
@@ -805,7 +813,7 @@ export interface StructAccessor {
 }
 
 /** One op in a `struct(...)` pipeline: the cells it is binned into. */
-export type StructOpIR = { op: "bin"; partition: BinIR };
+export type StructOpIR = { op: "bin"; partition: StructBinIR };
 
 /** One op in a `field(...)` pipeline — mirrors gofish-graphics'
  *  `FieldOp` (`ast/fieldExpr.ts`) exactly. See {@link FieldAccessor}. */
@@ -822,8 +830,9 @@ export type FieldOpIR =
   | { op: "reverse" }
   | {
       op: "bin";
-      /** The partition each value is binned into: a Calendar value, `{ step }`
-       *  or `{ thresholds }`. Absent: about 10 cells. */
+      /** The partition each value is binned into: a Calendar value,
+       *  `Bin.step(size)` or `Bin.thresholds(countOrEdges)`. Absent: about
+       *  10 cells. */
       partition?: PartitionIR;
     }
   | { op: "dropNulls" }

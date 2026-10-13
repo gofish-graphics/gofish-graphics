@@ -417,8 +417,8 @@ export const withCells = <T extends CONTINUOUS_TYPE>(
  *  - calendar cells share a calendar partition (`sameCells`): an axis over
  *    calendar cells labels them all by one partition's rows.
  *
- * That is what the parts agree on, not how they were binned: a `{ step }`
- * over two domains gives cells of one partition, and a `{ thresholds }`
+ * That is what the parts agree on, not how they were binned: a `Bin.step`
+ * over two domains gives cells of one partition, and a `Bin.thresholds`
  * fitted to two domains may not.
  */
 export const mergeCells = (

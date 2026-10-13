@@ -390,12 +390,19 @@ export const Calendar = {
   year: new CalendarPartition("year"),
 };
 
-/** `value` as an error message shows it. A partition shows as its builder
- *  spelling, and nothing calls `toJSON` (a partition with a format has no
+/** `value` as an error message shows it. A partition (a Calendar value, or
+ *  `Bin.step(...)`, cells.ts) shows as its builder spelling, its own
+ *  `toString`, and nothing calls `toJSON` (a partition with a format has no
  *  wire form, and its `toJSON` throws). */
 export function describe(value: unknown): string {
-  if (value instanceof CalendarPartition) return String(value);
   if (Array.isArray(value)) return `[${value.map(describe).join(", ")}]`;
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    typeof value.toString === "function" &&
+    value.toString !== Object.prototype.toString
+  )
+    return String(value);
   if (value !== null && typeof value === "object") {
     const fields = Object.entries(value).map(
       ([k, v]) => `${k}: ${describe(v)}`

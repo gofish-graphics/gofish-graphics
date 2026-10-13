@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, spread, stack, rect, ribbon, field } from "../../src/lib";
+import { chart, spread, stack, rect, ribbon, field, Bin } from "../../src/lib";
 
 const meta: Meta = {
   title: "Tests/Field Expression Pipeline",
@@ -233,7 +233,7 @@ export const SharedBinsAcrossGroups: StoryObj<Args> = {
       .flow(
         spread({ by: "group", dir: "y", spacing: 20 }),
         spread({
-          by: field("age").bin({ thresholds: 10 }),
+          by: field("age").bin(Bin.thresholds(10)),
           dir: "x",
           spacing: 2,
         })

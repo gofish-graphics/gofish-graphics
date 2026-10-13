@@ -383,7 +383,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
     },
     StructAccessor: {
       description:
-        "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes a Bin strategy). Valid as a partition's `by` only once binned.",
+        "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes Bin.hex or Bin.voronoi). Valid as a partition's `by` only once binned.",
       type: "object",
       required: ["type", "fields"],
       additionalProperties: false,
@@ -403,7 +403,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             additionalProperties: false,
             properties: {
               op: { const: "bin" },
-              partition: { $ref: "#/$defs/Bin" },
+              partition: { $ref: "#/$defs/StructBin" },
             },
           },
         },
@@ -442,30 +442,10 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             op: { const: "bin" },
             partition: {
               description:
-                "The partition each value is binned into: a Calendar value ({ unit, step?, start? }), { step }, or { thresholds } (a cell count or a list of edges). Absent: about 10 cells.",
+                "The partition each value is binned into: a Calendar value ({ unit, step?, start? }), or Bin.step(size) or Bin.thresholds(countOrEdges). Absent: about 10 cells.",
               oneOf: [
                 { $ref: "#/$defs/Calendar" },
-                {
-                  type: "object",
-                  required: ["step"],
-                  properties: {
-                    step: { type: "number", exclusiveMinimum: 0 },
-                  },
-                  additionalProperties: false,
-                },
-                {
-                  type: "object",
-                  required: ["thresholds"],
-                  properties: {
-                    thresholds: {
-                      oneOf: [
-                        { $ref: "#/$defs/Number" },
-                        { type: "array", items: { $ref: "#/$defs/Number" } },
-                      ],
-                    },
-                  },
-                  additionalProperties: false,
-                },
+                { $ref: "#/$defs/FieldBin" },
               ],
             },
           },

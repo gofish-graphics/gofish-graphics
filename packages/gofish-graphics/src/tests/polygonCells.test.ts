@@ -335,10 +335,24 @@ async function main() {
     check(
       "a struct is binned only by a call in the Bin family",
       /Bin family/.test(
-        errorOf(() => struct({ x: "a", y: "b" }).bin({ step: 1 } as any)) ??
+        errorOf(() => struct({ x: "a", y: "b" }).bin({ size: 1 } as any)) ??
           ""
       )
     );
+    {
+      const why = errorOf(() =>
+        struct({ x: "a", y: "b" }).bin(
+          // @ts-expect-error Bin.step bins one field, not a struct
+          Bin.step(1)
+        )
+      );
+      check(
+        "a Bin kind of one field on a struct is an error naming field",
+        /Bin\.step bins one field/.test(why ?? "") &&
+          (why ?? "").includes("field(x).bin(Bin.step(...))"),
+        why
+      );
+    }
     const zero = errorOf(() =>
       struct({ x: "a", y: "b" }).bin(Bin.hex({ radius: 0 }))
     );

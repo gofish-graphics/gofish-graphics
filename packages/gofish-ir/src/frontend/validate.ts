@@ -37,6 +37,7 @@ import {
 } from "./nonFinite.js";
 import {
   AUTHORED_REFS,
+  BIN_KINDS,
   LABEL_OPTIONS,
   OPTION_TYPES,
   acceptedFields,
@@ -537,6 +538,38 @@ export function checkStrategy(
   }
 }
 
+/**
+ * Check a `Bin` strategy on the key that takes it: `"field"` for
+ * `field(x).bin(b)`, which takes the kinds that cut one line
+ * (`Bin.step`, `Bin.thresholds`), `"struct"` for `struct({ x, y }).bin(b)`,
+ * which takes the kinds that divide a plane (`Bin.hex`, `Bin.voronoi`). A
+ * kind of the other key throws, naming the key that takes it; anything else
+ * is checked as {@link checkStrategy} checks it.
+ */
+export function checkBin(
+  key: keyof typeof BIN_KINDS,
+  value: unknown,
+  where: string
+): void {
+  const kind = isObject(value) ? value.kind : undefined;
+  const isKindOf = (k: keyof typeof BIN_KINDS) =>
+    (BIN_KINDS[k] as readonly unknown[]).includes(kind);
+  if (key === "field" && isKindOf("struct"))
+    throw new Error(
+      `[gofish] ${where}: Bin.${kind} bins two fields together into cells ` +
+        `of the plane. Bin them with struct({ x, y }).bin(Bin.${kind}(...)); ` +
+        `field(x).bin takes Bin.step(size), Bin.thresholds(countOrEdges), ` +
+        `or a Calendar value.`
+    );
+  if (key === "struct" && isKindOf("field"))
+    throw new Error(
+      `[gofish] ${where}: Bin.${kind} bins one field. Bin each field with ` +
+        `field(x).bin(Bin.${kind}(...)); struct({ x, y }).bin takes ` +
+        `Bin.hex({ radius }) or Bin.voronoi({ seeds }).`
+    );
+  checkStrategy("Bin", value, where);
+}
+
 /** The anchors an axis interval may name: the fields of `AxisInterval` in
  *  `OPTION_TYPES`. */
 export const AXIS_INTERVAL_KEYS = Object.keys(
@@ -780,7 +813,8 @@ function walkFieldAccessor(
 /**
  * A key built from two fields (`struct({ x, y })`), with the cells it is
  * binned into: `{ type: "struct", fields: { x, y }, ops?: [{ op: "bin",
- * partition }] }`, the partition a `Bin` strategy (`OPTION_TYPES.Bin`).
+ * partition }] }`, the partition a `Bin` kind that bins two fields
+ * (`OPTION_TYPES.StructBin`).
  */
 function walkStructAccessor(value: unknown, path: string, ctx: Context): void {
   const fail = (message: string, at = path) =>
@@ -820,7 +854,7 @@ function walkStructAccessor(value: unknown, path: string, ctx: Context): void {
         }
         rejectUnknown(op, ["op", "partition"], at, ctx);
         walkFieldType(
-          OPTION_TYPES.Bin.type,
+          OPTION_TYPES.StructBin.type,
           op.partition,
           `${at}.partition`,
           ctx
@@ -904,42 +938,18 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
   }
 }
 
-/** A `bin` op's partition: a Calendar value (the `Calendar` option type,
- *  `{ unit, step?, start? }`), `{ step }` with a positive step, or
- *  `{ thresholds }` (a count or a list of edges). */
+/** A `bin` op's partition: a Calendar value (`OPTION_TYPES.Calendar`) or a
+ *  `Bin` kind that bins one field (`OPTION_TYPES.FieldBin`). A Calendar
+ *  value's wire form, `{ unit, step?, start? }`, has no `kind`, so the two
+ *  are not one tagged union: a Calendar value is told apart by its `unit`. */
 function walkPartition(value: unknown, path: string, ctx: Context): void {
-  const fail = (message: string) => ctx.errors.push({ path, message });
-  if (!isObject(value)) {
-    fail(`bin "partition" must be an object, got ${typeNameOf(value)}`);
-    return;
-  }
-  const keys = Object.keys(value);
-  if ("unit" in value) {
-    walkRefType("Calendar", value, path, ctx);
-    return;
-  }
-  if (keys.length === 1 && keys[0] === "step") {
-    walkFieldType(
-      t.num({ exclusiveMin: 0, finite: true }),
-      value.step,
-      `${path}.step`,
-      ctx
-    );
-    return;
-  }
-  if (keys.length === 1 && keys[0] === "thresholds") {
-    const th = value.thresholds;
-    if (
-      !isIRNumber(th) &&
-      !(Array.isArray(th) && th.every((e) => isIRNumber(e)))
-    )
-      fail(
-        'bin "partition.thresholds" must be a number or an array of numbers'
-      );
-    return;
-  }
-  fail(
-    'bin "partition" must be a Calendar value ({ unit, step?, start? }), { step }, or { thresholds }'
+  walkFieldType(
+    isObject(value) && "unit" in value
+      ? OPTION_TYPES.Calendar.type
+      : OPTION_TYPES.FieldBin.type,
+    value,
+    path,
+    ctx
   );
 }
 

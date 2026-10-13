@@ -3,7 +3,7 @@
 import math
 from datetime import datetime, timedelta, timezone
 
-from gofish import chart, rect, field, spread, stack, partition, Schema, Calendar
+from gofish import chart, rect, field, spread, stack, partition, Schema, Calendar, Bin
 
 # Seventy-two movie ratings from 1 to 9.5, none from 2 to 2.5: a hump around
 # 6.5 with a thin low tail.
@@ -23,7 +23,7 @@ MOVIES = [
 def story_rating_histogram():
     return (
         chart(MOVIES, axes=True)
-        .flow(spread(by=field("rating").bin(step=0.5), dir="x", spacing=1))
+        .flow(spread(by=field("rating").bin(Bin.step(0.5)), dir="x", spacing=1))
         .mark(rect(h=field("rating").count(), fill="steelblue")),
         {"w": 560, "h": 200},
     )
@@ -82,7 +82,7 @@ def story_stacked_monthly_bars():
 def story_rating_histogram_continuous():
     return (
         chart(MOVIES, axes=True)
-        .flow(partition(by=field("rating").bin(step=0.5), dir="x"))
+        .flow(partition(by=field("rating").bin(Bin.step(0.5)), dir="x"))
         .mark(rect(h=field("rating").count(), fill="steelblue", inset=0.5)),
         {"w": 560, "h": 200},
     )

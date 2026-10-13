@@ -10,6 +10,7 @@ import {
   allExamples,
   validate,
   checkStrategy,
+  checkBin,
   encodeIR,
   decodeNonFinite,
   FRONTEND_IR_JSON_SCHEMA,
@@ -484,9 +485,9 @@ for (const [name, partition] of [
   ["no partition", undefined],
   ["a Calendar value", { unit: "month", step: 3 }],
   ["a week start", { unit: "week", step: 1, start: "sunday" }],
-  ["a step", { step: 0.5 }],
-  ["a threshold count", { thresholds: 20 }],
-  ["threshold edges", { thresholds: [1, 2, 5] }],
+  ["a step", { kind: "step", size: 0.5 }],
+  ["a threshold count", { kind: "thresholds", thresholds: 20 }],
+  ["threshold edges", { kind: "thresholds", thresholds: [1, 2, 5] }],
 ] as const) {
   const r = validate(binBy(partition));
   check(
@@ -497,11 +498,16 @@ for (const [name, partition] of [
 }
 for (const [name, partition] of [
   ["an unknown unit", { unit: "fortnight" }],
-  ["a step and thresholds", { step: 1, thresholds: 10 }],
-  ["a non-numeric step", { step: "1" }],
-  ["a zero step", { step: 0 }],
+  ["a step with thresholds", { kind: "step", size: 1, thresholds: 10 }],
+  ["a non-numeric step", { kind: "step", size: "1" }],
+  ["a zero step", { kind: "step", size: 0 }],
+  ["a threshold count below 1", { kind: "thresholds", thresholds: 0 }],
+  ["a non-numeric edge", { kind: "thresholds", thresholds: [1, "2"] }],
   ["a Calendar value with no unit", { step: 1, start: "sunday" }],
   ["the old flat thresholds", 10],
+  ["the untagged step", { step: 0.5 }],
+  ["the untagged thresholds", { thresholds: 20 }],
+  ["a bin of two fields", { kind: "hex", radius: 1 }],
 ] as const) {
   check(`bin with ${name} rejected`, !validate(binBy(partition)).valid);
 }
@@ -528,7 +534,10 @@ for (const [name, partition] of [
 
 // partition's `by`: one binned key with a `dir`, or a binned struct
 // (#1059). A key per axis is two partitions on the wire.
-const binned = (name: string, partition: unknown = { step: 1 }) => ({
+const binned = (
+  name: string,
+  partition: unknown = { kind: "step", size: 1 }
+) => ({
   type: "field",
   name,
   ops: [{ op: "bin", partition }],
@@ -554,6 +563,21 @@ for (const [name, op] of [
     r.valid ? undefined : JSON.stringify(r.errors)
   );
 }
+check(
+  "partition with a struct binned by a field bin rejected",
+  !validate(
+    chart([
+      {
+        type: "partition",
+        by: {
+          type: "struct",
+          fields: { x: "a", y: "b" },
+          ops: [{ op: "bin", partition: { kind: "step", size: 1 } }],
+        },
+      },
+    ])
+  ).valid
+);
 for (const [name, by] of [
   ["a key per axis", { x: binned("a"), y: binned("b") }],
   ["a string per axis", { x: "a", y: "b" }],
@@ -567,7 +591,13 @@ for (const [name, by] of [
 // reports what is wrong with the bin, not that no shape matched.
 {
   const r = validate(
-    chart([{ type: "partition", by: binned("a", { step: "1" }), dir: "x" }])
+    chart([
+      {
+        type: "partition",
+        by: binned("a", { kind: "step", size: "1" }),
+        dir: "x",
+      },
+    ])
   );
   check(
     "partition with a bad bin names the bin",
@@ -967,6 +997,10 @@ console.log("\n# Strategies");
     ["Curve", { kind: "monotone" }],
     ["Curve", { kind: "arc", direction: "down" }],
     ["Curve", { kind: "perfectArrows", bow: 0.3, padEnd: 4 }],
+    ["Bin", { kind: "step", size: 0.5 }],
+    ["Bin", { kind: "thresholds", thresholds: 20 }],
+    ["Bin", { kind: "thresholds", thresholds: [0, 5, 10] }],
+    ["Bin", { kind: "hex", radius: 1 }],
   ];
   for (const [family, value] of accepts) {
     const why = thrown(family, value);
@@ -989,6 +1023,11 @@ console.log("\n# Strategies");
       ["Curve", { type: "monotone" }, /unknown kind undefined/],
       ["Curve", { kind: "arc", direction: "left" }, /direction/],
       ["Curve", { kind: "linear", options: {} }, /unknown field "options"/],
+      ["Bin", { kind: "step", size: 0 }, /above 0/],
+      ["Bin", { kind: "step", size: Infinity }, /finite/],
+      ["Bin", { kind: "step" }, /size/],
+      ["Bin", { step: 1 }, /unknown kind undefined/],
+      ["Bin", { kind: "thresholds", thresholds: 0 }, /at least 1/],
     ];
   for (const [family, value, pattern] of rejects) {
     const why = thrown(family, value);
@@ -998,6 +1037,45 @@ console.log("\n# Strategies");
       why
     );
   }
+
+  // A Bin kind is valid only on its key, and the error names the key that
+  // takes it.
+  const binThrown = (key: "field" | "struct", value: unknown): string => {
+    try {
+      checkBin(key, value, "where");
+      return "";
+    } catch (e) {
+      return (e as Error).message;
+    }
+  };
+  check(
+    "checkBin accepts a field bin on a field",
+    binThrown("field", { kind: "step", size: 1 }) === ""
+  );
+  check(
+    "checkBin accepts a struct bin on a struct",
+    binThrown("struct", { kind: "hex", radius: 1 }) === ""
+  );
+  {
+    const why = binThrown("field", { kind: "hex", radius: 1 });
+    check(
+      "checkBin rejects Bin.hex on a field, naming struct",
+      /Bin\.hex bins two fields/.test(why) && why.includes("struct({ x, y })"),
+      why
+    );
+  }
+  {
+    const why = binThrown("struct", { kind: "step", size: 1 });
+    check(
+      "checkBin rejects Bin.step on a struct, naming field",
+      /Bin\.step bins one field/.test(why) && why.includes("field(x).bin"),
+      why
+    );
+  }
+  check(
+    "checkBin checks the params",
+    /above 0/.test(binThrown("field", { kind: "step", size: -1 }))
+  );
 
   // The validator walks a strategy option the same way.
   const doc = (tile: unknown) =>

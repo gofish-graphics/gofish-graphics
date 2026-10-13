@@ -130,7 +130,8 @@ export type {
 } from "./ast/calendar";
 export type { TimeRowOption } from "./ast/axes/timeRows";
 // Cells (#1058): what `field(x).bin(partition)` maps each value to. A
-// partition is a Calendar value, `{ step }`, or `{ thresholds }`.
+// partition is a Calendar value, `Bin.step(size)`, or
+// `Bin.thresholds(countOrEdges)`.
 export type {
   Cell,
   Partition,

@@ -1,6 +1,6 @@
 """Equivalent of FieldExpr.stories.tsx — Tests/Field Expression Pipeline."""
 
-from gofish import chart, spread, stack, rect, ribbon, field
+from gofish import chart, spread, stack, rect, ribbon, field, Bin
 
 # Deliberately out-of-alphabetical order (C, A, B) so a correct
 # `field("x").sort("v")` visibly reorders the bars ascending by `v`.
@@ -188,7 +188,7 @@ def story_shared_bins_across_groups():
         chart(_GROUPED_AGES, axes=True)
         .flow(
             spread(by="group", dir="y", spacing=20),
-            spread(by=field("age").bin(thresholds=10), dir="x", spacing=2),
+            spread(by=field("age").bin(Bin.thresholds(10)), dir="x", spacing=2),
         )
         .mark(rect(w=30, h=field("age").count())),
         {"w": 500, "h": 300},
