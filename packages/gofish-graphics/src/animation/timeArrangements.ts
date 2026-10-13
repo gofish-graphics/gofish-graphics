@@ -61,7 +61,11 @@ export type StaggerOptions = {
   dwell?: number;
   /** Split the children by this key and take the groups in its order;
    *  children with equal keys start together. Without it each child is its
-   *  own group, in layout order. */
+   *  own group, in layout order. In an operator's `update` (a staggered
+   *  move between keyframes) the MARKS under the operator are split by it,
+   *  so a child whose marks disagree on the key is no error: R2D3's
+   *  histogram staggers each dot by its own elevation under the bins.
+   *  PROTOTYPE: `enter` still splits whole children. */
   by?: SplitBy;
   /** Which group starts first. Default `"first"`. */
   from?: StaggerFrom;

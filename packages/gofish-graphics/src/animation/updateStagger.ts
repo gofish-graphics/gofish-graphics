@@ -38,10 +38,23 @@ type Stagger = {
  *  stagger, and which of its groups holds the mark. */
 export type UpdateSlot = { stagger: Stagger; group: number };
 
-/** Each staggering operator node's children, by the slot each one holds. */
+/** Each staggering operator node's marks, by the slot each one holds. */
 const slotsByOperator = new WeakMap<GoFishNode, Map<GoFishNode, UpdateSlot>>();
 
-/** The update slots of an operator node's children, grouped once. */
+/** The marks (leaves) under a node. */
+const leavesOf = (node: GoFishNode): GoFishNode[] => {
+  const kids = node.children.filter(
+    (c): c is GoFishNode => c instanceof GoFishNode
+  );
+  return kids.length === 0 ? [node] : kids.flatMap(leavesOf);
+};
+
+/** The update slots of the marks under an operator node, grouped once.
+ *  Without `by`, each child is a group and its marks share its slot. With
+ *  `by`, the MARKS are split by it (R2D3: a histogram's dots staggered by
+ *  their own elevation, below the bins the operator splits into); a child
+ *  whose rows agree on `by` puts all its marks in one group, so this is the
+ *  children-grouping it was before wherever that one was defined. */
 function slotsOf(
   node: GoFishNode,
   spec: ArrangementSpec
@@ -52,7 +65,18 @@ function slotsOf(
       (c): c is GoFishNode => c instanceof GoFishNode
     );
     const { by, ...arrangement } = spec;
-    const groups = [...groupEntries(kids, rowsOf, by).values()];
+    // With `by`, only marks that draw rows are split: chrome under the
+    // operator (its axis labels) has no value of `by` and does not move.
+    const groups =
+      by === undefined
+        ? kids.map(leavesOf)
+        : [
+            ...groupEntries(
+              kids.flatMap(leavesOf).filter((l) => rowsOf(l).length > 0),
+              rowsOf,
+              by
+            ).values(),
+          ];
     const stagger: Stagger = {
       arrangement,
       groups: groups.length,
@@ -60,7 +84,7 @@ function slotsOf(
     };
     slots = new Map(
       groups.flatMap((members, group) =>
-        members.map((kid) => [kid, { stagger, group }] as const)
+        members.map((leaf) => [leaf, { stagger, group }] as const)
       )
     );
     slotsByOperator.set(node, slots);
@@ -69,14 +93,16 @@ function slotsOf(
 }
 
 /** The update slot of a keyframe mark: the nearest operator above it whose
- *  `.transition({ update })` arranges its children, and which of those
- *  children holds the mark. `undefined` when nothing above it staggers. */
+ *  `.transition({ update })` arranges what is under it, and which group
+ *  holds the mark. `undefined` when nothing above it staggers. */
 export function updateSlotOf(mark: GoFishNode): UpdateSlot | undefined {
   for (let n: GoFishNode = mark; n.parent instanceof GoFishNode; ) {
     const parent: GoFishNode = n.parent;
     const record = nodeTransition(parent);
     if (record?.kind === "operator" && record.update !== undefined) {
-      return slotsOf(parent, record.update).get(n);
+      // A moving mark may be a composite (a bar and its label): it moves
+      // with its first mark's group.
+      return slotsOf(parent, record.update).get(leavesOf(mark)[0]);
     }
     n = parent;
   }
