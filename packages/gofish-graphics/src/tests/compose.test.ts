@@ -16,25 +16,29 @@ function check(name: string, ok: boolean): void {
 async function main() {
   console.log("\n# compose operator fragments");
 
-  const addOne = derive((value: number) => value + 1);
-  const stringify = derive((value: number) => `value:${value}`);
-  const fragment: Operator<number, string> = compose(addOne, stringify);
-  const finalMark = ((value: string) => value) as unknown as Mark<string>;
+  type N = { v: number };
+  type S = { s: string };
+  const addOne = derive((rows: N[]) => rows.map(({ v }) => ({ v: v + 1 })));
+  const stringify = derive((rows: N[]) =>
+    rows.map(({ v }) => ({ s: `value:${v}` }))
+  );
+  const fragment: Operator<N[], S[]> = compose(addOne, stringify);
+  const finalMark = ((rows: S[]) => rows[0].s) as unknown as Mark<S[]>;
   const composedMark = await fragment(finalMark);
 
   check(
     "operators run left-to-right",
-    ((await composedMark(2)) as unknown) === "value:3"
+    ((await composedMark([{ v: 2 }])) as unknown) === "value:3"
   );
 
-  const identity = compose<string>();
+  const identity = compose<S[]>();
   check("empty compose is the identity", (await identity(finalMark)) === finalMark);
 
   const nested = compose(addOne, compose(addOne, stringify));
   const nestedMark = await nested(finalMark);
   check(
     "nested fragments preserve order",
-    ((await nestedMark(2)) as unknown) === "value:4"
+    ((await nestedMark([{ v: 2 }])) as unknown) === "value:4"
   );
 
   const spec = chart([{ category: "A" }])

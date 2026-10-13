@@ -7,8 +7,9 @@
   it resolves at layout time against the name tree, hygienically scoped (see
   [scoping](#hygienic-scoping)).
 - **As chart data** — `chart(ref("maxBar")).mark(text(...))` — it resolves at
-  build time against the named-layer registry and stands in for the one node
-  registered under that name.
+  build time against the named-layer registry to a list of one ref, the node
+  registered under that name. Like all chart data it is a list; being singular
+  is a check that exactly one node matched.
 
 `select_all(name)` is the **plural** chart-data verb: it returns an **array of
 refs**, one per node a named mark produced (node-unit; aggregate or not, no
@@ -38,7 +39,7 @@ layer([
 ## Signature
 
 ```python
-ref(name: str) -> Ref            # singular; resolves to exactly one node
+ref(name: str) -> Ref            # singular; as chart data, a list of exactly one ref
 select_all(name: str) -> list[Ref]  # one ref per matching node
 ```
 
@@ -58,7 +59,7 @@ When you pass `ref(name)` as chart data it must resolve to **exactly one** node:
   reference refuses to silently pick one.
 
 ```python
-chart(ref("kpi")).mark(text(text="peak"))  # one ref; raises on 0 or >1 nodes
+chart(ref("kpi")).mark(text(text="peak"))  # a list of one ref; raises on 0 or >1 nodes
 ```
 
 ## Node-unit selection

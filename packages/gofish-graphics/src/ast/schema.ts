@@ -4,6 +4,7 @@
 
 import type { StackOrigin } from "./constraints/distribute";
 import { loadTemporal, temporal } from "./calendar";
+import { INSTANT } from "./measure";
 
 /**
  * Column types (#984): `chart(data, { schema })` declares, per column, the
@@ -23,14 +24,20 @@ import { loadTemporal, temporal } from "./calendar";
  *    calendar in a time zone. Declared with `Schema.time()`, or inferred from
  *    JS `Date` values. The values become epoch milliseconds (UTC) when the
  *    schema is applied, and an axis over them is a time axis whose ticks are
- *    calendar cells (calendar.ts). A time has no zero. Its unit is an
- *    instant, so two time columns may share an axis.
+ *    calendar cells (calendar.ts). A time has no zero. `Schema.time()` also
+ *    writes its unit, the instant, so two time columns may share an axis.
  *  - {@link HasUnit}: the column's values are amounts. Declared with
- *    `Schema.unit(unit)`, which says what unit they are in; without it a
- *    column's unit is unknown and unifies with any other (`measure.ts`). A
- *    transform writes it for the columns it makes: `bin()` says its
- *    `start`/`end`/`size` are amounts of its source column's quantity, in
- *    the source's unit, and its `count` is a count.
+ *    `Schema.unit(unit)` (or `.unit(unit)` after another builder), which
+ *    says what unit they are in; without it a
+ *    column's unit is unknown and unifies with any other (`measure.ts`).
+ *  - {@link HasQuantity}: what the column's values are amounts of, its
+ *    quantity, when that is not the column's name. Declared with
+ *    `Schema.quantity(name)` (or `.quantity(name)` after another builder).
+ *    The quantity titles the axis and names the unit variable.
+ *
+ * A transform writes these for the columns it makes: `bin()` says its
+ * `start`/`end`/`size` are amounts of its source column's quantity, in the
+ * source's unit, and its `count` is a count.
  *
  * A column type is a record keyed by class name, so a later class (`HasZero`,
  * `HasCycle`, ...) is one more optional key. The record is also the wire form:
@@ -63,16 +70,24 @@ export type HasMidpoint = { at: number };
  *  starts at local midnight) and how labels read. An instant has no zero. */
 export type HasCalendar = { zone: string };
 
-/** The class of a column whose values are amounts of a quantity:
+/** The class of a column whose values are amounts in a declared unit:
  *
- *  - `unit`: the declared unit (`Schema.unit("USD")`). Two declared units
- *    that differ never share an axis. Absent: the unit is unknown, a unit
- *    variable that unifies with any unit (`measure.ts`).
- *  - `quantity`: the name of the quantity, when it is not the column's own
- *    name: `bin()`'s `start` is an amount of its source column's quantity.
- *    The quantity names the axis title and the unit variable.
+ *  - `unit`: the unit's name (`Schema.unit("USD")`). Two units are the same
+ *    when their names are equal, and two different units never share an
+ *    axis. A column without this class has an unknown unit, a unit variable
+ *    that unifies with any unit (`measure.ts`).
+ *  - `symbol`: what an axis title appends to show the unit, "Pay (USD)".
+ *    `Schema.unit(u)` writes `u`. The engine's own units (the "count" of
+ *    `bin()`'s `count`) have none, so their axes add nothing.
  */
-export type HasUnit = { unit?: string; quantity?: string };
+export type HasUnit = { unit: string; symbol?: string };
+
+/** The class of a column whose values are amounts of the quantity `name`
+ *  (`Schema.quantity("Pay")`), when that is not the column's own name.
+ *  Columns of one quantity share one unit variable, and the quantity titles
+ *  the axis: `bin()`'s `start` is an amount of its source column's
+ *  quantity, and the five summary columns of a box plot can all be "Pay". */
+export type HasQuantity = { name: string };
 
 /** A column's type: the classes it has, keyed by class name. */
 export type ColumnType = {
@@ -80,6 +95,7 @@ export type ColumnType = {
   HasMidpoint?: HasMidpoint;
   HasCalendar?: HasCalendar;
   HasUnit?: HasUnit;
+  HasQuantity?: HasQuantity;
 };
 
 /** Whether `v` is a time column's value as the engine reads it: epoch
@@ -88,7 +104,8 @@ const isEpochMs = (v: unknown): boolean =>
   v == null || (typeof v === "number" && Number.isFinite(v));
 
 /** Which values each class accepts as they stand, without reinterpreting
- *  them. A missing value (null, undefined) fits every class.
+ *  them, given the class's own record. A missing value (null, undefined)
+ *  fits every class.
  *
  *  - `HasCalendar`: an instant: epoch milliseconds (a finite number) or a
  *    valid `Date`. A `Date` is an instant, so turning it into epoch
@@ -98,36 +115,62 @@ const isEpochMs = (v: unknown): boolean =>
  *    the levels still fits, so the order stays and its stray-level error
  *    fires where the order is used.
  *  - `HasMidpoint`: anything; its values are its order's.
- *  - `HasUnit`: numbers, the amounts the unit measures. */
-const ACCEPTS: { [K in keyof ColumnType]-?: (v: unknown) => boolean } = {
-  HasCalendar: (v) =>
-    isEpochMs(v) || (v instanceof Date && Number.isFinite(v.getTime())),
+ *  - `HasUnit`: numbers, the amounts the unit measures. In the instant
+ *    unit, also a valid `Date`, which is an instant (see `HasCalendar`).
+ *  - `HasQuantity`: anything; a name says nothing about the values. */
+const ACCEPTS: {
+  [K in keyof ColumnType]-?: (
+    v: unknown,
+    c: NonNullable<ColumnType[K]>
+  ) => boolean;
+} = {
+  HasCalendar: (v) => isEpochMs(v) || isDate(v),
   HasOrder: (v) => v == null || typeof v === "string" || typeof v === "number",
   HasMidpoint: () => true,
-  HasUnit: (v) => v == null || typeof v === "number",
+  HasUnit: (v, { unit }) =>
+    v == null || typeof v === "number" || (unit === INSTANT.unit && isDate(v)),
+  HasQuantity: () => true,
 };
+
+/** Whether `v` is a valid `Date`. */
+const isDate = (v: unknown): boolean =>
+  v instanceof Date && Number.isFinite(v.getTime());
 
 const CLASSES = Object.keys(ACCEPTS) as (keyof ColumnType)[];
 
-/** Whether one value fits a column type as it stands, as a predicate built
- *  once per column: every class the type has accepts it ({@link ACCEPTS}). */
-function fitsType(type: ColumnType): (v: unknown) => boolean {
-  const accepts = CLASSES.filter((k) => type[k] !== undefined).map(
-    (k) => ACCEPTS[k]
+/** The first class of `type` that does not accept `v` ({@link ACCEPTS}). */
+const rejectingClass = (
+  type: ColumnType,
+  v: unknown
+): keyof ColumnType | undefined =>
+  CLASSES.find(
+    (k) =>
+      type[k] !== undefined &&
+      !(ACCEPTS[k] as (v: unknown, c: unknown) => boolean)(v, type[k])
   );
-  return (v) => accepts.every((accept) => accept(v));
-}
+
+/** Whether one value fits a column type as it stands: every class the type
+ *  has accepts it ({@link ACCEPTS}). */
+const fitsType =
+  (type: ColumnType) =>
+  (v: unknown): boolean =>
+    rejectingClass(type, v) === undefined;
 
 /** The column types of a dataset, keyed by column name. */
 export type ColumnTypes = Record<string, ColumnType>;
 
 /**
  * A column type under construction. Each builder method adds one class, and a
- * method that needs a class already present says so in its `this` type, so a
- * missing prerequisite is a type error: `.diverging()` needs `HasOrder`.
+ * method that needs a class already present, or one absent, says so in its
+ * `this` type, so breaking the rule is a type error: `.diverging()` needs
+ * `HasOrder`, and `.unit()` needs no `HasUnit` yet. The constructor checks
+ * that an order's levels fit the column's other classes
+ * ({@link checkLevelsFit}).
  */
 export class ColumnSchema<C extends ColumnType = ColumnType> {
-  constructor(public readonly type: C) {}
+  constructor(public readonly type: C) {
+    checkLevelsFit("schema: the column", type);
+  }
 
   /** Give the column a midpoint (`HasMidpoint`) at `midpoint`, in edge
    *  coordinates over its order. The default is the middle of the order,
@@ -143,6 +186,24 @@ export class ColumnSchema<C extends ColumnType = ColumnType> {
     return new ColumnSchema({ ...this.type, HasMidpoint: { at } });
   }
 
+  /** Say what the column's values are amounts of (`HasQuantity`): the
+   *  quantity `name`, which titles the axis in place of the column's name. */
+  quantity(name: string): ColumnSchema<C & { HasQuantity: HasQuantity }> {
+    return new ColumnSchema({ ...this.type, HasQuantity: { name } });
+  }
+
+  /** Say what unit the column's values are in (`HasUnit`): the unit `unit`,
+   *  whose symbol follows the quantity in the axis title, "Pay (USD)". A
+   *  column has one unit, so a builder that already has one (`Schema.time()`
+   *  writes the instant) has no `.unit()` ({@link checkNoUnit}). */
+  unit(
+    this: ColumnSchema<C & { HasUnit?: never }>,
+    unit: string
+  ): ColumnSchema<C & { HasUnit: HasUnit }> {
+    checkNoUnit(".unit: the column", this.type);
+    return new ColumnSchema({ ...this.type, HasUnit: { unit, symbol: unit } });
+  }
+
   toJSON(): C {
     return this.type;
   }
@@ -154,22 +215,29 @@ export const Schema = {
   ordered(levels: readonly Level[]): ColumnSchema<{ HasOrder: HasOrder }> {
     return new ColumnSchema({ HasOrder: { levels: [...levels] } });
   },
-  /** A column whose values are instants (`HasCalendar`), read on the
-   *  calendar of `zone` (an IANA time zone, `"UTC"` by default). A value may
-   *  be an ISO 8601 string ("2024-03-05" is the start of that day in `zone`;
-   *  a string without an offset is a wall-clock time in `zone`), a `Date`,
-   *  or epoch milliseconds. */
+  /** A column whose values are instants (`HasCalendar`) in the instant unit
+   *  (`HasUnit`), read on the calendar of `zone` (an IANA time zone, `"UTC"`
+   *  by default). A value may be an ISO 8601 string ("2024-03-05" is the
+   *  start of that day in `zone`; a string without an offset is a wall-clock
+   *  time in `zone`), a `Date`, or epoch milliseconds. */
   time({ zone = "UTC" }: { zone?: string } = {}): ColumnSchema<{
     HasCalendar: HasCalendar;
+    HasUnit: HasUnit;
   }> {
-    return new ColumnSchema({ HasCalendar: { zone } });
+    return new ColumnSchema({ HasCalendar: { zone }, HasUnit: INSTANT });
   },
   /** A column whose values are amounts in the unit `unit` (`HasUnit`), an
    *  opaque name such as `"USD"` or `"mm"`. Columns in the same unit may
    *  share an axis; two different units on one axis are an error. A column
    *  with no unit declared may share an axis with any other. */
   unit(unit: string): ColumnSchema<{ HasUnit: HasUnit }> {
-    return new ColumnSchema({ HasUnit: { unit } });
+    return new ColumnSchema({}).unit(unit);
+  },
+  /** A column whose values are amounts of the quantity `name`
+   *  (`HasQuantity`), e.g. `"Pay"`. The quantity titles the axis in place of
+   *  the column's name, and columns of one quantity share one unit. */
+  quantity(name: string): ColumnSchema<{ HasQuantity: HasQuantity }> {
+    return new ColumnSchema({}).quantity(name);
   },
 };
 
@@ -177,12 +245,26 @@ export const Schema = {
  *  it writes (the wire form). */
 export type SchemaEntry = ColumnSchema<ColumnType> | ColumnType;
 
-/** The record a schema entry stands for, checked for the prerequisites the
- *  builder enforces in its types (a record from the wire, as Python sends it,
- *  has no types) and for a midpoint on its order, with the same check
- *  `.diverging()` runs. */
+/** The record a schema entry stands for, checked for the rules the builder
+ *  enforces (a record from the wire, as Python sends it, has no types): the
+ *  record is read as the builders' writes, so `HasCalendar` writes the
+ *  instant unit as `Schema.time()` does, and a different `HasUnit` is a
+ *  second unit ({@link checkNoUnit}). Then its levels must fit
+ *  ({@link checkLevelsFit}), and a midpoint needs an order and must lie on
+ *  it, with the same check `.diverging()` runs. */
 export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
-  const type = entry instanceof ColumnSchema ? entry.type : entry;
+  const who = `schema: column "${column}"`;
+  const { HasUnit: unit, ...rest } =
+    entry instanceof ColumnSchema ? entry.type : entry;
+  const type: ColumnType =
+    rest.HasCalendar !== undefined
+      ? { ...Schema.time(rest.HasCalendar).type, ...rest }
+      : rest;
+  if (unit !== undefined && unit.unit !== type.HasUnit?.unit) {
+    checkNoUnit(who, type);
+    type.HasUnit = unit;
+  }
+  checkLevelsFit(who, type);
   if (type.HasMidpoint === undefined) return type;
   if (!type.HasOrder) {
     throw new Error(
@@ -193,6 +275,33 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   }
   checkMidpointOnOrder(type.HasOrder.levels, type.HasMidpoint.at);
   return type;
+}
+
+/** The one-unit rule: a column has one unit, so a column type that already
+ *  has `HasUnit` (`Schema.time()` writes the instant) takes no other.
+ *  Python's `ColumnSchema.unit` raises the same message. */
+function checkNoUnit(who: string, type: ColumnType): void {
+  if (type.HasUnit === undefined) return;
+  throw new Error(
+    `${who} already has the unit ${JSON.stringify(type.HasUnit.unit)}.`
+  );
+}
+
+/** The rule that an order's levels fit the column's other classes: each
+ *  level is one of the column's values, so every class must accept it
+ *  ({@link ACCEPTS}). Text levels are not amounts, so
+ *  `Schema.ordered(["low", "high"]).unit("pts")` throws, while a Likert
+ *  scale's levels `[1, 2, 3, 4, 5]` take a unit. Python's `ColumnSchema`
+ *  raises the same message. */
+function checkLevelsFit(who: string, type: ColumnType): void {
+  for (const level of type.HasOrder?.levels ?? []) {
+    const rejects = rejectingClass(type, level);
+    if (rejects !== undefined) {
+      throw new Error(
+        `${who} has the level ${showLevel(level)}, which is not a value ${rejects} accepts.`
+      );
+    }
+  }
 }
 
 /** The loud error for a midpoint off its order: `at` must be a finite number
@@ -248,7 +357,7 @@ export const setColumnTypes = <T>(data: T, types: ColumnTypes): T => {
  *  column `target` does not type itself. A split leaf or a filter's result is
  *  a fresh array, so it has to be told. Without it, a mark channel over a
  *  split leaf would lose its column's order, time, and unit (a bin's `start`
- *  would fall back to the quantity "start", see `resolveQuantity`). */
+ *  would fall back to the quantity "start", see `resolveColumn`). */
 export const copyColumnTypes = <T>(target: T, source: unknown): T => {
   const types = getColumnTypes(source);
   if (types === undefined) return target;
@@ -339,7 +448,7 @@ export async function applySchema<T>(
     for (const column of unresolved) {
       const v = r[column];
       if (v == null) continue;
-      if (v instanceof Date) types[column] = { HasCalendar: { zone: "UTC" } };
+      if (v instanceof Date) types[column] = Schema.time().type;
       unresolved.delete(column);
     }
   }

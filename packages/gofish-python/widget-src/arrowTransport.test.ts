@@ -215,9 +215,9 @@ function testTimeColumnsDecodeAsTimes(): boolean {
     rows[1].n === 2 &&
     JSON.stringify(types) ===
       JSON.stringify({
-        ny: { HasCalendar: { zone: "America/New_York" } },
-        naive: { HasCalendar: { zone: "UTC" } },
-        d: { HasCalendar: { zone: "UTC" } },
+        ny: Schema.time({ zone: "America/New_York" }).type,
+        naive: Schema.time().type,
+        d: Schema.time().type,
       });
   console.log(
     ok ? "  ✓ PASSED" : `  ✗ FAILED ${JSON.stringify({ rows, types })}`
@@ -414,9 +414,9 @@ function testNestedTimesDecodeAsEpochMs(): boolean {
     rows[0].points[1] === null &&
     JSON.stringify(Serialize.getColumnTypes(rows[0].points)) ===
       JSON.stringify({
-        naive: { HasCalendar: { zone: "UTC" } },
-        ny: { HasCalendar: { zone: "America/New_York" } },
-        d: { HasCalendar: { zone: "UTC" } },
+        naive: Schema.time().type,
+        ny: Schema.time({ zone: "America/New_York" }).type,
+        d: Schema.time().type,
       }) &&
     JSON.stringify(rows[0].stamps) === JSON.stringify([ms, null]) &&
     rows[0].at.naive === ms &&
@@ -432,7 +432,7 @@ function testNestedTimesDecodeAsEpochMs(): boolean {
 }
 
 /** A callback's decoded rows are typed before anything reads them: a lambda
- *  accessor's result and a derive's single-datum result hold epoch ms, not
+ *  accessor's result and a derive's result (always a list) hold epoch ms, not
  *  the decode's wall-clock strings, and `derive(fn, { schema })` reads them
  *  in its zone. */
 async function testCallbackResultsAreTyped(): Promise<boolean> {
@@ -456,7 +456,7 @@ async function testCallbackResultsAreTyped(): Promise<boolean> {
   // A Python accessor is resolved over its rows in one batch call.
   const accessor = Serialize.unwrapOpts({ __gofish_lambda: "f" }, bridge);
   const [fromAccessor] = await accessor[Serialize.RESOLVE_ROWS]([{ x: 1 }]);
-  const single = async (schema?: Record<string, unknown>) => {
+  const derived = async (schema?: Record<string, unknown>) => {
     let seen: any;
     const op = Serialize.rebuild(
       "operator",
@@ -469,16 +469,19 @@ async function testCallbackResultsAreTyped(): Promise<boolean> {
         seen = d;
         return undefined;
       })
-    )({ x: 1 });
+    )([{ x: 1 }]);
     return seen;
   };
-  const utc = await single();
-  const ny = await single({ t: { HasCalendar: { zone: "America/New_York" } } });
+  const utc = await derived();
+  const ny = await derived({
+    t: { HasCalendar: { zone: "America/New_York" } },
+  });
   const ok =
     fromAccessor.t === feb28 &&
-    !Array.isArray(utc) &&
-    utc.t === feb28 &&
-    ny.t === Date.UTC(2024, 1, 28, 18);
+    Array.isArray(utc) &&
+    utc[0].t === feb28 &&
+    Array.isArray(ny) &&
+    ny[0].t === Date.UTC(2024, 1, 28, 18);
   console.log(
     ok
       ? "  ✓ PASSED"

@@ -1,3 +1,5 @@
+import { getColumnTypes, setColumnTypes } from "../schema";
+import { datumOfInput } from "../marks/markResult";
 import { packEnclose } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
 import { boxOfDims } from "../geometry";
@@ -234,32 +236,35 @@ export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
     return basePolygon(opts as any);
   }
   const field = opts.points;
-  const mark = async (d: any) => {
-    const rows: any[] = Array.isArray(d) ? d : [d];
+  const mark = async (rows: any[]) => {
+    const types = getColumnTypes(rows);
     const nodes = await Promise.all(
       rows.map(async (row) => {
         const ring = row?.[field];
+        // Validates the ring COLUMN's value type (a field-bound `points`
+        // column holds coordinate arrays), not the shape of the data.
         if (!Array.isArray(ring)) {
           throw new Error(
             `polygon({ points: "${field}" }): row has no array in field ` +
               `"${field}" — a field-bound \`points\` reads one ring per row.`
           );
         }
-        // Each row is one ordinary `polygon` mark over that row: the mark factory
-        // resolves `fill`/`stroke` against the row exactly as it does for a
-        // literal ring (and as `rect` does), and the `value(...)` ring passes
-        // through as the data-bound reading.
+        // Each row is one ordinary `polygon` mark over that row's one-row
+        // group `[row]`, tagged with the column types like a split leaf: the
+        // mark factory resolves `fill`/`stroke` against
+        // the row exactly as it does for a literal ring (and as `rect` does),
+        // and the `value(...)` ring passes through as the data-bound reading.
         const node = (await basePolygon({
           ...opts,
           points: value(ring as Ring),
-        } as any)(row)) as GoFishNode;
+        } as any)(types ? setColumnTypes([row], types) : [row])) as GoFishNode;
         node.name("");
         return node;
       })
     );
     if (nodes.length === 1) return nodes[0];
     const group = (await Layer({}, nodes)) as GoFishNode;
-    group.datum = d;
+    group.datum = datumOfInput(rows);
     return group;
   };
   const result = nameableMark(mark);

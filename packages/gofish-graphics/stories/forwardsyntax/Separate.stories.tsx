@@ -74,9 +74,9 @@ export const MixedRadii: StoryObj = {
           overlap: Overlap.separate({ padding: 1 }),
         })
       )
-      .mark((d: (typeof weighed)[number]) =>
+      .mark((d: typeof weighed) =>
         circle({
-          r: 2 + ((d["Body Mass (g)"] ?? 0) - 2700) / 600,
+          r: 2 + ((d[0]["Body Mass (g)"] ?? 0) - 2700) / 600,
           fill: "Species",
         })(d)
       )

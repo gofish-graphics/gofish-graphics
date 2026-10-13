@@ -20,6 +20,7 @@ import { polar } from "../ast/coordinateTransforms/polar";
 import { Rect } from "../ast/shapes/rect";
 import { Ellipse } from "../ast/shapes/ellipse";
 import { DatumValueImpl, baseEmbedded } from "../ast/data";
+import { fresh } from "./testHelpers";
 
 /** A data value read from column `name`, i.e. an amount of that quantity. */
 const q = (v: number, name: string) => new DatumValueImpl(v, { name });
@@ -53,7 +54,9 @@ async function embedOf(
 }
 
 console.log("# embedding: baseEmbedded predicate (coord-free half)");
-{
+// Called on its own, outside any walk: it compares unknown units, so it
+// needs a union-find of its own.
+fresh(() => {
   ok("data size embeds", baseEmbedded({ size: q(5, "amount") }) === true);
   ok("pixel (number) size does not embed", baseEmbedded({ size: 10 }) === false);
   ok("unsized embeds (nest-growth case)", baseEmbedded({}) === true);
@@ -65,7 +68,7 @@ console.log("# embedding: baseEmbedded predicate (coord-free half)");
     "min in the same measure still embeds",
     baseEmbedded({ size: q(5, "amount"), min: q(2, "amount") }) === true
   );
-}
+});
 
 console.log("# embedding: Route B in context");
 (async () => {

@@ -29,9 +29,10 @@ derive(fn, { schema });
 
 ## Parameters
 
-`fn` (required, `(d: T) => U | Promise<U>`) receives the data at this point
-in the flow (inside `.flow()`, the current group's rows) and returns what the
-rest of the pipeline sees. It may be `async`. The options:
+`fn` (required, `(rows: T[]) => U[] | Promise<U[]>`) receives the rows at
+this point in the flow (inside `.flow()`, the current group's rows) and returns
+the list of rows the rest of the pipeline sees. It returns a list even for one
+row (`(d) => [d[0]]`). It may be `async`. The options:
 
 ::: gofish-ref derive
 :::
@@ -115,7 +116,9 @@ error. See [`Schema.unit`](/js/api/core/schema).
   });
   ```
 
-An axis is titled by the names of its columns, never by a unit.
+An axis is titled by the quantities of its columns (each column's name,
+unless its schema declares a quantity), then a declared unit in parentheses:
+`"Pay (USD)"`. See [`Schema.quantity`](/js/api/core/schema).
 
 If an axis combines two different units, you have two remedies:
 

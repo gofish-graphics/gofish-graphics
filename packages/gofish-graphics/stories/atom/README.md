@@ -56,11 +56,11 @@ GoFish has no dedicated `gridxy` operator; an Atom layout decomposes into a shor
 | `subgroup: groupby(key)` | `spread({ by: key, dir })` for small multiples, or `.facet({ by, dir })` |
 | `subgroup: bin(key, numBin)` | `derive()` that assigns a bin field (e.g. `Math.floor(age/10)*10`), then `spread({ by: binField })` — see [gap #3](#feature-gaps) |
 | `subgroup: passthrough` | no operator (carry the array through) |
-| `subgroup: flatten` | the terminal `.mark(...)` applied per record; grid wrapping via `derive(rows => chunk(rows, …))` + `spread(dir:"y")` + `spread(dir:"x")` |
+| `subgroup: flatten` | the terminal `.mark(...)` applied per record; grid wrapping via `spread({ by: chunk(…), dir: "y" })` + `spread({ dir: "x" })` |
 | `size: uniform` | a fixed mark size (`circle({ r })`, `rect({ w, h })`) |
 | `size: sum(field)` | `treemap({ size: field })` |
 | `size: count` | per-group count via `groupBy`, then main-axis value-proportional sizing through the σ solve (`rect({ h: "count" })` / `stack`); packed square-unit (2-D) case still awaits cross-scope size coupling ([gap #1](#feature-gaps)) |
-| `aspect_ratio: square / fillX / fillY` | manual grid via `chunk(rows, cols)` (e.g. `cols = ceil(sqrt(n))` for square) ([gap #2](#feature-gaps)) |
+| `aspect_ratio: square / fillX / fillY` | manual grid via `spread({ by: chunk(cols) })` (e.g. `cols = ceil(sqrt(n))` for square) ([gap #2](#feature-gaps)) |
 | `aspect_ratio: maxfill` | `treemap({ tile: squarify() })`, or manual chunking |
 | `direction` (`LRBT`, `BT`, …) + `align` | `spread`'s `dir`, `reverse`, and `alignment` |
 | `sort` | `derive(rows => orderBy(rows, key, dir))` (lodash) |
@@ -109,7 +109,9 @@ around them as noted; these are candidates for new operators.
 2. **Aspect-ratio-driven auto-wrapping.** Atom's `aspect_ratio` (`square`, `maxfill`,
    `fillX`, `fillY`) chooses the grid's row/column counts automatically to hit a target
    shape. GoFish requires the author to pick the wrap width explicitly via
-   `chunk(rows, cols)` (e.g. `Math.ceil(Math.sqrt(n))` to approximate `square`). There is
+   `chunk(cols)` (e.g. `Math.ceil(Math.sqrt(n))` to approximate `square`). A width that
+   depends on the group (TitanicFacet, UnitMosaic) is built as data with lodash
+   `chunk(rows, cols)`, then unwrapped from its one-item group. There is
    no operator that derives the wrap from a desired aspect ratio or the parent box.
 
 3. **Row-preserving binning.** The `bin()` helper in
