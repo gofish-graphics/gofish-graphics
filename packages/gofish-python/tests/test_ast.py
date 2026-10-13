@@ -137,12 +137,12 @@ class TestOperators:
         """`.bin` takes a Calendar value, Bin.step or Bin.thresholds, and
         writes the partition's wire form (camelCase keys, as JS reads them)."""
         assert field("d").bin(Calendar.month.every(3))["ops"] == [
-            {"op": "bin", "partition": {"unit": "month", "step": 3}}
+            {"op": "bin", "partition": {"kind": "month", "step": 3}}
         ]
         assert field("d").bin(Calendar.week(start="sunday"))["ops"] == [
             {
                 "op": "bin",
-                "partition": {"unit": "week", "step": 1, "start": "sunday"},
+                "partition": {"kind": "week", "step": 1, "start": "sunday"},
             }
         ]
         assert field("x").bin(Bin.step(0.5))["ops"] == [
@@ -160,14 +160,14 @@ class TestOperators:
             {
                 "op": "bin",
                 "partition": [
-                    {"unit": "year", "step": 1},
-                    {"unit": "month", "step": 1},
+                    {"kind": "year", "step": 1},
+                    {"kind": "month", "step": 1},
                 ],
             }
         ]
         assert field("d").bin(Calendar.year).bin(Calendar.month)["ops"] == [
-            {"op": "bin", "partition": {"unit": "year", "step": 1}},
-            {"op": "bin", "partition": {"unit": "month", "step": 1}},
+            {"op": "bin", "partition": {"kind": "year", "step": 1}},
+            {"op": "bin", "partition": {"kind": "month", "step": 1}},
         ]
         with pytest.raises(TypeError, match="two or more"):
             field("d").bin([Calendar.month])
@@ -794,15 +794,19 @@ class TestTime:
         }
 
     def test_calendar_wire_form(self):
-        assert Calendar.month == {"unit": "month", "step": 1}
-        assert Calendar.hour.every(6) == {"unit": "hour", "step": 6}
-        assert Calendar.week == {"unit": "week", "step": 1, "start": "monday"}
+        assert Calendar.month == {"kind": "month", "step": 1}
+        assert Calendar.hour.every(6) == {"kind": "hour", "step": 6}
+        assert Calendar.week == {"kind": "week", "step": 1, "start": "monday"}
         assert Calendar.week(start="sunday") == {
-            "unit": "week",
+            "kind": "week",
             "step": 1,
             "start": "sunday",
         }
         assert Calendar.week(start="sunday").every(2)["step"] == 2
+
+    def test_calendar_old_unit_form_is_rejected(self):
+        with pytest.raises(TypeError, match="expected a Calendar value"):
+            field("d").bin({"unit": "month", "step": 1})
 
     def test_calendar_rejects_bad_steps_and_starts(self):
         with pytest.raises(ValueError, match="step must be a whole number"):
@@ -822,7 +826,7 @@ class TestTime:
             .to_ir()
         )
         assert ir["options"]["axes"]["x"]["levels"] == [
-            {"unit": "month", "step": 1},
+            {"kind": "month", "step": 1},
             False,
             True,
         ]

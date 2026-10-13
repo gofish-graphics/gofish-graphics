@@ -49,7 +49,7 @@ axes={"x": {"levels": [Calendar.month, Calendar.year]}}
 | `start`   | `"monday" \| "sunday"` | `Calendar.week(start=...)`: the first day of a week. Default `"monday"`, as in ISO 8601. |
 
 A Calendar value is a dict, its wire form: `Calendar.month.every(3)` is
-`{"unit": "month", "step": 3}`. Custom labels (`.format(fn)` in JS) are
+`{"kind": "month", "step": 3}`. Custom labels (`.format(fn)` in JS) are
 JS-only: a function has no wire form.
 
 ## Behavior

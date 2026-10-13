@@ -115,7 +115,7 @@ def test_partition_serializes_a_binned_key():
     assert d["by"] == {
         "type": "field",
         "name": "date",
-        "ops": [{"op": "bin", "partition": {"unit": "month", "step": 1}}],
+        "ops": [{"op": "bin", "partition": {"kind": "month", "step": 1}}],
     }
 
 

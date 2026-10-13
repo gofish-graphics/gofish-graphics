@@ -483,8 +483,8 @@ const binBy = (partition: unknown) =>
   ]);
 for (const [name, partition] of [
   ["no partition", undefined],
-  ["a Calendar value", { unit: "month", step: 3 }],
-  ["a week start", { unit: "week", step: 1, start: "sunday" }],
+  ["a Calendar value", { kind: "month", step: 3 }],
+  ["a week start", { kind: "week", step: 1, start: "sunday" }],
   ["a step", { kind: "step", size: 0.5 }],
   ["a threshold count", { kind: "thresholds", thresholds: 20 }],
   ["threshold edges", { kind: "thresholds", thresholds: [1, 2, 5] }],
@@ -497,27 +497,29 @@ for (const [name, partition] of [
   );
 }
 for (const [name, partition] of [
-  ["an unknown unit", { unit: "fortnight" }],
+  ["an unknown kind", { kind: "fortnight" }],
   ["a step with thresholds", { kind: "step", size: 1, thresholds: 10 }],
   ["a non-numeric step", { kind: "step", size: "1" }],
   ["a zero step", { kind: "step", size: 0 }],
   ["a threshold count below 1", { kind: "thresholds", thresholds: 0 }],
   ["a non-numeric edge", { kind: "thresholds", thresholds: [1, "2"] }],
-  ["a Calendar value with no unit", { step: 1, start: "sunday" }],
+  ["a Calendar value with no kind", { step: 1, start: "sunday" }],
+  ["the old untagged Calendar form", { unit: "month", step: 1 }],
+  ["a start on a level other than weeks", { kind: "month", start: "sunday" }],
   ["the old flat thresholds", 10],
   ["the untagged step", { step: 0.5 }],
   ["the untagged thresholds", { thresholds: 20 }],
   ["a bin of two fields", { kind: "hex", radius: 1 }],
-  ["a product of one", [{ unit: "month" }]],
+  ["a product of one", [{ kind: "month" }]],
   [
     "a product with a numeric bin",
-    [{ unit: "year" }, { kind: "step", size: 1 }],
+    [{ kind: "year" }, { kind: "step", size: 1 }],
   ],
 ] as const) {
   check(`bin with ${name} rejected`, !validate(binBy(partition)).valid);
 }
 {
-  const r = validate(binBy([{ unit: "year" }, { unit: "month", step: 1 }]));
+  const r = validate(binBy([{ kind: "year" }, { kind: "month", step: 1 }]));
   check(
     "bin with a product of Calendar values accepts",
     r.valid,
@@ -532,8 +534,8 @@ for (const [name, partition] of [
           type: "field",
           name: "d",
           ops: [
-            { op: "bin", partition: { unit: "year" } },
-            { op: "bin", partition: { unit: "month" } },
+            { op: "bin", partition: { kind: "year" } },
+            { op: "bin", partition: { kind: "month" } },
           ],
         },
       },
@@ -642,21 +644,20 @@ for (const [name, by] of [
     JSON.stringify(r.errors)
   );
 }
-// Of a partition's shapes, the one whose required keys it has (a Calendar
-// value's unit) says what is wrong.
+// A partition is one tagged union: an unknown kind is named at its `kind`.
 {
   const r = validate(
     chart([
       {
         type: "partition",
-        by: binned("a", { unit: "fortnight" }),
+        by: binned("a", { kind: "fortnight" }),
         dir: "x",
       },
     ])
   );
   check(
-    "partition with an unknown unit names the unit",
-    !r.valid && r.errors.every((e) => e.path.endsWith(".partition.unit")),
+    "partition with an unknown kind names the kind",
+    !r.valid && r.errors.every((e) => e.path.endsWith(".partition.kind")),
     JSON.stringify(r.errors)
   );
 }
@@ -796,7 +797,7 @@ check(
         type: "spread",
         by: "lake",
         dir: "x",
-        axes: { x: { levels: [false, true, { unit: "year", step: 1 }] } },
+        axes: { x: { levels: [false, true, { kind: "year", step: 1 }] } },
       },
     ])
   ).valid
@@ -804,7 +805,8 @@ check(
 
 for (const [name, levels] of [
   ["a field name", ["weather"]],
-  ["an unknown unit", [{ unit: "decade" }]],
+  ["an unknown kind", [{ kind: "decade" }]],
+  ["the old untagged Calendar form", [{ unit: "year", step: 1 }]],
   ["a list of lists", [[true]]],
 ] as const) {
   check(
@@ -817,7 +819,7 @@ check(
   "the old axis rows option is gone: rejected",
   !validate(
     chart([
-      { type: "spread", axes: { x: { rows: [{ unit: "month" }] } } as any },
+      { type: "spread", axes: { x: { rows: [{ kind: "month" }] } } as any },
     ])
   ).valid
 );

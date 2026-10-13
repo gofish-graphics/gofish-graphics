@@ -28,7 +28,7 @@
  * since weeks do not nest in months.
  */
 import type { Temporal as TemporalNS } from "temporal-polyfill";
-import type { Frontend } from "gofish-ir";
+import { Frontend } from "gofish-ir";
 
 // ── Temporal ──────────────────────────────────────────────────────────────
 
@@ -72,28 +72,18 @@ const epochDay = (): TemporalNS.PlainDate =>
 // ── Units ─────────────────────────────────────────────────────────────────
 
 /** The wire form of a Calendar value (what Python sends, and what
- *  `toJSON` writes): the IR's `CalendarPartitionIR`. `start` is only for
- *  weeks. */
+ *  `toJSON` writes): the IR's `CalendarPartitionIR`, `{ kind, step?,
+ *  start? }`, one kind per level. `start` is only for weeks. */
 export type CalendarJSON = Frontend.CalendarPartitionIR;
 
-/** The calendar levels. */
-export type CalendarUnit = CalendarJSON["unit"];
+/** The calendar levels: the kinds of the Calendar family. */
+export type CalendarUnit = CalendarJSON["kind"];
 
 /** The day a week starts on. Monday is the ISO 8601 default (as in polars and
  *  pandas). */
-export type WeekStart = NonNullable<CalendarJSON["start"]>;
-
-/** The calendar levels, finest first. */
-const CALENDAR_UNITS: readonly CalendarUnit[] = [
-  "second",
-  "minute",
-  "hour",
-  "day",
-  "week",
-  "month",
-  "quarter",
-  "year",
-];
+export type WeekStart = NonNullable<
+  Extract<CalendarJSON, { kind: "week" }>["start"]
+>;
 
 /** The level whose cells hold this level's cells: the outer row of a time
  *  axis. A week's parent is the month its start falls in (weeks do not nest
@@ -505,10 +495,10 @@ export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
       );
     }
     return {
-      unit: this.unit,
+      kind: this.unit,
       step: this.step,
       ...(this.start !== undefined ? { start: this.start } : {}),
-    };
+    } as CalendarJSON;
   }
 
   toString(): string {
@@ -529,7 +519,7 @@ export type WeekPartition = CalendarPartition<"week"> &
 function weekPartition(): WeekPartition {
   const make = ({ start }: { start?: WeekStart } = {}) =>
     calendarPartition(
-      { unit: "week", step: 1, start },
+      { kind: "week", step: 1, ...(start !== undefined ? { start } : {}) },
       "Calendar.week"
     ) as CalendarPartition<"week">;
   // A function that is also the default partition: same prototype, same
@@ -582,33 +572,26 @@ export function describe(value: unknown): string {
 }
 
 /** A Calendar value from a builder value or its wire form (Python sends the
- *  wire form). An unknown unit, or a `start` that is not "monday" or
- *  "sunday" or is given for a level other than weeks, is a loud error. */
+ *  wire form), checked against the Calendar family
+ *  (`Frontend.checkStrategy`): an unknown kind, a step below 1, or a `start`
+ *  that is not "monday" or "sunday" or is given for a level other than
+ *  weeks, is a loud error. */
 export function calendarPartition(
   value: CalendarPartition | CalendarJSON,
   where: string
 ): CalendarPartition {
   if (value instanceof CalendarPartition) return value;
-  const v = value as Partial<CalendarJSON> | null;
-  if (
-    v === null ||
-    typeof v !== "object" ||
-    !(CALENDAR_UNITS as readonly string[]).includes(v.unit as string)
-  ) {
-    throw new Error(
-      `${where}: expected a Calendar value (Calendar.month, ` +
-        `Calendar.hour.every(6), ...), got ${describe(value)}.`
-    );
-  }
-  if (v.start !== undefined && v.unit !== "week") {
-    throw new Error(`${where}: only Calendar.week takes a start day.`);
-  }
-  if (v.start !== undefined && v.start !== "monday" && v.start !== "sunday") {
-    throw new Error(
-      `${where}: start must be "monday" or "sunday", not ${describe(v.start)}.`
-    );
-  }
-  return new CalendarPartition(v.unit as CalendarUnit, v.step ?? 1, v.start);
+  Frontend.checkStrategy("Calendar", value, where);
+  return fromWire(value);
+}
+
+/** A Calendar value from its wire form, already checked. */
+export function fromWire(v: CalendarJSON): CalendarPartition {
+  return new CalendarPartition(
+    v.kind,
+    v.step ?? 1,
+    v.kind === "week" ? v.start : undefined
+  );
 }
 
 // ── Ticks ─────────────────────────────────────────────────────────────────

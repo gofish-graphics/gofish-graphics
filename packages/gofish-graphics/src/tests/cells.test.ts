@@ -384,8 +384,8 @@ async function main() {
         {
           op: "bin",
           partition: [
-            { unit: "year", step: 1 },
-            { unit: "month", step: 1 },
+            { kind: "year", step: 1 },
+            { kind: "month", step: 1 },
           ],
         },
       ])
@@ -507,8 +507,8 @@ async function main() {
     check(
       "a chain's wire form is one bin op per bin",
       same(field("d").bin(Calendar.year).bin(Calendar.month).toJSON().ops, [
-        { op: "bin", partition: { unit: "year", step: 1 } },
-        { op: "bin", partition: { unit: "month", step: 1 } },
+        { op: "bin", partition: { kind: "year", step: 1 } },
+        { op: "bin", partition: { kind: "month", step: 1 } },
       ])
     );
     const quarters = chainCells(
@@ -533,7 +533,7 @@ async function main() {
   {
     check(
       "the wire forms check",
-      checkPartition({ unit: "month", step: 3 }, "t") instanceof Object &&
+      checkPartition({ kind: "month", step: 3 }, "t") instanceof Object &&
         checkPartition({ kind: "step", size: 2 }, "t") instanceof StepBin &&
         same(checkPartition({ kind: "step", size: 2 }, "t"), {
           kind: "step",
@@ -556,6 +556,7 @@ async function main() {
       ["a bare number", 10],
       ["the untagged step", { step: 1 }],
       ["the untagged thresholds", { thresholds: 10 }],
+      ["the old untagged Calendar form", { unit: "month", step: 1 }],
     ] as const) {
       check(
         `${name} is an error`,
@@ -581,7 +582,7 @@ async function main() {
     check(
       "a field expression writes its partition's wire form",
       same(field("d").bin(Calendar.month.every(3)).toJSON().ops, [
-        { op: "bin", partition: { unit: "month", step: 3 } },
+        { op: "bin", partition: { kind: "month", step: 3 } },
       ]) &&
         same(field("x").bin(Bin.step(0.5)).toJSON().ops, [
           { op: "bin", partition: { kind: "step", size: 0.5 } },

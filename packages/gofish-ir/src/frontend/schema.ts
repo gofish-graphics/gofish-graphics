@@ -391,21 +391,16 @@ export type AxisOptions =
       levels?: (boolean | CalendarPartitionIR)[];
     };
 
-/** A Calendar value's wire form (`Calendar.month.every(3)`): a calendar level
- *  at a step. `start` is the first day of a week, for weeks only. */
-export type CalendarPartitionIR = {
-  unit:
-    | "second"
-    | "minute"
-    | "hour"
-    | "day"
-    | "week"
-    | "month"
-    | "quarter"
-    | "year";
-  step?: number;
-  start?: "monday" | "sunday";
-};
+/** A Calendar value's wire form (`Calendar.month.every(3)` is
+ *  `{ kind: "month", step: 3 }`): a calendar level, its `kind`, at a step.
+ *  Only a week has a `start`, its first day. The kinds of the `CALENDAR`
+ *  family in descriptors.ts. */
+export type CalendarPartitionIR =
+  | {
+      kind: "second" | "minute" | "hour" | "day" | "month" | "quarter" | "year";
+      step?: number;
+    }
+  | { kind: "week"; step?: number; start?: "monday" | "sunday" };
 
 export interface TableOperator
   extends BaseIRNode,
@@ -794,7 +789,8 @@ export type AxisDims = Record<string, ChannelValue | AxisInterval>;
  *  operator's entry-flagged `size` channel, `normalize`. */
 /** A partition's wire form (`field(x).bin(p)`): a Calendar value, or a
  *  `Bin` kind that bins one field (`Bin.step(size)`,
- *  `Bin.thresholds(countOrEdges)`). */
+ *  `Bin.thresholds(countOrEdges)`). One tagged union, told apart by `kind`
+ *  (`OPTION_TYPES.Partition`). */
 export type PartitionIR = CalendarPartitionIR | FieldBinIR;
 
 export interface FieldAccessor {

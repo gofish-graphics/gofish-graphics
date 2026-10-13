@@ -2395,9 +2395,10 @@ _CALENDAR_UNITS = (
 
 
 class CalendarPartition(dict):
-    """A partition of the time line into calendar cells: a level (``unit``)
-    at a step. The dict is the wire form JS reads (``{"unit": "month",
-    "step": 3}``). Mirrors JS ``CalendarPartition``; build one from
+    """A partition of the time line into calendar cells: a level (``unit``,
+    its ``kind`` on the wire) at a step. The dict is the wire form JS reads
+    (``{"kind": "month", "step": 3}``), a kind of the Calendar family in
+    gofish-ir's descriptors.ts. Mirrors JS ``CalendarPartition``; build one from
     ``Calendar``. Used in ``field(x).bin(...)`` and in an axis's levels,
     ``axes={"x": {"levels": [...]}}``.
     """
@@ -2413,7 +2414,7 @@ class CalendarPartition(dict):
                 f"Calendar.{unit}.every({step!r}): the step must be a whole "
                 f"number of {unit}s, 1 or more."
             )
-        wire: dict = {"unit": unit, "step": step}
+        wire: dict = {"kind": unit, "step": step}
         if start is not None:
             wire["start"] = start
         super().__init__(wire)
@@ -2422,7 +2423,7 @@ class CalendarPartition(dict):
         """The same level, ``n`` units per cell (``Calendar.month.every(3)``).
         Steps align to the level above: months in steps of 3 start in
         January, April, July and October."""
-        return CalendarPartition(self["unit"], n, self.get("start"))
+        return CalendarPartition(self["kind"], n, self.get("start"))
 
 
 class _WeekPartition(CalendarPartition):
@@ -2819,9 +2820,7 @@ class FieldAccessor(dict):
         empty cells are kept. Valid only in a `by` (domain) slot. Emits the
         wire op ``{"op": "bin", "partition": ...}``, one per ``.bin``."""
         op: dict = {"op": "bin"}
-        if isinstance(partition, CalendarPartition):
-            op["partition"] = dict(partition)
-        elif isinstance(partition, (list, tuple)):
+        if isinstance(partition, (list, tuple)):
             if len(partition) < 2 or not all(
                 isinstance(p, CalendarPartition) for p in partition
             ):
@@ -2969,18 +2968,22 @@ def field(name: str, measure: Optional[str] = None) -> FieldAccessor:
 
 
 def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
-    """A ``Bin`` strategy on the key that takes it, in its wire form:
-    ``"field"`` for ``field(x).bin(...)``, which takes ``Bin.step`` and
-    ``Bin.thresholds``, and ``"struct"`` for ``struct(x=..., y=...).bin(...)``,
-    which takes ``Bin.hex`` and ``Bin.voronoi``. A kind of the other key is a
-    TypeError naming the key that takes it. The kinds of each key are the
-    ``FieldBin`` and ``StructBin`` option types (gofish-ir ``BIN_KINDS``).
-    Mirrors JS ``Frontend.checkBin``."""
+    """The cells a key is binned into, in their wire form, on the key that
+    takes them: ``"field"`` for ``field(x).bin(...)``, which takes a Calendar
+    value, ``Bin.step`` and ``Bin.thresholds``, and ``"struct"`` for
+    ``struct(x=..., y=...).bin(...)``, which takes ``Bin.hex`` and
+    ``Bin.voronoi``. A kind of the other key is a TypeError naming the key
+    that takes it. The kinds of each key are the ``Partition`` and
+    ``StructBin`` option types, each one tagged union (gofish-ir
+    ``BIN_KINDS``). Mirrors JS ``Frontend.checkPartition`` and
+    ``Frontend.checkBin``."""
     from ._generated import _OPTION_TYPES, _to_wire
 
-    own, other = ("FieldBin", "StructBin") if key == "field" else ("StructBin", "FieldBin")
+    own, other = ("Partition", "StructBin") if key == "field" else ("StructBin", "Partition")
     kind = value.get("kind") if isinstance(value, dict) else None
-    if kind in _OPTION_TYPES[other][2]:
+    # A Calendar value bins one field only: on a struct it is no other
+    # key's kind, just not one of the struct's.
+    if kind in _OPTION_TYPES[other][2] and kind not in _OPTION_TYPES["Calendar"][2]:
         if key == "field":
             raise TypeError(
                 f"{where}: Bin.{kind} bins two fields together into cells of "

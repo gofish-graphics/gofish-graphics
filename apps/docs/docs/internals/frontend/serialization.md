@@ -156,10 +156,11 @@ form and emits the opaque `derive`. A `derive`'s `schema` (`derive(fn, { schema 
 it to the rows the Python callback returns. (A `derive` once also carried a
 measure `provenance` map for the rows of the `bin()` data helper; both are
 gone, #1058.) A binned key, `field("date").bin(Calendar.month)`, is an op in
-the field expression's `ops`: `{ "op": "bin", "partition": { "unit": "month",
+the field expression's `ops`: `{ "op": "bin", "partition": { "kind": "month",
 "step": 1 } }`, where the partition is a Calendar value's wire form, a
 `Bin` kind that bins one field, `{ "kind": "step", "size": 0.5 }` or
-`{ "kind": "thresholds", "thresholds": 20 }` (`PartitionIR`), or a list of
+`{ "kind": "thresholds", "thresholds": 20 }` (`PartitionIR`, one union told
+apart by `kind`), or a list of
 Calendar values for a product (`.bin([Calendar.year, Calendar.month])`), and
 an op with no `partition` bins into about 10 cells. A chain,
 `.bin(Calendar.year).bin(Calendar.month)`, is one `bin` op per `.bin`, in
@@ -430,7 +431,7 @@ today `AxesOptions` (a boolean, or `{x, y}`), `AxisOptions` (a boolean, or
 `{title, side, labelAngle}`), `AxisInterval` (`{min, center, max, size,
 embedded}`), `AxisDimsValue` (a channel value or an `AxisInterval`, the
 value of a `dims` entry), `FieldPredicate` (`{field, between, closed}`,
-the predicate of `filter`), `Calendar`, `FieldBin` and `StructBin` (the `Bin`
+the predicate of `filter`), `Calendar`, `Partition` and `StructBin` (the
 kinds valid on each key, below), and one entry per strategy family. A
 `t.ref(name)` resolves against it first, so the validator, the JSON Schema,
 and the Python generator all read one declaration of each. `ChartOptions` is
@@ -453,16 +454,24 @@ so the strategy options are `t.ref("Tile")`, `t.ref("Overlap")` and
 positional-only parameter in Python, and `{ kind: "step", size: 0.5 }` on
 the wire either way. The `Bin` kinds bin one of two keys (`BIN_KINDS`):
 `step` and `thresholds` cut the line of one field, and `hex` and `voronoi`
-divide the plane of two. `OPTION_TYPES.FieldBin` and `OPTION_TYPES.StructBin`
-are the kinds of each, derived from the one `Bin` entry, so a struct's bin
-op takes a `StructBin`, and the JS layout checks a bin on its key with
-`checkBin(key, value, where)`, which names the right key for a kind of the
-other one. A field's bin op takes a Calendar value or a `FieldBin`. These are
-not one tagged union: a Calendar value's wire form, `{ unit, step?, start? }`,
-has no `kind`, so the validator tells it apart by its `unit`
-(`walkPartition`), the JSON Schema writes a `oneOf`, and the Python
-generator, which allows a union of several dict branches only when a `kind`
-tells them apart, would refuse it. A param
+divide the plane of two. `OPTION_TYPES.StructBin` is the kinds of the plane,
+derived from the one `Bin` entry, so a struct's bin op takes a `StructBin`,
+and the JS layout checks a bin on its key with `checkBin(key, value,
+where)`, which names the right key for a kind of the other one.
+
+A field's bin op takes a Calendar value, `{ kind: "month", step? }` or
+`{ kind: "week", step?, start? }`, or a `Bin` kind that cuts one field's line.
+The `CALENDAR` family declares the Calendar kinds, one per level, in the
+same shape as a `STRATEGIES` family, and `OPTION_TYPES.Calendar` is its
+union. `OPTION_TYPES.Partition` is one tagged union of the Calendar kinds
+and the `Bin` kinds `step` and `thresholds`, so the validator, the JSON
+Schema and the Python generator each read a field's partition by its
+`kind`, and the JS layout checks one with `checkPartition(value, where)`.
+An axis's `levels` entries take `OPTION_TYPES.Calendar`. `CALENDAR` is not
+in `STRATEGIES` yet: the Python generator writes each kind of a family as a
+function, and a Calendar kind is a value with a method in Python
+(`Calendar.month`, `Calendar.month.every(3)`), hand-written in
+`gofish/ast.py`. A param
 may carry bounds, `t.num({ min: 0, finite: true })` for a pixel padding or
 `t.num({ exclusiveMin: 0, finite: true })` for a hex radius, which the
 validator and the JSON Schema (`minimum`, `exclusiveMinimum`) check. When a

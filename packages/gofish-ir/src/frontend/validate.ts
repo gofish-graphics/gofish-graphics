@@ -516,7 +516,8 @@ function taggedBranches(
 }
 
 /**
- * Check a strategy against its family in `STRATEGIES`: a known `kind`, and
+ * Check a strategy against its family in `STRATEGIES` (or the `CALENDAR`
+ * family, declared beside it in descriptors.ts): a known `kind`, and
  * only that kind's params, each of its declared type. Throws the first
  * problem, naming `where` the strategy was written
  * (`"treemap({ tile })"`). This is the one check a strategy gets on the JS
@@ -524,7 +525,7 @@ function taggedBranches(
  * Python IR); the validator runs the same walk over a whole document.
  */
 export function checkStrategy(
-  family: StrategyFamilyName,
+  family: StrategyFamilyName | "Calendar",
   value: unknown,
   where: string
 ): void {
@@ -568,6 +569,28 @@ export function checkBin(
         `Bin.hex({ radius }) or Bin.voronoi({ seeds }).`
     );
   checkStrategy("Bin", value, where);
+}
+
+/**
+ * Check the partition of `field(x).bin(p)`: a Calendar kind or a `Bin` kind
+ * that cuts one field's line (`OPTION_TYPES.Partition`). A `Bin` kind that
+ * divides a plane throws as {@link checkBin} does, naming
+ * `struct({ x, y }).bin`.
+ */
+export function checkPartition(value: unknown, where: string): void {
+  const kind = isObject(value) ? value.kind : undefined;
+  if ((BIN_KINDS.struct as readonly unknown[]).includes(kind))
+    checkBin("field", value, where);
+  const ctx: Context = { errors: [] };
+  walkFieldType(OPTION_TYPES.Partition.type, value, where, ctx);
+  if (ctx.errors.length > 0) {
+    const [{ path, message }] = ctx.errors;
+    throw new Error(
+      `[gofish] ${path}: ${message}. Make one with a Calendar value ` +
+        `(Calendar.month, Calendar.hour.every(6), ...), Bin.step(size), or ` +
+        `Bin.thresholds(countOrEdges).`
+    );
+  }
 }
 
 /** The anchors an axis interval may name: the fields of `AxisInterval` in
@@ -938,13 +961,11 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
   }
 }
 
-/** A `bin` op's partition: a Calendar value (`OPTION_TYPES.Calendar`), a
- *  `Bin` kind that bins one field (`OPTION_TYPES.FieldBin`), or a product of
- *  Calendar values (a list of two or more). A Calendar value's wire form,
- *  `{ unit, step?, start? }`, has no `kind`, so the two are not one tagged
- *  union: a Calendar value is told apart by its `unit`. Which levels a
- *  product may combine is the renderer's check (`checkBinStep` in
- *  gofish-graphics' cells.ts). */
+/** A `bin` op's partition: a Calendar value or a `Bin` kind that bins one
+ *  field (`OPTION_TYPES.Partition`, one tagged union), or a product of
+ *  Calendar values (a list of two or more). Which levels a product may
+ *  combine is the renderer's check (`checkBinStep` in gofish-graphics'
+ *  cells.ts). */
 function walkPartition(value: unknown, path: string, ctx: Context): void {
   if (Array.isArray(value)) {
     if (value.length < 2)
@@ -957,14 +978,7 @@ function walkPartition(value: unknown, path: string, ctx: Context): void {
     );
     return;
   }
-  walkFieldType(
-    isObject(value) && "unit" in value
-      ? OPTION_TYPES.Calendar.type
-      : OPTION_TYPES.FieldBin.type,
-    value,
-    path,
-    ctx
-  );
+  walkFieldType(OPTION_TYPES.Partition.type, value, path, ctx);
 }
 
 function walkMark(node: unknown, path: string, ctx: Context): void {

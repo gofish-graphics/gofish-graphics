@@ -442,10 +442,9 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             op: { const: "bin" },
             partition: {
               description:
-                "The partition each value is binned into: a Calendar value ({ unit, step?, start? }), Bin.step(size) or Bin.thresholds(countOrEdges), or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
+                "The partition each value is binned into: a Calendar value (Calendar.month.every(3) is { kind: month, step: 3 }), Bin.step(size) or Bin.thresholds(countOrEdges), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
               oneOf: [
-                { $ref: "#/$defs/Calendar" },
-                { $ref: "#/$defs/FieldBin" },
+                { $ref: "#/$defs/Partition" },
                 {
                   type: "array",
                   minItems: 2,

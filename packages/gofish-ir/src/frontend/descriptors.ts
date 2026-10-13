@@ -721,51 +721,80 @@ export const BIN_KINDS = {
   readonly (keyof typeof STRATEGIES.Bin.kinds)[]
 >;
 
+/** One object type per kind of a strategy family (or per kind in `only`),
+ *  each tagged by its `kind`. */
+function kindBranches(
+  family: StrategyFamily,
+  only?: readonly string[]
+): FieldType[] {
+  return Object.entries(family.kinds)
+    .filter(([kind]) => only === undefined || only.includes(kind))
+    .map(([kind, { params }]) =>
+      t.object({ kind: { type: t.literal(kind), required: true }, ...params })
+    );
+}
+
 /** The value type of a strategy family: a union of one object per kind (or
  *  per kind in `only`), told apart by its `kind`. */
 function strategyType(
   family: StrategyFamily,
   only?: readonly string[]
 ): FieldType {
-  return t.union(
-    ...Object.entries(family.kinds)
-      .filter(([kind]) => only === undefined || only.includes(kind))
-      .map(([kind, { params }]) =>
-        t.object({ kind: { type: t.literal(kind), required: true }, ...params })
-      )
-  );
+  return t.union(...kindBranches(family, only));
 }
 
-/** A Calendar value's wire form: a partition of the time line into calendar
- *  cells (`CalendarPartition` in gofish-graphics/src/ast/calendar.ts). */
-const calendarPartition: FieldSpec = {
-  doc: "A calendar partition: a level (unit) at a step, e.g. Calendar.month.every(3).",
-  type: t.object({
-    unit: {
-      type: t.enum(
-        "second",
-        "minute",
-        "hour",
-        "day",
-        "week",
-        "month",
-        "quarter",
-        "year"
-      ),
-      required: true,
-      doc: "The calendar level of each cell.",
-    },
-    step: {
-      type: t.number,
-      default: 1,
-      doc: "How many units one cell spans; steps align to the level above.",
-    },
-    start: {
-      type: t.enum("monday", "sunday"),
-      doc: "The first day of a week (weeks only).",
-    },
-  }),
+/** How many units one cell of a Calendar kind spans. */
+const calendarStep: FieldSpec = {
+  type: t.num({ min: 1, finite: true }),
+  default: 1,
+  doc: "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
 };
+
+/** A Calendar kind whose only param is its step. */
+const calendarKind = (doc: string): StrategyKind => ({
+  doc,
+  params: { step: calendarStep },
+});
+
+/**
+ * The `Calendar` family: partitions of the time line into calendar cells
+ * (`CalendarPartition` in gofish-graphics/src/ast/calendar.ts), one kind per
+ * level. A value is `{ kind, step?, start? }` on the wire, like any
+ * strategy. The `Partition` option type puts its kinds and the `Bin` kinds
+ * that cut one field's line in one tagged union.
+ *
+ * TODO(#1059): this family belongs in `STRATEGIES`. It is declared here, in
+ * the same shape, because the Python generator writes each kind of a
+ * `STRATEGIES` family as a function (`Bin.step(size)`), and a Calendar kind
+ * is a value with a method instead (`Calendar.month`,
+ * `Calendar.month.every(3)`), hand-written in gofish/ast.py. Moving it in
+ * needs the generator to emit a kind as a value, a design decision.
+ */
+export const CALENDAR = {
+  doc: "Partitions of the time line into calendar cells, one kind per level: the value of `field(x).bin(...)` over a time column, and an entry of an axis's `levels`.",
+  kinds: {
+    second: calendarKind("Cells of a second."),
+    minute: calendarKind("Cells of a minute."),
+    hour: calendarKind("Cells of an hour."),
+    day: calendarKind("Cells of a day, from local midnight."),
+    week: {
+      doc: "Cells of a week, from its first day.",
+      params: {
+        step: calendarStep,
+        start: {
+          type: t.enum("monday", "sunday"),
+          default: "monday",
+          doc: "The first day of a week. Monday is the ISO 8601 default.",
+        },
+      },
+    },
+    month: calendarKind("Cells of a month, from its first day."),
+    quarter: calendarKind(
+      "Cells of 3 months, from January, April, July and October, labeled Q1 to Q4."
+    ),
+    year: calendarKind("Cells of a year, from January 1."),
+  },
+} satisfies StrategyFamily;
 
 /** Chart-level options: `chart(data, {...})` in JS, `chart(data, **options)`
  *  in Python, `ChartIR.options` on the wire. Mirrors the JS `ChartOptions` in
@@ -815,7 +844,7 @@ export const CHART_OPTIONS: FieldGroup = group({
  *  (LabelIR, TranslateIR, FieldAccessor, ...). */
 export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   AxisOptions: axisOptions,
-  Calendar: calendarPartition,
+  Calendar: { doc: CALENDAR.doc, type: strategyType(CALENDAR) },
   AxesOptions: {
     doc: "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own.",
     type: t.union(
@@ -868,13 +897,15 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
     doc: "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval.",
     type: t.union(t.channel("number", "pos"), t.ref("AxisInterval")),
   },
-  // The Bin kinds valid on each key (BIN_KINDS). A `field(x).bin(...)`
-  // partition is a Calendar value or a FieldBin; it is not one tagged union
-  // because a Calendar value's wire form has no `kind` (validate.ts
-  // `walkPartition`).
-  FieldBin: {
-    doc: "The cells `field(x).bin(...)` cuts a numeric field's line into: Bin.step(size) or Bin.thresholds(countOrEdges).",
-    type: strategyType(STRATEGIES.Bin, BIN_KINDS.field),
+  // The cells a key is binned into, by the key (BIN_KINDS). A
+  // `field(x).bin(...)` partition is a Calendar kind or a Bin kind that cuts
+  // one field's line: one tagged union of both families' kinds.
+  Partition: {
+    doc: "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour.every(6)), Bin.step(size) or Bin.thresholds(countOrEdges).",
+    type: t.union(
+      ...kindBranches(CALENDAR),
+      ...kindBranches(STRATEGIES.Bin, BIN_KINDS.field)
+    ),
   },
   StructBin: {
     doc: "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Bin.hex({ radius }) or Bin.voronoi({ seeds }).",

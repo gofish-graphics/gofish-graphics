@@ -181,16 +181,16 @@ async function main() {
       "Calendar.week is a Calendar value and a function",
       Calendar.week instanceof CalendarPartition &&
         typeof Calendar.week === "function" &&
-        same(Calendar.week, { unit: "week", step: 1, start: "monday" })
+        same(Calendar.week, { kind: "week", step: 1, start: "monday" })
     );
     check(
       "Calendar values write their wire form",
-      same(Calendar.hour.every(6), { unit: "hour", step: 6 })
+      same(Calendar.hour.every(6), { kind: "hour", step: 6 })
     );
     check(
       "the wire form reads back",
       same(
-        calendarPartition({ unit: "month", step: 3 }, "x"),
+        calendarPartition({ kind: "month", step: 3 }, "x"),
         Calendar.month.every(3)
       )
     );
@@ -621,7 +621,7 @@ async function main() {
     const levels = levelsFromOption(
       [
         Calendar.week,
-        { unit: "month" } as any,
+        { kind: "month" } as any,
         false,
         true,
         Calendar.quarter.format(fmt),
@@ -704,7 +704,7 @@ async function main() {
     check(
       "a bare partition still serializes",
       JSON.stringify(Calendar.month.every(3)) ===
-        JSON.stringify({ unit: "month", step: 3 })
+        JSON.stringify({ kind: "month", step: 3 })
     );
   }
 
@@ -719,8 +719,7 @@ async function main() {
     check(
       "the error describes the value without calling its toJSON",
       message !== undefined &&
-        message.includes("expected a Calendar value") &&
-        message.includes("Calendar.quarter.format(...)") &&
+        message.includes("levels[0].kind: unknown kind") &&
         !message.includes("no wire form"),
       message
     );
@@ -729,17 +728,33 @@ async function main() {
   console.log("\n# week starts are checked in the wire form");
   {
     const bad = await errorOf(() =>
-      calendarPartition({ unit: "week", start: "tuesday" } as any, "levels[0]")
+      calendarPartition({ kind: "week", start: "tuesday" } as any, "levels[0]")
     );
     check(
       'a week start that is not "monday" or "sunday" is a loud error',
-      bad?.includes('start must be "monday" or "sunday"') === true &&
-        bad.includes("levels[0]"),
+      bad?.includes('levels[0].start: expected one of "monday", "sunday"') ===
+        true,
       bad
+    );
+    const old = await errorOf(() =>
+      calendarPartition({ unit: "month", step: 1 } as any, "levels[0]")
+    );
+    check(
+      "the old untagged { unit } form is a loud error",
+      old?.includes("levels[0].kind: unknown kind") === true,
+      old
+    );
+    const monthStart = await errorOf(() =>
+      calendarPartition({ kind: "month", start: "sunday" } as any, "w")
+    );
+    check(
+      "only a week takes a start",
+      monthStart?.includes("w.start") === true,
+      monthStart
     );
     check(
       "a valid wire week start is read",
-      calendarPartition({ unit: "week", step: 1, start: "sunday" }, "w")
+      calendarPartition({ kind: "week", step: 1, start: "sunday" }, "w")
         .start === "sunday"
     );
   }

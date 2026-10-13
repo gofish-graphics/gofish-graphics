@@ -18,7 +18,7 @@ import {
 } from "../calendar";
 
 /** One entry of `axes.x.levels` as written: `true`, `false`, a Calendar
- *  value, or its wire form (`{ unit: "month", step: 1 }`, what Python
+ *  value, or its wire form (`{ kind: "month", step: 1 }`, what Python
  *  sends). */
 export type LevelOption = boolean | CalendarPartition | CalendarJSON;
 

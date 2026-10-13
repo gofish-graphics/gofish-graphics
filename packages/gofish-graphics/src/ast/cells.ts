@@ -40,11 +40,11 @@ import { tickIncrement } from "d3-array";
 import { Frontend } from "gofish-ir";
 import type { Temporal as TemporalNS } from "temporal-polyfill";
 import {
-  calendarPartition,
   CalendarPartition,
   cycleFields,
   describe,
   fieldsOf,
+  fromWire,
   nominalMs,
   productLabel,
   referencePeriod,
@@ -173,8 +173,9 @@ export type NumberPartition = StepBin | ThresholdsBin;
 /** What `field(x).bin(p)` takes: a Calendar value or a numeric partition. */
 export type Partition = CalendarPartition | NumberPartition;
 
-/** A partition's wire form: a Calendar value's (`{ unit, step?, start? }`),
- *  or a numeric partition's (`{ kind: "step", size }`,
+/** A partition's wire form, one tagged union: a Calendar value's
+ *  (`{ kind: "month", step? }`, `{ kind: "week", step?, start? }`), or a
+ *  numeric partition's (`{ kind: "step", size }`,
  *  `{ kind: "thresholds", thresholds }`). */
 export type PartitionJSON = Frontend.PartitionIR;
 
@@ -315,30 +316,24 @@ export type Cells = {
   cellOf(v: number): AxisCell | undefined;
 };
 
-/** Whether `p` is a Calendar value or its wire form. */
-const isCalendar = (p: unknown): p is CalendarPartition | CalendarJSON =>
-  p instanceof CalendarPartition ||
-  (typeof p === "object" && p !== null && "unit" in p);
-
 /** Check a partition as the user (or the wire) wrote it, and return it in
  *  its builder form: a CalendarPartition, a {@link StepBin}, or a
- *  {@link ThresholdsBin}. A `Bin` kind that bins two fields (`Bin.hex`) is
- *  an error naming `struct({ x, y }).bin` (`Frontend.checkBin`). */
+ *  {@link ThresholdsBin}. The wire form is told apart by its `kind`
+ *  (`Frontend.checkPartition`); a `Bin` kind that bins two fields
+ *  (`Bin.hex`) is an error naming `struct({ x, y }).bin`. */
 export function checkPartition(p: unknown, where: string): Partition {
-  if (isCalendar(p)) return calendarPartition(p, where);
-  if (typeof p !== "object" || p === null || !("kind" in p)) {
-    throw new Error(
-      `${where}: expected a partition: a Calendar value (Calendar.month, ` +
-        `Calendar.hour.every(6), ...), Bin.step(size), or ` +
-        `Bin.thresholds(countOrEdges); got ${describe(p)}.`
-    );
-  }
-  Frontend.checkBin("field", p, where);
+  if (p instanceof CalendarPartition) return p;
+  Frontend.checkPartition(p, where);
   if (p instanceof StepBin || p instanceof ThresholdsBin) return p;
-  const wire = p as Frontend.FieldBinIR;
-  return wire.kind === "step"
-    ? new StepBin(wire.size)
-    : new ThresholdsBin(wire.thresholds);
+  const wire = p as PartitionJSON;
+  switch (wire.kind) {
+    case "step":
+      return new StepBin(wire.size);
+    case "thresholds":
+      return new ThresholdsBin(wire.thresholds);
+    default:
+      return fromWire(wire);
+  }
 }
 
 /**
