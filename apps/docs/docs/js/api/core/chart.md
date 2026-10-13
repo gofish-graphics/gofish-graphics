@@ -95,9 +95,11 @@ innermost level. On the outermost axis of the dimension, a Calendar value
 past the inferred levels adds a level: `levels: [true, Calendar.year]` over
 the slots of `field("date").bin([Calendar.year, Calendar.month])` adds a year
 level. An entry that cannot apply is an error that lists the dimension's
-levels: a Calendar value over slots that are not times, or that it does not
-group (`Calendar.week` over months), `false` on a numeric axis, and an entry
-past the last level. `labelAngle` and `labelAlign` arrays use the same
+levels: a Calendar value over slots that are not times, or finer than the
+slots (`Calendar.week` over months), `false` on a numeric axis, and an entry
+past the last level. A Calendar value coarser than slots that do not nest in
+it groups each slot by the cell that holds the slot's start: over week
+slots, `Calendar.month` puts each week in the month it starts in. `labelAngle` and `labelAlign` arrays use the same
 depths.
 
 On an ordinal axis, the label rows of the dimension stack from the plot

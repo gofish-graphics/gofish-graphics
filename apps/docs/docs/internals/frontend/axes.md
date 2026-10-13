@@ -232,10 +232,15 @@ level as inferred, `false` hides it (a hidden level draws nothing and takes
 no space; the node still claims the axis and its depths, so no ancestor draws
 it instead), and a Calendar value names its cells: a time row's partition
 (`timeRows` in `elaborate.tsx`), or, on an ordinal axis over cells of time,
-the cells that group its slots (`calendarLevel`: each slot's cell of the
-partition, read off a timeline cell's start, or off a part of a cycle's cell
-in the reference cycle, `CycleCell.ref`; a part of a week is grouped only by
-a weekday that starts the week on the same day). An axis with no axis above it on
+the cells that group its slots (`calendarLevel`: each slot falls in the
+cell of the partition that holds its start, read off a timeline cell's
+start, or off a part of a cycle's cell in the reference cycle,
+`CycleCell.ref`; a part of a week is grouped only by a weekday that starts
+the week on the same day). A slot that nests in the partition lies in that
+cell. One that does not, a week over months, is grouped with the month it
+starts in, as a calendar labels its weeks. A partition finer than the slots
+(its cell holding a slot's start is shorter than the slot, a week over
+months) groups nothing, and is an error. An axis with no axis above it on
 its dim (`hasOuterAxis` reads the ancestors' still-set `axis` flags) also
 takes the Calendar entries past its inferred levels, as more levels. An entry
 that cannot apply records an issue, and `layout` raises the first one, or an

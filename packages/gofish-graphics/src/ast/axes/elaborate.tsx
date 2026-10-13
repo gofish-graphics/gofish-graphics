@@ -773,26 +773,30 @@ const chainLength = (cell: KeyCell): number => {
 
 /**
  * The level that groups `cells` (the slots of an ordinal axis, in order) by
- * the cells of `p`: the cell of `p` each slot lies in. A slot of the time
- * line must lie in one cell of `p` (a month in one year, not a week across
- * two months); a part of a cycle must lie in one part of `p`'s reading of
- * the same cycle (a month of the year in one quarter of the year). Returns a
- * reason when `p` does not group the slots.
+ * the cells of `p`: each slot falls in the cell of `p` that holds its START.
+ * A slot that nests in `p` lies in that cell; one that does not is grouped
+ * with the cell it begins in, so `Calendar.month` over week slots puts each
+ * week in the month it starts in, as a calendar labels its weeks. A part of
+ * a cycle falls the same way in a part of `p`'s reading of the same cycle (a
+ * month of the year in a quarter of the year). `p` must be at least as
+ * coarse as the slots: a cell of `p` shorter than the slot it holds the
+ * start of (a week over months) would give each slot its own group. Returns
+ * a reason when `p` does not group the slots.
  */
 function calendarLevel(
   p: CalendarPartition,
   cells: readonly (AxisCell | undefined)[]
 ): OrdinalLevel | string {
   const groups: OrdinalLevel["groups"] = [];
+  const finer = (label: string | undefined) =>
+    `the cell of ${String(p)} that holds the start of "${label}" is ` +
+    `shorter than it (${String(p)} is finer than the slots), so ` +
+    `${String(p)} does not group them; name a coarser level`;
   for (const c of cells) {
     if (c instanceof Cell && c.calendar !== undefined) {
       const zone = c.calendar.zone;
       const outer = p.cells(c.start, c.start, zone)[0];
-      if (c.end > outer.end)
-        return (
-          `the cell "${c.label}" lies across two cells of ${String(p)}, so ` +
-          `${String(p)} does not group the slots`
-        );
+      if (outer.end - outer.start < c.end - c.start) return finer(c.label);
       groups.push({ id: String(outer.start), label: p.label(outer, zone) });
     } else if (c instanceof CycleCell) {
       const of = c.cycle.of;
@@ -810,11 +814,8 @@ function calendarLevel(
         );
       const [s, e] = c.ref;
       const part = p.part(zoned(s, "UTC"));
-      if (p.part(zoned(e - 1, "UTC")) !== part)
-        return (
-          `the part "${c.label}" lies across two parts of ${String(p)}, so ` +
-          `${String(p)} does not group the slots`
-        );
+      const outer = p.cells(s, s, "UTC")[0];
+      if (outer.end - outer.start < e - s) return finer(c.label);
       const first = p.floor(zoned(s, "UTC")).epochMilliseconds;
       groups.push({
         id: String(part),

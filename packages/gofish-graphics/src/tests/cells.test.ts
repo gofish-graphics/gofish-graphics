@@ -1024,12 +1024,40 @@ async function main() {
       wordsOf(productKey, [true, DistCalendar.week])
     );
     check(
-      "a Calendar value that does not group the slots is an error listing " +
-        "the axis's levels",
+      "a Calendar value finer than the slots is an error listing the " +
+        "axis's levels",
       weekErr?.includes("axes.x.levels[1]") === true &&
-        weekErr.includes("lies across two cells of Calendar.week") &&
+        weekErr.includes("is finer than the slots") &&
         weekErr.includes("[0] [Calendar.year, Calendar.month]"),
       weekErr
+    );
+    // Weeks from Monday, Jan 1, 2024: the week of Jan 29 runs into
+    // February and starts in January, so it is grouped with January.
+    const weekDays = Array.from({ length: 6 }, (_, i) => ({
+      date: `2024-${["01-01", "01-08", "01-15", "01-22", "01-29", "02-05"][i]}`,
+      value: 1,
+    }));
+    const weekDl = await chart(weekDays, {
+      schema: { date: Schema.time() },
+      axes: { x: { title: false, levels: [true, DistCalendar.month] }, y: false },
+    })
+      .flow(spread({ by: distField("date").bin(DistCalendar.week), dir: "x" }))
+      .mark(rect({ w: 20, h: distField("value").sum() }))
+      .toDisplayList({ w: 400, h: 100 });
+    const weekTexts = textsOf(weekDl);
+    const weekMonths = weekTexts
+      .filter((t) => t.text === "Jan" || t.text === "Feb")
+      .map((t) => t.text);
+    const weekBars = rectsOf(weekDl).filter((r) => r.w === 20);
+    const weekLines = rectsOf(weekDl).filter((r) => r.w === 1);
+    check(
+      "a month level over week slots groups each week by the month it " +
+        "starts in: Jan's run holds the week of Jan 29, then one divider",
+      same(weekMonths, ["Jan", "Feb"]) &&
+        weekLines.length === 1 &&
+        weekLines[0].x > weekBars[4].x + 20 &&
+        weekLines[0].x < weekBars[5].x,
+      JSON.stringify({ weekMonths, weekLines })
     );
     const pastErr = await errorOfAsync(() =>
       wordsOf(chainKey, [true, true, true])

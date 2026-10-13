@@ -199,14 +199,16 @@ export type AxisOptions =
        *    drawn and take no space.
        *  - a Calendar value names its cells: a time row's partition
        *    (`Calendar.week`), or, on an ordinal axis over cells of time, the
-       *    cells that group its slots (`Calendar.year` over month slots),
-       *    each label centered under its run of slots. A Calendar value
-       *    with `.format(fn)` relabels the level.
+       *    cells that group its slots (`Calendar.year` over month slots):
+       *    each slot falls in the cell that holds its start, so
+       *    `Calendar.month` over week slots puts each week in the month it
+       *    starts in. A Calendar value with `.format(fn)` relabels the
+       *    level.
        *
        *  Depths the list does not reach stay as inferred. On the outermost
        *  axis of the dim, Calendar entries past its inferred levels add
        *  levels. An entry that cannot apply (a Calendar value over slots
-       *  that are not times, `false` on a numeric axis, an entry past the
+       *  that are not times or finer than the slots, `false` on a numeric axis, an entry past the
        *  last level) is an error that lists the axis's levels. `labelAngle`
        *  arrays use the same depths. */
       levels?: LevelOption[];
