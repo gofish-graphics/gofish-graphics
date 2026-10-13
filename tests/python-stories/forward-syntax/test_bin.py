@@ -4,6 +4,7 @@ import math
 from datetime import datetime, timedelta, timezone
 
 from gofish import chart, rect, field, spread, stack, partition, Schema, Calendar, Bin
+from python_stories.data import SEATTLE_WEATHER
 
 # Seventy-two movie ratings from 1 to 9.5, none from 2 to 2.5: a hump around
 # 6.5 with a thin low tail.
@@ -61,7 +62,7 @@ DAILY = [d for d in ALL_DAILY if not d["date"].startswith("2024-04")]
 def story_monthly_bars():
     return (
         chart(DAILY, schema={"date": Schema.time()}, axes=True)
-        .flow(spread(by=field("date").bin(Calendar.month), dir="x"))
+        .flow(spread(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x"))
         .mark(rect(h=field("value").sum(), fill="steelblue")),
         {"w": 560, "h": 200},
     )
@@ -71,7 +72,7 @@ def story_stacked_monthly_bars():
     return (
         chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True)
         .flow(
-            spread(by=field("date").bin(Calendar.month), dir="x"),
+            spread(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x"),
             stack(by="region", dir="y"),
         )
         .mark(rect(h=field("value").sum(), fill="region")),
@@ -91,7 +92,7 @@ def story_rating_histogram_continuous():
 def story_month_bars_true_widths():
     return (
         chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True)
-        .flow(partition(by=field("date").bin(Calendar.month), dir="x"))
+        .flow(partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"))
         .mark(rect(h=field("value").sum(), fill="steelblue", inset=1)),
         {"w": 560, "h": 200},
     )
@@ -101,7 +102,7 @@ def story_stacked_month_bars_true_widths():
     return (
         chart(DAILY, schema={"date": Schema.time()}, axes=True)
         .flow(
-            partition(by=field("date").bin(Calendar.month), dir="x"),
+            partition(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x"),
             stack(by="region", dir="y"),
         )
         .mark(rect(h=field("value").sum(), fill="region", inset=1)),
@@ -113,9 +114,113 @@ def story_grouped_month_bars_true_widths():
     return (
         chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True)
         .flow(
-            partition(by=field("date").bin(Calendar.month), dir="x"),
+            partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"),
             spread(by="region", dir="x"),
         )
         .mark(rect(h=field("value").sum(), fill="region")),
         {"w": 560, "h": 200},
+    )
+
+
+# Seattle's daily weather, 2012 to 2015.
+WEATHER = SEATTLE_WEATHER
+
+
+def _between(start, end):
+    """The days from `start` to `end` (ISO dates, `end` excluded)."""
+    return [d for d in WEATHER if start <= d["date"] < end]
+
+
+def story_seasonal_precipitation():
+    return (
+        chart(WEATHER, schema={"date": Schema.time()}, axes=True)
+        .flow(spread(by=field("date").bin(Calendar.month), dir="x"))
+        .mark(rect(h=field("precipitation").mean(), fill="steelblue")),
+        {"w": 560, "h": 220},
+    )
+
+
+def story_month_bars_product():
+    return (
+        chart(
+            _between("2014-07-01", "2015-07-01"),
+            schema={"date": Schema.time()},
+            axes={"x": {"label_angle": "auto"}, "y": True},
+        )
+        .flow(spread(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"))
+        .mark(rect(h=field("precipitation").sum(), fill="steelblue")),
+        {"w": 600, "h": 220},
+    )
+
+
+def story_month_bars_chained():
+    return (
+        chart(
+            _between("2014-01-01", "2016-01-01"),
+            schema={"date": Schema.time()},
+            axes=True,
+        )
+        .flow(spread(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x"))
+        .mark(rect(h=field("precipitation").sum(), fill="steelblue")),
+        {"w": 640, "h": 220},
+    )
+
+
+# The winter of 2014 to 2015: October to March.
+WINTER = _between("2014-10-01", "2015-04-01")
+
+# The kinds of weather, sunniest first.
+BY_WEATHER = field("weather").sort(["sun", "fog", "drizzle", "rain", "snow"])
+
+
+def story_grouped_month_bars():
+    return (
+        chart(
+            WINTER,
+            schema={"date": Schema.time()},
+            axes={"x": {"label_angle": "auto"}, "y": True},
+        )
+        .flow(
+            spread(
+                by=field("date").bin(Calendar.year).bin(Calendar.month),
+                dir="x",
+                spacing=12,
+            ),
+            spread(by=BY_WEATHER, dir="x", spacing=1),
+        )
+        .mark(rect(h=field("weather").count(), fill="weather")),
+        {"w": 640, "h": 240},
+    )
+
+
+def story_grouped_month_bars_hidden_inner():
+    return (
+        chart(
+            WINTER,
+            schema={"date": Schema.time()},
+            axes={"x": {"levels": [False, True]}, "y": True},
+        )
+        .flow(
+            spread(
+                by=field("date").bin(Calendar.year).bin(Calendar.month),
+                dir="x",
+                spacing=12,
+            ),
+            spread(by=BY_WEATHER, dir="x", spacing=1),
+        )
+        .mark(rect(h=field("weather").count(), fill="weather")),
+        {"w": 640, "h": 240},
+    )
+
+
+def story_month_bars_product_true_widths():
+    return (
+        chart(
+            _between("2014-01-01", "2016-01-01"),
+            schema={"date": Schema.time()},
+            axes=True,
+        )
+        .flow(partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"))
+        .mark(rect(h=field("precipitation").sum(), fill="steelblue", inset=1)),
+        {"w": 640, "h": 220},
     )

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
+import { seattleWeather } from "../../src/data/seatle-weather";
 import {
   chart,
   rect,
@@ -98,7 +99,7 @@ export const MonthlyBars: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(daily, { schema: { date: Schema.time() }, axes: true })
-      .flow(spread({ by: field("date").bin(Calendar.month), dir: "x" }))
+      .flow(spread({ by: field("date").bin(Calendar.year).bin(Calendar.month), dir: "x" }))
       .mark(rect({ h: field("value").sum(), fill: "steelblue" }))
       .render(container, { w: args.w, h: args.h });
     return container;
@@ -119,7 +120,7 @@ export const StackedMonthlyBars: StoryObj<Args> = {
     const container = initializeContainer();
     chart(allDaily, { schema: { date: Schema.time() }, axes: true })
       .flow(
-        spread({ by: field("date").bin(Calendar.month), dir: "x" }),
+        spread({ by: field("date").bin(Calendar.year).bin(Calendar.month), dir: "x" }),
         stack({ by: "region", dir: "y" })
       )
       .mark(rect({ h: field("value").sum(), fill: "region" }))
@@ -161,7 +162,7 @@ export const MonthBarsTrueWidths: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(allDaily, { schema: { date: Schema.time() }, axes: true })
-      .flow(partition({ by: field("date").bin(Calendar.month), dir: "x" }))
+      .flow(partition({ by: field("date").bin([Calendar.year, Calendar.month]), dir: "x" }))
       .mark(rect({ h: field("value").sum(), fill: "steelblue", inset: 1 }))
       .render(container, { w: args.w, h: args.h });
     return container;
@@ -182,7 +183,7 @@ export const StackedMonthBarsTrueWidths: StoryObj<Args> = {
     const container = initializeContainer();
     chart(daily, { schema: { date: Schema.time() }, axes: true })
       .flow(
-        partition({ by: field("date").bin(Calendar.month), dir: "x" }),
+        partition({ by: field("date").bin(Calendar.year).bin(Calendar.month), dir: "x" }),
         stack({ by: "region", dir: "y" })
       )
       .mark(rect({ h: field("value").sum(), fill: "region", inset: 1 }))
@@ -205,10 +206,178 @@ export const GroupedMonthBarsTrueWidths: StoryObj<Args> = {
     const container = initializeContainer();
     chart(allDaily, { schema: { date: Schema.time() }, axes: true })
       .flow(
-        partition({ by: field("date").bin(Calendar.month), dir: "x" }),
+        partition({ by: field("date").bin([Calendar.year, Calendar.month]), dir: "x" }),
         spread({ by: "region", dir: "x" })
       )
       .mark(rect({ h: field("value").sum(), fill: "region" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+// Seattle's daily weather, 2012 to 2015.
+const weather = seattleWeather;
+
+// The days from `from` to `to` (ISO dates, `to` excluded).
+const between = (from: string, to: string) =>
+  weather.filter((d) => d.date >= from && d.date < to);
+
+export const SeasonalPrecipitation: StoryObj<Args> = {
+  args: { w: 560, h: 220 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Seattle Rain by Month of the Year",
+      description:
+        "Seattle's average daily rainfall in each month of the year, with the Junes of four years pooled into one June bar.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(weather, { schema: { date: Schema.time() }, axes: true })
+      .flow(spread({ by: field("date").bin(Calendar.month), dir: "x" }))
+      .mark(rect({ h: field("precipitation").mean(), fill: "steelblue" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+export const MonthBarsProduct: StoryObj<Args> = {
+  args: { w: 600, h: 220 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Seattle Rain by Month",
+      description:
+        "Seattle's total rainfall in each month from July 2014 to June 2015, one bar per month labeled with its month and year.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(between("2014-07-01", "2015-07-01"), {
+      schema: { date: Schema.time() },
+      axes: { x: { labelAngle: "auto" }, y: true },
+    })
+      .flow(
+        spread({ by: field("date").bin([Calendar.year, Calendar.month]), dir: "x" })
+      )
+      .mark(rect({ h: field("precipitation").sum(), fill: "steelblue" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+export const MonthBarsChained: StoryObj<Args> = {
+  args: { w: 640, h: 220 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Seattle Rain by Month and Year",
+      description:
+        "Seattle's total rainfall in each month of 2014 and 2015, with the months labeled under each bar and the years below them.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(between("2014-01-01", "2016-01-01"), {
+      schema: { date: Schema.time() },
+      axes: true,
+    })
+      .flow(
+        spread({
+          by: field("date").bin(Calendar.year).bin(Calendar.month),
+          dir: "x",
+        })
+      )
+      .mark(rect({ h: field("precipitation").sum(), fill: "steelblue" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+// The winter of 2014 to 2015: October to March.
+const winter = between("2014-10-01", "2015-04-01");
+
+// The kinds of weather, sunniest first.
+const byWeather = field("weather").sort(["sun", "fog", "drizzle", "rain", "snow"]);
+
+export const GroupedMonthBars: StoryObj<Args> = {
+  args: { w: 640, h: 240 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Seattle Winter Weather by Month",
+      description:
+        "How many days of each kind of weather Seattle had in each month from October 2014 to March 2015, grouped by month, with dividers between the months and the years.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(winter, {
+      schema: { date: Schema.time() },
+      axes: { x: { labelAngle: "auto" }, y: true },
+    })
+      .flow(
+        spread({
+          by: field("date").bin(Calendar.year).bin(Calendar.month),
+          dir: "x",
+          spacing: 12,
+        }),
+        spread({ by: byWeather, dir: "x", spacing: 1 })
+      )
+      .mark(rect({ h: field("weather").count(), fill: "weather" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+export const GroupedMonthBarsHiddenInner: StoryObj<Args> = {
+  args: { w: 640, h: 240 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(winter, {
+      schema: { date: Schema.time() },
+      axes: { x: { levels: [false, true] }, y: true },
+    })
+      .flow(
+        spread({
+          by: field("date").bin(Calendar.year).bin(Calendar.month),
+          dir: "x",
+          spacing: 12,
+        }),
+        spread({ by: byWeather, dir: "x", spacing: 1 })
+      )
+      .mark(rect({ h: field("weather").count(), fill: "weather" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+export const MonthBarsProductTrueWidths: StoryObj<Args> = {
+  args: { w: 640, h: 220 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Seattle Rain on a Time Axis",
+      description:
+        "Seattle's total rainfall in each month of 2014 and 2015, each bar as wide as its month on a time axis.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(between("2014-01-01", "2016-01-01"), {
+      schema: { date: Schema.time() },
+      axes: true,
+    })
+      .flow(
+        partition({
+          by: field("date").bin([Calendar.year, Calendar.month]),
+          dir: "x",
+        })
+      )
+      .mark(
+        rect({ h: field("precipitation").sum(), fill: "steelblue", inset: 1 })
+      )
       .render(container, { w: args.w, h: args.h });
     return container;
   },

@@ -137,7 +137,7 @@ def story_week_over_month_rows():
         chart(
             VISITS,
             schema={"day": Schema.time()},
-            axes={"x": {"rows": [Calendar.week, Calendar.month]}, "y": True},
+            axes={"x": {"levels": [Calendar.week, Calendar.month]}, "y": True},
         )
         .flow(scatter(by="day", x="day", y="visits"))
         .mark(line(stroke="steelblue", stroke_width=2)),
