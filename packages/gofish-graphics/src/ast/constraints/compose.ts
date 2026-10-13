@@ -296,6 +296,7 @@ type Seg = DistributeSegment & {
   anchor: AlignAnchor | "edge";
   glue: boolean;
   measure?: string;
+  hasOrder?: boolean;
   origin: StackOrigin<number>;
   keys: (OrdinalKey | undefined)[];
   anonymous: boolean;
@@ -389,6 +390,7 @@ export function planConstraintComposition(
       anchor: d.anchor,
       glue: d.glue,
       measure: d.measure,
+      hasOrder: d.hasOrder,
       origin: distributeOrigin(d, ordered),
       keys: idx.map(keyOf),
       anonymous: idx.length > 0 && idx.every(syntheticOf),
@@ -436,6 +438,7 @@ const foldOptions = (s: Seg) => ({
   anchor: s.anchor,
   glue: s.glue,
   measure: s.measure,
+  hasOrder: s.hasOrder,
   anonymous: s.anonymous,
   origin: s.origin,
 });

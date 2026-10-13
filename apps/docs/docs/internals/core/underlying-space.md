@@ -377,6 +377,17 @@ places cells, not points: an axis over cells labels each cell between its
 boundary ticks ([Axes](/internals/frontend/axes)). It is read off the
 space, never off a datatype flag on the column.
 
+An `ORDINAL` also says whether its keys have an order
+(`ORDINAL_TYPE.hasOrder`). Cells are ordered by nature, so an ordinal over
+cells has it. A split over a column the chart's `schema` declares ordered
+(`HasOrder`) says so too: `spread`'s split reads the `by` column's type and
+returns `hasOrder` in its layout options, and the spread passes it through
+its distribute (`DistributeOptions.hasOrder`) to `ordinalOver`, as it passes
+the grouping field as the `measure`. `unionChildSpaces` keeps it when every
+unioned ordinal has it. The axis reads it to place an outer level's labels:
+at the start of each run of ordered keys, centered over unordered ones
+([Axes](/internals/frontend/axes)).
+
 A datum value can also carry a `field`: the data field it was read from, set
 by `inferColor` when a color channel names one. That is provenance, not a
 quantity: it never enters `resolveColumn` or unit unification, and only the

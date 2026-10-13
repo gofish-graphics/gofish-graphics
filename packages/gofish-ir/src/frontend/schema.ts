@@ -384,7 +384,8 @@ export interface ScatterOperator
  *
  * `AxisOptions` per-dim is either a boolean (show/hide, infer title) or an
  * object: `title` (string for a custom title, `false` to suppress), `side`
- * (the frame edge), `labelAngle` (label rotation in degrees), and `levels`
+ * (the frame edge), `labelAngle` (label rotation in degrees), `labelAlign`
+ * (each level's labels centered or at the start of each run), and `levels`
  * (the axis's bands of labels by depth, nearest the plot first: `true`
  * keeps one, `false` hides it, a Calendar value names its cells).
  */
@@ -395,6 +396,7 @@ export type AxisOptions =
       title?: string | false;
       side?: "start" | "end";
       labelAngle?: number | number[] | "auto";
+      labelAlign?: "start" | "center" | ("start" | "center" | true)[];
       levels?: (boolean | CalendarPartitionIR)[];
     };
 

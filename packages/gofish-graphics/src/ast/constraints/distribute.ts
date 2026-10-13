@@ -48,6 +48,9 @@ export interface DistributeOptions {
   /** The measure for an ORDINAL fold — the grouping field (spread's `by`) — so a
    *  category axis names itself off its own space, like a continuous axis does. */
   measure?: string;
+  /** The grouping field's values have an order (`HasOrder`, from the chart's
+   *  `schema`), so an ORDINAL fold's keys do too ({@link ORDINAL_TYPE}). */
+  hasOrder?: boolean;
   /** A stack's origin (glue only), its part named by child name. Omitted, it
    *  is the tail of the first part laid out. */
   origin?: StackOrigin<string>;
@@ -82,6 +85,7 @@ export interface DistributeConstraint {
   glue: boolean;
   children: ConstraintRef[];
   measure?: string;
+  hasOrder?: boolean;
   origin?: StackOrigin<string>;
 }
 
@@ -99,6 +103,7 @@ export const createDistributeConstraint = (
   glue: options.glue ?? false,
   children,
   measure: options.measure,
+  hasOrder: options.hasOrder,
   origin: options.glue ? options.origin : undefined,
 });
 
@@ -257,6 +262,8 @@ export type DistributeFoldOptions = {
    *  is the continuous measure composed from the children for a SIZE/POSITION
    *  result.) */
   measure?: string;
+  /** The keys have an order (`HasOrder`); see {@link DistributeOptions}. */
+  hasOrder?: boolean;
   /** True when every contributing child was POSITIONALLY keyed (a `spread`
    *  with no `by`): the folded ORDINAL is anonymous and renders no axis. */
   anonymous?: boolean;
@@ -321,7 +328,7 @@ export function distributeSpaceFold(
   const namedKeys = keys.filter((k): k is OrdinalKey => k !== undefined);
   const keyed = (): UnderlyingSpace =>
     namedKeys.length > 0
-      ? ordinalOver(namedKeys, opts.measure, opts.anonymous)
+      ? ordinalOver(namedKeys, opts.measure, opts.anonymous, opts.hasOrder)
       : UNDEFINED;
   if (!targetSpaces.every(hasOrigin)) return keyed();
   const targets = targetSpaces as CONTINUOUS_TYPE[];

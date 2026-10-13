@@ -65,6 +65,7 @@ type AxisOptions =
       title?: string | false;
       side?: "start" | "end";
       labelAngle?: number | number[] | "auto";
+      labelAlign?: "start" | "center" | ("start" | "center" | true)[];
       levels?: (boolean | CalendarPartition)[];
     };
 ```
@@ -96,13 +97,35 @@ the slots of `field("date").bin([Calendar.year, Calendar.month])` adds a year
 level. An entry that cannot apply is an error that lists the dimension's
 levels: a Calendar value over slots that are not times, or that it does not
 group (`Calendar.week` over months), `false` on a numeric axis, and an entry
-past the last level. `labelAngle` arrays use the same depths.
+past the last level. `labelAngle` and `labelAlign` arrays use the same
+depths.
 
-On an ordinal axis, the innermost ordinal level of the dimension draws no
-ticks. Every level outside it draws one divider in each gap between
-neighboring groups: a line centered in the gap, from the edge of what the
-axis labels down through its own row. Each label is centered under its run
-of slots.
+On an ordinal axis, the label rows of the dimension stack from the plot
+edge, whichever split draws them, so nested splits and one chained key look
+the same. The innermost level of the dimension draws no ticks. A divider is a
+line centered in the gap between two neighboring slots. It runs through the
+row of every level that has a boundary in that gap, starting at the plot
+edge: in a grouped bar chart over months, each month divider runs through
+the inner row and the month row, and the divider between two years runs on
+through the year row. A level whose group continues across the gap stops
+the divider.
+
+labelAlign sets where each level's labels sit along the axis: `"center"` centers
+a label under what it names, and `"start"` puts it at the start of its run,
+3 pixels past the divider before it (the first run starts at the axis
+start). By default:
+
+| Level                                                                                                      | Labels                   |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------ |
+| the innermost level of the dimension (one label per slot)                                                  | centered                 |
+| an outer level over unordered categories                                                                   | centered                 |
+| an outer level over ordered groups: cells of time, numeric bins, or a column the `schema` declares ordered | at the start of each run |
+| a continuous axis's ticks                                                                                  | centered on the tick     |
+
+A single value applies to every level. A list is per level, by the same
+depths as `levels`, and `true` keeps a level's inferred alignment: `labelAlign: [true, "center"]`
+centers the second level. `"start"` on a continuous axis is an error, since
+its labels name points.
 
 Each axis title defaults to the field that dimension encodes (e.g. `count` for
 `rect({ h: "count" })`). Pass `{ title: "…" }` to override it, or `{ title: false }`

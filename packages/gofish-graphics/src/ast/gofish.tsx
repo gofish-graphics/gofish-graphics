@@ -49,6 +49,8 @@ import {
 import {
   elaborateChrome,
   labelRowSettingsFromAngles,
+  type LabelAlign,
+  type LabelAlignOpt,
   type LabelRowSettings,
 } from "./axes/elaborate";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
@@ -165,6 +167,24 @@ export type AxisOptions =
        *  is one level, so in a faceted chart its ticks take the first entry
        *  and the facets' labels the next. */
       labelAngle?: number | number[] | "auto";
+      /** Where each level's labels sit along the axis: `"center"` centers a
+       *  label under what it names, `"start"` puts it at the start of its
+       *  run, just past the divider before it (the axis's first run starts
+       *  at the axis start). By default an ordinal axis's outer level over
+       *  ordered groups (cells of time, numeric bins, or a column the
+       *  `schema` declares ordered) starts its runs, since each label marks
+       *  where a run of ordered values begins, as a calendar's month labels
+       *  do; an outer level over unordered categories centers, since its
+       *  label collects the groups beneath it; and the innermost level, one
+       *  label per slot, centers. A continuous axis's labels name points,
+       *  so they center on their ticks, and `"start"` there is an error.
+       *
+       *  A plain value applies to every level of the axis. An **array** is
+       *  per level, by the depths of `levels`, nearest the plot first, like
+       *  `labelAngle`'s; `true`, or a depth past the array's end, keeps the
+       *  level's inferred alignment (`[true, "center"]` centers only the
+       *  second level). */
+      labelAlign?: LabelAlign | (LabelAlign | true)[];
       /** The levels of the axis: its bands of labels, by depth, nearest the
        *  plot first. Every axis on the dim has levels, nested ones counted
        *  from the inside out: a numeric axis has one (its ticks), a time
@@ -230,6 +250,28 @@ function checkLabelAngle(v: unknown, axis: "x" | "y"): LabelAngleOption {
       `(expected a number, an array of numbers, or "auto").`
   );
 }
+
+/** Reject a malformed `labelAlign` (see `AxisOptions.labelAlign`), for
+ *  untyped callers (Python, plain JS). */
+function checkLabelAlign(v: unknown, axis: "x" | "y"): LabelAlignOpt {
+  const ok = (a: unknown) => a === "start" || a === "center";
+  if (v === undefined || ok(v)) return v as LabelAlignOpt;
+  if (Array.isArray(v) && v.every((a) => a === true || ok(a)))
+    return v as (LabelAlign | true)[];
+  throw new Error(
+    `axes.${axis}.labelAlign: unknown value ${JSON.stringify(v)} ` +
+      `(expected "start", "center", or an array of those and true, one ` +
+      `per level).`
+  );
+}
+
+/** Each axis's `labelAlign`, checked. */
+export const resolveAxisLabelAligns = (
+  axes: AxesOptions | undefined
+): [LabelAlignOpt, LabelAlignOpt] => {
+  const [x, y] = perDimAxisOption(axes, "labelAlign");
+  return [checkLabelAlign(x, "x"), checkLabelAlign(y, "y")];
+};
 
 /** A `number` applies to every level; a `number[]` is per level, innermost first;
  *  `"auto"` is chosen per axis by `runLayout` (see `AxisOptions.labelAngle`). */
@@ -397,6 +439,7 @@ export async function layout(
     sides: resolveAxisSides(axes),
     labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
     levels,
+    labelAligns: resolveAxisLabelAligns(axes),
   });
   // Entries that no level took are an error (see `AxisOptions.levels`).
   const levelsErr = levelsError(

@@ -507,6 +507,24 @@ difference axis), never off the size claim:
   from the plot edge through the inner row and the month row, and the
   divider between two years runs on through the year row.
 
+  Where a level's labels sit along the axis is the axis's `labelAlign`
+  option, per depth like `labelAngle`, else inferred from what the label
+  means. A centered label collects the groups beneath it, which have no
+  order. A start-aligned label marks where a run of ordered values begins,
+  as a calendar's month labels do. So an outer level over ordered groups
+  (cells, or a split over a column with `HasOrder`, read off the space's
+  `ORDINAL_TYPE.hasOrder`; calendar levels from `levels` entries are cells)
+  puts each label at the start of its run, and every other level centers:
+  an outer level over categories, and the innermost level, one label per
+  slot. A start-aligned label centers on a `runStartBox`
+  (`axes/axisSpan.tsx`), a box as long as the label that starts
+  `LABEL_TICK_GAP` past the divider before the run, or at the first slot's
+  start for the axis's first run. The box reads which way the slots run off
+  the layout (from the axis's first slot to its last), so a reversed or
+  bottom-up axis puts it on the run's side. A continuous axis's labels name
+  points, its ticks, so they stay centered on them, and `labelAlign:
+"start"` on one is an error.
+
   `axisSpan` is a bake boundary
   (`BAKE_BOUNDARY_TYPES` in `bake.ts`), since it draws itself and its
   children are `ref` stand-ins.

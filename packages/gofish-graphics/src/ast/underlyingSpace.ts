@@ -139,6 +139,13 @@ export type ORDINAL_TYPE = {
    *  one cell (axes/elaborate.tsx). A union keeps them only when every part
    *  has them ({@link mergeAxisCells}), as a continuous axis's cells are. */
   cells?: readonly AxisCell[];
+  /** True when the keys have an order: they are the levels of a column the
+   *  chart's `schema` declares ordered (`HasOrder`), or cells, which are
+   *  ordered by nature (cells of the line by their starts, parts of a cycle
+   *  by the cycle). An axis puts an outer level's labels over ordered keys at
+   *  the start of each run, and centers them over unordered ones
+   *  (axes/elaborate.tsx). A union keeps it only when every part has it. */
+  hasOrder?: boolean;
 };
 
 export type UNDEFINED_TYPE = {
@@ -382,13 +389,15 @@ export const ORDINAL = (
   domain?: string[],
   title?: string,
   anonymous?: boolean,
-  cells?: readonly AxisCell[]
+  cells?: readonly AxisCell[],
+  hasOrder?: boolean
 ): UnderlyingSpace => ({
   kind: "ordinal",
   domain,
   titles: title === undefined ? undefined : [title],
   anonymous,
   ...(cells !== undefined ? { cells } : {}),
+  ...(hasOrder || cells !== undefined ? { hasOrder: true } : {}),
 });
 
 /** An ordinal axis's keys: plain text, or cells (`field(x).bin(p)`), which
@@ -401,14 +410,15 @@ export type OrdinalKey = string | KeyCell;
 export const ordinalOver = (
   keys: readonly OrdinalKey[],
   title?: string,
-  anonymous?: boolean
+  anonymous?: boolean,
+  hasOrder?: boolean
 ): UnderlyingSpace => {
   const cells = keys.every(
     (k): k is AxisCell => k instanceof Cell || k instanceof CycleCell
   )
     ? mergeAxisCells([keys])
     : undefined;
-  return ORDINAL(keys.map(String), title, anonymous, cells);
+  return ORDINAL(keys.map(String), title, anonymous, cells, hasOrder);
 };
 
 /** The cells of a union of ordinal parts: {@link mergeCells} for cells of

@@ -248,10 +248,11 @@ Each group's key is its cell. Its id is the cell's start, as text, or, for
 a part of a cycle, its field values (`"6"` for June). An axis over cells
 labels each cell (its edges, `"0.5–1"`, or the calendar label `"Jan"`),
 with no ticks. A chained key adds a level per bin before the last, e.g.
-years under months, each label centered under its run of months, with a
-divider between neighboring years. A part of a cycle covers the whole
+years under months, each year label at the start of its run of months, just
+past the divider between neighboring years. A part of a cycle covers the whole
 cycle: an axis over the months of the year shows all twelve. See
-[chart › Axes](/python/api/core/chart#axes) for the `"levels"` option.
+[chart › Axes](/python/api/core/chart#axes) for the `"levels"` and
+`"label_align"` options.
 
 `spread` gives each cell an equal slot. To place each cell at its true width
 on a continuous axis, use [`partition`](/python/api/operators/partition) with the same key.

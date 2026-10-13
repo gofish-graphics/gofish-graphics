@@ -793,6 +793,30 @@ check(
 );
 
 check(
+  "axis labelAlign accepts a value or a per-level array with true",
+  validate(
+    chart([
+      {
+        type: "spread",
+        by: "lake",
+        dir: "x",
+        axes: {
+          x: { labelAlign: [true, "start"] },
+          y: { labelAlign: "center" },
+        },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "axis labelAlign of an unknown value rejected",
+  !validate(
+    chart([{ type: "spread", axes: { x: { labelAlign: "left" } } as any }])
+  ).valid
+);
+
+check(
   "axis levels of booleans and Calendar values accept",
   validate(
     chart([

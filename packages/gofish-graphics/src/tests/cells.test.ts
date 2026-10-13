@@ -900,11 +900,12 @@ async function main() {
     const at = (w: string) => texts.find((t) => t.text === w)!;
     const mid = (w: string) => at(w).x + textWidth(w) / 2;
     check(
-      "each year is centered under its run of months, past the month level",
+      "each year starts its run of months, past the month level (see " +
+        "# labelAlign)",
       at("2023").y > at("Nov").y &&
-        Math.abs(mid("2023") - (mid("Nov") + mid("Dec")) / 2) < 0.5 &&
-        Math.abs(mid("2024") - mid("Feb")) < 0.5,
-      JSON.stringify([mid("2023"), mid("Nov"), mid("Dec"), mid("2024")])
+        at("2023").x < at("Nov").x &&
+        at("2024").x < at("Jan").x + textWidth("Jan"),
+      JSON.stringify([at("2023").x, at("Nov").x, at("2024").x, at("Jan").x])
     );
     const bars = rectsOf(chainedDl).filter((r) => r.w === 30);
     const lines = rectsOf(chainedDl).filter((r) => r.w === 1);
@@ -1113,6 +1114,88 @@ async function main() {
           1e-6 &&
         Math.abs(lines[0].y - cEdge) < 1e-6,
       JSON.stringify([nAt("a").y, nAt("Nov").y, plotEdge, cAt("Nov").y, cEdge])
+    );
+
+    console.log("\n# labelAlign");
+    // A chained key: the outer (year) level is over cells, so ordered.
+    const yearX = (dl: any) => textsOf(dl).find((t) => t.text === "2024")!.x;
+    const chainedBarsX = rectsOf(chainedDl).filter((r) => r.w === 30);
+    const divider = rectsOf(chainedDl).filter((r) => r.w === 1)[0];
+    check(
+      "an outer level over cells starts each run 3px past its divider, and " +
+        "the first run at the axis start",
+      Math.abs(yearX(chainedDl) - (divider.x + 0.5 + 3)) < 1e-6 &&
+        Math.abs(cAt("2023").x - chainedBarsX[0].x) < 1e-6,
+      JSON.stringify([yearX(chainedDl), divider.x, cAt("2023").x])
+    );
+    check(
+      "the innermost level stays centered",
+      Math.abs(mid("Nov") - (chainedBarsX[0].x + 15)) < 0.5,
+      `${mid("Nov")}`
+    );
+    const centered = await render(chainKey, {
+      title: false,
+      labelAlign: [true, "center"],
+    });
+    const cTexts = textsOf(centered);
+    const cMid = (w: string) => {
+      const t = cTexts.find((x: any) => x.text === w)!;
+      return t.x + textWidth(w) / 2;
+    };
+    const cBars = rectsOf(centered).filter((r) => r.w === 30);
+    check(
+      "labelAlign [true, \"center\"] centers the year level",
+      Math.abs(cMid("2023") - (cBars[0].x + cBars[1].x + 30) / 2) < 0.5,
+      `${cMid("2023")}`
+    );
+    // A split over categories: ordered only when the schema says so.
+    const catRows = ["p", "q"].flatMap((g) =>
+      ["a", "b"].map((s) => ({ g, s, v: 1 }))
+    );
+    const outerX = async (schema: any) => {
+      const dl = await chart(catRows, {
+        schema,
+        axes: { x: { title: false }, y: false },
+      })
+        .flow(spread({ by: "g", dir: "x" }), spread({ by: "s", dir: "x" }))
+        .mark(rect({ w: 20, h: "v" }))
+        .toDisplayList({ w: 300, h: 100 });
+      const t = textsOf(dl).find((x: any) => x.text === "q")!;
+      const bars = rectsOf(dl).filter((r) => r.w === 20);
+      return { left: t.x, mid: t.x + textWidth("q") / 2, bars };
+    };
+    const plain = await outerX(undefined);
+    check(
+      "an outer level over unordered categories centers",
+      Math.abs(plain.mid - (plain.bars[2].x + plain.bars[3].x + 20) / 2) < 0.5,
+      JSON.stringify(plain.mid)
+    );
+    const ordered = await outerX({ g: Schema.ordered(["p", "q"]) });
+    check(
+      "an outer level over a Schema.ordered column starts its runs",
+      ordered.left > ordered.bars[1].x + 20 &&
+        ordered.left < ordered.bars[2].x + 3,
+      JSON.stringify([ordered.left, ordered.bars[2].x])
+    );
+    const startErr = await errorOfAsync(() =>
+      chart([{ v: 1, w: 2 }], { axes: { x: { labelAlign: "start" }, y: false } })
+        .flow(scatter({ x: "v", y: "w" }))
+        .mark(circle({ r: 2 }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "labelAlign \"start\" on a continuous axis is an error",
+      startErr?.includes("axes.x.labelAlign") === true &&
+        startErr.includes("continuous"),
+      startErr
+    );
+    const badAlign = await errorOfAsync(() =>
+      render(chainKey, { title: false, labelAlign: "left" })
+    );
+    check(
+      "an unknown labelAlign value is an error",
+      badAlign?.includes("axes.x.labelAlign: unknown value") === true,
+      badAlign
     );
   }
 

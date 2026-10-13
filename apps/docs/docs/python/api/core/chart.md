@@ -69,12 +69,13 @@ chart(data, axes={"x": {"title": "Year"}, "y": True})   # custom x title
 chart(data, axes={"x": {"title": False}, "y": True})    # suppress inferred x title
 chart(data, axes={"x": {"side": "end"}})                # x-axis on the far edge
 chart(data, axes={"x": {"label_angle": 45}})            # x labels rotated 45 degrees
+chart(data, axes={"x": {"label_align": [True, "center"]}})  # center the second level
 chart(data, axes={"x": {"levels": [Calendar.week, Calendar.month]}})  # the rows of a time axis
 chart(data, axes={"x": {"levels": [False, True]}})       # hide the innermost level
 ```
 
 Keys inside the per-axis dict are snake_case, like every keyword argument:
-`"title"`, `"side"`, `"label_angle"`, and `"levels"`. Any other key, including the
+`"title"`, `"side"`, `"label_angle"`, `"label_align"`, and `"levels"`. Any other key, including the
 camelCase `"labelAngle"`, raises a `TypeError`.
 
 `"label_angle"` rotates the tick and category labels clockwise by that many
@@ -111,11 +112,32 @@ levels: a Calendar value over slots that are not times, or that it does not
 group (`Calendar.week` over months), `False` on a numeric axis, and an entry
 past the last level.
 
-On an ordinal axis, the innermost ordinal level of the dimension draws no
-ticks. Every level outside it draws one divider in each gap between
-neighboring groups: a line centered in the gap, from the edge of what the
-axis labels down through its own row. Each label is centered under its run
-of slots.
+On an ordinal axis, the label rows of the dimension stack from the plot
+edge, whichever split draws them, so nested splits and one chained key look
+the same. The innermost level of the dimension draws no ticks. A divider is a
+line centered in the gap between two neighboring slots. It runs through the
+row of every level that has a boundary in that gap, starting at the plot
+edge: in a grouped bar chart over months, each month divider runs through
+the inner row and the month row, and the divider between two years runs on
+through the year row. A level whose group continues across the gap stops
+the divider.
+
+"label_align" sets where each level's labels sit along the axis: `"center"` centers
+a label under what it names, and `"start"` puts it at the start of its run,
+3 pixels past the divider before it (the first run starts at the axis
+start). By default:
+
+| Level                                                                                                      | Labels                   |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------ |
+| the innermost level of the dimension (one label per slot)                                                  | centered                 |
+| an outer level over unordered categories                                                                   | centered                 |
+| an outer level over ordered groups: cells of time, numeric bins, or a column the `schema` declares ordered | at the start of each run |
+| a continuous axis's ticks                                                                                  | centered on the tick     |
+
+A single value applies to every level. A list is per level, by the same
+depths as `levels`, and `True` keeps a level's inferred alignment: `"label_align": [True, "center"]`
+centers the second level. `"start"` on a continuous axis is an error, since
+its labels name points.
 
 Each per-axis dict also accepts `"side": "start" | "end"`. By default a
 **continuous/quantitative x-axis renders at the visual bottom** (and a continuous

@@ -3449,6 +3449,7 @@ def chart(
         axes={"x": True, "y": False}   # per-dimension on/off
         axes={"x": {"title": "Year"}}  # custom title (title=False suppresses it)
         axes={"x": {"label_angle": 45}}  # rotate x labels (also "side")
+        axes={"x": {"label_align": ["center", "start"]}}  # per-level label alignment
 
         chart(data, axes=True)
         chart(data, axes={"x": {"title": "Year"}, "y": True})

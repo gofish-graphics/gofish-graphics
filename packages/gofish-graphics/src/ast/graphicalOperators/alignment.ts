@@ -128,12 +128,14 @@ export function unionChildSpaces(
     // Over cells only if every unioned ordinal is: a union with a plain
     // category key is a plain category axis.
     const cells = mergeAxisCells(ordinals.map((o) => o.cells));
+    const hasOrder = ordinals.every((o) => o.hasOrder);
     return {
       kind: "ordinal",
       domain: Array.from(keys),
       titles: titles.length > 0 ? titles : undefined,
       anonymous,
       ...(cells !== undefined ? { cells } : {}),
+      ...(hasOrder ? { hasOrder } : {}),
     };
   }
 

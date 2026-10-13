@@ -89,3 +89,65 @@ export function axisSpan(opts: {
     refs
   );
 }
+
+/**
+ * The box a start-aligned label of an ordinal axis is centered on, along
+ * axis `dim`: `width` pixels long (the label's extent along the axis),
+ * starting at the boundary its run begins at and running into the run. The
+ * boundary is the middle of the gap between the run's first slot (`first`)
+ * and the slot before it (`prev`), where a divider sits, and the box starts
+ * `pad` pixels past it; for the axis's first run (no `prev`) it is the
+ * first slot's start, the axis start. Which way the run runs is read off
+ * the layout, from the axis's first slot (`axisFirst`) toward its last
+ * (`axisLast`), so a reversed or bottom-up axis puts the box on the run's
+ * side too. Like {@link axisSpan}, it reads the slots through `ref`s, is
+ * placed along `dim` by its own layout, and is free across it (no depth).
+ */
+export function runStartBox(opts: {
+  dim: 0 | 1;
+  axisFirst: GoFishNode;
+  axisLast: GoFishNode;
+  first: GoFishNode;
+  prev?: GoFishNode;
+  width: number;
+  pad: number;
+}): GoFishNode {
+  const { dim, axisFirst, axisLast, first, prev, width, pad } = opts;
+  const nodes = [axisFirst, axisLast, first, ...(prev ? [prev] : [])];
+  const refs = nodes.map((n) => ref(n)) as unknown as GoFishAST[];
+  return new GoFishNode(
+    {
+      type: "axisSpan",
+      shared: [false, false],
+      resolveUnderlyingSpace: (): Size<UnderlyingSpace> => [
+        UNDEFINED,
+        UNDEFINED,
+      ],
+      layout: (_shared, size, _scales, layoutChildren) => {
+        const [lo, hi, f, p] = layoutChildren
+          .map((c) => c.layout(size, [undefined, undefined]))
+          .map((l) => [l.dims[dim].min ?? 0, l.dims[dim].max ?? 0] as const);
+        const sign = hi[0] + hi[1] >= lo[0] + lo[1] ? 1 : -1;
+        // The run's start edge, and the slot before's facing edge.
+        const runStart = sign > 0 ? f[0] : f[1];
+        const boundary =
+          p === undefined
+            ? runStart
+            : (runStart + (sign > 0 ? p[1] : p[0])) / 2;
+        const start = boundary + sign * pad;
+        const along = {
+          min: Math.min(start, start + sign * width),
+          size: width,
+        };
+        const across = { min: 0, size: 0 };
+        return {
+          intrinsicDims: dim === 0 ? [along, across] : [across, along],
+          transform: { translate: dim === 0 ? [0, undefined] : [undefined, 0] },
+          renderData: undefined,
+        };
+      },
+      lower: (): DisplayList.DisplayItem[] => [],
+    },
+    refs
+  );
+}

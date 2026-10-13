@@ -385,7 +385,7 @@ export const LABEL_OPTIONS: FieldGroup = group({
  *  object of named options. Mirrors the JS `AxisOptions` in
  *  `gofish-graphics/src/ast/gofish.tsx`. */
 const axisOptions: FieldSpec = {
-  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, and its levels.",
+  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, labelAlign, and its levels.",
   type: t.union(
     t.boolean,
     t.object({
@@ -400,6 +400,13 @@ const axisOptions: FieldSpec = {
       labelAngle: {
         type: t.union(t.number, t.array(t.number), t.enum("auto")),
         doc: 'Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite\'s labelAngle). A number applies to every level of the axis; an array is per level, by the same depths as `levels`, nearest the plot first; "auto" picks 0, 45, or 90 degrees per level so labels do not collide.',
+      },
+      labelAlign: {
+        type: t.union(
+          t.enum("start", "center"),
+          t.array(t.union(t.enum("start", "center"), t.literal(true)))
+        ),
+        doc: 'Where each level\'s labels sit along the axis: "center" centers a label under what it names, "start" puts it at the start of its run, just past the divider before it (the first run starts at the axis start). Omitted, an ordinal axis\'s outer level over ordered groups (cells of time, numeric bins, or a column the schema declares ordered) starts its runs, and every other level centers: an outer level over unordered categories, the innermost level (one label per slot), and a continuous axis, whose labels name points, so "start" there is an error. A plain value applies to every level; an array is per level, by the same depths as `levels`, nearest the plot first, with true keeping a level\'s inferred alignment.',
       },
       levels: {
         type: t.array(t.union(t.boolean, t.ref("Calendar"))),

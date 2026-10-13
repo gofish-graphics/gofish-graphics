@@ -44,7 +44,7 @@ import {
 } from "../axisDirection";
 import { rowLabels } from "./timeRows";
 import { rotatedExtent } from "./autoLabelAngle";
-import { axisSpan } from "./axisSpan";
+import { axisSpan, runStartBox } from "./axisSpan";
 import type { LevelEntry, LevelIssue } from "./levels";
 import { Cell, CycleCell, type AxisCell, type KeyCell } from "../cells";
 import { CalendarPartition, cycleFields, zoned } from "../calendar";
@@ -131,6 +131,25 @@ type LabelAngleOpt = number | number[] | undefined;
 function angleForTier(opt: LabelAngleOpt, tier: number): number | undefined {
   if (opt === undefined) return undefined;
   return Array.isArray(opt) ? opt[tier] : opt;
+}
+
+/** Where a level's labels sit along the axis: centered under what each
+ *  names, or at the start of each run (see `AxisOptions.labelAlign`). */
+export type LabelAlign = "start" | "center";
+
+/** A `labelAlign` value as authored: one alignment for every level, or one
+ *  entry per level by the depths of `levels`, nearest the plot first, where
+ *  `true` (or a depth past the end) keeps the level's inferred alignment. */
+export type LabelAlignOpt = LabelAlign | (LabelAlign | true)[] | undefined;
+
+/** The explicit alignment for the level at depth `tier`, or undefined for
+ *  the inferred one. */
+function alignForTier(
+  opt: LabelAlignOpt,
+  tier: number
+): LabelAlign | undefined {
+  const a = Array.isArray(opt) ? opt[tier] : opt;
+  return a === true ? undefined : a;
 }
 
 /** One row of axis labels: an axis, what kind of labels it carries, and its
@@ -726,7 +745,13 @@ type LevelSetting = { hidden: boolean; rotation?: LabelRotation };
 /** One level of an ordinal axis: the group each slot falls in (an id and a
  *  label), in slot order. Neighboring slots in one group are one run, and
  *  the level labels each run once. */
-type OrdinalLevel = { name: string; groups: { id: string; label: string }[] };
+type OrdinalLevel = {
+  name: string;
+  groups: { id: string; label: string }[];
+  /** The groups have an order (`HasOrder`): cells, or the levels of an
+   *  ordered column. */
+  hasOrder: boolean;
+};
 
 /** The `k`-th cell up a cell's chain (0 is the cell itself). */
 const ancestor = (cell: KeyCell, k: number): KeyCell | undefined => {
@@ -798,7 +823,7 @@ function calendarLevel(
       );
     }
   }
-  return { name: String(p), groups };
+  return { name: String(p), groups, hasOrder: true };
 }
 
 /**
@@ -810,7 +835,8 @@ function calendarLevel(
  */
 function inferredOrdinalLevels(
   slots: readonly { key: string; cell?: AxisCell }[],
-  title: string | undefined
+  title: string | undefined,
+  hasOrder: boolean
 ): OrdinalLevel[] {
   const first = slots[0]?.cell;
   if (first === undefined || slots.some((s) => s.cell === undefined))
@@ -821,6 +847,7 @@ function inferredOrdinalLevels(
           id: s.key,
           label: s.cell?.label ?? s.key,
         })),
+        hasOrder,
       },
     ];
   const depth = chainLength(first);
@@ -830,6 +857,7 @@ function inferredOrdinalLevels(
       const c = ancestor(s.cell!, k);
       return { id: c?.id ?? "", label: c?.label ?? "" };
     }),
+    hasOrder: true,
   }));
 }
 
@@ -874,7 +902,8 @@ function elaborateOrdinalAxis(
   outermost: boolean,
   dividersAtFirst: boolean,
   depth0: number,
-  rowsBelow: number
+  rowsBelow: number,
+  alignAt: (depth: number) => LabelAlign | undefined
 ): {
   elaboration: AxisElaboration;
   report: LevelReport;
@@ -893,7 +922,11 @@ function elaborateOrdinalAxis(
 
   // The levels: inferred, as the entries name them, and, on the outermost
   // axis, more levels from Calendar entries past the inferred ones.
-  const inferred = inferredOrdinalLevels(slots, spaceTitle(space));
+  const inferred = inferredOrdinalLevels(
+    slots,
+    spaceTitle(space),
+    space.hasOrder === true
+  );
   const levels: OrdinalLevel[] = [];
   const hidden: boolean[] = [];
   const regroup = (
@@ -951,15 +984,19 @@ function elaborateOrdinalAxis(
   // label (y), as rotated; and how far past the content it sits.
   const font = (t: string) =>
     estimateTextDimensions(t, LABEL_FONT_SIZE, FALLBACK_FONT_FAMILY);
+  // A label's box, as rotated.
+  const labelBox = (text: string, rotation: LabelRotation | undefined) => {
+    const { width, height } = font(text);
+    return rotatedExtent(
+      { minX: 0, minY: 0, maxX: width, maxY: height },
+      rotation?.rotate ?? 0
+    );
+  };
   const rowDepth = levels.map((level, k) =>
     Math.max(
       0,
       ...runs[k].map(([i]) => {
-        const { width, height } = font(level.groups[i].label);
-        const box = rotatedExtent(
-          { minX: 0, minY: 0, maxX: width, maxY: height },
-          settings[k].rotation?.rotate ?? 0
-        );
+        const box = labelBox(level.groups[i].label, settings[k].rotation);
         return dim === 0 ? box.maxY - box.minY : box.maxX - box.minX;
       })
     )
@@ -989,43 +1026,6 @@ function elaborateOrdinalAxis(
     (ref(s.node) as any).name(sName(i)) as GoFishNode,
   ]);
   const nodes: GoFishNode[] = [];
-  // A label and what it centers on: its slot's ref, or the span of its run.
-  const pairs: { label: string; on: string; k: number }[] = [];
-  levels.forEach((level, k) => {
-    if (settings[k].hidden) return;
-    const rotation = settings[k].rotation;
-    runs[k].forEach(([a, b], r) => {
-      const label = Text({
-        text: level.groups[a].label,
-        fontSize: LABEL_FONT_SIZE,
-        fill: AXIS_COLOR,
-        rotate: rotation?.rotate,
-        textAnchor: rotation?.textAnchor,
-      }).name(lName(k, r));
-      label.axisLabel = {
-        dim,
-        kind: "ordinal",
-        tier: depth0 + k,
-        field: spaceTitle(space),
-      };
-      if (a === b) {
-        if (k === 0) slotNodes[a].unshift(label);
-        else nodes.push(label);
-        pairs.push({ label: lName(k, r), on: sName(a), k });
-      } else {
-        nodes.push(label);
-        nodes.push(
-          axisSpan({
-            dim,
-            from: { node: slots[a].node, edge: "start" },
-            to: { node: slots[b].node, edge: "end" },
-            cross: 0,
-          }).name(spanName(k, r))
-        );
-        pairs.push({ label: lName(k, r), on: spanName(k, r), k });
-      }
-    });
-  });
 
   // Dividers. The rows of the dim, nearest the plot first: the inner axes'
   // rows (a group of an inner axis never crosses this axis's slots, so they
@@ -1049,7 +1049,8 @@ function elaborateOrdinalAxis(
   const breaks = (row: Row, i: number) =>
     row.k === undefined ||
     levels[row.k].groups[i].id !== levels[row.k].groups[i + 1].id;
-  const dividers: { at: number; start: number; end: number }[] = [];
+  const dividers: { at: number; start: number; end: number; ks: number[] }[] =
+    [];
   for (let i = 0; i + 1 < slots.length; i++) {
     let run: Row[] = [];
     const close = () => {
@@ -1058,6 +1059,7 @@ function elaborateOrdinalAxis(
           at: i,
           start: run[0].start,
           end: run[run.length - 1].end,
+          ks: run.flatMap((r) => (r.k === undefined ? [] : [r.k])),
         });
       run = [];
     };
@@ -1067,6 +1069,76 @@ function elaborateOrdinalAxis(
     }
     close();
   }
+  // Whether a divider runs through level `k`'s row in the gap before slot `a`.
+  const dividedAt = (a: number, k: number) =>
+    dividers.some((d) => d.at === a - 1 && d.ks.includes(k));
+
+  // Where each level's labels sit along the axis: as `labelAlign` says, else
+  // at the start of each run for an outer level over ordered groups (each
+  // label begins a run of ordered values, next to the divider before it),
+  // else centered (a label collects the unordered groups, or the one slot,
+  // beneath it).
+  const aligns = levels.map(
+    (level, k): LabelAlign =>
+      alignAt(depth0 + k) ??
+      ((k > 0 || dividersAtFirst) && level.hasOrder ? "start" : "center")
+  );
+
+  // A label and the box it centers on: its slot's ref or the span of its
+  // run (centered), or a label-wide box at the start of its run (start).
+  const pairs: { label: string; on: string; k: number }[] = [];
+  levels.forEach((level, k) => {
+    if (settings[k].hidden) return;
+    const rotation = settings[k].rotation;
+    runs[k].forEach(([a, b], r) => {
+      const text = level.groups[a].label;
+      const label = Text({
+        text,
+        fontSize: LABEL_FONT_SIZE,
+        fill: AXIS_COLOR,
+        rotate: rotation?.rotate,
+        textAnchor: rotation?.textAnchor,
+      }).name(lName(k, r));
+      label.axisLabel = {
+        dim,
+        kind: "ordinal",
+        tier: depth0 + k,
+        field: spaceTitle(space),
+      };
+      if (aligns[k] === "start") {
+        nodes.push(label);
+        const box = labelBox(text, rotation);
+        nodes.push(
+          runStartBox({
+            dim,
+            axisFirst: slots[0].node,
+            axisLast: slots[slots.length - 1].node,
+            first: slots[a].node,
+            prev: a > 0 ? slots[a - 1].node : undefined,
+            width: dim === 0 ? box.maxX - box.minX : box.maxY - box.minY,
+            pad: dividedAt(a, k) ? LABEL_TICK_GAP : 0,
+          }).name(spanName(k, r))
+        );
+        pairs.push({ label: lName(k, r), on: spanName(k, r), k });
+      } else if (a === b) {
+        if (k === 0) slotNodes[a].unshift(label);
+        else nodes.push(label);
+        pairs.push({ label: lName(k, r), on: sName(a), k });
+      } else {
+        nodes.push(label);
+        nodes.push(
+          axisSpan({
+            dim,
+            from: { node: slots[a].node, edge: "start" },
+            to: { node: slots[b].node, edge: "end" },
+            cross: 0,
+          }).name(spanName(k, r))
+        );
+        pairs.push({ label: lName(k, r), on: spanName(k, r), k });
+      }
+    });
+  });
+
   dividers.forEach((d, n) =>
     nodes.push(
       axisSpan({
@@ -1095,8 +1167,11 @@ function elaborateOrdinalAxis(
     // ±90° keeps plain bbox-middle centering; an oblique angle anchors the
     // LABEL at its own rotation pivot (`"baseline"`) while what it tracks
     // stays "middle"-anchored, via `Constraint.align`'s anchor-array form.
+    // A start-aligned label's box is its own rotated box, so it centers its
+    // bbox on it at any angle.
     for (const { label, on, k } of pairs) {
       const anchors: AlignAnchor[] =
+        aligns[k] === "center" &&
         settings[k].rotation?.trackAlign === "baseline"
           ? ["baseline", "middle"]
           : ["middle", "middle"];
@@ -1238,7 +1313,8 @@ function elaborationsFor(
     undefined,
     undefined,
   ],
-  below: LevelFold = emptyFold()
+  below: LevelFold = emptyFold(),
+  labelAligns: [LabelAlignOpt, LabelAlignOpt] = [undefined, undefined]
 ): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
@@ -1369,6 +1445,19 @@ function elaborationsFor(
       });
     fold.names[dim].push("the numeric ticks");
   };
+  // A continuous axis labels points (its ticks), so its labels center on
+  // them: `labelAlign: "start"` at one of its depths cannot apply.
+  const centeredLevels = (dim: 0 | 1, from: number, count: number) => {
+    for (let depth = from; depth < from + count; depth++)
+      if (alignForTier(labelAligns[dim], depth) === "start")
+        throw new Error(
+          `axes.${axisName(dim)}.labelAlign${Array.isArray(labelAligns[dim]) ? `[${depth}]` : ""}: ` +
+            `"start" cannot apply at depth ${depth}: it is a continuous ` +
+            `axis's level, whose labels name points (its ticks), so they ` +
+            `are centered on them. Only an ordinal axis's labels can start ` +
+            `their runs.`
+        );
+  };
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
@@ -1390,6 +1479,7 @@ function elaborationsFor(
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
+      centeredLevels(dim, depth0, time.names.length);
       fold.names[dim].push(...time.names);
     } else if (kind === "absolute" && isCONTINUOUS(s)) {
       const e = elaborateContinuousAxis(
@@ -1406,6 +1496,7 @@ function elaborationsFor(
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
+      centeredLevels(dim, depth0, 1);
       numericLevel(dim);
     } else if (kind === "delta" && isCONTINUOUS(s)) {
       const e = elaborateDifferenceAxis(
@@ -1418,6 +1509,7 @@ function elaborationsFor(
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
+      centeredLevels(dim, depth0, 1);
       numericLevel(dim);
     } else if (isORDINAL(s)) {
       keyMap ??= collectKeyMap(node);
@@ -1440,7 +1532,8 @@ function elaborationsFor(
         !hasOuterAxis(node, dim),
         fold.ordinal[dim],
         depth0,
-        fold.rowEnd[dim]
+        fold.rowEnd[dim],
+        (depth) => alignForTier(labelAligns[dim], depth)
       );
       refBased.push(elaboration);
       fold.rowEnd[dim] = rowEnd;
@@ -1497,6 +1590,9 @@ export type ChromeOptions = {
   /** Per-dim `levels` entries, nearest the plot first (see
    *  `AxisOptions.levels`); undefined = every level as inferred. */
   levels?: [LevelEntry[] | undefined, LevelEntry[] | undefined];
+  /** Per-dim `labelAlign` (see `AxisOptions.labelAlign`); undefined = every
+   *  level's alignment as inferred. */
+  labelAligns?: [LabelAlignOpt, LabelAlignOpt];
 };
 
 /**
@@ -1556,7 +1652,8 @@ export async function elaborateChrome(
       options.sides ?? [undefined, undefined],
       options.labelSettings,
       options.levels,
-      below
+      below,
+      options.labelAligns
     );
   // A title names an axis this node draws. It is read off the node's own
   // space (`spaceTitle`), which elaboration has not re-resolved yet.
