@@ -202,8 +202,10 @@ export type FieldAccessor = {
  * the unit a column's type carries, `HasUnit` in schema.ts) is a hard claim
  * that triggers a type error if it contradicts the column's unit.
  */
-export const field = (name: string, measure?: Measure): FieldExpr<false> =>
-  new FieldExpr<false>(name, measure);
+export const field = (
+  name: string,
+  measure?: Measure
+): FieldExpr<false, false> => new FieldExpr<false, false>(name, measure);
 export const isField = (v: unknown): v is FieldAccessor =>
   typeof v === "object" &&
   v !== null &&

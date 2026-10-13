@@ -14,6 +14,7 @@ import {
   allMirrored,
   mergeCalendars,
   mergeCells,
+  mergeAxisCells,
   withCells,
   withCalendar,
   mirrored,
@@ -132,7 +133,7 @@ export function unionChildSpaces(
       Array.from(keys),
       measure,
       anonymous,
-      mergeCells(ordinals.map((o) => o.cells))
+      mergeAxisCells(ordinals.map((o) => o.cells))
     );
   }
 

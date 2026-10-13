@@ -15,7 +15,15 @@
 import * as GoFish from "../../dist/index.js";
 import "../lib";
 import { spawnSync } from "node:child_process";
-import { binCells, checkPartition, Cell, StepBin } from "../ast/cells";
+import {
+  binCells,
+  chainCells,
+  checkBinStep,
+  checkPartition,
+  Cell,
+  CycleCell,
+  StepBin,
+} from "../ast/cells";
 import * as Bin from "../families/bin";
 import { mergeCells } from "../ast/underlyingSpace";
 import { inferPos } from "../ast/channels";
@@ -65,6 +73,19 @@ function check(name: string, ok: boolean, detail?: string): void {
     console.error(`  FAIL ${name}${detail ? ` — ${detail}` : ""}`);
   }
 }
+/** The message of what `fn` throws or rejects with, if anything. */
+async function errorOfAsync(
+  fn: () => Promise<unknown>
+): Promise<string | undefined> {
+  try {
+    await fn();
+  } catch (e) {
+    return (e as Error).message;
+  }
+  return undefined;
+}
+/** A label's width in the non-DOM text measure. */
+const textWidth = (s: string) => s.length * 6;
 function errorOf(fn: () => unknown): string | undefined {
   try {
     fn();
@@ -161,41 +182,131 @@ async function main() {
     );
   }
 
-  console.log("\n# calendar partitions");
+  console.log("\n# calendar partitions: a level alone is a part of a cycle");
   {
     const t = (s: string) => Date.parse(`${s}T00:00:00Z`);
     const months = binCells(
       Calendar.month,
-      [t("2024-01-15"), t("2024-03-01")],
+      [t("2023-06-15"), t("2024-03-01")],
       "UTC",
       "t"
     );
     check(
-      "months over the domain, and March 1 is in March",
+      "a month alone is the month of the year: always twelve cells, Jan to Dec",
       same(
         months.cells.map((c) => c.label),
-        ["Jan", "Feb", "Mar"]
-      ) && months.cellOf(t("2024-03-01"))?.label === "Mar",
+        [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+        ]
+      ) && months.cells.every((c) => c instanceof CycleCell),
       months.cells.map((c) => c.label).join(" ")
     );
     check(
-      "a calendar cell keeps its calendar fields and partition",
-      months.cells[1].calendar?.fields.month === 2 &&
-        months.cells[1].calendar?.partition === Calendar.month &&
-        months.cells[1].end === t("2024-03-01")
+      "all Junes are one cell, and March 1 is in March",
+      months.cellOf(t("2023-06-15")) === months.cellOf(t("2023-06-30")) &&
+        months.cellOf(t("2023-06-15"))?.label === "Jun" &&
+        months.cellOf(t("2024-03-01"))?.label === "Mar"
     );
-    const quarters = binCells(
-      Calendar.quarter.format((c) => `Q${c.quarter} ${c.year}`),
-      [t("2024-02-01"), t("2024-08-01")],
+    const twoYears = binCells(
+      Calendar.month,
+      [t("2022-06-10"), t("2023-06-20")],
       "UTC",
       "t"
     );
     check(
-      "a Calendar value's format writes the labels",
+      "June of two years pools into one cell",
+      twoYears.cellOf(t("2022-06-10")) === twoYears.cellOf(t("2023-06-20"))
+    );
+    const jun = months.cells[5] as CycleCell;
+    check(
+      "a part knows its cycle: every part, in order",
+      jun.id === "6" &&
+        jun.index === 5 &&
+        jun.cycle.of === "year" &&
+        jun.cycle.cells.length === 12 &&
+        jun.cycle.cells[5] === jun
+    );
+    const counts = (p: any) =>
+      binCells(p, [t("2024-01-01"), t("2024-01-02")], "UTC", "t").cells.length;
+    check(
+      "the parts of each level: 31 days of a month, 24 hours, 4 quarters, " +
+        "60 minutes, months in steps of 3",
+      counts(Calendar.day) === 31 &&
+        counts(Calendar.hour) === 24 &&
+        counts(Calendar.quarter) === 4 &&
+        counts(Calendar.minute) === 60 &&
+        counts(Calendar.month.every(3)) === 4 &&
+        counts(Calendar.hour.every(6)) === 4
+    );
+    const labelsOf = (p: any) =>
+      binCells(p, [t("2024-01-01")], "UTC", "t").cells.map((c) => c.label);
+    check(
+      "parts are labeled alone: Q1, 1 to 31, 12 AM, 05",
+      same(labelsOf(Calendar.quarter), ["Q1", "Q2", "Q3", "Q4"]) &&
+        labelsOf(Calendar.day)[30] === "31" &&
+        labelsOf(Calendar.hour)[0] === "12 AM" &&
+        labelsOf(Calendar.minute)[5] === "05",
+      JSON.stringify([labelsOf(Calendar.hour)[0], labelsOf(Calendar.minute)[5]])
+    );
+    const years = binCells(
+      Calendar.year,
+      [t("2022-06-10"), t("2023-06-20")],
+      "UTC",
+      "t"
+    );
+    const weeks = binCells(
+      Calendar.week,
+      [t("2024-01-03"), t("2024-01-20")],
+      "UTC",
+      "t"
+    );
+    check(
+      "a year or a week alone stays on the time line: nothing holds it",
       same(
-        quarters.cells.map((c) => c.label),
-        ["Q1 2024", "Q2 2024", "Q3 2024"]
-      )
+        years.cells.map((c) => c.label),
+        ["2022", "2023"]
+      ) &&
+        years.cells.every((c) => c instanceof Cell) &&
+        weeks.cells.length === 3 &&
+        weeks.cells.every((c) => c instanceof Cell)
+    );
+    const fields: any[] = [];
+    binCells(
+      Calendar.month.format((c) => (fields.push(c), `${c.month}`)),
+      [t("2024-01-01")],
+      "UTC",
+      "t"
+    );
+    check(
+      "a part's format reads its fields; it has no year or start",
+      fields.length === 12 &&
+        fields[5].month === 6 &&
+        Number.isNaN(fields[5].year) &&
+        Number.isNaN(fields[5].start)
+    );
+    const days = binCells(
+      [Calendar.month, Calendar.day],
+      [t("2023-02-10")],
+      "UTC",
+      "t"
+    );
+    check(
+      "a product of parts is a part too: a day of the year, February 29 kept",
+      days.cells.length === 366 &&
+        days.cells.some((c) => c.label === "Feb 29") &&
+        days.cellOf(t("2023-02-10"))?.label === "Feb 10",
+      String(days.cells.length)
     );
     const err = errorOf(() =>
       binCells(Calendar.month, [1, 2], undefined, 'field("n").bin(...)')
@@ -204,6 +315,217 @@ async function main() {
       "a Calendar partition over a column that is not a time is an error",
       err?.includes("not a time") === true,
       err
+    );
+  }
+
+  console.log("\n# a product: one cell where its levels meet");
+  {
+    const t = (s: string) => Date.parse(`${s}T00:00:00Z`);
+    const months = binCells(
+      [Calendar.year, Calendar.month],
+      [t("2023-11-20"), t("2024-03-02")],
+      "UTC",
+      "t"
+    );
+    check(
+      "one cell per month in the domain's range, the empty ones too, labeled " +
+        "by month and year",
+      same(
+        months.cells.map((c) => c.label),
+        ["Nov 2023", "Dec 2023", "Jan 2024", "Feb 2024", "Mar 2024"]
+      ),
+      months.cells.map((c) => c.label).join(" ")
+    );
+    const feb = months.cells[3] as Cell;
+    check(
+      "a product's region is where its levels meet: the 2024 year and all " +
+        "Februaries meet in February 2024",
+      feb instanceof Cell &&
+        feb.start === t("2024-02-01") &&
+        feb.end === t("2024-03-01") &&
+        feb.calendar?.partition.unit === "month" &&
+        months.cellOf(t("2024-02-29")) === feb
+    );
+    const quarters = binCells(
+      [Calendar.year, Calendar.quarter],
+      [t("2024-02-01"), t("2024-08-01")],
+      "UTC",
+      "t"
+    );
+    check(
+      "a quarter's label comes first: Q1 2024",
+      same(
+        quarters.cells.map((c) => c.label),
+        ["Q1 2024", "Q2 2024", "Q3 2024"]
+      )
+    );
+    for (const [name, step, says] of [
+      ["one level", [Calendar.month], "two or more"],
+      ["a day of a year", [Calendar.year, Calendar.day], "a part of a month"],
+      ["a week", [Calendar.year, Calendar.week], "part of no larger level"],
+      ["a stepped parent", [Calendar.year.every(5), Calendar.month], "5 years"],
+      ["a numeric bin", [Bin.step(1), Bin.step(2)], "cannot be in a product"],
+      [
+        "a format",
+        [Calendar.year, Calendar.month.format(() => "")],
+        "relabel the axis with its levels option",
+      ],
+    ] as const) {
+      const why = errorOf(() => checkBinStep(step, "field(...).bin"));
+      check(
+        `a product of ${name} is an error`,
+        why?.includes(says) === true,
+        why
+      );
+    }
+    check(
+      "a product's wire form is a list",
+      same(field("d").bin([Calendar.year, Calendar.month]).toJSON().ops, [
+        {
+          op: "bin",
+          partition: [
+            { unit: "year", step: 1 },
+            { unit: "month", step: 1 },
+          ],
+        },
+      ])
+    );
+  }
+
+  console.log("\n# a chain: each bin splits the cells of the one before it");
+  {
+    const t = (s: string) => Date.parse(`${s}T00:00:00Z`);
+    const chained = chainCells(
+      [Calendar.year, Calendar.month],
+      [t("2023-11-20"), t("2024-03-02")],
+      "UTC",
+      "t"
+    );
+    const leaves = chained.cells as Cell[];
+    check(
+      "the leaves are the months of each year in the range, labeled by month",
+      same(
+        leaves.map((c) => c.label),
+        ["Nov", "Dec", "Jan", "Feb", "Mar"]
+      ),
+      leaves.map((c) => c.label).join(" ")
+    );
+    check(
+      "each leaf holds its year, the same cell for the months of one year",
+      leaves[0].parent?.label === "2023" &&
+        leaves[0].parent === leaves[1].parent &&
+        leaves[2].parent?.label === "2024" &&
+        leaves[2].parent?.start === t("2024-01-01")
+    );
+    check(
+      "a leaf's region is its own: February 2024",
+      leaves[3].start === t("2024-02-01") && leaves[3].end === t("2024-03-01")
+    );
+    const weeks = chainCells(
+      [Calendar.year, Calendar.week],
+      [t("2023-12-20"), t("2024-01-10")],
+      "UTC",
+      "t"
+    );
+    const cut = (weeks.cells as Cell[]).filter(
+      (c) => c.start <= t("2024-01-01") && c.end >= t("2024-01-01")
+    );
+    check(
+      "a week across New Year is cut in two, one part in each year",
+      cut.length === 2 &&
+        cut[0].end === t("2024-01-01") &&
+        cut[1].start === t("2024-01-01") &&
+        cut[0].parent?.label === "2023" &&
+        cut[1].parent?.label === "2024",
+      JSON.stringify(cut.map((c) => [c.label, c.start, c.end]))
+    );
+    const nums = chainCells(
+      [Bin.step(10), Bin.step(5)],
+      [0, 3, 12, 19],
+      undefined,
+      "t"
+    );
+    check(
+      "numeric bins chain too",
+      same(
+        nums.cells.map((c) => c.label),
+        ["0–5", "5–10", "10–15", "15–20"]
+      ) && (nums.cells[1] as Cell).parent?.label === "0–10"
+    );
+    const cyc = chainCells(
+      [Calendar.month, Calendar.day],
+      [t("2024-02-10")],
+      "UTC",
+      "t"
+    );
+    const leaf = cyc.cellOf(t("2024-02-10")) as CycleCell;
+    check(
+      "on a cycle, a chain gives the parts of each part: the days of each " +
+        "month of the year",
+      cyc.cells.length === 366 &&
+        leaf.label === "10" &&
+        leaf.parent?.label === "Feb",
+      String(cyc.cells.length)
+    );
+    for (const [name, steps, says] of [
+      ["a coarser bin", [Calendar.week, Calendar.year], "is not finer"],
+      [
+        "weeks of a month of the year",
+        [Calendar.month, Calendar.week],
+        "a part of a month",
+      ],
+      [
+        "a product",
+        [Calendar.year, [Calendar.month, Calendar.day]],
+        "cannot split another bin",
+      ],
+      [
+        "times and numbers",
+        [Calendar.year, Bin.step(1)],
+        "a chain bins one column",
+      ],
+      ["a wider step", [Bin.step(2), Bin.step(5)], "is not finer"],
+    ] as const) {
+      const why = errorOf(() =>
+        chainCells(steps as any, [t("2024-01-01")], "UTC", "t")
+      );
+      check(
+        `a chain of ${name} is an error`,
+        why?.includes(says) === true,
+        why
+      );
+    }
+    const early = errorOf(() =>
+      field("d").bin(Calendar.month).bin(Calendar.year)
+    );
+    check(
+      "a chain is checked when it is written",
+      early?.includes("is not finer") === true ||
+        early?.includes("a part of") === true,
+      early
+    );
+    check(
+      "a chain's wire form is one bin op per bin",
+      same(field("d").bin(Calendar.year).bin(Calendar.month).toJSON().ops, [
+        { op: "bin", partition: { unit: "year", step: 1 } },
+        { op: "bin", partition: { unit: "month", step: 1 } },
+      ])
+    );
+    const quarters = chainCells(
+      [
+        Calendar.year,
+        Calendar.quarter.format((c) => `Q${c.quarter} ${c.year}`),
+      ],
+      [t("2024-02-01"), t("2024-08-01")],
+      "UTC",
+      "t"
+    );
+    check(
+      "a Calendar value's format writes the labels of its level",
+      same(
+        quarters.cells.map((c) => c.label),
+        ["Q1 2024", "Q2 2024", "Q3 2024"]
+      )
     );
   }
 
@@ -221,10 +543,10 @@ async function main() {
     check(
       "a Bin strategy's own keys are its wire form",
       same(Object.keys(Bin.step(0.5)).sort(), ["kind", "size"]) &&
-        same(
-          Object.keys(Bin.thresholds(20).format(() => "")).sort(),
-          ["kind", "thresholds"]
-        )
+        same(Object.keys(Bin.thresholds(20).format(() => "")).sort(), [
+          "kind",
+          "thresholds",
+        ])
     );
     for (const [name, p] of [
       ["a negative step", Bin.step(-1)],
@@ -241,9 +563,7 @@ async function main() {
       );
     }
     {
-      const why = errorOf(() =>
-        field("x").bin(Bin.hex({ radius: 1 }) as any)
-      );
+      const why = errorOf(() => field("x").bin(Bin.hex({ radius: 1 }) as any));
       check(
         "a Bin kind of two fields on a field is an error naming struct",
         why?.includes("struct({ x, y }).bin(Bin.hex(...))") === true,
@@ -331,10 +651,13 @@ async function main() {
     check(
       "a time column bins into calendar cells in its zone",
       same(
-        [...splitEntries(field("d").bin(Calendar.month), times).keys()].map(
-          (c) => (c as Cell).label
-        ),
-        ["Jan", "Feb", "Mar"]
+        [
+          ...splitEntries(
+            field("d").bin([Calendar.year, Calendar.month]),
+            times
+          ).keys(),
+        ].map((c) => (c as Cell).label),
+        ["Jan 2024", "Feb 2024", "Mar 2024"]
       )
     );
   }
@@ -352,7 +675,9 @@ async function main() {
     };
     const rows = [1.2, 1.4, 2.6, 2.7, 2.8].map((rating) => ({ rating }));
     const dl = await chart(rows, { axes: { x: { title: false }, y: false } })
-      .flow(spread({ by: distField("rating").bin(DistBin.step(0.5)), dir: "x" }))
+      .flow(
+        spread({ by: distField("rating").bin(DistBin.step(0.5)), dir: "x" })
+      )
       .mark(rect({ w: 20, h: distField("rating").count() }))
       .toDisplayList({ w: 300, h: 100 });
     const words = textsOf(dl).map((t) => t.text);
@@ -365,30 +690,210 @@ async function main() {
     const daily = ["2023-11-20", "2023-12-05", "2024-01-10", "2024-03-02"].map(
       (date) => ({ date, value: 1 })
     );
-    const monthDl = await chart(daily, {
-      schema: { date: Schema.time() },
-      axes: { x: { title: false }, y: false },
-    })
-      .flow(spread({ by: distField("date").bin(DistCalendar.month), dir: "x" }))
-      .mark(rect({ w: 30, h: distField("value").sum() }))
-      .toDisplayList({ w: 400, h: 100 });
-    const texts = textsOf(monthDl);
+    const render = async (by: any, x: any = { title: false }) =>
+      await chart(daily, {
+        schema: { date: Schema.time() },
+        axes: { x, y: false },
+      })
+        .flow(spread({ by, dir: "x" }))
+        .mark(rect({ w: 30, h: distField("value").sum() }))
+        .toDisplayList({ w: 400, h: 100 });
+    const rectsOf = (dl: any): any[] => {
+      const out: any[] = [];
+      const walk = (it: any) => {
+        if (it.kind === "rect") out.push(it);
+        for (const c of it.children ?? []) walk(c);
+      };
+      dl.items.forEach(walk);
+      return out;
+    };
+    const chainedDl = await render(
+      distField("date").bin(DistCalendar.year).bin(DistCalendar.month)
+    );
+    const texts = textsOf(chainedDl);
     const monthWords = texts.map((t) => t.text);
     check(
-      "month cells get a month row, with the empty February kept, and a " +
-        "year row",
-      ["Nov", "Dec", "Jan", "Feb", "Mar", "2023", "2024"].every((w) =>
-        monthWords.includes(w)
-      ) && monthWords.length === 7,
+      "a chained key's axis has a month level, the empty February kept, and " +
+        "a year level",
+      same(monthWords, ["Nov", "Dec", "Jan", "Feb", "Mar", "2023", "2024"]),
       monthWords.join(" ")
     );
     const at = (w: string) => texts.find((t) => t.text === w)!;
+    const mid = (w: string) => at(w).x + textWidth(w) / 2;
     check(
-      "the year row sits past the month row, each year at its first month",
+      "each year is centered under its run of months, past the month level",
       at("2023").y > at("Nov").y &&
-        at("2024").x > at("Dec").x &&
-        at("2024").x <= at("Jan").x,
-      JSON.stringify([at("2023"), at("Nov"), at("2024"), at("Jan")])
+        Math.abs(mid("2023") - (mid("Nov") + mid("Dec")) / 2) < 0.5 &&
+        Math.abs(mid("2024") - mid("Feb")) < 0.5,
+      JSON.stringify([mid("2023"), mid("Nov"), mid("Dec"), mid("2024")])
+    );
+    const bars = rectsOf(chainedDl).filter((r) => r.w === 30);
+    const lines = rectsOf(chainedDl).filter((r) => r.w === 1);
+    check(
+      "the month level has no ticks; one divider sits centered in the gap " +
+        "between the years, down through the year level",
+      lines.length === 1 &&
+        Math.abs(lines[0].x + 0.5 - (bars[1].x + 30 + bars[2].x) / 2) < 1e-6 &&
+        lines[0].y + lines[0].h > at("2023").y,
+      JSON.stringify(lines)
+    );
+    const productWords = textsOf(
+      await render(
+        distField("date").bin([DistCalendar.year, DistCalendar.month])
+      )
+    ).map((t) => t.text);
+    check(
+      "a product's axis has one level, labeled by month and year",
+      same(productWords, [
+        "Nov 2023",
+        "Dec 2023",
+        "Jan 2024",
+        "Feb 2024",
+        "Mar 2024",
+      ]),
+      productWords.join(" ")
+    );
+    const cycleWords = textsOf(
+      await render(distField("date").bin(DistCalendar.month))
+    ).map((t) => t.text);
+    check(
+      "a month of the year's axis has the whole year, and no year level",
+      same(cycleWords, [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ]),
+      cycleWords.join(" ")
+    );
+
+    console.log("\n# levels on an ordinal axis");
+    const wordsOf = async (by: any, levels: any) =>
+      textsOf(await render(by, { title: false, levels })).map((t) => t.text);
+    const chainKey = distField("date")
+      .bin(DistCalendar.year)
+      .bin(DistCalendar.month);
+    const productKey = distField("date").bin([
+      DistCalendar.year,
+      DistCalendar.month,
+    ]);
+    check(
+      "false hides a level: [true, false] drops the years",
+      same(await wordsOf(chainKey, [true, false]), [
+        "Nov",
+        "Dec",
+        "Jan",
+        "Feb",
+        "Mar",
+      ])
+    );
+    check(
+      "depths the list does not reach stay inferred: [true] keeps the years",
+      same(await wordsOf(chainKey, [true]), [
+        "Nov",
+        "Dec",
+        "Jan",
+        "Feb",
+        "Mar",
+        "2023",
+        "2024",
+      ])
+    );
+    check(
+      "a Calendar value with a format relabels its level",
+      same(
+        await wordsOf(chainKey, [
+          DistCalendar.month.format((c: any) => `${c.month}/${c.year % 100}`),
+        ]),
+        ["11/23", "12/23", "1/24", "2/24", "3/24", "2023", "2024"]
+      )
+    );
+    check(
+      "a coarser Calendar value past the inferred levels adds a level of runs",
+      same(await wordsOf(productKey, [true, DistCalendar.year]), [
+        "Nov 2023",
+        "Dec 2023",
+        "Jan 2024",
+        "Feb 2024",
+        "Mar 2024",
+        "2023",
+        "2024",
+      ])
+    );
+    check(
+      "a quarter groups the months of the year",
+      same(
+        (
+          await wordsOf(distField("date").bin(DistCalendar.month), [
+            true,
+            DistCalendar.quarter,
+          ])
+        ).slice(12),
+        ["Q1", "Q2", "Q3", "Q4"]
+      )
+    );
+    const weekErr = await errorOfAsync(() =>
+      wordsOf(productKey, [true, DistCalendar.week])
+    );
+    check(
+      "a Calendar value that does not group the slots is an error listing " +
+        "the axis's levels",
+      weekErr?.includes("axes.x.levels[1]") === true &&
+        weekErr.includes("lies across two cells of Calendar.week") &&
+        weekErr.includes("[0] [Calendar.year, Calendar.month]"),
+      weekErr
+    );
+    const pastErr = await errorOfAsync(() =>
+      wordsOf(chainKey, [true, true, true])
+    );
+    check(
+      "an entry past the last level is an error listing the levels",
+      pastErr?.includes("axes.x.levels[2]") === true &&
+        pastErr.includes("[0] Calendar.month, [1] Calendar.year"),
+      pastErr
+    );
+    const splitErr = await errorOfAsync(async () =>
+      textsOf(
+        await chart([{ g: "a", v: 1 }], {
+          axes: { x: { levels: [DistCalendar.year] }, y: false },
+        })
+          .flow(spread({ by: "g", dir: "x" }))
+          .mark(rect({ w: 10, h: "v" }))
+          .toDisplayList({ w: 100, h: 100 })
+      )
+    );
+    check(
+      "a Calendar value over the groups of a split is an error",
+      splitErr?.includes("not cells of a time column") === true,
+      splitErr
+    );
+    const grouped = await chart(
+      daily.flatMap((d) => ["a", "b"].map((g) => ({ ...d, g }))),
+      {
+        schema: { date: Schema.time() },
+        axes: { x: { title: false, levels: [false, true] }, y: false },
+      }
+    )
+      .flow(spread({ by: productKey, dir: "x" }), spread({ by: "g", dir: "x" }))
+      .mark(rect({ w: 10, h: distField("value").sum() }))
+      .toDisplayList({ w: 400, h: 100 });
+    const groupedWords = textsOf(grouped).map((t) => t.text);
+    const dividers = rectsOf(grouped).filter((r) => r.w === 1);
+    check(
+      "[false, true] hides a grouped chart's inner level, and the outer " +
+        "level divides its groups",
+      !groupedWords.includes("a") &&
+        groupedWords.includes("Nov 2023") &&
+        dividers.length === 4,
+      `${groupedWords.join(" ")} / ${dividers.length}`
     );
   }
 
@@ -417,7 +922,10 @@ async function main() {
     const hist = rectsOf(
       await chart(rows, noAxes)
         .flow(
-          partition({ by: distField("rating").bin(DistBin.step(0.5)), dir: "x" })
+          partition({
+            by: distField("rating").bin(DistBin.step(0.5)),
+            dir: "x",
+          })
         )
         .mark(rect({ h: distField("rating").count() }))
         .toDisplayList({ w: 400, h: 100 })
@@ -441,7 +949,10 @@ async function main() {
     const months = rectsOf(
       await chart(daily, { schema: { date: Schema.time() }, ...noAxes })
         .flow(
-          partition({ by: distField("date").bin(DistCalendar.month), dir: "x" })
+          partition({
+            by: distField("date").bin([DistCalendar.year, DistCalendar.month]),
+            dir: "x",
+          })
         )
         .mark(rect({ h: distField("value").sum() }))
         .toDisplayList({ w: 600, h: 100 })
@@ -466,7 +977,9 @@ async function main() {
       await chart(regions, { schema: { date: Schema.time() }, ...noAxes })
         .flow(
           partition({
-            by: distField("date").bin(DistCalendar.month),
+            by: distField("date")
+              .bin(DistCalendar.year)
+              .bin(DistCalendar.month),
             dir: "x",
           }),
           stack({ by: "region", dir: "y" })
@@ -495,8 +1008,14 @@ async function main() {
       { a: 1.1, b: 2.9, name: "dddd" },
     ];
     const grid = async (first: "x" | "y") => {
-      const px = partition({ by: distField("a").bin(DistBin.step(1)), dir: "x" });
-      const py = partition({ by: distField("b").bin(DistBin.step(1)), dir: "y" });
+      const px = partition({
+        by: distField("a").bin(DistBin.step(1)),
+        dir: "x",
+      });
+      const py = partition({
+        by: distField("b").bin(DistBin.step(1)),
+        dir: "y",
+      });
       return rectsOf(
         await chart(pts, noAxes)
           .flow(...(first === "x" ? [px, py] : [py, px]))
@@ -537,8 +1056,7 @@ async function main() {
             Object.fromEntries(
               Object.entries(it).filter(
                 ([k, v]) =>
-                  k !== "id" &&
-                  (typeof v === "number" || typeof v === "string")
+                  k !== "id" && (typeof v === "number" || typeof v === "string")
               )
             )
           );
@@ -659,8 +1177,7 @@ async function main() {
       "in 1D, a mark with a width of its own is centered in its cell",
       fixed1D.length === 3 &&
         fixed1D.every(
-          (r, i) =>
-            r.w === 10 && Math.abs(r.x - fixed1D[0].x - 100 * i) < 1e-6
+          (r, i) => r.w === 10 && Math.abs(r.x - fixed1D[0].x - 100 * i) < 1e-6
         ) &&
         Math.abs(fixed1D[1].x + 5 - (x0 + 150)) < 1e-6,
       JSON.stringify(fixed1D)
@@ -813,7 +1330,10 @@ async function main() {
     const pts = [0, 5, 12, 17, 50, 95, 100].map((x, i) => ({ x, y: i % 3 }));
     const runs = await chart(pts, { axes: false })
       .flow(
-        spread({ by: distField("x").bin(DistBin.thresholds([10, 90])), dir: "x" }),
+        spread({
+          by: distField("x").bin(DistBin.thresholds([10, 90])),
+          dir: "x",
+        }),
         scatter({ x: "x", y: "y" })
       )
       .mark(line())
@@ -940,8 +1460,16 @@ async function main() {
     const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
     const calendarCells = (p: any, lo: string, hi: string) =>
       binCells(p, [t(lo), t(hi)], "UTC", "t").cells;
-    const months = calendarCells(Calendar.month, "2024-01-10", "2024-01-20");
-    const days = calendarCells(Calendar.day, "2024-03-04", "2024-03-06");
+    const months = calendarCells(
+      [Calendar.year, Calendar.month],
+      "2024-01-10",
+      "2024-01-20"
+    );
+    const days = calendarCells(
+      [Calendar.year, Calendar.month, Calendar.day],
+      "2024-03-04",
+      "2024-03-06"
+    );
     const mixed = mergeCells([months, days]);
     check(
       "calendar cells of two partitions are not cells of one, even apart",
@@ -973,6 +1501,22 @@ export function partitionKeyTypes(): void {
   // @ts-expect-error a product divides both axes, so it takes no dir
   srcPartition({ by: { x: field("a").bin(), y: field("b").bin() }, dir: "x" });
   field("a").bin(Bin.thresholds([0, 5, 10]).format((c) => String(c.start)));
+  // @ts-expect-error a month of the year has no one region on the time line
+  srcPartition({ by: field("d").bin(Calendar.month), dir: "x" });
+  srcPartition({ by: field("d").bin(Calendar.year), dir: "x" });
+  srcPartition({
+    by: field("d").bin([Calendar.year, Calendar.month]),
+    dir: "x",
+  });
+  srcPartition({
+    by: field("d").bin(Calendar.year).bin(Calendar.month),
+    dir: "x",
+  });
+  srcPartition({
+    // @ts-expect-error a chain over a part of a cycle stays a part
+    by: field("d").bin(Calendar.month).bin(Calendar.day),
+    dir: "x",
+  });
   // @ts-expect-error Bin.hex bins two fields together, not one
   field("a").bin(Bin.hex({ radius: 1 }));
   // @ts-expect-error the untagged form is gone: write Bin.step(1)

@@ -24,48 +24,20 @@
  * domain picks for about 10 ticks (`tickPartition` in calendar.ts, like d3's
  * time ticks), and the outer row is that level's parent (hours → days, days
  * → months, months → years). A level with no parent (years) gives one row.
- * `axes: { x: { rows: [...] } }` sets the rows, inner first; a row's labels
- * are its partition's (`Calendar.<unit>.format(fn)` for custom ones).
+ * The rows are the axis's levels: `axes: { x: { levels: [...] } }` names or
+ * hides them, inner first (axes/levels.ts); a row's labels are its
+ * partition's (`Calendar.<unit>.format(fn)` for custom ones).
  *
- * This module is the pure half (which rows, which labels where). The shapes
- * and constraints are built in elaborate.tsx.
+ * This module is the pure half (which labels where). Which rows, and the
+ * shapes and constraints, are built in elaborate.tsx (`timeRows`,
+ * `elaborateTimeAxis`).
  */
-import {
-  calendarPartition,
-  type CalendarJSON,
-  type CalendarPartition,
-} from "../calendar";
-
-/** One entry of `axes.x.rows`: a Calendar value, or its wire form
- *  (`{ unit: "month", step: 1 }`, what Python sends). */
-export type TimeRowOption = CalendarPartition | CalendarJSON;
+import type { CalendarPartition } from "../calendar";
 
 /** One label of a row: its text and the tick it is centered on (`at`, epoch
  *  ms: its cell's start, or the axis's first tick for a cell that starts
  *  before the domain). */
 export type TimeLabel = { at: number; text: string };
-
-/** Read `axes.<dim>.rows` (inner first) into partitions. An entry that is
- *  not a Calendar value is a loud error. */
-export function timeRowsFromOption(
-  rows: readonly TimeRowOption[],
-  axis: string
-): CalendarPartition[] {
-  if (!Array.isArray(rows) || rows.length === 0) {
-    throw new Error(
-      `axes.${axis}.rows: expected a list of Calendar values, inner row ` +
-        `first, e.g. [Calendar.month, Calendar.year].`
-    );
-  }
-  return rows.map((r, i) => calendarPartition(r, `axes.${axis}.rows[${i}]`));
-}
-
-/** The default rows of a time axis whose inner row is `inner`: `inner`,
- *  then its parent level, if it has one. */
-export function defaultTimeRows(inner: CalendarPartition): CalendarPartition[] {
-  const parent = inner.parent;
-  return parent === undefined ? [inner] : [inner, parent];
-}
 
 /** The labels of `row` over the domain `[lo, hi]`, one per cell that meets
  *  it, as `row.label` writes them. Each is centered on its cell's start, or

@@ -112,7 +112,7 @@ import {
   type LabelSpec,
 } from "./labels/labelPlacement";
 import { packEnclose } from "d3-hierarchy";
-import type { RegionCell } from "./cells";
+import type { KeyCell } from "./cells";
 import {
   boxOfDims,
   enclosingCircle,
@@ -475,7 +475,7 @@ export class GoFishNode {
    *  key (`field(x).bin(p)`): the key is the cell's id. Set in
    *  `createOperator`; read when folding the distribute ordinal, which then
    *  holds cells (`ORDINAL_TYPE.cells`, see `distributeSpaceFold`). */
-  public keyCell?: RegionCell;
+  public keyCell?: KeyCell;
   /** The `by` the operator that made this node grouped by, when it grouped
    *  by one: the node's `key` is its group's key under it. Set in
    *  `createOperator`; a fused relational mark's default split reads it, to

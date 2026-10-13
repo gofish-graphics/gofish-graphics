@@ -51,7 +51,12 @@ import {
   type LabelRowSettings,
 } from "./axes/elaborate";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
-import { timeRowsFromOption, type TimeRowOption } from "./axes/timeRows";
+import {
+  levelsError,
+  levelsFromOption,
+  type LevelEntry,
+  type LevelOption,
+} from "./axes/levels";
 import { axisName } from "./constraints/shared";
 import {
   getScopeRegistry,
@@ -159,25 +164,31 @@ export type AxisOptions =
        *  axis has a single tier: it uses the number, or `array[0]` for the
        *  array form. */
       labelAngle?: number | number[] | "auto";
-      /** The label rows of a time axis (an axis over a `Schema.time()`
-       *  column), inner row first: each a Calendar value, e.g.
-       *  `[Calendar.month, Calendar.year]` or `[Calendar.hour.every(6),
-       *  Calendar.day]`. A row's labels are its partition's: the level's
-       *  default, or a function of the cell given with `.format(fn)`
-       *  (`Calendar.quarter.format((cell) => ...)`). Each row is one
-       *  partition of the time line: its ticks are its cells' starts, and
-       *  each label is centered on its cell's start tick. The axis's domain
-       *  is niced outward to the cells of the inner row. Rows need not nest.
-       *  Omitted, the axis has two rows: the level-and-step the domain picks
-       *  for about 10 ticks, and its parent level.
+      /** The levels of the axis: its bands of labels, by depth, nearest the
+       *  plot first. Every axis on the dim has levels, nested ones counted
+       *  from the inside out: a numeric axis has one (its ticks), a time
+       *  axis two (the level-and-step its domain picks for about 10 ticks,
+       *  and that level's parent: months, then years), and an ordinal axis
+       *  one per split, plus one per `.bin(...)` of a chained key before the
+       *  last (`.bin(Calendar.year).bin(Calendar.month)` gives a month level
+       *  and a year level). Each entry sets the level at its depth:
        *
-       *  The rows reach every axis on the dim, but only a time axis reads
-       *  them: in a faceted chart, the time axes inside the facets read
-       *  them and the facets' category axis on the same dim does not. A
-       *  chart with rows and no time axis on the dim is an error, raised
-       *  once the whole chart is elaborated. `labelAngle` does not rotate
-       *  a time axis's labels yet. */
-      rows?: TimeRowOption[];
+       *  - `true` keeps the level as inferred.
+       *  - `false` hides it: its labels (and a time row's ticks) are not
+       *    drawn and take no space.
+       *  - a Calendar value names its cells: a time row's partition
+       *    (`Calendar.week`), or, on an ordinal axis over cells of time, the
+       *    cells that group its slots (`Calendar.year` over month slots),
+       *    each label centered under its run of slots. A Calendar value
+       *    with `.format(fn)` relabels the level.
+       *
+       *  Depths the list does not reach stay as inferred. On the outermost
+       *  axis of the dim, Calendar entries past its inferred levels add
+       *  levels. An entry that cannot apply (a Calendar value over slots
+       *  that are not times, `false` on a numeric axis, an entry past the
+       *  last level) is an error that lists the axis's levels. `labelAngle`
+       *  arrays use the same depths. */
+      levels?: LevelOption[];
     };
 
 /** Read one `AxisOptions` field per dim, AS AUTHORED — `undefined` wherever the
@@ -338,24 +349,22 @@ export async function layout(
   // object, a dim is enabled unless it is explicitly `false` — an unspecified
   // (undefined) dim still shows (specifying one axis doesn't disable the
   // other); only `false` suppresses. Each enabled dim carries what its axis
-  // ticks at: about 10 ticks, or the rows of a time axis (`rows`, parsed
-  // here, once), whose inner row its scope's domain is niced to. The axis is
-  // drawn from the same stamp. A dim with rows is always enabled: a disabled
-  // dim (`false`) has no options to hold them.
-  const rows = perDimAxisOption(axes, "rows");
+  // ticks at: about 10 ticks. A time axis stamps its rows on it when it is
+  // elaborated (its levels, which depend on the axes inside it), before any
+  // solve nices its domain to its inner row. A dim with `levels` is always
+  // enabled: a disabled dim (`false`) has no options to hold them.
+  const levelOpts = perDimAxisOption(axes, "levels");
+  const levels: [LevelEntry[] | undefined, LevelEntry[] | undefined] = [
+    levelOpts[0] && levelsFromOption(levelOpts[0], "x"),
+    levelOpts[1] && levelsFromOption(levelOpts[1], "y"),
+  ];
   if (axes) {
-    const ticksOf = (dim: 0 | 1): AxisTicks => {
-      const r = rows[dim];
-      return r === undefined
-        ? DEFAULT_AXIS_TICKS
-        : { ...DEFAULT_AXIS_TICKS, rows: timeRowsFromOption(r, axisName(dim)) };
-    };
     const enabled = new Map<0 | 1, AxisTicks>();
     for (const dim of [0, 1] as const) {
       const on =
         axes === true ||
         (typeof axes === "object" && (dim === 0 ? axes.x : axes.y) !== false);
-      if (on) enabled.set(dim, ticksOf(dim));
+      if (on) enabled.set(dim, DEFAULT_AXIS_TICKS);
     }
     child.resolveAxes(new Map(), enabled);
   }
@@ -386,18 +395,15 @@ export async function layout(
   const elaborated = await elaborateChrome(child, {
     sides: resolveAxisSides(axes),
     labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
+    levels,
   });
-  // Rows that no time axis read are an error (see `AxisOptions.rows`).
-  rows.forEach((r, dim) => {
-    if (r !== undefined && !elaborated.timeAxes[dim]) {
-      throw new Error(
-        `axes.${axisName(dim as 0 | 1)}.rows: rows of calendar cells need a ` +
-          `time axis, but no ${axisName(dim as 0 | 1)} axis of this chart is ` +
-          `over a time column. Declare the column with Schema.time() in the ` +
-          `chart's schema.`
-      );
-    }
-  });
+  // Entries that no level took are an error (see `AxisOptions.levels`).
+  const levelsErr = levelsError(
+    levels,
+    elaborated.fold.names,
+    elaborated.fold.issues
+  );
+  if (levelsErr !== undefined) throw levelsErr;
   if (elaborated.changed) {
     child = elaborated.node;
     await reresolve(child);

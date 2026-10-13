@@ -377,8 +377,9 @@ export interface ScatterOperator
  *
  * `AxisOptions` per-dim is either a boolean (show/hide, infer title) or an
  * object: `title` (string for a custom title, `false` to suppress), `side`
- * (the frame edge), `labelAngle` (label rotation in degrees), and `rows` (the
- * label rows of a time axis, inner row first).
+ * (the frame edge), `labelAngle` (label rotation in degrees), and `levels`
+ * (the axis's bands of labels by depth, nearest the plot first: `true`
+ * keeps one, `false` hides it, a Calendar value names its cells).
  */
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions =
@@ -387,7 +388,7 @@ export type AxisOptions =
       title?: string | false;
       side?: "start" | "end";
       labelAngle?: number | number[] | "auto";
-      rows?: CalendarPartitionIR[];
+      levels?: (boolean | CalendarPartitionIR)[];
     };
 
 /** A Calendar value's wire form (`Calendar.month.every(3)`): a calendar level
@@ -834,9 +835,11 @@ export type FieldOpIR =
   | {
       op: "bin";
       /** The partition each value is binned into: a Calendar value,
-       *  `Bin.step(size)` or `Bin.thresholds(countOrEdges)`. Absent: about
-       *  10 cells. */
-      partition?: PartitionIR;
+       *  `Bin.step(size)` or `Bin.thresholds(countOrEdges)`, or a product of
+       *  Calendar values (`[year, month]`: one cell where they meet).
+       *  Absent: about 10 cells. A second `bin` op splits the cells of the
+       *  one before it (`.bin(Calendar.year).bin(Calendar.month)`). */
+      partition?: PartitionIR | CalendarPartitionIR[];
     }
   | { op: "dropNulls" }
   | { op: "normalize" }

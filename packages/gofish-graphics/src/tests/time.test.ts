@@ -28,11 +28,8 @@ import {
   toEpochMs,
   Schema as SrcSchema,
 } from "../ast/schema";
-import {
-  defaultTimeRows,
-  rowLabels,
-  timeRowsFromOption,
-} from "../ast/axes/timeRows";
+import { rowLabels } from "../ast/axes/timeRows";
+import { levelsFromOption } from "../ast/axes/levels";
 import {
   CONTINUOUS,
   niceContinuous,
@@ -519,8 +516,14 @@ async function main() {
 
   console.log("\n# default rows and nicing");
   {
-    const rowsOf = (lo: number, hi: number) =>
-      defaultTimeRows(tickPartition(lo, hi, 10)).map((r) => r.toString());
+    // A time axis's default rows: the partition its domain picks, and that
+    // partition's parent level.
+    const rowsOf = (lo: number, hi: number) => {
+      const inner = tickPartition(lo, hi, 10);
+      return [inner, ...(inner.parent ? [inner.parent] : [])].map((r) =>
+        r.toString()
+      );
+    };
     check(
       "daily over 14 months: month, year",
       same(rowsOf(Date.UTC(2023, 10, 1), Date.UTC(2024, 11, 31)), [
@@ -612,32 +615,40 @@ async function main() {
     );
   }
 
-  console.log("\n# the rows option");
+  console.log("\n# the levels option");
   {
     const fmt = (c: any) => `Q${c.quarter}`;
-    const rows = timeRowsFromOption(
-      [Calendar.week, { unit: "month" } as any, Calendar.quarter.format(fmt)],
+    const levels = levelsFromOption(
+      [
+        Calendar.week,
+        { unit: "month" } as any,
+        false,
+        true,
+        Calendar.quarter.format(fmt),
+      ],
       "x"
     );
     check(
-      "rows read Calendar values, wire forms, and formatted partitions",
-      rows.length === 3 &&
-        rows[0].unit === "week" &&
-        rows[1].unit === "month" &&
-        rows[2].formatCell === fmt
+      "levels read Calendar values, wire forms, booleans, and formatted partitions",
+      levels.length === 5 &&
+        (levels[0] as any).unit === "week" &&
+        (levels[1] as any).unit === "month" &&
+        levels[2] === false &&
+        levels[3] === true &&
+        (levels[4] as any).formatCell === fmt
     );
-    const bad = await errorOf(() => timeRowsFromOption(["month"] as any, "x"));
+    const bad = await errorOf(() => levelsFromOption(["month"] as any, "x"));
     check(
-      "a row that is not a Calendar value is a loud error",
-      bad?.includes("axes.x.rows[0]") === true,
+      "an entry that is not a boolean or a Calendar value is a loud error",
+      bad?.includes("axes.x.levels[0]") === true,
       bad
     );
     const old = await errorOf(() =>
-      timeRowsFromOption([{ unit: Calendar.month, format: fmt }] as any, "x")
+      levelsFromOption([{ unit: Calendar.month, format: fmt }] as any, "x")
     );
     check(
       "the { unit, format } object form is gone: a loud error",
-      old?.includes("axes.x.rows[0]") === true,
+      old?.includes("axes.x.levels[0]") === true,
       old
     );
   }
@@ -681,12 +692,12 @@ async function main() {
       notFn
     );
     const wire = await errorOf(() =>
-      JSON.stringify({ rows: [Calendar.year, stepped] })
+      JSON.stringify({ levels: [Calendar.year, stepped] })
     );
     check(
       "a partition with a format has no wire form: serializing it is a loud " +
         "error naming the row",
-      wire?.includes("rows[1]: Calendar.month.every(3).format(...)") === true &&
+      wire?.includes("[1]: Calendar.month.every(3).format(...)") === true &&
         wire.includes("has no wire form"),
       wire
     );
@@ -702,7 +713,7 @@ async function main() {
     const message = await errorOf(() =>
       calendarPartition(
         { unit: Calendar.quarter.format((c) => `Q${c.quarter}`) } as any,
-        "rows[0]"
+        "levels[0]"
       )
     );
     check(
@@ -718,12 +729,12 @@ async function main() {
   console.log("\n# week starts are checked in the wire form");
   {
     const bad = await errorOf(() =>
-      calendarPartition({ unit: "week", start: "tuesday" } as any, "rows[0]")
+      calendarPartition({ unit: "week", start: "tuesday" } as any, "levels[0]")
     );
     check(
       'a week start that is not "monday" or "sunday" is a loud error',
       bad?.includes('start must be "monday" or "sunday"') === true &&
-        bad.includes("rows[0]"),
+        bad.includes("levels[0]"),
       bad
     );
     check(
@@ -959,11 +970,12 @@ async function main() {
       axes: {
         x: {
           title: false,
-          rows: [
+          levels: [
             DistCalendar.quarter.format(
               (c: any) =>
                 `Q${c.quarter} '${String(c.year % 100).padStart(2, "0")}`
             ),
+            false,
           ],
         },
         y: false,
@@ -985,21 +997,23 @@ async function main() {
 
     const notTime = await errorOf(() =>
       chart([{ a: 1, b: 2 }], {
-        axes: { x: { rows: [DistCalendar.month] } },
+        axes: { x: { levels: [DistCalendar.month] } },
       })
         .flow(scatter({ by: "a", x: "a", y: "b" }))
         .mark(circle({ r: 2 }))
         .toDisplayList({ w: 100, h: 100 })
     );
     check(
-      "rows on a non-time axis are a loud error",
-      notTime?.includes("need a time axis") === true,
+      "a Calendar level on a numeric axis is a loud error listing its levels",
+      notTime?.includes("axes.x.levels[0]") === true &&
+        notTime.includes("numeric axis") &&
+        notTime.includes("[0] the numeric ticks"),
       notTime
     );
 
     // A faceted chart: the facets' ordinal x axis shares the dim with the
-    // time axis in each facet. The rows reach the time axes and the ordinal
-    // axis ignores them.
+    // time axis in each facet. The time axes' rows are the first two levels
+    // of x, and the facets' level is the third.
     const cities = ["A", "B"].flatMap((city) =>
       ["2024-01-15", "2024-03-10", "2024-05-20"].map((date, i) => ({
         city,
@@ -1010,7 +1024,7 @@ async function main() {
     const facetWords = textsOf(
       await chart(cities, {
         schema: { date: Schema.time() },
-        axes: { x: { rows: [DistCalendar.month] }, y: false },
+        axes: { x: { levels: [DistCalendar.month, false, true] }, y: false },
       })
         .flow(
           spread({ by: "city", dir: "x" }),
@@ -1020,7 +1034,7 @@ async function main() {
         .toDisplayList({ w: 400, h: 200 })
     ).map((t) => t.text);
     check(
-      "a faceted chart's rows reach its time axes, not its category axis",
+      "a faceted chart's levels: the time axes' rows, then the facets'",
       facetWords.filter((w) => w === "Jan").length === 2 &&
         !facetWords.includes("2024") &&
         facetWords.includes("A"),

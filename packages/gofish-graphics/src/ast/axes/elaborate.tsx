@@ -41,9 +41,12 @@ import {
   wrapperDirection,
   type AxisDirection,
 } from "../axisDirection";
-import { defaultTimeRows, rowLabels } from "./timeRows";
+import { rowLabels } from "./timeRows";
 import { rotatedExtent } from "./autoLabelAngle";
-import type { Cell } from "../cells";
+import { axisSpan } from "./axisSpan";
+import type { LevelEntry, LevelIssue } from "./levels";
+import { Cell, CycleCell, type AxisCell, type KeyCell } from "../cells";
+import { CalendarPartition, cycleFields, zoned } from "../calendar";
 
 /**
  * The edge an axis on `dim` seats on when its `side` is not given, in the
@@ -585,9 +588,8 @@ function elaborateContinuousAxis(
  * (`niceContinuous` with the axis's `ticks`, the same nicing its scope's
  * solve applies), so both ends are inner ticks. An outer row's first cell
  * may start before the domain: its label is centered on the first tick,
- * under the inner row's first label. The rows are `ticks.rows` (the
- * chart's `axes.x.rows`, as `layout` stamped them), else the inner row the
- * domain picks (`axisTickPartition`) and its parent level.
+ * under the inner row's first label. The rows are the axis's levels
+ * ({@link timeRows}); a hidden row draws no ticks and no labels.
  *
  * Like a numeric axis, a time axis labels every tick and never drops a
  * label; choosing ticks from the labels' room is #1063. `labelAngle` does
@@ -598,14 +600,14 @@ function elaborateTimeAxis(
   dim: 0 | 1,
   space: CONTINUOUS_TYPE,
   nice: [number, number],
-  ticks: AxisTicks,
+  levels: readonly { partition: CalendarPartition; hidden: boolean }[],
   prefix: string,
   crossFloor: number | undefined,
   side: "start" | "end"
 ): AxisElaboration {
   const [lo, hi] = nice;
   const zone = space.calendar!.zone;
-  const rows = ticks.rows ?? defaultTimeRows(axisTickPartition(space, ticks));
+  const rows = levels.filter((r) => !r.hidden).map((r) => r.partition);
   const starts = rows.map((row) => rowLabels(row, lo, hi, zone));
   // A row that cuts the same cells as the cells the axis places names
   // those cells: each label sits midway between its cell's two boundary
@@ -707,192 +709,334 @@ function elaborateDifferenceAxis(
   };
 }
 
+/** What an axis says about its levels: one name per level, nearest the plot
+ *  first (for error messages), and the entries that could not apply. */
+type LevelReport = { names: string[]; issues: LevelIssue[] };
+
+/** How one level of an ordinal axis is drawn, as its depth's settings say:
+ *  hidden (by `levels` or by `labelAngle: "auto"`), or with its labels
+ *  rotated. */
+type LevelSetting = { hidden: boolean; rotation?: LabelRotation };
+
+/** One level of an ordinal axis: the group each slot falls in (an id and a
+ *  label), in slot order. Neighboring slots in one group are one run, and
+ *  the level labels each run once. */
+type OrdinalLevel = { name: string; groups: { id: string; label: string }[] };
+
+/** The `k`-th cell up a cell's chain (0 is the cell itself). */
+const ancestor = (cell: KeyCell, k: number): KeyCell | undefined => {
+  let c: KeyCell | undefined = cell;
+  for (let i = 0; i < k && c !== undefined; i++) c = c.parent;
+  return c;
+};
+
+/** How many cells a cell's chain holds: 1, plus one per bin before it. */
+const chainLength = (cell: KeyCell): number => {
+  let n = 0;
+  for (let c: KeyCell | undefined = cell; c !== undefined; c = c.parent) n++;
+  return n;
+};
+
 /**
- * One ordinal axis: a label per key. Each label is centered on its key node
- * along the axis (via a `ref` stand-in + `align`), but seated on a COMMON
- * baseline by `distribute`-ing it past the whole content's near edge — so the
- * labels form a straight row/column and don't follow each mark's own extent
- * (which would scatter them, e.g. under a negative bar). The distribute anchors
- * against the wrapped content layer (`INNER_REF_NAME`), whose bbox includes any
- * inner-facet labels — so an outer (e.g. lake) label row stacks BELOW the inner
- * (species) row instead of overlapping it. The orchestrator pins that layer on
- * the gutter dim so it can serve as the anchor.
+ * The level that groups `cells` (the slots of an ordinal axis, in order) by
+ * the cells of `p`: the cell of `p` each slot lies in. A slot of the time
+ * line must lie in one cell of `p` (a month in one year, not a week across
+ * two months); a part of a cycle must lie in one part of `p`'s reading of
+ * the same cycle (a month of the year in one quarter of the year). Returns a
+ * reason when `p` does not group the slots.
+ */
+function calendarLevel(
+  p: CalendarPartition,
+  cells: readonly (AxisCell | undefined)[]
+): OrdinalLevel | string {
+  const groups: OrdinalLevel["groups"] = [];
+  for (const c of cells) {
+    if (c instanceof Cell && c.calendar !== undefined) {
+      const zone = c.calendar.zone;
+      const outer = p.cells(c.start, c.start, zone)[0];
+      if (c.end > outer.end)
+        return (
+          `the cell "${c.label}" lies across two cells of ${String(p)}, so ` +
+          `${String(p)} does not group the slots`
+        );
+      groups.push({ id: String(outer.start), label: p.label(outer, zone) });
+    } else if (c instanceof CycleCell) {
+      const of = c.cycle.of;
+      if (p.cycle !== of)
+        return (
+          `the slots are parts of a ${of} (${c.bin ?? "a cycle"}), and ` +
+          `${String(p)} ${p.cycle === undefined ? "is a part of nothing" : `is a part of a ${p.cycle}`}, so it does not group them`
+        );
+      const [s, e] = c.ref;
+      const part = p.part(zoned(s, "UTC"));
+      if (p.part(zoned(e - 1, "UTC")) !== part)
+        return (
+          `the part "${c.label}" lies across two parts of ${String(p)}, so ` +
+          `${String(p)} does not group the slots`
+        );
+      const first = p.floor(zoned(s, "UTC")).epochMilliseconds;
+      groups.push({
+        id: String(part),
+        label: p.partLabel(cycleFields(first, p.unit, of), first),
+      });
+    } else {
+      return (
+        `${String(p)} groups slots of time, and these slots are not cells ` +
+        `of a time column`
+      );
+    }
+  }
+  return { name: String(p), groups };
+}
+
+/**
+ * The levels an ordinal axis over `slots` infers, nearest the plot first:
+ * one for a split, or, for a key binned by a chain of bins
+ * (`.bin(Calendar.year).bin(Calendar.month)`), one per bin, each grouping
+ * the slots by their cell of that bin (the month level, then the year
+ * level).
+ */
+function inferredOrdinalLevels(
+  slots: readonly { key: string; cell?: AxisCell }[],
+  measure: string | undefined
+): OrdinalLevel[] {
+  const first = slots[0]?.cell;
+  if (first === undefined || slots.some((s) => s.cell === undefined))
+    return [
+      {
+        name:
+          measure !== undefined ? `the groups of "${measure}"` : "the groups",
+        groups: slots.map((s) => ({
+          id: s.key,
+          label: s.cell?.label ?? s.key,
+        })),
+      },
+    ];
+  const depth = chainLength(first);
+  return Array.from({ length: depth }, (_, k) => ({
+    name: ancestor(first, k)?.bin ?? "the cells",
+    groups: slots.map((s) => {
+      const c = ancestor(s.cell!, k);
+      return { id: c?.id ?? "", label: c?.label ?? "" };
+    }),
+  }));
+}
+
+/**
+ * One ordinal axis: the levels of the key it lays out, one row of labels
+ * each, nearest the plot first (see {@link inferredOrdinalLevels}), as the
+ * `levels` entries from `depth0` on say (`entries[0]` is this axis's first
+ * level): `true` keeps a level, `false` hides it, and a Calendar value groups
+ * the slots by its cells instead (see {@link calendarLevel}). An outermost
+ * axis also takes Calendar entries past its own levels, as more levels.
  *
- * An ordinal over CELLS (`space.cells`, from a binned key `field(x).bin(p)`)
- * places cells, not points: each label names its cell (the cell's label, its
- * partition's format or the default) and is centered between the cell's two
- * boundary ticks, a tick at each edge of the cell's node. Calendar cells add
- * an outer row of their parent level (months get a year row), as a time axis
- * does (see {@link cellAxisRows}).
+ * Each label is centered on the run of slots it names: a slot's label on
+ * its key node (via a `ref` stand-in + `align`), a run's on the stretch from
+ * the run's first slot to its last ({@link axisSpan}). Each row is seated on
+ * a COMMON baseline by `distribute`-ing it past the whole content's near
+ * edge, so the labels form a straight row or column and don't follow each
+ * mark's own extent (which would scatter them, e.g. under a negative bar).
+ * The distribute anchors against the wrapped content layer
+ * (`INNER_REF_NAME`), whose bbox includes any inner axes' labels, so an
+ * outer axis stacks below the inner one instead of overlapping it; each row
+ * sits past the rows before it.
+ *
+ * Ticks: the innermost ordinal level on a dim has none. Every outer level
+ * draws one divider in each gap between neighboring groups, a line centered
+ * in the gap from the content's edge down through its own row; a gap that
+ * several levels divide gets one divider, as deep as the outermost of them.
+ * `dividersAtFirst` says whether this axis's first level is an outer one (an
+ * ordinal axis is drawn below it on the dim).
  */
 function elaborateOrdinalAxis(
   dim: 0 | 1,
   space: Extract<UnderlyingSpace, { kind: "ordinal" }>,
   keyMap: Record<string, GoFishNode>,
   prefix: string,
-  side: "start" | "end" = "start",
-  labelRotation?: LabelRotation,
-  tier = 0
-): AxisElaboration {
+  side: "start" | "end",
+  settingAt: (k: number) => LevelSetting,
+  entries: readonly (LevelEntry | undefined)[],
+  outermost: boolean,
+  dividersAtFirst: boolean,
+  depth0: number
+): { elaboration: AxisElaboration; report: LevelReport } {
   const keys = (space.domain ?? []).filter((k) => keyMap[k] !== undefined);
   const trackAxis = axisName(dim); // labels track their key along the axis dim
   const gutterDir = crossName(dim); // labels sit in the cross gutter
-  const lName = (i: number) => `${prefix}ol${i}`;
-  const rName = (i: number) => `${prefix}or${i}`;
-  // Hanging-point rule (see `LabelRotation`'s doc comment): unrotated / ±90°
-  // keeps the plain bbox-middle centering used before (pixel-identical to the
-  // pre-hanging-point behavior); an oblique angle instead anchors the LABEL at
-  // its own rotation pivot (`"baseline"`) while the key node it tracks stays
-  // "middle"-anchored on its own extent — a heterogeneous per-child anchor,
-  // via `Constraint.align`'s anchor-array form.
-  const trackAnchors: AlignAnchor[] =
-    labelRotation?.trackAlign === "baseline"
-      ? ["baseline", "middle"]
-      : ["middle", "middle"];
-
   const cellOf = new Map(space.cells?.map((c) => [c.id, c]));
-  const nodes: GoFishNode[] = [];
-  keys.forEach((k, i) => {
-    const label = Text({
-      text: cellOf.get(k)?.label ?? k,
-      fontSize: LABEL_FONT_SIZE,
-      fill: AXIS_COLOR,
-      rotate: labelRotation?.rotate,
-      textAnchor: labelRotation?.textAnchor,
-    }).name(lName(i));
-    label.axisLabel = { dim, kind: "ordinal", tier, field: space.measure };
-    nodes.push(label);
-    nodes.push((ref(keyMap[k]) as any).name(rName(i)) as GoFishNode);
-  });
+  const slots = keys.map((key) => ({
+    key,
+    cell: cellOf.get(key),
+    node: keyMap[key],
+  }));
+  const issues: LevelIssue[] = [];
 
-  const constraints = (g: Record<string, any>) => {
-    const cs: any[] = [];
-    keys.forEach((_, i) => {
-      // Track the key along the axis dim …
-      cs.push(
-        Constraint.align({ [trackAxis]: trackAnchors } as any, [
-          g[lName(i)],
-          g[rName(i)],
-        ])
-      );
-      // … and sit just past one of the content's gutter edges, anchored to the
-      // whole content layer (so the row clears any nested inner labels) rather
-      // than the individual mark. `side` picks the edge: "start" seats the row
-      // before the content (label → content), "end" after it (content → label)
-      // — flipping which frame edge (top/bottom or left/right) the axis lands on.
-      const pair =
-        side === "end"
-          ? [g[INNER_REF_NAME], g[lName(i)]]
-          : [g[lName(i)], g[INNER_REF_NAME]];
-      cs.push(
-        Constraint.distribute(
-          { dir: gutterDir, spacing: ORDINAL_LABEL_GAP },
-          pair
-        )
-      );
-    });
-    return cs;
-  };
-
-  if (space.cells === undefined) return { nodes, constraints };
-  const rows = cellAxisRows(
-    dim,
-    keys.map((k) => cellOf.get(k)!),
-    rName,
-    prefix,
-    side,
-    labelRotation
-  );
-  return {
-    nodes: [...nodes, ...rows.nodes],
-    constraints: (g) => [...constraints(g), ...rows.constraints(g)],
-  };
-}
-
-/** A cell's outer cell in its parent calendar level (a month's year), with
- *  that cell's label; undefined for a numeric cell or a level with no
- *  parent. */
-function outerCell(cell: Cell): { start: number; label: string } | undefined {
-  const c = cell.calendar;
-  const parent = c?.partition.parent;
-  if (c === undefined || parent === undefined) return undefined;
-  const outer = parent.cells(cell.start, cell.start, c.zone)[0];
-  return { start: outer.start, label: parent.label(outer, c.zone) };
-}
-
-/**
- * The boundary ticks and the outer row of an ordinal axis over cells. The
- * key nodes are the refs `rName(i)`, one per cell in `cells`, in order.
- *
- *  - Ticks: one at each edge of each cell's node, so each cell's label, which
- *    is centered on its node, sits centered between its two boundary ticks.
- *    Neighboring cells with no space between them share a tick.
- *  - Outer row, for calendar cells: one label per run of cells in the same
- *    parent cell (a year, for months), at the start of its first cell, the
- *    first visible point of the parent cell, as a time axis places it. The
- *    tick where a parent cell starts is long, so the boundary stands out.
- *    The row sits past the cells' own labels.
- */
-function cellAxisRows(
-  dim: 0 | 1,
-  cells: Cell[],
-  rName: (i: number) => string,
-  prefix: string,
-  side: "start" | "end",
-  labelRotation?: LabelRotation
-): Pick<AxisElaboration, "nodes" | "constraints"> {
-  const trackAxis = axisName(dim);
-  const gutterDir = crossName(dim);
-  const outers = cells.map(outerCell);
-  // Where each outer run starts (cell index), and its label.
-  const runs: { at: number; label: string }[] = [];
-  outers.forEach((o, i) => {
-    if (o !== undefined && (i === 0 || o.start !== outers[i - 1]?.start))
-      runs.push({ at: i, label: o.label });
-  });
-  const runStarts = new Set(runs.map((r) => r.at));
-
-  const tName = (i: number, edge: "start" | "end") =>
-    `${prefix}ct${i}${edge === "start" ? "s" : "e"}`;
-  const oName = (r: number) => `${prefix}oo${r}`;
-  const nodes: GoFishNode[] = [];
-  cells.forEach((_, i) => {
-    const long = runs.length > 0 && runStarts.has(i);
-    nodes.push(
-      tickRect(dim, long ? TIME_OUTER_TICK_LEN : TICK_LEN).name(
-        tName(i, "start")
-      )
+  // The levels: inferred, as the entries name them, and, on the outermost
+  // axis, more levels from Calendar entries past the inferred ones.
+  const inferred = inferredOrdinalLevels(slots, space.measure);
+  const levels: OrdinalLevel[] = [];
+  const hidden: boolean[] = [];
+  const regroup = (
+    p: CalendarPartition,
+    k: number,
+    fallback?: OrdinalLevel
+  ) => {
+    const level = calendarLevel(
+      p,
+      slots.map((s) => s.cell)
     );
-    nodes.push(tickRect(dim).name(tName(i, "end")));
+    if (typeof level === "string") {
+      issues.push({ dim, depth: depth0 + k, reason: level });
+      return fallback;
+    }
+    return level;
+  };
+  inferred.forEach((level, k) => {
+    const e = entries[k];
+    levels.push(
+      e instanceof CalendarPartition ? (regroup(e, k, level) ?? level) : level
+    );
+    hidden.push(e === false);
   });
-  runs.forEach((r, k) => {
-    const label = Text({
-      text: r.label,
-      fontSize: LABEL_FONT_SIZE,
-      fill: AXIS_COLOR,
-    }).name(oName(k));
-    nodes.push(label);
+  if (outermost) {
+    for (
+      let k = inferred.length;
+      entries[k] instanceof CalendarPartition;
+      k++
+    ) {
+      const level = regroup(entries[k] as CalendarPartition, k);
+      if (level === undefined) break;
+      levels.push(level);
+      hidden.push(false);
+    }
+  }
+  const settings = levels.map((_, k) => {
+    const s = settingAt(depth0 + k);
+    return { ...s, hidden: s.hidden || hidden[k] };
   });
 
-  // The outer row sits past the cells' labels: the label gap, then the
-  // inner labels' depth across the axis (their height on x, their widest on
-  // y, as rotated), then the gap between two rows of a time axis.
+  // Runs: each level's neighboring slots in one group, as [first, last].
+  const runsOf = (level: OrdinalLevel): [number, number][] => {
+    const runs: [number, number][] = [];
+    level.groups.forEach((g, i) => {
+      const last = runs[runs.length - 1];
+      if (last !== undefined && level.groups[last[1]].id === g.id) last[1] = i;
+      else runs.push([i, i]);
+    });
+    return runs;
+  };
+  const runs = levels.map(runsOf);
+
+  // Each row's depth across the axis: its labels' height (x) or widest
+  // label (y), as rotated; and how far past the content it sits.
   const font = (t: string) =>
     estimateTextDimensions(t, LABEL_FONT_SIZE, FALLBACK_FONT_FAMILY);
-  const depth = Math.max(
-    0,
-    ...cells.map((c) => {
-      const { width, height } = font(c.label);
-      const box = rotatedExtent(
-        { minX: 0, minY: 0, maxX: width, maxY: height },
-        labelRotation?.rotate ?? 0
-      );
-      return dim === 0 ? box.maxY - box.minY : box.maxX - box.minX;
-    })
+  const rowDepth = levels.map((level, k) =>
+    Math.max(
+      0,
+      ...runs[k].map(([i]) => {
+        const { width, height } = font(level.groups[i].label);
+        const box = rotatedExtent(
+          { minX: 0, minY: 0, maxX: width, maxY: height },
+          settings[k].rotation?.rotate ?? 0
+        );
+        return dim === 0 ? box.maxY - box.minY : box.maxX - box.minX;
+      })
+    )
   );
-  const outerGap = ORDINAL_LABEL_GAP + depth + TIME_ROW_GAP;
+  const rowOffset: number[] = [];
+  let offset = ORDINAL_LABEL_GAP;
+  levels.forEach((_, k) => {
+    rowOffset.push(offset);
+    if (!settings[k].hidden) offset += rowDepth[k] + TIME_ROW_GAP;
+  });
 
-  // Seat `node` just past the content's gutter edge, as an ordinal label is.
+  const lName = (k: number, r: number) =>
+    k === 0 ? `${prefix}ol${r}` : `${prefix}ol${k}_${r}`;
+  const sName = (i: number) => `${prefix}or${i}`;
+  const spanName = (k: number, r: number) => `${prefix}os${k}_${r}`;
+  const dName = (i: number) => `${prefix}od${i}`;
+  // Each slot's ref, after the first level's label for that slot, if it has
+  // one of its own; then the other labels, the spans they center on, and
+  // the dividers.
+  const slotNodes: GoFishNode[][] = slots.map((s, i) => [
+    (ref(s.node) as any).name(sName(i)) as GoFishNode,
+  ]);
+  const nodes: GoFishNode[] = [];
+  // A label and what it centers on: its slot's ref, or the span of its run.
+  const pairs: { label: string; on: string; k: number }[] = [];
+  levels.forEach((level, k) => {
+    if (settings[k].hidden) return;
+    const rotation = settings[k].rotation;
+    runs[k].forEach(([a, b], r) => {
+      const label = Text({
+        text: level.groups[a].label,
+        fontSize: LABEL_FONT_SIZE,
+        fill: AXIS_COLOR,
+        rotate: rotation?.rotate,
+        textAnchor: rotation?.textAnchor,
+      }).name(lName(k, r));
+      label.axisLabel = {
+        dim,
+        kind: "ordinal",
+        tier: depth0 + k,
+        field: space.measure,
+      };
+      if (a === b) {
+        if (k === 0) slotNodes[a].unshift(label);
+        else nodes.push(label);
+        pairs.push({ label: lName(k, r), on: sName(a), k });
+      } else {
+        nodes.push(label);
+        nodes.push(
+          axisSpan({
+            dim,
+            from: { node: slots[a].node, edge: "start" },
+            to: { node: slots[b].node, edge: "end" },
+            cross: 0,
+          }).name(spanName(k, r))
+        );
+        pairs.push({ label: lName(k, r), on: spanName(k, r), k });
+      }
+    });
+  });
+
+  // Dividers: in each gap, as deep as the outermost visible outer level
+  // whose groups break there.
+  const dividers: { at: number; depth: number }[] = [];
+  for (let i = 0; i + 1 < slots.length; i++) {
+    let deepest: number | undefined;
+    levels.forEach((level, k) => {
+      const outer = k > 0 || dividersAtFirst;
+      if (
+        outer &&
+        !settings[k].hidden &&
+        level.groups[i].id !== level.groups[i + 1].id
+      )
+        deepest = k;
+    });
+    if (deepest !== undefined)
+      dividers.push({
+        at: i,
+        depth: rowOffset[deepest] + rowDepth[deepest],
+      });
+  }
+  dividers.forEach((d, n) =>
+    nodes.push(
+      axisSpan({
+        dim,
+        from: { node: slots[d.at].node, edge: "end" },
+        to: { node: slots[d.at + 1].node, edge: "start" },
+        cross: d.depth,
+        line: { color: AXIS_COLOR },
+      }).name(dName(n))
+    )
+  );
+
+  // Seat `node` `spacing` past the content's gutter edge. `side` picks the
+  // edge: "start" seats it before the content (node → content), "end"
+  // after it (content → node), flipping which frame edge (top/bottom or
+  // left/right) the axis lands on.
   const seat = (g: Record<string, any>, node: any, spacing: number) =>
     Constraint.distribute(
       { dir: gutterDir, spacing },
@@ -900,30 +1044,65 @@ function cellAxisRows(
     );
   const constraints = (g: Record<string, any>) => {
     const cs: any[] = [];
-    cells.forEach((_, i) => {
-      for (const edge of ["start", "end"] as const) {
-        const tick = g[tName(i, edge)];
-        cs.push(
-          Constraint.align({ [trackAxis]: ["middle", edge] } as any, [
-            tick,
-            g[rName(i)],
-          ])
-        );
-        cs.push(seat(g, tick, 0));
-      }
-    });
-    runs.forEach((r, k) => {
+    // Hanging-point rule (see `LabelRotation`'s doc comment): unrotated /
+    // ±90° keeps plain bbox-middle centering; an oblique angle anchors the
+    // LABEL at its own rotation pivot (`"baseline"`) while what it tracks
+    // stays "middle"-anchored, via `Constraint.align`'s anchor-array form.
+    for (const { label, on, k } of pairs) {
+      const anchors: AlignAnchor[] =
+        settings[k].rotation?.trackAlign === "baseline"
+          ? ["baseline", "middle"]
+          : ["middle", "middle"];
       cs.push(
-        Constraint.align({ [trackAxis]: ["start", "start"] } as any, [
-          g[oName(k)],
-          g[rName(r.at)],
-        ])
+        Constraint.align({ [trackAxis]: anchors } as any, [g[label], g[on]])
       );
-      cs.push(seat(g, g[oName(k)], outerGap));
-    });
+      cs.push(seat(g, g[label], rowOffset[k]));
+    }
+    dividers.forEach((_, n) => cs.push(seat(g, g[dName(n)], 0)));
     return cs;
   };
-  return { nodes, constraints };
+
+  const names = levels.map((l) => l.name);
+  return {
+    elaboration: { nodes: [...slotNodes.flat(), ...nodes], constraints },
+    report: { names, issues },
+  };
+}
+
+/**
+ * The rows of a time axis, as its `levels` entries from `depth0` on name
+ * them (`entries[0]` is the axis's first level). It infers two: the inner
+ * row (the partition of the cells it places, else the one its domain picks
+ * for about 10 ticks, `axisTickPartition`) and that row's parent level, if
+ * it has one. A Calendar entry names a row's partition, and `false` hides
+ * the row (its ticks and labels; the domain is still niced to the inner
+ * row's cells). The parent row follows the inner row as named. An outermost
+ * axis also takes Calendar entries past its rows, as more rows.
+ */
+function timeRows(
+  space: CONTINUOUS_TYPE,
+  entries: readonly (LevelEntry | undefined)[],
+  outermost: boolean
+): {
+  rows: { partition: CalendarPartition; hidden: boolean }[];
+  names: string[];
+} {
+  const rows: { partition: CalendarPartition; hidden: boolean }[] = [];
+  const named = (k: number, inferred: CalendarPartition) => {
+    const e = entries[k];
+    rows.push({
+      partition: e instanceof CalendarPartition ? e : inferred,
+      hidden: e === false,
+    });
+  };
+  named(0, axisTickPartition(space, DEFAULT_AXIS_TICKS));
+  const parent = rows[0].partition.parent;
+  if (parent !== undefined) named(1, parent);
+  if (outermost) {
+    for (let k = rows.length; entries[k] instanceof CalendarPartition; k++)
+      rows.push({ partition: entries[k] as CalendarPartition, hidden: false });
+  }
+  return { rows, names: rows.map((r) => String(r.partition)) };
 }
 
 /**
@@ -953,6 +1132,34 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
   return out;
 }
 
+/** What the axes of a subtree say about each dim, folded bottom-up by
+ *  {@link elaborateChrome}: the names of the levels drawn so far, nearest
+ *  the plot first (so the next axis out starts at that depth), whether one
+ *  of them is an ordinal level (so the next ordinal level out is an outer
+ *  one, with dividers), and the `levels` entries that could not apply. */
+export type LevelFold = {
+  names: [string[], string[]];
+  ordinal: [boolean, boolean];
+  issues: LevelIssue[];
+};
+
+const emptyFold = (): LevelFold => ({
+  names: [[], []],
+  ordinal: [false, false],
+  issues: [],
+});
+
+/** Whether a node above `node` will draw an axis on `dim`, so `node`'s axis
+ *  is not the outermost on it. Ancestors are elaborated after `node`, so
+ *  their `axis` flags are still set. */
+function hasOuterAxis(node: GoFishNode, dim: 0 | 1): boolean {
+  for (let p = node.parent; p !== undefined; p = p.parent) {
+    if (p instanceof GoFishNode && (dim === 0 ? p.axis.x : p.axis.y) === true)
+      return true;
+  }
+  return false;
+}
+
 /**
  * Build the elaborations for whichever axes `node` owns; clears its flags.
  * Splits them into two tiers because they place differently:
@@ -963,21 +1170,22 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
  *    tier. Otherwise the ref captures the pre-shift position and the labels miss
  *    the continuous-axis gutter offset.
  *
- * `tierCounts` is the per-dim count of ordinal axis tiers already elaborated
- * BELOW this node in the subtree (0 = none yet, i.e. this node — if it owns an
- * ordinal axis — is the innermost tier); see `elaborateChrome` for how it's
- * bubbled up. The returned `tierCounts` adds one per dim this node claimed an
- * ordinal axis on, so an ancestor owning the same dim's outer tier reads the
- * right index for a per-tier `labelAngle` array. `timeAxes` folds the same
- * way: whether a time axis was drawn below this node, per dim, and the
- * returned one adds the dims this node draws a time axis on.
+ * `below` is what the axes already elaborated BELOW this node say per dim
+ * (see {@link LevelFold}): an axis this node draws on a dim starts at the
+ * depth after them, and reads the `levels` entries from there. Every axis
+ * has levels: a numeric axis one (its ticks), a time axis its rows, an
+ * ordinal axis one per split or bin. The returned fold adds this node's
+ * levels.
  */
 function elaborationsFor(
   node: GoFishNode,
   sides: AxisSides,
   labelSettings: LabelRowSettings = () => undefined,
-  tierCounts: [number, number] = [0, 0],
-  timeAxes: [boolean, boolean] = [false, false]
+  levelsOpt: [LevelEntry[] | undefined, LevelEntry[] | undefined] = [
+    undefined,
+    undefined,
+  ],
+  below: LevelFold = emptyFold()
 ): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
@@ -990,13 +1198,14 @@ function elaborationsFor(
   /** Per-dim [x, y]: the edge each owned axis seats on, in the node's axis
    *  order; undefined on a dim the node owns no axis on. */
   sides: AxisSides;
-  /** Per-dim ordinal-tier count, incremented for each dim this node claimed
-   *  an ordinal axis on (see the doc comment above). */
-  tierCounts: [number, number];
-  /** Per-dim [x, y]: did this node, or a node below it, draw a time axis on
-   *  that dim. */
-  timeAxes: [boolean, boolean];
+  /** `below`, with this node's levels added. */
+  fold: LevelFold;
 } {
+  const fold: LevelFold = {
+    names: [[...below.names[0]], [...below.names[1]]],
+    ordinal: [...below.ordinal],
+    issues: [...below.issues],
+  };
   const space = node._underlyingSpace;
   if (!space)
     return {
@@ -1005,8 +1214,7 @@ function elaborationsFor(
       anchors: [undefined, undefined],
       owned: [false, false],
       sides: [undefined, undefined],
-      tierCounts,
-      timeAxes,
+      fold,
     };
   // A node can own a dim (`resolveAxes` set `axis.x/y`) whose own
   // `_underlyingSpace` is the UNDEFINED sentinel — self-scaled children
@@ -1021,20 +1229,37 @@ function elaborationsFor(
       ? node.placedSpace(space[dim])
       : (node.hoistedAxisSpace?.[dim] ?? space[dim]);
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
+  // The `levels` entries an axis on `dim` reads, from its first level on.
+  const entriesFor = (dim: 0 | 1) =>
+    (levelsOpt[dim] ?? []).slice(fold.names[dim].length);
+  // The rows of each owned time axis, as its levels name them. Its ticks
+  // are stamped with its inner row before anything nices its domain: the
+  // scope's solve reads the stamp (`scopeAxisTicks`), as the axis does.
+  const times: (ReturnType<typeof timeRows> | undefined)[] = [
+    undefined,
+    undefined,
+  ];
   // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
   // axis's own line/ticks and the other axis's `crossFloor` (the plot corner),
   // so a nicing change can't skew the corner. A DIFFERENCE dim's floor is 0.
   const nices: ([number, number] | undefined)[] = [undefined, undefined];
   const floors: (number | undefined)[] = [undefined, undefined];
   // What each owned axis ticks at, as `resolveAxes` stamped it: the same
-  // ticks its scope's solve nices the domain to. Every axis is drawn from
-  // it: a numeric axis's tick count, a time axis's rows.
+  // ticks its scope's solve nices the domain to. A numeric axis is drawn
+  // from its tick count; a time axis stamps its rows here first.
   const ticksFor = (dim: 0 | 1): AxisTicks =>
     node.axisDemand[dim] ?? DEFAULT_AXIS_TICKS;
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
     if (axisOver(s) === "absolute") {
+      if (isCONTINUOUS(s) && s.calendar) {
+        times[dim] = timeRows(s, entriesFor(dim), !hasOuterAxis(node, dim));
+        node.axisDemand[dim] = {
+          ...ticksFor(dim),
+          rows: times[dim]!.rows.map((r) => r.partition),
+        };
+      }
       const niced = niceContinuous(s, ticksFor(dim)) as CONTINUOUS_TYPE;
       nices[dim] = [niced.dataInterval.min, niced.dataInterval.max];
       floors[dim] = nices[dim]![0];
@@ -1057,12 +1282,11 @@ function elaborationsFor(
     dim === 0 ? wrapperDirection(node) : 1;
   const axisSide = (dim: 0 | 1): "start" | "end" =>
     sides[dim] ?? defaultAxisSide(dim, spaceFor(dim), crossDirection(dim));
-  // `tier` is 0 for a continuous/difference axis (always single-tier) or the
-  // bubbled-up ordinal tier index (0 = innermost) for an ordinal one. Returns
-  // the full hanging-point descriptor (see `LabelRotation`), not just the
-  // angle — `resolveLabelRotation` also derives the track-axis alignment mode
-  // and, for an oblique angle, which end of the label anchors the rotation
-  // pivot.
+  // `tier` is the label row's depth among the dim's levels (0 = nearest the
+  // plot). Returns the full hanging-point descriptor (see `LabelRotation`),
+  // not just the angle — `resolveLabelRotation` also derives the track-axis
+  // alignment mode and, for an oblique angle, which end of the label anchors
+  // the rotation pivot.
   const resolvedLabelRotation = (row: LabelRow): LabelRotation | undefined => {
     const setting = labelSettings(row);
     if (setting === "hidden") {
@@ -1074,8 +1298,23 @@ function elaborationsFor(
     }
     return resolveLabelRotation(setting);
   };
-  const outTierCounts: [number, number] = [...tierCounts];
-  const outTimeAxes: [boolean, boolean] = [...timeAxes];
+  // An entry on a numeric axis's one level: only `true` applies.
+  const numericLevel = (dim: 0 | 1) => {
+    const depth = fold.names[dim].length;
+    const e = entriesFor(dim)[0];
+    if (e === false || e instanceof CalendarPartition)
+      fold.issues.push({
+        dim,
+        depth,
+        reason:
+          e === false
+            ? `a numeric axis's tick labels cannot be hidden (to hide the ` +
+              `whole axis, set the axis to false)`
+            : `${String(e)} names cells of time, and this level is a ` +
+              `numeric axis's ticks`,
+      });
+    fold.names[dim].push("the numeric ticks");
+  };
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
@@ -1083,19 +1322,21 @@ function elaborationsFor(
     const crossFloor = floors[cross(dim)];
     const kind = axisOver(s);
     const ticks = ticksFor(dim);
+    const depth0 = fold.names[dim].length;
     if (kind === "absolute" && isCONTINUOUS(s) && s.calendar) {
+      const time = times[dim]!;
       const e = elaborateTimeAxis(
         dim,
         s,
         nices[dim]!,
-        ticks,
+        time.rows,
         prefix,
         crossFloor,
         axisSide(dim)
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
-      outTimeAxes[dim] = true;
+      fold.names[dim].push(...time.names);
     } else if (kind === "absolute" && isCONTINUOUS(s)) {
       const e = elaborateContinuousAxis(
         dim,
@@ -1105,11 +1346,12 @@ function elaborationsFor(
         crossFloor,
         axisSide(dim),
         crossDirection(dim),
-        resolvedLabelRotation({ dim, kind: "continuous", tier: 0 }),
+        resolvedLabelRotation({ dim, kind: "continuous", tier: depth0 }),
         s.mirrored === true
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
+      numericLevel(dim);
     } else if (kind === "delta" && isCONTINUOUS(s)) {
       const e = elaborateDifferenceAxis(
         dim,
@@ -1121,26 +1363,33 @@ function elaborationsFor(
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
+      numericLevel(dim);
     } else if (isORDINAL(s)) {
       keyMap ??= collectKeyMap(node);
-      const tier = outTierCounts[dim];
-      const row: LabelRow = { dim, kind: "ordinal", tier };
-      // A hidden row draws nothing and takes no space, but the node still
-      // claims the axis (and its tier), so no ancestor draws it instead.
-      if (labelSettings(row) !== "hidden") {
-        refBased.push(
-          elaborateOrdinalAxis(
-            dim,
-            s,
-            keyMap,
-            prefix,
-            axisSide(dim),
-            resolvedLabelRotation(row),
-            tier
-          )
-        );
-      }
-      outTierCounts[dim] = tier + 1;
+      // A hidden level draws nothing and takes no space, but the node still
+      // claims the axis (and its depth), so no ancestor draws it instead.
+      const settingAt = (tier: number): LevelSetting => {
+        const row: LabelRow = { dim, kind: "ordinal", tier };
+        return labelSettings(row) === "hidden"
+          ? { hidden: true }
+          : { hidden: false, rotation: resolvedLabelRotation(row) };
+      };
+      const { elaboration, report } = elaborateOrdinalAxis(
+        dim,
+        s,
+        keyMap,
+        prefix,
+        axisSide(dim),
+        settingAt,
+        entriesFor(dim),
+        !hasOuterAxis(node, dim),
+        fold.ordinal[dim],
+        depth0
+      );
+      refBased.push(elaboration);
+      fold.names[dim].push(...report.names);
+      fold.issues.push(...report.issues);
+      fold.ordinal[dim] = true;
     } else {
       continue;
     }
@@ -1157,8 +1406,7 @@ function elaborationsFor(
       owned[0] ? axisSide(0) : undefined,
       owned[1] ? axisSide(1) : undefined,
     ],
-    tierCounts: outTierCounts,
-    timeAxes: outTimeAxes,
+    fold,
   };
 }
 
@@ -1187,6 +1435,9 @@ export type ChromeOptions = {
   sides?: AxisSides;
   /** How each axis label row is drawn. */
   labelSettings?: LabelRowSettings;
+  /** Per-dim `levels` entries, nearest the plot first (see
+   *  `AxisOptions.levels`); undefined = every level as inferred. */
+  levels?: [LevelEntry[] | undefined, LevelEntry[] | undefined];
 };
 
 /**
@@ -1199,19 +1450,16 @@ export type ChromeOptions = {
  * `_chromeRequest` asks for: a title on each of those axes that the `axes`
  * options name, and a legend ring.
  *
- * It also bubbles up `tierCounts` — the per-dim count of ordinal axis tiers
- * elaborated so far in this subtree — purely as an output (nothing is passed
- * DOWN for it): each dim is folded bottom-up as `max` over the node's own
- * children, then incremented by `elaborationsFor` if this node itself claims
- * an ordinal axis on that dim. That gives a node's ordinal axis a tier index
- * of 0 for the innermost nesting (e.g. a grouped bar chart's year row) and 1
- * for the next one out (its city row), which `elaborationsFor` uses to pick
- * the right entry of a per-tier `labelAngle` array. Sibling subtrees don't
- * interfere: each call only sees counts folded from ITS OWN children.
- *
- * It also reports, per dim, whether any node in the subtree drew a time axis
- * (`timeAxes`), folded the same way, so `layout` can reject `axes.<dim>.rows`
- * on a chart with no time axis on that dim (see `AxisOptions.rows`).
+ * It also bubbles up what the axes say about their levels (a
+ * {@link LevelFold}) purely as an output (nothing is passed DOWN for it):
+ * each dim is folded bottom-up over the node's own children (the most
+ * levels any child drew; an ordinal level if any child drew one), then
+ * `elaborationsFor` adds this node's own levels. That gives each level its
+ * depth among the levels of its dim, 0 nearest the plot (a grouped bar
+ * chart's year labels, then its city labels), which picks its `levels`
+ * entry and its entry of a per-level `labelAngle` array. Sibling subtrees
+ * don't interfere: each call only sees what ITS OWN children folded. `layout`
+ * reads the root's fold to check every `levels` entry applied.
  */
 export async function elaborateChrome(
   node: GoFishNode,
@@ -1219,12 +1467,10 @@ export async function elaborateChrome(
 ): Promise<{
   node: GoFishNode;
   changed: boolean;
-  tierCounts: [number, number];
-  timeAxes: [boolean, boolean];
+  fold: LevelFold;
 }> {
   let changed = false;
-  const tierCounts: [number, number] = [0, 0];
-  const childTimeAxes: [boolean, boolean] = [false, false];
+  const below = emptyFold();
   // Bottom-up: replace each child with its elaborated form.
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
@@ -1232,9 +1478,11 @@ export async function elaborateChrome(
       const res = await elaborateChrome(child, options);
       if (res.changed) changed = true;
       for (const dim of [0, 1] as (0 | 1)[]) {
-        tierCounts[dim] = Math.max(tierCounts[dim], res.tierCounts[dim]);
-        childTimeAxes[dim] ||= res.timeAxes[dim];
+        if (res.fold.names[dim].length > below.names[dim].length)
+          below.names[dim] = res.fold.names[dim];
+        below.ordinal[dim] ||= res.fold.ordinal[dim];
       }
+      below.issues.push(...res.fold.issues);
       if (res.node !== child) {
         node.children[i] = res.node;
         res.node.parent = node;
@@ -1242,21 +1490,14 @@ export async function elaborateChrome(
     }
   }
 
-  const {
-    constrained,
-    refBased,
-    anchors,
-    owned,
-    sides,
-    tierCounts: nextTierCounts,
-    timeAxes,
-  } = elaborationsFor(
-    node,
-    options.sides ?? [undefined, undefined],
-    options.labelSettings,
-    tierCounts,
-    childTimeAxes
-  );
+  const { constrained, refBased, anchors, owned, sides, fold } =
+    elaborationsFor(
+      node,
+      options.sides ?? [undefined, undefined],
+      options.labelSettings,
+      options.levels,
+      below
+    );
   // A title names an axis this node draws. The measure is read off the
   // node's own space, which elaboration has not re-resolved yet.
   const request = node._chromeRequest;
@@ -1279,7 +1520,7 @@ export async function elaborateChrome(
     titles[1] === undefined &&
     legend === undefined
   ) {
-    return { node, changed, tierCounts: nextTierCounts, timeAxes };
+    return { node, changed, fold };
   }
 
   let withAxes: GoFishNode = node;
@@ -1352,12 +1593,7 @@ export async function elaborateChrome(
   });
   root.chrome = { content: node, withAxes };
 
-  return {
-    node: root,
-    changed: true,
-    tierCounts: nextTierCounts,
-    timeAxes,
-  };
+  return { node: root, changed: true, fold };
 }
 
 // ── Axis titles ──────────────────────────────────────────────────────────────

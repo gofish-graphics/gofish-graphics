@@ -55,7 +55,7 @@ import type {
 } from "../channels";
 import { discretePosition } from "../data";
 import { copyColumnTypes } from "../schema";
-import { RegionCell } from "../cells";
+import { KeyCell } from "../cells";
 import type { SplitKey } from "../datumProjection";
 import { fieldNameOf } from "../data";
 import type { MaybeValue, Value } from "../data";
@@ -1153,7 +1153,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             // a cell: the node's key is its id, and the node keeps the cell
             // itself for the ordinal space it folds into
             // (`ORDINAL_TYPE.cells`).
-            const cell = i instanceof RegionCell ? i : undefined;
+            const cell = i instanceof KeyCell ? i : undefined;
             const currentKey: string | number =
               cell?.id ?? (i as string | number);
             const leafNodes = await applyMark(

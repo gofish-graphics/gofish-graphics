@@ -385,7 +385,7 @@ export const LABEL_OPTIONS: FieldGroup = group({
  *  object of named options. Mirrors the JS `AxisOptions` in
  *  `gofish-graphics/src/ast/gofish.tsx`. */
 const axisOptions: FieldSpec = {
-  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, and the rows of a time axis.",
+  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, and its levels.",
   type: t.union(
     t.boolean,
     t.object({
@@ -399,11 +399,11 @@ const axisOptions: FieldSpec = {
       },
       labelAngle: {
         type: t.union(t.number, t.array(t.number), t.enum("auto")),
-        doc: 'Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite\'s labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; "auto" picks 0, 45, or 90 degrees per label row so labels do not collide.',
+        doc: 'Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite\'s labelAngle). A number applies to every level of the axis; an array is per level, by the same depths as `levels`, nearest the plot first; "auto" picks 0, 45, or 90 degrees per level so labels do not collide.',
       },
-      rows: {
-        type: t.array(t.ref("Calendar")),
-        doc: "The label rows of a time axis, inner row first, e.g. [Calendar.month, Calendar.year]. Each row is one calendar partition: its ticks are its cells' starts, and each label is centered on its cell's start tick. The domain is niced outward to the inner row's cells. Default: the level and step the domain picks for about 10 ticks, then its parent level. In JS a row's labels can be custom: Calendar.quarter.format(fn), with fn a function of the cell. A row with a format is JS-only (it has no wire form).",
+      levels: {
+        type: t.array(t.union(t.boolean, t.ref("Calendar"))),
+        doc: "The axis's levels, its bands of labels, by depth, nearest the plot first. Every axis on the dim has levels: a numeric axis one (its ticks), a time axis two (the level and step its domain picks for about 10 ticks, then that level's parent), and an ordinal axis one per split, plus one per bin before the last of a chained key (field(x).bin(Calendar.year).bin(Calendar.month) gives a month level and a year level). Each entry sets the level at its depth: true keeps it as inferred, false hides it, and a Calendar value names its cells: a time row's partition, or, on an ordinal axis over cells of time, the cells that group its slots, each label centered under its run of slots. Depths the list does not reach stay as inferred; on the outermost axis, Calendar values past the inferred levels add levels. An entry that cannot apply is an error that lists the axis's levels. In JS a level's labels can be custom: Calendar.quarter.format(fn), with fn a function of the cell; an entry with a format is JS-only (it has no wire form).",
       },
     })
   ),
@@ -1370,7 +1370,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       by: {
         type: t.union(t.ref("FieldAccessor"), t.ref("StructAccessor")),
         required: true,
-        doc: "A key that has a region: a binned field, field(x).bin(p) with p a Calendar value, Bin.step(size) or Bin.thresholds(countOrEdges), whose cells divide the axis `dir`. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.",
+        doc: "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.",
       },
       dir: {
         type: t.string,

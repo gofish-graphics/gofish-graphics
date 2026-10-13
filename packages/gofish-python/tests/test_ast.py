@@ -153,6 +153,27 @@ class TestOperators:
         ]
         assert field("x").bin()["ops"] == [{"op": "bin"}]
 
+    def test_bin_product_and_chain_wire(self):
+        """A product is a list partition on one bin op; a chain is one bin op
+        per `.bin`."""
+        assert field("d").bin([Calendar.year, Calendar.month])["ops"] == [
+            {
+                "op": "bin",
+                "partition": [
+                    {"unit": "year", "step": 1},
+                    {"unit": "month", "step": 1},
+                ],
+            }
+        ]
+        assert field("d").bin(Calendar.year).bin(Calendar.month)["ops"] == [
+            {"op": "bin", "partition": {"unit": "year", "step": 1}},
+            {"op": "bin", "partition": {"unit": "month", "step": 1}},
+        ]
+        with pytest.raises(TypeError, match="two or more"):
+            field("d").bin([Calendar.month])
+        with pytest.raises(TypeError, match="two or more"):
+            field("d").bin([Calendar.year, Bin.step(1)])
+
     def test_bin_rejects_other_partitions(self):
         """The untagged forms and the removed kwargs are gone, and a Bin kind
         of two fields names the key that takes it."""
@@ -789,21 +810,29 @@ class TestTime:
         with pytest.raises(ValueError, match="monday"):
             Calendar.week(start="friday")
 
-    def test_rows_ride_axes(self):
+    def test_levels_ride_axes(self):
         ir = (
             chart(
                 [{"t": "2024-01-01", "v": 1}],
                 schema={"t": Schema.time()},
-                axes={"x": {"rows": [Calendar.month, Calendar.year]}},
+                axes={"x": {"levels": [Calendar.month, False, True]}},
             )
             .flow(scatter(by="t", x="t", y="v"))
             .mark(line())
             .to_ir()
         )
-        assert ir["options"]["axes"]["x"]["rows"] == [
+        assert ir["options"]["axes"]["x"]["levels"] == [
             {"unit": "month", "step": 1},
-            {"unit": "year", "step": 1},
+            False,
+            True,
         ]
+
+    def test_rows_is_gone(self):
+        with pytest.raises(TypeError, match="levels"):
+            chart(
+                [{"t": "2024-01-01", "v": 1}],
+                axes={"x": {"rows": [Calendar.month]}},
+            ).flow(scatter(by="t", x="t", y="v")).mark(line()).to_ir()
 
     def test_datetime_columns_cross_as_arrow_times(self):
         """A datetime column is not marked in the IR: its Arrow type crosses

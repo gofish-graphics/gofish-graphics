@@ -32,11 +32,34 @@ import meanBy from "lodash/meanBy";
 import type { Measure, MaybeValue } from "./data";
 import { withWire, wireOf } from "./wire";
 import {
-  checkPartition,
-  partitionToJSON,
+  binStepToJSON,
+  checkBinStep,
+  checkChain,
+  DEFAULT_PARTITION,
+  type BinStep,
+  type BinStepJSON,
+  type NumberPartition,
   type Partition,
-  type PartitionJSON,
 } from "./cells";
+import type { CalendarPartition, CalendarUnit } from "./calendar";
+
+/** The calendar levels that are a part of nothing, so a bin of one alone
+ *  gives cells of the time line. */
+type LineUnit = "week" | "year";
+
+/** Type-level: whether a key binned by `S` first has a REGION
+ *  ({@link FieldExpr.hasRegion}): cells of the line do, parts of a cycle
+ *  (`Calendar.month`, the month of the year) do not. A product has one when
+ *  its first level does. */
+export type RegionOf<S> = S extends readonly [infer H, ...unknown[]]
+  ? RegionOf<H>
+  : S extends CalendarPartition<infer U>
+    ? [U] extends [LineUnit]
+      ? true
+      : [U] extends [Exclude<CalendarUnit, LineUnit>]
+        ? false
+        : boolean
+    : true;
 
 export type FieldOp =
   | {
@@ -52,10 +75,11 @@ export type FieldOp =
   | { op: "reverse" }
   | {
       op: "bin";
-      /** The partition the values are binned into (cells.ts): a builder
-       *  value in JS, or its wire form from the IR. Absent: about 10 cells
-       *  (`DEFAULT_PARTITION`). */
-      partition?: Partition | PartitionJSON;
+      /** The partition the values are binned into (cells.ts), or a product
+       *  of calendar levels (a list): a builder value in JS, or its wire
+       *  form from the IR. Absent: about 10 cells (`DEFAULT_PARTITION`). A
+       *  second `bin` op splits the cells of the one before it. */
+      partition?: BinStep | BinStepJSON;
     }
   | { op: "dropNulls" }
   | { op: "normalize" }
@@ -80,15 +104,23 @@ export type FieldExprWire = {
  * `toJSON` writes the canonical {@link FieldExprWire} shape. Evaluation sites
  * read ops off either form via {@link getFieldOps}.
  */
-export class FieldExpr<HasRegion extends boolean = boolean> {
+export class FieldExpr<
+  HasRegion extends boolean = boolean,
+  Binned extends boolean = boolean,
+> {
   public readonly type = "field" as const;
   /** Type-level only (no runtime field): whether this expression, used as a
    *  grouping key, gives each group a REGION, the interval of a cell. Only
-   *  `.bin(p)` makes one (`FieldExpr<true>`), and `partition` requires one,
-   *  so `partition({ by: "date" })` or `partition({ by: field("date") })` is
-   *  a type error. Domain ops keep the flag; an aggregate folds it away.
-   *  Plain `FieldExpr` (`boolean`) accepts either. */
+   *  `.bin(p)` makes one (`FieldExpr<true>`), and only with cells of the
+   *  line: a part of a cycle (`.bin(Calendar.month)`, the month of the
+   *  year) has none. `partition` requires one, so `partition({ by: "date"
+   *  })` or `partition({ by: field("date").bin(Calendar.month) })` is a type
+   *  error. Domain ops keep the flag; an aggregate folds it away. Plain
+   *  `FieldExpr` (`boolean`) accepts either. */
   declare readonly hasRegion?: HasRegion;
+  /** Type-level only: whether the expression is binned already, so a
+   *  further `.bin(p)` splits its cells (a chain) and keeps their kind. */
+  declare readonly binned?: Binned;
   constructor(
     public readonly name: string,
     public readonly measure?: Measure,
@@ -96,8 +128,10 @@ export class FieldExpr<HasRegion extends boolean = boolean> {
     public readonly _ops: readonly FieldOp[] = []
   ) {}
 
-  private _withOp<R extends boolean>(op: FieldOp): FieldExpr<R> {
-    return new FieldExpr<R>(this.name, this.measure, [...this._ops, op]);
+  private _withOp<R extends boolean, B extends boolean = Binned>(
+    op: FieldOp
+  ): FieldExpr<R, B> {
+    return new FieldExpr<R, B>(this.name, this.measure, [...this._ops, op]);
   }
 
   /** Order groups by an explicit list of group keys — e.g.
@@ -105,15 +139,15 @@ export class FieldExpr<HasRegion extends boolean = boolean> {
    *  domain-specific order that no aggregate expresses. Groups whose key
    *  isn't in the list are appended after, in natural sort order. Valid only
    *  in a `by` (domain) slot. */
-  sort(values: (string | number)[]): FieldExpr<HasRegion>;
+  sort(values: (string | number)[]): FieldExpr<HasRegion, Binned>;
   /** Order groups by the SUM of `by` over each group's rows (ascending unless
    *  `order: "desc"`), or by the group key itself when `by` is omitted. Valid
    *  only in a `by` (domain) slot. */
-  sort(by?: string, order?: "asc" | "desc"): FieldExpr<HasRegion>;
+  sort(by?: string, order?: "asc" | "desc"): FieldExpr<HasRegion, Binned>;
   sort(
     byOrValues?: string | (string | number)[],
     order?: "asc" | "desc"
-  ): FieldExpr<HasRegion> {
+  ): FieldExpr<HasRegion, Binned> {
     if (Array.isArray(byOrValues)) {
       return this._withOp({ op: "sort", values: byOrValues });
     }
@@ -125,30 +159,57 @@ export class FieldExpr<HasRegion extends boolean = boolean> {
   }
 
   /** Reverse the group order. Valid only in a `by` (domain) slot. */
-  reverse(): FieldExpr<HasRegion> {
+  reverse(): FieldExpr<HasRegion, Binned> {
     return this._withOp({ op: "reverse" });
   }
 
-  /** Map each value to its CELL in `partition` (cells.ts): a Calendar value
-   *  (`Calendar.month`), `Bin.step(size)`, or `Bin.thresholds(countOrEdges)`
-   *  (a count or a list of edges); about 10 cells when omitted. The groups
-   *  are the cells, in order, over the column's whole domain in the chart's
-   *  data, so every group of a split sees the same cells, and empty cells
-   *  are kept. Each takes a label `.format(fn)`, a function of the cell.
-   *  Valid only in a `by` (domain) slot. */
-  bin(partition?: Partition): FieldExpr<true> {
+  /** Map each value to its CELL (cells.ts). `step` is:
+   *
+   *  - a Calendar value. A level that is a part of a larger one gives its
+   *    parts: `Calendar.month` is the month of the year, so all Junes are
+   *    one cell, and every month is a cell, empty or not. A level that is a
+   *    part of nothing (`Calendar.year`, `Calendar.week`) gives cells of
+   *    the time line.
+   *  - a product of calendar levels, `[Calendar.year, Calendar.month]`: one
+   *    cell where one cell of each level meet, each level a part of the one
+   *    before it (the June of 2015, labeled "Jun 2015").
+   *  - `Bin.step(size)` or `Bin.thresholds(countOrEdges)` (a count or a list
+   *    of edges); about 10 cells when omitted.
+   *
+   *  A second `.bin(...)` splits each cell of the first (a chain:
+   *  `.bin(Calendar.year).bin(Calendar.month)`, the months of each year), and
+   *  each cell keeps the cell it was split from, which an axis shows as a
+   *  level of its own. The groups are the cells, in order, over the column's
+   *  whole domain in the chart's data, so every group of a split sees the
+   *  same cells, and empty cells are kept. A partition takes a label
+   *  `.format(fn)`, a function of the cell. Valid only in a `by` (domain)
+   *  slot. */
+  bin<
+    S extends
+      | Partition
+      | readonly [CalendarPartition, ...CalendarPartition[]] = NumberPartition,
+  >(step?: S): FieldExpr<Binned extends true ? HasRegion : RegionOf<S>, true> {
+    const checked =
+      step !== undefined ? checkBinStep(step, "field(...).bin") : undefined;
+    const steps = [
+      ...this._ops.flatMap((op) =>
+        op.op === "bin"
+          ? [checkBinStep(op.partition ?? DEFAULT_PARTITION, "field(...).bin")]
+          : []
+      ),
+      checked ?? DEFAULT_PARTITION,
+    ];
+    checkChain(steps, `field("${this.name}")`);
     return this._withOp({
       op: "bin",
-      ...(partition !== undefined
-        ? { partition: checkPartition(partition, "field(...).bin") }
-        : {}),
+      ...(checked !== undefined ? { partition: checked } : {}),
     });
   }
 
   /** Drop rows whose value at this field is `null`/`undefined`, BEFORE
    *  grouping — named after polars' `drop_nulls` (pandas `dropna`, tidyr
    *  `drop_na`). Valid only in a `by` (domain) slot. */
-  dropNulls(): FieldExpr<HasRegion> {
+  dropNulls(): FieldExpr<HasRegion, Binned> {
     return this._withOp({ op: "dropNulls" });
   }
 
@@ -245,7 +306,7 @@ export class FieldExpr<HasRegion extends boolean = boolean> {
  *  holds the builder form, which `.bin()` checked. */
 const opToJSON = (op: FieldOp): FieldOp =>
   op.op === "bin" && op.partition !== undefined
-    ? { op: "bin", partition: partitionToJSON(op.partition as Partition) }
+    ? { op: "bin", partition: binStepToJSON(op.partition as BinStep) }
     : op;
 
 export type BetweenOptions = {

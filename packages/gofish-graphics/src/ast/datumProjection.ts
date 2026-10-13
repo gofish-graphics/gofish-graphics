@@ -30,11 +30,12 @@ import {
   type FieldOp,
 } from "./fieldExpr";
 import {
-  binCells,
-  checkPartition,
+  chainCells,
+  checkBinStep,
   Cell,
+  CycleCell,
   DEFAULT_PARTITION,
-  type RegionCell,
+  KeyCell,
   type Cells,
 } from "./cells";
 import { columnType, domainRows, orderByLevels } from "./schema";
@@ -151,10 +152,11 @@ export type SplitBy =
   | StructExprWire;
 
 /** The key of one group of a split: a value of the `by` field (text or a
- *  number), or a cell ({@link RegionCell}): a {@link Cell} for a binned key
- *  (`field(x).bin(p)`), a `PolygonCell` for a binned struct
- *  (`struct({ x, y }).bin(b)`). A cell stands for its id (`String(cell)`). */
-export type SplitKey = string | number | RegionCell;
+ *  number), or a cell ({@link KeyCell}): a {@link Cell} or a
+ *  {@link CycleCell} for a binned key (`field(x).bin(p)`), a `PolygonCell`
+ *  for a binned struct (`struct({ x, y }).bin(b)`). A cell stands for its id
+ *  (`String(cell)`). */
+export type SplitKey = string | number | KeyCell;
 
 /**
  * The mutable cell `ChartBuilder` writes the computed default split/travel
@@ -250,8 +252,11 @@ export function splitKeyFn(
 /** Numeric-aware, lodash-`orderBy`-compatible-enough key comparator: compares
  *  as numbers when both keys coerce to finite numbers, else falls back to
  *  string comparison. Used by `field(...).sort()`'s no-arg (sort-by-key) form.
- *  A cell compares by its start: its id is its start, as text. */
+ *  A cell of the line compares by its start (its id is its start, as text),
+ *  and a part of a cycle by its place in the cycle. */
 function compareKeys(a: unknown, b: unknown): number {
+  if (a instanceof CycleCell && b instanceof CycleCell)
+    return a.index - b.index;
   const na = typeof a === "number" ? a : Number(a);
   const nb = typeof b === "number" ? b : Number(b);
   if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
@@ -293,20 +298,23 @@ function valuesOf(domain: unknown[], name: string): unknown[] {
   return values;
 }
 
-/** The cells `field(name).bin(partition)` maps values to: the cells of the
- *  partition over the column's values in `d`'s DOMAIN (`domainRows`,
- *  schema.ts), the chart's data, not over `d` alone. */
+/** The cells `field(name).bin(a).bin(b)...` maps values to: the cells of the
+ *  chain of bins (one per `bin` op, in order) over the column's values in
+ *  `d`'s DOMAIN (`domainRows`, schema.ts), the chart's data, not over `d`
+ *  alone. Memoized on the last `bin` op: an op is made by appending it to
+ *  an expression, so the ops before it are always the same. */
 function domainCells(
   name: string,
   d: Record<string, any>[],
-  partitionOp: unknown
+  binOps: readonly Extract<FieldOp, { op: "bin" }>[]
 ): Cells {
   const where = `field("${name}").bin(...)`;
-  const raw = (partitionOp ?? DEFAULT_PARTITION) as object;
   const domain = domainRows(d);
-  return cellsMemo(domain, raw, name, () =>
-    binCells(
-      checkPartition(raw, where),
+  return cellsMemo(domain, binOps[binOps.length - 1], name, () =>
+    chainCells(
+      binOps.map((op) =>
+        checkBinStep(op.partition ?? DEFAULT_PARTITION, where)
+      ),
       valuesOf(domain, name),
       columnType(d, name)?.HasCalendar?.zone,
       where
@@ -363,15 +371,15 @@ function binKey(
   data: unknown
 ):
   | {
-      cells: readonly RegionCell[];
-      key: (r: unknown) => RegionCell | undefined;
+      cells: readonly KeyCell[];
+      key: (r: unknown) => KeyCell | undefined;
     }
   | undefined {
   // The one cell `cellsOf` gives `r`'s rows, if they agree.
   const collapse =
-    (cellsOf: (r: unknown, add: (c: RegionCell) => void) => void) =>
-    (r: unknown): RegionCell | undefined => {
-      const seen = new Set<RegionCell>();
+    (cellsOf: (r: unknown, add: (c: KeyCell) => void) => void) =>
+    (r: unknown): KeyCell | undefined => {
+      const seen = new Set<KeyCell>();
       cellsOf(r, (c) => seen.add(c));
       return seen.size === 1 ? [...seen][0] : undefined;
     };
@@ -410,8 +418,10 @@ function binKey(
       ),
     };
   }
-  const op = getFieldOps(by).find((o) => o.op === "bin");
-  if (op === undefined) return undefined;
+  const binOps = getFieldOps(by).filter(
+    (o): o is Extract<FieldOp, { op: "bin" }> => o.op === "bin"
+  );
+  if (binOps.length === 0) return undefined;
   if (!isField(by))
     throw new Error(
       "field(...).bin() requires a field(name) accessor as `by`, not a function."
@@ -420,7 +430,7 @@ function binKey(
   const { cells, cellOf } = domainCells(
     name,
     data as Record<string, any>[],
-    op.partition
+    binOps
   );
   return {
     cells,
@@ -446,8 +456,8 @@ function binKey(
 function binEntries<T extends Record<string, any>>(
   binned: NonNullable<ReturnType<typeof binKey>>,
   rows: T[]
-): Map<RegionCell, T[]> {
-  const entries = new Map<RegionCell, T[]>(binned.cells.map((c) => [c, []]));
+): Map<KeyCell, T[]> {
+  const entries = new Map<KeyCell, T[]>(binned.cells.map((c) => [c, []]));
   for (const row of rows) {
     const cell = binned.key(row);
     if (cell !== undefined) entries.get(cell)!.push(row);
@@ -468,7 +478,11 @@ function sortEntries<T>(
     const rank = new Map<unknown, number>(op.values.map((v, i) => [v, i]));
     // A cell is listed by its start (or its id).
     const rankOf = (k: SplitKey) =>
-      k instanceof Cell ? (rank.get(k.start) ?? rank.get(k.id)) : rank.get(k);
+      k instanceof Cell
+        ? (rank.get(k.start) ?? rank.get(k.id))
+        : k instanceof KeyCell
+          ? rank.get(k.id)
+          : rank.get(k);
     pairs.sort(([ka], [kb]) => {
       const ra = rankOf(ka);
       const rb = rankOf(kb);

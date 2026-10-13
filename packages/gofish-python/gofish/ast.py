@@ -2398,7 +2398,8 @@ class CalendarPartition(dict):
     """A partition of the time line into calendar cells: a level (``unit``)
     at a step. The dict is the wire form JS reads (``{"unit": "month",
     "step": 3}``). Mirrors JS ``CalendarPartition``; build one from
-    ``Calendar``. Used in ``axes={"x": {"rows": [...]}}``.
+    ``Calendar``. Used in ``field(x).bin(...)`` and in an axis's levels,
+    ``axes={"x": {"levels": [...]}}``.
     """
 
     def __init__(self, unit: str, step: int = 1, start: Optional[str] = None):
@@ -2437,15 +2438,19 @@ class _WeekPartition(CalendarPartition):
 
 
 class Calendar:
-    """The calendar partitions, used in ``axes={"x": {"rows": [...]}}``.
+    """The calendar partitions: the cells of ``field(x).bin(...)``, and the
+    levels of a time axis, ``axes={"x": {"levels": [...]}}``.
 
     Mirrors JS ``Calendar``::
 
-        chart(data, axes={"x": {"rows": [Calendar.month, Calendar.year]}})
+        field("date").bin(Calendar.month)                  # the month of the year
+        field("date").bin([Calendar.year, Calendar.month])  # each month of each year
+        field("date").bin(Calendar.year).bin(Calendar.month)
+        chart(data, axes={"x": {"levels": [Calendar.week, Calendar.month]}})
         Calendar.hour.every(6)
         Calendar.week(start="sunday")
 
-    A custom ``format`` for a row's labels is JS-only for now.
+    A custom ``format`` for a level's labels is JS-only for now.
     """
 
     second = CalendarPartition("second")
@@ -2786,19 +2791,46 @@ class FieldAccessor(dict):
         return self._with_op({"op": "reverse"})
 
     def bin(
-        self, partition: Optional[Union["CalendarPartition", Dict[str, Any]]] = None
+        self,
+        partition: Optional[
+            Union["CalendarPartition", Dict[str, Any], List["CalendarPartition"]]
+        ] = None,
     ) -> "FieldAccessor":
-        """Map each value to its CELL in a partition: a Calendar value
-        (``field("date").bin(Calendar.month)``), cells of one width
-        (``.bin(Bin.step(0.5))``), or ``Bin.thresholds(...)``, a cell count
-        or a list of edges (``.bin(Bin.thresholds(20))``). About 10 cells
-        when none is given. The groups are the cells, in order, over the
-        column's whole domain in the chart's data, so every group of a split
-        sees the same cells, and empty cells are kept. Valid only in a `by`
-        (domain) slot. Emits the wire op ``{"op": "bin", "partition": ...}``."""
+        """Map each value to its CELL. ``partition`` is:
+
+        - a Calendar value. A level that is a part of a larger one gives its
+          parts: ``field("date").bin(Calendar.month)`` is the month of the
+          year, so all Junes are one cell, and every month is a cell. A level
+          that is a part of nothing (``Calendar.year``, ``Calendar.week``)
+          gives cells of the time line.
+        - a product of Calendar values, a list:
+          ``.bin([Calendar.year, Calendar.month])``, one cell where one cell
+          of each level meet, each level a part of the one before it (the
+          June of 2015, labeled "Jun 2015").
+        - cells of one width (``.bin(Bin.step(0.5))``), or
+          ``Bin.thresholds(...)``, a cell count or a list of edges
+          (``.bin(Bin.thresholds(20))``). About 10 cells when none is given.
+
+        A second ``.bin(...)`` splits each cell of the first, a chain:
+        ``.bin(Calendar.year).bin(Calendar.month)`` gives the months of each
+        year, and an axis over it shows a month level and a year level. The
+        groups are the cells, in order, over the column's whole domain in the
+        chart's data, so every group of a split sees the same cells, and
+        empty cells are kept. Valid only in a `by` (domain) slot. Emits the
+        wire op ``{"op": "bin", "partition": ...}``, one per ``.bin``."""
         op: dict = {"op": "bin"}
         if isinstance(partition, CalendarPartition):
             op["partition"] = dict(partition)
+        elif isinstance(partition, (list, tuple)):
+            if len(partition) < 2 or not all(
+                isinstance(p, CalendarPartition) for p in partition
+            ):
+                raise TypeError(
+                    "field(...).bin: a product of bins is a list of two or more "
+                    "Calendar values, e.g. [Calendar.year, Calendar.month]; got "
+                    f"{partition!r}."
+                )
+            op["partition"] = [dict(p) for p in partition]
         elif partition is not None:
             op["partition"] = _check_bin("field", partition, "field(...).bin")
         return self._with_op(op)

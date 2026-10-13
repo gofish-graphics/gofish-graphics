@@ -2,7 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { RegionCell } from "../cells";
+import { CycleCell, RegionCell } from "../cells";
 import { columnValue, resolveColumn } from "../channels";
 import { isField, type FieldAccessor } from "../data";
 import { splitEntries, type SplitBy } from "../datumProjection";
@@ -128,6 +128,22 @@ const noRegion = (by: unknown): Error => {
   );
 };
 
+/** The loud error for a key binned into the parts of a cycle
+ *  (`field("date").bin(Calendar.month)`, the month of the year): a part is
+ *  every June, in any year, so it has no one region on the time line. */
+const cycleHasNoRegion = (by: FieldAccessor): Error =>
+  new Error(
+    `partition: field("${by.name}").bin(...) bins into the parts of a ` +
+      `cycle (such as the month of the year: all Junes are one cell), and ` +
+      `a part has no one region on the time line to place its group in. ` +
+      `To place each month of each year at its place in time, bin by the ` +
+      `year too: field("${by.name}").bin([Calendar.year, Calendar.month]) ` +
+      `(one cell per month, labeled "Jun 2015"), or ` +
+      `field("${by.name}").bin(Calendar.year).bin(Calendar.month) (the ` +
+      `months of each year). To give each part an equal slot, use ` +
+      `spread({ by, dir }).`
+  );
+
 /** The layout node's options: the columns of the key, in the key's order
  *  (one for a field, x then y for a struct), as maps from a value to its
  *  datum. Each child's cell is the one its key names (`GoFishNode.keyCell`,
@@ -156,7 +172,7 @@ const PartitionNode = createNodeOperator(
     // operator form, so every child is a group of its split.
     const cells = children.map((child) => {
       const cell = child instanceof GoFishNode ? child.keyCell : undefined;
-      if (cell === undefined)
+      if (!(cell instanceof RegionCell))
         throw new Error(
           "partition: each child is a group of the key's split, with the " +
             "cell its key names, but this one has none."
@@ -233,6 +249,8 @@ const partitionOperator = createOperator<
       // in TS; the wire form from Python is checked here).
       if (!hasRegion(by)) throw noRegion(by);
       const entries = splitEntries(by as SplitBy, d);
+      if ([...entries.keys()].some((k) => k instanceof CycleCell))
+        throw cycleHasNoRegion(by as FieldAccessor);
       if (![...entries.keys()].every((k) => k instanceof RegionCell))
         throw noRegion(by);
       const columns = isStruct(by)

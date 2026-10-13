@@ -113,8 +113,9 @@ export type {
   Level,
   SchemaEntry,
 } from "./ast/schema";
-// Calendar partitions (#1057): the cells a time axis's rows are made of
-// (`axes: { x: { rows: [Calendar.month, Calendar.year] } }`). Capitalized
+// Calendar partitions (#1057): the cells of `field(x).bin(...)`, and the
+// cells a time axis's levels are made of
+// (`axes: { x: { levels: [Calendar.month, Calendar.year] } }`). Capitalized
 // like `Schema`: a namespace of values.
 export { Calendar, CalendarPartition } from "./ast/calendar";
 export type {
@@ -124,12 +125,18 @@ export type {
   CellFormat,
   WeekStart,
 } from "./ast/calendar";
-export type { TimeRowOption } from "./ast/axes/timeRows";
+export type { LevelOption } from "./ast/axes/levels";
 // Cells (#1058): what `field(x).bin(partition)` maps each value to. A
 // partition is a Calendar value, `Bin.step(size)`, or
-// `Bin.thresholds(countOrEdges)`.
+// `Bin.thresholds(countOrEdges)`; a list of Calendar values is a product
+// (`[Calendar.year, Calendar.month]`). A level that is a part of a larger
+// one (`Calendar.month`, the month of the year) gives parts of a cycle.
 export type {
   Cell,
+  CycleCell,
+  HasCycle,
+  BinStep,
+  Product,
   Partition,
   NumberPartition,
   NumberCellFormat,

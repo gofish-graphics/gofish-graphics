@@ -508,8 +508,42 @@ for (const [name, partition] of [
   ["the untagged step", { step: 0.5 }],
   ["the untagged thresholds", { thresholds: 20 }],
   ["a bin of two fields", { kind: "hex", radius: 1 }],
+  ["a product of one", [{ unit: "month" }]],
+  [
+    "a product with a numeric bin",
+    [{ unit: "year" }, { kind: "step", size: 1 }],
+  ],
 ] as const) {
   check(`bin with ${name} rejected`, !validate(binBy(partition)).valid);
+}
+{
+  const r = validate(binBy([{ unit: "year" }, { unit: "month", step: 1 }]));
+  check(
+    "bin with a product of Calendar values accepts",
+    r.valid,
+    r.valid ? undefined : JSON.stringify(r.errors)
+  );
+  const chained = validate(
+    chart([
+      {
+        type: "spread",
+        dir: "x",
+        by: {
+          type: "field",
+          name: "d",
+          ops: [
+            { op: "bin", partition: { unit: "year" } },
+            { op: "bin", partition: { unit: "month" } },
+          ],
+        },
+      },
+    ])
+  );
+  check(
+    "a chain of bins (one op per bin) accepts",
+    chained.valid,
+    chained.valid ? undefined : JSON.stringify(chained.errors)
+  );
 }
 // The old flat spelling, `{ op: "bin", thresholds: 20 }`, is an unknown key
 // on the op: rejected, not read as the default partition.
@@ -751,6 +785,40 @@ check(
   "axis labelAngle of the wrong type rejected",
   !validate(
     chart([{ type: "spread", axes: { x: { labelAngle: "45" } } as any }])
+  ).valid
+);
+
+check(
+  "axis levels of booleans and Calendar values accept",
+  validate(
+    chart([
+      {
+        type: "spread",
+        by: "lake",
+        dir: "x",
+        axes: { x: { levels: [false, true, { unit: "year", step: 1 }] } },
+      },
+    ])
+  ).valid
+);
+
+for (const [name, levels] of [
+  ["a field name", ["weather"]],
+  ["an unknown unit", [{ unit: "decade" }]],
+  ["a list of lists", [[true]]],
+] as const) {
+  check(
+    `axis levels with ${name} rejected`,
+    !validate(chart([{ type: "spread", axes: { x: { levels } } as any }])).valid
+  );
+}
+
+check(
+  "the old axis rows option is gone: rejected",
+  !validate(
+    chart([
+      { type: "spread", axes: { x: { rows: [{ unit: "month" }] } } as any },
+    ])
   ).valid
 );
 

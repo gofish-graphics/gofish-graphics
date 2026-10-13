@@ -938,11 +938,25 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
   }
 }
 
-/** A `bin` op's partition: a Calendar value (`OPTION_TYPES.Calendar`) or a
- *  `Bin` kind that bins one field (`OPTION_TYPES.FieldBin`). A Calendar
- *  value's wire form, `{ unit, step?, start? }`, has no `kind`, so the two
- *  are not one tagged union: a Calendar value is told apart by its `unit`. */
+/** A `bin` op's partition: a Calendar value (`OPTION_TYPES.Calendar`), a
+ *  `Bin` kind that bins one field (`OPTION_TYPES.FieldBin`), or a product of
+ *  Calendar values (a list of two or more). A Calendar value's wire form,
+ *  `{ unit, step?, start? }`, has no `kind`, so the two are not one tagged
+ *  union: a Calendar value is told apart by its `unit`. Which levels a
+ *  product may combine is the renderer's check (`checkBinStep` in
+ *  gofish-graphics' cells.ts). */
 function walkPartition(value: unknown, path: string, ctx: Context): void {
+  if (Array.isArray(value)) {
+    if (value.length < 2)
+      ctx.errors.push({
+        path,
+        message: "a product of bins takes two or more Calendar values",
+      });
+    value.forEach((v, i) =>
+      walkFieldType(OPTION_TYPES.Calendar.type, v, `${path}[${i}]`, ctx)
+    );
+    return;
+  }
   walkFieldType(
     isObject(value) && "unit" in value
       ? OPTION_TYPES.Calendar.type

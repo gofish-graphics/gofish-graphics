@@ -61,7 +61,7 @@ export function temporal(): TemporalApi {
 }
 
 /** Instant `t` (epoch ms) on the calendar of `zone`. */
-const zoned = (t: number, zone: string): TemporalNS.ZonedDateTime =>
+export const zoned = (t: number, zone: string): TemporalNS.ZonedDateTime =>
   temporal().Instant.fromEpochMilliseconds(t).toZonedDateTimeISO(zone);
 
 let _epochDay: TemporalNS.PlainDate | undefined;
@@ -110,6 +110,54 @@ const PARENT: Record<CalendarUnit, CalendarUnit | undefined> = {
   year: undefined,
 };
 
+/** The unit a bin of each unit, alone, reads it as a part of (#256): a month
+ *  binned alone is a month of the year, so all Junes are one cell. A week
+ *  is a part of no larger unit (weeks do not nest in months or years), and
+ *  nothing contains a year, so a bin of either alone stays on the time line.
+ *  See {@link CalendarPartition.cycle}. */
+const CYCLE: Record<CalendarUnit, CalendarUnit | undefined> = {
+  second: "minute",
+  minute: "hour",
+  hour: "day",
+  day: "month",
+  week: undefined,
+  month: "year",
+  quarter: "year",
+  year: undefined,
+};
+
+/** One cell of each cycle unit, as UTC instants, that the parts of a cycle
+ *  are read off (`cycleCells` in cells.ts): the leap year 2000 (so
+ *  February 29 is a part of the year), its January (31 days, so day 31 is a
+ *  part of the month), and its first day, hour and minute. */
+const REFERENCE: Partial<Record<CalendarUnit, [string, string]>> = {
+  year: ["2000-01-01T00:00:00Z", "2001-01-01T00:00:00Z"],
+  month: ["2000-01-01T00:00:00Z", "2000-02-01T00:00:00Z"],
+  day: ["2000-01-01T00:00:00Z", "2000-01-02T00:00:00Z"],
+  hour: ["2000-01-01T00:00:00Z", "2000-01-01T01:00:00Z"],
+  minute: ["2000-01-01T00:00:00Z", "2000-01-01T00:01:00Z"],
+};
+
+/** The `[start, end)` (epoch ms, UTC) of the reference cell of the cycle
+ *  unit `unit` (see {@link REFERENCE}). */
+export function referencePeriod(unit: CalendarUnit): [number, number] {
+  const [lo, hi] = REFERENCE[unit]!;
+  return [Date.parse(lo), Date.parse(hi)];
+}
+
+/** The `Intl.DateTimeFormat` field each part of a label is written with,
+ *  when a cell is labeled by several levels at once (a product's "Jun
+ *  2015") or a part of a cycle is labeled alone ("Jun"). Quarter has no Intl
+ *  field ("Q2"), and a week is never a part. */
+const PART_FORMAT: Partial<Record<CalendarUnit, Intl.DateTimeFormatOptions>> = {
+  second: { second: "2-digit" },
+  minute: { minute: "2-digit" },
+  hour: { hour: "numeric" },
+  day: { day: "numeric" },
+  month: { month: "short" },
+  year: { year: "numeric" },
+};
+
 /** `Intl.DateTimeFormat` options for each level's default label. Quarter has
  *  no Intl field; its label is built by hand ("Q1"). */
 const LABEL_FORMAT: Record<
@@ -153,7 +201,13 @@ function formatter(
  *  axis's zone, as plain numbers named like pandas' and polars' `dt.*`:
  *  `year`, `quarter` (1 to 4), `month` (1 to 12), `week` (the ISO week
  *  number), `day` (of the month), `hour`, `minute` and `second`. A custom
- *  label (`.format(fn)`) is a function of this. */
+ *  label (`.format(fn)`) is a function of this.
+ *
+ *  A part of a cycle (a month of the year: a bin of `Calendar.month` alone)
+ *  has no one place on the time line: its `start` and `end`, `week`, and
+ *  the fields of its cycle unit and above (`year` for a month of the year)
+ *  are `NaN`. The fields below its level are those of the part's first
+ *  instant (`day` 1 for a month). */
 export type CalendarCell = {
   start: number;
   end: number;
@@ -173,16 +227,109 @@ export type CellFormat = (cell: CalendarCell) => string;
 
 const ISO_DOW: Record<WeekStart, number> = { monday: 1, sunday: 7 };
 
+/** The calendar fields of the cell of level `unit` that starts at `s` and
+ *  ends at `end` (epoch ms). */
+export function fieldsOf(
+  s: TemporalNS.ZonedDateTime,
+  end: number,
+  unit: CalendarUnit
+): CalendarCell {
+  return {
+    start: s.epochMilliseconds,
+    end,
+    unit,
+    year: s.year,
+    quarter: Math.floor((s.month - 1) / 3) + 1,
+    month: s.month,
+    week: s.weekOfYear!,
+    day: s.day,
+    hour: s.hour,
+    minute: s.minute,
+    second: s.second,
+  };
+}
+
+/** The finest first: the order of the fields a part of a cycle keeps. */
+const FIELD_ORDER = [
+  "second",
+  "minute",
+  "hour",
+  "day",
+  "month",
+  "quarter",
+  "year",
+] as const;
+
+/** The fields of a part of a cycle of `cycle` (a month of the year): those
+ *  of its first instant `t` in the reference cycle (UTC), with `start`,
+ *  `end`, `week`, and the fields of `cycle` and above set to `NaN`, since
+ *  the part has no one place on the time line (see {@link CalendarCell}). */
+export function cycleFields(
+  t: number,
+  unit: CalendarUnit,
+  cycle: CalendarUnit
+): CalendarCell {
+  const f = fieldsOf(zoned(t, "UTC"), NaN, unit);
+  f.start = NaN;
+  f.week = NaN;
+  const above = FIELD_ORDER.indexOf(cycle as (typeof FIELD_ORDER)[number]);
+  for (const k of FIELD_ORDER.slice(above)) f[k] = NaN;
+  return f;
+}
+
+const partFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * The label of a cell named by several levels at once, the instant `t` read
+ * in `zone`: each level writes its own field (`PART_FORMAT`), and
+ * `Intl.DateTimeFormat` in en-US puts them in order, so a product of a year
+ * and a month reads "Jun 2015", and of a month and a day "Jun 15". A
+ * quarter has no Intl field: it comes first, "Q2 2015". One level alone is
+ * a part of its cycle: "Jun", "15", "12 AM", "05".
+ */
+export function productLabel(
+  levels: readonly CalendarPartition[],
+  t: number,
+  zone: string
+): string {
+  const units = levels.map((p) => p.unit);
+  const intlUnits = units.filter((u) => u !== "quarter");
+  let text = "";
+  if (intlUnits.length > 0) {
+    const key = `${intlUnits.join(",")}|${zone}`;
+    let f = partFormatters.get(key);
+    if (f === undefined) {
+      const opts: Intl.DateTimeFormatOptions = { timeZone: zone };
+      for (const u of intlUnits) Object.assign(opts, PART_FORMAT[u]);
+      f = new Intl.DateTimeFormat(LABEL_LOCALE, opts);
+      partFormatters.set(key, f);
+    }
+    text = f.format(t);
+    // Intl writes a minute or a second alone without its leading zero.
+    if (
+      intlUnits.length === 1 &&
+      (units[0] === "minute" || units[0] === "second")
+    )
+      text = text.padStart(2, "0");
+  }
+  if (units.includes("quarter")) {
+    const month = zoned(t, zone).month;
+    const q = `Q${Math.floor((month - 1) / 3) + 1}`;
+    text = text === "" ? q : `${q} ${text}`;
+  }
+  return text;
+}
+
 // ── Partitions ────────────────────────────────────────────────────────────
 
 /** A partition of the time line into calendar cells: a level (`unit`) at a
  *  step, with an optional label `format`. See the module comment. */
-export class CalendarPartition {
+export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
   /** The first day of a week, for weeks only (Monday unless given). */
   readonly start: WeekStart | undefined;
 
   constructor(
-    readonly unit: CalendarUnit,
+    readonly unit: U,
     readonly step: number = 1,
     start?: WeekStart,
     /** The cells' custom label, if any (`.format(fn)`); else the level's
@@ -200,7 +347,7 @@ export class CalendarPartition {
   }
 
   /** The same level, `n` units per cell (`Calendar.month.every(3)`). */
-  every(n: number): CalendarPartition {
+  every(n: number): CalendarPartition<U> {
     return new CalendarPartition(this.unit, n, this.start, this.formatCell);
   }
 
@@ -208,7 +355,7 @@ export class CalendarPartition {
    *  ({@link CalendarCell}): `Calendar.month.every(3).format((c) =>
    *  String(c.year))`. JS only: a function cannot cross to Python, so a
    *  partition with a format has no wire form. */
-  format(fn: CellFormat): CalendarPartition {
+  format(fn: CellFormat): CalendarPartition<U> {
     if (typeof fn !== "function") {
       throw new Error(
         `${String(this)}.format: expected a function of the cell, ` +
@@ -234,6 +381,35 @@ export class CalendarPartition {
   get parent(): CalendarPartition | undefined {
     const p = PARENT[this.unit];
     return p === undefined ? undefined : new CalendarPartition(p);
+  }
+
+  /** The unit this level is a part of when it is binned alone
+   *  (`field(x).bin(Calendar.month)` is the month of the year), or undefined
+   *  for a level that is a part of nothing (week, year): binned alone, its
+   *  cells stay on the time line. See {@link CYCLE}. */
+  get cycle(): CalendarUnit | undefined {
+    return CYCLE[this.unit];
+  }
+
+  /** The part of its cycle unit that the instant `z` falls in: its level's
+   *  field at the start of the cell that holds `z` (6 for any instant in
+   *  June; 4 for May under `Calendar.month.every(3)`, whose cell starts in
+   *  April; 1 to 4 for a quarter). */
+  part(z: TemporalNS.ZonedDateTime): number {
+    const s = this.floor(z);
+    return this.unit === "quarter"
+      ? Math.floor((s.month - 1) / 3) + 1
+      : (s[this.unit as Exclude<CalendarUnit, "quarter" | "week">] as number);
+  }
+
+  /** The default label of a part of this level's cycle (`Calendar.month`
+   *  alone): "Jan" for a month, "Q1" for a quarter, "1" for a day of the
+   *  month, "12 AM" for an hour of the day, "05" for a minute of the hour
+   *  or a second of the minute. `t` is the part's first instant in the
+   *  reference cycle (UTC, {@link referencePeriod}). */
+  partLabel(cell: CalendarCell, t: number): string {
+    if (this.formatCell !== undefined) return this.formatCell(cell);
+    return productLabel([this], t, "UTC");
   }
 
   /** The level and step the cell math runs on: a quarter is 3 months, so
@@ -300,19 +476,7 @@ export class CalendarPartition {
     let s = this.floor(zoned(lo, zone));
     while (s.epochMilliseconds <= hi) {
       const e = this.next(s);
-      out.push({
-        start: s.epochMilliseconds,
-        end: e.epochMilliseconds,
-        unit: this.unit,
-        year: s.year,
-        quarter: Math.floor((s.month - 1) / 3) + 1,
-        month: s.month,
-        week: s.weekOfYear!,
-        day: s.day,
-        hour: s.hour,
-        minute: s.minute,
-        second: s.second,
-      });
+      out.push(fieldsOf(s, e.epochMilliseconds, this.unit));
       s = e;
     }
     return out;
@@ -330,10 +494,10 @@ export class CalendarPartition {
 
   /** The wire form. A partition with a `.format(fn)` has none (a loud
    *  error): `key` is the index `JSON.stringify` passes for an entry of a
-   *  `rows` list. */
+   *  list (an axis's `levels`). */
   toJSON(key?: string): CalendarJSON {
     if (this.formatCell !== undefined) {
-      const row = key !== undefined && key !== "" ? `rows[${key}]: ` : "";
+      const row = key !== undefined && key !== "" ? `[${key}]: ` : "";
       throw new Error(
         `${row}${String(this)} has no wire form: its format is a JS ` +
           `function, which cannot be serialized (to Python or the IR). ` +
@@ -359,12 +523,15 @@ export class CalendarPartition {
 
 /** `Calendar.week`: the Monday-start week partition, also callable as
  *  `Calendar.week({ start: "sunday" })` for another first day. */
-export type WeekPartition = CalendarPartition &
-  ((opts?: { start?: WeekStart }) => CalendarPartition);
+export type WeekPartition = CalendarPartition<"week"> &
+  ((opts?: { start?: WeekStart }) => CalendarPartition<"week">);
 
 function weekPartition(): WeekPartition {
   const make = ({ start }: { start?: WeekStart } = {}) =>
-    calendarPartition({ unit: "week", step: 1, start }, "Calendar.week");
+    calendarPartition(
+      { unit: "week", step: 1, start },
+      "Calendar.week"
+    ) as CalendarPartition<"week">;
   // A function that is also the default partition: same prototype, same
   // fields, so `Calendar.week` works as a value and as a call.
   const fn = make as unknown as WeekPartition;
@@ -378,7 +545,8 @@ function weekPartition(): WeekPartition {
   return fn;
 }
 
-/** The calendar partitions, used in `axes: { x: { rows: [...] } }`. */
+/** The calendar partitions: the cells of `field(x).bin(...)`, and the
+ *  levels of a time axis (`axes: { x: { levels: [...] } }`). */
 export const Calendar = {
   second: new CalendarPartition("second"),
   minute: new CalendarPartition("minute"),
@@ -458,7 +626,7 @@ const AUTO_STEPS: [CalendarUnit, number[]][] = [
 ];
 
 /** About how long one cell of `unit` × `step` lasts. */
-function nominalMs(unit: CalendarUnit, step: number): number {
+export function nominalMs(unit: CalendarUnit, step: number): number {
   const ms: Record<CalendarUnit, number> = {
     second: 1e3,
     minute: 6e4,
