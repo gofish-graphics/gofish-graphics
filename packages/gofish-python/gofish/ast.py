@@ -2873,7 +2873,7 @@ def field(name: str, measure: Optional[str] = None) -> FieldAccessor:
     `size` channel (see `FieldAccessor` for the full method list).
 
     Emits the canonical `{type: "field", name, measure?, ops?}` wire shape; an
-    annotation that contradicts known provenance is a type error.
+    annotation that contradicts the column's known unit is a type error.
 
     Args:
         name: The field name to read from each row.

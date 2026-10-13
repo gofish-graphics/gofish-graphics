@@ -6,8 +6,8 @@
  * check, the centered stack's extent fold, the stray-level and signed-part
  * errors (checked where the order is used, so a `filter` in the flow can drop
  * a stray), the HasOrder prerequisite of HasMidpoint, a spread of centered
- * stacks lining up on their midpoints, and the schema keeping the measure
- * provenance its data carries.
+ * stacks lining up on their midpoints, and the schema keeping the column
+ * types (a column's unit, `HasUnit`) its data carries.
  *
  * Run: `pnpm build && tsx src/tests/schema.test.ts` (wired as
  * `pnpm test:schema`). The rendering checks import from `dist` for the same
@@ -26,10 +26,10 @@ import {
   columnTypeOf,
   getColumnTypes,
   orderByLevels,
+  setColumnTypes,
   stackOrigin,
   type ColumnType,
 } from "../ast/schema";
-import { getMeasureProvenance, setMeasureProvenance } from "../ast/data";
 import { interval } from "../util/interval";
 import {
   distributeSpaceFold,
@@ -445,22 +445,32 @@ async function main() {
 
   console.log("\n# a schema keeps what the data array already carries");
   {
-    const binned = setMeasureProvenance(
+    const binned = setColumnTypes(
       [
         { start: 0, end: 5, count: 2 },
         { start: 5, end: 10, count: 1 },
       ],
-      { start: "x", end: "x", count: "count" }
+      {
+        start: { HasUnit: { unit: "x" } },
+        end: { HasUnit: { unit: "x" } },
+        count: { HasUnit: { unit: "count" } },
+      }
     );
     const typed = await applySchema(binned, { count: Schema.ordered([0, 1, 2]) });
     check(
-      "a transform's measure provenance survives a schema",
-      getMeasureProvenance(typed)?.start === "x",
-      JSON.stringify(getMeasureProvenance(typed))
+      "a column's unit survives a schema for another column",
+      getColumnTypes(typed)?.start?.HasUnit?.unit === "x",
+      JSON.stringify(getColumnTypes(typed))
+    );
+    check(
+      "a schema entry is the column's whole type",
+      JSON.stringify(getColumnTypes(typed)?.count) ===
+        JSON.stringify({ HasOrder: { levels: [0, 1, 2] } }),
+      JSON.stringify(getColumnTypes(typed)?.count)
     );
     check(
       "applySchema does not tag the caller's array",
-      getColumnTypes(binned) === undefined
+      getColumnTypes(binned)?.count?.HasOrder === undefined
     );
   }
 

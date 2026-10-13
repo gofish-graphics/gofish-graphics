@@ -105,9 +105,9 @@ silently corrupting the shared domain.
 By default the measure is just the field name, which is usually right. Two
 things change it:
 
-- **A transform that tags its output** with `setMeasureProvenance(rows,
-{ start: "rating", count: "count" })` gives those columns the measures it
-  names. The tag rides the array and survives through `derive`.
+- **A column's unit** in the data's column types (`HasUnit`) gives that
+  column the measure it names. The column types ride the array and survive
+  through `derive`.
 - **An arbitrary `derive`** can lose that connection — once you compute a new
   column, GoFish only knows its name, not its unit. When the new column is
   really in some existing unit (and you want its axis to share with that unit's
@@ -131,6 +131,6 @@ have two remedies:
    becomes a [self-contained scale region](/js/api/core/render#explicit-size-makes-a-self-contained-scale-region)
    and never shares that axis.
 
-Annotating a channel whose measure contradicts a transform's provenance (e.g.
-calling `field("count", "mm")` on a column tagged `"count"`) is itself an
-error — the annotation and the provenance are contradictory claims.
+Annotating a channel whose measure contradicts its column's unit (e.g.
+calling `field("count", "mm")` on a column whose unit is `"count"`) is itself
+an error — the annotation and the unit are contradictory claims.

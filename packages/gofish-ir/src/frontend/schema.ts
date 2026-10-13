@@ -193,7 +193,10 @@ export interface DeriveOperator
   /** The column types of the derive's result, keyed by column name, in the
    *  wire form of a chart's `schema` (e.g. `{ HasOrder: { levels } }`). They
    *  type the result over the types it keeps or infers, and convert values
-   *  as a chart's schema does. */
+   *  as a chart's schema does. A transform (e.g. Python's `bin`) writes the
+   *  units of its output columns here (`{ HasUnit: { unit } }`), since the
+   *  column types the JS-side array carries can't ride the rows across the
+   *  derive RPC. */
   schema?: Record<string, Record<string, unknown>>;
 }
 
