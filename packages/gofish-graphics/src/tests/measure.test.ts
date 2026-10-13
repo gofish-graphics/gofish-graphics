@@ -635,9 +635,10 @@ console.log("# measure: declared units clash");
   );
 
   // A declared column is its unit, so two charts that each declare their
-  // own "value" share nothing by name. Spread along y, the charts share no
-  // y axis either, so each scales on its own. (Layered or spread along x,
-  // they would share the y axis, which can show only one unit.)
+  // own "value" share nothing through the column's name. Placed apart (a
+  // spread gives each its own slot, so they do not share an axis), each
+  // keeps its own unit. Overlaid in a layer they would share y, and two
+  // declared units on one shared axis wait on dual axes (#528).
   const values = [
     { genre: "a", value: 1 },
     { genre: "b", value: 2 },

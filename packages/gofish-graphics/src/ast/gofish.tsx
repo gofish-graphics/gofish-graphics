@@ -31,7 +31,7 @@ import {
   type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
-import { scalesWithSigma } from "./extent";
+import { scalesWithSigma, type Extent } from "./extent";
 import { KeyedDomains } from "./keyedDomains";
 import {
   fromFrameStart,
@@ -472,9 +472,36 @@ export async function layout(
   // Only a claim with σ in it is data to scale: a box with a literal size
   // claims its own pixels, and needs no canvas.
   const needsCanvas = scalesWithSigma;
-  // Concrete canvas for scaling a claimed axis (always a real number).
-  const canvasW = w ?? DEFAULT_CANVAS_SIZE;
-  const canvasH = h ?? DEFAULT_CANVAS_SIZE;
+  // Concrete canvas for scaling a claimed axis (always a real number). The
+  // render root is a sized node only on an axis the render gives a size
+  // (#1114). On an axis with no render size it shrink-wraps its content: when
+  // sized nodes below solve its keyed domain, all at one σ, the root maps the
+  // domain at that σ too, so its canvas is its claim at that σ and the axis
+  // it draws agrees with the marks. The default canvas is a fallback, not a
+  // size: it applies only when no sized node below solves the domain (the
+  // common `chart(...).render(el, {})`), or when they solve it at different
+  // σs, an over-constrained layout like any other.
+  const canvasFor = (
+    axis: 0 | 1,
+    given: number | undefined,
+    claim: Extent | undefined
+  ): number => {
+    if (given !== undefined) return given;
+    const sigmas = keyedDomains.solvedSigmas(
+      child,
+      axis,
+      child._underlyingSpace![axis]
+    );
+    const sigma = sigmas[0];
+    const agree =
+      sigma !== undefined &&
+      sigmas.every((s) => Math.abs(s - sigma) <= 1e-9 * Math.abs(sigma));
+    if (!agree || !scalesWithSigma(claim)) return DEFAULT_CANVAS_SIZE;
+    const px = claim.width.run(sigma);
+    return Number.isFinite(px) && px > 0 ? px : DEFAULT_CANVAS_SIZE;
+  };
+  const canvasW = canvasFor(0, w, niceExtentX);
+  const canvasH = canvasFor(1, h, niceExtentY);
   // Size handed to `child.layout`: a shrink-to-fit axis is left unsized.
   const layoutW = w ?? (needsCanvas(niceExtentX) ? canvasW : UNSIZED);
   const layoutH = h ?? (needsCanvas(niceExtentY) ? canvasH : UNSIZED);

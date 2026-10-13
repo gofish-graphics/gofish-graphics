@@ -481,6 +481,10 @@ export const layer = createNodeOperatorSequential(
           const keyed: KeyedDomains | undefined = (
             node as GoFishNode
           ).tryGetRenderSession()?.keyedDomains;
+          // The σ the box solves its keyed domain at, per axis: what an
+          // unsized render root above maps the same domain at (`gofish.tsx`).
+          const solved: Size<number | undefined> = [undefined, undefined];
+          (node as GoFishNode)._solvedSigma = solved;
           const fixedClaim = (axis: 0 | 1, px: number): Extent | undefined => {
             const claim = resolved[axis];
             if (claim === undefined || Monotonic.isConstant(claim.width))
@@ -494,6 +498,7 @@ export const layer = createNodeOperatorSequential(
               )[1] ?? claim;
             const sigma = wide.width.inverse(px, { upperBoundGuess: px });
             if (sigma === undefined) return claim;
+            solved[axis] = sigma;
             return Extent(
               Monotonic.linear(0, wide.ascent.run(sigma)),
               Monotonic.linear(0, wide.descent.run(sigma))

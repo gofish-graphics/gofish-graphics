@@ -37,7 +37,8 @@ const offsetSpace = (
   // `value`, a free or difference space hangs its origin at `value`. The claim
   // moves with it (see `offsetExtent` below).
   // A datum offset moves the content in data, so the content stays shared
-  // with its parent (the node's sharing rule, below).
+  // with its parent (the node's sharing rule, below): the offset and the
+  // content are one unit.
   //
   // The result is a point plus a difference on one shared axis. When the
   // content is pinned, it is the point and the offset the difference that

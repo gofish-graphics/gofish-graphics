@@ -167,8 +167,8 @@ export const unionInOrder = <T>(a: T[], b: readonly T[]): T[] => {
   return added.length === 0 ? a : [...a, ...added];
 };
 
-/** A string that names a unit: equal for two units iff they are the same
- *  unit, as in {@link sameUnitVar}. */
+/** A string that names a unit: equal for two units iff they are one unit
+ *  (as {@link sameUnitVar} decides for their variables). */
 export const unitKey = (unit: Unit): string =>
   unit.kind === "declared" ? `declared:${unit.unit}` : `unknown:${unit.name}`;
 

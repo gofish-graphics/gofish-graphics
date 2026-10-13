@@ -39,6 +39,9 @@ export type KeyedNode = {
   /** Set on a coordinate transform: the space it opens for its subtree. */
   _space?: unknown;
   axisDemand: [AxisTicks | undefined, AxisTicks | undefined];
+  /** Per axis, the σ a sized node with a literal size solves its keyed
+   *  domain at (`GoFishNode._solvedSigma`). */
+  _solvedSigma?: Size<number | undefined>;
   sharing(): SharingPlan;
 };
 
@@ -268,6 +271,29 @@ export class KeyedDomains {
   ): string | undefined {
     const key = this.keyOf(node, axis, space, true);
     return key === undefined ? undefined : `${key.spaceRoot.uid}/${key.key}`;
+  }
+
+  /** The σ of every sized node that solves the keyed domain `node`'s
+   *  content of type `space` is over on `axis` (its `_solvedSigma`, from the
+   *  claim walk), other than `node` itself. Empty when no sized node below
+   *  solves it. An unsized render root reads it: it maps its keyed domain at
+   *  the σ the domain is solved at, instead of at a canvas it was not given
+   *  (`gofish.tsx`). */
+  solvedSigmas(
+    node: KeyedNode,
+    axis: 0 | 1,
+    space: UnderlyingSpace | undefined
+  ): number[] {
+    const key = this.axisKey(node, axis, space);
+    if (key === undefined) return [];
+    const sigmas: number[] = [];
+    for (const n of this.seats.keys()) {
+      const sigma = n._solvedSigma?.[axis];
+      if (n === node || sigma === undefined) continue;
+      if (this.axisKey(n, axis, n._underlyingSpace?.[axis]) === key)
+        sigmas.push(sigma);
+    }
+    return sigmas;
   }
 
   /** A node's seat on `axis`. A node added after the build (a chrome ring,

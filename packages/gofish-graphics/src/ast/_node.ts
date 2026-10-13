@@ -468,6 +468,13 @@ export class GoFishNode {
   private _resolveExtent: ResolveExtent;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   public _extent?: Size<Extent | undefined> = undefined;
+  /** Per axis, the σ this node solves its keyed domain at when it is a
+   *  sized node with a literal size (`layer.tsx`): the slope its fixed claim
+   *  is computed at. Set by the claim walk, with {@link _extent}. The render
+   *  root reads it when it has no size of its own on the axis
+   *  (`gofish.tsx`): the root then maps the domain at the σ it is solved at
+   *  below. */
+  public _solvedSigma?: Size<number | undefined> = undefined;
   private _layout: Layout;
   /** Per-primitive IR lowering (see {@link Lower}) — the node's sole draw
    *  description. Absent on operators that never lower themselves (their
@@ -1033,6 +1040,7 @@ export class GoFishNode {
     this._underlyingSpace = undefined;
     this._yFrame = undefined;
     this._extent = undefined;
+    this._solvedSigma = undefined;
     this._sharing = undefined;
     this.children.forEach((c) => {
       if (c instanceof GoFishNode) c.clearUnderlyingSpace();
