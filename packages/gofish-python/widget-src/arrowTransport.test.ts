@@ -432,7 +432,7 @@ function testNestedTimesDecodeAsEpochMs(): boolean {
 }
 
 /** A callback's decoded rows are typed before anything reads them: a lambda
- *  accessor's result and a derive's single-datum result hold epoch ms, not
+ *  accessor's result and a derive's result (always a list) hold epoch ms, not
  *  the decode's wall-clock strings, and `derive(fn, { schema })` reads them
  *  in its zone. */
 async function testCallbackResultsAreTyped(): Promise<boolean> {
@@ -469,16 +469,16 @@ async function testCallbackResultsAreTyped(): Promise<boolean> {
         seen = d;
         return undefined;
       })
-    )({ x: 1 });
+    )([{ x: 1 }]);
     return seen;
   };
   const utc = await single();
   const ny = await single({ t: { HasCalendar: { zone: "America/New_York" } } });
   const ok =
     fromAccessor.t === feb28 &&
-    !Array.isArray(utc) &&
-    utc.t === feb28 &&
-    ny.t === Date.UTC(2024, 1, 28, 18);
+    Array.isArray(utc) &&
+    utc[0].t === feb28 &&
+    ny[0].t === Date.UTC(2024, 1, 28, 18);
   console.log(
     ok
       ? "  ✓ PASSED"
