@@ -2,12 +2,13 @@
  * Units as gradual types with inference (#955; `measure.ts`).
  *
  * A column with no declared unit has an unknown unit, a unit variable named
- * by its quantity (the column, or the source column of a `bin()` edge),
+ * by its quantity (its declared `Schema.quantity`, the source column's for a
+ * `bin()` edge, else the column),
  * which unifies with anything. A declared unit (`Schema.unit`, the
  * "instant" of `Schema.time()`, the "count" of `.count()`) is concrete, and
  * two different declared units on one axis are a `MeasureClash`. A binding
- * holds for the whole render. The quantity names title the axis; a declared
- * unit never does.
+ * holds for the whole render. The quantity names title the axis, followed by
+ * a declared unit's symbol: "Pay (USD)".
  *
  * The first part pins the channel contract (a column's quantity reaches mark
  * channels over split leaves, #534) and the unifier itself, from source. The
@@ -19,21 +20,26 @@
 import * as GoFish from "../../dist/index.js";
 import { getQuantity } from "../ast/data";
 import { columnType, copyColumnTypes, setColumnTypes } from "../ast/schema";
-import { inferSize, resolveQuantity } from "../ast/channels";
+import { inferSize, resolveColumn } from "../ast/channels";
 import {
   columnQuantity,
   MeasureClash,
   resolveUnit,
-  sameUnit,
-  Units,
-  withUnits,
+  sameUnitVar,
 } from "../ast/measure";
 import {
   CONTINUOUS,
   joinUnits,
   quantityUnits,
+  spaceUnit,
+  type CONTINUOUS_TYPE,
   type UnitRecord,
 } from "../ast/underlyingSpace";
+import { GoFishNode } from "../ast/_node";
+import { DatumValueImpl } from "../ast/data";
+import { positionNode } from "../ast/graphicalOperators/positionNode";
+import { DURATION, INSTANT, type Quantity } from "../ast/measure";
+import { declared, fresh, textsOf, unknown } from "./testHelpers";
 import { distributeSpaceFold } from "../ast/constraints/distribute";
 import { interval } from "../util/interval";
 
@@ -76,20 +82,11 @@ async function errorOf(fn: () => unknown): Promise<string | undefined> {
 }
 
 const SIZE = { w: 300, h: 200 };
-const textsOf = (dl: any): string[] => {
-  const out: string[] = [];
-  const walk = (it: any) => {
-    if (it.kind === "text") out.push(String(it.text));
-    for (const c of it.children ?? []) walk(c);
-  };
-  dl.items.forEach(walk);
-  return out;
-};
 
 // ── Channels: a column's quantity reaches mark channels (#534) ──────────────
 
 // A bin()-shaped array: `size` is an amount of the source column's quantity.
-const mm = { HasUnit: { quantity: "Beak Length (mm)" } };
+const mm = { HasQuantity: { name: "Beak Length (mm)" } };
 const binned = setColumnTypes(
   [
     { start: 0, end: 10, size: 10, count: 3 },
@@ -105,7 +102,10 @@ console.log("# measure: quantities on the source array");
     getQuantity(inferSize("size", binned))?.name === "Beak Length (mm)"
   );
   const rawLeaf = [...binned].slice(0, 1);
-  ok("an untagged split leaf has no type", columnType(rawLeaf, "size") === undefined);
+  ok(
+    "an untagged split leaf has no type",
+    columnType(rawLeaf, "size") === undefined
+  );
   ok(
     "and falls back to the column's own name",
     getQuantity(inferSize("size", rawLeaf))?.name === "size"
@@ -113,19 +113,48 @@ console.log("# measure: quantities on the source array");
   const leaf = copyColumnTypes([...binned].slice(0, 1), binned);
   ok(
     "copyColumnTypes restores the source quantity",
-    resolveQuantity(leaf, "size")?.name === "Beak Length (mm)"
+    resolveColumn(leaf, "size").quantity?.name === "Beak Length (mm)"
   );
   ok(
     "a bare column has no declared unit",
-    resolveQuantity([{ v: 1 }], "v")?.unit === undefined
+    resolveColumn([{ v: 1 }], "v").quantity?.unit === undefined
   );
   ok(
     "a time column's unit is an instant",
-    columnQuantity("start", { HasCalendar: { zone: "UTC" } }).unit === "instant"
+    columnQuantity("start", Schema.time().type).unit?.unit === "instant"
+  );
+  ok(
+    "and an instant has no symbol",
+    columnQuantity("start", Schema.time().type).unit?.symbol === undefined
   );
   ok(
     "Schema.unit declares the unit",
-    columnQuantity("gross", Schema.unit("USD").type).unit === "USD"
+    columnQuantity("gross", Schema.unit("USD").type).unit?.unit === "USD"
+  );
+  ok(
+    "and its symbol is the unit's name",
+    columnQuantity("gross", Schema.unit("USD").type).unit?.symbol === "USD"
+  );
+  ok(
+    "Schema.quantity names the quantity in place of the column",
+    columnQuantity("q1", Schema.quantity("Pay").type).name === "Pay"
+  );
+  // A column type is a record keyed by class, so compare it with its classes
+  // in a fixed order: the order the builders ran in is not part of the type.
+  const classes = (t: Record<string, unknown>) =>
+    JSON.stringify(Object.entries(t).sort(([a], [b]) => a.localeCompare(b)));
+  ok(
+    ".unit() and .quantity() chain in either order to the same column type",
+    [Schema.quantity("Pay").unit("USD"), Schema.unit("USD").quantity("Pay")]
+      .map((s) => classes(s.type))
+      .every(
+        (c) =>
+          c ===
+          classes({
+            HasUnit: { unit: "USD", symbol: "USD" },
+            HasQuantity: { name: "Pay" },
+          })
+      )
   );
 }
 
@@ -134,11 +163,6 @@ console.log("# measure: quantities on the source array");
 console.log("# measure: the join table, shared axis");
 {
   const site = { axis: 1 as const, where: "in a test" };
-  /** Run `f` in a fresh render's union-find. */
-  const fresh = <T>(f: () => T): T => withUnits(new Units(), f);
-  const declared = (name: string, unit: string) =>
-    quantityUnits({ name, unit });
-  const unknown = (name: string) => quantityUnits({ name });
   const unitOf = (r: UnitRecord | undefined) =>
     r?.unit === undefined ? undefined : resolveUnit(r.unit);
   const clashes = (f: () => unknown): boolean => {
@@ -154,7 +178,7 @@ console.log("# measure: the join table, shared axis");
     const r = joinUnits(declared("a", "USD"), declared("b", "USD"), true, site);
     ok(
       "declared A, declared A: one unit A",
-      unitOf(r)?.kind === "declared" && unitOf(r)?.name === "USD"
+      unitOf(r)?.kind === "declared" && unitOf(r)?.unit === "USD"
     );
   });
   fresh(() =>
@@ -170,7 +194,7 @@ console.log("# measure: the join table, shared axis");
     joinUnits(declared("a", "USD"), x, true, site);
     ok(
       "declared A, unknown x: x is bound to A",
-      unitOf(x)?.kind === "declared" && unitOf(x)?.name === "USD"
+      unitOf(x)?.kind === "declared" && unitOf(x)?.unit === "USD"
     );
   });
   fresh(() => {
@@ -186,7 +210,7 @@ console.log("# measure: the join table, shared axis");
     const r = joinUnits(x, y, true, site);
     ok(
       "unknown x, unknown y: x and y unify",
-      sameUnit(unitOf(x), unitOf(y)) && unitOf(r)?.kind === "unknown"
+      sameUnitVar(x.unit!, y.unit!) && unitOf(r)?.kind === "unknown"
     );
     ok(
       "and the titles are both names, in order",
@@ -207,6 +231,34 @@ console.log("# measure: the join table, shared axis");
       )
     );
   });
+  fresh(() => {
+    // A declared unit is a concrete term: it binds no variable of its name.
+    declared("value", "USD");
+    ok(
+      "a declared column leaves an unknown of the same name unknown",
+      unitOf(unknown("value"))?.kind === "unknown"
+    );
+    ok(
+      "and two declared columns of one name, USD and EUR, are two units",
+      !sameUnitVar(
+        declared("value", "USD").unit!,
+        declared("value", "EUR").unit!
+      )
+    );
+  });
+  ok(
+    "reading an unknown unit outside any walk is an internal error",
+    /Internal error/.test(
+      (() => {
+        try {
+          unknown("x");
+          return "";
+        } catch (e) {
+          return (e as Error).message;
+        }
+      })()
+    )
+  );
   fresh(() =>
     ok(
       "a stack whose parts have two declared units: a MeasureClash",
@@ -233,10 +285,6 @@ console.log("# measure: the join table, shared axis");
 console.log("# measure: the join table, not shared");
 {
   const site = { axis: 1 as const, where: "in a test" };
-  const fresh = <T>(f: () => T): T => withUnits(new Units(), f);
-  const declared = (name: string, unit: string) =>
-    quantityUnits({ name, unit });
-  const unknown = (name: string) => quantityUnits({ name });
   const unitOf = (r: UnitRecord | undefined) =>
     r?.unit === undefined ? undefined : resolveUnit(r.unit);
 
@@ -246,7 +294,7 @@ console.log("# measure: the join table, not shared");
     joinUnits(a, b, false, site);
     ok(
       "declared A, declared A: one unit A",
-      sameUnit(unitOf(a), unitOf(b)) && unitOf(a)?.name === "USD"
+      sameUnitVar(a.unit!, b.unit!) && resolveUnit(a.unit!).kind === "declared"
     );
   });
   fresh(() => {
@@ -261,9 +309,9 @@ console.log("# measure: the join table, not shared");
     }
     ok(
       "declared A, declared B: two separate units, no error",
-      err === undefined && !sameUnit(unitOf(a), unitOf(b))
+      err === undefined && !sameUnitVar(a.unit!, b.unit!)
     );
-    ok("and the join keeps a's record", unitOf(r)?.name === "USD");
+    ok("and the join keeps a's record", r === a);
   });
   fresh(() => {
     const x = unknown("x");
@@ -277,7 +325,7 @@ console.log("# measure: the join table, not shared");
     const a = unknown("x");
     const b = unknown("x");
     joinUnits(a, b, false, site);
-    ok("unknown x, unknown x: one unit", sameUnit(unitOf(a), unitOf(b)));
+    ok("unknown x, unknown x: one unit", sameUnitVar(a.unit!, b.unit!));
   });
   fresh(() => {
     const x = unknown("x");
@@ -285,16 +333,104 @@ console.log("# measure: the join table, not shared");
     joinUnits(x, y, false, site);
     ok(
       "unknown x, unknown y: forget (two units)",
-      !sameUnit(unitOf(x), unitOf(y))
+      !sameUnitVar(x.unit!, y.unit!)
     );
   });
+}
+
+// ── A position offset: a point plus a difference ───────────────────────────
+
+console.log("# measure: a position offset joins in difference units");
+{
+  // A leaf whose y space is pinned (a point) or free (a magnitude) at
+  // [0, 10], in the units of quantity `q`, read inside the walk.
+  const leaf = (origin: "pinned" | "free", q?: Quantity) =>
+    new GoFishNode(
+      {
+        type: "leaf",
+        resolveUnderlyingSpace: () => [
+          CONTINUOUS(interval(0, 0), "pinned"),
+          CONTINUOUS(interval(0, 10), origin, quantityUnits(q)),
+        ],
+        layout: () => ({
+          intrinsicDims: [{}, {}],
+          transform: { translate: [undefined, undefined] },
+        }),
+      },
+      []
+    );
+  const by = (v: number, q: Quantity) => new DatumValueImpl(v, q);
+  const usd: Quantity = {
+    name: "price",
+    column: "price",
+    unit: { unit: "USD", symbol: "USD" },
+  };
+  const count: Quantity = { name: "n", column: "n", unit: { unit: "count" } };
+  const shift: Quantity = { name: "shift", column: "shift" };
+  const date: Quantity = {
+    name: "date",
+    column: "date",
+    unit: INSTANT,
+    calendar: { zone: "UTC" },
+  };
+  const lag: Quantity = { name: "lag", column: "lag", unit: DURATION };
+  const yOf = (node: GoFishNode) =>
+    node.resolveUnderlyingSpace()[1] as CONTINUOUS_TYPE;
+
+  const a = yOf(positionNode({ y: by(5, shift) }, [leaf("pinned", usd)]));
+  ok(
+    "(a) a USD position with an unknown offset is fine and stays USD",
+    spaceUnit(a)?.unit?.kind === "declared" &&
+      (spaceUnit(a)!.unit as any).unit === "USD" &&
+      JSON.stringify(a.dataInterval) === JSON.stringify(interval(5, 15))
+  );
+  const b = await errorOf(() =>
+    positionNode({ y: by(5, count) }, [
+      leaf("pinned", usd),
+    ]).resolveUnderlyingSpace()
+  );
+  ok(
+    "(b) a USD position with a count offset is a MeasureClash",
+    b !== undefined && /USD/.test(b) && /count/.test(b),
+    b
+  );
+  const c1 = yOf(positionNode({ y: by(5, shift) }, [leaf("pinned", date)]));
+  ok(
+    "(c) a time position with a numeric offset: the offset is a duration",
+    (spaceUnit(c1)!.unit as any).unit === "instant" &&
+      c1.measure?.calendar?.zone === "UTC"
+  );
+  const c2 = yOf(positionNode({ y: by(5, lag) }, [leaf("pinned", date)]));
+  ok(
+    "(c) a time position with a duration offset stays on its calendar",
+    (spaceUnit(c2)!.unit as any).unit === "instant" &&
+      c2.measure?.calendar?.zone === "UTC"
+  );
+  const twoTimes = await errorOf(() =>
+    positionNode({ y: by(5, date) }, [
+      leaf("pinned", date),
+    ]).resolveUnderlyingSpace()
+  );
+  ok("a time does not move a time", twoTimes !== undefined, twoTimes);
+  const hung = yOf(positionNode({ y: by(5, date) }, [leaf("free", lag)]));
+  ok(
+    "a duration hung at a time is a time on its calendar",
+    (spaceUnit(hung)!.unit as any).unit === "instant" &&
+      hung.measure?.calendar?.zone === "UTC" &&
+      JSON.stringify(hung.measure?.titles) === JSON.stringify(["date", "lag"])
+  );
 }
 
 // ── Rendering: the benchmark failures now render with no annotation ─────────
 
 const penguins = [
   170, 175, 181, 186, 190, 193, 195, 197, 200, 210, 215, 220, 230,
-].map((f, i) => ({ id: i, flipper: f, mass: 3000 + f * 5, sp: i % 2 ? "A" : "B" }));
+].map((f, i) => ({
+  id: i,
+  flipper: f,
+  mass: 3000 + f * 5,
+  sp: i % 2 ? "A" : "B",
+}));
 const myBins = (rows: any[]) =>
   [170, 190, 210].map((s) => ({
     start: s,
@@ -462,6 +598,78 @@ console.log("# measure: declared units clash");
     countMm !== undefined && /two different units/.test(countMm),
     countMm
   );
+  ok(
+    "its hint declares the column, never the count, in the schema",
+    countMm !== undefined &&
+      countMm.includes('schema: { "flipper": Schema.unit("count") }') &&
+      !countMm.includes('schema: { "count"'),
+    countMm
+  );
+
+  // The hint names a COLUMN, which is what a schema is keyed by, even when
+  // the column declares a quantity of another name.
+  const payEur = await errorOf(() =>
+    chart(
+      [
+        { genre: "a", q1: 10, eu: 9 },
+        { genre: "b", q1: 20, eu: 18 },
+      ],
+      {
+        schema: {
+          q1: Schema.quantity("Pay").unit("USD"),
+          eu: Schema.unit("EUR"),
+        },
+      }
+    )
+      .flow(spread({ by: "genre", dir: "x" }))
+      .mark(layer([rect({ h: "q1" }), rect({ h: "eu" })]))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "a declared quantity's clash hint names its column, not its quantity",
+    payEur !== undefined &&
+      /"USD" \("Pay"\)/.test(payEur) &&
+      payEur.includes('schema: { "q1": Schema.unit("EUR") }') &&
+      !payEur.includes('schema: { "Pay"'),
+    payEur
+  );
+
+  // A declared column is its unit, so two charts that each declare their
+  // own "value" share nothing by name. Spread along y, the charts share no
+  // y axis either, so each scales on its own. (Layered or spread along x,
+  // they would share the y axis, which can show only one unit.)
+  const values = [
+    { genre: "a", value: 1 },
+    { genre: "b", value: 2 },
+  ];
+  const valueIn = (unit: string) =>
+    chart(values, { w: 100, h: 100, schema: { value: Schema.unit(unit) } })
+      .flow(spread({ by: "genre", dir: "x" }))
+      .mark(rect({ h: "value" }));
+  const twoValues = await errorOf(() =>
+    spread({ dir: "y" }, [valueIn("USD"), valueIn("EUR")]).toDisplayList(SIZE)
+  );
+  ok(
+    "two charts declaring their own column of one name, USD and EUR, render",
+    twoValues === undefined,
+    twoValues
+  );
+  const counted = [
+    { genre: "a", count: 3, v: 1 },
+    { genre: "a", count: 5, v: 2 },
+    { genre: "b", count: 4, v: 2 },
+  ];
+  const peopleCount = await errorOf(() =>
+    chart(counted, { schema: { count: Schema.unit("people") } })
+      .flow(spread({ by: "genre", dir: "x" }))
+      .mark(rect({ h: field("v").count(), w: field("count").sum() }))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    'a column "count" declared people next to a .count() renders',
+    peopleCount === undefined,
+    peopleCount
+  );
 
   // Chart-wide binding: "lo" meets the USD "price" on chart A's y axis, so
   // "lo" is USD in the whole figure; on chart B's x axis it then meets a
@@ -478,7 +686,9 @@ console.log("# measure: declared units clash");
       { k: "v", lo: 3 },
     ])
       .flow(spread({ by: "k", dir: "y" }))
-      .mark(layer([rect({ w: "lo", h: 5 }), rect({ w: field("lo").count(), h: 5 })]));
+      .mark(
+        layer([rect({ w: "lo", h: 5 }), rect({ w: field("lo").count(), h: 5 })])
+      );
   const alone = await errorOf(() => b().toDisplayList(SIZE));
   ok("chart B alone renders (its lo is unknown)", alone === undefined, alone);
   const wide = await errorOf(() => a().layer(b()).toDisplayList(SIZE));
@@ -489,10 +699,97 @@ console.log("# measure: declared units clash");
   );
 }
 
-// ── Titles: quantity names, never a declared unit ───────────────────────────
+// ── Titles: quantities, then the unit's symbol ──────────────────────────────
 
-console.log("# measure: titles come from quantity names");
+console.log("# measure: titles are Quantity (unit)");
 {
+  /** The texts of a one-bar-per-genre chart over `rows`, its y read by
+   *  `mark`, with `schema`. */
+  const bars = async (rows: any[], schema: any, mark: any, opts: any = {}) =>
+    textsOf(
+      await chart(rows, { schema, axes: true, ...opts })
+        .flow(spread({ by: "genre", dir: "x" }))
+        .mark(mark)
+        .toDisplayList(SIZE)
+    );
+  const gross = [
+    { genre: "a", "Production Budget": 10 },
+    { genre: "b", "Production Budget": 20 },
+  ];
+
+  const plain = await bars(gross, {}, rect({ h: "Production Budget" }));
+  ok(
+    "a plain column titles by its name",
+    plain.includes("Production Budget"),
+    plain.join(" | ")
+  );
+
+  const usd = await bars(
+    gross,
+    { "Production Budget": Schema.unit("USD") },
+    rect({ h: "Production Budget" })
+  );
+  ok(
+    "a declared unit follows its quantity in parentheses",
+    usd.includes("Production Budget (USD)"),
+    usd.join(" | ")
+  );
+
+  const explicit = await bars(
+    gross,
+    { "Production Budget": Schema.unit("USD") },
+    rect({ h: "Production Budget" }),
+    { axes: { y: { title: "Budget" } } }
+  );
+  ok(
+    "an explicit axes title wins",
+    explicit.includes("Budget") &&
+      !explicit.includes("Production Budget (USD)"),
+    explicit.join(" | ")
+  );
+
+  const suffixed = await bars(
+    [
+      { genre: "a", "Flipper Length (mm)": 190 },
+      { genre: "b", "Flipper Length (mm)": 210 },
+    ],
+    { "Flipper Length (mm)": Schema.unit("mm") },
+    rect({ h: "Flipper Length (mm)" })
+  );
+  ok(
+    "a name that ends with the symbol is still suffixed: names are not read",
+    suffixed.includes("Flipper Length (mm) (mm)"),
+    suffixed.join(" | ")
+  );
+
+  const declaredQuantity = await bars(
+    [
+      { genre: "a", "Flipper Length (mm)": 190 },
+      { genre: "b", "Flipper Length (mm)": 210 },
+    ],
+    {
+      "Flipper Length (mm)": Schema.quantity("Flipper Length").unit("mm"),
+    },
+    rect({ h: "Flipper Length (mm)" })
+  );
+  ok(
+    "a declared quantity titles it cleanly",
+    declaredQuantity.includes("Flipper Length (mm)") &&
+      !declaredQuantity.some((t) => t.includes("(mm) (mm)")),
+    declaredQuantity.join(" | ")
+  );
+
+  const counted = await bars(
+    penguins.map((p) => ({ ...p, genre: p.sp })),
+    {},
+    rect({ h: field("flipper").count() })
+  );
+  ok(
+    ".count() titles as count, with no unit",
+    counted.includes("count") && !counted.some((t) => /\(count\)/.test(t)),
+    counted.join(" | ")
+  );
+
   const hist = textsOf(
     await chart(penguins, { axes: true })
       .flow(derive(bin("flipper")), scatter({ xMin: "start", xMax: "end" }))
@@ -504,24 +801,25 @@ console.log("# measure: titles come from quantity names");
     hist.includes("flipper") && !hist.some((t) => /start|end/.test(t)),
     hist.join(" | ")
   );
-  ok("bin counts title as count", hist.includes("count"), hist.join(" | "));
+  ok(
+    "bin counts title as count, with no unit",
+    hist.includes("count") && !hist.some((t) => /\(count\)/.test(t)),
+    hist.join(" | ")
+  );
 
-  const declared = textsOf(
-    await chart(
-      [
-        { genre: "a", "Worldwide Gross": 10 },
-        { genre: "b", "Worldwide Gross": 20 },
-      ],
-      { schema: { "Worldwide Gross": Schema.unit("USD") }, axes: true }
-    )
-      .flow(spread({ by: "genre", dir: "x" }))
-      .mark(rect({ h: "Worldwide Gross" }))
+  const histMm = textsOf(
+    await chart(penguins, {
+      schema: { flipper: Schema.quantity("Flipper").unit("mm") },
+      axes: true,
+    })
+      .flow(derive(bin("flipper")), scatter({ xMin: "start", xMax: "end" }))
+      .mark(rect({ h: "count" }))
       .toDisplayList(SIZE)
   );
   ok(
-    "a declared column titles by its name, never its unit",
-    declared.includes("Worldwide Gross") && !declared.includes("USD"),
-    declared.join(" | ")
+    "bin edges take the source's declared quantity and unit",
+    histMm.includes("Flipper (mm)"),
+    histMm.join(" | ")
   );
 
   const several = textsOf(
@@ -538,6 +836,65 @@ console.log("# measure: titles come from quantity names");
     "an axis over several names titles them all, joined",
     several.includes("lo, hi"),
     several.join(" | ")
+  );
+
+  // A box plot: four summary columns, one declared quantity and unit.
+  const summary = [
+    { genre: "a", lo: 1, q1: 3, q3: 6, hi: 9 },
+    { genre: "b", lo: 2, q1: 4, q3: 7, hi: 10 },
+  ];
+  const box = (schema: any) =>
+    bars(
+      summary,
+      schema,
+      layer([rect({ y: "lo", y2: "hi" }), rect({ y: "q1", y2: "q3" })])
+    );
+  const undeclared = await box({});
+  ok(
+    "a box plot with no declarations titles by its column names",
+    undeclared.includes("lo, hi, q1, q3"),
+    undeclared.join(" | ")
+  );
+  const pay = Schema.quantity("Pay").unit("USD");
+  const declaredBox = await box({ lo: pay, q1: pay, q3: pay, hi: pay });
+  ok(
+    "one declared quantity over four columns titles once, with its unit",
+    declaredBox.includes("Pay (USD)"),
+    declaredBox.join(" | ")
+  );
+  // #998: a split with no `by` hands each mark `[row]`, tagged with the
+  // column types like any other leaf, so the declaration reaches it.
+  const noByBox = textsOf(
+    await chart(summary, {
+      schema: { lo: pay, q1: pay, q3: pay, hi: pay },
+      axes: true,
+    })
+      .flow(spread({ dir: "x" }))
+      .mark(layer([rect({ y: "lo", y2: "hi" }), rect({ y: "q1", y2: "q3" })]))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "a mark under a split with no `by` keeps the declared quantity and unit",
+    noByBox.includes("Pay (USD)"),
+    noByBox.join(" | ")
+  );
+
+  const times = textsOf(
+    await chart(
+      [
+        { day: "2024-03-01", price: 1 },
+        { day: "2024-03-09", price: 3 },
+      ],
+      { schema: { day: Schema.time() }, axes: true }
+    )
+      .flow(scatter({ x: "day", y: "price" }))
+      .mark(rect({ w: 4, h: 4 }))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "a time axis titles by its column, with no (instant)",
+    times.includes("day") && !times.some((t) => t.includes("instant")),
+    times.join(" | ")
   );
 }
 

@@ -109,13 +109,13 @@ export const ImageCutWithLabels: StoryObj<Args> = {
                   fontSize: 18,
                   fontWeight: "bold",
                   fill: "#1c5e20",
-                  text: d.datum.category,
+                  text: d.datum[0].category,
                 }).name("label"),
                 text({
                   fontSize: 36,
                   fontFamily: "Impact",
                   fill: "#1c5e20",
-                  text: `${d.datum.amount}`,
+                  text: `${d.datum[0].amount}`,
                 }).name("amount"),
               ]).relate(({ slice, label, amount }) => [
                 Constraint.align({ y: "middle" }, [slice, label]),

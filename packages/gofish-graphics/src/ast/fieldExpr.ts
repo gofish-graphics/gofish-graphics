@@ -320,7 +320,7 @@ export const isDomainOp = (op: FieldOp): boolean => DOMAIN_OPS.has(op.op);
  * Also reports the quantity the pipeline itself determines, if any: `count` /
  * `distinct` yield counts — not the source field's units — so they report
  * the quantity "count", in the declared unit "count". Every other pipeline
- * reports none, leaving the quantity to the caller (`resolveQuantity`): a
+ * reports none, leaving the quantity to the caller (`resolveColumn`): a
  * `sum` or `mean` keeps its source column's quantity and unit.
  *
  * Domain ops (`sort`/`reverse`/`bin`) don't belong in a value slot and throw;
@@ -367,8 +367,8 @@ export function evalFieldValues<T>(
   }
 }
 
-/** What `.count()` and `.distinct()` report: counts. */
-const COUNT_QUANTITY: Quantity = { name: COUNT, unit: COUNT };
+/** What `.count()` and `.distinct()` report: counts, read from no column. */
+const COUNT_QUANTITY: Quantity = { name: "count", unit: COUNT };
 
 /** The "not yet supported" error for `normalize()` outside its one valid
  *  slot (an operator's entry-flagged `size` channel), shared so every other
@@ -447,14 +447,15 @@ const datumQuantity = (v: MaybeValue<number>): Quantity | undefined =>
  * `byName`, when present, further qualifies by the grouping field the shares
  * were computed over, so a per-`origin` share and a per-`cylinders` share
  * (two nesting levels of the same mosaic) stay distinct units even though
- * both are "count share". The name doubles as the axis title.
+ * both are "count share". The name doubles as the axis title. The unit has
+ * no symbol: a share is a plain number, so the title adds no "(unit)".
  */
 export const shareQuantity = (
   base: Quantity | undefined,
   byName?: string
 ): Quantity => {
   const name = `${base?.name ?? "value"} share${byName ? ` by ${byName}` : ""}`;
-  return { name, unit: name };
+  return { name, unit: { unit: name } };
 };
 
 /**

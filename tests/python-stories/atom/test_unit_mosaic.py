@@ -73,8 +73,13 @@ def story_default():
                 # last column is short. (Row-major chunking instead left a
                 # ragged partial *row* spanning the whole cell width, which
                 # broke the band boundaries.)
+                # `chunk(size)` takes a fixed size, and `gridRows` depends on
+                # the block, so the columns are built as data: each item is
+                # now one column of dots.
                 derive(_chunk_by_grid_rows),
                 spread(spacing=1, dir="x"),
+                # Each group holds one item, a column of dots: spread its dots.
+                derive(lambda group: group[0]),
                 spread(spacing=1, dir="y", reverse=True),
             )
             .mark(circle(r=3, fill="survived"))

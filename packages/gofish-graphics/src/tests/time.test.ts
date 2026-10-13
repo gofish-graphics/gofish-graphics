@@ -285,7 +285,7 @@ async function main() {
     const typed = await applySchema(rows);
     check(
       "a Date column is inferred as a UTC time",
-      same(getColumnTypes(typed), { when: { HasCalendar: { zone: "UTC" } } })
+      same(getColumnTypes(typed), { when: SrcSchema.time().type })
     );
     check(
       "its values become epoch ms, in copied rows",
@@ -349,8 +349,8 @@ async function main() {
       "a derive's Date column is a time, in epoch ms",
       fromJs[0].at === at &&
         same(getColumnTypes(fromJs), {
-          day: { HasCalendar: { zone: "UTC" } },
-          at: { HasCalendar: { zone: "UTC" } },
+          day: SrcSchema.time().type,
+          at: SrcSchema.time().type,
         }),
       JSON.stringify([fromJs[0], getColumnTypes(fromJs)])
     );
@@ -486,24 +486,10 @@ async function main() {
         getColumnTypes(inPlace)?.at?.HasCalendar?.zone === "UTC",
       JSON.stringify([inPlace[0], getColumnTypes(inPlace)])
     );
-    // A derive over one datum that returns one object: the schema converts
-    // it as one row.
-    const single = await derived(
-      (d: any) => ({ ...d, at: "2024-03-05" }),
-      { schema: { at: Schema.time({ zone: "America/New_York" }) } },
-      { n: 1 }
-    );
-    check(
-      "derive(fn, { schema }) converts a single-object result",
-      !Array.isArray(single) &&
-        single.n === 1 &&
-        single.at === Date.UTC(2024, 2, 5, 5),
-      JSON.stringify(single)
-    );
     // filter's rows are its input's, so it carries the input's types as
     // they are, with no fit check (a derive would drop this one).
     const unfit = setColumnTypes([{ day: "not a time", n: 1 }], {
-      day: { HasCalendar: { zone: "UTC" } },
+      day: SrcSchema.time().type,
     });
     let filteredUnfit: any;
     await (
@@ -745,7 +731,7 @@ async function main() {
     check(
       "a column whose first value is null is still inferred from its Dates",
       rows[1].d === at &&
-        same(getColumnTypes(rows), { d: { HasCalendar: { zone: "UTC" } } }),
+        same(getColumnTypes(rows), { d: SrcSchema.time().type }),
       JSON.stringify([rows, getColumnTypes(rows)])
     );
   }
@@ -764,9 +750,9 @@ async function main() {
         },
       ],
       {
-        naive: { HasCalendar: { zone: "UTC" } },
-        day: { HasCalendar: { zone: "UTC" } },
-        aware: { HasCalendar: { zone: "UTC" } },
+        naive: SrcSchema.time().type,
+        day: SrcSchema.time().type,
+        aware: SrcSchema.time().type,
       }
     );
     const ny = SrcSchema.time({ zone: "America/New_York" });
@@ -816,19 +802,17 @@ async function main() {
       empty === undefined,
       empty
     );
-    const nan = withCalendar(
-      CONTINUOUS(interval(NaN, NaN), "pinned"),
-      { zone: "UTC" }
-    );
+    const nan = withCalendar(CONTINUOUS(interval(NaN, NaN), "pinned"), {
+      zone: "UTC",
+    });
     check(
       "a non-finite time domain is not niced",
       Number.isNaN((niceContinuous(nan) as any).dataInterval.min)
     );
     const [hi, lo] = [Date.UTC(2024, 1, 2, 7), Date.UTC(2024, 1, 1, 7)];
-    const backwards = withCalendar(
-      CONTINUOUS({ min: hi, max: lo }, "pinned"),
-      { zone: "UTC" }
-    );
+    const backwards = withCalendar(CONTINUOUS({ min: hi, max: lo }, "pinned"), {
+      zone: "UTC",
+    });
     const kept = (niceContinuous(backwards) as any).dataInterval;
     check(
       "an empty time domain (min > max) is not niced",

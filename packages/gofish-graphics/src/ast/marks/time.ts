@@ -34,12 +34,7 @@ import { Frame } from "../graphicalOperators/frame";
 import { tween } from "../graphicalOperators/tween";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import {
-  projectBy,
-  projectPath,
-  splitEntries,
-  type TimeTier,
-} from "../datumProjection";
+import { projectPath, splitEntries, type TimeTier } from "../datumProjection";
 import { timer, type Timer } from "../../interaction/inputs";
 import { readLive } from "../../interaction/live";
 import type { MaybeValue } from "../data";
@@ -393,7 +388,7 @@ export type TransitionOptions = {
  */
 export const transition = createRelationalMark<TransitionOptions>(
   "time.transition",
-  (o, children, inferred) => {
+  (o, children, inferred, key) => {
     const tier = inferred.time;
     // BUILD MODE: no keyframes at all, so the transition is from the empty
     // chart and every selected mark enters (`src/animation/`), which checks
@@ -455,14 +450,7 @@ export const transition = createRelationalMark<TransitionOptions>(
     const times = children.map((child) => knotOf(child, by));
     // One mark per moment: two keyframe marks of one run at one time leave
     // nowhere for the moving mark to be then.
-    assertOneRowPerKnot(
-      times,
-      "time.transition()",
-      by,
-      inferred.by !== undefined && children.length > 0
-        ? projectBy(children[0], inferred.by)
-        : undefined
-    );
+    assertOneRowPerKnot(times, "time.transition()", by, key);
     const run = unrollOrder(times, cycle);
     // The keyframes the run's knots are drawn from, so the tween can tell a
     // gap in the run from a step between neighbors. Only the sequence's own

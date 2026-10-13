@@ -34,7 +34,9 @@ derive(fn, schema={...}) -> DeriveOperator
 
 `fn` (required, `Callable`) receives the current group's rows and returns the
 new ones: a list of dicts, `None`, or a dataframe from any backend
-[narwhals](https://narwhals-dev.github.io/narwhals/) supports. The options:
+[narwhals](https://narwhals-dev.github.io/narwhals/) supports. It returns a
+list even for one row (`lambda d: [d[0]]`); a bare dict is not data. The
+options:
 
 ::: gofish-ref derive
 :::
@@ -139,7 +141,9 @@ from gofish import Schema, derive
 derive(quartiles, schema={"lo": Schema.unit("USD"), "hi": Schema.unit("USD")})
 ```
 
-An axis is titled by the names of its columns, never by a unit.
+An axis is titled by the quantities of its columns (each column's name,
+unless its schema declares a quantity), then a declared unit in parentheses:
+`"Pay (USD)"`. See [`Schema.quantity`](/python/api/core/schema).
 
 If an axis combines two different units, you have two remedies:
 

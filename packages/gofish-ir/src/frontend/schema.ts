@@ -193,7 +193,7 @@ export interface DeriveOperator
    *  wire form of a chart's `schema` (e.g. `{ HasOrder: { levels } }`). They
    *  type the result over the types it keeps or infers, and convert values
    *  as a chart's schema does. A transform (e.g. Python's `bin`) writes the
-   *  units of its output columns here (`{ HasUnit: { quantity } }`), since the
+   *  quantities of its output columns here (`{ HasQuantity: { name } }`), since the
    *  column types the JS-side array carries can't ride the rows across the
    *  derive RPC. */
   schema?: Record<string, Record<string, unknown>>;
@@ -255,6 +255,13 @@ export interface FilterOperator
   predicate: FieldPredicateIR;
 }
 
+/** A `by` key that groups consecutive rows, as `chunk(size)` builds it: row
+ *  `i` goes to group `floor(i / size)`, a bin over row position. */
+export interface ChunkKeyIR {
+  type: "chunk";
+  size: number;
+}
+
 /** A field predicate: the field it reads and the interval it tests. */
 export interface FieldPredicateIR {
   field: string;
@@ -272,7 +279,7 @@ export interface SpreadOperator
    *  subdata. String accessors round-trip; function accessors don't (see
    *  `LabelIR`/`labelIRField` in createOperator.ts). */
   label?: LabelIR;
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
   /** `x`/`y`, or an axis name the enclosing coordinate space declares. */
   dir?: string;
   spacing?: number;
@@ -306,7 +313,7 @@ export interface StackOperator
   type: "stack";
   /** See `SpreadOperator.label` — `stack` is `spread({glue: true})` re-tagged. */
   label?: LabelIR;
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
   /** See `SpreadOperator.dir`. */
   dir?: string;
   /** Spread-parity passthrough: the JS `stack` is `Spread({...props, glue:
@@ -334,7 +341,7 @@ export interface GroupOperator
   type: "group";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
-  by: string | FieldAccessor;
+  by: string | FieldAccessor | ChunkKeyIR;
 }
 
 export interface ScatterOperator
@@ -344,7 +351,7 @@ export interface ScatterOperator
   type: "scatter";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
   x?: ChannelValue;
   y?: ChannelValue;
   xMin?: ChannelValue;
@@ -444,7 +451,7 @@ export interface TreemapOperator
   /** Field to partition rows by; also accepts a field(...) accessor carrying
    *  domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is
    *  emitted per row. */
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
   /** Gap between sibling tiles, in pixels. Default 0. */
   spacing?: number;
   /** Inset around the outer edge of the treemap, in pixels. Default 0. */
@@ -481,7 +488,7 @@ export interface PackOperator
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
   /** Field to partition rows by. Without `by`, one child per row. */
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
 }
 
 // ---------------------------------------------------------------------------
