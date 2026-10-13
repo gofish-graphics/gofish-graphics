@@ -451,14 +451,14 @@ forms:
 
 ### A connector's datum, and its `live()` channels
 
-A leaf mark carries the rows it was drawn from. A connector threads a whole
-group, so its datum is **the group**: a one-row list whose row holds each
-field of its operands' data, projected with homogeneity collapse
-(`groupDatumOf`). A path through one species' daily positions collapses
-`species` to that species and `day` to `undefined` — which is exactly what a
-channel callback should see, and what `pointer().datum()` hands back when that
-path is hovered. Like every datum it is a list; a pairwise `{ from, to }`
-connector's datum is its own row as `[row]`.
+A leaf mark carries the rows it was drawn from, and so does a connector: its
+datum is the rows it was drawn through, in draw order (its operands' datums,
+concatenated, with their column types; `groupDatumOf`). A path through one
+species' daily positions has one row per day, so a channel callback, and
+`pointer().datum()` when that path is hovered, reads the species off any row
+(`d[0].species`), or off all of them with `project(d, "species")`. A
+pairwise `{ from, to }` connector is drawn from one row, so its datum is
+`[row]`.
 
 `live(...)` channels on a connector are treated exactly as a leaf mark's, by one
 path: `liveChannelsOf` collects them and the factory stamps them on each produced

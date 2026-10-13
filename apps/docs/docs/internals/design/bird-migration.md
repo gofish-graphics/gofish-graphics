@@ -159,7 +159,8 @@ chart(birds)
 ```
 
 Both channels are paint-only, so hover costs no relayout. To verify: a line
-mark's stamped datum is its group (homogeneity collapse gives `species`).
+mark's stamped datum is the rows it was drawn through, one species' days, so
+`d[0].species` is its species.
 
 Tooltip, two options:
 

@@ -104,7 +104,8 @@ export const B_HoverHighlight: StoryObj<Args> = {
     const container = initializeContainer();
 
     const hover = pointer();
-    // A line's datum is its group's one-row list, so `species` is on its row.
+    // A line's datum is the rows it was drawn through: one species' days, so
+    // any row gives its `species`.
     const hot = (d: any) => hover.datum()?.[0]?.species === d?.[0]?.species;
 
     basemap()

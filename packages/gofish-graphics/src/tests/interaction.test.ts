@@ -1469,9 +1469,9 @@ async function main() {
       { day: 2, lon: -55, lat: -25, species: "b" },
       { day: 3, lon: -50, lat: -40, species: "b" },
     ];
-    // The stamped datum of a `line` is its group's projected datum, a
-    // one-row list, so the species field is readable off its row — the
-    // panel-B `hot` predicate.
+    // The stamped datum of a `line` is the rows it was drawn through, so the
+    // species its group agrees on is readable off any row — the panel-B
+    // `hot` predicate.
     const hot = (d: any) => p.datum()?.[0]?.species === d?.[0]?.species;
     await chart(rows, {
       coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
@@ -1532,6 +1532,15 @@ async function main() {
       widths.filter((w: string) => w === "3").length === 1 &&
         widths.filter((w: string) => w === "0.1").length === 1,
       widths.join(",")
+    );
+    const hovered = p.datum() as any[] | undefined;
+    ok(
+      "a hovered line's datum is its rows, one per point, in draw order",
+      hovered?.length === 3 &&
+        ["a", "b"].includes(hovered[0].species) &&
+        hovered.every((r) => r.species === hovered[0].species) &&
+        hovered.map((r) => r.day).join(",") === "1,2,3",
+      JSON.stringify(hovered)
     );
     ok(
       "the live() readout gains the hovered species' name",

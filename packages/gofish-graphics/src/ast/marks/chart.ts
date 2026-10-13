@@ -662,27 +662,21 @@ export function createRelationalMark<O extends Record<string, unknown>>(
      *  here, not inside the bag branch below, because `produce` reads it on
      *  every branch. */
     const inferred: InferredRelational = {};
-    /** The datum of the GROUP a connector threads: a one-row list whose row
-     *  holds each field of its operands' rows, projected with homogeneity
-     *  collapse. A path through one species' days collapses `species` to that
-     *  species and `day` to undefined, which is what a channel callback — and
-     *  `pointer().datum()` on hover — should see. Like every datum it is a
-     *  list. Undefined when the operands carry no data. */
-    const groupDatumOf = (
-      operands: GoFishAST[]
-    ): Record<string, unknown>[] | undefined => {
+    /** The datum of a connector: the rows it was drawn through, in draw
+     *  order (its operands' datums, concatenated), with their column types,
+     *  like any leaf's. A field one group agrees on reads off any row
+     *  (`d[0].species`), and a projection reads it off all of them
+     *  (`projectPath(d, "species")`). Undefined when the operands carry no
+     *  data. */
+    const groupDatumOf = (operands: GoFishAST[]): unknown[] | undefined => {
       const datums: unknown[][] = operands
         .map((o) => (o as any).datum)
         .filter((d) => d !== undefined);
       if (datums.length === 0) return undefined;
-      const keys = new Set<string>();
-      for (const row of datums.flat())
-        if (row !== null && typeof row === "object")
-          for (const k of Object.keys(row)) keys.add(k);
-      if (keys.size === 0) return undefined;
-      const group: Record<string, unknown> = {};
-      for (const k of keys) group[k] = projectPath(datums, k);
-      return [group];
+      return datums.reduce<unknown[]>(
+        (rows, d) => copyColumnTypes(rows, d),
+        datums.flat()
+      );
     };
     /** The opts `produce` is built from: each `live(...)` channel replaced by
      *  its value at the connector's datum (the same substitution a leaf mark's
