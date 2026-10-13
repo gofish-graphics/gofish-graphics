@@ -207,7 +207,12 @@
     align-items: start;
     margin: 14px 0 26px;
   }
-  .ex > div {
+  .ex > div,
+  .ex > figure,
+  .pair > div,
+  .grid2 > *,
+  .grid3 > *,
+  .grid4 > * {
     min-width: 0;
   }
   .pair {
@@ -292,7 +297,7 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .ex {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
   }
   @media (max-width: 520px) {
@@ -300,10 +305,117 @@
     .grid3,
     .grid2,
     .pair {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
     h1 {
       font-size: 25px;
+    }
+  }
+  .part {
+    font:
+      500 12px/1 "IBM Plex Mono",
+      monospace;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 56px 0 0;
+    padding-top: 18px;
+    border-top: 3px solid var(--accent);
+  }
+  .part + h2 {
+    border-top: none;
+    margin-top: 10px;
+  }
+  .toc {
+    font-size: 14px;
+    columns: 2;
+    column-gap: 28px;
+    padding-left: 18px;
+  }
+  .toc li {
+    break-inside: avoid;
+  }
+  [role="tablist"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 14px 0 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  [role="tab"] {
+    font:
+      500 13.5px/1.2 "IBM Plex Sans",
+      system-ui,
+      sans-serif;
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  [role="tab"]:hover {
+    border-color: var(--accent);
+  }
+  [role="tab"][aria-selected="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+  }
+  [role="tab"]:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+  }
+  [role="tabpanel"] {
+    padding-top: 6px;
+  }
+  [role="tabpanel"] > h3:first-child {
+    margin-top: 14px;
+  }
+  .shot.wide {
+    overflow-x: auto;
+  }
+  .ref-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: 14px;
+    margin-top: 12px;
+    align-items: start;
+  }
+  details.hist {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 4px 16px;
+    margin: 12px 0;
+  }
+  details.hist > summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 16px;
+    padding: 10px 0;
+  }
+  details.hist > summary:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+  }
+  details.hist[open] > summary {
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 8px;
+  }
+  @media (max-width: 860px) {
+    .ref-pair {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 640px) {
+    .shot.wide img {
+      max-width: none;
+      width: 640px;
+    }
+    .toc {
+      columns: 1;
     }
   }
 </style>
@@ -316,16 +428,16 @@
   <p class="lede">
     GoFish already has a box-only <code>enclose</code> (also exported as
     <code>background</code>). This proposal turns it into one relational mark
-    that draws an outline around a set of nodes: a box, or a region built from
-    discs around the members and links between them. The outlines are values of
-    a new strategy family, <code>Shape</code>, chosen with a
+    that draws an outline around a set of nodes: a box, or a smooth region built
+    from discs around the members and links between them. The outlines are
+    values of a new strategy family, <code>Shape</code>, chosen with a
     <code>shape</code> option the way <code>Curve</code> is chosen with
     <code>curve</code> on <code>line</code>. The region member,
     <code>Shape.blob()</code>, fills the space between members with the alpha
     shape's rule (dialed by <code>convexity</code>), links them with a spanning
-    tree, and blurs the result so the outline's curvature never jumps. The
-    convex hull and the spine are shortcuts of it, the way
-    <code>sina()</code> and <code>jitter()</code> are shortcuts of
+    tree so the set stays in one piece, and blurs the result so the outline's
+    curvature never jumps. The convex hull and the spine are shortcuts of it,
+    the way <code>sina()</code> and <code>jitter()</code> are shortcuts of
     <code>noise()</code>.
   </p>
 
@@ -345,7 +457,109 @@
       <code>.background()</code> modifier yet; it is the runner-up, to add later
       as exact sugar.
     </p>
-    <pre><code>// one hull per species: group the points in a second layer
+  </div>
+
+  <p class="small">
+    The page has three parts. <strong>Part 1</strong> is the current proposal
+    only. <strong>Part 2</strong> is context: Josh's tensions, alternatives,
+    nearby GoFish decisions, precedent and related issues.
+    <strong>Part 3, History</strong>, holds the earlier versions and the retired
+    decisions, collapsed. Every picture is a real render of a throwaway
+    prototype story
+    (<code>stories/_proposals/BackgroundHull.stories.tsx</code>). Since
+    <code>Shape</code> does not exist, the stories place members at fixed pixel
+    positions and compute outlines with story-local code, drawn with
+    <code>polygon</code>. Every outline in Part 1 comes from the current
+    construction. Box panels use the real <code>enclose</code>. The code beside
+    each picture is the proposed spelling, not the story's code.
+  </p>
+
+  <ol class="toc">
+    <li><a href="#terms">Terms</a></li>
+    <li><a href="#syntax">The syntax</a></li>
+    <li><a href="#explorer">Dataset explorer</a></li>
+    <li><a href="#hull-check">The hull preset is within half a pixel</a></li>
+    <li><a href="#curvature">The curvature never jumps</a></li>
+    <li>
+      <a href="#penguins">One outline per group, and <code>by</code></a>
+    </li>
+    <li><a href="#future">Future work</a></li>
+    <li><a href="#decisions">Open decisions</a></li>
+    <li><a href="#tensions">Josh's tensions</a></li>
+    <li><a href="#approaches">Where it lives</a></li>
+    <li><a href="#spelling">Strategy spelling</a></li>
+    <li><a href="#nearby">Nearby GoFish decisions</a></li>
+    <li><a href="#precedent">Precedent</a></li>
+    <li><a href="#issues">Related issues</a></li>
+    <li><a href="#changes">Syntax changes to review</a></li>
+    <li><a href="#history">History</a></li>
+  </ol>
+
+  <!-- ───────────────────────── Part 1 ───────────────────────── -->
+  <div class="part">Part 1 · The current proposal</div>
+
+  <h2 id="terms">Terms</h2>
+  <div class="grid3">
+    <div class="card">
+      <h4>Box, convex hull</h4>
+      <p>
+        The box is the smallest rectangle, sides parallel to the axes, that
+        holds the members; <code>enclose</code> draws it today. The convex hull
+        is the smallest convex shape that holds them: the straight line between
+        any two of its points stays inside, so it never has dents.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Member, non-member, hyperedge</h4>
+      <p>
+        Members are the nodes a shape must contain; non-members are the nodes it
+        must keep out. A hyperedge joins any number of nodes, so a set drawn as
+        one region is a hyperedge.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Relational mark, strategy family</h4>
+      <p>
+        A relational mark takes its geometry from already placed nodes, like
+        <code>line</code>. A strategy family is a capitalized namespace of
+        option values, such as <code>Curve.monotone()</code> (#1013, one
+        uppercase namespace per family).
+      </p>
+    </div>
+    <div class="card">
+      <h4>Padding, spine</h4>
+      <p>
+        Padding is the distance in pixels between the members and the outline
+        (#1005 settled it as the inset around the outer edge). A spine is a tree
+        of links joining the members, drawn as a smooth tube; bubble sets
+        (Collins et al., 2009) are built this way.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Delaunay, spanning tree, alpha shape</h4>
+      <p>
+        The Delaunay triangulation splits points into triangles with no point
+        inside any triangle's circumcircle. The minimum spanning tree is the
+        shortest tree joining all members. The alpha shape fills the Delaunay
+        triangles whose circumradius is at most alpha.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Closing, blur, curvature</h4>
+      <p>
+        Closing grows a shape by <em>s</em> and shrinks it back, which rounds
+        dents and fills narrow gaps. A Gaussian blur averages nearby values with
+        bell-curve weights. Curvature is 1 over the radius of the best-fitting
+        circle; an outline is G2 when its curvature never jumps.
+      </p>
+    </div>
+  </div>
+
+  <h2 id="syntax">The syntax</h2>
+  <div class="ex">
+    <div>
+      <div class="lang">JS</div>
+      <pre><code>// one hull per species: group the points in a second layer
 chart(penguins)
   .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
   .mark(circle({ r: 3, fill: "Species" }).name("points"))
@@ -357,486 +571,137 @@ chart(penguins)
 
 // contains a and c but not b: combinator form over refs
 layer([a, b, c]).relate(({ a, b, c }) =&gt; [
-  enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.85, smoothing: 40 }),
+  enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.85,
+                                 smoothing: 40, clearance: 6 }),
             padding: 22, fill: "#ff2400" }, [a, c]),
-])</code></pre>
-  </div>
-  <p class="small">
-    Every picture below is a real render of a throwaway prototype story
-    (<code>stories/_proposals/BackgroundHull.stories.tsx</code>). Since
-    <code>Shape</code> does not exist, the stories place members at fixed pixel
-    positions and compute outlines with story-local code (convex hull, an alpha
-    shape on Delaunay triangles, a bubble set assembled from
-    <code>bubblesets-js</code> parts, a simple KelpFusion prototype, and the
-    generalized construction), drawn with <code>polygon</code>. Box panels use
-    the real <code>enclose</code>. The code beside each picture is the proposed
-    spelling, not the story's code.
-  </p>
+])
 
-  <h2>Strategy grid (earlier three-member design)</h2>
-  <p>
-    Same members (blue U-shaped cluster) and the same two non-members (gray) in
-    each panel, <code>padding: 8</code>. This grid shows the earlier design,
-    kept for comparison; the next section shows the same data under the blob.
-  </p>
-  <div class="grid4">
-    <div class="card">
-      <h4>Shape.box()</h4>
-      <div class="shot">
-        <img src="img/strategy-box.png" alt="Box around the U cluster" />
-      </div>
-      <p>
-        The padded bounding box. Real <code>enclose</code>; note its fill
-        painting over the gray dots (#986).
-      </p>
+// the component case: fresh children
+enclose({ padding: 20, fill: "#252150", stroke: "none",
+          shape: Shape.box({ rx: 16, ry: 16 }) },
+  [spread({ dir: "x", spacing: 50, alignment: "middle" },
+          planets.map((d) =&gt; circle(d)))])</code></pre>
     </div>
-    <div class="card">
-      <h4>Shape.hull()</h4>
-      <div class="shot">
-        <img
-          src="img/strategy-hull-convex.png"
-          alt="Convex hull around the U cluster"
-        />
-      </div>
-      <p>Convex hull of the padded member outlines. Never has dents.</p>
-    </div>
-    <div class="card">
-      <h4>alpha shape, alpha 40 (dropped)</h4>
-      <div class="shot">
-        <img
-          src="img/strategy-hull-concave.png"
-          alt="Concave alpha shape around the U cluster"
-        />
-      </div>
-      <p>
-        Alpha shape: openings wider than a 40 px disc are carved out. Depends
-        only on the members.
-      </p>
-    </div>
-    <div class="card">
-      <h4>bubble-set spine (earlier)</h4>
-      <div class="shot">
-        <img
-          src="img/strategy-spine.png"
-          alt="Bubble-set spine around the U cluster"
-        />
-      </div>
-      <p>
-        Connects the members with a tree that bends around the listed
-        non-members, then draws a smooth outline around it.
-      </p>
-    </div>
-  </div>
-  <p class="small">
-    The concave hull and the spine look alike here but answer different
-    questions. The hull's dent comes from the members' spacing and ignores the
-    gray dots; the spine's dent comes from the <code>avoiding</code> list. The
-    Topology example is the case only the spine can draw.
-  </p>
+    <div>
+      <div class="lang">Python</div>
+      <pre><code>(chart(penguins)
+   .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
+   .mark(circle(r=3, fill="Species").name("points"))
+   .layer(
+       chart(select_all("points"))
+         .flow(group(by="Species"))
+         .mark(enclose(shape=Shape.hull(), padding=6,
+                       fill="Species", opacity=0.2))))
 
-  <h2>One construction: a smooth region, with hull and spine as shortcuts</h2>
-  <p>
-    Josh asked whether KelpFusion could be generalized, by making the size of
-    the circles around the points configurable, so that it covers the usual
-    hull, and whether it and the alpha shape could be unified. The previous
-    version (v3) answered with <code>Shape.blob()</code>, a generalized
-    KelpFusion with hull and spine as shortcuts, the way <code>sina()</code> and
-    <code>jitter()</code> are shortcuts of <code>noise()</code> (#1018, which
-    made the scatter overlap strategy one <code>noise()</code> with two
-    presets). This version (v4) keeps that factoring and changes how the region
-    is built.
-  </p>
+layer([a, b, c]).relate(lambda a, b, c: [
+    enclose([a, c],
+            shape=Shape.spine(avoiding=[b], neck=0.85,
+                              smoothing=40, clearance=6),
+            padding=22, fill="#ff2400"),
+])
 
-  <h3>What changed in v4, and why</h3>
-  <div class="note">
-    <p>Josh's review of v3:</p>
-    <ol>
-      <li>
-        "Alpha shapes still seem to have a nice aesthetic to them because
-        they're a bit more convex than the kelp comparisons."
-      </li>
-      <li>The Munkres {a, c} outline "still feels too shrinkwrapped."</li>
-      <li>
-        "I don't want to see a shape curvature change when the circle connects
-        to the link."
-      </li>
-    </ol>
-  </div>
-  <p>
-    The third point is a hard requirement, and v3 could not meet it. Its outline
-    was a union of circle arcs, straight tube sides and closing arcs. Where an
-    arc meets a straight side the outline has no corner, but its curvature jumps
-    at once from 1/<em>R</em> to 0 (G1, not G2). v4 changes three things:
-  </p>
-  <ul>
-    <li>
-      <strong>Smoothing ends with a Gaussian blur of the region.</strong> The
-      outline is the level ½ of the blurred region, which is
-      curvature-continuous everywhere.
-    </li>
-    <li>
-      <strong
-        ><code>density</code> is replaced by <code>convexity</code>.</strong
-      >
-      The alpha shape's fill rule comes back as the dial from spine to hull,
-      unitless, with a spanning tree that keeps the set in one piece.
-    </li>
-    <li>
-      <strong
-        >Links that bound a filled triangle are drawn at full width,</strong
-      >
-      so filled parts get the alpha shape's even, straight sides instead of
-      scallops.
-    </li>
-  </ul>
-  <div class="grid2">
-    <div class="card">
-      <h4>Delaunay triangulation</h4>
-      <p>
-        The standard way to split a point set into triangles: no point lies
-        inside the circle through any triangle's corners. Its outer boundary is
-        the convex hull.
-      </p>
-    </div>
-    <div class="card">
-      <h4>Voronoi cell</h4>
-      <p>
-        The part of the plane closer to one point than to any other point of the
-        set.
-      </p>
-    </div>
-    <div class="card">
-      <h4>Minkowski sum with a disc</h4>
-      <p>
-        Growing a shape by a distance <em>r</em> in every direction, so it holds
-        every point within <em>r</em> of the shape. Padding is this operation.
-      </p>
-    </div>
-    <div class="card">
-      <h4>Morphological closing</h4>
-      <p>
-        Grow by <em>s</em>, then shrink by <em>s</em>. Convex parts come back
-        unchanged, concave corners get rounded with radius <em>s</em>, and gaps
-        narrower than about 2<em>s</em> are filled: everything a rolling disc of
-        radius <em>s</em> cannot reach.
-      </p>
-    </div>
-    <div class="card">
-      <h4>Alpha hull, alpha shape</h4>
-      <p>
-        In Edelsbrunner, Kirkpatrick and Seidel (1983), the alpha hull is what
-        remains when every disc of radius alpha that holds no point is removed.
-        The alpha shape is the same with straight edges instead of arcs.
-      </p>
-    </div>
-    <div class="card">
-      <h4>Curvature</h4>
-      <p>
-        How sharply the outline bends: 1 over the radius of the best-fitting
-        circle. A straight run has 0, a circle of radius <em>R</em> has
-        1/<em>R</em>. Positive where the outline bulges out, negative where it
-        dents in.
-      </p>
-    </div>
-    <div class="card">
-      <h4>G1 and G2 continuity</h4>
-      <p>
-        G1: the direction never jumps (no corners). G2: the curvature never
-        jumps either. A circle meeting a tangent line is G1, not G2. Josh's
-        requirement is G2.
-      </p>
-    </div>
-    <div class="card">
-      <h4>Curvature plot and comb</h4>
-      <p>
-        The plot draws curvature against distance along the outline. The comb
-        draws teeth across the outline with length proportional to curvature; a
-        jump shows as a step in the line through the tips.
-      </p>
-    </div>
-    <div class="card">
-      <h4>Implicit field, iso-contour</h4>
-      <p>
-        A field gives every point a number; its iso-contour at level
-        <em>c</em> is the curve where the field equals <em>c</em>. A smooth
-        field has a smooth iso-contour wherever it is not flat.
-      </p>
-    </div>
-    <div class="card">
-      <h4>Convolution surface</h4>
-      <p>
-        A field made by adding a smooth bump along a skeleton of points,
-        segments and triangles, drawn as one iso-contour (Bloomenthal and
-        Shoemake, SIGGRAPH 1991; from memory). Bubble Sets' energy is of this
-        kind.
-      </p>
-    </div>
-    <div class="card">
-      <h4>Gaussian blur</h4>
-      <p>
-        Replace each value by a weighted average of its neighbors, with weights
-        falling off as a bell curve of width σ.
-      </p>
-    </div>
-    <div class="card">
-      <h4>Circumradius, alpha complex</h4>
-      <p>
-        Circumradius: the radius of the circle through a triangle's corners. The
-        alpha complex: the Delaunay triangles with circumradius at most alpha,
-        and edges at most 2 alpha long. Filled, it is the alpha shape.
-      </p>
+enclose([spread([circle(**d) for d in planets],
+                dir="x", spacing=50, alignment="middle")],
+        padding=20, fill="#252150", stroke="none",
+        shape=Shape.box(rx=16, ry=16))</code></pre>
     </div>
   </div>
 
-  <h3>Alpha shape and KelpFusion: what is the same and what is not</h3>
+  <h3>Members and presets</h3>
   <div class="tablewrap">
     <table>
       <tr>
-        <th>Question</th>
-        <th>Answer</th>
-        <th>Status</th>
+        <th>Value</th>
+        <th>Is exactly</th>
+        <th>Draws</th>
       </tr>
       <tr>
-        <td>The alpha hull, in terms of closing?</td>
+        <td><code>Shape.box(opts)</code></td>
+        <td>its own member; options <code>rx</code>, <code>ry</code></td>
         <td>
-          Exactly the closing of the point set by a disc of radius alpha.
-          "Remove every empty disc of radius alpha" is the definition of
-          closing.
-        </td>
-        <td>
-          Definition: Edelsbrunner, Kirkpatrick, Seidel, IEEE Trans. Inf. Theory
-          1983. The match with closing is my derivation (inferred).
+          the padded bounding box with rounded corners; the default
+          <code>shape</code>
         </td>
       </tr>
       <tr>
-        <td>The alpha complex?</td>
-        <td>
-          The points, edges and triangles of the Delaunay triangulation whose
-          smallest empty circle has radius at most alpha. Its union is the alpha
-          shape.
-        </td>
-        <td>Edelsbrunner and Mücke, ACM TOG 1994. From memory.</td>
+        <td><code>Shape.blob(opts)</code></td>
+        <td>the general region</td>
+        <td>discs, links and filled triangles, smoothed (below)</td>
       </tr>
       <tr>
-        <td>Its relation to discs?</td>
+        <td><code>Shape.hull(opts)</code></td>
+        <td><code>Shape.blob({ convexity: 1, neck: 1, ...opts })</code></td>
         <td>
-          Put a disc of radius alpha on each point, cut to the point's Voronoi
-          cell. The complex has an edge where two cut discs touch and a triangle
-          where three meet; the union of discs has the same pieces and holes as
-          the alpha shape.
-        </td>
-        <td>
-          Edelsbrunner, "The union of balls and its dual shape", 1995. From
-          memory.
+          the convex hull grown by <code>padding</code>, smoothed (within half a
+          pixel)
         </td>
       </tr>
       <tr>
-        <td>A KelpFusion node area?</td>
-        <td>
-          A disc of radius <em>r</em> cut to the node's Voronoi cell, which is
-          exactly Edelsbrunner's cut disc.
-        </td>
-        <td>Definition verified in the paper; the identity is inferred.</td>
-      </tr>
-      <tr>
-        <td>Alpha shape a special case of KelpFusion?</td>
-        <td>
-          No. KelpFusion's node areas touch along the alpha complex of radius
-          <em>r</em>, but its links come from the shortest-path graph
-          SPG(<em>t</em>), which always connects all members and does not change
-          with scale. The alpha complex falls apart once alpha is below half the
-          widest gap, and it changes with scale.
-        </td>
-        <td>Inferred.</td>
-      </tr>
-      <tr>
-        <td>KelpFusion a special case of the alpha shape?</td>
-        <td>
-          No. For 1 &lt; <em>t</em> &lt; ∞ it keeps long links without the
-          triangles around them, which no alpha complex does.
-        </td>
-        <td>Inferred.</td>
-      </tr>
-      <tr>
-        <td>What they share</td>
-        <td>
-          Both keep some Delaunay links, fill some faces, and grow the result.
-          Both end at the full triangulation, whose outline is the convex hull:
-          alpha = ∞ and <em>t</em> = 1.
-        </td>
-        <td>KelpFusion part verified; alpha part from memory.</td>
+        <td><code>Shape.spine(opts)</code></td>
+        <td><code>Shape.blob({ convexity: 0, ...opts })</code></td>
+        <td>the spanning tree of tubes, smoothed</td>
       </tr>
     </table>
   </div>
   <p>
-    So they unify as one pipeline, not as one parameter. KelpFusion picks links
-    with a dial that has no unit and keeps the set in one piece; the alpha shape
-    picks links and faces with a length. For a set, one piece is what we want: a
-    set drawn as two islands reads as two sets. Non-member avoidance: the alpha
-    shape has none. KelpFusion has it in three places: links routed around other
-    nodes, faces holding a non-member left open, and non-member areas cut out at
-    the end.
+    As <code>sina()</code> and <code>jitter()</code> do over
+    <code>noise()</code> (#1018, which made the scatter overlap strategy one
+    <code>noise()</code> with two presets), a shortcut makes the same object as
+    the general call (<code>kind: "blob"</code>), declared once as a preset, and
+    any option overrides the preset. So
+    <code>Shape.hull({ avoiding: others })</code> is legal and draws a hull that
+    leaves out triangles touching other nodes. <code>Shape.box()</code> stays
+    separate: a box is a rectangle grown by padding, not a union of discs.
   </p>
 
-  <h3>Three ways to get a curvature-continuous outline</h3>
-  <p>
-    All three start from the same skeleton (member points, links, filled
-    triangles), prototyped in story section (e).
-  </p>
-  <div class="grid3">
-    <div class="card">
-      <h4>(a) Convolution surface</h4>
-      <p>
-        A Gaussian bump added up along the skeleton, weighted so each piece
-        alone ends at its target offset; one iso-contour. Smooth, and close to
-        Bubble Sets. But fields add up where pieces meet, so the lobes swell
-        past the promised padding (dashed rings) and the U dents in toward b.
-        <code>padding</code> stops being a promise. Out.
-      </p>
-    </div>
-    <div class="card">
-      <h4>(b) A closed curve through v3</h4>
-      <p>
-        Points every few pixels along the v3 outline, then a closed curve
-        through them: centripetal Catmull-Rom (G1, the foil), a periodic natural
-        cubic spline (C2), or a Yuksel-style C2 blend of circles (Yuksel, ACM
-        TOG 2020, listed in #957; my own variant of it, inferred). Today's
-        <code>Curve</code> members do not apply: the data-space ones interpolate
-        <em>y</em>(<em>x</em>), the connectors join two ends, and
-        <code>catmullRom</code> is open and G1 (verified in
-        <code>src/families/curve.ts</code>).
-      </p>
-    </div>
-    <div class="card">
-      <h4>(c) Blur the region (chosen)</h4>
-      <p>
-        Keep v3's region, blur it with a Gaussian, draw the level ½: one step of
-        Merriman, Bence and Osher's curvature-flow scheme (1992; from memory).
-        Straight sides stay; a bulge of radius <em>r</em> moves in by about
-        σ²/(2<em>r</em>), a dent moves out as much. Discs, tubes and cut zones
-        are drawn slightly larger to cancel it, so a lone member ends exactly at
-        <code>padding</code> and the cut at <code>clearance</code>.
-      </p>
-    </div>
-  </div>
-  <figure>
-    <div class="shot">
-      <img
-        src="img/smooth-candidates-field-vs-curve.png"
-        alt="Topology a/c set and the U, drawn by v3 and the three candidates"
-      />
-    </div>
-    <figcaption>
-      Top: the Topology {a, c} set avoiding b, dashed rings at the promised
-      padding. Bottom: the U at <code>convexity: 0.5</code>. Columns: v3, (a),
-      (b) natural spline with knots 25 px apart (12 px on the U), (c).
-    </figcaption>
-  </figure>
-
-  <h3>The curvature plot</h3>
-  <p>
-    The {a, c} set with v3's parameters (<code>padding: 21</code>,
-    <code>neck: 0.7</code>, <code>smoothing: 40</code>,
-    <code>clearance: 10</code>). Left: the outline with its curvature comb.
-    Right: curvature against distance along the outline from the leftmost point;
-    gray lines at 1/<em>R</em> (a's circle) and −1/40 (the closing radius). The
-    numbers are measured on each outline.
-  </p>
-  <figure>
-    <div class="shot">
-      <img
-        src="img/smooth-curvature-topology-ac.png"
-        alt="Curvature combs and curvature plots for v3, the blurred region, and three closed curves"
-      />
-    </div>
-  </figure>
-  <ul>
-    <li>
-      <strong>v3</strong> (measured from the traced outline, so noisy) jumps
-      between 1/<em>R</em>, 0 and −1/40 at every join: the changes Josh saw.
-    </li>
-    <li>
-      <strong>(c)</strong>, computed exactly from the field, moves smoothly
-      between the same values, each change spread over about 20 px. Padding at a
-      is 26.0 px (asked 26), the gap to b's ring 10.1 px (asked 10), and it
-      stays within 1.9 px of v3.
-    </li>
-    <li>
-      <strong>(b)</strong> cannot do both. With knots 10 px apart the spline
-      follows v3 to 0.3 px but keeps its sudden changes, squeezed between two
-      knots. With knots 25 px apart the changes spread, but the natural spline
-      and the Yuksel blend ripple, and all three cut into b's clearance (8.1 to
-      8.5 px instead of 10). Catmull-Rom jumps at every knot. A curve through
-      points knows only the points, not the padding or the avoided nodes.
-    </li>
-  </ul>
-  <p>
-    <strong>Where a <code>curve</code> key would fit.</strong> The idea was
-    <code>enclose({ shape: Shape.hull(), curve: Curve.&lt;x&gt;() })</code>,
-    reusing the relational marks' <code>curve</code> key. Recommendation: do not
-    add it (decision 14). No <code>Curve</code> member is closed today, a curve
-    through outline points breaks <code>padding</code> and
-    <code>clearance</code>, and it would be a second smoothing control next to
-    <code>smoothing</code>. The findings feed #957 (better screen-space curves
-    than Catmull-Rom, which asks whether its candidates "work for closed curves
-    (enclosures)"): a closed Yuksel-style blend is easy and C2, and it ripples
-    where point spacing is uneven. A closed C2 member would have other users,
-    such as smooth polygon outlines or the custom-shape function's output.
-  </p>
-
-  <h3>The construction (v4)</h3>
-  <ol>
-    <li>
-      <strong>Skeleton.</strong> Delaunay triangulation of the member centers.
-      Fill a triangle when its circumradius is at most alpha (from
-      <code>convexity</code>) and no avoided node's keep-out zone touches it.
-      Links: the filled triangles' edges, other Delaunay edges at most 2 alpha
-      long that no avoided node blocks, the minimum spanning tree over links
-      routed around avoided nodes (always), and <code>via</code> edges.
-    </li>
-    <li>
-      <strong>Pieces.</strong> Each member grown by <code>padding</code> (its
-      bulge, radius <em>R</em>); links bounding a filled triangle as tubes as
-      wide as the bulge, other links <code>neck</code> times as wide; the filled
-      triangles.
-    </li>
-    <li>
-      <strong>Closing</strong> by a disc of radius <code>smoothing</code>, as in
-      v3.
-    </li>
-    <li><strong>Cut</strong> each avoided node's keep-out zone.</li>
-    <li>
-      <strong>Blur</strong> with σ = ½ min(<code>smoothing</code>, thinnest
-      piece) and draw the level ½. A wider blur would erase the thinnest piece.
-      The prototype traces it with marching squares, then moves each point onto
-      the exact level line with Newton steps, so v3's grid waviness is gone.
-    </li>
-  </ol>
+  <h3>Parameters</h3>
   <div class="tablewrap">
     <table>
       <tr>
         <th>Parameter</th>
+        <th>On</th>
         <th>Meaning</th>
         <th>Direction</th>
         <th>Default</th>
       </tr>
       <tr>
-        <td><code>padding</code> (on <code>enclose</code>)</td>
-        <td>The bulge around each member. Exact for a member on its own.</td>
+        <td><code>padding</code></td>
+        <td><code>enclose</code></td>
+        <td>
+          The bulge around each member, from the member's own outline. Exact for
+          a member on its own.
+        </td>
         <td>Bigger is fatter.</td>
         <td>as today</td>
       </tr>
       <tr>
+        <td><code>fill</code>, <code>stroke</code>, …</td>
+        <td><code>enclose</code></td>
+        <td>Paint, shared by every member of the family.</td>
+        <td></td>
+        <td>as today</td>
+      </tr>
+      <tr>
+        <td><code>rx</code>, <code>ry</code></td>
+        <td><code>Shape.box</code></td>
+        <td>Corner rounding, as on <code>rect</code>.</td>
+        <td>Bigger is rounder.</td>
+        <td>0</td>
+      </tr>
+      <tr>
         <td><code>convexity</code></td>
+        <td><code>Shape.blob</code></td>
         <td>
-          How much of the space between members is filled: 0 is a spanning tree
-          of links, 1 every Delaunay triangle (the convex hull). Unitless.
+          How much of the space between members is filled, from 0 (a spanning
+          tree of links) to 1 (every Delaunay triangle: the convex hull).
+          Unitless.
         </td>
         <td>Bigger is fuller and more convex.</td>
         <td>0.5</td>
       </tr>
       <tr>
         <td><code>neck</code></td>
+        <td><code>Shape.blob</code></td>
         <td>
           Width of links that do not bound a filled triangle, as a fraction of
           the bulge.
@@ -846,27 +711,37 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
       </tr>
       <tr>
         <td><code>smoothing</code></td>
+        <td><code>Shape.blob</code></td>
         <td>
-          Closing radius in pixels; it also sets the blur, so the bend changes
-          over a length that grows with it.
+          Closing radius in pixels; it also sets the blur, so the curvature
+          changes gradually over a length that grows with it.
         </td>
         <td>Bigger is smoother and fuller.</td>
         <td>same as <code>padding</code></td>
       </tr>
       <tr>
         <td><code>avoiding</code></td>
-        <td>Nodes to keep out; each listed non-member is avoided.</td>
+        <td><code>Shape.blob</code></td>
+        <td>
+          Nodes to keep out. Each listed node that is not a member is avoided,
+          so the user never computes a set difference.
+        </td>
         <td></td>
         <td>none</td>
       </tr>
       <tr>
         <td><code>via</code></td>
-        <td>Edges to use as links; always kept, never rerouted.</td>
+        <td><code>Shape.blob</code></td>
+        <td>
+          Edges to use as links, such as a graph's own edges. Always kept, never
+          rerouted.
+        </td>
         <td></td>
         <td>none</td>
       </tr>
       <tr>
         <td><code>clearance</code></td>
+        <td><code>Shape.blob</code></td>
         <td>Gap in pixels kept from each avoided node.</td>
         <td>Bigger keeps farther away.</td>
         <td>4</td>
@@ -874,485 +749,603 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
     </table>
   </div>
 
-  <h3>Convexity: the alpha fill rule, back</h3>
+  <h3>How the blob is built</h3>
   <p>
-    alpha = <em>m</em> × <code>convexity</code> / (1 − <code>convexity</code>),
-    where <em>m</em> is the median link of the members' minimum spanning tree (a
-    typical neighbor distance). 0 fills nothing, 0.5 fills triangles up to about
-    the typical spacing, 1 fills everything. The name says its direction, which
-    avoids the survey's trap (ggforce's <code>concavity</code> and alpha run in
-    opposite directions).
+    <code>Shape.blob()</code> draws one set in five steps, after layout, in
+    screen space (so it works under polar and other coordinate transforms the
+    way curves do).
   </p>
-  <ul>
+  <ol>
     <li>
-      <strong>Units.</strong> A pixel alpha fills different triangles after a
-      resize; measured in units of <em>m</em>, the rule depends only on the
-      point set's shape. Tying it to <code>padding</code> would still change on
-      resize.
+      <strong>Skeleton.</strong> Take the Delaunay triangulation of the member
+      centers. Fill a triangle when its circumradius is at most alpha and no
+      avoided node's keep-out zone (the node grown by <code>clearance</code>)
+      touches it. The links are the edges of the filled triangles, the other
+      Delaunay edges no longer than 2 alpha that no avoided node blocks, the
+      minimum spanning tree over links routed around the avoided nodes (always,
+      so the set stays in one piece), and any <code>via</code> edges.
     </li>
     <li>
-      <strong>Pieces.</strong> The alpha complex falls apart below the widest
-      gap; the spanning tree is always added, so the set stays one region.
+      <strong>Pieces.</strong> Each member grown by <code>padding</code> (its
+      bulge, radius <em>R</em>). Each link that bounds a filled triangle is a
+      tube as wide as the bulge; every other link is a tube
+      <code>neck</code> times the bulge. The filled triangles.
     </li>
     <li>
-      <strong>Avoided nodes.</strong> A triangle touching a keep-out zone is
-      never filled, and the zone is cut out at the end.
+      <strong>Closing.</strong> The union of the pieces is closed by a disc of
+      radius <code>smoothing</code>.
     </li>
     <li>
-      <strong><code>density</code> is dropped.</strong> Convexity covers the
-      same range, tree to hull, and its middle looks like the alpha shapes Josh
-      liked. KelpFusion's own middle (long links without the triangles around
-      them) is no longer reachable; no example needs it.
+      <strong>Cut.</strong> Each avoided node's keep-out zone is cut back out.
     </li>
-  </ul>
-  <figure>
-    <div class="shot">
-      <img
-        src="img/smooth-convexity-grid-u.png"
-        alt="U data: classic alpha shape, v3, and v4 at four convexity values"
-      />
-    </div>
-    <figcaption>
-      U data (<code>padding: 8</code>, <code>smoothing: 8</code>, gray dots
-      avoided): classic alpha shape (alpha 40), v3 at <code>density: 0.5</code>,
-      v4 at <code>convexity</code> 0, 0.5, 0.8, 1. At 0.5 the arms fill and get
-      straight sides with rounded joins. At 0.8 and 1 the triangles across the
-      opening fill except near the gray dots, leaving holes shaped by the
-      triangles left out: faithful to the rule, not pretty.
-    </figcaption>
-  </figure>
-  <figure>
-    <div class="shot">
-      <img
-        src="img/smooth-convexity-grid-penguins.png"
-        alt="Gentoo penguins: classic alpha shape, v3, and v4 at four convexity values"
-      />
-    </div>
-    <figcaption>
-      Gentoo (green), the other species avoided (gray), <code>padding: 4</code>,
-      <code>smoothing: 6</code>, classic alpha 12. The classic alpha shape
-      leaves stray points out; v4 keeps them, linked by the tree. At 0.8 it is
-      close to the alpha look. One member at the top left is walled in by gray
-      points, so no link reaches it; it is its own small region below
-      <code>convexity: 1</code>.
-    </figcaption>
-  </figure>
-
-  <h3>The shortcuts</h3>
-  <div class="tablewrap">
-    <table>
-      <tr>
-        <th>Shortcut</th>
-        <th>Is exactly</th>
-        <th>Draws</th>
-      </tr>
-      <tr>
-        <td><code>Shape.hull(opts)</code></td>
-        <td><code>Shape.blob({ convexity: 1, neck: 1, ...opts })</code></td>
-        <td>the convex hull grown by <code>padding</code>, smoothed</td>
-      </tr>
-      <tr>
-        <td><code>Shape.spine(opts)</code></td>
-        <td><code>Shape.blob({ convexity: 0, ...opts })</code></td>
-        <td>the spanning tree of thick tubes, smoothed</td>
-      </tr>
-    </table>
-  </div>
+    <li>
+      <strong>Blur.</strong> The region is blurred with a Gaussian of width σ =
+      ½ min(<code>smoothing</code>, thinnest piece), and the outline is where
+      the blurred value is ½. A blurred region is a sum of smooth bumps, so this
+      outline is curvature-continuous. Blurring pulls a bulge of radius
+      <em>r</em> in by about σ²/(2<em>r</em>), so discs, tubes and cut zones are
+      drawn slightly larger to cancel it: a lone member ends exactly at
+      <code>padding</code>, a lone link at its half-width, and the cut at
+      <code>clearance</code>.
+    </li>
+  </ol>
   <p>
-    A shortcut makes the same object as the general call (<code
-      >kind: "blob"</code
-    >), declared once as a preset in the <code>STRATEGIES</code> table, and any
-    option overrides the preset, so
-    <code>Shape.hull({ avoiding: others })</code> draws a hull that leaves out
-    triangles touching other nodes. The spine shortcut is exactly the spanning
-    tree (plus <code>via</code>), smoothed.
+    <strong>The convexity scale.</strong> alpha = <em>m</em> ×
+    <code>convexity</code> / (1 − <code>convexity</code>), where <em>m</em> is
+    the median link length of the members' minimum spanning tree (a typical
+    distance between neighbors). So 0 fills nothing, 0.5 fills triangles up to
+    about the typical spacing, and 1 fills everything. Measuring alpha in units
+    of <em>m</em> makes the rule depend only on the shape of the point set, not
+    on the chart's size.
   </p>
-  <div class="ex">
-    <div>
-      <p>
-        <strong
-          >The hull shortcut is within half a pixel, no longer exact.</strong
-        >
-        Before the blur it is exact, as in v3: every triangle is filled and
-        every hull edge is a tube as wide as the bulge, so the union is the hull
-        grown by the bulge, and closing a convex shape changes nothing. The blur
-        rounds the corners, and the slightly larger discs that cancel it on a
-        lone member stand out a little near corners. Measured against a true
-        padded hull: never inside, at most 0.5 px outside with
-        <code>smoothing</code> equal to <code>padding</code>, 0.9 px with
-        <code>smoothing: 20</code>.
-      </p>
-    </div>
-    <figure>
-      <div class="shot">
-        <img
-          src="img/smooth-hull-preset-vs-true-hull.png"
-          alt="Hull shortcut fill with a true padded convex hull drawn as a black line"
-        />
-      </div>
-      <figcaption>
-        Black line: a true padded convex hull. Fill: the shortcut.
-      </figcaption>
-    </figure>
-  </div>
-
-  <h3>The previous version (v3), for reference</h3>
-  <p>
-    v3 picked links with KelpFusion's SPG(<em>t</em>), <em>t</em> = 1 /
-    <code>density</code>, filled every closed face without an avoided node, and
-    smoothed only by closing. Its outlines were G1 (the main reason for the
-    change), its middle was less full than the alpha shape, and its Topology
-    outline was shrink-wrapped.
-  </p>
-  <figure>
-    <div class="shot">
-      <img
-        src="img/blob-parameter-grid.png"
-        alt="v3 parameter grid: density, smoothing and padding on the U data"
-      />
-    </div>
-    <figcaption>
-      v3: <code>density</code> 0, 0.5, 0.75, 1; <code>smoothing</code> 0, 8, 20,
-      40; <code>padding</code> 3, 8, 14, 20.
-    </figcaption>
-  </figure>
 
   <h3>Custom shapes and the ellipse</h3>
   <p>
-    <code>Shape.box()</code> stays separate: a box is a rectangle grown by
-    padding, not a union of discs. Josh's ellipse fits the #1101 escape hatch
-    (one extensibility model for strategy families): a user function in place of
-    a <code>Shape</code> value. It receives the members as
-    <code>{ box, boundary }</code> (pixels, after placement), the box of all
-    members, the avoided nodes in the same form, and <code>padding</code>, and
-    returns a closed outline as a list of points. <code>enclose</code> still
-    paints it below the members and uses its box. If ellipses prove common
-    (TikZ, ggforce, Munkres), <code>Shape.ellipse()</code> can become a declared
-    member later.
+    Josh's ellipse fits the #1101 escape hatch (one extensibility model for
+    strategy families, still being designed): a user function in place of a
+    <code>Shape</code> value. It receives the members as
+    <code>{ box, boundary }</code> in pixels after placement, the box of all
+    members, the avoided nodes, and <code>padding</code>, and returns a closed
+    outline as a list of points. <code>enclose</code> still paints it below the
+    members and uses its box. The Munkres panel in the explorer draws its
+    ellipses this way. <code>Shape.ellipse()</code> can become a member later if
+    ellipses turn out to be common.
   </p>
-  <div class="lang">JS</div>
-  <pre><code>const oval = ({ box, padding }) =&gt; ellipsePoints(box, padding); // user code
-enclose({ shape: oval, padding: 30 }, [a, b])</code></pre>
-  <div class="lang">Python</div>
-  <pre><code>enclose([a, b], shape=lambda s: ellipse_points(s.box, s.padding), padding=30)</code></pre>
-
-  <h2>KelpFusion and bubble sets</h2>
-  <p>
-    Josh asked whether KelpFusion has the convex hull as a special case, and how
-    it compares to a bubble set. This section answers from the two papers, then
-    puts both, and the convex hull, on the same four examples.
-  </p>
-  <p class="small">
-    Sources:
-    <a
-      href="https://www.microsoft.com/en-us/research/wp-content/uploads/2016/12/kelpfusion_tvcg2013.pdf"
-      >Meulemans, Henry Riche, Speckmann, Alper, Dwyer, "KelpFusion: A Hybrid
-      Set Visualization Technique", IEEE TVCG 2013</a
-    >;
-    <a href="https://vialab.ca/wp-content/publication_media/pdf/col2009c.pdf"
-      >Collins, Penn, Carpendale, "Bubble Sets", IEEE TVCG 2009</a
-    >. Kelp Diagrams (Dinkla et al. 2012) and LineSets (Alper et al. 2011) are
-    described as the KelpFusion paper describes them; I did not read those two
-    papers directly.
-  </p>
-
-  <h3>How KelpFusion is built</h3>
-  <p>KelpFusion draws each set separately, in three steps.</p>
-  <ol>
-    <li>
-      <strong>Connect the members.</strong> For every pair of members, the
-      candidate edge is the shortest route between them that stays clear of
-      every other node, member or not. "Clear" means outside each node's
-      <em>allocation area</em> (a disc of radius <code>r</code>, cut down to the
-      node's Voronoi cell, the part of the plane closer to it than to any other
-      node), with an extra margin of half the edge width <code>w</code>. Then it
-      keeps some of those candidates, using a <em>shortest-path graph</em> with
-      one parameter <code>t ≥ 1</code>: each edge weighs its length to the power
-      <code>t</code>, and an edge is kept only if no other path between its ends
-      is lighter. At <code>t = 1</code> every candidate is kept, and the outline
-      is the convex hull. As <code>t</code> grows, long edges lose to chains of
-      short ones, and at the limit the graph is the
-      <em>minimum spanning tree</em> (the tree of shortest total length joining
-      all members). The steps are nested: an edge kept at some <code>t</code> is
-      kept at every smaller <code>t</code>. The paper's implementation only
-      considers pairs that are neighbors in the
-      <em>Delaunay triangulation</em> (the standard way to split a point set
-      into well-shaped triangles).
-    </li>
-    <li>
-      <strong>Fill some faces.</strong> A <em>face</em> is a region fully
-      enclosed by kept edges. It is filled only if (1) its area divided by one
-      more than its number of corner nodes is below a second parameter
-      <code>A</code>, (2) it contains no node outside the set, and (3, 4) it
-      does not hide edges of a set drawn beneath it, or share an edge with one
-      unless all its nodes belong to that set.
-    </li>
-    <li>
-      <strong>Draw.</strong> The union of node discs, edges of width
-      <code>w</code> and filled faces, smoothed, with every non-member's
-      allocation area cut back out.
-    </li>
-  </ol>
-  <figure>
-    <div class="shot">
-      <img
-        src="precedent/kelpfusion-fig5-t-sweep.png"
-        alt="KelpFusion paper Figure 5: t from 4.5 down to 1"
-      />
+  <div class="pair">
+    <div>
+      <div class="lang">JS</div>
+      <pre><code>const oval = ({ box, padding }) =&gt;
+  ellipsePoints(box, padding); // user code
+enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
     </div>
-    <figcaption>
-      The paper's Figure 5: <code>t</code> from 4.5 (a tree) down to 1 (the
-      convex hull).
-    </figcaption>
-  </figure>
-  <div class="rec">
-    <p>
-      <strong>Is the convex hull an exact special case?</strong> For the graph,
-      yes: at <code>t = 1</code> the outline of the shortest-path graph is
-      exactly the convex hull of the member points, and the paper says so. For
-      the drawn shape, only under conditions: <code>A</code> must be large
-      enough, and no non-member may sit inside the hull, because rule 2 leaves
-      any face that holds one open. Even then the drawing is the hull plus discs
-      of radius <code>r</code> and strips of half-width <code>w/2</code>, not
-      the hull grown evenly by a padding. So at <code>t = 1</code> KelpFusion
-      gives the convex hull minus the faces that would cover a non-member: a
-      set-aware hull. Our <code>Shape.hull()</code> ignores non-members.
+    <div>
+      <div class="lang">Python</div>
+      <pre><code>enclose([a, b],
+        shape=lambda s: ellipse_points(s.box, s.padding),
+        padding=30)</code></pre>
+    </div>
+  </div>
+
+  <h2 id="explorer">Dataset explorer</h2>
+  <p>
+    One grid per dataset, all with the same two parameters.
+    <strong
+      >Columns are <code>convexity</code> (0, 0.5, 0.8, 1) and rows are
+      <code>smoothing</code> (half the padding, equal to it, twice it), because
+      these are the two blob knobs that change the outline's character, how much
+      space between members is filled and how gently it bends, while
+      <code>padding</code> and <code>clearance</code> are plain distances whose
+      effect reads from their names.</strong
+    >
+    The teal frame marks the recommended defaults cell (<code
+      >convexity: 0.5</code
+    >, <code>neck: 1</code>, <code>smoothing</code> equal to
+    <code>padding</code>). Where convexity does nothing on a dataset, the
+    columns are <code>neck</code> instead, and the grid's header says so.
+  </p>
+
+  <div role="tablist" aria-label="Datasets" id="ds-tabs" hidden>
+    <button
+      role="tab"
+      id="tab-topology"
+      aria-controls="ds-topology"
+      aria-selected="true"
+    >
+      a, b, c: {a, c} avoiding b
+    </button>
+    <button
+      role="tab"
+      id="tab-u"
+      aria-controls="ds-u"
+      aria-selected="false"
+      tabindex="-1"
+    >
+      U-shaped cloud
+    </button>
+    <button
+      role="tab"
+      id="tab-penguins"
+      aria-controls="ds-penguins"
+      aria-selected="false"
+      tabindex="-1"
+    >
+      Gentoo penguins
+    </button>
+    <button
+      role="tab"
+      id="tab-hyperedges"
+      aria-controls="ds-hyperedges"
+      aria-selected="false"
+      tabindex="-1"
+    >
+      Hyperedges over a graph
+    </button>
+    <button
+      role="tab"
+      id="tab-trout"
+      aria-controls="ds-trout"
+      aria-selected="false"
+      tabindex="-1"
+    >
+      Trout across lakes
+    </button>
+    <button
+      role="tab"
+      id="tab-munkres"
+      aria-controls="ds-munkres"
+      aria-selected="false"
+      tabindex="-1"
+    >
+      Munkres panel
+    </button>
+  </div>
+
+  <section
+    role="tabpanel"
+    id="ds-topology"
+    aria-labelledby="tab-topology"
+    tabindex="0"
+  >
+    <h3>(a) a, b, c with {a, c} avoiding b</h3>
+    <pre><code>enclose({ shape: Shape.spine({ avoiding: [b], neck, smoothing, clearance: 6 }),
+          padding: 22 }, [a, c])</code></pre>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-topology.png"
+          alt="Grid of the a, c set avoiding b: neck 0.5 to 1 across, smoothing 11, 22, 44 px down"
+        />
+      </div>
+      <figcaption>
+        <strong>Columns are <code>neck</code></strong> (0.5, 0.7, 0.85, 1): with
+        two members there is no triangle to fill and the one link is always
+        kept, so every <code>convexity</code> draws the same thing. Rows are
+        <code>smoothing</code> 11, 22 and 44 px. The band always detours under b
+        at the clearance, and the joins to the circles stay smooth at every
+        setting. The spelling in the syntax section (<code>neck: 0.85</code>,
+        <code>smoothing: 40</code>) sits between the bottom two rows of the
+        third column.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section role="tabpanel" id="ds-u" aria-labelledby="tab-u" tabindex="0">
+    <h3>(b) The U-shaped point cloud with non-members inside</h3>
+    <pre><code>enclose({ shape: Shape.blob({ convexity, smoothing, avoiding: others }),
+          padding: 8 }, members)</code></pre>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-u.png"
+          alt="Grid of the U cloud: convexity 0 to 1 across, smoothing 4, 8, 16 px down"
+        />
+      </div>
+      <figcaption>
+        At 0 the U is a tree of tubes, slightly wavy along the arms. At 0.5 the
+        two-dot-thick arms fill and get straight sides with rounded joins, and
+        the opening stays clear. At 0.8 and 1 the triangles across the opening
+        fill except where they touch a gray dot, which leaves holes (drawn
+        white) shaped by the triangles that were left out. With more smoothing
+        the closing fills those gaps, and the holes shrink to even rings around
+        the gray dots.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section
+    role="tabpanel"
+    id="ds-penguins"
+    aria-labelledby="tab-penguins"
+    tabindex="0"
+  >
+    <h3>(c) Gentoo penguins among the other species</h3>
+    <pre><code>enclose({ shape: Shape.blob({ convexity, smoothing, avoiding: otherSpecies }),
+          padding: 4 }, gentoo)</code></pre>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-penguins.png"
+          alt="Grid of the Gentoo set: convexity 0 to 1 across, smoothing 2, 4, 8 px down"
+        />
+      </div>
+      <figcaption>
+        One species (Gentoo, green) with the other two avoided (gray), cropped
+        to the Gentoo cluster. At 0 and 0.5 dense parts fill and stragglers stay
+        attached by tubes; at 0.8 the outline looks like an alpha shape while
+        still holding every point; at 1 it is the hull. One member near the top
+        left sits among gray points: at <code>smoothing: 8</code> their keep-out
+        zones pinch off the tube that reaches it, so it is drawn as its own
+        small region.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section
+    role="tabpanel"
+    id="ds-hyperedges"
+    aria-labelledby="tab-hyperedges"
+    tabindex="0"
+  >
+    <h3>(d) Hyperedges over a node-link graph</h3>
+    <p class="small">
+      Each row of <code>memberships</code> is <code>{ set, node }</code>. The
+      graph's edges between members are the <code>via</code> links. Rows that
+      hold refs need a <code>members</code> option naming the column (decision
+      9).
     </p>
-  </div>
+    <div class="pair">
+      <div>
+        <div class="lang">JS</div>
+        <pre><code>layer([
+  graph, // nodes "nodes", edges "edges"
+  chart(memberships)
+    .flow(resolve(["node"], { from: selectAll("nodes") }),
+          group({ by: "set" }))
+    .mark(enclose({
+      members: "node",
+      shape: Shape.blob({ convexity, smoothing,
+        via: selectAll("edges"),
+        avoiding: selectAll("nodes"), clearance: 3 }),
+      padding: 6, fill: "set", opacity: 0.25 })),
+])</code></pre>
+      </div>
+      <div>
+        <div class="lang">Python</div>
+        <pre><code>layer([
+    graph,
+    chart(memberships)
+      .flow(resolve(["node"], from_=select_all("nodes")),
+            group(by="set"))
+      .mark(enclose(members="node",
+          shape=Shape.blob(via=select_all("edges"),
+                           avoiding=select_all("nodes"),
+                           clearance=3),
+          padding=6, fill="set", opacity=0.25)),
+])</code></pre>
+      </div>
+    </div>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-hyperedges.png"
+          alt="Grid of three hyperedges over a graph: convexity 0 to 1 across, smoothing 3, 6, 12 px down"
+        />
+      </div>
+      <figcaption>
+        At 0 each set follows the graph's edges, and a cycle of
+        <code>via</code> edges around an empty space leaves a hole (sets A and
+        B). From 0.5 the triangles inside those cycles fill. At 0.8 and 1 set C
+        fills the triangle 3, 8, 9, which covers the graph edges 6 to 7 and 4 to
+        6; nodes 4 and 6 themselves stay outside. Node 3 is in sets A and C, and
+        both reach it.
+      </figcaption>
+    </figure>
+  </section>
 
-  <h3>How a bubble set is built</h3>
-  <ol>
+  <section
+    role="tabpanel"
+    id="ds-trout"
+    aria-labelledby="tab-trout"
+    tabindex="0"
+  >
+    <h3>(e) Trout across lakes in the grouped bars</h3>
+    <pre><code>chart(catch)
+  .flow(spread({ by: "lake", dir: "x" }),
+        spread({ by: "species", dir: "x", spacing: 9 }))
+  .mark(rect({ h: "count", fill: "species" }).name("bars"))
+  .layer(chart(selectAll("bars"))
+    .flow(filter((d) =&gt; d.species === "trout"))
+    .mark(enclose({ shape: Shape.spine({ avoiding: selectAll("bars"),
+                                         neck, smoothing }),
+                    padding: 4, stroke: "#d6580c" })))</code></pre>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-trout.png"
+          alt="Grid of the trout set: neck 0.5 to 1 across, smoothing 2, 4, 8 px down"
+        />
+      </div>
+      <figcaption>
+        <strong>Columns are <code>neck</code></strong> (0.5, 0.7, 0.85, 1):
+        <code>convexity</code> does nothing here, because every triangle between
+        trout bars holds another bar and every direct link is blocked, so all
+        four convexity columns rendered the same. Each link runs over the bar
+        tops as the shortest path that clears the other bars;
+        <code>neck</code> sets the tube's thickness, and
+        <code>smoothing</code> rounds the bends. The prototype also avoids the
+        axis line and its labels (decision 10).
+      </figcaption>
+    </figure>
+  </section>
+
+  <section
+    role="tabpanel"
+    id="ds-munkres"
+    aria-labelledby="tab-munkres"
+    tabindex="0"
+  >
+    <h3>(f) Munkres' three-point topology</h3>
+    <p class="small">
+      Munkres, <em>Topology</em> (2nd ed., §12), draws the nine topologies on
+      {a, b, c}. In the last panel the {a, c} set wraps a and c with an even
+      margin and joins them with a thick band under b. The GoFish port's {a, c}
+      neighborhood is today a hand-transcribed Bézier path (#717, concave hulls
+      for <code>enclose</code>). The whole set and the pairs {a, b} and {b, c}
+      are ellipses through the custom-shape function.
+    </p>
+    <pre><code>layer([a, b, c]).relate(({ a, b, c }) =&gt; [
+  enclose({ shape: oval, padding: 30 }, [a, b, c]),
+  enclose({ shape: oval, padding: 16 }, [a, b]),
+  enclose({ shape: oval, padding: 16 }, [b, c]),
+  enclose({ shape: Shape.spine({ avoiding: [b], neck, smoothing,
+                                 clearance: 6 }),
+            padding: 22 }, [a, c]),
+])</code></pre>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-munkres.png"
+          alt="Grid of the Munkres panel: neck 0.5 to 1 across, smoothing 11, 22, 44 px down"
+        />
+      </div>
+      <figcaption>
+        <strong>Columns are <code>neck</code></strong
+        >, as in (a), since the {a, c} set has two members.
+      </figcaption>
+    </figure>
+    <div class="ref-pair">
+      <figure>
+        <div class="shot">
+          <img
+            src="img/topology-munkres-panel-smooth.png"
+            alt="Munkres last panel redrawn with the current construction"
+          />
+        </div>
+        <figcaption>
+          The recommended spelling on its own (<code>neck: 0.85</code>,
+          <code>smoothing: 40</code>, <code>padding: 22</code>).
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="shot">
+          <img
+            src="precedent/munkres-fig12-1-nine-topologies.png"
+            alt="Munkres, nine topologies on a three-point set"
+          />
+        </div>
+        <figcaption>
+          Reference: Munkres, Figure 12.1, from the Math3ma post
+          <a href="https://math3ma.com/blog/topology-vs-a-topology"
+            >"Topology vs. 'A Topology' (cont.)"</a
+          >.
+        </figcaption>
+      </figure>
+    </div>
+    <p>
+      Matched: even margins around a and c, a thick band, and smooth joins.
+      Still different: the bottom of the band is a wide V rather than Munkres'
+      flatter bottom, because the link is the shortest path around b. A link
+      rule that bends the band to follow b's outline at a fixed gap would get
+      closer, and is a change to routing rather than a new parameter.
+    </p>
+  </section>
+
+  <h2 id="hull-check">The hull preset is within half a pixel</h2>
+  <p>
+    Before the blur the hull shortcut is exact: with nothing avoided, every
+    Delaunay triangle is filled and every hull edge is a tube as wide as the
+    bulge, so the union is the convex hull grown by the bulge, and closing a
+    convex shape changes nothing. The blur rounds the corners, and the slightly
+    larger discs that cancel the blur stand out by a fraction of a pixel near
+    them. Measured against a true padded convex hull (black line): never inside
+    it, and at most 0.5 px outside it with <code>smoothing</code> equal to
+    <code>padding</code> (U and Gentoo), 0.9 px with <code>smoothing: 20</code>.
+  </p>
+  <figure>
+    <div class="shot">
+      <img
+        src="img/smooth-hull-preset-vs-true-hull.png"
+        alt="Hull preset against the true padded convex hull"
+      />
+    </div>
+  </figure>
+  <p>
+    The spine shortcut draws exactly the spanning tree (plus <code>via</code>),
+    smoothed: at <code>convexity: 0</code> alpha is 0, so no triangle is filled
+    and no extra edge is added.
+  </p>
+
+  <h2 id="curvature">The curvature never jumps</h2>
+  <p>
+    Josh's requirement: "I don't want to see a shape curvature change when the
+    circle connects to the link." Below is the {a, c} outline of the syntax
+    section's spelling. Left: the outline with its curvature comb, a short tooth
+    across the outline at many points with length proportional to the curvature
+    there. Right: curvature against distance along the outline from the leftmost
+    point, computed exactly from the blurred field. The gray lines mark 1/<em
+      >R</em
+    >
+    (a's circle) and −1/40 (the closing radius).
+  </p>
+  <figure>
+    <div class="shot wide">
+      <img
+        src="img/current-curvature-topology-ac.png"
+        alt="Curvature comb and curvature plot of the current a, c outline"
+      />
+    </div>
+    <figcaption>
+      The curve moves smoothly between 1/<em>R</em> around the circles, about 0
+      along the band, and negative values at the joins, with every change spread
+      over about 20 px of outline. Padding at a is 22.0 px (asked 22) and the
+      gap to b's ring is 6.2 px (asked 6).
+    </figcaption>
+  </figure>
+
+  <h2 id="penguins">One outline per group: penguins and <code>by</code></h2>
+  <p>
+    The points are named, and a second layer groups them and draws one hull per
+    group (code in the syntax section).
+  </p>
+  <div class="grid2">
+    <figure>
+      <div class="shot">
+        <img
+          src="img/penguins-hull-per-species.png"
+          alt="One hull per penguin species"
+        />
+      </div>
+      <figcaption><code>Shape.hull()</code></figcaption>
+    </figure>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/penguins-box-per-species.png"
+          alt="One box per penguin species"
+        />
+      </div>
+      <figcaption><code>Shape.box()</code>, same data</figcaption>
+    </figure>
+  </div>
+  <p>
+    The boxes overlap so much that they stop separating the species; the hulls
+    show where each species actually lies. (Prototype: axes are hand-drawn.)
+  </p>
+  <ul>
     <li>
-      <strong>Connect the members with virtual edges.</strong> Starting from the
-      member nearest the set's center and working outward, each member is joined
-      to the already visited member that minimizes distance times the number of
-      non-members on the straight line between them. A
-      <em>virtual edge</em> that crosses a non-member's bounding box is bent
-      around a corner of that box, pushed out by a buffer; if that fails, other
-      corners and smaller buffers are tried, up to an iteration limit. Real data
-      edges can be used instead.
+      <strong>Why not <code>enclose({ by: "Species" })</code>?</strong> #752
+      (the default-split rule for relational marks) removed <code>by</code> from
+      <code>line</code> and <code>ribbon</code>. Splits are written in the flow,
+      so a <code>by</code> on <code>enclose</code> would bring back a second
+      spelling. Josh is open to bringing <code>by</code> back later, when the
+      design of stacked and divided ribbons in #47 is worked out (a ribbon today
+      joins one element to one element; #47 asks for one-to-many, like a join
+      between a source set and a target set). #740, a spike on whether
+      <code>group()</code> plus <code>resolve()</code> covers regrouping refs
+      for connectors, is related.
     </li>
     <li>
-      <strong>Build an energy field.</strong> Every pixel gets a score: members
-      and edges add energy that falls from 1 at distance <code>R0</code> to 0 at
-      <code>R1</code>; non-members subtract (weight −0.8). Only the nearest
-      segment of each routed edge counts, to avoid bulges at the bends.
+      <strong>Dependency.</strong> This spelling goes through the same
+      <code>chart(selectAll(...)).flow(group({ by }))</code> path that #877
+      reports as broken for <code>ribbon</code>: the <code>group</code> is
+      ignored, and the fused default threads the inner tier instead. It likely
+      needs that fix for <code>enclose</code> too. Unverified for
+      <code>enclose</code>; the prototype does not exercise that path.
     </li>
     <li>
-      <strong>Trace the outline</strong> where the energy equals a threshold (an
-      <em>isocontour</em>), with marching squares. If a member ends up outside,
-      the threshold is lowered, then the weights are changed, until all members
-      are inside. The result is smoothed with splines. The paper says it "cannot
-      guarantee that non-set member items will be excluded"; such items get a
-      white border instead.
+      <strong>The shorter form</strong>, <code>group</code> in the first layer's
+      flow followed by a fused
+      <code>.layer(enclose({ shape: Shape.hull(), ... }))</code>, also works
+      when the grouping is already there for other reasons.
+    </li>
+  </ul>
+
+  <h2 id="future">Future work: placing points and regions together</h2>
+  <p>
+    Not part of this proposal: the Munkres example may be drawn best by placing
+    the points and the region together, with an energy that pushes shapes apart
+    and rewards symmetry, as Penrose and Keenan Crane's work do. Every strategy
+    here draws around shapes that are already placed, so that would be a change
+    to layout, not a new shape.
+  </p>
+
+  <h2 id="decisions">Open decisions</h2>
+  <ol class="decisions">
+    <li>
+      Keep <code>enclose</code> as the one name and delete
+      <code>background</code>? (Or keep <code>background</code>; or rename to
+      <code>hull</code>.)
+    </li>
+    <li>
+      Make <code>enclose</code> a relational mark now and defer any
+      <code>.background()</code> modifier?
+    </li>
+    <li>
+      One general member with two shortcuts: name it <code>blob</code> (or
+      <code>kelp</code>, <code>bubble</code>), and keep the shortcut names
+      <code>hull</code> and <code>spine</code>?
+    </li>
+    <li>
+      Option key and family <code>shape: Shape.*</code>, or
+      <code>outline: Outline.*</code>?
+    </li>
+    <li>
+      The blob's parameters and defaults: <code>convexity</code> 0.5,
+      <code>neck</code> 1, <code>smoothing</code> equal to <code>padding</code>,
+      <code>clearance</code> 4 px (the teal cells in the explorer)?
+    </li>
+    <li>
+      <code>avoiding</code> and <code>via</code> on <code>Shape.blob()</code>,
+      so on both shortcuts, avoiding listed non-members only, with
+      <code>Shape.hull({ avoiding })</code> leaving out triangles that touch
+      other nodes?
+    </li>
+    <li>
+      Draw ellipses through the #1101 custom-shape function first, and add
+      <code>Shape.ellipse()</code> only when examples call for it?
+    </li>
+    <li>
+      Move <code>rx</code>/<code>ry</code> into
+      <code>Shape.box({ rx, ry })</code>?
+    </li>
+    <li>
+      For rows that carry refs, name the ref column with <code>members</code>,
+      like <code>line({ from, to })</code>?
+    </li>
+    <li>
+      In a chart, should a spine stay inside the plot area by rule, or should
+      the user list the axis in <code>avoiding</code> (the trout example)?
+    </li>
+    <li>
+      <code>convexity</code> as the name, with alpha = <em>m</em> ×
+      <code>convexity</code> / (1 − <code>convexity</code>) and <em>m</em> the
+      median spanning-tree link, so it does not change with a resize? (Or a
+      length relative to <code>padding</code>, or a pixel <code>alpha</code>.)
+    </li>
+    <li>
+      Keep all smoothing inside <code>Shape.blob()</code> (the region blur), and
+      add no <code>curve</code> key to <code>enclose</code>? (History, v4, shows
+      why a curve through the outline cannot keep <code>padding</code> or
+      <code>clearance</code>.)
     </li>
   </ol>
-  <figure>
-    <div class="shot">
-      <img
-        src="precedent/bubblesets-fig3-virtual-edge-routing.png"
-        alt="Bubble Sets paper Figure 3: routing a virtual edge around obstacles"
-      />
-    </div>
-    <figcaption>Bubble Sets paper, Figure 3: virtual edge routing.</figcaption>
-  </figure>
 
-  <h3>Side by side on the same data</h3>
-  <p>
-    Each grid reads from line-like to area-like: KelpFusion at
-    <code>t = ∞</code>, 2, 1.5 and 1, then the plain convex hull and a bubble
-    set. KelpFusion is a story-local prototype of the paper's three steps with
-    <code>A = ∞</code> (fill every allowed face). Declared simplifications:
-    allocation areas are discs (or the bar grown by the padding) without the
-    Voronoi cut, filled faces keep straight sides even where an edge bends,
-    rules 3 and 4 are skipped (they only matter between overlapping sets), and
-    there is no smoothing pass.
-  </p>
-  <figure>
-    <div class="shot">
-      <img
-        src="img/kelp-compare-topology.png"
-        alt="Topology a and c: KelpFusion at four t values, convex hull, bubble set"
-      />
-    </div>
-    <figcaption>
-      Topology, {a, c} avoiding b. With two members there is one edge, so every
-      <code>t</code> gives the same bent tube. Only the convex hull covers b.
-    </figcaption>
-  </figure>
-  <figure style="margin-top: 16px">
-    <div class="shot">
-      <img
-        src="img/kelp-compare-hyperedges.png"
-        alt="Set C of the hyperedge example: KelpFusion, convex hull, bubble set"
-      />
-    </div>
-    <figcaption>
-      Set C of the hyperedge example. KelpFusion uses positions only, so its
-      edges do not follow the graph's edges; at <code>t = 1</code> it fills the
-      triangle 3, 7, 9 over the graph edges 4 to 6 and 6 to 7. The bubble set
-      uses the graph edges as its skeleton (<code>via</code>).
-    </figcaption>
-  </figure>
-  <figure style="margin-top: 16px">
-    <div class="shot">
-      <img
-        src="img/kelp-compare-bars.png"
-        alt="Trout across lakes: KelpFusion, convex hull, bubble set"
-      />
-    </div>
-    <figcaption>
-      Trout across lakes. Every face between trout bars holds a bass or perch
-      bar, so rule 2 keeps all faces empty and KelpFusion stays lines at every
-      <code>t</code>; lower <code>t</code> only adds longer routed edges. The
-      hull end of the dial cannot be reached here.
-    </figcaption>
-  </figure>
-  <figure style="margin-top: 16px">
-    <div class="shot">
-      <img
-        src="img/kelp-compare-penguins.png"
-        alt="Gentoo penguins among the other species: KelpFusion, convex hull, bubble set"
-      />
-    </div>
-    <figcaption>
-      One species (Gentoo) among the others. KelpFusion's best case: at
-      <code>t = 2</code> and 1.5 the dense core fills in while stragglers stay
-      attached by lines. At <code>t = 1</code> it is the convex hull with a bite
-      taken out where other species sit inside it.
-    </figcaption>
-  </figure>
+  <!-- ───────────────────────── Part 2 ───────────────────────── -->
+  <div class="part">Part 2 · Context</div>
 
-  <div class="tablewrap">
-    <table>
-      <tr>
-        <th></th>
-        <th>KelpFusion</th>
-        <th>Bubble set</th>
-      </tr>
-      <tr>
-        <td>Input</td>
-        <td>
-          Node positions and membership. Builds its own graph; does not take
-          data edges.
-        </td>
-        <td>
-          Item shapes (boxes) and membership; can follow real data edges instead
-          of virtual ones.
-        </td>
-      </tr>
-      <tr>
-        <td>Non-members</td>
-        <td>
-          Every edge routed around every other node's allocation area; faces
-          that hold a non-member stay open; non-member areas cut out after
-          smoothing.
-        </td>
-        <td>
-          Virtual edges bent around non-member boxes by a corner heuristic with
-          an iteration limit; negative energy pushes the outline away. Can still
-          enclose a non-member, which is then marked.
-        </td>
-      </tr>
-      <tr>
-        <td>Extremes</td>
-        <td>
-          <code>t = ∞</code>: minimum spanning tree as lines and node discs.
-          <code>t = 1</code>: the convex hull, minus faces holding non-members.
-        </td>
-        <td>
-          None built in. Large <code>R1</code> gives blobs, small
-          <code>R1</code> thin tubes; the skeleton is always a tree or the given
-          edges.
-        </td>
-      </tr>
-      <tr>
-        <td>Parameters</td>
-        <td>
-          <code>t</code>: graph density, larger is sparser; unitless, so the
-          graph does not change when the drawing is scaled. <code>A</code>:
-          largest face to fill, an area per node, so it does change with scale.
-          <code>r</code>, <code>w</code>: drawing sizes.
-        </td>
-        <td>
-          <code>R0</code>, <code>R1</code> for nodes and for edges, the routing
-          buffer, energy weights, threshold and its decay. All pixel distances
-          or weights.
-        </td>
-      </tr>
-      <tr>
-        <td>Stability</td>
-        <td>
-          Discrete. Each edge switches on at its own <code>t</code>, which can
-          be precomputed, so dragging <code>t</code> is fast but the shape
-          jumps. The paper lists stability under added or removed items as
-          future work. Inferred: a small move can change Delaunay neighbors, and
-          so edges and faces.
-        </td>
-        <td>
-          Discrete too (inferred): the visiting order, the corner chosen for a
-          bend, and the threshold loop can all flip under a small move.
-        </td>
-      </tr>
-      <tr>
-        <td>Cost</td>
-        <td>
-          <code>O(n⁴)</code> with full routing; <code>O(n² log n)</code> with
-          Delaunay pairs (paper).
-        </td>
-        <td>
-          <code>O(K·N·(N + H·W))</code> for <code>K</code> sets,
-          <code>N</code> items, an <code>H × W</code> grid (paper).
-        </td>
-      </tr>
-      <tr>
-        <td>User study</td>
-        <td colspan="2">
-          13 people, four overlapping sets on a map. Accuracy: KelpFusion 86.5%,
-          LineSets 84.3%, Bubble Sets 54.5%. Mean time: 12.4 s, 14.2 s, 17.2 s.
-          People rated KelpFusion less cluttered and better at showing groups
-          than Bubble Sets. The authors note Bubble Sets was designed for sets
-          that do not overlap, which the study did not test. The Bubble Sets
-          paper itself has case studies, not a controlled comparison.
-        </td>
-      </tr>
-    </table>
-  </div>
-  <p>
-    <strong>The line end of the spectrum.</strong> LineSets draws each set as
-    one smooth curve through its members, which reads as an order even when the
-    set has none; it is pure connection. Kelp Diagrams draws node discs joined
-    by a sparse graph: a minimum spanning tree plus extra edges that shorten
-    detours enough, routed around other nodes. KelpFusion keeps the Kelp look
-    and replaces the detour rule with the shortest-path graph, which adds short
-    edges inside clusters first and so makes small faces worth filling.
-  </p>
-
-  <h3>What it meant for the strategy factoring</h3>
-  <p>
-    An earlier version concluded that KelpFusion overlapped hull and spine in
-    part and replaced neither: its hull end avoided non-members and was not an
-    even padding, its line end could not follow real edges, and its edges were
-    thin straight strips. Each gap is closed by one parameter of the blob:
-    <code>avoiding</code> is optional, <code>via</code> adds real edges, and
-    <code>neck</code> and <code>smoothing</code> give even, smooth tubes. So
-    hull and spine become two settings of one member. The earlier pick (three
-    members on a shared kernel, <code>Shape.kelp({ t })</code> later) is the
-    runner-up.
-  </p>
-
-  <h2>Josh's three tensions</h2>
+  <h2 id="tensions">Josh's tensions, answered</h2>
   <div class="grid3">
     <div class="card">
       <h4>Relational mark or operator?</h4>
       <p>
-        Not a choice of construct. #707 showed the operand kind decides it: all
-        fresh children act like an operator, all refs plus ink act like a
-        connector, a mix is an open term. <code>enclose</code> already lives in
-        all three rows. Over fresh children the combinator form <em>is</em> the
-        component: it takes space, can be named and pointed at. A user-supplied
-        outline (Bluefish's background callback) becomes the
-        <code>Shape</code> family's function escape hatch (#1101).
+        What decides it is the kind of operands, not the construct (#707, one
+        combinator indexed by operand kind): fresh children behave like an
+        operator, refs like a connector, a mix is an open term.
+        <code>enclose</code> is used all three ways today, so it stays one
+        construct. Over fresh children the combinator form <em>is</em> the
+        component: it lays out its children, has a box, can be named and pointed
+        at. A user-supplied drawn shape, as in Bluefish's callback, is the #1101
+        function escape hatch.
       </p>
     </div>
     <div class="card">
@@ -1362,9 +1355,9 @@ enclose({ shape: oval, padding: 30 }, [a, b])</code></pre>
         <code>enclose(opts, [node])</code> already does that, so a
         <code>.background()</code> modifier would be exact sugar, and on an
         operator it could give one background per group like
-        <code>.label()</code>. It cannot reach nodes that live in different
-        places (Topology, hyperedges, one species across lakes). Kept as the
-        runner-up.
+        <code>.label()</code> (#750). It cannot reach nodes that live in
+        different places (Topology, hyperedges, one species across lakes). Kept
+        as the runner-up.
       </p>
     </div>
     <div class="card">
@@ -1380,518 +1373,367 @@ enclose({ shape: oval, padding: 30 }, [a, b])</code></pre>
     </div>
   </div>
 
-  <h2>
+  <h2 id="approaches">Where it lives: three approaches</h2>
+  <p>
+    How the strategies are spelled is a separate axis (next section); all three
+    approaches use <code>shape: Shape.*</code>.
+  </p>
+  <h3>
     Approach A: <code>enclose</code> becomes a relational mark
     <span class="tag ok">recommended</span>
-  </h2>
+  </h3>
   <p>
-    Built with <code>createRelationalMark</code> instead of
-    <code>createNodeOperator</code>. Keeps the combinator form; gains the bag
-    form, fusion, the #752 split, per-group paint and the paint-below default.
+    Rebuilt with <code>createRelationalMark</code> instead of
+    <code>createNodeOperator</code>. Keeps the combinator form for fresh
+    children, refs or a mix; gains the bag form, fusion, the #752 split,
+    per-group paint and the paint-below default. The component case is unchanged
+    except for the corner option:
   </p>
-
-  <h3>The component case: fresh children</h3>
-  <div class="ex">
-    <div>
-      <div class="lang">JS</div>
-      <pre><code>enclose({ padding: 20, fill: "#252150", stroke: "none",
-          shape: Shape.box({ rx: 16, ry: 16 }) }, [
-  spread({ dir: "x", spacing: 50, alignment: "middle" },
-         planets.map((d) =&gt; circle(d))),
-])</code></pre>
-      <div class="lang">Python</div>
-      <pre><code>enclose([spread([circle(**d) for d in planets],
-                dir="x", spacing=50, alignment="middle")],
-        padding=20, fill="#252150", stroke="none",
-        shape=Shape.box(rx=16, ry=16))</code></pre>
-    </div>
-    <figure>
-      <div class="shot">
-        <img
-          src="img/planets-box-component.png"
-          alt="Planets on a dark rounded background"
-        />
-      </div>
-      <figcaption>
-        Real render of today's tutorial <code>background(...)</code>. Only the
-        corner option moves.
-      </figcaption>
-    </figure>
-  </div>
-
-  <h3>One hull per group: Palmer penguins</h3>
-  <div class="ex">
-    <div>
-      <div class="lang">JS</div>
-      <pre><code>chart(penguins)
-  .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
-  .mark(circle({ r: 3, fill: "Species" }).name("points"))
-  .layer(
-    chart(selectAll("points"))
-      .flow(group({ by: "Species" }))
-      .mark(enclose({ shape: Shape.hull(), padding: 6,
-                      fill: "Species", opacity: 0.2 })))</code></pre>
-      <div class="lang">Python</div>
-      <pre><code>(chart(penguins)
-   .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
-   .mark(circle(r=3, fill="Species").name("points"))
-   .layer(
-       chart(select_all("points"))
-         .flow(group(by="Species"))
-         .mark(enclose(shape=Shape.hull(), padding=6,
-                       fill="Species", opacity=0.2))))</code></pre>
-    </div>
-    <div class="pair">
-      <figure>
-        <div class="shot">
-          <img
-            src="img/penguins-hull-per-species.png"
-            alt="Convex hull per penguin species"
-          />
-        </div>
-        <figcaption>
-          <code>Shape.hull()</code>: this padded convex hull, to within half a
-          pixel.
-        </figcaption>
-      </figure>
-      <figure>
-        <div class="shot">
-          <img
-            src="img/penguins-box-per-species.png"
-            alt="Box per penguin species"
-          />
-        </div>
-        <figcaption>
-          <code>Shape.box()</code>: the boxes overlap too much to separate
-          species.
-        </figcaption>
-      </figure>
-    </div>
-  </div>
-  <ul>
-    <li>
-      <strong>Why not <code>enclose({ by: "Species" })</code>?</strong> #752
-      (the default-split rule for relational marks) removed <code>by</code> from
-      <code>line</code> and <code>ribbon</code>. Splits are written in the flow,
-      so <code>by</code> on <code>enclose</code> would bring back a second
-      spelling. Josh is open to bringing <code>by</code> back later, when the
-      design of stacked and divided ribbons in #47 is worked out (a ribbon today
-      joins one element to one; #47 asks for one-to-many, like a join between a
-      source set and a target set). Related: #740, a spike on whether
-      <code>group()</code> plus <code>resolve()</code> covers regrouping refs
-      for connectors.
-    </li>
-    <li>
-      <strong>Dependency.</strong> This spelling goes through the same
-      <code>chart(selectAll(...)).flow(group({ by }))</code> path that #877
-      reports as broken for <code>ribbon</code> (the <code>group</code> is
-      ignored and the fused default threads the inner tier). It likely needs
-      that fix for <code>enclose</code> too. Unverified for
-      <code>enclose</code>: the prototype draws the hulls with story-local code.
-    </li>
-    <li>
-      <strong>The shorter form</strong>, <code>group</code> in the first layer's
-      flow and a fused <code>.layer(enclose(...))</code>, also works when the
-      grouping is already there for other reasons.
-    </li>
-  </ul>
-
-  <h3>A set that avoids a point: Munkres' three-point topologies</h3>
-  <div class="ex">
-    <div>
-      <p>
-        The figure of the nine topologies on {a, b, c} from Munkres,
-        <em>Topology</em> (2nd ed., §12). Math3ma reproduces it, Bluefish ported
-        it, and the GoFish port's a/c set is today a hand-transcribed Bezier
-        <code>polygon</code> (#717). In the last panel the {a, c} set wraps a
-        and c with an even margin and joins them with a thick band under b, with
-        smooth S-shaped joins.
-      </p>
-      <div class="lang">JS</div>
-      <pre><code>layer([a, b, c]).relate(({ a, b, c }) =&gt; [
-  enclose({ shape: Shape.hull(), padding: 16,
-            fill: "#009dff" }, [a, b]),
-  enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.85,
-                                 smoothing: 40, clearance: 6 }),
-            padding: 22, fill: "#ff2400" }, [a, c]),
-])</code></pre>
-      <div class="lang">Python</div>
-      <pre><code>layer([a, b, c]).relate(lambda a, b, c: [
-    enclose([a, b], shape=Shape.hull(), padding=16, fill="#009dff"),
-    enclose([a, c], shape=Shape.spine(avoiding=[b], neck=0.85,
-                                      smoothing=40, clearance=6),
-            padding=22, fill="#ff2400"),
-])</code></pre>
-    </div>
-    <figure>
-      <div class="shot">
-        <img
-          src="precedent/munkres-fig12-1-nine-topologies.png"
-          alt="Munkres' figure of nine topologies on a three-point set"
-        />
-      </div>
-      <figcaption>
-        Reference: Munkres, <em>Topology</em>, §12. Image from
-        <a href="https://math3ma.com/blog/topology-vs-a-topology">Math3ma</a>,
-        captioned "Image from Topology by J. Munkres".
-      </figcaption>
-    </figure>
-  </div>
   <figure>
     <div class="shot">
       <img
-        src="img/smooth-topology-ac-before-after.png"
-        alt="The a/c set: v3, v4 with the same parameters, v4 fuller, and v4 with b as a wall"
+        src="img/planets-box-component.png"
+        alt="Planets inside a rounded box, the component case"
       />
     </div>
-    <figcaption>
-      v3 (<code>padding: 21</code>, <code>neck: 0.7</code>,
-      <code>smoothing: 40</code>); v4 with the same parameters (same margins and
-      gap, no curvature jumps); v4 fuller (<code>padding: 22</code>,
-      <code>neck: 0.85</code>); v4 with b as a wall during the closing (decision
-      13).
-    </figcaption>
   </figure>
-  <div class="grid2">
-    <figure>
-      <div class="shot">
-        <img
-          src="img/topology-munkres-panel-smooth.png"
-          alt="Munkres' last panel redrawn with v4"
-        />
-      </div>
-      <figcaption>
-        Munkres' last panel with v4: ellipses through the custom-shape function,
-        {a, c} with the spine shortcut as in the code above.
-      </figcaption>
-    </figure>
-    <figure>
-      <div class="shot">
-        <img
-          src="img/topology-munkres-panel-smooth-walls.png"
-          alt="Munkres' last panel redrawn with v4, b as a wall"
-        />
-      </div>
-      <figcaption>
-        The same with b as a wall: the band's top wraps b in a U at the
-        clearance, as in the reference.
-      </figcaption>
-    </figure>
-  </div>
   <p>
-    <strong>How close it gets now.</strong> Matched: even margins around a and
-    c, a thick band, and smooth joins with no visible change in bend where the
-    circles meet the band. Closer than v3
-    (<code>img/topology-munkres-panel-blob.png</code>): a fuller band, and with
-    b as a wall a U around b. Still different: the band's bottom is a wide V
-    rather than Munkres' flatter bottom, since the link is the shortest path
-    around b, and the wall version has a short flat shelf between a and b. A
-    link rule that follows b's outline at a fixed gap would get closer; that is
-    routing, not a new parameter.
+    <strong>How it composes.</strong> <code>enclose(opts, operands)</code> is
+    <code>layer(operands)</code> plus one outline node computed after the
+    operands are placed, the framing #713 already uses ("enclose = layer + hull
+    ink"). The outline is computed from each operand's <code>boundary</code>
+    (#974, a geometry query for a node's outline as points; box corners when a
+    mark has no better answer). No new core node kind. Its box is the box of the
+    drawn outline (#707's ink rule). Under animation the outline is recomputed
+    each frame; how it should tween is out of scope.
   </p>
-  <div class="pair">
-    <figure>
-      <div class="shot">
-        <img
-          src="img/topology-ac-convex-hull-covers-b.png"
-          alt="Convex hull of a and c covering b"
-        />
-      </div>
-      <figcaption>Hull of {a, c}: must cover b.</figcaption>
-    </figure>
-    <figure>
-      <div class="shot">
-        <img
-          src="img/topology-ac-spine-avoiding-b.png"
-          alt="Earlier bubble-set spine of a and c routed around b"
-        />
-      </div>
-      <figcaption>Earlier bubble-set spine of {a, c} avoiding b.</figcaption>
-    </figure>
-  </div>
   <p>
-    Future work, not part of this proposal: this example may be drawn best by
-    placing the points and the region together, with an energy that pushes
-    shapes apart and rewards symmetry, as Penrose and Keenan Crane's work do.
-    Every strategy here draws around shapes that are already placed, so that
-    would be a change to layout, not a new shape.
+    <strong>Overlap check.</strong> <code>layer</code>: exact composition.
+    <code>Constraint.nest</code> with a <code>rect</code> outer, and
+    <code>rect</code> plus <code>align</code> span: agree with box mode in
+    degenerate cases; build box mode through the same code as <code>nest</code>.
+    <code>line</code>/<code>ribbon</code>: a two-member spine looks like a thick
+    line, degenerate. <code>subtract</code>: not an overlap. <code>pack</code>:
+    its enclosing circle is a possible future <code>Shape.circle()</code>.
+  </p>
+  <p>
+    <strong>Trade-offs.</strong> One name, one mental model, every hard example
+    expressible. New terms: <code>Shape</code>, <code>blob</code>,
+    <code>hull</code>, <code>spine</code>, <code>convexity</code>,
+    <code>neck</code>, <code>smoothing</code>, <code>avoiding</code>,
+    <code>via</code>, <code>clearance</code>. Awkward: the per-group background
+    behind each lake needs
+    <code
+      >chart(selectAll("bars")).flow(group({ by: "lake"
+      })).mark(enclose())</code
+    >, longer than a modifier.
   </p>
 
-  <h3>Hyperedges over a node-link diagram</h3>
+  <h3>Approach B: a <code>.background()</code> modifier only (SwiftUI)</h3>
   <div class="ex">
     <div>
-      <div class="lang">JS</div>
-      <pre><code>layer([
-  graph, // nodes named "nodes", edges named "edges"
-  chart(memberships) // rows: { set, node }
-    .flow(resolve(["node"], { from: selectAll("nodes") }),
-          group({ by: "set" }))
-    .mark(enclose({
-      members: "node", // new: the ref column, like line's from/to
-      shape: Shape.spine({ via: selectAll("edges"),
-                           avoiding: selectAll("nodes") }),
-      padding: 9, fill: "set", opacity: 0.25,
-    })),
-])</code></pre>
-      <div class="lang">Python</div>
-      <pre><code>layer([
-    graph,
-    chart(memberships)
-      .flow(resolve(["node"], from_=select_all("nodes")),
-            group(by="set"))
-      .mark(enclose(members="node",
-                    shape=Shape.spine(via=select_all("edges"),
-                                      avoiding=select_all("nodes")),
-                    padding=9, fill="set", opacity=0.25)),
-])</code></pre>
-      <p class="small">
-        Rule: avoid each listed node that is not a member, so
-        <code>selectAll("nodes")</code> works without a set difference. Node 3
-        is in A and C.
-      </p>
-    </div>
-    <figure>
-      <div class="shot">
-        <img
-          src="img/hyperedges-spine-over-graph.png"
-          alt="Three overlapping set regions drawn along graph edges"
-        />
-      </div>
-      <figcaption>
-        Earlier bubble-set prototype. Each set's spine runs along the graph's
-        own edges (<code>via</code>).
-      </figcaption>
-    </figure>
-  </div>
-  <div class="ex">
-    <p>
-      The same sets with the blob's spine shortcut (<code
-        >neck: 0.75, smoothing: 10</code
-      >). The graph's edges between members are links that are always kept; set
-      C's edges already connect it, so nothing else is added. KelpFusion alone
-      cannot draw this, since it builds its own links from positions.
-    </p>
-    <figure>
-      <div class="shot">
-        <img
-          src="img/hyperedges-smooth-spine.png"
-          alt="Three set regions drawn along graph edges with the blob spine"
-        />
-      </div>
-      <figcaption>Blob spine with <code>via</code>.</figcaption>
-    </figure>
-  </div>
-
-  <h3>Members that are not next to each other</h3>
-  <div class="ex">
-    <div>
-      <div class="lang">JS</div>
-      <pre><code>chart(catch)
-  .flow(spread({ by: "lake", dir: "x" }),
-        spread({ by: "species", dir: "x", spacing: 9 }))
-  .mark(rect({ h: "count", fill: "species" }).name("bars"))
-  .layer(
-    chart(selectAll("bars"))
-      .flow(filter((d) =&gt; d.species === "trout"))
-      .mark(enclose({
-        shape: Shape.spine({ avoiding: selectAll("bars") }),
-        stroke: "#d6580c" })))</code></pre>
-    </div>
-    <div>
-      <div class="pair">
-        <figure>
-          <div class="shot">
-            <img
-              src="img/bars-trout-spine-across-lakes.png"
-              alt="Spine around the trout bars, routed over the bar tops"
-            />
-          </div>
-          <figcaption>
-            <code>avoiding</code>: the other bars and the axis band.
-          </figcaption>
-        </figure>
-        <figure>
-          <div class="shot">
-            <img
-              src="img/bars-trout-spine-avoiding-bars-only.png"
-              alt="Spine around the trout bars, one connection routed under the axis"
-            />
-          </div>
-          <figcaption><code>avoiding</code>: the other bars only.</figcaption>
-        </figure>
-      </div>
-      <p class="small">
-        The hardest case. With the other bars as the only obstacles, the
-        bubble-set routing sends the Huron to Michigan connection under the
-        baseline, because it goes around whichever side of a box cuts off less
-        of it. With the axis line and its labels also treated as an obstacle,
-        every connection runs as a thin tube over the bar tops and no non-member
-        bar is covered. The spelling does not say that yet: either the axis is
-        listed in <code>avoiding</code>, or the spine stays inside the plot area
-        by rule (decision 11). Both renders above are the earlier bubble-set
-        prototype.
-      </p>
-      <figure>
-        <div class="shot">
-          <img
-            src="img/bars-trout-smooth-spine.png"
-            alt="Blob spine around the trout bars, routed over the bar tops"
-          />
-        </div>
-        <figcaption>
-          The blob's spine shortcut (<code>neck: 0.5, smoothing: 8</code>,
-          avoiding the other bars and the axis band): each link is the shortest
-          path that clears the other bars.
-        </figcaption>
-      </figure>
-    </div>
-  </div>
-
-  <h3>How it composes</h3>
-  <ul>
-    <li>
-      <code>enclose(opts, operands)</code> = <code>layer(operands)</code> + one
-      outline computed after the operands are placed (the #713 framing). The
-      outline reads each operand's <code>boundary</code> (#974; box corners as
-      fallback). No new core node kind.
-    </li>
-    <li>
-      Outlines are computed in screen space after placement, like curves, so
-      coordinate transforms need nothing special. The outline's box is the box
-      of the drawn ink (#707's rule).
-    </li>
-    <li>
-      Overlaps: <code>layer</code> is an exact composition;
-      <code>Constraint.nest</code> with a rect and <code>align span</code> agree
-      with box mode in a small degenerate case (share the padded-union code); a
-      two-member spine resembles a thick <code>line</code>;
-      <code>avoiding</code> is not <code>subtract</code> (it routes, it does not
-      cut).
-    </li>
-  </ul>
-
-  <h2>
-    Approach B: a <code>.background()</code> modifier only
-    <span class="tag">foil</span>
-  </h2>
-  <div class="ex">
-    <div>
-      <div class="lang">JS</div>
       <pre><code>text("H").background({ padding: 4, fill: "#ffe8a3" })
-
 chart(catch)
   .flow(spread({ by: "lake", dir: "x" })
           .background({ padding: 8, fill: "#f0f1f3" }),
         spread({ by: "species", dir: "x", spacing: 9 }))
   .mark(rect({ h: "count", fill: "species" }))</code></pre>
-      <div class="lang">Python</div>
-      <pre><code>(chart(catch)
-   .flow(spread(by="lake", dir="x")
-           .background(padding=8, fill="#f0f1f3"),
-         spread(by="species", dir="x", spacing=9))
-   .mark(rect(h="count", fill="species")))</code></pre>
+      <p class="small">
+        Desugars to the <code>enclose</code> combinator around the node. Short
+        for one-node decorations and per-group panels. Fails every hard example:
+        the Topology set, hyperedges and the trout set are not single nodes of
+        the tree. It would still need <code>enclose</code> for refs, so it is a
+        second spelling, not a replacement.
+      </p>
     </div>
     <figure>
       <div class="shot">
         <img
           src="img/bars-box-per-lake-group.png"
-          alt="A light box behind each lake group"
+          alt="One box per lake group"
         />
       </div>
       <figcaption>
-        One box per group the operator makes, like <code>.label()</code> on an
-        operator. Short and familiar, but it fails Topology, hyperedges and the
-        trout set: none is a single node of the tree.
+        Prototype: story-local boxes; <code>enclose</code> per group would draw
+        the same.
       </figcaption>
     </figure>
   </div>
 
-  <h2>
-    Approach C: A plus the modifier as sugar <span class="tag">runner-up</span>
-  </h2>
+  <h3>
+    Approach C: A plus the modifier as sugar
+    <span class="tag">runner-up</span>
+  </h3>
   <p>
-    Everything in A, plus <code>x.background(opts)</code> defined as
-    <code>enclose(opts, [x])</code> (per group on operators). That is the "exact
-    composition" regime, so it is allowed, but one concept gets two names, or
-    the modifier is spelled <code>.enclose()</code>, which reads oddly on a text
-    mark. <strong>What would make it the pick:</strong> real examples where
-    per-node or per-group backgrounds inside a flow are the common case (label
-    pills, panel backgrounds, zebra stripes).
+    Everything in A, plus <code>x.background(opts)</code> =
+    <code>enclose(opts, [x])</code> (and per group on operators). Allowed as
+    exact composition, but one concept gets two names.
+    <strong>What would make it the pick:</strong>
+    real examples where per-node or per-group backgrounds inside a flow are the
+    common case, such as label pills, facet panel backgrounds and zebra stripes.
   </p>
 
-  <h2>Strategy spelling (independent axis)</h2>
+  <h2 id="spelling">How strategies and parameters are spelled</h2>
   <div class="grid3">
     <div class="card">
-      <h4>S1 · shape: Shape.*</h4>
+      <h4>S1 · shape: Shape.* <span class="tag ok">recommended</span></h4>
       <p>
-        <span class="tag ok">recommended</span>
-        <code>Shape.box({ rx, ry })</code> and
-        <code
-          >Shape.blob({ convexity, neck, smoothing, avoiding, via, clearance
-          })</code
-        >, with <code>Shape.hull()</code> and <code>Shape.spine()</code> as
-        presets. <code>padding</code> and paint stay on <code>enclose</code>.
-        Default is <code>Shape.box()</code>. Runner-up: the earlier three
-        separate members, <code>Shape.hull({ alpha })</code> and
-        <code>Shape.spine({ avoiding, via })</code>.
+        One option with a family; <code>padding</code> and paint stay on
+        <code>enclose</code>; each strategy carries only the parameters it uses.
+        Default <code>Shape.box()</code>, today's behavior.
       </p>
     </div>
     <div class="card">
       <h4>S2 · box() / hull() / spine()</h4>
       <p>
-        One function per shape, like ggforce's <code>geom_mark_*</code>. Splits
-        one concept into three operators; changing shape means changing the
-        function.
+        One function per strategy, as in ggforce. Splits one concept into three
+        operators, against "one concept is one operator" and the #397/#717
+        direction.
       </p>
     </div>
     <div class="card">
       <h4>S3 · shape: "hull" + flat options</h4>
       <p>
-        Josh's #717 sketch. Ruled out by #1013 (families with arguments are
-        calls), and flat <code>convexity</code>/<code>avoiding</code> would be
-        accepted and ignored by other shapes.
+        Strings with <code>convexity</code> and <code>avoiding</code> on
+        <code>enclose</code> (#717 comment). Rejected by #1013: a family with
+        arguments is a namespace of calls, and flat options would be accepted
+        and ignored by strategies that do not use them.
       </p>
     </div>
   </div>
-  <p>
-    <strong>The knobs.</strong> Libraries disagree on the direction of a hull's
-    concavity knob: <code>concavity</code> (ggforce) grows toward convex;
-    <code>alpha</code> is a radius in CGAL but an inverse radius in Python's
-    alphashape. v3 replaced the earlier <code>alpha</code> with
-    <code>density</code>; v4 brings alpha back as <code>convexity</code>, whose
-    direction reads from the name (more convexity is more convex), which has no
-    unit (alpha is measured against the members' typical spacing, so it survives
-    a resize), and which avoids <code>density</code>'s clash with density plots.
-    <code>smoothing</code> is in pixels; bigger is smoother, the same direction
-    as <code>smoothing</code> on <code>noise()</code>, though there it is in
-    data units. <code>neck</code> is the everyday word for the narrow part
-    joining two bulges.
-  </p>
-  <p>
-    <strong>The general member's name.</strong> <code>kelp</code> credits
-    KelpFusion but means nothing to most readers, and the construction differs
-    from the paper. <code>bubble</code> is the Bubble Sets word, but that is a
-    different algorithm, and in KelpFusion a bubble is one node's disc.
-    <code>region</code> collides with GoFish's region-compositing operators;
-    <code>outline</code> is a candidate for the option key and also means a
-    stroke; <code>set</code> names the data and shadows JavaScript's
-    <code>Set</code>. <code>blob</code> is an everyday word for a rounded
-    free-form region and is what Bluefish already calls a hand-drawn set outline
-    (<code>Blob</code> in its Math3ma example). Proposed:
-    <code>blob</code> (decision 3).
-  </p>
-  <p>
-    <strong>The third name.</strong> <code>spine</code> (Josh's) names the
-    mechanism, the connecting skeleton that makes the shape a hyperedge, and
-    reads well with <code>via</code>; it stays as the shortcut's name.
-    <code>bubble</code> (Bubble Sets, bubblesets-js, #717) names the look and is
-    the literature's term. The docs use "space-filling spine" descriptively for
-    mosaics; that prose could be reworded if <code>spine</code> becomes an API
-    name.
+
+  <h2 id="nearby">Nearby GoFish decisions</h2>
+  <div class="tablewrap">
+    <table>
+      <tr>
+        <th>Decision</th>
+        <th>What was decided</th>
+        <th>This design</th>
+      </tr>
+      <tr>
+        <td>Strategy namespaces (#1013)</td>
+        <td>
+          An option whose value is one of several strategies gets an uppercase
+          family of calls; family type inside the namespace; Python module bound
+          as the family.
+        </td>
+        <td>
+          <strong>Matches.</strong> <code>Shape.box()</code>,
+          <code>Shape.blob()</code>, <code>Shape.hull()</code>,
+          <code>Shape.spine()</code>, type <code>Shape.Shape</code>, Python
+          <code>from gofish import Shape</code>.
+        </td>
+      </tr>
+      <tr>
+        <td>Presets over one general strategy (#1018)</td>
+        <td>
+          <code>sina()</code> and <code>jitter()</code> are
+          <code>noise()</code> with params preset; they emit
+          <code>kind: "noise"</code>; any option overrides a preset.
+        </td>
+        <td>
+          <strong>Matches.</strong> <code>hull</code> and <code>spine</code> are
+          <code>blob</code> with <code>convexity</code> (and for hull,
+          <code>neck</code>) preset.
+        </td>
+      </tr>
+      <tr>
+        <td>One-strategy options (three-surfaces.md, <code>pack</code>)</td>
+        <td>An option with one strategy has no option at all.</td>
+        <td>
+          <strong>Matches.</strong> Two members plus two presets, so the option
+          earns its place.
+        </td>
+      </tr>
+      <tr>
+        <td>Closed families plus escape hatch (#1101)</td>
+        <td>
+          Families are closed; a user function is the planned escape hatch.
+        </td>
+        <td>
+          <strong>Matches.</strong> Custom shapes and the ellipse go there.
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>curve</code> on <code>line</code>/<code>ribbon</code> (#637)
+        </td>
+        <td>
+          One key picks a relational mark's drawn geometry, computed in screen
+          space after placement.
+        </td>
+        <td>
+          <strong>Matches.</strong> <code>shape</code> is to
+          <code>enclose</code> what <code>curve</code> is to <code>line</code>.
+        </td>
+      </tr>
+      <tr>
+        <td>Relational marks and <code>.layer()</code> (#745)</td>
+        <td>
+          Relational marks paint below their operands;
+          <code>.layer()</code> hands each tier the previous tier's marks.
+        </td>
+        <td>
+          <strong>Matches.</strong> A background is the clearest case of
+          painting below what it relates.
+        </td>
+      </tr>
+      <tr>
+        <td>Blank fusion (#748)</td>
+        <td>
+          <code>.mark(R(opts))</code> becomes
+          <code>.mark(blank(anchor)).layer(R(rest))</code>.
+        </td>
+        <td><strong>Matches</strong>, inherited.</td>
+      </tr>
+      <tr>
+        <td>Default split (#752)</td>
+        <td>
+          A fused relational mark splits on every flow grouping except the path
+          tier.
+        </td>
+        <td>
+          <strong>Matches.</strong> <code>group(Species)</code> then
+          <code>scatter</code> plus <code>.layer(enclose())</code> gives one
+          hull per species.
+        </td>
+      </tr>
+      <tr>
+        <td>Plural refs never auto-map (#707)</td>
+        <td>
+          One outline around the whole selection; per element needs
+          <code>.each</code>.
+        </td>
+        <td><strong>Matches.</strong></td>
+      </tr>
+      <tr>
+        <td><code>relate()</code> drawing clauses (#878, #930)</td>
+        <td>Clauses may hold ink such as <code>background</code> over refs.</td>
+        <td>
+          <strong>Matches</strong>, and inherits #986 (drawing clauses miss the
+          paint-below default).
+        </td>
+      </tr>
+      <tr>
+        <td><code>padding</code> vs <code>spacing</code> (#1005)</td>
+        <td><code>padding</code> = inset around the outer edge.</td>
+        <td><strong>Matches.</strong></td>
+      </tr>
+      <tr>
+        <td>Geometry queries (#966, #968, #974)</td>
+        <td>
+          One file per query; <code>boundary</code> enters with its first user.
+        </td>
+        <td>
+          <strong>Matches.</strong> This is the first user #974 waits for.
+        </td>
+      </tr>
+      <tr>
+        <td>Modifier versus option (shape geometry, 10-03)</td>
+        <td>
+          <code>overlap</code> stays an option; modifiers apply to any mark or
+          operator.
+        </td>
+        <td>
+          <strong>Consistent.</strong> A modifier is legitimate here; deferred
+          on "one concept, one spelling".
+        </td>
+      </tr>
+      <tr>
+        <td><code>.label()</code> on operators (#741, #750)</td>
+        <td>A modifier on an operator yields one label per group.</td>
+        <td>
+          <strong>Precedent</strong> for Approach B's per-group background.
+        </td>
+      </tr>
+      <tr>
+        <td>
+          Refs inside a strategy argument (<code>Curve.bundle({ via })</code>
+          note)
+        </td>
+        <td>
+          Secondary geometry is a strategy argument, never columns in the flow.
+        </td>
+        <td>
+          <strong>Matches</strong> in spirit:
+          <code>Shape.blob({ avoiding, via })</code>. New wire detail: a
+          strategy parameter that holds refs.
+        </td>
+      </tr>
+      <tr>
+        <td>No back-compat; delete, don't gate</td>
+        <td>No aliases, no accepted-and-ignored options.</td>
+        <td>
+          <strong>Matches.</strong> <code>background</code> deleted;
+          <code>rx</code>/<code>ry</code> move into <code>Shape.box()</code>.
+        </td>
+      </tr>
+      <tr>
+        <td>Python surface (#1008)</td>
+        <td>
+          Children positional, snake_case kwargs,
+          <code>Family.member()</code> strategies.
+        </td>
+        <td><strong>Matches.</strong></td>
+      </tr>
+      <tr>
+        <td>Designer names, survey first (#196, #404, #762)</td>
+        <td>Prefer names designers know; survey precedent before naming.</td>
+        <td>
+          Partly. <code>box</code> and <code>hull</code> have strong precedent;
+          <code>spine</code> is Josh's name; <code>blob</code> follows Bluefish.
+        </td>
+      </tr>
+    </table>
+  </div>
+  <p class="small">
+    Where it departs: from Josh's #717 comment, shapes are family calls instead
+    of strings, <code>avoiding</code> lives on <code>Shape.blob()</code>, and a
+    separate <code>alpha</code> member is not needed since
+    <code>convexity</code> is alpha on a unitless scale; from #397's
+    <code>bubbleset: true</code>, a boolean cannot grow into several strategies.
+    Not re-asked: #935, #954, #1053/#1054, #290.
   </p>
 
-  <h2>Precedent</h2>
-  <div class="grid4">
+  <h2 id="precedent">Precedent</h2>
+  <div class="grid3">
+    <div class="card">
+      <h4>Globs (Steve Ruiz)</h4>
+      <div class="shot">
+        <img
+          src="precedent/glassner-globs-design.png"
+          alt="A glob: two circles joined by a smooth neck, with its handles, and the same glob filled"
+        />
+      </div>
+      <p>
+        "A globs-based vector editor" (<a href="https://globs.design"
+          >globs.design</a
+        >, <a href="https://github.com/steveruizok/globs">source</a>), by the
+        author of perfect-freehand and perfect-arrows, which GoFish already
+        uses. It implements Andrew Glassner's glob ("Globs: A Primitive Shape
+        for Graceful Blends Between Circles", JCGT 4(3), 2015): two circles of
+        any radii joined by a neck of two Bézier curves that leave each circle
+        along a tangent, shaped by four handles. You place nodes, connect them
+        with globs, and drag handles; a glob follows its nodes.
+      </p>
+      <p>
+        <strong>Compared with the blob:</strong> globs are hand-placed pairs;
+        the blob computes every neck for any number of members, fills between
+        them, and keeps non-members out. Glassner's neck meets the circle along
+        a tangent (G1); his page does not claim curvature continuity, while the
+        blob is G2 everywhere. The shared look is round ends and necks that
+        narrow and widen gracefully. A glob is a candidate output for the #1101
+        function, and its neck handles are a reference for a better link rule in
+        the Munkres panel.
+      </p>
+      <p>
+        Image: Glassner's page (<a href="https://glassner.com/?p=3004"
+          >glassner.com/?p=3004</a
+        >; file <code>Globs-design.png</code>). Left: circle centers (red) and
+        neck handles; right: filled. globs.design renders client side and
+        yielded no image.
+      </p>
+    </div>
     <div class="card">
       <h4>SwiftUI</h4>
       <div class="noimg">no image obtained</div>
@@ -1916,7 +1758,7 @@ chart(catch)
       <pre><code>Background({ padding: 40 },
   [Ref("label"), Ref("mercury")])</code></pre>
       <p>
-        Relation over refs, filed beside Arrow; box only.
+        Relation over refs, filed beside Arrow; box only; custom shape callback.
         <a
           href="https://github.com/joshpoll/bluefish-monorepo/blob/main/docs/learn/tutorial-2-relations.md"
           >source</a
@@ -2004,291 +1846,120 @@ chart(catch)
       <pre><code>(paper; no API)</code></pre>
       <p>
         Graph dial <code>t</code> from spanning tree to convex hull, plus a
-        face-size limit <code>A</code> (see "KelpFusion and bubble sets").
-        <a
-          href="https://vis.uib.no/wp-content/papercite-data/pdfs/Alsallakh_et_al-2016-Computer_Graphics_Forum.pdf"
-          >Alsallakh et al. 2016</a
-        >
+        face-size limit <code>A</code> (History, v2).
       </p>
     </div>
   </div>
-
-  <h2>Nearby GoFish decisions</h2>
-  <div class="tablewrap">
-    <table>
-      <tr>
-        <th>Decision</th>
-        <th>Fit</th>
-        <th>How</th>
-      </tr>
-      <tr>
-        <td>Strategy namespaces (#1013)</td>
-        <td><span class="tag ok">matches</span></td>
-        <td>
-          <code>Shape.*</code> calls, type <code>Shape.Shape</code>, Python
-          <code>from gofish import Shape</code>.
-        </td>
-      </tr>
-      <tr>
-        <td>Presets over one general strategy (#1018)</td>
-        <td><span class="tag ok">matches</span></td>
-        <td>
-          <code>sina()</code>/<code>jitter()</code> emit
-          <code>kind: "noise"</code>, presets declared in
-          <code>STRATEGIES</code>, any option overrides.
-          <code>hull()</code>/<code>spine()</code> emit
-          <code>kind: "blob"</code> the same way.
-        </td>
-      </tr>
-      <tr>
-        <td>Closed families + function hatch (#1101)</td>
-        <td><span class="tag ok">matches</span></td>
-        <td>
-          Bluefish's custom background, and Josh's ellipse, become the escape
-          hatch.
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <code>curve</code> on <code>line</code>/<code>ribbon</code> (#637)
-        </td>
-        <td><span class="tag ok">matches</span></td>
-        <td>
-          <code>shape</code> is to <code>enclose</code> what
-          <code>curve</code> is to <code>line</code>; screen-space geometry.
-        </td>
-      </tr>
-      <tr>
-        <td>
-          Relational marks paint below; <code>.layer()</code> scope (#745)
-        </td>
-        <td><span class="tag ok">matches</span></td>
-        <td>Inherited from <code>createRelationalMark</code>.</td>
-      </tr>
-      <tr>
-        <td>Blank fusion (#748); default split (#752)</td>
-        <td><span class="tag ok">matches</span></td>
-        <td>
-          One hull per group with no option; no <code>over</code>/<code
-            >along</code
-          >
-          word proposed.
-        </td>
-      </tr>
-      <tr>
-        <td>Plural refs never auto-map (#707)</td>
-        <td><span class="tag ok">matches</span></td>
-        <td>
-          A selection is one outline; per element needs <code>.each</code>.
-        </td>
-      </tr>
-      <tr>
-        <td><code>relate()</code> drawing clauses (#930)</td>
-        <td><span class="tag ok">matches</span></td>
-        <td>Inherits the #986 paint-order gap (visible in the box panel).</td>
-      </tr>
-      <tr>
-        <td><code>padding</code> vs <code>spacing</code> (#1005)</td>
-        <td><span class="tag ok">matches</span></td>
-        <td><code>padding</code> grows every outline.</td>
-      </tr>
-      <tr>
-        <td>Geometry queries (#966, #974)</td>
-        <td><span class="tag ok">matches</span></td>
-        <td>Hull and spine are <code>boundary</code>'s first user.</td>
-      </tr>
-      <tr>
-        <td>
-          Modifier vs option (jitter dropped, <code>overlap</code> stays an
-          option)
-        </td>
-        <td><span class="tag">consistent</span></td>
-        <td>
-          A background passes "applies to anything", so B/C are legitimate;
-          deferred on one-spelling grounds.
-        </td>
-      </tr>
-      <tr>
-        <td><code>.label()</code> on operators (#741, #750)</td>
-        <td><span class="tag">precedent</span></td>
-        <td>Per-group modifier semantics for B/C.</td>
-      </tr>
-      <tr>
-        <td>
-          Refs as strategy arguments (<code>Curve.bundle({ via })</code> note)
-        </td>
-        <td><span class="tag ok">matches</span></td>
-        <td>
-          Reuses <code>via</code>; new wire detail: a strategy param holding
-          refs.
-        </td>
-      </tr>
-      <tr>
-        <td>No back-compat; no accepted-and-ignored options</td>
-        <td><span class="tag dep">changes code</span></td>
-        <td>
-          <code>background</code> alias deleted; <code>rx</code>/<code>ry</code>
-          move into <code>Shape.box()</code>; <code>avoiding</code> and
-          <code>via</code> only on the blob.
-        </td>
-      </tr>
-      <tr>
-        <td>Josh's #717 sketch; #397 <code>bubbleset: true</code></td>
-        <td><span class="tag dep">departs</span></td>
-        <td>
-          Strings become a family; <code>avoiding</code> moves onto the blob;
-          ellipse via the custom-shape function; alpha becomes
-          <code>convexity</code>; a boolean cannot hold these shapes.
-        </td>
-      </tr>
-      <tr>
-        <td>Python kwargs, snake_case (#1008)</td>
-        <td><span class="tag ok">matches</span></td>
-        <td><code>enclose([a, c], shape=Shape.spine(avoiding=[b]))</code>.</td>
-      </tr>
-    </table>
-  </div>
-  <p class="small">Not re-asked: #935, #954, #1053/#1054, #290 (parked).</p>
-
-  <h2>Trade-offs</h2>
-  <div class="tablewrap">
-    <table>
-      <tr>
-        <th></th>
-        <th>A · relational mark</th>
-        <th>B · modifier only</th>
-        <th>C · A + modifier</th>
-      </tr>
-      <tr>
-        <td>Hard examples</td>
-        <td>All five</td>
-        <td>Only one-node and per-group</td>
-        <td>All five</td>
-      </tr>
-      <tr>
-        <td>Names for the concept</td>
-        <td>One</td>
-        <td>One, but needs <code>enclose</code> for refs anyway</td>
-        <td>Two</td>
-      </tr>
-      <tr>
-        <td>Per-group background in a flow</td>
-        <td>Longer (<code>selectAll</code> + <code>group</code>)</td>
-        <td>Short</td>
-        <td>Short</td>
-      </tr>
-      <tr>
-        <td>New terms</td>
-        <td>
-          <code>Shape</code>, <code>blob</code>, <code>hull</code>,
-          <code>spine</code>, <code>convexity</code>, <code>neck</code>,
-          <code>smoothing</code>, <code>avoiding</code>, <code>via</code>,
-          <code>clearance</code>
-        </td>
-        <td><code>.background()</code></td>
-        <td>Both</td>
-      </tr>
-      <tr>
-        <td>Core change</td>
-        <td>Enclose node gains a geometry strategy</td>
-        <td>Same</td>
-        <td>Same</td>
-      </tr>
-    </table>
-  </div>
-
-  <h2>Runner-ups</h2>
   <p>
-    <strong>Where it lives:</strong> Approach C (A plus a modifier). It would
-    win if per-group backgrounds inside flows became common.
-    <strong>Strategies:</strong> the earlier three members,
-    <code>Shape.box()</code>, <code>Shape.hull({ alpha })</code>,
-    <code>Shape.spine({ avoiding, via })</code>. It would win if real examples
-    needed an alpha shape that splits into pieces, or if the blob's parameters
-    proved hard to explain, so that two members with fewer knobs read better
-    than one member with shortcuts. <strong>Smoothing:</strong> a closed C2
-    curve through the outline (candidate (b)). It would win if a curve could
-    keep a promised distance from given points, which none of the tested ones
-    can.
+    <strong>What GoFish should take:</strong> one name with a shape value
+    (SwiftUI, Compose, TikZ), a relation over refs that also nests (Bluefish), a
+    shared <code>padding</code> plus one knob per strategy (ggforce), members,
+    non-members and real edges as the blob's inputs (bubblesets-js).
+    <strong>Not:</strong> one function per shape (ggforce), grouping inferred
+    from the color channel (Plot), field-physics knobs.
+  </p>
+  <p>
+    <strong>Names.</strong> <code>box</code> matches TikZ and ggforce's
+    <code>rect</code>; <code>hull</code> matches Plot, ggforce, d3 and the
+    roadmap. No library says "spine"; Bubble Sets and Josh's #717 comment say
+    "bubble". <code>spine</code> names the connecting skeleton and reads well
+    with <code>via</code>. For the general member, <code>kelp</code> means
+    little to most readers, <code>bubble</code> names a different algorithm,
+    <code>region</code> collides with the region-compositing operators,
+    <code>outline</code> is a candidate option key, and <code>set</code> shadows
+    JavaScript's <code>Set</code>; <code>blob</code> is an everyday word and
+    Bluefish's name for a hand-drawn set outline.
+  </p>
+  <p>
+    <strong>The knobs.</strong> ggforce's and concaveman's
+    <code>concavity</code> grows more convex; alpha is a radius in CGAL and an
+    inverse radius in Python's <code>alphashape</code>.
+    <code>convexity</code> reads its direction from the name and has no unit.
+    <code>smoothing</code> runs the same direction as on <code>noise()</code>.
+    <code>neck</code> is the everyday word for the narrow join, and also
+    Glassner's word for the part of a glob between its circles.
   </p>
 
-  <h2>Decisions for Josh</h2>
-  <p class="small">
-    Earlier questions 5 (<code>alpha</code> as a pixel radius) and 10 (a shared
-    kernel, <code>Shape.kelp({ t })</code> later) were retired in v3. In v4,
-    question 5 is rewritten for the new parameters, question 10 (leave alpha
-    out) is retired because alpha is back as <code>convexity</code>, and 12 to
-    14 are new.
-  </p>
-  <ol class="decisions">
+  <h2 id="issues">Related issues</h2>
+  <ul class="small">
     <li>
-      Keep <code>enclose</code> as the one name and delete
-      <code>background</code>? (Or keep <code>background</code>; or rename to
-      <code>hull</code>.)
+      <strong>#397</strong> Bring back a bubble-set enclosure after
+      <code>wrap</code> was deleted.
     </li>
     <li>
-      Make <code>enclose</code> a relational mark now and defer any
-      <code>.background()</code> modifier?
+      <strong>#717</strong> Concave hulls for <code>enclose</code>; Josh's
+      comment proposes one <code>enclose</code> with a <code>shape</code>, an
+      <code>avoiding</code> list, and "relation, not function".
     </li>
     <li>
-      One general member with two shortcuts: name it <code>blob</code> (or
-      <code>kelp</code>, <code>bubble</code>), and keep the shortcut names
-      <code>hull</code> and <code>spine</code>?
+      <strong>#974</strong> A <code>boundary</code> geometry query; hulls are
+      its first user.
     </li>
     <li>
-      Option key and family <code>shape: Shape.*</code>, or
-      <code>outline: Outline.*</code>?
+      <strong>#1138</strong> Roadmap: "Hulls: a group of marks in, a path out".
     </li>
     <li>
-      The blob's parameters: <code>convexity</code> (0 to 1, a tree to the hull;
-      default 0.5), <code>neck</code> (width of links that do not bound a filled
-      triangle, as a fraction of the bulge; default 1),
-      <code>smoothing</code> (pixels; closing radius, which also sets the blur;
-      default same as <code>padding</code>) and <code>clearance</code> (pixels;
-      default 4)? <code>density</code> is dropped.
+      <strong>#707</strong> Operators over placed nodes: one combinator indexed
+      by operand kind.
     </li>
     <li>
-      <code>avoiding</code> and <code>via</code> on <code>Shape.blob()</code>,
-      so on both shortcuts, avoiding listed non-members only, with
-      <code>Shape.hull({ avoiding })</code> leaving out faces that hold other
-      nodes?
+      <strong>#929</strong> Remaining <code>relate()</code> steps, including
+      <code>.each</code> templates.
     </li>
     <li>
-      Draw ellipses through the #1101 custom-shape function first, and add
-      <code>Shape.ellipse()</code> only when examples call for it?
+      <strong>#986</strong> Paint-below default not applied to
+      <code>.relate()</code> drawing clauses.
+    </li>
+    <li><strong>#935</strong> (parked) relate() follow-ups; not re-asked.</li>
+    <li>
+      <strong>#752</strong> Default split for fused relational marks; enclose
+      follows it with order ignored.
     </li>
     <li>
-      Move <code>rx</code>/<code>ry</code> into
-      <code>Shape.box({ rx, ry })</code>?
+      <strong>#1101</strong> Extensibility model for strategy families (custom
+      curves, tiles, overlaps).
+    </li>
+    <li><strong>#1013</strong> One uppercase namespace per strategy family.</li>
+    <li><strong>#802</strong> Operators cannot be <code>.name()</code>d.</li>
+    <li>
+      <strong>#844</strong> A <code>ref()</code> to a constraint-placed sibling
+      lands at the origin; repro is an <code>enclose</code> over a ref.
+    </li>
+    <li><strong>#171</strong> Enclose broken for the nested waffle chart.</li>
+    <li>
+      <strong>#1109</strong> Annotation tutorial; enclose around selected marks.
     </li>
     <li>
-      For rows that carry refs, name the ref column with <code>members</code>,
-      like <code>line({ from, to })</code>?
-    </li>
-    <li>(Retired in v4: alpha is back, as <code>convexity</code>.)</li>
-    <li>
-      In a chart, should a spine stay inside the plot area by rule, or should
-      the user list the axis in <code>avoiding</code>?
+      <strong>#1084</strong> Venn docs example, an Euler-diagram neighbor.
     </li>
     <li>
-      <code>convexity</code> as the name, with alpha = <em>m</em> ×
-      <code>convexity</code> / (1 − <code>convexity</code>) and <em>m</em> the
-      median spanning-tree link, so it does not change with a resize? (Or a
-      length relative to <code>padding</code>, or a pixel <code>alpha</code>.)
+      <strong>#396, #713, #714, #716</strong> <code>wrap</code> deleted; enclose
+      = layer + hull ink; enclose paints behind its children.
     </li>
     <li>
-      Should an avoided node inside the set (inside the members' convex hull) be
-      a wall during the closing, so the outline wraps it in a U, or should the
-      outline only detour around it (the default here)?
+      <strong>#47</strong> Stacked and divided ribbons; where <code>by</code> on
+      relational marks may come back.
     </li>
     <li>
-      Keep all smoothing inside <code>Shape.blob()</code> (the region blur), no
-      <code>curve</code> key on <code>enclose</code>, and take the closed-curve
-      findings to #957?
+      <strong>#877</strong> <code>selectAll</code> plus
+      <code>group({ by })</code> before a ribbon is ignored; the penguin
+      spelling uses the same path.
     </li>
-  </ol>
+    <li>
+      <strong>#740</strong> Spike: does <code>group()</code> plus
+      <code>resolve()</code> cover regrouping refs for connectors?
+    </li>
+    <li>
+      <strong>#1018</strong> <code>noise()</code> with <code>sina()</code> and
+      <code>jitter()</code> as presets: the model for the shortcuts.
+    </li>
+    <li>
+      <strong>#957</strong> Better screen-space curves than Catmull-Rom; asks
+      about closed curves for enclosures.
+    </li>
+  </ul>
 
-  <h2>Syntax changes to review</h2>
+  <h2 id="changes">Syntax changes to review</h2>
   <div class="tablewrap">
     <table>
       <tr>
@@ -2311,7 +1982,7 @@ chart(catch)
         <td>unchanged (default <code>Shape.box()</code>)</td>
       </tr>
       <tr>
-        <td>no per-group outline</td>
+        <td>no way to draw one outline per group</td>
         <td>
           <code
             >.layer(chart(selectAll("points")).flow(group({ by
@@ -2320,7 +1991,7 @@ chart(catch)
         </td>
       </tr>
       <tr>
-        <td>hand-drawn concave <code>polygon</code></td>
+        <td>hand-drawn concave <code>polygon</code> (Topology)</td>
         <td>
           <code
             >enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.85,
@@ -2338,7 +2009,7 @@ chart(catch)
         </td>
       </tr>
       <tr>
-        <td>Python <code>background = enclose</code></td>
+        <td><code>background = enclose</code> in Python</td>
         <td>
           removed;
           <code
@@ -2346,29 +2017,519 @@ chart(catch)
           >
         </td>
       </tr>
+      <tr>
+        <td>new import</td>
+        <td>
+          <code>import { Shape } from "gofish-graphics"</code> /
+          <code>from gofish import Shape</code>
+        </td>
+      </tr>
     </table>
   </div>
-  <p class="note">
+  <p class="small">
     Docs follow-up if approved: the handwritten Basics and Diagrams tutorials
-    teach <code>background()</code>. Their code blocks can migrate; the prose
-    would get an issue, not a rewrite.
+    teach <code>background()</code>. Their code blocks can be migrated; their
+    prose names the construct "background", so an issue would record what went
+    stale rather than rewriting it.
   </p>
 
-  <h2>Related issues</h2>
+  <!-- ───────────────────────── Part 3 ───────────────────────── -->
+  <div class="part">Part 3 · History</div>
+  <h2 id="history">Earlier versions and retired decisions</h2>
   <p class="small">
-    #397 bubble-set enclosure after <code>wrap</code> was deleted · #717 concave
-    hulls; Josh's <code>shape</code> + <code>avoiding</code> sketch · #974
-    <code>boundary</code> query · #1138 roadmap "Hulls" · #707 operators over
-    placed nodes · #929 relate() open-term steps · #986 paint-below missing in
-    relate clauses · #935 parked relate() follow-ups · #752 default split for
-    relational marks · #1101 strategy extensibility · #1013 strategy namespaces
-    · #802 operators cannot be named · #844 ref to constraint-placed sibling at
-    origin · #171 nested waffle enclose · #1109 annotation tutorial · #1084 Venn
-    example · #396/#713/#714/#716 enclose history · #47 stacked and divided
-    ribbons (one-to-many joins; where <code>by</code> may come back) · #877
-    <code>selectAll</code> + <code>group</code> ignored before a ribbon · #740
-    spike: <code>group()</code> + <code>resolve()</code> for regrouping refs ·
-    #1018 <code>noise()</code> with <code>sina()</code>/<code>jitter()</code>
-    presets.
+    Oldest first. Nothing here is part of the current proposal.
   </p>
+
+  <details class="hist">
+    <summary>v1: three strategies, with the alpha shape</summary>
+    <p>
+      Three members: <code>Shape.box()</code>,
+      <code>Shape.hull({ alpha })</code>
+      (convex, or concave as an alpha shape with a pixel radius), and
+      <code>Shape.spine({ avoiding, via })</code> built as a bubble set: connect
+      the members with a tree of lines that bends around non-members, then draw
+      a smooth outline at a fixed distance around it.
+    </p>
+    <div class="grid4">
+      <figure>
+        <div class="shot">
+          <img src="img/strategy-box.png" alt="Box around the U cluster" />
+        </div>
+        <figcaption>
+          <code>Shape.box()</code>: real <code>enclose</code>, its fill painting
+          over the gray dots (#986).
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="shot">
+          <img
+            src="img/strategy-hull-convex.png"
+            alt="Convex hull around the U cluster"
+          />
+        </div>
+        <figcaption>
+          <code>Shape.hull()</code>: convex hull of the padded members.
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="shot">
+          <img
+            src="img/strategy-hull-concave.png"
+            alt="Concave alpha shape around the U cluster"
+          />
+        </div>
+        <figcaption>
+          Alpha shape, alpha 40: openings wider than the disc carved out.
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="shot">
+          <img
+            src="img/strategy-spine.png"
+            alt="Bubble-set spine around the U cluster"
+          />
+        </div>
+        <figcaption>
+          Bubble-set spine: a tree routed around the listed non-members.
+        </figcaption>
+      </figure>
+    </div>
+    <p>
+      The concave hull's dent came from the members' spacing and ignored the
+      gray dots; the spine's dent came from the <code>avoiding</code> list. On
+      the Topology set only the spine kept b out:
+    </p>
+    <div class="grid2">
+      <figure>
+        <div class="shot">
+          <img
+            src="img/topology-ac-convex-hull-covers-b.png"
+            alt="Convex hull of a and c covers b"
+          />
+        </div>
+        <figcaption><code>Shape.hull()</code> for {a, c} covers b.</figcaption>
+      </figure>
+      <figure>
+        <div class="shot">
+          <img
+            src="img/topology-ac-spine-avoiding-b.png"
+            alt="Bubble-set spine avoiding b"
+          />
+        </div>
+        <figcaption>Bubble-set spine avoiding b.</figcaption>
+      </figure>
+    </div>
+    <div class="grid3">
+      <figure>
+        <div class="shot">
+          <img
+            src="img/hyperedges-spine-over-graph.png"
+            alt="Bubble-set hyperedges over a graph"
+          />
+        </div>
+        <figcaption>Hyperedges, bubble-set spine.</figcaption>
+      </figure>
+      <figure>
+        <div class="shot">
+          <img
+            src="img/bars-trout-spine-across-lakes.png"
+            alt="Trout across lakes, bubble-set spine"
+          />
+        </div>
+        <figcaption>Trout, avoiding the bars and the axis band.</figcaption>
+      </figure>
+      <figure>
+        <div class="shot">
+          <img
+            src="img/bars-trout-spine-avoiding-bars-only.png"
+            alt="Trout routed under the axis"
+          />
+        </div>
+        <figcaption>
+          Trout, avoiding the bars only: one link went under the baseline.
+        </figcaption>
+      </figure>
+    </div>
+    <p>
+      S1', the three-member spelling on a shared kernel, was the pick of v1 and
+      v2. Hull and spine had no common dial, the middle (filled where dense,
+      links where sparse) needed a fourth member, and a raw <code>alpha</code>
+      brought a pixel length whose direction libraries disagree on.
+    </p>
+  </details>
+
+  <details class="hist">
+    <summary>v2: KelpFusion and bubble sets compared</summary>
+    <p>
+      Josh asked whether KelpFusion has the convex hull as a special case, and
+      how it compares to a bubble set. Sources: Meulemans et al., "KelpFusion: A
+      Hybrid Set Visualization Technique", IEEE TVCG 19(11), 2013 (<a
+        href="https://www.microsoft.com/en-us/research/wp-content/uploads/2016/12/kelpfusion_tvcg2013.pdf"
+        >author copy</a
+      >); Collins, Penn, Carpendale, "Bubble Sets", IEEE TVCG 15(6), 2009 (<a
+        href="https://vialab.ca/wp-content/publication_media/pdf/col2009c.pdf"
+        >author copy</a
+      >).
+    </p>
+    <h3>How KelpFusion is built</h3>
+    <ol>
+      <li>
+        <strong>Connect the members.</strong> For every pair, the candidate edge
+        is the shortest route clear of every other node's allocation area (a
+        disc of radius <code>r</code> cut to the node's Voronoi cell, the part
+        of the plane closer to it than to any other node). It keeps candidates
+        by a shortest-path graph with parameter <code>t ≥ 1</code>: an edge
+        weighs its length to the power <code>t</code> and is kept only if no
+        other path is lighter. <code>t = 1</code> keeps everything (the convex
+        hull); <code>t → ∞</code> gives the minimum spanning tree.
+      </li>
+      <li>
+        <strong>Fill some faces</strong>: a face is filled if it is small enough
+        (area per node below <code>A</code>), holds no non-member, and does not
+        clash with a set drawn beneath.
+      </li>
+      <li>
+        <strong>Draw</strong> the union of discs, edges of width
+        <code>w</code> and filled faces; smooth; cut out non-member areas.
+      </li>
+    </ol>
+    <figure>
+      <div class="shot">
+        <img
+          src="precedent/kelpfusion-fig5-t-sweep.png"
+          alt="KelpFusion t sweep"
+        />
+      </div>
+      <figcaption>
+        KelpFusion Figure 5: <code>t</code> from 4.5 (a tree) to 1 (the convex
+        hull).
+      </figcaption>
+    </figure>
+    <p>
+      The convex hull is an exact special case for the graph, but the drawn
+      shape is the hull only when every face can be filled and no non-member is
+      inside, and even then it is not the hull grown evenly by a padding.
+    </p>
+    <h3>How a bubble set is built</h3>
+    <p>
+      Members are joined by virtual edges bent around non-member boxes; members
+      and edges add energy and non-members subtract; the outline is an
+      isocontour, with the threshold lowered until every member is inside. The
+      paper says it "cannot guarantee that non-set member items will be
+      excluded".
+    </p>
+    <figure>
+      <div class="shot">
+        <img
+          src="precedent/bubblesets-fig3-virtual-edge-routing.png"
+          alt="Bubble Sets virtual edge routing"
+        />
+      </div>
+    </figure>
+    <h3>Side by side</h3>
+    <p class="small">
+      KelpFusion at <code>t = ∞</code>, 2, 1.5, 1, then the convex hull and a
+      bubble set. Story-local KelpFusion with <code>A = ∞</code>, no Voronoi
+      cut, straight-sided faces, no smoothing.
+    </p>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/kelp-compare-topology.png"
+          alt="KelpFusion compared on Topology"
+        />
+      </div>
+      <figcaption>
+        Topology: every <code>t</code> gives the same bent tube; only the hull
+        covers b.
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/kelp-compare-hyperedges.png"
+          alt="KelpFusion compared on hyperedges"
+        />
+      </div>
+      <figcaption>
+        Hyperedges: KelpFusion uses positions only, so it does not follow the
+        graph's edges.
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/kelp-compare-bars.png"
+          alt="KelpFusion compared on bars"
+        />
+      </div>
+      <figcaption>
+        Trout: every face holds another bar, so KelpFusion stays lines at every
+        <code>t</code>.
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/kelp-compare-penguins.png"
+          alt="KelpFusion compared on penguins"
+        />
+      </div>
+      <figcaption>
+        Penguins: at <code>t = 2</code> and 1.5 the dense core fills while
+        stragglers stay attached.
+      </figcaption>
+    </figure>
+    <p>
+      In the paper's study (13 people, four overlapping sets on a map),
+      KelpFusion scored 86.5% accuracy against 54.5% for Bubble Sets, and was
+      faster. The conclusion then: KelpFusion overlapped hull and spine in part
+      and replaced neither, which led to v3.
+    </p>
+  </details>
+
+  <details class="hist">
+    <summary>
+      v3: the generalized KelpFusion (<code>Shape.blob</code> with
+      <code>density</code>)
+    </summary>
+    <p>
+      Josh asked whether KelpFusion could be generalized, with configurable
+      circle sizes, to cover the usual hull, and whether it and the alpha shape
+      could be unified. v3 introduced
+      <code>Shape.blob({ density, neck, smoothing, avoiding, via })</code> with
+      hull and spine as shortcuts. It picked links by KelpFusion's shortest-path
+      graph at <em>t</em> = 1 / <code>density</code>, filled every closed face
+      without an avoided node, and smoothed only by closing.
+    </p>
+    <p>
+      Alpha shape and KelpFusion share a pipeline (keep some Delaunay links,
+      fill some faces, grow the result, end at the convex hull) but not a
+      parameter: the alpha hull is exactly the closing of the points by a disc
+      of radius alpha (Edelsbrunner, Kirkpatrick, Seidel 1983; the match with
+      closing is my derivation), its complex falls apart below half the widest
+      gap and changes with scale, while KelpFusion's graph always stays
+      connected and does not change with scale; and KelpFusion keeps long links
+      without their triangles, which no alpha complex does.
+    </p>
+    <figure>
+      <div class="shot">
+        <img src="img/blob-parameter-grid.png" alt="v3 parameter grid" />
+      </div>
+      <figcaption>The v3 parameter grid on the U.</figcaption>
+    </figure>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/topology-munkres-panel-blob.png"
+          alt="Munkres panel, v3"
+        />
+      </div>
+      <figcaption>The v3 Munkres panel.</figcaption>
+    </figure>
+    <p>
+      Josh's review of v3: alpha shapes "still seem to have a nice aesthetic to
+      them because they're a bit more convex than the kelp comparisons"; the
+      Munkres outline "still feels too shrinkwrapped"; and "I don't want to see
+      a shape curvature change when the circle connects to the link." v3's
+      outline was circle arcs, straight sides and closing arcs, so its curvature
+      jumped at every join.
+    </p>
+  </details>
+
+  <details class="hist">
+    <summary>
+      v4: the move to the current construction, and the rejected
+      <code>curve</code> key
+    </summary>
+    <p>
+      v4 made three changes, which are the current construction: blur the region
+      and take its level ½; replace <code>density</code> with
+      <code>convexity</code> (the alpha fill rule on a unitless scale, plus a
+      spanning tree); and draw links that bound a filled triangle at full width.
+      <code>density</code>'s middle (long links kept without their triangles) is
+      no longer reachable; no example needs it.
+    </p>
+    <p>
+      The comparison grids below put the classic alpha shape and v3 beside the
+      new construction. Josh's verdict: the classic alpha shape fits the data
+      worse than the new construction.
+    </p>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/smooth-convexity-grid-u.png"
+          alt="Convexity on the U, with alpha and v3"
+        />
+      </div>
+    </figure>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/smooth-convexity-grid-penguins.png"
+          alt="Convexity on the Gentoo penguins, with alpha and v3"
+        />
+      </div>
+    </figure>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/smooth-topology-ac-before-after.png"
+          alt="Topology before and after"
+        />
+      </div>
+      <figcaption>
+        v3 with <code>padding: 21</code>, <code>neck: 0.7</code>,
+        <code>smoothing: 40</code>; the new construction with the same
+        parameters (same margins, no curvature jumps); and with
+        <code>padding: 22</code>, <code>neck: 0.85</code>, the spelling now in
+        Part 1.
+      </figcaption>
+    </figure>
+    <h3>Three ways to get a curvature-continuous outline</h3>
+    <p>
+      <strong>(a) A convolution surface</strong>: add up a Gaussian bump along
+      the skeleton and draw one iso-contour (the curve where the summed field
+      equals a level). Where pieces meet their fields add, so the outline swells
+      past the promised padding. Out.
+      <strong>(b) A closed curve through the v3 outline</strong>: GoFish's
+      data-space curves interpolate <em>y</em>(<em>x</em>) and its connector
+      curves join two endpoints, and <code>catmullRom</code> is open and G1, so
+      the prototype tried closed Catmull-Rom (G1), a periodic natural cubic
+      spline (C2) and a Yuksel-style C2 blend of circles (Yuksel, ACM TOG 2020,
+      listed in #957; my own variant). <strong>(c) Blur the region</strong>:
+      chosen.
+    </p>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/smooth-candidates-field-vs-curve.png"
+          alt="Three candidates"
+        />
+      </div>
+      <figcaption>
+        Top: Topology {a, c} with dashed rings at the promised padding. Bottom:
+        the U at <code>convexity: 0.5</code>. Columns: v3, (a), (b), (c).
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/smooth-curvature-topology-ac.png"
+          alt="Curvature plot of every candidate"
+        />
+      </div>
+      <figcaption>
+        v3 jumps between 1/<em>R</em>, 0 and −1/40 at every join. The blurred
+        region moves smoothly, keeps padding (26.0 px, asked 26) and clearance
+        (10.1 px, asked 10). The curves through v3 either keep v3's sudden
+        changes (knots 10 px apart) or ripple and cut into b's clearance, 8.1 to
+        8.5 px instead of 10 (knots 25 px apart).
+      </figcaption>
+    </figure>
+    <p>
+      <strong>The <code>curve</code> key, rejected.</strong>
+      <code>enclose({ shape: Shape.hull(), curve: Curve.&lt;x&gt;() })</code>
+      would reuse the relational marks' key, but no <code>Curve</code> member is
+      closed, a curve through outline points breaks <code>padding</code> and
+      <code>clearance</code>, and it would be a second smoothing control. The
+      findings go to #957: the closed Yuksel-style blend is easy to build and
+      C2, and it ripples where point spacing is uneven.
+    </p>
+    <p>
+      v4 also tried treating an avoided node inside the set as a wall during the
+      closing, so the band wrapped b in a U. Dropped; see the retired decisions.
+    </p>
+  </details>
+
+  <details class="hist">
+    <summary>Retired decisions</summary>
+    <ul>
+      <li>
+        <strong
+          ><code>alpha</code> as a pixel radius on
+          <code>Shape.hull()</code></strong
+        >
+        (v1). Retired in v3; alpha came back in v4 as <code>convexity</code>.
+      </li>
+      <li>
+        <strong
+          >A shared kernel for three members, with
+          <code>Shape.kelp({ t })</code> left out</strong
+        >
+        (v1). Retired in v3, when hull and spine became shortcuts of one member.
+      </li>
+      <li>
+        <strong>Leave alpha out</strong> (v3). Retired in v4: alpha is back, as
+        <code>convexity</code>.
+      </li>
+      <li>
+        <strong><code>density</code></strong> as the blob's dial (v3). Dropped
+        in v4 for <code>convexity</code>.
+      </li>
+      <li>
+        <strong
+          >An avoided node inside the set as a wall during the closing</strong
+        >
+        (v4 decision 13). Retired. Josh: creates a cusp (a point where the
+        outline turns sharply).
+      </li>
+      <li>
+        <strong>A <code>curve</code> key on <code>enclose</code></strong> (v4).
+        Rejected; open decision 12 asks Josh to confirm.
+      </li>
+    </ul>
+  </details>
 </main>
+
+<script>
+  (function () {
+    var list = document.getElementById("ds-tabs");
+    if (!list) return;
+    var tabs = Array.prototype.slice.call(
+      list.querySelectorAll('[role="tab"]')
+    );
+    var KEY = "bh-dataset-tab";
+    function select(tab, focus) {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute("aria-selected", on ? "true" : "false");
+        t.tabIndex = on ? 0 : -1;
+        var panel = document.getElementById(t.getAttribute("aria-controls"));
+        if (panel) panel.hidden = !on;
+      });
+      if (focus) tab.focus();
+      try {
+        localStorage.setItem(KEY, tab.id);
+      } catch (e) {}
+    }
+    list.hidden = false;
+    var saved = null;
+    try {
+      saved = localStorage.getItem(KEY);
+    } catch (e) {}
+    var start =
+      tabs.filter(function (t) {
+        return t.id === saved;
+      })[0] || tabs[0];
+    select(start, false);
+    tabs.forEach(function (t, i) {
+      t.addEventListener("click", function () {
+        select(t, false);
+      });
+      t.addEventListener("keydown", function (e) {
+        var j = null;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown")
+          j = (i + 1) % tabs.length;
+        else if (e.key === "ArrowLeft" || e.key === "ArrowUp")
+          j = (i - 1 + tabs.length) % tabs.length;
+        else if (e.key === "Home") j = 0;
+        else if (e.key === "End") j = tabs.length - 1;
+        if (j !== null) {
+          e.preventDefault();
+          select(tabs[j], true);
+        }
+      });
+    });
+  })();
+</script>

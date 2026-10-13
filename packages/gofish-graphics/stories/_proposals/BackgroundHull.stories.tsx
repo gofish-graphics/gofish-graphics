@@ -1493,7 +1493,7 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
   return { P, R, links, faces, alpha };
 };
 
-type SmoothOpts = SkelOpts & { smoothing?: number; res?: number; compensate?: boolean; walls?: boolean };
+type SmoothOpts = SkelOpts & { smoothing?: number; res?: number; compensate?: boolean };
 type Smooth = { loops: Pt[][]; field: Field | null; skel: Skeleton };
 /** Steps 2-4: union, closing, cut, Gaussian smoothing, exact tracing. */
 const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
@@ -1539,24 +1539,6 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
       if (v < f[k]) f[k] = v;
     }
   }
-  // Avoided nodes that sit inside the members' convex hull are walls during the
-  // closing: the closing fills up to their keep-out zone, which is then cut out.
-  // (So the outline wraps snugly around a node in the middle of the set.)
-  const P = sk.P, hullP = P.length >= 3 ? convexHull(P) : P;
-  const inside = (c: Pt, r: number) =>
-    P.length >= 3 ? polySigned(c, hullP) < r : P.length === 2 ? Math.sqrt(segDist2([P[0], P[1]], c[0], c[1])) < r : false;
-  if (s > 0 && (o.walls ?? false))
-    for (const m of others) {
-      const kr = memberRadius(m) + clearance;
-      if (!inside(centerOf(m), kr)) continue;
-      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-        const x = x0 + i * res, y = y0 + j * res;
-        const dk = m.kind === "circle" ? Math.hypot(x - m.cx, y - m.cy) - kr
-          : Math.hypot(Math.max(m.x - x, 0, x - m.x - m.w), Math.max(m.y - y, 0, y - m.y - m.h)) - clearance;
-        const k = j * W + i;
-        if (dk < f[k]) f[k] = dk;
-      }
-    }
   // closing by s (exact distance transform), F > 0 inside
   const F = new Float64Array(W * H);
   if (s > 0) {
@@ -1882,17 +1864,14 @@ export const V4Candidates: StoryObj = {
 };
 
 // Topology a/c avoiding b: v3 against the new construction.
-// {a, c} for the Munkres panel. Without walls the link detours under b (a boomerang);
-// with walls, b is a wall for the closing, so the outline fills up to b's keep-out zone.
+// {a, c} for the Munkres panel: the link detours under b.
 const MUNK = { avoiding: [ring(MB)], pad: 22, convexity: 0, neck: 0.85, smoothing: 40, clearance: 6 };
-const MUNK_WALLS = { ...MUNK, pad: 20, neck: 0.8, walls: true };
 export const V4Topology: StoryObj = {
   render: () => titledGrid([
     ["v3: padding 21, neck 0.7, smoothing 40", layer([...loopInk(acV3(), RED, 0.3, 2), ...topoBase()])],
     ["new, same parameters", layer([...loopInk(acV4({ neck: 0.7 }).loops, RED, 0.3, 2), ...topoBase()])],
     ["new: padding 22, neck 0.85", layer([...loopInk(smoothBlob([MA, MC], MUNK).loops, RED, 0.3, 2), ...topoBase()])],
-    ["new, b as a wall: padding 20, neck 0.8", layer([...loopInk(smoothBlob([MA, MC], MUNK_WALLS).loops, RED, 0.3, 2), ...topoBase()])],
-  ], { w: 340, h: 150, cols: 2 }),
+  ], { w: 340, h: 150, cols: 3 }),
 };
 // Munkres' ninth panel (Topology, 2nd ed., Figure 12.1) with the new construction for {a, c}.
 const munkresPanel = (o: SmoothOpts) => {
@@ -1911,14 +1890,6 @@ export const V4TopologyMunkres: StoryObj = {
     return container;
   },
 };
-export const V4TopologyMunkresWalls: StoryObj = {
-  render: () => {
-    const container = initializeContainer();
-    layer([munkresPanel(MUNK_WALLS)]).render(container, { w: 380, h: 190 });
-    return container;
-  },
-};
-
 // Convexity on the U and on one penguin species, against the classic alpha shape and v3.
 const convexityCells = (o: {
   members: Extract<Member, { kind: "circle" }>[]; avoiding: Member[]; pad: number; alpha: number; smoothing: number;
@@ -1996,6 +1967,147 @@ export const V4TroutBars: StoryObj = {
   render: () => {
     const container = initializeContainer();
     barsScene(false, blobInk(smoothBlob(TROUT, { avoiding: [...NOT_TROUT, AXIS_BAND], pad: 4, convexity: 0, neck: 0.5, smoothing: 8, clearance: 4 }).loops, "#d6580c", 0.18, 2)).render(container, { w: 400, h: 240 });
+    return container;
+  },
+};
+
+// ── (f) dataset explorer: one two-parameter grid per dataset ────────────────
+// Columns: convexity (0, 0.5, 0.8, 1). Rows: smoothing at half, equal to and twice
+// the padding. Where convexity does nothing (two members), columns are `neck`.
+// Every cell is the v4 construction (`smoothBlob`). The recommended defaults
+// cell (convexity 0.5 or neck 1, smoothing = padding) gets a teal frame.
+type Axis = { name: string; vals: number[]; fmt?: (v: number) => string; def: number };
+const paramGrid = (g: {
+  cols: Axis; rows: Axis; w: number; h: number;
+  cell: (c: number, r: number) => any[];
+}) => {
+  const container = initializeContainer();
+  const nc = g.cols.vals.length, nr = g.rows.vals.length;
+  const W0 = 92 + nc * (g.w + 8), k = Math.min(1, 1120 / W0);
+  const GX = 92 / k, GY = 40 / k, gap = 8 / k, fs = 12.5 / k;
+  const W = GX + nc * (g.w + gap), H = GY + nr * (g.h + gap);
+  const fmtC = g.cols.fmt ?? String, fmtR = g.rows.fmt ?? String;
+  const frame = (x: number, y: number, on: boolean) =>
+    polygon({ points: [[x, y], [x + g.w, y], [x + g.w, y + g.h], [x, y + g.h]], fill: "none", stroke: on ? "#0f6e74" : "#d5d9de", strokeWidth: (on ? 3 : 1) / k });
+  const ink: any[] = [
+    label(GX, 2 / k, `${g.cols.name} →`, { fontSize: fs, fontWeight: "bold", fill: "#333" }),
+    label(4 / k, 20 / k, `${g.rows.name} ↓`, { fontSize: fs, fontWeight: "bold", fill: "#333" }),
+  ];
+  g.cols.vals.forEach((v, ci) =>
+    ink.push(label(GX + ci * (g.w + gap) + 4 / k, 20 / k, fmtC(v) + (v === g.cols.def ? " (default)" : ""), { fontSize: fs, fill: v === g.cols.def ? "#0f6e74" : "#333", fontWeight: v === g.cols.def ? "bold" : "normal" }))
+  );
+  g.rows.vals.forEach((v, ri) => {
+    const y = GY + ri * (g.h + gap);
+    ink.push(label(4 / k, y + g.h / 2 - 16 / k, fmtR(v), { fontSize: fs, fill: v === g.rows.def ? "#0f6e74" : "#333", fontWeight: v === g.rows.def ? "bold" : "normal" }));
+    if (v === g.rows.def) ink.push(label(4 / k, y + g.h / 2 + 2 / k, "(default)", { fontSize: fs, fill: "#0f6e74", fontWeight: "bold" }));
+    g.cols.vals.forEach((c, ci) => {
+      const x = GX + ci * (g.w + gap);
+      ink.push(position({ x, y }, [layer(g.cell(c, v))]));
+      ink.push(frame(x, y, c === g.cols.def && v === g.rows.def));
+    });
+  });
+  layer([polygon({ points: [[0, 0], [W, 0], [W, H], [0, H]], fill: "white", stroke: "none" }), ...ink]).render(container, { w: W, h: H });
+  // shrink wide grids to fit the 1264 px capture root; the drawing stays vector
+  if (k < 1) container.style.zoom = String(k);
+  return container;
+};
+const CONVEXITY: Axis = { name: "convexity", vals: [0, 0.5, 0.8, 1], def: 0.5 };
+const NECK: Axis = { name: "neck", vals: [0.5, 0.7, 0.85, 1], def: 1 };
+const smoothingAxis = (pad: number): Axis => ({ name: "smoothing", vals: [pad / 2, pad, 2 * pad], fmt: (v) => `${v} px`, def: pad });
+/** Shift a circle member into a cell's local frame. */
+const shiftC = (m: Extract<Member, { kind: "circle" }>, dx: number, dy: number) => C(m.cx + dx, m.cy + dy, m.r);
+
+// (a) Topology: {a, c} avoiding b. Two members, so convexity does nothing: columns are neck.
+export const GridTopology: StoryObj = {
+  render: () => paramGrid({
+    cols: NECK, rows: smoothingAxis(22), w: 330, h: 150,
+    cell: (neck, smoothing) => [position({ x: -5, y: -10 }, [layer([
+      ...loopInk(smoothBlob([MA, MC], { avoiding: [ring(MB)], pad: 22, convexity: 0, neck, smoothing, clearance: 6 }).loops, RED, 0.3, 2),
+      ...topoBase(),
+    ])])],
+  }),
+};
+// (b) the U-shaped cloud with two non-members in its opening.
+export const GridU: StoryObj = {
+  render: () => paramGrid({
+    cols: CONVEXITY, rows: smoothingAxis(8), w: 230, h: 180,
+    cell: (convexity, smoothing) => [position({ x: 2, y: 2 }, [uPanel(blobInk(smoothBlob(U, { avoiding: NON, pad: 8, convexity, neck: 1, smoothing }).loops, BLUE))])],
+  }),
+};
+// (c) Gentoo among the other species (cropped to the Gentoo cluster).
+export const GridPenguins: StoryObj = {
+  render: () => {
+    const g = gentooPts(), PWc = 290, PHc = 150;
+    const ox = Math.min(...g.map((m) => m.cx)) - 20, oy = Math.min(...g.map((m) => m.cy)) - 12;
+    const members = g.map((m) => shiftC(m, -ox, -oy));
+    const avoiding = otherPts().map((m) => shiftC(m, -ox, -oy)).filter((m) => m.cx > -10 && m.cx < PWc + 10 && m.cy > -10 && m.cy < PHc + 10);
+    const shown = avoiding.filter((m) => m.cx > 3 && m.cx < PWc - 3 && m.cy > 3 && m.cy < PHc - 3);
+    return paramGrid({
+      cols: CONVEXITY, rows: smoothingAxis(4), w: PWc, h: PHc,
+      cell: (convexity, smoothing) => [
+        ...blobInk(smoothBlob(members, { avoiding, pad: 4, convexity, neck: 1, smoothing }).loops, SPECIES_COLORS.Gentoo),
+        ...shown.map((m) => dot(m, "#b8bcc2")), ...members.map((m) => dot(m, SPECIES_COLORS.Gentoo)),
+      ],
+    });
+  },
+};
+// (d) hyperedges over the node-link graph: the graph's edges between members are `via`.
+export const GridHyperedges: StoryObj = {
+  render: () => paramGrid({
+    cols: CONVEXITY, rows: smoothingAxis(6), w: 345, h: 205,
+    cell: (convexity, smoothing) => [position({ x: -12, y: -8 }, [hyperPanel(SETS.flatMap((s) => {
+      const members = s.nodes.map(hyperNode);
+      const others = Object.keys(NODES).filter((id) => !s.nodes.includes(id)).map(hyperNode);
+      const via = EDGES.filter(([p, q]) => s.nodes.includes(p) && s.nodes.includes(q)).map(([p, q]) => [NODES[p], NODES[q]] as [Pt, Pt]);
+      return blobInk(smoothBlob(members, { avoiding: others, via, pad: 6, convexity, neck: 1, smoothing, clearance: 3 }).loops, s.color, 0.25, 2);
+    }))])],
+  }),
+};
+// (e) trout across lakes, avoiding the other bars and the axis band.
+const troutCell = (o: Partial<SmoothOpts>) => [position({ x: -8, y: -12 }, [barsScene(false,
+  blobInk(smoothBlob(TROUT, { avoiding: [...NOT_TROUT, AXIS_BAND], pad: 4, convexity: 0.5, neck: 1, smoothing: 4, clearance: 4, ...o }).loops, "#d6580c", 0.18, 2), false)])];
+// Convexity does nothing here (every triangle between trout bars holds another bar,
+// and every direct link is blocked), so columns are neck.
+export const GridTrout: StoryObj = {
+  render: () => paramGrid({ cols: NECK, rows: smoothingAxis(4), w: 440, h: 200, cell: (neck, smoothing) => troutCell({ neck, smoothing }) }),
+};
+// (f) Munkres' ninth panel; {a, c} as in (a), so columns are neck.
+export const GridMunkres: StoryObj = {
+  render: () => paramGrid({
+    cols: NECK, rows: smoothingAxis(22), w: 384, h: 192,
+    cell: (neck, smoothing) => [position({ x: -2, y: -2 }, [munkresPanel({ ...MUNK, neck, smoothing })])],
+  }),
+};
+
+// The curvature of the current construction alone, on the recommended {a, c} spelling
+// (padding 22, neck 0.85, smoothing 40, clearance 6), with its comb and its plot.
+export const V4CurvatureCurrent: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    const r = smoothWithCurvature(smoothBlob([MA, MC], MUNK));
+    const left = r.pts.reduce((a, b) => (b[0] < a[0] ? b : a));
+    const note = `measured: padding at a ${(MA.cx - left[0] - MA.r).toFixed(1)} px (asked 22), gap to b's ring ${(minDistTo(r.pts, [MB.cx, MB.cy]) - 14).toFixed(1)} px (asked 6)`;
+    console.error(`[v4 curvature current] ${note}`);
+    const color = "#1f6f8b", invR = 1 / (MA.r + 22);
+    layer([
+      position({ x: 0, y: 4 }, [layer([
+        polygon({ points: r.pts, fill: color, opacity: 0.12, stroke: "none" }),
+        ...comb(r.pts, r.kappa, 300, 2, color),
+        polygon({ points: r.pts, fill: "none", stroke: "#111", strokeWidth: 1.2 }),
+        ...topoBase(),
+      ])]),
+      position({ x: 330, y: 0 }, [kappaPlot(r.pts, r.kappa, { w: 520, h: 170, kmax: 0.06, color, title: "curvature along the outline, from the leftmost point", refs: [[invR, "1/R"], [-1 / 40, "−1/40"]] })]),
+      label(376, 16, note, { fontSize: 9.5, fill: "#555" }),
+    ]).render(container, { w: 860, h: 175 });
+    return container;
+  },
+};
+
+// One hull per species with the hull preset (convexity 1, neck 1) of the current construction.
+export const V4PenguinHulls: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    penguinScene((ms, c) => blobInk(smoothBlob(ms, { pad: 6, convexity: 1, neck: 1, smoothing: 6 }).loops, c, 0.18, 1.5)).render(container, { w: 420, h: 330 });
     return container;
   },
 };
