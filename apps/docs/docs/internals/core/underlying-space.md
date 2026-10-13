@@ -2026,9 +2026,47 @@ the closed domain: the count's step is the one a numeric axis with that many
 ticks uses (`tickIncrement`), and the largest value falls in the last cell
 when it sits on an edge, as in numpy's `histogram` and d3's `bin`.
 
+**Cycles, products and chains.** A calendar level binned alone is a part
+of the next larger level (`CalendarPartition.cycle`): `Calendar.month` is
+the month of the year, so all Junes are one cell. A week is a part of
+nothing (weeks do not nest in months or years) and nothing holds a year, so
+those stay on the line. The parts are not cells of the line: a
+`CycleCell` (cells.ts) has an id (its field values, `"6"` for June), a
+label, its place in the cycle, and no region. The cells of a cycle are read
+off one cell of the cycle unit, the reference cycle (`referencePeriod` in
+calendar.ts: the leap year 2000, so February 29 is a part of the year; its
+31-day January for the days of a month), so a key over them has every part,
+in order, whatever the data holds. That is the key's `HasCycle`: the order
+and the whole cycle. A value falls in the part named by its own fields in
+the column's zone (`CalendarPartition.part`). TODO(#1052): a spread over a
+cycle in polar space should leave the same gap between its last part and
+its first as between any two; that default is not built.
+
+A list is a **product**, `[Calendar.year, Calendar.month]` (`checkProduct`):
+each level after the first is a part of the one before it, which has a
+step of 1, so the cells where one cell of each level meets one of the next
+are each one interval, the finest level's cells (the June of 2015 is the
+2015 year met with every June). Its label names every level at once
+(`productLabel`: `"Jun 2015"`). With a first level on the line its cells are
+cells of the line, every one in the range of the domain; with a first level
+that is a part (`[Calendar.month, Calendar.day]`) they are the parts of a
+cycle. A second `bin` op is a **chain** (`chainCells`): it splits each cell
+of the bin before it, and each cell keeps the cell it was split from
+(`KeyCell.parent`). On the line the next bin must be finer, its cells are
+read on the line, and a cell it shares with two cells before it is cut in
+two (`refine`); on a cycle the next bin must be a part of the one before it,
+as in a product. So `.bin(Calendar.year).bin(Calendar.month)` and
+`.bin([Calendar.year, Calendar.month])` have the same leaves; only the chain
+keeps their years, which an ordinal axis over it shows as a level
+([Axes](/internals/frontend/axes#levels)). The type follows the cells: a key
+first binned by a part (`RegionOf` in `fieldExpr.ts`, read off the level's
+unit) has no region, and a chain keeps the kind of its first bin (the
+phantom `binned` flag).
+
 The keys of a split may now be cells (`SplitKey`). Everything that reads a
-key as text or a number reads the cell's id (its start), so `.sort()` orders
-cells by start and `time.sequence` keys its frames at cell starts.
+key as text or a number reads the cell's id (its start, or a part's field
+values), so `.sort()` orders cells of the line by start and parts of a cycle
+by their place in it, and `time.sequence` keys its frames at cell starts.
 
 ### Partition: each group in its cell
 
@@ -2037,10 +2075,12 @@ cells by start and `time.sequence` keys its frames at cell starts.
 it gives each group its cell's interval `[start, end)` on one continuous
 scale, so a 29-day February is narrower than a 31-day March and an empty
 cell keeps its place (it is a group with no rows, and it is still placed).
-Its key must have a region. Only `.bin(p)` makes one, so the type
-of a field expression says whether it does (`FieldExpr<true>`, a phantom
-`hasRegion` flag that domain ops keep and aggregates drop), and the split
-checks the wire form from Python with an error that names the fix.
+Its key must have a region. Only `.bin(p)` with cells of the line makes one,
+so the type of a field expression says whether it does (`FieldExpr<true>`,
+a phantom `hasRegion` flag that domain ops keep and aggregates drop, and
+that a part of a cycle does not set), and the split checks the wire form
+from Python with an error that names the fix (for a part of a cycle: bin by
+the year too, as a product or a chain).
 
 It has no layout code of its own. It is a layer with one `position`
 constraint per child that gives it its cell (`Constraint.position({ region

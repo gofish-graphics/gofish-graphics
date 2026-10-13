@@ -273,12 +273,12 @@ const errorOf = async (fn: () => unknown): Promise<string> => {
 
 console.log("validation");
 ok(
-  '"auto" inside a per-tier array is an error',
+  '"auto" inside a per-level array is an error',
   (
     await errorOf(() =>
       resolveAxisLabelAngles({ x: { labelAngle: ["auto"] as any } })
     )
-  ).includes("per-tier array")
+  ).includes("per-level array")
 );
 ok(
   "an unknown string is an error",

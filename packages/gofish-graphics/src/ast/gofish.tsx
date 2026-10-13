@@ -142,7 +142,7 @@ export type AxisOptions =
        *  the right, `90` reads top-to-bottom).
        *
        *  **`"auto"`** picks the angle for you, separately for each label row
-       *  (each tier of a nested ordinal axis): the first of 0°, 45°, 90° at
+       *  (each level of the axis): the first of 0°, 45°, 90° at
        *  which no two labels in that row collide (at least 2px apart). A
        *  category row that collides at every angle is hidden and takes no
        *  space; a continuous tick row cannot be hidden and keeps the angle
@@ -151,18 +151,18 @@ export type AxisOptions =
        *  Collisions are counted across the whole chart. The chart is
        *  laid out once per angle tried, so it must be rebuildable: a chart
        *  builder or a component thunk, not a prebuilt node (see
-       *  axes/autoLabelAngle.ts). "auto" cannot be an entry of a per-tier
+       *  axes/autoLabelAngle.ts). "auto" cannot be an entry of a per-level
        *  array.
        *
-       *  A plain **number** applies to every tier of a nested ordinal axis
-       *  (e.g. both the city and year rows of a grouped bar chart). An
-       *  **array** is per-tier, indexed from the INNERMOST tier outward —
-       *  `[45]` rotates only the innermost category row (e.g. the year row
-       *  directly under grouped bars) and leaves outer tiers (e.g. the city
-       *  row) unrotated; `[45, 0]` is the explicit two-tier form. An index
-       *  beyond the array's length means unrotated/undefined. A continuous
-       *  axis has a single tier: it uses the number, or `array[0]` for the
-       *  array form. */
+       *  A plain **number** applies to every level of the axis (e.g. both
+       *  the city and year rows of a grouped bar chart). An **array** is per
+       *  level, by the depths of `levels`, nearest the plot first — `[45]`
+       *  rotates only the innermost level (e.g. the year row directly under
+       *  grouped bars) and leaves outer levels (e.g. the city row)
+       *  unrotated; `[45, 0]` is the explicit two-level form. An index
+       *  beyond the array's length means unrotated/undefined. A numeric axis
+       *  is one level, so in a faceted chart its ticks take the first entry
+       *  and the facets' labels the next. */
       labelAngle?: number | number[] | "auto";
       /** The levels of the axis: its bands of labels, by depth, nearest the
        *  plot first. Every axis on the dim has levels, nested ones counted
@@ -220,7 +220,7 @@ function checkLabelAngle(v: unknown, axis: "x" | "y"): LabelAngleOption {
     if (v.includes("auto"))
       throw new Error(
         `axes.${axis}.labelAngle: "auto" applies to the whole axis, so it ` +
-          `cannot be one entry of a per-tier array; use labelAngle: "auto".`
+          `cannot be one entry of a per-level array; use labelAngle: "auto".`
       );
     if (v.every((a) => typeof a === "number")) return v as number[];
   }
@@ -230,7 +230,7 @@ function checkLabelAngle(v: unknown, axis: "x" | "y"): LabelAngleOption {
   );
 }
 
-/** A `number` applies to every tier; a `number[]` is per-tier, innermost first;
+/** A `number` applies to every level; a `number[]` is per level, innermost first;
  *  `"auto"` is chosen per axis by `runLayout` (see `AxisOptions.labelAngle`). */
 export const resolveAxisLabelAngles = (
   axes: AxesOptions | undefined

@@ -40,7 +40,10 @@ A kind is valid only on its key: `Bin.step` and `Bin.thresholds` on
 `field(x).bin`, `Bin.hex` and `Bin.voronoi` on `struct(x=..., y=...).bin`. The
 other way round raises a `TypeError` that names the right key.
 `field(x).bin` also takes a [Calendar](/python/api/core/calendar) value, for a
-time column.
+time column, or a list of Calendar values (a product,
+`[Calendar.year, Calendar.month]`). A second `.bin(...)` on a field splits
+the cells of the first (a chain,
+`field(x).bin(Bin.step(10)).bin(Bin.step(2))`).
 
 `struct(x=..., y=...)` takes two field names: `x` is the column read on the x
 axis, and `y` the column read on the y axis. The name follows polars'

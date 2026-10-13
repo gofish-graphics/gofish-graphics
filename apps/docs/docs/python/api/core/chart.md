@@ -69,21 +69,53 @@ chart(data, axes={"x": {"title": "Year"}, "y": True})   # custom x title
 chart(data, axes={"x": {"title": False}, "y": True})    # suppress inferred x title
 chart(data, axes={"x": {"side": "end"}})                # x-axis on the far edge
 chart(data, axes={"x": {"label_angle": 45}})            # x labels rotated 45 degrees
-chart(data, axes={"x": {"rows": [Calendar.month, Calendar.year]}})  # rows of a time axis
+chart(data, axes={"x": {"levels": [Calendar.week, Calendar.month]}})  # the rows of a time axis
+chart(data, axes={"x": {"levels": [False, True]}})       # hide the innermost level
 ```
 
 Keys inside the per-axis dict are snake_case, like every keyword argument:
-`"title"`, `"side"`, `"label_angle"`, and `"rows"`. Any other key, including the
+`"title"`, `"side"`, `"label_angle"`, and `"levels"`. Any other key, including the
 camelCase `"labelAngle"`, raises a `TypeError`.
 
 `"label_angle"` rotates the tick and category labels clockwise by that many
-degrees. A list rotates each tier of a nested axis separately, from the
-innermost tier outward (`[45]` rotates only the innermost row), and `"auto"`
-picks 0, 45, or 90 degrees for each label row so the labels do not collide.
+degrees. A list rotates each level of the axis separately, by the same
+depths as `"levels"`, nearest the plot first (`[45]` rotates only the
+innermost level), and `"auto"` picks 0, 45, or 90 degrees for each level so
+the labels do not collide.
 
-`"rows"` sets the label rows of a time axis, an axis over a
-[`Schema.time()`](/python/api/core/schema) column. See
-[`Calendar`](/python/api/core/calendar).
+`"levels"` sets the axis's levels, its bands of labels, by depth, nearest
+the plot first. Every axis on the dimension has levels, counted from the
+inside out:
+
+| Axis    | Inferred levels                                                                                                                                     |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| numeric | one: its ticks                                                                                                                                      |
+| time    | two rows: the level and step its domain picks for about 10 ticks, then that level's parent (see [`Calendar`](/python/api/core/calendar))            |
+| ordinal | one per split; a key binned by a chain, `field("date").bin(Calendar.year).bin(Calendar.month)`, has one per bin, nearest first (months, then years) |
+
+Each entry sets the level at its depth:
+
+- `True` keeps the level as inferred.
+- `False` hides it: its labels (and a time row's ticks) are not drawn and
+  take no space.
+- A Calendar value names its cells. On a time axis it is a row's partition.
+  On an ordinal axis over cells of time, it groups the slots by its cells:
+  `Calendar.year` over month slots labels each run of months in one year.
+
+Depths the list does not reach stay as inferred, so `[False]` hides only the
+innermost level. On the outermost axis of the dimension, a Calendar value
+past the inferred levels adds a level: `"levels": [True, Calendar.year]` over
+the slots of `field("date").bin([Calendar.year, Calendar.month])` adds a year
+level. An entry that cannot apply is an error that lists the dimension's
+levels: a Calendar value over slots that are not times, or that it does not
+group (`Calendar.week` over months), `False` on a numeric axis, and an entry
+past the last level.
+
+On an ordinal axis, the innermost ordinal level of the dimension draws no
+ticks. Every level outside it draws one divider in each gap between
+neighboring groups: a line centered in the gap, from the edge of what the
+axis labels down through its own row. Each label is centered under its run
+of slots.
 
 Each per-axis dict also accepts `"side": "start" | "end"`. By default a
 **continuous/quantitative x-axis renders at the visual bottom** (and a continuous

@@ -34,15 +34,25 @@ are the groups of its key, so there is no list of children to pass it.
 ## The key must have a region
 
 `by` must be a key whose values have a region. That is a binned field,
-`field(x).bin(p)`, whose values are cells, each an interval `[start, end)`,
-or a binned struct, `struct({ x, y }).bin(b)`, whose values are cells of the
+`field(x).bin(p)` whose values are cells of the line, each an interval
+`[start, end)`, or a binned struct, `struct({ x, y }).bin(b)`, whose values are cells of the
 plane (see [Cells of the plane](#cells-of-the-plane)). See [the field-expression pipeline](/js/api/operators/spread#field-expression-pipeline)
 for the partitions `.bin` takes.
 
 ```ts
-partition({ by: field("date").bin(Calendar.month), dir: "x" }); // true month widths
+partition({ by: field("date").bin([Calendar.year, Calendar.month]), dir: "x" }); // true month widths
+partition({
+  by: field("date").bin(Calendar.year).bin(Calendar.month),
+  dir: "x",
+}); // the same cells
 partition({ by: field("rating").bin(Bin.step(0.5)), dir: "x" }); // a histogram
 ```
+
+A level binned alone that is a part of a larger level is a part of a cycle,
+with no one region on the time line: `field("date").bin(Calendar.month)` is
+the month of the year, every June in one cell. So
+`partition({ by: field("date").bin(Calendar.month), dir: "x" })` is a type
+error, and an error naming the product and the chain when the chart renders.
 
 A plain field has no region, so `partition({ by: "date", dir: "x" })` and
 `partition({ by: field("date"), dir: "x" })` are type errors in TypeScript,

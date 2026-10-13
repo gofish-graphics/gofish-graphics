@@ -5,6 +5,8 @@ order: 50
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/axes/elaborate.tsx
+  - packages/gofish-graphics/src/ast/axes/axisSpan.tsx
+  - packages/gofish-graphics/src/ast/axes/levels.ts
   - packages/gofish-graphics/src/ast/axes/timeRows.ts
   - packages/gofish-graphics/src/ast/axes/autoLabelAngle.ts
   - packages/gofish-graphics/src/ast/choice/choose.ts
@@ -139,7 +141,7 @@ uses that same side, so a title and its axis always land on the same edge.
 ### Label rotation (`labelAngle`)
 
 The public `axes: { x: { labelAngle: number | number[] | "auto" } }` option (#746, extended
-to per-tier arrays afterward) rotates a tick or category label about its anchor,
+to per-level arrays afterward) rotates a tick or category label about its anchor,
 authored **screen-clockwise** to match Vega-Lite's `labelAngle`. It is threaded the
 same way `side` is —
 `elaborateChrome → elaborationsFor → elaborate{Continuous,Ordinal}Axis → tickMark` /
@@ -199,34 +201,47 @@ label is a sibling related to it by the same heterogeneous
 (still `tickMark` + `Spread`'s uniform `"middle"` alignment), not just untouched
 geometry, so those angles stay pixel-identical to before the hanging-point rule.
 
-**Per-tier selection.** A plain number applies uniformly to every tier of a
-nested ordinal axis (a grouped bar chart's inner year row and outer city row
-both rotate the same amount); an array is per-tier instead, indexed from the
-INNERMOST tier outward — `angleForTier(opt, tier)` picks `opt` itself when it's
-a number, or `opt[tier]` (possibly `undefined`, past the array's end) when it's
-an array. `elaborationsFor` needs to know which tier index `tier` a given
-ordinal-axis-owning node is, since **ordinal axes nest**: `resolveAxes` lets a
-distinct ordinal grouping claim its own axis at every depth (`_node.ts`'s
-`resolveAxes`), so a grouped bar chart has one node owning the city axis and,
-independently, one sibling-node-per-city each owning that city's year axis — a
-DEEPER call in the bottom-up `elaborateChrome` walk always elaborates an inner
-tier before an ancestor elaborates an outer one on the same dim.
+### Levels
 
-The tier index is computed by bubbling a per-dim `tierCounts: [number, number]`
-UP through the recursion: `elaborateChrome` folds it as a `Math.max` over its own children's
-returned `tierCounts` (a node's tier count only depends on ITS OWN subtree, so
-sibling subtrees elsewhere in the tree — e.g. two independent grouped-bar
-regions — don't interfere with each other), then calls `elaborationsFor` with
-that folded value. Inside `elaborationsFor`, a node that claims an ordinal axis
-on dim `d` reads `tier = tierCounts[d]` (0 for the first — innermost — claim
-seen anywhere below it) as its OWN tier index, then increments
-`tierCounts[d]` by one before returning, so an ancestor claiming the same dim's
-next-outer tier reads the incremented count. Continuous/difference axes are
-always single-owner and single-tier (`resolveAxes`: "Continuous: single-owner —
-only the root-most unclaimed dim claims"), so they always resolve tier `0` —
-i.e. the number, or `array[0]`.
+Every axis on a dim has **levels**, its bands of labels, numbered by depth
+from the plot outward: a numeric axis has one (its ticks), a time axis one
+per row, and an ordinal axis one per split, plus one per bin before the last
+of a chained key (`field(x).bin(Calendar.year).bin(Calendar.month)`: a month
+level, then a year level). Axes nest, since **ordinal axes nest**:
+`resolveAxes` lets a distinct ordinal grouping claim its own axis at every
+depth (`_node.ts`'s `resolveAxes`), so a grouped bar chart has one node owning
+the city axis and, independently, one sibling-node-per-city each owning that
+city's year axis, and a DEEPER call in the bottom-up `elaborateChrome` walk
+always elaborates an inner axis before an ancestor elaborates an outer one on
+the same dim.
 
-### Automatic label angle (`labelAngle: "auto"`)
+The depths come from a `LevelFold` bubbled UP through the recursion: per dim,
+the names of the levels drawn so far (nearest the plot first), whether one of
+them is ordinal, and the `levels` entries that could not apply.
+`elaborateChrome` folds it over its own children (the longest list of names;
+ordinal if any child's is), so a node's fold depends only on ITS OWN subtree
+and two independent grouped-bar regions don't interfere, then hands it to
+`elaborationsFor`. An axis on dim `d` starts at depth `names[d].length` and
+appends the names of its own levels. Both the public `axes.x.levels` entries
+and a per-level `labelAngle` array are read at those depths: `angleForTier`
+picks the number itself, or `array[depth]`.
+
+`axes.x.levels` (`AxisOptions.levels` in `gofish.tsx`; read once by
+`levelsFromOption` in `axes/levels.ts`) is a list by depth. `true` keeps a
+level as inferred, `false` hides it (a hidden level draws nothing and takes
+no space; the node still claims the axis and its depths, so no ancestor draws
+it instead), and a Calendar value names its cells: a time row's partition
+(`timeRows` in `elaborate.tsx`), or, on an ordinal axis over cells of time,
+the cells that group its slots (`calendarLevel`: each slot's cell of the
+partition, read off a timeline cell's start, or off a part of a cycle's cell
+in the reference cycle, `CycleCell.ref`). An axis with no axis above it on
+its dim (`hasOuterAxis` reads the ancestors' still-set `axis` flags) also
+takes the Calendar entries past its inferred levels, as more levels. An entry
+that cannot apply records an issue, and `layout` raises the first one, or an
+entry past the last level, with the dim's level names (`levelsError`). So an
+error lists every level of the chart's dim, not only the axis that found it.
+
+### Automatic label angle### Automatic label angle (`labelAngle: "auto"`)
 
 `labelAngle: "auto"` picks each label row's setting from 0°, 45°, 90°, and (for
 a category row only) hidden, in that order of preference: the first setting at
@@ -262,7 +277,8 @@ thunk path. A node built by hand has no `rebuild`, and `"auto"` on it throws.
 
 **Tagging and reading labels.** Axis elaboration tags every tick and category
 label `Text` with `axisLabel = { dim, kind, tier }` (`kind` is `"ordinal"` or
-`"continuous"`; continuous labels are tier 0;
+`"continuous"`; `tier` is the label's level depth on its dim, see
+[Levels](#levels);
 difference-axis delta labels are not tagged, since the angle does not apply to
 them). After a run, `collectLabelBoxes` walks the laid-out tree, and for each
 tagged label reads its unrotated text box and rotation from the `Text` node and
@@ -290,7 +306,7 @@ function, `(row) => angle | "hidden" | undefined`, asked once per row; a manual
 `labelAngle` becomes one via `labelRowSettingsFromAngles`, and `runLayout` hands
 `layout()` the chosen one directly (an internal option, not a public value). A
 hidden ordinal row is simply not elaborated: the node still claims the axis and
-its tier, but adds no labels, so the row takes no space. The runs are uniform:
+its depth, but adds no labels, so the row takes no space. The runs are uniform:
 each applies one candidate to every row of every `"auto"` axis (memoized by
 candidate; in the "hidden" run a continuous row stays upright and is never
 scored), and each row runs its own `chooseFirstFit` over its candidates
@@ -299,9 +315,9 @@ scores. If the winners are not all the same, that combination is laid out once
 more. This rests on two
 assumptions that hold today. Axes don't interact: labels do not feed σ, so one
 axis's angles cannot move the other axis's labels along their track. Rows don't
-interact for collisions: each tier is its own cross-axis row, and a tier's angle
+interact for collisions: each level is its own cross-axis row, and a level's angle
 pushes the rows outside it further into (or back out of) the margin without changing their
-spacing along the track. `"auto"` inside a per-tier array is an error.
+spacing along the track. `"auto"` inside a per-level array is an error.
 
 **Warning when categories go unlabeled.** A hidden category row is fine when a
 legend still names its categories. Ordinal labels carry the field their row
@@ -400,16 +416,15 @@ difference axis), never off the size claim:
   a label; choosing ticks from the labels' room is #1063. Rows stack outward from the
   line by a fixed offset each, the row's text height (its widest label on a
   y axis) plus a gap, so the axis emits all its rows in one elaboration
-  rather than going through the ordinal tiers. Rows are independent
+  rather than one axis per row. Rows are independent
   partitions, so they need not nest. A tick both rows share is drawn once,
-  short; an outer-row tick between inner ticks is longer. `axes.x.rows` sets the rows
-  (parsed once, by `layout`, into the axis demand below). The demand
-  reaches every axis on the dim, but only a time axis reads the rows (the
-  rule is stated once, on `AxisOptions.rows` in `gofish.tsx`).
-  `elaborateChrome` folds which dims drew a time axis (`timeAxes`) bottom-up
-  with the ordinal tier counts, and `layout` rejects rows on a dim that drew
-  none. Without
-  them the inner row is the level and step whose cells are nearest in
+  short; an outer-row tick between inner ticks is longer. The rows are the
+  axis's [levels](#levels) (`timeRows`): a Calendar entry names a row, the
+  outer row follows the inner row as named, and `false` hides a row's ticks
+  and labels. The axis stamps its rows on its axis demand when it is
+  elaborated, before any solve nices its domain, so the scope's nicing and
+  the drawing read the same inner row. Without
+  entries the inner row is the level and step whose cells are nearest in
   length to a tenth of the domain (`tickPartition` in `calendar.ts`, like
   d3's time ticks, and like a numeric axis's ~10 ticks), and the outer row
   is that level's parent. Both choices read the domain only, never pixels.
@@ -450,25 +465,35 @@ difference axis), never off the size claim:
   that. Key discovery uses `_ordinalKeyMap` (set by operators such as `table`)
   or a subtree walk by `node.key`.
 
-  An ordinal over **cells** (`ORDINAL_TYPE.cells`, from a binned key
-  `field(x).bin(p)`; see
-  [Underlying Space](/internals/core/underlying-space#cells-a-binned-key))
-  places cells, not points, so its labels name cells. Placement follows what
-  the space places, read off the space type, never a tick setting on the
-  column's datatype: points get labels centered on their ticks (the numeric and
-  time axes above), and cells get labels centered between their boundary
-  ticks. Each label's text is the cell's label (the partition's `format`, or
-  `"0.5–1"`, or `"Jan"`), still centered on its key node, and
-  `cellAxisRows` adds a tick at each edge of each key node (`align` of the
-  tick's middle with the node's `start` or `end`), seated in the gutter like
-  the labels. Neighboring cells with no space between them share a tick. For
-  calendar cells it also adds an outer row of the cells' parent level (a
-  year row under months): one label per run of cells in the same parent cell,
-  start-aligned with the run's first cell (the first visible point of the
-  parent cell, as a time axis's outer row puts it), with a long tick where
-  the run starts. The outer row sits past the inner labels by the inner
-  labels' depth, as rotated (the box `rotatedExtent` in `autoLabelAngle.ts`
-  measures).
+  An ordinal axis draws one row per [level](#levels) (`elaborateOrdinalAxis`).
+  A level groups the slots: each slot's group at that level, and a run of
+  neighboring slots in one group is labeled once. The first level of a split
+  has one group per slot, its label the key's text, or, over **cells**
+  (`ORDINAL_TYPE.cells`, from a binned key `field(x).bin(p)`; see
+  [Underlying Space](/internals/core/underlying-space#cells-a-binned-key)),
+  the cell's label (the partition's `format`, `"0.5–1"`, `"Jan"`, or a
+  product's `"Jun 2015"`). A chained key's cells hold their parent cells
+  (`KeyCell.parent`), so the axis infers one more level per bin before the
+  last: the slots grouped by their `k`-th ancestor (the year of each month).
+  A slot's label is centered on its key node, as above. A run's label is
+  centered on an `axisSpan` (`axes/axisSpan.tsx`) from the run's first slot's
+  start to its last slot's end: a node whose layout reads the two nodes
+  through `ref`s, as a label reads its slot, so it is placed along the axis
+  by its own layout and is free across it. Each row sits past the rows
+  before it by their depth, as rotated (the box `rotatedExtent` in
+  `autoLabelAngle.ts` measures).
+
+  The innermost ordinal level of a dim draws no ticks. Every level outside
+  it (a later level of the same axis, or the first level of an axis with an
+  ordinal axis below it, `LevelFold.ordinal`) draws one divider in each gap
+  between neighboring groups: an `axisSpan` from one slot's end to the next
+  slot's start, which draws a 1px line in its middle, seated at the content's
+  edge and as deep as the bottom of its row. A gap that several levels divide
+  gets one divider, as deep as the outermost of them. A slot is a key node,
+  so for an outer axis it is a group with its own axes, and the dividers start
+  past the inner axes' labels. `axisSpan` is a bake boundary
+  (`BAKE_BOUNDARY_TYPES` in `bake.ts`), since it draws itself and its
+  children are `ref` stand-ins.
 
 ## Unifying duplicate axes across self-scaled siblings
 

@@ -1,13 +1,13 @@
 # Calendar
 
 Partitions of the time line into calendar cells: seconds, minutes, hours,
-days, weeks, months, quarters and years. A time axis draws one row of labels
-per partition. Pass them as the `"rows"` of an axis in the `axes` keyword of
-[`chart`](/python/api/core/chart), over a time column (see
-[`Schema.time`](/python/api/core/schema)). A Calendar value is also a
-partition for
-[`field(name).bin(...)`](/python/api/operators/spread#field-expression-pipeline),
-which groups a time column's rows by their cells.
+days, weeks, months, quarters and years, over a time column (see
+[`Schema.time`](/python/api/core/schema)). A Calendar value has two uses. It
+bins a time column's rows into cells, as the partition of
+[`field(name).bin(...)`](/python/api/operators/spread#field-expression-pipeline).
+And it names a level of an axis, an entry of the `"levels"` of an axis in the
+`axes` keyword of [`chart`](/python/api/core/chart): a time axis draws one row
+of labels per level.
 
 ::: gofish example:hourly-temperature-line hidden
 :::
@@ -15,7 +15,7 @@ which groups a time column's rows by their cells.
 ```python
 from gofish import chart, scatter, line, Calendar
 
-chart(readings, axes={"x": {"rows": [Calendar.hour.every(6), Calendar.day]}}).flow(
+chart(readings, axes={"x": {"levels": [Calendar.hour.every(6), Calendar.day]}}).flow(
     scatter(by="time", x="time", y="temp")
 ).mark(line(stroke="steelblue", stroke_width=2)).render(w=560, h=200)
 ```
@@ -35,20 +35,21 @@ Calendar.year
 
 Calendar.month.every(3)          # cells of 3 months
 
-axes={"x": {"rows": [Calendar.month, Calendar.year]}}
-spread(by=field("date").bin(Calendar.month), dir="x")
+field("date").bin(Calendar.month)                    # the month of the year
+field("date").bin([Calendar.year, Calendar.month])   # each month of each year
+field("date").bin(Calendar.year).bin(Calendar.month) # the months of each year
+axes={"x": {"levels": [Calendar.month, Calendar.year]}}
 ```
 
 ## Parameters
 
-| Parameter | Type                      | Description                                                                              |
-| --------- | ------------------------- | ---------------------------------------------------------------------------------------- |
-| `n`       | `int`                     | `.every(n)`: how many units one cell spans. A whole number, 1 or more. Default `1`.      |
-| `start`   | `"monday" \| "sunday"`    | `Calendar.week(start=...)`: the first day of a week. Default `"monday"`, as in ISO 8601. |
-| `"rows"`  | `list[CalendarPartition]` | An axis's label rows, inner row first.                                                   |
+| Parameter | Type                   | Description                                                                              |
+| --------- | ---------------------- | ---------------------------------------------------------------------------------------- |
+| `n`       | `int`                  | `.every(n)`: how many units one cell spans. A whole number, 1 or more. Default `1`.      |
+| `start`   | `"monday" \| "sunday"` | `Calendar.week(start=...)`: the first day of a week. Default `"monday"`, as in ISO 8601. |
 
 A Calendar value is a dict, its wire form: `Calendar.month.every(3)` is
-`{"unit": "month", "step": 3}`. Custom row labels (`.format(fn)` in JS) are
+`{"unit": "month", "step": 3}`. Custom labels (`.format(fn)` in JS) are
 JS-only: a function has no wire form.
 
 ## Behavior
@@ -66,7 +67,53 @@ JS-only: a function has no wire form.
   the week of 1970-01-01.
 - `Calendar.quarter` is months in steps of 3, labeled `Q1` to `Q4`.
 
-**Rows.**
+**Bins.**
+
+- A level binned alone is a part of the next larger level, a cycle: all
+  the cells with the same part are one cell, in any year. Every part is a
+  cell, in the cycle's order, whatever the data holds.
+
+  | Level alone        | Cells                      | Labels                 |
+  | ------------------ | -------------------------- | ---------------------- |
+  | `Calendar.second`  | the 60 seconds of a minute | `00` to `59`           |
+  | `Calendar.minute`  | the 60 minutes of an hour  | `00` to `59`           |
+  | `Calendar.hour`    | the 24 hours of a day      | `12 AM` to `11 PM`     |
+  | `Calendar.day`     | the 31 days of a month     | `1` to `31`            |
+  | `Calendar.month`   | the 12 months of a year    | `Jan` to `Dec`         |
+  | `Calendar.quarter` | the 4 quarters of a year   | `Q1` to `Q4`           |
+  | `Calendar.week`    | weeks on the time line     | its first day, `Jan 1` |
+  | `Calendar.year`    | years on the time line     | `2024`                 |
+
+  A week is a part of nothing (weeks do not nest in months or years), and
+  nothing holds a year, so they stay on the time line. A step counts from
+  the level above: `Calendar.month.every(3)` alone is 4 cells, starting in
+  January, April, July and October.
+
+- A list is a product, `[Calendar.year, Calendar.month]`: one cell where
+  one cell of each level meets one of the next, each level after the first
+  a part of the one before it. Its cells are the finest level's cells (the
+  June of 2015), labeled by every level at once (`Jun 2015`, `Q2 2015`,
+  `Jun 15, 2015`). With a first level on the time line, the cells are every
+  cell in the range of the data, the empty ones too, and each has one
+  region on the time line. With a first level that is a part,
+  `[Calendar.month, Calendar.day]`, the cells are the parts of a cycle (the
+  366 days of a year).
+- A second `.bin(...)` splits each cell of the first, a chain:
+  `.bin(Calendar.year).bin(Calendar.month)` gives the months of each year.
+  On the time line, the next bin must be finer, and a cell it shares with
+  two cells of the bin before it is cut in two (a week across New Year). On
+  a cycle, the next bin must be a part of the one before it, as in a
+  product. Each cell keeps the cell it was split from, and an axis over the
+  key shows one level per bin (a month level, then a year level).
+- A product's levels must be in order, at a step of 1 before the last:
+  `[Calendar.year, Calendar.day]` is an error (a day is a part of a month),
+  and so are `[Calendar.month]` and a numeric bin. A chain whose next bin
+  is not finer is an error.
+- A part of a cycle has no one region on the time line, so
+  [`partition`](/python/api/operators/partition) over one is an error that
+  names the product and the chain.
+
+**Levels of a time axis.**
 
 - A time axis is continuous: every tick and label sits where the axis's
   scale puts its instant.
@@ -82,23 +129,28 @@ JS-only: a function has no wire form.
 - Rows need not nest: `[Calendar.week, Calendar.month]` is valid.
 - The first row sits next to the axis line, and each further row sits past
   the one before it. An outer-row tick that falls between inner ticks is longer.
-- Without `"rows"`, the axis has two rows. The inner row gives about 10
+- By default the axis has two rows. The inner row gives about 10
   ticks over the data, as a numeric axis does: it is the level and step
   whose cells are nearest in length to a tenth of the data's span, out of
   seconds and minutes (1, 5, 15, 30), hours (1, 3, 6, 12), days (1, 2),
   months (1, 2, 3), and years (1, 2, 5, 10, 20, 50, ...). The
-  outer row is the inner level's parent: minutes for seconds, hours for
+  outer row is the inner row's parent: minutes for seconds, hours for
   minutes, days for hours, months for days and weeks, years for months and
   quarters. Year has no parent, so a year row is the only row.
+- In `"levels"`, a Calendar value names a row's partition, and the outer
+  row follows the inner row as named. `False` hides a row: its ticks and
+  labels are not drawn, and the domain is still rounded to the inner row's
+  cells. On the outermost axis of its dimension, Calendar values past the
+  rows add rows.
 - A domain of one instant spans the day that holds it.
 - Default labels come from `Intl.DateTimeFormat` in English (`en-US`),
   whatever the browser's locale: `12 AM` for an hour, `Feb 29` for a day or
   week, `Jan` for a month, `2024` for a year. A locale option is
   [#1098](https://github.com/gofish-graphics/gofish-graphics/issues/1098).
 - `"label_angle"` does not rotate the labels of a time axis.
-- In a faceted chart, `"rows"` applies to the time axes inside the facets.
-  The facets' category axis on the same dimension ignores it.
-- `"rows"` on a chart with no time axis on that dimension is an error.
+- In a faceted chart, the rows of the time axes inside the facets are the
+  first levels of the dimension, and the facets' category level comes after
+  them.
 
 ## Example
 
@@ -108,8 +160,19 @@ A week row over a month row:
 chart(
     visits,
     schema={"day": Schema.time()},
-    axes={"x": {"rows": [Calendar.week, Calendar.month]}, "y": True},
+    axes={"x": {"levels": [Calendar.week, Calendar.month]}, "y": True},
 ).flow(scatter(by="day", x="day", y="visits")).mark(
     line(stroke="steelblue", stroke_width=2)
 )
 ```
+
+Rain by month of the year, all Junes in one bar:
+
+```python
+chart(weather, schema={"date": Schema.time()}, axes=True).flow(
+    spread(by=field("date").bin(Calendar.month), dir="x")
+).mark(rect(h=field("precipitation").mean()))
+```
+
+::: gofish example:seattle-rain-by-month-of-the-year hidden
+:::

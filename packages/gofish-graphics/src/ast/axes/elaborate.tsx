@@ -118,14 +118,14 @@ export type AxisElaboration = {
   contentAt?: { dim: 0 | 1; at: number };
 };
 
-/** A `labelAngle` value as authored: a plain number applies to every tier of
- *  a nested ordinal axis; an array is per-tier, indexed from the INNERMOST
- *  tier outward (see `AxisOptions.labelAngle` in `gofish.tsx`). */
+/** A `labelAngle` value as authored: a plain number applies to every level
+ *  of the axis; an array is per level, by the depths of `levels`, nearest the
+ *  plot first (see `AxisOptions.labelAngle` in `gofish.tsx`). */
 type LabelAngleOpt = number | number[] | undefined;
 
-/** Select the angle for a given ordinal tier (0 = innermost) — or, for a
- *  continuous/difference axis (always a single tier), tier `0`. A plain
- *  number applies uniformly; an array indexes by tier, `undefined` past its
+/** Select the angle for the level at depth `tier` (0 = nearest the plot,
+ *  counting every level of every axis on the dim). A plain
+ *  number applies uniformly; an array indexes by depth, `undefined` past its
  *  end (unrotated). */
 function angleForTier(opt: LabelAngleOpt, tier: number): number | undefined {
   if (opt === undefined) return undefined;
@@ -133,7 +133,8 @@ function angleForTier(opt: LabelAngleOpt, tier: number): number | undefined {
 }
 
 /** One row of axis labels: an axis, what kind of labels it carries, and its
- *  tier (0 = innermost ordinal tier; a continuous axis has only tier 0). */
+ *  tier: its level's depth among the levels of the dim (0 = nearest the
+ *  plot; see `AxisOptions.levels`). */
 export type LabelRow = {
   dim: 0 | 1;
   kind: "ordinal" | "continuous";
@@ -149,7 +150,7 @@ export type LabelRowSetting = number | "hidden" | undefined;
 export type LabelRowSettings = (row: LabelRow) => LabelRowSetting;
 
 /** The row settings a manual `labelAngle` per axis describes (see
- *  `AxisOptions.labelAngle`): a number for every tier, or per tier. */
+ *  `AxisOptions.labelAngle`): a number for every level, or per level. */
 export const labelRowSettingsFromAngles =
   (angles: [LabelAngleOpt, LabelAngleOpt]): LabelRowSettings =>
   (row) =>
@@ -259,7 +260,8 @@ function tickMark(
   name: string,
   side: "start" | "end",
   crossDirection: AxisDirection,
-  labelAngle?: number
+  labelAngle: number | undefined,
+  tier: number
 ): GoFishNode {
   const atPixelStart = side === orientSide("start", crossDirection);
   const text = Text({
@@ -268,8 +270,8 @@ function tickMark(
     fill: AXIS_COLOR,
     rotate: labelAngle,
   });
-  // A continuous axis has one tier (see `AxisOptions.labelAngle`).
-  text.axisLabel = { dim, kind: "continuous", tier: 0 };
+  // A numeric axis is one level, at depth `tier` (see `AxisOptions.levels`).
+  text.axisLabel = { dim, kind: "continuous", tier };
   const tick = tickRect(dim);
   return (Spread as any)(
     {
@@ -530,8 +532,9 @@ function elaborateContinuousAxis(
   crossFloor: number | undefined,
   side: "start" | "end",
   crossDirection: AxisDirection,
-  labelRotation?: LabelRotation,
-  mirrored = false
+  labelRotation: LabelRotation | undefined,
+  mirrored: boolean,
+  tier: number
 ): AxisElaboration {
   const [niceMin, niceMax] = nice;
   const tickValues = d3Ticks(niceMin, niceMax, ticks.count);
@@ -552,7 +555,8 @@ function elaborateContinuousAxis(
             name,
             side,
             crossDirection,
-            labelRotation?.rotate
+            labelRotation?.rotate,
+            tier
           ),
     tickLabel: oblique
       ? (v, _i, name) => {
@@ -563,7 +567,7 @@ function elaborateContinuousAxis(
             rotate: labelRotation!.rotate,
             textAnchor: labelRotation!.textAnchor,
           }).name(name);
-          label.axisLabel = { dim, kind: "continuous", tier: 0 };
+          label.axisLabel = { dim, kind: "continuous", tier };
           return label;
         }
       : undefined,
@@ -1347,7 +1351,8 @@ function elaborationsFor(
         axisSide(dim),
         crossDirection(dim),
         resolvedLabelRotation({ dim, kind: "continuous", tier: depth0 }),
-        s.mirrored === true
+        s.mirrored === true,
+        depth0
       );
       constrained.push(e);
       anchors[dim] = e.anchor;

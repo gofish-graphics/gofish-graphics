@@ -19,7 +19,7 @@ the plane into hexagons or Voronoi cells.
 from gofish import Calendar, Schema, chart, field, partition, rect
 
 chart(daily, schema={"date": Schema.time()}, axes=True).flow(
-    partition(by=field("date").bin(Calendar.month), dir="x")
+    partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x")
 ).mark(rect(h=field("value").sum(), inset=1)).render(w=560, h=200)
 ```
 
@@ -41,14 +41,21 @@ there is no list of children to pass it.
 ## The key must have a region
 
 `by` must be a key whose values have a region. That is a binned field,
-`field(x).bin(...)`, whose values are cells, each an interval `[start, end)`,
-or a binned struct, `struct(x=..., y=...).bin(...)`, whose values are cells
+`field(x).bin(...)` whose values are cells of the line, each an interval
+`[start, end)`, or a binned struct, `struct(x=..., y=...).bin(...)`, whose values are cells
 of the plane (see [Cells of the plane](#cells-of-the-plane)).
 
 ```python
-partition(by=field("date").bin(Calendar.month), dir="x")  # true month widths
+partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x")  # true month widths
+partition(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x")  # the same cells
 partition(by=field("rating").bin(Bin.step(0.5)), dir="x")  # a histogram
 ```
+
+A level binned alone that is a part of a larger level is a part of a cycle,
+with no one region on the time line: `field("date").bin(Calendar.month)` is
+the month of the year, every June in one cell. So
+`partition(by=field("date").bin(Calendar.month), dir="x")` is an error naming
+the product and the chain when the chart renders.
 
 A plain field has no region, so `partition(by="date", dir="x")` raises a
 `ValueError`, and so does a struct with no bin,
@@ -73,7 +80,7 @@ groups inside the cell, so February's group is narrower than March's.
 
 ```python
 chart(daily, schema={"date": Schema.time()}, axes=True).flow(
-    partition(by=field("date").bin(Calendar.month), dir="x"),
+    partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"),
     spread(by="region", dir="x"),
 ).mark(rect(h=field("value").sum(), fill="region"))
 ```

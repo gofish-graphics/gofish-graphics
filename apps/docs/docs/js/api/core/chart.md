@@ -51,7 +51,8 @@ chart(data, { axes: false }); // no axes (the default)
 chart(data, { axes: { x: true, y: false } }); // x only
 chart(data, { axes: { x: { title: "Year" }, y: true } }); // custom x title, inferred y title
 chart(data, { axes: { x: { title: false }, y: true } }); // suppress the inferred x title
-chart(data, { axes: { x: { rows: [Calendar.month, Calendar.year] } } }); // rows of a time axis
+chart(data, { axes: { x: { levels: [Calendar.week, Calendar.month] } } }); // the rows of a time axis
+chart(data, { axes: { x: { levels: [false, true] } } }); // hide the innermost level
 ```
 
 The full type is:
@@ -64,14 +65,44 @@ type AxisOptions =
       title?: string | false;
       side?: "start" | "end";
       labelAngle?: number | number[] | "auto";
-      rows?: TimeRowOption[];
+      levels?: (boolean | CalendarPartition)[];
     };
 ```
 
-`rows` sets the label rows of a time axis, an axis over a
-[`Schema.time()`](/js/api/core/schema) column. Each row is a Calendar value,
-such as `Calendar.month` or `Calendar.quarter.format(fn)` for custom labels.
-See [`Calendar`](/js/api/core/calendar).
+`levels` sets the axis's levels, its bands of labels, by depth, nearest the
+plot first. Every axis on the dimension has levels, counted from the inside
+out:
+
+| Axis    | Inferred levels                                                                                                                                     |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| numeric | one: its ticks                                                                                                                                      |
+| time    | two rows: the level and step its domain picks for about 10 ticks, then that level's parent (see [`Calendar`](/js/api/core/calendar))                |
+| ordinal | one per split; a key binned by a chain, `field("date").bin(Calendar.year).bin(Calendar.month)`, has one per bin, nearest first (months, then years) |
+
+Each entry sets the level at its depth:
+
+- `true` keeps the level as inferred.
+- `false` hides it: its labels (and a time row's ticks) are not drawn and
+  take no space.
+- A Calendar value names its cells. On a time axis it is a row's partition.
+  On an ordinal axis over cells of time, it groups the slots by its cells:
+  `Calendar.year` over month slots labels each run of months in one year.
+  `Calendar.month.format(fn)` relabels a level of months.
+
+Depths the list does not reach stay as inferred, so `[false]` hides only the
+innermost level. On the outermost axis of the dimension, a Calendar value
+past the inferred levels adds a level: `levels: [true, Calendar.year]` over
+the slots of `field("date").bin([Calendar.year, Calendar.month])` adds a year
+level. An entry that cannot apply is an error that lists the dimension's
+levels: a Calendar value over slots that are not times, or that it does not
+group (`Calendar.week` over months), `false` on a numeric axis, and an entry
+past the last level. `labelAngle` arrays use the same depths.
+
+On an ordinal axis, the innermost ordinal level of the dimension draws no
+ticks. Every level outside it draws one divider in each gap between
+neighboring groups: a line centered in the gap, from the edge of what the
+axis labels down through its own row. Each label is centered under its run
+of slots.
 
 Each axis title defaults to the field that dimension encodes (e.g. `count` for
 `rect({ h: "count" })`). Pass `{ title: "…" }` to override it, or `{ title: false }`

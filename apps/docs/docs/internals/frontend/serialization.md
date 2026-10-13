@@ -157,10 +157,13 @@ it to the rows the Python callback returns. (A `derive` once also carried a
 measure `provenance` map for the rows of the `bin()` data helper; both are
 gone, #1058.) A binned key, `field("date").bin(Calendar.month)`, is an op in
 the field expression's `ops`: `{ "op": "bin", "partition": { "unit": "month",
-"step": 1 } }`, where the partition is a Calendar value's wire form or a
+"step": 1 } }`, where the partition is a Calendar value's wire form, a
 `Bin` kind that bins one field, `{ "kind": "step", "size": 0.5 }` or
-`{ "kind": "thresholds", "thresholds": 20 }` (`PartitionIR`), and an op with
-no `partition` bins into about 10 cells. The op takes no other key, so the
+`{ "kind": "thresholds", "thresholds": 20 }` (`PartitionIR`), or a list of
+Calendar values for a product (`.bin([Calendar.year, Calendar.month])`), and
+an op with no `partition` bins into about 10 cells. A chain,
+`.bin(Calendar.year).bin(Calendar.month)`, is one `bin` op per `.bin`, in
+order. The op takes no other key, so the
 old flat spelling, `{ "op": "bin", "thresholds": 20 }`, is an error, not the
 default partition, and so is the untagged `{ "step": 0.5 }`. A partition
 with a JS `.format(fn)` has no wire form, and serializing it is an error. Marks are a tree — leaves
