@@ -82,8 +82,8 @@ into N pieces, followed by a fan-in back to a single node:
 
 1. **Split.** Partition the data into pieces. For `spread`, this is
    "groupBy `by`-field"; for `table`, it's the cartesian product of two
-   fields; for `group`, it's groupBy. For `scatter` with no `by`, it's
-   "one piece per item".
+   fields; for `group`, it's groupBy. With no `by`, the split is by row
+   identity (`chunk(1)`): one piece `[item]` per item.
 2. **fmap.** Apply the user's mark to each piece, producing one
    `GoFishNode` per piece.
 3. **Combine.** Hand the array of nodes to the low-level layout function
@@ -99,8 +99,7 @@ From `src/ast/graphicalOperators/spread.tsx:430`:
 
 ```ts
 export const spread = createOperator<any, SpreadOptions>(Spread, {
-  split: ({ by }, d) =>
-    by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
+  split: ({ by }, d) => splitEntries(by, d),
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
 });
 ```
@@ -111,9 +110,17 @@ Three pieces:
    `createNodeOperator`-built node builder that already knows how to position
    children along an axis. This is the **combine** step.
 2. **`split(opts, d)`** — partition `d` into an ordered `Map<key, subdata>`.
-   Insertion order matters (it determines layout order). When `by` is omitted,
-   each item becomes its own one-element group. `spread`/`stack`/`group`/
-   `scatter` all delegate to the shared `splitEntries` helper
+   Insertion order matters (it determines layout order). Every piece is a
+   list of the items the split was given, and a split never looks inside an
+   item, so an item that is itself an array is still one item. When `by` is
+   omitted, the split is by row identity, `chunk(1)` (`splitByOf` applies
+   that default, in one place): each item becomes its
+   own one-item group `[item]`, keyed by its position. `chunk(size)` is a `by`
+   key over row position (row `i` goes to group `floor(i / size)`), so no
+   `by` and `by: chunk(1)` are one split. A position key (no `by`, or any
+   `chunk(n)`) marks its keys positional (`_syntheticKey`), so they draw no
+   axis or labels. A key function's keys are values, like a field's: they
+   label a category axis, which has no title, since no field names it. `spread`/`stack`/`group`/`scatter` all delegate to the shared `splitEntries` helper
    (`datumProjection.ts`, #700) rather than a bare `Map.groupBy`: it groups by
    `by` first (a `field(...)` accessor groups by its `.name`, identically to a
    bare string), then applies any pipeline ops the accessor carries — see
@@ -141,21 +148,21 @@ Walking `createOperator.ts:391-415`:
    `Map<key, subdata>`. (Some operators also return `layoutOpts`, opts the
    split computed that get merged into the layout opts: `table`'s row/column
    labels, or a `stack`'s `origin` when its `by` column has `HasMidpoint`.) Each
-   array leaf is then re-tagged with `d`'s column types (`copyColumnTypes`,
+   leaf (always an array) is then re-tagged with `d`'s column types (`copyColumnTypes`,
    see [Column
    types](/internals/core/underlying-space#column-types-the-chart-schema)): a
    leaf is a fresh sub-array that wouldn't otherwise inherit them, so without
-   this a _mark_ channel applied per leaf would lose a transform's unit
-   (`HasUnit`) and fall back to the literal field name — see [underlying
-   space](/internals/core/underlying-space) and #534 — and a nested split or
-   a color channel would lose an ordered column. The data's domain rides
-   along the same way, so a nested binned key sees the chart's cells. A cell
-   key becomes its id for the mark and the node (`setKey`), and the node
-   keeps the cell itself as `keyCell`, which the distribute fold reads to
-   build an ordinal over cells, and a `partition` reads to give the node its
-   cell. The node also keeps the `by` it was keyed by (`keyBy`), so a fused
-   connector's default split can read a mark's key under each tier off its
-   ancestors.
+   this a _mark_ channel applied per leaf would lose its column's quantity
+   and unit (`HasQuantity`, `HasUnit`) and fall back to the literal field
+   name — see [underlying space](/internals/core/underlying-space) and
+   #534 — and a nested split or a color channel would lose an ordered
+   column. The data's domain rides along the same way, so a nested binned
+   key sees the chart's cells. A cell key becomes its id for the mark and
+   the node (`setKey`), and the node keeps the cell itself as `keyCell`,
+   which the distribute fold reads to build an ordinal over cells, and a
+   `partition` reads to give the node its cell. The node also keeps the
+   `by` it was keyed by (`keyBy`), so a fused connector's default split can
+   read a mark's key under each tier off its ancestors.
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream
@@ -183,11 +190,12 @@ Walking `createOperator.ts:391-415`:
    needs its field to name the ORDINAL axis it builds. So the resolved per-axis
    grouping field (`cfg.axisFields?.(opts)`, e.g. `{ x: "lake" }`) is passed
    through to the low-level layout in opts as `axisMeasures`, where the node
-   builder stamps it onto the ORDINAL space's `measure` — the discrete analogue
-   of a continuous channel's field becoming its space's measure. That measure is
-   the sole source for the axis title (a continuous space's unit or an ordinal
-   space's grouping field); there is no longer any field-name title _hint_ or
-   fallback (the former `__axisFields` tag is gone).
+   builder stamps it onto the ORDINAL space's `measure` as its title — the
+   discrete analogue of a continuous channel's column becoming its space's
+   title. A space's titles are the sole source for the axis title (a
+   continuous space's quantity names or an ordinal space's grouping field);
+   there is no longer any field-name title _hint_ or fallback (the former
+   `__axisFields` tag is gone).
 6. **Combine** — call the low-level `layout` with the encoded opts and the
    array of child nodes.
 
@@ -244,7 +252,7 @@ so a slot infers exactly as its counterpart: scatter's bare value and
 slot as given (treemap's `min` stands for its unannotated `x`), and the
 counterparts on the two axes must share one spec.
 
-A `size` or `pos` channel resolves its column (`resolveColumn`: its measure
+A `size` or `pos` channel resolves its column (`resolveColumn`: its quantity
 and its type from the chart's `schema`) off the whole input once, and passes
 it to every entry's inference, since a split entry's slice may not carry
 the column types. The value then records the type (`fieldType`), which is
@@ -359,13 +367,12 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   operator's closed-over `labelState`. That's what makes both
   `.translate().label()` and `.label().translate()` work identically.
 - `resolveLabelText` (`ast/labels/labelPlacement.ts`) resolves the accessor
-  in one of three ways, depending on both the accessor's shape and the
-  datum's shape:
-  - A **bare string** over the group's array-of-rows datum must be constant
-    across every row (true by construction for a `by`-field, since every row
-    in the group shares that value) — `resolveLabelText` throws a loud error
-    if it isn't, rather than silently reading just the first row. Over a
-    scalar (non-array) datum it just reads the field directly.
+  over the node's datum, which is always a list of rows, in one of three
+  ways, depending on the accessor's shape:
+  - A **bare string** must be constant across every row (true by
+    construction for a `by`-field, since every row in the group shares that
+    value) — `resolveLabelText` throws a loud error if it isn't, rather than
+    silently reading just the first row.
   - A **`field(...)` aggregate** (`field("count").sum()`/`.mean()`/`.count()`/
     `.distinct()`) folds the group's rows to one value via `evalFieldValues`
     (the same evaluator the `by`/`size`/`pos` channel pipelines use) — this is
@@ -378,7 +385,7 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   checked in order string → field-expression → function): a string accessor
   becomes `tag.label = {accessor, ...options}`; a `field(...)` accessor
   serializes via its own `.toJSON()` (the `FieldExprWire` shape) into
-  `tag.label = {accessor: {type: "field", name, measure?, ops?}, ...options}`;
+  `tag.label = {accessor: {type: "field", name, ops?}, ...options}`;
   a function accessor warns and is dropped from the emitted IR (functions
   aren't serializable). `.translate()`'s wrapper has no tag of its own by
   default (the wrapped function is new), so `translateOperator` copies the
@@ -468,8 +475,8 @@ They live in their own registry (`terminals.ts`): a `TERMINALS` list plus
 node-resolution strategy (a `withGoFish` promise resolves by awaiting). The
 other surfaces go through the same list via `attachBuilderTerminals(target,
 resolveForRender, render)`, which lets a surface also prepare the render options
-and drive `render` through its own strategy. A combinator mark resolves by
-calling itself with `undefined` and installs the build-in its own
+and drive `render` through its own strategy. A combinator mark resolves as a
+root (`resolveMarkResult`, with `NO_ROWS`) and installs the build-in its own
 `.transition({ enter })` asks for, reading the clock's `playing`/`at`.
 `ChartBuilder` and `LayerBuilder` merge in the chart-level `axes`/`color` config,
 read the build-in clock's `playing`/`at` (which `TerminalMethods<Extra>` adds to

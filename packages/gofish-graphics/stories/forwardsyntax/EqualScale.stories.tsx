@@ -1,15 +1,15 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 
-import { chart, circle, field, scatter, Color } from "../../src/lib";
+import { chart, circle, scatter, Color, Schema } from "../../src/lib";
 
 /**
  * Shared-measure scale equality (#582). When the x and y channels carry the
  * **same unit of measure**, "1 unit on x" and "1 unit on y" are the same
  * quantity, so GoFish gives them one data→pixel scale — a circle in data space
  * stays a circle, never an ellipse. There is no `aspectRatio` knob: it follows
- * from the measures matching (`field(name, "plane")` on both axes), the same way
- * `circle({ r })` lowers to a `w`/`h` that share a measure and so can't distort.
+ * from the units matching (`Schema.unit("plane")` on both columns), the same way
+ * `circle({ r })` lowers to a `w`/`h` that share a unit and so can't distort.
  * The binding axis fills its dimension; the other centers in the leftover space.
  *
  * The demo is a phyllotaxis ("sunflower") spiral: seed `i` sits at angle
@@ -43,15 +43,18 @@ export const Sunflower: StoryObj<Args> = {
     gallery: {
       title: "Sunflower (Equal Scale)",
       description:
-        "A phyllotaxis spiral of 500 seeds placed by the golden angle; tagging x and y with the same measure gives them one shared data→pixel scale, so the packing stays perfectly circular in a wide canvas.",
+        "A phyllotaxis spiral of 500 seeds placed by the golden angle; declaring x and y in the same unit gives them one shared data→pixel scale, so the packing stays perfectly circular in a wide canvas.",
     },
   },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(sunflower, { color: Color.gradient(["#fde725", "#21918c", "#440154"]) })
-      // Same measure on both axes ⇒ one shared scale ⇒ a true circle.
-      .flow(scatter({ x: field("x", "plane"), y: field("y", "plane") }))
+    chart(sunflower, {
+      color: Color.gradient(["#fde725", "#21918c", "#440154"]),
+      // Same unit on both axes ⇒ one shared scale ⇒ a true circle.
+      schema: { x: Schema.unit("plane"), y: Schema.unit("plane") },
+    })
+      .flow(scatter({ x: "x", y: "y" }))
       .mark(circle({ r: 4, fill: "i" }))
       .render(container, { w: args.w, h: args.h });
 
@@ -59,7 +62,7 @@ export const Sunflower: StoryObj<Args> = {
   },
 };
 
-/** The same spiral with the measures left off — each axis scales independently,
+/** The same spiral with the units left off — each axis scales independently,
  *  so the circular packing shears into an ellipse. */
 export const Uncoupled: StoryObj<Args> = {
   args: { w: 640, h: 380 },

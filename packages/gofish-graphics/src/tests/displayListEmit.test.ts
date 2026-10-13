@@ -16,7 +16,7 @@ import { DisplayList } from "gofish-ir";
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 
-const { chart, spread, rect } = GoFish as any;
+const { chart, spread, filter, layer, rect } = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -105,6 +105,47 @@ async function main() {
   check(
     "viewport is positive and finite",
     doc.viewport.w > 0 && doc.viewport.h > 0
+  );
+
+  // -- role: no rows vs an empty group ------------------------------------
+  // A mark resolved at a root has no rows, so it has no datum and is chrome.
+  // A group a filter emptied is a real, empty list of rows: it is data.
+  const rectsOf = (d: any): any[] => {
+    const out: any[] = [];
+    const walk = (it: any) => {
+      if (it.kind === "rect") out.push(it);
+      (it.children ?? []).forEach(walk);
+    };
+    d.items.forEach(walk);
+    return out;
+  };
+  const emptied = rectsOf(
+    await chart(data)
+      .flow(
+        spread({ by: "c", dir: "x" }),
+        filter((d: any) => d.v > 100)
+      )
+      .mark(rect({ h: "v", w: W }))
+      .toDisplayList({ w: 200, h: 120 })
+  );
+  check(
+    "an empty filtered group is data, not chrome",
+    emptied.length === 3 &&
+      emptied.every(
+        (it) =>
+          it.role === "node" && Array.isArray(it.datum) && it.datum.length === 0
+      ),
+    JSON.stringify(emptied.map((it) => [it.role, it.datum]))
+  );
+  const rooted = rectsOf(
+    await layer([rect({ w: 10, h: 10 })]).toDisplayList({ w: 50, h: 50 })
+  );
+  check(
+    "a mark at a combinator root has no datum and is chrome",
+    rooted.length === 1 &&
+      rooted[0].role === "overlay" &&
+      rooted[0].datum === undefined,
+    JSON.stringify(rooted.map((it) => [it.role, it.datum]))
   );
 
   console.log(`\n${passed} passed, ${failed} failed`);

@@ -5,18 +5,18 @@
  * inside a level, and at either end, a missing level), the midpoint's range
  * check, the centered stack's extent fold, the stray-level and signed-part
  * errors (checked where the order is used, so a `filter` in the flow can drop
- * a stray), the HasOrder prerequisite of HasMidpoint, a spread of centered
- * stacks lining up on their midpoints, and the schema keeping the column
- * types (a column's unit, `HasUnit`) its data carries.
+ * a stray), the HasOrder prerequisite of HasMidpoint, the one-unit rule, the
+ * levels-fit rule, a spread of centered stacks lining up on their midpoints,
+ * and the schema keeping the column types (a column's quantity and unit)
+ * its data carries.
  *
  * Run: `pnpm build && tsx src/tests/schema.test.ts` (wired as
  * `pnpm test:schema`). The rendering checks import from `dist` for the same
  * lodash-ESM reason as `axisDims.test.ts`.
  *
- * The type-level rule (`.diverging()` exists only after `.ordered(...)`) is
- * enforced by `ColumnSchema#diverging`'s `this` type. The repo's test files
- * are not typechecked, so this file checks the runtime counterpart (a
- * HasMidpoint record without HasOrder, as it would arrive from the wire).
+ * The repo's test files are not typechecked, so this file checks the runtime
+ * counterparts of the builder's type-level rules (schema.ts), on records as
+ * they would arrive from the wire.
  */
 
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
@@ -28,9 +28,11 @@ import {
   orderByLevels,
   setColumnTypes,
   stackOrigin,
+  Schema as SrcSchema,
   type ColumnType,
 } from "../ast/schema";
 import { interval } from "../util/interval";
+import { textsOf } from "./testHelpers";
 import {
   distributeSpaceFold,
   type StackOrigin,
@@ -41,7 +43,19 @@ import {
   CONTINUOUS,
 } from "../ast/underlyingSpace";
 
-const { chart, spread, stack, rect, filter, derive, Schema, Color } = GoFish as any;
+const {
+  chart,
+  spread,
+  stack,
+  scatter,
+  rect,
+  circle,
+  filter,
+  derive,
+  chunk,
+  Schema,
+  Color,
+} = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -77,6 +91,11 @@ const rectsOf = (dl: any): Box[] => {
   dl.items.forEach(walk);
   return out;
 };
+
+/** A display list as JSON with its render-global node ids left out, so two
+ *  renders compare by what they draw. */
+const drawn = (dl: any): string =>
+  JSON.stringify(dl, (k, v) => (k === "id" ? undefined : v));
 
 const LEVELS5 = ["SD", "D", "N", "A", "SA"];
 const LEVELS4 = ["SD", "D", "A", "SA"];
@@ -404,6 +423,60 @@ async function main() {
         message.includes(".diverging()"),
       message
     );
+    // The one-unit rule: a wire record's HasCalendar writes the instant unit,
+    // as `Schema.time()` does, so its HasUnit USD is a second unit.
+    const timeUnit = await errorOf(() =>
+      columnTypeOf("t", {
+        HasCalendar: { zone: "UTC" },
+        HasUnit: { unit: "USD" },
+      })
+    );
+    check(
+      "a time record with another unit is an error",
+      timeUnit === `schema: column "t" already has the unit "instant".`,
+      timeUnit
+    );
+    const builtTime = await errorOf(() => Schema.time().unit("USD"));
+    check(
+      "and so is the builder's",
+      builtTime === `.unit: the column already has the unit "instant".`,
+      builtTime
+    );
+    check(
+      "a time record is read as Schema.time() wrote it",
+      columnTypeOf("t", { HasCalendar: { zone: "UTC" } }).HasUnit?.unit ===
+        "instant"
+    );
+    // The levels-fit rule: text levels are not amounts, numbers are.
+    const textUnit = await errorOf(() =>
+      columnTypeOf("r", {
+        HasOrder: { levels: LEVELS5 },
+        HasUnit: { unit: "pts" },
+      })
+    );
+    check(
+      "a record with text levels and a unit is an error",
+      textUnit ===
+        `schema: column "r" has the level "SD", which is not a value HasUnit accepts.`,
+      textUnit
+    );
+    const builtText = await errorOf(() =>
+      Schema.ordered(["low", "mid", "high"]).unit("pts")
+    );
+    check(
+      "and so is the builder's",
+      builtText ===
+        'schema: the column has the level "low", which is not a value HasUnit accepts.',
+      builtText
+    );
+    check(
+      "numeric levels take a unit",
+      Schema.ordered([1, 2, 3, 4, 5]).unit("pts").type.HasUnit.unit === "pts" &&
+        columnTypeOf("likert", {
+          HasOrder: { levels: [1, 2, 3, 4, 5] },
+          HasUnit: { unit: "pts" },
+        }).HasUnit?.unit === "pts"
+    );
   }
 
   console.log("\n# a spread of centered stacks lines up on the midpoint");
@@ -445,21 +518,20 @@ async function main() {
 
   console.log("\n# a schema keeps what the data array already carries");
   {
+    const edge = { HasQuantity: { name: "x" } };
     const binned = setColumnTypes(
       [
         { start: 0, end: 5, count: 2 },
         { start: 5, end: 10, count: 1 },
       ],
-      {
-        start: { HasUnit: { unit: "x" } },
-        end: { HasUnit: { unit: "x" } },
-        count: { HasUnit: { unit: "count" } },
-      }
+      { start: edge, end: edge, count: { HasUnit: { unit: "count" } } }
     );
-    const typed = await applySchema(binned, { count: Schema.ordered([0, 1, 2]) });
+    const typed = await applySchema(binned, {
+      count: SrcSchema.ordered([0, 1, 2]),
+    });
     check(
-      "a column's unit survives a schema for another column",
-      getColumnTypes(typed)?.start?.HasUnit?.unit === "x",
+      "a column's quantity survives a schema for another column",
+      getColumnTypes(typed)?.start?.HasQuantity?.name === "x",
       JSON.stringify(getColumnTypes(typed))
     );
     check(
@@ -522,6 +594,152 @@ async function main() {
       "a stray level a color scale reads is an error",
       colored !== undefined && colored.includes(`"Refused"`),
       colored
+    );
+  }
+
+  console.log("\n# a split with no `by` is a split by row identity (#998)");
+  {
+    const grades = [
+      { grade: "high", a: 1, b: 3 },
+      { grade: "low", a: 2, b: 1 },
+      { grade: "mid", a: 3, b: 2 },
+    ];
+    const dots = (by?: unknown) =>
+      chart(grades, {
+        schema: { grade: Schema.ordered(["low", "mid", "high"]) },
+        color: Color.palette(["red", "green", "blue"]),
+      })
+        .flow(scatter({ ...(by === undefined ? {} : { by }), x: "a", y: "b" }))
+        .mark(circle({ r: 3, fill: "grade" }))
+        .toDisplayList({ w: 100, h: 100 });
+    const legend = textsOf(await dots()).filter((t) =>
+      ["low", "mid", "high"].includes(t)
+    );
+    check(
+      "a mark under a scatter with no `by` keeps the column's order: the legend reads low, mid, high",
+      legend.join() === "low,mid,high",
+      legend.join()
+    );
+    // No `by` is `chunk(1)`, a position key. (A key function returning the
+    // row's position is not the same thing: its keys are values, which
+    // label an axis when axes are on.)
+    const noBy = drawn(await dots());
+    check(
+      "no `by` renders exactly as `by: chunk(1)`",
+      noBy === drawn(await dots(chunk(1)))
+    );
+
+    const units = Array.from({ length: 7 }, (_, i) => ({
+      i,
+      k: i % 2 ? "x" : "y",
+    }));
+    const grid = (by: unknown) =>
+      chart(units, { color: Color.palette(["red", "blue"]) })
+        .flow(
+          spread({ by, dir: "y", spacing: 1 }),
+          spread({ dir: "x", spacing: 1 })
+        )
+        .mark(rect({ w: 4, h: 4, fill: "k" }))
+        .toDisplayList({ w: 100, h: 100 });
+    const chunked = await grid(chunk(3));
+    check(
+      "with no axes, `by: chunk(3)` renders exactly as `by` row position over 3",
+      drawn(chunked) ===
+        drawn(await grid((_r: unknown, i: number) => Math.floor(i / 3)))
+    );
+    const cells = rectsOf(chunked).filter((r: any) => r.datum !== undefined);
+    const ys = [...new Set(cells.map((r) => r.y))];
+    check(
+      "`chunk(3)` over 7 rows makes 3 rows of rects",
+      ys.length === 3 && cells.length === 7,
+      JSON.stringify(ys)
+    );
+    check(
+      "`chunk(3)` keys name no field, so they draw no axis labels",
+      textsOf(chunked).every((t) => !["0", "1", "2"].includes(t)),
+      textsOf(chunked).join()
+    );
+    // Only a position key (no `by`, or `chunk(n)`) is synthetic. A key
+    // function's keys are values like a field's: they label a category
+    // axis, which has no title, since no field names it.
+    const eras = textsOf(
+      await chart(
+        [
+          { year: 1990, v: 1 },
+          { year: 2010, v: 3 },
+          { year: 2020, v: 2 },
+        ],
+        { axes: true }
+      )
+        .flow(
+          spread({
+            by: (d: { year: number }) => (d.year > 2000 ? "new" : "old"),
+            dir: "x",
+          })
+        )
+        .mark(rect({ w: 10, h: 10 }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a key function's category axis is labeled by its keys, with no title",
+      eras.join() === "old,new",
+      eras.join()
+    );
+    const chunkAxes = textsOf(
+      await chart(units, { axes: true })
+        .flow(spread({ by: chunk(3), dir: "x" }))
+        .mark(rect({ w: 4, h: 4 }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a `chunk(n)` key draws no axis even when axes are on",
+      chunkAxes.length === 0,
+      chunkAxes.join()
+    );
+
+    // An empty scope rendered on its own has no data: its mark gets none,
+    // and the schema has nothing to type.
+    const alone = await chart({ w: 100, h: 100 })
+      .mark(rect({ x: 0, y: 0, w: 10, h: 10 }))
+      .toDisplayList({ w: 100, h: 100 })
+      .then(
+        (dl: any) => rectsOf(dl).length,
+        (e: Error) => e.message
+      );
+    check("an empty `chart()` renders on its own", alone === 1, String(alone));
+
+    const seen: unknown[] = [];
+    await chart(grades)
+      .flow(spread({ dir: "x" }))
+      .mark(
+        rect({ w: 4, h: 4 }).label((d: unknown) => {
+          seen.push(d);
+          return "";
+        })
+      )
+      .toDisplayList({ w: 100, h: 100 });
+    check(
+      "a mark under a split with no `by` gets `[row]`",
+      seen.length === 3 &&
+        seen.every((d) => Array.isArray(d) && d.length === 1),
+      JSON.stringify(seen)
+    );
+
+    const nested = [[{ v: 1 }, { v: 2 }], [{ v: 3 }]];
+    const items: unknown[] = [];
+    await chart(nested)
+      .flow(spread({ dir: "x" }))
+      .mark(
+        rect({ w: 4, h: 4 }).label((d: unknown) => {
+          items.push(d);
+          return "";
+        })
+      )
+      .toDisplayList({ w: 100, h: 100 });
+    check(
+      "a split never looks inside an item: an array item is one item, `[item]`",
+      JSON.stringify(items) === JSON.stringify(nested.map((x) => [x])),
+      JSON.stringify(items)
     );
   }
 

@@ -1,6 +1,7 @@
 """AST classes for building GoFish chart specifications."""
 
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+import datetime
 import decimal
 import inspect
 import json
@@ -1883,7 +1884,9 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
     Derive operator - apply a Python function to transform data.
 
     Args:
-        fn: Function that takes data and returns transformed data
+        fn: Function that takes the list of rows and returns the new list of
+            rows (a list of dicts, ``None``, or a dataframe). It returns a
+            list even for one row: ``lambda d: [d[0]]``, not ``d[0]``.
         schema: Column types of the result, keyed by column name, as in
             ``chart(data, schema={...})``: ``Schema.ordered(levels)`` or
             ``Schema.time(zone=...)``. Without it, a result column keeps the
@@ -2283,8 +2286,13 @@ class ColumnSchema(dict):
     column has, keyed by class name (the wire form JS reads as is).
 
     Mirrors JS ``ColumnSchema``. Build one with ``Schema.ordered(levels)``;
-    each method adds one class.
+    each method adds one class. Constructing one checks that an order's
+    levels fit the column's other classes (``_check_levels_fit``).
     """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        _check_levels_fit("schema: the column", self)
 
     def diverging(self, midpoint: Optional[float] = None) -> "ColumnSchema":
         """Give the column a midpoint (``HasMidpoint``) along its order.
@@ -2309,12 +2317,7 @@ class ColumnSchema(dict):
         # word for word.
         order = (
             "the edges of the order ["
-            + ", ".join(
-                json.dumps(level, ensure_ascii=False)
-                if isinstance(level, str)
-                else _js_number(level)
-                for level in levels
-            )
+            + ", ".join(_show_level(level) for level in levels)
             + "]"
         )
         if (
@@ -2331,6 +2334,79 @@ class ColumnSchema(dict):
                 f"diverging: midpoint {_js_number(at)} is outside 0..{n}, {order}."
             )
         return ColumnSchema({**self, "HasMidpoint": {"at": at}})
+
+    def quantity(self, name: str) -> "ColumnSchema":
+        """Say what the column's values are amounts of (``HasQuantity``): the
+        quantity ``name``, which titles the axis in place of the column's
+        name."""
+        return ColumnSchema(
+            {**self, "HasQuantity": {"name": _require_str(name, "name")}}
+        )
+
+    def unit(self, unit: str) -> "ColumnSchema":
+        """Say what unit the column's values are in (``HasUnit``): the unit
+        ``unit``, whose symbol follows the quantity in the axis title,
+        "Pay (USD)". A column has one unit, so ``.unit`` on a column that has
+        one (``Schema.time()`` writes the instant) raises a TypeError, with
+        the message of JS ``checkNoUnit`` in schema.ts."""
+        if "HasUnit" in self:
+            raise TypeError(
+                ".unit: the column already has the unit "
+                f"{json.dumps(self['HasUnit']['unit'], ensure_ascii=False)}."
+            )
+        name = _require_str(unit, "unit")
+        return ColumnSchema({**self, "HasUnit": {"unit": name, "symbol": name}})
+
+
+def _require_str(value: Any, what: str) -> str:
+    """``value``, checked to be a string; ``what`` names it in the message."""
+    if not isinstance(value, str):
+        raise TypeError(f"{what} must be a string, got {value!r}")
+    return value
+
+
+# The unit of a time column, which ``Schema.time()`` writes beside
+# ``HasCalendar``: JS ``INSTANT`` in measure.ts.
+_INSTANT = {"unit": "instant"}
+
+
+def _is_number(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+# Which values each class accepts, given the class's own record: JS
+# ``ACCEPTS`` in schema.ts. A datetime is an instant.
+_ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
+    "HasCalendar": lambda v, c: v is None
+    or (_is_number(v) and math.isfinite(v))
+    or isinstance(v, datetime.date),
+    "HasOrder": lambda v, c: v is None or isinstance(v, str) or _is_number(v),
+    "HasMidpoint": lambda v, c: True,
+    "HasUnit": lambda v, c: v is None
+    or _is_number(v)
+    or (c.get("unit") == _INSTANT["unit"] and isinstance(v, datetime.date)),
+    "HasQuantity": lambda v, c: True,
+}
+
+
+def _check_levels_fit(who: str, column_type: Dict[str, Any]) -> None:
+    """Raise when one of an order's levels is not a value one of the
+    column's classes accepts, with the message of JS ``checkLevelsFit`` in
+    schema.ts, which explains the rule."""
+    for level in column_type.get("HasOrder", {}).get("levels", []):
+        for cls, accepts in _ACCEPTS.items():
+            if cls in column_type and not accepts(level, column_type[cls]):
+                raise TypeError(
+                    f"{who} has the level {_show_level(level)}, which is not "
+                    f"a value {cls} accepts."
+                )
+
+
+def _show_level(level: Any) -> str:
+    """``level`` as JS ``showLevel`` in schema.ts writes it."""
+    if isinstance(level, str):
+        return json.dumps(level, ensure_ascii=False)
+    return _js_number(level) if _is_number(level) else repr(level)
 
 
 def _js_number(x: Union[int, float]) -> str:
@@ -2364,8 +2440,9 @@ class Schema:
 
     @staticmethod
     def time(zone: str = "UTC") -> ColumnSchema:
-        """A column whose values are instants (``HasCalendar``), read on the
-        calendar of ``zone``, an IANA time zone (``"UTC"`` by default).
+        """A column whose values are instants (``HasCalendar``) in the
+        instant unit (``HasUnit``), read on the calendar of ``zone``, an IANA
+        time zone (``"UTC"`` by default).
 
         A value may be an ISO 8601 string (``"2024-03-05"`` is the start of
         that day in ``zone``; a string without an offset is a wall-clock time
@@ -2377,7 +2454,30 @@ class Schema:
             raise TypeError(
                 f"Schema.time: zone must be an IANA time zone name, got {zone!r}"
             )
-        return ColumnSchema({"HasCalendar": {"zone": zone}})
+        return ColumnSchema(
+            {"HasCalendar": {"zone": zone}, "HasUnit": dict(_INSTANT)}
+        )
+
+    @staticmethod
+    def unit(unit: str) -> ColumnSchema:
+        """A column whose values are amounts in the unit ``unit``
+        (``HasUnit``), an opaque name such as ``"USD"`` or ``"mm"``.
+
+        Columns in the same unit may share an axis; two different units on
+        one axis are an error. A column with no unit declared may share an
+        axis with any other. An axis title shows the unit after its
+        quantity: "Pay (USD)".
+        """
+        return ColumnSchema({}).unit(unit)
+
+    @staticmethod
+    def quantity(name: str) -> ColumnSchema:
+        """A column whose values are amounts of the quantity ``name``
+        (``HasQuantity``), e.g. ``"Pay"``. The quantity titles the axis in
+        place of the column's name, and columns of one quantity share one
+        unit.
+        """
+        return ColumnSchema({}).quantity(name)
 
 
 # Calendar partitions
@@ -2749,7 +2849,7 @@ def datum(value: Any) -> DatumValue:
 
 class FieldAccessor(dict):
     """
-    The `{type: "field", name, measure?, ops?}` wire shape, as a dict
+    The `{type: "field", name, ops?}` wire shape, as a dict
     subclass so `field(name)` supports the same chainable pipeline syntax as
     JS's `FieldExpr` (`ast/fieldExpr.ts`) — a Polars-column-expression-style
     builder where each method returns a NEW accessor with one more op
@@ -2933,52 +3033,60 @@ def filter(
     if isinstance(predicate, FieldPredicate):
         return Operator("filter", predicate=dict(predicate))
     if callable(predicate):
-        # Data that is not a list (a single row) passes through unchanged,
-        # as in JS: there is nothing to filter.
-        return derive(
-            lambda rows: [row for row in rows if predicate(row)]
-            if isinstance(rows, list)
-            else rows
-        )
+        # Data always flows as a list, so the filter keeps a sublist.
+        return derive(lambda rows: [row for row in rows if predicate(row)])
     raise TypeError(
         "filter(...) expects field(name).between(lo, hi) or a function of one "
         f"row, got {type(predicate).__name__}"
     )
 
 
-def field(name: str, measure: Optional[str] = None) -> FieldAccessor:
+def field(name: str) -> FieldAccessor:
     """
     Explicit field-accessor wrapper. Mirrors the JS `field(...)` constructor
     in `packages/gofish-graphics/src/ast/data.ts` (the field/datum/literal
-    trichotomy). Equivalent to passing a bare field-name string, plus an
-    optional **measure annotation** — a unit-of-measure type claim for the
-    channel (see the underlying-space measure system).
+    trichotomy). Equivalent to passing a bare field-name string. Use it when
+    a field name could be read as a literal, or to chain a pipeline.
 
-    Use the measure annotation when YOUR OWN derive transform has renamed
-    fields so the weak field-name default would mis-tag the channel — e.g. a
-    lambda that renames a length column to "lo"/"hi":
+    A column's unit is declared in the chart's schema
+    (``Schema.unit("USD")``), not here. A column with no declared unit may
+    share an axis with any other.
 
-        scatter(
-            x_min=field("lo", measure="Beak Length (mm)"),
-            x_max=field("hi", measure="Beak Length (mm)"),
-        )
-
-    The returned `FieldAccessor` is also chainable, mirroring JS's
+    The returned `FieldAccessor` is chainable, mirroring JS's
     `field(...)` pipeline syntax — `field("site").sort("yield")` as an
     operator's `by`, or `field("count").normalize()` as a `spread`/`stack`
     `size` channel (see `FieldAccessor` for the full method list).
 
-    Emits the canonical `{type: "field", name, measure?, ops?}` wire shape; an
-    annotation that contradicts the column's known unit is a type error.
+    Emits the canonical `{type: "field", name, ops?}` wire shape.
 
     Args:
         name: The field name to read from each row.
-        measure: Optional unit-of-measure annotation for the channel.
     """
-    out = FieldAccessor({"type": "field", "name": name})
-    if measure is not None:
-        out["measure"] = measure
-    return out
+    return FieldAccessor({"type": "field", "name": name})
+
+
+class ChunkKey(dict):
+    """The ``{type: "chunk", size}`` wire shape of a ``chunk(size)`` grouping
+    key. It is data, so a ``by=chunk(size)`` crosses to JS with no
+    callback."""
+
+
+def chunk(size: int) -> ChunkKey:
+    """
+    A ``by`` key that groups consecutive rows: row ``i`` goes to group
+    ``i // size``. It is a bin of width ``size`` over row position, so
+    ``spread(by=chunk(5), dir="y")`` lays the rows out five to a group (the
+    rows of a waffle chart). Like ``itertools.batched``, lodash ``_.chunk``
+    and Rust ``chunks(n)``. The key names no field, so its groups draw no
+    axis or labels. Mirrors the JS ``chunk(size)`` in
+    ``packages/gofish-graphics/src/ast/data.ts``.
+
+    Args:
+        size: How many consecutive rows go in each group (a positive integer).
+    """
+    if isinstance(size, bool) or not isinstance(size, int) or size < 1:
+        raise ValueError(f"chunk(size): size must be a positive integer, got {size!r}")
+    return ChunkKey({"type": "chunk", "size": size})
 
 
 def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:

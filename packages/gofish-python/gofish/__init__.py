@@ -60,6 +60,7 @@ from .ast import (
     datum,
     field,
     struct,
+    chunk,
 )
 from .datum_projection import pluck
 from .charts import bar_chart
@@ -132,6 +133,7 @@ __all__ = [
     "datum",
     "field",
     "struct",
+    "chunk",
     "pluck",
     "bar_chart",
     "Bin",

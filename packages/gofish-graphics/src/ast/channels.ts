@@ -15,8 +15,8 @@ import {
   isValue,
   type FieldAccessor,
   type LiteralValue,
-  type Measure,
 } from "./data";
+import { columnQuantity, type Quantity } from "./measure";
 import { Frontend } from "gofish-ir";
 import {
   evalFieldValues,
@@ -147,66 +147,13 @@ export type DeriveMarkProps<
     : ShapeProps[K];
 } & { debug?: boolean };
 
-/**
- * Resolve a channel's {@link Measure} from its three sources, treating measures
- * as TYPES (the field/datum/literal trichotomy). The three sources, in checking
- * order:
- *   1. Explicit annotation — `field(name, measure)`. A real type claim.
- *   2. The column's unit — the `HasUnit` class of its column type (schema.ts),
- *      which a transform writes into the data array's column types. Also a
- *      real type claim.
- *   3. Field-name default — a bare string accessor's field name. A WEAK default
- *      binding, not a claim.
- *
- * Checking rule:
- *   - annotation AND unit both present and disagree → THROW immediately here
- *     (before any space union runs), naming the field and both measures;
- *   - annotation present (no conflict) → annotation (refines the weak default);
- *   - no annotation → unit ?? field-name default.
- *
- * `data` is the array carrying the column types (the operator's whole input,
- * which retains them across `derive`). Function accessors and literals have
- * no field identity → no measure.
- */
-export const resolveMeasure = <T>(
-  data: T | T[],
-  accessor:
-    | string
-    | number
-    | ((d: T) => unknown)
-    | FieldAccessor
-    | LiteralValue
-    | undefined
-): Measure | undefined => {
-  let fieldName: string | undefined;
-  let annotation: Measure | undefined;
-  if (isField(accessor)) {
-    fieldName = accessor.name;
-    annotation = accessor.measure;
-  } else if (typeof accessor === "string") {
-    fieldName = accessor;
-  } else {
-    return undefined; // function / number / literal: no field identity
-  }
-  const unit = columnType(data, fieldName)?.HasUnit?.unit;
-  if (annotation !== undefined && unit !== undefined && annotation !== unit) {
-    throw new Error(
-      `Measure conflict on field "${fieldName}": annotated as "${annotation}" ` +
-        `via field(name, measure) but its column's unit is ` +
-        `"${unit}". These are contradictory type claims — drop the ` +
-        `annotation or fix the upstream transform.`
-    );
-  }
-  if (annotation !== undefined) return annotation;
-  return unit ?? fieldName;
-};
-
-/** What a channel's column says about its values: its {@link Measure} and
- *  its type in the chart's schema (schema.ts). */
-export type ColumnInfo = { measure?: Measure; type?: ColumnType };
+/** What a channel's column says about its values: its {@link Quantity}
+ *  (`columnQuantity` in measure.ts) and its type in the chart's schema
+ *  (schema.ts). */
+export type ColumnInfo = { quantity?: Quantity; type?: ColumnType };
 
 /** `v` as a datum read from the column `name`: it carries what the column
- *  says about its values ({@link ColumnInfo}: its measure, and its schema
+ *  says about its values ({@link ColumnInfo}: its quantity, and its schema
  *  type, such as a time column's calendar), and, when the column has a type,
  *  the column's name. */
 export const columnValue = (
@@ -216,24 +163,22 @@ export const columnValue = (
 ): DatumValueImpl =>
   new DatumValueImpl(
     v,
-    column.measure,
+    column.quantity,
     undefined,
     undefined,
     column.type === undefined ? undefined : name,
     column.type
   );
 
-/** The {@link ColumnInfo} of `accessor`'s column, read off `data` (see
- *  {@link resolveMeasure}). An accessor that names no column (a function, a
+/** The {@link ColumnInfo} of `accessor`'s column, read off `data`: the array
+ *  carrying the column types (the operator's whole input, which retains them
+ *  across `derive`). An accessor that names no column (a function, a
  *  literal, a value) has neither. */
 export const resolveColumn = (data: unknown, accessor: unknown): ColumnInfo => {
   const field = fieldNameOf(accessor);
-  return field === undefined
-    ? {}
-    : {
-        measure: resolveMeasure(data, accessor as string | FieldAccessor),
-        type: columnType(data, field),
-      };
+  if (field === undefined) return {};
+  const type = columnType(data, field);
+  return { quantity: columnQuantity(field, type), type };
 };
 
 /**
@@ -273,8 +218,8 @@ export const inferEntrySize = <T>(
  *   the rows there — then aggregated across whatever that evaluation produced.
  *
  * Field/string accessors are tagged with what their column says
- * ({@link resolveColumn}): a resolved {@link Measure}, so the
- * underlying-space layer can unify per measure, and the column's type from
+ * ({@link resolveColumn}): its {@link Quantity}, so the underlying-space
+ * layer can unify units and title axes, and the column's type from
  * the chart's schema, when it has one, so a position over a time column
  * (`HasCalendar`) builds a time space. A value with a column type also
  * records the field it was read from. The caller may pass the column
@@ -292,20 +237,19 @@ const inferNumeric =
       | LiteralValue
       | Value<number>
       | undefined,
-    d: T | T[],
-    column: ColumnInfo = resolveColumn(d, accessor)
+    data: T[],
+    column: ColumnInfo = resolveColumn(data, accessor)
   ): MaybeValue<number> | undefined => {
     if (accessor === undefined) return undefined;
     if (typeof accessor === "number") return accessor;
     if (isLiteral(accessor)) return accessor.value as number;
     if (isValue(accessor)) return accessor as MaybeValue<number>;
-    const data = Array.isArray(d) ? d : [d];
     // Expression evaluation is orthogonal to this channel: the pipeline maps
     // the rows to values, and an aggregate op (`.mean()`, `.count()`, ...)
     // folds them to a singleton. The channel then applies its default
     // aggregation exactly as it always did — over a folded singleton, sum and
     // mean are both the identity, so neither side knows about the other.
-    const { values, measure: pipelineMeasure } = evalFieldValues(
+    const { values, quantity: pipelineQuantity } = evalFieldValues(
       accessor,
       data
     );
@@ -313,7 +257,7 @@ const inferNumeric =
     if (folded === undefined) return undefined;
     return columnValue(
       folded,
-      { measure: pipelineMeasure ?? column.measure, type: column.type },
+      { quantity: pipelineQuantity ?? column.quantity, type: column.type },
       fieldNameOf(accessor)
     );
   };
@@ -531,7 +475,7 @@ export function resolveChannelAccessors<O extends Record<string, any>>(
  * (`buildCreatedMark` in withGoFish.ts) and the operator factory
  * (`applyChannels` in marks/createOperator.ts).
  *
- * `measure` is the channel's resolved {@link Measure}, computed once per
+ * `column` is the channel's resolved {@link ColumnInfo}, computed once per
  * channel from the whole input array (which carries the column types even
  * when `data` is a per-entry slice that does not) and passed down
  * so `inferSize`/`inferPos` don't recompute it per split entry. Only they
@@ -545,7 +489,7 @@ export const CHANNEL_INFER: Record<
   pos: (val, data, column) => inferPos(val, data, column),
   color: (val, data) => inferColor(val, data),
   raw: (val, data) => inferRaw(val, data),
-  // Each slot resolves its own measure from `data`: the slots are separate
+  // Each slot resolves its own column from `data`: the slots are separate
   // channels that happen to share one option.
   dims: (val: AxisDims<any>, data) =>
     mapAxisDims(val, (v, slot) => CHANNEL_INFER[axisSlotKind(slot)](v, data)),

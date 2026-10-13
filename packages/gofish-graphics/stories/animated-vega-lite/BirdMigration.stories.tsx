@@ -104,7 +104,9 @@ export const B_HoverHighlight: StoryObj<Args> = {
     const container = initializeContainer();
 
     const hover = pointer();
-    const hot = (d: any) => hover.datum()?.species === d?.species;
+    // A line's datum is the rows it was drawn through: one species' days, so
+    // any row gives its `species`.
+    const hot = (d: any) => hover.datum()?.[0]?.species === d?.[0]?.species;
 
     basemap()
       .layer(
@@ -128,7 +130,7 @@ export const B_HoverHighlight: StoryObj<Args> = {
       // express today. See the report / the plan note.
       .layer(
         text({
-          text: live(() => hover.datum()?.species ?? ""),
+          text: live(() => hover.datum()?.[0]?.species ?? ""),
           fontSize: 14,
           fill: "#333",
         })

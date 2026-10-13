@@ -249,7 +249,7 @@ for the API.
       }
     },
     "FieldAccessor": {
-      "description": "Explicit field-accessor form, emitted by field(name, measure?). Optionally carries a chained pipeline (ops) — field(\"site\").sort(\"yield\") or field(\"count\").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator's entry-flagged size channel, normalize.",
+      "description": "Explicit field-accessor form, emitted by field(name). Optionally carries a chained pipeline (ops) — field(\"site\").sort(\"yield\") or field(\"count\").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator's entry-flagged size channel, normalize.",
       "type": "object",
       "required": ["type", "name"],
       "properties": {
@@ -258,10 +258,6 @@ for the API.
         },
         "name": {
           "type": "string"
-        },
-        "measure": {
-          "type": "string",
-          "description": "Optional unit annotation for the channel's underlying space (a type claim; see field(name, measure))."
         },
         "ops": {
           "type": "array",
@@ -308,6 +304,20 @@ for the API.
               }
             }
           }
+        }
+      }
+    },
+    "ChunkKey": {
+      "description": "A `by` key that groups consecutive rows, emitted by chunk(size): row i goes to group floor(i / size), a bin over row position. It names no field, so its groups draw no axis or labels.",
+      "type": "object",
+      "required": ["type", "size"],
+      "properties": {
+        "type": {
+          "const": "chunk"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     },
@@ -543,9 +553,6 @@ for the API.
                     "const": "datum"
                   },
                   "datum": {},
-                  "measure": {
-                    "type": "string"
-                  },
                   "offset": {
                     "$ref": "#/$defs/Number"
                   },
@@ -828,9 +835,6 @@ for the API.
               "const": "datum"
             },
             "datum": {},
-            "measure": {
-              "type": "string"
-            },
             "offset": {
               "$ref": "#/$defs/Number",
               "description": "Pixel offset applied after the datum maps through its scale (datum(v) + px)."
@@ -1008,9 +1012,12 @@ for the API.
             },
             {
               "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/ChunkKey"
             }
           ],
-          "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin)."
+          "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
         },
         "dir": {
           "type": "string",
@@ -1102,9 +1109,12 @@ for the API.
             },
             {
               "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/ChunkKey"
             }
           ],
-          "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin)."
+          "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
         },
         "dir": {
           "type": "string",
@@ -1194,9 +1204,12 @@ for the API.
             },
             {
               "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/ChunkKey"
             }
           ],
-          "description": "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin)."
+          "description": "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"
@@ -1231,9 +1244,12 @@ for the API.
             },
             {
               "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/ChunkKey"
             }
           ],
-          "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin)."
+          "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
         },
         "x": {
           "$ref": "#/$defs/ChannelValue",
@@ -1437,9 +1453,12 @@ for the API.
             },
             {
               "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/ChunkKey"
             }
           ],
-          "description": "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row."
+          "description": "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
         },
         "spacing": {
           "$ref": "#/$defs/Number",
@@ -1505,9 +1524,12 @@ for the API.
             },
             {
               "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/ChunkKey"
             }
           ],
-          "description": "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row."
+          "description": "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"

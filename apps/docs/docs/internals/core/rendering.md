@@ -152,8 +152,8 @@ area (2 — both axes sweep into a wedge). That flag is authored before layout b
 the `resolveEmbedding` pass (wired into the pipeline in `gofish.tsx`; see
 [Layout & Render Passes](/internals/layout/passes) and
 [Underlying Space](/internals/core/underlying-space)): a value-sized dim embeds
-only when its measure matches the axis it sits in, so a foreign-measure size (a
-scatter bubble's area) stays a flat point even under a coord.
+only when it is the same quantity as the position it sits at, so a size of a
+foreign quantity (a scatter bubble's area) stays a flat point even under a coord.
 
 ### Boundaries re-walk their own subtree
 
@@ -239,7 +239,9 @@ primitive was elaborated from, the hit-testing / accessibility target) and `role
 (`"node"` for a data-bearing mark, `"overlay"` for chrome such as a label, axis, or
 glyph detail). `role` is a **projection of `datum`-presence**: a `lower` body
 derives it via `roleFor(node.datum)` (`lowerHelpers.ts`) — `"node"` exactly when the
-item carries a datum, `"overlay"` otherwise — so the two fields can never disagree
+item carries a datum (even an empty one, a group a filter emptied), `"overlay"`
+otherwise (a mark resolved at a root has no rows, `NO_ROWS`, so it has no datum) —
+so the two fields can never disagree
 and a host can split data from chrome on `role` alone. (Generated chrome carries no
 datum, so axes/legends/value-labels classify as `"overlay"` automatically; before
 this projection they were hard-coded `"node"` and mis-classified as data.) What is
@@ -335,7 +337,9 @@ signal during resolve), three things change; when it is absent — the common ca
 - **The `View` handle.** `gofish()` returns a `View` for the chart it mounted:
   `{ container, unmount() }`. Every public `render` returns one, synchronously
   for a node and as a `Promise<View>` wherever a resolve comes first (a chart
-  builder, a mark or combinator surface, a component thunk). `unmount()` runs
+  builder, a mark or combinator surface, a component thunk; `gofish()` reifies
+  a function child, thunk or mark, through `resolveMarkResult`, which calls it
+  with `NO_ROWS`). `unmount()` runs
   the full teardown, `disposeChart(container)`, but only while the container's
   state is still the object the view was made with. That identity check is
   what makes `unmount()` idempotent (the first call clears the state) and

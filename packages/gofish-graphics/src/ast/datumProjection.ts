@@ -23,7 +23,14 @@ import toPath from "lodash/toPath";
 import { Frontend } from "gofish-ir";
 import sumBy from "lodash/sumBy";
 import { GoFishRef } from "./_ref";
-import { fieldNameOf, isField, type FieldAccessor } from "./data";
+import {
+  chunk,
+  fieldNameOf,
+  isChunk,
+  isField,
+  type ChunkKey,
+  type FieldAccessor,
+} from "./data";
 import {
   getFieldOps,
   normalizeNotSupportedError,
@@ -80,7 +87,12 @@ export function rowsReached(obj: unknown): unknown[] {
 }
 
 /** Walk `segments` from `obj`, projecting over any array encountered and
- *  through any ref's `.datum`, and `visit` each value the walk reaches. */
+ *  through any ref's `.datum`, and `visit` each value the walk reaches.
+ *
+ *  A declared domain case, not a row-vs-list sniff: projection is DEFINED
+ *  over nested bags (a bag of refs whose datums are bags of rows, a field
+ *  whose value is itself a list), so the walk maps over a list wherever one
+ *  sits on the path, at any depth. Every datum it starts from is a list. */
 function walkRows(
   obj: unknown,
   segments: string[],
@@ -136,20 +148,29 @@ export function projectBy(obj: unknown, by: SplitBy): unknown {
  *  collapse: none when no row has the field (or there are no rows), one when
  *  they agree, several when they don't. */
 export function projectByValues(obj: unknown, by: SplitBy): unknown[] {
+  if (isChunk(by)) {
+    throw new Error(
+      "chunk(size) keys a group by row position, which a single node's rows " +
+        "do not carry; it cannot be read back off a node. Group by a field."
+    );
+  }
+  // A key function reads one row here: a node's rows carry no position.
   return typeof by === "function"
-    ? projectValues(obj, [], by)
+    ? projectValues(obj, [], by as (r: unknown) => unknown)
     : projectValues(obj, toPath(fieldNameOf(by)!));
 }
 
 /** The `by` selector accepted by the split operators (group/spread/scatter):
- *  a field-path string, a key function over the row, or a `field(...)`
- *  accessor (possibly carrying a pipeline of domain ops — see
- *  {@link splitEntries}). */
+ *  a field-path string, a key function over the row (and its position), a
+ *  `field(...)` accessor (possibly carrying a pipeline of domain ops — see
+ *  {@link splitEntries}), a `struct({ x, y })` key, or a `chunk(size)` bin
+ *  over row position. */
 export type SplitBy =
   | string
-  | ((r: any) => unknown)
+  | ((r: any, i: number) => unknown)
   | FieldAccessor
-  | StructExprWire;
+  | StructExprWire
+  | ChunkKey;
 
 /** The key of one group of a split: a value of the `by` field (text or a
  *  number), or a cell ({@link KeyCell}): a {@link Cell} or a
@@ -172,9 +193,10 @@ export type SplitKey = string | number | KeyCell;
  * `chart.ts` also imports `ChartBuilder` from `chartBuilder.ts` at runtime.
  */
 export type InferredRelational = {
-  /** The default split: an operand's key, the groups of the flow it is in
-   *  (`computeDefaultBy` in chartBuilder.ts). */
-  by?: (operand: GoFishRef) => string;
+  /** The default split of the connector's bag: the `by` of every flow tier
+   *  but the path tier's, outermost first, one connector per group
+   *  ({@link splitByTiers}). */
+  split?: SplitBy[];
   dir?: "x" | "y";
   /** The path tier's own `by`: the connection variable the connector
    *  threads its operands along, whether `along` named the tier or it was
@@ -234,12 +256,17 @@ export type TimeTier = {
  *  Projected keys are runtime strings/numbers/cells (or `undefined` for
  *  ill-posed groups, where the bag disagrees on the key, and for a row with
  *  no value); the assertion bridges the honest `unknown` produced by
- *  projection + homogeneity collapse. */
+ *  projection + homogeneity collapse. A key function and a `chunk(size)`
+ *  also read the row's position `i`. */
 export function splitKeyFn(
   by: SplitBy,
   data: unknown
-): (r: any) => SplitKey | undefined {
-  if (typeof by === "function") return by as (r: any) => SplitKey;
+): (r: any, i: number) => SplitKey | undefined {
+  if (typeof by === "function") return by as (r: any, i: number) => SplitKey;
+  if (isChunk(by)) {
+    const size = by.size;
+    return (_r, i) => Math.floor(i / size);
+  }
   const binned = binKey(by, data);
   if (binned !== undefined) return binned.key;
   const segments = toPath(fieldNameOf(by)!);
@@ -247,6 +274,34 @@ export function splitKeyFn(
     const values = projectValues(r, segments);
     return (values.length === 1 ? values[0] : undefined) as string | number;
   };
+}
+
+/**
+ * Group a connector's bag of refs, in flow order, the way the flow's tiers
+ * grouped them: one group per combination of the keys `tiers` (the flow's
+ * `by`s but the path tier's, outermost first) gave the ref's mark. A ref's
+ * key under a tier is the key that tier's split gave the group the ref's
+ * mark is in: the `key` of the mark's ancestor that the split made, which
+ * `createOperator` stamps with the split's `by` (`GoFishNode.keyBy`). So it
+ * is the split's own key in every form: a field's value, a key function's, a
+ * `chunk(n)`'s position within its parent group, or a binned key's cell over
+ * the split's domain. Nothing is recomputed from the mark's rows, which do
+ * not carry that position or domain.
+ */
+export function splitByTiers(
+  tiers: readonly SplitBy[],
+  refs: GoFishRef[]
+): Map<string, GoFishRef[]> {
+  const keyUnder = (r: GoFishRef, by: SplitBy): string | undefined => {
+    for (let n = r.targetNode; n !== undefined; n = n.parent)
+      if (n.keyBy === by) return n.key;
+    return undefined;
+  };
+  // Unit-separator join: a bare `join("")` would collide composite keys like
+  // ("ab","c") and ("a","bc").
+  return Map.groupBy(refs, (r) =>
+    tiers.map((by) => String(keyUnder(r, by))).join("\u001f")
+  );
 }
 
 /** Numeric-aware, lodash-`orderBy`-compatible-enough key comparator: compares
@@ -519,7 +574,7 @@ function reorderEntries<T>(
  *  of the order (spread.tsx), so it knows the order the split lays the
  *  levels out in even when a row has only some of them. */
 export function orderEntries<T>(
-  by: SplitBy,
+  by: SplitBy | undefined,
   entries: Map<SplitKey, T[]>
 ): Map<SplitKey, T[]> {
   for (const op of getFieldOps(by)) {
@@ -528,6 +583,11 @@ export function orderEntries<T>(
   }
   return entries;
 }
+
+/** The key an operator splits by: its `by`, or with no `by` a split by row
+ *  identity, `chunk(1)`: one group `[row]` per row, keyed by position. This
+ *  is the one place that default lives. */
+export const splitByOf = (by: SplitBy | undefined): SplitBy => by ?? chunk(1);
 
 /**
  * Group `d` by `by` (via {@link splitKeyFn}): in the order of the column's
@@ -543,14 +603,16 @@ export function orderEntries<T>(
  *   - `sort` / `reverse` reorder the entries Map.
  *   - a value-slot op (`sum`/`mean`/`count`/`distinct`) in a `by` slot, or
  *     `normalize`, throws — those aren't domain ops.
+ * No `by` is a split by row identity ({@link splitByOf}).
  * Central helper so spread/group/scatter share one split+ops pipeline —
  * `by`-string/function callers get plain `Map.groupBy` behavior unchanged
  * (they carry no ops).
  */
 export function splitEntries<T extends Record<string, any>>(
-  by: SplitBy,
+  byOpt: SplitBy | undefined,
   d: T[]
 ): Map<SplitKey, T[]> {
+  const by = splitByOf(byOpt);
   const ops = getFieldOps(by);
   let rows = d;
   if (ops.some((op) => op.op === "dropNulls")) {

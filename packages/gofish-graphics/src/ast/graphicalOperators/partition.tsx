@@ -218,8 +218,8 @@ const PartitionNode = createNodeOperator(
 );
 
 /** A datum read from the column `name`: it carries what the column says
- *  about its values (its measure, and its schema type: a time column's
- *  calendar), as a position read from the column does, so the axis it is
+ *  about its values (its quantity, in its declared unit, and its schema
+ *  type: a time column's calendar), as a position read from the column does, so the axis it is
  *  placed on is that column's axis. */
 function columnDatum(
   d: unknown[],

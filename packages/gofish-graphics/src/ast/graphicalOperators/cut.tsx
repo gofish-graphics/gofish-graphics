@@ -48,8 +48,7 @@ import { mask as Mask } from "./porterDuff";
 import { offset as offsetOp } from "./offset";
 import { Rect } from "../shapes/rect";
 import { createMark } from "../withGoFish";
-import { datum, getValue, getMeasure, isValue, type Value } from "../data";
-import { mergeAllMeasures } from "../underlyingSpace";
+import { datum, getValue, isValue, type Value } from "../data";
 
 /** User-facing options for the pure `cut(source, opts)` form. */
 export type CutOptions = {
@@ -115,7 +114,7 @@ async function buildSliceNode(
     h: sliceH,
     fill: "white",
   });
-  const sourceNode = await resolveMarkResult(source(undefined));
+  const sourceNode = await resolveMarkResult(source);
   const translated = await offsetOp(
     dirIdx === 0 ? { x: translateOffset } : { y: translateOffset },
     [sourceNode]
@@ -139,12 +138,7 @@ async function buildSliceNode(
  *   (a) the absolutes alone already sum to more than the source extent
  *       (the fixed claims don't fit);
  *   (b) there are datum entries but the remainder is ≤ 0 (no flex space left
- *       for them to fill);
- *   (c) two datum entries carry different, both-defined measure tags
- *       (incompatible units). Untagged entries are permissive — they unify
- *       with anything. The comparison reuses {@link mergeAllMeasures}, the same
- *       undefined-permissive measure unification the underlying-space type
- *       system uses (#527).
+ *       for them to fill).
  */
 function resolveExtents(
   size: Value<number>[],
@@ -186,14 +180,6 @@ function resolveExtents(
     );
   }
 
-  // Incompatible-measures guard: datum entries with different, both-defined
-  // measure tags are a unit error. mergeAllMeasures is undefined-permissive
-  // (untagged entries unify with anything) and throws on a real conflict.
-  mergeAllMeasures(
-    datumEntries.map((v) => getMeasure(v)),
-    { where: "in the datum() weights of a cut's size" }
-  );
-
   const weightTotal =
     datumEntries.reduce((sum, v) => sum + (Number(getValue(v)) || 0), 0) || 1;
   return size.map((v) =>
@@ -221,7 +207,7 @@ export function cut(
 
   // One shared probe + extent resolution; every slice awaits it.
   const geom = (async () => {
-    const probe = await resolveMarkResult(source(undefined));
+    const probe = await resolveMarkResult(source);
     const dirIdx: 0 | 1 = dir === "x" ? 0 : 1;
     const crossIdx: 0 | 1 = dirIdx === 0 ? 1 : 0;
     const probeArgs: any = (probe as any).args;

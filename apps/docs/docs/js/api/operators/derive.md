@@ -29,9 +29,10 @@ derive(fn, { schema });
 
 ## Parameters
 
-`fn` (required, `(d: T) => U | Promise<U>`) receives the data at this point
-in the flow (inside `.flow()`, the current group's rows) and returns what the
-rest of the pipeline sees. It may be `async`. The options:
+`fn` (required, `(rows: T[]) => U[] | Promise<U[]>`) receives the rows at
+this point in the flow (inside `.flow()`, the current group's rows) and returns
+the list of rows the rest of the pipeline sees. It returns a list even for one
+row (`(d) => [d[0]]`). It may be `async`. The options:
 
 ::: gofish-ref derive
 :::
@@ -93,44 +94,34 @@ derive(monthlyHighs, { schema: { month: Schema.ordered(MONTHS) } });
 )
 ```
 
-## Measures: keeping units across a transform
+## Units: keeping axes shared across a transform
 
-A channel that encodes a field carries that field's **measure** — its
-unit-of-measure, like `"Beak Depth (mm)"` or `"count"`. GoFish uses measures to
-decide when two axes may share a scale: overlaying or aligning marks whose axes
-have the _same_ measure merges their domains, while mixing _different_ measures
-(say, a count axis with a millimeter axis) is refused with an error rather than
-silently corrupting the shared domain.
+A channel that encodes a column carries the column's **unit**. GoFish uses
+units to decide when two axes may share a scale. A column with no declared
+unit has an unknown unit, which shares an axis with any column, so the
+columns a `derive` computes (`lo`, `hi`, a box plot's quartiles) share an
+axis with no annotation. Two different declared units on one axis are an
+error. See [`Schema.unit`](/js/api/core/schema).
 
-By default the measure is just the field name, which is usually right. Two
-things change it:
-
-- **A column's unit** in the data's column types (`HasUnit`) gives that
-  column the measure it names. The column types ride the array and survive
+- **A column's type** (its declared quantity and unit, `HasQuantity` and
+  `HasUnit`) rides the data array, so a column the input declares keeps it
   through `derive`.
-- **An arbitrary `derive`** can lose that connection — once you compute a new
-  column, GoFish only knows its name, not its unit. When the new column is
-  really in some existing unit (and you want its axis to share with that unit's
-  axis), annotate the channel with the second argument to `field`:
+- **An arbitrary `derive`** can declare the unit of a column it makes with
+  its `schema`:
 
   ```ts
-  import { field } from "gofish-graphics";
-
-  // `depthMm` was derived but is still millimeters:
-  .mark(rect({ y: field("depthMm", "Beak Depth (mm)") }))
+  derive(quartiles, {
+    schema: { lo: Schema.unit("USD"), hi: Schema.unit("USD") },
+  });
   ```
 
-  `datum(v, measure)` does the same for a literal value.
+An axis is titled by the quantities of its columns (each column's name,
+unless its schema declares a quantity), then a declared unit in parentheses:
+`"Pay (USD)"`. See [`Schema.quantity`](/js/api/core/schema).
 
-If you hit **"Cannot unify underlying spaces with different measures"**, you
-have two remedies:
+If an axis combines two different units, you have two remedies:
 
-1. If the units really are the same, say so with `field(name, measure)` /
-   `datum(v, measure)` so the axes collapse to one measure and merge.
+1. If the units really are the same, declare the same unit for both columns.
 2. If the units really differ, give the inner chart an explicit `w`/`h` so it
    becomes a [self-contained scale region](/js/api/core/render#explicit-size-makes-a-self-contained-scale-region)
    and never shares that axis.
-
-Annotating a channel whose measure contradicts its column's unit (e.g.
-calling `field("count", "mm")` on a column whose unit is `"count"`) is itself
-an error — the annotation and the unit are contradictory claims.

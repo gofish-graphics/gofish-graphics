@@ -29,7 +29,8 @@
 // import THIS module's class at runtime without a cycle.
 import sumBy from "lodash/sumBy";
 import meanBy from "lodash/meanBy";
-import type { Measure, MaybeValue } from "./data";
+import type { MaybeValue } from "./data";
+import { COUNT, type Quantity } from "./measure";
 import { withWire, wireOf } from "./wire";
 import {
   binStepToJSON,
@@ -93,7 +94,6 @@ export type FieldOp =
 export type FieldExprWire = {
   type: "field";
   name: string;
-  measure?: Measure;
   ops?: FieldOp[];
 };
 
@@ -123,7 +123,6 @@ export class FieldExpr<
   declare readonly binned?: Binned;
   constructor(
     public readonly name: string,
-    public readonly measure?: Measure,
     /** @internal accumulated pipeline ops; read via {@link getFieldOps} */
     public readonly _ops: readonly FieldOp[] = []
   ) {}
@@ -131,7 +130,7 @@ export class FieldExpr<
   private _withOp<R extends boolean, B extends boolean = Binned>(
     op: FieldOp
   ): FieldExpr<R, B> {
-    return new FieldExpr<R, B>(this.name, this.measure, [...this._ops, op]);
+    return new FieldExpr<R, B>(this.name, [...this._ops, op]);
   }
 
   /** Order groups by an explicit list of group keys — e.g.
@@ -295,7 +294,6 @@ export class FieldExpr<
     return {
       type: this.type,
       name: this.name,
-      ...(this.measure !== undefined ? { measure: this.measure } : {}),
       ...(this._ops.length ? { ops: this._ops.map(opToJSON) } : {}),
     };
   }
@@ -418,11 +416,11 @@ export const meanOf = (values: readonly unknown[]): number | undefined =>
  * afterwards (sum for a size slot, mean for a pos slot) is the identity on a
  * singleton.
  *
- * Also reports the measure the pipeline itself determines, if any: `count` /
+ * Also reports the quantity the pipeline itself determines, if any: `count` /
  * `distinct` yield counts — not the source field's units — so they report
- * measure "count" (an explicit `field(name, measure)` annotation still wins).
- * Every other pipeline reports none, leaving measure resolution to the caller
- * (`resolveMeasure`).
+ * the quantity "count", in the declared unit "count". Every other pipeline
+ * reports none, leaving the quantity to the caller (`resolveColumn`): a
+ * `sum` or `mean` keeps its source column's quantity and unit.
  *
  * Domain ops (`sort`/`reverse`/`bin`) don't belong in a value slot and throw;
  * so does a second aggregate (the fold happens once).
@@ -430,7 +428,7 @@ export const meanOf = (values: readonly unknown[]): number | undefined =>
 export function evalFieldValues<T>(
   accessor: string | ((r: T) => unknown) | FieldExprWire | FieldExpr,
   rows: T[]
-): { values: unknown[]; measure?: Measure } {
+): { values: unknown[]; quantity?: Quantity } {
   const key: (r: T) => unknown =
     typeof accessor === "function"
       ? accessor
@@ -453,17 +451,13 @@ export function evalFieldValues<T>(
     agg = op;
   }
   if (agg === undefined) return { values: rows.map(key) };
-  const annotation =
-    typeof accessor === "object" && accessor !== null
-      ? accessor.measure
-      : undefined;
   switch (agg.op) {
     case "count":
-      return { values: [rows.length], measure: annotation ?? "count" };
+      return { values: [rows.length], quantity: COUNT_QUANTITY };
     case "distinct":
       return {
         values: [new Set(rows.map(key)).size],
-        measure: annotation ?? "count",
+        quantity: COUNT_QUANTITY,
       };
     case "mean": {
       // No rows, no mean: the fold has no value (`meanOf`).
@@ -474,6 +468,9 @@ export function evalFieldValues<T>(
       return { values: [sumBy(rows.map(key) as any[])] };
   }
 }
+
+/** What `.count()` and `.distinct()` report: counts, read from no column. */
+const COUNT_QUANTITY: Quantity = { name: "count", unit: COUNT };
 
 /** The "not yet supported" error for `normalize()` outside its one valid
  *  slot (an operator's entry-flagged `size` channel), shared so every other
@@ -522,46 +519,46 @@ export function splitAtNormalize(
   const preOps = ops.slice(0, idx);
   const name =
     accessor instanceof FieldExpr ? accessor.name : (accessor as any).name;
-  const measure =
-    accessor instanceof FieldExpr
-      ? accessor.measure
-      : (accessor as any).measure;
   const pre: FieldExprWire = {
     type: "field",
     name,
-    ...(measure !== undefined ? { measure } : {}),
     ...(preOps.length ? { ops: preOps } : {}),
   };
   return { pre, post: rest };
 }
 
-/** Duck-typed read of a `Value<number>`'s `.datum`/`.measure`, without a
- *  runtime dependency on data.ts's `isValue`/`getValue`/`getMeasure` (this
+/** Duck-typed read of a `Value<number>`'s `.datum`/`.quantity`, without a
+ *  runtime dependency on data.ts's `isValue`/`getValue`/`getQuantity` (this
  *  module must not import data.ts at runtime — see the file header). Mirrors
  *  their identical `.type === "datum"` check; a plain object literal with
  *  this shape IS the wire form those functions already accept. */
 const isDatumValue = (
   v: unknown
-): v is { type: "datum"; datum: unknown; measure?: Measure } =>
+): v is { type: "datum"; datum: unknown; quantity?: Quantity } =>
   typeof v === "object" && v !== null && (v as any).type === "datum";
 const numericDatum = (v: MaybeValue<number>): number =>
   isDatumValue(v) ? Number(v.datum) : Number(v);
-const datumMeasure = (v: MaybeValue<number>): Measure | undefined =>
-  isDatumValue(v) ? v.measure : undefined;
+const datumQuantity = (v: MaybeValue<number>): Quantity | undefined =>
+  isDatumValue(v) ? v.quantity : undefined;
 
 /**
- * Share measure naming: a share is a NEW unit (0–1, not the base measure's
- * own units), so `"count"` and `"count share"` must never silently union on
- * the same axis — see `mergeMeasures`' throw in underlyingSpace.ts, which is
- * exactly the type guard this is meant to trigger. `byName`, when present,
- * further qualifies by the grouping field the shares were computed over, so
- * a per-`origin` share and a per-`cylinders` share (two nesting levels of the
- * same mosaic) stay distinct measures even though both are "count share".
+ * The quantity of a share: a share is a NEW unit (0–1, not the base
+ * quantity's own units), declared, so `"count"` and `"count share"` must
+ * never silently union on the same axis — see `joinUnits`' throw in
+ * underlyingSpace.ts, which is exactly the type guard this is meant to trigger.
+ * `byName`, when present, further qualifies by the grouping field the shares
+ * were computed over, so a per-`origin` share and a per-`cylinders` share
+ * (two nesting levels of the same mosaic) stay distinct units even though
+ * both are "count share". The name doubles as the axis title. The unit has
+ * no symbol: a share is a plain number, so the title adds no "(unit)".
  */
-export const shareMeasure = (
-  base: Measure | undefined,
+export const shareQuantity = (
+  base: Quantity | undefined,
   byName?: string
-): Measure => `${base ?? "value"} share${byName ? ` by ${byName}` : ""}`;
+): Quantity => {
+  const name = `${base?.name ?? "value"} share${byName ? ` by ${byName}` : ""}`;
+  return { name, unit: { unit: name } };
+};
 
 /**
  * The windowed normalize stage: given the collected per-entry Values already
@@ -569,7 +566,7 @@ export const shareMeasure = (
  * each entry's share `v_e / Σv_e` across the window — the operator's own split
  * entries. A non-positive total has no meaningful share, so every entry gets 0
  * and a console warning rather than a divide-by-zero/negative-share NaN. Shares
- * are tagged with `shareMeasure` — see its doc for why that's load-bearing.
+ * are tagged with `shareQuantity` — see its doc for why that's load-bearing.
  */
 export function applyEntryNormalize(
   entryValues: MaybeValue<number>[],
@@ -577,10 +574,10 @@ export function applyEntryNormalize(
 ): MaybeValue<number>[] {
   const nums = entryValues.map(numericDatum);
   const total = sumBy(nums);
-  const baseMeasure = entryValues
-    .map(datumMeasure)
-    .find((m) => m !== undefined);
-  const measure = shareMeasure(baseMeasure, byName);
+  const baseQuantity = entryValues
+    .map(datumQuantity)
+    .find((q) => q !== undefined);
+  const quantity = shareQuantity(baseQuantity, byName);
   if (!(total > 0)) {
     if (typeof console !== "undefined" && typeof console.warn === "function") {
       console.warn(
@@ -589,9 +586,9 @@ export function applyEntryNormalize(
           `positive values.`
       );
     }
-    return nums.map(() => ({ type: "datum", datum: 0, measure }) as const);
+    return nums.map(() => ({ type: "datum", datum: 0, quantity }) as const);
   }
   return nums.map(
-    (n) => ({ type: "datum", datum: n / total, measure }) as const
+    (n) => ({ type: "datum", datum: n / total, quantity }) as const
   );
 }

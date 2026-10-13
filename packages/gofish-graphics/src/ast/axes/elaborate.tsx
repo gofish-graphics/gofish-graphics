@@ -29,7 +29,8 @@ import {
   axisOver,
   niceContinuous,
   originIs,
-  spaceMeasure,
+  spaceTitle,
+  spaceCalendar,
   axisTickPartition,
   cellPartition,
   DEFAULT_AXIS_TICKS,
@@ -610,7 +611,7 @@ function elaborateTimeAxis(
   side: "start" | "end"
 ): AxisElaboration {
   const [lo, hi] = nice;
-  const zone = space.calendar!.zone;
+  const zone = spaceCalendar(space)!.zone;
   const rows = levels.filter((r) => !r.hidden).map((r) => r.partition);
   const starts = rows.map((row) => rowLabels(row, lo, hi, zone));
   // A row that cuts the same cells as the cells the axis places names
@@ -809,14 +810,13 @@ function calendarLevel(
  */
 function inferredOrdinalLevels(
   slots: readonly { key: string; cell?: AxisCell }[],
-  measure: string | undefined
+  title: string | undefined
 ): OrdinalLevel[] {
   const first = slots[0]?.cell;
   if (first === undefined || slots.some((s) => s.cell === undefined))
     return [
       {
-        name:
-          measure !== undefined ? `the groups of "${measure}"` : "the groups",
+        name: title !== undefined ? `the groups of "${title}"` : "the groups",
         groups: slots.map((s) => ({
           id: s.key,
           label: s.cell?.label ?? s.key,
@@ -884,7 +884,7 @@ function elaborateOrdinalAxis(
 
   // The levels: inferred, as the entries name them, and, on the outermost
   // axis, more levels from Calendar entries past the inferred ones.
-  const inferred = inferredOrdinalLevels(slots, space.measure);
+  const inferred = inferredOrdinalLevels(slots, spaceTitle(space));
   const levels: OrdinalLevel[] = [];
   const hidden: boolean[] = [];
   const regroup = (
@@ -991,7 +991,7 @@ function elaborateOrdinalAxis(
         dim,
         kind: "ordinal",
         tier: depth0 + k,
-        field: space.measure,
+        field: spaceTitle(space),
       };
       if (a === b) {
         if (k === 0) slotNodes[a].unshift(label);
@@ -1264,7 +1264,7 @@ function elaborationsFor(
     if (!owns(dim)) continue;
     const s = spaceFor(dim);
     if (axisOver(s) === "absolute") {
-      if (isCONTINUOUS(s) && s.calendar) {
+      if (isCONTINUOUS(s) && spaceCalendar(s)) {
         times[dim] = timeRows(s, entriesFor(dim), !hasOuterAxis(node, dim));
         node.axisDemand[dim] = {
           ...ticksFor(dim),
@@ -1334,7 +1334,7 @@ function elaborationsFor(
     const kind = axisOver(s);
     const ticks = ticksFor(dim);
     const depth0 = fold.names[dim].length;
-    if (kind === "absolute" && isCONTINUOUS(s) && s.calendar) {
+    if (kind === "absolute" && isCONTINUOUS(s) && spaceCalendar(s)) {
       const time = times[dim]!;
       const e = elaborateTimeAxis(
         dim,
@@ -1510,8 +1510,8 @@ export async function elaborateChrome(
       options.levels,
       below
     );
-  // A title names an axis this node draws. The measure is read off the
-  // node's own space, which elaboration has not re-resolved yet.
+  // A title names an axis this node draws. It is read off the node's own
+  // space (`spaceTitle`), which elaboration has not re-resolved yet.
   const request = node._chromeRequest;
   node._chromeRequest = undefined;
   const titles = ([0, 1] as const).map((dim) =>
@@ -1519,7 +1519,7 @@ export async function elaborateChrome(
       ? chartAxisTitle(
           request.axes,
           dim,
-          spaceMeasure(node._underlyingSpace?.[dim])
+          spaceTitle(node._underlyingSpace?.[dim])
         )
       : undefined
   ) as [string | undefined, string | undefined];
@@ -1621,19 +1621,19 @@ export const TITLE_COLOR = "gray";
 
 /** The title of the axis on `dim` from the chart's `axes` options: it is
  *  titled only when `axes` turns it on (`true`, or a dim's entry that is not
- *  `false`); its title is then {@link axisTitle}'s, with the axis's measure
- *  as the inferred name. */
+ *  `false`); its title is then {@link axisTitle}'s, with the axis's space's
+ *  title (`spaceTitle`) as the inferred name. */
 function chartAxisTitle(
   axes: AxesOptions | undefined,
   dim: 0 | 1,
-  measure: string | undefined
+  inferred: string | undefined
 ): string | undefined {
-  if (axes === true) return measure;
+  if (axes === true) return inferred;
   const opt =
     axes && typeof axes === "object" ? axes[dim === 0 ? "x" : "y"] : undefined;
   return opt === undefined || opt === false
     ? undefined
-    : axisTitle(opt, measure);
+    : axisTitle(opt, inferred);
 }
 
 /** The title of a drawn axis from its `axes` option: the option's `title`,
