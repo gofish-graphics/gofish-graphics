@@ -438,7 +438,10 @@
     tree so the set stays in one piece, and blurs the result so the outline's
     curvature never jumps. The convex hull and the spine are shortcuts of it,
     the way <code>sina()</code> and <code>jitter()</code> are shortcuts of
-    <code>noise()</code>.
+    <code>noise()</code>. A member can be any placed shape, so a graph's edges
+    can be members next to its nodes. The design idea is a discrete choice
+    followed by continuous tuning: pick a shape from a small set (box, hull,
+    blob, spine), then adjust the blob's parameters to taste.
   </p>
 
   <div class="rec">
@@ -447,7 +450,7 @@
       <code>createRelationalMark</code> and give it
       <code
         >shape: Shape.box({ rx, ry }) | Shape.blob({ convexity, neck, smoothing,
-        avoiding, via, clearance })</code
+        avoiding, clearance })</code
       >, with two shortcuts: <code>Shape.hull(opts)</code> =
       <code>Shape.blob({ convexity: 1, neck: 1, ...opts })</code> and
       <code>Shape.spine(opts)</code> =
@@ -653,6 +656,12 @@ enclose([spread([circle(**d) for d in planets],
     leaves out triangles touching other nodes. <code>Shape.box()</code> stays
     separate: a box is a rectangle grown by padding, not a union of discs.
   </p>
+  <p>
+    So the four values are a small discrete menu, and the blob's parameters are
+    the continuous dials behind three of them. A user picks the shape that reads
+    best first (the penguins tab shows the four side by side), and only then
+    tunes <code>convexity</code>, <code>neck</code> and <code>smoothing</code>.
+  </p>
 
   <h3>Parameters</h3>
   <div class="tablewrap">
@@ -668,8 +677,8 @@ enclose([spread([circle(**d) for d in planets],
         <td><code>padding</code></td>
         <td><code>enclose</code></td>
         <td>
-          The bulge around each member, from the member's own outline. Exact for
-          a member on its own.
+          The bulge around each member, from the member's own outline (for a
+          line, around its whole length). Exact for a member on its own.
         </td>
         <td>Bigger is fatter.</td>
         <td>as today</td>
@@ -730,16 +739,6 @@ enclose([spread([circle(**d) for d in planets],
         <td>none</td>
       </tr>
       <tr>
-        <td><code>via</code></td>
-        <td><code>Shape.blob</code></td>
-        <td>
-          Edges to use as links, such as a graph's own edges. Always kept, never
-          rerouted.
-        </td>
-        <td></td>
-        <td>none</td>
-      </tr>
-      <tr>
         <td><code>clearance</code></td>
         <td><code>Shape.blob</code></td>
         <td>Gap in pixels kept from each avoided node.</td>
@@ -757,19 +756,25 @@ enclose([spread([circle(**d) for d in planets],
   </p>
   <ol>
     <li>
-      <strong>Skeleton.</strong> Take the Delaunay triangulation of the member
-      centers. Fill a triangle when its circumradius is at most alpha and no
-      avoided node's keep-out zone (the node grown by <code>clearance</code>)
-      touches it. The links are the edges of the filled triangles, the other
-      Delaunay edges no longer than 2 alpha that no avoided node blocks, the
-      minimum spanning tree over links routed around the avoided nodes (always,
-      so the set stays in one piece), and any <code>via</code> edges.
+      <strong>Skeleton.</strong> Each member is its own geometry: a node is its
+      center, and a line member (such as a graph edge) is its segment, which
+      already links its two ends. Take the Delaunay triangulation of the
+      members' points (node centers and line ends). Fill a triangle when its
+      circumradius is at most alpha and no avoided node's keep-out zone (the
+      node grown by <code>clearance</code>) touches it. The links are the edges
+      of the filled triangles, the other Delaunay edges no longer than 2 alpha
+      that no avoided node blocks, and the minimum spanning tree over the
+      members, routed around the avoided nodes (always, so the set stays in one
+      piece). A spanning-tree link runs between the closest points of two
+      members' geometries, so members that touch, like an edge and its end node,
+      are joined at no cost.
     </li>
     <li>
       <strong>Pieces.</strong> Each member grown by <code>padding</code> (its
-      bulge, radius <em>R</em>). Each link that bounds a filled triangle is a
-      tube as wide as the bulge; every other link is a tube
-      <code>neck</code> times the bulge. The filled triangles.
+      bulge, radius <em>R</em>; for a line member, a tube around its whole
+      length). Each link that bounds a filled triangle is a tube as wide as the
+      bulge; every other link is a tube <code>neck</code> times the bulge. The
+      filled triangles.
     </li>
     <li>
       <strong>Closing.</strong> The union of the pieces is closed by a disc of
@@ -869,7 +874,7 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
       aria-selected="false"
       tabindex="-1"
     >
-      Gentoo penguins
+      Penguins
     </button>
     <button
       role="tab"
@@ -958,24 +963,57 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
     aria-labelledby="tab-penguins"
     tabindex="0"
   >
-    <h3>(c) Gentoo penguins among the other species</h3>
-    <pre><code>enclose({ shape: Shape.blob({ convexity, smoothing, avoiding: otherSpecies }),
-          padding: 4 }, gentoo)</code></pre>
+    <h3>(c) Penguins: the discrete choice, then the dials</h3>
+    <p>
+      First the discrete choice. All three species, each with its own outline,
+      at <code>padding: 6</code> and the same light fill, so overlaps and fit
+      can be compared. Each panel uses the shape's defaults; nothing is avoided.
+    </p>
+    <pre><code>chart(penguins)
+  .flow(group({ by: "Species" }),
+        scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+  .mark(circle({ r: 2.5, fill: "Species" }))
+  .layer(enclose({ shape, padding: 6, fill: "Species", opacity: 0.15 }))
+// shape: Shape.box(), Shape.hull(), Shape.blob() or Shape.spine()</code></pre>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/penguins-four-shapes.png"
+          alt="Three penguin species, each outlined four ways: box, hull, blob and spine"
+        />
+      </div>
+      <figcaption>
+        The boxes overlap so much that the species blur together. The hulls
+        separate them well and are easy to read, with a sliver of overlap
+        between each pair. The blob and the spine follow the points closely and
+        show where each species is dense; on data this dense they look almost
+        the same, because the discs already touch and there is little space left
+        for <code>convexity: 0.5</code> to fill. Box and hull are reasonable
+        choices here; blob and spine trade a calm outline for a closer fit.
+      </figcaption>
+    </figure>
+    <p>
+      Then the dials. The same three species in every cell, convexity by
+      smoothing.
+    </p>
+    <pre><code>.layer(enclose({ shape: Shape.blob({ convexity, smoothing }),
+                padding: 6, fill: "Species", opacity: 0.15 }))</code></pre>
     <figure>
       <div class="shot wide">
         <img
           src="img/explore-penguins.png"
-          alt="Grid of the Gentoo set: convexity 0 to 1 across, smoothing 2, 4, 8 px down"
+          alt="Grid of the three penguin species: convexity 0 to 1 across, smoothing 3, 6, 12 px down"
         />
       </div>
       <figcaption>
-        One species (Gentoo, green) with the other two avoided (gray), cropped
-        to the Gentoo cluster. At 0 and 0.5 dense parts fill and stragglers stay
-        attached by tubes; at 0.8 the outline looks like an alpha shape while
-        still holding every point; at 1 it is the hull. One member near the top
-        left sits among gray points: at <code>smoothing: 8</code> their keep-out
-        zones pinch off the tube that reaches it, so it is drawn as its own
-        small region.
+        The defaults cell is the <code>Shape.blob()</code> panel above, and the
+        convexity 1 column is the <code>Shape.hull()</code> panel. At 0.8 each
+        species becomes one calm region that still leaves out its empty corners,
+        the step between the blob and the hull. More smoothing calms the wobble
+        of the low-convexity outlines. Adding
+        <code>avoiding: selectAll("points")</code> to the blob would cut each
+        species' outline away from the other species' points, as the U tab
+        shows.
       </figcaption>
     </figure>
   </section>
@@ -987,25 +1025,30 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
     tabindex="0"
   >
     <h3>(d) Hyperedges over a node-link graph</h3>
-    <p class="small">
-      Each row of <code>memberships</code> is <code>{ set, node }</code>. The
-      graph's edges between members are the <code>via</code> links. Rows that
-      hold refs need a <code>members</code> option naming the column (decision
-      9).
+    <p>
+      <span class="tag ok">proposed change</span>
+      <strong>The edges are members.</strong> Each set's members are its nodes
+      plus the graph edges whose two ends are both in the set. An edge member is
+      a line, held inside the outline at <code>padding</code> along its whole
+      length, and it already links its two ends. This replaces the earlier
+      <code>via</code> parameter (History, v5).
     </p>
     <div class="pair">
       <div>
         <div class="lang">JS</div>
         <pre><code>layer([
-  graph, // nodes "nodes", edges "edges"
-  chart(memberships)
-    .flow(resolve(["node"], { from: selectAll("nodes") }),
-          group({ by: "set" }))
+  graph, // "nodes" and "edges", keyed by id
+  chart(setMembers) // { set, member }
+    .flow(
+      resolve(["member"], {
+        // new: a list of selections
+        from: [selectAll("nodes"),
+               selectAll("edges")] }),
+      group({ by: "set" }))
     .mark(enclose({
-      members: "node",
-      shape: Shape.blob({ convexity, smoothing,
-        via: selectAll("edges"),
-        avoiding: selectAll("nodes"), clearance: 3 }),
+      members: "member", // new (decision 9)
+      shape: Shape.spine({
+        avoiding: selectAll("nodes") }),
       padding: 6, fill: "set", opacity: 0.25 })),
 ])</code></pre>
       </div>
@@ -1013,33 +1056,176 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
         <div class="lang">Python</div>
         <pre><code>layer([
     graph,
-    chart(memberships)
-      .flow(resolve(["node"], from_=select_all("nodes")),
+    chart(set_members)
+      .flow(resolve(["member"],
+                    from_=[select_all("nodes"),
+                           select_all("edges")]),
             group(by="set"))
-      .mark(enclose(members="node",
-          shape=Shape.blob(via=select_all("edges"),
-                           avoiding=select_all("nodes"),
-                           clearance=3),
+      .mark(enclose(members="member",
+          shape=Shape.spine(
+              avoiding=select_all("nodes")),
           padding=6, fill="set", opacity=0.25)),
 ])</code></pre>
       </div>
     </div>
     <figure>
-      <div class="shot wide">
+      <div class="shot">
         <img
-          src="img/explore-hyperedges.png"
-          alt="Grid of three hyperedges over a graph: convexity 0 to 1 across, smoothing 3, 6, 12 px down"
+          src="img/hyperedges-members-vs-via.png"
+          alt="Three sets over a graph: edges as members (left) against via (right), as a spine (top) and at the defaults (bottom)"
         />
       </div>
       <figcaption>
-        At 0 each set follows the graph's edges, and a cycle of
-        <code>via</code> edges around an empty space leaves a hole (sets A and
-        B). From 0.5 the triangles inside those cycles fill. At 0.8 and 1 set C
-        fills the triangle 3, 8, 9, which covers the graph edges 6 to 7 and 4 to
-        6; nodes 4 and 6 themselves stay outside. Node 3 is in sets A and C, and
-        both reach it.
+        <strong
+          >Nodes + edges as members (proposed), left;
+          <code>via</code> (current), right.</strong
+        >
+        As a spine (top) the two differ. With edges as members, each set is its
+        nodes and its edges, drawn as slim tubes at the padding, and nothing
+        else: the members already touch, so the spanning tree adds no link. With
+        <code>via</code>, the spanning tree over node centers adds links the
+        graph does not have (2 to 3 in set A, 5 to 6 in set B, 3 to 7 in set C),
+        and each closes a cycle with a hole in it. At the defaults (bottom) the
+        two are the same picture, because the filled triangles cover the edges
+        either way.
       </figcaption>
     </figure>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-hyperedges-members.png"
+          alt="Grid of the three sets with edges as members: convexity 0 to 1 across, smoothing 3, 6, 12 px down"
+        />
+      </div>
+      <figcaption>
+        The grid on the proposed version. At 0 each set is a tube along its own
+        edges. From 0.5 the triangles fill. At 0.8 and 1 set C fills the
+        triangle 3, 8, 9, which covers the graph edges 6 to 7 and 4 to 6; nodes
+        4 and 6 stay outside. This is the same as with <code>via</code>: edges
+        as members add what must be inside, and say nothing about what must stay
+        out.
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/hyperedges-members-routed-link.png"
+          alt="Set 3, 5, 10 as a spine: a link from 3 bends around node 4 to reach 5"
+        />
+      </div>
+      <figcaption>
+        <strong>Connected only through a non-member.</strong> Set {3, 5, 10}
+        reaches 5 from 3 only through node 4. Its member subgraph is in two
+        pieces (node 3, and the edge 5 to 10), and the spanning tree joins them
+        with a link routed around node 4, as wide as the node bulge. The
+        <code>via</code> version draws the same link.
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/hyperedges-members-near-edge.png"
+          alt="An edge u to v passing non-members x and w, as a member and with via"
+        />
+      </div>
+      <figcaption>
+        <strong>An edge near non-members.</strong> Edge u to v passes x (13 px
+        above it) and w (17 px, then 11 px, below it). As a member, the outline
+        is a slim tube that clears both with a small notch. With
+        <code>via</code> the link is a full-bulge tube, so the cut around w and
+        x makes a lopsided shape. At 11 px, w's keep-out zone (its radius plus
+        <code>clearance</code>) reaches the edge itself, and both versions let
+        <code>clearance</code> win, so the outline touches the drawn edge at w.
+        No outline can keep both promises there; the rule is the one that
+        applies to a node member near a non-member.
+      </figcaption>
+    </figure>
+
+    <h4>What the user writes</h4>
+    <p>
+      The data is two tables: <code>edges</code> rows
+      <code>{ id, source, target }</code> and <code>memberships</code> rows
+      <code>{ set, node }</code>. "This set's nodes plus the edges among them"
+      is built in plain code today:
+    </p>
+    <div class="pair">
+      <div>
+        <div class="lang">JS</div>
+        <pre><code>const inSet = new Set(
+  memberships.map((m) =&gt; `${m.set}/${m.node}`));
+const setMembers = [
+  ...memberships.map(({ set, node }) =&gt;
+    ({ set, member: node })),
+  ...sets.flatMap((set) =&gt; edges
+    .filter((e) =&gt;
+      inSet.has(`${set}/${e.source}`) &amp;&amp;
+      inSet.has(`${set}/${e.target}`))
+    .map((e) =&gt; ({ set, member: e.id }))),
+];</code></pre>
+      </div>
+      <div>
+        <div class="lang">Python</div>
+        <pre><code>in_set = {(m["set"], m["node"])
+          for m in memberships}
+set_members = [
+    {"set": m["set"], "member": m["node"]}
+    for m in memberships
+] + [
+    {"set": s, "member": e["id"]}
+    for s in sets for e in edges
+    if (s, e["source"]) in in_set
+    and (s, e["target"]) in in_set
+]</code></pre>
+      </div>
+    </div>
+    <p>
+      The edge half alone can be written with existing operators:
+      <code
+        >chart(edges).flow(join(sourceSets, { on: "source" }), join(targetSets,
+        { on: "target" }), filter((d) =&gt; d.sourceSet === d.targetSet))</code
+      >, where <code>sourceSets</code> and <code>targetSets</code> are
+      <code>memberships</code> with its columns renamed. That is awkward, and it
+      still cannot be put together with the node rows, because a flow has no
+      operator that appends one table's rows to another's. So three things are
+      missing, each with a small fix: <code>resolve</code> takes a list of
+      selections in <code>from</code> (the nodes and the edges are two layers);
+      the edges need a key column (<code>id</code>) so rows can refer to them;
+      and <code>enclose</code> needs the <code>members</code> option of decision
+      9. The plain-code table is the honest spelling until a flow can append
+      rows.
+    </p>
+    <h4>What it needs from #974</h4>
+    <p>
+      #974 plans one geometry query per file, with a <code>boundary</code> query
+      (a node's own outline) that enters only when something first needs it.
+      Edges as members are that first user: the blob needs a line mark's
+      geometry (its path and stroke width), not just its box or center, both to
+      grow it by <code>padding</code> and to start spanning-tree links at the
+      closest point. The prototype reads straight segments; a curved edge would
+      need its path as points.
+    </p>
+    <h4>Box and hull</h4>
+    <p>
+      Members are just shapes, so <code>Shape.box()</code> and
+      <code>Shape.hull()</code> contain line members too, through the same
+      query. When both ends of an edge are members, the edge already lies
+      inside, since both shapes are convex; it matters only for an edge whose
+      end is outside the set.
+    </p>
+    <h4>What <code>via</code> did that this does not</h4>
+    <p>
+      Two things, neither needed by an example. <code>via</code> could make the
+      outline follow a route it does not draw, but a route the outline follows
+      is inside it at the padding anyway, so it might as well be a member; a
+      route with no mark can be drawn as an invisible line. And
+      <code>via</code> drew each edge as a tube as wide as the node bulge, while
+      a member edge is slim (its stroke plus <code>padding</code>); a wider look
+      comes from <code>padding</code> or <code>convexity</code>. So
+      <code>via</code> can be dropped. With it gone, <code>avoiding</code> is
+      the only strategy parameter that holds refs. It could later become a
+      second operand role of <code>enclose</code> (the nodes to keep out, beside
+      the members); that is not redesigned here.
+    </p>
   </section>
 
   <section
@@ -1170,7 +1356,7 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
     </div>
   </figure>
   <p>
-    The spine shortcut draws exactly the spanning tree (plus <code>via</code>),
+    The spine shortcut draws exactly the members and the spanning tree,
     smoothed: at <code>convexity: 0</code> alpha is 0, so no triangle is filled
     and no extra edge is added.
   </p>
@@ -1295,8 +1481,8 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
       <code>clearance</code> 4 px (the teal cells in the explorer)?
     </li>
     <li>
-      <code>avoiding</code> and <code>via</code> on <code>Shape.blob()</code>,
-      so on both shortcuts, avoiding listed non-members only, with
+      <code>avoiding</code> on <code>Shape.blob()</code>, so on both shortcuts,
+      avoiding listed non-members only, with
       <code>Shape.hull({ avoiding })</code> leaving out triangles that touch
       other nodes?
     </li>
@@ -1310,7 +1496,8 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
     </li>
     <li>
       For rows that carry refs, name the ref column with <code>members</code>,
-      like <code>line({ from, to })</code>?
+      like <code>line({ from, to })</code>? The hyperedge example also needs
+      <code>resolve</code> to take a list of selections.
     </li>
     <li>
       In a chart, should a spine stay inside the plot area by rule, or should
@@ -1327,6 +1514,12 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
       add no <code>curve</code> key to <code>enclose</code>? (History, v4, shows
       why a curve through the outline cannot keep <code>padding</code> or
       <code>clearance</code>.)
+    </li>
+    <li>
+      <strong>Confirm:</strong> drop <code>via</code> in favor of enclosing the
+      edges themselves as members (the hyperedges tab)? Box and hull contain
+      line members too, since members are just shapes, and the blob reads their
+      geometry through #974's <code>boundary</code> query.
     </li>
   </ol>
 
@@ -1368,7 +1561,8 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
         from spanning tree to convex hull. So the design keeps it in the
         relational-mark family (with <code>line</code>, <code>ribbon</code>),
         makes connection versus containment one dial (<code>convexity</code>) on
-        one member, and lets <code>via</code> take real connections as links.
+        one member, and lets real connections, such as a graph's edges, be
+        members themselves.
       </p>
     </div>
   </div>
@@ -1421,8 +1615,8 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
     expressible. New terms: <code>Shape</code>, <code>blob</code>,
     <code>hull</code>, <code>spine</code>, <code>convexity</code>,
     <code>neck</code>, <code>smoothing</code>, <code>avoiding</code>,
-    <code>via</code>, <code>clearance</code>. Awkward: the per-group background
-    behind each lake needs
+    <code>clearance</code>. Awkward: the per-group background behind each lake
+    needs
     <code
       >chart(selectAll("bars")).flow(group({ by: "lake"
       })).mark(enclose())</code
@@ -1656,8 +1850,10 @@ chart(catch)
         </td>
         <td>
           <strong>Matches</strong> in spirit:
-          <code>Shape.blob({ avoiding, via })</code>. New wire detail: a
-          strategy parameter that holds refs.
+          <code>Shape.blob({ avoiding })</code>. With <code>via</code> dropped,
+          <code>avoiding</code> is the only strategy parameter that holds refs.
+          It could later become a second operand role of <code>enclose</code>;
+          not redesigned here.
         </td>
       </tr>
       <tr>
@@ -1863,12 +2059,13 @@ chart(catch)
     <code>rect</code>; <code>hull</code> matches Plot, ggforce, d3 and the
     roadmap. No library says "spine"; Bubble Sets and Josh's #717 comment say
     "bubble". <code>spine</code> names the connecting skeleton and reads well
-    with <code>via</code>. For the general member, <code>kelp</code> means
-    little to most readers, <code>bubble</code> names a different algorithm,
-    <code>region</code> collides with the region-compositing operators,
-    <code>outline</code> is a candidate option key, and <code>set</code> shadows
-    JavaScript's <code>Set</code>; <code>blob</code> is an everyday word and
-    Bluefish's name for a hand-drawn set outline.
+    over a graph ("a spine along these edges"). For the general member,
+    <code>kelp</code> means little to most readers, <code>bubble</code> names a
+    different algorithm, <code>region</code> collides with the
+    region-compositing operators, <code>outline</code> is a candidate option
+    key, and <code>set</code> shadows JavaScript's <code>Set</code>;
+    <code>blob</code> is an everyday word and Bluefish's name for a hand-drawn
+    set outline.
   </p>
   <p>
     <strong>The knobs.</strong> ggforce's and concaveman's
@@ -2443,8 +2640,46 @@ chart(catch)
   </details>
 
   <details class="hist">
+    <summary>v5: <code>via</code>, replaced by edges as members</summary>
+    <p>
+      v5 took a graph's edges as a strategy parameter,
+      <code>Shape.blob({ via: selectAll("edges") })</code>: each listed edge
+      between two members was a link, always kept and never rerouted. It was
+      replaced because the edges can simply be members, which removes a strategy
+      parameter that holds refs and draws the spine without links the graph does
+      not have.
+    </p>
+    <pre><code>enclose({ members: "node",
+          shape: Shape.blob({ convexity, smoothing,
+            via: selectAll("edges"),
+            avoiding: selectAll("nodes"), clearance: 3 }),
+          padding: 6 })</code></pre>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-hyperedges.png"
+          alt="Grid of three hyperedges with via: convexity 0 to 1 across, smoothing 3, 6, 12 px down"
+        />
+      </div>
+      <figcaption>
+        At 0 each set follows the graph's edges plus the spanning tree over node
+        centers, and a cycle around an empty space leaves a hole (sets A, B and
+        C). From 0.5 the triangles inside those cycles fill.
+      </figcaption>
+    </figure>
+    <p>
+      v5 also showed the Gentoo species alone, with the other two avoided and
+      cropped to its cluster; the penguins tab now shows all three species.
+    </p>
+  </details>
+
+  <details class="hist">
     <summary>Retired decisions</summary>
     <ul>
+      <li>
+        <strong><code>via</code> on <code>Shape.blob()</code></strong> (v5).
+        Replaced by edges as members (open decision 13).
+      </li>
       <li>
         <strong
           ><code>alpha</code> as a pixel radius on

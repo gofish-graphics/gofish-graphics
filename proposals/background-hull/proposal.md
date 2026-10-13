@@ -3,9 +3,10 @@
 **Summary.**
 GoFish already has a box-only `enclose` (also exported as `background`). This proposal turns it into one relational mark that draws an outline around a set of nodes: a box, or a smooth region built from discs around the members and links between them.
 The outlines are values of one strategy family, `Shape`, chosen with a `shape` option, the same way `Curve` is chosen with `curve` on `line`. The region member, `Shape.blob()`, fills the space between members with the alpha shape's rule (dialed by `convexity`), links them with a spanning tree so the set stays in one piece, and blurs the result so the outline's curvature never jumps. The convex hull and the spine are two shortcuts of it, the way `sina()` and `jitter()` are shortcuts of `noise()`.
-The construct keeps working in all three places `enclose` works today (around fresh children, around refs, and mixed), and gains the bag form that `line` and `ribbon` have.
+The construct keeps working in all three places `enclose` works today (around fresh children, around refs, and mixed), and gains the bag form that `line` and `ribbon` have. A member can be any placed shape, so a graph's edges can be members next to its nodes.
+The design idea is a discrete choice followed by continuous tuning: pick a shape from a small set (box, hull, blob, spine), then adjust the blob's parameters to taste.
 
-**Recommendation.** Rebuild `enclose` with `createRelationalMark` and give it `shape: Shape.box({ rx, ry }) | Shape.blob({ convexity, neck, smoothing, avoiding, via, clearance })`, with two shortcuts, `Shape.hull(opts)` = `Shape.blob({ convexity: 1, neck: 1, ...opts })` and `Shape.spine(opts)` = `Shape.blob({ convexity: 0, ...opts })`. `padding` and paint stay on `enclose`. Delete the `background` alias. Do not add a `.background()` modifier now; keep it as the runner-up, to add later as exact sugar if per-group backgrounds turn out to be common.
+**Recommendation.** Rebuild `enclose` with `createRelationalMark` and give it `shape: Shape.box({ rx, ry }) | Shape.blob({ convexity, neck, smoothing, avoiding, clearance })`, with two shortcuts, `Shape.hull(opts)` = `Shape.blob({ convexity: 1, neck: 1, ...opts })` and `Shape.spine(opts)` = `Shape.blob({ convexity: 0, ...opts })`. `padding` and paint stay on `enclose`. Delete the `background` alias. Do not add a `.background()` modifier now; keep it as the runner-up, to add later as exact sugar if per-group backgrounds turn out to be common.
 
 The page has three parts. The top is the current proposal only. The middle is context: Josh's tensions, alternatives, nearby GoFish decisions, precedent and related issues. The bottom, "History", holds the earlier versions and the retired decisions.
 
@@ -123,26 +124,27 @@ enclose([spread([circle(**d) for d in planets], dir="x", spacing=50, alignment="
 
 As `sina()` and `jitter()` do over `noise()` (#1018, which made the scatter overlap strategy one `noise()` with two presets), a shortcut makes the same object as the general call (`kind: "blob"`), declared once as a preset in the `STRATEGIES` table, and any option overrides the preset. So `Shape.hull({ avoiding: others })` is legal and draws a hull that leaves out triangles touching other nodes. `Shape.box()` stays separate: a box is a rectangle grown by padding, not a union of discs, so no blob setting draws it.
 
+So the four values are a small discrete menu, and the blob's parameters are the continuous dials behind three of them. A user picks the shape that reads best first (dataset (c) shows the four side by side), and only then tunes `convexity`, `neck` and `smoothing`.
+
 ### Parameters
 
 | Parameter             | On           | Meaning                                                                                                                                       | Direction                         | Default           |
 | --------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ----------------- |
-| `padding`             | `enclose`    | The bulge around each member, from the member's own outline. Exact for a member on its own.                                                   | Bigger is fatter.                 | as today          |
+| `padding`             | `enclose`    | The bulge around each member, from the member's own outline (for a line, around its whole length). Exact for a member on its own.             | Bigger is fatter.                 | as today          |
 | `fill`, `stroke`, ... | `enclose`    | Paint, shared by every member of the family.                                                                                                  |                                   | as today          |
 | `rx`, `ry`            | `Shape.box`  | Corner rounding, as on `rect`.                                                                                                                | Bigger is rounder.                | 0                 |
 | `convexity`           | `Shape.blob` | How much of the space between members is filled, from 0 (a spanning tree of links) to 1 (every Delaunay triangle: the convex hull). Unitless. | Bigger is fuller and more convex. | 0.5               |
 | `neck`                | `Shape.blob` | Width of links that do not bound a filled triangle, as a fraction of the bulge.                                                               | Bigger is thicker; 1 is as thick. | 1                 |
 | `smoothing`           | `Shape.blob` | Closing radius in pixels; it also sets the blur, so the curvature changes gradually over a length that grows with it.                         | Bigger is smoother and fuller.    | same as `padding` |
 | `avoiding`            | `Shape.blob` | Nodes to keep out. Each listed node that is not a member is avoided, so the user never computes a set difference.                             |                                   | none              |
-| `via`                 | `Shape.blob` | Edges to use as links, such as a graph's own edges. Always kept, never rerouted.                                                              |                                   | none              |
 | `clearance`           | `Shape.blob` | Gap in pixels kept from each avoided node.                                                                                                    | Bigger keeps farther away.        | 4                 |
 
 ### How the blob is built
 
 `Shape.blob()` draws one set in five steps, after layout, in screen space (so it works under polar and other coordinate transforms the way curves do).
 
-1. **Skeleton.** Take the Delaunay triangulation of the member centers. Fill a triangle when its circumradius is at most alpha and no avoided node's keep-out zone (the node grown by `clearance`) touches it. The links are the edges of the filled triangles, the other Delaunay edges no longer than 2 alpha that no avoided node blocks, the minimum spanning tree over links routed around the avoided nodes (always, so the set stays in one piece), and any `via` edges.
-2. **Pieces.** Each member grown by `padding` (its bulge, radius _R_). Each link that bounds a filled triangle is a tube as wide as the bulge; every other link is a tube `neck` times the bulge. The filled triangles.
+1. **Skeleton.** Each member is its own geometry: a node is its center, and a line member (such as a graph edge) is its segment, which already links its two ends. Take the Delaunay triangulation of the members' points (node centers and line ends). Fill a triangle when its circumradius is at most alpha and no avoided node's keep-out zone (the node grown by `clearance`) touches it. The links are the edges of the filled triangles, the other Delaunay edges no longer than 2 alpha that no avoided node blocks, and the minimum spanning tree over the members, routed around the avoided nodes (always, so the set stays in one piece). A spanning-tree link runs between the closest points of two members' geometries, so members that touch, like an edge and its end node, are joined at no cost.
+2. **Pieces.** Each member grown by `padding` (its bulge, radius _R_; for a line member, a tube around its whole length). Each link that bounds a filled triangle is a tube as wide as the bulge; every other link is a tube `neck` times the bulge. The filled triangles.
 3. **Closing.** The union of the pieces is closed by a disc of radius `smoothing`.
 4. **Cut.** Each avoided node's keep-out zone is cut back out.
 5. **Blur.** The region is blurred with a Gaussian of width σ = ½ min(`smoothing`, thinnest piece), and the outline is where the blurred value is ½. A blurred region is a sum of smooth bumps, so this outline is curvature-continuous. Blurring pulls a bulge of radius _r_ in by about σ²/(2 _r_), so discs, tubes and cut zones are drawn slightly larger to cancel it: a lone member ends exactly at `padding`, a lone link at its half-width, and the cut at `clearance`.
@@ -197,41 +199,51 @@ enclose(
 
 At 0 the U is a tree of tubes, slightly wavy along the arms. At 0.5 the two-dot-thick arms fill and get straight sides with rounded joins, and the opening stays clear. At 0.8 and 1 the triangles across the opening fill except where they touch a gray dot, which leaves holes (drawn white) shaped by the triangles that were left out. With more smoothing the closing fills those triangle gaps, and the holes shrink to even rings around the gray dots.
 
-### (c) Gentoo penguins among the other species
+### (c) Penguins: the discrete choice, then the dials
+
+First the discrete choice. All three species, each with its own outline, at `padding: 6` and the same light fill, so overlaps and fit can be compared. Each panel uses the shape's defaults; nothing is avoided.
 
 ```js
-enclose(
-  {
-    shape: Shape.blob({ convexity, smoothing, avoiding: otherSpecies }),
-    padding: 4,
-  },
-  gentoo
-);
+chart(penguins)
+  .flow(
+    group({ by: "Species" }),
+    scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" })
+  )
+  .mark(circle({ r: 2.5, fill: "Species" }))
+  .layer(enclose({ shape, padding: 6, fill: "Species", opacity: 0.15 }));
+// shape: Shape.box(), Shape.hull(), Shape.blob() or Shape.spine()
 ```
 
-![Gentoo: convexity by smoothing](img/explore-penguins.png)
+![penguins: box, hull, blob and spine](img/penguins-four-shapes.png)
 
-One species (Gentoo, green) with the other two species avoided (gray), cropped to the Gentoo cluster. At 0 and 0.5 dense parts fill and stragglers stay attached by tubes; at 0.8 the outline is close to an alpha shape's look while still holding every point; at 1 it is the hull. One member near the top left sits among gray points. At `smoothing: 8` the gray points' keep-out zones pinch off the tube that reaches it, so it is drawn as its own small region.
+The boxes overlap so much that the species blur together. The hulls separate them well and are easy to read, with a sliver of overlap between each pair. The blob and the spine follow the points closely and show where each species is dense; on data this dense they look almost the same, because the discs already touch and there is little space left for `convexity: 0.5` to fill. Box and hull are reasonable choices here; blob and spine trade a calm outline for a closer fit.
+
+Then the dials. The same three species in every cell, convexity by smoothing.
+
+```js
+.layer(enclose({ shape: Shape.blob({ convexity, smoothing }), padding: 6, fill: "Species", opacity: 0.15 }))
+```
+
+![penguins: convexity by smoothing](img/explore-penguins.png)
+
+The defaults cell is the `Shape.blob()` panel above, and the convexity 1 column is the `Shape.hull()` panel. At 0.8 each species becomes one calm region that still leaves out its empty corners, which is the step between the blob and the hull. More smoothing calms the wobble of the low-convexity outlines. Adding `avoiding: selectAll("points")` to the blob would cut each species' outline away from the other species' points, as dataset (b) shows for the U.
 
 ### (d) Hyperedges over a node-link graph
 
-Each row of `memberships` is `{ set, node }`. The graph's edges between members are the `via` links.
+**Proposed change: the edges are members.** Each set's members are its nodes plus the graph edges whose two ends are both in the set. An edge member is a line, held inside the outline at `padding` along its whole length, and it already links its two ends. This replaces the earlier `via` parameter (History, v5).
 
 ```js
 layer([
-  graph, // nodes named "nodes", edges named "edges"
-  chart(memberships)
-    .flow(resolve(["node"], { from: selectAll("nodes") }), group({ by: "set" }))
+  graph, // nodes named "nodes" (keyed by id), edges named "edges" (keyed by id)
+  chart(setMembers) // rows { set, member }: the set's nodes, then the edges among them
+    .flow(
+      resolve(["member"], { from: [selectAll("nodes"), selectAll("edges")] }), // new: a list
+      group({ by: "set" })
+    )
     .mark(
       enclose({
-        members: "node", // new: the column whose refs are the operands, like line's from/to
-        shape: Shape.blob({
-          convexity,
-          smoothing,
-          via: selectAll("edges"),
-          avoiding: selectAll("nodes"),
-          clearance: 3,
-        }),
+        members: "member", // new (decision 9): the column whose refs are the operands
+        shape: Shape.spine({ avoiding: selectAll("nodes") }),
         padding: 6,
         fill: "set",
         opacity: 0.25,
@@ -243,17 +255,68 @@ layer([
 ```python
 layer([
     graph,
-    chart(memberships)
-      .flow(resolve(["node"], from_=select_all("nodes")), group(by="set"))
-      .mark(enclose(members="node",
-                    shape=Shape.blob(via=select_all("edges"), avoiding=select_all("nodes"), clearance=3),
+    chart(set_members)
+      .flow(resolve(["member"], from_=[select_all("nodes"), select_all("edges")]), group(by="set"))
+      .mark(enclose(members="member", shape=Shape.spine(avoiding=select_all("nodes")),
                     padding=6, fill="set", opacity=0.25)),
 ])
 ```
 
-![hyperedges: convexity by smoothing](img/explore-hyperedges.png)
+| nodes + edges as members (proposed) against `via` (current), as a spine and at the defaults |
+| ------------------------------------------------------------------------------------------- |
+| ![edges as members against via](img/hyperedges-members-vs-via.png)                          |
 
-At 0 each set follows the graph's edges, and a cycle of `via` edges around an empty space leaves a hole (sets A and B). From 0.5 the triangles inside those cycles fill. At 0.8 and 1 set C fills the triangle 3, 8, 9, which covers the graph edges 6 to 7 and 4 to 6; nodes 4 and 6 themselves stay outside. Node 3 is in sets A and C, and both reach it. This example needs a `members` option for rows that hold refs in a column (decision 9).
+As a spine (top row) the two differ. With edges as members, each set is its nodes and its edges, drawn as slim tubes at the padding, and nothing else: the members already touch, so the spanning tree adds no link. With `via`, the spanning tree over node centers adds a link the graph does not have (2 to 3 in set A, 3 to 7 in set C, 5 to 6 in set B), and each extra link closes a cycle with a hole in it. At the defaults (bottom row) the two are the same picture, because the filled triangles cover the edges either way.
+
+The grid on the proposed version:
+
+![hyperedges with edges as members: convexity by smoothing](img/explore-hyperedges-members.png)
+
+At 0 each set is a tube along its own edges. From 0.5 the triangles fill. At 0.8 and 1 set C fills the triangle 3, 8, 9, which covers the graph edges 6 to 7 and 4 to 6; nodes 4 and 6 stay outside. This is the same as with `via`: edges as members add what must be inside, and say nothing about what must stay out.
+
+Two harder cases, both as a spine:
+
+![set {3, 5, 10}: joined around 4](img/hyperedges-members-routed-link.png)
+
+Set {3, 5, 10} reaches 5 from 3 only through node 4, which is not a member. Its member subgraph is in two pieces (node 3, and the edge 5 to 10), and the spanning tree joins them with a link routed around node 4, as wide as the node bulge. The `via` version draws the same link.
+
+![an edge passing near non-members](img/hyperedges-members-near-edge.png)
+
+An edge u to v passes non-members x (13 px above it) and w (17 px, then 11 px, below it). With the edge as a member the outline is a slim tube that clears both with a small notch. With `via` the link is a full-bulge tube, so the cut around w and x makes a lopsided shape. When w is 11 px away, w's keep-out zone (its radius plus `clearance`) reaches the edge itself, and both versions let `clearance` win, so the outline touches the drawn edge at w. Here no outline can keep both promises; the rule is the same one that applies to a node member near a non-member.
+
+**What the user writes.** The data is two tables: `edges` rows `{ id, source, target }` and `memberships` rows `{ set, node }`. "This set's nodes plus the edges among them" is built in plain code today:
+
+```js
+const inSet = new Set(memberships.map((m) => `${m.set}/${m.node}`));
+const setMembers = [
+  ...memberships.map(({ set, node }) => ({ set, member: node })),
+  ...sets.flatMap((set) =>
+    edges
+      .filter(
+        (e) =>
+          inSet.has(`${set}/${e.source}`) && inSet.has(`${set}/${e.target}`)
+      )
+      .map((e) => ({ set, member: e.id }))
+  ),
+];
+```
+
+```python
+in_set = {(m["set"], m["node"]) for m in memberships}
+set_members = [{"set": m["set"], "member": m["node"]} for m in memberships] + [
+    {"set": s, "member": e["id"]}
+    for s in sets for e in edges
+    if (s, e["source"]) in in_set and (s, e["target"]) in in_set
+]
+```
+
+The edge half alone can be written with existing operators: `chart(edges).flow(join(sourceSets, { on: "source" }), join(targetSets, { on: "target" }), filter((d) => d.sourceSet === d.targetSet))`, where `sourceSets` and `targetSets` are `memberships` with its columns renamed. That is awkward, and it still cannot be put together with the node rows, because a flow has no operator that appends one table's rows to another's. So three things are missing, and the smallest fix for each is: `resolve` takes a list of selections in `from` (the nodes and the edges are two layers); the edges need a key column (`id`) so they can be referred to; and `enclose` needs the `members` option of decision 9. The plain-code table above is the honest spelling until a flow can append rows.
+
+**What it needs from #974.** #974 is the issue that plans one geometry query per file, with a `boundary` query (a node's own outline) entering only when something first needs it. Edges as members are that first user: the blob needs a line mark's geometry (its path and stroke width), not just its box or center, both to grow it by `padding` and to start spanning-tree links at the closest point. The prototype reads straight segments; a curved edge would need its path as points.
+
+**Box and hull.** Members are just shapes, so `Shape.box()` and `Shape.hull()` contain line members too, through the same `boundary` query. When both ends of an edge are members, the edge already lies inside, since both shapes are convex; it matters only for an edge whose end is outside the set.
+
+**What `via` did that this does not.** Two things, neither needed by an example. `via` could make the outline follow a route it does not draw, but a route the outline follows is inside it at the padding anyway, so it might as well be a member; a route with no mark can be drawn as an invisible line. And `via` drew each edge as a tube as wide as the node bulge, while a member edge is slim (its stroke plus `padding`); a wider look comes from `padding` or from `convexity`. So `via` can be dropped.
 
 ### (e) Trout across lakes in the grouped bars
 
@@ -307,7 +370,7 @@ Before the blur the hull shortcut is exact: with nothing avoided, every Delaunay
 
 ![hull shortcut vs true hull](img/smooth-hull-preset-vs-true-hull.png)
 
-The spine shortcut draws exactly the spanning tree (plus `via`), smoothed: at `convexity: 0` alpha is 0, so no triangle is filled and no extra edge is added.
+The spine shortcut draws exactly the members and the spanning tree, smoothed: at `convexity: 0` alpha is 0, so no triangle is filled and no extra edge is added.
 
 ## 5. The curvature never jumps
 
@@ -342,13 +405,14 @@ Not part of this proposal: the Munkres example may be drawn best by placing the 
 3. One general member with two shortcuts: name it `blob` (or `kelp`, `bubble`), and keep the shortcut names `hull` and `spine`?
 4. Option key and family `shape: Shape.*`, or `outline: Outline.*`?
 5. The blob's parameters and defaults: `convexity` 0.5, `neck` 1, `smoothing` equal to `padding`, `clearance` 4 px (the teal cells in section 3)?
-6. `avoiding` and `via` on `Shape.blob()`, so also on both shortcuts, with "avoid each listed node that is not a member", and `Shape.hull({ avoiding })` drawing a hull that leaves out triangles touching other nodes?
+6. `avoiding` on `Shape.blob()`, so also on both shortcuts, with "avoid each listed node that is not a member", and `Shape.hull({ avoiding })` drawing a hull that leaves out triangles touching other nodes?
 7. Draw ellipses through the #1101 custom-shape function first, and add `Shape.ellipse()` only when examples call for it?
 8. Move `rx`/`ry` from `enclose` into `Shape.box({ rx, ry })`?
-9. For rows that carry refs (the hyperedge example), name the ref column with a `members` option, by analogy with `line({ from, to })`?
+9. For rows that carry refs (the hyperedge example), name the ref column with a `members` option, by analogy with `line({ from, to })`? The same example also needs `resolve` to take a list of selections (dataset (d)).
 10. In a chart, should a spine stay inside the plot area by rule, or should the user list the axis in `avoiding` (the trout example)?
 11. `convexity` as the name, with alpha = _m_ × `convexity` / (1 − `convexity`) and _m_ the median spanning-tree link, so it does not change with a resize? (Alternatives: a length relative to `padding`; or a pixel `alpha`.)
 12. Keep all smoothing inside `Shape.blob()` (the region blur), and add no `curve` key to `enclose`? (History, v4, shows why a curve through the outline cannot keep `padding` or `clearance`.)
+13. Confirm: drop `via` in favor of enclosing the edges themselves as members (dataset (d)). Box and hull contain line members too, since members are just shapes, and the blob reads their geometry through #974's `boundary` query.
 
 ---
 
@@ -369,7 +433,7 @@ The literature agrees. The set-visualization survey (Alsallakh et al., 2016) fil
 
 1. The construct is a relational mark, the same family as `line` and `ribbon`, which GoFish uses for connection.
 2. Connection and containment are one dial, `convexity`, on one member, `Shape.blob()`: 0 is a tree of links (`Shape.spine()`), 1 is the convex hull (`Shape.hull()`).
-3. `via` can take real connections, such as the edges of a graph, as links (dataset (d)).
+3. Real connections, such as the edges of a graph, can be members themselves, so the outline follows them (dataset (d)).
 
 ## 10. Where it lives: three approaches
 
@@ -392,7 +456,7 @@ How the strategies are spelled is a separate axis (section 11); all three approa
 - `subtract` (region compositing): not an overlap. `avoiding` routes the outline around a node; `subtract` would cut a hole of the node's shape.
 - `pack`: its enclosing circle is a possible future `Shape.circle()`, not an overlap.
 
-**Trade-offs.** One name, one mental model, every hard example expressible. New terms: `Shape`, `blob`, `hull`, `spine`, `convexity`, `neck`, `smoothing`, `avoiding`, `via`, `clearance`. Cost to extend: a new member of a closed family, or #1101's function hatch. Awkward: the per-group "background behind each lake" needs `chart(selectAll("bars")).flow(group({ by: "lake" })).mark(enclose())`, which is longer than a modifier would be.
+**Trade-offs.** One name, one mental model, every hard example expressible. New terms: `Shape`, `blob`, `hull`, `spine`, `convexity`, `neck`, `smoothing`, `avoiding`, `clearance`. Cost to extend: a new member of a closed family, or #1101's function hatch. Awkward: the per-group "background behind each lake" needs `chart(selectAll("bars")).flow(group({ by: "lake" })).mark(enclose())`, which is longer than a modifier would be.
 
 ### Approach B: a `.background()` modifier only (SwiftUI)
 
@@ -424,26 +488,26 @@ Everything in A, plus `.background(opts)` defined by the rewrite `x.background(o
 
 ## 12. Nearby GoFish decisions and how this design lines up
 
-| Decision                                                                               | What was decided                                                                                                                                                                                                       | This design                                                                                                                                                                                          |
-| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Strategy namespaces (#1013)                                                            | An option whose value is one of several strategies, some with arguments, gets an uppercase family: `Overlap.separate()`, calls only, family type inside the namespace (`Curve.Curve`), Python module bound as `Curve`. | **Matches.** `Shape.box()`, `Shape.blob()`, `Shape.hull()`, `Shape.spine()`, type `Shape.Shape`, `gofish-graphics/shape` subpath, Python `from gofish import Shape`.                                 |
-| Presets over one general strategy (#1018)                                              | `sina()` and `jitter()` are `noise()` with params preset; they emit `kind: "noise"`, the presets are declared in the `STRATEGIES` table, and any option overrides a preset.                                            | **Matches.** `Shape.hull()` and `Shape.spine()` are `Shape.blob()` with `convexity` (and for hull, `neck`) preset; they emit `kind: "blob"`.                                                         |
-| One-strategy options (three-surfaces.md, `pack`)                                       | An option with one strategy has no option at all.                                                                                                                                                                      | **Matches.** Two members plus two presets, so the option earns its place.                                                                                                                            |
-| Closed families plus escape hatch (#1101)                                              | Families are closed; a user function is the planned escape hatch.                                                                                                                                                      | **Matches.** Bluefish's custom background shape, and Josh's ellipse, become that escape hatch, not a new option.                                                                                     |
-| `curve` on `line`/`ribbon` (#637)                                                      | One key picks the drawn geometry of a relational mark; every curve is computed in screen space after placement.                                                                                                        | **Matches.** `shape` is to `enclose` what `curve` is to `line`. Outlines are computed in screen space after layout, so they work under polar and other coordinate transforms the same way curves do. |
-| Relational marks and `.layer()` (#745)                                                 | Relational marks paint below their operands by default; `.layer()` hands each tier the previous tier's marks; `.connect()` deleted.                                                                                    | **Matches.** A background is the clearest case of "paint below what it relates".                                                                                                                     |
-| Blank fusion (#748)                                                                    | `.mark(R(opts))` becomes `.mark(blank(anchor)).layer(R(rest))`; all paint goes to the relational mark.                                                                                                                 | **Matches**, inherited from `createRelationalMark`.                                                                                                                                                  |
-| Default split (#752)                                                                   | A fused relational mark splits on every flow grouping except the path tier; `along` names the path tier; for enclose the order half is vacuous and the option word is deferred.                                        | **Matches.** `group(Species)` then `scatter` plus `.layer(enclose())` gives one hull per species with no option. No `along`/`over` is proposed, since no example needs it.                           |
-| Plural refs never auto-map (#707)                                                      | `enclose(opts, points)` is one outline around the whole selection; per-element needs `.each`.                                                                                                                          | **Matches.**                                                                                                                                                                                         |
-| `relate()` drawing clauses (#878, #930)                                                | Clauses may hold ink such as `background` over refs and open terms.                                                                                                                                                    | **Matches**, and inherits the #986 paint-order gap (drawing clauses in `.relate()` miss the paint-below default), which this feature makes more visible.                                             |
-| `padding` vs `spacing` (#1005)                                                         | `padding` = inset around the outer edge; `spacing` = gap between siblings.                                                                                                                                             | **Matches.** `padding` grows every strategy's outline.                                                                                                                                               |
-| Geometry queries (#966, #968, #974)                                                    | One file per query; `boundary` enters with its first user.                                                                                                                                                             | **Matches.** The blob reads each member's `boundary` (falling back to box corners). This is the first user #974 waits for.                                                                           |
-| Modifier versus option (shape geometry, 10-03)                                         | `overlap` stays an option because modifiers apply to any mark or operator; the `.jitter()` modifier was dropped.                                                                                                       | **Consistent.** A background passes the "applies to anything" test, so a modifier is legitimate (Approach B/C). It is deferred on the "one concept, one spelling" rule, not ruled out.               |
-| `.label()` on operators (#741, #750)                                                   | A modifier on an operator yields one label per group, lowered to ordinary marks.                                                                                                                                       | **Precedent** for Approach B's per-group `.background()`.                                                                                                                                            |
-| Refs inside a strategy argument (route vs interpolation note, `Curve.bundle({ via })`) | Secondary geometry is a strategy argument, never columns in the flow. Not shipped.                                                                                                                                     | **Matches** in spirit: `Shape.blob({ avoiding, via })` takes selections as arguments. Reuses the word `via`. New wire detail: a strategy parameter that holds refs.                                  |
-| No back-compat; delete, don't gate                                                     | No aliases, no accepted-and-ignored options, migrate call sites.                                                                                                                                                       | **Matches.** `background` alias deleted; `rx`/`ry` move into `Shape.box()` instead of being ignored by the blob; `avoiding` and `via` exist only on the blob, where they mean something.             |
-| Python surface (#1008)                                                                 | Children positional, snake_case kwargs, `Family.member()` strategies.                                                                                                                                                  | **Matches.** `enclose([a, c], shape=Shape.spine(avoiding=[b]), padding=8)`.                                                                                                                          |
-| Designer names, survey first (#196, #404, #762)                                        | Prefer names designers know; survey precedent before naming.                                                                                                                                                           | Partly. `box` and `hull` have strong precedent. `spine` is Josh's name; precedent says "bubble". `blob` follows Bluefish's `Blob` (section 13).                                                      |
+| Decision                                                                               | What was decided                                                                                                                                                                                                       | This design                                                                                                                                                                                                                                                                                   |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Strategy namespaces (#1013)                                                            | An option whose value is one of several strategies, some with arguments, gets an uppercase family: `Overlap.separate()`, calls only, family type inside the namespace (`Curve.Curve`), Python module bound as `Curve`. | **Matches.** `Shape.box()`, `Shape.blob()`, `Shape.hull()`, `Shape.spine()`, type `Shape.Shape`, `gofish-graphics/shape` subpath, Python `from gofish import Shape`.                                                                                                                          |
+| Presets over one general strategy (#1018)                                              | `sina()` and `jitter()` are `noise()` with params preset; they emit `kind: "noise"`, the presets are declared in the `STRATEGIES` table, and any option overrides a preset.                                            | **Matches.** `Shape.hull()` and `Shape.spine()` are `Shape.blob()` with `convexity` (and for hull, `neck`) preset; they emit `kind: "blob"`.                                                                                                                                                  |
+| One-strategy options (three-surfaces.md, `pack`)                                       | An option with one strategy has no option at all.                                                                                                                                                                      | **Matches.** Two members plus two presets, so the option earns its place.                                                                                                                                                                                                                     |
+| Closed families plus escape hatch (#1101)                                              | Families are closed; a user function is the planned escape hatch.                                                                                                                                                      | **Matches.** Bluefish's custom background shape, and Josh's ellipse, become that escape hatch, not a new option.                                                                                                                                                                              |
+| `curve` on `line`/`ribbon` (#637)                                                      | One key picks the drawn geometry of a relational mark; every curve is computed in screen space after placement.                                                                                                        | **Matches.** `shape` is to `enclose` what `curve` is to `line`. Outlines are computed in screen space after layout, so they work under polar and other coordinate transforms the same way curves do.                                                                                          |
+| Relational marks and `.layer()` (#745)                                                 | Relational marks paint below their operands by default; `.layer()` hands each tier the previous tier's marks; `.connect()` deleted.                                                                                    | **Matches.** A background is the clearest case of "paint below what it relates".                                                                                                                                                                                                              |
+| Blank fusion (#748)                                                                    | `.mark(R(opts))` becomes `.mark(blank(anchor)).layer(R(rest))`; all paint goes to the relational mark.                                                                                                                 | **Matches**, inherited from `createRelationalMark`.                                                                                                                                                                                                                                           |
+| Default split (#752)                                                                   | A fused relational mark splits on every flow grouping except the path tier; `along` names the path tier; for enclose the order half is vacuous and the option word is deferred.                                        | **Matches.** `group(Species)` then `scatter` plus `.layer(enclose())` gives one hull per species with no option. No `along`/`over` is proposed, since no example needs it.                                                                                                                    |
+| Plural refs never auto-map (#707)                                                      | `enclose(opts, points)` is one outline around the whole selection; per-element needs `.each`.                                                                                                                          | **Matches.**                                                                                                                                                                                                                                                                                  |
+| `relate()` drawing clauses (#878, #930)                                                | Clauses may hold ink such as `background` over refs and open terms.                                                                                                                                                    | **Matches**, and inherits the #986 paint-order gap (drawing clauses in `.relate()` miss the paint-below default), which this feature makes more visible.                                                                                                                                      |
+| `padding` vs `spacing` (#1005)                                                         | `padding` = inset around the outer edge; `spacing` = gap between siblings.                                                                                                                                             | **Matches.** `padding` grows every strategy's outline.                                                                                                                                                                                                                                        |
+| Geometry queries (#966, #968, #974)                                                    | One file per query; `boundary` enters with its first user.                                                                                                                                                             | **Matches.** The blob reads each member's `boundary` (falling back to box corners). This is the first user #974 waits for.                                                                                                                                                                    |
+| Modifier versus option (shape geometry, 10-03)                                         | `overlap` stays an option because modifiers apply to any mark or operator; the `.jitter()` modifier was dropped.                                                                                                       | **Consistent.** A background passes the "applies to anything" test, so a modifier is legitimate (Approach B/C). It is deferred on the "one concept, one spelling" rule, not ruled out.                                                                                                        |
+| `.label()` on operators (#741, #750)                                                   | A modifier on an operator yields one label per group, lowered to ordinary marks.                                                                                                                                       | **Precedent** for Approach B's per-group `.background()`.                                                                                                                                                                                                                                     |
+| Refs inside a strategy argument (route vs interpolation note, `Curve.bundle({ via })`) | Secondary geometry is a strategy argument, never columns in the flow. Not shipped.                                                                                                                                     | **Matches** in spirit: `Shape.blob({ avoiding })` takes a selection as an argument. With `via` dropped, `avoiding` is the only strategy parameter that holds refs. It could later become a second operand role of `enclose` (the nodes to keep out, beside the members), not redesigned here. |
+| No back-compat; delete, don't gate                                                     | No aliases, no accepted-and-ignored options, migrate call sites.                                                                                                                                                       | **Matches.** `background` alias deleted; `rx`/`ry` move into `Shape.box()` instead of being ignored by the blob; `avoiding` exists only on the blob, where it means something.                                                                                                                |
+| Python surface (#1008)                                                                 | Children positional, snake_case kwargs, `Family.member()` strategies.                                                                                                                                                  | **Matches.** `enclose([a, c], shape=Shape.spine(avoiding=[b]), padding=8)`.                                                                                                                                                                                                                   |
+| Designer names, survey first (#196, #404, #762)                                        | Prefer names designers know; survey precedent before naming.                                                                                                                                                           | Partly. `box` and `hull` have strong precedent. `spine` is Josh's name; precedent says "bubble". `blob` follows Bluefish's `Blob` (section 13).                                                                                                                                               |
 
 **Where it departs, and why.**
 
@@ -482,7 +546,7 @@ Image: `precedent/glassner-globs-design.png`, from Glassner's own page on globs 
 
 What GoFish should take overall: one name with a shape value (SwiftUI, Compose, TikZ), a relation over refs that also nests (Bluefish), a shared `padding` plus one knob per strategy (ggforce), members, non-members and real edges as the blob's inputs (bubblesets-js). What it should not take: one function per shape (ggforce), grouping inferred from the color channel (Plot; GoFish uses the flow's grouping instead), field-physics knobs (`nodeR0`, `edgeR1`).
 
-**Names.** `box` matches TikZ's default and ggforce's `rect`. `hull` matches Plot, ggforce, d3 and the roadmap. For the spine shortcut no library uses "spine"; Bubble Sets, bubblesets-js and Josh's own #717 comment say "bubble". `spine` names the mechanism, the connecting skeleton that makes the shape a hyperedge, and reads well with `via` ("a spine via these edges"). The docs also use the phrase "space-filling spine" descriptively for mosaic layouts; that prose could be reworded later if `spine` becomes an API name.
+**Names.** `box` matches TikZ's default and ggforce's `rect`. `hull` matches Plot, ggforce, d3 and the roadmap. For the spine shortcut no library uses "spine"; Bubble Sets, bubblesets-js and Josh's own #717 comment say "bubble". `spine` names the mechanism, the connecting skeleton that makes the shape a hyperedge, and reads well over a graph ("a spine along these edges"). The docs also use the phrase "space-filling spine" descriptively for mosaic layouts; that prose could be reworded later if `spine` becomes an API name.
 
 **The general member's name.** Candidates: `kelp`, `bubble`, `blob`, `region`, `outline`, `set`. `kelp` credits KelpFusion, but the word means nothing to most readers and the construction differs from the paper. `bubble` is the Bubble Sets word, but Bubble Sets is a different algorithm (an energy field), and in KelpFusion a bubble is one node's disc. `region` collides with GoFish's region-compositing operators. `outline` is a candidate for the option key itself (decision 4) and also means a stroke. `set` names the data, not the drawing, and shadows JavaScript's `Set`. `blob` is an everyday word for a rounded free-form region and is the name Bluefish already uses for a hand-drawn set outline (`Blob` in the Math3ma example). This proposal uses `blob` (decision 3).
 
@@ -530,9 +594,9 @@ Docs follow-up if approved: the handwritten Basics and Diagrams tutorials teach 
 ## 16. Prototype notes
 
 - The stories live in `packages/gofish-graphics/stories/_proposals/BackgroundHull.stories.tsx` (title "Proposals/Background Hull"). They are throwaway and import `delaunator` by a relative path into the pnpm store, since it is not a declared dependency.
-- The current construction is story section (e), `smoothBlob`. It builds the alpha complex and spanning tree, routes blocked links on a visibility graph around polygons standing in for the avoided nodes, rasterizes the pieces on a grid of 0.25 to 0.5 px, closes and cuts with exact distance transforms, blurs an anti-aliased version of the region with a separable Gaussian, and traces the level ½ with marching squares. Each traced point is then moved onto the exact level line by Newton steps on the field, so the outline has no grid waviness. Curvature for the plot comes from the field's first and second derivatives. The compensation (drawing discs, tubes and cut zones slightly larger) is solved numerically per radius. Holes are painted white instead of cut out. Links start from member centers; links from outlines (#974) are needed for exact hulls of mixed shapes.
+- The current construction is story section (e), `smoothBlob`. It builds the alpha complex and spanning tree, routes blocked links on a visibility graph around polygons standing in for the avoided nodes, rasterizes the pieces on a grid of 0.25 to 0.5 px, closes and cuts with exact distance transforms, blurs an anti-aliased version of the region with a separable Gaussian, and traces the level ½ with marching squares. Each traced point is then moved onto the exact level line by Newton steps on the field, so the outline has no grid waviness. Curvature for the plot comes from the field's first and second derivatives. The compensation (drawing discs, tubes and cut zones slightly larger) is solved numerically per radius. Holes are painted white instead of cut out. Links start from member centers, or from the closest point of a line member; links from outlines (#974) are needed for exact hulls of mixed shapes. Line members (`kind: "segment"`) are new in section (g); section (f) keeps the `via` stories for History.
 - The dataset grids are story section (f), the `Grid*` stories. Wide grids are shrunk with CSS `zoom` to fit the 1264 px capture root, and every PNG was trimmed to its content with a small pngjs script.
-- Current images: `img/explore-topology.png`, `img/explore-u.png`, `img/explore-penguins.png`, `img/explore-hyperedges.png`, `img/explore-trout.png`, `img/explore-munkres.png`, `img/topology-munkres-panel-smooth.png`, `img/smooth-hull-preset-vs-true-hull.png`, `img/current-curvature-topology-ac.png`, `img/penguins-hull-per-species.png` (now the hull preset), `img/penguins-box-per-species.png`, `img/planets-box-component.png`, `img/bars-box-per-lake-group.png`.
+- Current images: `img/explore-topology.png`, `img/explore-u.png`, `img/penguins-four-shapes.png`, `img/explore-penguins.png` (now all three species), `img/hyperedges-members-vs-via.png`, `img/explore-hyperedges-members.png`, `img/hyperedges-members-routed-link.png`, `img/hyperedges-members-near-edge.png`, `img/explore-trout.png`, `img/explore-munkres.png`, `img/topology-munkres-panel-smooth.png`, `img/smooth-hull-preset-vs-true-hull.png`, `img/current-curvature-topology-ac.png`, `img/penguins-hull-per-species.png` (now the hull preset), `img/penguins-box-per-species.png`, `img/planets-box-component.png`, `img/bars-box-per-lake-group.png`.
 
 ---
 
@@ -676,7 +740,31 @@ v3 jumps between 1/_R_, 0 and −1/40 at every join. The blurred region moves sm
 
 v4 also tried treating an avoided node inside the set as a wall during the closing, so the {a, c} band wrapped b snugly in a U. That variant is dropped (retired decision below).
 
+## v5: `via`, replaced by edges as members
+
+v5 took a graph's edges as a strategy parameter, `Shape.blob({ via: selectAll("edges") })`: each listed edge between two members was a link, always kept and never rerouted. It was replaced because the edges can simply be members, which removes a strategy parameter that holds refs and draws the spine without links the graph does not have. The old grid:
+
+```js
+enclose({
+  members: "node",
+  shape: Shape.blob({
+    convexity,
+    smoothing,
+    via: selectAll("edges"),
+    avoiding: selectAll("nodes"),
+    clearance: 3,
+  }),
+  padding: 6,
+});
+```
+
+![hyperedges with via: convexity by smoothing](img/explore-hyperedges.png)
+
+v5 also showed the Gentoo species alone, with the other two avoided and cropped to its cluster; the dataset now shows all three species.
+
 ## Retired decisions
+
+- **`via` on `Shape.blob()`** (v5). Replaced by edges as members (decision 13).
 
 - **`alpha` as a pixel radius on `Shape.hull()`** (v1 question 5). Retired in v3; alpha came back in v4 as `convexity`.
 - **A shared kernel for three members, with `Shape.kelp({ t })` left out** (v1 question 10). Retired in v3, when hull and spine became shortcuts of one member.

@@ -43,7 +43,10 @@ export default meta;
 type Pt = [number, number];
 type Member =
   | { kind: "circle"; cx: number; cy: number; r: number }
-  | { kind: "rect"; x: number; y: number; w: number; h: number };
+  | { kind: "rect"; x: number; y: number; w: number; h: number }
+  // A line-segment member (a drawn edge, stroke width w). Only the current
+  // construction (`smoothBlob`) understands it; the older helpers never see one.
+  | { kind: "segment"; a: Pt; b: Pt; w: number };
 
 /** The member's outline grown by `pad`, sampled as points (the #974 `boundary`). */
 const samples = (m: Member, pad: number): Pt[] => {
@@ -594,7 +597,8 @@ export const PlanetsBox: StoryObj = {
 // sets drawn on top of each other) are skipped; no smoothing pass.
 
 type Poly = Pt[];
-const centerOf = (m: Member): Pt => (m.kind === "circle" ? [m.cx, m.cy] : [m.x + m.w / 2, m.y + m.h / 2]);
+const centerOf = (m: Member): Pt =>
+  m.kind === "circle" ? [m.cx, m.cy] : m.kind === "segment" ? [(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2] : [m.x + m.w / 2, m.y + m.h / 2];
 const discPoly = (c: Pt, R: number, n = 28): Poly =>
   Array.from({ length: n }, (_, i) => [c[0] + R * Math.cos((2 * Math.PI * i) / n), c[1] + R * Math.sin((2 * Math.PI * i) / n)] as Pt);
 /** A node's allocation area grown by `grow`, as a convex polygon. */
@@ -888,7 +892,7 @@ type BlobOpts = {
   clearance?: number; res?: number; debug?: { links: Pt[][] };
 };
 
-const memberRadius = (m: Member) => (m.kind === "circle" ? m.r : Math.min(m.w, m.h) / 2);
+const memberRadius = (m: Member) => (m.kind === "circle" ? m.r : m.kind === "segment" ? m.w / 2 : Math.min(m.w, m.h) / 2);
 
 /** Squared Euclidean distance transform (Felzenszwalb & Huttenlocher) of a 1-D array. */
 const edt1 = (f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Float64Array) => {
@@ -1433,10 +1437,44 @@ const circumR = (a: Pt, b: Pt, c: Pt) => (dist(a, b) * dist(b, c) * dist(c, a)) 
 
 type SkelOpts = { avoiding?: Member[]; via?: [Pt, Pt][]; pad: number; convexity: number; neck?: number; clearance?: number };
 type Skeleton = { P: Pt[]; R: number[]; links: { route: Pt[]; h: number }[]; faces: Pt[][]; alpha: number };
-/** Step 1: the alpha complex of the centers plus the routed spanning tree. */
+/** A member's sites, the points the alpha complex is built on: a node's center, a segment's two ends. */
+const sitesOf = (m: Member): Pt[] => (m.kind === "segment" ? [m.a, m.b] : [centerOf(m)]);
+const nearestOnSeg = (p: Pt, a: Pt, b: Pt): Pt => {
+  const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy || 1;
+  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L));
+  return [a[0] + t * dx, a[1] + t * dy];
+};
+/** The closest points of two members' geometries (a node is its center, a segment is the whole segment). */
+const closestPair = (m1: Member, m2: Member): [Pt, Pt] => {
+  if (m1.kind !== "segment" && m2.kind !== "segment") return [centerOf(m1), centerOf(m2)];
+  if (m2.kind === "segment" && m1.kind !== "segment") { const c = centerOf(m1); return [c, nearestOnSeg(c, m2.a, m2.b)]; }
+  if (m1.kind === "segment" && m2.kind !== "segment") { const c = centerOf(m2); return [nearestOnSeg(c, m1.a, m1.b), c]; }
+  const s1 = m1 as Extract<Member, { kind: "segment" }>, s2 = m2 as Extract<Member, { kind: "segment" }>;
+  if (segIntersect(s1.a, s1.b, s2.a, s2.b)) {
+    const d = cross(s2.a, s2.b, s1.a) / (cross(s2.a, s2.b, s1.a) - cross(s2.a, s2.b, s1.b));
+    const x: Pt = [s1.a[0] + d * (s1.b[0] - s1.a[0]), s1.a[1] + d * (s1.b[1] - s1.a[1])];
+    return [x, x];
+  }
+  const opts: [Pt, Pt][] = [
+    [s1.a, nearestOnSeg(s1.a, s2.a, s2.b)], [s1.b, nearestOnSeg(s1.b, s2.a, s2.b)],
+    [nearestOnSeg(s2.a, s1.a, s1.b), s2.a], [nearestOnSeg(s2.b, s1.a, s1.b), s2.b],
+  ];
+  return opts.reduce((x, y) => (dist(x[0], x[1]) <= dist(y[0], y[1]) ? x : y));
+};
+/** Step 1: the alpha complex of the members' sites plus the routed spanning tree over members.
+ *  Each member is its own geometry: a segment member is already a link between its ends, and a
+ *  spanning-tree link runs between the closest points of two members' geometries. */
 const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
   const neck = o.neck ?? 0.7, clearance = o.clearance ?? 4, others = o.avoiding ?? [];
-  const P = members.map(centerOf), n = P.length, R = members.map((m) => memberRadius(m) + o.pad);
+  const Cm = members.map(centerOf), Rm = members.map((m) => memberRadius(m) + o.pad), nm = members.length;
+  // sites, merged where two members share one (an edge's end on its node)
+  const P: Pt[] = [], R: number[] = [], owner: number[][] = [];
+  members.forEach((mm, k) => sitesOf(mm).forEach((q) => {
+    let i = P.findIndex((p) => dist(p, q) < 0.5);
+    if (i < 0) { i = P.length; P.push(q); R.push(Rm[k]); owner.push([]); } else R[i] = Math.max(R[i], Rm[k]);
+    owner[i].push(k);
+  }));
+  const n = P.length;
   const ek = (i: number, j: number) => (i < j ? `${i},${j}` : `${j},${i}`);
   const tri: [number, number, number][] = [], cand = new Map<string, [number, number]>();
   if (n >= 3) {
@@ -1449,7 +1487,7 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
     }
   }
   if (tri.length === 0) for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) cand.set(ek(i, j), [i, j]);
-  // the scale: median link of the Euclidean minimum spanning tree
+  // the scale: median link of the Euclidean minimum spanning tree of the sites
   const root = P.map((_, k) => k);
   const find = (k: number): number => (root[k] === k ? k : (root[k] = find(root[k])));
   const mst: number[] = [];
@@ -1471,26 +1509,46 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
   }
   const obstacle = (mm: Member, grow: number) =>
     mm.kind === "circle" ? discPoly([mm.cx, mm.cy - 0.01], (keep(mm) + grow) / Math.cos(Math.PI / 32), 32) : convexHull(samples(mm, clearance + grow));
+  const routeFor = (p: Pt, q: Pt, h: number) =>
+    routeAround(p, q, others.map((mm) => obstacle(mm, h)).filter((poly) => !inPoly(p, poly) && !inPoly(q, poly)));
   const links: { route: Pt[]; h: number }[] = [];
-  const routed: { i: number; j: number; route: Pt[]; len: number }[] = [];
+  // spanning-tree candidates, between members: a face edge as drawn, else the routed closest-point link
+  const mk = (a: number, b: number) => (a < b ? `${a},${b}` : `${b},${a}`);
+  const routed = new Map<string, { a: number; b: number; route: Pt[]; len: number; h?: number }>();
+  const hm = (a: number, b: number) => neck * Math.min(Rm[a], Rm[b]);
+  // the bulge where a link attaches: the widest member whose geometry holds that point
+  const onMember = (mm: Member, p: Pt) => dist(p, mm.kind === "segment" ? nearestOnSeg(p, mm.a, mm.b) : centerOf(mm)) < 0.5;
+  const radiusAt = (p: Pt) => Math.max(...members.map((mm, k) => (onMember(mm, p) ? Rm[k] : 0)));
   for (const [key, [i, j]] of cand) {
-    if (faceEdges.has(key)) { links.push({ route: [P[i], P[j]], h: Math.min(R[i], R[j]) }); routed.push({ i, j, route: [P[i], P[j]], len: dist(P[i], P[j]) }); continue; }
-    const obs = others.map((mm) => obstacle(mm, hw(i, j))).filter((poly) => !inPoly(P[i], poly) && !inPoly(P[j], poly));
-    const route = routeAround(P[i], P[j], obs);
-    if (!route) continue;
-    if (route.length === 2 && dist(P[i], P[j]) / 2 <= alpha) links.push({ route, h: hw(i, j) });
-    routed.push({ i, j, route, len: polyLen(route) });
+    if (faceEdges.has(key)) {
+      links.push({ route: [P[i], P[j]], h: Math.min(R[i], R[j]) });
+      for (const a of owner[i]) for (const b of owner[j]) if (a !== b && !routed.has(mk(a, b))) routed.set(mk(a, b), { a, b, route: [P[i], P[j]], len: dist(P[i], P[j]) });
+      continue;
+    }
+    const route = routeFor(P[i], P[j], hw(i, j));
+    if (route && route.length === 2 && dist(P[i], P[j]) / 2 <= alpha) links.push({ route, h: hw(i, j) });
   }
-  // the spanning tree over routed links keeps the set in one piece
-  const r2 = P.map((_, k) => k);
+  const pairs = new Set<string>();
+  for (const [i, j] of cand.values()) for (const a of owner[i]) for (const b of owner[j]) if (a !== b) pairs.add(mk(a, b));
+  owner.forEach((ks) => ks.forEach((a) => ks.forEach((b) => { if (a !== b) pairs.add(mk(a, b)); })));
+  members.forEach((mm, a) => { if (mm.kind === "segment") for (let b = 0; b < nm; b++) if (b !== a) pairs.add(mk(a, b)); });
+  for (const key of pairs) {
+    if (routed.has(key)) continue;
+    const [a, b] = key.split(",").map(Number), [p, q] = closestPair(members[a], members[b]);
+    if (dist(p, q) < 0.5) { routed.set(key, { a, b, route: [p, q], len: 0 }); continue; }
+    const h = neck * Math.min(radiusAt(p), radiusAt(q)), route = routeFor(p, q, h);
+    if (route) routed.set(key, { a, b, route, len: polyLen(route), h });
+  }
+  // the spanning tree over routed links keeps the set in one piece (members that touch join for free)
+  const r2 = members.map((_, k) => k);
   const f2 = (k: number): number => (r2[k] === k ? k : (r2[k] = f2(r2[k])));
-  for (const e of routed.sort((a, b) => a.len - b.len))
-    if (f2(e.i) !== f2(e.j)) { r2[f2(e.i)] = f2(e.j); links.push({ route: e.route, h: hw(e.i, e.j) }); }
+  for (const e of [...routed.values()].sort((x, y) => x.len - y.len))
+    if (f2(e.a) !== f2(e.b)) { r2[f2(e.a)] = f2(e.b); if (e.len > 0) links.push({ route: e.route, h: e.h ?? hm(e.a, e.b) }); }
   for (const [a, b] of o.via ?? []) {
     const i = P.findIndex((q) => dist(a, q) < 0.5), j = P.findIndex((q) => dist(b, q) < 0.5);
     if (i >= 0 && j >= 0) links.push({ route: [P[i], P[j]], h: hw(i, j) });
   }
-  return { P, R, links, faces, alpha };
+  return { P: Cm, R: Rm, links, faces, alpha };
 };
 
 type SmoothOpts = SkelOpts & { smoothing?: number; res?: number; compensate?: boolean };
@@ -1510,7 +1568,11 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
   members.forEach((m, k) => {
     const Rk = comp ? discComp(sk.R[k], sigma) : sk.R[k];
     if (m.kind === "circle") pieces.push({ bb: [m.cx - Rk, m.cy - Rk, m.cx + Rk, m.cy + Rk], d: (x, y) => Math.hypot(x - m.cx, y - m.cy) - Rk });
-    else {
+    else if (m.kind === "segment") {
+      // a segment member: its whole length grown by `pad` (a tube of half-width w/2 + pad)
+      const h = comp ? tubeComp(sk.R[k], sigma) : sk.R[k], { a, b } = m;
+      pieces.push({ bb: [Math.min(a[0], b[0]) - h, Math.min(a[1], b[1]) - h, Math.max(a[0], b[0]) + h, Math.max(a[1], b[1]) + h], d: (x, y) => Math.sqrt(segDist2([a, b], x, y)) - h });
+    } else {
       const pk = comp ? tubeComp(pad, sigma) : pad;
       pieces.push({
         bb: [m.x - pk, m.y - pk, m.x + m.w + pk, m.y + m.h + pk],
@@ -2035,21 +2097,55 @@ export const GridU: StoryObj = {
   }),
 };
 // (c) Gentoo among the other species (cropped to the Gentoo cluster).
-export const GridPenguins: StoryObj = {
+// All three species in a compact frame (no axes). Nothing is avoided, so the grid's
+// defaults cell is the Shape.blob() panel and its convexity-1 column is Shape.hull().
+const PCW = 336, PCH = 246;
+const penSpecies = () => Object.keys(SPECIES_COLORS).map((sp) => ({
+  sp, color: SPECIES_COLORS[sp],
+  ms: pen.filter((d) => d.Species === sp).map((d) => C(10 + ((d["Beak Length (mm)"] - 32) / (60 - 32)) * (PCW - 20), 8 + ((22 - d["Beak Depth (mm)"]) / (22 - 13)) * (PCH - 16), 2.5)),
+}));
+/** Like blobInk, but holes are cut out of the fill (each hole joined to its outer loop by a
+ *  zero-width bridge), so overlapping sets show through each other's holes. */
+const blobInkCut = (loops: Pt[][], color: string, fillOpacity = 0.15, strokeWidth = 1.5) => {
+  if (!loops.length) return [];
+  const big = loops.reduce((a, b) => (loopArea(a) > loopArea(b) ? a : b));
+  const outerSign = Math.sign(signedArea(big));
+  const outer = loops.filter((l) => Math.sign(signedArea(l)) === outerSign), holes = loops.filter((l) => Math.sign(signedArea(l)) !== outerSign);
+  const fills = outer.map((o) => {
+    let pts = o.slice();
+    for (const h of holes.filter((h) => inPoly(h[0], o))) pts = [...pts, pts[0], ...h, h[0], pts[0]];
+    return polygon({ points: pts, fill: color, stroke: "none", opacity: fillOpacity });
+  });
+  return [...fills, ...loops.map((l) => polygon({ points: l, fill: "none", stroke: color, strokeWidth }))];
+};
+const penCell = (outline: (ms: Member[], others: Member[]) => Pt[][], fillOpacity = 0.15) => {
+  const g = penSpecies();
+  return [
+    ...g.flatMap(({ ms, color }, i) => blobInkCut(outline(ms, g.filter((_, k) => k !== i).flatMap((o) => o.ms)), color, fillOpacity, 1.5)),
+    ...g.flatMap(({ ms, color }) => ms.map((m) => dot(m, color))),
+  ];
+};
+// The discrete choice first: box, hull, blob, spine, each with its defaults at padding 6.
+// chart(penguins).flow(group({ by: "Species" }), scatter(...)).mark(circle(...)).layer(enclose({ shape, padding: 4, fill: "Species", opacity: 0.15 }))
+const PEN_PAD = 6;
+export const PenguinShapes: StoryObj = {
   render: () => {
-    const g = gentooPts(), PWc = 290, PHc = 150;
-    const ox = Math.min(...g.map((m) => m.cx)) - 20, oy = Math.min(...g.map((m) => m.cy)) - 12;
-    const members = g.map((m) => shiftC(m, -ox, -oy));
-    const avoiding = otherPts().map((m) => shiftC(m, -ox, -oy)).filter((m) => m.cx > -10 && m.cx < PWc + 10 && m.cy > -10 && m.cy < PHc + 10);
-    const shown = avoiding.filter((m) => m.cx > 3 && m.cx < PWc - 3 && m.cy > 3 && m.cy < PHc - 3);
-    return paramGrid({
-      cols: CONVEXITY, rows: smoothingAxis(4), w: PWc, h: PHc,
-      cell: (convexity, smoothing) => [
-        ...blobInk(smoothBlob(members, { avoiding, pad: 4, convexity, neck: 1, smoothing }).loops, SPECIES_COLORS.Gentoo),
-        ...shown.map((m) => dot(m, "#b8bcc2")), ...members.map((m) => dot(m, SPECIES_COLORS.Gentoo)),
-      ],
-    });
+    const sm = (o: Partial<SmoothOpts>) => (ms: Member[], others: Member[]) => smoothBlob(ms, { pad: PEN_PAD, neck: 1, convexity: 0.5, smoothing: PEN_PAD, ...o, avoiding: o.avoiding === undefined ? others : o.avoiding }).loops;
+    const panel = (ink: any[]) => position({ x: 0, y: 2 }, [layer([polygon({ points: [[0, 0], [PCW, 0], [PCW, PCH], [0, PCH]], fill: "none", stroke: "#e3e3e3", strokeWidth: 1 }), ...ink])]);
+    return titledGrid([
+      ["Shape.box()", panel(penCell((ms) => [boxOutline(ms, PEN_PAD)]))],
+      ["Shape.hull()", panel(penCell(sm({ convexity: 1, avoiding: [] })))],
+      ["Shape.blob()", panel(penCell(sm({ avoiding: [] })))],
+      ["Shape.spine()", panel(penCell(sm({ convexity: 0, avoiding: [] })))],
+    ], { w: PCW + 14, h: PCH + 6, cols: 2 });
   },
+};
+// Then the continuous tuning: convexity by smoothing, all three species in every cell.
+export const GridPenguins: StoryObj = {
+  render: () => paramGrid({
+    cols: CONVEXITY, rows: smoothingAxis(PEN_PAD), w: PCW, h: PCH,
+    cell: (convexity, smoothing) => penCell((ms) => smoothBlob(ms, { pad: PEN_PAD, convexity, neck: 1, smoothing }).loops),
+  }),
 };
 // (d) hyperedges over the node-link graph: the graph's edges between members are `via`.
 export const GridHyperedges: StoryObj = {
@@ -2110,5 +2206,73 @@ export const V4PenguinHulls: StoryObj = {
     penguinScene((ms, c) => blobInk(smoothBlob(ms, { pad: 6, convexity: 1, neck: 1, smoothing: 6 }).loops, c, 0.18, 1.5)).render(container, { w: 420, h: 330 });
     return container;
   },
+};
+
+// ── (g) hyperedges with the graph's edges as members (Josh, 10-13) ─────────
+// Each set's members are its nodes plus the graph edges whose two ends are both
+// in the set. A segment member is its own geometry: its whole length is inside
+// the outline at `padding`, and it already links its two ends. Proposed spelling
+// in proposal (d): enclose's operands are the set's nodes and its edges.
+const EDGE_W = 1.5;
+type HSet = { name: string; nodes: string[]; color: string };
+const edgeMembers = (nodes: string[], edges = EDGES, at = NODES): Member[] =>
+  edges.filter(([p, q]) => nodes.includes(p) && nodes.includes(q)).map(([p, q]) => ({ kind: "segment", a: at[p], b: at[q], w: EDGE_W }) as Member);
+const hyperInk = (s: HSet, mode: "members" | "via", o: Partial<SmoothOpts> = {}) => {
+  const nodes = s.nodes.map(hyperNode);
+  const avoiding = Object.keys(NODES).filter((id) => !s.nodes.includes(id)).map(hyperNode);
+  const via = EDGES.filter(([p, q]) => s.nodes.includes(p) && s.nodes.includes(q)).map(([p, q]) => [NODES[p], NODES[q]] as [Pt, Pt]);
+  const members = mode === "members" ? [...nodes, ...edgeMembers(s.nodes)] : nodes;
+  return blobInk(smoothBlob(members, { avoiding, via: mode === "via" ? via : undefined, pad: 6, convexity: 0.5, neck: 1, smoothing: 6, clearance: 3, ...o }).loops, s.color, 0.25, 2);
+};
+const hyperCell = (sets: HSet[], mode: "members" | "via", o: Partial<SmoothOpts> = {}) =>
+  position({ x: -12, y: -8 }, [hyperPanel(sets.flatMap((s) => hyperInk(s, mode, o)))]);
+export const HyperedgesMembersVsVia: StoryObj = {
+  render: () => titledGrid([
+    ["nodes + edges as members, convexity 0 (spine)", hyperCell(SETS, "members", { convexity: 0 })],
+    ["via (current), convexity 0 (spine)", hyperCell(SETS, "via", { convexity: 0 })],
+    ["nodes + edges as members, defaults", hyperCell(SETS, "members")],
+    ["via (current), defaults", hyperCell(SETS, "via")],
+  ], { w: 350, h: 210, cols: 2 }),
+};
+export const GridHyperedgesMembers: StoryObj = {
+  render: () => paramGrid({
+    cols: CONVEXITY, rows: smoothingAxis(6), w: 345, h: 205,
+    cell: (convexity, smoothing) => [hyperCell(SETS, "members", { convexity, smoothing })],
+  }),
+};
+// Stress cases. Set D = {3, 5, 10}: 3 reaches 5 only through the non-member 4, so
+// its member subgraph is two pieces ({3} and the edge 5-10) that the spanning tree
+// must join around 4. Below, a two-node set whose edge passes near non-members w, x.
+const SET_D: HSet = { name: "D", nodes: ["n3", "n5", "n10"], color: "#9467bd" };
+const nearInk = (mode: "members" | "via", wy = 17, o: Partial<SmoothOpts> = {}) => {
+  const NEAR: Record<string, Pt> = { u: [30, 50], v: [290, 50], w: [160, 50 + wy], x: [95, 50 - 13] };
+  const node = (id: string) => C(NEAR[id][0], NEAR[id][1], 9);
+  const nodes = ["u", "v"].map(node), avoiding = ["w", "x"].map(node);
+  const members = mode === "members" ? [...nodes, ...edgeMembers(["u", "v"], [["u", "v"]], NEAR)] : nodes;
+  const loops = smoothBlob(members, { avoiding, via: mode === "via" ? [[NEAR.u, NEAR.v]] : undefined, pad: 6, convexity: 0.5, neck: 1, smoothing: 6, clearance: 3, ...o }).loops;
+  const [a, b] = [NEAR.u, NEAR.v];
+  return layer([
+    ...blobInk(loops, "#e45756", 0.25, 2),
+    polygon({ points: [[a[0], a[1] - 0.75], [b[0], b[1] - 0.75], [b[0], b[1] + 0.75], [a[0], a[1] + 0.75]], fill: "#555" }),
+    ...Object.keys(NEAR).flatMap((id) => [
+      dot(node(id), "white"),
+      polygon({ points: samples(node(id), 0), fill: "none", stroke: "#333", strokeWidth: 1.5 }),
+      label(NEAR[id][0] - 4, NEAR[id][1] - 6, id, { fontSize: 10, fontStyle: "italic" }),
+    ]),
+  ]);
+};
+export const HyperedgesMembersStress: StoryObj = {
+  render: () => titledGrid([
+    ["set D = {3, 5, 10} as a spine, edges as members", hyperCell([SET_D], "members", { convexity: 0 })],
+    ["set D = {3, 5, 10} as a spine, via (current)", hyperCell([SET_D], "via", { convexity: 0 })],
+  ], { w: 350, h: 210, cols: 2 }),
+};
+export const HyperedgesMembersNearEdge: StoryObj = {
+  render: () => titledGrid([
+    ["edge u-v, w 17 px below it; edges as members", position({ x: 0, y: 6 }, [nearInk("members")])],
+    ["edge u-v, w 17 px below it; via (current)", position({ x: 0, y: 6 }, [nearInk("via")])],
+    ["edge u-v, w 11 px below it; edges as members", position({ x: 0, y: 6 }, [nearInk("members", 11)])],
+    ["edge u-v, w 11 px below it; via (current)", position({ x: 0, y: 6 }, [nearInk("via", 11)])],
+  ], { w: 350, h: 95, cols: 2 }),
 };
 
