@@ -27,8 +27,8 @@ import { tagArray, type Measure } from "./data";
  *    calendar cells (calendar.ts). A time has no zero.
  *  - {@link HasUnit}: the column's values are amounts in the unit `unit`, the
  *    measure a channel over the column resolves to (`resolveMeasure` in
- *    channels.ts). A transform writes it for the columns it makes: `bin()`
- *    says its `start`/`end`/`size` are in the source field's unit and its
+ *    channels.ts). A transform writes it for the columns it makes, e.g.
+ *    that a histogram's `start`/`end` are in the source field's unit and its
  *    `count` is a count.
  *
  * A column type is a record keyed by class name, so a later class (`HasZero`,
@@ -63,7 +63,7 @@ export type HasMidpoint = { at: number };
 export type HasCalendar = { zone: string };
 
 /** The class of a column whose values are amounts in the unit `unit` (a
- *  {@link Measure}), e.g. `bin()`'s `start` in its source field's unit. Two
+ *  {@link Measure}), e.g. a histogram's `start` in its source field's unit. Two
  *  channels share an axis only when their units agree. */
 export type HasUnit = { unit: Measure };
 
