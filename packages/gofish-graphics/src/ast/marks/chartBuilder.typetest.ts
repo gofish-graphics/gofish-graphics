@@ -42,9 +42,10 @@ export function chartOverloads(rows: Row[]) {
   // A plural ref flows downstream as an array of refs.
   const refs = chart(selectAll("bars"));
   expectType<Equal<typeof refs, ChartBuilder<GoFishRef[], GoFishRef[]>>>();
-  // A single ref is data too, though it shares the `color` key with options.
+  // A single ref is data too, though it shares the `color` key with options,
+  // and like all data it flows downstream as a list (of one ref).
   const one = chart(ref("bars"));
-  expectType<Equal<typeof one, ChartBuilder<GoFishRef, GoFishRef>>>();
+  expectType<Equal<typeof one, ChartBuilder<GoFishRef[], GoFishRef[]>>>();
 }
 
 export function markReturnTypes(rows: Row[]) {
