@@ -26,7 +26,7 @@ import { GoFishNode } from "../ast/_node";
 import { GoFishRef } from "../ast/_ref";
 import { tween } from "../ast/graphicalOperators/tween";
 import type { InterpolationMethod } from "../interpolate";
-import { identities, type Identities } from "./identity";
+import { identities, matchRuns, type Identities } from "./identity";
 import { relationTween } from "./relationTween";
 import { arrowPropsOf } from "../ast/graphicalOperators/arrow";
 import { foldTime, unrollOrder, unrollRun, type Cycle } from "../timeWindow";
@@ -99,7 +99,9 @@ export async function morph(
     );
     return { knots: u.knots, operand: u.operand };
   };
-  for (const run of runsOf(ids.map((i) => i.leaves)).values()) {
+  // Leaves are matched by `matchRuns` (identity.ts): equal key assignments,
+  // or each assignment holding of the other leaf's rows.
+  for (const run of matchRuns(keyframes)) {
     moving.push(
       await tween(
         {
