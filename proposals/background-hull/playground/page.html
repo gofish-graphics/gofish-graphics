@@ -1,0 +1,424 @@
+<title>Blob Playground</title>
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap");
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --fg: #1d232b;
+    --muted: #5b6573;
+    --line: #dde2e8;
+    --accent: #0f6e74;
+    --accent-soft: #e3f1f1;
+    --code-bg: #eef1f4;
+    --img-bg: #ffffff;
+    --track: #cfd5dc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181d;
+      --surface: #1b2027;
+      --fg: #e4e8ed;
+      --muted: #9aa5b3;
+      --line: #2d343e;
+      --accent: #5cc0c4;
+      --accent-soft: #1d3134;
+      --code-bg: #20262e;
+      --img-bg: #ffffff;
+      --track: #3a424d;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181d;
+    --surface: #1b2027;
+    --fg: #e4e8ed;
+    --muted: #9aa5b3;
+    --line: #2d343e;
+    --accent: #5cc0c4;
+    --accent-soft: #1d3134;
+    --code-bg: #20262e;
+    --img-bg: #ffffff;
+    --track: #3a424d;
+    color-scheme: dark;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  [hidden] {
+    display: none !important;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    margin: 0;
+    padding: 28px 16px 48px;
+    font:
+      15px/1.55 "IBM Plex Sans",
+      system-ui,
+      sans-serif;
+  }
+  main {
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+  a {
+    color: var(--accent);
+  }
+  .eyebrow {
+    font:
+      500 12px/1 "IBM Plex Mono",
+      monospace;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  h1 {
+    font-size: 28px;
+    line-height: 1.2;
+    margin: 0 0 6px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .lede {
+    color: var(--muted);
+    margin: 0 0 20px;
+    max-width: 70ch;
+  }
+  code,
+  .mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 820px) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin-bottom: 10px;
+  }
+  .tabs button {
+    flex: 1 1 auto;
+    font:
+      500 13px/1 "IBM Plex Sans",
+      sans-serif;
+    color: var(--muted);
+    background: none;
+    border: 0;
+    border-radius: 5px;
+    padding: 8px 10px;
+    cursor: pointer;
+  }
+  .tabs button[aria-selected="true"] {
+    background: var(--surface);
+    color: var(--fg);
+    box-shadow: 0 0 0 1px var(--line);
+  }
+  .card {
+    background: var(--img-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  #stage {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 72vh;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+  }
+  .below {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  #status {
+    font:
+      12px/1.5 "IBM Plex Mono",
+      monospace;
+  }
+  #ds-note {
+    margin: 8px 0 0;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .panel h2 {
+    font-size: 12px;
+    font:
+      500 12px/1 "IBM Plex Mono",
+      monospace;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+  .panel h2 + * {
+    margin-top: 0;
+  }
+  .panel section + section {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  .field {
+    margin: 0 0 12px;
+  }
+  .field label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-weight: 500;
+    font-size: 14px;
+  }
+  .field output {
+    font:
+      13px "IBM Plex Mono",
+      monospace;
+    color: var(--accent);
+  }
+  .field .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 1px;
+  }
+  .field.minor label {
+    font-weight: 400;
+    font-size: 13px;
+  }
+  input[type="range"] {
+    width: 100%;
+    margin: 6px 0 0;
+    accent-color: var(--accent);
+  }
+  .presets {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .presets button,
+  #copy {
+    font:
+      500 13px/1 "IBM Plex Sans",
+      sans-serif;
+    color: var(--fg);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 7px 10px;
+    cursor: pointer;
+  }
+  .presets button[aria-pressed="true"] {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .readout {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .readout b {
+    color: var(--fg);
+    font-weight: 600;
+  }
+  .codebox {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin-top: 10px;
+  }
+  #code {
+    flex: 1;
+    min-width: 0;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font:
+      12.3px/1.5 "IBM Plex Mono",
+      monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin: 0;
+  }
+  .check {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 14px;
+  }
+  .check input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    margin: 0;
+  }
+  .help {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 6px 0 0;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  input[type="range"]:focus-visible {
+    outline-offset: 4px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .tabs button,
+    .presets button,
+    #copy {
+      transition:
+        background-color 0.12s,
+        border-color 0.12s;
+    }
+  }
+</style>
+<main>
+  <div class="eyebrow">GoFish proposal · background and hull</div>
+  <h1>Blob playground</h1>
+  <p class="lede">
+    Move the sliders to redraw <code>Shape.blob()</code> live with the current
+    construction: a Delaunay skeleton, discs and tubes, a closing, the avoided
+    nodes cut out, then a Gaussian blur traced at level ½.
+    <a href="https://claude.ai/artifact/2esKYS7PvWVMdoyVny6uLP"
+      >Back to the proposal</a
+    >.
+  </p>
+  <div class="layout">
+    <div>
+      <div class="tabs" id="ds-tabs" role="tablist" aria-label="Dataset"></div>
+      <div class="card" id="stage-wrap">
+        <svg
+          id="stage"
+          xmlns="http://www.w3.org/2000/svg"
+          role="img"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <g id="under"></g>
+          <g id="skel"></g>
+          <g id="blobs"></g>
+          <g id="over"></g>
+        </svg>
+      </div>
+      <div class="below">
+        <span id="status" role="status" aria-live="polite"></span>
+        <label class="check" for="variant" id="variant-wrap" hidden
+          ><input type="checkbox" id="variant" />
+          <span id="variant-label"></span
+        ></label>
+      </div>
+      <p id="ds-note"></p>
+    </div>
+    <div class="panel">
+      <section>
+        <h2>Blob</h2>
+        <div class="field">
+          <label for="convexity"
+            >convexity <output id="convexity-out" for="convexity"></output
+          ></label>
+          <input type="range" id="convexity" min="0" max="1" step="0.01" />
+          <div class="hint">
+            0 is a spanning tree of links; 1 fills every triangle (the hull)
+          </div>
+        </div>
+        <div class="field">
+          <label for="neck"
+            >neck <output id="neck-out" for="neck"></output
+          ></label>
+          <input type="range" id="neck" min="0.3" max="1.2" step="0.01" />
+          <div class="hint">
+            width of links that bound no filled triangle, × the bulge
+          </div>
+        </div>
+        <div class="field">
+          <label for="smoothing"
+            >smoothing <output id="smoothing-out" for="smoothing"></output
+          ></label>
+          <input type="range" id="smoothing" min="0" max="24" step="0.5" />
+          <div class="hint">
+            closing radius in px; blur σ = ½ min(smoothing, thinnest piece).
+            <span id="smoothing-hint"></span>
+          </div>
+        </div>
+      </section>
+      <section>
+        <h2>Distances</h2>
+        <div class="field minor">
+          <label for="padding"
+            >padding <output id="padding-out" for="padding"></output
+          ></label>
+          <input type="range" id="padding" min="1" max="40" step="1" />
+        </div>
+        <div class="field minor">
+          <label for="clearance"
+            >clearance <output id="clearance-out" for="clearance"></output
+          ></label>
+          <input type="range" id="clearance" min="0" max="20" step="0.5" />
+        </div>
+        <p class="help">
+          Each dataset loads the padding and clearance its story uses.
+        </p>
+      </section>
+      <section>
+        <h2>Presets</h2>
+        <div class="presets">
+          <button type="button" data-preset="hull" id="preset-hull">
+            hull
+          </button>
+          <button type="button" data-preset="spine" id="preset-spine">
+            spine
+          </button>
+          <button
+            type="button"
+            data-preset="blob defaults"
+            id="preset-defaults"
+          >
+            blob defaults
+          </button>
+        </div>
+        <div class="readout">Current settings: <b id="preset-readout"></b></div>
+        <div class="codebox">
+          <pre id="code" aria-label="Current spelling"></pre>
+          <button type="button" id="copy">Copy</button>
+        </div>
+      </section>
+      <section>
+        <label class="check" for="skeleton"
+          ><input type="checkbox" id="skeleton" /> Show the skeleton</label
+        >
+        <p class="help">
+          Filled triangles (tinted) and links (dashed) that the outline is grown
+          from.
+        </p>
+      </section>
+    </div>
+  </div>
+</main>
+<!--SCRIPT-->
