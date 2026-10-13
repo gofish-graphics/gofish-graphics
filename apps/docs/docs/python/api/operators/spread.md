@@ -121,8 +121,8 @@ chart(select_all("bars")) \
 appends one op to an ordered pipeline. It works in two disjoint places:
 
 - As `by` (a **domain** slot): `.sort(by=None, order=None)`, `.sort(values)`
-  (an explicit order list), `.reverse()`, `.bin(partition=None, step=None,
-thresholds=None)`, and `.drop_nulls()` decide **which groups exist and in
+  (an explicit order list), `.reverse()`, `.bin(partition=None)`, and
+  `.drop_nulls()` decide **which groups exist and in
   what order**.
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.count()`, and `.distinct()` **fold a group's rows to one number**,
@@ -176,7 +176,7 @@ order.
 ```python
 # One bar per half-point cell of `rating`, height = row count per cell
 chart(data).flow(
-    spread(by=field("rating").bin(step=0.5), dir="x")
+    spread(by=field("rating").bin(Bin.step(0.5)), dir="x")
 ).mark(rect(h=field("rating").count()))
 
 # One bar per calendar month of a time column
@@ -186,17 +186,18 @@ chart(sales, schema={"date": Schema.time()}).flow(
 ```
 
 `.bin(...)` maps each value to its **cell**: an interval `[start, end)` that
-holds its start and not its end. Give one partition:
+holds its start and not its end. The partition is one of:
 
-| Argument                                      | Cells                                                                                                                                   |
+| Partition                                     | Cells                                                                                                                                   |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | a [Calendar](/python/api/core/calendar) value | The calendar cells of a time column, in the column's zone: `Calendar.month`, `Calendar.hour.every(6)`, `Calendar.week(start="sunday")`. |
-| `step=`                                       | Cells `step` wide, starting at multiples of `step`.                                                                                     |
-| `thresholds=n`                                | About `n` cells, with the step a numeric axis with `n` ticks uses. The default, with no argument, is `thresholds=10`.                   |
-| `thresholds=[t1, ...]`                        | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                  |
+| `Bin.step(size)`                              | Cells `size` wide, starting at multiples of `size`.                                                                                     |
+| `Bin.thresholds(n)`                           | About `n` cells, with the step a numeric axis with `n` ticks uses. The default, with no argument, is `Bin.thresholds(10)`.              |
+| `Bin.thresholds([t1, ...])`                   | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                  |
 
-A thresholds partition includes its top edge, so the largest value falls in
-the last cell. Custom cell labels (`format`) are JS-only for now.
+`Bin.step` and `Bin.thresholds` are members of the [`Bin`](/python/api/bin)
+family. A thresholds partition includes its top edge, so the largest value
+falls in the last cell. Custom cell labels (`.format`) are JS-only for now.
 
 The groups are the cells over the column's values in the **chart's data**
 (or the result of the last `derive`), not over the rows of one group. So

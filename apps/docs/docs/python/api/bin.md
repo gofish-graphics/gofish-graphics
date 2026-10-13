@@ -4,11 +4,13 @@ title: Bin
 
 # Bin
 
-The `Bin` family holds the ways to bin two fields together into cells of the
-plane. A `Bin` value is the argument of `struct(x=..., y=...).bin(...)`, a key
-that reads two fields at once. [`partition`](/python/api/operators/partition)
-over that key gives each group its cell, and
-[`region`](/python/api/marks/region) draws it.
+The `Bin` family holds the ways to bin a key into cells. `Bin.step` and
+`Bin.thresholds` cut the line of one field into intervals: they are the
+argument of `field(x).bin(...)`. `Bin.hex` and `Bin.voronoi` divide the plane
+of two fields into polygons: they are the argument of
+`struct(x=..., y=...).bin(...)`, a key that reads two fields at once.
+[`partition`](/python/api/operators/partition) over a binned key gives each
+group its cell, and [`region`](/python/api/marks/region) draws it.
 
 ::: gofish example:hexbin-of-us-airports hidden
 :::
@@ -25,11 +27,20 @@ chart(airports, color=Color.gradient("blues"), axes=True).flow(
 ## Signature
 
 ```python
+field(x).bin(b)
 struct(*, x, y).bin(b)
 
+Bin.step(size, /)
+Bin.thresholds(count_or_edges, /)
 Bin.hex(*, radius)
 Bin.voronoi(*, seeds)
 ```
+
+A kind is valid only on its key: `Bin.step` and `Bin.thresholds` on
+`field(x).bin`, `Bin.hex` and `Bin.voronoi` on `struct(x=..., y=...).bin`. The
+other way round raises a `TypeError` that names the right key.
+`field(x).bin` also takes a [Calendar](/python/api/core/calendar) value, for a
+time column.
 
 `struct(x=..., y=...)` takes two field names: `x` is the column read on the x
 axis, and `y` the column read on the y axis. The name follows polars'
@@ -38,8 +49,8 @@ a call in the `Bin` family. A struct takes one bin. A struct is a key only once
 it is binned: `partition(by=struct(x=..., y=...))` raises a `ValueError`.
 
 Each member of the family returns a plain dict, `{"kind": ..., **params}`, for
-example `{"kind": "hex", "radius": 0.5}`. It is the same value the JavaScript
-`Bin` family makes.
+example `{"kind": "hex", "radius": 0.5}` or `{"kind": "step", "size": 0.5}`.
+It is the same value the JavaScript `Bin` family makes.
 
 The family is also a module of its own:
 
@@ -50,14 +61,59 @@ from gofish.bin import hex  # the same function as Bin.hex
 
 ## Members
 
-| Member                   | Its cells                                                       |
-| ------------------------ | --------------------------------------------------------------- |
-| `Bin.hex(radius=...)`    | A grid of hexagons that covers the domain of the two fields.    |
-| `Bin.voronoi(seeds=...)` | One cell per seed: the points nearer to it than to other seeds. |
+| Member                           | Key                    | Its cells                                                       |
+| -------------------------------- | ---------------------- | --------------------------------------------------------------- |
+| `Bin.step(size)`                 | `field(x)`             | Intervals `size` wide, starting at multiples of `size`.         |
+| `Bin.thresholds(count_or_edges)` | `field(x)`             | About `count` intervals with round edges, or the given edges.   |
+| `Bin.hex(radius=...)`            | `struct(x=..., y=...)` | A grid of hexagons that covers the domain of the two fields.    |
+| `Bin.voronoi(seeds=...)`         | `struct(x=..., y=...)` | One cell per seed: the points nearer to it than to other seeds. |
 
-The cells are those of the two columns' domain in the chart's data, so every
-group of a nested split sees the same cells, and an empty cell is kept. A row
-that is missing either field is dropped.
+The cells are those of the domain of the key's columns in the chart's data, so
+every group of a nested split sees the same cells, and an empty cell is kept.
+A row that is missing a field of the key is dropped.
+
+## Bin.step
+
+```python
+Bin.step(size, /)
+```
+
+| Param  | Type    | Description                                                |
+| ------ | ------- | ---------------------------------------------------------- |
+| `size` | `float` | The width of each cell, in data units: finite and above 0. |
+
+A value is in the cell that starts at the largest multiple of `size` at or
+below it, whatever the domain. A cell holds its start and not its end.
+
+```python
+partition(by=field("rating").bin(Bin.step(0.5)), dir="x")
+```
+
+::: gofish example:rating-histogram-on-a-continuous-axis hidden
+:::
+
+## Bin.thresholds
+
+```python
+Bin.thresholds(count_or_edges, /)
+```
+
+| Param            | Type                   | Description                                                                                                                                  |
+| ---------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `count_or_edges` | `float \| list[float]` | A count, 1 or more: about that many cells, with the width a numeric axis with that many ticks uses. Or a list of edges to cut the domain at. |
+
+The cells are fitted to the domain of the field in the chart's data, and
+cover it with both ends included: the largest value falls in the last cell,
+as in numpy's `histogram` and d3's `bin`. With a list of edges, the domain's
+ends are the outer edges, and an edge outside the domain cuts nothing.
+`field(x).bin()` with no argument is `field(x).bin(Bin.thresholds(10))`.
+
+```python
+spread(by=field("age").bin(Bin.thresholds(10)), dir="x")
+spread(by=field("age").bin(Bin.thresholds([18, 30, 50])), dir="x")
+```
+
+Custom cell labels (`.format`) are JS-only for now.
 
 ## Bin.hex
 

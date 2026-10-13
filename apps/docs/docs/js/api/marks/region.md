@@ -33,8 +33,8 @@ chart(movies, { color: Color.gradient("blues"), axes: true })
   .flow(
     partition({
       by: {
-        x: field("IMDB Rating").bin({ step: 0.5 }),
-        y: field("Rotten Tomatoes Rating").bin({ step: 5 }),
+        x: field("IMDB Rating").bin(Bin.step(0.5)),
+        y: field("Rotten Tomatoes Rating").bin(Bin.step(5)),
       },
     })
   )

@@ -47,7 +47,7 @@ of the plane (see [Cells of the plane](#cells-of-the-plane)).
 
 ```python
 partition(by=field("date").bin(Calendar.month), dir="x")  # true month widths
-partition(by=field("rating").bin(step=0.5), dir="x")  # a histogram
+partition(by=field("rating").bin(Bin.step(0.5)), dir="x")  # a histogram
 ```
 
 A plain field has no region, so `partition(by="date", dir="x")` raises a
@@ -84,14 +84,14 @@ With `by` a dict keyed by axis, `partition` divides both axes. Each key must
 have a region, and `dir` and `alignment` are not allowed.
 
 ```python
-partition(by={"x": field("a").bin(step=1), "y": field("b").bin(step=0.5)})
+partition(by={"x": field("a").bin(Bin.step(1)), "y": field("b").bin(Bin.step(0.5))})
 ```
 
 It is the same as the 1D partition on x, then the 1D partition on y:
 
 ```python
-partition(by=field("a").bin(step=1), dir="x"),
-partition(by=field("b").bin(step=0.5), dir="y")
+partition(by=field("a").bin(Bin.step(1)), dir="x"),
+partition(by=field("b").bin(Bin.step(0.5)), dir="y")
 ```
 
 A partition inside a cell of another partition gives each of its groups that
@@ -106,13 +106,13 @@ whose `fill` is a count.
 :::
 
 ```python
-from gofish import Color, chart, field, partition, region
+from gofish import Bin, Color, chart, field, partition, region
 
 chart(movies, color=Color.gradient("blues"), axes=True).flow(
     partition(
         by={
-            "x": field("IMDB Rating").bin(step=0.5),
-            "y": field("Rotten Tomatoes Rating").bin(step=5),
+            "x": field("IMDB Rating").bin(Bin.step(0.5)),
+            "y": field("Rotten Tomatoes Rating").bin(Bin.step(5)),
         }
     )
 ).mark(region(fill=field("IMDB Rating").count())).render(w=480, h=320)
@@ -124,14 +124,14 @@ A mark with a size of its own is centered in its rectangle.
 :::
 
 ```python
-from gofish import chart, field, partition, text
+from gofish import Bin, chart, field, partition, text
 
 # measured: the penguins that have both a flipper length and a body mass
 chart(measured, axes=True).flow(
     partition(
         by={
-            "x": field("Flipper Length (mm)").bin(step=10),
-            "y": field("Body Mass (g)").bin(step=500),
+            "x": field("Flipper Length (mm)").bin(Bin.step(10)),
+            "y": field("Body Mass (g)").bin(Bin.step(500)),
         }
     )
 ).mark(text(text=field("Body Mass (g)").count())).render(w=420, h=320)

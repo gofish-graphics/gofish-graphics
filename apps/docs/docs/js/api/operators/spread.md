@@ -198,7 +198,7 @@ order.
 
 ```ts
 // One bar per half-point cell of `rating`, height = row count per cell
-.flow(spread({ by: field("rating").bin({ step: 0.5 }), dir: "x" }))
+.flow(spread({ by: field("rating").bin(Bin.step(0.5)), dir: "x" }))
 .mark(rect({ h: field("rating").count() }))
 
 // One bar per calendar month of a time column
@@ -212,14 +212,15 @@ order.
 | Partition                                 | Cells                                                                                                                                        |
 | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | a [Calendar](/js/api/core/calendar) value | The calendar cells of a time column, in the column's zone: `Calendar.month`, `Calendar.hour.every(6)`, `Calendar.week({ start: "sunday" })`. |
-| `{ step }`                                | Cells `step` wide, starting at multiples of `step`.                                                                                          |
-| `{ thresholds: n }`                       | About `n` cells, with the step a numeric axis with `n` ticks uses. Default: `{ thresholds: 10 }`.                                            |
-| `{ thresholds: [t1, t2, ...] }`           | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                       |
+| `Bin.step(size)`                          | Cells `size` wide, starting at multiples of `size`.                                                                                          |
+| `Bin.thresholds(n)`                       | About `n` cells, with the step a numeric axis with `n` ticks uses. Default: `Bin.thresholds(10)`.                                            |
+| `Bin.thresholds([t1, t2, ...])`           | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                       |
 
-A thresholds partition includes its top edge, so the largest value falls in
-the last cell. A numeric partition also takes `format: (cell) => string` for
-its labels, as a Calendar value takes `.format(fn)`. A partition with a
-format is JS-only, and serializing it is an error.
+`Bin.step` and `Bin.thresholds` are members of the [`Bin`](/js/api/bin)
+family. A thresholds partition includes its top edge, so the largest value
+falls in the last cell. Each partition takes `.format((cell) => string)` for
+its labels, as in `Bin.step(10).format((c) => String(c.start))`. A partition
+with a format is JS-only, and serializing it is an error.
 
 The groups are the cells over the column's values in the **chart's data**
 (or the result of the last `derive`), not over the rows of one group. So

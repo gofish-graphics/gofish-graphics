@@ -41,7 +41,7 @@ for the partitions `.bin` takes.
 
 ```ts
 partition({ by: field("date").bin(Calendar.month), dir: "x" }); // true month widths
-partition({ by: field("rating").bin({ step: 0.5 }), dir: "x" }); // a histogram
+partition({ by: field("rating").bin(Bin.step(0.5)), dir: "x" }); // a histogram
 ```
 
 A plain field has no region, so `partition({ by: "date", dir: "x" })` and
@@ -72,15 +72,15 @@ region, and `dir` and `alignment` are not allowed.
 
 ```ts
 partition({
-  by: { x: field("a").bin({ step: 1 }), y: field("b").bin({ step: 0.5 }) },
+  by: { x: field("a").bin(Bin.step(1)), y: field("b").bin(Bin.step(0.5)) },
 });
 ```
 
 It is the same as the 1D partition on x, then the 1D partition on y:
 
 ```ts
-(partition({ by: field("a").bin({ step: 1 }), dir: "x" }),
-  partition({ by: field("b").bin({ step: 0.5 }), dir: "y" }));
+(partition({ by: field("a").bin(Bin.step(1)), dir: "x" }),
+  partition({ by: field("b").bin(Bin.step(0.5)), dir: "y" }));
 ```
 
 A partition inside a cell of another partition gives each of its groups that

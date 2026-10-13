@@ -15,13 +15,13 @@ drawn as a rectangle.
 :::
 
 ```python
-from gofish import Color, chart, field, partition, region
+from gofish import Bin, Color, chart, field, partition, region
 
 chart(movies, color=Color.gradient("blues"), axes=True).flow(
     partition(
         by={
-            "x": field("IMDB Rating").bin(step=0.5),
-            "y": field("Rotten Tomatoes Rating").bin(step=5),
+            "x": field("IMDB Rating").bin(Bin.step(0.5)),
+            "y": field("Rotten Tomatoes Rating").bin(Bin.step(5)),
         }
     )
 ).mark(region(fill=field("IMDB Rating").count())).render(w=480, h=320)

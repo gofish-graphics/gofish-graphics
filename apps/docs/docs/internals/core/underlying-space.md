@@ -1948,7 +1948,7 @@ predicate `(row) => boolean` for the `filter` flow operator, and a predicate
 belongs to none of the three slots: it never decides which groups exist, never
 folds a group to a value, and never scales anything. Giving it an op would mean
 a fourth slot that every evaluation site had to learn to ignore. For the same
-reason it THROWS when the expression carries ops: `field("x").bin({ step: 10 }).between(...)`
+reason it THROWS when the expression carries ops: `field("x").bin(Bin.step(10)).between(...)`
 would have tested the raw `x`, silently. `closed` is polars' `is_between`
 argument, comparing by value (SQL `RANGE`) rather than by row count (Vega's
 window `frame`). The bounds are plain numbers; a window that follows a `timer()`
@@ -1966,12 +1966,17 @@ never in the expression's `ops`, so the three slots stay as they are.
 
 `field(x).bin(p)` (#1058) is a value transform: it maps each value of `x` to
 its **cell** in the partition `p` (`cells.ts`). A partition is a Calendar
-value (`calendar.ts`), `{ step }`, or `{ thresholds }` (a count, or a list of
-edges); the wire form of the op is `{ op: "bin", partition? }` with the
-partition's own wire form, and `checkPartition` reads either form. A `Cell`
+value (`calendar.ts`), `Bin.step(size)`, or `Bin.thresholds(countOrEdges)`
+(a count, or a list of edges), the two `Bin` kinds that bin one field
+(`families/bin.ts`). Those two are objects of a class, `StepBin` and
+`ThresholdsBin`, whose own keys are their wire form (`{ kind: "step", size }`)
+and whose `.format(fn)` is held off those keys, as a Calendar value's is. The
+wire form of the op is `{ op: "bin", partition? }` with the partition's own
+wire form, and `checkPartition` reads either form, and rejects a `Bin` kind
+that bins two fields (`checkBin`). A `Cell`
 keeps the whole value: the interval `[start, end)` (its region), its id (its
 start, as text, so `String(cell)` is the key a node gets), its label (the
-partition's `format`, else the default: `"0.5–1"`, or the calendar label),
+partition's `.format(fn)`, else the default: `"0.5–1"`, or the calendar label),
 and, for a calendar cell, its calendar fields, partition and zone. Cells are
 ordered by start.
 
@@ -2005,9 +2010,9 @@ place to draw it. So `scatter({ by: field("x").bin(p), x, y })` draws one
 point per cell that holds rows, and the empty cells leave the scale of the
 others alone.
 
-A cell holds its start and not its end, and a Calendar value or a `{ step }`
+A cell holds its start and not its end, and a Calendar value or a `Bin.step`
 puts a value in the cell that holds it whatever the domain (March 1 is in
-March). A `{ thresholds }` partition is fitted to the domain, so it covers
+March). A `Bin.thresholds` partition is fitted to the domain, so it covers
 the closed domain: the count's step is the one a numeric axis with that many
 ticks uses (`tickIncrement`), and the largest value falls in the last cell
 when it sits on an edge, as in numpy's `histogram` and d3's `bin`.
@@ -2081,8 +2086,8 @@ cells does. That is read off the cells, not off how they were binned: no two
 cells overlap (a cell in two parts is one interval in both, so `[0, 10)` and
 `[5, 10)` are of two partitions), and calendar cells share a calendar
 partition (`CalendarPartition.sameCells`), since a time axis labels them all
-by one partition's rows. A `{ step }` over two domains gives the cells of one
-partition; a `{ thresholds }` fitted to two domains may not. The type is what tells the
+by one partition's rows. A `Bin.step` over two domains gives the cells of one
+partition; a `Bin.thresholds` fitted to two domains may not. The type is what tells the
 axis that it places cells: a time axis over calendar cells ticks at their
 partition and labels each cell between its two boundary ticks
 ([Axes](/internals/frontend/axes)). A numeric axis over numeric cells keeps
@@ -2122,7 +2127,8 @@ A hexagon depends on two fields together, so a `.bin` on each field cannot
 express it. `struct({ x, y })` (`structExpr.ts`, after polars' `pl.struct`)
 is a key that reads two columns, one per axis, and `.bin(b)` bins it with a
 strategy of the `Bin` family (`families/bin.ts`): `Bin.hex({ radius })` or
-`Bin.voronoi({ seeds })`. Its type carries the same phantom flag as a field
+`Bin.voronoi({ seeds })`, the two kinds that bin two fields (a kind that bins
+one field, such as `Bin.step`, is an error here that names `field(x).bin`). Its type carries the same phantom flag as a field
 expression (`StructExpr<true>` once binned), so `partition` over an unbinned
 struct is a type error, and the split checks the wire form. The class's own
 fields are its wire form (`{ type: "struct", fields, ops? }`), so the
@@ -2139,7 +2145,7 @@ object and the two columns).
 
 - **Hexagons.** A pointy-top grid (as in d3-hexbin, ggplot2's `geom_hex` and
   Observable Plot) with a hexagon centered on (0, 0), so the grid does not
-  move with the data, as `{ step }` cells are aligned to multiples of the
+  move with the data, as `Bin.step` cells are aligned to multiples of the
   step. The radius is in data units, one number or one per axis; a hexagon is
   the unit hexagon scaled by the x radius on x and the y radius on y. A point
   goes to the hexagon with the nearest center (axial coordinates and cube

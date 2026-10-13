@@ -157,12 +157,13 @@ it to the rows the Python callback returns. (A `derive` once also carried a
 measure `provenance` map for the rows of the `bin()` data helper; both are
 gone, #1058.) A binned key, `field("date").bin(Calendar.month)`, is an op in
 the field expression's `ops`: `{ "op": "bin", "partition": { "unit": "month",
-"step": 1 } }`, where the partition is a Calendar value's wire form,
-`{ "step" }`, or `{ "thresholds" }` (`PartitionIR`), and an op with no
-`partition` bins into about 10 cells. The op takes no other key, so the old
-flat spelling, `{ "op": "bin", "thresholds": 20 }`, is an error, not the
-default partition. A partition with a JS `format`
-function has no wire form, and serializing it is an error. Marks are a tree — leaves
+"step": 1 } }`, where the partition is a Calendar value's wire form or a
+`Bin` kind that bins one field, `{ "kind": "step", "size": 0.5 }` or
+`{ "kind": "thresholds", "thresholds": 20 }` (`PartitionIR`), and an op with
+no `partition` bins into about 10 cells. The op takes no other key, so the
+old flat spelling, `{ "op": "bin", "thresholds": 20 }`, is an error, not the
+default partition, and so is the untagged `{ "step": 0.5 }`. A partition
+with a JS `.format(fn)` has no wire form, and serializing it is an error. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
@@ -426,7 +427,8 @@ today `AxesOptions` (a boolean, or `{x, y}`), `AxisOptions` (a boolean, or
 `{title, side, labelAngle}`), `AxisInterval` (`{min, center, max, size,
 embedded}`), `AxisDimsValue` (a channel value or an `AxisInterval`, the
 value of a `dims` entry), `FieldPredicate` (`{field, between, closed}`,
-the predicate of `filter`), `Calendar`, and one entry per strategy family. A
+the predicate of `filter`), `Calendar`, `FieldBin` and `StructBin` (the `Bin`
+kinds valid on each key, below), and one entry per strategy family. A
 `t.ref(name)` resolves against it first, so the validator, the JSON Schema,
 and the Python generator all read one declaration of each. `ChartOptions` is
 one of them: `t.object(CHART_OPTIONS)`, the chart-level options (`w`, `h`,
@@ -443,7 +445,21 @@ kind with some params already set, such as `Overlap.sina()`, which is
 `noise` with `smoothing: "silverman"`. Each family derives its
 `OPTION_TYPES` entry, a union of one object per kind with a literal `kind`,
 so the strategy options are `t.ref("Tile")`, `t.ref("Overlap")` and
-`t.ref("Curve")`, and a struct's bin op takes `OPTION_TYPES.Bin`. A param
+`t.ref("Curve")`. A kind may take its one param by position
+(`positional: true`): `Bin.step(0.5)` in JS, `Bin.step(0.5)` with a
+positional-only parameter in Python, and `{ kind: "step", size: 0.5 }` on
+the wire either way. The `Bin` kinds bin one of two keys (`BIN_KINDS`):
+`step` and `thresholds` cut the line of one field, and `hex` and `voronoi`
+divide the plane of two. `OPTION_TYPES.FieldBin` and `OPTION_TYPES.StructBin`
+are the kinds of each, derived from the one `Bin` entry, so a struct's bin
+op takes a `StructBin`, and the JS layout checks a bin on its key with
+`checkBin(key, value, where)`, which names the right key for a kind of the
+other one. A field's bin op takes a Calendar value or a `FieldBin`. These are
+not one tagged union: a Calendar value's wire form, `{ unit, step?, start? }`,
+has no `kind`, so the validator tells it apart by its `unit`
+(`walkPartition`), the JSON Schema writes a `oneOf`, and the Python
+generator, which allows a union of several dict branches only when a `kind`
+tells them apart, would refuse it. A param
 may carry bounds, `t.num({ min: 0, finite: true })` for a pixel padding or
 `t.num({ exclusiveMin: 0, finite: true })` for a hex radius, which the
 validator and the JSON Schema (`minimum`, `exclusiveMinimum`) check. When a
@@ -476,7 +492,7 @@ A named type may say which Python class builds a value of it (`pyClass`):
 `FieldPredicate` here, and `FieldAccessor` and `StructAccessor` in
 `AUTHORED_REFS`, the list of refs to hand-authored shapes (a struct key,
 `{ type: "struct", fields: { x, y }, ops? }`, is walked by its own walker,
-whose bin op is checked against `OPTION_TYPES.Bin`). Such a value already carries its wire keys, so
+whose bin op is checked against `OPTION_TYPES.StructBin`). Such a value already carries its wire keys, so
 the Python generator passes it through. One function, `pyType` in
 `descriptors.ts`, gives the Python type of a field: the generated factory
 signatures (the strategy modules' too) annotate with it and the Python docs
