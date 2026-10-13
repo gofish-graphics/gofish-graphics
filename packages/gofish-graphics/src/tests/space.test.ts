@@ -14,11 +14,15 @@ import {
   type UnderlyingSpace,
   CONTINUOUS,
   originIs,
+  DEFAULT_AXIS_TICKS,
 } from "../ast/underlyingSpace";
 import { Extent, impliedExtent, niceScope } from "../ast/extent";
 import { ScopeRegistry, seatInScope } from "../ast/solver/scopes";
 import { pxOf } from "../ast/domain";
-import { GoFishNode } from "../ast/_node";
+import { debugUnderlyingSpaceTree, GoFishNode } from "../ast/_node";
+import { sameUnitVar, type UnitVar } from "../ast/measure";
+import { valueUnits } from "../ast/underlyingSpace";
+import { DatumValueImpl } from "../ast/data";
 import {
   unionChildExtents,
   unionChildSpaces,
@@ -32,6 +36,7 @@ import {
 import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
 import { positionNode } from "../ast/graphicalOperators/positionNode";
 import { value } from "../ast/data";
+import { declared } from "./testHelpers";
 import {
   resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
@@ -67,26 +72,26 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
   // units. Overlaying foreign units onto one axis must be REFUSED — this is the
   // marginal-histogram unit guard. (Two-state's `every(origin === 0)` wrongly
   // took these for magnitudes and silently forgot the clash.)
-  const dollars0 = CONTINUOUS(interval(0, 100), "pinned", "dollars");
-  const units0 = CONTINUOUS(interval(0, 50), "pinned", "units");
+  const dollars0 = CONTINUOUS(interval(0, 100), "pinned", declared("dollars"));
+  const units0 = CONTINUOUS(interval(0, 50), "pinned", declared("units"));
   const msg = throws(() => unionChildSpaces([onY(dollars0), onY(units0)], 1));
   ok(
-    "overlay of two origin-0 data axes with clashing measures THROWS",
-    msg !== null && /different measures/.test(msg),
+    "overlay of two origin-0 data axes with clashing units THROWS",
+    msg !== null && /different units/.test(msg),
     msg ?? "did not throw"
   );
 
   // Two baseline magnitudes in different fields on one axis are the same type
   // error: the measure policy does not depend on the origin.
-  const dollarsMag = CONTINUOUS(interval(0, 100), "free", "dollars");
-  const unitsMag = CONTINUOUS(interval(0, 50), "free", "units");
+  const dollarsMag = CONTINUOUS(interval(0, 100), "free", declared("dollars"));
+  const unitsMag = CONTINUOUS(interval(0, 50), "free", declared("units"));
   let composed: UnderlyingSpace | undefined;
   const magMsg = throws(() => {
     composed = unionChildSpaces([onY(dollarsMag), onY(unitsMag)], 1);
   });
   ok(
-    "overlay of two baseline magnitudes with clashing measures THROWS too",
-    magMsg !== null && /different measures/.test(magMsg),
+    "overlay of two baseline magnitudes with clashing units THROWS too",
+    magMsg !== null && /different units/.test(magMsg),
     magMsg ?? "did not throw"
   );
   ok("...and nothing was composed", composed === undefined);
@@ -274,6 +279,7 @@ console.log("# space: position moves a claim with its data");
     []
   );
   const placed = positionNode({ y: value(10) }, [bar]);
+  // Standalone, with no render session: the walk's root owns its units.
   const [, space] = placed.resolveUnderlyingSpace();
   const [, claim] = placed.resolveExtent();
   ok(
@@ -399,7 +405,8 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
   // Nicing widens only the data part.
   const [niced, nicedClaim] = niceScope(
     CONTINUOUS(interval(-3, 44), "pinned"),
-    Extent(M.linear(47, 100))
+    Extent(M.linear(47, 100)),
+    DEFAULT_AXIS_TICKS
   );
   ok(
     "nicing widens the claim by σ·(nicedWidth − dataWidth)",
@@ -420,34 +427,87 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
   );
 }
 
+console.log("# space: the type walk's root owns its units, and layout reads them");
+{
+  // An unknown unit "lo" read in the type hook and again in the layout
+  // hook, of a node with no render session: both reads are one variable.
+  const lo = () => valueUnits(new DatumValueImpl(1, { name: "lo" }))!.unit!;
+  let inType: UnitVar | undefined;
+  let inLayout: UnitVar | undefined;
+  const leaf = new GoFishNode(
+    {
+      type: "leaf",
+      resolveUnderlyingSpace: () => {
+        inType = lo();
+        return [UNDEFINED, UNDEFINED];
+      },
+      layout: () => {
+        inLayout = lo();
+        return {
+          intrinsicDims: [{}, {}],
+          transform: { translate: [undefined, undefined] },
+        };
+      },
+    },
+    []
+  );
+  const root = new GoFishNode(
+    {
+      type: "root",
+      resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
+      layout: (_shared, size, scales, children) => {
+        children[0].layout(size, scales);
+        return {
+          intrinsicDims: [{}, {}],
+          transform: { translate: [undefined, undefined] },
+        };
+      },
+    },
+    [leaf]
+  );
+  const standalone = throws(() => {
+    root.resolveUnderlyingSpace();
+    root.layout([100, 100], [undefined, undefined]);
+  });
+  ok("a standalone walk and layout need no session", standalone === null, standalone ?? "");
+  ok(
+    "layout reads the type walk's unit variables",
+    inType !== undefined && inLayout !== undefined && sameUnitVar(inType, inLayout)
+  );
+  const log = console.log;
+  const group = console.group;
+  console.log = console.group = () => {};
+  const dump = throws(() => debugUnderlyingSpaceTree(root));
+  console.log = log;
+  console.group = group;
+  ok("the debug dump of a standalone node works", dump === null, dump ?? "");
+}
+
 console.log("# space: a measure clash says what to do");
 {
   const gross = throws(() =>
     unionChildSpaces(
       [
-        onY(CONTINUOUS(interval(0, 10), "free", "Worldwide Gross")),
-        onY(CONTINUOUS(interval(0, 5), "free", "US Gross")),
+        onY(CONTINUOUS(interval(0, 10), "free", declared("Worldwide Gross", "USD"))),
+        onY(CONTINUOUS(interval(0, 5), "free", declared("Revenue", "EUR"))),
       ],
       1
     )
   );
   ok(
-    "the message names the axis, both measures, and the composition",
+    "the message names the axis, both units and their columns, and the composition",
     gross !== null &&
       gross.startsWith(
-        'The y axis combines two different measures, "Worldwide Gross" and ' +
-          '"US Gross" (where marks are drawn on top of each other). One axis ' +
-          "can show only one measure."
+        'The y axis combines two different units, "USD" ("Worldwide Gross") ' +
+          'and "EUR" ("Revenue") (where marks are drawn on top of each ' +
+          "other). One axis can show only one unit."
       ),
     gross ?? "did not throw"
   );
   ok(
-    "and suggests a shared unit-style measure and the axes option",
+    "and suggests one declared unit or a chart of its own",
     gross !== null &&
-      gross.includes(
-        'field("Worldwide Gross", "dollars") and field("US Gross", "dollars")'
-      ) &&
-      gross.includes("use the axes option") &&
+      gross.includes('schema: { "Worldwide Gross": Schema.unit("EUR") }') &&
       gross.includes("give the inner chart its own w and h")
   );
   // A node names the axis from where it sits: inside a polar coord, the y
@@ -462,7 +522,7 @@ console.log("# space: a measure clash says what to do");
         type: "leaf",
         resolveUnderlyingSpace: () => [
           UNDEFINED,
-          CONTINUOUS(interval(0, 1), "free", m),
+          CONTINUOUS(interval(0, 1), "free", declared(m)),
         ],
         layout,
       },
@@ -640,10 +700,10 @@ console.log("# space: one fold for every origin");
   // An ordinal's measure is its grouping field, not a unit: a datum position
   // in dollars beside a category spread by "genre" is no measure clash.
   const genreThenDollars = throws(() =>
-    resolveLayerBaseSpaces([[UNDEFINED, ORDINAL(["a", "b"], "genre")]], {
-      y: interval(0, 5),
-      yMeasure: "dollars",
-    })
+    resolveLayerBaseSpaces(
+      [[UNDEFINED, ORDINAL(["a", "b"], "genre")]],
+      { y: interval(0, 5), yMeasure: declared("dollars") }
+    )
   );
   ok(
     "a datum measure does not clash with an ordinal's grouping field",
@@ -652,7 +712,10 @@ console.log("# space: one fold for every origin");
   );
   const stackOfGenre = throws(() =>
     distributeSpaceFold(
-      [ORDINAL(["a"], "genre"), CONTINUOUS(interval(0, 3), "free", "dollars")],
+      [
+        ORDINAL(["a"], "genre"),
+        CONTINUOUS(interval(0, 3), "free", declared("dollars")),
+      ],
       ["p", "q"],
       {
         axis: 1,
@@ -687,7 +750,8 @@ console.log("# space: nicing is gated on an axis over the interval");
 {
   const [delta, deltaClaim] = niceScope(
     CONTINUOUS(interval(0, 137), "none"),
-    Extent(M.linear(137, 0))
+    Extent(M.linear(137, 0)),
+    DEFAULT_AXIS_TICKS
   );
   ok(
     "a delta axis nices its width, its claim widening by half on each side",
@@ -700,7 +764,8 @@ console.log("# space: nicing is gated on an axis over the interval");
   // of its claim widens by its own niced end.
   const [free, freeClaim] = niceScope(
     CONTINUOUS(interval(-28, 137), "free"),
-    Extent(M.linear(137, 0), M.linear(28, 0))
+    Extent(M.linear(137, 0), M.linear(28, 0)),
+    DEFAULT_AXIS_TICKS
   );
   ok(
     "a free magnitude nices about its 0, each side by its own end",

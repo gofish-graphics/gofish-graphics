@@ -1,13 +1,8 @@
 import type { GoFishAST } from "../_ast";
 import { GoFishNode, type Placeable } from "../_node";
-import {
-  getMeasure,
-  getValue,
-  isValue,
-  type MaybeValue,
-  type Measure,
-} from "../data";
-import { mergeMeasures } from "../underlyingSpace";
+import { getValue, isValue, type MaybeValue } from "../data";
+import { joinUnits, valueUnits, type UnitRecord } from "../underlyingSpace";
+import type { PositionDomains } from "./compose";
 import * as Interval from "../../util/interval";
 import { createAlignConstraint } from "./align";
 import { createDistributeConstraint } from "./distribute";
@@ -250,9 +245,10 @@ export function resolveConstraintOperands(
  * `resolveUnderlyingSpace` merges this with the children's spaces (see
  * `layer.tsx`).
  *
- * Measure (Stage-1 guard): a datum coordinate's `measure` is folded per axis
- * with {@link mergeMeasures} (equal measures unify; two *different* defined
- * measures throw — a unit conflict among a layer's own position constraints).
+ * Measure (Stage-1 guard): a datum coordinate's units are folded per axis
+ * with {@link joinUnits} (equal units unify; two *different* units throw — a
+ * unit conflict among a layer's own position constraints; calendars and
+ * titles join too).
  * An interval's two endpoints unify their measures the same way (an interval in
  * mixed units is a conflict). The layer's `resolveAxis` then treats this as the
  * axis's unit, PREFERRING it over the children's POSITION measure (falling back
@@ -260,16 +256,13 @@ export function resolveConstraintOperands(
  * tag the scatter reduction dropped, without strict-unifying against a
  * self-scaling child's leaked unit.
  */
-export function collectPositionDomains(constraints: ConstraintSpec[]): {
-  x?: Interval.Interval;
-  y?: Interval.Interval;
-  xMeasure?: Measure;
-  yMeasure?: Measure;
-} {
+export function collectPositionDomains(
+  constraints: ConstraintSpec[]
+): PositionDomains {
   let x: Interval.Interval | undefined;
   let y: Interval.Interval | undefined;
-  let xMeasure: Measure | undefined;
-  let yMeasure: Measure | undefined;
+  let xMeasure: UnitRecord | undefined;
+  let yMeasure: UnitRecord | undefined;
   const pointInterval = (
     coord: PositionConstraint["x"]
   ): Interval.Interval | undefined => {
@@ -286,14 +279,14 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
   const coordMeasure = (
     coord: PositionConstraint["x"] | undefined,
     axis: 0 | 1
-  ): Measure | undefined => {
+  ): UnitRecord | undefined => {
     if (coord === undefined) return undefined;
     return isPositionInterval(coord)
-      ? mergeMeasures(getMeasure(coord[0]), getMeasure(coord[1]), {
+      ? joinUnits(valueUnits(coord[0]), valueUnits(coord[1]), true, {
           axis,
           where: "at the two ends of a position range",
         })
-      : getMeasure(coord);
+      : valueUnits(coord);
   };
   const coordInterval = (
     coord: PositionConstraint["x"] | undefined
@@ -307,11 +300,11 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
     if (c.type !== "position") continue;
     x = unionIv(x, coordInterval(c.x));
     y = unionIv(y, coordInterval(c.y));
-    xMeasure = mergeMeasures(xMeasure, coordMeasure(c.x, 0), {
+    xMeasure = joinUnits(xMeasure, coordMeasure(c.x, 0), true, {
       axis: 0,
       where: "across position constraints",
     });
-    yMeasure = mergeMeasures(yMeasure, coordMeasure(c.y, 1), {
+    yMeasure = joinUnits(yMeasure, coordMeasure(c.y, 1), true, {
       axis: 1,
       where: "across position constraints",
     });

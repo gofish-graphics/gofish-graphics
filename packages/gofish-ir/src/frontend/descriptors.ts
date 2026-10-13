@@ -39,18 +39,32 @@
  *  expected JS type for docgen (e.g. Python's generated signature/docstring). */
 export type ChannelInner = "number" | "string" | "boolean" | "color";
 
+/** How a mark or operator infers a channel's value from its rows: a `size`
+ *  sums them, a `pos` averages them, a `color` reads the first row through
+ *  the color scale, and a `raw` reads the first row as is. The JS mark
+ *  factories' channel maps are generated from it
+ *  (gofish-graphics' `markChannels.generated.ts`); the wire, the validator,
+ *  the JSON Schema, and Python treat every kind alike. */
+export type ChannelInfer = "size" | "pos" | "color" | "raw";
+
 /** The value a `literal` type admits: exactly one string, number, or boolean
  *  (`false` in `title: string | false`). */
 export type LiteralValue = string | number | boolean;
 
 export type FieldType =
   | { kind: "string" }
-  | { kind: "number" }
+  | {
+      kind: "number";
+      /** The least value allowed (inclusive). NaN is never at least it. */
+      min?: number;
+      /** Reject Infinity and -Infinity (NaN is never finite). */
+      finite?: boolean;
+    }
   | { kind: "boolean" }
   | { kind: "any" }
   | { kind: "enum"; values: readonly string[] }
   | { kind: "literal"; value: LiteralValue }
-  | { kind: "channel"; inner: ChannelInner }
+  | { kind: "channel"; inner: ChannelInner; infer: ChannelInfer }
   | { kind: "ref"; name: string }
   | { kind: "union"; options: readonly FieldType[] }
   | { kind: "array"; items: FieldType }
@@ -68,6 +82,20 @@ export interface FieldSpec {
   doc?: string;
   /** Wire key, when it differs from the descriptor's field name. */
   wire?: string;
+  /** On a strategy family's `OPTION_TYPES` entry: the Python namespace whose
+   *  calls make a value (`Tile`, as in `Tile.squarify()`). The docs name the
+   *  option by it; a signature annotates the value's own type instead
+   *  (`dict`), since a namespace is not a type ({@link pyType}). */
+  pyFamily?: string;
+  /** On a named type (`OPTION_TYPES`, `AUTHORED_REFS`): the Python class
+   *  that builds a value of it. Its instances already carry the wire keys,
+   *  so Python passes them through, and {@link pyType} names the class. */
+  pyClass?: string;
+  /** On the wire only: a field the producer writes for the consumer (a
+   *  Python bridge handle), never an option a user passes. The docs options
+   *  tables (`::: gofish-ref`) leave it out; the wire schema and validator
+   *  keep it. Default: false. */
+  wireOnly?: boolean;
 }
 
 export type FieldGroup = Record<string, FieldSpec>;
@@ -127,18 +155,24 @@ export function pyKwarg(fieldName: string): string {
 export const t = {
   string: { kind: "string" } as FieldType,
   number: { kind: "number" } as FieldType,
+  /** A number with bounds: at least `min`, and finite when `finite`
+   *  (`t.num({ min: 0, finite: true })` for a pixel padding). */
+  num: (bounds: { min?: number; finite?: boolean }): FieldType => ({
+    kind: "number",
+    ...bounds,
+  }),
   boolean: { kind: "boolean" } as FieldType,
   /** Escape hatch for JS-only shapes not worth modeling precisely yet
-   *  (perfect-arrows' `ArrowOptions`, a `Curve` factory-call value, an
-   *  `AnchorSpec`, a JS function accessor). */
+   *  (an `AnchorSpec`, a JS function accessor). */
   any: { kind: "any" } as FieldType,
   enum: (...values: string[]): FieldType => ({ kind: "enum", values }),
   /** Exactly one value, e.g. `t.literal(false)` for the `false` in JS's
    *  `string | false`. */
   literal: (value: LiteralValue): FieldType => ({ kind: "literal", value }),
-  channel: (inner: ChannelInner = "number"): FieldType => ({
+  channel: (inner: ChannelInner, infer: ChannelInfer): FieldType => ({
     kind: "channel",
     inner,
+    infer,
   }),
   /** A reference by name: to a named option type in `OPTION_TYPES`
    *  (AxesOptions, ...), or to an authored envelope `$def` (LabelIR,
@@ -150,19 +184,30 @@ export const t = {
   tuple: (...items: FieldType[]): FieldType => ({ kind: "tuple", items }),
   object: (fields: FieldGroup): FieldType => ({ kind: "object", fields }),
   /** `Record<string, valueType>` — a string-keyed bag with no fixed key set
-   *  (e.g. `derive`'s `provenance`: output field name → measure string). */
+   *  (e.g. `derive`'s `schema`: column name → column type). */
   record: (valueType: FieldType = { kind: "string" }): FieldType => ({
     kind: "record",
     valueType,
   }),
 };
 
-/** `ch.num(doc?)` / `ch.color(doc?)` / `ch.str(doc?)` — shorthand for a bare
- *  `ChannelValue` slot of the given literal flavor. */
+/** Shorthand for a bare `ChannelValue` slot, one per inference kind
+ *  ({@link ChannelInfer}): `ch.size(doc?)` and `ch.pos(doc?)` take a number,
+ *  `ch.color(doc?)` a color, and `ch.raw(inner, doc?)` a literal of `inner`. */
 export const ch = {
-  num: (doc?: string): FieldSpec => ({ type: t.channel("number"), doc }),
-  color: (doc?: string): FieldSpec => ({ type: t.channel("color"), doc }),
-  str: (doc?: string): FieldSpec => ({ type: t.channel("string"), doc }),
+  size: (doc?: string): FieldSpec => ({
+    type: t.channel("number", "size"),
+    doc,
+  }),
+  pos: (doc?: string): FieldSpec => ({ type: t.channel("number", "pos"), doc }),
+  color: (doc?: string): FieldSpec => ({
+    type: t.channel("color", "color"),
+    doc,
+  }),
+  raw: (inner: ChannelInner, doc?: string): FieldSpec => ({
+    type: t.channel(inner, "raw"),
+    doc,
+  }),
 };
 
 /** Declare a shared field group (included by reference from multiple
@@ -236,6 +281,20 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
   debug: {
     type: t.boolean,
     doc: "Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.",
+  },
+  // Python bridge fields (the serialization essay's "Bridge extensions"):
+  // the renderer reads them, so they are declared like any other field.
+  __scope: {
+    type: t.literal(true),
+    doc: "The mark is a component: the Python @mark decorator's output. The renderer seals it like a JS createMark component.",
+  },
+  __datum: {
+    type: t.any,
+    doc: "Python bind_data(): the datum the mark is pre-bound to.",
+  },
+  __key: {
+    type: t.union(t.string, t.number),
+    doc: "Python bind_data(): the key the mark is pre-bound to.",
   },
 });
 
@@ -318,7 +377,7 @@ export const LABEL_OPTIONS: FieldGroup = group({
  *  object of named options. Mirrors the JS `AxisOptions` in
  *  `gofish-graphics/src/ast/gofish.tsx`. */
 const axisOptions: FieldSpec = {
-  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle.",
+  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, and the rows of a time axis.",
   type: t.union(
     t.boolean,
     t.object({
@@ -334,49 +393,300 @@ const axisOptions: FieldSpec = {
         type: t.union(t.number, t.array(t.number), t.enum("auto")),
         doc: 'Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite\'s labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; "auto" picks 0, 45, or 90 degrees per label row so labels do not collide.',
       },
+      rows: {
+        type: t.array(t.ref("Calendar")),
+        doc: "The label rows of a time axis, inner row first, e.g. [Calendar.month, Calendar.year]. Each row is one calendar partition: its ticks are its cells' starts, and each label is centered on its cell's start tick. The domain is niced outward to the inner row's cells. Default: the level and step the domain picks for about 10 ticks, then its parent level. In JS a row's labels can be custom: Calendar.quarter.format(fn), with fn a function of the cell. A row with a format is JS-only (it has no wire form).",
+      },
     })
   ),
 };
 
-/** Named option types: the nested option objects a field points at with
- *  `t.ref(name)`, declared in the same type DSL as the construct fields. Each
- *  consumer resolves a ref through this table: `jsonSchema.ts` emits one
- *  `$def` per entry, `validate.ts` walks the value with the generic field-type
- *  interpreter, and the Python generator renames the keys of a nested dict
- *  with `pyKwarg`, the same rule as the top-level kwargs
- *  (`axes={"x": {"label_angle": 45}}` serializes as `labelAngle`).
+// ---------------------------------------------------------------------------
+// Strategy families — one table of the strategy objects that cross the wire
+// ---------------------------------------------------------------------------
+
+/** One kind of strategy: its params, which sit beside `kind` in the strategy
+ *  object (`{ kind: "squarify", ratio: 1 }`). */
+export interface StrategyKind {
+  doc: string;
+  params: FieldGroup;
+}
+
+/** A factory that makes a kind with some of its params already set
+ *  (`Overlap.sina()` is `noise` with `smoothing: "silverman"`). An option the
+ *  caller passes overrides the preset value. */
+export interface StrategyPreset {
+  kind: string;
+  /** Param values, by field name, set before the caller's options. */
+  values: Record<string, unknown>;
+  doc: string;
+}
+
+/** A strategy family: an option's value is one choice from its kinds, made
+ *  by a call in the family's namespace (`Tile.squarify()`). */
+export interface StrategyFamily {
+  doc: string;
+  /** The kinds, by their wire `kind`. Each also has a factory of the same
+   *  name (`pyKwarg` spelling in Python: `sliceDice` → `slice_dice`). */
+  kinds: Record<string, StrategyKind>;
+  /** Further factories, each a kind with some params preset. */
+  presets?: Record<string, StrategyPreset>;
+}
+
+/** Pixels between neighboring dots, for both overlap kinds. */
+const overlapPadding: FieldSpec = {
+  type: t.num({ min: 0, finite: true }),
+  default: 0,
+  doc: "Pixels kept between neighboring dots.",
+};
+
+/**
+ * The strategy families whose values cross the Python↔JS wire, by family
+ * name. A strategy is a plain object `{ kind, ...params }`, the same in JS
+ * and on the wire; in Python its param keys are snake_case, renamed to the
+ * wire keys at the option it is passed to, like any nested option dict.
  *
- *  A ref that is not in this table names a hand-authored envelope `$def`
- *  (LabelIR, TranslateIR, FieldAccessor, AxisDimsValue, ...). */
-export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
-  AxisOptions: axisOptions,
-  AxesOptions: {
-    doc: "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own.",
-    type: t.union(
-      t.boolean,
-      t.object({
-        x: { type: t.ref("AxisOptions"), doc: "Options for the x axis." },
-        y: { type: t.ref("AxisOptions"), doc: "Options for the y axis." },
-      })
-    ),
+ * Read by: the `OPTION_TYPES` entry each family derives (so a field takes a
+ * strategy with `t.ref("Tile")`, and the validator, the JSON Schema and the
+ * Python generator all see one shape), `checkStrategy` in validate.ts (the
+ * one check the JS layout runs on a strategy it is handed), and the Python
+ * generator, which writes `gofish/<family>.py` from it.
+ *
+ * `Coord` and `Color` are not strategy families in this sense: a coordinate
+ * transform is a JS object of functions, rebuilt on the JS side from a
+ * `type`-tagged config (`COORDS` above), and a color scale is tagged by
+ * `_tag` and takes its one argument by position.
+ */
+export const STRATEGIES = {
+  Tile: {
+    doc: "How `treemap` tiles its box: the value of its `tile` option. Each kind is one of d3-hierarchy's tiling methods.",
+    kinds: {
+      squarify: {
+        doc: "Squarified tiling (d3's `treemapSquarify`): make tiles as close as possible to the aspect `ratio`. The default.",
+        params: {
+          ratio: {
+            type: t.num({ min: 1 }),
+            doc: "Target tile aspect ratio: the longer side over the shorter side, at least 1 (orientation is not chosen). Omitted, d3's default, the golden ratio. 1 aims for square tiles, which suits one circle per leaf.",
+          },
+        },
+      },
+      slice: {
+        doc: "Lay the tiles out in one column, stacked along y (d3's `treemapSlice`).",
+        params: {},
+      },
+      dice: {
+        doc: "Lay the tiles out in one row, side by side along x (d3's `treemapDice`).",
+        params: {},
+      },
+      binary: {
+        doc: "Split the tiles into two halves of near-equal weight, recursively (d3's `treemapBinary`).",
+        params: {},
+      },
+      sliceDice: {
+        doc: "Alternate slice and dice by depth (d3's `treemapSliceDice`).",
+        params: {},
+      },
+    },
   },
+  Overlap: {
+    doc: "How `scatter` keeps its children clear of each other on the axis no field places: the value of its `overlap` option. Both kinds grow from the `alignment` line and move only that free axis.",
+    kinds: {
+      separate: {
+        doc: "Keep dots apart: each dot keeps its position on the data axis and moves along the free axis to the free spot nearest the alignment line, in data order, so no two dots overlap. The result is a beeswarm (Observable Plot's `dodge`).",
+        params: { padding: overlapPadding },
+      },
+      noise: {
+        doc: "Spread the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. Dots may still touch.",
+        params: {
+          randomness: {
+            type: t.enum("blue", "quasi", "uniform"),
+            default: "blue",
+            doc: 'How offsets are drawn inside the outline: "blue" keeps each dot as far from its placed neighbors as it can, "quasi" spreads the dots by rank (fastest), "uniform" draws seeded uniform offsets.',
+          },
+          smoothing: {
+            type: t.union(t.num({ min: 0 }), t.enum("silverman")),
+            default: 0,
+            doc: "The bandwidth of each dot's bell, in data units of the data axis: 0 is no smoothing beyond the dots' own size, Infinity is a flat band, and \"silverman\" computes it from the data.",
+          },
+          padding: {
+            ...overlapPadding,
+            doc: 'Pixels added to each dot\'s width when the outline is sized and, for "blue" randomness, when distances are compared.',
+          },
+          seed: {
+            type: t.num({ finite: true }),
+            default: 0,
+            doc: 'Seed for "blue" and "uniform" randomness, so a render is the same every time.',
+          },
+        },
+      },
+    },
+    presets: {
+      sina: {
+        kind: "noise",
+        values: { smoothing: "silverman" },
+        doc: 'A sina plot: noise with smoothing "silverman", a bandwidth computed per scatter from the data (ggforce\'s `geom_sina`). The outline is the curve a violin plot draws. Any option overrides the preset.',
+      },
+      jitter: {
+        kind: "noise",
+        values: { randomness: "uniform", smoothing: Infinity },
+        doc: 'Classic jitter: noise with randomness "uniform" and smoothing Infinity, so the dots get uniform random offsets in a flat band. Any option overrides the preset.',
+      },
+    },
+  },
+  Curve: {
+    doc: "How a path runs through its points: the value of the `curve` option of `line` and `ribbon`. `linear`, `step`, `monotone` and `smooth` are read over the parameter of the run, from the least to the most smooth; `catmullRom` is a shape on screen; `bezier`, `orthogonal`, `arc` and `perfectArrows` route each pair of neighboring points.",
+    kinds: {
+      linear: {
+        doc: "Straight segments from each point to the next.",
+        params: {},
+      },
+      step: {
+        doc: "Hold every value that depends on the ordering field until the next point, then jump: a staircase when the ordering field is an axis.",
+        params: {},
+      },
+      monotone: {
+        doc: "Piecewise monotone cubic: between two neighboring points each coordinate only rises or only falls (d3 `curveMonotoneX`).",
+        params: {},
+      },
+      smooth: {
+        doc: "A rounder cubic over the same parameter as `monotone`; it can go a little past a point, but keeps a run of equal values flat.",
+        params: {},
+      },
+      catmullRom: {
+        doc: "A centripetal Catmull-Rom through the points on screen.",
+        params: {},
+      },
+      bezier: {
+        doc: "Cubic bezier between each pair of points (the d3 `linkVertical`/`linkHorizontal` convention).",
+        params: {},
+      },
+      orthogonal: {
+        doc: "Right-angle elbow bending at the main-axis midpoint (GoTree orthogonal).",
+        params: {
+          bend: {
+            type: t.enum("auto"),
+            doc: 'Omitted, the elbow bends on the connector\'s `dir` axis; "auto" infers the bend axis from the endpoint geometry instead, for layouts with no single growth axis.',
+          },
+        },
+      },
+      arc: {
+        doc: "Semicircular arc through both endpoints (GoTree arccurve).",
+        params: {
+          direction: {
+            type: t.enum("up", "down"),
+            default: "up",
+            doc: "Which side the arc bulges toward.",
+          },
+        },
+      },
+      perfectArrows: {
+        doc: "Box-to-box arc from the perfect-arrows library.",
+        params: {
+          bow: {
+            type: t.number,
+            default: 0,
+            doc: "Baseline curvature. 0 is a straight line.",
+          },
+          stretch: {
+            type: t.number,
+            default: 0.25,
+            doc: "How much the bow grows as the endpoints get closer, and shrinks as they get farther apart.",
+          },
+          stretchMin: {
+            type: t.number,
+            default: 50,
+            doc: "Distance in pixels below which stretch has its full effect.",
+          },
+          stretchMax: {
+            type: t.number,
+            default: 420,
+            doc: "Distance in pixels above which stretch has no effect.",
+          },
+          padStart: {
+            type: t.number,
+            default: 0,
+            doc: "Gap in pixels between the source box and the start of the arc.",
+          },
+          padEnd: {
+            type: t.number,
+            default: 20,
+            doc: "Gap in pixels between the end of the arc and the target box.",
+          },
+          flip: {
+            type: t.boolean,
+            default: false,
+            doc: "Flip which side the arc bows toward.",
+          },
+          straights: {
+            type: t.boolean,
+            default: true,
+            doc: "Allow a straight line when the endpoints are axis-aligned, instead of forcing a slight bow.",
+          },
+        },
+      },
+    },
+  },
+} satisfies Record<string, StrategyFamily>;
+
+/** The name of a strategy family: `"Tile"`, `"Overlap"` or `"Curve"`. */
+export type StrategyFamilyName = keyof typeof STRATEGIES;
+
+/** The value type of a strategy family: a union of one object per kind, told
+ *  apart by its `kind`. */
+function strategyType(family: StrategyFamily): FieldType {
+  return t.union(
+    ...Object.entries(family.kinds).map(([kind, { params }]) =>
+      t.object({ kind: { type: t.literal(kind), required: true }, ...params })
+    )
+  );
+}
+
+/** A Calendar value's wire form: a partition of the time line into calendar
+ *  cells (`CalendarPartition` in gofish-graphics/src/ast/calendar.ts). */
+const calendarPartition: FieldSpec = {
+  doc: "A calendar partition: a level (unit) at a step, e.g. Calendar.month.every(3).",
+  type: t.object({
+    unit: {
+      type: t.enum(
+        "second",
+        "minute",
+        "hour",
+        "day",
+        "week",
+        "month",
+        "quarter",
+        "year"
+      ),
+      doc: "The calendar level of each cell.",
+    },
+    step: {
+      type: t.number,
+      default: 1,
+      doc: "How many units one cell spans; steps align to the level above.",
+    },
+    start: {
+      type: t.enum("monday", "sunday"),
+      doc: "The first day of a week (weeks only).",
+    },
+  }),
 };
 
 /** Chart-level options: `chart(data, {...})` in JS, `chart(data, **options)`
  *  in Python, `ChartIR.options` on the wire. Mirrors the JS `ChartOptions` in
- *  `gofish-graphics/src/ast/marks/chartBuilder.ts`. Read by the Python
- *  generator (`_chart_opts`); the IR validator and JSON Schema still take
- *  `options` as an open object. */
+ *  `gofish-graphics/src/ast/marks/chartBuilder.ts`. The Python generator
+ *  (`_chart_opts`) reads it; the IR validator, the JSON Schema, and the docs
+ *  options table (`::: gofish-ref ChartOptions`) read it as the named option
+ *  type `ChartOptions` (`OPTION_TYPES`). */
 export const CHART_OPTIONS: FieldGroup = group({
   w: { type: t.number, doc: "Chart width in pixels." },
   h: { type: t.number, doc: "Chart height in pixels." },
   coord: {
     type: t.any,
-    doc: "Coordinate transform for the whole chart: polar(), clock(), wavy(), ...",
+    doc: "Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ...",
   },
   color: {
     type: t.any,
-    doc: "Color scale for every mark: palette(...) or gradient(...).",
+    doc: "Color scale for every mark, made by a call in the Color family: Color.palette(...) or Color.gradient(...).",
   },
   axes: {
     type: t.ref("AxesOptions"),
@@ -394,13 +704,162 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
   schema: {
     type: t.record(t.any),
-    doc: "Column types, keyed by column name, e.g. Schema.ordered(levels).",
+    doc: "Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time().",
   },
 });
+
+/** Named option types: the nested option objects a field points at with
+ *  `t.ref(name)`, declared in the same type DSL as the construct fields. Each
+ *  consumer resolves a ref through this table: `jsonSchema.ts` emits one
+ *  `$def` per entry, `validate.ts` walks the value with the generic field-type
+ *  interpreter, and the Python generator renames the keys of a nested dict
+ *  with `pyKwarg`, the same rule as the top-level kwargs
+ *  (`axes={"x": {"label_angle": 45}}` serializes as `labelAngle`).
+ *
+ *  A ref that is not in this table names a hand-authored envelope `$def`
+ *  (LabelIR, TranslateIR, FieldAccessor, ...). */
+export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
+  AxisOptions: axisOptions,
+  Calendar: calendarPartition,
+  AxesOptions: {
+    doc: "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own.",
+    type: t.union(
+      t.boolean,
+      t.object({
+        x: { type: t.ref("AxisOptions"), doc: "Options for the x axis." },
+        y: { type: t.ref("AxisOptions"), doc: "Options for the y axis." },
+      })
+    ),
+  },
+  AxisInterval: {
+    doc: "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels.",
+    type: t.object({
+      min: ch.pos("Start edge position."),
+      center: ch.pos("Center position."),
+      max: ch.pos("End edge position."),
+      size: ch.size("Size along the axis."),
+      embedded: {
+        type: t.boolean,
+        doc: "Embed this axis in the parent's space.",
+      },
+    }),
+  },
+  FieldPredicate: {
+    pyClass: "FieldPredicate",
+    doc: "A field predicate, as `field(name).between(lo, hi, { closed })` builds it: the field it reads and the interval it tests.",
+    type: t.object({
+      field: {
+        type: t.string,
+        required: true,
+        doc: "The field whose value is tested.",
+      },
+      between: {
+        type: t.tuple(t.number, t.number),
+        required: true,
+        doc: "The interval's ends, `[lo, hi]`, compared by value.",
+      },
+      closed: {
+        type: t.enum("both", "left", "right", "none"),
+        default: "both",
+        doc: "Which ends of the interval are inclusive, as in polars' `is_between`.",
+      },
+    }),
+  },
+  ChartOptions: {
+    doc: "Chart-level options: chart(data, {...}) in JS, chart(data, **options) in Python.",
+    type: t.object(CHART_OPTIONS),
+  },
+  AxisDimsValue: {
+    doc: "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval.",
+    type: t.union(t.channel("number", "pos"), t.ref("AxisInterval")),
+  },
+  // Each strategy family (`STRATEGIES`) is one entry, under its family name.
+  ...Object.fromEntries(
+    Object.entries(STRATEGIES).map(([name, family]) => [
+      name,
+      { doc: family.doc, type: strategyType(family), pyFamily: name },
+    ])
+  ),
+};
+
+/** The refs a field may name that are not `OPTION_TYPES` entries: shapes
+ *  authored by hand in schema.ts / jsonSchema.ts and walked by their own
+ *  validator walkers. `pyClass` names the Python class that builds a value. */
+export const AUTHORED_REFS: Readonly<Record<string, { pyClass?: string }>> = {
+  FieldAccessor: { pyClass: "FieldAccessor" },
+  ChunkKey: { pyClass: "ChunkKey" },
+  LabelIR: {},
+  TranslateIR: {},
+  RelateClauseIR: {},
+};
+
+/** The Python class for a named type, if it has one. */
+export function refPyClass(name: string): string | undefined {
+  return OPTION_TYPES[name]?.pyClass ?? AUTHORED_REFS[name]?.pyClass;
+}
+
+/**
+ * The Python type of a field type, as the generated factory signatures
+ * annotate it (`"annotation"`) and the Python docs tables print it
+ * (`"doc"`). A channel takes a literal or a field name; a named type is its
+ * Python class when it has one, else the type it stands for. The one
+ * difference between the two uses: a strategy family is a namespace, not a
+ * type, so the docs name it (`Tile`) and an annotation spells the value it
+ * makes (`dict`).
+ */
+export function pyType(
+  f: FieldType,
+  use: "annotation" | "doc" = "annotation"
+): string {
+  switch (f.kind) {
+    case "string":
+    case "enum":
+      return "str";
+    case "number":
+      return "float";
+    case "boolean":
+      return "bool";
+    case "literal":
+      return `Literal[${typeof f.value === "boolean" ? (f.value ? "True" : "False") : JSON.stringify(f.value)}]`;
+    case "channel":
+      return f.inner === "number"
+        ? "int | float | str"
+        : f.inner === "boolean"
+          ? "bool"
+          : "str";
+    case "union":
+      return [...new Set(f.options.map((o) => pyType(o, use)))].join(" | ");
+    case "array":
+      return "list";
+    case "tuple":
+      return "tuple";
+    case "object":
+    case "record":
+      return "dict";
+    case "ref": {
+      const cls = refPyClass(f.name);
+      if (cls !== undefined) return cls;
+      const named = OPTION_TYPES[f.name];
+      if (named === undefined) return "Any";
+      if (use === "doc" && named.pyFamily !== undefined) return named.pyFamily;
+      return pyType(named.type, use);
+    }
+    case "any":
+      return "Any";
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Shared field groups
 // ---------------------------------------------------------------------------
+
+/** A split operator's `by`: a field name, a `field(...)` accessor, or a
+ *  `chunk(size)` key. */
+const splitBy = (doc: string, required = false): FieldSpec => ({
+  type: t.union(t.string, t.ref("FieldAccessor"), t.ref("ChunkKey")),
+  ...(required ? { required: true } : {}),
+  doc,
+});
 
 /** A `dims` option: axis name → value or interval (`AxisDims` in schema.ts).
  *  The names are `x`/`y` plus whatever the enclosing coordinate space
@@ -415,21 +874,21 @@ const axisDims = (doc: string): FieldSpec => ({
  *  which mean axis 0/1 in every coordinate space, plus the open `dims` bag
  *  keyed by axis name. Included wholesale by marks whose factory spreads a
  *  bare `...fancyDims: FancyDims<MaybeValue<number>>` (rect, ellipse, petal,
- *  text, image, treemap, layer's `Layer(dims, children)` form). Marks that
- *  destructure a fixed subset (blank, circle) declare their own fields
- *  instead of including this group. */
+ *  text, image, treemap, layer's `Layer(dims, children)` form), and by
+ *  circle, which hands them to its ellipse. Marks that destructure a fixed
+ *  subset (blank) declare their own fields instead of including this group. */
 export const boxDims: FieldGroup = group({
-  x: ch.num("Left edge position."),
-  cx: ch.num("Center x."),
-  x2: ch.num("Right edge position."),
-  w: ch.num("Width."),
+  x: ch.pos("Left edge position."),
+  cx: ch.pos("Center x."),
+  x2: ch.pos("Right edge position."),
+  w: ch.size("Width."),
   emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
-  y: ch.num(
+  y: ch.pos(
     "Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward."
   ),
-  cy: ch.num("Center y."),
-  y2: ch.num("Other y edge position."),
-  h: ch.num("Height."),
+  cy: ch.pos("Center y."),
+  y2: ch.pos("Other y edge position."),
+  h: ch.size("Height."),
   emY: { type: t.boolean, doc: "Embed y in the parent's y space." },
   dims: axisDims(
     "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
@@ -437,8 +896,9 @@ export const boxDims: FieldGroup = group({
 });
 
 /** `rect`'s full paint group (the only leaf mark that supports all five —
- *  ellipse/petal/circle support a strict subset and declare their fill/
- *  stroke/strokeWidth directly rather than including this group). */
+ *  ellipse/petal/circle support a different set (no filter; ellipse and
+ *  circle add fillOpacity) and declare their paint fields directly rather
+ *  than including this group). */
 export const paint: FieldGroup = group({
   fill: ch.color("Fill color, or a field name for a color scale."),
   stroke: ch.color("Stroke color. Defaults to `fill`."),
@@ -468,15 +928,15 @@ export const SHARED_FIELD_GROUPS: ReadonlyArray<{
  *  pipeline op) is the space-filling spine (mosaic/marimekko) that replaced
  *  the old `normalize: true` layout flag. */
 const spreadBoxFields: FieldGroup = group({
-  x: ch.num(
+  x: ch.pos(
     "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
   ),
-  y: ch.num(
+  y: ch.pos(
     "Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
   ),
-  w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
-  h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
-  size: ch.num(
+  w: ch.size("Data-driven cross-axis extent (field/datum-sized children)."),
+  h: ch.size("Data-driven cross-axis extent (field/datum-sized children)."),
+  size: ch.size(
     "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
   ),
 });
@@ -488,15 +948,16 @@ const spreadBoxFields: FieldGroup = group({
 
 export const OPERATORS: Record<string, ConstructDescriptor> = {
   derive: operator("derive", {
-    doc: "Opaque user transformation (`derive(fn)`). Function bodies aren't serializable; the IR carries a bridge handle when the Python widget is the producer.",
+    doc: "Transforms the data with a function, `derive(fn)`. A function does not serialize: the IR carries a Python bridge handle in its place.",
     fields: {
       lambdaId: {
         type: t.string,
+        wireOnly: true,
         doc: "Python-bridge handle for the remote callable.",
       },
-      provenance: {
-        type: t.record(t.string),
-        doc: "Measure provenance a transform (e.g. bin) declares for its output columns — output field name → measure.",
+      schema: {
+        type: t.record(t.any),
+        doc: "Column types of the result, keyed by column name, as in a chart's schema, e.g. Schema.ordered(levels) or Schema.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant).",
       },
     },
   }),
@@ -536,13 +997,23 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
     },
   }),
 
+  filter: operator("filter", {
+    doc: "Keep the rows a field predicate accepts (`filter(field(name).between(lo, hi, { closed }))`). A filter over a hand-written predicate has no wire form and serializes as an opaque `derive`.",
+    fields: {
+      predicate: {
+        type: t.ref("FieldPredicate"),
+        required: true,
+        doc: "The field predicate `field(name).between(lo, hi, { closed })` builds: `{ field, between: [lo, hi], closed? }`.",
+      },
+    },
+  }),
+
   spread: operator("spread", {
     doc: "Arrange children along `dir` with spacing, aligning them on the cross axis.",
     fields: {
-      by: {
-        type: t.union(t.string, t.ref("FieldAccessor")),
-        doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
-      },
+      by: splitBy(
+        "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
+      ),
       // IR truth: optional here even though Python's spread() requires dir —
       // matches validate.ts's optionalField("dir", ...) today.
       dir: {
@@ -587,10 +1058,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   stack: operator("stack", {
     doc: "`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).",
     fields: {
-      by: {
-        type: t.union(t.string, t.ref("FieldAccessor")),
-        doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
-      },
+      by: splitBy(
+        "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
+      ),
       dir: {
         type: t.string,
         doc: "Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).",
@@ -636,27 +1106,25 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   group: operator("group", {
     doc: "Partition rows by `by` into a flat `Frame` (no layout beyond grouping).",
     fields: {
-      by: {
-        type: t.union(t.string, t.ref("FieldAccessor")),
-        required: true,
-        doc: "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
-      },
+      by: splitBy(
+        "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows.",
+        true
+      ),
     },
   }),
 
   scatter: operator("scatter", {
     doc: "Position each child at an explicit (x, y) point or [min, max] span in data space.",
     fields: {
-      by: {
-        type: t.union(t.string, t.ref("FieldAccessor")),
-        doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
-      },
-      x: ch.num("Point position, x."),
-      y: ch.num("Point position, y."),
-      xMin: ch.num("Range form: left/bottom edge, x."),
-      xMax: ch.num("Range form: right/top edge, x."),
-      yMin: ch.num("Range form: left/bottom edge, y."),
-      yMax: ch.num("Range form: right/top edge, y."),
+      by: splitBy(
+        "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
+      ),
+      x: ch.pos("Point position, x."),
+      y: ch.pos("Point position, y."),
+      xMin: ch.pos("Range form: left/bottom edge, x."),
+      xMax: ch.pos("Range form: right/top edge, x."),
+      yMin: ch.pos("Range form: left/bottom edge, y."),
+      yMax: ch.pos("Range form: right/top edge, y."),
       dims: axisDims(
         "Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span."
       ),
@@ -666,26 +1134,14 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Cross-axis alignment for the axis without an explicit position.",
       },
       overlap: {
-        type: t.union(
-          t.object({
-            kind: { type: t.enum("separate"), required: true },
-            padding: { type: t.number },
-          }),
-          t.object({
-            kind: { type: t.enum("noise"), required: true },
-            randomness: { type: t.enum("blue", "quasi", "uniform") },
-            smoothing: { type: t.union(t.number, t.enum("silverman")) },
-            padding: { type: t.number },
-            seed: { type: t.number },
-          })
-        ),
-        doc: 'How children keep clear of each other on the axis no field places, made by a function call. separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is "blue" (default), "quasi" or "uniform". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or "silverman" to compute it from the data. sina() is noise with smoothing "silverman" (a violin outline), and jitter() is noise with randomness "uniform" and smoothing Infinity (classic jitter); both make kind "noise". Both kinds grow from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only.',
+        type: t.ref("Overlap"),
+        doc: 'How children keep clear of each other on the axis no field places, made by a call in the Overlap family. Overlap.separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. Overlap.noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is "blue" (default), "quasi" or "uniform". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or "silverman" to compute it from the data. Overlap.sina() is noise with smoothing "silverman" (a violin outline), and Overlap.jitter() is noise with randomness "uniform" and smoothing Infinity (classic jitter); both make kind "noise". Both kinds grow from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only.',
       },
       axes: { type: t.ref("AxesOptions") },
-      w: ch.num(
+      w: ch.size(
         "Fixed cross-axis extent, or a field name sizing this operator's own box from data."
       ),
-      h: ch.num(
+      h: ch.size(
         "Fixed cross-axis extent, or a field name sizing this operator's own box from data."
       ),
     },
@@ -738,25 +1194,24 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       // `dims` names the same box by axis name and is written onto it by the
       // resolveAliases pass (`deferAxisDims`); each slot infers as its
       // top-level counterpart.
-      x: ch.num(
+      x: ch.pos(
         "Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
       ),
-      y: ch.num(
+      y: ch.pos(
         "Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
       ),
-      w: ch.num(
+      w: ch.size(
         "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
       ),
-      h: ch.num(
+      h: ch.size(
         "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
       ),
       dims: axisDims(
         "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
       ),
-      by: {
-        type: t.union(t.string, t.ref("FieldAccessor")),
-        doc: "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.",
-      },
+      by: splitBy(
+        "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
+      ),
       spacing: {
         type: t.number,
         default: 0,
@@ -773,49 +1228,27 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Round pixel positions and sizes.",
       },
       tile: {
-        type: t.union(
-          t.object({
-            kind: { type: t.enum("squarify"), required: true },
-            ratio: {
-              type: t.number,
-              doc: "Target tile aspect ratio: the longer side over the shorter side, at least 1 (orientation is not chosen). Omitted, d3's default, the golden ratio.",
-            },
-          }),
-          t.object({
-            kind: {
-              type: t.enum("slice", "dice", "binary", "sliceDice"),
-              required: true,
-            },
-          })
-        ),
+        type: t.ref("Tile"),
         default: { kind: "squarify" },
-        doc: "The tiling strategy, made by a function call: squarify({ ratio? }), slice(), dice(), binary(), or sliceDice(). Each is one of d3-hierarchy's tiling methods.",
+        doc: "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods.",
       },
       sort: {
         type: t.enum("asc", "desc", "none"),
         default: "desc",
         doc: "Sort leaves by weight before layout.",
       },
-      size: ch.num(
+      size: ch.size(
         "Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group."
       ),
     },
   }),
 
   pack: operator("pack", {
-    doc: "Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).",
+    doc: "Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping, with d3's front-chain algorithm. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).",
     fields: {
-      by: {
-        type: t.union(t.string, t.ref("FieldAccessor")),
-        doc: "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row.",
-      },
-      method: {
-        type: t.object({
-          kind: { type: t.enum("circles"), required: true },
-        }),
-        default: { kind: "circles" },
-        doc: "The packing strategy, made by a function call: circles() packs each child's enclosing circle with d3's front-chain algorithm.",
-      },
+      by: splitBy(
+        "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
+      ),
     },
   }),
 };
@@ -852,9 +1285,12 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   circle: leafMark("circle", {
-    doc: "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity) — position it via `spread`/`scatter`.",
+    doc: "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by at most one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
+    include: [boxDims],
     fields: {
-      r: ch.num("Radius; becomes w=h=2r on the underlying ellipse."),
+      r: ch.size(
+        "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h."
+      ),
       fill: ch.color("Fill color, or a field name for a color scale."),
       stroke: ch.color("Stroke color. Defaults to `fill`."),
       strokeWidth: {
@@ -863,9 +1299,15 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Stroke width in pixels.",
       },
       opacity: {
-        type: t.number,
+        ...ch.raw(
+          "number",
+          "Opacity, 0 to 1, applied to fill and stroke: a number, a field name, or a per-datum accessor (in JS also a `live(...)` value, which does not cross the wire)."
+        ),
         default: 1,
-        doc: "Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire.",
+      },
+      fillOpacity: {
+        type: t.number,
+        doc: "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`.",
       },
       debug: {
         type: t.boolean,
@@ -875,7 +1317,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   ellipse: leafMark("ellipse", {
-    doc: "An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter).",
+    doc: "An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.",
     include: [boxDims],
     fields: {
       fill: ch.color("Fill color, or a field name for a color scale."),
@@ -886,6 +1328,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Stroke width in pixels.",
       },
       opacity: { type: t.number, default: 1, doc: "Opacity, 0 to 1." },
+      fillOpacity: {
+        type: t.number,
+        doc: "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`.",
+      },
       aspectRatio: {
         type: t.number,
         doc: "w/h ratio to enforce. When both dims are data-driven, the constraining axis is used.",
@@ -921,7 +1367,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       text: {
-        type: t.channel("string"),
+        type: t.channel("string", "raw"),
         required: true,
         doc: "Text content (raw channel — a literal, field name, or accessor).",
       },
@@ -1023,8 +1469,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     fields: {
       emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
       emY: { type: t.boolean, doc: "Embed y in the parent's y space." },
-      w: { ...ch.num("Width."), default: 0 },
-      h: { ...ch.num("Height."), default: 0 },
+      w: { ...ch.size("Width."), default: 0 },
+      h: { ...ch.size("Height."), default: 0 },
       fill: ch.color(
         "Fill color. A blank never paints; `fill` only seeds the shared color scale."
       ),
@@ -1043,9 +1489,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       // color scale reads (`color: isValue(fill) ? fill : stroke`) and the
       // stroke's fallback (`stroke ?? fill ?? "black"`).
       fill: ch.color(
-        "A line's path is never filled. `fill` is the channel the shared color scale reads, so a field name colors each line by group, and it is the line color when `stroke` is omitted."
+        "A line's path is never filled. `fill` is the channel the shared color scale reads: a field name or an accessor colors each line by group (it must be constant within the line), and it is the line color when `stroke` is omitted."
       ),
-      stroke: { type: t.string, doc: "Line color." },
+      stroke: ch.color(
+        "Line color, or a field name or accessor for a color scale (constant within the line). Defaults to `fill`."
+      ),
       strokeWidth: {
         type: t.number,
         default: 1,
@@ -1061,8 +1509,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Blend mode where connectors overlap.",
       },
       curve: {
-        type: t.any,
-        doc: 'Screen-space path shape: a factory call (bezier()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name ("linear"/"bezier"/"step"/"monotone"/"smooth"/"catmullRom"). "step", "linear", "monotone" and "smooth" are read over the parameter of the run, from the least to the most smooth. "step" holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). "monotone" is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". "smooth" rounds a peak a little past its point, but keeps a run of equal values flat. "catmullRom" is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted = "auto" (monotone on a homogeneous continuous connection axis, else linear).',
+        type: t.ref("Curve"),
+        doc: 'Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear().',
       },
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       source: {
@@ -1091,11 +1539,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `line` itself.",
       },
       w: {
-        ...ch.num(),
+        ...ch.size(),
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `line` itself.",
       },
       h: {
-        ...ch.num(),
+        ...ch.size(),
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `line` itself.",
       },
     },
@@ -1105,9 +1553,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     doc: "Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).",
     fields: {
       fill: ch.color(
-        "Fill color of the band, or a field name for a color scale. Omitted, the band takes the color of the marks it connects."
+        "Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects."
       ),
-      stroke: { type: t.string, doc: "Stroke color." },
+      stroke: ch.color(
+        "Stroke color of the band's outline, or a field name or accessor for a color scale (constant within the band)."
+      ),
       strokeWidth: {
         type: t.number,
         default: 0,
@@ -1121,8 +1571,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       curve: {
-        type: t.any,
-        doc: 'Screen-space band-edge shape ("linear" | bezier() | "step" | "monotone" | "smooth" | "catmullRom"). "step" steps both edges, as a stepped area does. "monotone" is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); "smooth" is a rounder reading over the same parameter, and can go a little past a point; "catmullRom" is a centripetal Catmull-Rom on screen and can overshoot. Omitted = "auto" (monotone on a homogeneous continuous connection axis, else a bezier band).',
+        type: t.ref("Curve"),
+        doc: 'Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band.',
       },
       from: { type: t.string },
       to: { type: t.string },
@@ -1139,11 +1589,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.",
       },
       w: {
-        ...ch.num(),
+        ...ch.size(),
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.",
       },
       h: {
-        ...ch.num(),
+        ...ch.size(),
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.",
       },
     },
@@ -1202,7 +1652,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
       // options (`resolveOptions` in serialize/fromJSON.ts).
       coord: {
         type: t.any,
-        doc: "Coordinate transform (`polar()`, `clock()`, `wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.",
+        doc: "Coordinate transform (`Coord.polar()`, `Coord.clock()`, `Coord.wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.",
       },
       // Rides the same `...restDims` passthrough into `coord(...)`, so it is a
       // real option of the coord-bearing form only (a plain layer ignores it).
@@ -1265,8 +1715,8 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     doc: "Set a single child's min-corner (x, y) in parent coordinates — an absolute-offset placement primitive, NOT center-anchored. Unlike `enclose`'s convex-hull styling, `position` draws nothing of its own; it exists for cases (e.g. the Topology story's combinator trees) that need to place one child precisely without `enclose`'s fill/stroke/hull limits.",
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
-      x: ch.num("Min-corner x offset."),
-      y: ch.num("Min-corner y offset."),
+      x: ch.pos("Min-corner x offset."),
+      y: ch.pos("Min-corner y offset."),
     },
   }),
 
@@ -1419,7 +1869,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
 // dispatch; they don't need JSON Schema $defs yet (per the design doc).
 // ---------------------------------------------------------------------------
 
-// The field names are the camelCase wire keys; Python's polar()/clock() spell
+// The field names are the camelCase wire keys; Python's Coord.polar()/clock() spell
 // them in snake_case (inner_radius, ...) like every other generated kwarg (see
 // `pyKwarg`).
 const polarFields: FieldGroup = group({
@@ -1456,7 +1906,7 @@ export const COORDS: Record<string, ConstructDescriptor> = {
     fields: polarFields,
   }),
   clock: coordTransform("clock", {
-    doc: "A `polar()` preset (0° at 12 o'clock, clockwise — already polar's defaults) kept as a distinct type tag for bbox sampling and user intent.",
+    doc: "A `Coord.polar()` preset (0° at 12 o'clock, clockwise — already polar's defaults) kept as a distinct type tag for bbox sampling and user intent.",
     fields: polarFields,
   }),
   wavy: coordTransform("wavy", {
@@ -1556,4 +2006,33 @@ export function acceptedFields(
   }
   acceptedFieldsCache.set(cacheKey, fields);
   return fields;
+}
+
+/** Whether a value of this type may hold a channel at some depth: a channel,
+ *  or a union, array, tuple, record, object or named option type containing
+ *  one. A mark factory's channel map (`createMark` in gofish-graphics) names
+ *  exactly the fields of this kind, and the Python generator wraps exactly
+ *  these fields' callables as accessors. */
+export function carriesChannel(type: FieldType): boolean {
+  switch (type.kind) {
+    case "channel":
+      return true;
+    case "union":
+      return type.options.some(carriesChannel);
+    case "array":
+      return carriesChannel(type.items);
+    case "tuple":
+      return type.items.some(carriesChannel);
+    case "record":
+      return carriesChannel(type.valueType);
+    case "object":
+      return Object.values(type.fields).some((f) => carriesChannel(f.type));
+    case "ref":
+      return (
+        type.name in OPTION_TYPES &&
+        carriesChannel(OPTION_TYPES[type.name].type)
+      );
+    default:
+      return false;
+  }
 }

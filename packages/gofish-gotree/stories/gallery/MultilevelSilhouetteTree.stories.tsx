@@ -1,5 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, ellipse, line, layer, frame, polar } from "gofish-graphics";
+import {
+  rect,
+  ellipse,
+  line,
+  layer,
+  frame,
+  Coord,
+  Curve,
+} from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -245,7 +253,7 @@ const pt = (theta: number, r: number) =>
 const linkMark = (l: Link) =>
   line(
     {
-      curve: "linear",
+      curve: Curve.linear(),
       fill: "none",
       stroke: LINK_STROKE,
       strokeWidth: 2,
@@ -275,7 +283,7 @@ export const MultilevelSilhouetteTree: StoryObj = {
   },
   render: () => {
     const container = initializeContainer({ w: 660, h: 660 });
-    frame({ coord: polar() as any }, [layer(marks)]).render(container, {
+    frame({ coord: Coord.polar() as any }, [layer(marks)]).render(container, {
       w: 660,
       h: 660,
     });

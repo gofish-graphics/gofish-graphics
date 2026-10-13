@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, polar } from "gofish-graphics";
+import { circle, Coord, Curve } from "gofish-graphics";
 import { combine, byDepth, mount, sampleTree } from "./_shared";
 
 // GoTree gallery port — FlowerTree (polar circle clusters / "petals").
@@ -57,7 +57,7 @@ export const FlowerTree: StoryObj = {
     mount(
       {
         node,
-        link: { curve: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1.5 },
         parentChild: combine({
           // θ: parent wedge encloses (nests) the child group's angular span.
           x: { kind: "nest", pad: 0.04 },
@@ -75,7 +75,7 @@ export const FlowerTree: StoryObj = {
           // r: siblings share a radius band.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       { w: 520, h: 520 },
       sampleTree

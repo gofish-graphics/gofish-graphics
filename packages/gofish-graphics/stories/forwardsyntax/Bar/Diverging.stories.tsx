@@ -6,8 +6,8 @@ import {
   stack,
   rect,
   field,
-  palette,
   Schema,
+  Color,
 } from "../../../src/lib";
 
 const meta: Meta = {
@@ -35,7 +35,7 @@ const LEVELS = [
   "Agree",
   "Strongly agree",
 ];
-const likertColors = palette({
+const likertColors = Color.palette({
   "Strongly disagree": "#ca0020",
   Disagree: "#f4a582",
   Neutral: "#d9d9d9",
@@ -162,7 +162,7 @@ export const PopulationPyramid: StoryObj<Args> = {
     const container = initializeContainer();
     chart(population, {
       schema: { sex: Schema.ordered(["Women", "Men"]).diverging() },
-      color: palette({ Women: "#c05780", Men: "#3b75af" }),
+      color: Color.palette({ Women: "#c05780", Men: "#3b75af" }),
       axes: { x: { title: "People (millions)" }, y: true },
     })
       .flow(

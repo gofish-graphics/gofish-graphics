@@ -1,8 +1,8 @@
 /**
- * `animation.*` — WHAT changes while a mark enters. Each effect is a plain
+ * `Animation.*` — WHAT changes while a mark enters. Each effect is a plain
  * value, named by what it does (grow / shrink, fadeIn / fadeOut), not by the
  * phase it is used in, so one can be defined once and reused
- * (`const growIn = animation.grow({ duration: 600 })`).
+ * (`const growIn = Animation.grow({ duration: 600 })`).
  *
  * An effect is read at PAINT time: layout runs once, and the effect maps the
  * display items a mark lowered at rest to the items it shows at a progress
@@ -117,17 +117,17 @@ export type TimedEffect = {
   ease: (u: number) => number;
 };
 
-/** `animation.tween(...)`: how a mark MOVES between two keyframes of a
+/** `Animation.tween(...)`: how a mark MOVES between two keyframes of a
  *  `time.sequence` (the update phase). It is the chained spelling of today's
  *  `.layer(time.transition({ curve, ease }))`, and like it keeps
  *  `time.transition`'s defaults (the auto curve, no ease). `layer` builds that
  *  transition tier, which moves the marks that chained this tween; it is bound where the `time` namespace is in reach
- *  (`animation/index.ts`), so the chart builder can use it without importing
+ *  (`families/animation.ts`), so the chart builder can use it without importing
  *  `time` (which would cycle). */
 export type TweenEffect = {
   readonly __tween: true;
   /** How the run is read between keyframes, as for `time.transition`,
-   *  resolved (`resolveMethod`), so an unset curve and `"auto"` are
+   *  resolved (`resolveMethod`) to its name, so an unset curve is
    *  `"monotone"` here. */
   readonly curve: InterpolationMethod;
   /** A time warp inside each keyframe interval, resolved. */
@@ -137,7 +137,7 @@ export type TweenEffect = {
 
 /** Whether two tweens move a mark the same way: the same curve and the same
  *  ease. Marks whose tweens do are moved by one transition, however many
- *  times `animation.tween(...)` was called for them. */
+ *  times `Animation.tween(...)` was called for them. */
 export const sameTween = (a: TweenEffect, b: TweenEffect): boolean =>
   a.curve === b.curve && a.ease === b.ease;
 
@@ -167,7 +167,7 @@ function effect(
     const ms = duration ?? DEFAULT_DURATION;
     if (!(Number.isFinite(ms) && ms >= 0)) {
       throw new Error(
-        `[gofish] animation.${kind}({ duration: ${String(duration)} }): a ` +
+        `[gofish] Animation.${kind}({ duration: ${String(duration)} }): a ` +
           `duration is a number of milliseconds, 0 or more, or a field name.`
       );
     }
@@ -199,9 +199,9 @@ const collapsing = (kind: "grow" | "shrink"): Look => ({
   fits: (item) => {
     if (BOX_FIELDS[item] !== undefined) return;
     throw new Error(
-      `[gofish] animation.${kind}(): collapses a box-shaped mark (a rect ` +
+      `[gofish] Animation.${kind}(): collapses a box-shaped mark (a rect ` +
         `or an ellipse) toward its baseline, and this mark ${drawnAs(item)}. ` +
-        `Use animation.fadeIn() or animation.appear() for it.`
+        `Use Animation.fadeIn() or Animation.appear() for it.`
     );
   },
 });
@@ -237,14 +237,14 @@ const revealing = (
     const circle = shape === "circle";
     if (item === (circle ? "ellipse" : "rect")) return;
     throw new Error(
-      `[gofish] animation.wipe(${
+      `[gofish] Animation.wipe(${
         circle ? `{ shape: "circle" }` : `{ from: "${from}" }`
       }): ` +
         (circle
           ? `a circular reveal is built for circles (it grows the radius)`
           : `a side wipe is built for rects (it clips the box)`) +
-        `, and this mark ${drawnAs(item)}. Use animation.fadeIn() or ` +
-        `animation.appear() for it. A general clip needs a clip item in the ` +
+        `, and this mark ${drawnAs(item)}. Use Animation.fadeIn() or ` +
+        `Animation.appear() for it. A general clip needs a clip item in the ` +
         `display list, which this prototype does not have.`
     );
   },
@@ -300,9 +300,9 @@ export function effectList(
   for (const e of list) {
     if (!isEffect(e)) {
       throw new Error(
-        `[gofish] ${where}: expected animation effects (animation.grow(), ` +
-          `animation.fadeIn(), …)` +
-          (isTween(e) ? `; animation.tween() is for \`update\`.` : `.`)
+        `[gofish] ${where}: expected animation effects (Animation.grow(), ` +
+          `Animation.fadeIn(), …)` +
+          (isTween(e) ? `; Animation.tween() is for \`update\`.` : `.`)
       );
     }
   }

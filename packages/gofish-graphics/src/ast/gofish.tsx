@@ -20,12 +20,15 @@ import { lowerToDisplayList } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
 import type { InteractionRuntime } from "../interaction/runtime";
 import { renderWithInteraction } from "../interaction/renderTerminal";
+import { resolveMarkResult } from "./marks/markResult";
+import { resolveUnit, sameUnitVar } from "./measure";
 import type { ToPixel } from "./_node";
 import type { Size } from "./dims";
 import {
   continuousInterval,
   isCONTINUOUS,
-  spaceMeasure,
+  DEFAULT_AXIS_TICKS,
+  type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { niceScope, type Extent } from "./extent";
@@ -49,6 +52,8 @@ import {
   type LabelRowSettings,
 } from "./axes/elaborate";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
+import { timeRowsFromOption, type TimeRowOption } from "./axes/timeRows";
+import { axisName } from "./constraints/shared";
 import {
   getScopeRegistry,
   scopeFrame,
@@ -155,6 +160,25 @@ export type AxisOptions =
        *  axis has a single tier: it uses the number, or `array[0]` for the
        *  array form. */
       labelAngle?: number | number[] | "auto";
+      /** The label rows of a time axis (an axis over a `Schema.time()`
+       *  column), inner row first: each a Calendar value, e.g.
+       *  `[Calendar.month, Calendar.year]` or `[Calendar.hour.every(6),
+       *  Calendar.day]`. A row's labels are its partition's: the level's
+       *  default, or a function of the cell given with `.format(fn)`
+       *  (`Calendar.quarter.format((cell) => ...)`). Each row is one
+       *  partition of the time line: its ticks are its cells' starts, and
+       *  each label is centered on its cell's start tick. The axis's domain
+       *  is niced outward to the cells of the inner row. Rows need not nest.
+       *  Omitted, the axis has two rows: the level-and-step the domain picks
+       *  for about 10 ticks, and its parent level.
+       *
+       *  The rows reach every axis on the dim, but only a time axis reads
+       *  them: in a faceted chart, the time axes inside the facets read
+       *  them and the facets' category axis on the same dim does not. A
+       *  chart with rows and no time axis on the dim is an error, raised
+       *  once the whole chart is elaborated. `labelAngle` does not rotate
+       *  a time axis's labels yet. */
+      rows?: TimeRowOption[];
     };
 
 /** Read one `AxisOptions` field per dim, AS AUTHORED — `undefined` wherever the
@@ -314,15 +338,25 @@ export async function layout(
   // the chart-level `axes` option enables: `true` → both. For an `{ x?, y? }`
   // object, a dim is enabled unless it is explicitly `false` — an unspecified
   // (undefined) dim still shows (specifying one axis doesn't disable the
-  // other); only `false` suppresses.
+  // other); only `false` suppresses. Each enabled dim carries what its axis
+  // ticks at: about 10 ticks, or the rows of a time axis (`rows`, parsed
+  // here, once), whose inner row its scope's domain is niced to. The axis is
+  // drawn from the same stamp. A dim with rows is always enabled: a disabled
+  // dim (`false`) has no options to hold them.
+  const rows = perDimAxisOption(axes, "rows");
   if (axes) {
-    const enabled = new Set<0 | 1>();
-    if (axes === true) {
-      enabled.add(0);
-      enabled.add(1);
-    } else if (typeof axes === "object") {
-      if (axes.x !== false) enabled.add(0);
-      if (axes.y !== false) enabled.add(1);
+    const ticksOf = (dim: 0 | 1): AxisTicks => {
+      const r = rows[dim];
+      return r === undefined
+        ? DEFAULT_AXIS_TICKS
+        : { ...DEFAULT_AXIS_TICKS, rows: timeRowsFromOption(r, axisName(dim)) };
+    };
+    const enabled = new Map<0 | 1, AxisTicks>();
+    for (const dim of [0, 1] as const) {
+      const on =
+        axes === true ||
+        (typeof axes === "object" && (dim === 0 ? axes.x : axes.y) !== false);
+      if (on) enabled.set(dim, ticksOf(dim));
     }
     child.resolveAxes(new Map(), enabled);
   }
@@ -354,6 +388,17 @@ export async function layout(
     sides: resolveAxisSides(axes),
     labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
   });
+  // Rows that no time axis read are an error (see `AxisOptions.rows`).
+  rows.forEach((r, dim) => {
+    if (r !== undefined && !elaborated.timeAxes[dim]) {
+      throw new Error(
+        `axes.${axisName(dim as 0 | 1)}.rows: rows of calendar cells need a ` +
+          `time axis, but no ${axisName(dim as 0 | 1)} axis of this chart is ` +
+          `over a time column. Declare the column with Schema.time() in the ` +
+          `chart's schema.`
+      );
+    }
+  });
   if (elaborated.changed) {
     child = elaborated.node;
     await reresolve(child);
@@ -373,7 +418,7 @@ export async function layout(
   // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,
   // applied AT the scope's solve (there is no pre-layout tree walk), and it is
   // DEMAND-DRIVEN — the root scope nices a POSITION domain iff some node in it
-  // renders that dim's axis (`scopeRendersAxis` reads the persistent stamps
+  // renders that dim's axis (`scopeAxisTicks` reads the persistent stamps
   // `resolveAxes` left; with axes off no stamp exists, so axis-less content
   // stays at the honest raw scale). When an axis IS drawn, every root consumer
   // below — the posScale, the baseline-magnitude size solve, the equal-measure
@@ -381,10 +426,7 @@ export async function layout(
   // the tick elaboration niced, so content and ticks agree by construction.
   // Each nested scope root (self-scaled region, shared-scale scope) applies the
   // same rule at its own solve; a coord scope never nices.
-  const rootAxisDemand: [boolean, boolean] = [
-    child.scopeRendersAxis(0),
-    child.scopeRendersAxis(1),
-  ];
+  const rootAxisDemand = [child.scopeAxisTicks(0), child.scopeAxisTicks(1)];
   // The root's types and their size claims, niced together (a niced pinned
   // domain implies its claim).
   const rootExtent = child.resolveExtent();
@@ -467,9 +509,22 @@ export async function layout(
   // registry (Stage 6c: the ONE post-solve σ adjustment, so every slope stays
   // registry-sourced and the dump shows the FINAL σ). Silently skipped when an
   // axis has no solved scope to equate.
-  const measureX = spaceMeasure(niceUnderlyingSpaceX);
-  const measureY = spaceMeasure(niceUnderlyingSpaceY);
-  if (measureX !== undefined && measureX === measureY) {
+  //
+  // Only a DECLARED unit counts: two unknowns that unify through overlays
+  // are one domain, not a claim that a data unit is the same length on x
+  // and y.
+  const unitX = isCONTINUOUS(niceUnderlyingSpaceX)
+    ? niceUnderlyingSpaceX.measure?.unit
+    : undefined;
+  const unitY = isCONTINUOUS(niceUnderlyingSpaceY)
+    ? niceUnderlyingSpaceY.measure?.unit
+    : undefined;
+  if (
+    unitX !== undefined &&
+    unitY !== undefined &&
+    resolveUnit(unitX).kind === "declared" &&
+    sameUnitVar(unitX, unitY)
+  ) {
     const axisInfo = ([0, 1] as const).map(
       (axis): EqualMeasureAxis | undefined => {
         const space = rootSpaces[axis];
@@ -943,13 +998,18 @@ export function gofish(
   // the runtime only if something registered. A PLAIN node keeps today's exact
   // static behavior below (a `live()` channel on a plain node still patches at
   // paint — that's runtime-independent — it just gets no runtime/hit-testing).
+  //
+  // A function child is a thunk or a mark (`layer([...])` is one), and both
+  // reify the way a combinator child does: `resolveMarkResult` calls it with
+  // the empty list `[]` (a root has no rows; a thunk ignores it) and reifies
+  // whatever it returns.
   if (typeof child === "function") {
-    const thunk = child;
+    const build = () => resolveMarkResult(child as any);
     return renderWithInteraction(async () => {
-      const node = await thunk();
+      const node = await build();
       // A thunk can build the chart again, which `labelAngle: "auto"` needs
       // (see `GoFishNode.rebuild`).
-      node.rebuild = async () => thunk();
+      node.rebuild = build;
       return { node, options: { ...options } };
     }, container);
   }

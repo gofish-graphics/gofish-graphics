@@ -102,7 +102,7 @@ color scale. Any other string is a literal color. When `stroke` is omitted it
 follows the fill.
 
 ```python
-chart(rows, color=gradient(["#fff5eb", "#7f2704"])).mark(
+chart(rows, color=Color.gradient(["#fff5eb", "#7f2704"])).mark(
     polygon(points="ring", fill="n")
 )
 ```

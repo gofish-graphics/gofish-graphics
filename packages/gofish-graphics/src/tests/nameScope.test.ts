@@ -744,7 +744,7 @@ async function main() {
       }
     }
 
-    const tween = () => ({ update: gf.animation.tween() });
+    const tween = () => ({ update: gf.Animation.tween() });
 
     // `.name("dots").transition(...)`
     {

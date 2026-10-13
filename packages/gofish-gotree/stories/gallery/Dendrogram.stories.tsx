@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect } from "gofish-graphics";
+import { rect, Curve } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth } from "../data";
 import { initializeContainer } from "../helper";
@@ -92,7 +92,7 @@ export const Dendrogram: StoryObj = {
         // the hidden nodes carry no visible color, so honor it on the links —
         // each link colored by its target node's depth.
         link: (_src: any, tgt: any) => ({
-          curve: "linear",
+          curve: Curve.linear(),
           stroke: byDepth()(tgt),
           strokeWidth: 1.5,
         }),

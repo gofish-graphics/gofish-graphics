@@ -5,7 +5,7 @@ import { stack } from "../ast/graphicalOperators/stack";
 import { rect } from "../ast/shapes/rect";
 import { color, color6 } from "../color";
 import { layer } from "../ast/graphicalOperators/layer";
-import { line } from "../lib";
+import { line, Curve } from "../lib";
 import { ref } from "../ast/shapes/ref";
 import { color10Order } from "./color10";
 import { mix } from "spectral.js";
@@ -90,7 +90,7 @@ export const testPolarRibbonTransposed = (size: { width: number; height: number 
               // fill: "black",
               // fill: "none",
               // stroke: i == 3 ? "black" : "none",
-              curve: "bezier",
+              curve: Curve.bezier(),
               opacity: 0.7,
             },
             items.map((d) => ref(`${d.category}-${d.group}`))

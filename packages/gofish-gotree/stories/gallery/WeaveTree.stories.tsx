@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle } from "gofish-graphics";
+import { circle, Curve } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — WeaveTree.
@@ -23,7 +23,7 @@ export const WeaveTree: StoryObj = {
     mount({
       node,
       // TODO: needs curve links implemented
-      link: { curve: "linear", stroke: "#666", strokeWidth: 1 },
+      link: { curve: Curve.linear(), stroke: "#666", strokeWidth: 1 },
       parentChild: combine({
         x: { kind: "distribute", spacing: 8 },
         y: { kind: "align", alignment: "end" },

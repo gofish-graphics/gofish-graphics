@@ -16,6 +16,7 @@ import {
   interpolate,
   knotOrder,
 } from "../interpolate";
+import * as Curve from "../families/curve";
 
 let passed = 0;
 let failed = 0;
@@ -185,7 +186,7 @@ console.log("# interpolate(rows): step reads the previous keyframe's row");
     along: "year",
     key: "country",
     at: 1957.5,
-    method: "step",
+    method: Curve.step(),
   });
   ok("holds the numeric field", near(stepped.life as number, 50));
   // Non-numeric fields follow the method: at 1957.5 the NEAREST keyframe is a
@@ -195,7 +196,7 @@ console.log("# interpolate(rows): step reads the previous keyframe's row");
     along: "year",
     key: "country",
     at: 1959,
-    method: "step",
+    method: Curve.step(),
   });
   ok("copies the previous keyframe's text", late.note === "early");
   const [smooth] = interpolate(rows, {

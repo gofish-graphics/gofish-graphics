@@ -53,7 +53,7 @@ under [`polar`](/js/api/coords/polar) you can write `dir: "theta"` or
 `dir: "r"`, and under [`geo`](/js/api/coords/geo) `dir: "lon"` or `dir: "lat"`:
 
 ```ts
-chart(data, { coord: polar() })
+chart(data, { coord: Coord.polar() })
   .flow(spread({ by: "month", dir: "theta", spacing: 0 }))
   .mark(rect({ w: 0.5, h: "value" }));
 ```
@@ -64,14 +64,43 @@ enclosing space does not declare throws an error that lists the names it does.
 
 ## Path-aware `by` {#path-aware-by}
 
-`by` accepts a **field name**, a **lodash path string**, a **function**, or a
-[`field(...)`](#field-expression-pipeline) accessor:
+`by` accepts a **field name**, a **lodash path string**, a **function**, a
+[`field(...)`](#field-expression-pipeline) accessor, or a
+[`chunk(size)`](#chunk) key:
 
 ```ts
 spread({ by: "species", dir: "x" }); // field name
 spread({ by: "origin.country", dir: "x" }); // nested path
-spread({ by: (r) => r.species, dir: "x" }); // function escape hatch
+spread({ by: (r, i) => r.species, dir: "x" }); // function of the row and its position
 spread({ by: field("species").sort(), dir: "x" }); // field(...) accessor
+spread({ by: chunk(5), dir: "y" }); // consecutive rows, five to a group
+```
+
+## Without `by` {#without-by}
+
+With no `by`, the split is by row identity: each row is its own group, keyed
+by its position. The mark under it gets that group, a one-row array `[row]`,
+just as it gets a group of rows under a `by` field. An item that is itself an
+array is still one item, so it becomes `[item]`. The keys are positions, not
+data, so they draw no axis and no labels.
+
+## `chunk(size)` {#chunk}
+
+`chunk(size)` groups consecutive rows: row `i` goes to group
+`Math.floor(i / size)`. It is a bin of width `size` over row position, like
+lodash `_.chunk`, Rust `chunks(n)` and Python `itertools.batched`. Like no
+`by`, its keys name no field, so they draw no axis and no labels. `chunk(1)`
+is the same split as no `by`.
+
+```ts
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x" }),
+    derive((d) => d.flatMap((row) => repeat(row, "count"))),
+    spread({ by: chunk(5), dir: "y", reverse: true }), // rows of five units
+    spread({ dir: "x" })
+  )
+  .mark(rect({ w: 8, h: 8, fill: "species" }));
 ```
 
 The same bare field name works after a [`ref` / `selectAll`](/js/api/selection/ref)
@@ -222,9 +251,8 @@ Empty bins are dropped, like an ordinary `groupBy`. Pass
 .mark(rect({ h: field("weight").mean() }))
 ```
 
-`.count()` and `.distinct()` report measure `"count"` (they're counts, not the
-source field's own units) unless you annotate the accessor explicitly:
-`field("id", "my-measure").distinct()`.
+`.count()` and `.distinct()` are in the unit `"count"` (they're counts, not the
+source field's own units).
 
 ## Space-filling spines (mosaic / marimekko)
 

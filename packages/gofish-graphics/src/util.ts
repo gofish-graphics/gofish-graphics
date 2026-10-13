@@ -1,5 +1,11 @@
 import { getValue, getValueOffset, isValue, MaybeValue } from "./ast/data";
 
+/** Whether `v` is a promise or another thenable. */
+export const isThenable = <T>(v: T | PromiseLike<T>): v is PromiseLike<T> =>
+  v !== null &&
+  (typeof v === "object" || typeof v === "function") &&
+  typeof (v as PromiseLike<T>).then === "function";
+
 /** Read a dev-gate flag from `globalThis.<name>` or `process.env.<name>` (truthy
  *  = on). Zero-cost when off; the single reader for the #39 dev gates
  *  (`GOFISH_SOLVER_CHECK`, `GOFISH_CONFLICT_CHECK`). */

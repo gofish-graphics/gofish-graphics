@@ -50,14 +50,16 @@ import {
   selectGridConstraint,
 } from "../ast/constraints/proposalPlan";
 import { discretePosition, value } from "../ast/data";
+import { declared } from "./testHelpers";
 import { pxOf, type AxisMap } from "../ast/domain";
 import {
   UNDEFINED,
   continuousInterval,
   dataWidth,
-  spaceMeasure,
+  spaceUnit,
   CONTINUOUS,
   originIs,
+  DEFAULT_AXIS_TICKS,
 } from "../ast/underlyingSpace";
 import { Extent, impliedExtent } from "../ast/extent";
 import { ScopeRegistry } from "../ast/solver/scopes";
@@ -620,10 +622,10 @@ console.log("# constraint confluence: nest size dependency planning");
     [
       [
         CONTINUOUS(interval(0, 10), "free"),
-        CONTINUOUS(interval(5, 15), "pinned", "child"),
+        CONTINUOUS(interval(5, 15), "pinned", declared("child")),
       ],
     ],
-    { y: interval(0, 20), yMeasure: "pin" },
+    { y: interval(0, 20), yMeasure: declared("pin") },
     [new Set(), new Set([0])]
   );
   ok(
@@ -637,7 +639,7 @@ console.log("# constraint confluence: nest size dependency planning");
       [
         [
           CONTINUOUS(interval(0, 10), "free"),
-          CONTINUOUS(interval(5, 15), "pinned", "child"),
+          CONTINUOUS(interval(5, 15), "pinned", declared("child")),
         ],
       ],
       0,
@@ -653,20 +655,20 @@ console.log("# constraint confluence: nest size dependency planning");
     pinned !== undefined &&
       pinned.min === 0 &&
       pinned.max === 20 &&
-      spaceMeasure(resolved[1]) === "pin"
+      spaceUnit(resolved[1])?.titles.join() === "pin"
   );
   let clash: string | undefined;
   try {
     resolveLayerBaseSpaces(
-      [[UNDEFINED, CONTINUOUS(interval(5, 15), "pinned", "child")]],
-      { y: interval(0, 20), yMeasure: "pin" }
+      [[UNDEFINED, CONTINUOUS(interval(5, 15), "pinned", declared("child"))]],
+      { y: interval(0, 20), yMeasure: declared("pin") }
     );
   } catch (e) {
     clash = (e as Error).message;
   }
   ok(
     "an unplaced child in another unit than the datum domain is a type error",
-    clash !== undefined && /different measures/.test(clash)
+    clash !== undefined && /different units/.test(clash)
   );
 }
 
@@ -883,7 +885,7 @@ console.log("# constraint confluence: child posScale forwarding");
     [impliedExtent(positionSpace), impliedExtent(positionSpace)],
     [100, 200],
     [undefined, undefined],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );
@@ -899,7 +901,7 @@ console.log("# constraint confluence: child posScale forwarding");
     [impliedExtent(positionSpace), impliedExtent(positionSpace)],
     [100, 200],
     [baseX, undefined],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );
@@ -1301,7 +1303,7 @@ console.log("# constraint confluence: child scale factor planning");
     [inheritedX, inheritedY],
     [false, false],
     [false, false],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );
@@ -1336,7 +1338,7 @@ console.log("# constraint confluence: child scale factor planning");
     [inheritedX, inheritedY],
     [true, true],
     [false, false],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );
@@ -1362,7 +1364,7 @@ console.log("# constraint confluence: child scale factor planning");
     [inheritedX, inheritedY],
     [true, true],
     [false, false],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );
@@ -1387,7 +1389,7 @@ console.log("# constraint confluence: child scale factor planning");
     [undefined, undefined],
     [true, false],
     [true, false],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );
@@ -1413,7 +1415,7 @@ console.log("# constraint confluence: child scale factor planning");
       [inheritedX, inheritedY],
       [false, true],
       [false, false],
-      () => true,
+      () => DEFAULT_AXIS_TICKS,
       new ScopeRegistry(),
       "test"
     );
@@ -1436,7 +1438,7 @@ console.log("# constraint confluence: child scale factor planning");
     [inheritedX, inheritedY],
     [false, false],
     [true, false],
-    () => false,
+    () => undefined,
     new ScopeRegistry(),
     "test"
   );

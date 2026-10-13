@@ -1,6 +1,7 @@
 """AST classes for building GoFish chart specifications."""
 
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+import datetime
 import decimal
 import inspect
 import json
@@ -8,7 +9,8 @@ import math
 import re
 import uuid
 
-from ._nonfinite import encode_non_finite
+from . import _nonfinite
+from ._nonfinite import KEEP, encode_non_finite
 
 T = TypeVar("T")
 
@@ -18,6 +20,9 @@ class Operator:
 
     def __init__(self, op_type: str, **kwargs):
         self.op_type = op_type
+        # A callable in a channel option was wrapped as an accessor by the
+        # factory (`_channel`); one anywhere else has no meaning on the wire.
+        self._accessors = _scan_options(op_type, kwargs)
         self.kwargs = kwargs
         self._translate: Optional[dict] = None
         # One entry per `.label(accessor, options?)` call, in call order —
@@ -79,7 +84,10 @@ class Operator:
 
     def to_dict(self) -> dict:
         """Convert operator to dictionary for JSON IR."""
-        d = {"type": self.op_type, **self.kwargs}
+        d = {
+            "type": self.op_type,
+            **_wire_options(self.kwargs, self._accessors),
+        }
         if self._translate:
             d["translate"] = self._translate
         if self._labels:
@@ -90,16 +98,18 @@ class Operator:
 class DeriveOperator(Operator):
     """Operator for deriving new data via Python function."""
 
-    def __init__(self, fn: Callable, provenance: Optional[dict] = None):
+    def __init__(
+        self,
+        fn: Callable,
+        schema: Optional[dict] = None,
+    ):
         super().__init__("derive")
         self.fn = fn
         self.lambda_id = str(uuid.uuid4())
-        # Measure provenance a data transform (e.g. `bin`) declares for its
-        # output columns. It can't ride the data rows across the derive RPC
-        # bridge, so it travels in the operator IR and is re-applied JS-side via
-        # `setMeasureProvenance` — mirroring the JS bin's array-symbol
-        # provenance so a histogram's edges unify on the source field's axis.
-        self.provenance = provenance
+        # The column types of the result (``derive(fn, schema={...})``), in
+        # the wire form of a chart's ``schema``; JS applies them to the rows
+        # the callback returns.
+        self.schema = schema
 
     def translate(
         self,
@@ -108,7 +118,7 @@ class DeriveOperator(Operator):
         y: Optional[float] = None,
     ) -> "DeriveOperator":
         """Translate a derived operator while preserving its lambda handle."""
-        new_op = DeriveOperator(self.fn, self.provenance)
+        new_op = DeriveOperator(self.fn, self.schema)
         new_op.lambda_id = self.lambda_id
         new_op._labels = list(self._labels)
         new_op._translate = {
@@ -129,10 +139,10 @@ class DeriveOperator(Operator):
         )
 
     def to_dict(self) -> dict:
-        """Convert to dict - return lambda ID (+ measure provenance, if any)."""
+        """Convert to dict - return lambda ID (+ result column types, if any)."""
         out = {"type": "derive", "lambdaId": self.lambda_id}
-        if self.provenance:
-            out["provenance"] = self.provenance
+        if self.schema is not None:
+            out["schema"] = self.schema
         if self._translate:
             out["translate"] = self._translate
         return out
@@ -140,6 +150,38 @@ class DeriveOperator(Operator):
 
 def _collect_derive_operators(ops: List[Operator]) -> List[DeriveOperator]:
     return [op for op in ops if isinstance(op, DeriveOperator)]
+
+
+class Composed:
+    """A reusable flow fragment: a left-to-right sequence of operators.
+
+    Built by :func:`compose`. It holds its operators already flattened, and
+    ``ChartBuilder.flow()`` expands it into them, so the IR carries the
+    constituent operators and has no compose node. Mirrors JS
+    ``compose(...ops)`` (ast/marks/compose.ts).
+    """
+
+    def __init__(self, operators: List[Operator]):
+        self.operators: tuple = tuple(operators)
+
+
+def _expand_composed(op: Union[Operator, Composed]) -> tuple:
+    return op.operators if isinstance(op, Composed) else (op,)
+
+
+def compose(*ops: Union[Operator, Composed]) -> Composed:
+    """Package a left-to-right sequence of operators as one flow fragment.
+
+    Nested fragments are flattened, and ``compose()`` with no arguments is
+    the identity fragment. Pass the result to ``.flow()`` like an operator;
+    it expands into its constituent operators.
+
+    Example::
+
+        grid = compose(spread(dir="y"), spread(dir="x"))
+        chart(data).flow(spread(by="lake", dir="x"), grid).mark(rect(w=8, h=8))
+    """
+    return Composed([o for op in ops for o in _expand_composed(op)])
 
 
 class _MarkFn:
@@ -162,13 +204,14 @@ class _MarkFn:
 
 
 class _PendingAccessor:
-    """Sentinel wrapping a Python callable used as a mark kwarg accessor.
+    """Sentinel wrapping a Python callable used as an accessor in a mark or
+    operator option (top-level, or nested as in `dims={"r": {"size": fn}}`).
 
     JS's `createMark` accepts a callable for encoding channels like
     `text({text: (d) => `${d.amount}%`})`. The harness can't ship a Python
     callable to JS, so the factory wraps it here with a fresh `lambda_id`
     (same UUID shape as `DeriveOperator`, sharing one registry).
-    `Mark.to_dict()` serializes it as `{"__gofish_lambda": id}`; the
+    `_wire` serializes it as `{"__gofish_lambda": id}`; the
     harness/widget swaps that sentinel for an `async (d) => fetch
     /derive/<id>(d)` arrow at render time, so JS sees a real accessor
     function whose body happens to RPC into Python.
@@ -179,35 +222,106 @@ class _PendingAccessor:
         self.lambda_id = str(uuid.uuid4())
 
 
-def _channel(v: Any) -> Any:
-    """Wrap a bare callable channel value in `_PendingAccessor`.
+def _is_tagged(v: Any) -> bool:
+    """A `field(...)` or `datum(...)` value: a dict subclass that already holds
+    wire data, so the option walks treat it as a leaf."""
+    return isinstance(v, (FieldAccessor, DatumValue))
 
-    Generalizes what `text()` already did for its `text=` kwarg (the only
-    channel that supported an accessor lambda) to any generated leaf-mark
-    channel kwarg — a plain literal/field-name/`datum()` passes through
-    unchanged, a callable `(row) -> value` gets wrapped so
-    `_collect_mark_lambdas` can register it with the derive RPC bridge.
+
+def _channel(v: Any) -> Any:
+    """Wrap every callable in a channel option's value in `_PendingAccessor`.
+
+    A channel value is a literal, a field name, a tagged value (`datum()`,
+    `field(...)`), or a plain dict/list/tuple of those
+    (`dims={"r": {"size": ...}}`). A callable `(row) -> value` may sit at any
+    depth, so this wraps each one; the `Mark` or `Operator` built from the
+    options records the accessors (`_scan_options`). The generated factories
+    call it only on options the descriptor declares as channels. A value with
+    no callable comes back as the same object.
     """
-    if v is not None and not isinstance(v, (str, int, float, bool)) and callable(v):
-        return _PendingAccessor(v)
-    return v
+    return _nonfinite.walk(
+        v,
+        lambda x: x
+        if _is_tagged(x)
+        else _PendingAccessor(x)
+        if callable(x) and not isinstance(x, _PendingAccessor)
+        else KEEP,
+    )
+
+
+def _scan_options(construct: str, options: Dict[str, Any]) -> Dict[str, List["_PendingAccessor"]]:
+    """The accessors in a construct's options, by option key, in one walk.
+
+    A Python callable crosses to JS only as a channel accessor, which the
+    generated factories wrap with `_channel` for the options the descriptor
+    declares as channels. A raw callable anywhere else (a `by`, a `dir`, ...)
+    would reach JS as an RPC handle it never resolves, so it fails loudly
+    here. The `Mark` / `Operator` keeps the result, so serializing and
+    registering its accessors never walks large options (`join`'s rows) again.
+    """
+    found: Dict[str, List[_PendingAccessor]] = {}
+    for key, value in options.items():
+        accessors: List[_PendingAccessor] = []
+
+        def visit(x: Any, key: str = key, accessors: list = accessors) -> Any:
+            if isinstance(x, _PendingAccessor):
+                accessors.append(x)
+                return x
+            if _is_tagged(x):
+                return x
+            if callable(x):
+                raise TypeError(
+                    f"{construct}: {key} holds a function, but only channel "
+                    f"options take a function. Pass a field name or a "
+                    f"field(...) accessor."
+                )
+            return KEEP
+
+        _nonfinite.walk(value, visit)
+        if accessors:
+            found[key] = accessors
+    return found
+
+
+def _wire_options(options: Dict[str, Any], accessors: Dict[str, list]) -> Dict[str, Any]:
+    """The options as the wire carries them: each `_PendingAccessor` becomes
+    its `{"__gofish_lambda": id}` sentinel, at any depth. Only the options
+    `_scan_options` found accessors in are walked; the rest are the same
+    objects. The JS deserializer turns each sentinel back into an accessor
+    that calls into Python."""
+    return {
+        k: _nonfinite.walk(
+            v,
+            lambda x: {"__gofish_lambda": x.lambda_id}
+            if isinstance(x, _PendingAccessor)
+            else x
+            if _is_tagged(x)
+            else KEEP,
+        )
+        if k in accessors
+        else v
+        for k, v in options.items()
+    }
+
+
+def _lambda_pairs(accessors: Dict[str, list]) -> List[tuple]:
+    """`(lambda_id, rows_fn)` for every accessor a construct recorded.
+    `rows_fn` adapts the user's `(row) -> value` callable to the rows-in /
+    rows-out shape the `/derive/<id>` endpoint expects, so accessors and
+    `derive()` operators share one registry and one endpoint."""
+    return [
+        (acc.lambda_id, lambda rows, _fn=acc.fn: [_fn(r) for r in rows])
+        for accs in accessors.values()
+        for acc in accs
+    ]
 
 
 def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
     """Walk a Mark tree, yielding `(lambda_id, rows_fn)` pairs for every
-    `_PendingAccessor` in mark kwargs (and recursively in combinator
-    `_children` and in the marks of `.relate(...)` clauses). `rows_fn`
-    adapts the user's `(row) -> value` callable to the rows-in / rows-out
-    shape the existing `/derive/<id>` endpoint expects, so mark accessors
-    and `derive()` operators share one registry and one endpoint.
+    `_PendingAccessor` in mark kwargs, at any depth (and recursively in
+    combinator `_children` and in the marks of `.relate(...)` clauses).
     """
-    pairs: List[tuple] = []
-    for val in mark.kwargs.values():
-        if isinstance(val, _PendingAccessor):
-            fn = val.fn
-            pairs.append(
-                (val.lambda_id, lambda rows, _fn=fn: [_fn(r) for r in rows])
-            )
+    pairs = _lambda_pairs(mark._accessors)
     if mark._children is not None:
         for child in mark._children:
             pairs.extend(_collect_mark_lambdas(child))
@@ -216,6 +330,12 @@ def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
         if isinstance(clause, Mark):
             pairs.extend(_collect_mark_lambdas(clause))
     return pairs
+
+
+def _collect_operator_lambdas(ops: List["Operator"]) -> List[tuple]:
+    """`(lambda_id, rows_fn)` for every accessor in the options of a chart's
+    operators (e.g. `scatter(dims={"r": lambda d: ...})`)."""
+    return [pair for op in ops for pair in _lambda_pairs(op._accessors)]
 
 
 class Token:
@@ -280,6 +400,8 @@ class Mark:
         **kwargs,
     ):
         self.mark_type = mark_type
+        # As on Operator: only channel options may hold a callable.
+        self._accessors = _scan_options(mark_type, kwargs)
         self.kwargs = kwargs
         self._name: Optional[Union[str, "Token"]] = None
         # One entry per `.label(accessor, options?)` call, in call order —
@@ -440,17 +562,12 @@ class Mark:
 
     def to_dict(self) -> dict:
         """Convert mark to dictionary for JSON IR."""
-        # Replace `_PendingAccessor` kwarg values with their lambda-id
+        # Replace each `_PendingAccessor` (at any depth) with its lambda-id
         # sentinel. The derive-server walks the Mark tree separately to
         # register the underlying callable in the shared registry; the JS
         # harness/widget substitutes the sentinel for a real `(d) => ...`
         # arrow function whose body RPCs into Python.
-        def _wire(v):
-            if isinstance(v, _PendingAccessor):
-                return {"__gofish_lambda": v.lambda_id}
-            return v
-
-        serialized_kwargs = {k: _wire(v) for k, v in self.kwargs.items()}
+        serialized_kwargs = _wire_options(self.kwargs, self._accessors)
         if self._children is not None:
             # Combinator form: emit a nested payload the JS side reconstructs
             # via the operator's `(opts, marks)` overload.
@@ -529,13 +646,10 @@ class Mark:
         Returns a GoFishChartWidget; in a notebook this auto-displays.
         """
         from .widget import GoFishChartWidget
-        from .arrow_utils import empty_placeholder_arrow_bytes
-
-        arrow_data = empty_placeholder_arrow_bytes()
 
         widget = GoFishChartWidget(
             spec=self.to_ir(),
-            arrow_data=arrow_data,
+            tier_arrow=tiers_arrow_bytes(self),
             derive_functions={},
             width=w,
             height=h,
@@ -659,7 +773,6 @@ from ._generated import (  # noqa: E402
     _layer_opts,
     _chart_opts,
     _label_opts,
-    _polar_config,
 )
 
 
@@ -1150,12 +1263,13 @@ class ChartBuilder:
         self._z_order = z_order
         self._name: Optional[Union[str, "Token"]] = None
 
-    def flow(self, *ops: Operator) -> "ChartBuilder":
+    def flow(self, *ops: Union[Operator, Composed]) -> "ChartBuilder":
         """
         Add operators to the flow pipeline.
 
         Args:
-            *ops: One or more operators (spread, stack, derive, etc.)
+            *ops: One or more operators (spread, stack, derive, etc.) or
+                ``compose(...)`` fragments, which expand into their operators
 
         Returns:
             New ChartBuilder with operators added
@@ -1163,7 +1277,10 @@ class ChartBuilder:
         return ChartBuilder(
             self.data,
             self.options,
-            operators=[*self.operators, *ops],
+            operators=[
+                *self.operators,
+                *(o for op in ops for o in _expand_composed(op)),
+            ],
             z_order=self._z_order,
         )
 
@@ -1402,14 +1519,6 @@ class ChartBuilder:
 
         # Import here to avoid circular dependencies
         from .widget import GoFishChartWidget
-        from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
-
-        # Ref-data charts (`ref(name)` / `select_all(name)`) have no data of
-        # their own — they borrow nodes from a sibling chart.
-        if isinstance(self.data, _RefProxy):
-            arrow_data = empty_placeholder_arrow_bytes()
-        else:
-            arrow_data = data_to_arrow_bytes(self.data)
 
         # Get the IR spec
         spec = self.to_ir()
@@ -1422,7 +1531,7 @@ class ChartBuilder:
 
         widget = GoFishChartWidget(
             spec=spec,
-            arrow_data=arrow_data,
+            tier_arrow=tiers_arrow_bytes(self),
             derive_functions=derive_functions,
             width=w,
             height=h,
@@ -1555,7 +1664,7 @@ def layer(
 
     Either way the options are the JS ``layer(options, children)`` options
     (box dims, ``coord``, ``axes``, ``transform``, ``box``, ``key``), as keyword
-    arguments: ``layer([chart1, chart2], coord=clock())``. Render options such
+    arguments: ``layer([chart1, chart2], coord=Coord.clock())``. Render options such
     as ``padding`` go to ``.render(...)``, as in JS.
 
     Mirrors the JS ``layer([...])`` combinator, which is likewise universal over
@@ -1768,24 +1877,38 @@ def stack(
     return Operator("stack", **_stack_opts(**options))
 
 
-def derive(fn: Callable) -> DeriveOperator:
+def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
     """
     Derive operator - apply a Python function to transform data.
 
     Args:
-        fn: Function that takes data and returns transformed data
+        fn: Function that takes the list of rows and returns the new list of
+            rows (a list of dicts, ``None``, or a dataframe). It returns a
+            list even for one row: ``lambda d: [d[0]]``, not ``d[0]``.
+        schema: Column types of the result, keyed by column name, as in
+            ``chart(data, schema={...})``: ``Schema.ordered(levels)`` or
+            ``Schema.time(zone=...)``. Without it, a result column keeps the
+            type it had in the input while its values still fit it, a
+            datetime column is a time, and any other column has no type. A
+            ``schema`` entry overrides those and converts the column's
+            values, as a chart's schema does.
 
     Returns:
         DeriveOperator object
 
-    A transform may declare measure provenance for its output columns by
-    setting `_gofish_measure_provenance` on the callable (e.g. `bin`); it is
-    carried into the operator IR so the JS side can re-tag the rows after the
-    RPC. This is what lets `derive(bin("X"))` produce `start`/`end` edges that
-    unify on X's axis without an explicit `field(name, measure=...)`.
+    A transform may declare the column types of its output by setting
+    `_gofish_column_types` on the callable (e.g. `bin`, whose `start`/`end`
+    columns are amounts of the source field's quantity, ``HasQuantity``). They go
+    into the operator's ``schema`` so the JS side types the rows after the
+    RPC; a ``schema`` entry for the same column replaces the transform's,
+    since a schema entry is a column's whole type. This is what lets
+    `derive(bin("X"))` produce `start`/`end` edges that title their axis "X"
+    and take X's unit.
     """
-    provenance = getattr(fn, "_gofish_measure_provenance", None)
-    return DeriveOperator(fn, provenance)
+    column_types = getattr(fn, "_gofish_column_types", None)
+    if column_types:
+        schema = {**column_types, **(schema or {})}
+    return DeriveOperator(fn, schema)
 
 
 def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
@@ -1855,7 +1978,7 @@ def join(right: Any, *, on: str) -> Operator:
     Pairs with a nested chart that inherits its parent partition::
 
         chart(catch_locations).flow(scatter(by="lake", x="x", y="y")).mark(
-            lambda data: chart(data, coord=clock())
+            lambda data: chart(data, coord=Coord.clock())
             .flow(join(SEAFOOD, on="lake"), stack(by="species", dir="x", h=20))
             .mark(rect(w="count", fill="species"))
         )
@@ -1937,9 +2060,9 @@ def treemap(
         **options: The generated ``_treemap_opts`` core's options (the
             combinator form's: ``_treemap_combinator_opts``); see the docs
             options table. ``size`` sizes each leaf's tile area, one value
-            per split entry. ``tile`` takes a strategy: ``squarify()`` (the
-            default), ``slice()``, ``dice()``, ``binary()``, or
-            ``slice_dice()``.
+            per split entry. ``tile`` takes a strategy from the ``Tile``
+            family: ``Tile.squarify()`` (the default), ``Tile.slice()``,
+            ``Tile.dice()``, ``Tile.binary()``, or ``Tile.slice_dice()``.
 
     The largest tile (under the default sort) lands at the top left.
 
@@ -1963,231 +2086,6 @@ def treemap(
     if by is not None:
         options["by"] = by
     return Operator("treemap", **_treemap_opts(**options))
-
-
-def separate(*, padding: Optional[float] = None) -> Dict[str, Any]:
-    """
-    The ``separate()`` overlap strategy for :func:`scatter`: it keeps dots
-    apart, so no two overlap, and the result is a beeswarm. Each dot keeps its
-    position on the data axis and moves along the axis no field places, to the
-    free spot nearest the ``alignment`` line (Observable Plot's ``dodge``).
-
-        chart(penguins).flow(
-            scatter(x="Body Mass (g)", alignment="middle", overlap=separate(padding=1))
-        ).mark(circle(r=3))
-
-    Mirrors JS ``separate({ padding })``; the strategy is a plain object on the
-    wire, ``{"kind": "separate", "padding": ...}``.
-
-    Args:
-        padding: Pixels kept between neighboring dots. Default 0.
-    """
-    if padding is not None and not (padding >= 0 and math.isfinite(padding)):
-        raise ValueError(f"separate: padding must be a finite non-negative number, got {padding}")
-    return {"kind": "separate"} if padding is None else {"kind": "separate", "padding": padding}
-
-
-def _is_real(v: Any) -> bool:
-    """A real number: an int or float, not a bool."""
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
-
-
-def _make_noise(
-    name: str,
-    randomness: Optional[str],
-    smoothing: Optional[Union[float, str]],
-    padding: Optional[float],
-    seed: Optional[float],
-) -> Dict[str, Any]:
-    """Check the options and build the ``{"kind": "noise", ...}`` object;
-    ``name`` is the function the user called, for the error messages."""
-    if randomness is not None and randomness not in ("blue", "quasi", "uniform"):
-        raise ValueError(
-            f'{name}: randomness must be "blue", "quasi" or "uniform", got {randomness!r}'
-        )
-    if smoothing is not None and smoothing != "silverman" and not (
-        _is_real(smoothing) and smoothing >= 0
-    ):
-        raise ValueError(
-            f'{name}: smoothing must be a non-negative number of data units, math.inf, '
-            f'or "silverman", got {smoothing!r}'
-        )
-    if padding is not None and not (padding >= 0 and math.isfinite(padding)):
-        raise ValueError(f"{name}: padding must be a finite non-negative number, got {padding}")
-    if seed is not None and not (_is_real(seed) and math.isfinite(seed)):
-        raise ValueError(f"{name}: seed must be a number, got {seed}")
-    out: Dict[str, Any] = {"kind": "noise"}
-    for key, value in (
-        ("randomness", randomness),
-        ("smoothing", smoothing),
-        ("padding", padding),
-        ("seed", seed),
-    ):
-        if value is not None:
-            out[key] = value
-    return out
-
-
-def noise(
-    *,
-    randomness: Optional[str] = None,
-    smoothing: Optional[Union[float, str]] = None,
-    padding: Optional[float] = None,
-    seed: Optional[float] = None,
-) -> Dict[str, Any]:
-    """
-    The ``noise()`` overlap strategy for :func:`scatter`. Each dot keeps its
-    position on the data axis and gets an offset on the axis no field places,
-    inside an outline that follows how many dots share that part of the data
-    axis. Each dot adds a small bell-shaped bump, and the outline is the sum
-    of the bumps. :func:`sina` and :func:`jitter` are this strategy with other
-    defaults.
-
-        chart(penguins).flow(
-            scatter(x="Body Mass (g)", alignment="middle",
-                    overlap=noise(randomness="quasi", smoothing=100))
-        ).mark(circle(r=3))
-
-    Mirrors JS ``noise({ randomness, smoothing, padding, seed })``; the
-    strategy is a plain object on the wire, ``{"kind": "noise", ...}``.
-
-    Args:
-        randomness: ``"blue"`` (default) keeps each dot far from its
-            neighbors, ``"quasi"`` spreads dots by rank (fastest),
-            ``"uniform"`` draws seeded uniform offsets.
-        smoothing: The bandwidth of each dot's bell, in data units of the
-            data axis. Default 0: no smoothing beyond the dots' own size.
-            ``math.inf`` gives a flat outline (classic fixed-band jitter).
-            ``"silverman"`` computes it from the data, as :func:`sina` does.
-        padding: Pixels added to each dot's width. Default 0.
-        seed: Seed for ``"blue"`` and ``"uniform"``. Default 0.
-    """
-    return _make_noise("noise", randomness, smoothing, padding, seed)
-
-
-def sina(
-    *,
-    randomness: Optional[str] = None,
-    smoothing: Optional[Union[float, str]] = None,
-    padding: Optional[float] = None,
-    seed: Optional[float] = None,
-) -> Dict[str, Any]:
-    """
-    A sina plot: :func:`noise` with ``smoothing="silverman"``, a bandwidth
-    computed per group from the data by Silverman's rule of thumb, as
-    ggforce's ``geom_sina`` does. The outline is the smooth curve a violin
-    plot draws, filled with dots. Any option overrides the default.
-
-        chart(penguins).flow(
-            spread(by="Species", dir="y"),
-            scatter(x="Body Mass (g)", alignment="middle", overlap=sina()),
-        ).mark(circle(r=3))
-
-    Mirrors JS ``sina({ ... })``; on the wire it is
-    ``{"kind": "noise", "smoothing": "silverman", ...}``.
-
-    Args: as :func:`noise`.
-    """
-    return _make_noise(
-        "sina",
-        randomness,
-        "silverman" if smoothing is None else smoothing,
-        padding,
-        seed,
-    )
-
-
-def jitter(
-    *,
-    randomness: Optional[str] = None,
-    smoothing: Optional[Union[float, str]] = None,
-    padding: Optional[float] = None,
-    seed: Optional[float] = None,
-) -> Dict[str, Any]:
-    """
-    Classic jitter: :func:`noise` with ``randomness="uniform"`` and
-    ``smoothing=math.inf``, so the dots get uniform random offsets in a flat
-    band. Any option overrides the default.
-
-        chart(penguins).flow(
-            scatter(x="Body Mass (g)", alignment="middle", overlap=jitter())
-        ).mark(circle(r=3))
-
-    Mirrors JS ``jitter({ ... })``; on the wire it is
-    ``{"kind": "noise", "randomness": "uniform", "smoothing": Infinity, ...}``.
-
-    Args: as :func:`noise`.
-    """
-    return _make_noise(
-        "jitter",
-        "uniform" if randomness is None else randomness,
-        math.inf if smoothing is None else smoothing,
-        padding,
-        seed,
-    )
-
-
-def squarify(*, ratio: Optional[Union[int, float]] = None) -> Dict[str, Any]:
-    """
-    The ``squarify()`` tiling strategy for :func:`treemap` (the default):
-    make tiles as close as possible to the aspect ``ratio``: the longer side
-    over the shorter side, so at least 1, with no orientation chosen. Omitted, ``ratio`` is d3's default, the golden ratio.
-    ``squarify(ratio=1)`` aims for square tiles, which suits one circle per
-    leaf.
-
-    Mirrors JS ``squarify({ ratio })``; on the wire it is the plain object
-    ``{"kind": "squarify", "ratio": ...}``.
-    """
-    if ratio is None:
-        return {"kind": "squarify"}
-    return {"kind": "squarify", "ratio": ratio}
-
-
-def slice() -> Dict[str, Any]:
-    """
-    The ``slice()`` tiling strategy for :func:`treemap`: lay the tiles out in
-    one column, stacked along y. Mirrors JS ``slice()``; on the wire it is
-    ``{"kind": "slice"}``.
-    """
-    return {"kind": "slice"}
-
-
-def dice() -> Dict[str, Any]:
-    """
-    The ``dice()`` tiling strategy for :func:`treemap`: lay the tiles out in
-    one row, side by side along x. Mirrors JS ``dice()``; on the wire it is
-    ``{"kind": "dice"}``.
-    """
-    return {"kind": "dice"}
-
-
-def binary() -> Dict[str, Any]:
-    """
-    The ``binary()`` tiling strategy for :func:`treemap`: split the tiles into
-    two halves of near-equal weight, recursively. Mirrors JS ``binary()``; on
-    the wire it is ``{"kind": "binary"}``.
-    """
-    return {"kind": "binary"}
-
-
-def slice_dice() -> Dict[str, Any]:
-    """
-    The ``slice_dice()`` tiling strategy for :func:`treemap`: alternate slice
-    and dice by depth. Mirrors JS ``sliceDice()``; on the wire it is
-    ``{"kind": "sliceDice"}``.
-    """
-    return {"kind": "sliceDice"}
-
-
-def circles() -> Dict[str, Any]:
-    """
-    The ``circles()`` strategy for :func:`pack`: pack each child's enclosing
-    circle with d3's front-chain algorithm. Takes no options yet.
-
-    Mirrors JS ``circles()``; the strategy is a plain object on the wire,
-    ``{"kind": "circles"}``.
-    """
-    return {"kind": "circles"}
 
 
 def pack(
@@ -2219,8 +2117,8 @@ def pack(
             Marks to pack.
         by: Field name to group by, or a ``field(...)`` accessor (operator
             form only). Omit for one child per row.
-        **options:
-            method: The packing strategy, e.g. ``circles()`` (the default).
+        **options: The generated ``_pack_opts`` core's options; see the docs
+            options table.
 
     Returns:
         Operator (no children) or Mark (with children).
@@ -2283,8 +2181,13 @@ class ColumnSchema(dict):
     column has, keyed by class name (the wire form JS reads as is).
 
     Mirrors JS ``ColumnSchema``. Build one with ``Schema.ordered(levels)``;
-    each method adds one class.
+    each method adds one class. Constructing one checks that an order's
+    levels fit the column's other classes (``_check_levels_fit``).
     """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        _check_levels_fit("schema: the column", self)
 
     def diverging(self, midpoint: Optional[float] = None) -> "ColumnSchema":
         """Give the column a midpoint (``HasMidpoint``) along its order.
@@ -2309,12 +2212,7 @@ class ColumnSchema(dict):
         # word for word.
         order = (
             "the edges of the order ["
-            + ", ".join(
-                json.dumps(level, ensure_ascii=False)
-                if isinstance(level, str)
-                else _js_number(level)
-                for level in levels
-            )
+            + ", ".join(_show_level(level) for level in levels)
             + "]"
         )
         if (
@@ -2331,6 +2229,79 @@ class ColumnSchema(dict):
                 f"diverging: midpoint {_js_number(at)} is outside 0..{n}, {order}."
             )
         return ColumnSchema({**self, "HasMidpoint": {"at": at}})
+
+    def quantity(self, name: str) -> "ColumnSchema":
+        """Say what the column's values are amounts of (``HasQuantity``): the
+        quantity ``name``, which titles the axis in place of the column's
+        name."""
+        return ColumnSchema(
+            {**self, "HasQuantity": {"name": _require_str(name, "name")}}
+        )
+
+    def unit(self, unit: str) -> "ColumnSchema":
+        """Say what unit the column's values are in (``HasUnit``): the unit
+        ``unit``, whose symbol follows the quantity in the axis title,
+        "Pay (USD)". A column has one unit, so ``.unit`` on a column that has
+        one (``Schema.time()`` writes the instant) raises a TypeError, with
+        the message of JS ``checkNoUnit`` in schema.ts."""
+        if "HasUnit" in self:
+            raise TypeError(
+                ".unit: the column already has the unit "
+                f"{json.dumps(self['HasUnit']['unit'], ensure_ascii=False)}."
+            )
+        name = _require_str(unit, "unit")
+        return ColumnSchema({**self, "HasUnit": {"unit": name, "symbol": name}})
+
+
+def _require_str(value: Any, what: str) -> str:
+    """``value``, checked to be a string; ``what`` names it in the message."""
+    if not isinstance(value, str):
+        raise TypeError(f"{what} must be a string, got {value!r}")
+    return value
+
+
+# The unit of a time column, which ``Schema.time()`` writes beside
+# ``HasCalendar``: JS ``INSTANT`` in measure.ts.
+_INSTANT = {"unit": "instant"}
+
+
+def _is_number(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+# Which values each class accepts, given the class's own record: JS
+# ``ACCEPTS`` in schema.ts. A datetime is an instant.
+_ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
+    "HasCalendar": lambda v, c: v is None
+    or (_is_number(v) and math.isfinite(v))
+    or isinstance(v, datetime.date),
+    "HasOrder": lambda v, c: v is None or isinstance(v, str) or _is_number(v),
+    "HasMidpoint": lambda v, c: True,
+    "HasUnit": lambda v, c: v is None
+    or _is_number(v)
+    or (c.get("unit") == _INSTANT["unit"] and isinstance(v, datetime.date)),
+    "HasQuantity": lambda v, c: True,
+}
+
+
+def _check_levels_fit(who: str, column_type: Dict[str, Any]) -> None:
+    """Raise when one of an order's levels is not a value one of the
+    column's classes accepts, with the message of JS ``checkLevelsFit`` in
+    schema.ts, which explains the rule."""
+    for level in column_type.get("HasOrder", {}).get("levels", []):
+        for cls, accepts in _ACCEPTS.items():
+            if cls in column_type and not accepts(level, column_type[cls]):
+                raise TypeError(
+                    f"{who} has the level {_show_level(level)}, which is not "
+                    f"a value {cls} accepts."
+                )
+
+
+def _show_level(level: Any) -> str:
+    """``level`` as JS ``showLevel`` in schema.ts writes it."""
+    if isinstance(level, str):
+        return json.dumps(level, ensure_ascii=False)
+    return _js_number(level) if _is_number(level) else repr(level)
 
 
 def _js_number(x: Union[int, float]) -> str:
@@ -2362,34 +2333,127 @@ class Schema:
         """
         return ColumnSchema({"HasOrder": {"levels": list(levels)}})
 
+    @staticmethod
+    def time(zone: str = "UTC") -> ColumnSchema:
+        """A column whose values are instants (``HasCalendar``) in the
+        instant unit (``HasUnit``), read on the calendar of ``zone``, an IANA
+        time zone (``"UTC"`` by default).
 
-# Color configuration
+        A value may be an ISO 8601 string (``"2024-03-05"`` is the start of
+        that day in ``zone``; a string without an offset is a wall-clock time
+        in ``zone``), a datetime, or epoch milliseconds. A pandas or polars
+        datetime column is a time without a schema entry. An axis over the
+        column labels its ticks with calendar cells (see ``Calendar``).
+        """
+        if not isinstance(zone, str):
+            raise TypeError(
+                f"Schema.time: zone must be an IANA time zone name, got {zone!r}"
+            )
+        return ColumnSchema(
+            {"HasCalendar": {"zone": zone}, "HasUnit": dict(_INSTANT)}
+        )
+
+    @staticmethod
+    def unit(unit: str) -> ColumnSchema:
+        """A column whose values are amounts in the unit ``unit``
+        (``HasUnit``), an opaque name such as ``"USD"`` or ``"mm"``.
+
+        Columns in the same unit may share an axis; two different units on
+        one axis are an error. A column with no unit declared may share an
+        axis with any other. An axis title shows the unit after its
+        quantity: "Pay (USD)".
+        """
+        return ColumnSchema({}).unit(unit)
+
+    @staticmethod
+    def quantity(name: str) -> ColumnSchema:
+        """A column whose values are amounts of the quantity ``name``
+        (``HasQuantity``), e.g. ``"Pay"``. The quantity titles the axis in
+        place of the column's name, and columns of one quantity share one
+        unit.
+        """
+        return ColumnSchema({}).quantity(name)
 
 
-def palette(values: Any) -> dict:
+# Calendar partitions
+
+_CALENDAR_UNITS = (
+    "second",
+    "minute",
+    "hour",
+    "day",
+    "week",
+    "month",
+    "quarter",
+    "year",
+)
+
+
+class CalendarPartition(dict):
+    """A partition of the time line into calendar cells: a level (``unit``)
+    at a step. The dict is the wire form JS reads (``{"unit": "month",
+    "step": 3}``). Mirrors JS ``CalendarPartition``; build one from
+    ``Calendar``. Used in ``axes={"x": {"rows": [...]}}``.
     """
-    Create a palette color configuration.
 
-    Args:
-        values: Palette name (e.g. "tableau10") or list of color strings
+    def __init__(self, unit: str, step: int = 1, start: Optional[str] = None):
+        if unit not in _CALENDAR_UNITS:
+            raise ValueError(
+                f"Calendar: unknown unit {unit!r}; expected one of "
+                + ", ".join(_CALENDAR_UNITS)
+            )
+        if isinstance(step, bool) or not isinstance(step, int) or step < 1:
+            raise ValueError(
+                f"Calendar.{unit}.every({step!r}): the step must be a whole "
+                f"number of {unit}s, 1 or more."
+            )
+        wire: dict = {"unit": unit, "step": step}
+        if start is not None:
+            wire["start"] = start
+        super().__init__(wire)
 
-    Returns:
-        Color config dict for use in chart options
+    def every(self, n: int) -> "CalendarPartition":
+        """The same level, ``n`` units per cell (``Calendar.month.every(3)``).
+        Steps align to the level above: months in steps of 3 start in
+        January, April, July and October."""
+        return CalendarPartition(self["unit"], n, self.get("start"))
+
+
+class _WeekPartition(CalendarPartition):
+    """``Calendar.week``: Monday-start weeks, also callable as
+    ``Calendar.week(start="sunday")``."""
+
+    def __call__(self, start: str = "monday") -> CalendarPartition:
+        if start not in ("monday", "sunday"):
+            raise ValueError(
+                f'Calendar.week: start must be "monday" or "sunday", not {start!r}.'
+            )
+        return CalendarPartition("week", 1, start)
+
+
+class Calendar:
+    """The calendar partitions, used in ``axes={"x": {"rows": [...]}}``.
+
+    Mirrors JS ``Calendar``::
+
+        chart(data, axes={"x": {"rows": [Calendar.month, Calendar.year]}})
+        Calendar.hour.every(6)
+        Calendar.week(start="sunday")
+
+    A custom ``format`` for a row's labels is JS-only for now.
     """
-    return {"_tag": "palette", "values": values}
+
+    second = CalendarPartition("second")
+    minute = CalendarPartition("minute")
+    hour = CalendarPartition("hour")
+    day = CalendarPartition("day")
+    week = _WeekPartition("week", 1, "monday")
+    month = CalendarPartition("month")
+    quarter = CalendarPartition("quarter")
+    year = CalendarPartition("year")
 
 
-def gradient(stops: Union[str, List[str]]) -> dict:
-    """
-    Create a gradient color configuration.
-
-    Args:
-        stops: Color stop(s) - a single color string or list of color strings
-
-    Returns:
-        Color config dict for use in chart options
-    """
-    return {"_tag": "gradient", "stops": stops}
+# Color helpers (the scales themselves are the `Color` family, color.py)
 
 
 # Named gradient schemes, mirrored from packages/gofish-graphics/src/ast/colorSchemes.ts.
@@ -2510,12 +2574,12 @@ def assign_gradient_color(gradient_config: dict, t: float) -> str:
     Python-side counterpart of `assignGradientColor` (colorSchemes.ts). Meant for
     use inside a `derive()` callback that needs to precompute a literal hex fill
     (a raw `fill` channel) rather than going through the JS-side `color:
-    gradient(...)` chart option. Gives the same hex as the JS function: evenly
+    Color.gradient(...)` chart option. Gives the same hex as the JS function: evenly
     spaced stops mixed linearly in CIE Lab (D65 white point, CSS Color 4
     conversions), clipped to the sRGB gamut and rounded to 8 bits per channel.
 
     Args:
-        gradient_config: A `gradient(...)` config dict (`{"_tag": "gradient",
+        gradient_config: A `Color.gradient(...)` config dict (`{"_tag": "gradient",
             "stops": ...}`). Stops are hex colors.
         t: Interpolation position in [0, 1] (values outside are clamped; NaN
             gives `#cccccc`).
@@ -2550,95 +2614,6 @@ def assign_gradient_color(gradient_config: dict, t: float) -> str:
             local_t = (tt - p0) / (p1 - p0)
             return _lab_mix_hex(colors[i], colors[i + 1], local_t)
     return _rgb_to_hex(*_hex_to_rgb(colors[n]))
-
-
-# Coordinate transforms
-
-
-# `clock()`/`polar()` are hand-written because the `clock`-vs-`polar` type
-# tag isn't part of the descriptor; both call the generated `_polar_config`.
-
-
-def clock(
-    inner_radius: float | None = None,
-    central_angle: float | None = None,
-    start_angle: float | None = None,
-    direction: int | None = None,
-    center: tuple[float, float] | list[float] | None = None,
-) -> dict:
-    """
-    Clock coordinate transform — a ``polar()`` preset with 0° at 12 o'clock,
-    increasing clockwise (its defaults). Accepts the same options. Use as:
-    ``chart(data, coord=clock())``.
-
-    Args:
-        inner_radius: donut hole as a fraction [0,1) of the outer radius (e.g. a
-            clock rim). Default 0 (filled disc).
-        central_angle: total angular sweep in radians. Default 2π (full circle).
-        start_angle: angle (radians) of θ=0. Default π/2 (12 o'clock).
-        direction: +1 counter-clockwise, -1 clockwise. Default -1.
-        center: screen-space center offset [x, y]. Default [0, 0].
-
-    Returns:
-        Coord config dict for use in chart options
-    """
-    return _polar_config(
-        "clock",
-        inner_radius=inner_radius,
-        central_angle=central_angle,
-        start_angle=start_angle,
-        direction=direction,
-        center=center,
-    )
-
-
-def polar(
-    inner_radius: float | None = None,
-    central_angle: float | None = None,
-    start_angle: float | None = None,
-    direction: int | None = None,
-    center: tuple[float, float] | list[float] | None = None,
-) -> dict:
-    """
-    Polar coordinate transform — angle θ on the x-axis, radius r on the y-axis,
-    with 0 at 12 o'clock. Use as: ``chart(data, coord=polar())``.
-
-    The actual transform/domain is reconstructed on the JS side from this tag
-    (the function body can't cross the IR bridge), mirroring ``clock()``.
-
-    Args:
-        inner_radius: donut hole as a fraction [0,1) of the outer radius.
-            Default 0 (filled disc).
-        central_angle: total angular sweep in radians. Default 2π (full circle).
-        start_angle: angle (radians) of θ=0. Default π/2 (12 o'clock).
-        direction: +1 counter-clockwise, -1 clockwise. Default -1 (clockwise).
-        center: screen-space center offset [x, y]. Default [0, 0].
-
-    Returns:
-        Coord config dict for use in chart/layer options
-    """
-    return _polar_config(
-        "polar",
-        inner_radius=inner_radius,
-        central_angle=central_angle,
-        start_angle=start_angle,
-        direction=direction,
-        center=center,
-    )
-
-
-def wavy() -> dict:
-    """
-    Wavy coordinate transform — adds a sinusoidal ripple to both axes. Use as:
-    `layer([...], coord=wavy())`.
-
-    The actual transform/domain is reconstructed on the JS side from this tag
-    (the function body can't cross the IR bridge), mirroring `clock()`.
-
-    Returns:
-        Coord config dict for use in chart/layer options
-    """
-    return {"type": "wavy"}
 
 
 # Layer selection
@@ -2749,7 +2724,7 @@ def datum(value: Any) -> DatumValue:
 
 class FieldAccessor(dict):
     """
-    The `{type: "field", name, measure?, ops?}` wire shape, as a dict
+    The `{type: "field", name, ops?}` wire shape, as a dict
     subclass so `field(name)` supports the same chainable pipeline syntax as
     JS's `FieldExpr` (`ast/fieldExpr.ts`) — a Polars-column-expression-style
     builder where each method returns a NEW accessor with one more op
@@ -2848,45 +2823,112 @@ class FieldAccessor(dict):
         field. Valid only in a value (size/pos) slot."""
         return self._with_op({"op": "distinct"})
 
+    def between(
+        self, lo: float, hi: float, *, closed: Optional[str] = None
+    ) -> "FieldPredicate":
+        """A row predicate for :func:`filter`: is this field's value in
+        ``[lo, hi]``? ``closed`` picks which ends are inclusive (``"both"``,
+        the default, ``"left"``, ``"right"`` or ``"none"``), as in polars'
+        ``is_between``.
 
-def field(name: str, measure: Optional[str] = None) -> FieldAccessor:
+        Not a pipeline op. Mirrors JS ``field(name).between(lo, hi,
+        { closed })``, which returns a predicate rather than appending to
+        ``ops``, so it raises when the expression already carries ops: the
+        predicate would test the raw field and silently drop them.
+        """
+        ops = self.get("ops", [])
+        if ops:
+            names = ", ".join(op["op"] for op in ops)
+            raise ValueError(
+                f'field("{self["name"]}").between(...) does not apply the '
+                f"expression pipeline ({names}): a predicate is not a value "
+                "slot. Filter on the raw field, or derive the binned/sorted "
+                "column first."
+            )
+        pred = FieldPredicate(field=self["name"], between=[lo, hi])
+        if closed is not None:
+            pred["closed"] = closed
+        return pred
+
+
+class FieldPredicate(dict):
+    """The ``{field, between: [lo, hi], closed?}`` wire shape of a field
+    predicate, built by ``field(name).between(lo, hi, closed=...)`` and
+    consumed by :func:`filter`. It is data, so a filter over it crosses to JS
+    with no callback."""
+
+
+def filter(
+    predicate: Union[FieldPredicate, Callable[[dict], bool]],
+) -> Operator:
+    """Keep the rows a predicate accepts, and drop the rest.
+
+    Mirrors JS ``filter(pred)``. A field predicate,
+    ``field("day").between(100, 120, closed="right")``, goes on the wire as
+    ``{type: "filter", predicate}``. A plain Python function of one row is a
+    callback, so that filter is a :func:`derive` and runs in Python, like
+    JS's ``filter`` over a hand-written predicate.
+
+    Returns:
+        Operator object for use inside ``.flow()``.
+    """
+    if isinstance(predicate, FieldPredicate):
+        return Operator("filter", predicate=dict(predicate))
+    if callable(predicate):
+        # Data always flows as a list, so the filter keeps a sublist.
+        return derive(lambda rows: [row for row in rows if predicate(row)])
+    raise TypeError(
+        "filter(...) expects field(name).between(lo, hi) or a function of one "
+        f"row, got {type(predicate).__name__}"
+    )
+
+
+def field(name: str) -> FieldAccessor:
     """
     Explicit field-accessor wrapper. Mirrors the JS `field(...)` constructor
     in `packages/gofish-graphics/src/ast/data.ts` (the field/datum/literal
-    trichotomy). Equivalent to passing a bare field-name string, plus an
-    optional **measure annotation** — a unit-of-measure type claim for the
-    channel (see the underlying-space measure system).
+    trichotomy). Equivalent to passing a bare field-name string. Use it when
+    a field name could be read as a literal, or to chain a pipeline.
 
-    Use the measure annotation when YOUR OWN derive transform has renamed
-    fields so the weak field-name default would mis-tag the channel — e.g. a
-    lambda that renames a length column to "lo"/"hi":
+    A column's unit is declared in the chart's schema
+    (``Schema.unit("USD")``), not here. A column with no declared unit may
+    share an axis with any other.
 
-        scatter(
-            x_min=field("lo", measure="Beak Length (mm)"),
-            x_max=field("hi", measure="Beak Length (mm)"),
-        )
-
-    Built-in transforms like `bin()` declare their output provenance, which now
-    travels in the derive operator's IR (see DeriveOperator), so a binned
-    histogram's `start`/`end` edges auto-tag with the source field's units — no
-    explicit annotation needed.
-
-    The returned `FieldAccessor` is also chainable, mirroring JS's
+    The returned `FieldAccessor` is chainable, mirroring JS's
     `field(...)` pipeline syntax — `field("site").sort("yield")` as an
     operator's `by`, or `field("count").normalize()` as a `spread`/`stack`
     `size` channel (see `FieldAccessor` for the full method list).
 
-    Emits the canonical `{type: "field", name, measure?, ops?}` wire shape; an
-    annotation that contradicts known provenance is a type error.
+    Emits the canonical `{type: "field", name, ops?}` wire shape.
 
     Args:
         name: The field name to read from each row.
-        measure: Optional unit-of-measure annotation for the channel.
     """
-    out = FieldAccessor({"type": "field", "name": name})
-    if measure is not None:
-        out["measure"] = measure
-    return out
+    return FieldAccessor({"type": "field", "name": name})
+
+
+class ChunkKey(dict):
+    """The ``{type: "chunk", size}`` wire shape of a ``chunk(size)`` grouping
+    key. It is data, so a ``by=chunk(size)`` crosses to JS with no
+    callback."""
+
+
+def chunk(size: int) -> ChunkKey:
+    """
+    A ``by`` key that groups consecutive rows: row ``i`` goes to group
+    ``i // size``. It is a bin of width ``size`` over row position, so
+    ``spread(by=chunk(5), dir="y")`` lays the rows out five to a group (the
+    rows of a waffle chart). Like ``itertools.batched``, lodash ``_.chunk``
+    and Rust ``chunks(n)``. The key names no field, so its groups draw no
+    axis or labels. Mirrors the JS ``chunk(size)`` in
+    ``packages/gofish-graphics/src/ast/data.ts``.
+
+    Args:
+        size: How many consecutive rows go in each group (a positive integer).
+    """
+    if isinstance(size, bool) or not isinstance(size, int) or size < 1:
+        raise ValueError(f"chunk(size): size must be a positive integer, got {size!r}")
+    return ChunkKey({"type": "chunk", "size": size})
 
 
 # Data utilities (for use inside derive() callbacks)
@@ -3135,8 +3177,8 @@ def chart(
     Chart-level options are keyword arguments (the JS options object
     ``chart(data, { axes, coord, ... })`` becomes kwargs):
 
-        chart(data, color=palette("tableau10"))
-        chart(data, color=gradient("blues"), coord=clock())
+        chart(data, color=Color.palette("tableau10"))
+        chart(data, color=Color.gradient("blues"), coord=Coord.clock())
 
     Axes are a chart option (``.render(axes=...)`` can also set them, as in
     JS). ``axes`` accepts:
@@ -3149,7 +3191,7 @@ def chart(
 
         chart(data, axes=True)
         chart(data, axes={"x": {"title": "Year"}, "y": True})
-        chart(data, coord=clock(), axes=True, padding=80)   # polar chart
+        chart(data, coord=Coord.clock(), axes=True, padding=80)   # polar chart
 
     Per-operator overrides use the same shape on spread()/scatter():
 
@@ -3174,6 +3216,33 @@ def chart(
         ChartBuilder instance
     """
     return ChartBuilder(data, _chart_opts(**options) or None)
+
+
+def tiers_arrow_bytes(root: Any) -> List[bytes]:
+    """The Arrow IPC bytes of each chart tier's own rows, as the widget ships
+    them beside the IR (the ``tier_arrow`` trait) and the parity harness's
+    derive server ships them too: one tier for a chart, one per child for a
+    layer, none for a bare mark. Timestamp and date columns cross as Arrow
+    times, and the widget's decode reads them as times. A tier with no rows
+    of its own ships the empty placeholder: a mark child, a chart whose data
+    is a ``ref`` / ``select_all`` (it borrows a sibling's nodes), and an
+    empty ``chart()`` scope (it takes the previous tier's marks)."""
+    from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
+
+    def tier(t: Any) -> bytes:
+        if (
+            not isinstance(t, ChartBuilder)
+            or isinstance(t.data, _RefProxy)
+            or t._uses_previous_marks()
+        ):
+            return empty_placeholder_arrow_bytes()
+        return data_to_arrow_bytes(t.data)
+
+    if isinstance(root, LayerBuilder):
+        return [tier(child) for child in root.children]
+    if isinstance(root, ChartBuilder):
+        return [tier(root)]
+    return []
 
 
 class LayerBuilder:
@@ -3285,27 +3354,10 @@ class LayerBuilder:
             GoFishChartWidget instance that will display in Jupyter
         """
         from .widget import GoFishChartWidget
-        from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
 
-        def _serialize_child_data(child: ChartBuilder) -> bytes:
-            """Serialize a child chart's data to raw Arrow IPC bytes.
-
-            ``GoFishChartWidget`` owns the base64/JSON wire encoding (see
-            ``arrow_dict`` there) — this only ever hands it plain bytes.
-            """
-            # Ref-data tiers borrow nodes from a sibling; empty `chart()`
-            # scopes (previous-tier) inherit the preceding tier's marks
-            # JS-side — neither ships rows of its own.
-            if isinstance(child.data, _RefProxy) or child._uses_previous_marks():
-                return empty_placeholder_arrow_bytes()
-
-            return data_to_arrow_bytes(child.data)
-
-        # Serialize each child's data and collect derive functions
-        arrow_dict: dict = {}
+        # Collect derive functions
         derive_functions: dict = {}
-        for i, child in enumerate(self.children):
-            arrow_dict[str(i)] = _serialize_child_data(child)
+        for child in self.children:
             for op in _collect_derive_operators(child.operators):
                 derive_functions[op.lambda_id] = op.fn
 
@@ -3313,7 +3365,7 @@ class LayerBuilder:
 
         widget = GoFishChartWidget(
             spec=spec,
-            arrow_dict=arrow_dict,
+            tier_arrow=tiers_arrow_bytes(self),
             derive_functions=derive_functions,
             width=w,
             height=h,

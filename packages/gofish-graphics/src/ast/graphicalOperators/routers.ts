@@ -1,5 +1,5 @@
 /**
- * Curve registry — pluggable path-shaping algorithms for the `line`/`ribbon`
+ * Curve registry — the path-shaping algorithms for the `line`/`ribbon`
  * mark (and any connector). The public `curve` option resolves (via
  * `resolveCurve`) to a *router*: a function that shapes the stroke between two
  * already-resolved endpoints (their bboxes). All of these are screen-space and
@@ -10,10 +10,8 @@
  * Built-ins below are the *routing* curves (linear / bezier / orthogonal /
  * arc — the GoTree link styles, Li et al. CHI 2020 — plus perfect-arrows), each
  * pairwise, and the *sequence* curves (step, monotone, smooth,
- * catmullRom), which thread the whole point run (`sequenceCurve`).
- *
- * Register a new router with `registerRoute(name, fn)`; look one up with
- * `getRoute(name)`.
+ * catmullRom), which thread the whole point run (`sequenceCurve`). The set is
+ * closed: the kinds of the Curve family in gofish-ir's STRATEGIES table.
  */
 import {
   type Path,
@@ -25,8 +23,10 @@ import {
   curve,
 } from "../../path";
 import type { Dimensions } from "../dims";
+import type { Curve } from "../../families/curve";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { getBoxToBoxArrow } from "perfect-arrows";
+import { Frontend } from "gofish-ir";
 import {
   SMOOTH_CURVES,
   catmullRomPath,
@@ -56,25 +56,25 @@ export type Router = (
 ) => Path;
 
 /**
- * A serializable curve value, produced by a curve factory (`bezier()`,
- * `orthogonal()`, `arc({ direction: "down" })`, …) — the same builder-object
- * idiom GoFish uses for coordinate spaces, axes, and labels. `type` names a
- * registered router; `options` are forwarded to it. A bare string is accepted
- * as shorthand for an option-less curve (`"linear"`).
- *
  * `curve` is the single screen-space path-shaping key on `line`/`ribbon` — it
  * holds both interpolating curves that thread the point sequence (linear,
  * bezier, step, monotone, smooth, catmullRom) and routing curves that shape the stroke between two
- * anchors (orthogonal, arc, perfectArrows). A curve resolves to a `Router`.
+ * anchors (orthogonal, arc, perfectArrows). Its value is a `Curve`, made by a
+ * call in the `Curve` family (`families/curve.ts`). A curve resolves to a
+ * `Router`.
  */
-export type CurveSpec = { type: string; options?: Record<string, any> };
-export type Curve = string | CurveSpec;
 
-type RouteEntry = {
-  fn: Router;
-  /** Whether this route is valid for the filled `ribbon` (edge) mode. */
-  ribbon: boolean;
-};
+/** The name of a curve value, or undefined when it is omitted. Anything that
+ *  is not a Curve-family value (an unknown kind, an undeclared or
+ *  out-of-bounds param) throws, naming `where` the option was written. */
+export function curveName(
+  curve: Curve | undefined,
+  where: string
+): string | undefined {
+  if (curve === undefined) return undefined;
+  Frontend.checkStrategy("Curve", curve, where);
+  return curve.kind;
+}
 
 /**
  * A sequence curve threads the *whole* run of points as one spline, rather
@@ -103,44 +103,16 @@ export type RunParameter = {
   parameterAxis?: 0 | 1;
 };
 
-/** The pairwise routes, which `registerRoute` extends. */
-const routes = new Map<string, RouteEntry>();
+// TODO(#1101): user-defined strategies (a route of one's own) are designed
+// in #1101, one extensibility model for the strategy families. Until then the
+// curves are the built-ins below, and nothing outside this module adds one.
 
-/** The sequence curves. These are built in: `connect` threads them over the
- *  whole run, which a router never sees, so `registerRoute` cannot add or
- *  replace one. */
+/** The pairwise routes, by curve kind. */
+const routes = new Map<string, Router>();
+
+/** The sequence curves, by curve kind: `connect` threads them over the whole
+ *  run, which a router never sees. */
 const sequenceCurves = new Map<string, SequenceCurve>();
-
-export function registerRoute(
-  name: string,
-  fn: Router,
-  opts?: { ribbon?: boolean }
-): void {
-  if (sequenceCurves.has(name)) {
-    throw new Error(
-      `[gofish] registerRoute("${name}"): "${name}" is a built-in sequence ` +
-        `curve, which threads the whole run of points rather than routing ` +
-        `each pair. Register the route under another name.`
-    );
-  }
-  routes.set(name, { fn, ribbon: opts?.ribbon ?? false });
-}
-
-export function getRoute(name: string): Router {
-  const entry = routes.get(name);
-  if (!entry) {
-    throw new Error(
-      `connect: unknown route "${name}". Registered routes: ${[
-        ...routes.keys(),
-      ].join(", ")}.`
-    );
-  }
-  return entry.fn;
-}
-
-export function hasRoute(name: string): boolean {
-  return routes.has(name);
-}
 
 /** The sequence curve registered under `name`, or undefined when `name` is a
  *  pairwise route (or nothing). */
@@ -153,13 +125,19 @@ export function sequenceCurve(
 /** The names of the registered sequence curves. */
 export const sequenceCurveNames = (): string[] => [...sequenceCurves.keys()];
 
-/** Resolve a `Curve` (string or spec) to its router fn + options. */
+/** Resolve a `Curve` to its router fn + options: the params beside its
+ *  `kind`. */
 export function resolveCurve(curve: Curve): {
   router: Router;
-  options?: Record<string, any>;
+  options: Record<string, any>;
 } {
-  if (typeof curve === "string") return { router: getRoute(curve) };
-  return { router: getRoute(curve.type), options: curve.options };
+  const { kind, ...options } = curve;
+  const router = routes.get(kind);
+  if (router === undefined)
+    throw new Error(
+      `[gofish] Curve.${kind}() is not a pairwise route (${[...routes.keys()].join(", ")}).`
+    );
+  return { router, options };
 }
 
 // --- geometry helpers -------------------------------------------------------
@@ -298,11 +276,11 @@ const perfectArrowsRouter: Router = (b0, b1, { opts }) => {
   return [curve(p0, control1, control2, p1)];
 };
 
-registerRoute("linear", linearRouter, { ribbon: false });
-registerRoute("bezier", bezierRouter, { ribbon: false });
-registerRoute("orthogonal", orthogonalRouter, { ribbon: false });
-registerRoute("arc", arcRouter, { ribbon: false });
-registerRoute("perfectArrows", perfectArrowsRouter, { ribbon: false });
+routes.set("linear", linearRouter);
+routes.set("bezier", bezierRouter);
+routes.set("orthogonal", orthogonalRouter);
+routes.set("arc", arcRouter);
+routes.set("perfectArrows", perfectArrowsRouter);
 
 // The data-space curves are read over the run's parameter. A smooth one
 // threads a run with none with centripetal knots. `step` holds every
@@ -323,38 +301,4 @@ for (const smooth of SMOOTH_CURVES) {
 sequenceCurves.set("catmullRom", {
   thread: (points) => catmullRomPath(points).map((seg) => evenStep([seg])),
   takesKnots: false,
-});
-
-// --- curve factories --------------------------------------------------------
-// Builder-object idiom (like `polar({…})` / axis / label specs): each returns a
-// serializable `CurveSpec` carrying its own options, so call sites read
-// `line({ curve: orthogonal() })`, `line({ curve: arc({ direction: "down" }) })`.
-// The option-less `"linear"`, `"step"`, `"monotone"`, `"smooth"` and
-// `"catmullRom"` have no factory; pass the bare name. (`linear()` is
-// already the Cartesian coordinate transform.)
-
-/** Cubic bezier (d3.linkVertical/horizontal convention). */
-export const bezier = (): CurveSpec => ({ type: "bezier" });
-
-/**
- * Right-angle elbow bending at the main-axis midpoint (GoTree orthogonal). The
- * bend axis is the connector's `dir` by default; pass `{ bend: "auto" }` to
- * infer it from the endpoint geometry instead (for layouts with no single
- * declared growth axis, like a diagonal tree cascade).
- */
-export const orthogonal = (options?: { bend?: "auto" }): CurveSpec => ({
-  type: "orthogonal",
-  ...(options ? { options } : {}),
-});
-
-/** Semicircular arc through both endpoints (GoTree arccurve). */
-export const arc = (options?: { direction?: "up" | "down" }): CurveSpec => ({
-  type: "arc",
-  ...(options ? { options } : {}),
-});
-
-/** Box-to-box arrow arc via perfect-arrows (bow/stretch/pad/… options). */
-export const perfectArrows = (options?: Record<string, any>): CurveSpec => ({
-  type: "perfectArrows",
-  ...(options ? { options } : {}),
 });

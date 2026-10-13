@@ -41,8 +41,9 @@ import {
   UNDEFINED,
   UnderlyingSpace,
   isCONTINUOUS,
-  mergeMeasures,
+  joinUnits,
   CONTINUOUS,
+  type UnitRecord,
 } from "../underlyingSpace";
 import {
   resolveAlignmentExtent,
@@ -54,7 +55,7 @@ import {
 import { impliedExtent, scaleExtent, type Extent } from "../extent";
 import { type ConstraintSpec } from ".";
 import * as Interval from "../../util/interval";
-import { isValue, type Measure } from "../data";
+import { isValue } from "../data";
 import {
   distributeChildrenInPlacementOrder,
   distributeOrigin,
@@ -99,8 +100,10 @@ export type ComposeBudget = {
 export type PositionDomains = {
   x?: Interval.Interval;
   y?: Interval.Interval;
-  xMeasure?: Measure;
-  yMeasure?: Measure;
+  /** The units of the datum positions on each axis (with their calendar,
+   *  when they are times). */
+  xMeasure?: UnitRecord;
+  yMeasure?: UnitRecord;
 };
 
 /** Per axis, the direct children a `position` constraint places by a datum
@@ -155,7 +158,7 @@ function resolveLayerAxisSpace(
   base: UnderlyingSpace,
   axis: 0 | 1,
   positionDomain: Interval.Interval | undefined,
-  positionMeasure: Measure | undefined
+  positionMeasure: UnitRecord | undefined
 ): UnderlyingSpace {
   if (positionDomain === undefined) return base;
   const merged = seatedUnion(
@@ -173,9 +176,10 @@ function resolveLayerAxisSpace(
   return CONTINUOUS(
     merged,
     "pinned",
-    mergeMeasures(
+    joinUnits(
       positionMeasure,
       isCONTINUOUS(base) ? base.measure : undefined,
+      true,
       {
         axis,
         where: "between a position constraint and the marks it sits among",

@@ -99,31 +99,68 @@ needs one.
 `inferSize` and `inferPos` are two instantiations of one numeric-inference
 factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumBy`
 vs `meanBy`, imported through lodash's per-helper entrypoints so this path is
-safe under native ESM). Both take an optional third argument, a resolved `Measure`: a
-string/`field()` accessor's produced value is tagged with its unit-of-measure
-so the underlying-space layer can unify scales per measure (see
+safe under native ESM). Both take an optional third argument, the accessor's
+resolved column (`ColumnInfo`, from `resolveColumn(data, accessor)`): its
+`Quantity` and its type in the chart's `schema`. A string/`field()` accessor's
+produced value is tagged with its quantity so the underlying-space
+layer can unify units and title axes (see
 [Underlying Space](/internals/core/underlying-space)). When the caller doesn't
-pass one (e.g. `createMark`'s size channel), the inferer resolves it locally
-via `resolveMeasure(data, accessor)` — explicit `field(name, measure)`
-annotation, else transform provenance riding the data array (`bin()` tags its
-output), else the field name as a weak default; a contradictory
-annotation-vs-provenance pair throws at the channel. `createOperator` hoists
-`resolveMeasure` to once per channel and passes the result down, since the
-accessor and provenance are loop-invariant across split entries.
+pass a column (e.g. `createMark`'s size channel), the inferer resolves it
+locally from `data`. The quantity comes from `resolveColumn`: named by the
+column's declared quantity (`HasQuantity`, which `bin()` also writes for its
+edges), else by the column, in the column's declared unit (`HasUnit`, or an
+instant for a time column), else in an unknown unit.
+`createOperator` hoists `resolveColumn` to once per channel and passes the
+result down, since the accessor and what the data carries are loop-invariant
+across split entries. A value read from a column with a type also records
+that type (`DatumValueImpl.fieldType`) and the field it read, so a position
+over a `Schema.time()` column builds a space on that column's calendar (see
+[Underlying Space](/internals/core/underlying-space#column-types-the-chart-schema)).
+
+Inference is synchronous. A Python lambda reaches JS as an accessor with a
+batch form (`RESOLVE_ROWS`), and it is resolved over the mark's rows before
+inference: `resolveChannelAccessors` (`channels.ts`) calls each one once with
+all the rows and hands inference a synchronous accessor that reads each row's
+value back. It also walks a `dims` bag, so a nested accessor is resolved the
+same way. With no Python accessor in any channel it returns the options as
+they are, without awaiting. The operator factory uses the same helper before
+its own channel inference. A JS `async (d) => ...` accessor is not
+supported.
 
 A prop that does not appear in the annotations map (e.g. `Rect.cornerRadius`)
 is passed through to `shapeFn` exactly as the user wrote it.
+
+A built-in mark's annotations map is generated from its descriptor in
+gofish-ir: `markChannels.generated.ts` (`MARK_CHANNELS`, written by
+`pnpm --filter gofish-graphics gen`, checked for freshness in CI) lists each
+field that can hold a channel (`carriesChannel`) with its inference kind
+(`ch.size`, `ch.pos`, `ch.color`, `ch.raw`, or `dims` for a `dims` bag), and
+the mark passes it to `createMark`. It is generated as a literal, not built at
+run time, so `DeriveMarkProps` still types each key. The Python factories wrap
+a callable as an accessor at exactly the same fields, so a Python lambda works
+exactly where a JS per-datum accessor does.
+
+A shape function may also work on the inferred values before it builds the
+node. `circle` (in `chart.ts`) is `createMark` over `Ellipse` with
+`aspectRatio: 1`. Its `r`, `w`, and `h` are all size channels, and the body
+turns whichever one was given into the ellipse's diameter. For `r` it doubles
+the inferred value, keeping its measure (`value(2 * v, measure)`), so the
+diameter is `2r` for a number, a field, and an accessor alike. A data `w` or
+`h` stays on its own axis, and the aspect lock derives the other.
 
 ## What happens at render time
 
 Walking `withGoFish.ts:431-477`:
 
-1. **Unwrap the input.** Marks are called with one of three shapes —
-   `T` (single datum), `T[]` (array), or `{ item, key }` (an item paired with a
-   key set by an upstream operator). Step 1 normalizes them to `(d, key)`.
-2. **Wrap to an array.** `data = Array.isArray(d) ? d : [d]`. The `infer*`
-   helpers all expect an array.
-3. **Apply each channel.** For each prop in the user's `markOpts`:
+1. **Read the input.** A mark is called as `(d, key)`, and `d` is always a
+   list of rows: every operator split hands each mark a group (with no `by`,
+   the one-row list `[row]`), a chart hands its data (a `ref` or `selectAll`
+   resolves to a list of refs), a combinator child gets the combinator's own
+   list, which is `[]` at the root, and a mark called directly is called on a
+   list (`rect({...})([box])`, so the rect's datum is `[box]`). Nothing
+   inspects the input's shape; the `infer*` helpers all read it as the list
+   it is.
+2. **Apply each channel.** For each prop in the user's `markOpts`:
    - `Value`-wrapped (`v(...)`) → pass through unchanged. (Already final.)
    - `"size"` channel → `inferSize(markValue, data)`. If `markValue` is a
      string, sum that field across `data`; if a number, use as-is.
@@ -135,8 +172,11 @@ Walking `withGoFish.ts:431-477`:
      scale knows which field it maps; a function accessor records none. It
      also records the field's type from the chart's `schema`
      (`DatumValueImpl.fieldType`), read off `data`, so a color scale over an
-     ordered column lists its domain in that order. (A `derive` keeps its
-     input's column types on its result, so they reach the mark.)
+     ordered column lists its domain in that order. (A `derive` types its
+     result with `applySchema`, like chart data: a column keeps its input's
+     type while its values still fit it, and `derive(fn, { schema })`
+     overrides that, so the types reach the mark. A `filter` carries its
+     input's types over as they are.)
    - `"dims"` channel → the axis-name-keyed `dims` option
      (`rect({ dims: { theta: { size: "count" } } })`). Each slot is its own
      channel, and its kind comes from its structure, not its name: `size` is
@@ -149,7 +189,7 @@ Walking `withGoFish.ts:431-477`:
      enclosing coord and writes the slots onto the mark's dims. So
      `dims: { r: { size: "count" } }` aggregates exactly like `h: "count"`.
    - Anything else → pass through.
-4. **Call the low-level shape.** The encoded shape props go into `shapeFn`,
+3. **Call the low-level shape.** The encoded shape props go into `shapeFn`,
    producing the `GoFishNode`. A component body (the no-`channels` form) may
    instead return a mark, such as `layer([...])` or `spread(opts, [...])`, or
    a chart builder. That result goes through `resolveMarkResult`, the same
@@ -157,8 +197,9 @@ Walking `withGoFish.ts:431-477`:
    component is a naming boundary. So a component is written with the same
    lowercase operators as a chart, and there is no separate node-level
    spelling to reach for. An expand mark's array of slice nodes passes through
-   unchanged.
-5. **Tag the node** with `datum = d` so downstream coordinators (label
+   unchanged, each slice stamped with its own one-row group `[row]`, tagged
+   with the column types like a split leaf.
+4. **Tag the node** with `datum = d` so downstream coordinators (label
    placement, `selectAll` projections) can find its row. The factory does not
    name the node after its data key: the key is data, and a name made from it
    could clash with a name the user wrote (see
@@ -194,12 +235,13 @@ The other half of `withGoFish.ts` is `createNodeOperator` /
 `createNodeOperatorSequential`, which every low-level operator (`layer`,
 `spreadX`, `Frame`, …) is built from. They flatten the children array, await its
 promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
-shared by both loops: a thunk is called, and whatever comes out — like every other
-child — goes to `resolveMarkResult` (`marks/markResult.ts`), the single place
-that knows all the shapes. Five get in:
+shared by both loops: every child goes to `resolveMarkResult`
+(`marks/markResult.ts`), the single place that knows all the shapes. Five get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
-- a **mark** (a function) — invoked with `undefined` data, which is how a bare
+- a **mark** (a function) — invoked with `NO_ROWS`, the empty list a root
+  gets (a node built from it has no datum, unlike an empty group a filter
+  left), which is how a bare
   `rect({ … })` becomes a node inside `spreadX([...])`, and how a control mark
   (`slider(...)`) is rebuilt on every resolve;
 - a **thunk** (sequential form only) — called, then reified again;
@@ -231,12 +273,11 @@ The other half of `withGoFish.ts` is `createNodeOperator` /
 `createNodeOperatorSequential`, which every low-level operator (`layer`,
 `spreadX`, `Frame`, …) is built from. They flatten the children array, await its
 promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
-shared by both loops: a thunk is called, and whatever comes out — like every other
-child — goes to `resolveMarkResult` (`marks/markResult.ts`), the single place
-that knows all the shapes. Five get in:
+shared by both loops: every child goes to `resolveMarkResult`
+(`marks/markResult.ts`), the single place that knows all the shapes. Five get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
-- a **mark** (a function) — invoked with `undefined` data, which is how a bare
+- a **mark** (a function) — invoked with `NO_ROWS` (no rows, so no datum), which is how a bare
   `rect({ … })` becomes a node inside `spreadX([...])`;
 - a **thunk** (sequential form only) — called, then reified again;
 - a **chart builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
@@ -268,12 +309,13 @@ methods:
 
 - `mark.name("layerName")` — registers each produced node into the chart's
   layer context so `selectAll("layerName")` can pull the array of refs (or
-  `ref("layerName")` the single node, when the layer holds exactly one). It also
+  `ref("layerName")` the one-ref list, when the layer holds exactly one: being
+  singular is a check on the match count, not a different data shape). It also
   stashes the passed name on the returned mark function via `stashLayerName`
   (defined in `markResult.ts`, called by every `.name()` implementation, and
   carried forward by every modifier chained after it), so `.layer()`'s
   producer-tier auto-naming and a sequenced tier's naming can detect a
-  user-chained name without parsing the `__serialize` tag. A `createName`
+  user-chained name without parsing the wire tag (`wireOf`). A `createName`
   token is filed in the layer context under its own symbol (`layerKey`), so
   those tiers find a token-named mark's nodes too, while no string
   `selectAll` or `ref` can reach them. (An earlier `ChartBuilder.connect()`
@@ -292,7 +334,7 @@ methods:
   round-trips through the IR; a callback is dropped from the emitted IR (like a
   function `.label` accessor).
 - `mark.transition({ enter, update, exit })` records how the mark looks in
-  each phase of an animation (`animation.grow()`, `animation.fadeIn()`, and
+  each phase of an animation (`Animation.grow()`, `Animation.fadeIn()`, and
   so on) on every produced node. With no `time.sequence` in the flow, the
   build-in reads the `enter` effects back off the resolved tree
   (`src/animation/install.ts`). Under a sequence, the chart builder reads the
@@ -320,7 +362,7 @@ which is one application of the shared **modifier factory** in
 mutates each produced node (once per node — every slice for an expand mark like
 `cut`) and receives the per-instance datum, so a modifier like `.zOrder` can
 derive a value from the data; `tag` stamps metadata on the
-wrapped mark function once (propagating the `__serialize` tag and stashing the
+wrapped mark function once (propagating the wire tag, `wireOf`, and stashing the
 layer name — a mark no longer carries an axis-field tag, since axis titles now
 derive from each node's resolved space `measure`).
 `attachModifiers` wires the set onto the base and
@@ -401,20 +443,22 @@ forms:
 - **Bag form** — applied directly to a `GoFishRef[]` (e.g. `selectAll(...)`
   or the previous tier's marks via `.layer()`): one connector through all the
   refs, UNLESS the mark is fused over a flow, in which case `ChartBuilder`
-  computes a split and partitions the bag with `splitEntries` — the same
-  helper `group()`'s `split` hook uses — producing one connector **per
+  computes a split and partitions the bag as the flow's tiers grouped its
+  rows (`splitByTiers`), producing one connector **per
   group** (e.g. `ribbon({})` fused over `stack({ by: "species" })` draws one
   band per species; see "Default grouping" below). A refs-bag chart spells
   the same split structurally instead, via an upstream `group()`.
 
 ### A connector's datum, and its `live()` channels
 
-A leaf mark carries the row it was drawn from. A connector threads a whole
-group, so its datum is **the group**: each field of its operands' data,
-projected with homogeneity collapse (`groupDatumOf`). A path through one
-species' daily positions collapses `species` to that species and `day` to
-`undefined` — which is exactly what a channel callback should see, and what
-`pointer().datum()` hands back when that path is hovered.
+A leaf mark carries the rows it was drawn from, and so does a connector: its
+datum is the rows it was drawn through, in draw order (its operands' datums,
+concatenated, with their column types; `groupDatumOf`). A path through one
+species' daily positions has one row per day, so a channel callback, and
+`pointer().datum()` when that path is hovered, reads the species off any row
+(`d[0].species`), or off all of them with `project(d, "species")`. A
+pairwise `{ from, to }` connector is drawn from one row, so its datum is
+`[row]`.
 
 `live(...)` channels on a connector are treated exactly as a leaf mark's, by one
 path: `liveChannelsOf` collects them and the factory stamps them on each produced
@@ -479,11 +523,27 @@ bag (`chart(selectAll("bars")).mark(ribbon(opts))`, or an empty-scope
 unfused, since there's nothing to anchor; `along` on either of those, or on
 the pairwise form, is a builder-time error rather than a silent no-op
 (`rejectAlongWithoutFlow` in chartBuilder.ts, and the pairwise branch in
-chart.ts). A split connector's `fill` may be a shared field name rather than
-a literal color; `resolveGroupFill` in chart.ts resolves it per group via
-`inferColor` (same channel helper `createMark` uses) before it reaches
-`Connect`, reading a representative row off the group's ref bag (so the
-resolved paint carries its field the same way).
+chart.ts). A connector's paint (`fill`, `stroke`: the color channels of
+its generated channel map) may be a field name, or an accessor (a field name
+is shorthand for one), rather than a literal color. Every call form (split
+bag, plain bag, pairwise edge row, low-level children) runs the same step,
+`resolveGroupPaint` in chart.ts, once per connector: Python accessors are
+resolved over exactly the rows the group's walk reaches (`rowsReached`,
+`resolveChannelAccessors`), then `projectByValues` (the projection `by`
+uses) reads the value. One value is the connector's color (`colorValue`, the
+helper `inferColor` uses); several throw; none passes a literal color string
+through and drops an accessor, so a raw function never reaches `Connect`.
+
+The types follow the same split. A relational factory returns a
+`RelationalMark` (chart.ts): a `NameableMark` with a type-only brand that
+`.name()`/`.label()`/`.zOrder()`/`.transition()` keep, since they carry the
+tag, and `.translate()` drops, since it does not. `ChartBuilder.mark()` is
+overloaded on it. A `RelationalMark` gets `ChartBuilder | LayerBuilder`,
+because whether it fuses also depends on the chart's data, which the types do
+not track. Every other mark gets a plain `ChartBuilder`, so
+`chart(...).mark(petal(...)).name("flower")` typechecks. The pairwise form
+carries the brand too, so its type is the wider union even though it never
+fuses.
 
 ### Default grouping: a fused connector's split, and `along`
 
@@ -511,7 +571,9 @@ builder has in hand. Two call sites run it:
 
 Both guard on the same "fuses over THIS chart's own flow" boundary
 `dataNeedsAnchors` already checks — `!usesPreviousLayerMarks() &&
-!dataIsRefs(this.data)` — so a refs-bag chart (`chart(selectAll(...))`) or the
+!(this.data instanceof GoFishRef)` — so a chart over a selection
+(`chart(ref(...))` or `chart(selectAll(...))`; the check reads the
+`chart(...)` argument, never the items of a list) or the
 nested `chart().flow(group({by})).mark(line())` idiom never gets a default
 injected; both keep their pre-#752 meaning exactly, and using `along` on
 either throws instead (see the previous section).
@@ -519,7 +581,7 @@ either throws instead (see the previous section).
 Crucially, the computed default is written into a **separate mutable cell**,
 `inferred`, not into `opts` — `tagRelationalFusable` stamps `{ type, opts,
 inferred, anchorKeys, makeAnchor }`, and `opts` stays the untouched record of
-what the user wrote (the same object `__serialize.opts` reads, so mutating it
+what the user wrote (the same object the wire tag's `opts` reads, so mutating it
 would corrupt the emitted IR and make an inferred split look
 user-specified). The connector's mark closure reads the split off `inferred`
 only — there's no `opts.by` to check anymore — and resolves `dir = opts.dir
@@ -535,7 +597,7 @@ so travel is x, and vice versa; else the innermost flow tier that positions
 anchors) and a path tier (the innermost tier positioning along the travel
 axis). `along`, when given, replaces this whole resolution: `findTierIndexByAlong`
 (chartBuilder.ts) scans the flow tiers for one whose `by` names the given
-field (`fieldNameOf` in datumProjection.ts matches a string `by` on itself, a
+field (`fieldNameOf` in data.ts matches a string `by` on itself, a
 `field(...)` accessor on `.name`, and never a function-form `by` — the design
 note's "Matching" clause), and throws, naming the field and the flow's available
 keys, if none match. The matched tier's travel axis mirrors
@@ -557,10 +619,17 @@ scatterplot). The smooth curves ignore it.
 
 Either way, once the path tier index is settled, the path tier's own `by`
 orders the path and never splits; every _other_ flow tier's `by` becomes one
-term of a synthesized composite split key (`ChartBuilder`'s
-`computeDefaultBy`, built from `splitKeyFn` in datumProjection.ts — the same
-projection-through-`GoFishRef.datum` helper `splitEntries` uses, so
-string/field/function `by` forms behave identically to a real operator `by`).
+term of a composite split key (`ChartBuilder`'s `computeDefaultSplit` lists
+the tiers, and `splitByTiers` in datumProjection.ts reads them off the bag).
+Each tier keys a ref as its operator keyed the ref's rows: a field `by`
+projects through `GoFishRef.datum`, a key function reads each row, and a
+position key (`chunk(n)`, or a key function's second argument) reads the
+row's position within the tier's parent group, the group every outer tier,
+the path tier included, put it in. That is why the path tier stays in the
+list: a `chunk(5)` under a spread by category counts five rows within each
+category, as the operator did, not along the whole bag. The group's key is
+handed to the connector (`produce`'s `key`), so `time.transition()` names a
+run by it without reading a key back off a row.
 Each operator declares how it arranges its groups (`createOperator`'s
 `arrangement` config, read back by `chartBuilder.ts`'s `classifyOperator`), so
 an operator that declares nothing simply takes no part in the rule. One
@@ -627,7 +696,7 @@ inside the bag branch), since every call form now passes it to `produce`.
 
 The paint fix from the same design note rides along for free: split and
 plain-bag now share one code path in `createRelationalMark`'s bag-form mark,
-so `resolveGroupFill` runs on both — per group on the split branch (where
+so the paint step (now `resolveGroupPaint`) runs on both — per group on the split branch (where
 it's a no-op safety net, since each group is homogeneous by construction),
 and over the _whole bag as one group_ on the plain-bag branch, where it now
 throws a loud, specific error if a field-valued `fill` disagrees across the
@@ -669,7 +738,7 @@ positions.
 - The companion factory for layout operators:
   [The Operator Factory](/internals/frontend/operator-factory).
 - The factory's optional `serialize` config (third argument, the IR `type`)
-  tags the produced mark with `__serialize` metadata that the frontend-IR
+  attaches the produced mark's wire tag (`withWire`) that the frontend-IR
   emitter reads. The tag holds the options as the caller passed them; the
   emitter keeps only the keys the mark's descriptor declares — see
   [Frontend IR (Serialization)](/internals/frontend/serialization).

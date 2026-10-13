@@ -125,7 +125,10 @@ const heatData = ["Mon", "Tue", "Wed", "Thu", "Fri"].flatMap((day, di) =>
   }))
 );
 
-gf.chart(heatData, { color: gf.gradient(["#e0f3ff", "#08519c"]), axes: true })
+gf.chart(heatData, {
+  color: gf.Color.gradient(["#e0f3ff", "#08519c"]),
+  axes: true,
+})
   .flow(gf.table("hour", "day", { spacing: 4 }))
   .mark(
     gf
@@ -210,7 +213,7 @@ Pass a function instead of a field name for computed labels.
 // Function accessor — receives the datum, returns display text
 .mark(
   rect({ w: "proportion", fill: "sex" })
-    .label((d) => d.people.toLocaleString(), { position: "center", color: "white" })
+    .label((d) => d[0].people.toLocaleString(), { position: "center", color: "white" })
 )
 ```
 

@@ -10,7 +10,15 @@
  * the one with the least overlap wins, ties going to the more preferred angle.
  */
 // The library first, so its modules initialize in their usual order.
-import { chart, spread, rect, field } from "../lib";
+import {
+  chart,
+  spread,
+  rect,
+  field,
+  scatter,
+  line,
+  Schema,
+} from "../lib";
 import * as Serialize from "../serialize";
 import { inferColor } from "../ast/channels";
 import { datum } from "../ast/data";
@@ -383,6 +391,47 @@ console.log("end to end");
       scores
         .map((r) => `${r.row.dim}:${r.row.tier}=${r.score.join()}`)
         .join(" ")
+    );
+  }
+
+  // Labels that `labelAngle` does not rotate are not scored by "auto": a
+  // difference axis's delta labels, and a time axis's row labels.
+  {
+    const deltaChart = chart([
+      { g: "a", v: 10 },
+      { g: "b", v: 40 },
+      { g: "c", v: 25 },
+    ])
+      .flow(spread({ by: "g", dir: "x", alignment: "middle" }))
+      .mark(rect({ h: "v", w: 20 }));
+    const delta = await runLayout(
+      { w: 300, h: 200, axes: true },
+      await (deltaChart as any).resolve()
+    );
+    const deltaRows = collectLabelBoxes(delta.child).map(
+      (b) => `${b.dim}:${b.kind}`
+    );
+    ok(
+      "a difference axis's delta labels are not scored",
+      deltaRows.length === 3 && deltaRows.every((r) => r === "0:ordinal"),
+      deltaRows.join(" ")
+    );
+    const timeChart = chart(
+      [
+        { date: "2024-01-01", v: 1 },
+        { date: "2024-06-01", v: 2 },
+      ],
+      { schema: { date: Schema.time() } }
+    )
+      .flow(scatter({ by: "date", x: "date", y: "v" }))
+      .mark(line());
+    const time = await runLayout(
+      { w: 300, h: 200, axes: { x: true, y: false } },
+      await (timeChart as any).resolve()
+    );
+    ok(
+      "a time axis's row labels are not scored",
+      collectLabelBoxes(time.child).length === 0
     );
   }
 

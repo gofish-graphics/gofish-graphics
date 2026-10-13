@@ -33,7 +33,7 @@ don't thread the data through a callback:
 chart(catchLocationsArray)
   .flow(scatter({ by: "lake", x: "x", y: "y" }))
   .mark(
-    chart({ coord: clock() }) // no data → inherits this lake's partition
+    chart({ coord: Coord.clock() }) // no data → inherits this lake's partition
       .flow(stack({ by: "species", dir: "x", h: 20 }))
       .mark(rect({ w: "count", fill: "species" }))
   );

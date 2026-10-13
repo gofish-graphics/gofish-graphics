@@ -35,8 +35,8 @@ import {
   field,
   selectAll,
   time,
-  animation,
   createMark,
+  Animation,
 } from "gofish-graphics";
 
 // ---------------------------------------------------------------------------
@@ -62,7 +62,7 @@ chart(sales)
         time.stagger({ by: "product", spacing: 0 }), //        groupBy class, start after previous
         time.stagger({ by: "quarter", lag: 100 }) //            groupBy id, delay 100
       )
-      .mark(time.transition({ enter: animation.wipe({ from: "bottom" }) })) // effects
+      .mark(time.transition({ enter: Animation.wipe({ from: "bottom" }) })) // effects
   );
 
 // The same build timed the way the chart is nested (whole stacks left to
@@ -78,7 +78,7 @@ chart(sales)
   )
   .mark(
     rect({ h: "revenue", fill: "product" }).transition({
-      enter: animation.wipe({ from: "bottom" }),
+      enter: Animation.wipe({ from: "bottom" }),
     })
   );
 
@@ -102,7 +102,7 @@ chart(counties)
   )
   .mark(
     circle({ r: 3, fill: "rate" }).transition({
-      enter: animation.wipe({ shape: "circle", duration: 500 }),
+      enter: Animation.wipe({ shape: "circle", duration: 500 }),
     })
   );
 // OPEN: the title fading in first. That is chrome, like the axes in
@@ -131,10 +131,10 @@ const LabeledBar = createMark(
   ({ category, amount }) =>
     spread({ dir: "x", spacing: 4 }, [
       text({ text: category }).transition({
-        enter: animation.fadeIn({ duration: 200 }),
+        enter: Animation.fadeIn({ duration: 200 }),
       }),
       rect({ w: amount }).transition({
-        enter: animation.grow({ duration: 200 }),
+        enter: Animation.grow({ duration: 200 }),
       }),
     ]).transition({ enter: time.stagger({ spacing: 0 }) }) // label, then body
 );
@@ -146,10 +146,10 @@ const LabeledBar2 = createMark(
     spread({ dir: "x", spacing: 4 }, [
       text({ text: category })
         .name("label")
-        .transition({ enter: animation.fadeIn({ duration: 200 }) }),
+        .transition({ enter: Animation.fadeIn({ duration: 200 }) }),
       rect({ w: amount })
         .name("body")
-        .transition({ enter: animation.grow({ duration: 200 }) }),
+        .transition({ enter: Animation.grow({ duration: 200 }) }),
     ]).relate(({ label, body }) => [time.after(label, body)]) // body starts when label ends
 );
 
@@ -183,7 +183,7 @@ chart(counties)
   .layer(
     chart(selectAll("dots"))
       .flow(time.sequence({ by: "rate", duration: 3000, history: Infinity }))
-      .mark(time.transition({ enter: animation.fadeIn({ duration: 400 }) }))
+      .mark(time.transition({ enter: Animation.fadeIn({ duration: 400 }) }))
   );
 // This stays a time.sequence because it reads rate AS data time: each dot is
 // an arrival in data time, like AVL's Walmart stores by opening year, and
@@ -208,7 +208,7 @@ chart(tasks)
   )
   .mark(
     rect({ x: "start", w: "days" }).transition({
-      enter: animation.wipe({ from: "left", duration: "days" }),
+      enter: Animation.wipe({ from: "left", duration: "days" }),
     })
   );
 // `duration: "days"` is a size claim on t from a field, the way `w: "days"` is
@@ -233,7 +233,7 @@ chart(market)
       .flow(time.stagger({ by: "segment", spacing: 0 }))
       .mark(
         time.transition({
-          enter: animation.wipe({ from: "bottom", duration: 400 }),
+          enter: Animation.wipe({ from: "bottom", duration: 400 }),
         })
       )
   );

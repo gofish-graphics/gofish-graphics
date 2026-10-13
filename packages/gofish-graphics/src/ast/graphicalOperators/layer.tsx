@@ -20,6 +20,7 @@ import {
   isCONTINUOUS,
   isUNDEFINED,
   magnitude,
+  type AxisTicks,
 } from "../underlyingSpace";
 import { impliedExtent, type Extent } from "../extent";
 import { isValue } from "../data";
@@ -560,12 +561,12 @@ export const layer = createNodeOperatorSequential(
           // Demand-driven nicing (issue #659): any scope this layer roots
           // (self-scaled stash, shared-scale, datum-position) nices its
           // POSITION domain only if some node in the scope renders an axis on
-          // that dim — read off the persistent axis-demand stamps. Read only
-          // when this layer roots such a scope, and kept per region
-          // (`scopeRendersAxis`), so a region is scanned once however many
-          // layers in it ask.
-          const axisDemand = (axis: 0 | 1): boolean =>
-            node.scopeRendersAxis(axis);
+          // that dim, to that axis's ticks — read off the persistent
+          // axis-demand stamps. Read only when this layer roots such a scope,
+          // and kept per region (`scopeAxisTicks`), so a region is scanned
+          // once however many layers in it ask.
+          const axisDemand = (axis: 0 | 1): AxisTicks | undefined =>
+            node.scopeAxisTicks(axis);
           const layerExtent = node.resolveExtent();
           const childScalePlan = buildChildScalePlan(
             selfScaledSpaces,

@@ -1,4 +1,4 @@
-# geo
+# Coord.geo
 
 Projects longitude and latitude onto the plane. Inside a `geo` coordinate
 space, `x` is longitude in degrees and `y` is latitude in degrees, so a mark
@@ -9,14 +9,14 @@ positioned by `x: "lon"` and `y: "lat"` lands where it belongs on a map.
 
 ```ts
 chart(world110m, {
-  coord: geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
+  coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
 }).mark(polygon({ points: "ring", fill: "#f7f7f7", stroke: "#aaa" }));
 ```
 
 ## Signature
 
 ```ts
-geo(
+Coord.geo(
   projection: "equalEarth" | "mercator" | ((lonLat: [number, number]) => [number, number]),
   options?: {
     lon?: [number, number]; // longitude window in degrees
@@ -39,7 +39,7 @@ so passing one as the third form works:
 
 ```ts
 import { geoAlbersUsa } from "d3-geo";
-chart(states, { coord: geo(geoAlbersUsa()) });
+chart(states, { coord: Coord.geo(geoAlbersUsa()) });
 ```
 
 Mercator clamps latitude to ±85°, the usual bound, because the projection
@@ -75,7 +75,7 @@ wherever an axis is named: as a key of a mark's or a scatter's `dims` option,
 and as an operator's `dir`.
 
 ```ts
-chart(cities, { coord: geo("equalEarth") })
+chart(cities, { coord: Coord.geo("equalEarth") })
   .flow(scatter({ by: "name", dims: { lon: "lon", lat: "lat" } }))
   .mark(circle({ r: 3 }));
 ```
@@ -92,7 +92,7 @@ projection:
 
 ```ts
 chart(world110m, {
-  coord: geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
+  coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
 })
   .mark(polygon({ points: "ring", fill: "#f7f7f7", stroke: "#aaa" }))
   .layer(

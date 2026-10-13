@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar, datum } from "gofish-graphics";
+import { rect, datum, Coord } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth } from "../data";
 import { initializeContainer } from "../helper";
@@ -137,7 +137,7 @@ export const SectorTree2: StoryObj = {
           // r: siblings share the same ring.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       deepBalancedTree
     ).render(container, { w: 540, h: 540 });

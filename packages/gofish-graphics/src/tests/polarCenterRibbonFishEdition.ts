@@ -14,7 +14,7 @@ import { linear } from "../ast/coordinateTransforms/linear";
 import _ from "lodash";
 import { layer } from "../ast/graphicalOperators/layer";
 import { ref } from "../ast/shapes/ref";
-import { ribbon } from "../lib";
+import { ribbon, Curve } from "../lib";
 import { fishData } from "../data/fish";
 const data = [
   { category: "A", group: "x", value: 0.1 },
@@ -94,7 +94,7 @@ export const testPolarCenterRibbonFishEdition = (size: { width: number; height: 
               {
                 dir: "y",
                 fill: colorScale[FishType as keyof typeof colorScale],
-                curve: "bezier",
+                curve: Curve.bezier(),
                 opacity: 0.8,
                 mixBlendMode: "multiply",
               },

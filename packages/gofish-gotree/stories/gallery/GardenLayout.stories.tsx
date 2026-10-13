@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle } from "gofish-graphics";
+import { circle, Curve } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth, sampleTree } from "../data";
 import { initializeContainer } from "../helper";
@@ -40,7 +40,7 @@ export const GardenLayout: StoryObj = {
     tree(
       {
         node,
-        link: { curve: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1.5 },
         parentChild: combine({
           x: { kind: "align", alignment: "middle" },
           y: { kind: "distribute", spacing: 48 },

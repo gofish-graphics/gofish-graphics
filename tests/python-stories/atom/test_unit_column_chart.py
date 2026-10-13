@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from gofish import chart, circle, derive, palette, spread
+from gofish import chart, chunk, circle, derive, spread, Color
 
 
 def story_default():
@@ -13,14 +13,11 @@ def story_default():
     def order_by_survived(rows):
         return sorted(rows, key=lambda row: row["survived"], reverse=True)
 
-    def chunk_rows(rows):
-        size = 14
-        return [rows[i : i + size] for i in range(0, len(rows), size)]
 
     return (
         chart(
             titanic_passengers,
-            color=palette(["#2b8cbe", "#ff8408"]),
+            color=Color.palette(["#2b8cbe", "#ff8408"]),
             # x = pclass (the columns) at the bottom (y-end), under the
             # upward-filling columns; y is the dot-row index, so suppress it.
             axes={"x": {"side": "end"}, "y": False},
@@ -32,9 +29,8 @@ def story_default():
             chart()
             .flow(
                 derive(order_by_survived),
-                derive(chunk_rows),
                 # Reverse the rows so the ragged partial row lands at the top.
-                spread(spacing=2, dir="y", reverse=True),
+                spread(by=chunk(14), spacing=2, dir="y", reverse=True),
                 spread(spacing=2, dir="x"),
             )
             .mark(circle(r=4, fill="survived"))

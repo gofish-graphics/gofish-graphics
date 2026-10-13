@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar } from "gofish-graphics";
+import { rect, Coord } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — TornadoTree (polar, nested-radial spiral).
@@ -89,7 +89,7 @@ export const TornadoTree: StoryObj = {
           // r: step siblings radially too → fans the level outward (tornado).
           y: { kind: "distribute", spacing: 9, anchor: "middle" },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       { w: 480, h: 480 }
     ),

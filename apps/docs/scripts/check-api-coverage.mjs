@@ -31,11 +31,8 @@ const IR_DIST = resolve(REPO_ROOT, "packages/gofish-ir/dist/frontend/index.js");
  *  - `over`: internal-only union compositing, not exported from lib.ts (the
  *    public spelling is `layer`), kept only so the deserializer can dispatch
  *    the wire type.
- *  - `derive`: its user-facing argument is a function, which the descriptor
- *    cannot describe (the descriptor models the bridge handle the function
- *    becomes), so `derive`'s page writes its one-parameter table by hand.
  */
-const ALLOWLIST = new Set(["mark-fn", "over", "derive"]);
+const ALLOWLIST = new Set(["mark-fn", "over"]);
 
 const LANGS = ["js", "python"];
 
@@ -64,6 +61,10 @@ for (const [kind, table] of TABLES) {
     constructs.get(name).kinds.push(kind);
   }
 }
+// Named option types (`OPTION_TYPES`) may have a table too
+// (`::: gofish-ref ChartOptions`). They are not required, but one documented
+// in one language must be documented in the other.
+const optionTypes = new Set(Object.keys(ir.OPTION_TYPES));
 
 /** Every `::: gofish-ref a b c` name, per language, with the page it came from. */
 function collectRefs(lang) {
@@ -123,9 +124,16 @@ for (const [name, { kinds }] of rows) {
 
 for (const lang of LANGS) {
   for (const [name, page] of refs[lang]) {
-    if (!constructs.has(name)) {
+    if (optionTypes.has(name)) {
+      const other = LANGS.find((l) => l !== lang);
+      if (!refs[other].has(name)) {
+        failures.push(
+          `${page}: \`::: gofish-ref ${name}\` has no counterpart under docs/${other}/api/`
+        );
+      }
+    } else if (!constructs.has(name)) {
       failures.push(
-        `${page}: \`::: gofish-ref ${name}\` names no construct in the descriptor table`
+        `${page}: \`::: gofish-ref ${name}\` names no construct or option type in the descriptor table`
       );
     }
   }

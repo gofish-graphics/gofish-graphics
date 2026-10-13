@@ -30,7 +30,7 @@ gf.layer([
 ## Signature
 
 ```ts
-ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x", curve = "auto", along?, from?, to?, w?, h?, emX?, emY? })
+ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x", curve?, along?, from?, to?, w?, h?, emX?, emY? })
 ```
 
 ## Parameters
@@ -38,34 +38,21 @@ ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x",
 ::: gofish-ref ribbon
 :::
 
-`curve` accepts the strings `"linear"`, `"bezier"`, `"step"`, `"monotone"`,
-`"smooth"` or `"catmullRom"`, or a `CurveSpec` factory: `bezier()`, `orthogonal()`,
-`arc({ direction: "up" | "down" })`, or `perfectArrows({ bow })`. `"linear"`
-has no factory, because [`linear()`](/js/api/coords/linear) is the coordinate
-transform. The default `"auto"` inspects the connection axis: over a
-homogeneous **continuous** axis (a stacked area / streamgraph sampling a
-continuous variable) it smooths the band edges with `"monotone"` — matching its
-[`line`](/js/api/marks/line) sibling — and otherwise draws a **bezier** band
-(the band equivalent of a straight line: the honest connector between discrete
-regions, as in a sankey or a categorical ribbon).
+`curve` takes a member of the [`Curve`](/js/api/curve) family:
+`Curve.linear()`, `Curve.bezier()`, `Curve.step()`, `Curve.monotone()`,
+`Curve.smooth()` or `Curve.catmullRom()`. When `curve` is omitted, `ribbon`
+inspects the connection axis: over a homogeneous **continuous** axis (a stacked
+area / streamgraph sampling a continuous variable) it smooths the band edges
+with `Curve.monotone()` — matching its [`line`](/js/api/marks/line) sibling —
+and otherwise draws a **bezier** band, `Curve.bezier()` (the band equivalent of
+a straight line: the honest connector between discrete regions, as in a sankey
+or a categorical ribbon).
 
-A ribbon drawn with `"monotone"` or `"smooth"` takes the knots
-of its curve the same way a [`line`](/js/api/marks/line) does. It uses the values of the field it runs
-along when they are numbers in order along the band. If they are not, it uses
-the positions on a continuous connection axis, and otherwise the distances
-between the points on the screen. Both edges of the band use the same knots.
-
-`"monotone"` is piecewise monotone. Between two neighboring points, each edge
-only rises or only falls, so it never goes past either point. It does not make
-the whole edge monotone: the band still turns where the data turns, and the
-peak sits exactly on the data point. It is the same curve as d3's
-`curveMonotoneX` and Vega-Lite's `interpolate: "monotone"`. `"smooth"` is a
-rounder curve over the same knots, and can go a little past a point. `"step"` steps both edges, as Vega-Lite's stepped area does. The
-[curves table on the `line` page](/js/api/marks/line#curves-through-data)
-compares them. `"catmullRom"` is a
-centripetal Catmull-Rom spline through the edge points on the screen. Its knots
-are always the distances between those points, and it can overshoot between
-two of them.
+A ribbon drawn with `Curve.monotone()` or `Curve.smooth()` takes the knots of
+its curve the same way a [`line`](/js/api/marks/line) does, and both edges of
+the band use the same knots. `Curve.step()` steps both edges, as Vega-Lite's
+stepped area does. The [`Curve`](/js/api/curve#curves-through-data) page
+compares the curves.
 
 Like [`line`](/js/api/marks/line), `ribbon` has a **bag form** (over a `GoFishRef[]`,
 shown below) and a **pairwise form** `ribbon({ from, to })` over rows whose

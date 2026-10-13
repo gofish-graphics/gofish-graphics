@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { ellipse, line, layer, frame } from "gofish-graphics";
+import { ellipse, line, layer, frame, Curve } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -153,7 +153,7 @@ const links = placed
       parent.depth === 0 ? [CENTER, CENTER] : project(parent.theta, parent.r);
     return line(
       {
-        curve: "linear",
+        curve: Curve.linear(),
         fill: "none",
         stroke: LINK_COLOR,
         strokeWidth: linkWidth(parent.depth),

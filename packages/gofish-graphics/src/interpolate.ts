@@ -19,6 +19,8 @@
 
 import { SMOOTH_CURVES, type SmoothCurve, channelSpline } from "./spline";
 import { lerp } from "./util";
+import type { Curve } from "./families/curve";
+import { curveName } from "./ast/graphicalOperators/routers";
 
 /** How a run is read between its knots, from the least to the most smooth.
  *  These are readings of values over a parameter; the screen-space
@@ -33,7 +35,7 @@ const METHODS: readonly InterpolationMethod[] = [
 ];
 
 /**
- * The method a `curve` (or `method`) option names. Unset and `"auto"` are
+ * The method a `curve` (or `method`) option names. Unset is
  * `"monotone"`: the field is numeric, so the run is a sample of a continuous
  * variable and smooths — the same conclusion `connect`'s auto rule reaches for
  * a continuous connection axis, and the reason a transition traces the curve
@@ -41,23 +43,24 @@ const METHODS: readonly InterpolationMethod[] = [
  * naming `where` the option was written.
  */
 export function resolveMethod(
-  curve: unknown,
+  curve: Curve | undefined,
   where: string
 ): InterpolationMethod {
-  if (curve === undefined || curve === "auto") return "monotone";
-  if (METHODS.includes(curve as InterpolationMethod)) {
-    return curve as InterpolationMethod;
+  const name = curveName(curve, where);
+  if (name === undefined) return "monotone";
+  if (METHODS.includes(name as InterpolationMethod)) {
+    return name as InterpolationMethod;
   }
   const screenOnly =
-    curve === "catmullRom"
+    name === "catmullRom"
       ? ` Catmull-Rom is a screen-space path curve: a line's or a ribbon's ` +
         `\`curve\` can draw it, but nothing reads it over time.`
       : "";
   throw new Error(
-    `[gofish] ${where}: ${typeof curve === "string" ? JSON.stringify(curve) : String(curve)} is not a way to read a run ` +
+    `[gofish] ${where}: Curve.${name}() is not a way to read a run ` +
       `between its keyframes. Use ${METHODS.slice(0, -1)
-        .map((m) => JSON.stringify(m))
-        .join(", ")} or ${JSON.stringify(METHODS[METHODS.length - 1])}.` +
+        .map((m) => `Curve.${m}()`)
+        .join(", ")} or Curve.${METHODS[METHODS.length - 1]}().` +
       screenOnly
   );
 }
@@ -245,13 +248,13 @@ export type InterpolateOptions = {
   key: string;
   /** Where to read the run, in `along`'s units. */
   at: number;
-  /** How a run is read between its keyframes: `"step"`, `"linear"`,
-   *  `"monotone"` or `"smooth"`. Default `"monotone"`, the
-   *  same default `time.transition()` takes for the same reason (the field is
-   *  numeric, so the run is a sample of something continuous). `"step"` does
-   *  not blend at all: each keyframe's values hold until the next one's time
-   *  arrives. */
-  method?: InterpolationMethod;
+  /** How a run is read between its keyframes: `Curve.step()`,
+   *  `Curve.linear()`, `Curve.monotone()` or `Curve.smooth()`. Default
+   *  `Curve.monotone()`, the same default `time.transition()` takes for the
+   *  same reason (the field is numeric, so the run is a sample of something
+   *  continuous). `Curve.step()` does not blend at all: each keyframe's values
+   *  hold until the next one's time arrives. */
+  method?: Curve;
   /** Which fields to interpolate. By default every field whose value is a
    *  finite number at every keyframe of the run, apart from `along` and
    *  `key`. */

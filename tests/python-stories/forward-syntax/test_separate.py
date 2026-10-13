@@ -1,6 +1,6 @@
 """Equivalent of Separate.stories.tsx — Forward Syntax/Separate."""
 
-from gofish import chart, circle, scatter, spread, separate
+from gofish import chart, circle, scatter, spread, Overlap
 from python_stories.data import PENGUINS
 
 WEIGHED = [p for p in PENGUINS if p["Body Mass (g)"] is not None]
@@ -14,7 +14,7 @@ def story_penguin_mass():
             scatter(
                 x="Body Mass (g)",
                 alignment="middle",
-                overlap=separate(padding=1),
+                overlap=Overlap.separate(padding=1),
             ),
         )
         .mark(circle(r=3, fill="Species")),
@@ -29,7 +29,7 @@ def story_one_sided():
             scatter(
                 x="Body Mass (g)",
                 alignment="start",
-                overlap=separate(padding=1),
+                overlap=Overlap.separate(padding=1),
             )
         )
         .mark(circle(r=3, fill="Species")),

@@ -1,15 +1,15 @@
 // 3f. Name the effect once and reuse it. Nothing new: it is a JS value.
 import {
-  animation,
   chart,
   rect,
   spread,
   time,
   type BuildClockOptions,
+  Animation,
 } from "../../../src/lib";
 import { alphabet } from "./data";
 
-const growIn = animation.grow({ duration: 600, ease: "cubicOut" });
+const growIn = Animation.grow({ duration: 600, ease: "cubicOut" });
 
 export default (container: HTMLElement, clock?: BuildClockOptions) =>
   chart(alphabet)

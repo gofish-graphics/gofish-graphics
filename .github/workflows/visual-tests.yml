@@ -70,7 +70,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
 
       # No gofish-graphics build: the capture harness aliases gofish-graphics
@@ -150,7 +150,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
 
       - name: Install Node dependencies
@@ -324,7 +324,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
 
       - name: Setup Python
@@ -395,7 +395,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
 
       - name: Install Node dependencies

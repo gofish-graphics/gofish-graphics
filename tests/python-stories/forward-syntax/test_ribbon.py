@@ -6,7 +6,6 @@ from gofish import (
     layer,
     ribbon,
     chart,
-    clock,
     field,
     group,
     rect,
@@ -14,6 +13,7 @@ from gofish import (
     select_all,
     spread,
     stack,
+    Coord,
 )
 from python_stories.data import SEAFOOD
 
@@ -51,6 +51,6 @@ def story_polar():
         .mark(ribbon(opacity=0.8))
     )
     return (
-        layer([bars, overlay], coord=clock()),
+        layer([bars, overlay], coord=Coord.clock()),
         {"w": 400, "h": 400, "axes": True},
     )

@@ -29,10 +29,16 @@
  *    type (OPTION_TYPES) and the one interpreter that renames the keys of a
  *    nested option dict (`axes={"x": {"label_angle": 45}}`) to wire keys by
  *    the field's declared type, raising TypeError on an undeclared key.
+ *  - The strategy family modules, `gofish/<family>.py` (`tile.py`,
+ *    `overlap.py`, `curve.py`), one factory per kind and per preset of the
+ *    STRATEGIES table. Each builds `{"kind": ..., **params}` with snake_case
+ *    keys, which `_to_wire` renames at the option the strategy is passed to
+ *    (each family is an OPTION_TYPES entry). Each factory first checks its
+ *    params at the call, from their types (`pyParamChecks`).
  * `derive`/`resolve`/`join` (real logic: RPC bridge, ref-shape narrowing,
- * DataFrame conversion) and `palette`/`gradient`/`field`/`datum`/`normalize`/
- * `repeat`/`ref`/`selectAll` (not in the descriptor table) stay fully
- * hand-written.
+ * DataFrame conversion), `field`/`datum`/`normalize`/`repeat`/`ref`/
+ * `selectAll`, and the Color and Coord family modules (`color.py`,
+ * `coord.py`; see the note on STRATEGIES) stay hand-written.
  */
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -48,11 +54,17 @@ import {
   PY_LEAF_BASE_KWARGS,
   PY_OPERATOR_BASE_KWARGS,
   LABEL_OPTIONS,
+  STRATEGIES,
   pyKwarg,
   resolveFields,
+  type StrategyFamily,
   type FieldGroup,
   type FieldSpec,
   type FieldType,
+  carriesChannel,
+  pyType,
+  refPyClass,
+  AUTHORED_REFS,
 } from "gofish-ir/frontend";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -61,53 +73,6 @@ const OUT_FILE = join(HERE, "..", "gofish", "_generated.py");
 // ---------------------------------------------------------------------------
 // small helpers
 // ---------------------------------------------------------------------------
-
-function literalPyType(value: string | number | boolean): string {
-  if (typeof value === "string") return "str";
-  if (typeof value === "number") return "float";
-  return "bool";
-}
-
-function pyType(f: FieldType): string {
-  switch (f.kind) {
-    case "string":
-      return "str";
-    case "number":
-      return "float";
-    case "boolean":
-      return "bool";
-    case "channel":
-      return f.inner === "number" ? "Union[int, float, str]" : "str";
-    case "enum":
-      return "str";
-    case "literal":
-      // Annotated by the literal's base type, like `enum` → str; the IR
-      // validator checks the exact value.
-      return literalPyType(f.value);
-    case "array":
-      return "List[Any]";
-    case "union": {
-      // A union of primitive kinds renders as a real Union; anything richer
-      // falls back to Any.
-      const prims = f.options.map((o) => {
-        if (o.kind === "string") return "str";
-        if (o.kind === "number") return "float";
-        if (o.kind === "boolean") return "bool";
-        if (o.kind === "literal") return literalPyType(o.value);
-        return null;
-      });
-      if (prims.every(Boolean)) return `Union[${prims.join(", ")}]`;
-      return "Any";
-    }
-    case "any":
-    case "ref":
-    case "tuple":
-    case "object":
-    case "record":
-    default:
-      return "Any";
-  }
-}
 
 function pySig(name: string, f: FieldSpec): string {
   // Descriptor-required wire fields are required keyword arguments: missing
@@ -122,9 +87,12 @@ function docLine(name: string, f: FieldSpec): string | null {
   if (!f.doc && f.default === undefined) return null;
   let text = f.doc ?? "";
   if (f.default !== undefined) {
-    text = text
-      ? `${text} Default ${JSON.stringify(f.default)}.`
-      : `Default ${JSON.stringify(f.default)}.`;
+    // JSON has no Infinity; the docs spell it as JS and Python read it.
+    const shown =
+      typeof f.default === "number" && !Number.isFinite(f.default)
+        ? String(f.default)
+        : JSON.stringify(f.default);
+    text = text ? `${text} Default ${shown}.` : `Default ${shown}.`;
   }
   return `        ${name}: ${text}`;
 }
@@ -149,26 +117,15 @@ function pyStr(s: string): string {
 // nested option dicts
 // ---------------------------------------------------------------------------
 
-/** Refs outside `OPTION_TYPES` that a generated kwarg may carry. Their values
- *  pass through unchanged, so each entry says why that is right. A ref in
- *  neither table fails generation, so a new nested type has to be declared
- *  before Python can take it. */
-const PASSTHROUGH_REFS: Record<string, string> = {
-  FieldAccessor:
-    "built by field(...), whose dict already carries the wire keys (type, name, measure, ops)",
-  AxisDimsValue:
-    "a `dims` entry: a channel value or an interval {min, center, max, size, embedded}; " +
-    "a channel value can itself be a dict (field(...), datum(...)), so a plain dict here " +
-    "cannot be routed to the interval shape, and the interval keys are single words",
-};
-
-/** Whether a value of this type may be a Python dict. */
+/** Whether a value of this type may be a Python dict that `_to_wire` has to
+ *  route. A channel value may be a dict too (field(...), datum(...)), but
+ *  `_to_wire` passes those through by their class, so a channel branch never
+ *  competes with a union's dict-shaped branch. */
 function acceptsDict(type: FieldType): boolean {
   switch (type.kind) {
     case "object":
     case "record":
     case "any":
-    case "channel": // field(...) / datum(...) are dicts
       return true;
     case "ref":
       return type.name in OPTION_TYPES
@@ -183,7 +140,7 @@ function acceptsDict(type: FieldType): boolean {
 
 /** The field that tells the branches of a tagged union apart: a dict value's
  *  `kind` names the branch it means. It is the convention the strategy
- *  objects (treemap `tile`, pack strategies) already follow. */
+ *  objects (treemap `tile`, scatter `overlap`) already follow. */
 const DISCRIMINATOR = "kind";
 
 /** The `kind` values that select an object branch of a tagged union, or null
@@ -246,11 +203,13 @@ function wireShape(type: FieldType, where: string): string | null {
           ? null
           : `("ref", ${pyStr(type.name)})`;
       }
-      if (type.name in PASSTHROUGH_REFS) return null;
+      // A value of a type with a Python class (`field(...)` builds a
+      // FieldAccessor) already carries the wire keys, so it passes through.
+      if (refPyClass(type.name) !== undefined) return null;
       throw new Error(
         `${where}: t.ref("${type.name}") is neither a named option type ` +
           `(OPTION_TYPES in descriptors.ts) nor a known pass-through ref ` +
-          `(PASSTHROUGH_REFS in generate.ts). Declare it before Python takes it.`
+          `(a pyClass in AUTHORED_REFS). Declare it before Python takes it.`
       );
     }
     case "union": {
@@ -293,7 +252,8 @@ function wireShape(type: FieldType, where: string): string | null {
  *  keys renamed by `_to_wire`. */
 function wireValue(py: string, spec: FieldSpec): string {
   const shape = wireShape(spec.type, py);
-  return shape === null ? py : `_to_wire(${shape}, ${py}, ${pyStr(py)})`;
+  const wired = shape === null ? py : `_to_wire(${shape}, ${py}, ${pyStr(py)})`;
+  return carriesChannel(spec.type) ? `_channel(${wired})` : wired;
 }
 
 /** The `(wireKey, value)` pair lines a generated function loops over to
@@ -397,9 +357,24 @@ operator-vs-combinator, ref-shape narrowing, DataFrame conversion, the
 lambda/RPC bridge) stays hand-written there.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+
+from . import ast as _ast
 from .ast import Mark, _channel
+
+if TYPE_CHECKING:
+    from .ast import ${[
+      ...new Set(
+        [
+          ...Object.values(OPTION_TYPES).map((s) => s.pyClass),
+          ...Object.values(AUTHORED_REFS).map((r) => r.pyClass),
+        ].filter((c): c is string => c !== undefined)
+      ),
+    ]
+      .sort()
+      .join(", ")}
 `);
 
 // --- Nested option dicts ------------------------------------------------------
@@ -434,9 +409,13 @@ parts.push(
       `    raises TypeError, as an unknown kwarg does. Record keys (column names,`,
       `    axis names) and values of any other type pass through unchanged. A`,
       `    tagged union picks its branch by the dict's tag key (\`kind\`); a missing`,
-      `    or unknown tag raises TypeError.`,
+      `    or unknown tag raises TypeError. A channel value built by field(...) or`,
+      `    datum(...) is a dict already in wire form, so it passes through too:`,
+      `    that is how a \`dims\` entry tells a channel value from an interval.`,
       `    """`,
       `    if shape is None or value is None:`,
+      `        return value`,
+      `    if isinstance(value, (_ast.FieldAccessor, _ast.DatumValue)):`,
       `        return value`,
       `    kind = shape[0]`,
       `    if kind == "ref":`,
@@ -495,7 +474,6 @@ parts.push(
 }
 
 // --- Leaf marks -------------------------------------------------------------
-const OPEN_KWARGS_MARKS = new Set(["circle", "ellipse", "petal", "blank"]);
 const GENERATED_LEAF_MARKS = [
   "rect",
   "circle",
@@ -516,13 +494,9 @@ for (const name of GENERATED_LEAF_MARKS) {
   // declared field of the same name wins. Labeling is done exclusively via
   // the `.label(accessor, options?)` chain — no leaf-mark `label` kwarg.
   const fields = { ...PY_LEAF_BASE_KWARGS, ...resolveFields(d) };
-  const openKwargs = OPEN_KWARGS_MARKS.has(name);
-  // Render manually (not via renderLeafFactory's half-baked openKwargs path)
-  // for full control over the **kwargs merge.
+  // The signature is closed: an undeclared kwarg is a TypeError (#1007).
   const ents = entries(fields);
-  const sigParts = ents.map(([py, , spec]) => pySig(py, spec));
-  if (openKwargs) sigParts.push("**kwargs: Any");
-  const sig = sigParts.join(", ");
+  const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
   const docLines = ents
     .map(([py, , spec]) => docLine(py, spec))
     .filter(Boolean);
@@ -538,16 +512,8 @@ for (const name of GENERATED_LEAF_MARKS) {
     pairs,
     `    ]:`,
     `        if _v is not None:`,
-    `            _kw[_k] = _channel(_v)`,
+    `            _kw[_k] = _v`,
   ];
-  if (openKwargs) {
-    // Extras route through _channel too, so a callable accessor on an
-    // undeclared channel (e.g. circle(cx=lambda d: ...)) bridges via the
-    // derive RPC exactly like a declared one.
-    bodyLines.push(`    for _k, _v in kwargs.items():`);
-    bodyLines.push(`        if _v is not None:`);
-    bodyLines.push(`            _kw[_k] = _channel(_v)`);
-  }
   bodyLines.push(`    return Mark(${pyStr(d.type)}, **_kw)`);
   parts.push(
     [`def ${name}(*, ${sig}) -> Mark:`, docstring, bodyLines.join("\n")].join(
@@ -697,3 +663,244 @@ parts.push(
 
 writeFileSync(OUT_FILE, parts.join("\n").replace(/\n{3,}/g, "\n\n\n") + "\n");
 console.log(`wrote ${OUT_FILE}`);
+
+// ---------------------------------------------------------------------------
+// Strategy families: one module per family, gofish/<family>.py
+// ---------------------------------------------------------------------------
+
+/** A preset param value as a Python literal. */
+function pyLiteral(v: unknown): string {
+  if (v === Infinity) return "math.inf";
+  if (v === -Infinity) return "-math.inf";
+  if (typeof v === "boolean") return v ? "True" : "False";
+  if (typeof v === "string" || typeof v === "number") return JSON.stringify(v);
+  throw new Error(`no Python literal for preset value ${JSON.stringify(v)}`);
+}
+
+/** A Python f-string whose text is `text` taken literally, followed by the
+ *  f-string source `tail` (`{v!r}`). */
+function pyFStr(text: string, tail: string): string {
+  return `f${JSON.stringify(text)
+    .replace(/[{}]/g, (c) => c + c)
+    .slice(0, -1)}${tail}"`;
+}
+
+/** A param type in words, for the error messages: `a finite number >= 0`,
+ *  `one of "blue", "quasi", "uniform"`, `a number >= 0 or "silverman"`. */
+function describeType(type: FieldType): string {
+  switch (type.kind) {
+    case "number":
+      return `a${type.finite ? " finite" : ""} number${type.min !== undefined ? ` >= ${type.min}` : ""}`;
+    case "string":
+      return "a str";
+    case "boolean":
+      return "a bool";
+    case "enum":
+      return type.values.length === 1
+        ? JSON.stringify(type.values[0])
+        : `one of ${type.values.map((v) => JSON.stringify(v)).join(", ")}`;
+    case "union":
+      return type.options.map(describeType).join(" or ");
+    default:
+      throw new Error(`no Python check for a ${type.kind} strategy param`);
+  }
+}
+
+/** The Python type test for one branch of a param type, by the Python type
+ *  its values have: number (an int or float, not a bool), str, or bool. */
+function pyTypeTest(type: FieldType, v: string): string {
+  switch (type.kind) {
+    case "number":
+      return `isinstance(${v}, (int, float)) and not isinstance(${v}, bool)`;
+    case "string":
+    case "enum":
+      return `isinstance(${v}, str)`;
+    case "boolean":
+      return `isinstance(${v}, bool)`;
+    default:
+      throw new Error(`no Python check for a ${type.kind} strategy param`);
+  }
+}
+
+/** The ValueError checks for a value already known to be of `type`'s Python
+ *  type: a number's bounds (NaN is never a number on the wire, as in JS),
+ *  an enum's values. `whole` is the param's full type, for the message. */
+function pyValueChecks(
+  type: FieldType,
+  whole: FieldType,
+  v: string,
+  label: string
+): string[] {
+  const fail = (cond: string, text: string) => [
+    `if ${cond}:`,
+    `    raise ValueError(${pyFStr(`${label} ${text}, got `, `{${v}!r}`)})`,
+  ];
+  switch (type.kind) {
+    case "number":
+      return [
+        ...(type.finite
+          ? fail(`not math.isfinite(${v})`, "must be finite")
+          : fail(`math.isnan(${v})`, "must not be NaN")),
+        ...(type.min !== undefined
+          ? fail(`${v} < ${type.min}`, `must be >= ${type.min}`)
+          : []),
+      ];
+    case "enum":
+      return fail(
+        `${v} not in (${type.values.map((s) => JSON.stringify(s)).join(", ")}${type.values.length === 1 ? "," : ""})`,
+        `must be ${describeType(whole)}`
+      );
+    default:
+      return [];
+  }
+}
+
+/** The eager checks a strategy factory runs on one param `v`, from the
+ *  param's descriptor type, so a bad value fails at the Python call: a
+ *  TypeError when its Python type is not one the param admits, a ValueError
+ *  when it is but the value is out of range. The same constraints as the JS
+ *  `checkStrategy`, which reads the same STRATEGIES table. The branches of a
+ *  union are told apart by Python type. */
+function pyParamChecks(type: FieldType, v: string, label: string): string[] {
+  const branches = type.kind === "union" ? [...type.options] : [type];
+  const tests = branches.map((b) => pyTypeTest(b, v));
+  if (new Set(tests).size !== tests.length)
+    throw new Error(
+      `${label}: two branches of a strategy param share a Python type`
+    );
+  const typeError = `raise TypeError(${pyFStr(`${label} must be ${describeType(type)}, got `, `{type(${v}).__name__}`)})`;
+  const indent = (lines: string[]) => lines.map((l) => `    ${l}`);
+  if (branches.length === 1)
+    return [
+      `if not ${tests[0].includes(" and ") ? `(${tests[0]})` : tests[0]}:`,
+      `    ${typeError}`,
+      ...pyValueChecks(type, type, v, label),
+    ];
+  return [
+    ...branches.flatMap((b, i) => {
+      const checks = pyValueChecks(b, type, v, label);
+      return [
+        `${i === 0 ? "if" : "elif"} ${tests[i]}:`,
+        ...indent(checks.length ? checks : ["pass"]),
+      ];
+    }),
+    `else:`,
+    `    ${typeError}`,
+  ];
+}
+
+/** One factory of a family: a function that builds the strategy dict. Its
+ *  keys are the snake_case kwarg names; the option the dict is passed to
+ *  renames them to wire keys (`_to_wire`, by the family's OPTION_TYPES
+ *  entry), as for any nested option dict. */
+function renderStrategyFactory(opts: {
+  family: string;
+  name: string;
+  kind: string;
+  params: FieldGroup;
+  preset: Record<string, unknown>;
+  doc: string;
+}): string {
+  const { family, name, kind, params, preset, doc } = opts;
+  const ents = entries(params);
+  // A preset value is this factory's default for that param.
+  const docLines = ents
+    .map(([py, , spec]) => {
+      const field = Object.keys(params).find((f) => pyKwarg(f) === py)!;
+      return docLine(
+        py,
+        field in preset ? { ...spec, default: preset[field] } : spec
+      );
+    })
+    .filter(Boolean);
+  const docstring = docLines.length
+    ? [`    """${doc}`, "", "    Args:", ...docLines, `    """`].join("\n")
+    : `    """${doc}"""`;
+  const head = [
+    `${pyStr("kind")}: ${pyStr(kind)}`,
+    ...Object.entries(preset).map(
+      ([field, value]) => `${pyStr(pyKwarg(field))}: ${pyLiteral(value)}`
+    ),
+  ].join(", ");
+  if (ents.length === 0) {
+    return [
+      `def ${name}() -> Dict[str, Any]:`,
+      docstring,
+      `    return {${head}}`,
+    ].join("\n");
+  }
+  const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
+  const checks = ents.flatMap(([py, , spec]) => [
+    `    if ${py} is not None:`,
+    ...pyParamChecks(spec.type, py, `${family}.${name}(${py}=...)`).map(
+      (l) => `        ${l}`
+    ),
+  ]);
+  const body = [
+    ...checks,
+    `    out: Dict[str, Any] = {${head}}`,
+    `    for _k, _v in [`,
+    ...ents.map(([py]) => `        (${pyStr(py)}, ${py}),`),
+    `    ]:`,
+    `        if _v is not None:`,
+    `            out[_k] = _v`,
+    `    return out`,
+  ].join("\n");
+  return [`def ${name}(*, ${sig}) -> Dict[str, Any]:`, docstring, body].join(
+    "\n"
+  );
+}
+
+for (const [family, spec] of Object.entries(STRATEGIES) as Array<
+  [string, StrategyFamily]
+>) {
+  const module = family.toLowerCase();
+  const factories = [
+    ...Object.entries(spec.kinds).map(([kind, k]) => ({
+      family,
+      name: pyKwarg(kind),
+      kind,
+      params: k.params,
+      preset: {},
+      doc: k.doc,
+    })),
+    ...Object.entries(spec.presets ?? {}).map(([name, p]) => ({
+      family,
+      name: pyKwarg(name),
+      kind: p.kind,
+      params: spec.kinds[p.kind].params,
+      preset: p.values,
+      doc: p.doc,
+    })),
+  ];
+  const example = factories[0].name;
+  const functions = factories.map(renderStrategyFactory);
+  const usesMath = functions.some((f) => f.includes("math."));
+  const source = [
+    `# GENERATED by packages/gofish-python/scripts/generate.ts from the gofish-ir`,
+    `# STRATEGIES table — do not edit; run \`pnpm --filter gofish-python gen\`.`,
+    `"""`,
+    `The \`\`${family}\`\` family. ${spec.doc}`,
+    ``,
+    `The package binds this module as \`\`${family}\`\`, so \`\`${family}.${example}()\`\` and`,
+    `\`\`from gofish.${module} import ${example}\`\` reach the same function. A strategy is a`,
+    `plain dict, \`\`{"kind": ..., **params}\`\`, with snake_case param keys; the option it`,
+    `is passed to renames them to the camelCase wire keys. Mirrors JS`,
+    `\`\`gofish-graphics/${module}\`\`.`,
+    `"""`,
+    ``,
+    `from __future__ import annotations`,
+    ``,
+    ...(usesMath ? [`import math`] : []),
+    `from typing import Any, Dict, Literal, Optional`,
+    ``,
+    `__all__ = [${factories.map((f) => pyStr(f.name)).join(", ")}]`,
+    ``,
+    ``,
+    functions.join("\n\n\n"),
+    ``,
+  ].join("\n");
+  const outFile = join(HERE, "..", "gofish", `${module}.py`);
+  writeFileSync(outFile, source);
+  console.log(`wrote ${outFile}`);
+}

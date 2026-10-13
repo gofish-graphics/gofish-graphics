@@ -431,7 +431,7 @@ values in between overlap. The choice between a fixed lag and a fixed total is
 the choice `distribute` makes between a fixed pitch and fitting an extent.
 
 **The enter state can come from channel types.** `rect` declares `h` as a size
-channel (`RECT_CHANNELS` in `rect.tsx`), and a rect's baseline is its local 0
+channel (`MARK_CHANNELS.rect`, generated from its descriptor), and a rect's baseline is its local 0
 (`intrinsicDims` has `min: Math.min(0, h)`). So "collapse the size channels to
 0 at the baseline" is a rule GoFish can state once for all marks. Marks with no
 size channel would fade in place, which is the current default. Relational

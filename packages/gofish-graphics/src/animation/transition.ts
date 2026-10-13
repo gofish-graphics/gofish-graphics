@@ -3,7 +3,7 @@
  * on marks and on operators.
  *
  *   mark.transition({ enter: <effect> })          how the MARK looks while it
- *                                                  enters (`animation.*`)
+ *                                                  enters (`Animation.*`)
  *   operator.transition({ enter: <arrangement> }) how the operator's CHILDREN
  *                                                  are arranged in time
  *                                                  (`time.stagger` /
@@ -103,7 +103,7 @@ export function recordMarkTransition(
   const where = "mark.transition()";
   if (spec.update !== undefined && !isTween(spec.update)) {
     throw new Error(
-      `[gofish] ${where}: \`update\` takes animation.tween({ curve, ease }).`
+      `[gofish] ${where}: \`update\` takes Animation.tween({ curve, ease }).`
     );
   }
   records.set(node, {
@@ -124,7 +124,7 @@ function arrangementOf(
     throw new Error(
       `[gofish] ${where}: an operator's phase takes an arrangement of its ` +
         `children in time, time.stagger({ ... }) or time.parallel(). ` +
-        `Effects (animation.grow(), …) go on the mark.`
+        `Effects (Animation.grow(), …) go on the mark.`
     );
   }
   return spec;
@@ -197,8 +197,8 @@ export function checkPhases(
  * moves between years, and the chart builder draws one transition over its
  * tier's marks for each tween found here (`ChartBuilder.resolve`). Entering
  * and leaving marks fade in place over the stretch between two keyframes (the
- * #892 default), which is what `enter: animation.fadeIn()` and
- * `exit: animation.fadeOut()` say; other enter and exit effects under a
+ * #892 default), which is what `enter: Animation.fadeIn()` and
+ * `exit: Animation.fadeOut()` say; other enter and exit effects under a
  * sequence are not in this prototype (the build checks them, `checkPhases`).
  * The walk does not look inside a mark once it finds one.
  */
@@ -210,7 +210,7 @@ export function chainedUpdates(nodes: GoFishNode[]): TweenEffect[] {
       if (record.update === undefined) {
         throw new Error(
           `[gofish] mark.transition() under a time.sequence: give ` +
-            `\`update: animation.tween({ curve })\`, how the mark moves ` +
+            `\`update: Animation.tween({ curve })\`, how the mark moves ` +
             `between keyframes. Entering and leaving marks fade in place ` +
             `with it.`
         );
@@ -259,7 +259,7 @@ export function checkSequencePhases(
     for (const e of list) {
       if (e.kind !== kind || e.duration !== undefined || e.ease !== undefined) {
         throw new Error(
-          `[gofish] ${where}: \`${phase}\` can only be animation.${kind}() ` +
+          `[gofish] ${where}: \`${phase}\` can only be Animation.${kind}() ` +
             `(no duration or ease) in this prototype. A mark that ${phase}s during ` +
             `a sequence fades in place over the whole stretch between two ` +
             `keyframes (#892); other ${phase} effects are not built yet.`

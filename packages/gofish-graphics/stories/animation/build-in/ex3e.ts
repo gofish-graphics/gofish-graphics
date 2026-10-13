@@ -1,11 +1,11 @@
 // 3e. Grow and fade together.
 import {
-  animation,
   chart,
   rect,
   spread,
   time,
   type BuildClockOptions,
+  Animation,
 } from "../../../src/lib";
 import { alphabet } from "./data";
 
@@ -19,8 +19,8 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
     .mark(
       rect({ h: "frequency" }).transition({
         enter: [
-          animation.grow({ duration: 600 }),
-          animation.fadeIn({ duration: 300 }),
+          Animation.grow({ duration: 600 }),
+          Animation.fadeIn({ duration: 300 }),
         ],
       })
     )

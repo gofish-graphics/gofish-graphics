@@ -587,7 +587,7 @@ so that it looks better in polar space.
 :::gofish
 
 ```ts
-gf.layer({ coord: gf.clock(), axes: true }, [
+gf.layer({ coord: gf.Coord.clock(), axes: true }, [
   gf
     .chart(seafood)
     .flow(

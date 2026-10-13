@@ -35,24 +35,24 @@ import { drivingShifts } from "../data/drivingShifts";
 import { sameTween } from "../animation/effects";
 
 const {
-  animation,
   blank,
   chart,
   circle,
   createMark,
   derive,
   group,
+  chunk,
   interpolate,
   layer,
   line,
-  orthogonal,
-  registerRoute,
   ribbon,
   scatter,
   selectAll,
   spread,
   field,
   time,
+  Animation,
+  Curve,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -164,7 +164,7 @@ function firstDifference(a: Segment[], b: Segment[]): string | undefined {
 /** The AVL port, held still at `at`. */
 async function sugar(at: number) {
   return keyframes(drivingShifts, at, Infinity)
-    .mark(line({ along: "year", curve: "linear" }))
+    .mark(line({ along: "year", curve: Curve.linear() }))
     .toDisplayList(OPTIONS);
 }
 
@@ -187,14 +187,14 @@ async function dataSpace(rows: any[], at: number) {
             along: "year",
             key: "key",
             at,
-            method: "linear",
+            method: Curve.linear(),
           }),
         ];
       }),
       group({ by: "year" }),
       scatter({ x: "miles", y: "gas" })
     )
-    .mark(line({ along: "year", curve: "linear" }))
+    .mark(line({ along: "year", curve: Curve.linear() }))
     .layer(
       chart(rows)
         .flow(group({ by: "year" }), scatter({ x: "miles", y: "gas" }))
@@ -254,7 +254,7 @@ async function main(): Promise<void> {
         time.history(),
         scatter({ x: "miles", y: "gas" })
       )
-      .mark(line({ along: "year", curve: "linear" }))
+      .mark(line({ along: "year", curve: Curve.linear() }))
       .render(container, OPTIONS);
     await settle();
     const d = () => container.querySelector("path")?.getAttribute("d") ?? "";
@@ -309,11 +309,11 @@ async function main(): Promise<void> {
           layer([
             time.history([circle({ r: 4, fill: "white" })]),
             circle({ r: 4, fill: "red" }).transition({
-              update: animation.tween({ curve }),
+              update: Animation.tween({ curve: Curve[curve]() }),
             }),
           ])
         )
-        .layer(line({ along: "year", curve }))
+        .layer(line({ along: "year", curve: Curve[curve]() }))
         .toDisplayList(OPTIONS);
     const shownDots = (doc: any, fill: string) =>
       items(doc).filter(
@@ -383,7 +383,7 @@ async function main(): Promise<void> {
       onePath(
         await keyframes(drivingShifts, at)
           .mark(mark)
-          .layer(line({ along: "year", curve: "linear" }))
+          .layer(line({ along: "year", curve: Curve.linear() }))
           .toDisplayList(OPTIONS)
       ).d as string;
     ok(
@@ -406,7 +406,7 @@ async function main(): Promise<void> {
     );
     const comet = onePath(
       await keyframes(drivingShifts, 1979.25, 10)
-        .mark(line({ along: "year", curve: "linear" }))
+        .mark(line({ along: "year", curve: Curve.linear() }))
         .toDisplayList(OPTIONS)
     ).d as string;
     ok(
@@ -447,7 +447,7 @@ async function main(): Promise<void> {
     // way, and it is drawn in forward in time all the same.
     const backward = [...drivingShifts].reverse();
     const straight = await keyframes(backward, 1979.25, Infinity)
-      .mark(line({ along: "year", curve: "linear" }))
+      .mark(line({ along: "year", curve: Curve.linear() }))
       .toDisplayList(OPTIONS);
     const diff = firstDifference(
       lineSegments(straight),
@@ -609,7 +609,7 @@ async function main(): Promise<void> {
     const lineAt = async (at: number, last: number) =>
       lineSegments(
         await days(at, true, last)
-          .mark(line({ along: "day", curve: "linear" }))
+          .mark(line({ along: "day", curve: Curve.linear() }))
           .toDisplayList(OPTIONS)
       );
     const seam = await lineAt(1.5, 2);
@@ -629,7 +629,7 @@ async function main(): Promise<void> {
           layer([
             time.history({ last: 2 }, [circle({ r: 4, fill: "white" })]),
             circle({ r: 4, fill: "red" }).transition({
-              update: animation.tween(),
+              update: Animation.tween(),
             }),
           ])
         )
@@ -690,7 +690,7 @@ async function main(): Promise<void> {
         lineSegments(
           await keyframes(drivingShifts, 1979.5)
             .mark(mark)
-            .layer(line({ along: "year", curve: "linear" }))
+            .layer(line({ along: "year", curve: Curve.linear() }))
             .toDisplayList(OPTIONS)
         )
       );
@@ -720,11 +720,12 @@ async function main(): Promise<void> {
     };
     const head = (fill: string, update: any) =>
       circle({ r: 4, fill }).transition({ update });
-    const alone = async (curve: string) =>
-      (await headsAt(head("red", animation.tween({ curve })))).red[0];
+    const alone = async (curve: "linear" | "monotone") =>
+      (await headsAt(head("red", Animation.tween({ curve: Curve[curve]() }))))
+        .red[0];
     const [linear, smooth] = [await alone("linear"), await alone("monotone")];
 
-    const shared = animation.tween({ curve: "linear" });
+    const shared = Animation.tween({ curve: Curve.linear() });
     const both = await headsAt(
       layer([head("red", shared), head("blue", shared)])
     );
@@ -738,8 +739,8 @@ async function main(): Promise<void> {
     );
     const two = await headsAt(
       layer([
-        head("red", animation.tween({ curve: "linear" })),
-        head("blue", animation.tween({ curve: "monotone" })),
+        head("red", Animation.tween({ curve: Curve.linear() })),
+        head("blue", Animation.tween({ curve: Curve.monotone() })),
       ])
     );
     ok(
@@ -754,7 +755,7 @@ async function main(): Promise<void> {
     // A chained mark inside a component moves too: the chart reads the
     // transition off the marks it built, wherever the chained one sits.
     const Head = createMark(() =>
-      layer([head("red", animation.tween({ curve: "linear" }))])
+      layer([head("red", Animation.tween({ curve: Curve.linear() }))])
     );
     const inComponent = await headsAt(Head({}));
     ok(
@@ -779,9 +780,9 @@ async function main(): Promise<void> {
   let why = await throws(
     () =>
       threaded()
-        .layer(line({ along: "year", curve: orthogonal() }))
+        .layer(line({ along: "year", curve: Curve.orthogonal() }))
         .toDisplayList(OPTIONS),
-    /"orthogonal" does not/
+    /Curve\.orthogonal\(\) does not/
   );
   ok("a threaded line whose curve is a router", !why, why);
   why = await throws(
@@ -881,16 +882,41 @@ async function main(): Promise<void> {
     /time\.transition\(\): the run for "us" has two rows at year = 1958\b/
   );
   ok("a transition split by a function names the run's key", !why, why);
+  // A position key names it too: the split hands the run its key, so no key
+  // function is read off a row that carries no position.
+  why = await throws(
+    () =>
+      chart(doubled)
+        .flow(
+          time.sequence({ by: "year", on: clockAt(1958.5) }),
+          group({ by: chunk(10) }),
+          scatter({ x: "miles", y: "gas" })
+        )
+        .mark(circle({ r: 4 }))
+        .layer(time.transition())
+        .toDisplayList(OPTIONS),
+    /time\.transition\(\): the run for "0" has two rows at year = 1958\b/
+  );
+  ok("a transition split by chunk(n) names the run's key", !why, why);
 
   // A curve that is not a reading of values over time is an error wherever
-  // it is written, and Catmull-Rom says it is a path curve.
-  const notAMethod = [
+  // it is written, and Catmull-Rom says it is a path curve. An unknown kind
+  // and a bare name are not curves at all: curves are made by calls in the
+  // Curve family, and each pattern starts after the option's name.
+  const notAMethod: [any, RegExp][] = [
     [
-      "catmullRom",
-      /"catmullRom" is not a way.*"step", "linear", "monotone" or "smooth".*screen-space path curve/,
+      Curve.catmullRom(),
+      /: Curve\.catmullRom\(\) is not a way.*Curve\.step\(\), Curve\.linear\(\), Curve\.monotone\(\) or Curve\.smooth\(\).*screen-space path curve/,
     ],
-    ["linaer", /"linaer" is not a way.*"step", "linear", "monotone" or "smooth"/],
-  ] as const;
+    [
+      { kind: "linaer" },
+      /\.kind: unknown kind "linaer".*Make one with a call in the Curve family/,
+    ],
+    [
+      "monotone",
+      /: expected object, got string\. Make one with a call in the Curve family/,
+    ],
+  ];
   for (const [curve, pattern] of notAMethod) {
     why = await throws(
       () =>
@@ -898,32 +924,53 @@ async function main(): Promise<void> {
           .mark(circle({ r: 4 }))
           .layer(time.transition({ curve }))
           .toDisplayList(OPTIONS),
-      new RegExp(`time\\.transition\\(\\{ curve \\}\\): ${pattern.source}`)
+      new RegExp(`time\\.transition\\(\\{ curve \\}\\)${pattern.source}`)
     );
-    ok(`time.transition({ curve: "${curve}" })`, !why, why);
+    ok(`time.transition({ curve: ${JSON.stringify(curve)} })`, !why, why);
     why = await throws(
-      async () => animation.tween({ curve }),
-      new RegExp(`animation\\.tween\\(\\{ curve \\}\\): ${pattern.source}`)
+      async () => Animation.tween({ curve }),
+      new RegExp(`Animation\\.tween\\(\\{ curve \\}\\)${pattern.source}`)
     );
-    ok(`animation.tween({ curve: "${curve}" })`, !why, why);
+    ok(`Animation.tween({ curve: ${JSON.stringify(curve)} })`, !why, why);
     why = await throws(
       async () =>
         interpolate(
           drivingShifts.map((d: any) => ({ ...d, key: "us" })),
           { along: "year", key: "key", at: 1958.5, method: curve }
         ),
-      new RegExp(`interpolate\\(\\{ method \\}\\): ${pattern.source}`)
+      new RegExp(`interpolate\\(\\{ method \\}\\)${pattern.source}`)
     );
-    ok(`interpolate({ method: "${curve}" })`, !why, why);
+    ok(`interpolate({ method: ${JSON.stringify(curve)} })`, !why, why);
   }
 
-  // Unset, "auto" and "monotone" are one curve, so one transition moves
-  // marks that chain any of them.
+  // A line's curve is checked against the Curve family like any strategy:
+  // an unknown kind and a bad param fail where the connector is made.
+  for (const [curve, pattern] of [
+    [{ kind: "swoop" }, /\.kind: unknown kind "swoop"/],
+    [
+      { kind: "arc", direction: "left" },
+      /\.direction: expected one of "up", "down"/,
+    ],
+  ] as [any, RegExp][]) {
+    why = await throws(
+      async () =>
+        keyframes(drivingShifts, 1958.5, Infinity)
+          .mark(line({ along: "year", curve }))
+          .toDisplayList(OPTIONS),
+      new RegExp(`line/ribbon\\(\\{ curve \\}\\)${pattern.source}`)
+    );
+    ok(`line({ curve: ${JSON.stringify(curve)} })`, !why, why);
+  }
+
+  // Unset and Curve.monotone() are one curve, so one transition moves
+  // marks that chain either of them.
   ok(
-    'tween(), tween({ curve: "auto" }) and tween({ curve: "monotone" }) are one tween',
-    sameTween(animation.tween(), animation.tween({ curve: "monotone" })) &&
-      sameTween(animation.tween({ curve: "auto" }), animation.tween()) &&
-      !sameTween(animation.tween(), animation.tween({ curve: "linear" }))
+    "tween() and tween({ curve: Curve.monotone() }) are one tween",
+    sameTween(
+      Animation.tween(),
+      Animation.tween({ curve: Curve.monotone() })
+    ) &&
+      !sameTween(Animation.tween(), Animation.tween({ curve: Curve.linear() }))
   );
 
   console.log("\n# the step curve");
@@ -954,7 +1001,7 @@ async function main(): Promise<void> {
     const overYears = vertices(
       await chart(rows)
         .flow(scatter({ by: "year", x: "year", y: "gas" }))
-        .mark(line({ curve: "step" }))
+        .mark(line({ curve: Curve.step() }))
         .toDisplayList(OPTIONS)
     );
     ok(
@@ -964,10 +1011,10 @@ async function main(): Promise<void> {
     );
     // A connected scatter plot over years: nothing draws the years, so the
     // hold is a point and the riser a diagonal, the same shape as linear.
-    const connected = (curve: string) =>
+    const connected = (curve: "step" | "linear") =>
       chart(rows)
         .flow(scatter({ by: "year", x: "miles", y: "gas" }))
-        .mark(line({ curve }))
+        .mark(line({ curve: Curve[curve]() }))
         .toDisplayList(OPTIONS);
     const diff = firstDifference(
       lineSegments(await connected("step")),
@@ -980,7 +1027,7 @@ async function main(): Promise<void> {
     const band = vertices(
       await chart(rows)
         .flow(spread({ by: "year", dir: "x", spacing: 20 }))
-        .mark(ribbon({ h: "gas", curve: "step" }))
+        .mark(ribbon({ h: "gas", curve: Curve.step() }))
         .toDisplayList(OPTIONS)
     );
     const edge = 2 * rows.length - 1;
@@ -991,17 +1038,6 @@ async function main(): Promise<void> {
         staircase(band.slice(edge, 2 * edge).reverse()),
       `${band.length} vertices`
     );
-  }
-
-  // The sequence curves are built in: a route cannot take their names.
-  for (const name of ["step", "monotone", "catmullRom"]) {
-    why = await throws(
-      async () => registerRoute(name, () => []),
-      new RegExp(
-        `registerRoute\\("${name}"\\): "${name}" is a built-in sequence curve`
-      )
-    );
-    ok(`registerRoute("${name}", ...)`, !why, why);
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

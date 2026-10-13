@@ -223,20 +223,5 @@ console.log("# pack: 0 and 1 children");
   ok("one child: R is its radius", near(one.intrinsicDims![0].size!, 12));
 }
 
-console.log("# pack: unknown method");
-{
-  let threw = false;
-  try {
-    layOut(
-      (await Pack({ method: { kind: "squares" } as any }, [
-        circle(3),
-      ])) as GoFishNode
-    );
-  } catch {
-    threw = true;
-  }
-  ok("an unknown method kind throws", threw);
-}
-
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

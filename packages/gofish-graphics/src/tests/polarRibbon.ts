@@ -6,7 +6,7 @@ import { spread } from "../ast/graphicalOperators/spread";
 import { rect } from "../ast/shapes/rect";
 import { color, color6 } from "../color";
 import { layer } from "../ast/graphicalOperators/layer";
-import { ribbon } from "../lib";
+import { ribbon, Curve } from "../lib";
 import { ref } from "../ast/shapes/ref";
 import { color10Order } from "./color10";
 import { mix } from "spectral.js";
@@ -90,7 +90,7 @@ export const testPolarRibbon = (size: { width: number; height: number }) =>
               // fill: "black",
               // fill: "none",
               // stroke: i == 3 ? "black" : "none",
-              curve: "linear",
+              curve: Curve.linear(),
               opacity: 0.7,
               mixBlendMode: "multiply",
             },

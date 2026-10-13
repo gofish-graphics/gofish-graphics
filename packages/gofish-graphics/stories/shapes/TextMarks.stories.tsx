@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { coord, ellipse, map, polar, stack, spread, text } from "../../src/lib";
+import { coord, ellipse, map, stack, spread, text, Coord } from "../../src/lib";
 
 const meta: Meta = {
   title: "Shapes/Text Marks",
@@ -132,7 +132,7 @@ export const PolarText: StoryObj<Args> = {
     const container = initializeContainer();
 
     container.innerHTML = "";
-    const polarTransform = polar();
+    const polarTransform = Coord.polar();
     const radialPolar = {
       type: polarTransform.type,
       transform: ([r, theta]: [number, number]) => polarTransform.transform([theta, r]),

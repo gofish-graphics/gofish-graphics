@@ -1,14 +1,9 @@
 import { GoFishNode } from "../_node";
 import type { AxisOptions } from "../gofish";
-import { MaybeValue } from "../data";
+import { fieldNameOf, MaybeValue } from "../data";
 import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
 import { Collection } from "lodash";
-import {
-  SplitBy,
-  fieldNameOf,
-  orderEntries,
-  splitEntries,
-} from "../datumProjection";
+import { SplitBy, orderEntries, splitEntries } from "../datumProjection";
 import { isField } from "../data";
 import { columnType, stackOrigin } from "../schema";
 import type { StackOrigin } from "../constraints/distribute";
@@ -25,6 +20,7 @@ import {
 import { createOperator } from "../marks/createOperator";
 import { Mark, MarkChild, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
+import { withWire, wireOf } from "../wire";
 
 // Utility function to unwrap lodash wrapped arrays
 const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
@@ -256,11 +252,10 @@ export type SpreadOptions<T = any> = {
 };
 
 export const spread = createOperator<any, SpreadOptions>(Spread as any, {
-  // With `by`: groupBy on the field. Without `by`: identity split — one leaf
-  // per row (the waffle grid relies on this to spread chunked sub-arrays).
-  // Expand-kind marks (e.g. `cut`) need the whole array in one leaf instead;
-  // that override lives in createOperator (it dispatches on the mark's kind),
-  // not here, so this split stays kind-agnostic.
+  // Without `by`, `splitEntries` splits by row identity. Expand-kind marks
+  // (e.g. `cut`) need the whole array in one leaf instead; that override
+  // lives in createOperator (it dispatches on the mark's kind), not here, so
+  // this split stays kind-agnostic.
   //
   // A stack over a column with HasMidpoint (from the chart's `schema`) puts its
   // origin at the midpoint of the column's order instead of at its first
@@ -268,7 +263,6 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   // reorders every level of the order the way it reorders the groups, so the
   // stack knows which way it lays the order out even in a row with one part.
   split: ({ by, glue, reverse }, d) => {
-    if (!by) return new Map(d.map((r, i) => [i, r]));
     const entries = splitEntries(by, d);
     if (!glue) return entries;
     const column = fieldNameOf(by);
@@ -289,8 +283,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   },
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
   axisFields: ({ by, dir }) => {
-    const name =
-      typeof by === "string" ? by : isField(by) ? by.name : undefined;
+    const name = fieldNameOf(by);
     return name === undefined ? undefined : { [dir]: name };
   },
   // `dir` is the axis this operator lays its groups out along (`stack` is
@@ -328,14 +321,10 @@ export function stack(
   // of `{ type: "spread", glue: true, ... }`. Preserve `__combinator` and
   // `children` when present (combinator form) — dropping them would make
   // toJSON emit a leaf-shaped node missing its children.
-  const tag = (result as any).__serialize;
+  const tag = wireOf(result);
   if (tag) {
     const { glue: _glue, ...stackPayload } = tag.opts;
-    (result as any).__serialize = {
-      ...tag,
-      type: "stack",
-      opts: stackPayload,
-    };
+    withWire(result, { ...tag, type: "stack", opts: stackPayload });
   }
   return result;
 }

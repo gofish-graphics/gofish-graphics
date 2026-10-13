@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, polar } from "gofish-graphics";
+import { circle, Coord, Curve } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth, sampleTree } from "../data";
 import { initializeContainer } from "../helper";
@@ -58,7 +58,7 @@ export const SpiralLayout: StoryObj = {
     tree(
       {
         node,
-        link: { curve: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1.5 },
         // parentChild: step around (θ) and outward (r) from the parent.
         parentChild: combine({
           x: {
@@ -89,7 +89,7 @@ export const SpiralLayout: StoryObj = {
             alignment: "middle",
           },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       sampleTree
     ).render(container, { w: 520, h: 520 });

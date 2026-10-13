@@ -3,7 +3,8 @@
 // </gofish-wiki>
 
 import type { StackOrigin } from "./constraints/distribute";
-import { copyMeasureProvenance } from "./data";
+import { loadTemporal, temporal } from "./calendar";
+import { INSTANT } from "./measure";
 
 /**
  * Column types (#984): `chart(data, { schema })` declares, per column, the
@@ -19,17 +20,32 @@ import { copyMeasureProvenance } from "./data";
  *    Declared with `.diverging()`, which exists only after `.ordered(...)`
  *    because a midpoint is a point along an order. A stack over the column
  *    puts its origin (its 0) at the midpoint.
+ *  - {@link HasCalendar}: the column's values are instants that read on a
+ *    calendar in a time zone. Declared with `Schema.time()`, or inferred from
+ *    JS `Date` values. The values become epoch milliseconds (UTC) when the
+ *    schema is applied, and an axis over them is a time axis whose ticks are
+ *    calendar cells (calendar.ts). A time has no zero. `Schema.time()` also
+ *    writes its unit, the instant, so two time columns may share an axis.
+ *  - {@link HasUnit}: the column's values are amounts. Declared with
+ *    `Schema.unit(unit)` (or `.unit(unit)` after another builder), which
+ *    says what unit they are in; without it a
+ *    column's unit is unknown and unifies with any other (`measure.ts`).
+ *  - {@link HasQuantity}: what the column's values are amounts of, its
+ *    quantity, when that is not the column's name. Declared with
+ *    `Schema.quantity(name)` (or `.quantity(name)` after another builder).
+ *    The quantity titles the axis and names the unit variable.
+ *
+ * A transform writes these for the columns it makes: `bin()` says its
+ * `start`/`end`/`size` are amounts of its source column's quantity, in the
+ * source's unit, and its `count` is a count.
  *
  * A column type is a record keyed by class name, so a later class (`HasZero`,
  * `HasCycle`, ...) is one more optional key. The record is also the wire form:
  * `ColumnSchema#toJSON` writes it, and `chart` accepts it as is (that is what
  * arrives from Python).
  *
- * The types ride the chart's data ARRAY under {@link COLUMN_TYPES}, the way a
- * transform's measure provenance does (`MEASURE_PROVENANCE` in data.ts), so an
+ * The types ride the chart's data ARRAY under {@link COLUMN_TYPES}, so an
  * operator reads a column's type off the data it splits.
- * TODO(#994): measure provenance is the unit part of this record; merge the
- * two symbols.
  */
 
 /** One level of an ordered column. */
@@ -48,22 +64,113 @@ export type HasOrder = { levels: readonly Level[] };
  *  is even. It requires {@link HasOrder}, and `0 <= at <= n`. */
 export type HasMidpoint = { at: number };
 
+/** The class of a column whose values are instants (`Schema.time()`): epoch
+ *  milliseconds, UTC, read on the calendar of the IANA time zone `zone`
+ *  (`"UTC"` by default). The zone decides where calendar cells start (a day
+ *  starts at local midnight) and how labels read. An instant has no zero. */
+export type HasCalendar = { zone: string };
+
+/** The class of a column whose values are amounts in a declared unit:
+ *
+ *  - `unit`: the unit's name (`Schema.unit("USD")`). Two units are the same
+ *    when their names are equal, and two different units never share an
+ *    axis. A column without this class has an unknown unit, a unit variable
+ *    that unifies with any unit (`measure.ts`).
+ *  - `symbol`: what an axis title appends to show the unit, "Pay (USD)".
+ *    `Schema.unit(u)` writes `u`. The engine's own units (the "count" of
+ *    `bin()`'s `count`) have none, so their axes add nothing.
+ */
+export type HasUnit = { unit: string; symbol?: string };
+
+/** The class of a column whose values are amounts of the quantity `name`
+ *  (`Schema.quantity("Pay")`), when that is not the column's own name.
+ *  Columns of one quantity share one unit variable, and the quantity titles
+ *  the axis: `bin()`'s `start` is an amount of its source column's
+ *  quantity, and the five summary columns of a box plot can all be "Pay". */
+export type HasQuantity = { name: string };
+
 /** A column's type: the classes it has, keyed by class name. */
 export type ColumnType = {
   HasOrder?: HasOrder;
   HasMidpoint?: HasMidpoint;
+  HasCalendar?: HasCalendar;
+  HasUnit?: HasUnit;
+  HasQuantity?: HasQuantity;
 };
+
+/** Whether `v` is a time column's value as the engine reads it: epoch
+ *  milliseconds, a finite number, or missing (null, undefined). */
+const isEpochMs = (v: unknown): boolean =>
+  v == null || (typeof v === "number" && Number.isFinite(v));
+
+/** Which values each class accepts as they stand, without reinterpreting
+ *  them, given the class's own record. A missing value (null, undefined)
+ *  fits every class.
+ *
+ *  - `HasCalendar`: an instant: epoch milliseconds (a finite number) or a
+ *    valid `Date`. A `Date` is an instant, so turning it into epoch
+ *    milliseconds reinterprets nothing; a string is not one, since reading
+ *    it needs a zone (only a `schema` annotation converts strings).
+ *  - `HasOrder`: text or numbers, the kinds its levels are. A value outside
+ *    the levels still fits, so the order stays and its stray-level error
+ *    fires where the order is used.
+ *  - `HasMidpoint`: anything; its values are its order's.
+ *  - `HasUnit`: numbers, the amounts the unit measures. In the instant
+ *    unit, also a valid `Date`, which is an instant (see `HasCalendar`).
+ *  - `HasQuantity`: anything; a name says nothing about the values. */
+const ACCEPTS: {
+  [K in keyof ColumnType]-?: (
+    v: unknown,
+    c: NonNullable<ColumnType[K]>
+  ) => boolean;
+} = {
+  HasCalendar: (v) => isEpochMs(v) || isDate(v),
+  HasOrder: (v) => v == null || typeof v === "string" || typeof v === "number",
+  HasMidpoint: () => true,
+  HasUnit: (v, { unit }) =>
+    v == null || typeof v === "number" || (unit === INSTANT.unit && isDate(v)),
+  HasQuantity: () => true,
+};
+
+/** Whether `v` is a valid `Date`. */
+const isDate = (v: unknown): boolean =>
+  v instanceof Date && Number.isFinite(v.getTime());
+
+const CLASSES = Object.keys(ACCEPTS) as (keyof ColumnType)[];
+
+/** The first class of `type` that does not accept `v` ({@link ACCEPTS}). */
+const rejectingClass = (
+  type: ColumnType,
+  v: unknown
+): keyof ColumnType | undefined =>
+  CLASSES.find(
+    (k) =>
+      type[k] !== undefined &&
+      !(ACCEPTS[k] as (v: unknown, c: unknown) => boolean)(v, type[k])
+  );
+
+/** Whether one value fits a column type as it stands: every class the type
+ *  has accepts it ({@link ACCEPTS}). */
+const fitsType =
+  (type: ColumnType) =>
+  (v: unknown): boolean =>
+    rejectingClass(type, v) === undefined;
 
 /** The column types of a dataset, keyed by column name. */
 export type ColumnTypes = Record<string, ColumnType>;
 
 /**
  * A column type under construction. Each builder method adds one class, and a
- * method that needs a class already present says so in its `this` type, so a
- * missing prerequisite is a type error: `.diverging()` needs `HasOrder`.
+ * method that needs a class already present, or one absent, says so in its
+ * `this` type, so breaking the rule is a type error: `.diverging()` needs
+ * `HasOrder`, and `.unit()` needs no `HasUnit` yet. The constructor checks
+ * that an order's levels fit the column's other classes
+ * ({@link checkLevelsFit}).
  */
 export class ColumnSchema<C extends ColumnType = ColumnType> {
-  constructor(public readonly type: C) {}
+  constructor(public readonly type: C) {
+    checkLevelsFit("schema: the column", type);
+  }
 
   /** Give the column a midpoint (`HasMidpoint`) at `midpoint`, in edge
    *  coordinates over its order. The default is the middle of the order,
@@ -79,6 +186,24 @@ export class ColumnSchema<C extends ColumnType = ColumnType> {
     return new ColumnSchema({ ...this.type, HasMidpoint: { at } });
   }
 
+  /** Say what the column's values are amounts of (`HasQuantity`): the
+   *  quantity `name`, which titles the axis in place of the column's name. */
+  quantity(name: string): ColumnSchema<C & { HasQuantity: HasQuantity }> {
+    return new ColumnSchema({ ...this.type, HasQuantity: { name } });
+  }
+
+  /** Say what unit the column's values are in (`HasUnit`): the unit `unit`,
+   *  whose symbol follows the quantity in the axis title, "Pay (USD)". A
+   *  column has one unit, so a builder that already has one (`Schema.time()`
+   *  writes the instant) has no `.unit()` ({@link checkNoUnit}). */
+  unit(
+    this: ColumnSchema<C & { HasUnit?: never }>,
+    unit: string
+  ): ColumnSchema<C & { HasUnit: HasUnit }> {
+    checkNoUnit(".unit: the column", this.type);
+    return new ColumnSchema({ ...this.type, HasUnit: { unit, symbol: unit } });
+  }
+
   toJSON(): C {
     return this.type;
   }
@@ -90,18 +215,56 @@ export const Schema = {
   ordered(levels: readonly Level[]): ColumnSchema<{ HasOrder: HasOrder }> {
     return new ColumnSchema({ HasOrder: { levels: [...levels] } });
   },
+  /** A column whose values are instants (`HasCalendar`) in the instant unit
+   *  (`HasUnit`), read on the calendar of `zone` (an IANA time zone, `"UTC"`
+   *  by default). A value may be an ISO 8601 string ("2024-03-05" is the
+   *  start of that day in `zone`; a string without an offset is a wall-clock
+   *  time in `zone`), a `Date`, or epoch milliseconds. */
+  time({ zone = "UTC" }: { zone?: string } = {}): ColumnSchema<{
+    HasCalendar: HasCalendar;
+    HasUnit: HasUnit;
+  }> {
+    return new ColumnSchema({ HasCalendar: { zone }, HasUnit: INSTANT });
+  },
+  /** A column whose values are amounts in the unit `unit` (`HasUnit`), an
+   *  opaque name such as `"USD"` or `"mm"`. Columns in the same unit may
+   *  share an axis; two different units on one axis are an error. A column
+   *  with no unit declared may share an axis with any other. */
+  unit(unit: string): ColumnSchema<{ HasUnit: HasUnit }> {
+    return new ColumnSchema({}).unit(unit);
+  },
+  /** A column whose values are amounts of the quantity `name`
+   *  (`HasQuantity`), e.g. `"Pay"`. The quantity titles the axis in place of
+   *  the column's name, and columns of one quantity share one unit. */
+  quantity(name: string): ColumnSchema<{ HasQuantity: HasQuantity }> {
+    return new ColumnSchema({}).quantity(name);
+  },
 };
 
 /** What `chart`'s `schema` option takes per column: a builder, or the record
  *  it writes (the wire form). */
 export type SchemaEntry = ColumnSchema<ColumnType> | ColumnType;
 
-/** The record a schema entry stands for, checked for the prerequisites the
- *  builder enforces in its types (a record from the wire, as Python sends it,
- *  has no types) and for a midpoint on its order, with the same check
- *  `.diverging()` runs. */
+/** The record a schema entry stands for, checked for the rules the builder
+ *  enforces (a record from the wire, as Python sends it, has no types): the
+ *  record is read as the builders' writes, so `HasCalendar` writes the
+ *  instant unit as `Schema.time()` does, and a different `HasUnit` is a
+ *  second unit ({@link checkNoUnit}). Then its levels must fit
+ *  ({@link checkLevelsFit}), and a midpoint needs an order and must lie on
+ *  it, with the same check `.diverging()` runs. */
 export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
-  const type = entry instanceof ColumnSchema ? entry.type : entry;
+  const who = `schema: column "${column}"`;
+  const { HasUnit: unit, ...rest } =
+    entry instanceof ColumnSchema ? entry.type : entry;
+  const type: ColumnType =
+    rest.HasCalendar !== undefined
+      ? { ...Schema.time(rest.HasCalendar).type, ...rest }
+      : rest;
+  if (unit !== undefined && unit.unit !== type.HasUnit?.unit) {
+    checkNoUnit(who, type);
+    type.HasUnit = unit;
+  }
+  checkLevelsFit(who, type);
   if (type.HasMidpoint === undefined) return type;
   if (!type.HasOrder) {
     throw new Error(
@@ -112,6 +275,33 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   }
   checkMidpointOnOrder(type.HasOrder.levels, type.HasMidpoint.at);
   return type;
+}
+
+/** The one-unit rule: a column has one unit, so a column type that already
+ *  has `HasUnit` (`Schema.time()` writes the instant) takes no other.
+ *  Python's `ColumnSchema.unit` raises the same message. */
+function checkNoUnit(who: string, type: ColumnType): void {
+  if (type.HasUnit === undefined) return;
+  throw new Error(
+    `${who} already has the unit ${JSON.stringify(type.HasUnit.unit)}.`
+  );
+}
+
+/** The rule that an order's levels fit the column's other classes: each
+ *  level is one of the column's values, so every class must accept it
+ *  ({@link ACCEPTS}). Text levels are not amounts, so
+ *  `Schema.ordered(["low", "high"]).unit("pts")` throws, while a Likert
+ *  scale's levels `[1, 2, 3, 4, 5]` take a unit. Python's `ColumnSchema`
+ *  raises the same message. */
+function checkLevelsFit(who: string, type: ColumnType): void {
+  for (const level of type.HasOrder?.levels ?? []) {
+    const rejects = rejectingClass(type, level);
+    if (rejects !== undefined) {
+      throw new Error(
+        `${who} has the level ${showLevel(level)}, which is not a value ${rejects} accepts.`
+      );
+    }
+  }
 }
 
 /** The loud error for a midpoint off its order: `at` must be a finite number
@@ -134,8 +324,8 @@ function checkMidpointOnOrder(levels: readonly Level[], at: unknown): void {
 
 /**
  * Well-known symbol under which a data ARRAY carries its column types. It
- * rides the array, not each row, and is non-enumerable, like
- * `MEASURE_PROVENANCE`.
+ * rides the array, not each row, and is non-enumerable, so it never leaks
+ * into a `{...d}` spread.
  */
 export const COLUMN_TYPES: unique symbol = Symbol.for("gofish.columnTypes");
 
@@ -163,13 +353,19 @@ export const setColumnTypes = <T>(data: T, types: ColumnTypes): T => {
   return data;
 };
 
-/** Copy `source`'s column types onto `target` (both arrays), if it has any. A
- *  split leaf or a derive's result is a fresh array, so it has to be told. */
+/** Copy `source`'s column types onto `target` (both arrays), for every
+ *  column `target` does not type itself. A split leaf or a filter's result is
+ *  a fresh array, so it has to be told. Without it, a mark channel over a
+ *  split leaf would lose its column's order, time, and unit (a bin's `start`
+ *  would fall back to the quantity "start", see `resolveColumn`). */
 export const copyColumnTypes = <T>(target: T, source: unknown): T => {
   const types = getColumnTypes(source);
-  if (types !== undefined && getColumnTypes(target) === undefined)
-    setColumnTypes(target, types);
-  return target;
+  if (types === undefined) return target;
+  const own = getColumnTypes(target);
+  return setColumnTypes(
+    target,
+    own === undefined ? types : { ...types, ...own }
+  );
 };
 
 const showLevel = (level: unknown): string =>
@@ -183,29 +379,173 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
     `schema: column "${column}" has ${strays.length === 1 ? "a value" : "values"} ` +
       `outside its order: ${strays.map(showLevel).join(", ")}. HasOrder ` +
       `(declared with \`Schema.ordered(levels)\`) lists every level of the ` +
-      `column, so add ${strays.length === 1 ? "it" : "them"} to the levels or ` +
-      `filter those rows out.`
+      `column, so add ${strays.length === 1 ? "it" : "them"} to the levels, ` +
+      `filter those rows out, or, if a derive changed the values, annotate ` +
+      `the derive's result type with \`derive(fn, { schema })\`.`
   );
 }
 
 /**
- * Type `rows` with `schema`: a copy of the array carrying the column types
- * (merged over any the array already carries) and the measure provenance it
- * carries. The copy leaves the caller's array untagged, so one array can feed
- * charts with different schemas.
+ * Type `rows` with `schema`: a copy of the array carrying the column types.
+ * The types are, each winning over the one before:
  *
- * It does not check the values: a value outside an order is an error where the
- * order is used (`orderByLevels`), so a `filter` in the flow can drop it first.
+ *  1. `inherited` (an operator's input's, for its result), each kept only
+ *     when every value of its column fits it as it stands
+ *     ({@link ACCEPTS}). The inherited types never reinterpret or check the
+ *     values: a column that no longer fits (a date rewritten to "Mar") just
+ *     has no type. A column the rows do not hold fits (it has no values).
+ *     A time column of `Date`s fits its inherited time, zone and all, and
+ *     its Dates become epoch milliseconds below. Fitting reads values, not
+ *     meanings: a time recoded to plain numbers (years) still fits, since
+ *     any finite number is epoch milliseconds (#1089); `schema` fixes it.
+ *  2. The types the array already carries.
+ *  3. `schema`'s.
+ *
+ * A column none of these type is a time column (`HasCalendar`, UTC) when its
+ * first non-null value is a JS `Date` (a column is a key of the first row):
+ * inference is local, from the value alone, and a missing value says nothing
+ * about the column. Strings and numbers are never inferred as time; they need
+ * `Schema.time()`. Every time column's values become epoch milliseconds (see
+ * {@link toEpochMs}); the rows are copied only when some value is not one
+ * already. The copy leaves the caller's array untagged, so one array can
+ * feed charts with different schemas.
+ *
+ * It does not check the values against an order: a value outside an order is
+ * an error where the order is used (`orderByLevels`), so a `filter` in the
+ * flow can drop it first.
  */
-export function applySchema<T>(
+export async function applySchema<T>(
   rows: T[],
-  schema: Record<string, SchemaEntry>
-): T[] {
-  const types: ColumnTypes = { ...getColumnTypes(rows) };
+  schema: Record<string, SchemaEntry> = {},
+  inherited?: ColumnTypes
+): Promise<T[]> {
+  const own = getColumnTypes(rows);
+  const records = rows as unknown as (Record<string, unknown> | null)[];
+  const types: ColumnTypes = {};
+  for (const [column, type] of Object.entries(inherited ?? {})) {
+    const fits = fitsType(type);
+    if (
+      records.every(
+        (r) => r == null || typeof r !== "object" || fits(r[column])
+      )
+    )
+      types[column] = type;
+  }
+  Object.assign(types, own);
   for (const [column, entry] of Object.entries(schema)) {
     types[column] = columnTypeOf(column, entry);
   }
-  return setColumnTypes(copyMeasureProvenance([...rows], rows), types);
+  // Date inference, in one pass over the rows: each untyped column of the
+  // first row is resolved by its first non-null value.
+  const unresolved = new Set(
+    Object.keys(records.find((r) => r != null) ?? {}).filter(
+      (column) => types[column] === undefined
+    )
+  );
+  for (const r of records) {
+    if (unresolved.size === 0) break;
+    if (r == null) continue;
+    for (const column of unresolved) {
+      const v = r[column];
+      if (v == null) continue;
+      if (v instanceof Date) types[column] = Schema.time().type;
+      unresolved.delete(column);
+    }
+  }
+  if (Object.keys(types).length === 0) return rows;
+  const timeColumns = Object.entries(types).filter(
+    ([, t]) => t.HasCalendar !== undefined
+  );
+  const isConverted = (row: T): boolean =>
+    row == null ||
+    typeof row !== "object" ||
+    timeColumns.every(([column]) =>
+      isEpochMs((row as Record<string, unknown>)[column])
+    );
+  let out: T[] = [...rows];
+  if (timeColumns.length > 0) {
+    await loadTemporal();
+    for (const [column, t] of timeColumns)
+      checkZone(column, t.HasCalendar!.zone);
+  }
+  if (!rows.every(isConverted)) {
+    // Long-format data repeats its dates, so each string is parsed once per
+    // zone (for this call only).
+    const parsed = new Map<string, unknown>();
+    const epochMs = (v: unknown, zone: string, column: string): unknown => {
+      if (typeof v !== "string") return toEpochMs(v, zone, column);
+      const key = `${zone}\n${v}`;
+      if (!parsed.has(key)) parsed.set(key, toEpochMs(v, zone, column));
+      return parsed.get(key);
+    };
+    out = rows.map((row) => {
+      if (row == null || typeof row !== "object") return row;
+      const copy = { ...(row as Record<string, unknown>) };
+      for (const [column, t] of timeColumns) {
+        if (column in copy) {
+          copy[column] = epochMs(copy[column], t.HasCalendar!.zone, column);
+        }
+      }
+      return copy as T;
+    });
+  }
+  return setColumnTypes(out, types);
+}
+
+/** The zones {@link checkZone} has found valid. */
+const knownZones = new Set<string>();
+
+/** The loud error for a time zone Temporal does not know. */
+function checkZone(column: string, zone: string): void {
+  if (knownZones.has(zone)) return;
+  try {
+    temporal().Now.zonedDateTimeISO(zone);
+    knownZones.add(zone);
+  } catch {
+    throw new Error(
+      `schema: column "${column}" has the time zone ${JSON.stringify(zone)}, ` +
+        `which is not an IANA time zone (e.g. "UTC", "America/New_York").`
+    );
+  }
+}
+
+const DATE_ONLY = /^[+-]?\d{4,6}-\d{2}-\d{2}$/;
+const HAS_OFFSET = /(?:[zZ]|[+-]\d{2}(?::?\d{2})?)(?:\[.*\])?$/;
+
+/**
+ * One value of a time column as epoch milliseconds (UTC). A number is already
+ * one; a `Date` is its time; a string is ISO 8601: a date alone is the start
+ * of that day in `zone`, a date-time with an offset (`Z`, `+05:00`) is that
+ * instant, and a date-time without one is that wall-clock time in `zone`.
+ * Missing values (null, undefined) stay missing. Anything else is a loud
+ * error naming the column.
+ */
+export function toEpochMs(v: unknown, zone: string, column: string): unknown {
+  if (isEpochMs(v)) return v;
+  if (v instanceof Date && Number.isFinite(v.getTime())) return v.getTime();
+  if (typeof v === "string") {
+    const T = temporal();
+    const s = v.trim();
+    try {
+      if (DATE_ONLY.test(s)) {
+        return T.PlainDate.from(s).toZonedDateTime({ timeZone: zone })
+          .epochMilliseconds;
+      }
+      if (HAS_OFFSET.test(s) && /\d[T ]\d/.test(s)) {
+        return T.Instant.from(s.replace(" ", "T")).epochMilliseconds;
+      }
+      return T.PlainDateTime.from(s.replace(" ", "T")).toZonedDateTime(zone)
+        .epochMilliseconds;
+    } catch {
+      // fall through to the error below
+    }
+  }
+  throw new Error(
+    `schema: column "${column}" is a time (Schema.time()), but has the value ` +
+      `${typeof v === "string" ? JSON.stringify(v) : String(v)}, which is not ` +
+      `an ISO 8601 date or date-time ("2024-03-05", "2024-03-05T14:30:00Z"), ` +
+      `a Date, or epoch milliseconds.`
+  );
 }
 
 /** Each level of `order`, mapped to its rank (its index in the order). */

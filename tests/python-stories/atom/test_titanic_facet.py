@@ -4,7 +4,7 @@ from math import ceil, sqrt
 
 import pandas as pd
 
-from gofish import chart, circle, derive, palette, spread, table
+from gofish import chart, circle, derive, spread, table, Color
 
 
 def story_default():
@@ -20,7 +20,7 @@ def story_default():
         return [rows[i : i + size] for i in range(0, len(rows), size)]
 
     return (
-        chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"]))
+        chart(titanic_passengers, color=Color.palette(["#2b8cbe", "#ff8408"]))
         .flow(
             table(
                 by={"x": "pclass", "y": "sex"},
@@ -35,10 +35,15 @@ def story_default():
             chart()
             .flow(
                 derive(order_by_survived),
+                # Rows of sqrt(n) dots. `chunk(size)` takes a fixed size, and
+                # this one depends on the cell, so the rows are built as data:
+                # each item is now one row of dots.
                 derive(chunk_rows),
                 # Fill each cell bottom-up (y-down free space: reverse so the
                 # partial last row lands at the top), like a waffle that grows up.
                 spread(spacing=2, dir="y", reverse=True),
+                # Each group holds one item, a row of dots: spread its dots.
+                derive(lambda group: group[0]),
                 spread(spacing=2, dir="x"),
             )
             .mark(circle(r=4, fill="survived"))

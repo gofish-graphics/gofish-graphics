@@ -2,7 +2,7 @@
 order: 5
 ---
 
-# linear
+# Coord.linear
 
 The identity coordinate transform: Cartesian x and y, unchanged. This is what a
 chart uses when you pass no `coord`, so you only name it explicitly to override
@@ -11,7 +11,7 @@ an enclosing coordinate space back to Cartesian.
 ::: gofish
 
 ```js
-gf.chart(seafood, { coord: gf.linear(), axes: true })
+gf.chart(seafood, { coord: gf.Coord.linear(), axes: true })
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, { w: 400, h: 250 });
@@ -22,7 +22,7 @@ gf.chart(seafood, { coord: gf.linear(), axes: true })
 ## Signature
 
 ```ts
-linear();
+Coord.linear();
 ```
 
 ## Parameters
@@ -32,4 +32,4 @@ linear();
 
 ## See Also
 
-- [polar](/js/api/coords/polar) — angle and radius instead of x and y
+- [Coord.polar](/js/api/coords/polar) — angle and radius instead of x and y

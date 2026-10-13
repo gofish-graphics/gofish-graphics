@@ -8,24 +8,24 @@ GoFish provides two color scale types: **palettes** for categorical data and **g
 
 ## Palette
 
-Use `palette()` for discrete, categorical colors. It cycles through colors by index or maps values by key.
+Use `Color.palette()` for discrete, categorical colors. It cycles through colors by index or maps values by key.
 
 ### Input formats
 
 ```ts
 // Named scheme — cycles through preset colors
-chart(data, { color: palette("tableau10") });
+chart(data, { color: Color.palette("tableau10") });
 
 // Array — cycles by index
-chart(data, { color: palette(["#e41a1c", "#377eb8", "#4daf4a"]) });
+chart(data, { color: Color.palette(["#e41a1c", "#377eb8", "#4daf4a"]) });
 
 // Object — maps specific keys to colors (unmapped values fall back to #ccc)
-chart(data, { color: palette({ Salmon: "#e15759", Bass: "#4e79a7" }) });
+chart(data, { color: Color.palette({ Salmon: "#e15759", Bass: "#4e79a7" }) });
 ```
 
 ## Gradient
 
-Use `gradient()` for continuous data. Colors are interpolated in LAB color space via culori.
+Use `Color.gradient()` for continuous data. Colors are interpolated in LAB color space via culori.
 
 ### Two-color gradient
 
@@ -45,7 +45,10 @@ const scores = [
   { label: "H", value: 100 },
 ];
 
-gf.chart(scores, { color: gf.gradient(["#f7fbff", "#08519c"]), axes: true })
+gf.chart(scores, {
+  color: gf.Color.gradient(["#f7fbff", "#08519c"]),
+  axes: true,
+})
   .flow(gf.spread({ by: "label", dir: "x" }))
   .mark(gf.rect({ h: "value", fill: "value" }))
   .render(root, { w: 400, h: 250 });
@@ -72,7 +75,7 @@ const scores = [
 ];
 
 gf.chart(scores, {
-  color: gf.gradient(["#f7fbff", "#42c663", "#6b0808"]),
+  color: gf.Color.gradient(["#f7fbff", "#42c663", "#6b0808"]),
   axes: true,
 })
   .flow(gf.spread({ by: "label", dir: "x" }))
@@ -86,13 +89,13 @@ gf.chart(scores, {
 
 ```ts
 // Named scheme — uses preset stops
-chart(data, { color: gradient("blues") });
+chart(data, { color: Color.gradient("blues") });
 
 // Two stops — interpolates between them in LAB space
-chart(data, { color: gradient(["#f7fbff", "#6b0808"]) });
+chart(data, { color: Color.gradient(["#f7fbff", "#6b0808"]) });
 
 // Three stops — diverging scale (low → mid → high)
-chart(data, { color: gradient(["#f7fbff", "#42c663", "#6b0808"]) });
+chart(data, { color: Color.gradient(["#f7fbff", "#42c663", "#6b0808"]) });
 ```
 
 ## Built-in schemes
@@ -117,17 +120,17 @@ Literal hex strings in `fill` (e.g. from `derive`) pass through directly — if 
 
 ```ts
 // Stacked bar chart with categorical colors
-chart(seafood, { color: palette("tableau10") })
+chart(seafood, { color: Color.palette("tableau10") })
   .flow(spread({ by: "lake", dir: "x" }), stack({ by: "species", dir: "y" }))
   .mark(rect({ h: "count", fill: "species" }));
 
 // Heatmap with continuous gradient
-chart(data, { color: gradient(["#f7fbff", "#08519c"]) })
+chart(data, { color: Color.gradient(["#f7fbff", "#08519c"]) })
   .flow(table("hour", "day"))
   .mark(rect({ fill: "value" }));
 
 // Explicit key-to-color mapping
-chart(data, { color: palette({ Male: "#ca8861", Female: "#675193" }) })
+chart(data, { color: Color.palette({ Male: "#ca8861", Female: "#675193" }) })
   .flow(spread({ by: "age", dir: "y" }), stack({ by: "sex", dir: "x" }))
   .mark(rect({ w: "proportion", fill: "sex" }));
 ```

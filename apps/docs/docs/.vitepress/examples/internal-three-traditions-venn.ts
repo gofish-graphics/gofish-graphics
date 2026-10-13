@@ -2,8 +2,8 @@
 // UI Component Frameworks, Graphic Design — drawn as a three-circle Venn.
 // gf.position places by CENTER, in a y-up coordinate space.
 //
-// GoFish's ellipse doesn't expose fillOpacity, so semi-transparency is set
-// directly on the fill string via rgba(...).
+// Semi-transparency is set directly on the fill and stroke strings via
+// rgba(...), so each keeps its own alpha.
 
 const W = 360;
 const H = 320;

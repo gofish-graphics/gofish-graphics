@@ -28,6 +28,7 @@ import {
   ref,
   spreadX,
   spreadY,
+  Curve,
 } from "../lib";
 
 // const classColor = {
@@ -205,7 +206,7 @@ export const testSankeyIcicle = () =>
           {
             dir: "x",
             fill: classColor[cls as keyof typeof classColor],
-            curve: "bezier",
+            curve: Curve.bezier(),
             opacity: 0.7,
             mixBlendMode: "multiply",
           },
@@ -231,7 +232,7 @@ export const testSankeyIcicle = () =>
                 //     neutral,
                 //     mixPct[cls as keyof typeof mixPct]
                 //   ),
-                curve: "bezier",
+                curve: Curve.bezier(),
                 opacity: 0.7,
                 mixBlendMode: "multiply",
               },
@@ -261,7 +262,7 @@ export const testSankeyIcicle = () =>
                     //     neutral,
                     //     mixPct[cls as keyof typeof mixPct]
                     //   ),
-                    curve: "bezier",
+                    curve: Curve.bezier(),
                     opacity: 0.7,
                     mixBlendMode: "multiply",
                   },
@@ -366,7 +367,7 @@ export const testSankeyIcicleWithFor = () =>
         {
           dir: "x",
           fill: classColor[cls as keyof typeof classColor],
-          curve: "bezier",
+          curve: Curve.bezier(),
           opacity: 0.7,
           mixBlendMode: "multiply",
         },
@@ -377,7 +378,7 @@ export const testSankeyIcicleWithFor = () =>
           {
             dir: "x",
             fill: sex === "Female" ? color6_old[2] : color6_old[3],
-            curve: "bezier",
+            curve: Curve.bezier(),
             opacity: 0.7,
             mixBlendMode: "multiply",
           },
@@ -395,7 +396,7 @@ export const testSankeyIcicleWithFor = () =>
                   : survived === "No"
                     ? mix(color6_old[3], black, 0.5)
                     : mix(color6_old[3], white, 0.5),
-              curve: "bezier",
+              curve: Curve.bezier(),
               opacity: 0.7,
               mixBlendMode: "multiply",
             },

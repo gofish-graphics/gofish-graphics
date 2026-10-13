@@ -11,7 +11,12 @@ import {
   text,
   time,
   timer,
+  Curve,
 } from "../../src/lib";
+import type {
+  ChartBuilder,
+  LayerBuilder,
+} from "../../src/ast/marks/chartBuilder";
 import { pausedClock } from "../animated-vega-lite/pausedClock";
 import {
   type Gap,
@@ -72,7 +77,9 @@ export const Ladder: StoryObj = {
           .mark(
             circle({ r: 2.5, fill: "white", stroke: "black", strokeWidth: 1 })
           )
-          .layer(line({ along: "year", curve, stroke: "steelblue" }))
+          .layer(
+            line({ along: "year", curve: Curve[curve](), stroke: "steelblue" })
+          )
           .render(into, { w, h: 240 });
       panel("year", byYear, 600);
       panel("miles", connected, 360);
@@ -114,7 +121,10 @@ const pathOf = (curve: LadderCurve) =>
 const GAPS = new Map(
   CURVES.slice(1).map((curve, k) => [
     curve,
-    { below: CURVES[k], gaps: largestGaps(pathOf(curve), pathOf(CURVES[k]), knots) },
+    {
+      below: CURVES[k],
+      gaps: largestGaps(pathOf(curve), pathOf(CURVES[k]), knots),
+    },
   ])
 );
 
@@ -167,14 +177,14 @@ const animatedPanel = (curve: LadderCurve, clock: any) => {
     chart(drivingShifts).flow(scatter({ by: "year", x: "miles", y: "gas" }));
   // The panel's frame and axes, with the ghost of the rung below, if any,
   // drawn first so everything else sits over it.
-  let panel = chart(drivingShifts)
+  let panel: ChartBuilder<any, any> | LayerBuilder = chart(drivingShifts)
     .flow(scatter({ by: "year", x: "miles", y: "gas" }))
     .mark(circle({ r: 3.5, opacity: 0 }));
   if (below !== undefined) {
     panel = panel.layer(
       line({
         along: "year",
-        curve: below.below,
+        curve: Curve[below.below](),
         stroke: "#999",
         strokeWidth: 1.5,
         strokeDasharray: "6,4",
@@ -188,7 +198,12 @@ const animatedPanel = (curve: LadderCurve, clock: any) => {
           circle({ r: 3.5, fill: "white", stroke: "black", strokeWidth: 1 })
         )
         .layer(
-          line({ along: "year", curve, stroke: "steelblue", strokeWidth: 2.5 })
+          line({
+            along: "year",
+            curve: Curve[curve](),
+            stroke: "steelblue",
+            strokeWidth: 2.5,
+          })
         )
     )
     .layer(
@@ -197,8 +212,10 @@ const animatedPanel = (curve: LadderCurve, clock: any) => {
           time.sequence({ by: "year", on: clock }),
           scatter({ x: "miles", y: "gas" })
         )
-        .mark(circle({ r: 7, fill: "#e4572e", stroke: "black", strokeWidth: 1.5 }))
-        .layer(time.transition({ curve }))
+        .mark(
+          circle({ r: 7, fill: "#e4572e", stroke: "black", strokeWidth: 1.5 })
+        )
+        .layer(time.transition({ curve: Curve[curve]() }))
     );
   for (const ringChart of below === undefined ? [] : rings(below.gaps)) {
     panel = panel.layer(ringChart);

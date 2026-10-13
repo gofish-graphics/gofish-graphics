@@ -34,6 +34,7 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import { Mark, MarkChild, Operator } from "../types";
 import {
+  datumOfInput,
   layerKey,
   resolveMarkResult,
   stashLayerName,
@@ -41,8 +42,9 @@ import {
 } from "./markResult";
 import {
   CHANNEL_INFER,
+  resolveChannelAccessors,
   axisSlotKind,
-  resolveMeasure,
+  resolveColumn,
   type DimsChannelSpec,
 } from "../channels";
 import { mapAxisDims, type AxisDimsSlot } from "../dims";
@@ -52,9 +54,10 @@ import type {
   ChannelSpec as MarkChannelSpec,
   ChannelType as MarkChannelType,
 } from "../channels";
-import { discretePosition, copyMeasureProvenance } from "../data";
+import { discretePosition } from "../data";
 import { copyColumnTypes } from "../schema";
-import { fieldNameOf } from "../datumProjection";
+import { fieldNameOf, isChunk } from "../data";
+import { splitByOf } from "../datumProjection";
 import type { MaybeValue, Value } from "../data";
 import {
   hasNormalizeOp,
@@ -76,6 +79,8 @@ import {
   type MarkTransition,
   type OperatorTransition,
 } from "../../animation/transition";
+import { withWire, wireOf } from "../wire";
+import { isThenable } from "../../util";
 
 export type { LayerContext } from "./markResult";
 export { resolveMarkResult } from "./markResult";
@@ -132,16 +137,15 @@ export function withMarkKind<M>(mark: M, kind: MarkKind): M {
  */
 export async function applyMark<T>(
   mark: Mark<T> | Mark<T[]>,
-  group: T | T[],
+  group: T[],
   groupKey?: string | number,
   layerContext?: LayerContext
 ): Promise<GoFishNode[]> {
   const kind = getMarkKind(mark);
   if (kind === "expand") {
-    const items = Array.isArray(group) ? (group as T[]) : ([group] as T[]);
-    const result = await (mark as Mark<T[]>)(items, groupKey, layerContext);
+    const result = await (mark as Mark<T[]>)(group, groupKey, layerContext);
     return Promise.all(
-      (Array.isArray(result) ? result : [result]).map((r) =>
+      (result as unknown as GoFishNode[]).map((r) =>
         resolveMarkResult(r as any, layerContext)
       )
     );
@@ -210,11 +214,11 @@ function propagateSerialize(
   to: object,
   merge: (tag: Record<string, any>) => void
 ): void {
-  const tag = (from as any).__serialize;
+  const tag = wireOf(from);
   if (tag) {
     const nextTag: any = { ...tag };
     merge(nextTag);
-    (to as any).__serialize = nextTag;
+    withWire(to, nextTag);
   }
 }
 
@@ -233,9 +237,9 @@ function modifierMethod(
       const raw = await (base as any)(d, key, layerContext);
       // Expand-kind marks return an array of nodes; per-item return one.
       // Apply the modifier to each produced node either way.
-      if (Array.isArray(raw)) {
+      if (getMarkKind(base) === "expand") {
         const nodes = await Promise.all(
-          raw.map((r) => resolveMarkResult(r, layerContext))
+          (raw as GoFishNode[]).map((r) => resolveMarkResult(r, layerContext))
         );
         for (const node of nodes)
           await cfg.apply(node, layerContext, d, ...args);
@@ -309,13 +313,11 @@ export function attachModifiers<T>(
   });
   // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
   // from the shared registry, so adding one touches a single list. A mark
-  // resolves to a node by calling it with `undefined`, and plays its own
+  // resolves to a node as a root (`resolveMarkResult`), and plays its own
   // `.transition({ enter })` as a chart does (`installBuildIn`, which the
   // render options `playing` / `at` can hold). See terminals.ts.
   attachBuilderTerminals(base, async (options) => {
-    const node = (await resolveMarkResult(
-      (base as any)(undefined)
-    )) as GoFishNode;
+    const node = await resolveMarkResult(base as Mark<any>);
     installBuildIn(node, options);
     return { node, options };
   });
@@ -449,7 +451,7 @@ export const zOrderModifier = {
 
 /**
  * `.transition({ enter, update, exit })` — how the mark looks in each phase
- * of an animation (`animation.grow()`, `animation.fadeIn()`, …). It records
+ * of an animation (`Animation.grow()`, `Animation.fadeIn()`, …). It records
  * the effects on each produced node. The build-in reads them there
  * (`src/animation/install.ts`), and so does the chart builder when the flow
  * has a `time.sequence` (then the phases are `time.transition()`'s,
@@ -523,19 +525,18 @@ export function attachTransformModifiers<M extends object>(
  * What a split returns. Insertion order is preserved (ES Map spec), which
  * matters for layout ordering.
  *
- * Each bucket may be either a `Datum[]` (the typical groupBy case) or a
- * single `Datum` (the no-`by` per-item case). The downstream mark and
- * `inferSize`/`inferPos`/`inferColor` all normalise via
- * `Array.isArray(d) ? d : [d]`, so both forms work uniformly.
+ * Each bucket is a group: a list of the items the split was given. A split
+ * never looks inside an item, so an item that is itself an array is just an
+ * item. With no `by` the split is by row identity, and each group is `[item]`.
  *
  * If the split also computes opts for the layout function (the axis labels
  * `{colKeys, rowKeys}` for table, a stack's `origin`), return the wrapped
  * `{entries, layoutOpts}` form instead of a bare Map.
  */
 export type SplitResult<Datum> =
-  | Map<string | number, Datum | Datum[]>
+  | Map<string | number, Datum[]>
   | {
-      entries: Map<string | number, Datum | Datum[]>;
+      entries: Map<string | number, Datum[]>;
       layoutOpts?: Record<string, unknown>;
     };
 
@@ -681,7 +682,7 @@ export function tagCombinator<M extends object>(
   opts: Record<string, unknown>,
   children: unknown
 ): M {
-  (mark as any).__serialize = { type, opts, __combinator: true, children };
+  withWire(mark, { type, opts, __combinator: true, children });
   return mark;
 }
 
@@ -690,7 +691,7 @@ export type DualModeOperator<Datum, Options> = {
   (
     opts: Options,
     marks: MarkChild[] | Promise<MarkChild[]>
-  ): NameableMark<Datum>;
+  ): NameableMark<Datum[]>;
 };
 
 export type TranslatableOperator<T, U> = Operator<T, U> & {
@@ -773,9 +774,9 @@ function translateOperator<T, U>(
   // `readTag` would find nothing here and silently fall back to the opaque
   // `{type: "derive"}` IR — losing both `.translate()` and any chained
   // `.label()` from the wire.
-  const baseTag = (operator as any).__serialize;
+  const baseTag = wireOf(operator);
   if (baseTag) {
-    (translated as any).__serialize = { ...baseTag, translate: opts };
+    withWire(translated, { ...baseTag, translate: opts });
   }
   // Same for the spatial classification: a translated operator arranges its
   // groups exactly as the base one does.
@@ -793,7 +794,7 @@ function translateOperator<T, U>(
   if (typeof (operator as any).label === "function") {
     attachLabelOption(withTranslate, (accessor, options) => {
       (operator as any).label(accessor, options);
-      const tag = (translated as any).__serialize;
+      const tag = wireOf(translated);
       if (tag) {
         pushLabelField(tag, labelIRField(accessor, options));
       }
@@ -839,7 +840,6 @@ function applyChannels<Options extends Record<string, any>>(
   entries: Map<string | number, any> | undefined
 ): Options {
   if (!channels) return opts;
-  const wholeData = Array.isArray(d) ? d : [d];
   const out: any = { ...opts };
   const infer = (
     type: Exclude<ChannelType, "dims">,
@@ -853,7 +853,7 @@ function applyChannels<Options extends Record<string, any>>(
       flags?.entry === true,
       flags?.discrete === true,
       val,
-      wholeData,
+      d,
       entries,
       opts
     );
@@ -929,13 +929,14 @@ function applyChannel(
   // arrays (e.g. `scatter({x: [0, 1, 2]}, [...marks])`), and for entry-
   // flagged channels where the user passed an explicit array.
   if (Array.isArray(val)) return val;
-  // The measure is loop-invariant across split entries (it depends only on
-  // the accessor and `wholeData`'s provenance, not on which items a given
-  // entry holds), so resolve it once per channel. Only size/pos consume it;
-  // computing it for color/raw would add a spurious conflict-throw site.
-  const measure =
+  // The column (its measure and its schema type) is loop-invariant across
+  // split entries (it depends only on the accessor and what `wholeData`
+  // carries, not on which items a given entry holds), so resolve it once per
+  // channel. Only size/pos consume it; computing it for color/raw would add a
+  // spurious conflict-throw site.
+  const column =
     type === "size" || type === "pos"
-      ? resolveMeasure(wholeData, val)
+      ? resolveColumn(wholeData, val)
       : undefined;
   if (perEntry && entries !== undefined) {
     if (type === "pos" && discrete && isNonNumericEntryField(val, wholeData)) {
@@ -955,18 +956,18 @@ function applyChannel(
     if (type === "size" && hasNormalizeOp(val)) {
       const { pre } = splitAtNormalize(val);
       const rawEntryValues = [...entries.values()].map((items) =>
-        CHANNEL_INFER[type](pre, items, measure)
+        CHANNEL_INFER[type](pre, items, column)
       );
       return applyEntryNormalize(rawEntryValues, fieldNameOf(opts.by));
     }
-    // Value aggregation uses each entry's items; the measure comes from
+    // Value aggregation uses each entry's items; the column comes from
     // `wholeData` (the binned array still carries the symbol — each per-entry
     // slice does not).
     return [...entries.values()].map((items) =>
-      CHANNEL_INFER[type](val, items, measure)
+      CHANNEL_INFER[type](val, items, column)
     );
   }
-  return CHANNEL_INFER[type](val, wholeData, measure);
+  return CHANNEL_INFER[type](val, wholeData, column);
 }
 
 /**
@@ -987,15 +988,26 @@ function stripFactoryKeys<Options extends Record<string, any>>(
   return out as Options;
 }
 
-/** Build the low-level opts passed to `layout`. */
-function buildLayoutOpts<Datum, Options extends Record<string, any>>(
+/** Build the low-level opts passed to `layout`. A Python accessor in a
+ *  channel is resolved first, over every row `applyChannels` reads (the
+ *  whole input and each entry's rows), so `applyChannels` stays synchronous
+ *  (`resolveChannelAccessors`, #1080). */
+async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   channels: ChannelAnnotations<Options> | undefined,
   opts: Options,
-  d: Datum | Datum[],
-  entries: Map<string | number, Datum | Datum[]> | undefined,
+  d: Datum[],
+  entries: Map<string | number, Datum[]> | undefined,
   layoutOpts: Record<string, unknown> | undefined
-): Options {
-  const withChannels = applyChannels(opts, channels, d, entries);
+): Promise<Options> {
+  const pending = resolveChannelAccessors(opts, channels, () => {
+    const rows = new Set<unknown>(d);
+    for (const items of entries?.values() ?? []) {
+      for (const row of items) rows.add(row);
+    }
+    return [...rows];
+  });
+  const resolved = isThenable(pending) ? await pending : pending;
+  const withChannels = applyChannels(resolved, channels, d, entries);
   const stripped = stripFactoryKeys(withChannels);
   // Merge the opts the split computed (e.g. colKeys, rowKeys for table).
   return { ...stripped, ...layoutOpts } as Options;
@@ -1017,15 +1029,15 @@ export function createOperator<Datum, Options extends Record<string, any>>(
   function dual(
     opts: Options,
     marks: MarkChild[] | Promise<MarkChild[]>
-  ): NameableMark<Datum>;
+  ): NameableMark<Datum[]>;
   function dual(
     opts: Options,
     marks?: MarkChild[] | Promise<MarkChild[]>
-  ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum> {
+  ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum[]> {
     if (marks !== undefined) {
       // Combinator form: apply each mark to the same data d, then layout.
-      const base: Mark<Datum> = async (
-        d: Datum,
+      const base: Mark<Datum[]> = async (
+        d: Datum[],
         key?: string | number,
         layerContext?: LayerContext
       ) => {
@@ -1047,7 +1059,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             return resolveMarkResult(result, layerContext);
           })
         );
-        const lowOpts = buildLayoutOpts(
+        const lowOpts = await buildLayoutOpts(
           cfg.channels,
           opts,
           d,
@@ -1055,7 +1067,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           undefined
         );
         const node = (await layout(lowOpts, nodes)) as GoFishNode;
-        (node as any).datum = d;
+        node.datum = datumOfInput(d);
         return node;
       };
       const combinator = nameableMark(base);
@@ -1111,19 +1123,14 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         const splitLayoutOpts =
           splitResult instanceof Map ? undefined : splitResult.layoutOpts;
         // Split leaves are fresh sub-arrays (groupBy/filter/slice) that don't
-        // inherit `d`'s measure-provenance symbol. Re-tag each array leaf so a
+        // inherit `d`'s column types (schema.ts). Re-tag each leaf so a
         // MARK channel applied per leaf (createMark → inferSize/inferPos with no
-        // precomputed measure) reads the source measure off its own data — e.g.
+        // precomputed measure) reads the column's unit off its own data — e.g.
         // a bin's `start`/`end`/`size` resolve to the source field's units, not
-        // the literal field name, matching the operator-channel path (#534).
-        // The column types (schema.ts) ride along the same way, so a nested
-        // split or a mark's color channel still sees an ordered column.
-        for (const leaf of entries.values()) {
-          if (Array.isArray(leaf)) {
-            copyMeasureProvenance(leaf, d);
-            copyColumnTypes(leaf, d);
-          }
-        }
+        // the literal field name, matching the operator-channel path (#534) —
+        // and a nested split or a mark's color channel still sees an ordered
+        // column.
+        for (const leaf of entries.values()) copyColumnTypes(leaf, d);
         // Route each leaf through applyMark so expand-kind marks (e.g. `cut`)
         // can return arrays that we flatten across leaves. A per-item mark is
         // called once per leaf and applyMark wraps its node in a singleton.
@@ -1138,16 +1145,17 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             const currentKey = i;
             const leafNodes = await applyMark(
               mark,
-              leaf as Datum | Datum[],
+              leaf,
               currentKey,
               layerContext
             );
             const keyStr = currentKey?.toString() ?? "";
-            // Positional key when this operator did NOT group by a data field
-            // (an identity split — a `spread` with no `by`): the key is a bare
-            // index, so any ordinal folded from it is `anonymous` (renders no
-            // axis). A `by` grouping yields data-value keys (semantic).
-            const synthetic = (opts as any).by === undefined;
+            // Positional key when this operator splits by row position (no
+            // `by`, which is `chunk(1)`, or any `chunk(n)`): any ordinal
+            // folded from it is `anonymous` (renders no axis or labels). A
+            // field `by` or a key function yields data-value keys (semantic):
+            // a function's keys label their axis, which has no title.
+            const synthetic = isChunk(splitByOf((opts as any).by));
             for (const node of leafNodes) {
               node.setKey(keyStr);
               node._syntheticKey = synthetic;
@@ -1189,7 +1197,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           })
         );
         const nodes = nodesPerLeaf.flat();
-        const lowOpts = buildLayoutOpts(
+        const lowOpts = await buildLayoutOpts(
           cfg.channels,
           opts,
           d,
@@ -1230,14 +1238,14 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     // Tag the operator with IR-serialization metadata so the frontend-IR
     // emitter can reconstruct it as `{ type, ...opts }` on the wire.
     if (cfg.serialize) {
-      (operator as any).__serialize = { type: cfg.serialize, opts };
+      withWire(operator, { type: cfg.serialize, opts });
     }
     const withTranslate = attachTranslateOption(operator, (translateOpts) =>
       translateOperator(operator, translateOpts)
     ) as TranslatableOperator<Datum[], Datum[]>;
     attachLabelOption(withTranslate, (accessor, options) => {
       labelState = [...labelState, { accessor, options }];
-      const tag = (operator as any).__serialize;
+      const tag = wireOf(operator);
       if (tag) {
         pushLabelField(tag, labelIRField(accessor, options));
       }

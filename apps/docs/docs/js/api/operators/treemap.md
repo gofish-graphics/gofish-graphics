@@ -69,22 +69,29 @@ treemap(options, children); // combinator form
 
 ## Strategies
 
-`tile` holds the tiling strategy. You make a strategy with a function call.
-Each one is a tiling method from d3-hierarchy.
+`tile` holds the tiling strategy, a member of the `Tile` family. You make a
+strategy with a function call. Each one is a tiling method from d3-hierarchy.
+The family is also the module `gofish-graphics/tile`, so
+`import { squarify } from "gofish-graphics/tile"` gives the same function as
+`Tile.squarify`.
 
-- `squarify({ ratio? })` makes tiles as close as it can to the aspect ratio
+- `Tile.squarify({ ratio? })` makes tiles as close as it can to the aspect ratio
   `ratio`, the longer side over the shorter side. `ratio` must be at least 1,
   and it does not choose between wide and tall tiles. It is the default. Without `ratio`, it uses
-  d3's default, the golden ratio. `squarify({ ratio: 1 })` aims for square
+  d3's default, the golden ratio. `Tile.squarify({ ratio: 1 })` aims for square
   tiles, which suits one circle per leaf.
-- `slice()` puts the tiles in one column, stacked along y.
-- `dice()` puts the tiles in one row, side by side along x.
-- `binary()` splits the tiles into two halves of about equal weight, and
+- `Tile.slice()` puts the tiles in one column, stacked along y.
+- `Tile.dice()` puts the tiles in one row, side by side along x.
+- `Tile.binary()` splits the tiles into two halves of about equal weight, and
   repeats on each half.
-- `sliceDice()` alternates between `slice` and `dice` by depth.
+- `Tile.sliceDice()` alternates between `slice` and `dice` by depth.
 
 ```js
-gf.treemap({ by: "genre", size: "gross", tile: gf.squarify({ ratio: 1 }) });
+gf.treemap({
+  by: "genre",
+  size: "gross",
+  tile: gf.Tile.squarify({ ratio: 1 }),
+});
 ```
 
 ## Notes

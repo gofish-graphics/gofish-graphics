@@ -20,7 +20,7 @@ ellipse(w=24, h=30, fill="#e15759")
 
 ```python
 ellipse(w=None, h=None, fill=None, stroke=None, stroke_width=None,
-        opacity=None, debug=None) -> Mark
+        opacity=None, fill_opacity=None, debug=None) -> Mark
 ```
 
 ## Parameters

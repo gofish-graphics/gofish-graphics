@@ -9,6 +9,7 @@ import {
   rect,
   map,
   ribbon,
+  Curve,
 } from "../../src/lib";
 import { color6, gray, neutral } from "../../src/color";
 import { groupBy } from "lodash";
@@ -130,7 +131,7 @@ export const Default: StoryObj = {
             {
               dir: "x",
               fill: classColor[cls],
-              curve: "bezier",
+              curve: Curve.bezier(),
               opacity: 0.7,
               mixBlendMode: "multiply",
             },
@@ -141,7 +142,7 @@ export const Default: StoryObj = {
               {
                 dir: "x",
                 fill: sex === "Female" ? color6[4] : color6[5],
-                curve: "bezier",
+                curve: Curve.bezier(),
                 opacity: 0.7,
                 mixBlendMode: "multiply",
               },
@@ -159,7 +160,7 @@ export const Default: StoryObj = {
                       : survived === "No"
                         ? gray
                         : color6[5],
-                  curve: "bezier",
+                  curve: Curve.bezier(),
                   opacity: 0.7,
                   mixBlendMode: "multiply",
                 },

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { spreadX, stackX, layer, rect, polar, map, v } from "../../src/lib";
+import { spreadX, stackX, layer, rect, map, v, Coord } from "../../src/lib";
 import { color6 } from "../../src/color";
 
 const meta: Meta = {
@@ -54,7 +54,7 @@ const pieData = [
 ];
 
 const pie = () =>
-  layer({ coord: polar() }, [
+  layer({ coord: Coord.polar() }, [
     stackX(
       { h: 70, spacing: 0, alignment: "start", sharedScale: true },
       map(pieData, (d) => rect({ w: v(d.count), fill: d.color }))

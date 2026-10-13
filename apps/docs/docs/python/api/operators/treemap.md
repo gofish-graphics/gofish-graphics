@@ -58,29 +58,29 @@ treemap(children, **options) -> Mark
 
 ## Strategies
 
-`tile` holds the tiling strategy. You make a strategy with a function call.
-Each one is a tiling method from d3-hierarchy. On the wire a strategy is a
-plain object, such as `{"kind": "squarify", "ratio": 1}`.
+`tile` holds the tiling strategy, a member of the `Tile` family. You make a
+strategy with a function call. Each one is a tiling method from d3-hierarchy.
+On the wire a strategy is a plain object, such as
+`{"kind": "squarify", "ratio": 1}`. The family is also the module
+`gofish.tile`, so `from gofish.tile import squarify` gives the same function as
+`Tile.squarify`.
 
-- `squarify(ratio=None)` makes tiles as close as it can to the aspect ratio
+- `Tile.squarify(ratio=None)` makes tiles as close as it can to the aspect ratio
   `ratio`, the longer side over the shorter side. `ratio` must be at least 1,
   and it does not choose between wide and tall tiles. It is the default. Without `ratio`, it uses
-  d3's default, the golden ratio. `squarify(ratio=1)` aims for square tiles,
+  d3's default, the golden ratio. `Tile.squarify(ratio=1)` aims for square tiles,
   which suits one circle per leaf.
-- `slice()` puts the tiles in one column, stacked along y.
-- `dice()` puts the tiles in one row, side by side along x.
-- `binary()` splits the tiles into two halves of about equal weight, and
+- `Tile.slice()` puts the tiles in one column, stacked along y.
+- `Tile.dice()` puts the tiles in one row, side by side along x.
+- `Tile.binary()` splits the tiles into two halves of about equal weight, and
   repeats on each half.
-- `slice_dice()` alternates between `slice` and `dice` by depth.
+- `Tile.slice_dice()` alternates between `slice` and `dice` by depth.
 
 ```python
-from gofish import squarify, treemap
+from gofish import treemap, Tile
 
-treemap(by="genre", size="gross", tile=squarify(ratio=1))
+treemap(by="genre", size="gross", tile=Tile.squarify(ratio=1))
 ```
-
-Importing `slice` from `gofish` hides Python's built-in `slice` in that
-module, so you may prefer `import gofish as gf` and `gf.slice()`.
 
 ## Notes
 

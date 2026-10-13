@@ -27,21 +27,23 @@ tier's marks inside [`.layer(...)`](/python/api/core/layer).
 
 ## Parameters
 
-| Parameter | Type                      | Description                                                                                                                                                                                                                                                     |
-| --------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data`    | `list[dict]` \| dataframe | The dataset to visualize — a list of dict rows, or any dataframe [narwhals](https://narwhals-dev.github.io/narwhals/) supports (pandas, polars, pyarrow, a DuckDB relation, ...) — or [`select_all()` / `ref()`](#cross-chart-references) for a layer reference |
-| `axes`    | keyword                   | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                                                                                                               |
-| `coord`   | keyword                   | Coordinate transform, e.g. `coord=clock()`                                                                                                                                                                                                                      |
-| `color`   | keyword                   | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                                                                                                                                                                            |
-| `legend`  | keyword                   | `False` drops the color legend; the marks keep their colors. Default `True`.                                                                                                                                                                                    |
-| `padding` | keyword                   | Extra SVG padding (px) — useful for polar charts and overflowing labels                                                                                                                                                                                         |
-| `schema`  | keyword                   | Column types, keyed by column name, e.g. `schema={"response": Schema.ordered(LEVELS).diverging()}`. See [`Schema`](/python/api/core/schema).                                                                                                                    |
+`data` (`list[dict]` or a dataframe) is the dataset to visualize: a list of
+dict rows, or any dataframe [narwhals](https://narwhals-dev.github.io/narwhals/)
+supports (pandas, polars, pyarrow, a DuckDB relation, ...), or
+[`select_all()` / `ref()`](#cross-chart-references) for a layer reference.
+
+The chart-level options are keyword arguments. Any other keyword raises a
+`TypeError`. See [Axes](#axes) for the full `axes` shape and
+[`Schema`](/python/api/core/schema) for `schema`.
+
+::: gofish-ref ChartOptions
+:::
 
 Chart-level options are passed as keyword arguments:
 
 ```python
-chart(data, color=palette("tableau10"))
-chart(data, color=gradient("blues"), coord=clock())
+chart(data, color=Color.palette("tableau10"))
+chart(data, color=Color.gradient("blues"), coord=Coord.clock())
 ```
 
 Returns a `ChartBuilder` with [`.flow()`](/python/api/core/flow),
@@ -67,16 +69,21 @@ chart(data, axes={"x": {"title": "Year"}, "y": True})   # custom x title
 chart(data, axes={"x": {"title": False}, "y": True})    # suppress inferred x title
 chart(data, axes={"x": {"side": "end"}})                # x-axis on the far edge
 chart(data, axes={"x": {"label_angle": 45}})            # x labels rotated 45 degrees
+chart(data, axes={"x": {"rows": [Calendar.month, Calendar.year]}})  # rows of a time axis
 ```
 
 Keys inside the per-axis dict are snake_case, like every keyword argument:
-`"title"`, `"side"`, and `"label_angle"`. Any other key, including the
+`"title"`, `"side"`, `"label_angle"`, and `"rows"`. Any other key, including the
 camelCase `"labelAngle"`, raises a `TypeError`.
 
 `"label_angle"` rotates the tick and category labels clockwise by that many
 degrees. A list rotates each tier of a nested axis separately, from the
 innermost tier outward (`[45]` rotates only the innermost row), and `"auto"`
 picks 0, 45, or 90 degrees for each label row so the labels do not collide.
+
+`"rows"` sets the label rows of a time axis, an axis over a
+[`Schema.time()`](/python/api/core/schema) column. See
+[`Calendar`](/python/api/core/calendar).
 
 Each per-axis dict also accepts `"side": "start" | "end"`. By default a
 **continuous/quantitative x-axis renders at the visual bottom** (and a continuous
@@ -91,7 +98,7 @@ forces the x-axis onto the opposite edge from the default.
 For polar charts, combine with `coord` (and `padding` for label room):
 
 ```python
-chart(seafood, coord=clock(), axes=True, padding=80)
+chart(seafood, coord=Coord.clock(), axes=True, padding=80)
 ```
 
 Per-operator overrides use the same shape on
@@ -101,28 +108,28 @@ Per-operator overrides use the same shape on
 chart(data, axes=True).flow(spread(by="species", dir="x", axes={"x": True, "y": False}))
 ```
 
-## Equal scale from a shared measure
+## Equal scale from a shared unit
 
 By default each axis resolves its data→pixel scale independently, so a circle in
-data space becomes an ellipse. But when **x and y are the same unit of measure**,
+data space becomes an ellipse. But when **x and y are in the same unit**,
 their scales must be equal — a circle stays circular. GoFish does this from the
-**measure**, not a knob: tag both channels with the same measure via
-`field(name, measure)` and the shared scale follows.
+**unit**, not a knob: declare both columns in the same unit with
+[`Schema.unit`](/python/api/core/schema) and the shared scale follows.
 
 ```python
 (
-    chart(data)
-    .flow(scatter(x=field("x", "plane"), y=field("y", "plane")))
+    chart(data, schema={"x": Schema.unit("plane"), "y": Schema.unit("plane")})
+    .flow(scatter(x="x", y="y"))
     .mark(circle(r=4))
     .render(w=640, h=380)  # a true circle, not an ellipse
 )
 ```
 
 This is the same rule the `circle` mark obeys one level down: `circle(r=...)`
-lowers to a `w` and `h` that share a measure, so it can never distort. The
+lowers to a `w` and `h` that share a unit, so it can never distort. The
 binding axis fills its dimension; the other centers in the leftover space.
-Tagging the two axes the same is a unit claim — different measures (e.g.
-`bill_length` vs `bill_depth`, both mm) stay independent.
+Two columns with no declared unit (e.g. `bill_length` vs `bill_depth`) stay
+independent.
 
 ## The builder
 

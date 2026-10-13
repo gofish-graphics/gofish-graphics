@@ -153,9 +153,6 @@ Equal slices are `[datum(1)] * n` (or, in the modifier form, simply omit
 - the **absolutes alone exceed the source extent** (the fixed claims don't fit);
 - there are `datum()` weights but **no remainder is left** for them (the
   absolutes already consume the whole source);
-- two `datum()` entries carry **different, both-defined measure tags** — an
-  incompatible-units error. Untagged weights are permissive and unify with
-  anything.
 
 ## inset
 

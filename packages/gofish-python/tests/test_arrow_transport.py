@@ -123,7 +123,6 @@ class TestWidgetMarkFnBagContract:
 
         widget = GoFishChartWidget(
             spec={"data": None, "mark": {"type": "rect"}, "operators": [], "options": {}, "zOrder": None},
-            arrow_data=b"",
             derive_functions={"mark-fn-1": mark_fn},
             width=400,
             height=300,

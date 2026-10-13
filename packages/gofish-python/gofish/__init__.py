@@ -16,6 +16,8 @@ from .ast import (
     Constraint,
     Schema,
     ColumnSchema,
+    Calendar,
+    CalendarPartition,
     ref,
     arrow,
     over,
@@ -29,30 +31,17 @@ from .ast import (
     spread,
     stack,
     derive,
+    compose,
     resolve,
     join,
+    filter,
     group,
     scatter,
     treemap,
-    squarify,
-    slice,
-    dice,
-    binary,
-    slice_dice,
     pack,
-    circles,
-    separate,
-    noise,
-    sina,
-    jitter,
     table,
     log,
-    clock,
-    polar,
-    wavy,
     select_all,
-    palette,
-    gradient,
     assign_gradient_color,
     normalize,
     repeat,
@@ -68,9 +57,20 @@ from .ast import (
     polygon,
     datum,
     field,
+    chunk,
 )
 from .transforms import bin
+from .datum_projection import pluck
 from .charts import bar_chart
+
+# Strategy families (#1013): one module per family, with a lowercase file
+# name, bound here under its capitalized name. `Curve.monotone` and
+# `from gofish.curve import monotone` are the same function.
+from . import color as Color
+from . import coord as Coord
+from . import curve as Curve
+from . import overlap as Overlap
+from . import tile as Tile
 
 __all__ = [
     "chart",
@@ -86,6 +86,8 @@ __all__ = [
     "Constraint",
     "Schema",
     "ColumnSchema",
+    "Calendar",
+    "CalendarPartition",
     "ref",
     "arrow",
     "over",
@@ -99,30 +101,17 @@ __all__ = [
     "spread",
     "stack",
     "derive",
+    "compose",
     "resolve",
     "join",
+    "filter",
     "group",
     "scatter",
     "treemap",
-    "squarify",
-    "slice",
-    "dice",
-    "binary",
-    "slice_dice",
     "pack",
-    "circles",
-    "separate",
-    "noise",
-    "sina",
-    "jitter",
     "table",
     "log",
-    "clock",
-    "polar",
-    "wavy",
     "select_all",
-    "palette",
-    "gradient",
     "assign_gradient_color",
     "normalize",
     "repeat",
@@ -138,8 +127,15 @@ __all__ = [
     "polygon",
     "datum",
     "field",
+    "chunk",
     "bin",
+    "pluck",
     "bar_chart",
+    "Color",
+    "Coord",
+    "Curve",
+    "Overlap",
+    "Tile",
 ]
 
 __version__ = "0.1.0"

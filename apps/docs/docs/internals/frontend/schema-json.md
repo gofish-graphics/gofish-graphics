@@ -155,7 +155,7 @@ for the API.
           "$ref": "#/$defs/MarkIR"
         },
         "options": {
-          "type": "object"
+          "$ref": "#/$defs/ChartOptions"
         },
         "zOrder": {
           "$ref": "#/$defs/Number"
@@ -249,7 +249,7 @@ for the API.
       }
     },
     "FieldAccessor": {
-      "description": "Explicit field-accessor form, emitted by field(name, measure?). Optionally carries a chained pipeline (ops) — field(\"site\").sort(\"yield\") or field(\"count\").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator's entry-flagged size channel, normalize.",
+      "description": "Explicit field-accessor form, emitted by field(name). Optionally carries a chained pipeline (ops) — field(\"site\").sort(\"yield\") or field(\"count\").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator's entry-flagged size channel, normalize.",
       "type": "object",
       "required": ["type", "name"],
       "properties": {
@@ -259,15 +259,25 @@ for the API.
         "name": {
           "type": "string"
         },
-        "measure": {
-          "type": "string",
-          "description": "Optional unit annotation for the channel's underlying space (a type claim; see field(name, measure))."
-        },
         "ops": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/FieldOpIR"
           }
+        }
+      }
+    },
+    "ChunkKey": {
+      "description": "A `by` key that groups consecutive rows, emitted by chunk(size): row i goes to group floor(i / size), a bin over row position. It names no field, so its groups draw no axis or labels.",
+      "type": "object",
+      "required": ["type", "size"],
+      "properties": {
+        "type": {
+          "const": "chunk"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     },
@@ -500,9 +510,6 @@ for the API.
                     "const": "datum"
                   },
                   "datum": {},
-                  "measure": {
-                    "type": "string"
-                  },
                   "offset": {
                     "$ref": "#/$defs/Number"
                   },
@@ -676,7 +683,7 @@ for the API.
                 "description": "Font family of the label's text node. Omitted, the elaborator's own font family."
               },
               "fontWeight": {
-                "oneOf": [
+                "anyOf": [
                   {
                     "$ref": "#/$defs/Number"
                   },
@@ -785,9 +792,6 @@ for the API.
               "const": "datum"
             },
             "datum": {},
-            "measure": {
-              "type": "string"
-            },
             "offset": {
               "$ref": "#/$defs/Number",
               "description": "Pixel offset applied after the datum maps through its scale (datum(v) + px)."
@@ -805,41 +809,8 @@ for the API.
         }
       ]
     },
-    "AxisInterval": {
-      "description": "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "min": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "center": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "max": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "size": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "embedded": {
-          "type": "boolean"
-        }
-      }
-    },
-    "AxisDimsValue": {
-      "description": "A `dims` entry: a bare channel value (a position) or an AxisInterval.",
-      "oneOf": [
-        {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        {
-          "$ref": "#/$defs/AxisInterval"
-        }
-      ]
-    },
     "DeriveOperator": {
-      "description": "Opaque user transformation (`derive(fn)`). Function bodies aren't serializable; the IR carries a bridge handle when the Python widget is the producer.",
+      "description": "Transforms the data with a function, `derive(fn)`. A function does not serialize: the IR carries a Python bridge handle in its place.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -851,12 +822,10 @@ for the API.
           "type": "string",
           "description": "Python-bridge handle for the remote callable."
         },
-        "provenance": {
+        "schema": {
           "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          },
-          "description": "Measure provenance a transform (e.g. bin) declares for its output columns — output field name → measure."
+          "additionalProperties": {},
+          "description": "Column types of the result, keyed by column name, as in a chart's schema, e.g. Schema.ordered(levels) or Schema.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant)."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"
@@ -954,6 +923,36 @@ for the API.
         }
       }
     },
+    "FilterOperator": {
+      "description": "Keep the rows a field predicate accepts (`filter(field(name).between(lo, hi, { closed }))`). A filter over a hand-written predicate has no wire form and serializes as an opaque `derive`.",
+      "type": "object",
+      "required": ["type", "predicate"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "filter"
+        },
+        "predicate": {
+          "$ref": "#/$defs/FieldPredicate",
+          "description": "The field predicate `field(name).between(lo, hi, { closed })` builds: `{ field, between: [lo, hi], closed? }`."
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
+        }
+      }
+    },
     "SpreadOperator": {
       "description": "Arrange children along `dir` with spacing, aligning them on the cross axis.",
       "type": "object",
@@ -964,15 +963,18 @@ for the API.
           "const": "spread"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
             {
               "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/ChunkKey"
             }
           ],
-          "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin)."
+          "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
         },
         "dir": {
           "type": "string",
@@ -1058,15 +1060,18 @@ for the API.
           "const": "stack"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
             {
               "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/ChunkKey"
             }
           ],
-          "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin)."
+          "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
         },
         "dir": {
           "type": "string",
@@ -1150,15 +1155,18 @@ for the API.
           "const": "group"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
             {
               "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/ChunkKey"
             }
           ],
-          "description": "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin)."
+          "description": "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"
@@ -1187,15 +1195,18 @@ for the API.
           "const": "scatter"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
             {
               "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/ChunkKey"
             }
           ],
-          "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin)."
+          "description": "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
         },
         "x": {
           "$ref": "#/$defs/ChannelValue",
@@ -1234,49 +1245,8 @@ for the API.
           "default": "baseline"
         },
         "overlap": {
-          "oneOf": [
-            {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "enum": ["separate"]
-                },
-                "padding": {
-                  "$ref": "#/$defs/Number"
-                }
-              },
-              "required": ["kind"]
-            },
-            {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "enum": ["noise"]
-                },
-                "randomness": {
-                  "enum": ["blue", "quasi", "uniform"]
-                },
-                "smoothing": {
-                  "oneOf": [
-                    {
-                      "$ref": "#/$defs/Number"
-                    },
-                    {
-                      "enum": ["silverman"]
-                    }
-                  ]
-                },
-                "padding": {
-                  "$ref": "#/$defs/Number"
-                },
-                "seed": {
-                  "$ref": "#/$defs/Number"
-                }
-              },
-              "required": ["kind"]
-            }
-          ],
-          "description": "How children keep clear of each other on the axis no field places, made by a function call. separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is \"blue\" (default), \"quasi\" or \"uniform\". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or \"silverman\" to compute it from the data. sina() is noise with smoothing \"silverman\" (a violin outline), and jitter() is noise with randomness \"uniform\" and smoothing Infinity (classic jitter); both make kind \"noise\". Both kinds grow from the `alignment` line: \"middle\" both ways, \"start\"/\"baseline\" to the positive side, \"end\" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only."
+          "$ref": "#/$defs/Overlap",
+          "description": "How children keep clear of each other on the axis no field places, made by a call in the Overlap family. Overlap.separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. Overlap.noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is \"blue\" (default), \"quasi\" or \"uniform\". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or \"silverman\" to compute it from the data. Overlap.sina() is noise with smoothing \"silverman\" (a violin outline), and Overlap.jitter() is noise with randomness \"uniform\" and smoothing Infinity (classic jitter); both make kind \"noise\". Both kinds grow from the `alignment` line: \"middle\" both ways, \"start\"/\"baseline\" to the positive side, \"end\" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only."
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
@@ -1329,7 +1299,7 @@ for the API.
           "description": "Grouping fields for the column/row keys — the table operator can't run without both."
         },
         "spacing": {
-          "oneOf": [
+          "anyOf": [
             {
               "$ref": "#/$defs/Number"
             },
@@ -1434,15 +1404,18 @@ for the API.
           "description": "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
             {
               "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/ChunkKey"
             }
           ],
-          "description": "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row."
+          "description": "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
         },
         "spacing": {
           "$ref": "#/$defs/Number",
@@ -1460,31 +1433,8 @@ for the API.
           "default": true
         },
         "tile": {
-          "oneOf": [
-            {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "enum": ["squarify"]
-                },
-                "ratio": {
-                  "$ref": "#/$defs/Number",
-                  "description": "Target tile aspect ratio: the longer side over the shorter side, at least 1 (orientation is not chosen). Omitted, d3's default, the golden ratio."
-                }
-              },
-              "required": ["kind"]
-            },
-            {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "enum": ["slice", "dice", "binary", "sliceDice"]
-                }
-              },
-              "required": ["kind"]
-            }
-          ],
-          "description": "The tiling strategy, made by a function call: squarify({ ratio? }), slice(), dice(), binary(), or sliceDice(). Each is one of d3-hierarchy's tiling methods.",
+          "$ref": "#/$defs/Tile",
+          "description": "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods.",
           "default": {
             "kind": "squarify"
           }
@@ -1516,7 +1466,7 @@ for the API.
       }
     },
     "PackOperator": {
-      "description": "Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).",
+      "description": "Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping, with d3's front-chain algorithm. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1525,28 +1475,18 @@ for the API.
           "const": "pack"
         },
         "by": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string"
             },
             {
               "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/ChunkKey"
             }
           ],
-          "description": "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one child per row."
-        },
-        "method": {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "enum": ["circles"]
-            }
-          },
-          "required": ["kind"],
-          "description": "The packing strategy, made by a function call: circles() packs each child's enclosing circle with d3's front-chain algorithm.",
-          "default": {
-            "kind": "circles"
-          }
+          "description": "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"
@@ -1576,6 +1516,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/JoinOperator"
+        },
+        {
+          "$ref": "#/$defs/FilterOperator"
         },
         {
           "$ref": "#/$defs/SpreadOperator"
@@ -1723,7 +1666,7 @@ for the API.
       }
     },
     "CircleMark": {
-      "description": "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/opacity) — position it via `spread`/`scatter`.",
+      "description": "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by at most one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1731,9 +1674,56 @@ for the API.
         "type": {
           "const": "circle"
         },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge position."
+        },
+        "cx": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center x."
+        },
+        "x2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Right edge position."
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Width."
+        },
+        "emX": {
+          "type": "boolean",
+          "description": "Embed x in the parent's x space."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward."
+        },
+        "cy": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center y."
+        },
+        "y2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Other y edge position."
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Height."
+        },
+        "emY": {
+          "type": "boolean",
+          "description": "Embed y in the parent's y space."
+        },
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
+        },
         "r": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Radius; becomes w=h=2r on the underlying ellipse."
+          "description": "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -1749,9 +1739,13 @@ for the API.
           "default": 0
         },
         "opacity": {
-          "$ref": "#/$defs/Number",
-          "description": "Opacity, 0 to 1, applied to fill and stroke. In JS it may also be a per-datum accessor or a `live(...)` value; only a literal number crosses the wire.",
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Opacity, 0 to 1, applied to fill and stroke: a number, a field name, or a per-datum accessor (in JS also a `live(...)` value, which does not cross the wire).",
           "default": 1
+        },
+        "fillOpacity": {
+          "$ref": "#/$defs/Number",
+          "description": "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`."
         },
         "debug": {
           "type": "boolean"
@@ -1777,7 +1771,7 @@ for the API.
       }
     },
     "EllipseMark": {
-      "description": "An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter).",
+      "description": "An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1849,6 +1843,10 @@ for the API.
           "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1.",
           "default": 1
+        },
+        "fillOpacity": {
+          "$ref": "#/$defs/Number",
+          "description": "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`."
         },
         "aspectRatio": {
           "$ref": "#/$defs/Number",
@@ -2066,7 +2064,7 @@ for the API.
           "description": "Raw CSS font-style (e.g. \"italic\")."
         },
         "fontWeight": {
-          "oneOf": [
+          "anyOf": [
             {
               "$ref": "#/$defs/Number"
             },
@@ -2224,7 +2222,7 @@ for the API.
           "const": "polygon"
         },
         "points": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -2354,11 +2352,11 @@ for the API.
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "A line's path is never filled. `fill` is the channel the shared color scale reads, so a field name colors each line by group, and it is the line color when `stroke` is omitted."
+          "description": "A line's path is never filled. `fill` is the channel the shared color scale reads: a field name or an accessor colors each line by group (it must be constant within the line), and it is the line color when `stroke` is omitted."
         },
         "stroke": {
-          "type": "string",
-          "description": "Line color."
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Line color, or a field name or accessor for a color scale (constant within the line). Defaults to `fill`."
         },
         "strokeWidth": {
           "$ref": "#/$defs/Number",
@@ -2378,7 +2376,8 @@ for the API.
           "description": "Blend mode where connectors overlap."
         },
         "curve": {
-          "description": "Screen-space path shape: a factory call (bezier()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name (\"linear\"/\"bezier\"/\"step\"/\"monotone\"/\"smooth\"/\"catmullRom\"). \"step\", \"linear\", \"monotone\" and \"smooth\" are read over the parameter of the run, from the least to the most smooth. \"step\" holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). \"monotone\" is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate \"monotone\". \"smooth\" rounds a peak a little past its point, but keeps a run of equal values flat. \"catmullRom\" is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted = \"auto\" (monotone on a homogeneous continuous connection axis, else linear)."
+          "$ref": "#/$defs/Curve",
+          "description": "Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate \"monotone\". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear()."
         },
         "dir": {
           "enum": ["x", "y"],
@@ -2452,11 +2451,11 @@ for the API.
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Fill color of the band, or a field name for a color scale. Omitted, the band takes the color of the marks it connects."
+          "description": "Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects."
         },
         "stroke": {
-          "type": "string",
-          "description": "Stroke color."
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Stroke color of the band's outline, or a field name or accessor for a color scale (constant within the band)."
         },
         "strokeWidth": {
           "$ref": "#/$defs/Number",
@@ -2477,7 +2476,8 @@ for the API.
           "description": "Connection axis."
         },
         "curve": {
-          "description": "Screen-space band-edge shape (\"linear\" | bezier() | \"step\" | \"monotone\" | \"smooth\" | \"catmullRom\"). \"step\" steps both edges, as a stepped area does. \"monotone\" is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate \"monotone\"); \"smooth\" is a rounder reading over the same parameter, and can go a little past a point; \"catmullRom\" is a centripetal Catmull-Rom on screen and can overshoot. Omitted = \"auto\" (monotone on a homogeneous continuous connection axis, else a bezier band)."
+          "$ref": "#/$defs/Curve",
+          "description": "Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate \"monotone\"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band."
         },
         "from": {
           "type": "string"
@@ -2601,7 +2601,7 @@ for the API.
       ]
     },
     "AxisOptions": {
-      "oneOf": [
+      "anyOf": [
         {
           "type": "boolean"
         },
@@ -2609,7 +2609,7 @@ for the API.
           "type": "object",
           "properties": {
             "title": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "type": "string"
                 },
@@ -2624,7 +2624,7 @@ for the API.
               "description": "Which frame edge the axis sits on: \"start\" is the near (origin) edge, \"end\" the far edge. Omitted, a continuous x-axis sits at the visual bottom."
             },
             "labelAngle": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "$ref": "#/$defs/Number"
                 },
@@ -2639,14 +2639,49 @@ for the API.
                 }
               ],
               "description": "Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite's labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; \"auto\" picks 0, 45, or 90 degrees per label row so labels do not collide."
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Calendar"
+              },
+              "description": "The label rows of a time axis, inner row first, e.g. [Calendar.month, Calendar.year]. Each row is one calendar partition: its ticks are its cells' starts, and each label is centered on its cell's start tick. The domain is niced outward to the inner row's cells. Default: the level and step the domain picks for about 10 ticks, then its parent level. In JS a row's labels can be custom: Calendar.quarter.format(fn), with fn a function of the cell. A row with a format is JS-only (it has no wire form)."
             }
           }
         }
       ],
-      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, and labelAngle."
+      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, and the rows of a time axis."
+    },
+    "Calendar": {
+      "type": "object",
+      "properties": {
+        "unit": {
+          "enum": [
+            "second",
+            "minute",
+            "hour",
+            "day",
+            "week",
+            "month",
+            "quarter",
+            "year"
+          ],
+          "description": "The calendar level of each cell."
+        },
+        "step": {
+          "$ref": "#/$defs/Number",
+          "description": "How many units one cell spans; steps align to the level above.",
+          "default": 1
+        },
+        "start": {
+          "enum": ["monday", "sunday"],
+          "description": "The first day of a week (weeks only)."
+        }
+      },
+      "description": "A calendar partition: a level (unit) at a step, e.g. Calendar.month.every(3)."
     },
     "AxesOptions": {
-      "oneOf": [
+      "anyOf": [
         {
           "type": "boolean"
         },
@@ -2665,6 +2700,359 @@ for the API.
         }
       ],
       "description": "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own."
+    },
+    "AxisInterval": {
+      "type": "object",
+      "properties": {
+        "min": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Start edge position."
+        },
+        "center": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center position."
+        },
+        "max": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "End edge position."
+        },
+        "size": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Size along the axis."
+        },
+        "embedded": {
+          "type": "boolean",
+          "description": "Embed this axis in the parent's space."
+        }
+      },
+      "description": "One axis of a `dims` option as an interval: `size` is a size channel, `min`/`center`/`max` are position channels."
+    },
+    "FieldPredicate": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "The field whose value is tested."
+        },
+        "between": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/Number"
+            }
+          ],
+          "description": "The interval's ends, `[lo, hi]`, compared by value."
+        },
+        "closed": {
+          "enum": ["both", "left", "right", "none"],
+          "description": "Which ends of the interval are inclusive, as in polars' `is_between`.",
+          "default": "both"
+        }
+      },
+      "required": ["field", "between"],
+      "description": "A field predicate, as `field(name).between(lo, hi, { closed })` builds it: the field it reads and the interval it tests."
+    },
+    "ChartOptions": {
+      "type": "object",
+      "properties": {
+        "w": {
+          "$ref": "#/$defs/Number",
+          "description": "Chart width in pixels."
+        },
+        "h": {
+          "$ref": "#/$defs/Number",
+          "description": "Chart height in pixels."
+        },
+        "coord": {
+          "description": "Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ..."
+        },
+        "color": {
+          "description": "Color scale for every mark, made by a call in the Color family: Color.palette(...) or Color.gradient(...)."
+        },
+        "axes": {
+          "$ref": "#/$defs/AxesOptions",
+          "description": "Draw axes: a boolean for both axes, or per-axis options {x?, y?}."
+        },
+        "legend": {
+          "type": "boolean",
+          "description": "Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped.",
+          "default": true
+        },
+        "padding": {
+          "$ref": "#/$defs/Number",
+          "description": "Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels)."
+        },
+        "schema": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time()."
+        }
+      },
+      "description": "Chart-level options: chart(data, {...}) in JS, chart(data, **options) in Python."
+    },
+    "AxisDimsValue": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        {
+          "$ref": "#/$defs/AxisInterval"
+        }
+      ],
+      "description": "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval."
+    },
+    "Tile": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "squarify"
+            },
+            "ratio": {
+              "$ref": "#/$defs/Number",
+              "minimum": 1,
+              "description": "Target tile aspect ratio: the longer side over the shorter side, at least 1 (orientation is not chosen). Omitted, d3's default, the golden ratio. 1 aims for square tiles, which suits one circle per leaf."
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "slice"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "dice"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "binary"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "sliceDice"
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "How `treemap` tiles its box: the value of its `tile` option. Each kind is one of d3-hierarchy's tiling methods."
+    },
+    "Overlap": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "separate"
+            },
+            "padding": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Pixels kept between neighboring dots.",
+              "default": 0
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "noise"
+            },
+            "randomness": {
+              "enum": ["blue", "quasi", "uniform"],
+              "description": "How offsets are drawn inside the outline: \"blue\" keeps each dot as far from its placed neighbors as it can, \"quasi\" spreads the dots by rank (fastest), \"uniform\" draws seeded uniform offsets.",
+              "default": "blue"
+            },
+            "smoothing": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Number",
+                  "minimum": 0
+                },
+                {
+                  "enum": ["silverman"]
+                }
+              ],
+              "description": "The bandwidth of each dot's bell, in data units of the data axis: 0 is no smoothing beyond the dots' own size, Infinity is a flat band, and \"silverman\" computes it from the data.",
+              "default": 0
+            },
+            "padding": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Pixels added to each dot's width when the outline is sized and, for \"blue\" randomness, when distances are compared.",
+              "default": 0
+            },
+            "seed": {
+              "type": "number",
+              "description": "Seed for \"blue\" and \"uniform\" randomness, so a render is the same every time.",
+              "default": 0
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "How `scatter` keeps its children clear of each other on the axis no field places: the value of its `overlap` option. Both kinds grow from the `alignment` line and move only that free axis."
+    },
+    "Curve": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "linear"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "step"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "monotone"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "smooth"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "catmullRom"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "bezier"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "orthogonal"
+            },
+            "bend": {
+              "enum": ["auto"],
+              "description": "Omitted, the elbow bends on the connector's `dir` axis; \"auto\" infers the bend axis from the endpoint geometry instead, for layouts with no single growth axis."
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "arc"
+            },
+            "direction": {
+              "enum": ["up", "down"],
+              "description": "Which side the arc bulges toward.",
+              "default": "up"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "perfectArrows"
+            },
+            "bow": {
+              "$ref": "#/$defs/Number",
+              "description": "Baseline curvature. 0 is a straight line.",
+              "default": 0
+            },
+            "stretch": {
+              "$ref": "#/$defs/Number",
+              "description": "How much the bow grows as the endpoints get closer, and shrinks as they get farther apart.",
+              "default": 0.25
+            },
+            "stretchMin": {
+              "$ref": "#/$defs/Number",
+              "description": "Distance in pixels below which stretch has its full effect.",
+              "default": 50
+            },
+            "stretchMax": {
+              "$ref": "#/$defs/Number",
+              "description": "Distance in pixels above which stretch has no effect.",
+              "default": 420
+            },
+            "padStart": {
+              "$ref": "#/$defs/Number",
+              "description": "Gap in pixels between the source box and the start of the arc.",
+              "default": 0
+            },
+            "padEnd": {
+              "$ref": "#/$defs/Number",
+              "description": "Gap in pixels between the end of the arc and the target box.",
+              "default": 20
+            },
+            "flip": {
+              "type": "boolean",
+              "description": "Flip which side the arc bows toward.",
+              "default": false
+            },
+            "straights": {
+              "type": "boolean",
+              "description": "Allow a straight line when the endpoints are axis-aligned, instead of forcing a slight bow.",
+              "default": true
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "How a path runs through its points: the value of the `curve` option of `line` and `ribbon`. `linear`, `step`, `monotone` and `smooth` are read over the parameter of the run, from the least to the most smooth; `catmullRom` is a shape on screen; `bezier`, `orthogonal`, `arc` and `perfectArrows` route each pair of neighboring points."
     }
   }
 }

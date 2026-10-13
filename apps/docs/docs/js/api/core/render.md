@@ -113,7 +113,10 @@ axes: { x: { side: "end" } }                   // seat the x-axis on the far edg
 axes: { x: { labelAngle: 45 } }                // rotate x tick/category labels 45°
 axes: { x: { labelAngle: [45] } }              // rotate only the innermost tier
 axes: { x: { labelAngle: "auto" } }            // rotate only if labels would collide
+axes: { x: { rows: [Calendar.month, Calendar.year] } } // the label rows of a time axis
 ```
+
+`rows` applies to a time axis only. See [`Calendar`](/js/api/core/calendar).
 
 Each per-axis object also accepts `side: "start" | "end"`. By default a
 **continuous/quantitative x-axis renders at the visual bottom** (and a continuous

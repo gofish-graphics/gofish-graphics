@@ -36,49 +36,13 @@ line(stroke=None, stroke_width=None, stroke_dasharray=None, opacity=None, curve=
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
-## Curves through data
+## Curve
 
-Four curve names draw a line through a run of values, read over the field that
-orders it, such as the years of a line chart. From the least to the most
-smooth, they are `"step"`, `"linear"`, `"monotone"` and `"smooth"`. When
-`curve` is left out, a line over a continuous axis uses `"monotone"`.
-
-A few terms help compare them. A curve is **C0** when it has no breaks, and
-**C1** when its direction also never changes suddenly (it has no corners). A
-curve **overshoots** when,
-between two neighboring points, it goes above the higher one or below the
-lower one. A curve is **local** when changing one value changes the curve only
-near that point.
-
-| Name       | What you see                                                                        | Algorithm                                                               | Continuity     | Local | Never overshoots |
-| ---------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------- | ----- | ---------------- |
-| `step`     | Each value holds until the next point, and then jumps.                              | step-after, like d3's `curveStepAfter`                                  | not continuous | yes   | yes              |
-| `linear`   | Straight segments from point to point.                                              | straight lines                                                          | C0             | yes   | yes              |
-| `monotone` | A smooth curve that turns exactly on the points.                                    | Steffen (1990), the same curve as d3's `curveMonotoneX`                 | C1             | yes   | yes              |
-| `smooth`   | Rounder peaks that can pass a little beyond their points. Long flat runs stay flat. | modified Akima, also called makima (Moler 2019), as in MATLAB and SciPy | C1             | yes   | no               |
-
-`"monotone"` is **piecewise** monotone. Between two neighboring points, each
-coordinate only rises or only falls, so the curve never goes past either point.
-It does not make the whole line monotone. The line still turns where the data
-turns, and the peak sits exactly on the data point.
-
-`"smooth"` lets a peak round off a little past its point. A run of three or
-more equal values stays exactly flat, while a single flat step between a rise
-and a fall can bow a little.
-
-`step` holds every value that depends on the field that orders the line until
-the next point's value of that field, and then jumps. It never holds the field
-itself. On a line chart over years, the year is the x axis, so the line moves
-along x while y holds, and the jump is a vertical riser: the staircase of d3's
-`curveStepAfter` and Vega-Lite's `interpolate: "step-after"`. On a connected
-scatterplot over years, x and y both depend on the year, so both hold, and
-the jump is a straight line from one point to the next, so it looks like
-`linear`. This differs on purpose from d3's step curves, which always draw a
-horizontal step and then a vertical one on the screen, whatever the axes
-mean.
-
-See the [JavaScript `line` page](/js/api/marks/line#curves-through-data) for
-how a line picks the knots of its curve.
+`curve` takes a member of the [`Curve`](/python/api/curve) family, such as
+`Curve.monotone()` or `Curve.orthogonal(bend="auto")`. When `curve` is left
+out, a line over a continuous axis uses `Curve.monotone()`, and any other line
+uses `Curve.linear()`. The [`Curve`](/python/api/curve#curves-through-data) page
+compares the curves.
 
 ## The line pattern
 

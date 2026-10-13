@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, rect } from "gofish-graphics";
+import { circle, rect, Curve } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — JewelryTree.
@@ -39,7 +39,7 @@ export const Jewelry: StoryObj = {
   render: () =>
     mount({
       node,
-      link: { curve: "linear", stroke: "#6baed6", strokeWidth: 2 },
+      link: { curve: Curve.linear(), stroke: "#6baed6", strokeWidth: 2 },
       parentChild: combine({
         x: { kind: "nest", pad: 6 },
         y: { kind: "align", alignment: "middle" },

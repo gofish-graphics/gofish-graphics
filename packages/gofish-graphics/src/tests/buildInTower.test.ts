@@ -23,9 +23,7 @@ import * as GoFish from "../../dist/index.js";
 import { categoryBrands, everyYearBrands } from "../data/categoryBrands";
 
 const {
-  animation,
   chart,
-  clock,
   derive,
   field,
   rect,
@@ -34,6 +32,9 @@ const {
   spread,
   stack,
   time,
+  Animation,
+  Coord,
+  Curve,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -141,7 +142,7 @@ await agree(
       .flow(spread({ by: "letter", dir: "x" }))
       .mark(
         rect({ h: "frequency" }).transition({
-          enter: animation.grow({ duration: 600 }),
+          enter: Animation.grow({ duration: 600 }),
         })
       ),
   () =>
@@ -150,7 +151,7 @@ await agree(
       .mark(rect({ h: "frequency" }).name("bars"))
       .layer(
         chart(selectAll("bars")).mark(
-          time.transition({ enter: animation.grow({ duration: 600 }) })
+          time.transition({ enter: Animation.grow({ duration: 600 }) })
         )
       ),
   [0, 200, 450, 600]
@@ -168,7 +169,7 @@ await agree(
       )
       .mark(
         rect({ h: "frequency" }).transition({
-          enter: animation.grow({ duration: 600 }),
+          enter: Animation.grow({ duration: 600 }),
         })
       ),
   () =>
@@ -178,7 +179,7 @@ await agree(
       .layer(
         chart(selectAll("bars"))
           .flow(time.stagger({ by: "letter", lag: 60 }))
-          .mark(time.transition({ enter: animation.grow({ duration: 600 }) }))
+          .mark(time.transition({ enter: Animation.grow({ duration: 600 }) }))
       ),
   [0, 100, 400, 700, 1260]
 );
@@ -198,7 +199,7 @@ await agree(
       )
       .mark(
         rect({ h: "frequency" }).transition({
-          enter: animation.grow({ duration: 600 }),
+          enter: Animation.grow({ duration: 600 }),
         })
       ),
   () =>
@@ -213,7 +214,7 @@ await agree(
               lag: 60,
             })
           )
-          .mark(time.transition({ enter: animation.grow({ duration: 600 }) }))
+          .mark(time.transition({ enter: Animation.grow({ duration: 600 }) }))
       ),
   [0, 150, 500, 900]
 );
@@ -238,7 +239,7 @@ await agree(
   () =>
     grouped(true).mark(
       rect({ h: "precipitation", fill: "city" }).transition({
-        enter: animation.grow({ duration: 400 }),
+        enter: Animation.grow({ duration: 400 }),
       })
     ),
   () =>
@@ -247,7 +248,7 @@ await agree(
       .layer(
         chart(selectAll("bars"))
           .flow(time.stagger({ by: "month", lag: 300 }))
-          .mark(time.transition({ enter: animation.grow({ duration: 400 }) }))
+          .mark(time.transition({ enter: Animation.grow({ duration: 400 }) }))
       ),
   [0, 250, 700, 1300, 1900]
 );
@@ -258,7 +259,7 @@ await agree(
   () =>
     grouped(true, 50).mark(
       rect({ h: "precipitation", fill: "city" }).transition({
-        enter: animation.grow({ duration: 400 }),
+        enter: Animation.grow({ duration: 400 }),
       })
     ),
   () =>
@@ -270,7 +271,7 @@ await agree(
             time.stagger({ by: "month", lag: 300 }),
             time.stagger({ by: "city", lag: 50 })
           )
-          .mark(time.transition({ enter: animation.grow({ duration: 400 }) }))
+          .mark(time.transition({ enter: Animation.grow({ duration: 400 }) }))
       ),
   [0, 75, 330, 520, 1000, 2000]
 );
@@ -294,7 +295,7 @@ await agree(
   () =>
     stacked(true).mark(
       rect({ h: "revenue", fill: "product" }).transition({
-        enter: animation.wipe({ from: "bottom" }),
+        enter: Animation.wipe({ from: "bottom" }),
       })
     ),
   () =>
@@ -306,7 +307,7 @@ await agree(
             time.stagger({ by: "quarter", lag: 100 }),
             time.stagger({ by: "product", spacing: 0 })
           )
-          .mark(time.transition({ enter: animation.wipe({ from: "bottom" }) }))
+          .mark(time.transition({ enter: Animation.wipe({ from: "bottom" }) }))
       ),
   [0, 300, 650, 1100, 1800]
 );
@@ -322,7 +323,7 @@ console.log("# fill: the enter state before a turn, the rest state after");
       )
       .mark(
         rect({ h: "frequency" }).transition({
-          enter: animation.grow({ duration: 600 }),
+          enter: Animation.grow({ duration: 600 }),
         })
       );
   // The bars: the rects that carry data (axis ticks are overlay rects).
@@ -374,7 +375,7 @@ console.log("# labels wait for their mark");
         .mark(
           rect({ h: "frequency" })
             .label("letter")
-            .transition({ enter: animation.grow({ duration: 400 }) })
+            .transition({ enter: Animation.grow({ duration: 400 }) })
         ),
       at,
       false
@@ -417,7 +418,7 @@ console.log("# a field-valued duration (CAST+ Gantt)");
           )
           .mark(
             rect({ x: "start", w: "days" }).transition({
-              enter: animation.wipe({ from: "left", duration: "days" }),
+              enter: Animation.wipe({ from: "left", duration: "days" }),
             })
           ),
         at,
@@ -464,15 +465,15 @@ console.log("# the race: chained .transition() vs .layer(time.transition())");
   const plain = (at: number) =>
     flow(at)
       .mark(bar())
-      .layer(time.transition({ curve: "linear" }))
+      .layer(time.transition({ curve: Curve.linear() }))
       .toDisplayList(view);
   for (const at of [2000, 2007.5, 2019]) {
     const chained = await flow(at)
       .mark(
         bar().transition({
-          enter: animation.fadeIn(),
-          update: animation.tween({ curve: "linear" }),
-          exit: animation.fadeOut(),
+          enter: Animation.fadeIn(),
+          update: Animation.tween({ curve: Curve.linear() }),
+          exit: Animation.fadeOut(),
         })
       )
       .toDisplayList(view);
@@ -484,7 +485,7 @@ console.log("# the race: chained .transition() vs .layer(time.transition())");
   const staggered = (at: number) =>
     flow(at, ranking().transition({ update: time.stagger({ lag: 20 }) }))
       .mark(
-        bar().transition({ update: animation.tween({ curve: "linear" }) })
+        bar().transition({ update: Animation.tween({ curve: Curve.linear() }) })
       )
       .toDisplayList(view);
   for (const at of [2007, 2008]) {
@@ -538,14 +539,14 @@ console.log("# a grow or a wipe on a pie wedge fails loudly");
   // A rect in polar coordinates is drawn as a path, which a grow or a wipe
   // cannot reshape; it must not silently pop in.
   const pie = (effect: unknown) =>
-    chart(alphabet.slice(0, 4), { coord: clock() })
+    chart(alphabet.slice(0, 4), { coord: Coord.clock() })
       .flow(stack({ by: "letter", dir: "x" }))
       .mark(rect({ w: "frequency", fill: "letter" }).transition({ enter: effect }))
       .toDisplayList({ w: 200, h: 200, playing: false, at: 0 });
   for (const [name, effect] of [
-    ["grow", animation.grow()],
-    ["shrink", animation.shrink()],
-    ["wipe", animation.wipe({ from: "left" })],
+    ["grow", Animation.grow()],
+    ["shrink", Animation.shrink()],
+    ["wipe", Animation.wipe({ from: "left" })],
   ] as const) {
     let message = "";
     try {
@@ -561,7 +562,7 @@ console.log("# a grow or a wipe on a pie wedge fails loudly");
   }
   let fadeError: unknown;
   try {
-    await pie(animation.fadeIn());
+    await pie(Animation.fadeIn());
   } catch (e) {
     fadeError = e;
   }
@@ -573,7 +574,7 @@ console.log("# a bare mark plays its own enter transition");
   const box = async (at: number) =>
     (paint(
       await rect({ w: 40, h: 30 })
-        .transition({ enter: animation.grow({ duration: 400 }) })
+        .transition({ enter: Animation.grow({ duration: 400 }) })
         .toDisplayList({ w: 100, h: 100, playing: false, at })
     ) as any[]).find((i) => i.kind === "rect");
   const [start, end] = [await box(0), await box(1000)];
@@ -610,7 +611,7 @@ console.log("# playing charts rendered together each play their own build");
       )
       .mark(
         rect({ h: "frequency" }).transition({
-          enter: animation.grow({ duration: 600 }),
+          enter: Animation.grow({ duration: 600 }),
         })
       )
       .render(box, { w: 200, h: 120, axes: false })
@@ -620,7 +621,7 @@ console.log("# playing charts rendered together each play their own build");
   document.body.appendChild(bareBox);
   renders.push(
     rect({ w: 40, h: 30 })
-      .transition({ enter: animation.grow({ duration: 2000 }) })
+      .transition({ enter: Animation.grow({ duration: 2000 }) })
       .render(bareBox, { w: 100, h: 100 })
   );
   await Promise.all(renders);
@@ -655,7 +656,7 @@ console.log("# a re-render lands on the build's final frame (#914)");
     )
     .mark(
       rect({ h: "frequency" }).transition({
-        enter: animation.grow({ duration: 600 }),
+        enter: Animation.grow({ duration: 600 }),
       })
     )
     .render(container, { w: 200, h: 120, axes: false, playing: false });

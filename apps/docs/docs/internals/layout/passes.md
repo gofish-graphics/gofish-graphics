@@ -88,6 +88,13 @@ Three per-run session contexts are initialized:
 
 These are attached to the render session and propagated to the node tree, rather than stored as module-global mutable state. This establishes clean state for the rendering process and ensures no interference between multiple chart renders.
 
+Calendar math (a time axis's cells) runs synchronously during elaboration,
+on the Temporal API that `applySchema` (`schema.ts`) loads when the chart's
+data has a time column (`loadTemporal()` in `calendar.ts`): the native API
+where the runtime has one, else `temporal-polyfill`, imported only then. A
+time axis needs a time column, so `layout` itself loads nothing, and a chart
+without one never loads the polyfill.
+
 ### Pass 2: Color Scale Resolution
 
 **Location**: `src/ast/gofish.tsx:172`
@@ -169,7 +176,7 @@ The `computeIntrinsicSize()` function returns a `Monotonic` function that maps f
 
 `x`/`y`/`w`/`h` mean axis 0 and axis 1 in every coordinate space. A coordinate
 transform may also declare **names** for its two axes in its `aliases` field:
-`polar()`/`clock()` declare `{ x: "theta", y: "r" }` and `geo()` declares
+`Coord.polar()`/`Coord.clock()` declare `{ x: "theta", y: "r" }` and `Coord.geo()` declares
 `{ x: "lon", y: "lat" }`. That declaration is the only source of the names. They are
 used in two places, and in both the meaning of a name depends on where the node sits,
 which a factory does not know when it runs:
@@ -312,8 +319,9 @@ under an ancestor ordinal axis, as long as it is a _different_ grouping (a finer
 level). So a grouped or faceted chart renders one ordinal axis per grouping
 level (per facet) — e.g. a `spread(lake)`+`stack(species)` bar gets an outer
 `lake` axis and a per-lake `species` axis. Wherever it sets an owning flag,
-`resolveAxes` also leaves a persistent `axisDemand` stamp — the demand bit that
-later gates per-scope domain nicing at the σ-scope solves (issue #659), since
+`resolveAxes` also leaves a persistent `axisDemand` stamp — the axis's ticks
+(`AxisTicks`: a count, and a time axis's rows), which later gate and
+shape per-scope domain nicing at the σ-scope solves (issue #659), since
 `resolveNiceDomains`'s old per-node tree walk is gone; nicing is now demand-
 driven at each scope's own solve (below). Then
 `elaborateChrome` **rewrites the tree**. Each node that owns chrome (axes,
@@ -337,10 +345,11 @@ The chart's options describe the chrome of the chart root. `layout()` passes
 
 - **Axis titles.** The root titles each axis it owns that the `axes` option
   turns on. The title text is the option's `title`, or else the axis's
-  `measure` (a continuous axis names itself by its unit, an ordinal axis by its
-  grouping field). A space with no measure has no title. The measure is read
-  off the root's space before elaboration re-resolves it, so the title names
-  the OUTERMOST grouping (`lake`, not the inner `species`).
+  title (`spaceTitle`: a continuous axis names itself by its quantity names,
+  joined with `", "`, never by its unit; an ordinal axis by its grouping
+  field). A space with no measure has no title. The title is read off the
+  root's space before elaboration re-resolves it, so it names the OUTERMOST
+  grouping (`lake`, not the inner `species`).
 - **The legend.** The color scale is resolved once, from the root, so the root
   carries the legend whenever the scale has something to show and the `legend`
   option is not `false`.
@@ -385,13 +394,16 @@ captured render closure observes it. Explicit `emX`/`emY` (and `connect`'s
 `embed()`) lock the flag to `true` and are never recomputed.
 
 A dim embeds iff its size is a data value or unsized (`baseEmbedded`, `data.ts`)
-AND — the **Route B** measure gate, only inside a coordinate space — its size's
-measure matches the dim's own _position_ measure (`min`/`center`/`max`). A size
-in a measure _foreign_ to where the mark sits (a scatter bubble's area ≠ its
-position units) stays ink: a flat point at the mapped center, not a swept wedge.
-The discriminator is mark-local because a polar coord forgets its axis measure;
-a positioned mark's own position measure is the axis measure it sits on. This
-consumes the measure provenance #534 carried to mark channels. The revocation is
+AND — the **Route B** unit gate, only inside a coordinate space — its size
+is in the same unit as the dim's own _position_ (`min`/`center`/`max`;
+`sameValueUnit` reads both through the render's union-find, which
+`resolveEmbedding` installs as the type walk does, so two unknowns
+are one unit only when they are one column or met on a shared axis). A size
+in a unit _foreign_ to where the mark sits (a scatter bubble's area ≠ its
+position) stays ink: a flat point at the mapped center, not a swept wedge.
+The discriminator is mark-local because a polar coord forgets its axis
+measure; a positioned mark's own position unit is the axis unit it sits on. This consumes the quantity provenance #534
+carried to mark channels. The revocation is
 coord-scoped, so Cartesian behavior matches the former construction-time
 inference. (Route A — relational, measure-free embedding — is not yet
 implemented; tracked under #618.)
@@ -479,9 +491,12 @@ turned into the side in a frame's axis order by `orientSide("start" | "end",
 direction)`. Geometry a node keeps for its own `lower` (a connector's paths, an
 arrow, a polygon's vertices, a tween's run) is in its axis order too; `lower`
 receives one node-local map, `local` (`p ↦ translate + (x, direction·y)`), the one
-place that geometry is reflected. A node that runs a pixel-native algorithm
-(the treemap's d3 tiling) reads its y from its frame's start edge
-(`fromFrameStart`), where it places its children.
+place that geometry is reflected. A node that runs a pixel-native algorithm (the
+treemap's d3 tiling, pack's `packSiblings`) places its children in its own axis
+order like any operator, with no reflection of its own. A treemap or pack with no
+data-driven size has no y axis, so it takes its frame's direction: in free space
+d3's first tile lands at the top left, as in d3; in a chart whose y grows upward
+it lands at the bottom left.
 
 Seating a child at its baseline is the one place a boundary between two directions
 needs more than the reflection: a child whose y grows upward inside a layer that
@@ -516,8 +531,9 @@ omitted dimension is resolved per axis from the root's size claim on it:
 the position scales and root scale factors) from the `layoutW`/`layoutH` it hands
 to `child.layout` (where a shrink-to-fit axis is left unsized). **Shared-measure
 equal scale** (#582) adds one reconciliation step here, after the per-axis scales
-are built and before `child.layout`: when `spaceMeasure(x) === spaceMeasure(y)`
-(the two axes are the same unit), each axis's pixels-per-data-unit — a POSITION
+are built and before `child.layout`: when `spaceUnit(x).unit` and
+`spaceUnit(y).unit` are the same DECLARED unit (two unknowns that unified
+through overlays do not count), each axis's pixels-per-data-unit — a POSITION
 domain's `canvas / range` or a baseline-magnitude σ — is equated to the binding
 `min(...)` so one data unit measures the same on both axes (circles stay circular,
 maps stay undistorted); the binding axis fills, the other gets a recentered
@@ -638,8 +654,8 @@ That is why `pack` keeps its children at their pixel size and does not fit
 itself to the space it is given (#967). The design note is
 `internals/design/shape-geometry.md` on the geometry-representations branch.
 
-The second consumer is `scatter`'s `overlap` option, `separate()` (#969) or
-`noise()` (#970, #1014). `sina()` and `jitter()` are `noise()` with other
+The second consumer is `scatter`'s `overlap` option, `Overlap.separate()` (#969) or
+`Overlap.noise()` (#970, #1014). `Overlap.sina()` and `Overlap.jitter()` are `Overlap.noise()` with other
 defaults filled in, so they reach layout as the same `{kind: "noise"}` object.
 `scatter` elaborates to a layer with a `position` constraint per child on each
 axis a field places, and an `align` on every other ("free") axis. With an

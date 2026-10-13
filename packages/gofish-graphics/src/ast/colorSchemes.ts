@@ -3,22 +3,15 @@
 // </gofish-wiki>
 
 import { formatHex, parse, toLab65, type Color } from "../colorModes";
+import type {
+  Color as ColorConfig,
+  PaletteScale,
+  GradientScale,
+} from "../families/color";
 
-export type PaletteScale = {
-  _tag: "palette";
-  values: string | string[] | Record<string, string>;
-};
-export type GradientScale = { _tag: "gradient"; stops: string | string[] };
-export type ColorConfig = PaletteScale | GradientScale;
-
-export const palette = (
-  values: string | string[] | Record<string, string>
-): PaletteScale => ({ _tag: "palette", values });
-
-export const gradient = (stops: string | string[]): GradientScale => ({
-  _tag: "gradient",
-  stops,
-});
+// The color scale a chart's `color` option takes, made by the `Color` family
+// (`families/color.ts`); internally it is called a color config.
+export type { ColorConfig, PaletteScale, GradientScale };
 
 type Scheme = { type: "palette" | "gradient"; colors: string[] };
 

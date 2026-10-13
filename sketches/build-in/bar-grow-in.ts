@@ -48,7 +48,8 @@ import {
   select,
   group,
   time,
-  animation,
+  Animation,
+  Curve,
 } from "gofish-graphics";
 
 // ---------------------------------------------------------------------------
@@ -69,7 +70,7 @@ chart(alphabet)
   .mark(rect({ h: "frequency" }).name("bars"))
   .layer(
     chart(selectAll("bars")).mark(
-      time.transition({ enter: animation.grow({ duration: 600 }) })
+      time.transition({ enter: Animation.grow({ duration: 600 }) })
     )
   );
 
@@ -78,7 +79,7 @@ chart(alphabet)
   .flow(spread({ by: "letter", dir: "x" }))
   .mark(
     rect({ h: "frequency" }).transition({
-      enter: animation.grow({ duration: 600 }),
+      enter: Animation.grow({ duration: 600 }),
     })
   );
 
@@ -94,7 +95,7 @@ chart(alphabet)
   .layer(
     chart(selectAll("bars"))
       .flow(time.stagger({ by: "letter", lag: 60 }))
-      .mark(time.transition({ enter: animation.grow({ duration: 600 }) }))
+      .mark(time.transition({ enter: Animation.grow({ duration: 600 }) }))
   );
 
 // jmp suggestion
@@ -106,7 +107,7 @@ chart(alphabet)
   )
   .mark(
     rect({ h: "frequency" }).transition({
-      enter: animation.grow({ duration: 600 }),
+      enter: Animation.grow({ duration: 600 }),
     })
   );
 
@@ -129,7 +130,7 @@ chart(alphabet)
   )
   .mark(
     rect({ h: "frequency" }).transition({
-      enter: animation.grow({ duration: 600 }),
+      enter: Animation.grow({ duration: 600 }),
     })
   );
 
@@ -142,7 +143,7 @@ chart(alphabet)
   )
   .mark(
     rect({ h: "frequency" }).transition({
-      enter: animation.grow({ duration: 600 }),
+      enter: Animation.grow({ duration: 600 }),
     })
   );
 
@@ -157,7 +158,7 @@ chart(alphabet)
   )
   .mark(
     rect({ h: "frequency" }).transition({
-      enter: animation.grow({ duration: 600 }),
+      enter: Animation.grow({ duration: 600 }),
     })
   );
 // OPEN: how to say "the whole build takes 1.5 s".
@@ -170,7 +171,7 @@ chart(alphabet)
       enter: time.stagger({ lag: 120 }),
     })
   )
-  .mark(rect({ h: "frequency" }).transition({ enter: animation.appear() }));
+  .mark(rect({ h: "frequency" }).transition({ enter: Animation.appear() }));
 
 // 3e. Grow and fade together.
 chart(alphabet)
@@ -182,15 +183,15 @@ chart(alphabet)
   .mark(
     rect({ h: "frequency" }).transition({
       enter: [
-        animation.grow({ duration: 600 }),
-        animation.fadeIn({ duration: 300 }),
+        Animation.grow({ duration: 600 }),
+        Animation.fadeIn({ duration: 300 }),
       ],
     })
   );
 
 // 3f. Name the effect once and reuse it (SwiftUI's `Animation.ripple`, Motion's
 //     variant objects). Nothing new is needed for this; it is a JS value.
-const growIn = animation.grow({ duration: 600, ease: "cubicOut" });
+const growIn = Animation.grow({ duration: 600, ease: "cubicOut" });
 chart(alphabet)
   .flow(
     spread({ by: "letter", dir: "x" }).transition({
@@ -214,7 +215,7 @@ chart(weather)
   )
   .mark(
     rect({ h: "precipitation", fill: "city" }).transition({
-      enter: animation.grow({ duration: 400 }),
+      enter: Animation.grow({ duration: 400 }),
     })
   );
 
@@ -233,7 +234,7 @@ chart(weather)
   )
   .mark(
     rect({ h: "precipitation", fill: "city" }).transition({
-      enter: animation.grow({ duration: 400 }),
+      enter: Animation.grow({ duration: 400 }),
     })
   );
 // Timing: each month lasts 2 × 50 + 400 = 500 ms (three cities), and months
@@ -251,7 +252,7 @@ chart(weather)
   .layer(
     chart(selectAll("bars"))
       .flow(time.stagger({ by: "city", spacing: 0 })) // one city after another
-      .mark(time.transition({ enter: animation.grow({ duration: 400 }) }))
+      .mark(time.transition({ enter: Animation.grow({ duration: 400 }) }))
   );
 // City order is presentation time, so it is a stagger, and city A's bars stay
 // when city B's arrive. `history` is only for data time (time.sequence).
@@ -270,7 +271,7 @@ chart(seattle)
   )
   .mark(
     rect({ h: "count", fill: "weather" }).transition({
-      enter: animation.grow({ duration: 500 }),
+      enter: Animation.grow({ duration: 500 }),
     })
   );
 
@@ -287,7 +288,7 @@ chart(seattle)
   )
   .mark(
     rect({ h: "count", fill: "weather" }).transition({
-      enter: animation.grow({ duration: 200 }),
+      enter: Animation.grow({ duration: 200 }),
     })
   );
 // OPEN: does a segment grow in place from its stack start (ECharts), ride on
@@ -315,9 +316,9 @@ chart(brands)
   )
   .mark(
     rect({ w: "value", fill: "category" }).transition({
-      enter: animation.fadeIn(),
-      update: animation.tween({ curve: "linear" }),
-      exit: animation.fadeOut(),
+      enter: Animation.fadeIn(),
+      update: Animation.tween({ curve: Curve.linear() }),
+      exit: Animation.fadeOut(),
     })
   );
 // DEFAULT FOR NOW (revisit once there are many examples): a stagger inside a
@@ -339,8 +340,8 @@ chart(alphabet)
   )
   .mark(
     rect({ h: "frequency" }).transition({
-      enter: animation.grow({ duration: 600 }),
-      exit: animation.shrink({ duration: 300 }),
+      enter: Animation.grow({ duration: 600 }),
+      exit: Animation.shrink({ duration: 300 }),
     })
   );
 // shrink is its own effect because of what it does (collapse to the
@@ -360,7 +361,7 @@ chart(alphabet)
   .mark(rect({ h: "frequency" }).name("bars"))
   .layer(
     chart(select("axes"))
-      .mark(time.transition({ enter: animation.fadeIn({ duration: 300 }) }))
+      .mark(time.transition({ enter: Animation.fadeIn({ duration: 300 }) }))
       .name("axesIn")
   )
   .layer(
@@ -368,7 +369,7 @@ chart(alphabet)
       .flow(time.stagger({ by: "letter", lag: 60 }))
       .mark(
         time.transition({
-          enter: animation.grow({ duration: 600 }),
+          enter: Animation.grow({ duration: 600 }),
           after: "axesIn",
         })
       )
@@ -389,7 +390,7 @@ chart(brands)
     })
   )
   .mark(rect({ w: "value", fill: "category" }))
-  .layer(time.transition({ curve: "linear" }));
+  .layer(time.transition({ curve: Curve.linear() }));
 
 // Chained: the mark says how it moves between years. With no .transition()
 // the chart steps from year to year, as time.sequence alone does today.
@@ -404,7 +405,7 @@ chart(brands)
   )
   .mark(
     rect({ w: "value", fill: "category" }).transition({
-      update: animation.tween({ curve: "linear" }),
+      update: Animation.tween({ curve: Curve.linear() }),
     })
   );
 
@@ -423,5 +424,7 @@ chart(brands)
   .layer(
     chart(selectAll("bars"))
       .flow(time.sequence({ by: "year" })) // data time: a name in consecutive years moves
-      .mark(time.transition({ update: animation.tween({ curve: "linear" }) })) // key = complement = name
+      .mark(
+        time.transition({ update: Animation.tween({ curve: Curve.linear() }) })
+      ) // key = complement = name
   );

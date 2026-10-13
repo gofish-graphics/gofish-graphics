@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar, datum } from "gofish-graphics";
+import { rect, datum, Coord, Curve } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — ClockTreeWithLink (a clock-face ring of nodes whose
@@ -95,7 +95,7 @@ export const ClockTreeWithLink: StoryObj = {
       {
         node,
         // curveStepBefore is unsupported → straight chord (bows under polar).
-        link: { curve: "linear", stroke: "#90a4ae", strokeWidth: 1 },
+        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1 },
         parentChild: combine({
           // θ: parent at the start of its subtree's slot, group after it.
           x: { kind: "distribute", spacing: 0, anchor: "edge" },
@@ -110,7 +110,7 @@ export const ClockTreeWithLink: StoryObj = {
         }),
         // InnerRadius:0.79 — the thin outer clock rim with an empty center that
         // the step/arc links route through. Now expressible.
-        coord: polar({ innerRadius: 0.79 }),
+        coord: Coord.polar({ innerRadius: 0.79 }),
       },
       { w: 520, h: 520 },
       clockData

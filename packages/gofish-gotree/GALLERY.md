@@ -39,7 +39,7 @@ radial node-link story now uses the #627 data-position approach (see the polar s
 
 ## Polar (ported — the filled-wedge family is now high-fidelity)
 
-All polar examples are ported as stories under `stories/gallery/` with `coord: polar()`
+All polar examples are ported as stories under `stories/gallery/` with `coord: Coord.polar()`
 (x → θ radians, y → r). The filled-wedge family (sunbursts, sector/clock/tyre rings,
 polar icicles) now renders at high fidelity: `polar()` takes shape options (#620) and the
 coord is a fit-frame on both axes, so WEDGE (rect) nodes carrying `w: datum(1)` (the θ extent)

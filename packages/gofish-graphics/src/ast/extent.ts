@@ -19,6 +19,7 @@ import {
   niceContinuous,
   axisOver,
   placeBaseline,
+  type AxisTicks,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "./underlyingSpace";
@@ -97,19 +98,20 @@ export const padExtent = (extent: Extent, padding: number): Extent =>
  *  kept. The widths are lengths, so this holds for a signed domain too, and
  *  for a delta axis, whose width is niced from 0. Only a space that renders an
  *  axis over its interval ({@link axisOver}), or will once placed (a free
- *  magnitude, {@link placeBaseline}), is niced, and only when `demand` says
- *  some node in the scope draws that axis (nicing is a presentation
+ *  magnitude, {@link placeBaseline}), is niced, and only when some node in
+ *  the scope draws that axis: `ticks` are that axis's ticks, which the
+ *  domain is niced to, or undefined for no axis (nicing is a presentation
  *  adjustment, so its demand comes from axis views). */
 export const niceScope = <S extends UnderlyingSpace | undefined>(
   space: S,
   extent: Extent | undefined,
-  demand = true
+  ticks: AxisTicks | undefined
 ): [S, Extent | undefined] => {
-  if (!demand) return [space, extent];
+  if (ticks === undefined) return [space, extent];
   const axis = axisOver(placeBaseline(space));
   if (space === undefined || !isCONTINUOUS(space) || axis === undefined)
     return [space, extent];
-  const niced = niceContinuous(space);
+  const niced = niceContinuous(space, ticks);
   if (extent === undefined) return [niced, undefined];
   const widened =
     dataWidth(niced as CONTINUOUS_TYPE) - dataWidth(space as CONTINUOUS_TYPE);

@@ -26,12 +26,15 @@ import { polar } from "../ast/coordinateTransforms/polar";
 import { wavy } from "../ast/coordinateTransforms/wavy";
 import { createName, type Token } from "../ast/createName";
 import { Constraint, RelateOperand } from "../ast/constraints";
-import { palette, gradient } from "../ast/colorSchemes";
+import { palette, gradient } from "../families/color";
 import { ref } from "../ast/shapes/ref";
 import { GoFishRef } from "../ast/_ref";
 import { sealComponent } from "../ast/withGoFish";
+import { resolveMarkResult } from "../ast/marks/markResult";
 import { Frontend } from "gofish-ir";
+import { RESOLVE_ROWS } from "../ast/channels";
 import {
+  applyLambdaTyped,
   rebuild,
   cutSlices,
   cutMark,
@@ -108,21 +111,30 @@ export function isTokenSentinel(v: any): v is TokenSentinel {
 // ---------------------------------------------------------------------------
 
 /**
- * Build the async arrow for a `{ __gofish_lambda: id }` sentinel. The arrow
- * is what JS-side `inferRaw` (and equivalents) calls per row. The body
- * issues a one-row RPC through the bridge and returns the lambda's result for
- * that row as the bridge hands it back: plain JSON values, with any
- * transport-specific wrapping already undone by the bridge.
+ * Build the accessor for a `{ __gofish_lambda: id }` sentinel. It has only a
+ * batch form ({@link RESOLVE_ROWS}): the mark and operator factories resolve
+ * it before channel inference (`resolveChannelAccessors` in channels.ts) with
+ * one `applyLambdaTyped(bridge, id, rows)` call for all of its rows, typed
+ * like any other callback result (a time comes back as epoch milliseconds).
+ * That call is the one place a Python accessor crosses the bridge. Called per row, it throws: a
+ * Python accessor works only in a channel.
  */
 function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
-  return async (d: any) => {
-    const [result] = await bridge.applyLambda(lambdaId, [d]);
-    return result;
+  const accessor = () => {
+    throw new Error(
+      "a Python accessor was called per row; it is resolved only in a channel"
+    );
   };
+  return Object.assign(accessor, {
+    [RESOLVE_ROWS]: (rows: readonly unknown[]) =>
+      applyLambdaTyped(bridge, lambdaId, [...rows]),
+  });
 }
 
 /**
- * Walk an arbitrary value and resolve Python-emitted lambda sentinels.
+ * Walk a mark's or operator's options and resolve Python-emitted lambda
+ * sentinels at any depth (a top-level channel, or nested as in
+ * `dims: { r: { size: … } }`).
  *
  *  - `{ __gofish_lambda: id }` becomes an `async (d) => …` arrow that
  *    RPCs into Python via the supplied bridge.
@@ -132,10 +144,10 @@ function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
  * supplied, lambda sentinels throw — a pure-JS consumer should never
  * emit one.
  */
-export function unwrapMarkOpts(value: any, bridge?: DeriveBridge): any {
+export function unwrapOpts(value: any, bridge?: DeriveBridge): any {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) {
-    return value.map((item) => unwrapMarkOpts(item, bridge));
+    return value.map((item) => unwrapOpts(item, bridge));
   }
   if (typeof value.__gofish_lambda === "string") {
     if (bridge === undefined) {
@@ -147,7 +159,7 @@ export function unwrapMarkOpts(value: any, bridge?: DeriveBridge): any {
   }
   const out: Record<string, any> = {};
   for (const [k, val] of Object.entries(value)) {
-    out[k] = unwrapMarkOpts(val, bridge);
+    out[k] = unwrapOpts(val, bridge);
   }
   return out;
 }
@@ -187,7 +199,7 @@ export function wrapWithScope(inner: any): any {
     });
   if (typeof inner.render === "function") {
     define("render", async (container: any, options: any) => {
-      const node: any = await wrapped(undefined, undefined, undefined);
+      const node: any = await resolveMarkResult(wrapped);
       return node.render(container, options);
     });
   }
@@ -276,7 +288,9 @@ export function mapOperator(
   bridge?: DeriveBridge
 ): Operator<any, any> | null {
   const { type, translate, label, ...opts } = op as Record<string, any>;
-  let operator = rebuild("operator", type as string, opts, { bridge });
+  let operator = rebuild("operator", type as string, unwrapOpts(opts, bridge), {
+    bridge,
+  });
   if (operator === undefined) return null;
   if (
     operator &&
@@ -332,7 +346,7 @@ export function mapMarkChildren(
       // valid in the chart `.mark(cut(...))` (data-bound expand) form.
       const slices = cutSlices(sourceMark as any, {
         dir: child.dir,
-        size: unwrapMarkOpts(child.size, bridge),
+        size: unwrapOpts(child.size, bridge),
         inset: child.inset,
       });
       out.push(...slices);
@@ -376,8 +390,10 @@ function relateClauses(
  * (the pre-#591 mark-fn contract, e.g. Scatter's pie-glyph story) pass
  * through unchanged.
  */
-function serializeMarkFnInput(data: any): { rows: any[]; inputRefs?: any[] } {
-  const items = Array.isArray(data) ? data : [data];
+function serializeMarkFnInput(items: any[]): {
+  rows: any[];
+  inputRefs?: any[];
+} {
   if (!items.some((item) => item instanceof GoFishRef)) {
     return { rows: items };
   }
@@ -507,7 +523,7 @@ export function mapMark(
     let mark = cutMark({
       source: sourceMark as any,
       dir: spec.dir,
-      size: unwrapMarkOpts(spec.size, bridge),
+      size: unwrapOpts(spec.size, bridge),
       inset: spec.inset,
     });
     mark = applyTranslate(mark);
@@ -535,7 +551,7 @@ export function mapMark(
     );
     // Resolve color/coord configs (e.g. a `layer({coord: polar()})` carries
     // its coord transform in the combinator options, not chart options).
-    const opts = resolveOptions(unwrapMarkOpts(spec.options ?? {}, bridge));
+    const opts = resolveOptions(unwrapOpts(spec.options ?? {}, bridge));
     let mark = rebuild("combinator-mark", spec.type, opts, {
       children: childMarks,
     });
@@ -585,7 +601,7 @@ export function mapMark(
     opts = rest;
   }
 
-  let mark = rebuild("leaf-mark", type as string, unwrapMarkOpts(opts, bridge));
+  let mark = rebuild("leaf-mark", type as string, unwrapOpts(opts, bridge));
   if (mark === undefined) {
     throw new Error(`Unknown mark type: ${String(type)}`);
   }
@@ -684,7 +700,7 @@ function chartFromIR(
   //                                        does the auto-naming/selectAll
   //                                        wiring (see chartBuilder.ts)
   //   - null / undefined                 — data was shipped via the bridge's
-  //                                        arrow_data sidecar; use the
+  //                                        tier_arrow sidecar; use the
   //                                        `data` argument the caller passed
   // Data in the IR (inline rows, a selection, the previous tier) wins over
   // rows the host shipped beside it.
@@ -762,7 +778,8 @@ export interface IRHost {
   /** Rows shipped beside the IR instead of inline in it (the widget's Arrow
    *  sidecar), one array per chart tier; a lone chart is tier 0. A chart
    *  whose `data` is inline, a selection, or the previous tier ignores its
-   *  entry. */
+   *  entry. An array may carry column types (`setColumnTypes`), which the
+   *  chart reads as it reads its own `schema`'s, and its `schema` wins. */
   tierRows?: Record<string, any>[][];
 }
 
@@ -777,7 +794,8 @@ function definedFields<T extends Record<string, unknown>>(o: T): Partial<T> {
 /**
  * Render a whole frontend-IR root (a chart, a layer, or a bare mark) into
  * `container`. This is the one entry point both hosts use: the Python widget
- * (Arrow sidecar, anywidget RPC) and the parity harness (inline rows, HTTP).
+ * (Arrow sidecar, anywidget RPC) and the parity harness (the same Arrow
+ * sidecar, HTTP RPC).
  * Building throws synchronously on a bad spec; the returned promise settles
  * with the {@link View} once the chart has rendered.
  */

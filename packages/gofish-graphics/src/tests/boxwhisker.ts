@@ -7,6 +7,7 @@ import {
   rect,
   spreadX,
   v,
+  Curve,
 } from "../lib";
 import { genderPayGap, payGrade } from "../data/genderPayGap";
 import { Value } from "../ast/data";
@@ -35,7 +36,7 @@ const boxAndWhisker = ({
       rect({ w: 8, h: 1, y: v(min), fill: "gray" }).name(minName),
       rect({ w: 8, h: 1, y: v(max), fill: "gray" }).name(maxName),
     ]).relate((names) => [
-      line({ dir: "y", strokeWidth: 1, curve: "bezier" }, [
+      line({ dir: "y", strokeWidth: 1, curve: Curve.bezier() }, [
         names[minName],
         names[maxName],
       ]),

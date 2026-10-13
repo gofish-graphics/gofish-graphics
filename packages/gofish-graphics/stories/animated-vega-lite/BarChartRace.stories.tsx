@@ -53,6 +53,7 @@ import {
   time,
   timer,
   type Timer,
+  Curve,
 } from "../../src/lib";
 import { pausedClock } from "./pausedClock";
 import {
@@ -165,7 +166,7 @@ const race = (
         position: "outset-right",
       })
     )
-    .layer(time.transition({ curve: "linear" }))
+    .layer(time.transition({ curve: Curve.linear() }))
     .layer(yearReadout(year, args.h))
     .render(container, {
       w: args.w,
@@ -207,7 +208,7 @@ export const Animated: StoryObj<Args> = {
           position: "outset-right",
         })
       )
-      .layer(time.transition({ curve: "linear" }))
+      .layer(time.transition({ curve: Curve.linear() }))
       .layer(yearReadout(year, args.h))
       .render(container, {
         w: args.w,
@@ -393,7 +394,7 @@ const raceFromBelow = (
     .layer(
       chart(selectAll("bars"))
         .flow(group({ by: "name" }))
-        .mark(time.transition({ along: "year", curve: "linear" }))
+        .mark(time.transition({ along: "year", curve: Curve.linear() }))
     )
     .layer(yearReadout(year, args.h))
     .render(container, {
