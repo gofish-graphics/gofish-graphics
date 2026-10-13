@@ -279,7 +279,7 @@ with no ticks. A chained key adds a level per bin before the last, e.g.
 years under months, each year label at the start of its run of months, just
 past the divider between neighboring years. A part of a cycle covers the whole
 cycle: an axis over the months of the year shows all twelve. See
-[chart › Axes](/js/api/core/chart#axes) for the `levels` and `labelAlign`
+[chart › Axes](/js/api/core/chart#axes) for the `levels` and `label.align`
 options.
 
 `spread` gives each cell an equal slot. To place each cell at its true width

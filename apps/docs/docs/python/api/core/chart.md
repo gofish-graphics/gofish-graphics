@@ -68,17 +68,19 @@ chart(data, axes={"x": True, "y": False})     # x only
 chart(data, axes={"x": {"title": "Year"}, "y": True})   # custom x title
 chart(data, axes={"x": {"title": False}, "y": True})    # suppress inferred x title
 chart(data, axes={"x": {"side": "end"}})                # x-axis on the far edge
-chart(data, axes={"x": {"label_angle": 45}})            # x labels rotated 45 degrees
-chart(data, axes={"x": {"label_align": [True, "center"]}})  # center the second level
+chart(data, axes={"x": {"label": {"angle": 45}}})         # x labels rotated 45 degrees
+chart(data, axes={"x": {"label": {"align": [True, "center"]}}})  # center the second level
 chart(data, axes={"x": {"levels": [Calendar.week, Calendar.month]}})  # the rows of a time axis
 chart(data, axes={"x": {"levels": [False, True]}})       # hide the innermost level
 ```
 
 Keys inside the per-axis dict are snake_case, like every keyword argument:
-`"title"`, `"side"`, `"label_angle"`, `"label_align"`, and `"levels"`. Any other key, including the
-camelCase `"labelAngle"`, raises a `TypeError`.
+`"title"`, `"side"`, `"label"`, and `"levels"`, and inside `"label"`, `"angle"`
+and `"align"`. Any other key raises a `TypeError` that lists
+the keys the dict takes.
 
-`"label_angle"` rotates the tick and category labels clockwise by that many
+`"label"` sets how the axis's labels are drawn. Its `"angle"` rotates the tick
+and category labels clockwise by that many
 degrees. A list rotates each level of the axis separately, by the same
 depths as `"levels"`, nearest the plot first (`[45]` rotates only the
 innermost level), and `"auto"` picks 0, 45, or 90 degrees for each level so
@@ -124,7 +126,7 @@ the inner row and the month row, and the divider between two years runs on
 through the year row. A level whose group continues across the gap stops
 the divider.
 
-"label_align" sets where each level's labels sit along the axis: `"center"` centers
+The label's `"align"` sets where each level's labels sit along the axis: `"center"` centers
 a label under what it names, and `"start"` puts it at the start of its run,
 3 pixels past the divider before it (the first run starts at the axis
 start). By default:
@@ -137,7 +139,7 @@ start). By default:
 | a continuous axis's ticks                                                                                  | centered on the tick     |
 
 A single value applies to every level. A list is per level, by the same
-depths as `levels`, and `True` keeps a level's inferred alignment: `"label_align": [True, "center"]`
+depths as `levels`, and `True` keeps a level's inferred alignment: `"label": {"align": [True, "center"]}`
 centers the second level. `"start"` on a continuous axis is an error, since
 its labels name points.
 

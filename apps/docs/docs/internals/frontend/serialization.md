@@ -428,7 +428,8 @@ fields genuinely their own.
 Three smaller tables sit beside the construct entries. `OPTION_TYPES` declares
 the nested option objects a field points at by name, in the same type DSL:
 today `AxesOptions` (a boolean, or `{x, y}`), `AxisOptions` (a boolean, or
-`{title, side, labelAngle}`), `AxisInterval` (`{min, center, max, size,
+`{title, side, label, levels}`), `AxisLabelOptions` (`{angle, align}`, the
+value of an axis's `label`), `AxisInterval` (`{min, center, max, size,
 embedded}`), `AxisDimsValue` (a channel value or an `AxisInterval`, the
 value of a `dims` entry), `FieldPredicate` (`{field, between, closed}`,
 the predicate of `filter`), `Calendar`, `Partition` and `StructBin` (the
@@ -704,9 +705,11 @@ paired with its wire key and the shape of its value. A field whose type has
 no option keys compiles to nothing and its value passes through as is. The
 generated module holds one entry per named option type (`_OPTION_TYPES`) and
 one interpreter, `_to_wire`, which every generated function calls on such a
-field. So `chart(data, axes={"x": {"label_angle": 45}})` serializes as
-`{"axes": {"x": {"labelAngle": 45}}}`, and an undeclared key, including the
-camelCase `"labelAngle"`, is a `TypeError` that names the expected keys.
+field. A declared camelCase key would be snake_case in the dict; no nested
+option type declares one today, so `chart(data, axes={"x": {"label":
+{"angle": 45}}})` serializes as `{"axes": {"x": {"label": {"angle": 45}}}}`.
+An undeclared key, such as a flat `"label_angle"`, is a `TypeError` that
+names the expected keys.
 Python's `chart()` now goes through a generated `_chart_opts` core built from
 `CHART_OPTIONS`, so an unknown chart keyword is a `TypeError` too. The
 `axes` option of `.render(...)`, on a chart, a mark, or a layer, goes through

@@ -138,10 +138,10 @@ side by the owner's cross direction) to keep the tick facing the content.
 order. `elaborationsFor` returns the side it chose for each axis, and the title ring
 uses that same side, so a title and its axis always land on the same edge.
 
-### Label rotation (`labelAngle`)
+### Label rotation (`label.angle`)
 
-The public `axes: { x: { labelAngle: number | number[] | "auto" } }` option (#746, extended
-to per-level arrays afterward) rotates a tick or category label about its anchor,
+The public `axes: { x: { label: { angle: number | number[] | "auto" } } }` option (#746, extended
+to per-level arrays afterward, nested under `label` in #1133) rotates a tick or category label about its anchor,
 authored **screen-clockwise** to match Vega-Lite's `labelAngle`. It is threaded the
 same way `side` is —
 `elaborateChrome → elaborationsFor → elaborate{Continuous,Ordinal}Axis → tickMark` /
@@ -149,7 +149,7 @@ same way `side` is —
 SVG's rotation, clockwise on screen, so it passes through unchanged. A number or
 array is a manual, always-on
 angle; `"auto"` picks one of 0°, 45°, and 90° per label row (see
-[Automatic label angle](#automatic-label-angle-labelangle-auto) below).
+[Automatic label angle](#automatic-label-angle-label-angle-auto) below).
 
 **The hanging-point rule.** `resolveLabelRotation` (`axes/elaborate.tsx`) turns
 the authored angle `a` into a `LabelRotation` descriptor — `rotate` (the value
@@ -223,7 +223,7 @@ ordinal if any child's is), so a node's fold depends only on ITS OWN subtree
 and two independent grouped-bar regions don't interfere, then hands it to
 `elaborationsFor`. An axis on dim `d` starts at depth `names[d].length` and
 appends the names of its own levels. Both the public `axes.x.levels` entries
-and a per-level `labelAngle` array are read at those depths: `angleForTier`
+and a per-level `label.angle` array are read at those depths: `angleForTier`
 picks the number itself, or `array[depth]`.
 
 `axes.x.levels` (`AxisOptions.levels` in `gofish.tsx`; read once by
@@ -247,9 +247,9 @@ that cannot apply records an issue, and `layout` raises the first one, or an
 entry past the last level, with the dim's level names (`levelsError`). So an
 error lists every level of the chart's dim, not only the axis that found it.
 
-### Automatic label angle### Automatic label angle (`labelAngle: "auto"`)
+### Automatic label angle (`label.angle: "auto"`)
 
-`labelAngle: "auto"` picks each label row's setting from 0°, 45°, 90°, and (for
+`label.angle: "auto"` picks each label row's setting from 0°, 45°, 90°, and (for
 a category row only) hidden, in that order of preference: the first setting at
 which no two labels in the row collide wins. Hidden always fits (a hidden row
 has no labels to collide), so a category row never reaches the least-overlap
@@ -309,7 +309,7 @@ sweep along the row, so any two labels are compared, not only neighbors.
 so a grouped bar chart's crowded product row can slant to 45° (or be hidden)
 while its region row stays at 0°. Axis elaboration takes a `LabelRowSettings`
 function, `(row) => angle | "hidden" | undefined`, asked once per row; a manual
-`labelAngle` becomes one via `labelRowSettingsFromAngles`, and `runLayout` hands
+`label.angle` becomes one via `labelRowSettingsFromAngles`, and `runLayout` hands
 `layout()` the chosen one directly (an internal option, not a public value). A
 hidden ordinal row is simply not elaborated: the node still claims the axis and
 its depth, but adds no labels, so the row takes no space. The runs are uniform:
@@ -399,10 +399,10 @@ difference axis), never off the size claim:
   same gutter seating, and every tick and label pinned at its instant with
   `Constraint.position`, so nothing sits in an ordinal slot: it is built by
   the same `positionAxis` as a numeric axis, its row labels passed as
-  `extraLabels` (each with its row's offset past the line). `labelAngle`
+  `extraLabels` (each with its row's offset past the line). `label.angle`
   does not rotate them yet (a rotated row would need its depth from the
   rotated label boxes), so, like a difference axis's delta labels, they
-  carry no `axisLabel` tag and `labelAngle: "auto"` does not score them. Its
+  carry no `axisLabel` tag and `label.angle: "auto"` does not score them. Its
   ticks and
   labels come from calendar partitions (`CalendarPartition` in
   `calendar.ts`) instead of `d3.ticks`, one row per partition
@@ -525,8 +525,8 @@ difference axis), never off the size claim:
   points-versus-cells rule that places labels: a point's label centers on
   its tick, and a cell's label is placed by its region.
 
-  Where a level's labels sit along the axis is the axis's `labelAlign`
-  option, per depth like `labelAngle`, else inferred from what the label
+  Where a level's labels sit along the axis is the axis's `label.align`
+  option, per depth like `label.angle`, else inferred from what the label
   means. A centered label collects the groups beneath it, which have no
   order. A start-aligned label marks where a run of ordered values begins,
   as a calendar's month labels do. So an outer level over ordered groups
@@ -540,7 +540,7 @@ difference axis), never off the size claim:
   start for the axis's first run. The box reads which way the slots run off
   the layout (from the axis's first slot to its last), so a reversed or
   bottom-up axis puts it on the run's side. A continuous axis's labels name
-  points, its ticks, so they stay centered on them, and `labelAlign:
+  points, its ticks, so they stay centered on them, and `label.align:
 "start"` on one is an error.
 
   `axisSpan` is a bake boundary

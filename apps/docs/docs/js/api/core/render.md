@@ -110,9 +110,9 @@ axes: { x: true, y: false }                    // x only
 axes: { x: { title: "Year" }, y: true }        // custom x title, inferred y title
 axes: { x: { title: false }, y: true }         // suppress the inferred x title
 axes: { x: { side: "end" } }                   // seat the x-axis on the far edge
-axes: { x: { labelAngle: 45 } }                // rotate x tick/category labels 45°
-axes: { x: { labelAngle: [45] } }              // rotate only the innermost level
-axes: { x: { labelAngle: "auto" } }            // rotate only if labels would collide
+axes: { x: { label: { angle: 45 } } }         // rotate x tick/category labels 45°
+axes: { x: { label: { angle: [45] } } }       // rotate only the innermost level
+axes: { x: { label: { angle: "auto" } } }     // rotate only if labels would collide
 axes: { x: { levels: [Calendar.week, Calendar.month] } } // the rows of a time axis
 axes: { x: { levels: [false, true] } }         // hide the innermost level
 ```
@@ -132,7 +132,7 @@ grows upward) and `"end"` is the far edge — e.g.
 
 ### Rotating tick and category labels
 
-Each per-axis object also accepts `labelAngle: number | number[] | "auto"` — degrees,
+Each per-axis object also accepts `label: { angle: number | number[] | "auto" }` — degrees,
 **clockwise on screen**, matching Vega-Lite's `labelAngle`. It rotates both
 continuous tick labels and ordinal category labels on that axis. This is useful
 when category labels would otherwise overlap at small chart sizes:
@@ -146,7 +146,7 @@ gf.chart(seafood)
   .render(root, {
     w: 300,
     h: 210,
-    axes: { x: { labelAngle: 45 }, y: true },
+    axes: { x: { label: { angle: 45 } }, y: true },
   });
 ```
 
@@ -155,7 +155,7 @@ gf.chart(seafood)
 A **plain number** applies to every level of the axis — e.g. a
 two-level grouped bar chart's inner (year) and outer (city) category rows both
 rotate the same amount. An **array** is per-level instead, by the depths of
-[`levels`](/js/api/core/chart#axes), nearest the plot first: `labelAngle: [45]`
+[`levels`](/js/api/core/chart#axes), nearest the plot first: `label: { angle: [45] }`
 rotates only the innermost level and leaves outer levels unrotated; `[45, 0]` is
 the explicit two-level form (same result). An index past the end of the array
 means unrotated. A numeric axis is one level, so in a faceted chart its ticks
@@ -169,7 +169,7 @@ Vega-Lite's 45° look for a positive (clockwise) angle and matplotlib's
 `ha="right"` look for a negative one.
 
 ```js
-gf.chart(cityYear, { axes: { x: { labelAngle: [45] } } }) // year rotated, city upright
+gf.chart(cityYear, { axes: { x: { label: { angle: [45] } } } }) // year rotated, city upright
   .flow(
     gf.spread({ by: "city", dir: "x", spacing: 24 }),
     gf.spread({ by: "year", dir: "x", spacing: 0 })
@@ -180,7 +180,7 @@ gf.chart(cityYear, { axes: { x: { labelAngle: [45] } } }) // year rotated, city 
 
 #### Choosing the angle automatically
 
-`labelAngle: "auto"` rotates only when it has to. Each row of labels gets its
+`label: { angle: "auto" }` rotates only when it has to. Each row of labels gets its
 own angle: GoFish tries 0°, then 45°, then 90°, and keeps the first angle at
 which no two labels in that row overlap or come closer than 2px. If a row of
 category labels collides at every angle, GoFish hides that row instead of
@@ -194,7 +194,7 @@ chart, so a year label under one city that runs into a year label under the
 next city counts as a collision.
 
 ```js
-gf.chart(sales, { axes: { x: { labelAngle: "auto" } } })
+gf.chart(sales, { axes: { x: { label: { angle: "auto" } } } })
   .flow(
     gf.spread({ by: "region", dir: "x", spacing: 24 }),
     gf.spread({ by: "product", dir: "x", spacing: 0 })

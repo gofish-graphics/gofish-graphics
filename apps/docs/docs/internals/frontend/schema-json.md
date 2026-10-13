@@ -2800,43 +2800,9 @@ for the API.
               "enum": ["start", "end"],
               "description": "Which frame edge the axis sits on: \"start\" is the near (origin) edge, \"end\" the far edge. Omitted, a continuous x-axis sits at the visual bottom."
             },
-            "labelAngle": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/Number"
-                },
-                {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/Number"
-                  }
-                },
-                {
-                  "enum": ["auto"]
-                }
-              ],
-              "description": "Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite's labelAngle). A number applies to every level of the axis; an array is per level, by the same depths as `levels`, nearest the plot first; \"auto\" picks 0, 45, or 90 degrees per level so labels do not collide."
-            },
-            "labelAlign": {
-              "anyOf": [
-                {
-                  "enum": ["start", "center"]
-                },
-                {
-                  "type": "array",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "enum": ["start", "center"]
-                      },
-                      {
-                        "const": true
-                      }
-                    ]
-                  }
-                }
-              ],
-              "description": "Where each level's labels sit along the axis: \"center\" centers a label under what it names, \"start\" puts it at the start of its run, just past the divider before it (the first run starts at the axis start). Omitted, an ordinal axis's outer level over ordered groups (cells of time, numeric bins, or a column the schema declares ordered) starts its runs, and every other level centers: an outer level over unordered categories, the innermost level (one label per slot), and a continuous axis, whose labels name points, so \"start\" there is an error. A plain value applies to every level; an array is per level, by the same depths as `levels`, nearest the plot first, with true keeping a level's inferred alignment."
+            "label": {
+              "$ref": "#/$defs/AxisLabelOptions",
+              "description": "How the axis's labels are drawn: their angle and their alignment, per level."
             },
             "levels": {
               "type": "array",
@@ -2855,7 +2821,51 @@ for the API.
           }
         }
       ],
-      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, labelAlign, and its levels."
+      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, label (angle and align), and its levels."
+    },
+    "AxisLabelOptions": {
+      "type": "object",
+      "properties": {
+        "angle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Number"
+              }
+            },
+            {
+              "enum": ["auto"]
+            }
+          ],
+          "description": "Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite's labelAngle). A number applies to every level of the axis; an array is per level, by the same depths as `levels`, nearest the plot first; \"auto\" picks 0, 45, or 90 degrees per level so labels do not collide."
+        },
+        "align": {
+          "anyOf": [
+            {
+              "enum": ["start", "center"]
+            },
+            {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "enum": ["start", "center"]
+                  },
+                  {
+                    "const": true
+                  }
+                ]
+              }
+            }
+          ],
+          "description": "Where each level's labels sit along the axis: \"center\" centers a label under what it names, \"start\" puts it at the start of its run, just past the divider before it (the first run starts at the axis start). Omitted, an ordinal axis's outer level over ordered groups (cells of time, numeric bins, or a column the schema declares ordered) starts its runs, and every other level centers: an outer level over unordered categories, the innermost level (one label per slot), and a continuous axis, whose labels name points, so \"start\" there is an error. A plain value applies to every level; an array is per level, by the same depths as `levels`, nearest the plot first, with true keeping a level's inferred alignment."
+        }
+      },
+      "description": "How one axis's labels are drawn: their angle and their alignment, each per level by the same depths as `levels`."
     },
     "Calendar": {
       "anyOf": [

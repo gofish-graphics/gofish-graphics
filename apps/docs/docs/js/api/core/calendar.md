@@ -181,7 +181,7 @@ those of its first instant (`day` is `1` for a month).
   whatever the runtime's locale: `12 AM` for an hour, `Feb 29` for a day or
   week, `Mon` for a weekday, `Jan` for a month, `2024` for a year. A locale option is
   [#1098](https://github.com/gofish-graphics/gofish-graphics/issues/1098).
-- `labelAngle` does not rotate the labels of a time axis.
+- `label.angle` does not rotate the labels of a time axis.
 - In a faceted chart, the rows of the time axes inside the facets are the
   first levels of the dimension, and the facets' category level comes after
   them.

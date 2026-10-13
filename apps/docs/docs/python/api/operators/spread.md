@@ -254,7 +254,7 @@ years under months, each year label at the start of its run of months, just
 past the divider between neighboring years. A part of a cycle covers the whole
 cycle: an axis over the months of the year shows all twelve. See
 [chart › Axes](/python/api/core/chart#axes) for the `"levels"` and
-`"label_align"` options.
+`"label"` (`"align"`) options.
 
 `spread` gives each cell an equal slot. To place each cell at its true width
 on a continuous axis, use [`partition`](/python/api/operators/partition) with the same key.

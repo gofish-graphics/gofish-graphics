@@ -53,6 +53,8 @@ chart(data, { axes: { x: { title: "Year" }, y: true } }); // custom x title, inf
 chart(data, { axes: { x: { title: false }, y: true } }); // suppress the inferred x title
 chart(data, { axes: { x: { levels: [Calendar.week, Calendar.month] } } }); // the rows of a time axis
 chart(data, { axes: { x: { levels: [false, true] } } }); // hide the innermost level
+chart(data, { axes: { x: { label: { angle: 45 } } } }); // x labels rotated 45 degrees
+chart(data, { axes: { x: { label: { align: [true, "center"] } } } }); // center the second level
 ```
 
 The full type is:
@@ -64,11 +66,18 @@ type AxisOptions =
   | {
       title?: string | false;
       side?: "start" | "end";
-      labelAngle?: number | number[] | "auto";
-      labelAlign?: "start" | "center" | ("start" | "center" | true)[];
+      label?: AxisLabelOptions;
       levels?: (boolean | CalendarPartition)[];
     };
+type AxisLabelOptions = {
+  angle?: number | number[] | "auto";
+  align?: "start" | "center" | ("start" | "center" | true)[];
+};
 ```
+
+`label` sets how the axis's labels are drawn: `angle` rotates them and
+`align` places them along the axis. An axis object or a `label` object with any
+other key is an error that lists the keys it takes.
 
 `levels` sets the axis's levels, its bands of labels, by depth, nearest the
 plot first. Every axis on the dimension has levels, counted from the inside
@@ -99,7 +108,7 @@ levels: a Calendar value over slots that are not times, or finer than the
 slots (`Calendar.week` over months), `false` on a numeric axis, and an entry
 past the last level. A Calendar value coarser than slots that do not nest in
 it groups each slot by the cell that holds the slot's start: over week
-slots, `Calendar.month` puts each week in the month it starts in. `labelAngle` and `labelAlign` arrays use the same
+slots, `Calendar.month` puts each week in the month it starts in. `label.angle` and `label.align` arrays use the same
 depths.
 
 On an ordinal axis, the label rows of the dimension stack from the plot
@@ -112,7 +121,7 @@ the inner row and the month row, and the divider between two years runs on
 through the year row. A level whose group continues across the gap stops
 the divider.
 
-labelAlign sets where each level's labels sit along the axis: `"center"` centers
+`label.align` sets where each level's labels sit along the axis: `"center"` centers
 a label under what it names, and `"start"` puts it at the start of its run,
 3 pixels past the divider before it (the first run starts at the axis
 start). By default:
@@ -125,7 +134,7 @@ start). By default:
 | a continuous axis's ticks                                                                                  | centered on the tick     |
 
 A single value applies to every level. A list is per level, by the same
-depths as `levels`, and `true` keeps a level's inferred alignment: `labelAlign: [true, "center"]`
+depths as `levels`, and `true` keeps a level's inferred alignment: `label: { align: [true, "center"] }`
 centers the second level. `"start"` on a continuous axis is an error, since
 its labels name points.
 

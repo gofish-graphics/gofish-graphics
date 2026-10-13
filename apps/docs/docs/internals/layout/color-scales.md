@@ -95,9 +95,9 @@ accessor, a literal, or a hand-made `datum(...)` has none, so the scale knows
 no field for it. It is not a quantity and plays no part in unit checking. A legend draws the
 scale, so `layout()` reports the fields a rendered legend shows as
 `LayoutData.legendFields` (empty when the legend is suppressed). No legend
-title reads it yet; `labelAngle: "auto"` uses it to decide whether a hidden
+title reads it yet; `label.angle: "auto"` uses it to decide whether a hidden
 category row is still named somewhere (see
-[Axes](/internals/frontend/axes#automatic-label-angle-labelangle-auto)).
+[Axes](/internals/frontend/axes#automatic-label-angle-label-angle-auto)).
 
 ### Literal hex passthrough
 

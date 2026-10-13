@@ -148,6 +148,15 @@ and `y.*` options. When GoFish embeds another system's grammar, it renames that
 grammar's options to GoFish's words and moves per-node styling into a mark
 function (the GoTree port, #461).
 
+**Nest a role instead of prefixing its name.** When several options share a
+prefix, such as `labelAngle` and `labelAlign`, the prefix is a hierarchy
+written into the names. Write it as structure instead: one option named for
+the role, with its details inside, as in `label: { angle, align }`. The
+grouping is then visible, the role can be passed as a whole, and a new detail
+is a new key, not a new name. CSS shorthands and ggplot2's `element_text`
+group settings the same way. Vega-Lite's flat `labelAngle` and `labelAlign`
+are the pattern to avoid (#1133).
+
 **Strategy families are uppercase namespaces.** When an option's value is one of
 several named strategies, the family is a capitalized namespace such as
 `Overlap.separate()` or `Curve.monotone()` (#1013). The details, and why an
