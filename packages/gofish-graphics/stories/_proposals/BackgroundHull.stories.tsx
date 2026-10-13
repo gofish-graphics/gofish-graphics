@@ -855,3 +855,423 @@ export const KelpRowPenguins: StoryObj = {
   },
 };
 
+// ── (d) Generalized KelpFusion: one construction, hull and spine as presets ──
+//
+// Proposed spelling (see proposal section 6):
+//   Shape.blob({ density, neck, smoothing, avoiding, via })   with `padding` on enclose
+//   Shape.hull(opts)  = Shape.blob({ density: 1, ...opts })
+//   Shape.spine(opts) = Shape.blob({ density: 0, ...opts })
+//
+// The construction, for one set:
+//  1. Skeleton. Candidate links are the Delaunay edges of the member centers
+//     (all pairs below three members), plus any `via` edges, which are always
+//     kept. Each link is routed around every non-member's keep-out zone. The
+//     links kept are KelpFusion's shortest-path graph SPG(t) with t = 1/density:
+//     density 0 is the minimum spanning tree, density 1 keeps every candidate.
+//  2. Faces. A face (a region closed off by kept links) is filled when it holds
+//     no non-member. (KelpFusion's area limit A is left out: A = Infinity.)
+//  3. Pieces. Each member grown by `padding` (the node bulge, radius R), each
+//     link drawn as a tube of half-width neck * R, and the filled faces.
+//  4. Smoothing. Morphological closing of the union by a disc of radius
+//     `smoothing`: grow by s, then shrink by s. It fills concave corners and
+//     gaps narrower than about 2s and leaves convex parts alone.
+//  5. Cut. Each non-member's keep-out zone (its own size + `clearance`) is cut
+//     back out, and a small opening rounds the corners the cut leaves.
+// Steps 4 and 5 are computed on a pixel grid (distance transforms), and the
+// outline is traced with marching squares. Prototype simplifications: no
+// Voronoi clipping of node areas; filled faces have straight sides; holes in
+// the result are not drawn (only outer loops).
+
+type BlobOpts = {
+  avoiding?: Member[]; via?: [Pt, Pt][];
+  pad: number; density: number; neck?: number; smoothing?: number;
+  clearance?: number; res?: number; debug?: { links: Pt[][] };
+};
+
+const memberRadius = (m: Member) => (m.kind === "circle" ? m.r : Math.min(m.w, m.h) / 2);
+
+/** Squared Euclidean distance transform (Felzenszwalb & Huttenlocher) of a 1-D array. */
+const edt1 = (f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Float64Array) => {
+  let k = 0; v[0] = 0; z[0] = -Infinity; z[1] = Infinity;
+  for (let q = 1; q < n; q++) {
+    let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+    while (s <= z[k]) { k--; s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]); }
+    k++; v[k] = q; z[k] = s; z[k + 1] = Infinity;
+  }
+  k = 0;
+  for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; d[q] = (q - v[k]) ** 2 + f[v[k]]; }
+};
+/** Distance (in grid cells) from each cell to the nearest cell where `target` is set. */
+const edtTo = (target: Uint8Array, W: number, H: number): Float64Array => {
+  const INF = 1e20, out = new Float64Array(W * H);
+  for (let i = 0; i < W * H; i++) out[i] = target[i] ? 0 : INF;
+  const N = Math.max(W, H), f = new Float64Array(N), d = new Float64Array(N), v = new Int32Array(N), z = new Float64Array(N + 1);
+  for (let x = 0; x < W; x++) {
+    for (let y = 0; y < H; y++) f[y] = out[y * W + x];
+    edt1(f, H, d, v, z);
+    for (let y = 0; y < H; y++) out[y * W + x] = d[y];
+  }
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) f[x] = out[y * W + x];
+    edt1(f, W, d, v, z);
+    for (let x = 0; x < W; x++) out[y * W + x] = Math.sqrt(d[x]);
+  }
+  return out;
+};
+
+/** Marching squares: closed loops where the field crosses 0 (inside is >= 0). */
+const contours = (F: Float64Array, W: number, H: number, x0: number, y0: number, res: number): Pt[][] => {
+  const at = (i: number, j: number) => F[j * W + i];
+  const pt = (e: string): Pt => {
+    const [kind, si, sj] = e.split(":"), i = +si, j = +sj;
+    if (kind === "h") { const a = at(i, j), b = at(i + 1, j), t = a / (a - b); return [x0 + (i + t) * res, y0 + j * res]; }
+    const a = at(i, j), b = at(i, j + 1), t = a / (a - b); return [x0 + i * res, y0 + (j + t) * res];
+  };
+  const SEGS: Record<number, [number, number][]> = {
+    1: [[2, 3]], 2: [[1, 2]], 3: [[1, 3]], 4: [[0, 1]], 5: [[0, 3], [2, 1]], 6: [[0, 2]], 7: [[0, 3]],
+    8: [[3, 0]], 9: [[2, 0]], 10: [[3, 2], [1, 0]], 11: [[1, 0]], 12: [[3, 1]], 13: [[2, 1]], 14: [[3, 2]],
+  };
+  const next = new Map<string, string>();
+  for (let j = 0; j < H - 1; j++)
+    for (let i = 0; i < W - 1; i++) {
+      const tl = at(i, j) >= 0 ? 1 : 0, tr = at(i + 1, j) >= 0 ? 1 : 0, br = at(i + 1, j + 1) >= 0 ? 1 : 0, bl = at(i, j + 1) >= 0 ? 1 : 0;
+      const c = tl * 8 + tr * 4 + br * 2 + bl;
+      if (c === 0 || c === 15) continue;
+      const E = [`h:${i}:${j}`, `v:${i + 1}:${j}`, `h:${i}:${j + 1}`, `v:${i}:${j}`]; // top, right, bottom, left
+      for (const [a, b] of SEGS[c]) next.set(E[a], E[b]);
+    }
+  const loops: Pt[][] = [], seen = new Set<string>();
+  for (const s0 of next.keys()) {
+    if (seen.has(s0)) continue;
+    const loop: Pt[] = [];
+    let cur: string | undefined = s0;
+    while (cur !== undefined && !seen.has(cur)) { seen.add(cur); loop.push(pt(cur)); cur = next.get(cur); }
+    if (loop.length > 8) loops.push(loop);
+  }
+  return loops;
+};
+const relax = (loop: Pt[], passes = 2): Pt[] => {
+  let p = loop;
+  for (let k = 0; k < passes; k++)
+    p = p.map((q, i) => {
+      const a = p[(i - 1 + p.length) % p.length], b = p[(i + 1) % p.length];
+      return [(a[0] + 2 * q[0] + b[0]) / 4, (a[1] + 2 * q[1] + b[1]) / 4] as Pt;
+    });
+  return p;
+};
+const loopArea = (l: Pt[]) => Math.abs(l.reduce((s, p, i) => s + cross([0, 0], p, l[(i + 1) % l.length]), 0)) / 2;
+const segDist2 = (sg: [Pt, Pt], x: number, y: number) => {
+  const [[x1, y1], [x2, y2]] = sg, dx = x2 - x1, dy = y2 - y1, L = dx * dx + dy * dy || 1;
+  const tt = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / L));
+  return (x - x1 - tt * dx) ** 2 + (y - y1 - tt * dy) ** 2;
+};
+
+/** The generalized construction. Returns the outer loops of the region. */
+const blob = (members: Member[], o: BlobOpts): Pt[][] => {
+  const res = o.res ?? 0.5, pad = o.pad, neck = o.neck ?? 1, s = o.smoothing ?? 0;
+  const clearance = o.clearance ?? 4, others = o.avoiding ?? [];
+  const P = members.map(centerOf), n = P.length;
+  const R = members.map((m) => memberRadius(m) + pad); // node bulge radius
+  const ek = (i: number, j: number) => (i < j ? `${i},${j}` : `${j},${i}`);
+  // 1a. candidates: Delaunay edges of the centers (all pairs below 3)
+  const tri: [number, number, number][] = [];
+  const cand = new Map<string, [number, number]>();
+  if (n >= 3) {
+    const d = Delaunator.from(P);
+    for (let k = 0; k < d.triangles.length; k += 3) {
+      const [i, j, l] = [d.triangles[k], d.triangles[k + 1], d.triangles[k + 2]];
+      if (Math.abs(cross(P[i], P[j], P[l])) < 1e-9) continue;
+      tri.push([i, j, l]);
+      for (const [u, v] of [[i, j], [j, l], [l, i]]) cand.set(ek(u, v), [Math.min(u, v), Math.max(u, v)]);
+    }
+  }
+  if (tri.length === 0) for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) cand.set(ek(i, j), [i, j]);
+  // via edges (given in coordinates) matched to member indices; always kept, never routed
+  const idxOf = (p: Pt) => P.findIndex((q) => dist(p, q) < 0.5);
+  const viaKeys = new Set<string>();
+  for (const [a, b] of o.via ?? []) {
+    const i = idxOf(a), j = idxOf(b);
+    if (i >= 0 && j >= 0) { viaKeys.add(ek(i, j)); cand.set(ek(i, j), [Math.min(i, j), Math.max(i, j)]); }
+  }
+  // 1b. route each candidate around the non-members' keep-out zones, grown by the tube half-width
+  const hw = (i: number, j: number) => neck * Math.min(R[i], R[j]);
+  const keep = (m: Member) => memberRadius(m) + clearance;
+  const obstacle = (m: Member, grow: number) =>
+    // (the 0.01 px upward nudge only breaks exact ties between going above and below, toward below)
+    m.kind === "circle" ? discPoly([m.cx, m.cy - 0.01], (keep(m) + grow) / Math.cos(Math.PI / 32), 32) : convexHull(samples(m, clearance + grow));
+  const G: { i: number; j: number; route: Pt[]; len: number; via: boolean }[] = [];
+  for (const [key, [i, j]] of cand) {
+    const via = viaKeys.has(key);
+    const obs = others.map((m) => obstacle(m, hw(i, j))).filter((poly) => !inPoly(P[i], poly) && !inPoly(P[j], poly));
+    const route = via ? [P[i], P[j]] : routeAround(P[i], P[j], obs);
+    if (route) G.push({ i, j, route, len: polyLen(route), via });
+  }
+  // 1c. SPG(t), t = 1/density; via edges first, always kept
+  const t = o.density <= 0 ? Infinity : 1 / o.density;
+  G.sort((a, b) => (a.via === b.via ? a.len - b.len : a.via ? -1 : 1));
+  const kept = new Map<string, (typeof G)[number]>();
+  const root = P.map((_, k) => k);
+  const find = (k: number): number => (root[k] === k ? k : (root[k] = find(root[k])));
+  const adj: { to: number; w: number }[][] = P.map(() => []);
+  const spDist = (src: number, goal: number, bound: number) => {
+    const D = new Map<number, number>([[src, 0]]), done = new Set<number>();
+    const heap: [number, number][] = [[0, src]];
+    while (heap.length) {
+      let bi = 0;
+      for (let k = 1; k < heap.length; k++) if (heap[k][0] < heap[bi][0]) bi = k;
+      const [du, u] = heap.splice(bi, 1)[0];
+      if (done.has(u)) continue;
+      if (du >= bound) return Infinity;
+      if (u === goal) return du;
+      done.add(u);
+      for (const { to, w } of adj[u]) {
+        const nd = du + w;
+        if (nd < (D.get(to) ?? Infinity)) { D.set(to, nd); heap.push([nd, to]); }
+      }
+    }
+    return Infinity;
+  };
+  for (const e of G) {
+    if (e.via || !isFinite(t)) {
+      if (e.via || find(e.i) !== find(e.j)) {
+        root[find(e.i)] = find(e.j); kept.set(ek(e.i, e.j), e);
+        if (e.via) { adj[e.i].push({ to: e.j, w: 0 }); adj[e.j].push({ to: e.i, w: 0 }); }
+      }
+      continue;
+    }
+    const we = Math.pow(e.len, t);
+    if (spDist(e.i, e.j, we) >= we) { kept.set(ek(e.i, e.j), e); adj[e.i].push({ to: e.j, w: we }); adj[e.j].push({ to: e.i, w: we }); }
+  }
+  if (o.debug) o.debug.links.push(...[...kept.values()].map((e) => e.route));
+  // 2. faces: groups of Delaunay triangles joined across links that were not kept
+  const triOf = new Map<string, number[]>();
+  tri.forEach(([i, j, l], k) => [[i, j], [j, l], [l, i]].forEach(([u, v]) => triOf.set(ek(u, v), [...(triOf.get(ek(u, v)) ?? []), k])));
+  const tr = tri.map((_, k) => k);
+  const tfind = (k: number): number => (tr[k] === k ? k : (tr[k] = tfind(tr[k])));
+  for (const [key, ks] of triOf) if (ks.length === 2 && !kept.has(key)) tr[tfind(ks[0])] = tfind(ks[1]);
+  const open = new Set<number>();
+  for (const [key, ks] of triOf) if (ks.length === 1 && !kept.has(key)) open.add(tfind(ks[0]));
+  const faces: Pt[][] = [];
+  const groups = new Map<number, number[]>();
+  tri.forEach((_, k) => groups.set(tfind(k), [...(groups.get(tfind(k)) ?? []), k]));
+  for (const [g, ks] of groups) {
+    if (open.has(g)) continue;
+    const polys = ks.map((k) => tri[k].map((v) => P[v]) as Pt[]);
+    if (others.some((m) => polys.some((q) => inPoly(centerOf(m), q)))) continue;
+    faces.push(...polys);
+  }
+  // 3. pieces as distance functions, rasterized into f = distance to their union
+  type Piece = { bb: number[]; d: (x: number, y: number) => number };
+  const pieces: Piece[] = [];
+  members.forEach((m, k) => {
+    if (m.kind === "circle") pieces.push({ bb: [m.cx - R[k], m.cy - R[k], m.cx + R[k], m.cy + R[k]], d: (x, y) => Math.hypot(x - m.cx, y - m.cy) - R[k] });
+    else pieces.push({
+      bb: [m.x - pad, m.y - pad, m.x + m.w + pad, m.y + m.h + pad],
+      d: (x, y) => Math.hypot(Math.max(m.x - x, 0, x - m.x - m.w), Math.max(m.y - y, 0, y - m.y - m.h)) - pad,
+    });
+  });
+  const segD = (a: Pt, b: Pt, x: number, y: number) => Math.sqrt(segDist2([a, b], x, y));
+  for (const e of kept.values()) {
+    const h = hw(e.i, e.j);
+    for (let k = 1; k < e.route.length; k++) {
+      const a = e.route[k - 1], b = e.route[k];
+      pieces.push({ bb: [Math.min(a[0], b[0]) - h, Math.min(a[1], b[1]) - h, Math.max(a[0], b[0]) + h, Math.max(a[1], b[1]) + h], d: (x, y) => segD(a, b, x, y) - h });
+    }
+  }
+  for (const q of faces) {
+    pieces.push({ bb: bboxOf(q), d: (x, y) => {
+      const e = Math.min(segD(q[0], q[1], x, y), segD(q[1], q[2], x, y), segD(q[2], q[0], x, y));
+      return inPoly([x, y], q) ? -e : e;
+    } });
+  }
+  const bb = pieces.reduce((r, p) => [Math.min(r[0], p.bb[0]), Math.min(r[1], p.bb[1]), Math.max(r[2], p.bb[2]), Math.max(r[3], p.bb[3])], [Infinity, Infinity, -Infinity, -Infinity]);
+  const M = s + 6, x0 = bb[0] - M, y0 = bb[1] - M;
+  const W = Math.ceil((bb[2] - bb[0] + 2 * M) / res) + 1, H = Math.ceil((bb[3] - bb[1] + 2 * M) / res) + 1;
+  const f = new Float64Array(W * H).fill(1e9);
+  for (const p of pieces) {
+    const i0 = Math.max(0, Math.floor((p.bb[0] - s - 3 - x0) / res)), i1 = Math.min(W - 1, Math.ceil((p.bb[2] + s + 3 - x0) / res));
+    const j0 = Math.max(0, Math.floor((p.bb[1] - s - 3 - y0) / res)), j1 = Math.min(H - 1, Math.ceil((p.bb[3] + s + 3 - y0) / res));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const v = p.d(x0 + i * res, y0 + j * res), k = j * W + i;
+      if (v < f[k]) f[k] = v;
+    }
+  }
+  // 4. closing by s: grow (f <= s), then shrink by s (distance to the outside >= s)
+  const F = new Float64Array(W * H);
+  if (s > 0) {
+    const outside = new Uint8Array(W * H);
+    for (let k = 0; k < W * H; k++) outside[k] = f[k] > s ? 1 : 0;
+    const dOut = edtTo(outside, W, H);
+    for (let k = 0; k < W * H; k++) F[k] = outside[k] ? -f[k] : dOut[k] * res - s;
+  } else for (let k = 0; k < W * H; k++) F[k] = -f[k];
+  // 5. cut each non-member's keep-out zone, then round the cut's corners with a small opening
+  if (others.length) {
+    for (const m of others) {
+      const kr = keep(m), mb = m.kind === "circle" ? [m.cx - kr, m.cy - kr, m.cx + kr, m.cy + kr] : [m.x - clearance, m.y - clearance, m.x + m.w + clearance, m.y + m.h + clearance];
+      const i0 = Math.max(0, Math.floor((mb[0] - x0) / res) - 2), i1 = Math.min(W - 1, Math.ceil((mb[2] - x0) / res) + 2);
+      const j0 = Math.max(0, Math.floor((mb[1] - y0) / res) - 2), j1 = Math.min(H - 1, Math.ceil((mb[3] - y0) / res) + 2);
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const x = x0 + i * res, y = y0 + j * res;
+        const dk = m.kind === "circle" ? Math.hypot(x - m.cx, y - m.cy) - kr
+          : Math.hypot(Math.max(m.x - x, 0, x - m.x - m.w), Math.max(m.y - y, 0, y - m.y - m.h)) - clearance;
+        const k = j * W + i;
+        if (dk < F[k]) F[k] = dk;
+      }
+    }
+    const ro = Math.min(clearance, 0.5 * neck * Math.min(...R), Math.max(s, 2));
+    if (ro > res) {
+      const out1 = new Uint8Array(W * H);
+      for (let k = 0; k < W * H; k++) out1[k] = F[k] < 0 ? 1 : 0;
+      const d1 = edtTo(out1, W, H);
+      const core = new Uint8Array(W * H);
+      for (let k = 0; k < W * H; k++) core[k] = d1[k] * res >= ro ? 1 : 0;
+      const d2 = edtTo(core, W, H);
+      for (let k = 0; k < W * H; k++) F[k] = ro - d2[k] * res;
+    }
+  }
+  const loops = contours(F, W, H, x0, y0, res).map((l) => relax(l, 3));
+  return loops.filter((l) => loopArea(l) > 40 * res * res);
+};
+const signedArea = (l: Pt[]) => l.reduce((a, p, i) => a + cross([0, 0], p, l[(i + 1) % l.length]), 0) / 2;
+/** Outer loops are filled; holes (loops wound the other way) are painted white, then outlined. */
+const blobInk = (loops: Pt[][], color: string, fillOpacity = 0.22, strokeWidth = 1.5) => {
+  if (!loops.length) return [];
+  const big = loops.reduce((a, b) => (loopArea(a) > loopArea(b) ? a : b));
+  const outerSign = Math.sign(signedArea(big));
+  const outer = loops.filter((l) => Math.sign(signedArea(l)) === outerSign), holes = loops.filter((l) => Math.sign(signedArea(l)) !== outerSign);
+  return [
+    ...outer.map((l) => polygon({ points: l, fill: color, stroke: color, strokeWidth: 0, opacity: fillOpacity })),
+    ...holes.map((l) => polygon({ points: l, fill: "white", stroke: "none" })),
+    ...loops.map((l) => polygon({ points: l, fill: "none", stroke: color, strokeWidth })),
+  ];
+};
+const outlineOnlyAll = (loops: Pt[][]) => loops.map((l) => polygon({ points: l, fill: "none", stroke: "#111", strokeWidth: 2.5 }));
+
+// The shortcuts: exactly the general call with `density` fixed.
+const hullPreset = (o: Omit<BlobOpts, "density">): BlobOpts => ({ density: 1, ...o });
+const spinePreset = (o: Omit<BlobOpts, "density">): BlobOpts => ({ density: 0, ...o });
+
+// A titled grid of panels.
+const titledGrid = (cells: [string, any][], o: { w: number; h: number; cols: number }) => {
+  const container = initializeContainer();
+  const top = 22;
+  layer(
+    cells.map(([title, panel], i) =>
+      position({ x: (i % o.cols) * o.w, y: Math.floor(i / o.cols) * (o.h + top) }, [
+        layer([
+          position({ x: 6, y: 0 }, [text({ text: title, fontSize: 12, fontWeight: "bold", fill: "#333" })]),
+          position({ x: 0, y: top }, [panel]),
+        ]),
+      ])
+    )
+  ).render(container, { w: o.cols * o.w, h: Math.ceil(cells.length / o.cols) * (o.h + top) });
+  return container;
+};
+const uPanel = (ink: any[]) => layer([...ink, ...pointsLayer()]);
+const uBlob = (o: Partial<BlobOpts>) => blobInk(blob(U, { avoiding: NON, pad: 8, density: 0, ...o }), BLUE);
+
+// Parameter grid on the U data (gray dots are non-members, listed in `avoiding`).
+// Row 1: density at padding 8, smoothing 8. Row 2: smoothing at density 0.
+// Row 3: padding (the node bulge) at density 0, smoothing 4, neck 0.5.
+export const BlobGrid: StoryObj = {
+  render: () => titledGrid([
+    ["density: 0 (spine)", uPanel(uBlob({ density: 0, smoothing: 8 }))],
+    ["density: 0.5", uPanel(uBlob({ density: 0.5, smoothing: 8 }))],
+    ["density: 0.75", uPanel(uBlob({ density: 0.75, smoothing: 8 }))],
+    ["density: 1, no avoiding (hull)", uPanel(uBlob({ density: 1, smoothing: 8, avoiding: [] }))],
+    ["smoothing: 0", uPanel(uBlob({ smoothing: 0 }))],
+    ["smoothing: 8", uPanel(uBlob({ smoothing: 8 }))],
+    ["smoothing: 20", uPanel(uBlob({ smoothing: 20 }))],
+    ["smoothing: 40", uPanel(uBlob({ smoothing: 40 }))],
+    ["padding: 3", uPanel(uBlob({ pad: 3, neck: 0.5, smoothing: 4 }))],
+    ["padding: 8", uPanel(uBlob({ pad: 8, neck: 0.5, smoothing: 4 }))],
+    ["padding: 14", uPanel(uBlob({ pad: 14, neck: 0.5, smoothing: 4 }))],
+    ["padding: 20", uPanel(uBlob({ pad: 20, neck: 0.5, smoothing: 4 }))],
+  ], { w: 265, h: 225, cols: 4 }),
+};
+
+// The convex-hull shortcut against a true padded convex hull (black line), on the U
+// and on one penguin species.
+export const BlobHullExact: StoryObj = {
+  render: () => {
+    const gentoo = pen.filter((d) => d.Species === "Gentoo").map((d) => C(xs(d["Beak Length (mm)"]), ys(d["Beak Depth (mm)"]), 2.5));
+    const truth = (ms: Member[], pad: number) => polygon({ points: hullOutline(ms, pad), fill: "none", stroke: "#111", strokeWidth: 1 });
+    return titledGrid([
+      ["Shape.hull() fill, true hull line", uPanel([...uBlob(hullPreset({ pad: 8, avoiding: [] })), truth(U, 8)])],
+      ["same, Gentoo penguins", layer([...axes(), ...blobInk(blob(gentoo, hullPreset({ pad: 6, res: 0.5 })), SPECIES_COLORS.Gentoo), truth(gentoo, 6), ...gentoo.map((m) => dot(m, SPECIES_COLORS.Gentoo))])],
+    ], { w: 430, h: 300, cols: 2 });
+  },
+};
+
+// Alpha shape (old prototype, alpha 40) next to the general construction with
+// smoothing 40, which plays the part of alpha's rolling disc.
+export const BlobVsAlpha: StoryObj = {
+  render: () => titledGrid([
+    ["alpha shape, alpha 40", uPanel(region(hullOutline(U, 8, 40), BLUE))],
+    ["density 0, smoothing 40, no avoiding", uPanel(uBlob({ smoothing: 40, avoiding: [] }))],
+    ["density 0, smoothing 40, avoiding gray", uPanel(uBlob({ smoothing: 40 }))],
+  ], { w: 265, h: 225, cols: 3 }),
+};
+
+// ── Topology, aimed at Munkres' figure (Topology, 2nd ed., §12, Figure 12.1) ──
+// Points 100 apart, each singleton set a small ring, as in Munkres' bullseyes.
+const MA = C(60, 70, 5), MB = C(160, 70, 5), MC = C(260, 70, 5);
+const ring = (m: Extract<Member, { kind: "circle" }>) => C(m.cx, m.cy, 14);
+const ringInk = (m: Extract<Member, { kind: "circle" }>) =>
+  polygon({ points: discPoly([m.cx, m.cy], 14, 48), fill: "none", stroke: "#111", strokeWidth: 2.5 });
+const outlineOnly = (loops: Pt[][]) => loops.map((l) => polygon({ points: l, fill: "none", stroke: "#111", strokeWidth: 2.5 }));
+const topoPoints = () => [MA, MB, MC].map((m) => dot(m, "#111"));
+// {a, c}: Shape.spine({ avoiding: [b] }) with padding 21 around a and c
+const acSpine = (o: Partial<BlobOpts> = {}) =>
+  blob([MA, MC], spinePreset({ avoiding: [ring(MB)], pad: 21, neck: 0.7, smoothing: 40, clearance: 10, ...o }));
+export const BlobTopology: StoryObj = {
+  render: () => titledGrid([
+    ["before: bubble-set spine", layer([...region(spineOutline2([MA, MC], { avoiding: [ring(MB)], pad: 14, tube: 10, gap: 10, falloff: 12 }), "#ff2400", 0.3, 2), ringInk(MB), ...topoPoints()])],
+    ["neck 0.4, smoothing 0", layer([...blobInk(acSpine({ neck: 0.4, smoothing: 0 }), "#ff2400", 0.3, 2), ringInk(MB), ...topoPoints()])],
+    ["neck 1, smoothing 40", layer([...blobInk(acSpine({ neck: 1 }), "#ff2400", 0.3, 2), ringInk(MB), ...topoPoints()])],
+    ["neck 0.7, smoothing 40", layer([...blobInk(acSpine(), "#ff2400", 0.3, 2), ringInk(MB), ...topoPoints()])],
+  ], { w: 330, h: 170, cols: 2 }),
+};
+// Munkres' ninth panel: whole set, {a, b}, {b, c}, {a, c}, {a}, {b}, {c}.
+export const BlobTopologyMunkres: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    // The whole set and the pairs {a, b}, {b, c} are ellipses: the custom-shape escape hatch
+    // (a function from the members' box to a path), drawn here with `ellipse`.
+    const oval = (cx: number, w: number, h: number) =>
+      position({ x: cx - w / 2, y: 70 - h / 2 }, [ellipse({ w, h, fill: "none", stroke: "#111", strokeWidth: 2.5 })]);
+    layer([
+      oval(160, 372, 184), oval(110, 176, 104), oval(210, 176, 104),
+      ...outlineOnly(acSpine()),
+      ...[MA, MB, MC].map(ringInk), ...topoPoints(),
+    ]).render(container, { w: 380, h: 190 });
+    return container;
+  },
+};
+
+// ── Hyperedges and trout with the spine shortcut on the general construction ──
+export const BlobHyperedges: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    const outlines = SETS.flatMap((s) => {
+      const members = s.nodes.map(hyperNode);
+      const others = Object.keys(NODES).filter((id) => !s.nodes.includes(id)).map(hyperNode);
+      const via = EDGES.filter(([p, q]) => s.nodes.includes(p) && s.nodes.includes(q)).map(([p, q]) => [NODES[p], NODES[q]] as [Pt, Pt]);
+      return blobInk(blob(members, spinePreset({ avoiding: others, via, pad: 6, neck: 0.75, smoothing: 10, clearance: 3 })), s.color, 0.25, 2);
+    });
+    layer([
+      ...outlines,
+      hyperPanel([]),
+      ...SETS.map((s, i) => label(20 + i * 50, 215, `set ${s.name}`, { fill: s.color, fontWeight: "bold" })),
+    ]).render(container, { w: 360, h: 240 });
+    return container;
+  },
+};
+export const BlobTroutBars: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    barsScene(false, blobInk(blob(TROUT, spinePreset({ avoiding: [...NOT_TROUT, AXIS_BAND], pad: 4, neck: 0.5, smoothing: 8, clearance: 4 })), "#d6580c", 0.18, 2)).render(container, { w: 400, h: 240 });
+    return container;
+  },
+};
+

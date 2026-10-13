@@ -310,16 +310,20 @@
 
 <main>
   <div class="eyebrow">GoFish API proposal · background / hull</div>
-  <h1>One <code>enclose</code>, three shapes: box, hull, spine</h1>
+  <h1>
+    One <code>enclose</code>: a box, or a blob with hull and spine shortcuts
+  </h1>
   <p class="lede">
     GoFish already has a box-only <code>enclose</code> (also exported as
     <code>background</code>). This proposal turns it into one relational mark
-    that draws a box, a hull, or a spine around a set of nodes. The shape is a
-    value of a new strategy family, <code>Shape</code>, chosen with a
+    that draws an outline around a set of nodes: a box, or a region built from
+    discs around the members and links between them. The outlines are values of
+    a new strategy family, <code>Shape</code>, chosen with a
     <code>shape</code> option the way <code>Curve</code> is chosen with
-    <code>curve</code> on <code>line</code>. It keeps working around fresh
-    children, refs and mixes, and gains the bag form, so one hull per group
-    needs no loop.
+    <code>curve</code> on <code>line</code>. The region member,
+    <code>Shape.blob()</code>, generalizes KelpFusion; the convex hull and the
+    spine are exact shortcuts of it, the way <code>sina()</code> and
+    <code>jitter()</code> are shortcuts of <code>noise()</code>.
   </p>
 
   <div class="rec">
@@ -327,22 +331,31 @@
       <strong>Recommendation.</strong> Rebuild <code>enclose</code> with
       <code>createRelationalMark</code> and give it
       <code
-        >shape: Shape.box() | Shape.hull({ alpha }) | Shape.spine({ avoiding,
-        via })</code
-      >, with <code>padding</code> and paint shared on <code>enclose</code>.
-      Delete the <code>background</code> alias. Do not add a
+        >shape: Shape.box({ rx, ry }) | Shape.blob({ density, neck, smoothing,
+        avoiding, via, clearance })</code
+      >, with two shortcuts: <code>Shape.hull(opts)</code> =
+      <code>Shape.blob({ density: 1, neck: 1, ...opts })</code> and
+      <code>Shape.spine(opts)</code> =
+      <code>Shape.blob({ density: 0, ...opts })</code>. <code>padding</code> and
+      paint stay on <code>enclose</code>. Delete the
+      <code>background</code> alias. Do not add a
       <code>.background()</code> modifier yet; it is the runner-up, to add later
       as exact sugar.
     </p>
-    <pre><code>// one hull per species: bag form, fused over the flow
+    <pre><code>// one hull per species: group the points in a second layer
 chart(penguins)
-  .flow(group({ by: "Species" }), scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
-  .mark(circle({ r: 3, fill: "Species" }))
-  .layer(enclose({ shape: Shape.hull(), padding: 6, fill: "Species", opacity: 0.2 }))
+  .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+  .mark(circle({ r: 3, fill: "Species" }).name("points"))
+  .layer(
+    chart(selectAll("points"))
+      .flow(group({ by: "Species" }))
+      .mark(enclose({ shape: Shape.hull(), padding: 6,
+                      fill: "Species", opacity: 0.2 })))
 
 // contains a and c but not b: combinator form over refs
 layer([a, b, c]).relate(({ a, b, c }) =&gt; [
-  enclose({ shape: Shape.spine({ avoiding: [b] }), fill: "#ff2400" }, [a, c]),
+  enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.7, smoothing: 40 }),
+            padding: 21, fill: "#ff2400" }, [a, c]),
 ])</code></pre>
   </div>
   <p class="small">
@@ -351,15 +364,17 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
     <code>Shape</code> does not exist, the stories place members at fixed pixel
     positions and compute outlines with story-local code (convex hull, an alpha
     shape on Delaunay triangles, a bubble set assembled from
-    <code>bubblesets-js</code> parts, and a KelpFusion prototype), drawn with
-    <code>polygon</code>. Box panels use the real <code>enclose</code>. The code
-    beside each picture is the proposed spelling, not the story's code.
+    <code>bubblesets-js</code> parts, a simple KelpFusion prototype, and the
+    generalized construction), drawn with <code>polygon</code>. Box panels use
+    the real <code>enclose</code>. The code beside each picture is the proposed
+    spelling, not the story's code.
   </p>
 
-  <h2>Strategy grid</h2>
+  <h2>Strategy grid (earlier three-member design)</h2>
   <p>
     Same members (blue U-shaped cluster) and the same two non-members (gray) in
-    each panel, <code>padding: 8</code>.
+    each panel, <code>padding: 8</code>. This grid shows the earlier design,
+    kept for comparison; the next section shows the same data under the blob.
   </p>
   <div class="grid4">
     <div class="card">
@@ -383,7 +398,7 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
       <p>Convex hull of the padded member outlines. Never has dents.</p>
     </div>
     <div class="card">
-      <h4>Shape.hull({ alpha: 40 })</h4>
+      <h4>alpha shape, alpha 40 (dropped)</h4>
       <div class="shot">
         <img
           src="img/strategy-hull-concave.png"
@@ -396,7 +411,7 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
       </p>
     </div>
     <div class="card">
-      <h4>Shape.spine({ avoiding })</h4>
+      <h4>bubble-set spine (earlier)</h4>
       <div class="shot">
         <img
           src="img/strategy-spine.png"
@@ -415,6 +430,370 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
     gray dots; the spine's dent comes from the <code>avoiding</code> list. The
     Topology example is the case only the spine can draw.
   </p>
+
+  <h2>One construction: the blob, with hull and spine as shortcuts</h2>
+  <p>
+    Josh asked whether KelpFusion could be generalized, by making the size of
+    the circles around the points configurable, so that it covers the usual
+    hull, and whether it and the alpha shape could be unified. The answer
+    changes the recommendation: hull and spine become two shortcuts of one
+    general member, <code>Shape.blob()</code>, the way <code>sina()</code> and
+    <code>jitter()</code> are shortcuts of <code>noise()</code> (#1018, which
+    made the scatter overlap strategy one <code>noise()</code> with two
+    presets).
+  </p>
+  <div class="grid2">
+    <div class="card">
+      <h4>Delaunay triangulation</h4>
+      <p>
+        The standard way to split a point set into triangles: no point lies
+        inside the circle through any triangle's corners. Its outer boundary is
+        the convex hull.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Voronoi cell</h4>
+      <p>
+        The part of the plane closer to one point than to any other point of the
+        set.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Minkowski sum with a disc</h4>
+      <p>
+        Growing a shape by a distance <em>r</em> in every direction, so it holds
+        every point within <em>r</em> of the shape. Padding is this operation.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Morphological closing</h4>
+      <p>
+        Grow by <em>s</em>, then shrink by <em>s</em>. Convex parts come back
+        unchanged, concave corners get rounded with radius <em>s</em>, and gaps
+        narrower than about 2<em>s</em> are filled: everything a rolling disc of
+        radius <em>s</em> cannot reach.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Alpha hull, alpha shape</h4>
+      <p>
+        In Edelsbrunner, Kirkpatrick and Seidel (1983), the alpha hull is what
+        remains when every disc of radius alpha that holds no point is removed.
+        The alpha shape is the same with straight edges instead of arcs.
+      </p>
+    </div>
+  </div>
+
+  <h3>Alpha shape and KelpFusion: what is the same and what is not</h3>
+  <div class="tablewrap">
+    <table>
+      <tr>
+        <th>Question</th>
+        <th>Answer</th>
+        <th>Status</th>
+      </tr>
+      <tr>
+        <td>The alpha hull, in terms of closing?</td>
+        <td>
+          Exactly the closing of the point set by a disc of radius alpha.
+          "Remove every empty disc of radius alpha" is the definition of
+          closing.
+        </td>
+        <td>
+          Definition: Edelsbrunner, Kirkpatrick, Seidel, IEEE Trans. Inf. Theory
+          1983. The match with closing is my derivation (inferred).
+        </td>
+      </tr>
+      <tr>
+        <td>The alpha complex?</td>
+        <td>
+          The points, edges and triangles of the Delaunay triangulation whose
+          smallest empty circle has radius at most alpha. Its union is the alpha
+          shape.
+        </td>
+        <td>Edelsbrunner and Mücke, ACM TOG 1994. From memory.</td>
+      </tr>
+      <tr>
+        <td>Its relation to discs?</td>
+        <td>
+          Put a disc of radius alpha on each point, cut to the point's Voronoi
+          cell. The complex has an edge where two cut discs touch and a triangle
+          where three meet; the union of discs has the same pieces and holes as
+          the alpha shape.
+        </td>
+        <td>
+          Edelsbrunner, "The union of balls and its dual shape", 1995. From
+          memory.
+        </td>
+      </tr>
+      <tr>
+        <td>A KelpFusion node area?</td>
+        <td>
+          A disc of radius <em>r</em> cut to the node's Voronoi cell, which is
+          exactly Edelsbrunner's cut disc.
+        </td>
+        <td>Definition verified in the paper; the identity is inferred.</td>
+      </tr>
+      <tr>
+        <td>Alpha shape a special case of KelpFusion?</td>
+        <td>
+          No. KelpFusion's node areas touch along the alpha complex of radius
+          <em>r</em>, but its links come from the shortest-path graph
+          SPG(<em>t</em>), which always connects all members and does not change
+          with scale. The alpha complex falls apart once alpha is below half the
+          widest gap, and it changes with scale.
+        </td>
+        <td>Inferred.</td>
+      </tr>
+      <tr>
+        <td>KelpFusion a special case of the alpha shape?</td>
+        <td>
+          No. For 1 &lt; <em>t</em> &lt; ∞ it keeps long links without the
+          triangles around them, which no alpha complex does.
+        </td>
+        <td>Inferred.</td>
+      </tr>
+      <tr>
+        <td>What they share</td>
+        <td>
+          Both keep some Delaunay links, fill some faces, and grow the result.
+          Both end at the full triangulation, whose outline is the convex hull:
+          alpha = ∞ and <em>t</em> = 1.
+        </td>
+        <td>KelpFusion part verified; alpha part from memory.</td>
+      </tr>
+    </table>
+  </div>
+  <p>
+    So they unify as one pipeline, not as one parameter. KelpFusion picks links
+    with a dial that has no unit and keeps the set in one piece; the alpha shape
+    picks links and faces with a length. For a set, one piece is what we want: a
+    set drawn as two islands reads as two sets. Non-member avoidance: the alpha
+    shape has none. KelpFusion has it in three places: links routed around other
+    nodes, faces holding a non-member left open, and non-member areas cut out at
+    the end.
+  </p>
+
+  <h3>The construction</h3>
+  <ol>
+    <li>
+      <strong>Links.</strong> Candidates are the Delaunay edges between member
+      centers, plus any <code>via</code> edges, which are always kept. Each is
+      routed as the shortest path that keeps a <code>clearance</code> gap from
+      every avoided node. The links kept are SPG(<em>t</em>) with <em>t</em> = 1
+      / <code>density</code>: 0 is the minimum spanning tree, 1 keeps every
+      candidate.
+    </li>
+    <li>
+      <strong>Faces.</strong> A face closed off by kept links is filled when it
+      holds no avoided node (KelpFusion's size limit <em>A</em> is left out).
+    </li>
+    <li>
+      <strong>Pieces.</strong> Each member grown by <code>padding</code> (its
+      bulge), each link a tube <code>neck</code> times as wide as the bulge, and
+      the filled faces.
+    </li>
+    <li>
+      <strong>Smoothing.</strong> The closing of their union by a disc of radius
+      <code>smoothing</code>.
+    </li>
+    <li>
+      <strong>Cut.</strong> Each avoided node, grown by <code>clearance</code>,
+      is cut back out, and the cut's corners are rounded slightly.
+    </li>
+  </ol>
+  <div class="tablewrap">
+    <table>
+      <tr>
+        <th>Parameter</th>
+        <th>Meaning</th>
+        <th>Direction</th>
+        <th>Default</th>
+      </tr>
+      <tr>
+        <td><code>padding</code> (on <code>enclose</code>)</td>
+        <td>The bulge around each member: the size of KelpFusion's circles.</td>
+        <td>Bigger is fatter.</td>
+        <td>as today</td>
+      </tr>
+      <tr>
+        <td><code>density</code></td>
+        <td>
+          How many links are kept, 0 (a spanning tree) to 1 (every neighbor
+          link); 1/<em>t</em> in KelpFusion. No unit, so it survives a resize.
+        </td>
+        <td>Bigger is more filled in.</td>
+        <td>0.5</td>
+      </tr>
+      <tr>
+        <td><code>neck</code></td>
+        <td>Link width as a fraction of the bulge.</td>
+        <td>Bigger is thicker; 1 is as thick as the bulges.</td>
+        <td>1</td>
+      </tr>
+      <tr>
+        <td><code>smoothing</code></td>
+        <td>Closing radius in pixels.</td>
+        <td>Bigger is smoother and fuller.</td>
+        <td>same as <code>padding</code></td>
+      </tr>
+      <tr>
+        <td><code>avoiding</code></td>
+        <td>Nodes to keep out; each listed non-member is avoided.</td>
+        <td></td>
+        <td>none</td>
+      </tr>
+      <tr>
+        <td><code>via</code></td>
+        <td>Edges to use as links; always kept, never rerouted.</td>
+        <td></td>
+        <td>none</td>
+      </tr>
+      <tr>
+        <td><code>clearance</code></td>
+        <td>Gap in pixels kept from each avoided node.</td>
+        <td>Bigger keeps farther away.</td>
+        <td>4</td>
+      </tr>
+    </table>
+  </div>
+
+  <h3>The parameter grid</h3>
+  <figure>
+    <div class="shot">
+      <img
+        src="img/blob-parameter-grid.png"
+        alt="Twelve panels of the U data under different density, smoothing and padding values"
+      />
+    </div>
+    <figcaption>
+      Row 1: <code>density</code> 0, 0.5, 0.75, 1 (<code>padding: 8</code>,
+      <code>smoothing: 8</code>; the last panel avoids nothing). Row 2:
+      <code>smoothing</code> 0, 8, 20, 40 at <code>density: 0</code>. Row 3:
+      <code>padding</code> 3, 8, 14, 20 at <code>density: 0</code>,
+      <code>neck: 0.5</code>, <code>smoothing: 4</code>.
+    </figcaption>
+  </figure>
+  <ul>
+    <li>
+      <strong>Density</strong> moves the shape from a tree of tubes to the hull.
+      At 0.75 the links across the top of the U are kept, so the faces between
+      them fill, but faces holding a gray dot stay open (drawn as holes). That
+      is KelpFusion's middle.
+    </li>
+    <li>
+      <strong>Smoothing</strong> turns the tree into a concave hull. At 40 it
+      looks like the alpha shape with alpha 40, because closing by a disc is how
+      the alpha hull is defined.
+    </li>
+    <li>
+      <strong>Padding</strong> with thin necks gives the Kelp look when small
+      and fat merged bubbles when large. Big circles alone do not give the hull:
+      the union of discs is scalloped and keeps every dent wider than the discs.
+      <code>smoothing</code> and <code>density</code> close the shape.
+    </li>
+  </ul>
+
+  <h3>The shortcuts</h3>
+  <div class="tablewrap">
+    <table>
+      <tr>
+        <th>Shortcut</th>
+        <th>Is exactly</th>
+        <th>Draws</th>
+      </tr>
+      <tr>
+        <td><code>Shape.hull(opts)</code></td>
+        <td><code>Shape.blob({ density: 1, neck: 1, ...opts })</code></td>
+        <td>the convex hull grown by <code>padding</code></td>
+      </tr>
+      <tr>
+        <td><code>Shape.spine(opts)</code></td>
+        <td><code>Shape.blob({ density: 0, ...opts })</code></td>
+        <td>a tree of thick tubes, smoothed</td>
+      </tr>
+    </table>
+  </div>
+  <p>
+    As with <code>sina()</code> and <code>jitter()</code> over
+    <code>noise()</code>, a shortcut makes the same object as the general call
+    (<code>kind: "blob"</code>), declared once as a preset in the
+    <code>STRATEGIES</code> table, and any option overrides the preset. So
+    <code>Shape.hull({ avoiding: others })</code> is legal and draws a hull that
+    leaves out faces holding other nodes: KelpFusion at <em>t</em> = 1.
+  </p>
+  <div class="ex">
+    <div>
+      <p>
+        <strong>The hull shortcut is exact.</strong> With nothing avoided,
+        <code>density: 1</code> keeps every Delaunay edge and fills every face.
+        The union is the hull of the centers, plus tubes along its edges, plus
+        discs at its corners. That is exactly the hull grown by the bulge,
+        because any point that close to a convex shape is inside it or nearest
+        to its boundary. Closing a convex shape returns it unchanged. This holds
+        for points and round members of one size (the scatterplot case); for
+        mixed shapes, links would start from the members' outlines (#974) to
+        stay exact, an implementation detail.
+      </p>
+    </div>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/blob-hull-shortcut-vs-true-hull.png"
+          alt="Hull shortcut fill with a true padded convex hull drawn as a black line on top"
+        />
+      </div>
+      <figcaption>
+        Black line: a true padded convex hull. Fill: the shortcut. They agree to
+        within a pixel.
+      </figcaption>
+    </figure>
+  </div>
+  <figure>
+    <div class="shot">
+      <img
+        src="img/blob-smoothing-vs-alpha-shape.png"
+        alt="Alpha shape next to the spine shortcut with smoothing 40"
+      />
+    </div>
+    <figcaption>
+      The alpha shape is approximated, not reproduced. Left: the old alpha
+      shape, alpha 40. Middle and right:
+      <code>Shape.spine({ smoothing: 40 })</code> without and with
+      <code>avoiding</code>. The closing is a little fuller and always one
+      piece. An exact alpha shape would need a second link rule; no example
+      needs it, so <code>alpha</code> is dropped (decision 10).
+    </figcaption>
+  </figure>
+  <p>
+    <strong>What the generalization adds to KelpFusion.</strong>
+    <code>via</code>: KelpFusion builds its own graph from positions and cannot
+    follow a graph's real edges; here given edges are links that are always
+    kept, and SPG(<em>t</em>) only joins the pieces they leave apart.
+    <strong>Thick, smooth necks</strong>: KelpFusion's edges have a fixed width;
+    here the width is tied to the bulge (<code>neck</code>) and the closing
+    rounds every join. <strong>Routing</strong> is KelpFusion's own idea; the
+    prototype routes around avoided nodes only.
+  </p>
+
+  <h3>Custom shapes and the ellipse</h3>
+  <p>
+    <code>Shape.box()</code> stays separate: a box is a rectangle grown by
+    padding, not a union of discs. Josh's ellipse fits the #1101 escape hatch
+    (one extensibility model for strategy families): a user function in place of
+    a <code>Shape</code> value. It receives the members as
+    <code>{ box, boundary }</code> (pixels, after placement), the box of all
+    members, the avoided nodes in the same form, and <code>padding</code>, and
+    returns a closed outline as a list of points. <code>enclose</code> still
+    paints it below the members and uses its box. If ellipses prove common
+    (TikZ, ggforce, Munkres), <code>Shape.ellipse()</code> can become a declared
+    member later.
+  </p>
+  <div class="lang">JS</div>
+  <pre><code>const oval = ({ box, padding }) =&gt; ellipsePoints(box, padding); // user code
+enclose({ shape: oval, padding: 30 }, [a, b])</code></pre>
+  <div class="lang">Python</div>
+  <pre><code>enclose([a, b], shape=lambda s: ellipse_points(s.box, s.padding), padding=30)</code></pre>
 
   <h2>KelpFusion and bubble sets</h2>
   <p>
@@ -708,61 +1087,18 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
     edges inside clusters first and so makes small faces worth filling.
   </p>
 
-  <h3>What it means for the strategy factoring</h3>
+  <h3>What it meant for the strategy factoring</h3>
   <p>
-    KelpFusion's dial looks like an argument for merging hull and spine into one
-    strategy with a parameter. The renders say it is not quite that.
+    An earlier version concluded that KelpFusion overlapped hull and spine in
+    part and replaced neither: its hull end avoided non-members and was not an
+    even padding, its line end could not follow real edges, and its edges were
+    thin straight strips. Each gap is closed by one parameter of the blob:
+    <code>avoiding</code> is optional, <code>via</code> adds real edges, and
+    <code>neck</code> and <code>smoothing</code> give even, smooth tubes. So
+    hull and spine become two settings of one member. The earlier pick (three
+    members on a shared kernel, <code>Shape.kelp({ t })</code> later) is the
+    runner-up.
   </p>
-  <ul>
-    <li>
-      <strong>Its hull end is not our hull.</strong> At <code>t = 1</code> it
-      avoids non-members, and its outline is discs plus strips, not an even
-      padding. <code>Shape.hull()</code> is the plain padded hull that Plot and
-      ggforce draw, and <code>alpha</code> (dents from the members' own spacing)
-      has no KelpFusion equivalent.
-    </li>
-    <li>
-      <strong>Its line end is not our spine.</strong> It ignores real edges, so
-      it cannot do <code>via</code>, which is the point of the hyperedge
-      example. Its edges are straight polylines, not a smooth outline.
-    </li>
-    <li>
-      <strong>Its middle is new.</strong> "Filled where dense, lines where
-      sparse" (penguins at <code>t = 1.5</code>) is something neither hull nor
-      spine draws.
-    </li>
-  </ul>
-  <p>
-    So KelpFusion overlaps both strategies in part and replaces neither. Adding
-    it as a fourth member would leave users choosing between strategies that
-    each draw some of the same pictures.
-  </p>
-  <p>
-    What it does show is a better kernel. All three non-box strategies can be
-    built as one pipeline:
-    <strong
-      >a skeleton graph, a rule for which of its faces to fill, and an outline
-      grown from the result by <code>padding</code></strong
-    >. The convex hull is the complete graph with every face filled. The alpha
-    shape is the Delaunay triangulation with triangles larger than
-    <code>alpha</code> left empty. The spine is a tree routed around non-members
-    (or the <code>via</code> edges) with no faces. KelpFusion is the
-    shortest-path graph at <code>t</code> with faces up to a size. Growing the
-    result by <code>padding</code> with round joins, instead of tracing an
-    energy field, also gives the clean, even tubes that the bubble-set renders
-    here needed careful tuning to approach.
-  </p>
-  <div class="rec">
-    <p>
-      <strong>Recommendation.</strong> Keep the three strategies as proposed,
-      but implement <code>hull</code> and <code>spine</code> on that shared
-      kernel rather than on two libraries (Delaunay for hulls, bubblesets-js for
-      spines). Do not add <code>Shape.kelp()</code> in the first cut. If a real
-      example wants "dense core plus stragglers", add it later as
-      <code>Shape.kelp({ t })</code> on the same kernel, with no new mechanism
-      (decision 10).
-    </p>
-  </div>
 
   <h2>Josh's three tensions</h2>
   <div class="grid3">
@@ -797,8 +1133,8 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
         regions, the hypergraph survey as node-link, and KelpFusion is one dial
         from spanning tree to convex hull. So the design keeps it in the
         relational-mark family (with <code>line</code>, <code>ribbon</code>),
-        orders <code>shape</code> from box to spine, and lets
-        <code>Shape.spine({ via })</code> take real connections as its skeleton.
+        makes connection versus containment one dial (<code>density</code>) on
+        one member, and lets <code>via</code> take real connections as links.
       </p>
     </div>
   </div>
@@ -847,22 +1183,22 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
     <div>
       <div class="lang">JS</div>
       <pre><code>chart(penguins)
-  .flow(group({ by: "Species" }),
-        scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
-  .mark(circle({ r: 3, fill: "Species" }))
-  .layer(enclose({ shape: Shape.hull(), padding: 6,
-                   fill: "Species", opacity: 0.2 }))</code></pre>
+  .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+  .mark(circle({ r: 3, fill: "Species" }).name("points"))
+  .layer(
+    chart(selectAll("points"))
+      .flow(group({ by: "Species" }))
+      .mark(enclose({ shape: Shape.hull(), padding: 6,
+                      fill: "Species", opacity: 0.2 })))</code></pre>
       <div class="lang">Python</div>
       <pre><code>(chart(penguins)
-   .flow(group(by="Species"),
-         scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
-   .mark(circle(r=3, fill="Species"))
-   .layer(enclose(shape=Shape.hull(), padding=6,
-                  fill="Species", opacity=0.2)))</code></pre>
-      <p class="small">
-        One hull per species comes from #752's default split; no option is
-        written.
-      </p>
+   .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
+   .mark(circle(r=3, fill="Species").name("points"))
+   .layer(
+       chart(select_all("points"))
+         .flow(group(by="Species"))
+         .mark(enclose(shape=Shape.hull(), padding=6,
+                       fill="Species", opacity=0.2))))</code></pre>
     </div>
     <div class="pair">
       <figure>
@@ -872,7 +1208,9 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
             alt="Convex hull per penguin species"
           />
         </div>
-        <figcaption><code>Shape.hull()</code></figcaption>
+        <figcaption>
+          <code>Shape.hull()</code>: exactly this padded convex hull.
+        </figcaption>
       </figure>
       <figure>
         <div class="shot">
@@ -888,56 +1226,137 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
       </figure>
     </div>
   </div>
+  <ul>
+    <li>
+      <strong>Why not <code>enclose({ by: "Species" })</code>?</strong> #752
+      (the default-split rule for relational marks) removed <code>by</code> from
+      <code>line</code> and <code>ribbon</code>. Splits are written in the flow,
+      so <code>by</code> on <code>enclose</code> would bring back a second
+      spelling. Josh is open to bringing <code>by</code> back later, when the
+      design of stacked and divided ribbons in #47 is worked out (a ribbon today
+      joins one element to one; #47 asks for one-to-many, like a join between a
+      source set and a target set). Related: #740, a spike on whether
+      <code>group()</code> plus <code>resolve()</code> covers regrouping refs
+      for connectors.
+    </li>
+    <li>
+      <strong>Dependency.</strong> This spelling goes through the same
+      <code>chart(selectAll(...)).flow(group({ by }))</code> path that #877
+      reports as broken for <code>ribbon</code> (the <code>group</code> is
+      ignored and the fused default threads the inner tier). It likely needs
+      that fix for <code>enclose</code> too. Unverified for
+      <code>enclose</code>: the prototype draws the hulls with story-local code.
+    </li>
+    <li>
+      <strong>The shorter form</strong>, <code>group</code> in the first layer's
+      flow and a fused <code>.layer(enclose(...))</code>, also works when the
+      grouping is already there for other reasons.
+    </li>
+  </ul>
 
-  <h3>A set that avoids a point: Bluefish Topology</h3>
+  <h3>A set that avoids a point: Munkres' three-point topologies</h3>
   <div class="ex">
     <div>
+      <p>
+        The figure of the nine topologies on {a, b, c} from Munkres,
+        <em>Topology</em> (2nd ed., §12). Math3ma reproduces it, Bluefish ported
+        it, and the GoFish port's a/c set is today a hand-transcribed Bezier
+        <code>polygon</code> (#717). In the last panel the {a, c} set wraps a
+        and c with an even margin and joins them with a thick band under b, with
+        smooth S-shaped joins.
+      </p>
       <div class="lang">JS</div>
       <pre><code>layer([a, b, c]).relate(({ a, b, c }) =&gt; [
   enclose({ shape: Shape.hull(), padding: 16,
             fill: "#009dff" }, [a, b]),
-  enclose({ shape: Shape.spine({ avoiding: [b] }),
-            padding: 14, fill: "#ff2400" }, [a, c]),
+  enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.7,
+                                 smoothing: 40, clearance: 10 }),
+            padding: 21, fill: "#ff2400" }, [a, c]),
 ])</code></pre>
       <div class="lang">Python</div>
       <pre><code>layer([a, b, c]).relate(lambda a, b, c: [
     enclose([a, b], shape=Shape.hull(), padding=16, fill="#009dff"),
-    enclose([a, c], shape=Shape.spine(avoiding=[b]),
-            padding=14, fill="#ff2400"),
+    enclose([a, c], shape=Shape.spine(avoiding=[b], neck=0.7,
+                                      smoothing=40, clearance=10),
+            padding=21, fill="#ff2400"),
 ])</code></pre>
-      <p class="small">
-        Today this set is a hand-transcribed 16-segment Bezier
-        <code>polygon</code> (#717).
-      </p>
     </div>
-    <div class="pair">
-      <figure>
-        <div class="shot">
-          <img
-            src="img/topology-ac-convex-hull-covers-b.png"
-            alt="Convex hull of a and c covering b"
-          />
-        </div>
-        <figcaption>Hull of {a, c}: must cover b.</figcaption>
-      </figure>
-      <figure>
-        <div class="shot">
-          <img
-            src="img/topology-ac-spine-avoiding-b.png"
-            alt="Spine of a and c routed around b"
-          />
-        </div>
-        <figcaption>Spine of {a, c} avoiding b.</figcaption>
-      </figure>
-    </div>
-    <p>
-      Future work, not part of this proposal: this example may be drawn best by
-      placing the points and the region together, with an energy that pushes
-      shapes apart and rewards symmetry, as Penrose and Keenan Crane's work do.
-      Every strategy here draws around shapes that are already placed, so that
-      would be a change to layout, not a new shape.
-    </p>
+    <figure>
+      <div class="shot">
+        <img
+          src="precedent/munkres-fig12-1-nine-topologies.png"
+          alt="Munkres' figure of nine topologies on a three-point set"
+        />
+      </div>
+      <figcaption>
+        Reference: Munkres, <em>Topology</em>, §12. Image from
+        <a href="https://math3ma.com/blog/topology-vs-a-topology">Math3ma</a>,
+        captioned "Image from Topology by J. Munkres".
+      </figcaption>
+    </figure>
   </div>
+  <div class="grid2">
+    <figure>
+      <div class="shot">
+        <img
+          src="img/topology-ac-blob-neck-smoothing.png"
+          alt="The a/c set before, and with three neck and smoothing settings"
+        />
+      </div>
+      <figcaption>
+        Before (bubble-set spine), then the spine shortcut:
+        <code>neck: 0.4</code> unsmoothed is the thin Kelp look;
+        <code>neck: 1</code> is one sausage;
+        <code>neck: 0.7, smoothing: 40</code> has bulges, a thick band and
+        smooth joins.
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/topology-munkres-panel-blob.png"
+          alt="Munkres' last panel redrawn with ellipses and the a/c spine"
+        />
+      </div>
+      <figcaption>
+        Munkres' last panel redrawn: ellipses through the custom-shape function,
+        {a, c} with the spine shortcut. Close to the reference; the band's
+        bottom is a wide V (shortest path around b) where Munkres draws a
+        flatter U.
+      </figcaption>
+    </figure>
+  </div>
+  <div class="pair">
+    <figure>
+      <div class="shot">
+        <img
+          src="img/topology-ac-convex-hull-covers-b.png"
+          alt="Convex hull of a and c covering b"
+        />
+      </div>
+      <figcaption>Hull of {a, c}: must cover b.</figcaption>
+    </figure>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/topology-ac-spine-avoiding-b.png"
+          alt="Earlier bubble-set spine of a and c routed around b"
+        />
+      </div>
+      <figcaption>Earlier bubble-set spine of {a, c} avoiding b.</figcaption>
+    </figure>
+  </div>
+  <p>
+    A link rule that follows the avoided node's outline at an even gap would
+    give Munkres' U; that refines the routing and adds no parameter.
+  </p>
+  <p>
+    Future work, not part of this proposal: this example may be drawn best by
+    placing the points and the region together, with an energy that pushes
+    shapes apart and rewards symmetry, as Penrose and Keenan Crane's work do.
+    Every strategy here draws around shapes that are already placed, so that
+    would be a change to layout, not a new shape.
+  </p>
 
   <h3>Hyperedges over a node-link diagram</h3>
   <div class="ex">
@@ -980,9 +1399,27 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
         />
       </div>
       <figcaption>
-        Each set's spine runs along the graph's own edges (<code>via</code>), so
-        connection and containment are drawn from the same edges.
+        Earlier bubble-set prototype. Each set's spine runs along the graph's
+        own edges (<code>via</code>).
       </figcaption>
+    </figure>
+  </div>
+  <div class="ex">
+    <p>
+      The same sets with the blob's spine shortcut (<code
+        >neck: 0.75, smoothing: 10</code
+      >). The graph's edges between members are links that are always kept; set
+      C's edges already connect it, so nothing else is added. KelpFusion alone
+      cannot draw this, since it builds its own links from positions.
+    </p>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/hyperedges-blob-spine.png"
+          alt="Three set regions drawn along graph edges with the blob spine"
+        />
+      </div>
+      <figcaption>Blob spine with <code>via</code>.</figcaption>
     </figure>
   </div>
 
@@ -1032,8 +1469,22 @@ layer([a, b, c]).relate(({ a, b, c }) =&gt; [
         every connection runs as a thin tube over the bar tops and no non-member
         bar is covered. The spelling does not say that yet: either the axis is
         listed in <code>avoiding</code>, or the spine stays inside the plot area
-        by rule (decision 11).
+        by rule (decision 11). Both renders above are the earlier bubble-set
+        prototype.
       </p>
+      <figure>
+        <div class="shot">
+          <img
+            src="img/bars-trout-blob-spine.png"
+            alt="Blob spine around the trout bars, routed over the bar tops"
+          />
+        </div>
+        <figcaption>
+          The blob's spine shortcut (<code>neck: 0.5, smoothing: 8</code>,
+          avoiding the other bars and the axis band): each link is the shortest
+          path that clears the other bars.
+        </figcaption>
+      </figure>
     </div>
   </div>
 
@@ -1115,10 +1566,15 @@ chart(catch)
       <h4>S1 · shape: Shape.*</h4>
       <p>
         <span class="tag ok">recommended</span>
-        <code>Shape.box({ rx, ry })</code>, <code>Shape.hull({ alpha })</code>,
-        <code>Shape.spine({ avoiding, via })</code>. <code>padding</code> and
-        paint stay on <code>enclose</code>; each strategy carries only its own
-        knobs. Default is <code>Shape.box()</code>.
+        <code>Shape.box({ rx, ry })</code> and
+        <code
+          >Shape.blob({ density, neck, smoothing, avoiding, via, clearance
+          })</code
+        >, with <code>Shape.hull()</code> and <code>Shape.spine()</code> as
+        presets. <code>padding</code> and paint stay on <code>enclose</code>.
+        Default is <code>Shape.box()</code>. Runner-up: the earlier three
+        separate members, <code>Shape.hull({ alpha })</code> and
+        <code>Shape.spine({ avoiding, via })</code>.
       </p>
     </div>
     <div class="card">
@@ -1133,27 +1589,45 @@ chart(catch)
       <h4>S3 · shape: "hull" + flat options</h4>
       <p>
         Josh's #717 sketch. Ruled out by #1013 (families with arguments are
-        calls), and flat <code>alpha</code>/<code>avoiding</code> would be
+        calls), and flat <code>density</code>/<code>avoiding</code> would be
         accepted and ignored by other shapes.
       </p>
     </div>
   </div>
   <p>
-    <strong>The hull knob.</strong> <code>concavity</code> (ggforce) grows
-    toward convex; <code>alpha</code> is a radius in CGAL but an inverse radius
-    in Python's alphashape. Proposed: <code>alpha</code> as a
-    <em>pixel radius</em> of the carving disc, so the unit fixes the direction
-    (bigger is more convex) and <code>Infinity</code>, the default, is the
-    convex hull. Cost: a pixel length changes meaning when the visualization is
-    resized.
+    <strong>The knobs.</strong> Libraries disagree on the direction of a hull's
+    concavity knob: <code>concavity</code> (ggforce) grows toward convex;
+    <code>alpha</code> is a radius in CGAL but an inverse radius in Python's
+    alphashape. The blob replaces the earlier <code>alpha</code> with knobs
+    whose direction reads from the name: <code>density</code> (more links, more
+    filled in; no unit, so it survives a resize) and
+    <code>smoothing</code> (pixels; bigger is smoother, the same direction as
+    <code>smoothing</code> on <code>noise()</code>, though there it is in data
+    units). Risk: <code>density</code> can also mean data density, as in a
+    density plot. <code>neck</code> is the everyday word for the narrow part
+    joining two bulges.
+  </p>
+  <p>
+    <strong>The general member's name.</strong> <code>kelp</code> credits
+    KelpFusion but means nothing to most readers, and the construction differs
+    from the paper. <code>bubble</code> is the Bubble Sets word, but that is a
+    different algorithm, and in KelpFusion a bubble is one node's disc.
+    <code>region</code> collides with GoFish's region-compositing operators;
+    <code>outline</code> is a candidate for the option key and also means a
+    stroke; <code>set</code> names the data and shadows JavaScript's
+    <code>Set</code>. <code>blob</code> is an everyday word for a rounded
+    free-form region and is what Bluefish already calls a hand-drawn set outline
+    (<code>Blob</code> in its Math3ma example). Proposed:
+    <code>blob</code> (decision 3).
   </p>
   <p>
     <strong>The third name.</strong> <code>spine</code> (Josh's) names the
     mechanism, the connecting skeleton that makes the shape a hyperedge, and
-    reads well with <code>via</code>. <code>bubble</code> (Bubble Sets,
-    bubblesets-js, #717) names the look and is the literature's term. The docs
-    use "space-filling spine" descriptively for mosaics; that prose could be
-    reworded if <code>spine</code> becomes an API name.
+    reads well with <code>via</code>; it stays as the shortcut's name.
+    <code>bubble</code> (Bubble Sets, bubblesets-js, #717) names the look and is
+    the literature's term. The docs use "space-filling spine" descriptively for
+    mosaics; that prose could be reworded if <code>spine</code> becomes an API
+    name.
   </p>
 
   <h2>Precedent</h2>
@@ -1296,9 +1770,23 @@ chart(catch)
         </td>
       </tr>
       <tr>
+        <td>Presets over one general strategy (#1018)</td>
+        <td><span class="tag ok">matches</span></td>
+        <td>
+          <code>sina()</code>/<code>jitter()</code> emit
+          <code>kind: "noise"</code>, presets declared in
+          <code>STRATEGIES</code>, any option overrides.
+          <code>hull()</code>/<code>spine()</code> emit
+          <code>kind: "blob"</code> the same way.
+        </td>
+      </tr>
+      <tr>
         <td>Closed families + function hatch (#1101)</td>
         <td><span class="tag ok">matches</span></td>
-        <td>Bluefish's custom background becomes the escape hatch.</td>
+        <td>
+          Bluefish's custom background, and Josh's ellipse, become the escape
+          hatch.
+        </td>
       </tr>
       <tr>
         <td>
@@ -1380,16 +1868,17 @@ chart(catch)
         <td><span class="tag dep">changes code</span></td>
         <td>
           <code>background</code> alias deleted; <code>rx</code>/<code>ry</code>
-          move into <code>Shape.box()</code>; <code>avoiding</code> only on
-          spine.
+          move into <code>Shape.box()</code>; <code>avoiding</code> and
+          <code>via</code> only on the blob.
         </td>
       </tr>
       <tr>
         <td>Josh's #717 sketch; #397 <code>bubbleset: true</code></td>
         <td><span class="tag dep">departs</span></td>
         <td>
-          Strings become a family; <code>avoiding</code> moves onto spine;
-          ellipse deferred; a boolean cannot hold three shapes.
+          Strings become a family; <code>avoiding</code> moves onto the blob;
+          ellipse via the custom-shape function; <code>alpha</code> dropped; a
+          boolean cannot hold these shapes.
         </td>
       </tr>
       <tr>
@@ -1431,8 +1920,10 @@ chart(catch)
       <tr>
         <td>New terms</td>
         <td>
-          <code>Shape</code>, <code>alpha</code>, <code>spine</code>,
-          <code>avoiding</code>, <code>via</code>
+          <code>Shape</code>, <code>blob</code>, <code>hull</code>,
+          <code>spine</code>, <code>density</code>, <code>neck</code>,
+          <code>smoothing</code>, <code>avoiding</code>, <code>via</code>,
+          <code>clearance</code>
         </td>
         <td><code>.background()</code></td>
         <td>Both</td>
@@ -1446,7 +1937,25 @@ chart(catch)
     </table>
   </div>
 
+  <h2>Runner-ups</h2>
+  <p>
+    <strong>Where it lives:</strong> Approach C (A plus a modifier). It would
+    win if per-group backgrounds inside flows became common.
+    <strong>Strategies:</strong> the earlier three members,
+    <code>Shape.box()</code>, <code>Shape.hull({ alpha })</code>,
+    <code>Shape.spine({ avoiding, via })</code>. It would win if real examples
+    needed an exact alpha shape (dents from the members' own spacing, possibly
+    splitting a set into pieces), or if the blob's parameters proved hard to
+    explain, so that two members with fewer knobs read better than one member
+    with shortcuts.
+  </p>
+
   <h2>Decisions for Josh</h2>
+  <p class="small">
+    Earlier questions 5 (<code>alpha</code> as a pixel radius) and 10 (a shared
+    kernel, <code>Shape.kelp({ t })</code> later) are retired: the blob replaces
+    both.
+  </p>
   <ol class="decisions">
     <li>
       Keep <code>enclose</code> as the one name and delete
@@ -1458,21 +1967,29 @@ chart(catch)
       <code>.background()</code> modifier?
     </li>
     <li>
-      Strategy names <code>box</code>, <code>hull</code>, <code>spine</code>:
-      keep <code>spine</code>, or use <code>bubble</code>?
+      One general member with two shortcuts: name it <code>blob</code> (or
+      <code>kelp</code>, <code>bubble</code>), and keep the shortcut names
+      <code>hull</code> and <code>spine</code>?
     </li>
     <li>
       Option key and family <code>shape: Shape.*</code>, or
       <code>outline: Outline.*</code>?
     </li>
-    <li>Hull knob <code>alpha</code> as a pixel radius, convex by default?</li>
     <li>
-      <code>avoiding</code> and <code>via</code> only on
-      <code>Shape.spine()</code>, avoiding listed non-members only?
+      The blob's parameters: <code>density</code> (0 to 1, a tree to every
+      link), <code>neck</code> (link width as a fraction of the bulge),
+      <code>smoothing</code> (pixels, default same as <code>padding</code>) and
+      <code>clearance</code> (pixels)?
     </li>
     <li>
-      Leave <code>Shape.ellipse()</code> / <code>Shape.circle()</code> for
-      later?
+      <code>avoiding</code> and <code>via</code> on <code>Shape.blob()</code>,
+      so on both shortcuts, avoiding listed non-members only, with
+      <code>Shape.hull({ avoiding })</code> leaving out faces that hold other
+      nodes?
+    </li>
+    <li>
+      Draw ellipses through the #1101 custom-shape function first, and add
+      <code>Shape.ellipse()</code> only when examples call for it?
     </li>
     <li>
       Move <code>rx</code>/<code>ry</code> into
@@ -1483,9 +2000,9 @@ chart(catch)
       like <code>line({ from, to })</code>?
     </li>
     <li>
-      Build <code>hull</code> and <code>spine</code> on one shared kernel
-      (skeleton graph, filled faces, outline grown by <code>padding</code>), and
-      leave <code>Shape.kelp({ t })</code> out of the first cut?
+      Leave the exact alpha shape and KelpFusion's face-size limit
+      <code>A</code> out of the first cut (every face with no avoided node
+      inside is filled)?
     </li>
     <li>
       In a chart, should a spine stay inside the plot area by rule, or should
@@ -1518,15 +2035,27 @@ chart(catch)
       <tr>
         <td>no per-group outline</td>
         <td>
-          <code>.layer(enclose({ shape: Shape.hull() }))</code> over a grouped
-          flow
+          <code
+            >.layer(chart(selectAll("points")).flow(group({ by
+            })).mark(enclose({ shape: Shape.hull() })))</code
+          >
         </td>
       </tr>
       <tr>
         <td>hand-drawn concave <code>polygon</code></td>
         <td>
           <code
-            >enclose({ shape: Shape.spine({ avoiding: [b] }) }, [a, c])</code
+            >enclose({ shape: Shape.spine({ avoiding: [b], neck: 0.7, smoothing:
+            40 }) }, [a, c])</code
+          >
+        </td>
+      </tr>
+      <tr>
+        <td>no in-between shape</td>
+        <td>
+          <code
+            >enclose({ shape: Shape.blob({ density: 0.5, avoiding }) },
+            members)</code
           >
         </td>
       </tr>
@@ -1534,7 +2063,9 @@ chart(catch)
         <td>Python <code>background = enclose</code></td>
         <td>
           removed;
-          <code>enclose([...], shape=Shape.hull(alpha=40), padding=8)</code>
+          <code
+            >enclose([...], shape=Shape.spine(smoothing=40), padding=8)</code
+          >
         </td>
       </tr>
     </table>
@@ -1555,6 +2086,11 @@ chart(catch)
     relational marks · #1101 strategy extensibility · #1013 strategy namespaces
     · #802 operators cannot be named · #844 ref to constraint-placed sibling at
     origin · #171 nested waffle enclose · #1109 annotation tutorial · #1084 Venn
-    example · #396/#713/#714/#716 enclose history.
+    example · #396/#713/#714/#716 enclose history · #47 stacked and divided
+    ribbons (one-to-many joins; where <code>by</code> may come back) · #877
+    <code>selectAll</code> + <code>group</code> ignored before a ribbon · #740
+    spike: <code>group()</code> + <code>resolve()</code> for regrouping refs ·
+    #1018 <code>noise()</code> with <code>sina()</code>/<code>jitter()</code>
+    presets.
   </p>
 </main>
