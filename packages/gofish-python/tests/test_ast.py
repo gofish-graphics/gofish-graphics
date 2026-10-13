@@ -690,8 +690,28 @@ class TestSchema:
         )
         with pytest.raises(TypeError):
             Schema.quantity("Pay").unit(3)  # type: ignore[arg-type]
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match=r"^Schema\.quantity: "):
             Schema.quantity(3)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match=r"^\.quantity: "):
+            Schema.unit("USD").quantity(3)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match=r"^Schema\.unit: "):
+            Schema.unit(3)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match=r"^\.unit: "):
+            Schema.quantity("Pay").unit(3)  # type: ignore[arg-type]
+
+    def test_unit_does_not_follow_time_or_ordered(self):
+        # An instant's unit is the instant, and levels are not amounts.
+        with pytest.raises(TypeError, match='the unit "instant"'):
+            Schema.time().unit("USD")
+        with pytest.raises(TypeError, match="categories, not amounts"):
+            Schema.ordered(["low", "mid", "high"]).unit("pts")
+        with pytest.raises(TypeError, match="categories, not amounts"):
+            Schema.ordered(["low", "high"]).diverging().unit("pts")
+        # `.quantity` may follow any builder.
+        assert Schema.time().quantity("When") == {
+            "HasCalendar": {"zone": "UTC"},
+            "HasQuantity": {"name": "When"},
+        }
 
     def test_field_takes_no_unit(self):
         # A column's unit lives in the schema, not on a channel.

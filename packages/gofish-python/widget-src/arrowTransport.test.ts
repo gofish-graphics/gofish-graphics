@@ -456,7 +456,7 @@ async function testCallbackResultsAreTyped(): Promise<boolean> {
   // A Python accessor is resolved over its rows in one batch call.
   const accessor = Serialize.unwrapOpts({ __gofish_lambda: "f" }, bridge);
   const [fromAccessor] = await accessor[Serialize.RESOLVE_ROWS]([{ x: 1 }]);
-  const single = async (schema?: Record<string, unknown>) => {
+  const derived = async (schema?: Record<string, unknown>) => {
     let seen: any;
     const op = Serialize.rebuild(
       "operator",
@@ -472,12 +472,15 @@ async function testCallbackResultsAreTyped(): Promise<boolean> {
     )([{ x: 1 }]);
     return seen;
   };
-  const utc = await single();
-  const ny = await single({ t: { HasCalendar: { zone: "America/New_York" } } });
+  const utc = await derived();
+  const ny = await derived({
+    t: { HasCalendar: { zone: "America/New_York" } },
+  });
   const ok =
     fromAccessor.t === feb28 &&
     Array.isArray(utc) &&
     utc[0].t === feb28 &&
+    Array.isArray(ny) &&
     ny[0].t === Date.UTC(2024, 1, 28, 18);
   console.log(
     ok

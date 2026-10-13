@@ -140,8 +140,10 @@ export type ColumnTypes = Record<string, ColumnType>;
 
 /**
  * A column type under construction. Each builder method adds one class, and a
- * method that needs a class already present says so in its `this` type, so a
- * missing prerequisite is a type error: `.diverging()` needs `HasOrder`.
+ * method that needs a class already present, or that conflicts with one, says
+ * so in its `this` type, so a missing prerequisite or a conflict is a type
+ * error: `.diverging()` needs `HasOrder`, and `.unit()` excludes `HasCalendar`
+ * and `HasOrder` ({@link unitConflict}).
  */
 export class ColumnSchema<C extends ColumnType = ColumnType> {
   constructor(public readonly type: C) {}
@@ -167,8 +169,13 @@ export class ColumnSchema<C extends ColumnType = ColumnType> {
   }
 
   /** Say what unit the column's values are in (`HasUnit`): the unit `unit`,
-   *  whose symbol follows the quantity in the axis title, "Pay (USD)". */
-  unit(unit: string): ColumnSchema<C & { HasUnit: HasUnit }> {
+   *  whose symbol follows the quantity in the axis title, "Pay (USD)". A
+   *  time or an ordered column takes no unit, so a builder that already has
+   *  `HasCalendar` or `HasOrder` has no `.unit()`. */
+  unit(
+    this: ColumnSchema<C & { HasCalendar?: never; HasOrder?: never }>,
+    unit: string
+  ): ColumnSchema<C & { HasUnit: HasUnit }> {
     return new ColumnSchema({ ...this.type, HasUnit: { unit, symbol: unit } });
   }
 
@@ -212,12 +219,16 @@ export const Schema = {
  *  it writes (the wire form). */
 export type SchemaEntry = ColumnSchema<ColumnType> | ColumnType;
 
-/** The record a schema entry stands for, checked for the prerequisites the
- *  builder enforces in its types (a record from the wire, as Python sends it,
- *  has no types) and for a midpoint on its order, with the same check
- *  `.diverging()` runs. */
+/** The record a schema entry stands for, checked for the prerequisites and
+ *  conflicts the builder enforces in its types (a record from the wire, as
+ *  Python sends it, has no types) and for a midpoint on its order, with the
+ *  same check `.diverging()` runs. */
 export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   const type = entry instanceof ColumnSchema ? entry.type : entry;
+  const conflict = type.HasUnit !== undefined ? unitConflict(type) : undefined;
+  if (conflict !== undefined) {
+    throw new Error(`schema: column "${column}" has HasUnit, but ${conflict}`);
+  }
   if (type.HasMidpoint === undefined) return type;
   if (!type.HasOrder) {
     throw new Error(
@@ -228,6 +239,18 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   }
   checkMidpointOnOrder(type.HasOrder.levels, type.HasMidpoint.at);
   return type;
+}
+
+/** Why a column type with `HasCalendar` or `HasOrder` takes no `HasUnit`:
+ *  an instant's unit is the instant (`measure.ts`), and an ordered column's
+ *  values are categories, which `HasUnit` does not accept. Python's
+ *  `ColumnSchema.unit` raises the same reasons. */
+function unitConflict(type: ColumnType): string | undefined {
+  if (type.HasCalendar) return `an instant already has the unit "instant".`;
+  if (type.HasOrder) {
+    return `an ordered column's levels are categories, not amounts.`;
+  }
+  return undefined;
 }
 
 /** The loud error for a midpoint off its order: `at` must be a finite number

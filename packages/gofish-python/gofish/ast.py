@@ -2233,21 +2233,48 @@ class ColumnSchema(dict):
         """Say what the column's values are amounts of (``HasQuantity``): the
         quantity ``name``, which titles the axis in place of the column's
         name."""
-        return ColumnSchema({**self, "HasQuantity": {"name": _quantity_name(name)}})
+        return ColumnSchema(
+            {**self, "HasQuantity": {"name": _quantity_name(name, ".quantity")}}
+        )
 
     def unit(self, unit: str) -> "ColumnSchema":
         """Say what unit the column's values are in (``HasUnit``): the unit
         ``unit``, whose symbol follows the quantity in the axis title,
-        "Pay (USD)"."""
-        if not isinstance(unit, str):
-            raise TypeError(f"Schema.unit: unit must be a string, got {unit!r}")
-        return ColumnSchema({**self, "HasUnit": {"unit": unit, "symbol": unit}})
+        "Pay (USD)".
+
+        A time or an ordered column takes no unit, so ``.unit`` after
+        ``Schema.time()`` or ``Schema.ordered(levels)`` raises a TypeError
+        (in JS it is a type error).
+        """
+        # The same reasons as JS `unitConflict` in schema.ts.
+        if "HasCalendar" in self:
+            raise TypeError(
+                '.unit: a time column takes no unit; an instant already has '
+                'the unit "instant".'
+            )
+        if "HasOrder" in self:
+            raise TypeError(
+                ".unit: an ordered column takes no unit; an ordered column's "
+                "levels are categories, not amounts."
+            )
+        name = _unit_name(unit, ".unit")
+        return ColumnSchema({**self, "HasUnit": {"unit": name, "symbol": name}})
 
 
-def _quantity_name(name: Any) -> str:
+def _quantity_name(name: Any, form: str) -> str:
+    """``name``, checked to be a quantity name. ``form`` is the call that
+    passed it (``.quantity`` or ``Schema.quantity``), for the message."""
     if not isinstance(name, str):
-        raise TypeError(f"Schema.quantity: name must be a string, got {name!r}")
+        raise TypeError(f"{form}: name must be a string, got {name!r}")
     return name
+
+
+def _unit_name(unit: Any, form: str) -> str:
+    """``unit``, checked to be a unit name. ``form`` is the call that passed
+    it (``.unit`` or ``Schema.unit``), for the message."""
+    if not isinstance(unit, str):
+        raise TypeError(f"{form}: unit must be a string, got {unit!r}")
+    return unit
 
 
 def _js_number(x: Union[int, float]) -> str:
@@ -2306,7 +2333,8 @@ class Schema:
         axis with any other. An axis title shows the unit after its
         quantity: "Pay (USD)".
         """
-        return ColumnSchema({}).unit(unit)
+        name = _unit_name(unit, "Schema.unit")
+        return ColumnSchema({"HasUnit": {"unit": name, "symbol": name}})
 
     @staticmethod
     def quantity(name: str) -> ColumnSchema:
@@ -2315,7 +2343,9 @@ class Schema:
         place of the column's name, and columns of one quantity share one
         unit.
         """
-        return ColumnSchema({}).quantity(name)
+        return ColumnSchema(
+            {"HasQuantity": {"name": _quantity_name(name, "Schema.quantity")}}
+        )
 
 
 # Calendar partitions

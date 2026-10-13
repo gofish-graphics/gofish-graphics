@@ -5,7 +5,8 @@
  * inside a level, and at either end, a missing level), the midpoint's range
  * check, the centered stack's extent fold, the stray-level and signed-part
  * errors (checked where the order is used, so a `filter` in the flow can drop
- * a stray), the HasOrder prerequisite of HasMidpoint, a spread of centered
+ * a stray), the HasOrder prerequisite of HasMidpoint, HasUnit's conflict with
+ * HasCalendar and HasOrder, a spread of centered
  * stacks lining up on their midpoints, and the schema keeping the column
  * types (bin()'s units) its data carries.
  *
@@ -13,10 +14,12 @@
  * `pnpm test:schema`). The rendering checks import from `dist` for the same
  * lodash-ESM reason as `axisDims.test.ts`.
  *
- * The type-level rule (`.diverging()` exists only after `.ordered(...)`) is
- * enforced by `ColumnSchema#diverging`'s `this` type. The repo's test files
- * are not typechecked, so this file checks the runtime counterpart (a
- * HasMidpoint record without HasOrder, as it would arrive from the wire).
+ * The type-level rules (`.diverging()` exists only after `.ordered(...)`;
+ * `.unit()` exists only on a builder without `HasCalendar` or `HasOrder`) are
+ * enforced by the `this` types of `ColumnSchema#diverging` and
+ * `ColumnSchema#unit`. The repo's test files are not typechecked, so this
+ * file checks the runtime counterparts (such records as they would arrive
+ * from the wire).
  */
 
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
@@ -422,6 +425,32 @@ async function main() {
         message.includes("HasOrder") &&
         message.includes(".diverging()"),
       message
+    );
+    // `.unit()` excludes HasCalendar and HasOrder in its `this` type; a wire
+    // record is checked for the same conflict.
+    const timeUnit = await errorOf(() =>
+      columnTypeOf("t", {
+        HasCalendar: { zone: "UTC" },
+        HasUnit: { unit: "USD" },
+      })
+    );
+    check(
+      "a HasUnit record with HasCalendar is an error",
+      timeUnit ===
+        `schema: column "t" has HasUnit, but an instant already has the unit "instant".`,
+      timeUnit
+    );
+    const orderUnit = await errorOf(() =>
+      columnTypeOf("r", {
+        HasOrder: { levels: LEVELS5 },
+        HasUnit: { unit: "pts" },
+      })
+    );
+    check(
+      "a HasUnit record with HasOrder is an error",
+      orderUnit ===
+        `schema: column "r" has HasUnit, but an ordered column's levels are categories, not amounts.`,
+      orderUnit
     );
   }
 

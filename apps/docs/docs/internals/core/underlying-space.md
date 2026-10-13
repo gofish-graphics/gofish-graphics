@@ -1918,9 +1918,14 @@ reads only the classes, never the builder words. Four classes exist:
   (`CalendarPartition`) live in `calendar.ts`, which runs all calendar math
   on Temporal, native or the polyfill it loads when the runtime has none.
 - `HasUnit` (`{ unit, symbol? }`, #994, #955): the values are amounts in
-  the declared unit `unit` (`Schema.unit(u)`, or `.unit(u)` after another builder, which also
-  writes the symbol `u`). A column without it has an unknown unit, a unit variable (see
-  [measures](#measures-units-are-types)).
+  the declared unit `unit`. Both `Schema.unit(u)` and `.unit(u)` (after
+  another builder, but not after a time or an ordered column) declare the
+  unit `u` and write the symbol `u`. A column without it has an unknown
+  unit, a unit variable (see [measures](#measures-units-are-types)). It
+  excludes `HasCalendar` (an instant's unit is `"instant"`) and `HasOrder`
+  (levels are categories, which `HasUnit` does not accept): `.unit()`'s
+  `this` type rules them out, `columnTypeOf` rejects a wire record that has
+  both (`unitConflict`), and Python's `.unit` raises a `TypeError`.
 - `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
   `name` (`Schema.quantity(name)`, or `.quantity(name)` after another
   builder), when it is not the column's own name. It titles the axis and

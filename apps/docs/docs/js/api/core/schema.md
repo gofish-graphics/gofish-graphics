@@ -21,7 +21,10 @@ Schema.quantity(name).unit(unit); // HasUnit and HasQuantity
 
 A column type is a set of classes. Each builder method adds one class, and
 `.diverging()` exists only after `.ordered(...)`, because a midpoint is a
-point along an order. `.quantity(name)` and `.unit(unit)` may follow any builder.
+point along an order. `.quantity(name)` may follow any builder. `.unit(unit)`
+may follow any builder except `Schema.time()` and `Schema.ordered(levels)`,
+because an instant already has the unit `"instant"` and an ordered column's
+levels are categories, not amounts. Calling it there is a type error.
 
 | Builder                  | Class         | Meaning                                                 |
 | ------------------------ | ------------- | ------------------------------------------------------- |
@@ -29,7 +32,9 @@ point along an order. `.quantity(name)` and `.unit(unit)` may follow any builder
 | `.diverging()`           | `HasMidpoint` | The order has a midpoint, a point along it. See below.  |
 | `Schema.time()`          | `HasCalendar` | The column's values are instants, read on a calendar.   |
 | `Schema.unit(unit)`      | `HasUnit`     | The column's values are amounts in the unit `unit`.     |
+| `.unit(unit)`            | `HasUnit`     | The same, after another builder.                        |
 | `Schema.quantity(name)`  | `HasQuantity` | The column's values are amounts of the quantity `name`. |
+| `.quantity(name)`        | `HasQuantity` | The same, after another builder.                        |
 
 ## Parameters
 
