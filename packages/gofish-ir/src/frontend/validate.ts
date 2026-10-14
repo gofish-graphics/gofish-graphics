@@ -525,6 +525,27 @@ const strategyValue = (value: unknown): unknown =>
   isCallableValue(value) ? value.toJSON() : value;
 
 /**
+ * Walk `value` against `type` and throw the first problem, as
+ * `[gofish] <path>: <message>. <hint>`, naming `where` the value was
+ * written. The one way the JS side checks a value against a declared type
+ * (a strategy, a partition, a bin, an option object), so every check speaks
+ * the validator's vocabulary.
+ */
+function walkOrThrow(
+  type: FieldType,
+  value: unknown,
+  where: string,
+  hint: string
+): void {
+  const ctx: Context = { errors: [] };
+  walkFieldType(type, strategyValue(value), where, ctx);
+  if (ctx.errors.length > 0) {
+    const [{ path, message }] = ctx.errors;
+    throw new Error(`[gofish] ${path}: ${message}.${hint ? ` ${hint}` : ""}`);
+  }
+}
+
+/**
  * Check a strategy against its family in `STRATEGIES`: a known `kind`, and
  * only that kind's params, each of its declared type. Throws the first
  * problem, naming `where` the strategy was written
@@ -538,70 +559,69 @@ export function checkStrategy(
   value: unknown,
   where: string
 ): void {
-  const ctx: Context = { errors: [] };
-  walkFieldType(OPTION_TYPES[family].type, strategyValue(value), where, ctx);
-  if (ctx.errors.length > 0) {
-    const [{ path, message }] = ctx.errors;
-    throw new Error(
-      `[gofish] ${path}: ${message}. Make one with the ${family} family.`
-    );
-  }
+  walkOrThrow(
+    OPTION_TYPES[family].type,
+    value,
+    where,
+    `Make one with the ${family} family.`
+  );
 }
 
 /**
- * Check a `Bin` strategy on the key that takes it: `"field"` for
- * `field(x).bin(b)`, which takes the kinds that cut one line
- * (`Bin.step`, `Bin.thresholds`), `"struct"` for `struct({ x, y }).bin(b)`,
- * which takes the kinds that divide a plane (`Bin.hex`, `Bin.voronoi`). A
- * kind of the other key throws, naming the key that takes it; anything else
- * is checked as {@link checkStrategy} checks it.
+ * Check a named option object (`OPTION_TYPES`, e.g. `"AxisOptions"`)
+ * against its declared type, as the validator checks it in a document:
+ * only its declared keys, each of its declared type. Throws the first
+ * problem, naming `where` the option was written (`"axes.x"`).
  */
-export function checkBin(
-  key: keyof typeof BIN_KINDS,
+export function checkOption(
+  name: keyof typeof OPTION_TYPES,
   value: unknown,
   where: string
 ): void {
-  value = strategyValue(value);
-  const kind = isObject(value) ? value.kind : undefined;
-  const isKindOf = (k: keyof typeof BIN_KINDS) =>
-    (BIN_KINDS[k] as readonly unknown[]).includes(kind);
-  if (key === "field" && isKindOf("struct"))
+  walkOrThrow(OPTION_TYPES[name].type, value, where, "");
+}
+
+/**
+ * Check the `Bin` strategy of `struct({ x, y }).bin(b)`, which takes the
+ * kinds that divide a plane (`Bin.hex`, `Bin.voronoi`). A kind that cuts one
+ * field's line (`Bin.step`) throws, naming `field(x).bin`; anything else is
+ * checked as {@link checkStrategy} checks it.
+ */
+export function checkStructBin(value: unknown, where: string): void {
+  const v = strategyValue(value);
+  const kind = isObject(v) ? v.kind : undefined;
+  if ((BIN_KINDS.field as readonly unknown[]).includes(kind))
+    throw new Error(
+      `[gofish] ${where}: Bin.${kind} bins one field. Bin each field with ` +
+        `field(x).bin(Bin.${kind}(...)); struct({ x, y }).bin takes ` +
+        `Bin.hex({ radius }) or Bin.voronoi({ seeds }).`
+    );
+  checkStrategy("Bin", v, where);
+}
+
+/**
+ * Check the partition of `field(x).bin(p)`: a Calendar kind or a `Bin` kind
+ * that cuts one field's line (`OPTION_TYPES.Partition`). A `Bin` kind that
+ * divides a plane (`Bin.hex`) throws, naming `struct({ x, y }).bin`.
+ */
+export function checkPartition(value: unknown, where: string): void {
+  const v = strategyValue(value);
+  const kind = isObject(v) ? v.kind : undefined;
+  if ((BIN_KINDS.struct as readonly unknown[]).includes(kind))
     throw new Error(
       `[gofish] ${where}: Bin.${kind} bins two fields together into cells ` +
         `of the plane. Bin them with struct({ x, y }).bin(Bin.${kind}(...)); ` +
         `field(x).bin takes Bin.step(size), Bin.thresholds(countOrEdges), ` +
         `or a Calendar value.`
     );
-  if (key === "struct" && isKindOf("field"))
-    throw new Error(
-      `[gofish] ${where}: Bin.${kind} bins one field. Bin each field with ` +
-        `field(x).bin(Bin.${kind}(...)); struct({ x, y }).bin takes ` +
-        `Bin.hex({ radius }) or Bin.voronoi({ seeds }).`
-    );
-  checkStrategy("Bin", value, where);
-}
-
-/**
- * Check the partition of `field(x).bin(p)`: a Calendar kind or a `Bin` kind
- * that cuts one field's line (`OPTION_TYPES.Partition`). A `Bin` kind that
- * divides a plane throws as {@link checkBin} does, naming
- * `struct({ x, y }).bin`.
- */
-export function checkPartition(given: unknown, where: string): void {
-  const value = strategyValue(given);
-  const kind = isObject(value) ? value.kind : undefined;
-  if ((BIN_KINDS.struct as readonly unknown[]).includes(kind))
-    checkBin("field", value, where);
-  const ctx: Context = { errors: [] };
-  walkFieldType(OPTION_TYPES.Partition.type, value, where, ctx);
-  if (ctx.errors.length > 0) {
-    const [{ path, message }] = ctx.errors;
-    throw new Error(
-      `[gofish] ${path}: ${message}. Make one with a Calendar value ` +
-        `(Calendar.month, Calendar.hour({ every: 6 }), ...), Bin.step(size), or ` +
-        `Bin.thresholds(countOrEdges).`
-    );
-  }
+  walkOrThrow(
+    OPTION_TYPES.Partition.type,
+    v,
+    where,
+    `Make one with a Calendar value (Calendar.month, ` +
+      `Calendar.hour({ every: 6 }), ...), Bin.step(size), or ` +
+      `Bin.thresholds(countOrEdges).`
+  );
 }
 
 /** The anchors an axis interval may name: the fields of `AxisInterval` in

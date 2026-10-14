@@ -2,7 +2,8 @@ export * from "./schema.js";
 export {
   validate,
   checkStrategy,
-  checkBin,
+  checkOption,
+  checkStructBin,
   checkPartition,
   AXIS_INTERVAL_KEYS,
   isAxisInterval,

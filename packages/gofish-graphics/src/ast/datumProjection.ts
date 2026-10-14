@@ -491,7 +491,7 @@ function binKey(
           `so each group is a cell.`
       );
     // A struct from the wire (Python) did not pass `.bin`'s check.
-    Frontend.checkBin("struct", bin, where);
+    Frontend.checkStructBin(bin, where);
     const plane = domainPlane(by.fields, data, bin, where);
     return {
       cells: plane.cells,

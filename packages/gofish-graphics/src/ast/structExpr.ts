@@ -48,7 +48,7 @@ export class StructExpr<HasRegion extends boolean = boolean> {
       throw new Error(
         "struct(...).bin(...) is already binned: a struct takes one bin."
       );
-    Frontend.checkBin("struct", bin, "struct(...).bin");
+    Frontend.checkStructBin(bin, "struct(...).bin");
     return new StructExpr<true>(this.fields, [{ op: "bin", partition: bin }]);
   }
 

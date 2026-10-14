@@ -10,7 +10,9 @@ import {
   allExamples,
   validate,
   checkStrategy,
-  checkBin,
+  checkStructBin,
+  checkPartition,
+  checkOption,
   encodeIR,
   decodeNonFinite,
   FRONTEND_IR_JSON_SCHEMA,
@@ -1180,41 +1182,61 @@ console.log("\n# Strategies");
 
   // A Bin kind is valid only on its key, and the error names the key that
   // takes it.
-  const binThrown = (key: "field" | "struct", value: unknown): string => {
+  const thrown = (fn: () => void): string => {
     try {
-      checkBin(key, value, "where");
+      fn();
       return "";
     } catch (e) {
       return (e as Error).message;
     }
   };
   check(
-    "checkBin accepts a field bin on a field",
-    binThrown("field", { kind: "step", size: 1 }) === ""
+    "checkPartition accepts a field bin",
+    thrown(() => checkPartition({ kind: "step", size: 1 }, "where")) === ""
   );
   check(
-    "checkBin accepts a struct bin on a struct",
-    binThrown("struct", { kind: "hex", radius: 1 }) === ""
+    "checkStructBin accepts a struct bin",
+    thrown(() => checkStructBin({ kind: "hex", radius: 1 }, "where")) === ""
   );
   {
-    const why = binThrown("field", { kind: "hex", radius: 1 });
+    const why = thrown(() =>
+      checkPartition({ kind: "hex", radius: 1 }, "where")
+    );
     check(
-      "checkBin rejects Bin.hex on a field, naming struct",
+      "checkPartition rejects Bin.hex, naming struct",
       /Bin\.hex bins two fields/.test(why) && why.includes("struct({ x, y })"),
       why
     );
   }
   {
-    const why = binThrown("struct", { kind: "step", size: 1 });
+    const why = thrown(() =>
+      checkStructBin({ kind: "step", size: 1 }, "where")
+    );
     check(
-      "checkBin rejects Bin.step on a struct, naming field",
+      "checkStructBin rejects Bin.step, naming field",
       /Bin\.step bins one field/.test(why) && why.includes("field(x).bin"),
       why
     );
   }
   check(
-    "checkBin checks the params",
-    /above 0/.test(binThrown("field", { kind: "step", size: -1 }))
+    "checkPartition checks the params",
+    /above 0/.test(
+      thrown(() => checkPartition({ kind: "step", size: -1 }, "where"))
+    )
+  );
+  check(
+    "checkOption rejects an unknown axis option, naming the declared ones",
+    /axes\.x\.dividers: unknown field "dividers"; expected one of .*"divider"/.test(
+      thrown(() => checkOption("AxisOptions", { dividers: true }, "axes.x"))
+    )
+  );
+  check(
+    "checkOption checks a nested option's type",
+    /axes\.x\.label\.align/.test(
+      thrown(() =>
+        checkOption("AxisOptions", { label: { align: "left" } }, "axes.x")
+      )
+    )
   );
 
   // The validator walks a strategy option the same way.
