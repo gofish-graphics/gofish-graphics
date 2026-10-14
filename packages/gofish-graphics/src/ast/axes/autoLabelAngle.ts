@@ -3,7 +3,7 @@
 // </gofish-wiki>
 
 /**
- * `label.angle: "auto"`: pick each label ROW's angle (one row per axis tier)
+ * `label.angle: "auto"`: pick each label ROW's angle (one row per axis level)
  * from 0°, 45°, and 90°, in that order of preference, taking the first angle
  * at which no two labels of that row collide.
  *
@@ -11,7 +11,7 @@
  * score). The evaluation strategy is the generic whole-chart
  * {@link chooseFirstFit} in `choice/choose.ts`: the chart is built and laid out
  * once per candidate and the finished label geometry is scored. The whole
- * chart is the unit because an ordinal axis's inner tier is elaborated inside
+ * chart is the unit because an ordinal axis's inner level is elaborated inside
  * each group (a grouped bar chart's year labels live under each city), so a
  * collision across a group boundary can only be seen from the root.
  *
@@ -21,7 +21,7 @@
  * labels and nothing else.
  */
 import { GoFishNode } from "../_node";
-import type { GoFishRenderOptions } from "../gofish";
+import type { AxisRead, GoFishRenderOptions } from "../gofish";
 import {
   labelRowSettingsFromAngles,
   type LabelRow,
@@ -63,7 +63,7 @@ type RelBox = { minX: number; minY: number; maxX: number; maxY: number };
 export type LabelBox = {
   dim: 0 | 1;
   kind: "ordinal" | "continuous";
-  tier: number;
+  depth: number;
   /** The data field a category row labels, when known. */
   field?: string;
   pivot: [number, number];
@@ -134,7 +134,7 @@ export function collectLabelBoxes(root: GoFishNode): LabelBox[] {
           dim: n.axisLabel.dim,
           kind: n.axisLabel.kind,
           field: n.axisLabel.field,
-          tier: n.axisLabel.tier,
+          depth: n.axisLabel.depth,
           pivot,
           rotate: (n.args?.rotate as number | undefined) ?? 0,
           rel: {
@@ -158,7 +158,7 @@ const overlap1 = (a0: number, a1: number, b0: number, b1: number, pad = 0) =>
   Math.min(a1, b1) - Math.max(a0, b0) + 2 * pad;
 
 /**
- * Score one row of labels (one axis tier): `[overlap area, colliding pairs]`.
+ * Score one row of labels (one axis level): `[overlap area, colliding pairs]`.
  *
  * The labels of a row share one angle, so their rotated boxes are parallel.
  * Turning every origin back by that angle makes them plain axis-aligned boxes
@@ -205,17 +205,17 @@ function scoreRow(row: LabelBox[]): [number, number] {
   return [area, pairs];
 }
 
-const rowKey = (r: LabelRow): string => `${r.dim}:${r.kind}:${r.tier}`;
+const rowKey = (r: LabelRow): string => `${r.dim}:${r.kind}:${r.depth}`;
 
 /** One scored label row, with the field it labels (for a category row). */
 export type RowScore = { row: LabelRow; field?: string; score: Score };
 
 /** Score every label row: `[overlap area, colliding pairs]` per
- *  (axis, kind, tier), keyed by `rowKey`. */
+ *  (axis, kind, depth), keyed by `rowKey`. */
 export function scoreLabelRows(boxes: LabelBox[]): Map<string, RowScore> {
   const rows = new Map<string, { row: LabelRow; boxes: LabelBox[] }>();
   for (const b of boxes) {
-    const row: LabelRow = { dim: b.dim, kind: b.kind, tier: b.tier };
+    const row: LabelRow = { dim: b.dim, kind: b.kind, depth: b.depth };
     const key = rowKey(row);
     let entry = rows.get(key);
     if (!entry) rows.set(key, (entry = { row, boxes: [] }));
@@ -244,8 +244,6 @@ export const labelsFit = (s: Score): boolean => s[1] === 0;
 export const candidatesFor = (row: LabelRow): readonly LabelRowSetting[] =>
   row.kind === "ordinal" ? ORDINAL_CANDIDATES : CONTINUOUS_CANDIDATES;
 
-type AxisAngle = number | number[] | "auto" | undefined;
-
 /**
  * Lay the chart out with each label row of every "auto" axis at its own chosen
  * setting (an angle, or hidden for a category row). `layoutOnce` is the
@@ -259,7 +257,7 @@ type AxisAngle = number | number[] | "auto" | undefined;
  * today:
  *  - Axes don't interact: labels do not feed σ, so one axis's labels cannot
  *    move the other axis's labels along their track.
- *  - Rows don't interact for collisions: each tier is its own cross-axis row,
+ *  - Rows don't interact for collisions: each level is its own cross-axis row,
  *    and collisions are counted only within a row. A row's setting pushes the
  *    rows outside it further into (or back out of) the margin, but does not
  *    change their spacing along the track.
@@ -273,7 +271,7 @@ export async function layoutWithAutoLabelAngles<
 >(
   options: GoFishRenderOptions,
   child: GoFishNode | Promise<GoFishNode>,
-  angles: [AxisAngle, AxisAngle],
+  read: readonly [AxisRead, AxisRead],
   layoutOnce: (
     options: GoFishRenderOptions,
     child: GoFishNode,
@@ -300,10 +298,10 @@ export async function layoutWithAutoLabelAngles<
   };
 
   // Axes without "auto" keep their authored angles in every run.
-  const isAuto = (dim: 0 | 1) => angles[dim] === "auto";
+  const isAuto = (dim: 0 | 1) => read[dim].angle === "auto";
   const manual = labelRowSettingsFromAngles([
-    isAuto(0) ? undefined : (angles[0] as number | number[] | undefined),
-    isAuto(1) ? undefined : (angles[1] as number | number[] | undefined),
+    read[0].perLevel["label.angle"],
+    read[1].perLevel["label.angle"],
   ]);
 
   type Run = {

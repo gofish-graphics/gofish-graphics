@@ -1314,16 +1314,58 @@ async function main() {
       linesOf(lakes).length === 0,
       `${linesOf(lakes).length}`
     );
-    const continuousErr = await errorOfAsync(() =>
-      chart([{ g: "a", v: 1 }], { axes: { y: { divider: true } } })
-        .flow(spread({ by: "g", dir: "x" }))
-        .mark(rect({ w: 10, h: "v" }))
-        .toDisplayList({ w: 100, h: 100 })
+    // A per-level option on a mixed axis: facets ("g", ordinal) around
+    // scatters (numeric x). Depth 0 is the numeric ticks, depth 1 the
+    // facets. A plain value applies where it can and skips the numeric
+    // level; a list entry names its level, so one that cannot apply there,
+    // or one past the last level, is an error that lists the levels.
+    const facets = (x: any) =>
+      chart(
+        ["a", "b", "c"].flatMap((g) =>
+          [1, 2].map((v) => ({ g, v, w: v * 2 }))
+        ),
+        { axes: { x: { title: false, ...x }, y: false } }
+      )
+        .flow(
+          spread({ by: "g", dir: "x", spacing: 20 }),
+          scatter({ x: "v", y: "w", axes: { x: true, y: false } })
+        )
+        .mark(circle({ r: 2 }))
+        .toDisplayList({ w: 300, h: 100 });
+    const facetsPlain = await facets({ divider: true });
+    // Tick marks are 1px wide too: count the lines the option adds.
+    const facetsNone = await facets({});
+    check(
+      "a plain divider on a mixed axis divides the ordinal level only: one " +
+        "divider between each two facets",
+      linesOf(facetsPlain).length - linesOf(facetsNone).length === 2,
+      `${linesOf(facetsPlain).length} - ${linesOf(facetsNone).length}`
+    );
+    const facetsListed = await errorOfAsync(() => facets({ divider: [true] }));
+    check(
+      "a divider entry at a numeric level's depth is an error listing the " +
+        "levels",
+      facetsListed?.includes("axes.x.divider[0]: true cannot apply") ===
+        true &&
+        facetsListed.includes("[0] the numeric ticks, [1] the groups of"),
+      facetsListed
+    );
+    const facetsPast = await errorOfAsync(() =>
+      facets({ divider: [false, true, true] })
     );
     check(
-      "divider: true on a continuous axis's level is an error",
-      continuousErr?.includes("axes.y.divider") === true,
-      continuousErr
+      "a divider entry past the last level is an error listing the levels",
+      facetsPast?.includes("axes.x.divider[2]: true has no level to apply") ===
+        true && facetsPast.includes("[1] the groups of"),
+      facetsPast
+    );
+    const facetsAngle = await errorOfAsync(() =>
+      facets({ label: { angle: [0, 45, 0] } })
+    );
+    check(
+      "a label.angle entry past the last level is an error, as for levels",
+      facetsAngle?.includes("axes.x.label.angle[2]: 0 has no level") === true,
+      facetsAngle
     );
     const badErr = await errorOfAsync(() =>
       chart([{ g: "a", v: 1 }], { axes: { x: { divider: "yes" } } } as any)
@@ -1344,8 +1386,8 @@ async function main() {
     );
     check(
       "the axis-option key check takes divider and lists it",
-      unknownErr?.includes('unknown option "dividers"') === true &&
-        unknownErr.includes('"divider"'),
+      unknownErr?.includes('axes.x.dividers: unknown field "dividers"') ===
+        true && unknownErr.includes('"divider"'),
       unknownErr
     );
 
@@ -1411,25 +1453,31 @@ async function main() {
       JSON.stringify([ordered.left, ordered.bars[2].x])
     );
     const startErr = await errorOfAsync(() =>
-      chart([{ v: 1, w: 2 }], {
-        axes: { x: { label: { align: "start" } }, y: false },
-      })
-        .flow(scatter({ x: "v", y: "w" }))
-        .mark(circle({ r: 2 }))
-        .toDisplayList({ w: 100, h: 100 })
+      facets({ label: { align: ["start"] } })
     );
     check(
-      "label.align \"start\" on a continuous axis is an error",
-      startErr?.includes("axes.x.label.align") === true &&
-        startErr.includes("continuous"),
+      'label.align ["start"] at a continuous level\'s depth is an error',
+      startErr?.includes('axes.x.label.align[0]: "start" cannot apply') ===
+        true && startErr.includes("continuous"),
       startErr
+    );
+    // A plain "start" skips the numeric level and starts the facets' runs:
+    // each facet label sits at its facet's left edge, not centered on it.
+    const startTexts = textsOf(await facets({ label: { align: "start" } }));
+    const centerTexts = textsOf(await facets({}));
+    const facetX = (ts: typeof startTexts) => ts.find((t) => t.text === "b")!.x;
+    check(
+      'a plain label.align "start" on a mixed axis starts the ordinal level ' +
+        "only",
+      facetX(startTexts) < facetX(centerTexts) - 10,
+      JSON.stringify([facetX(startTexts), facetX(centerTexts)])
     );
     const badAlign = await errorOfAsync(() =>
       render(chainKey, { title: false, label: { align: "left" } })
     );
     check(
       "an unknown label.align value is an error",
-      badAlign?.includes("axes.x.label.align: unknown value") === true,
+      badAlign?.includes("axes.x.label.align: expected one of") === true,
       badAlign
     );
     // The flat key this nested option replaced is an unknown key now; the
@@ -1439,7 +1487,8 @@ async function main() {
     );
     check(
       "the old flat labelAlign key is an error naming label",
-      flatAlign?.includes('axes.x: unknown option "labelAlign"') === true &&
+      flatAlign?.includes('axes.x.labelAlign: unknown field "labelAlign"') ===
+        true &&
         flatAlign.includes('"label"'),
       flatAlign
     );

@@ -76,6 +76,7 @@ import { toJSON } from "../util/interval";
 import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
 import type { AxesOptions, AxisOptions, ScaleContext } from "./gofish";
+import type { LabelRow } from "./axes/elaborate";
 import type { ChromeRing } from "./elaborationUtils";
 import type { TokenContext } from "./tokenContext";
 import {
@@ -665,17 +666,12 @@ export class GoFishNode {
   public _ordinalKeyMap?: Record<string, GoFishNode>;
   /** Set on a tick or category label `Text` made by axis elaboration: the
    *  label row it belongs to — which axis (`dim`), whether it labels
-   *  categories or continuous ticks (`kind`), and which ordinal tier
-   *  (0 = innermost; always 0 on a continuous axis). `label.angle: "auto"` reads
-   *  these tags after layout to score label collisions per row across the
-   *  whole chart (see axes/autoLabelAngle.ts). */
-  public axisLabel?: {
-    dim: 0 | 1;
-    kind: "ordinal" | "continuous";
-    tier: number;
-    /** The data field a category row labels (its ordinal space's measure). */
-    field?: string;
-  };
+   *  categories or continuous ticks (`kind`), and its level's depth among
+   *  the levels of the dim (0 = nearest the plot) — and, for a category
+   *  row, the data field it labels (its ordinal space's measure).
+   *  `label.angle: "auto"` reads these tags after layout to score label
+   *  collisions per row across the whole chart (see axes/autoLabelAngle.ts). */
+  public axisLabel?: LabelRow & { field?: string };
   /** Set on a ROOT node by the surface that built it (a chart builder or a
    *  component thunk): builds a fresh, unlaid-out copy of the same chart.
    *  Layout writes each node's box once, so a choice that must lay the chart

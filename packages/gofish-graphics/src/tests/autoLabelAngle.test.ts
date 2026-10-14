@@ -5,7 +5,7 @@
  * `tsx src/tests/autoLabelAngle.test.ts` (wired into `pnpm test` as
  * `test:auto-label-angle`).
  *
- * The contract: each label row (axis tier) tries 0°, 45°, 90° in order and
+ * The contract: each label row (axis depth) tries 0°, 45°, 90° in order and
  * keeps the first angle at which its labels do not collide; if all collide,
  * the one with the least overlap wins, ties going to the more preferred angle.
  */
@@ -36,7 +36,7 @@ import {
   type LabelBox,
 } from "../ast/axes/autoLabelAngle";
 import type { LabelRowSetting } from "../ast/axes/elaborate";
-import { resolveAxisLabelAngles, runLayout } from "../ast/gofish";
+import { readAxisOptions, runLayout } from "../ast/gofish";
 import { Rect } from "../ast/shapes/rect";
 
 let passed = 0;
@@ -103,14 +103,14 @@ const row = (
   w: number,
   pitch: number,
   angle: number,
-  tier = 0,
+  depth = 0,
   kind: "ordinal" | "continuous" = "ordinal"
 ): LabelBox[] =>
   Array.from({ length: n }, (_, i) => ({
     dim: 0 as const,
     kind,
-    tier,
-    pivot: [i * pitch, tier * 50] as [number, number],
+    depth,
+    pivot: [i * pitch, depth * 50] as [number, number],
     rotate: angle,
     rel: { minX: 0, maxX: w, minY: -3, maxY: 7 },
   }));
@@ -119,9 +119,9 @@ const row = (
 const scoreOf = (
   boxes: LabelBox[],
   dim: 0 | 1 = 0,
-  tier = 0,
+  depth = 0,
   kind: "ordinal" | "continuous" = "ordinal"
-): Score => rowScore(scoreLabelRows(boxes), { dim, kind, tier });
+): Score => rowScore(scoreLabelRows(boxes), { dim, kind, depth });
 
 console.log("scoreLabelRows");
 ok("separated labels score zero", scoreOf(row(4, 20, 30, 0)).join() === "0,0");
@@ -162,26 +162,26 @@ ok("separated labels score zero", scoreOf(row(4, 20, 30, 0)).join() === "0,0");
   );
 }
 {
-  // Tier 1 sits exactly where tier 0 does, offset half a pitch: were they one
+  // Depth 1 sits exactly where depth 0 does, offset half a pitch: were they one
   // row, they would collide.
   const a = row(2, 20, 30, 0);
   const b = row(2, 20, 30, 0).map((x) => ({
     ...x,
-    tier: 1,
+    depth: 1,
     pivot: [x.pivot[0] + 15, 0] as [number, number],
   }));
   const s = [...scoreLabelRows([...a, ...b]).values()].map((r) =>
     r.score.join()
   );
   ok(
-    "tiers are scored as separate rows",
+    "levels are scored as separate rows",
     s.join("|") === "0,0|0,0",
     s.join("|")
   );
 }
 {
-  // A continuous tick row and an ordinal tier 0 on the same axis are
-  // different rows, even though both are tier 0.
+  // A continuous tick row and an ordinal depth 0 on the same axis are
+  // different rows, even though both are depth 0.
   const a = row(2, 20, 30, 0, 0, "continuous");
   const b = row(2, 20, 30, 0, 0, "ordinal").map((x) => ({
     ...x,
@@ -195,7 +195,7 @@ ok("separated labels score zero", scoreOf(row(4, 20, 30, 0)).join() === "0,0");
 
 // --- choosing a setting on synthetic label geometry --------------------------
 
-// A labels-only "chart" with an inner row (tier 0) and an outer row (tier 1),
+// A labels-only "chart" with an inner row (depth 0) and an outer row (depth 1),
 // both set to the candidate, as a uniform run sets every row. A hidden row
 // draws no labels. The angle Text receives is counterclockwise; the
 // screen-clockwise user angle is its negation. Each row picks its own setting
@@ -208,23 +208,23 @@ const pickRows = async (
   const draw = (
     c: LabelRowSetting,
     spec: [number, number],
-    tier: number,
+    depth: number,
     kind: "ordinal" | "continuous"
   ) =>
     c === "hidden"
       ? []
-      : row(tier === 0 ? 6 : 2, spec[0], spec[1], -(c ?? 0), tier, kind);
+      : row(depth === 0 ? 6 : 2, spec[0], spec[1], -(c ?? 0), depth, kind);
   const uniform = async (c: LabelRowSetting) => [
     ...draw(c, inner, 0, innerKind),
     ...draw(c, outer, 1, "ordinal"),
   ];
-  const pick = async (tier: number, kind: "ordinal" | "continuous") => {
-    const labelRow = { dim: 0 as const, kind, tier };
+  const pick = async (depth: number, kind: "ordinal" | "continuous") => {
+    const labelRow = { dim: 0 as const, kind, depth };
     return (
       await chooseFirstFit(
         candidatesFor(labelRow),
         uniform,
-        (boxes) => scoreOf(boxes, 0, tier, kind),
+        (boxes) => scoreOf(boxes, 0, depth, kind),
         labelsFit
       )
     ).candidate;
@@ -272,36 +272,32 @@ const errorOf = async (fn: () => unknown): Promise<string> => {
 };
 
 console.log("validation");
+const angleOf = (axes: any) =>
+  readAxisOptions(axes)
+    .map((r) => String(r.angle))
+    .join("|");
 ok(
   '"auto" inside a per-level array is an error',
-  (
-    await errorOf(() =>
-      resolveAxisLabelAngles({ x: { label: { angle: ["auto"] as any } } })
-    )
-  ).includes("per-level array")
+  (await errorOf(() => angleOf({ x: { label: { angle: ["auto"] } } }))).includes(
+    "axes.x.label.angle[0]: expected number"
+  )
 );
 ok(
   "an unknown string is an error",
-  (
-    await errorOf(() =>
-      resolveAxisLabelAngles({ x: { label: { angle: "sideways" as any } } })
-    )
-  ).includes("unknown value")
+  (await errorOf(() => angleOf({ x: { label: { angle: "sideways" } } }))).includes(
+    'axes.x.label.angle: expected one of "auto", got "sideways"'
+  )
 );
 ok(
   "the old flat labelAngle key is an error naming label",
-  (
-    await errorOf(() =>
-      resolveAxisLabelAngles({ x: { labelAngle: 45 } as any })
-    )
-  ).includes('"label"')
+  (await errorOf(() => angleOf({ x: { labelAngle: 45 } }))).includes('"label"')
 );
 ok(
   '"auto" and numbers pass through',
-  resolveAxisLabelAngles({
+  angleOf({
     x: { label: { angle: "auto" } },
     y: { label: { angle: [45, 0] } },
-  }).join("|") === "auto|45,0"
+  }) === "auto|45,0"
 );
 ok(
   '"auto" on a prebuilt node is an error',
@@ -397,7 +393,7 @@ console.log("end to end");
       `w=${w}: every row of the chosen layout is collision-free`,
       scores.length > 0 && scores.every((r) => labelsFit(r.score)),
       scores
-        .map((r) => `${r.row.dim}:${r.row.tier}=${r.score.join()}`)
+        .map((r) => `${r.row.dim}:${r.row.depth}=${r.score.join()}`)
         .join(" ")
     );
   }

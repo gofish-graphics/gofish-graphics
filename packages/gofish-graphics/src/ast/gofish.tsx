@@ -49,19 +49,18 @@ import {
 import {
   elaborateChrome,
   labelRowSettingsFromAngles,
-  type LabelAlign,
-  type LabelAlignOpt,
-  type DividerOpt,
   type LabelRowSettings,
 } from "./axes/elaborate";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
 import {
-  levelsError,
+  levelOptionsError,
   levelsFromOption,
-  type LevelEntry,
+  type LabelAlign,
   type LevelOption,
+  type LevelOptions,
+  type PerLevel,
 } from "./axes/levels";
-import { axisName } from "./constraints/shared";
+import { Frontend } from "gofish-ir";
 import {
   getScopeRegistry,
   scopeFrame,
@@ -167,9 +166,13 @@ export type AxisOptions =
        *  Depths the list does not reach stay as inferred. On the outermost
        *  axis of the dim, Calendar entries past its inferred levels add
        *  levels. An entry that cannot apply (a Calendar value over slots
-       *  that are not times or finer than the slots, `false` on a numeric axis, an entry past the
-       *  last level) is an error that lists the axis's levels. `label.angle`
-       *  and `label.align` arrays use the same depths. */
+       *  that are not times or finer than the slots, `false` on a numeric
+       *  axis, an entry past the last level) is an error that lists the
+       *  axis's levels. The other per-level options, `label.angle`,
+       *  `label.align` and `divider`, use the same depths and the same
+       *  rule: a plain value applies to every level where it can, and a
+       *  list entry that cannot apply at its depth, or one past the last
+       *  level, is this error. */
       levels?: LevelOption[];
       /** Whether each level of an ordinal axis draws dividers: a line in
        *  each gap where its runs break, through every level whose runs
@@ -181,12 +184,14 @@ export type AxisOptions =
        *  numeric bins inside bins. Categories nested in other categories (a
        *  lake over its species) draw none, nor does the innermost level.
        *
-       *  `true` turns a level's dividers on, `false` off. A plain value
-       *  applies to every level of the axis; an **array** is per level, by
-       *  the depths of `levels`, nearest the plot first, with a depth past
-       *  its end left as inferred (`[false, true]` divides only the second
-       *  level). A continuous axis's level has ticks, not regions, so
-       *  `true` at its depth is an error. */
+       *  `true` turns a level's dividers on, `false` off. A continuous
+       *  axis's level has ticks, not regions, so a plain value applies to
+       *  every ordinal level of the axis and skips the continuous ones. An
+       *  **array** is per level, by the depths of `levels`, nearest the
+       *  plot first, with a depth past its end left as inferred
+       *  (`[false, true]` divides only the second level); `true` at a
+       *  continuous level's depth, or an entry past the last level, is an
+       *  error (see `levels`). */
       divider?: boolean | boolean[];
     };
 
@@ -214,10 +219,13 @@ export type AxisLabelOptions = {
    *  level, by the depths of `levels`, nearest the plot first — `[45]`
    *  rotates only the innermost level (e.g. the year row directly under
    *  grouped bars) and leaves outer levels (e.g. the city row)
-   *  unrotated; `[45, 0]` is the explicit two-level form. An index
-   *  beyond the array's length means unrotated/undefined. A numeric axis
-   *  is one level, so in a faceted chart its ticks take the first entry
-   *  and the facets' labels the next. */
+   *  unrotated; `[45, 0]` is the explicit two-level form. A depth the
+   *  array does not reach is unrotated, and an entry past the last level
+   *  is an error (see `levels`). A numeric axis is one level, so in a
+   *  faceted chart its ticks take the first entry and the facets' labels
+   *  the next. A time axis does not rotate its labels yet, so a plain
+   *  number skips its rows, and a nonzero entry at one of their depths is
+   *  an error. */
   angle?: number | number[] | "auto";
   /** Where each level's labels sit along the axis: `"center"` centers a
    *  label under what it names, `"start"` puts it at the start of its
@@ -229,173 +237,77 @@ export type AxisLabelOptions = {
    *  do; an outer level over unordered categories centers, since its
    *  label collects the groups beneath it; and the innermost level, one
    *  label per slot, centers. A continuous axis's labels name points,
-   *  so they center on their ticks, and `"start"` there is an error.
+   *  so they center on their ticks.
    *
-   *  A plain value applies to every level of the axis. An **array** is
+   *  A plain value applies to every level of the axis where it can: a
+   *  plain `"start"` skips a continuous axis's levels. An **array** is
    *  per level, by the depths of `levels`, nearest the plot first, like
    *  `angle`'s; `true`, or a depth past the array's end, keeps the
    *  level's inferred alignment (`[true, "center"]` centers only the
-   *  second level). */
+   *  second level). `"start"` at a continuous level's depth, or an entry
+   *  past the last level, is an error (see `levels`). */
   align?: LabelAlign | (LabelAlign | true)[];
 };
 
-/** Read one `AxisOptions` field per dim, AS AUTHORED — `undefined` wherever the
- *  caller did not specify it, so an elaboration can tell an explicit value apart
- *  from the default (e.g. an explicit `side: "start"` vs. a continuous x-axis
- *  defaulting to the bottom). */
-function perDimAxisOption<K extends keyof Extract<AxisOptions, object>>(
-  axes: AxesOptions | undefined,
-  key: K
-): [Extract<AxisOptions, object>[K], Extract<AxisOptions, object>[K]] {
-  const read = (o: AxisOptions | undefined, axis: "x" | "y") => {
-    if (!o || typeof o !== "object") return undefined;
-    checkKeys(o, AXIS_OPTION_KEYS, `axes.${axis}`);
-    return o[key];
+/** One axis's options as read (see {@link readAxisOptions}). */
+export type AxisRead = {
+  side: "start" | "end" | undefined;
+  /** `label.angle` as authored: a manual angle, or `"auto"`. */
+  angle: PerLevel<number> | "auto";
+  /** The per-level options; a `label.angle` of `"auto"` has no entry. */
+  perLevel: LevelOptions;
+};
+
+/**
+ * Each dim's axis options, AS AUTHORED: `undefined` wherever the caller did
+ * not specify a field, so an elaboration can tell an explicit value apart
+ * from the default (an explicit `side: "start"` vs. a continuous x-axis
+ * defaulting to the bottom). Each options object is checked once, against
+ * the IR's declared `AxisOptions` (`Frontend.checkOption`), so a JS caller
+ * and a Python one get the same errors. The `levels` entries are read by
+ * `levelsFromOption` instead: a JS entry may be a Calendar value with a
+ * `.format(fn)`, which has no IR form.
+ */
+export function readAxisOptions(
+  axes: AxesOptions | undefined
+): [AxisRead, AxisRead] {
+  const read = (o: AxisOptions | undefined, axis: "x" | "y"): AxisRead => {
+    if (!o || typeof o !== "object")
+      return { side: undefined, angle: undefined, perLevel: {} };
+    const { levels, ...rest } = o;
+    Frontend.checkOption("AxisOptions", rest, `axes.${axis}`);
+    const angle = o.label?.angle;
+    return {
+      side: o.side,
+      angle,
+      perLevel: {
+        levels: levels && levelsFromOption(levels, axis),
+        "label.angle": angle === "auto" ? undefined : angle,
+        "label.align": o.label?.align,
+        divider: o.divider,
+      },
+    };
   };
   if (axes && typeof axes === "object")
     return [read(axes.x, "x"), read(axes.y, "y")];
-  return [undefined, undefined];
+  return [read(undefined, "x"), read(undefined, "y")];
 }
-
-/** Read one `AxisLabelOptions` field per dim (`axes.x.label.angle`), as
- *  authored, like `perDimAxisOption`. */
-function perDimLabelOption<K extends keyof AxisLabelOptions>(
-  axes: AxesOptions | undefined,
-  key: K
-): [AxisLabelOptions[K], AxisLabelOptions[K]] {
-  const [x, y] = perDimAxisOption(axes, "label");
-  const read = (o: AxisLabelOptions | undefined, axis: "x" | "y") => {
-    if (o === undefined) return undefined;
-    if (!o || typeof o !== "object" || Array.isArray(o))
-      throw new Error(
-        `axes.${axis}.label: expected an object of ` +
-          `${LABEL_OPTION_KEYS.join(", ")}, got ${JSON.stringify(o)}.`
-      );
-    checkKeys(o, LABEL_OPTION_KEYS, `axes.${axis}.label`);
-    return o[key];
-  };
-  return [read(x, "x"), read(y, "y")];
-}
-
-/** The keys an `AxisOptions` / `AxisLabelOptions` object takes. Typed so a
- *  key added to or removed from the type has to be listed here. */
-const AXIS_OPTION_KEYS = Object.keys({
-  title: true,
-  side: true,
-  label: true,
-  levels: true,
-  divider: true,
-} satisfies Record<keyof Extract<AxisOptions, object>, true>);
-const LABEL_OPTION_KEYS = Object.keys({
-  angle: true,
-  align: true,
-} satisfies Record<keyof AxisLabelOptions, true>);
-
-/** Reject a key an options object does not take, for untyped callers
- *  (Python, plain JS), naming the keys it does take. */
-function checkKeys(o: object, keys: readonly string[], path: string): void {
-  for (const k of Object.keys(o))
-    if (!keys.includes(k))
-      throw new Error(
-        `${path}: unknown option "${k}"; expected one of ` +
-          `${keys.map((key) => JSON.stringify(key)).join(", ")}.`
-      );
-}
-
-export const resolveAxisSides = (
-  axes: AxesOptions | undefined
-): ["start" | "end" | undefined, "start" | "end" | undefined] =>
-  perDimAxisOption(axes, "side");
-
-type LabelAngleOption = number | number[] | "auto" | undefined;
-
-/** Reject a malformed `label.angle` (see `AxisLabelOptions.angle`). The type
- *  already forbids these; this catches untyped callers (Python, plain JS). */
-function checkLabelAngle(v: unknown, axis: "x" | "y"): LabelAngleOption {
-  if (v === undefined || v === "auto" || typeof v === "number") return v;
-  if (Array.isArray(v)) {
-    if (v.includes("auto"))
-      throw new Error(
-        `axes.${axis}.label.angle: "auto" applies to the whole axis, so it ` +
-          `cannot be one entry of a per-level array; use angle: "auto".`
-      );
-    if (v.every((a) => typeof a === "number")) return v as number[];
-  }
-  throw new Error(
-    `axes.${axis}.label.angle: unknown value ${JSON.stringify(v)} ` +
-      `(expected a number, an array of numbers, or "auto").`
-  );
-}
-
-/** Reject a malformed `label.align` (see `AxisLabelOptions.align`), for
- *  untyped callers (Python, plain JS). */
-function checkLabelAlign(v: unknown, axis: "x" | "y"): LabelAlignOpt {
-  const ok = (a: unknown) => a === "start" || a === "center";
-  if (v === undefined || ok(v)) return v as LabelAlignOpt;
-  if (Array.isArray(v) && v.every((a) => a === true || ok(a)))
-    return v as (LabelAlign | true)[];
-  throw new Error(
-    `axes.${axis}.label.align: unknown value ${JSON.stringify(v)} ` +
-      `(expected "start", "center", or an array of those and true, one ` +
-      `per level).`
-  );
-}
-
-/** Reject a malformed `divider` (see `AxisOptions.divider`), for untyped
- *  callers (Python, plain JS). */
-function checkDivider(v: unknown, axis: "x" | "y"): DividerOpt {
-  if (
-    v === undefined ||
-    typeof v === "boolean" ||
-    (Array.isArray(v) && v.every((d) => typeof d === "boolean"))
-  )
-    return v as DividerOpt;
-  throw new Error(
-    `axes.${axis}.divider: unknown value ${JSON.stringify(v)} (expected ` +
-      `true, false, or an array of those, one per level).`
-  );
-}
-
-/** Each axis's `divider`, checked. */
-export const resolveAxisDividers = (
-  axes: AxesOptions | undefined
-): [DividerOpt, DividerOpt] => {
-  const [x, y] = perDimAxisOption(axes, "divider");
-  return [checkDivider(x, "x"), checkDivider(y, "y")];
-};
-
-/** Each axis's `label.align`, checked. */
-export const resolveAxisLabelAligns = (
-  axes: AxesOptions | undefined
-): [LabelAlignOpt, LabelAlignOpt] => {
-  const [x, y] = perDimLabelOption(axes, "align");
-  return [checkLabelAlign(x, "x"), checkLabelAlign(y, "y")];
-};
-
-/** A `number` applies to every level; a `number[]` is per level, innermost first;
- *  `"auto"` is chosen per axis by `runLayout` (see `AxisLabelOptions.angle`). */
-export const resolveAxisLabelAngles = (
-  axes: AxesOptions | undefined
-): [LabelAngleOption, LabelAngleOption] => {
-  const [x, y] = perDimLabelOption(axes, "angle");
-  return [checkLabelAngle(x, "x"), checkLabelAngle(y, "y")];
-};
 
 /** The label-row settings a manual `label.angle` describes. "auto" has none of
  *  its own: `runLayout` chooses them and hands them to `layout()` directly. */
 function manualLabelRowSettings(
-  axes: AxesOptions | undefined
+  read: readonly [AxisRead, AxisRead]
 ): LabelRowSettings {
-  const angles = resolveAxisLabelAngles(axes);
-  if (angles[0] === "auto" || angles[1] === "auto") {
+  if (read[0].angle === "auto" || read[1].angle === "auto") {
     throw new Error(
       'label.angle: "auto" must be resolved before layout(); render through ' +
         "gofish(), a chart builder, or runLayout()."
     );
   }
-  return labelRowSettingsFromAngles(
-    angles as [number | number[] | undefined, number | number[] | undefined]
-  );
+  return labelRowSettingsFromAngles([
+    read[0].perLevel["label.angle"],
+    read[1].perLevel["label.angle"],
+  ]);
 }
 
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
@@ -495,10 +407,10 @@ export async function layout(
   // elaborated (its levels, which depend on the axes inside it), before any
   // solve nices its domain to its inner row. A dim with `levels` is always
   // enabled: a disabled dim (`false`) has no options to hold them.
-  const levelOpts = perDimAxisOption(axes, "levels");
-  const levels: [LevelEntry[] | undefined, LevelEntry[] | undefined] = [
-    levelOpts[0] && levelsFromOption(levelOpts[0], "x"),
-    levelOpts[1] && levelsFromOption(levelOpts[1], "y"),
+  const read = readAxisOptions(axes);
+  const perLevel: [LevelOptions, LevelOptions] = [
+    read[0].perLevel,
+    read[1].perLevel,
   ];
   if (axes) {
     const enabled = new Map<0 | 1, AxisTicks>();
@@ -535,16 +447,15 @@ export async function layout(
       : undefined,
   };
   const elaborated = await elaborateChrome(child, {
-    sides: resolveAxisSides(axes),
-    labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
-    levels,
-    labelAligns: resolveAxisLabelAligns(axes),
-    dividers: resolveAxisDividers(axes),
+    sides: [read[0].side, read[1].side],
+    labelSettings: labelRowSettings ?? manualLabelRowSettings(read),
+    perLevel,
   });
-  // Entries that no level took are an error (see `AxisOptions.levels`).
-  const levelsErr = levelsError(
-    levels,
-    elaborated.fold.names,
+  // Per-level entries that no level took are an error (see
+  // `AxisOptions.levels`).
+  const levelsErr = levelOptionsError(
+    perLevel,
+    [elaborated.fold.dims[0].names, elaborated.fold.dims[1].names],
     elaborated.fold.issues
   );
   if (levelsErr !== undefined) throw levelsErr;
@@ -931,10 +842,10 @@ export async function runLayout(
   options: GoFishRenderOptions,
   child: GoFishNode | Promise<GoFishNode>
 ): Promise<LayoutData> {
-  const angles = resolveAxisLabelAngles(options.axes);
-  if (angles[0] !== "auto" && angles[1] !== "auto")
+  const read = readAxisOptions(options.axes);
+  if (read[0].angle !== "auto" && read[1].angle !== "auto")
     return layoutOnce(options, child);
-  return layoutWithAutoLabelAngles(options, child, angles, layoutOnce);
+  return layoutWithAutoLabelAngles(options, child, read, layoutOnce);
 }
 
 /** One pass of the pipeline over `child`, which it lays out in place. */
