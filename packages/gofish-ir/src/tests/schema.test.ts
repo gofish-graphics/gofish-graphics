@@ -1125,15 +1125,6 @@ console.log("\n# Strategies");
     ["Calendar", { kind: "month" }],
     ["Calendar", { kind: "month", every: 3 }],
     ["Calendar", { kind: "week", every: 2, start: "sunday" }],
-    // A strategy kind used bare is a function that carries its value as
-    // `toJSON()`: it is checked as that value.
-    [
-      "Curve",
-      Object.assign(() => ({ kind: "monotone" }), {
-        kind: "monotone",
-        toJSON: () => ({ kind: "monotone" }),
-      }),
-    ],
   ];
   for (const [family, value] of accepts) {
     const why = thrown(family, value);
@@ -1141,6 +1132,17 @@ console.log("\n# Strategies");
   }
   const rejects: Array<[Parameters<typeof checkStrategy>[0], unknown, RegExp]> =
     [
+      // A strategy kind used bare is read as its value where the option
+      // enters (gofish-graphics' withKindValues), so a function never
+      // reaches the check: one that does is not a strategy.
+      [
+        "Curve",
+        Object.assign(() => ({ kind: "monotone" }), {
+          kind: "monotone",
+          toJSON: () => ({ kind: "monotone" }),
+        }),
+        /expected object, got function/,
+      ],
       ["Tile", { kind: "strip" }, /where\.kind: unknown kind "strip"/],
       ["Tile", "squarify", /expected object/],
       ["Tile", { kind: "squarify", ratio: 0.5 }, /at least 1/],
@@ -1182,7 +1184,7 @@ console.log("\n# Strategies");
 
   // A Bin kind is valid only on its key, and the error names the key that
   // takes it.
-  const thrown = (fn: () => void): string => {
+  const errorIn = (fn: () => void): string => {
     try {
       fn();
       return "";
@@ -1192,14 +1194,14 @@ console.log("\n# Strategies");
   };
   check(
     "checkPartition accepts a field bin",
-    thrown(() => checkPartition({ kind: "step", size: 1 }, "where")) === ""
+    errorIn(() => checkPartition({ kind: "step", size: 1 }, "where")) === ""
   );
   check(
     "checkStructBin accepts a struct bin",
-    thrown(() => checkStructBin({ kind: "hex", radius: 1 }, "where")) === ""
+    errorIn(() => checkStructBin({ kind: "hex", radius: 1 }, "where")) === ""
   );
   {
-    const why = thrown(() =>
+    const why = errorIn(() =>
       checkPartition({ kind: "hex", radius: 1 }, "where")
     );
     check(
@@ -1209,7 +1211,7 @@ console.log("\n# Strategies");
     );
   }
   {
-    const why = thrown(() =>
+    const why = errorIn(() =>
       checkStructBin({ kind: "step", size: 1 }, "where")
     );
     check(
@@ -1221,19 +1223,19 @@ console.log("\n# Strategies");
   check(
     "checkPartition checks the params",
     /above 0/.test(
-      thrown(() => checkPartition({ kind: "step", size: -1 }, "where"))
+      errorIn(() => checkPartition({ kind: "step", size: -1 }, "where"))
     )
   );
   check(
     "checkOption rejects an unknown axis option, naming the declared ones",
     /axes\.x\.dividers: unknown field "dividers"; expected one of .*"divider"/.test(
-      thrown(() => checkOption("AxisOptions", { dividers: true }, "axes.x"))
+      errorIn(() => checkOption("AxisOptions", { dividers: true }, "axes.x"))
     )
   );
   check(
     "checkOption checks a nested option's type",
     /axes\.x\.label\.align/.test(
-      thrown(() =>
+      errorIn(() =>
         checkOption("AxisOptions", { label: { align: "left" } }, "axes.x")
       )
     )
