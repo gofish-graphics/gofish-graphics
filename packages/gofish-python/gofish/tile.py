@@ -3,11 +3,14 @@
 """
 The ``Tile`` family. How `treemap` tiles its box: the value of its `tile` option. Each kind is one of d3-hierarchy's tiling methods.
 
-The package binds this module as ``Tile``, so ``Tile.squarify()`` and
-``from gofish.tile import squarify`` reach the same function. A strategy is a
+The package binds this module as ``Tile``, so ``Tile.squarify`` and
+``from gofish.tile import squarify`` reach the same member. A strategy is a
 plain dict, ``{"kind": ..., **params}``, with snake_case param keys; the option it
 is passed to renames them to the camelCase wire keys. Mirrors JS
 ``gofish-graphics/tile``.
+
+A kind with no required option is a value as it is, and calling it sets
+options: ``Tile.squarify`` is ``Tile.squarify()`` (#1133).
 """
 
 from __future__ import annotations
@@ -15,9 +18,12 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, Literal, Optional
 
+from ._strategy import bare_kind
+
 __all__ = ["squarify", "slice", "dice", "binary", "slice_dice"]
 
 
+@bare_kind("Tile")
 def squarify(*, ratio: Optional[float] = None) -> Dict[str, Any]:
     """Squarified tiling (d3's `treemapSquarify`): make tiles as close as possible to the aspect `ratio`. The default.
 
@@ -40,21 +46,25 @@ def squarify(*, ratio: Optional[float] = None) -> Dict[str, Any]:
     return out
 
 
+@bare_kind("Tile")
 def slice() -> Dict[str, Any]:
     """Lay the tiles out in one column, stacked along y (d3's `treemapSlice`)."""
     return {"kind": "slice"}
 
 
+@bare_kind("Tile")
 def dice() -> Dict[str, Any]:
     """Lay the tiles out in one row, side by side along x (d3's `treemapDice`)."""
     return {"kind": "dice"}
 
 
+@bare_kind("Tile")
 def binary() -> Dict[str, Any]:
     """Split the tiles into two halves of near-equal weight, recursively (d3's `treemapBinary`)."""
     return {"kind": "binary"}
 
 
+@bare_kind("Tile")
 def slice_dice() -> Dict[str, Any]:
     """Alternate slice and dice by depth (d3's `treemapSliceDice`)."""
     return {"kind": "sliceDice"}

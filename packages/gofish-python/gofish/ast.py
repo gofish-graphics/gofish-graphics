@@ -2483,104 +2483,6 @@ class Schema:
         return ColumnSchema({}).quantity(name)
 
 
-# Calendar partitions
-
-_CALENDAR_UNITS = (
-    "second",
-    "minute",
-    "hour",
-    "day",
-    "weekday",
-    "week",
-    "month",
-    "quarter",
-    "year",
-)
-
-
-class CalendarPartition(dict):
-    """A partition of the time line into calendar cells: a level (``unit``,
-    its ``kind`` on the wire) at a step. The dict is the wire form JS reads
-    (``{"kind": "month", "step": 3}``), a kind of the Calendar family in
-    gofish-ir's descriptors.ts. Mirrors JS ``CalendarPartition``; build one from
-    ``Calendar``. Used in ``field(x).bin(...)`` and in an axis's levels,
-    ``axes={"x": {"levels": [...]}}``. A weekday has no step, so its wire form
-    has none (``{"kind": "weekday", "start": "monday"}``).
-    """
-
-    def __init__(self, unit: str, step: int = 1, start: Optional[str] = None):
-        if unit not in _CALENDAR_UNITS:
-            raise ValueError(
-                f"Calendar: unknown unit {unit!r}; expected one of "
-                + ", ".join(_CALENDAR_UNITS)
-            )
-        if isinstance(step, bool) or not isinstance(step, int) or step < 1:
-            raise ValueError(
-                f"Calendar.{unit}.every({step!r}): the step must be a whole "
-                f"number of {unit}s, 1 or more."
-            )
-        if unit == "weekday" and step != 1:
-            raise ValueError(
-                f"Calendar.weekday.every({step!r}): a weekday is one day of the "
-                f"week, so it has no steps. For cells of several days, use "
-                f"Calendar.day.every({step!r})."
-            )
-        wire: dict = {"kind": unit}
-        if unit != "weekday":
-            wire["step"] = step
-        if start is not None:
-            wire["start"] = start
-        super().__init__(wire)
-
-    def every(self, n: int) -> "CalendarPartition":
-        """The same level, ``n`` units per cell (``Calendar.month.every(3)``).
-        Steps align to the level above: months in steps of 3 start in
-        January, April, July and October."""
-        return CalendarPartition(self["kind"], n, self.get("start"))
-
-
-class _StartPartition(CalendarPartition):
-    """``Calendar.week`` or ``Calendar.weekday``: Monday-start, also callable
-    as ``Calendar.week(start="sunday")``."""
-
-    def __call__(self, start: str = "monday") -> CalendarPartition:
-        if start not in ("monday", "sunday"):
-            raise ValueError(
-                f"Calendar.{self['kind']}: start must be \"monday\" or "
-                f"\"sunday\", not {start!r}."
-            )
-        return CalendarPartition(self["kind"], 1, start)
-
-
-class Calendar:
-    """The calendar partitions: the cells of ``field(x).bin(...)``, and the
-    levels of a time axis, ``axes={"x": {"levels": [...]}}``.
-
-    Mirrors JS ``Calendar``::
-
-        field("date").bin(Calendar.month)                  # the month of the year
-        field("date").bin(Calendar.weekday)                # the day of the week
-        field("date").bin([Calendar.year, Calendar.month])  # each month of each year
-        field("date").bin(Calendar.year).bin(Calendar.month)
-        chart(data, axes={"x": {"levels": [Calendar.week, Calendar.month]}})
-        Calendar.hour.every(6)
-        Calendar.week(start="sunday")
-        Calendar.weekday(start="sunday")
-
-    A custom ``format`` for a level's labels is JS-only for now.
-    """
-
-    second = CalendarPartition("second")
-    minute = CalendarPartition("minute")
-    hour = CalendarPartition("hour")
-    day = CalendarPartition("day")
-    weekday = _StartPartition("weekday", 1, "monday")
-    week = _StartPartition("week", 1, "monday")
-    month = CalendarPartition("month")
-    quarter = CalendarPartition("quarter")
-    year = CalendarPartition("year")
-
-
 # Color helpers (the scales themselves are the `Color` family, color.py)
 
 
@@ -2911,7 +2813,7 @@ class FieldAccessor(dict):
     def bin(
         self,
         partition: Optional[
-            Union["CalendarPartition", Dict[str, Any], List["CalendarPartition"]]
+            Union[Dict[str, Any], List[Dict[str, Any]]]
         ] = None,
     ) -> "FieldAccessor":
         """Map each value to its CELL. ``partition`` is:
@@ -2938,15 +2840,22 @@ class FieldAccessor(dict):
         wire op ``{"op": "bin", "partition": ...}``, one per ``.bin``."""
         op: dict = {"op": "bin"}
         if isinstance(partition, (list, tuple)):
+            from ._generated import _OPTION_TYPES, _to_wire
+
+            calendar = _OPTION_TYPES["Calendar"]
             if len(partition) < 2 or not all(
-                isinstance(p, CalendarPartition) for p in partition
+                isinstance(p, dict) and p.get("kind") in calendar[2]
+                for p in partition
             ):
                 raise TypeError(
                     "field(...).bin: a product of bins is a list of two or more "
                     "Calendar values, e.g. [Calendar.year, Calendar.month]; got "
                     f"{partition!r}."
                 )
-            op["partition"] = [dict(p) for p in partition]
+            op["partition"] = [
+                _to_wire(calendar, p, f"field(...).bin[{i}]")
+                for i, p in enumerate(partition)
+            ]
         elif partition is not None:
             op["partition"] = _check_bin("field", partition, "field(...).bin")
         return self._with_op(op)

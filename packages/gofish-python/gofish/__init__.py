@@ -16,8 +16,6 @@ from .ast import (
     Constraint,
     Schema,
     ColumnSchema,
-    Calendar,
-    CalendarPartition,
     ref,
     arrow,
     over,
@@ -69,6 +67,7 @@ from .charts import bar_chart
 # name, bound here under its capitalized name. `Curve.monotone` and
 # `from gofish.curve import monotone` are the same function.
 from . import bin as Bin
+from . import calendar as Calendar
 from . import color as Color
 from . import coord as Coord
 from . import curve as Curve
@@ -90,7 +89,6 @@ __all__ = [
     "Schema",
     "ColumnSchema",
     "Calendar",
-    "CalendarPartition",
     "ref",
     "arrow",
     "over",
