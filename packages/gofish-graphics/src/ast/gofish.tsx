@@ -51,6 +51,7 @@ import {
   labelRowSettingsFromAngles,
   type LabelAlign,
   type LabelAlignOpt,
+  type DividerOpt,
   type LabelRowSettings,
 } from "./axes/elaborate";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
@@ -170,6 +171,23 @@ export type AxisOptions =
        *  last level) is an error that lists the axis's levels. `label.angle`
        *  and `label.align` arrays use the same depths. */
       levels?: LevelOption[];
+      /** Whether each level of an ordinal axis draws dividers: a line in
+       *  each gap where its runs break, through every level whose runs
+       *  also break there. By default a level draws them when it partitions
+       *  the value of the level inside it, that is, both bin the same
+       *  column: the year level over a month level of one date
+       *  (`field("date").bin(Calendar.year).bin(Calendar.month)`, or nested
+       *  splits that bin `"date"`), a coarser `Calendar` entry of `levels`,
+       *  numeric bins inside bins. Categories nested in other categories (a
+       *  lake over its species) draw none, nor does the innermost level.
+       *
+       *  `true` turns a level's dividers on, `false` off. A plain value
+       *  applies to every level of the axis; an **array** is per level, by
+       *  the depths of `levels`, nearest the plot first, with a depth past
+       *  its end left as inferred (`[false, true]` divides only the second
+       *  level). A continuous axis's level has ticks, not regions, so
+       *  `true` at its depth is an error. */
+      divider?: boolean | boolean[];
     };
 
 /** How one axis's labels are drawn (`axes.x.label`). */
@@ -266,6 +284,7 @@ const AXIS_OPTION_KEYS = Object.keys({
   side: true,
   label: true,
   levels: true,
+  divider: true,
 } satisfies Record<keyof Extract<AxisOptions, object>, true>);
 const LABEL_OPTION_KEYS = Object.keys({
   angle: true,
@@ -321,6 +340,29 @@ function checkLabelAlign(v: unknown, axis: "x" | "y"): LabelAlignOpt {
       `per level).`
   );
 }
+
+/** Reject a malformed `divider` (see `AxisOptions.divider`), for untyped
+ *  callers (Python, plain JS). */
+function checkDivider(v: unknown, axis: "x" | "y"): DividerOpt {
+  if (
+    v === undefined ||
+    typeof v === "boolean" ||
+    (Array.isArray(v) && v.every((d) => typeof d === "boolean"))
+  )
+    return v as DividerOpt;
+  throw new Error(
+    `axes.${axis}.divider: unknown value ${JSON.stringify(v)} (expected ` +
+      `true, false, or an array of those, one per level).`
+  );
+}
+
+/** Each axis's `divider`, checked. */
+export const resolveAxisDividers = (
+  axes: AxesOptions | undefined
+): [DividerOpt, DividerOpt] => {
+  const [x, y] = perDimAxisOption(axes, "divider");
+  return [checkDivider(x, "x"), checkDivider(y, "y")];
+};
 
 /** Each axis's `label.align`, checked. */
 export const resolveAxisLabelAligns = (
@@ -497,6 +539,7 @@ export async function layout(
     labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
     levels,
     labelAligns: resolveAxisLabelAligns(axes),
+    dividers: resolveAxisDividers(axes),
   });
   // Entries that no level took are an error (see `AxisOptions.levels`).
   const levelsErr = levelsError(

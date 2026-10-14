@@ -152,6 +152,17 @@ function alignForTier(
   return a === true ? undefined : a;
 }
 
+/** An `axes.x.divider` value as authored: one setting for every level, or
+ *  one entry per level by the depths of `levels`, nearest the plot first
+ *  (see `AxisOptions.divider` in `gofish.tsx`). */
+export type DividerOpt = boolean | boolean[] | undefined;
+
+/** The explicit divider setting for the level at depth `tier`, or undefined
+ *  for the inferred one (a depth past the array's end). */
+function dividerForTier(opt: DividerOpt, tier: number): boolean | undefined {
+  return Array.isArray(opt) ? opt[tier] : opt;
+}
+
 /** One row of axis labels: an axis, what kind of labels it carries, and its
  *  tier: its level's depth among the levels of the dim (0 = nearest the
  *  plot; see `AxisOptions.levels`). */
@@ -755,6 +766,10 @@ type OrdinalLevel = {
   /** The groups have an order (`HasOrder`): cells, or the levels of an
    *  ordered column. */
   hasOrder: boolean;
+  /** For a level of cells, the column they bin ({@link KeyCell.column}):
+   *  two levels over one column partition one value, so the outer one's
+   *  runs get dividers by default. Undefined for a level of categories. */
+  column?: string;
 };
 
 /** The `k`-th cell up a cell's chain (0 is the cell itself). */
@@ -828,7 +843,12 @@ function calendarLevel(
       );
     }
   }
-  return { name: String(p), groups, hasOrder: true };
+  return {
+    name: String(p),
+    groups,
+    hasOrder: true,
+    column: cells.find((c) => c !== undefined)?.column,
+  };
 }
 
 /**
@@ -863,6 +883,7 @@ function inferredOrdinalLevels(
       return { id: c?.id ?? "", label: c?.label ?? "" };
     }),
     hasOrder: true,
+    column: first.column,
   }));
 }
 
@@ -887,14 +908,20 @@ function inferredOrdinalLevels(
  *
  * The rows of a dim are one stack from the plot edge, whichever axis draws
  * them: `rowsBelow` is how deep the inner axes' rows reach (see
- * {@link LevelFold}), and this axis's rows follow them `ROW_GAP` apart, as
- * one chained key's levels do. It returns where its last row ends.
+ * {@link LevelFold}). Rows that partition one value (a chained key's levels,
+ * or this axis's first level over the same column as the inner axes',
+ * `innerColumn`) follow each other `ROW_GAP` apart; a level of other
+ * categories sits `ORDINAL_LABEL_GAP` past the rows inside it. It returns
+ * where its last row ends.
  *
- * Ticks: a divider runs through the rows of every level with a boundary in
- * its gap, from the plot edge (or the row before) outward; the innermost
- * level of the dim alone draws none (see the divider code below).
- * `dividersAtFirst` says whether this axis's first level is an outer one (an
- * ordinal axis is drawn below it on the dim).
+ * Dividers: a level whose divider setting is on draws one in each gap where
+ * its runs break, through the rows of every level with a boundary in that
+ * gap, from the plot edge (or the row before) outward (see the divider code
+ * below). By default a level's setting is on when it partitions the value
+ * of the level inside it: it bins the same column (`OrdinalLevel.column`).
+ * `dividerAt(depth)` is the explicit setting at a depth (`axes.x.divider`),
+ * if any. `outerAtFirst` says whether this axis's first level is an outer
+ * one (an ordinal axis is drawn below it on the dim), for its alignment.
  */
 function elaborateOrdinalAxis(
   dim: 0 | 1,
@@ -905,14 +932,17 @@ function elaborateOrdinalAxis(
   settingAt: (k: number) => LevelSetting,
   entries: readonly (LevelEntry | undefined)[],
   outermost: boolean,
-  dividersAtFirst: boolean,
+  outerAtFirst: boolean,
+  innerColumn: string | undefined,
   depth0: number,
   rowsBelow: number,
-  alignAt: (depth: number) => LabelAlign | undefined
+  alignAt: (depth: number) => LabelAlign | undefined,
+  dividerAt: (depth: number) => boolean | undefined
 ): {
   elaboration: AxisElaboration;
   report: LevelReport;
   rowEnd: number;
+  column: string | undefined;
 } {
   const keys = (space.domain ?? []).filter((k) => keyMap[k] !== undefined);
   const trackAxis = axisName(dim); // labels track their key along the axis dim
@@ -1006,11 +1036,22 @@ function elaborateOrdinalAxis(
       })
     )
   );
+  // Whether each level partitions the value of the level inside it: it bins
+  // the same column (a chained key's levels always do; the first level does
+  // when the inner axes' outer level bins its column). Categories nested in
+  // other categories (a lake over its species) do not.
+  const partitions = levels.map((level, k) => {
+    const inner = k > 0 ? levels[k - 1].column : innerColumn;
+    return level.column !== undefined && level.column === inner;
+  });
   // Every offset is from the plot edge: the rows of the dim's inner axes
-  // (`rowsBelow` deep) come first, then this axis's rows, each
-  // `ROW_GAP` past the one before, whichever axis draws them.
+  // (`rowsBelow` deep) come first, then this axis's rows, each `ROW_GAP`
+  // past the one before. A first level that does not partition the inner
+  // axes' value sits `ORDINAL_LABEL_GAP` past their rows, as any axis sits
+  // past the content inside it.
   const rowOffset: number[] = [];
-  let offset = rowsBelow > 0 ? rowsBelow + ROW_GAP : ORDINAL_LABEL_GAP;
+  let offset =
+    rowsBelow + (rowsBelow > 0 && partitions[0] ? ROW_GAP : ORDINAL_LABEL_GAP);
   let rowEnd = rowsBelow;
   levels.forEach((_, k) => {
     rowOffset.push(offset);
@@ -1035,22 +1076,23 @@ function elaborateOrdinalAxis(
   // Dividers. The rows of the dim, nearest the plot first: the inner axes'
   // rows (a group of an inner axis never crosses this axis's slots, so they
   // break at every gap), then this axis's visible levels. In each gap, every
-  // run of neighboring rows that break there gets one divider, through those
-  // rows; the first row's divider starts at the plot edge, a later one's at
-  // the far edge of the row before it. A run of the dim's innermost level
-  // alone draws none. A divider separates regions, so it runs through the
+  // run of neighboring rows that break there gets one divider when one of
+  // its rows divides (its level partitions the value inside it, or
+  // `axes.x.divider` says so at its depth), through those rows; the first
+  // row's divider starts at the plot edge, a later one's at the far edge of
+  // the row before it. A divider separates regions, so it runs through the
   // levels whose regions also break here and stops at one whose region
   // continues: the opposite of a time axis's ticks, which mark points and run
   // through the rows that lack them to reach their labels.
-  type Row = { start: number; end: number; outer: boolean; k?: number };
+  type Row = { start: number; end: number; divides: boolean; k?: number };
   const rows: Row[] = [];
-  if (rowsBelow > 0) rows.push({ start: 0, end: rowsBelow, outer: false });
+  if (rowsBelow > 0) rows.push({ start: 0, end: rowsBelow, divides: false });
   levels.forEach((_, k) => {
     if (settings[k].hidden) return;
     rows.push({
       start: rows[rows.length - 1]?.end ?? 0,
       end: rowOffset[k] + rowDepth[k],
-      outer: k > 0 || dividersAtFirst,
+      divides: dividerAt(depth0 + k) ?? partitions[k],
       k,
     });
   });
@@ -1062,7 +1104,7 @@ function elaborateOrdinalAxis(
   for (let i = 0; i + 1 < slots.length; i++) {
     let run: Row[] = [];
     const close = () => {
-      if (run.some((r) => r.outer))
+      if (run.some((r) => r.divides))
         dividers.push({
           at: i,
           start: run[0].start,
@@ -1089,7 +1131,7 @@ function elaborateOrdinalAxis(
   const aligns = levels.map(
     (level, k): LabelAlign =>
       alignAt(depth0 + k) ??
-      ((k > 0 || dividersAtFirst) && level.hasOrder ? "start" : "center")
+      ((k > 0 || outerAtFirst) && level.hasOrder ? "start" : "center")
   );
 
   // A label and the box it centers on: its slot's ref or the span of its
@@ -1197,6 +1239,7 @@ function elaborateOrdinalAxis(
     elaboration: { nodes: [...slotNodes.flat(), ...nodes], constraints },
     report: { names, issues },
     rowEnd,
+    column: levels[levels.length - 1]?.column,
   };
 }
 
@@ -1267,14 +1310,18 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
  *  {@link elaborateChrome}: the names of the levels drawn so far, nearest
  *  the plot first (so the next axis out starts at that depth), whether one
  *  of them is an ordinal level (so the next ordinal level out is an outer
- *  one, with dividers), how far past the plot edge the ordinal label rows
- *  drawn so far reach (so the next ordinal axis out stacks its rows and
- *  dividers on them; 0 when none is drawn, or when a continuous axis is
- *  drawn past them), and the `levels` entries that could not apply. */
+ *  one), how far past the plot edge the ordinal label rows drawn so far
+ *  reach (so the next ordinal axis out stacks its rows and dividers on
+ *  them; 0 when none is drawn, or when a continuous axis is drawn past
+ *  them), the column the outermost of those ordinal levels bins (so the
+ *  next ordinal axis out knows whether its first level partitions the same
+ *  value; undefined for categories, or when the inner axes disagree), and
+ *  the `levels` entries that could not apply. */
 export type LevelFold = {
   names: [string[], string[]];
   ordinal: [boolean, boolean];
   rowEnd: [number, number];
+  column: [string | undefined, string | undefined];
   issues: LevelIssue[];
 };
 
@@ -1282,6 +1329,7 @@ const emptyFold = (): LevelFold => ({
   names: [[], []],
   ordinal: [false, false],
   rowEnd: [0, 0],
+  column: [undefined, undefined],
   issues: [],
 });
 
@@ -1322,7 +1370,8 @@ function elaborationsFor(
     undefined,
   ],
   below: LevelFold = emptyFold(),
-  labelAligns: [LabelAlignOpt, LabelAlignOpt] = [undefined, undefined]
+  labelAligns: [LabelAlignOpt, LabelAlignOpt] = [undefined, undefined],
+  dividers: [DividerOpt, DividerOpt] = [undefined, undefined]
 ): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
@@ -1342,6 +1391,7 @@ function elaborationsFor(
     names: [[...below.names[0]], [...below.names[1]]],
     ordinal: [...below.ordinal],
     rowEnd: [...below.rowEnd],
+    column: [...below.column],
     issues: [...below.issues],
   };
   const space = node._underlyingSpace;
@@ -1455,8 +1505,18 @@ function elaborationsFor(
   };
   // A continuous axis labels points (its ticks), so its labels center on
   // them: `label.align: "start"` at one of its depths cannot apply.
-  const centeredLevels = (dim: 0 | 1, from: number, count: number) => {
-    for (let depth = from; depth < from + count; depth++)
+  // Nor are there regions between its ticks to divide: `divider: true` at
+  // one of its depths cannot apply either.
+  const pointLevels = (dim: 0 | 1, from: number, count: number) => {
+    for (let depth = from; depth < from + count; depth++) {
+      if (dividerForTier(dividers[dim], depth) === true)
+        throw new Error(
+          `axes.${axisName(dim)}.divider${Array.isArray(dividers[dim]) ? `[${depth}]` : ""}: ` +
+            `true cannot apply at depth ${depth}: it is a continuous ` +
+            `axis's level, whose labels name points (its ticks), with no ` +
+            `regions between them to divide. Only an ordinal axis's ` +
+            `levels have dividers.`
+        );
       if (alignForTier(labelAligns[dim], depth) === "start")
         throw new Error(
           `axes.${axisName(dim)}.label.align${Array.isArray(labelAligns[dim]) ? `[${depth}]` : ""}: ` +
@@ -1465,6 +1525,7 @@ function elaborationsFor(
             `are centered on them. Only an ordinal axis's labels can start ` +
             `their runs.`
         );
+    }
   };
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
@@ -1487,7 +1548,7 @@ function elaborationsFor(
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
-      centeredLevels(dim, depth0, time.names.length);
+      pointLevels(dim, depth0, time.names.length);
       fold.names[dim].push(...time.names);
     } else if (kind === "absolute" && isCONTINUOUS(s)) {
       const e = elaborateContinuousAxis(
@@ -1504,7 +1565,7 @@ function elaborationsFor(
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
-      centeredLevels(dim, depth0, 1);
+      pointLevels(dim, depth0, 1);
       numericLevel(dim);
     } else if (kind === "delta" && isCONTINUOUS(s)) {
       const e = elaborateDifferenceAxis(
@@ -1517,7 +1578,7 @@ function elaborationsFor(
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
-      centeredLevels(dim, depth0, 1);
+      pointLevels(dim, depth0, 1);
       numericLevel(dim);
     } else if (isORDINAL(s)) {
       keyMap ??= collectKeyMap(node);
@@ -1529,7 +1590,7 @@ function elaborationsFor(
           ? { hidden: true }
           : { hidden: false, rotation: resolvedLabelRotation(row) };
       };
-      const { elaboration, report, rowEnd } = elaborateOrdinalAxis(
+      const { elaboration, report, rowEnd, column } = elaborateOrdinalAxis(
         dim,
         s,
         keyMap,
@@ -1539,12 +1600,15 @@ function elaborationsFor(
         entriesFor(dim),
         !hasOuterAxis(node, dim),
         fold.ordinal[dim],
+        fold.column[dim],
         depth0,
         fold.rowEnd[dim],
-        (depth) => alignForTier(labelAligns[dim], depth)
+        (depth) => alignForTier(labelAligns[dim], depth),
+        (depth) => dividerForTier(dividers[dim], depth)
       );
       refBased.push(elaboration);
       fold.rowEnd[dim] = rowEnd;
+      fold.column[dim] = column;
       fold.names[dim].push(...report.names);
       fold.issues.push(...report.issues);
       fold.ordinal[dim] = true;
@@ -1552,7 +1616,10 @@ function elaborationsFor(
       continue;
     }
     // A continuous axis's gutter lies past the ordinal rows inside it.
-    if (!isORDINAL(s)) fold.rowEnd[dim] = 0;
+    if (!isORDINAL(s)) {
+      fold.rowEnd[dim] = 0;
+      fold.column[dim] = undefined;
+    }
     owned[dim] = true;
     if (dim === 0) node.axis.x = undefined;
     else node.axis.y = undefined;
@@ -1601,6 +1668,9 @@ export type ChromeOptions = {
   /** Per-dim `label.align` (see `AxisLabelOptions.align`); undefined = every
    *  level's alignment as inferred. */
   labelAligns?: [LabelAlignOpt, LabelAlignOpt];
+  /** Per-dim `divider` (see `AxisOptions.divider`); undefined = every
+   *  level's dividers as inferred. */
+  dividers?: [DividerOpt, DividerOpt];
 };
 
 /**
@@ -1643,6 +1713,13 @@ export async function elaborateChrome(
       for (const dim of [0, 1] as (0 | 1)[]) {
         if (res.fold.names[dim].length > below.names[dim].length)
           below.names[dim] = res.fold.names[dim];
+        // The inner axes' outer column: one column when every child that
+        // drew an ordinal level agrees on it.
+        if (res.fold.ordinal[dim])
+          below.column[dim] =
+            !below.ordinal[dim] || below.column[dim] === res.fold.column[dim]
+              ? res.fold.column[dim]
+              : undefined;
         below.ordinal[dim] ||= res.fold.ordinal[dim];
         below.rowEnd[dim] = Math.max(below.rowEnd[dim], res.fold.rowEnd[dim]);
       }
@@ -1661,7 +1738,8 @@ export async function elaborateChrome(
       options.labelSettings,
       options.levels,
       below,
-      options.labelAligns
+      options.labelAligns,
+      options.dividers
     );
   // A title names an axis this node draws. It is read off the node's own
   // space (`spaceTitle`), which elaboration has not re-resolved yet.

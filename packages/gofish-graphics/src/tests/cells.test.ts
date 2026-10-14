@@ -1085,65 +1085,211 @@ async function main() {
       splitErr?.includes("not cells of a time column") === true,
       splitErr
     );
-    const grouped = await chart(
-      daily.flatMap((d) => ["a", "b"].map((g) => ({ ...d, g }))),
-      {
-        schema: { date: Schema.time() },
-        axes: { x: { title: false, levels: [false, true] }, y: false },
-      }
-    )
-      .flow(spread({ by: productKey, dir: "x" }), spread({ by: "g", dir: "x" }))
-      .mark(rect({ w: 10, h: distField("value").sum() }))
-      .toDisplayList({ w: 400, h: 100 });
+    // A grouped chart: categories ("g") inside months. The two levels bin
+    // different columns, so neither partitions the other: no dividers,
+    // unless `divider` asks for them.
+    const groupedBy = async (outer: any, x: any) =>
+      await chart(
+        daily.flatMap((d) => ["a", "b"].map((g) => ({ ...d, g }))),
+        { schema: { date: Schema.time() }, axes: { x, y: false } }
+      )
+        .flow(spread({ by: outer, dir: "x" }), spread({ by: "g", dir: "x" }))
+        .mark(rect({ w: 10, h: distField("value").sum() }))
+        .toDisplayList({ w: 400, h: 100 });
+    const linesOf = (dl: any) => rectsOf(dl).filter((r) => r.w === 1);
+    const grouped = await groupedBy(productKey, {
+      title: false,
+      levels: [false, true],
+    });
     const groupedWords = textsOf(grouped).map((t) => t.text);
-    const dividers = rectsOf(grouped).filter((r) => r.w === 1);
     check(
-      "[false, true] hides a grouped chart's inner level, and the outer " +
-        "level divides its groups",
+      "[false, true] hides a grouped chart's inner level; the months over " +
+        "categories draw no dividers",
       !groupedWords.includes("a") &&
         groupedWords.includes("Nov 2023") &&
-        dividers.length === 4,
-      `${groupedWords.join(" ")} / ${dividers.length}`
+        linesOf(grouped).length === 0,
+      `${groupedWords.join(" ")} / ${linesOf(grouped).length}`
+    );
+    const groupedOn = await groupedBy(productKey, {
+      title: false,
+      levels: [false, true],
+      divider: [false, true],
+    });
+    const groupedAll = await groupedBy(productKey, {
+      title: false,
+      divider: true,
+    });
+    check(
+      "divider: [false, true] turns on the outer level's dividers, one per " +
+        "month boundary; divider: true also divides the inner level's slots " +
+        "(one gap in each of the four months with rows)",
+      linesOf(groupedOn).length === 4 && linesOf(groupedAll).length === 8,
+      `${linesOf(groupedOn).length} / ${linesOf(groupedAll).length}`
     );
 
-    // One boundary rule for nested splits and chained levels: a divider
-    // runs from the plot edge through every row that breaks in its gap.
-    const nested = await chart(
-      daily.flatMap((d) => ["a", "b"].map((g) => ({ ...d, g }))),
-      {
-        schema: { date: Schema.time() },
-        axes: { x: { title: false }, y: false },
-      }
-    )
-      .flow(spread({ by: chainKey, dir: "x" }), spread({ by: "g", dir: "x" }))
-      .mark(rect({ w: 10, h: distField("value").sum() }))
-      .toDisplayList({ w: 400, h: 100 });
+    // Categories inside a chained key: the year partitions the date's
+    // months, and the months do not partition "g". A divider runs from the
+    // plot edge through every row that breaks in its gap, only where the
+    // year breaks.
+    const nested = await groupedBy(chainKey, { title: false });
     const nestedTexts = textsOf(nested);
     const nAt = (w: string) => nestedTexts.find((t) => t.text === w)!;
     const nBars = rectsOf(nested).filter((r) => r.w === 10);
     const plotEdge = Math.max(...nBars.map((b) => b.y + b.h));
-    const nLines = rectsOf(nested).filter((r) => r.w === 1);
-    const deep = nLines.filter((l) => l.y + l.h > nAt("2023").y);
+    const nLines = linesOf(nested);
     check(
-      "nested splits: every divider starts at the plot edge, through the " +
-        "inner row; only the one between the years runs through the year row",
-      nLines.length === 4 &&
-        nLines.every((l) => Math.abs(l.y - plotEdge) < 1e-6) &&
-        nLines.every((l) => l.y + l.h > nAt("Nov").y) &&
-        deep.length === 1,
+      "mixed: one divider, at the year boundary, from the plot edge through " +
+        "the category, month and year rows",
+      nLines.length === 1 &&
+        Math.abs(nLines[0].y - plotEdge) < 1e-6 &&
+        nLines[0].y + nLines[0].h > nAt("2023").y,
       JSON.stringify({ plotEdge, nLines })
     );
     const cAt = (w: string) => texts.find((t) => t.text === w)!;
     const chainedBars = rectsOf(chainedDl).filter((r) => r.w === 30);
     const cEdge = Math.max(...chainedBars.map((b) => b.y + b.h));
     check(
-      "nested splits stack their rows like one chained key: the same gaps " +
-        "from the plot edge to the first row and between rows",
+      "mixed: the category row sits as far past the plot edge as a chained " +
+        "key's first row; the month row sits 6px further past it than the " +
+        "chained key's year row past its months (8px past categories, 2px " +
+        "between the levels of one value)",
       Math.abs(nAt("a").y - plotEdge - (cAt("Nov").y - cEdge)) < 1e-6 &&
-        Math.abs(nAt("Nov").y - nAt("a").y - (cAt("2023").y - cAt("Nov").y)) <
-          1e-6 &&
+        Math.abs(
+          nAt("Nov").y - nAt("a").y - (cAt("2023").y - cAt("Nov").y) - 6
+        ) < 1e-6 &&
         Math.abs(lines[0].y - cEdge) < 1e-6,
       JSON.stringify([nAt("a").y, nAt("Nov").y, plotEdge, cAt("Nov").y, cEdge])
+    );
+    const nestedOff = await groupedBy(chainKey, {
+      title: false,
+      divider: false,
+    });
+    check(
+      "divider: false turns a partition's dividers off",
+      linesOf(nestedOff).length === 0,
+      `${linesOf(nestedOff).length}`
+    );
+
+    // Nested splits that bin the same column partition one value, as one
+    // chained key does: the same dividers and the same row gaps.
+    const split = await chart(daily, {
+      schema: { date: Schema.time() },
+      axes: { x: { title: false }, y: false },
+    })
+      .flow(
+        spread({ by: distField("date").bin(DistCalendar.year), dir: "x" }),
+        spread({ by: distField("date").bin(DistCalendar.month), dir: "x" })
+      )
+      .mark(rect({ w: 30, h: distField("value").sum() }))
+      .toDisplayList({ w: 400, h: 100 });
+    const sTexts = textsOf(split);
+    const sAt = (w: string) => sTexts.find((t) => t.text === w)!;
+    const sLines = linesOf(split);
+    const sEdge = Math.max(
+      ...rectsOf(split)
+        .filter((r) => r.w === 30)
+        .map((b) => b.y + b.h)
+    );
+    check(
+      "nested splits over one date: one divider between the years, from " +
+        "the plot edge, and the rows 2px apart like a chained key's",
+      sLines.length === 1 &&
+        Math.abs(sLines[0].y - sEdge) < 1e-6 &&
+        Math.abs(sLines[0].h - lines[0].h) < 1e-6 &&
+        Math.abs(
+          sAt("2023").y - sAt("Nov").y - (cAt("2023").y - cAt("Nov").y)
+        ) < 1e-6,
+      JSON.stringify({ sLines, lines })
+    );
+
+    // Numeric bins inside bins of the same column partition it too.
+    const numeric = await chart(
+      [1, 3, 7, 12, 14, 18].map((v) => ({ v })),
+      { axes: { x: { title: false }, y: false } }
+    )
+      .flow(
+        spread({ by: distField("v").bin(DistBin.step(10)), dir: "x" }),
+        spread({ by: distField("v").bin(DistBin.step(5)), dir: "x" })
+      )
+      .mark(rect({ w: 20, h: 10 }))
+      .toDisplayList({ w: 400, h: 100 });
+    check(
+      "numeric bins inside bins of one column: one divider between the " +
+        "outer bins",
+      linesOf(numeric).length === 1,
+      `${linesOf(numeric).length} / ${textsOf(numeric)
+        .map((t) => t.text)
+        .join(" ")}`
+    );
+
+    // Bins of different columns are categories of each other.
+    const twoColumns = await chart(
+      [1, 3, 7, 12, 14, 18].map((v) => ({ v, w: v * 2 })),
+      { axes: { x: { title: false }, y: false } }
+    )
+      .flow(
+        spread({ by: distField("v").bin(DistBin.step(10)), dir: "x" }),
+        spread({ by: distField("w").bin(DistBin.step(10)), dir: "x" })
+      )
+      .mark(rect({ w: 20, h: 10 }))
+      .toDisplayList({ w: 400, h: 100 });
+    check(
+      "bins of one column inside bins of another draw no dividers",
+      linesOf(twoColumns).length === 0,
+      `${linesOf(twoColumns).length}`
+    );
+
+    // Categories inside categories (a lake over its species): no dividers.
+    const lakes = await chart(
+      [
+        { lake: "A", species: "bass" },
+        { lake: "A", species: "trout" },
+        { lake: "B", species: "bass" },
+        { lake: "B", species: "trout" },
+      ],
+      { axes: { x: { title: false }, y: false } }
+    )
+      .flow(spread({ by: "lake", dir: "x" }), spread({ by: "species", dir: "x" }))
+      .mark(rect({ w: 20, h: 10 }))
+      .toDisplayList({ w: 400, h: 100 });
+    check(
+      "categories inside categories draw no dividers",
+      linesOf(lakes).length === 0,
+      `${linesOf(lakes).length}`
+    );
+    const continuousErr = await errorOfAsync(() =>
+      chart([{ g: "a", v: 1 }], { axes: { y: { divider: true } } })
+        .flow(spread({ by: "g", dir: "x" }))
+        .mark(rect({ w: 10, h: "v" }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "divider: true on a continuous axis's level is an error",
+      continuousErr?.includes("axes.y.divider") === true,
+      continuousErr
+    );
+    const badErr = await errorOfAsync(() =>
+      chart([{ g: "a", v: 1 }], { axes: { x: { divider: "yes" } } } as any)
+        .flow(spread({ by: "g", dir: "x" }))
+        .mark(rect({ w: 10, h: "v" }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "a divider that is not a boolean or a list of them is an error",
+      badErr?.includes("axes.x.divider") === true,
+      badErr
+    );
+    const unknownErr = await errorOfAsync(() =>
+      chart([{ g: "a", v: 1 }], { axes: { x: { dividers: true } } } as any)
+        .flow(spread({ by: "g", dir: "x" }))
+        .mark(rect({ w: 10, h: "v" }))
+        .toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "the axis-option key check takes divider and lists it",
+      unknownErr?.includes('unknown option "dividers"') === true &&
+        unknownErr.includes('"divider"'),
+      unknownErr
     );
 
     console.log("\n# label.align");

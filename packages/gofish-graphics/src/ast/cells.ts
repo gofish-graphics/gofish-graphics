@@ -205,6 +205,11 @@ export abstract class KeyCell {
    *  `[Calendar.year, Calendar.month]`, `Bin.step(0.5)`): an axis names its
    *  levels with it. */
   declare readonly bin?: string;
+  /** The column the cell bins (`"date"` for `field("date").bin(...)`): the
+   *  levels of two keys are a partition of one value when their cells bin
+   *  the same column (a year and a month of one date), and an axis divides
+   *  their runs only then (axes/elaborate.tsx). */
+  declare readonly column?: string;
 
   toString(): string {
     return this.id;
@@ -242,7 +247,8 @@ export class Cell extends RegionCell {
     readonly label: string,
     readonly calendar?: CalendarCellInfo,
     readonly parent?: Cell,
-    readonly bin?: string
+    readonly bin?: string,
+    readonly column?: string
   ) {
     super();
   }
@@ -299,7 +305,8 @@ export class CycleCell extends KeyCell {
      *  parts reads which group each part falls in off it. */
     readonly ref: readonly [number, number],
     readonly parent?: CycleCell,
-    readonly bin?: string
+    readonly bin?: string,
+    readonly column?: string
   ) {
     super();
   }
@@ -624,7 +631,8 @@ function lineCells(
   step: BinStep,
   lo: number,
   hi: number,
-  zone: string | undefined
+  zone: string | undefined,
+  column: string | undefined
 ): Cell[] {
   const bin = spell(step);
   if (Array.isArray(step) || step instanceof CalendarPartition) {
@@ -642,7 +650,8 @@ function lineCells(
               : productLabel(levels, c.start, zone!),
             { fields: c, partition: leaf, zone: zone! },
             undefined,
-            bin
+            bin,
+            column
           )
       );
   }
@@ -650,7 +659,7 @@ function lineCells(
   const edges = numberEdges(p, lo, hi);
   return edges
     .slice(0, -1)
-    .map((start, i) => numberCell(p, start, edges[i + 1], bin));
+    .map((start, i) => numberCell(p, start, edges[i + 1], bin, column));
 }
 
 /** A numeric cell `[start, end)` of `p`, labeled by its format or its two
@@ -660,6 +669,7 @@ function numberCell(
   start: number,
   end: number,
   bin: string,
+  column: string | undefined,
   parent?: Cell
 ): Cell {
   const cell = new Cell(
@@ -668,11 +678,12 @@ function numberCell(
     numberLabel(start, end),
     undefined,
     parent,
-    bin
+    bin,
+    column
   );
   return p.formatCell === undefined
     ? cell
-    : new Cell(start, end, p.formatCell(cell), undefined, parent, bin);
+    : new Cell(start, end, p.formatCell(cell), undefined, parent, bin, column);
 }
 
 /**
@@ -686,9 +697,10 @@ function refine(
   p: Partition,
   lo: number,
   hi: number,
-  zone: string | undefined
+  zone: string | undefined,
+  column: string | undefined
 ): Cell[] {
-  const children = lineCells(p, lo, hi, zone);
+  const children = lineCells(p, lo, hi, zone, column);
   const bin = spell(p);
   const out: Cell[] = [];
   let j = 0;
@@ -704,7 +716,9 @@ function refine(
       const end = Math.min(c.end, parent.end);
       if (start >= end) continue;
       if (start === c.start && end === c.end) {
-        out.push(new Cell(start, end, c.label, c.calendar, parent, bin));
+        out.push(
+          new Cell(start, end, c.label, c.calendar, parent, bin, column)
+        );
       } else if (p instanceof CalendarPartition) {
         const fields = fieldsOf(zoned(start, zone!), end, p.unit);
         out.push(
@@ -714,11 +728,14 @@ function refine(
             p.label(fields, zone!),
             { fields, partition: p, zone: zone! },
             parent,
-            bin
+            bin,
+            column
           )
         );
       } else {
-        out.push(numberCell(p as NumberPartition, start, end, bin, parent));
+        out.push(
+          numberCell(p as NumberPartition, start, end, bin, column, parent)
+        );
       }
     }
   }
@@ -763,7 +780,8 @@ function cycleCells(
   steps: readonly BinStep[],
   lo: number,
   hi: number,
-  zone: string
+  zone: string,
+  column: string | undefined
 ): Cells {
   const levels: CalendarPartition[] = steps.flatMap((s): CalendarPartition[] =>
     Array.isArray(s) ? [...s] : [s as CalendarPartition]
@@ -809,7 +827,8 @@ function cycleCells(
         made.length,
         [c.start, c.end],
         k === 0 ? undefined : parents.get(idOf(z, depth[k - 1])),
-        spell(step)
+        spell(step),
+        column
       );
       byId.set(id, cell);
       made.push(cell);
@@ -826,7 +845,8 @@ function cycleCells(
             c.index,
             [c.ref[0], ends.get(c.id)!],
             c.parent,
-            c.bin
+            c.bin,
+            c.column
           )
       ),
     };
@@ -849,8 +869,9 @@ function cycleCells(
  * step) over the domain `values` (every value the column has in the chart's
  * data; missing values are skipped), in order: the leaves of the chain, each
  * holding its cell of the bin before it. `zone` is the column's time zone,
- * for a Calendar value, which needs a time column. An empty domain has no
- * cells.
+ * for a Calendar value, which needs a time column, and `column` the
+ * column's name, which every cell records ({@link KeyCell.column}). An
+ * empty domain has no cells.
  *
  *  - A first bin that is a part (`Calendar.month`, or a product that starts
  *    with one) bins into the parts of a cycle ({@link cycleCells}): every
@@ -862,7 +883,8 @@ export function chainCells(
   steps: readonly BinStep[],
   values: readonly unknown[],
   zone: string | undefined,
-  where: string
+  where: string,
+  column?: string
 ): Cells {
   checkChain(steps, where);
   const calendar = steps.some(
@@ -882,10 +904,10 @@ export function chainCells(
         `pass JS Date values.`
     );
   }
-  if (isCycleStep(steps[0])) return cycleCells(steps, lo, hi, zone!);
-  let cells = lineCells(steps[0], lo, hi, zone);
+  if (isCycleStep(steps[0])) return cycleCells(steps, lo, hi, zone!, column);
+  let cells = lineCells(steps[0], lo, hi, zone, column);
   for (const step of steps.slice(1))
-    cells = refine(cells, step as Partition, lo, hi, zone);
+    cells = refine(cells, step as Partition, lo, hi, zone, column);
   return { cells, cellOf: lineCellOf(cells, lo, hi) };
 }
 

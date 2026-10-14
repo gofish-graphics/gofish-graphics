@@ -497,28 +497,46 @@ difference axis), never off the size claim:
 
   The label rows of a dim form one stack measured from the plot edge,
   whichever axis draws them: the first row sits `ORDINAL_LABEL_GAP` past the
-  edge and each later row `ROW_GAP` past the one before, by its depth as
-  rotated (the box `rotatedExtent` in `autoLabelAngle.ts` measures). So one
-  chained key and the same levels as nested splits stack alike. An outer
+  edge, a row that partitions the value of the row before it (see below)
+  `ROW_GAP` past that row, and a row of other categories `ORDINAL_LABEL_GAP`
+  past it, each by its depth as rotated (the box `rotatedExtent` in
+  `autoLabelAngle.ts` measures). So one chained key and the same levels as
+  nested splits stack alike, and a lake row sits past its species row as any
+  axis sits past the content inside it. An outer
   axis learns how deep the rows inside it reach from the fold
   (`LevelFold.rowEnd`, the deepest any child drew) and seats its rows past
   them. This assumes the inner rows are the outermost part of the content
   on that side, which holds when the inner groups share a plot edge.
 
-  Boundary marks follow one rule: a divider runs through the rows of every
-  level that has a boundary in its gap. In each gap between neighboring
-  slots, the dim's visible rows, nearest the plot first, are the inner axes'
-  rows and then this axis's levels. The inner axes' rows break in every gap,
-  since an inner group never crosses this axis's slots. Each run of
-  neighboring rows that break there gets one divider, an `axisSpan` from one
-  slot's end to the next slot's start, which draws a 1px line in its middle
-  across those rows. The first row's divider starts at the plot edge, and a
-  later one's at the far edge of the row before it. The innermost level of
-  the dim alone draws none, so a run needs a level outside it (a later level
-  of the same axis, or the first level of an axis with an ordinal axis below
-  it, `LevelFold.ordinal`). A grouped bar chart's month dividers thus run
-  from the plot edge through the inner row and the month row, and the
-  divider between two years runs on through the year row.
+  Which levels draw dividers is a question about the data. A level
+  **partitions** the value of the level inside it when both bin the same
+  column: a year level over a month level of one date. Each cell records the
+  column it bins (`KeyCell.column`, set where `field(x).bin(...)` builds its
+  cells), so each `OrdinalLevel` of cells knows its column, and two levels
+  compare columns. A chained key's levels and a `Calendar` entry of `levels`
+  are over one key, so they always partition; nested splits that bin one
+  column (`spread` by `field("date").bin(Calendar.year)`, then by
+  `field("date").bin(Calendar.month)`), and numeric bins inside bins, do so
+  across axes, where the fold carries the column of the inner axes' outer
+  level (`LevelFold.column`, kept only when every child agrees). Categories
+  nested in other categories (a lake over its species, months over weather)
+  do not partition anything, so they draw no dividers. A level draws them
+  when it partitions the level inside it, or when the axis's `divider`
+  option says so at its depth (`true` on, `false` off), which wins.
+
+  Where they are drawn follows one rule: a divider runs through the rows of
+  every level that has a boundary in its gap. In each gap between
+  neighboring slots, the dim's visible rows, nearest the plot first, are the
+  inner axes' rows and then this axis's levels. The inner axes' rows break
+  in every gap, since an inner group never crosses this axis's slots. Each
+  run of neighboring rows that break there gets one divider when one of its
+  rows draws dividers: an `axisSpan` from one slot's end to the next slot's
+  start, which draws a 1px line in its middle across those rows. The first
+  row's divider starts at the plot edge, and a later one's at the far edge
+  of the row before it. A chart of months over weather categories, with a
+  chained year above the months, thus has one divider, between the years,
+  and it runs from the plot edge through the weather row, the month row and
+  the year row.
 
   This is the opposite of a time axis's ticks, on purpose. A divider
   separates regions, so it runs through every level whose regions also

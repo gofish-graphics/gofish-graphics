@@ -2139,8 +2139,12 @@ rejects a `Bin` kind that bins two fields (`checkBin`). A `Cell`
 keeps the whole value: the interval `[start, end)` (its region), its id (its
 start, as text, so `String(cell)` is the key a node gets), its label (the
 partition's `.format(fn)`, else the default: `"0.5–1"`, or the calendar label),
-and, for a calendar cell, its calendar fields, partition and zone. Cells are
-ordered by start.
+and, for a calendar cell, its calendar fields, partition and zone. Every
+cell also records the bin that made it (`KeyCell.bin`) and the column it bins
+(`KeyCell.column`, the name `domainCells` in `datumProjection.ts` passes to
+`chainCells`), so an axis can tell levels that partition one value (a year and
+a month of one date) from categories of different columns
+([Axes](/internals/frontend/axes#levels)). Cells are ordered by start.
 
 The cells are defined over the column's **domain**, not over the rows of the
 group being split. `binCells` takes every value the column has in the

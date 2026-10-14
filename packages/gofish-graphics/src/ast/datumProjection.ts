@@ -372,7 +372,8 @@ function domainCells(
       ),
       valuesOf(domain, name),
       columnType(d, name)?.HasCalendar?.zone,
-      where
+      where,
+      name
     )
   );
 }
