@@ -73,7 +73,10 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(mosaicPassengers, { color: Color.palette(["#2b8cbe", "#ff8408"]) })
+    chart(mosaicPassengers, {
+      color: Color.palette(["#2b8cbe", "#ff8408"]),
+      axes: false,
+    })
       .flow(
         // pclass rows: 1st at the bottom, 3rd at the top
         spread({ by: "pclass", dir: "y", spacing: 6, alignment: "start" }),

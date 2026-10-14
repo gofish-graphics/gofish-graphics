@@ -41,7 +41,7 @@ DATA = [
 def story_spread_option_y():
     return (
         chart(DATA).flow(spread(by="c", dir="x", y=50)).mark(rect(h="v")),
-        {"w": 300, "h": 200, "axes": True},
+        {"w": 300, "h": 200},
     )
 
 
@@ -52,7 +52,7 @@ def story_operator_translate_y():
         chart(DATA)
         .flow(spread(by="c", dir="x").translate(y=50))
         .mark(rect(h="v")),
-        {"w": 300, "h": 200, "axes": True},
+        {"w": 300, "h": 200},
     )
 
 
@@ -63,5 +63,5 @@ def story_operator_translate_x():
         chart(DATA)
         .flow(spread(by="c", dir="x").translate(x=50))
         .mark(rect(h="v")),
-        {"w": 300, "h": 200, "axes": True},
+        {"w": 300, "h": 200},
     )

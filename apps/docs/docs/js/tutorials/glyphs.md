@@ -101,7 +101,7 @@ const stations = [
   { id: "IJ", x: 92, y: 70, color: "#8e6bbf" },
 ];
 
-gf.chart(stations)
+gf.chart(stations, { axes: false })
   .flow(gf.scatter({ by: "id", x: "x", y: "y" }))
   .mark((d) => marker({ fill: d[0].color }))
   .render(root, { w: 260, h: 170 });
@@ -144,7 +144,7 @@ const stations = [
   { id: "IJ", x: 92, y: 70, color: "#8e6bbf" },
 ];
 
-gf.chart(stations)
+gf.chart(stations, { axes: false })
   .flow(gf.scatter({ by: "id", x: "x", y: "y" }))
   .mark((d) => marker(d[0]))
   .render(root, { w: 260, h: 170 });

@@ -37,7 +37,6 @@ export const GenderPayGap: StoryObj<Args> = {
         "75-Percentile": pay,
         Max: pay,
       },
-      axes: true,
     })
       .flow(
         spread({ by: "Pay Grade", dir: "x", spacing: 24 }),

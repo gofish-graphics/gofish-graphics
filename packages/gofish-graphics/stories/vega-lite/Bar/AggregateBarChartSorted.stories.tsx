@@ -27,7 +27,7 @@ export const Default: StoryObj<Args> = {
     );
 
     // Order age groups by their total (summed) people, descending.
-    chart(year2000, {axes: true})
+    chart(year2000)
       .flow(spread({ by: field("age").sort("people", "desc"),  dir: "y" }))
       .mark(rect({ w: "people" }))
       .render(container, { w: args.w, h: args.h });

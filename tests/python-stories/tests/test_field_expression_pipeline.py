@@ -15,7 +15,7 @@ def story_sort_by_value():
     # field("x").sort("v") should order the bars ascending by `v`:
     # A (10), B (25), C (40) — left to right.
     return (
-        chart(_SORT_DATA, axes=True)
+        chart(_SORT_DATA)
         .flow(spread(by=field("x").sort("v"), dir="x", spacing=20))
         .mark(rect(w=40, h="v", fill="x")),
         {"w": 400, "h": 250},
@@ -29,7 +29,7 @@ def story_binned_spread():
     # field("age").bin() groups rows into ~10 numeric bins and spreads one
     # bar per bin, each sized by the bin's row count — a histogram.
     return (
-        chart(_BIN_DATA, axes=True)
+        chart(_BIN_DATA)
         .flow(spread(by=field("age").bin(), dir="x", spacing=4))
         .mark(rect(w=30, h=field("age").count())),
         {"w": 500, "h": 250},
@@ -49,7 +49,7 @@ def story_mean_aggregate():
     # field("weight").mean() overrides the default sum aggregate: Bass -> 3,
     # Trout -> 3 (both bars should render the SAME height, not 6 vs 9).
     return (
-        chart(_MEAN_DATA, axes=True)
+        chart(_MEAN_DATA)
         .flow(spread(by="species", dir="x", spacing=20))
         .mark(rect(w=60, h=field("weight").mean(), fill="species")),
         {"w": 300, "h": 250},
@@ -70,7 +70,7 @@ def story_normalize_size_stack():
     # 3/4 y; category "b" is 1/2 x, 1/2 y. Every bar reaches the same
     # full-height 1 (a percent-bar), unlike the raw-count MosaicChart story.
     return (
-        chart(_SHARE_DATA, axes=True)
+        chart(_SHARE_DATA)
         .flow(
             spread(by="category", dir="x", spacing=20),
             stack(by="part", dir="y", size=field("n").normalize()),
@@ -102,7 +102,7 @@ def story_sort_by_explicit_order():
     # aggregate: sun, fog, drizzle, rain, snow — left to right. "extra" isn't
     # in the list, so it's appended after (natural sort order).
     return (
-        chart(_EXPLICIT_ORDER_DATA, axes=True)
+        chart(_EXPLICIT_ORDER_DATA)
         .flow(
             spread(
                 by=field("x").sort(["sun", "fog", "drizzle", "rain", "snow"]),
@@ -123,7 +123,7 @@ def story_spread_size_ordinal_axis():
     # of Huron/Erie/Ontario each keeping their own). Bar widths are also
     # proportional to `fish` (12/30/18).
     return (
-        chart(_SPREAD_SIZE_DATA, axes=True)
+        chart(_SPREAD_SIZE_DATA)
         .flow(spread(by="lake", dir="x", spacing=20, size="fish"))
         .mark(rect(h=40, fill="lake")),
         {"w": 400, "h": 250},
@@ -145,7 +145,7 @@ def story_drop_nulls():
     # exactly 3 bars (A, B, C), each at its own `v` — no fourth "null" bar
     # and no distortion from the 999-valued row.
     return (
-        chart(_DROP_NULLS_DATA, axes=True)
+        chart(_DROP_NULLS_DATA)
         .flow(spread(by=field("x").drop_nulls(), dir="x", spacing=20))
         .mark(rect(w=40, h="v", fill="x")),
         {"w": 400, "h": 250},
@@ -165,7 +165,7 @@ def story_binned_ribbon_histogram():
     # gives the band its width. Bins with zero rows are dropped rather than
     # rendered as zero-height gaps, so the band visibly skips them — see #763.
     return (
-        chart(_BIN_DATA, axes=True)
+        chart(_BIN_DATA)
         .flow(spread(by=field("age").bin(), dir="x", spacing=40))
         .mark(ribbon(h=field("age").count(), fill="steelblue")),
         {"w": 500, "h": 250},

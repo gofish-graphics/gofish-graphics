@@ -116,7 +116,7 @@ export const SpatialTwin: StoryObj<Args> = {
           opacity: 0.5,
         })
       )
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -158,7 +158,7 @@ export const Animated: StoryObj<Args> = {
       .mark(circle({ r: 4, fill: "country" }))
       .layer(time.transition())
       .layer(yearReadout(year))
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -183,7 +183,7 @@ export const Paused1975: StoryObj<Args> = {
       )
       .mark(circle({ r: 4, fill: "country" }))
       .layer(time.transition())
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -214,7 +214,7 @@ export const SequenceOnly: StoryObj<Args> = {
       )
       .mark(circle({ r: 4, fill: "country" }))
       .layer(yearReadout(year))
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -810,7 +810,7 @@ export const Frame1955: StoryObj<Args> = {
         scatter({ by: "country", x: "fertility", y: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }))
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -891,7 +891,7 @@ export const Trails: StoryObj<Args> = {
     const year = timer({ domain: yearRange(gapminder), duration: 10000 });
     trails(gapminder, year, Curve.monotone())
       .layer(yearReadout(year))
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -910,7 +910,7 @@ export const TrailsPaused: StoryObj<Args> = {
     const year = pausedClock(yearRange(gapminder), 10000, 1997.5);
     trails(gapminder, year, Curve.monotone())
       .layer(yearReadout(year))
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },

@@ -21,7 +21,7 @@ def story_default():
         )
 
     chart_builder = (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count"))
         .layer(chart().flow(group(by="lake")).mark(label_mark))
@@ -45,7 +45,7 @@ def story_species_count_per_lake():
         )
 
     chart_builder = (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count"))
         .layer(chart().flow(group(by="lake")).mark(label_mark))

@@ -62,7 +62,7 @@ export const Default: StoryObj<Args> = {
     });
     
 
-    chart(movieCounts, { axes: true })
+    chart(movieCounts)
       .flow(scatter({ by: "id", x: "x", y: "y" }))
       // Size each cell by bucket count.
       .mark(

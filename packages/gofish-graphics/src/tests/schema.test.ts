@@ -626,7 +626,7 @@ async function main() {
       k: i % 2 ? "x" : "y",
     }));
     const grid = (by: unknown) =>
-      chart(units, { color: Color.palette(["red", "blue"]) })
+      chart(units, { color: Color.palette(["red", "blue"]), axes: false })
         .flow(
           spread({ by, dir: "y", spacing: 1 }),
           spread({ dir: "x", spacing: 1 })

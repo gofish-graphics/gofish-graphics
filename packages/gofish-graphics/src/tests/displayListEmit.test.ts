@@ -44,7 +44,9 @@ async function main() {
   ];
   const W = 16;
   const SPACING = 8;
-  const doc: DisplayList.DisplayListDocument = await chart(data)
+  // Axes off: the checks below count and measure the bars alone, and axis
+  // ticks are rects too.
+  const doc: DisplayList.DisplayListDocument = await chart(data, { axes: false })
     .flow(spread({ by: "c", dir: "x", spacing: SPACING }))
     .mark(rect({ h: "v", w: W, fill: "steelblue" }))
     .toDisplayList({ w: 200, h: 120 });
@@ -119,8 +121,9 @@ async function main() {
     d.items.forEach(walk);
     return out;
   };
+  // Axes off: the check counts the mark rects, and axis ticks are rects too.
   const emptied = rectsOf(
-    await chart(data)
+    await chart(data, { axes: false })
       .flow(
         spread({ by: "c", dir: "x" }),
         filter((d: any) => d.v > 100)

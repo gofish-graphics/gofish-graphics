@@ -62,7 +62,7 @@ export const DailyLine: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(prices, { schema: { date: Schema.time() }, axes: true })
+    chart(prices, { schema: { date: Schema.time() } })
       .flow(scatter({ by: "date", x: "date", y: "price" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
       .render(container, { w: args.w, h: args.h });
@@ -98,7 +98,7 @@ export const HourlyLine: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(readings, { axes: true })
+    chart(readings)
       .flow(scatter({ by: "time", x: "time", y: "temp" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
       .render(container, { w: args.w, h: args.h });
@@ -124,7 +124,6 @@ export const DaylightSavingZone: StoryObj<Args> = {
     const container = initializeContainer();
     chart(newYork, {
       schema: { time: Schema.time({ zone: "America/New_York" }) },
-      axes: true,
     })
       .flow(scatter({ by: "time", x: "time", y: "load" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
@@ -239,7 +238,7 @@ export const VerticalDailyDots: StoryObj<Args> = {
   args: { w: 300, h: 480 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(prices, { schema: { date: Schema.time() }, axes: true })
+    chart(prices, { schema: { date: Schema.time() } })
       .flow(scatter({ by: "date", x: "price", y: "date" }))
       .mark(circle({ r: 1.5, fill: "steelblue" }))
       .render(container, { w: args.w, h: args.h });
@@ -269,10 +268,7 @@ export const MonthlyHighs: StoryObj<Args> = {
   args: { w: 480, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(
-      prices.filter((p) => p.date.startsWith("2024")),
-      { axes: true }
-    )
+    chart(prices.filter((p) => p.date.startsWith("2024")))
       .flow(
         derive(
           (rows: { date: string; price: number }[]) => {

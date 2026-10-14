@@ -958,7 +958,10 @@ async function benchSynthetic(context: BrowserContext): Promise<SyntheticRun> {
  * AB_HARNESS_PORT, alternating one sample each per point. Both engines see
  * identical specs and identical sampling; the delta is free of cross-machine
  * variance AND of the thermal drift of benching them minutes apart. Families
- * end as in `benchSynthetic`; a timed-out point is skipped for both sides.
+ * end as in `benchSynthetic`; a timed-out point is skipped for both sides. A
+ * family the base harness does not list (one this PR adds) is sampled on HEAD
+ * alone: it lands in `head` with no `base` points, so the report gives it no Δ
+ * row but still fits its exponent.
  */
 async function benchSyntheticAB(context: BrowserContext): Promise<{
   head: SyntheticPoint[];
@@ -973,6 +976,11 @@ async function benchSyntheticAB(context: BrowserContext): Promise<{
   const families = (await headPage.evaluate(() =>
     (window as any).__listSyntheticFamilies__()
   )) as { count: string[]; nest: boolean };
+  const baseFamilies = (await basePage.evaluate(() =>
+    (window as any).__listSyntheticFamilies__()
+  )) as { count: string[]; nest: boolean };
+  const onBase = (family: string) =>
+    family === "nest" ? baseFamilies.nest : baseFamilies.count.includes(family);
 
   const head: SyntheticPoint[] = [];
   const base: SyntheticPoint[] = [];
@@ -983,11 +991,22 @@ async function benchSyntheticAB(context: BrowserContext): Promise<{
     if (stopped.has(family)) continue;
     if (family !== curFamily) {
       curFamily = family;
-      console.log(`\n[synthetic A/B] family "${family}"`);
+      console.log(
+        `\n[synthetic A/B] family "${family}"` +
+          (onBase(family) ? "" : " (new on HEAD: HEAD only)")
+      );
     }
     process.stdout.write(`  n=${n} ... `);
-    const r = await orTimeout(
-      () => runSyntheticPointAB(headPage, basePage, family, n),
+    const r = await orTimeout<{
+      head: SyntheticMeasure;
+      base: SyntheticMeasure | null;
+    } | null>(
+      () =>
+        onBase(family)
+          ? runSyntheticPointAB(headPage, basePage, family, n)
+          : runSyntheticPoint(headPage, family, n).then((m) =>
+              m ? { head: m, base: null } : null
+            ),
       // Either page may be the stuck one; both are cheap to replace.
       async () => {
         await headPage.close();
@@ -1008,13 +1027,14 @@ async function benchSyntheticAB(context: BrowserContext): Promise<{
       continue;
     }
     head.push({ family, n, ...r.head });
-    base.push({ family, n, ...r.base });
+    if (r.base) base.push({ family, n, ...r.base });
     console.log(
-      `HEAD ${r.head.totalMs.median.toFixed(2)}ms · base ${r.base.totalMs.median.toFixed(2)}ms`
+      `HEAD ${r.head.totalMs.median.toFixed(2)}ms · base ` +
+        (r.base ? `${r.base.totalMs.median.toFixed(2)}ms` : "—")
     );
     if (
       r.head.wallMs.median > PER_RENDER_CEILING_MS ||
-      r.base.wallMs.median > PER_RENDER_CEILING_MS
+      (r.base && r.base.wallMs.median > PER_RENDER_CEILING_MS)
     )
       stopped.add(family);
   }

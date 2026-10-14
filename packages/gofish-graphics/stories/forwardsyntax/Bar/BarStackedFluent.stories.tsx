@@ -23,7 +23,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { axes: true })
+    chart(seafood)
       .facet({ by: "lake", dir: "x" })
       .stack({ by: "species", dir: "y" })
       .mark(rect({ h: "count", fill: "species" }))

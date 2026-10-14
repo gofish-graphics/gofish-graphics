@@ -15,7 +15,7 @@ export const FieldBetween: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    chart(penguins, { axes: true })
+    chart(penguins)
       .flow(
         filter(field("Body Mass (g)").between(3500, 4500, { closed: "left" })),
         scatter({ x: "Flipper Length (mm)", y: "Beak Length (mm)" })

@@ -17,6 +17,13 @@
  *    points* each with many children (the σ-solve fan-out case).
  *  - `nest` — a chain of `depth` nested single-child facets: pure recursion /
  *    scope-nesting depth, swept independently of leaf count.
+ *  - `axes` — the `scatter` workload with its default axes, so the cost of
+ *    axis inference and rendering is tracked as its own number.
+ *
+ * Every family but `axes` pins `axes: false`. `chart()` draws axes by default
+ * (#1110), and that fixed per-chart cost, multiplied by the nested `chart()`
+ * per cell in `grid` and `nest`, would swamp the layout work these families
+ * exist to measure.
  *
  * This module is imported by the harness Vite server (which aliases
  * `gofish-graphics` to the package source), so it always runs against
@@ -44,7 +51,7 @@ const rows = (n: number): { i: number; v: number }[] =>
 /** `n` rects spread along x — flat fan-out, one branch point. */
 export const spreadFamily: CountFamily = (n) => ({
   render: (container, { w, h }) =>
-    chart(rows(n))
+    chart(rows(n), { axes: false })
       .flow(spread({ dir: "x", spacing: 1 }))
       .mark(rect({ w: 4, h: "v" }))
       .render(container, { w, h }),
@@ -53,24 +60,32 @@ export const spreadFamily: CountFamily = (n) => ({
 /** `n` rects stacked along y — flat fan-out plus an `n`-way position sum. */
 export const stackFamily: CountFamily = (n) => ({
   render: (container, { w, h }) =>
-    chart(rows(n))
+    chart(rows(n), { axes: false })
       .flow(stack({ dir: "y" }))
       .mark(rect({ w: 20, h: "v" }))
       .render(container, { w, h }),
 });
 
+const points = (n: number): { x: number; y: number }[] =>
+  Array.from({ length: n }, (_, i) => ({ x: i, y: val(i) + (i % 7) }));
+
 /** `n` independently positioned points — posScale over `n` rows. */
 export const scatterFamily: CountFamily = (n) => ({
-  render: (container, { w, h }) => {
-    const data = Array.from({ length: n }, (_, i) => ({
-      x: i,
-      y: val(i) + (i % 7),
-    }));
-    return chart(data)
+  render: (container, { w, h }) =>
+    chart(points(n), { axes: false })
       .flow(scatter({ x: "x", y: "y" }))
       .mark(circle({ r: 2 }))
-      .render(container, { w, h });
-  },
+      .render(container, { w, h }),
+});
+
+/** The `scatter` workload with default axes — `axes` minus `scatter` is the
+ *  axis cost. */
+export const axesFamily: CountFamily = (n) => ({
+  render: (container, { w, h }) =>
+    chart(points(n))
+      .flow(scatter({ x: "x", y: "y" }))
+      .mark(circle({ r: 2 }))
+      .render(container, { w, h }),
 });
 
 /** ⌈√n⌉ groups × ⌈√n⌉ leaves — many branch points, each with many children. */
@@ -83,10 +98,10 @@ export const gridFamily: CountFamily = (n) => {
         i: k % side,
         v: val(k),
       }));
-      return chart(data)
+      return chart(data, { axes: false })
         .flow(spread({ by: "g", dir: "x", spacing: 4 }))
         .mark((d: any) =>
-          chart(d)
+          chart(d, { axes: false })
             .flow(spread({ by: "i", dir: "y", spacing: 1 }))
             .mark(rect({ w: 4, h: 4 }))
         )
@@ -101,6 +116,7 @@ export const countFamilies: Record<string, CountFamily> = {
   stack: stackFamily,
   scatter: scatterFamily,
   grid: gridFamily,
+  axes: axesFamily,
 };
 
 /**
@@ -112,11 +128,11 @@ export const nestFamily = (depth: number): BenchSpec => {
   const build = (level: number): any => {
     const data = [{ i: 0, v: 30 }];
     if (level <= 0) {
-      return chart(data)
+      return chart(data, { axes: false })
         .flow(spread({ dir: "x" }))
         .mark(rect({ w: 8, h: "v" }));
     }
-    return chart(data)
+    return chart(data, { axes: false })
       .flow(spread({ dir: "x" }))
       .mark(() => build(level - 1));
   };

@@ -64,7 +64,7 @@ export const Default: StoryObj<Args> = {
 
     const bins = wheel({ range: [3, 40], initial: 12, round: true });
 
-    chart(penguins, { axes: true })
+    chart(penguins)
       .flow(
         // regime 2: reading bins() in derive() makes it a pipeline dependency,
         // so a wheel tick re-bins the real rows and re-runs resolve → layout →
