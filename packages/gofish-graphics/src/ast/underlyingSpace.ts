@@ -424,12 +424,16 @@ export const ordinalOver = (
 /** The cells of a union of ordinal parts: {@link mergeCells} for cells of
  *  the line, and, for parts of a cycle, every part once, in the cycle's
  *  order, when all are of one cycle. Undefined when any part holds no
- *  cells, or the parts mix kinds or cycles. */
+ *  cells, or the parts mix kinds or cycles. The siblings of a split over
+ *  one key hold the same cells, so parts that are all one list are that
+ *  list, and parts of one cycle with a part that holds all of it are the
+ *  cycle's cells. */
 export const mergeAxisCells = (
   parts: (readonly AxisCell[] | undefined)[]
 ): readonly AxisCell[] | undefined => {
   if (parts.length === 0 || parts.some((p) => p === undefined))
     return undefined;
+  if (parts.every((p) => p === parts[0])) return parts[0];
   const all = (parts as (readonly AxisCell[])[]).flat();
   if (all.every((c): c is Cell => c instanceof Cell))
     return mergeCells(parts as (readonly Cell[])[]);
@@ -437,6 +441,7 @@ export const mergeAxisCells = (
     return undefined;
   const cycle = all[0]?.cycle;
   if (all.some((c) => c.cycle !== cycle)) return undefined;
+  if (parts.some((p) => p!.length === cycle.cells.length)) return cycle.cells;
   const byId = new Map(all.map((c) => [c.id, c]));
   return [...byId.values()].sort((a, b) => a.index - b.index);
 };

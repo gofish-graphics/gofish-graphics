@@ -7,7 +7,6 @@ import { createGridConstraint } from "../constraints/grid";
 import { ensureChildNames } from "../constraints/shared";
 import { splitEntries, type SplitBy } from "../datumProjection";
 import { fieldNameOf } from "../data";
-import { columnType } from "../schema";
 import type { OrdinalKey } from "../underlyingSpace";
 
 /**
@@ -111,26 +110,26 @@ export const table = createOperator<any, TableOptions>(Table, {
       );
     const cols = splitEntries(by.x, d);
     const rows = splitEntries(by.y, d);
+    // One pass over the rows: each row's row key, then each column's rows
+    // into their cells, which are made first, every one, in row-major order.
+    const cell = (colKey: unknown, rowKey: unknown) =>
+      `${String(colKey)}-${String(rowKey)}`;
+    const rowOf = new Map<unknown, unknown>();
+    for (const [rowKey, rowRows] of rows)
+      for (const r of rowRows) rowOf.set(r, rowKey);
     const entries = new Map<string | number, any[]>();
-    for (const [rowKey, rowRows] of rows) {
-      const inRow = new Set(rowRows);
-      for (const [colKey, colRows] of cols)
-        entries.set(
-          `${String(colKey)}-${String(rowKey)}`,
-          colRows.filter((r) => inRow.has(r))
-        );
-    }
-    const hasOrder = (key: SplitBy) =>
-      columnType(d, fieldNameOf(key))?.HasOrder !== undefined
-        ? true
-        : undefined;
+    for (const rowKey of rows.keys())
+      for (const colKey of cols.keys()) entries.set(cell(colKey, rowKey), []);
+    for (const [colKey, colRows] of cols)
+      for (const r of colRows)
+        if (rowOf.has(r)) entries.get(cell(colKey, rowOf.get(r)))!.push(r);
     return {
       entries,
       layoutOpts: {
         colKeys: [...cols.keys()],
         rowKeys: [...rows.keys()],
-        colHasOrder: hasOrder(by.x),
-        rowHasOrder: hasOrder(by.y),
+        colHasOrder: cols.hasOrder,
+        rowHasOrder: rows.hasOrder,
       },
     };
   },

@@ -263,15 +263,15 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   // part's tail; the split knows the groups present, so it computes it. It
   // reorders every level of the order the way it reorders the groups, so the
   // stack knows which way it lays the order out even in a row with one part.
-  // Over a column with HasOrder, the split says so (`hasOrder`), so the
+  // Over ordered keys, the split says so (`SplitGroups.hasOrder`), so the
   // ordinal space it folds knows its keys are ordered.
   split: ({ by, glue, reverse }, d) => {
     const entries = splitEntries(by, d);
-    const column = fieldNameOf(by);
-    const type = columnType(d, column);
-    const hasOrder = type?.HasOrder !== undefined ? true : undefined;
+    const hasOrder = entries.hasOrder;
     if (!glue)
       return hasOrder ? { entries, layoutOpts: { hasOrder } } : entries;
+    const column = fieldNameOf(by);
+    const type = columnType(d, column);
     const levels = (type?.HasOrder?.levels ?? []) as (string | number)[];
     const split = orderEntries(
       by,
