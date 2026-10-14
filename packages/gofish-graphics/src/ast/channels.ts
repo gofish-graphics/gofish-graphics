@@ -3,7 +3,6 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-import sumBy from "lodash/sumBy";
 import {
   MaybeValue,
   Value,
@@ -21,7 +20,9 @@ import { Frontend } from "gofish-ir";
 import {
   evalFieldValues,
   getFieldOps,
+  isMissing,
   meanOf,
+  sumOf,
   type FieldExpr,
 } from "./fieldExpr";
 import { columnType, type ColumnType } from "./schema";
@@ -208,9 +209,10 @@ export const inferEntrySize = <T>(
 
 /**
  * Shared core of {@link inferSize} / {@link inferPos}: they differ only in the
- * aggregation (a sum vs a mean, {@link meanOf}). An aggregation with no
- * value (the mean of no rows) is no value: the channel is undefined. Resolves a numeric value from a
- * field name, field expression, function accessor, or literal number:
+ * aggregation ({@link sumOf} vs {@link meanOf}), which both skip missing
+ * values. An aggregation with no value (the mean of no rows, the sum of only
+ * missing values) is no value: the channel is undefined. Resolves a numeric
+ * value from a field name, field expression, function accessor, or literal number:
  * - number / literal: passed through as a literal.
  * - `datum(...)`: already a data value, passed through as-is.
  * - string / function / field expression: evaluated per-row via
@@ -262,11 +264,13 @@ const inferNumeric =
     );
   };
 
-/** Infer a size value (sums the field/function across the data array). */
-export const inferSize = inferNumeric(sumBy);
+/** Infer a size value (sums the field/function across the data array,
+ *  missing values aside; see {@link sumOf}). */
+export const inferSize = inferNumeric(sumOf);
 
 /** Infer a position value (averages the field/function across the data
- *  array). Over no rows it has no value: undefined (see {@link meanOf}). */
+ *  array, missing values aside). Over no rows, or only missing values, it
+ *  has no value: undefined (see {@link meanOf}). */
 export const inferPos = inferNumeric(meanOf);
 
 /**
@@ -293,10 +297,10 @@ function firstRowValue<T extends Record<string, any>>(
     // An expression pipeline folds the group's rows itself, as for a size
     // channel (`evalFieldValues`): `.count()` is the number of rows, even
     // when there are none. The value is the fold's, not a value of the
-    // field, so it records no field. A fold over no rows that has no value
-    // (the mean of nothing) is no value here either.
+    // field, so it records no field. A fold that has no value (the mean
+    // of nothing) is no value here either.
     const [folded] = evalFieldValues(accessor, data).values;
-    return folded == null || Number.isNaN(folded)
+    return isMissing(folded)
       ? { kind: "none" }
       : { kind: "row", value: folded };
   }

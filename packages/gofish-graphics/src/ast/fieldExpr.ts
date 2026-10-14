@@ -28,7 +28,6 @@
 // Only type-only imports from `data.ts` (no runtime import) so `data.ts` can
 // import THIS module's class at runtime without a cycle.
 import sumBy from "lodash/sumBy";
-import meanBy from "lodash/meanBy";
 import type { MaybeValue } from "./data";
 import { COUNT, type Quantity } from "./measure";
 import { withWire, wireOf } from "./wire";
@@ -407,12 +406,36 @@ const DOMAIN_OPS = new Set(["sort", "reverse", "bin", "dropNulls"]);
 
 export const isDomainOp = (op: FieldOp): boolean => DOMAIN_OPS.has(op.op);
 
-/** The mean of `values`, or undefined when there are none (no values, or
- *  only `undefined`, which is no value: the mean of no rows). A sum or a
- *  count over no values is 0, but a mean has no value to fall back to: a
- *  group with no rows has no mean, so a channel read as one has no value. */
-export const meanOf = (values: readonly unknown[]): number | undefined =>
-  values.every((v) => v === undefined) ? undefined : meanBy(values as any[]);
+/** Whether `v` is a missing value: null or undefined, as everywhere in
+ *  GoFish (`dropNulls`, the schema's classes). A fold skips it. NaN is a
+ *  number, not a missing value. */
+export const isMissing = (v: unknown): v is null | undefined => v == null;
+
+/** The values of `values` that are not missing ({@link isMissing}). */
+const present = (values: readonly unknown[]): number[] =>
+  values.filter((v) => !isMissing(v)) as number[];
+
+/** The mean of the values of `values` that are not missing, or undefined
+ *  when there are none (no rows, or only missing values): a mean has no
+ *  value to fall back to, so a channel read as one has no value. */
+export const meanOf = (values: readonly unknown[]): number | undefined => {
+  const vs = present(values);
+  return vs.length === 0
+    ? undefined
+    : vs.reduce((a, b) => a + b, 0) / vs.length;
+};
+
+/** The sum of the values of `values` that are not missing. Over no rows it
+ *  is 0, the sum of nothing. Over rows whose values are all missing it is
+ *  undefined, as in SQL: their sum is unknown, not 0. So the sum of a
+ *  singleton is the singleton, missing or not, which is what lets a channel
+ *  sum a value an aggregate op already folded (`.mean()` over no rows). */
+export const sumOf = (values: readonly unknown[]): number | undefined => {
+  const vs = present(values);
+  return vs.length === 0 && values.length > 0
+    ? undefined
+    : vs.reduce((a, b) => a + b, 0);
+};
 
 /**
  * Evaluate a field expression (or bare string/function accessor) against a
@@ -467,12 +490,12 @@ export function evalFieldValues<T>(
         quantity: COUNT_QUANTITY,
       };
     case "mean":
-      // No rows, no mean: the fold is the singleton of no value
+      // No values, no mean: the fold is the singleton of no value
       // (`meanOf`), which every channel's own aggregation keeps (a sum of
       // `[undefined]` is undefined), so the channel has no value either.
       return { values: [meanOf(rows.map(key))] };
     default: // "sum"
-      return { values: [sumBy(rows.map(key) as any[])] };
+      return { values: [sumOf(rows.map(key))] };
   }
 }
 

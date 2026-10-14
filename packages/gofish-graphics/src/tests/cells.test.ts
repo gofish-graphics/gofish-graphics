@@ -30,7 +30,7 @@ import { evalFieldValues } from "../ast/fieldExpr";
 import { loadTemporal } from "../ast/calendar";
 import * as Calendar from "../families/calendar";
 import { splitEntries } from "../ast/datumProjection";
-import { field } from "../ast/data";
+import { field, getValue } from "../ast/data";
 import { partition as srcPartition } from "../lib";
 import {
   applySchema,
@@ -2069,6 +2069,60 @@ async function main() {
       inferPos("x", []) === undefined &&
         evalFieldValues(field("x").mean(), []).values[0] === undefined &&
         inferSize(field("x").mean(), []) === undefined
+    );
+    // A missing value (null or undefined, as everywhere: `dropNulls`, the
+    // schema's classes) is no value: a fold skips it. A mean over the rest
+    // divides by how many there are; over none, it has no value. A sum over
+    // values that are all missing has no value either, while a sum over no
+    // rows is 0. NaN is a number, not a missing value.
+    const num = (v: unknown) => getValue(v as any);
+    const someMissing = [{ y: 4 }, {}, { y: null }, { y: 2 }];
+    const allMissing = [{}, { y: null }];
+    check(
+      "a mean skips missing values",
+      evalFieldValues(field("y").mean(), [{ y: 4 }, {}]).values[0] === 4 &&
+        evalFieldValues(field("y").mean(), someMissing).values[0] === 3 &&
+        num(inferPos("y", someMissing)) === 3,
+      `${evalFieldValues(field("y").mean(), someMissing).values[0]} / ` +
+        `${num(inferPos("y", someMissing))}`
+    );
+    check(
+      "a mean over only missing values has no value",
+      evalFieldValues(field("y").mean(), allMissing).values[0] === undefined &&
+        inferPos("y", allMissing) === undefined &&
+        inferPos(field("y").mean(), allMissing) === undefined
+    );
+    check(
+      "a sum skips missing values; over only missing ones it has no value",
+      evalFieldValues(field("y").sum(), someMissing).values[0] === 6 &&
+        num(inferSize(field("y").sum(), someMissing)) === 6 &&
+        evalFieldValues(field("y").sum(), allMissing).values[0] ===
+          undefined &&
+        inferSize(field("y").sum(), allMissing) === undefined &&
+        num(inferSize(field("y").sum(), [])) === 0,
+      `${evalFieldValues(field("y").sum(), someMissing).values[0]} / ` +
+        `${evalFieldValues(field("y").sum(), allMissing).values[0]}`
+    );
+    check(
+      "a count counts rows, missing values included",
+      evalFieldValues(field("y").count(), someMissing).values[0] === 4
+    );
+    const missingBars = await chart(
+      [
+        { k: "a", y: 4 },
+        { k: "a", y: null },
+        { k: "b", y: null },
+      ],
+      noAxes
+    )
+      .flow(spread({ by: "k", dir: "x" }))
+      .mark(rect({ w: 5, h: distField("y").mean() }))
+      .toDisplayList({ w: 300, h: 100 })
+      .then((dl: any) => walkItems(dl).filter((it) => it.kind === "rect"));
+    check(
+      "a bar whose height is a mean over only missing values is not drawn",
+      missingBars.length === 1,
+      String(missingBars.length)
     );
     const dots = walkItems(
       await chart(pts, noAxes)
