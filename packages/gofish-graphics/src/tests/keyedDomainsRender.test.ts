@@ -316,6 +316,93 @@ async function main() {
     );
   }
 
+  console.log("# each chart's own axes option applies at that chart");
+  {
+    // Groups a and b spread along x, each a nested chart that spreads its
+    // rows p and q along y: the outer chart draws the a/b axis, each inner
+    // chart the p/q axis of its own grouping.
+    const rows = [
+      { g: "a", i: "p" },
+      { g: "a", i: "q" },
+      { g: "b", i: "p" },
+      { g: "b", i: "q" },
+    ];
+    const labels = async (outer: any, inner: any, render: any = {}) =>
+      items(
+        await chart(rows, outer)
+          .flow(spread({ by: "g", dir: "x", spacing: 10 }))
+          .mark((d: any) =>
+            chart(d, inner)
+              .flow(spread({ by: "i", dir: "y", spacing: 2 }))
+              .mark(rectMark({ w: 10, h: 10 }))
+          )
+          .toDisplayList({ w: 200, h: 200, ...render })
+      )
+        .filter((i) => i.kind === "text" && ["a", "p"].includes(i.text ?? ""))
+        .map((i) => i.text)
+        .sort()
+        .join(",");
+    check(
+      "by default every chart draws its axes",
+      (await labels({}, {})) === "a,p,p",
+      await labels({}, {})
+    );
+    check(
+      "a nested chart's axes: false turns off only its own axes",
+      (await labels({}, { axes: false })) === "a",
+      await labels({}, { axes: false })
+    );
+    check(
+      "an outer chart's axes: false leaves the nested charts' axes on",
+      (await labels({ axes: false }, {})) === "p,p",
+      await labels({ axes: false }, {})
+    );
+    check(
+      "the render's axes overrides only the outermost chart",
+      (await labels({}, {}, { axes: false })) === "p,p",
+      await labels({}, {}, { axes: false })
+    );
+    check(
+      "a per-axis form applies per dim",
+      (await labels({}, { axes: { y: false } })) === "a",
+      await labels({}, { axes: { y: false } })
+    );
+  }
+
+  console.log("# an axis a chart turns off is hidden, not drawn below it");
+  {
+    // The y domain is shared, so the outer chart owns its axis. With the
+    // outer chart's axes off, the nested charts (axes on) do not draw it.
+    const rows = [
+      { g: "a", i: 0, x: 1, y: 2 },
+      { g: "a", i: 1, x: 2, y: 5 },
+      { g: "b", i: 0, x: 3, y: 1 },
+      { g: "b", i: 1, x: 4, y: 7 },
+    ];
+    const numbers = async (outer: any) =>
+      items(
+        await chart(rows, outer)
+          .flow(spread({ by: "g", dir: "x", spacing: 10 }))
+          .mark((d: any) =>
+            chart(d, { w: 80, h: 80 })
+              .flow(scatter({ by: "i", x: "x", y: "y" }))
+              .mark(rectMark({ w: 4, h: 4 }))
+          )
+          .toDisplayList({})
+      ).filter((i) => i.kind === "text" && /^[0-9.]+$/.test(i.text ?? ""))
+        .length;
+    check(
+      "the shared axis is drawn once, by the outer chart",
+      (await numbers({})) > 0,
+      await numbers({})
+    );
+    check(
+      "with the outer chart's axes off no nested chart draws it",
+      (await numbers({ axes: false })) === 0,
+      await numbers({ axes: false })
+    );
+  }
+
   console.log("# an unsized render maps its axis at the σ solved below it");
   {
     // NestedCharts: a bare spread of mini charts, each 160 px tall, rendered

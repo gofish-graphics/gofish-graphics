@@ -75,6 +75,11 @@ export type ChartOptions = {
    * - `false` — suppress all axis rendering for this chart.
    * - `{ x?, y? }` — control x and y independently.
    *
+   * It applies at this chart: a chart nested in another reads its own option
+   * and draws only the axes of the domains it owns. An axis a chart turns off
+   * is hidden; no chart inside it draws that axis instead. A render's own
+   * `axes` option, if given, overrides only the outermost chart's.
+   *
    * Manual `axis: true/false` overrides on individual operators within the chart
    * are still respected when `axes: true`.
    */
@@ -919,6 +924,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
    *  inherits it. */
   renderMeta(): RenderMeta {
     return {
+      // The outermost chart's axes, which the render's own `axes` overrides.
       // A chart draws its axes unless told not to. A bare node rendered
       // without a chart (`gofish(...)`, a combinator's `.render`) keeps the
       // render default of no axes (see `layout` in gofish.tsx).
@@ -1147,7 +1153,13 @@ function isChartOptions(x: unknown): x is ChartOptions {
  * axis it has a size of its own, it solves σ there and draws them around its
  * content. Every node the chart draws (its marks, their transitions, the
  * tiers of a `.layer()` chain) is in that one content layer, so they all
- * share the axes it draws.
+ * share the axes it draws. The chart's own `axes` option (default `true`) is
+ * stamped next to its box (`_chartAxes`), and applies at the chart.
+ *
+ * DECLARED SHORTCUT (#1110): a coord's own axes (the polar rings) read the
+ * option as written, so a polar chart draws them only with an explicit
+ * `axes`. Reading the stamped default there would draw rings on every pie
+ * glyph and throw on every geo map (a fitted space has no rings yet).
  */
 async function frameChart(
   options: ChartOptions,
@@ -1155,6 +1167,7 @@ async function frameChart(
 ): Promise<GoFishNode> {
   const node = await Frame(options, [await Layer({}, children)]);
   node._chartBox = [options.w !== undefined, options.h !== undefined];
+  node._chartAxes = options.axes ?? true;
   return node;
 }
 

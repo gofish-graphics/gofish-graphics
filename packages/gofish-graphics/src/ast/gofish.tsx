@@ -249,6 +249,35 @@ function manualLabelRowSettings(
   );
 }
 
+/**
+ * The dims a chart's `axes` option draws, each with what its axis ticks at
+ * ({@link AxisTicks}). `true` draws both and `false` (or no option, as for a
+ * bare render) neither. For an `{ x?, y? }` object a dim is drawn unless it is
+ * explicitly `false`: specifying one axis does not turn the other off. Each
+ * drawn dim ticks at about 10 ticks, or at the rows of a time axis (`rows`),
+ * whose inner row its scope's domain is niced to. A dim with rows is always
+ * drawn: a dim turned off (`false`) has no options to hold them.
+ */
+export const axesEnabled = (
+  axes: AxesOptions | undefined
+): Map<0 | 1, AxisTicks> => {
+  const enabled = new Map<0 | 1, AxisTicks>();
+  if (!axes) return enabled;
+  const rows = perDimAxisOption(axes, "rows");
+  for (const dim of [0, 1] as const) {
+    const on = axes === true || (dim === 0 ? axes.x : axes.y) !== false;
+    if (!on) continue;
+    const r = rows[dim];
+    enabled.set(
+      dim,
+      r === undefined
+        ? DEFAULT_AXIS_TICKS
+        : { ...DEFAULT_AXIS_TICKS, rows: timeRowsFromOption(r, axisName(dim)) }
+    );
+  }
+  return enabled;
+};
+
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
 // which needs a concrete canvas to scale data into (see the per-axis comment in
 // `layout()` for the full behavior, including the shrink-to-fit case).
@@ -343,32 +372,12 @@ export async function layout(
     KeyedDomains.build(child));
 
   const __tAxes = perfNow();
-  // Axis ownership: which node draws each axis (`resolveAxes`). Which dims
-  // the chart-level `axes` option enables: `true` → both. For an `{ x?, y? }`
-  // object, a dim is enabled unless it is explicitly `false` — an unspecified
-  // (undefined) dim still shows (specifying one axis doesn't disable the
-  // other); only `false` suppresses. Each enabled dim carries what its axis
-  // ticks at: about 10 ticks, or the rows of a time axis (`rows`, parsed
-  // here, once), whose inner row its scope's domain is niced to. The axis is
-  // drawn from the same stamp. A dim with rows is always enabled: a disabled
-  // dim (`false`) has no options to hold them.
+  // Axis ownership: which node draws each axis (`resolveAxes`). The render
+  // root is the outermost chart, and the render's `axes` (the outermost
+  // chart's own option, unless the render gives one) applies there; every
+  // chart below it applies its own (`GoFishNode._chartAxes`).
   const rows = perDimAxisOption(axes, "rows");
-  if (axes) {
-    const ticksOf = (dim: 0 | 1): AxisTicks => {
-      const r = rows[dim];
-      return r === undefined
-        ? DEFAULT_AXIS_TICKS
-        : { ...DEFAULT_AXIS_TICKS, rows: timeRowsFromOption(r, axisName(dim)) };
-    };
-    const enabled = new Map<0 | 1, AxisTicks>();
-    for (const dim of [0, 1] as const) {
-      const on =
-        axes === true ||
-        (typeof axes === "object" && (dim === 0 ? axes.x : axes.y) !== false);
-      if (on) enabled.set(dim, ticksOf(dim));
-    }
-    child.resolveAxes(new Map(), enabled);
-  }
+  child.resolveAxes(new Map(), axesEnabled(axes));
   keyedDomains.refreshDemand();
 
   // Chrome elaboration (src/ast/axes/elaborate.tsx): every node that owns

@@ -224,9 +224,11 @@ A few rules:
   `gofish()` are. A node built ahead of time and passed to `gofish()` can be laid
   out only once, so `"auto"` there is an error.
 
-`axes` is most naturally a `chart()`/`chart()` option (e.g.
+`axes` is most naturally a `chart()` option (e.g.
 `gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as
-the examples below show.
+the examples below show. On `.render()` it overrides only the outermost chart's
+`axes`. A chart nested inside keeps its own (see
+[chart › Axes](/js/api/core/chart#axes)).
 
 ### Axes with inferred titles
 

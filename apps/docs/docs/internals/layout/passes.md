@@ -310,14 +310,15 @@ if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
 
 **Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/axes/elaborate.tsx`
 
-If the chart-level `axes` option enables a dimension, `resolveAxes` walks the
-tree top-down flagging which node _owns_ an axis on each dimension. Ownership
-records a **signature** per claimed dim: a continuous axis claims it opaquely
-(single-owner — the root-most one wins, descendants defer to the chart-level
-scale), and only at a `chart()` boundary
-([Axes](/internals/frontend/axes#axes-are-drawn-at-chart-boundaries)), which
-the walk decides as it goes: it carries down whether a chart is above the
-node, and memoizes whether one is below it. Ordinal axes **nest** — a node claims its own ordinal axis even
+`resolveAxes` walks the tree top-down flagging which node _owns_ an axis on
+each dimension, and draws it where the nearest chart's `axes` option turns
+that dimension on (the render's `axes` at the root, each chart's own below
+it). Ownership records a **signature** per claimed dim: a continuous axis
+claims it opaquely (single-owner — the root-most one wins, descendants defer to
+the chart-level scale), and only at a `chart()` boundary or the render root
+([Axes](/internals/frontend/axes#axes-are-drawn-at-chart-boundaries)). An
+axis whose chart turns it off is still owned, so it is hidden rather than
+drawn lower down. Ordinal axes **nest** — a node claims its own ordinal axis even
 under an ancestor ordinal axis, as long as it is a _different_ grouping (a finer
 level). So a grouped or faceted chart renders one ordinal axis per grouping
 level (per facet) — e.g. a `spread(lake)`+`stack(species)` bar gets an outer

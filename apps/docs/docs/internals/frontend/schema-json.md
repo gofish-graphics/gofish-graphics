@@ -2766,7 +2766,7 @@ for the API.
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions",
-          "description": "Draw axes: a boolean for both axes, or per-axis options {x?, y?}.",
+          "description": "Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead.",
           "default": true
         },
         "legend": {

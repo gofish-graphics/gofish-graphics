@@ -287,7 +287,7 @@ export const LabelOnSpread: StoryObj<Args> = {
         })
       )
       .mark(async (d: any) => {
-        return chart(d)
+        return chart(d, { axes: false })
           .flow(stack({ by: "species", dir: "x" }))
           .mark(rect({ h: "count" as any, fill: "species" as any }))
           .resolve();

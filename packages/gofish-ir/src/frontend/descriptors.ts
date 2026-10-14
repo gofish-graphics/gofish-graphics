@@ -691,7 +691,7 @@ export const CHART_OPTIONS: FieldGroup = group({
   axes: {
     type: t.ref("AxesOptions"),
     default: true,
-    doc: "Draw axes: a boolean for both axes, or per-axis options {x?, y?}.",
+    doc: "Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead.",
   },
   legend: {
     type: t.boolean,

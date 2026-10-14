@@ -35,7 +35,13 @@ import {
   type SpaceDeclaration,
   type AxisScopeHook,
 } from "./dims";
-import { gofish, gofishToSVGElement, gofishToSVG, gofishSave } from "./gofish";
+import {
+  axesEnabled,
+  gofish,
+  gofishToSVGElement,
+  gofishToSVG,
+  gofishSave,
+} from "./gofish";
 import type { GoFishExportOptions, GoFishRenderOptions } from "./gofish";
 import { toDisplayList } from "./displayList/toDisplayList";
 import type { DisplayList } from "gofish-ir";
@@ -546,6 +552,12 @@ export class GoFishNode {
    *  has a size of its own (`w`/`h`). A chart is where its axes are drawn
    *  (`isAxisBoundary`). Undefined on every other node. */
   public _chartBox?: [boolean, boolean];
+  /** Set on the node a `chart()` resolves to, next to {@link _chartBox}: the
+   *  chart's own `axes` option (default `true`). It applies at the chart and
+   *  below it, down to the next chart (`resolveAxes`). The render root's
+   *  setting is the render's `axes`, which is this one unless the render
+   *  gives its own. Undefined on every other node. */
+  public _chartAxes?: AxesOptions;
   /**
    * Set on the outermost ring of chrome that chrome elaboration
    * (`elaborateChrome` in axes/elaborate.tsx) wraps around a node: the boxes
@@ -1169,10 +1181,14 @@ export class GoFishNode {
    * keyed domain an ancestor already draws is the same axis, so it is not
    * drawn again.
    *
-   * `enabled` maps each dim the chart's `axes` option turns on to what its
-   * axis ticks at ({@link AxisTicks}); a node that draws an axis stamps those
-   * ticks as its `axisDemand`. An operator's explicit override can draw an
-   * axis on a dim `enabled` leaves out, with the default ticks.
+   * `enabled` maps each dim the nearest enclosing chart's `axes` option turns
+   * on to what its axis ticks at ({@link AxisTicks}, `axesEnabled`): the
+   * render's at the root, and each chart's own below it ({@link _chartAxes}).
+   * A node that claims an axis draws it only on a dim `enabled` has, and
+   * stamps those ticks as its `axisDemand`; on any other dim it still owns
+   * the axis, so the axis is hidden, not drawn by a chart below. An
+   * operator's explicit override can draw an axis on a dim `enabled` leaves
+   * out, with the default ticks.
    */
   public resolveAxes(
     claimed: Map<0 | 1, string> = new Map(),
@@ -1218,7 +1234,8 @@ export class GoFishNode {
         [1, AXIS_CLAIM_OPAQUE],
       ]);
       this.children.forEach((c) => {
-        if (c instanceof GoFishNode) c.resolveAxes(allClaimed, enabled);
+        if (c instanceof GoFishNode)
+          c.resolveAxes(allClaimed, c.axesBelow(enabled));
       });
       // _axisOverride can set axisX/Y on descendants even when claimed,
       // which would apply Cartesian axis budgets in polar coordinate space.
@@ -1285,7 +1302,7 @@ export class GoFishNode {
         else this.axis.y = show;
         if (show) this.axisDemand[dim] = ticksOf(dim);
         claim(dim, sig ?? AXIS_CLAIM_OPAQUE); // claim regardless — false blocks children too
-      } else if (enabled.has(dim) && space && !isUNDEFINED(space[dim])) {
+      } else if (space && !isUNDEFINED(space[dim])) {
         // A baseline magnitude ("free") owns no guide yet — only an anchored
         // (POSITION), unanchored (DIFFERENCE), or ORDINAL axis does.
         const s = space[dim];
@@ -1315,17 +1332,29 @@ export class GoFishNode {
           if (prior === undefined && this.isAxisBoundary(dim))
             sig = continuousSig(dim) ?? AXIS_CLAIM_OPAQUE;
         }
+        // A node owns the axis whether or not its chart draws it: an axis
+        // its chart turns off is hidden, not handed to a chart below.
         if (sig !== undefined) {
-          if (dim === 0) this.axis.x = true;
-          else this.axis.y = true;
-          this.axisDemand[dim] = ticksOf(dim);
+          if (enabled.has(dim)) {
+            if (dim === 0) this.axis.x = true;
+            else this.axis.y = true;
+            this.axisDemand[dim] = ticksOf(dim);
+          }
           claim(dim, sig);
         }
       }
     }
     this.children.forEach((c) => {
-      if (c instanceof GoFishNode) c.resolveAxes(next, enabled);
+      if (c instanceof GoFishNode) c.resolveAxes(next, c.axesBelow(enabled));
     });
+  }
+
+  /** The axes this node draws, given its parent's (`enabled`): its own
+   *  chart's `axes` option when it is a chart, else its parent's. */
+  private axesBelow(enabled: Map<0 | 1, AxisTicks>): Map<0 | 1, AxisTicks> {
+    return this._chartAxes === undefined
+      ? enabled
+      : axesEnabled(this._chartAxes);
   }
 
   /**

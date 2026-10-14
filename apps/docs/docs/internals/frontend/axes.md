@@ -486,6 +486,16 @@ another chart's content is still a boundary, but it draws only an axis no
 node above it claimed: the outer chart claims each axis its type covers
 first, and a continuous axis has one owner.
 
+Each chart's `axes` option applies at that chart. `frameChart` stamps it on
+the chart's node (`_chartAxes`, default `true`), and `resolveAxes` carries the
+dims the nearest chart turns on (`axesEnabled`) down its walk; the root's are
+the render's `axes`, which is the outermost chart's own unless the render
+gives one. A node that claims an axis on a dim its chart turns off still
+owns it, so the axis is hidden, not drawn by a chart below. A nested chart
+with `axes: false` turns off only the axes it owns. The titles, sides and
+label angles still come from the outermost chart's options alone (see Axis
+titles below).
+
 `resolveAxes` decides the boundaries in its one top-down walk, asking each
 node once. No other node claims a continuous axis, so a
 `spreadY` that middle-aligns a caption with a chart does not. Two exceptions

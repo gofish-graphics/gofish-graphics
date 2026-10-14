@@ -61,6 +61,11 @@ Chart **size** is set on [`.render()`](/python/api/core/render), not `chart()` â
 and also a [`render`](/python/api/core/render) option.
 It accepts a bool, a per-dimension dict, or per-dimension title control:
 
+Each chart's `axes` applies at that chart. A chart nested in another reads its
+own `axes` and draws only the axes of the domains it owns, so a shared axis is
+drawn once. An axis a chart turns off is hidden: no chart inside it draws that
+axis instead.
+
 ```python
 chart(data, axes=True)                       # both axes, titles inferred (the default)
 chart(data, axes=False)                       # no axes

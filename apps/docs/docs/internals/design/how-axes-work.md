@@ -157,10 +157,14 @@ boundary or the render root. Operator `axes:` overrides still draw at their own 
 (#1032), and nested category rows still nest at each grouping level (#1115).
 
 **Built** in #1129: `axes: true` is the default for `chart()`, and `axes: false` turns
-the axes off. The default is read only at the chart root, so a chart used as a mark
-draws no axes of its own. A bare node rendered without a chart still draws no axes. A
-coordinate frame's own axes (the polar rings and angle ticks) still need an explicit
-`axes: true`; that is a declared shortcut until the frame reads its chart's setting.
+the axes off. Each chart's `axes` applies at that chart: a chart used as a mark reads
+its own, and draws only the axes of the domains it owns. An axis a chart turns off is
+hidden, not drawn by a chart inside it. A render's own `axes` overrides only the
+outermost chart's. The render root is an implicit chart, and a bare node rendered
+without a chart still draws no axes by default. A coordinate frame's own axes (the
+polar rings and angle ticks) still need an explicit `axes: true`; that is a declared
+shortcut until the frame reads its chart's setting (reading the default there would
+draw rings on every pie glyph and reject every geo map).
 
 Facets fall out of this rule with no special case. In a faceted chart, the outer
 chart decides the shared domain, so it draws the shared axis and the panel labels.
