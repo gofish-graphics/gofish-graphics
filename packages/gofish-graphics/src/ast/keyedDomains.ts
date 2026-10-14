@@ -257,9 +257,10 @@ export class KeyedDomains {
     claim: Extent | undefined,
     viaSet: boolean = true
   ): [S, Extent | undefined] {
+    const sigmaClaim = scalesWithSigma(claim) ? claim : undefined;
     const [wide, wideClaim] = widenScope(
       space,
-      claim,
+      sigmaClaim,
       this.domainOf(node, axis, space, viaSet)
     );
     const [niced, nicedClaim] = niceScope(
@@ -267,7 +268,7 @@ export class KeyedDomains {
       wideClaim,
       this.ticksOf(node, axis, space, viaSet)
     );
-    return [niced, scalesWithSigma(claim) ? nicedClaim : claim];
+    return [niced, sigmaClaim === undefined ? claim : nicedClaim];
   }
 
   /** A name for the keyed domain a node's axis is over (its space root and
