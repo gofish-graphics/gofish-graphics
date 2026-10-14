@@ -2241,8 +2241,14 @@ label, its place in the cycle, and no region. The cells of a cycle are read
 off one cell of the cycle unit, the reference cycle (`referencePeriod` in
 calendar.ts: the leap year 2000, so February 29 is a part of the year; its
 31-day January for the days of a month), so a key over them has every part,
-in order, whatever the data holds. That is the key's `HasCycle`: the order
-and the whole cycle. A value falls in the part named by its own fields in
+in order, whatever the data holds. That is the key's `HasCycle`: the order,
+the whole cycle, and the cycle's unit as a partition whose every cell is one
+cycle (`unit`: `Calendar.year` for the months of a year, `Calendar.week` with
+the parts' week start for the parts of a week). An axis level that groups
+the parts asks that partition whether it is a part of a cycle
+(`calendarLevel` in `axes/elaborate.tsx`), and `partition`'s error over a
+key of parts, which names the whole key, fixes it with that unit first, as
+one product of all the levels or as a chain of them. A value falls in the part named by its own fields in
 the column's zone (`CalendarPartition.part`). TODO(#1052): a spread over a
 cycle in polar space should leave the same gap between its last part and
 its first as between any two; that default is not built.

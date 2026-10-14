@@ -2,13 +2,12 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { CycleCell, RegionCell, spell } from "../cells";
-import { CalendarPartition } from "../calendar";
+import { CycleCell, RegionCell, spell, type BinStep } from "../cells";
 import { columnValue, resolveColumn } from "../channels";
 import { isField, type FieldAccessor } from "../data";
 import { splitEntries, type SplitBy } from "../datumProjection";
 import { resolveAxisName, type AxisName } from "../dims";
-import { getFieldOps, type FieldExpr } from "../fieldExpr";
+import { binStepsOf, getFieldOps, type FieldExpr } from "../fieldExpr";
 import type { AxisOptions } from "../gofish";
 import { axisOverrideOf, GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
@@ -133,24 +132,25 @@ const noRegion = (by: unknown): Error => {
  *  (`field("date").bin(Calendar.month)`, the month of the year; `Calendar.
  *  weekday`, the day of the week): a part is the same part of every cycle
  *  (every June, every Monday), so it has no one region on the time line. The
- *  fix bins by the cycle too, as a product or a chain, written for the bin
- *  `cell` came from. */
+ *  error names the whole key, every bin of it. The fix bins by the cycle
+ *  too, keeping the key's levels after the cycle's unit: as one product of
+ *  them all, or as a chain of them one at a time (a product cannot split
+ *  another bin). */
 const cycleHasNoRegion = (by: FieldAccessor, cell: CycleCell): Error => {
-  const { of, levels } = cell.cycle;
-  const parts = levels.map(String).join(", ");
-  const cycle = String(
-    new CalendarPartition(of, 1, of === "week" ? levels[0].start : undefined)
-  );
-  const bin = cell.bin ?? spell(levels.length === 1 ? levels[0] : levels);
+  const { unit, levels } = cell.cycle;
+  const of = unit.unit;
   const f = `field("${by.name}")`;
+  const chain = (steps: readonly BinStep[]) =>
+    f + steps.map((s) => `.bin(${spell(s)})`).join("");
+  const key = chain(binStepsOf(getFieldOps(by), "partition: by"));
   return new Error(
-    `partition: ${f}.bin(${bin}) bins into the parts of a ${of} (the same ` +
-      `part of every ${of} is one cell), and a part has no one region on ` +
-      `the time line to place its group in. To place each part of each ` +
-      `${of} at its place in time, bin by the ${of} too: ` +
-      `${f}.bin([${cycle}, ${parts}]) (one cell per part of each ${of}), or ` +
-      `${f}.bin(${cycle}).bin(${bin}) (the parts of each ${of}). To give ` +
-      `each part an equal slot, use spread({ by, dir }).`
+    `partition: ${key} bins into the parts of a ${of} (the same part of ` +
+      `every ${of} is one cell), and a part has no one region on the time ` +
+      `line to place its group in. To place each part of each ${of} at its ` +
+      `place in time, bin by the ${of} too: ${chain([[unit, ...levels]])} ` +
+      `(one cell per part of each ${of}), or ${chain([unit, ...levels])} ` +
+      `(the parts of each ${of}). To give each part an equal slot, use ` +
+      `spread({ by, dir }).`
   );
 };
 

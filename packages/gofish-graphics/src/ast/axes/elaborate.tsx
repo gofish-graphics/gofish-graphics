@@ -788,15 +788,11 @@ function calendarLevel(
   if (first instanceof Cell && first.calendar !== undefined)
     slotLevel = first.calendar.partition;
   else if (first instanceof CycleCell) {
-    const { of, levels } = first.cycle;
-    const why = new CalendarPartition(
-      of,
-      1,
-      of === "week" ? levels[0].start : undefined
-    ).whyNotAPart(p);
+    const { unit, levels } = first.cycle;
+    const why = unit.whyNotAPart(p);
     if (why !== undefined)
       return (
-        `the slots are parts of a ${of} (${first.bin ?? spell(levels)}), ` +
+        `the slots are parts of a ${unit.unit} (${first.bin ?? spell(levels)}), ` +
         `but ${why}, so ${String(p)} does not group them`
       );
     slotLevel = levels[levels.length - 1];
@@ -839,7 +835,7 @@ function calendarLevel(
           end: p.next(s).epochMilliseconds,
           id: String(p.partAt(s)),
           label: p.partLabel(
-            cycleFields(t, p.unit, (c as CycleCell).cycle.of),
+            cycleFields(t, p.unit, (c as CycleCell).cycle.unit.unit),
             t
           ),
         };

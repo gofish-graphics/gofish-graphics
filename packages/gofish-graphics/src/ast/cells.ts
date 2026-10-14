@@ -259,8 +259,11 @@ export class Cell extends RegionCell {
  * any two; that default is not built yet.
  */
 export type HasCycle = {
-  /** The unit the parts are parts of: "year" for the months of a year. */
-  readonly of: CalendarUnit;
+  /** The cycle's unit, as a partition whose every cell is one cycle:
+   *  `Calendar.year` for the months of a year, and for the parts of a week
+   *  `Calendar.week` with their week start. Its `unit` is the unit the parts
+   *  are parts of. */
+  readonly unit: CalendarPartition;
   /** The levels each part is named by, coarsest first: `[Calendar.month]`
    *  for a month of the year, `[Calendar.month, Calendar.day]` for a day of
    *  the year. */
@@ -717,6 +720,13 @@ function cycleCells(
     Array.isArray(s) ? [...s] : [s as CalendarPartition]
   );
   const of = levels[0].cycle!;
+  // A week's parts keep its start (a weekday of a week that starts on
+  // Sunday is a part of that week).
+  const unit = new CalendarPartition(
+    of,
+    1,
+    of === "week" ? levels[0].start : undefined
+  );
   const [rlo, rhi] = referencePeriod(of, levels[0].start);
   const leaf = levels[levels.length - 1];
   // Each reference cell, with the id it has after each number of levels:
@@ -764,7 +774,7 @@ function cycleCells(
       made.push(cell);
     }
     const cycle: HasCycle = {
-      of,
+      unit,
       levels: levels.slice(0, n),
       cells: made.map(
         (c) =>

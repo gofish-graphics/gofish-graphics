@@ -255,7 +255,7 @@ async function main() {
       "a part knows its cycle: every part, in order",
       jun.id === "6" &&
         jun.index === 5 &&
-        jun.cycle.of === "year" &&
+        jun.cycle.unit.unit === "year" &&
         jun.cycle.cells.length === 12 &&
         jun.cycle.cells[5] === jun
     );
@@ -356,7 +356,7 @@ async function main() {
     const mon = days.cells[0] as CycleCell;
     check(
       "a weekday is a part of a week; its id is the ISO day of the week",
-      mon.cycle.of === "week" &&
+      mon.cycle.unit.unit === "week" &&
         mon.cycle.cells.length === 7 &&
         same(
           days.cells.map((c) => c.id),
@@ -1589,6 +1589,44 @@ async function main() {
         ) &&
         monthErr.includes('field("date").bin(Calendar.year).bin(Calendar.month)'),
       monthErr
+    );
+    // The error names the whole key, every bin of it, and its fixes keep
+    // the user's levels, with the cycle's unit first.
+    const keyErr = async (by: any) =>
+      await errorOfAsync(() =>
+        chart(days, { schema: { date: Schema.time() }, axes: false })
+          .flow(partition({ by, dir: "x" }))
+          .mark(rect({ h: 10 }))
+          .toDisplayList({ w: 200, h: 100 })
+      );
+    const chainErr = await keyErr(
+      distField("date").bin(DistCalendar.month).bin(DistCalendar.day)
+    );
+    const productErr = await keyErr(
+      distField("date").bin([DistCalendar.month, DistCalendar.day])
+    );
+    const fixes = (err: string | undefined) =>
+      err?.includes(
+        'field("date").bin([Calendar.year, Calendar.month, Calendar.day])'
+      ) === true &&
+      err.includes(
+        'field("date").bin(Calendar.year).bin(Calendar.month).bin(Calendar.day)'
+      );
+    check(
+      "the error over a chain of parts names the whole chain, and fixes it " +
+        "with the year first",
+      chainErr?.includes(
+        'field("date").bin(Calendar.month).bin(Calendar.day) bins into'
+      ) === true && fixes(chainErr),
+      chainErr
+    );
+    check(
+      "the error over a product of parts names the product, and fixes it " +
+        "with the year first",
+      productErr?.includes(
+        'field("date").bin([Calendar.month, Calendar.day]) bins into'
+      ) === true && fixes(productErr),
+      productErr
     );
 
     console.log("\n# a color with no value");

@@ -249,8 +249,9 @@ it instead), and a Calendar value names its cells: a time row's partition
 the cells that group its slots (`calendarLevel`: each slot falls in the
 cell of the partition that holds its start, read off a timeline cell's
 start, or off a part of a cycle's cell in the reference cycle,
-`CycleCell.ref`; a part of a week is grouped only by a weekday that starts
-the week on the same day). A slot that nests in the partition lies in that
+`CycleCell.ref`; the partition must be a part of one cell of the cycle,
+which the cycle's own unit says, `HasCycle.unit.whyNotAPart`, so a part of
+a week is grouped only by a weekday that starts the week on the same day). A slot that nests in the partition lies in that
 cell. One that does not, a week over months, is grouped with the month it
 starts in, as a calendar labels its weeks. The slots are in order, so each
 slot's cell is found once per run of slots. A partition finer than the
