@@ -1894,7 +1894,7 @@ chart(survey, { schema: { response: Schema.ordered(LEVELS).diverging() } });
 ```
 
 A column type is a record keyed by class name (`ColumnType`), and the engine
-reads only the classes, never the builder words. Four classes exist:
+reads only the classes, never the builder words. Six classes exist:
 
 - `HasOrder` (`Schema.ordered(levels)`): the values are the levels of a fixed
   order. `splitEntries` groups a `by` over the column in that order instead
@@ -1990,6 +1990,12 @@ reads only the classes, never the builder words. Four classes exist:
   names the unit variable. A transform writes it for the columns it makes
   (`bin(field)`'s `start`/`end`/`size` are amounts of `field`'s quantity, in
   `field`'s declared unit if it has one; its `count` is in `"count"`).
+- `HasDomain` (`{ lo, hi }`, #1059): the interval the column's values span,
+  from the least to the greatest, in the data it was typed with. It is the
+  one class nothing declares: `applySchema` computes it for every column whose
+  values are all finite numbers (missing values aside; a time's values are
+  epoch milliseconds by then), after the other classes. It is what a binned
+  key's cells cover (see [Cells](#cells-a-binned-key)).
 
 The types ride the chart's data array under the `COLUMN_TYPES` symbol:
 `ChartBuilder` copies the array and tags it (`applySchema`, which keeps the
@@ -2039,14 +2045,41 @@ entry that names the column replaces it with the rest of the type (#994).
 `chart(data, { schema })` and `derive(fn, { schema })` declare it with
 `Schema.unit(u)`.
 
-The typed array also carries its **domain**: the rows it was typed with,
-under the `DOMAIN_ROWS` symbol. `applySchema` sets it on the copy it returns
-(so the chart's data and each `derive`'s result are their own domains, and
-untyped data gets a tagged copy too), and `copyColumnTypes` hands it to each
-split leaf and to a `filter`'s result with the column types. A split leaf
-holds one group's rows, and its domain still names every row of the chart,
-which is what a binned key's cells cover (`domainRows`, read by
-`splitEntries`; see [Cells](#cells-a-binned-key)).
+A column's **domain** (`HasDomain`) moves with the rest of its type, by the
+rules above, with one difference: it is of the rows it was computed over.
+`applySchema` computes it for the chart's data and for each `derive`'s
+result over the rows it types, and drops the domains it inherits or finds on
+the array, so a `derive` never keeps its input's. `copyColumnTypes` hands it
+to each split leaf and to a `filter`'s result with the other classes, the
+same record, so a split leaf holds one group's rows and its column still has
+the domain of the whole data. A chart over a selection
+(`chart(selectAll(...))`) types a list of refs, so `ChartBuilder` passes
+`applySchema` the rows the refs stand for (`rowsReached`), and the domain is
+over those. A `schema` record that gives a column a domain
+(`{ HasDomain: { lo, hi } }`, its wire form; no builder writes one) stands in
+place of the computed one, and `columnTypeOf` checks that it is two finite
+numbers, `lo` at or below `hi`.
+
+**Domains are types.** A column's domain is part of its type, decided where
+the data is typed, so a subset keeps it. A group-by or a filter picks out
+rows. It does not change which values the column can take, just as filtering
+a list of `Int` gives a list of `Int`. So every group's `field(x).bin(p)`
+computes the same cells, empty ones included, with no group reading
+another's rows. This recasts Vega-Lite's
+`resolve: { scale: "shared" | "independent" }`, a setting on the
+composition, as type inference. Sharing is the default, because the type
+flows with the data from the place it was inferred, as TypeScript infers
+`number[]` for an array literal where it is defined. Independence is
+narrowing: a group that wants its own domain re-types its rows to the
+narrower type. In type-theory terms a domain is a refinement type, such as
+`{ v: number | 0 ≤ v ≤ 99 }`: a group inherits its parent's refinement by
+default, an independent group narrows to the one its own rows give (a
+subtype, since its rows are a subset), and groups that meet again on a
+shared axis combine at their join, the smallest domain that covers them
+all, which is what Vega-Lite's shared resolve computes. Units work the same
+way already (a unit is a type, and a
+mismatch is a type error). #1147 applies the same rule to categorical
+levels.
 
 ## Field expressions: a pipeline orthogonal to channel aggregation
 
@@ -2147,19 +2180,20 @@ a month of one date) from categories of different columns
 ([Axes](/internals/frontend/axes#levels)). Cells are ordered by start.
 
 The cells are defined over the column's **domain**, not over the rows of the
-group being split. `binCells` takes every value the column has in the
-domain rows (`DOMAIN_ROWS`, see [Column types](#column-types-the-chart-schema))
-and returns the cells in order and the cell each value falls in
-(`cellOf`). `splitEntries` then gives every cell an entry, empty or not, so
-each group of a nested split sees the same cells in the same order, and a
-count picks its step from the whole domain (#763). The domain's values are
-read with the walk the key function reads a row with (`walkRows`), so a
-domain of refs (`chart(selectAll(...))`) is binned over the rows they stand
-for. A value that is not a finite number is an error that names the column
-(`numericRange`): the cells of a line have no cell at an infinity. The cells
-of a domain are built once per partition value and column (a cache keyed by
-the domain array and the op's partition object), so the groups share the
-very same `Cell` objects.
+group being split. `binCells` takes the domain the column's type carries
+(`HasDomain`, see [Column types](#column-types-the-chart-schema)), read off
+the rows being split (`domainOf` in `datumProjection.ts`), and returns the
+cells in order and the cell each value falls in (`cellOf`). Since every
+split leaf has its column's type, `splitEntries` gives every group of a
+nested split the same cells in the same order, an entry per cell, empty or
+not, and a count picks its step from the whole domain (#763); no group reads
+another group's rows. A value outside the domain has no cell, which is an
+error. A column with values that are not all finite numbers has no domain
+(the cells of a line have no cell at an infinity), so binning it is an
+error that names the column, and the value when the group holds one; a
+column with no values has no cells. The cells of a domain are built once per
+partition value and column (a cache keyed by the `HasDomain` record and the
+op's partition object), so the groups share the very same `Cell` objects.
 
 **A group with no rows.** An empty cell is a group with no rows, and every
 operator over it is well defined: an operator over no rows makes no
@@ -2356,8 +2390,8 @@ instance and the object Python sends are read the same way.
 outline in data, and the box that holds it (its span on each axis), and no
 order. The cells are those
 of the two columns' domain, as in 1D, so every group of a nested split sees
-the same cells and empty cells are kept (a cache keyed by the domain, the bin
-object and the two columns).
+the same cells and empty cells are kept (a cache keyed by the two columns'
+`HasDomain` records, the bin object and the two columns).
 
 - **Hexagons.** A pointy-top grid (as in d3-hexbin, ggplot2's `geom_hex` and
   Observable Plot) with a hexagon centered on (0, 0), so the grid does not
@@ -2368,8 +2402,11 @@ object and the two columns).
   rounding), so a point on an edge goes to one of its two hexagons, the same
   one every time. The cells are every hexagon whose inside meets the box of
   the domain (a separating-axis test over the box's two axes and the
-  hexagon's three edge normals), plus the hexagon of each domain point, since
-  a point on the box's edge may fall in a hexagon that only touches the box.
+  hexagon's three edge normals). A point on the box's edge may lie on the
+  edge of a hexagon that only touches the box; it falls in the hexagon
+  beside it that is a cell and holds it too. A box with no area (a column
+  whose values are all one) may meet no hexagon's inside, so it adds the
+  hexagon of each of its corners that no cell holds.
 - **Voronoi cells.** One cell per seed (d3-delaunay, over Delaunator),
   clipped to the box that holds the domain and the seeds, so every seed has
   a cell; seeds at one point share the first one's cell. A cell's id is its
