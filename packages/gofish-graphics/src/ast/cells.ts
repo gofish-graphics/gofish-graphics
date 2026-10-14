@@ -794,12 +794,21 @@ function cycleCells(
     cells = cycle.cells as CycleCell[];
   });
   const leaves = new Map(cells.map((c) => [c.id, c]));
+  // Reading an instant's part takes a time-zone conversion and a floor per
+  // level, so each distinct value is read once: the map grows only to the
+  // values the column holds.
+  const partOf = new Map<number, CycleCell | undefined>();
   return {
     cells,
-    cellOf: (v) =>
-      v < lo || v > hi
-        ? undefined
-        : leaves.get(prefixIds(levels, zoned(v, zone))[levels.length]),
+    cellOf: (v) => {
+      if (v < lo || v > hi) return undefined;
+      if (!partOf.has(v))
+        partOf.set(
+          v,
+          leaves.get(prefixIds(levels, zoned(v, zone))[levels.length])
+        );
+      return partOf.get(v);
+    },
   };
 }
 
