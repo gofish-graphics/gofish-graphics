@@ -721,17 +721,22 @@ non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 **Location**: `src/ast/gofish.tsx`
 
 ```typescript
-// The root's axis order starts at the canvas frame's start edge: the top, or the
+// The root's axis order starts at a frame's start edge: the top, or the
 // bottom for a continuous y (`direction` −1).
-const atFrameStart = (p, size = frame) => (direction === 1 ? p : size - p);
-// The root's frame is its size (`rootSizes`): its claim at its σ, which is
-// the slot when fitted and its own box for a fixed size; the slot when there
-// is no claim.
+const fromFrameStart = (p, size, direction) => (direction === 1 ? p : size - p);
+// A shrink-to-fit root pins its edge in the canvas frame. A given size seats
+// the root in its own frame, its size (`rootSizes`): its claim at its σ,
+// which is the slot when fitted and its own box for a fixed size; the slot
+// when there is no claim.
 shrinkToFit
-  ? child.pinAnchor(axis, atFrameStart(offset), direction === 1 ? "min" : "max")
+  ? child.pinAnchor(
+      axis,
+      fromFrameStart(offset, final, direction),
+      direction === 1 ? "min" : "max"
+    )
   : child.place(
       axis,
-      atFrameStart(offset + seatPx, rootSizes[axis].px),
+      fromFrameStart(offset + seatPx, rootSizes[axis].px, direction),
       "baseline"
     );
 ```

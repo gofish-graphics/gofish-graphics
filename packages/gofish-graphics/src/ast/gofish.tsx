@@ -665,18 +665,15 @@ export async function layout(
   // Root placement. The canvas is a frame `[0, final]` on each axis, and the
   // root's axis order starts at the frame's start edge: the left on x, the top
   // for a y that reads top-down, and the BOTTOM for a continuous y, which grows
-  // upward from there (`atFrameStart`). A position `p` along the root's axis
+  // upward from there (`fromFrameStart`). A position `p` along the root's axis
   // order is the pixel `p` from that edge, inward.
   //
   // A GIVEN dimension is a fixed slot, and the root's box sits at its start
-  // edge in canvas order: the left on x and the top on y, for either y
-  // direction (#1032). The root's axis order starts at the start edge of the
-  // root's own frame, its size claim at its σ. When the root scope solves σ
-  // against the slot, that frame is the slot, which the root fills. When the
-  // root has a size of its own (a claim with no σ in it: a chart's literal
-  // `w`/`h`), its frame is that box, smaller than the slot, so the box sits at the slot's top-left
-  // rather than at its bottom. A baseline lines up siblings (facets sharing
-  // their 0s); a lone root has none, so the slot's start edge is its
+  // edge in canvas order, the left on x and the top on y, for either y
+  // direction (#1032): the root's axis order starts at the start edge of the
+  // root's own frame, its size (`rootSizes`), so a root smaller than the slot
+  // sits at the slot's top-left rather than at its bottom. A lone root has no
+  // baseline to line up with siblings, so the slot's start edge is its
   // reference. In its frame the root is seated by the one seating rule
   // (`seatInScope`): a free (baseline-magnitude) root's baseline at the
   // scope's `originPx` (#773: `descent·σ` from the frame's start edge, plus
@@ -696,14 +693,14 @@ export async function layout(
     const name = axis === 0 ? "x" : "y";
     const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
     const direction = axis === 0 ? 1 : rootYDirection;
-    const frame = axis === 0 ? finalW : finalH;
-    const atFrameStart = (p: number) => fromFrameStart(p, frame, direction);
     if ((axis === 0 ? w : h) === undefined) {
-      child.pinAnchor(name, atFrameStart(offset), orientSide("min", direction));
+      child.pinAnchor(
+        name,
+        fromFrameStart(offset, axis === 0 ? finalW : finalH, direction),
+        orientSide("min", direction)
+      );
       return;
     }
-    // The root's frame is its size (`rootSizes`): the slot for a root fitted
-    // to it, its own box for a fixed size, the slot again with no claim.
     child.place(
       name,
       fromFrameStart(
