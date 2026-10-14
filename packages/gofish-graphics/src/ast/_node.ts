@@ -408,24 +408,6 @@ const reportConflict = (type: string, dir: 0 | 1, c: BBoxConflict): void => {
  *  auto-claims on that dim. Ordinal owners record `"o:<keys>"` instead. */
 const AXIS_CLAIM_OPAQUE = "continuous";
 
-/** Whether a `chart()` is below `node` (a descendant with a chart box),
- *  memoized in `memo` so one walk asks each node once. */
-function containsChart(
-  node: GoFishNode,
-  memo: Map<GoFishNode, boolean>
-): boolean {
-  let has = memo.get(node);
-  if (has === undefined) {
-    has = node.children.some(
-      (c) =>
-        c instanceof GoFishNode &&
-        (c._chartBox !== undefined || containsChart(c, memo))
-    );
-    memo.set(node, has);
-  }
-  return has;
-}
-
 export class GoFishNode {
   public readonly uid: string;
   private static uidCounter = 0;
@@ -976,34 +958,20 @@ export class GoFishNode {
    * size of its own on `dim` draws them around itself (its σ is solved above
    * it, at the sized node that contains it); a chart with a size of its own
    * draws them around its content, inside the box it solves σ in. The render
-   * root is the outermost boundary: it draws the axes of the domains its own
-   * type covers, a bare low-level render's included. Outside every chart it
-   * also stands in for a chart over the continuous keyed domains in its
-   * subtree that no chart claims: a domain its type does not cover (its
-   * content is detached, so its type there is undefined) is drawn by the
-   * root-most node that holds it with no chart above it or below it (the
-   * caller's `claimed` check picks the root-most), which is where that
-   * domain's σ is solved. A node with a chart below it leaves the chart's
-   * domains to the chart. No other node draws one.
+   * root is an implicit chart and nothing more: it draws the axes of the
+   * domains its own type covers, a bare low-level render's included. A piece
+   * placed apart from it (detached, so the root's type does not cover it)
+   * draws an axis only if it is a chart itself. No other node draws one.
    *
    * A chart is a boundary whether or not a chart is above it, and it never
    * draws a second axis: every chart nested in another is inside that
    * chart's one content node (`frameChart`), which (or whose chart) claims
    * each axis its type covers first, and a continuous axis has one owner.
    * A nested chart draws only an axis no node above it claimed.
-   *
-   * `resolveAxes` walks top-down, so it knows whether a chart is above this
-   * node (`insideChart`); whether one is below it is memoized per node
-   * across the walk ({@link containsChart}).
    */
-  private isAxisBoundary(
-    dim: 0 | 1,
-    insideChart: boolean,
-    charts: Map<GoFishNode, boolean>
-  ): boolean {
+  private isAxisBoundary(dim: 0 | 1): boolean {
     if (this._chartBox !== undefined) return !this._chartBox[dim];
-    if (this.parent === undefined || this.isSizedChartContent(dim)) return true;
-    return !insideChart && !containsChart(this, charts);
+    return this.parent === undefined || this.isSizedChartContent(dim);
   }
 
   /**
@@ -1211,13 +1179,8 @@ export class GoFishNode {
     enabled: Map<0 | 1, AxisTicks> = new Map([
       [0, DEFAULT_AXIS_TICKS],
       [1, DEFAULT_AXIS_TICKS],
-    ]),
-    // Whether a chart is above this node, and which nodes have one below
-    // (`isAxisBoundary`): carried down the walk.
-    insideChart: boolean = false,
-    charts: Map<GoFishNode, boolean> = new Map()
+    ])
   ): void {
-    const childInsideChart = insideChart || this._chartBox !== undefined;
     // A `layer` is treated like any other node: it claims the axis for its own
     // (unioned) space ONCE, so overlaid children share a single axis. Per-child
     // axes still happen via explicit operator `axes:` overrides, which the
@@ -1255,8 +1218,7 @@ export class GoFishNode {
         [1, AXIS_CLAIM_OPAQUE],
       ]);
       this.children.forEach((c) => {
-        if (c instanceof GoFishNode)
-          c.resolveAxes(allClaimed, enabled, childInsideChart, charts);
+        if (c instanceof GoFishNode) c.resolveAxes(allClaimed, enabled);
       });
       // _axisOverride can set axisX/Y on descendants even when claimed,
       // which would apply Cartesian axis budgets in polar coordinate space.
@@ -1350,10 +1312,7 @@ export class GoFishNode {
         } else if (axisOver(this.placedSpace(s, dim)) !== undefined) {
           // Continuous: single-owner — only the root-most unclaimed chart
           // boundary claims (`isAxisBoundary`).
-          if (
-            prior === undefined &&
-            this.isAxisBoundary(dim, insideChart, charts)
-          )
+          if (prior === undefined && this.isAxisBoundary(dim))
             sig = continuousSig(dim) ?? AXIS_CLAIM_OPAQUE;
         }
         if (sig !== undefined) {
@@ -1365,8 +1324,7 @@ export class GoFishNode {
       }
     }
     this.children.forEach((c) => {
-      if (c instanceof GoFishNode)
-        c.resolveAxes(next, enabled, childInsideChart, charts);
+      if (c instanceof GoFishNode) c.resolveAxes(next, enabled);
     });
   }
 

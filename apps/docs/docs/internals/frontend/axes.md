@@ -466,14 +466,12 @@ axes of the domains it solves, a bare low-level render's included. On an axis
 the render gives no size, the root maps its domain at the σ the sized nodes
 below it solve it at, when they agree, so a bare spread of 160 px mini charts
 draws a 160 px axis (`rootSizes` in `gofish.tsx`, which reads the σ from
-`ScopeRegistry.keyedSigma`). Outside
-every chart the render root stands in for one: it claims the continuous keyed
-domains in its subtree that no chart claims. A domain its own type does not
-cover (its content is detached by a literal `position`, so its type is
-undefined there) is drawn by the root-most node that holds it with no chart
-above it or below it, which is where that domain's σ is solved. A node with a
-chart below it leaves that chart's domains to the chart. An ordinal axis the root
-draws on a dim still owns that dim, so a continuous level below it waits for
+`ScopeRegistry.keyedSigma`). The
+render root is an implicit chart and nothing more: a bare render draws the
+axes a `chart()` in its place would draw. A piece placed apart from the rest
+(detached by a literal `position`, so the root's type does not cover it) draws
+an axis only if it is a `chart()` itself. An ordinal axis the root draws on a
+dim still owns that dim, so a continuous level below it waits for
 hierarchical axes (#1115).
 
 A chart's content is everything it draws. `frameChart` builds a chart's node
@@ -488,10 +486,8 @@ another chart's content is still a boundary, but it draws only an axis no
 node above it claimed: the outer chart claims each axis its type covers
 first, and a continuous axis has one owner.
 
-`resolveAxes` decides the boundaries in its one top-down walk. It carries
-down whether a chart is above the node (`insideChart`), and whether a chart
-is below a node is memoized per node across the walk (`containsChart`), so
-each node is asked once. No other node claims a continuous axis, so a
+`resolveAxes` decides the boundaries in its one top-down walk, asking each
+node once. No other node claims a continuous axis, so a
 `spreadY` that middle-aligns a caption with a chart does not. Two exceptions
 remain until #1032 and #1115: an operator's explicit `axes:` override still
 draws at its node, and an ordinal axis still nests at every grouping level.

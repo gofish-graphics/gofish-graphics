@@ -268,26 +268,52 @@ async function main() {
     );
   }
 
-  console.log("# a bare render with no chart draws its continuous axes");
+  console.log(
+    "# the render root is an implicit chart: a detached piece draws axes only if it is a chart"
+  );
   {
     // The root places its content at a literal pixel, which detaches it, so
-    // the root's type is undefined on both axes. The content's data is
-    // continuous and no chart claims it, so the render (with no chart)
-    // draws its axes where its σ is solved: around the content. Before, no
-    // continuous axis was drawn.
-    const content = (layer as any)([
-      (rect as any)({ x: v(0), y: v(10), w: 10, h: 2 }),
-      (rect as any)({ x: v(40), y: v(50), w: 10, h: 2 }),
-    ]).name("content");
-    const node = (layer as any)([content]).relate(({ content }: any) => [
-      Constraint.position({ x: 0, y: 0 }, [content]),
-    ]);
-    const dl = await toDisplayList(node, { w: 200, h: 200, axes: true });
-    const ticks = (w: number, h: number) =>
+    // the root's type is undefined on both axes and the root draws no
+    // continuous axis. Inside a chart() the same content would draw none, so
+    // a bare render draws none either. The same piece written as a chart()
+    // draws its own axes.
+    const ticks = (dl: any, w: number, h: number) =>
       items(dl).filter((i) => i.kind === "rect" && i.w === w && i.h === h)
         .length;
-    check("a detached content's y axis is drawn", ticks(4, 1) > 1, ticks(4, 1));
-    check("a detached content's x axis is drawn", ticks(1, 4) > 1, ticks(1, 4));
+    const placed = (piece: any) =>
+      (layer as any)([(layer as any)([piece]).name("content")]).relate(
+        ({ content }: any) => [Constraint.position({ x: 0, y: 0 }, [content])]
+      );
+    const bare = await toDisplayList(
+      placed(
+        (layer as any)([
+          (rect as any)({ x: v(0), y: v(10), w: 10, h: 2 }),
+          (rect as any)({ x: v(40), y: v(50), w: 10, h: 2 }),
+        ])
+      ),
+      { w: 200, h: 200, axes: true }
+    );
+    check(
+      "a detached bare piece draws no continuous axis",
+      ticks(bare, 4, 1) === 0 && ticks(bare, 1, 4) === 0,
+      [ticks(bare, 4, 1), ticks(bare, 1, 4)]
+    );
+    const charted = await toDisplayList(
+      placed(
+        chart([
+          { id: 0, x: 0, y: 10 },
+          { id: 1, x: 40, y: 50 },
+        ])
+          .flow(scatter({ by: "id", x: "x", y: "y" }))
+          .mark(rectMark({ w: 10, h: 2 }))
+      ),
+      { w: 200, h: 200, axes: true }
+    );
+    check(
+      "a detached chart() draws its own axes",
+      ticks(charted, 4, 1) > 1 && ticks(charted, 1, 4) > 1,
+      [ticks(charted, 4, 1), ticks(charted, 1, 4)]
+    );
   }
 
   console.log("# an unsized render maps its axis at the σ solved below it");
