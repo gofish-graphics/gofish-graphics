@@ -1774,11 +1774,12 @@ column's is `"instant"`), or else unknown. A function accessor or a
 literal has no column, so no quantity: its value makes no claim.
 `inferSize`/`inferPos` tag the `value(...)` they emit with it, and a pipeline
 that determines its own quantity (`.count()`) overrides it; `.sum()` and
-`.mean()` keep the column's. The channel aggregators use lodash's per-helper
-entrypoints for native ESM compatibility, but their semantics are still
-`sumBy` for size and `meanBy` for position, except that the mean of no rows
-has no value (`meanOf`, see [Cells](#cells-a-binned-key)) where `meanBy`
-gives `NaN`. A position with no value leaves a scatter's child unplaced and
+`.mean()` keep the column's. The channel aggregators are a sum for size
+and a mean for position (`sumOf` and `meanOf` in `fieldExpr.ts`), and both
+skip a missing value (null or undefined, `isMissing`, the rule `dropNulls`
+uses). The mean of no values has no value (see
+[Cells](#cells-a-binned-key)); so has the sum of values that are all
+missing, as in SQL, while the sum of no rows is 0. A position with no value leaves a scatter's child unplaced and
 undrawn, and any data channel of a mark with no value leaves the mark
 undrawn, in its place
 ([The Mark Factory](/internals/frontend/mark-factory#what-happens-at-render-time)). A computed column a `derive`
@@ -2433,7 +2434,7 @@ or a text sits at a hexagon's center.
 
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always
-called `sumBy`/`meanBy` over the raw per-row values; it now instead calls
+called a sum or a mean over the raw per-row values; it now instead calls
 `evalFieldValues(accessor, data)` first — running any pipeline ops (an
 aggregate, if the accessor carries one) — and only _then_ applies its own
 default aggregation to whatever that produced. Neither side knows about the
