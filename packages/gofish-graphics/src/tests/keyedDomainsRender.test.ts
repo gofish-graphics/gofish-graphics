@@ -175,7 +175,7 @@ async function main() {
       .layer(
         chart(selectAll("bars")).mark(rectMark({ w: 4, h: 4, fill: "red" }))
       )
-      .toDisplayList({ w: 400, h: 400, axes: true });
+      .toDisplayList({ w: 400, h: 400 });
     const axis = yAxisOf(dl);
     const tall = byFill(dl, "steelblue").sort((p, q) => p.y! - q.y!)[0];
     check(

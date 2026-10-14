@@ -129,12 +129,12 @@ const Treemap = createNodeOperator(
         layout: (size, scales, childAsts, node) => {
           const xPos = computeAesthetic(
             dims[0].min,
-            posFn(scales?.[0]?.map)!,
+            posFn(scales?.[0]?.map),
             undefined
           );
           const yPos = computeAesthetic(
             dims[1].min,
-            posFn(scales?.[1]?.map)!,
+            posFn(scales?.[1]?.map),
             undefined
           );
 

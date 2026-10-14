@@ -125,11 +125,11 @@ export const positionNode = (
         const offsetX =
           options.x === undefined
             ? undefined
-            : (computeAesthetic(options.x, posFn(scales[0]?.map)!, 0) ?? 0);
+            : (computeAesthetic(options.x, posFn(scales[0]?.map), 0) ?? 0);
         const offsetY =
           options.y === undefined
             ? undefined
-            : (computeAesthetic(options.y, posFn(scales[1]?.map)!, 0) ?? 0);
+            : (computeAesthetic(options.y, posFn(scales[1]?.map), 0) ?? 0);
 
         // The local box is the child's placed box; the offset is applied once,
         // as the translate. Adding it to the local min too would count it

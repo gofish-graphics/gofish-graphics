@@ -83,7 +83,7 @@ axis draws one row per calendar level:
 
 ```ts
 // stories/forwardsyntax/Time.stories.tsx
-chart(prices, { schema: { date: Schema.time() }, axes: true })
+chart(prices, { schema: { date: Schema.time() } })
   .flow(scatter({ by: "date", x: "date", y: "price" }))
   .mark(line({ stroke: "steelblue", strokeWidth: 2 }));
 ```
@@ -156,8 +156,11 @@ rings of ordinary shapes around that node's content, not once at the root.
 boundary or the render root. Operator `axes:` overrides still draw at their own node
 (#1032), and nested category rows still nest at each grouping level (#1115).
 
-**Proposed**, in draft PR #1110: `axes: true` becomes the default for `chart()`. A
-bare node rendered without a chart still draws no axes.
+**Built** in #1129: `axes: true` is the default for `chart()`, and `axes: false` turns
+the axes off. The default is read only at the chart root, so a chart used as a mark
+draws no axes of its own. A bare node rendered without a chart still draws no axes. A
+coordinate frame's own axes (the polar rings and angle ticks) still need an explicit
+`axes: true`; that is a declared shortcut until the frame reads its chart's setting.
 
 Facets fall out of this rule with no special case. In a faceted chart, the outer
 chart decides the shared domain, so it draws the shared axis and the panel labels.
@@ -166,7 +169,7 @@ scatter as it is written today:
 
 ```ts
 // stories/forwardsyntax/FacetedChart.stories.tsx (FacetedScatterDriving)
-chart(drivingShifts, { axes: true })
+chart(drivingShifts)
   .flow(
     spread({ by: "side", dir: "x", spacing: 50 }),
     scatter({ x: "year", y: "miles", axes: { x: true, y: false } })
@@ -203,7 +206,7 @@ split a domain by accident. Three cases:
   the y axis disappears:
 
   ```ts
-  chart(seafood, { axes: true })
+  chart(seafood)
     .flow(
       spread({ by: "lake", dir: "x" }),
       stack({ by: "species", dir: "x", h: 150 }) // split the y domain before #1129
@@ -259,7 +262,7 @@ Here is the mosaic story:
 
 ```ts
 // stories/lowlevel/NestedMosaicChart.stories.tsx
-chart(titanic, { axes: true })
+chart(titanic)
   .flow(
     stack({ by: "class", dir: "y", size: field("count").normalize() }),
     stack({ by: "sex", dir: "x", size: field("count").normalize() }),

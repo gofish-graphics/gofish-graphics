@@ -118,13 +118,19 @@ export const foldFinite = (
 // input is a value, an aesthetic literal, or undefined. behavior differs based on this
 export const computeAesthetic = (
   input: MaybeValue<number> | undefined,
-  scale: (x: number) => number,
+  scale: ((x: number) => number) | undefined,
   provided: number | undefined
 ): number | undefined => {
+  // A data value on an axis with no position scale has no pixel of its own,
+  // so it gives none and the parent places the shape (as `startAtCenter`
+  // does). An axis has no scale when its scope solves no σ: a constant
+  // (zero-width) domain, such as a one-point chart or the ticks of its axis
+  // (#1107).
+  if (isValue(input) && scale === undefined) return undefined;
   // A datum's pixel offset applies AFTER the scale mapping — "this data
   // position, plus pixels" (`datum(v).offset(px)`).
   return isValue(input)
-    ? scale(getValue(input)!) + getValueOffset(input)
+    ? scale!(getValue(input)!) + getValueOffset(input)
     : (input ?? provided);
 };
 

@@ -43,7 +43,7 @@ export const GroupedBarsInnerHeight: StoryObj = {
         stack({ by: "item", dir: "x", h: 150 })
       )
       .mark(rect({ w: 20, h: "value", fill: "item" }))
-      .render(container, { w: 300, h: 150, axes: true });
+      .render(container, { w: 300, h: 150 });
     return container;
   },
 };
@@ -56,7 +56,7 @@ export const ChartOwnSize: StoryObj = {
     chart(values.filter((d) => d.group === "B"), { w: 240, h: 160 })
       .flow(spread({ by: "item", dir: "x", spacing: 12 }))
       .mark(rect({ w: 40, h: "value", fill: "item" }))
-      .render(container, { axes: true });
+      .render(container);
     return container;
   },
 };
@@ -83,7 +83,7 @@ export const LayeredChartOwnSize: StoryObj = {
               d[0],
             ])) as any)
       )
-      .render(container, { w: 400, h: 400, axes: true });
+      .render(container, { w: 400, h: 400 });
     return container;
   },
 };

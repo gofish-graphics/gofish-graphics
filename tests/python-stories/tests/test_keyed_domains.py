@@ -32,7 +32,7 @@ def story_grouped_bars_inner_height():
             stack(by="item", dir="x", h=150),
         )
         .mark(rect(w=20, h="value", fill="item")),
-        {"w": 300, "h": 150, "axes": True},
+        {"w": 300, "h": 150},
     )
 
 
@@ -43,7 +43,7 @@ def story_chart_own_size():
         chart(_GROUP_B, w=240, h=160)
         .flow(spread(by="item", dir="x", spacing=12))
         .mark(rect(w=40, h="value", fill="item")),
-        {"axes": True},
+        {},
     )
 
 
@@ -64,5 +64,5 @@ def story_layered_chart_own_size():
         .flow(spread(by="item", dir="x", spacing=12))
         .mark(rect(w=40, h="value", fill="item").name("bars"))
         .layer(chart(select_all("bars")).flow(group(by="item")).mark(label_mark)),
-        {"w": 400, "h": 400, "axes": True},
+        {"w": 400, "h": 400},
     )

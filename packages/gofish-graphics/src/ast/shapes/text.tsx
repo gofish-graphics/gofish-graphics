@@ -283,23 +283,19 @@ export const Text = ({
         const positionX =
           computeAesthetic(
             dims[0].center,
-            posFn(scales?.[0]?.map)!,
+            posFn(scales?.[0]?.map),
             undefined
           ) ??
-          computeAesthetic(dims[0].min, posFn(scales?.[0]?.map)!, undefined);
+          computeAesthetic(dims[0].min, posFn(scales?.[0]?.map), undefined);
         const centerY = computeAesthetic(
           dims[1].center,
-          posFn(scales?.[1]?.map)!,
+          posFn(scales?.[1]?.map),
           undefined
         );
         const positionY =
           centerY !== undefined
             ? centerY - height / 2
-            : computeAesthetic(
-                dims[1].min,
-                posFn(scales?.[1]?.map)!,
-                undefined
-              );
+            : computeAesthetic(dims[1].min, posFn(scales?.[1]?.map), undefined);
 
         const box: [Interval, Interval] = [
           {

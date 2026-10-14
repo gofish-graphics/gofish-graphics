@@ -277,17 +277,17 @@ export const Image = ({
         const positionX =
           computeAesthetic(
             dims[0].center,
-            posFn(scales?.[0]?.map)!,
+            posFn(scales?.[0]?.map),
             undefined
           ) ??
-          computeAesthetic(dims[0].min, posFn(scales?.[0]?.map)!, undefined);
+          computeAesthetic(dims[0].min, posFn(scales?.[0]?.map), undefined);
         const positionY =
           computeAesthetic(
             dims[1].center,
-            posFn(scales?.[1]?.map)!,
+            posFn(scales?.[1]?.map),
             undefined
           ) ??
-          computeAesthetic(dims[1].min, posFn(scales?.[1]?.map)!, undefined);
+          computeAesthetic(dims[1].min, posFn(scales?.[1]?.map), undefined);
 
         return {
           intrinsicDims: [

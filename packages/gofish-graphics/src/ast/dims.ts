@@ -1,5 +1,5 @@
 import { Frontend } from "gofish-ir";
-import { isValue, type MaybeValue } from "./data";
+import { type MaybeValue } from "./data";
 import { computeAesthetic } from "../util";
 
 export type Interval<T = number> = {
@@ -303,8 +303,8 @@ export const startAtCenter = (
   scale: ((x: number) => number) | undefined,
   sizePx: number
 ): number | undefined => {
-  if (scale === undefined && isValue(center)) return undefined;
-  return computeAesthetic(center, scale!, undefined)! - sizePx / 2;
+  const at = computeAesthetic(center, scale, undefined);
+  return at === undefined ? undefined : at - sizePx / 2;
 };
 
 export type IndexedDims<T = number> = {

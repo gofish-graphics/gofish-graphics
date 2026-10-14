@@ -121,16 +121,18 @@ async function main() {
     d.items.forEach(walk);
     return out;
   };
-  // Axes off: the check counts the mark rects, and axis ticks are rects too.
+  // With the default axes on: the axis ticks are rects with no datum, so the
+  // check reads the rects that carry one. An empty group drawn as chrome
+  // would carry none and drop out of the count.
   const emptied = rectsOf(
-    await chart(data, { axes: false })
+    await chart(data)
       .flow(
         spread({ by: "c", dir: "x" }),
         filter((d: any) => d.v > 100)
       )
       .mark(rect({ h: "v", w: W }))
       .toDisplayList({ w: 200, h: 120 })
-  );
+  ).filter((it) => it.datum !== undefined);
   check(
     "an empty filtered group is data, not chrome",
     emptied.length === 3 &&

@@ -99,7 +99,7 @@ export const Ellipse = ({
 
         const start = (axis: 0 | 1, sizePx: number) => {
           const center = centerOf(dims[axis]);
-          const scale = posFn(scales[axis]?.map)!;
+          const scale = posFn(scales[axis]?.map);
           return center !== undefined
             ? startAtCenter(center, scale, sizePx)
             : computeAesthetic(dims[axis].min, scale, undefined);

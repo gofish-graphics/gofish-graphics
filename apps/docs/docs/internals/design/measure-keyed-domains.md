@@ -415,7 +415,7 @@ domain per axis, as the reference intends.
 
 ```ts
 // stories/forwardsyntax/TimeBenchmarkPorts.stories.tsx (SurplusDeficitLine)
-chart(area, { schema, axes: true })
+chart(area, { schema })
   .flow(group({ by: "side" }), scatter({ by: "date", x: "date" }))
   .mark(ribbon({ h: "balance", fill: "side", curve: Curve.linear() }))
   .layer(
@@ -443,7 +443,7 @@ columns computed in user code. Today each is a `MeasureClash`.
 
 ```ts
 // stories/forwardsyntax/FacetedChart.stories.tsx (FacetedScatterDriving)
-chart(drivingShifts, { axes: true })
+chart(drivingShifts)
   .flow(
     spread({ by: "side", dir: "x", spacing: 50 }),
     scatter({ x: "year", y: "miles", axes: { x: true, y: false } })
@@ -474,7 +474,7 @@ covers this.
 ### Grouped bars with an inner `h: 150`
 
 ```ts
-chart(seafood, { axes: true })
+chart(seafood)
   .flow(
     spread({ by: "lake", dir: "x" }),
     stack({ by: "species", dir: "x", h: 150 })
@@ -517,7 +517,7 @@ It is a y-up orientation test, so the move is a fix.
 
 ```ts
 // stories/lowlevel/NestedMosaicChart.stories.tsx:41-54
-chart(titanic, { axes: true })
+chart(titanic)
   .flow(
     stack({ by: "class", dir: "y", size: field("count").normalize() }),
     stack({ by: "sex", dir: "x", size: field("count").normalize() }),

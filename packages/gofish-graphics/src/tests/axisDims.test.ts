@@ -367,11 +367,9 @@ async function main() {
     // unify on one axis.
     const lo = field("lo");
     const hi = field("hi");
-    // Axes off: these checks are about slot inference, not axes.
-    // TODO(#1107): a constant datum position crashes layout with axes on.
     const dots = async (opts: any, coord?: any) =>
       (
-        await chart(rows, coord ? { coord, axes: false } : { axes: false })
+        await chart(rows, coord ? { coord } : {})
           .flow(scatter({ by: "k", ...opts }))
           .mark(circle({ r: 3 }))
           .toDisplayList(SIZE)
@@ -466,6 +464,67 @@ async function main() {
       "treemap dims is not dropped (differs from no size)",
       !same(wh, full)
     );
+  }
+
+  console.log("\n# a constant or empty domain renders with the default axes (#1107)");
+  {
+    const flat = (d: any): any[] => {
+      const out: any[] = [];
+      const walk = (it: any) => {
+        out.push(it);
+        (it.children ?? []).forEach(walk);
+      };
+      d.items.forEach(walk);
+      return out;
+    };
+    // One row: each position axis has a zero-width domain, so its scope
+    // solves no σ and has no map. The axes are still drawn.
+    let onePoint: any[] = [];
+    const onePointErr = await errorOf(async () => {
+      onePoint = flat(
+        await chart([{ id: 0, a: 1, b: 2 }])
+          .flow(scatter({ by: "id", x: "a", y: "b" }))
+          .mark(circle({ r: 3 }))
+          .toDisplayList(SIZE)
+      );
+    });
+    check("a one-point chart renders with axes", onePointErr === "", onePointErr);
+    const dot = onePoint.filter((it) => it.kind === "ellipse");
+    check(
+      "the one point is drawn at a finite place",
+      dot.length === 1 &&
+        Number.isFinite(dot[0].cx) &&
+        Number.isFinite(dot[0].cy),
+      JSON.stringify(dot)
+    );
+    check(
+      "its axes tick at the constant values",
+      ["1", "2"].every((t) =>
+        onePoint.some((it) => it.kind === "text" && it.text === t)
+      ),
+      JSON.stringify(onePoint.filter((it) => it.kind === "text"))
+    );
+
+    // A constant datum position across several rows.
+    const constErr = await errorOf(() =>
+      chart([
+        { k: "a", v: 1 },
+        { k: "b", v: 2 },
+      ])
+        .flow(scatter({ by: "k", x: datum(5), y: "v" }))
+        .mark(circle({ r: 3 }))
+        .toDisplayList(SIZE)
+    );
+    check("a constant datum x renders with axes", constErr === "", constErr);
+
+    // No rows at all.
+    const emptyErr = await errorOf(() =>
+      chart([])
+        .flow(spread({ by: "c", dir: "x" }))
+        .mark(rect({ w: 10, h: "v" }))
+        .toDisplayList(SIZE)
+    );
+    check("an empty chart renders with axes", emptyErr === "", emptyErr);
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);
