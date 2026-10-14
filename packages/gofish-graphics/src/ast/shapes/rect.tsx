@@ -25,7 +25,7 @@ import {
   Size,
   Transform,
   centerOf,
-  startAtCenter,
+  positionOf,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
 import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
@@ -143,90 +143,37 @@ export const Rect = ({
         return [resolveAxis(0), resolveAxis(1)];
       },
       layout: (size, scales, children) => {
-        let x = computeAesthetic(
-          dims[0].min,
-          posFn(scales?.[0]?.map),
-          undefined
-        );
-        let y = computeAesthetic(
-          dims[1].min,
-          posFn(scales?.[1]?.map),
-          undefined
-        );
-
-        let w: number | undefined;
-        if (isValue(dims[0].min) && isValue(dims[0].max)) {
-          // Both min and max are values -> width spans [min, max] in data space
-          x = computeAesthetic(dims[0].min, posFn(scales?.[0]?.map), undefined);
-          const xMax = computeAesthetic(
-            dims[0].max,
-            posFn(scales?.[0]?.map),
-            undefined
-          );
-          // With no map on this axis both ends are undefined (#1107), so the
-          // width is NaN and falls back to the default below.
-          w = xMax! - x!;
-        } else if (isValue(dims[0].min) && isValue(dims[0].size)) {
-          // If a map for x exists, scale min and min+size, then subtract
-          const min = x;
-          const max = computeAesthetic(
-            value(getValue(dims[0].min)! + getValue(dims[0].size)!),
-            posFn(scales?.[0]?.map),
-            undefined
-          );
-          // With no map on this axis both ends are undefined (#1107), so the
-          // width is NaN and falls back to the default below.
-          w = max! - min!;
-        } else if (isValue(dims[0].size) && scales?.[0]?.map) {
-          // If we have size but no min, and a map exists, use position scale
-          // Treat min as 0 (baseline) and compute width from position scale
-          const minPos = pxOf(scales[0]!.map!, 0);
-          const maxPos = pxOf(scales[0]!.map!, getValue(dims[0].size)!);
-          w = maxPos - minPos;
-        } else {
-          w = computeSize(dims[0].size, scales?.[0]?.sigma!, size[0]);
-        }
-        // When parent constraints are unresolved and rect width is unspecified,
-        // keep a visible default instead of propagating undefined.
-        if (w === undefined || !Number.isFinite(w)) {
-          w = DEFAULT_RECT_SIZE;
-        }
-
-        let h: number | undefined;
-        if (isValue(dims[1].min) && isValue(dims[1].max)) {
-          // Both min and max are values -> height spans [min, max] in data space
-          y = computeAesthetic(dims[1].min, posFn(scales?.[1]?.map), undefined);
-          const yMax = computeAesthetic(
-            dims[1].max,
-            posFn(scales?.[1]?.map),
-            undefined
-          );
-          // With no map on this axis both ends are undefined (#1107), so the
-          // width is NaN and falls back to the default below.
-          h = yMax! - y!;
-        } else if (isValue(dims[1].min) && isValue(dims[1].size)) {
-          // If a map for y exists, scale min and min+size, then subtract
-          const min = y;
-          const max = computeAesthetic(
-            value(getValue(dims[1].min)! + getValue(dims[1].size)!),
-            posFn(scales?.[1]?.map),
-            undefined
-          );
-          // With no map on this axis both ends are undefined (#1107), so the
-          // width is NaN and falls back to the default below.
-          h = max! - min!;
-        } else if (isValue(dims[1].size) && scales?.[1]?.map) {
-          // If we have size but no min, and a map exists, use position scale
-          // Treat min as 0 (baseline) and compute height from position scale
-          const minPos = pxOf(scales[1]!.map!, 0);
-          const maxPos = pxOf(scales[1]!.map!, getValue(dims[1].size)!);
-          h = maxPos - minPos;
-        } else {
-          h = computeSize(dims[1].size, scales?.[1]?.sigma!, size[1]);
-        }
-        if (h === undefined || !Number.isFinite(h)) {
-          h = DEFAULT_RECT_SIZE;
-        }
+        const pos = [posFn(scales?.[0]?.map), posFn(scales?.[1]?.map)];
+        // The box's pixel size on one axis.
+        const sizeOn = (k: 0 | 1): number => {
+          const d = dims[k];
+          const at = (v: MaybeValue<number> | undefined) =>
+            computeAesthetic(v, pos[k], undefined)!;
+          const map = scales?.[k]?.map;
+          let s: number | undefined;
+          if (isValue(d.min) && isValue(d.max)) {
+            // Both ends are values: the box spans [min, max] in data space.
+            // With no map on this axis both ends are undefined (#1107), so
+            // the size is NaN and falls back to the default below.
+            s = at(d.max) - at(d.min);
+          } else if (isValue(d.min) && isValue(d.size)) {
+            // A data start and size: map both ends, then subtract (NaN with
+            // no map, as above).
+            s = at(value(getValue(d.min)! + getValue(d.size)!)) - at(d.min);
+          } else if (isValue(d.size) && map) {
+            // A data size with no start: measured from the baseline, data 0,
+            // through the map.
+            s = pxOf(map, getValue(d.size)!) - pxOf(map, 0);
+          } else {
+            s = computeSize(d.size, scales?.[k]?.sigma!, size[k]);
+          }
+          // When parent constraints are unresolved and the size is
+          // unspecified, keep a visible default instead of propagating
+          // undefined.
+          return s === undefined || !Number.isFinite(s) ? DEFAULT_RECT_SIZE : s;
+        };
+        let w = sizeOn(0);
+        let h = sizeOn(1);
 
         if (aspectRatio !== undefined && aspectRatio > 0) {
           const wIsData = isValue(dims[0].size);
@@ -246,11 +193,8 @@ export const Rect = ({
           }
         }
 
-        // A box placed by its center starts half its pixel size before it.
-        const c0 = centerOf(dims[0]);
-        if (c0 !== undefined) x = startAtCenter(c0, posFn(scales?.[0]?.map), w);
-        const c1 = centerOf(dims[1]);
-        if (c1 !== undefined) y = startAtCenter(c1, posFn(scales?.[1]?.map), h);
+        const x = positionOf(dims[0], pos[0], w);
+        const y = positionOf(dims[1], pos[1], h);
 
         return {
           intrinsicDims: {

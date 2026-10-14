@@ -1,5 +1,4 @@
 import { resolveColorChannel } from "../../color";
-import { computeAesthetic } from "../../util";
 import { posFn } from "../domain";
 import { GoFishNode } from "../_node";
 import { orientDims } from "../axisDirection";
@@ -10,6 +9,7 @@ import {
   type Interval,
   deferAxisDims,
   FancyDims,
+  positionOf,
   Transform,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
@@ -280,22 +280,10 @@ export const Text = ({
         // the box's start edge.
         const height = maxY - minY;
 
-        const positionX =
-          computeAesthetic(
-            dims[0].center,
-            posFn(scales?.[0]?.map),
-            undefined
-          ) ??
-          computeAesthetic(dims[0].min, posFn(scales?.[0]?.map), undefined);
-        const centerY = computeAesthetic(
-          dims[1].center,
-          posFn(scales?.[1]?.map),
-          undefined
-        );
-        const positionY =
-          centerY !== undefined
-            ? centerY - height / 2
-            : computeAesthetic(dims[1].min, posFn(scales?.[1]?.map), undefined);
+        // In x the origin is the anchor point itself, so a center places it
+        // with no offset; in y a center places the middle of the box.
+        const positionX = positionOf(dims[0], posFn(scales?.[0]?.map), 0);
+        const positionY = positionOf(dims[1], posFn(scales?.[1]?.map), height);
 
         const box: [Interval, Interval] = [
           {

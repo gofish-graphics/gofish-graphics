@@ -917,7 +917,8 @@ through the already-solved data→pixel scale plus any post-scale offset. A
 box placed by a data center (`circle({ cy: "value", r: 5 })`, a `rect` with
 `cx`) is a glyph like a text or an image: its axis space is `glyphAxis` of the
 center, and its layout puts the center through the scale and takes half its
-pixel size off (`centerOf` / `startAtCenter` in `dims.ts`). This
+pixel size off (`positionOf` in `dims.ts`, which every box mark places its
+start by: a rect, an ellipse, a text and an image). This
 keeps the unified constraint semantics without a generic dense linear solver:
 strong facts win, relation cycles are checked for contradiction, and components
 without an absolute pin are normalized so the minimum solved coordinate in that

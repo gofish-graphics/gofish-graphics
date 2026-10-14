@@ -1,4 +1,3 @@
-import { computeAesthetic } from "../../util";
 import { posFn, pxOf } from "../domain";
 import { GoFishNode } from "../_node";
 import { getValue, isValue } from "../data";
@@ -8,6 +7,7 @@ import {
   elaborateDims,
   deferAxisDims,
   FancyDims,
+  positionOf,
   Transform,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
@@ -274,20 +274,17 @@ export const Image = ({
           intrinsicDimensions
         );
 
-        const positionX =
-          computeAesthetic(
-            dims[0].center,
-            posFn(scales?.[0]?.map),
-            undefined
-          ) ??
-          computeAesthetic(dims[0].min, posFn(scales?.[0]?.map), undefined);
-        const positionY =
-          computeAesthetic(
-            dims[1].center,
-            posFn(scales?.[1]?.map),
-            undefined
-          ) ??
-          computeAesthetic(dims[1].min, posFn(scales?.[1]?.map), undefined);
+        // A center places the middle of the image's box.
+        const positionX = positionOf(
+          dims[0],
+          posFn(scales?.[0]?.map),
+          resolvedDimensions.width
+        );
+        const positionY = positionOf(
+          dims[1],
+          posFn(scales?.[1]?.map),
+          resolvedDimensions.height
+        );
 
         return {
           intrinsicDims: [
