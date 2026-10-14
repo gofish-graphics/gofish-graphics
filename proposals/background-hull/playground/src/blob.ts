@@ -684,7 +684,6 @@ const stageMemo = <T>() => {
 
 type SkelOpts = {
   avoiding?: Member[];
-  via?: [Pt, Pt][];
   pad: number;
   convexity: number;
   clearance?: number;
@@ -1011,240 +1010,223 @@ const skelMemo = stageMemo<Skeleton>();
  *  chosen and routed at its full width (the bulge at its ends), so `neck`, which only thins the
  *  drawn tubes (step 2), never changes which links there are or where they run. */
 const skeleton = (members: Member[], o: SkelOpts): Skeleton =>
-  skelMemo(
-    [members, o.avoiding, o.via],
-    [o.pad, o.convexity, o.clearance],
-    () => {
-      const clearance = o.clearance ?? 4,
-        others = o.avoiding ?? [];
-      const Cm = members.map(centerOf),
-        Rm = members.map((m) => memberRadius(m) + o.pad),
-        nm = members.length;
-      const { P, owner, tri, cand, m, memberGrid } = sitesOfMembers(members);
-      const R = owner.map((ks) => Math.max(...ks.map((k) => Rm[k])));
-      const ek = (i: number, j: number) => (i < j ? `${i},${j}` : `${j},${i}`);
-      const c = Math.max(0, Math.min(1, o.convexity));
-      const alpha = c >= 1 ? Infinity : (m * c) / (1 - c);
-      const hw = (i: number, j: number) => Math.min(R[i], R[j]);
-      const faces: Pt[][] = [],
-        faceEdges = new Set<string>();
-      for (const [i, j, l] of tri) {
-        const q = [P[i], P[j], P[l]];
-        // A face is filled whatever it holds: an avoided node inside it becomes a hole, cut
-        // later as exactly its clearance zone (step 2). Only links route around avoided nodes.
-        if (circumR(q[0], q[1], q[2]) > alpha) continue;
-        faces.push(q);
-        [ek(i, j), ek(j, l), ek(l, i)].forEach((e) => faceEdges.add(e));
-      }
-      const avoid = avoidIndex(others, clearance);
-      /** The keep-out polygons (each avoided node grown by the tube half-width h) whose boxes come
-       *  within mg of the box around p and q, holding neither p nor q, in the avoided nodes' order. */
-      const obstaclesNear = (p: Pt, q: Pt, h: number, mg: number) => {
-        const out: Poly[] = [];
-        for (const k of avoid.near(p, q, 1.02 * h + mg + 1)) {
-          // a node grown into a circle cannot reach a segment farther than its circumscribed radius
-          if (
-            mg === 0 &&
-            avoid.radius[k] > 0 &&
-            segD(
-              avoid.center[k][0],
-              avoid.center[k][1],
-              p[0],
-              p[1],
-              q[0],
-              q[1]
-            ) >
-              (avoid.radius[k] + h) / Math.cos(Math.PI / 32) + 0.02
-          )
-            continue;
-          const poly = avoid.poly(k, h);
-          if (!inPolyFast(p, poly) && !inPolyFast(q, poly)) out.push(poly);
-        }
-        return out;
-      };
-      const routes = routeMemo([others], [clearance], () => new Map());
-      const routeFor = (p: Pt, q: Pt, h: number) => {
-        const key = `${p[0]},${p[1]},${q[0]},${q[1]},${h}`;
-        let r = routes.get(key);
-        if (r === undefined) {
-          // most links are not blocked at all: check that first, against the nodes along the link only
-          const poly = clearOf(p, q, obstaclesNear(p, q, h, 0))
-            ? [p, q]
-            : routeAround(
-                p,
-                q,
-                obstaclesNear(p, q, h, Math.max(40, dist(p, q) * 0.6))
-              );
-          r = !poly
-            ? null
-            : poly.length === 2
-              ? { route: poly, parts: [{ a: p, b: q }], len: dist(p, q) }
-              : snapRoute(poly, (v) => pivotOf(v, h));
-          routes.set(key, r);
-        }
-        return r;
-      };
-      const clear = (p: Pt, q: Pt, h: number) =>
-        clearOf(p, q, obstaclesNear(p, q, h, 0));
-      /** The circle a keep-out polygon's vertex v stands for: an avoided node's keep-out circle grown
-       *  by h (its polygon is the 32-gon around it), or a box corner's; else v itself, a plain corner. */
-      const pivotOf = (v: Pt, h: number): { c: Pt; r: number } => {
-        for (const k of avoid.near(v, v, 1.02 * h + 1)) {
-          const mm = others[k];
-          if (mm.kind === "circle") {
-            const R = memberRadius(mm) + clearance + h;
-            if (
-              Math.abs(
-                Math.hypot(v[0] - mm.cx, v[1] - mm.cy + 0.01) -
-                  R / Math.cos(Math.PI / 32)
-              ) < 1e-6
-            )
-              return { c: [mm.cx, mm.cy], r: R };
-          } else if (mm.kind === "rect")
-            for (const c of [
-              [mm.x, mm.y],
-              [mm.x + mm.w, mm.y],
-              [mm.x, mm.y + mm.h],
-              [mm.x + mm.w, mm.y + mm.h],
-            ] as Pt[])
-              if (Math.abs(dist(v, c) - (clearance + h)) < 1e-6)
-                return { c, r: clearance + h };
-        }
-        return { c: v, r: 0 };
-      };
-      const links: SkLink[] = [];
-      // spanning-tree candidates, between members: a face edge as drawn, else the routed closest-point link
-      const mk = (a: number, b: number) => (a < b ? a * nm + b : b * nm + a);
-      const routed = new Map<
-        number,
-        { a: number; b: number; route: Pt[]; len: number; h?: number }
-      >();
-      const hm = (a: number, b: number) => Math.min(Rm[a], Rm[b]);
-      // the bulge where a link attaches: the widest member whose geometry holds that point
-      const onMember = (mm: Member, p: Pt) =>
-        dist(
-          p,
-          mm.kind === "segment" ? nearestOnSeg(p, mm.a, mm.b) : centerOf(mm)
-        ) < 0.5;
-      const radiusAt = (p: Pt) =>
-        Math.max(
-          0,
-          ...memberGrid
-            .query(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1)
-            .map((k) => (onMember(members[k], p) ? Rm[k] : 0))
-        );
-      for (const [key, [i, j]] of cand) {
-        if (faceEdges.has(key)) {
-          links.push({ route: [P[i], P[j]], h: hw(i, j) });
-          // the edge carries the spanning tree only when no hole will be cut across it
-          if (clear(P[i], P[j], hw(i, j)))
-            for (const a of owner[i])
-              for (const b of owner[j])
-                if (a !== b && !routed.has(mk(a, b)))
-                  routed.set(mk(a, b), {
-                    a,
-                    b,
-                    route: [P[i], P[j]],
-                    len: dist(P[i], P[j]),
-                  });
-          continue;
-        }
-        // a short candidate joins as drawn when nothing blocks it (it is never rerouted)
-        if (dist(P[i], P[j]) / 2 <= alpha && clear(P[i], P[j], hw(i, j)))
-          links.push({ route: [P[i], P[j]], h: hw(i, j) });
-      }
-      const pairs = new Set<number>();
-      for (const [i, j] of cand.values())
-        for (const a of owner[i])
-          for (const b of owner[j]) if (a !== b) pairs.add(mk(a, b));
-      owner.forEach((ks) =>
-        ks.forEach((a) =>
-          ks.forEach((b) => {
-            if (a !== b) pairs.add(mk(a, b));
-          })
-        )
-      );
-      members.forEach((mm, a) => {
-        if (mm.kind === "segment")
-          for (let b = 0; b < nm; b++) if (b !== a) pairs.add(mk(a, b));
-      });
-      // A pair's link is routed only when the spanning tree reaches it: until then its straight
-      // length stands in, a lower bound on the routed length (lazy Kruskal; ties keep their order).
-      type Link = {
-        a: number;
-        b: number;
-        len: number;
-        order: number;
-        route?: Pt[];
-        parts?: Part[];
-        h?: number;
-        ends?: [Pt, Pt];
-      };
-      const queue: Link[] = [...routed.values()].map((e, order) => ({
-        ...e,
-        order,
-      }));
-      for (const key of pairs) {
-        if (routed.has(key)) continue;
-        const a = Math.floor(key / nm),
-          b = key % nm,
-          [p, q] = closestPair(members[a], members[b]),
-          order = queue.length;
-        if (dist(p, q) < 0.5)
-          queue.push({ a, b, route: [p, q], len: 0, order });
-        else
-          queue.push({
-            a,
-            b,
-            len: dist(p, q),
-            order,
-            ends: [p, q],
-            h: Math.min(radiusAt(p), radiusAt(q)),
-          });
-      }
-      const before = (x: Link, y: Link) =>
-        x.len < y.len || (x.len === y.len && x.order < y.order);
-      queue.sort((x, y) => x.len - y.len || x.order - y.order);
-      // the spanning tree over routed links keeps the set in one piece (members that touch join for free)
-      const r2 = members.map((_, k) => k);
-      const f2 = (k: number): number => (r2[k] === k ? k : (r2[k] = f2(r2[k])));
-      let head = 0;
-      while (head < queue.length) {
-        const e = queue[head++];
-        if (f2(e.a) === f2(e.b)) continue;
-        if (e.ends) {
-          const r = routeFor(e.ends[0], e.ends[1], e.h!);
-          if (!r) continue;
-          const done: Link = {
-            a: e.a,
-            b: e.b,
-            route: r.route,
-            parts: r.parts,
-            len: r.len,
-            order: e.order,
-            h: e.h,
-          };
-          let at = head;
-          while (at < queue.length && before(queue[at], done)) at++;
-          queue.splice(at, 0, done);
-          continue;
-        }
-        r2[f2(e.a)] = f2(e.b);
-        if (e.len > 0)
-          links.push({
-            route: e.route!,
-            h: e.h ?? hm(e.a, e.b),
-            ...(e.parts && e.parts.length > 1 ? { parts: e.parts } : {}),
-          });
-      }
-      for (const [a, b] of o.via ?? []) {
-        const i = P.findIndex((q) => dist(a, q) < 0.5),
-          j = P.findIndex((q) => dist(b, q) < 0.5);
-        if (i >= 0 && j >= 0) links.push({ route: [P[i], P[j]], h: hw(i, j) });
-      }
-      return { P: Cm, R: Rm, links, faces, alpha };
+  skelMemo([members, o.avoiding], [o.pad, o.convexity, o.clearance], () => {
+    const clearance = o.clearance ?? 4,
+      others = o.avoiding ?? [];
+    const Cm = members.map(centerOf),
+      Rm = members.map((m) => memberRadius(m) + o.pad),
+      nm = members.length;
+    const { P, owner, tri, cand, m, memberGrid } = sitesOfMembers(members);
+    const R = owner.map((ks) => Math.max(...ks.map((k) => Rm[k])));
+    const ek = (i: number, j: number) => (i < j ? `${i},${j}` : `${j},${i}`);
+    const c = Math.max(0, Math.min(1, o.convexity));
+    const alpha = c >= 1 ? Infinity : (m * c) / (1 - c);
+    const hw = (i: number, j: number) => Math.min(R[i], R[j]);
+    const faces: Pt[][] = [],
+      faceEdges = new Set<string>();
+    for (const [i, j, l] of tri) {
+      const q = [P[i], P[j], P[l]];
+      // A face is filled whatever it holds: an avoided node inside it becomes a hole, cut
+      // later as exactly its clearance zone (step 2). Only links route around avoided nodes.
+      if (circumR(q[0], q[1], q[2]) > alpha) continue;
+      faces.push(q);
+      [ek(i, j), ek(j, l), ek(l, i)].forEach((e) => faceEdges.add(e));
     }
-  );
+    const avoid = avoidIndex(others, clearance);
+    /** The keep-out polygons (each avoided node grown by the tube half-width h) whose boxes come
+     *  within mg of the box around p and q, holding neither p nor q, in the avoided nodes' order. */
+    const obstaclesNear = (p: Pt, q: Pt, h: number, mg: number) => {
+      const out: Poly[] = [];
+      for (const k of avoid.near(p, q, 1.02 * h + mg + 1)) {
+        // a node grown into a circle cannot reach a segment farther than its circumscribed radius
+        if (
+          mg === 0 &&
+          avoid.radius[k] > 0 &&
+          segD(avoid.center[k][0], avoid.center[k][1], p[0], p[1], q[0], q[1]) >
+            (avoid.radius[k] + h) / Math.cos(Math.PI / 32) + 0.02
+        )
+          continue;
+        const poly = avoid.poly(k, h);
+        if (!inPolyFast(p, poly) && !inPolyFast(q, poly)) out.push(poly);
+      }
+      return out;
+    };
+    const routes = routeMemo([others], [clearance], () => new Map());
+    const routeFor = (p: Pt, q: Pt, h: number) => {
+      const key = `${p[0]},${p[1]},${q[0]},${q[1]},${h}`;
+      let r = routes.get(key);
+      if (r === undefined) {
+        // most links are not blocked at all: check that first, against the nodes along the link only
+        const poly = clearOf(p, q, obstaclesNear(p, q, h, 0))
+          ? [p, q]
+          : routeAround(
+              p,
+              q,
+              obstaclesNear(p, q, h, Math.max(40, dist(p, q) * 0.6))
+            );
+        r = !poly
+          ? null
+          : poly.length === 2
+            ? { route: poly, parts: [{ a: p, b: q }], len: dist(p, q) }
+            : snapRoute(poly, (v) => pivotOf(v, h));
+        routes.set(key, r);
+      }
+      return r;
+    };
+    const clear = (p: Pt, q: Pt, h: number) =>
+      clearOf(p, q, obstaclesNear(p, q, h, 0));
+    /** The circle a keep-out polygon's vertex v stands for: an avoided node's keep-out circle grown
+     *  by h (its polygon is the 32-gon around it), or a box corner's; else v itself, a plain corner. */
+    const pivotOf = (v: Pt, h: number): { c: Pt; r: number } => {
+      for (const k of avoid.near(v, v, 1.02 * h + 1)) {
+        const mm = others[k];
+        if (mm.kind === "circle") {
+          const R = memberRadius(mm) + clearance + h;
+          if (
+            Math.abs(
+              Math.hypot(v[0] - mm.cx, v[1] - mm.cy + 0.01) -
+                R / Math.cos(Math.PI / 32)
+            ) < 1e-6
+          )
+            return { c: [mm.cx, mm.cy], r: R };
+        } else if (mm.kind === "rect")
+          for (const c of [
+            [mm.x, mm.y],
+            [mm.x + mm.w, mm.y],
+            [mm.x, mm.y + mm.h],
+            [mm.x + mm.w, mm.y + mm.h],
+          ] as Pt[])
+            if (Math.abs(dist(v, c) - (clearance + h)) < 1e-6)
+              return { c, r: clearance + h };
+      }
+      return { c: v, r: 0 };
+    };
+    const links: SkLink[] = [];
+    // spanning-tree candidates, between members: a face edge as drawn, else the routed closest-point link
+    const mk = (a: number, b: number) => (a < b ? a * nm + b : b * nm + a);
+    const routed = new Map<
+      number,
+      { a: number; b: number; route: Pt[]; len: number; h?: number }
+    >();
+    const hm = (a: number, b: number) => Math.min(Rm[a], Rm[b]);
+    // the bulge where a link attaches: the widest member whose geometry holds that point
+    const onMember = (mm: Member, p: Pt) =>
+      dist(
+        p,
+        mm.kind === "segment" ? nearestOnSeg(p, mm.a, mm.b) : centerOf(mm)
+      ) < 0.5;
+    const radiusAt = (p: Pt) =>
+      Math.max(
+        0,
+        ...memberGrid
+          .query(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1)
+          .map((k) => (onMember(members[k], p) ? Rm[k] : 0))
+      );
+    for (const [key, [i, j]] of cand) {
+      if (faceEdges.has(key)) {
+        links.push({ route: [P[i], P[j]], h: hw(i, j) });
+        // the edge carries the spanning tree only when no hole will be cut across it
+        if (clear(P[i], P[j], hw(i, j)))
+          for (const a of owner[i])
+            for (const b of owner[j])
+              if (a !== b && !routed.has(mk(a, b)))
+                routed.set(mk(a, b), {
+                  a,
+                  b,
+                  route: [P[i], P[j]],
+                  len: dist(P[i], P[j]),
+                });
+        continue;
+      }
+      // a short candidate joins as drawn when nothing blocks it (it is never rerouted)
+      if (dist(P[i], P[j]) / 2 <= alpha && clear(P[i], P[j], hw(i, j)))
+        links.push({ route: [P[i], P[j]], h: hw(i, j) });
+    }
+    const pairs = new Set<number>();
+    for (const [i, j] of cand.values())
+      for (const a of owner[i])
+        for (const b of owner[j]) if (a !== b) pairs.add(mk(a, b));
+    owner.forEach((ks) =>
+      ks.forEach((a) =>
+        ks.forEach((b) => {
+          if (a !== b) pairs.add(mk(a, b));
+        })
+      )
+    );
+    members.forEach((mm, a) => {
+      if (mm.kind === "segment")
+        for (let b = 0; b < nm; b++) if (b !== a) pairs.add(mk(a, b));
+    });
+    // A pair's link is routed only when the spanning tree reaches it: until then its straight
+    // length stands in, a lower bound on the routed length (lazy Kruskal; ties keep their order).
+    type Link = {
+      a: number;
+      b: number;
+      len: number;
+      order: number;
+      route?: Pt[];
+      parts?: Part[];
+      h?: number;
+      ends?: [Pt, Pt];
+    };
+    const queue: Link[] = [...routed.values()].map((e, order) => ({
+      ...e,
+      order,
+    }));
+    for (const key of pairs) {
+      if (routed.has(key)) continue;
+      const a = Math.floor(key / nm),
+        b = key % nm,
+        [p, q] = closestPair(members[a], members[b]),
+        order = queue.length;
+      if (dist(p, q) < 0.5) queue.push({ a, b, route: [p, q], len: 0, order });
+      else
+        queue.push({
+          a,
+          b,
+          len: dist(p, q),
+          order,
+          ends: [p, q],
+          h: Math.min(radiusAt(p), radiusAt(q)),
+        });
+    }
+    const before = (x: Link, y: Link) =>
+      x.len < y.len || (x.len === y.len && x.order < y.order);
+    queue.sort((x, y) => x.len - y.len || x.order - y.order);
+    // the spanning tree over routed links keeps the set in one piece (members that touch join for free)
+    const r2 = members.map((_, k) => k);
+    const f2 = (k: number): number => (r2[k] === k ? k : (r2[k] = f2(r2[k])));
+    let head = 0;
+    while (head < queue.length) {
+      const e = queue[head++];
+      if (f2(e.a) === f2(e.b)) continue;
+      if (e.ends) {
+        const r = routeFor(e.ends[0], e.ends[1], e.h!);
+        if (!r) continue;
+        const done: Link = {
+          a: e.a,
+          b: e.b,
+          route: r.route,
+          parts: r.parts,
+          len: r.len,
+          order: e.order,
+          h: e.h,
+        };
+        let at = head;
+        while (at < queue.length && before(queue[at], done)) at++;
+        queue.splice(at, 0, done);
+        continue;
+      }
+      r2[f2(e.a)] = f2(e.b);
+      if (e.len > 0)
+        links.push({
+          route: e.route!,
+          h: e.h ?? hm(e.a, e.b),
+          ...(e.parts && e.parts.length > 1 ? { parts: e.parts } : {}),
+        });
+    }
+    return { P: Cm, R: Rm, links, faces, alpha };
+  });
 
 // ── step 2: the region, exactly ─────────────────────────────────────────────
 // The region is the union of the pieces minus the keep-out zones. Every piece and zone is one of
@@ -2271,8 +2253,9 @@ const keepOut = (
     return q;
   });
 };
-/** Do any two segments of these loops cross (the same loop's neighbors excepted)? */
-const loopsCross = (loops: Pt[][]) => {
+/** Do any two segments of these loops cross (the same loop's neighbors excepted)? With `hits`,
+ *  every crossing is found and its place pushed there. */
+const loopsCross = (loops: Pt[][], hits?: Pt[]) => {
   const owner: number[] = [],
     idx: number[] = [];
   let len = 0,
@@ -2327,14 +2310,17 @@ const loopsCross = (loops: Pt[][]) => {
             (Math.abs(it - i) <= 1 || Math.abs(it - i) === m - 1)
           )
             continue;
-          if (segIntersect(p, q, L[it], L[(it + 1) % m])) return true;
+          if (segIntersect(p, q, L[it], L[(it + 1) % m])) {
+            if (!hits) return true;
+            hits.push(p);
+          }
         }
         next.push(head[c]);
         seg.push(s2);
         head[c] = seg.length - 1;
       }
   }
-  return false;
+  return hits ? hits.length > 0 : false;
 };
 
 /** Move p out of a bulge it is inside onto that bulge's edge (along the bulge's normal), and give the
@@ -2378,7 +2364,8 @@ const ontoBulge = (b: Prim, p: Pt): { p: Pt; c: Pt; r: number } => {
   return { p: [qx + (dx * b.r) / d, qy + (dy * b.r) / d], c: [qx, qy], r };
 };
 /** Step 3, `neck`: pull the outline in. Every outline point not on a member's bulge moves inward
- *  along the outline's normal by `pull` (1 - neck) times
+ *  along its own piece's normal (toward a link's spine; where two pieces meet in a corner the moved
+ *  sides are carried on until they meet, so the pull never rounds a corner) by `pull` (1 - neck) times
  *  the region's half-width there: the radius of the largest disc inside the region that touches the
  *  outline at that point, capped at the link's own half-width. On a lone link that disc is the
  *  link's tube, so the tube thins to neck times its width about its middle (and a link that ran
@@ -2389,7 +2376,12 @@ const ontoBulge = (b: Prim, p: Pt): { p: Pt; c: Pt; r: number } => {
  *  moves into a member's bulge stops on its edge (a bulge stays whole, except where a zone cuts it). Since no point moves past
  *  the middle of its disc, each loop stays one loop and no two loops meet: the pieces and holes
  *  are those of the full-width region, whatever `neck` is. */
-const neckOutline = (region: Region, bulges: Prim[], pull: number): Loop[] => {
+const neckOutline = (
+  region: Region,
+  bulges: Prim[],
+  pull: number,
+  scale?: Float64Array[]
+): Loop[] => {
   if (pull <= 0) return region.loops;
   const loops = region.loops;
   // every outline point in a grid of cells two link widths wide
@@ -2435,7 +2427,7 @@ const neckOutline = (region: Region, bulges: Prim[], pull: number): Loop[] => {
     Math.sign(areas.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0)) ||
     1;
   const bgrid = boxGrid(bulges.map((b) => b.bb));
-  return loops.map((l) => {
+  return loops.map((l, li) => {
     const { pts, arcs, hw, kind } = l as Required<Loop>,
       N = pts.length;
     if (kind.every((k) => k === 1)) return l; // a hole cut by keep-out zones alone stays exactly as cut
@@ -2472,13 +2464,21 @@ const neckOutline = (region: Region, bulges: Prim[], pull: number): Loop[] => {
       }
       rho[i] = r;
     }
-    const out: Pt[] = [],
-      A = new Float64Array(4 * N);
+    // Each point moves along its own piece's normal (toward a link's spine, away from a keep-out
+    // zone's center), so a side of a link moves exactly as that link's thinner tube would. Where
+    // two pieces meet in a corner, the outline's own normal turns through the corner, and moving
+    // along it would round the corner by the pull itself (a web as wide as the pull); instead the
+    // two moved sides are carried on until they meet, so the corner stays a corner and only
+    // `roundness` rounds it.
+    const ds = dist(pts[0], pts[1]) || 1;
+    const Q: Pt[] = new Array(N),
+      DX = new Float64Array(N),
+      DY = new Float64Array(N),
+      S = new Float64Array(N);
     for (let i = 0; i < N; i++) {
       const p = pts[i];
-      A.set(arcs.subarray(4 * i, 4 * i + 4), 4 * i);
       if (kind[i] === 2) {
-        out.push(p);
+        Q[i] = p;
         continue;
       }
       // the half-width is measured against points 1 px apart, which makes it jitter from one point
@@ -2492,13 +2492,149 @@ const neckOutline = (region: Region, bulges: Prim[], pull: number): Loop[] => {
           n++;
         }
       }
-      const s = pull * (sum / n),
-        nx = NX[i],
-        ny = NY[i];
-      let q: Pt = [p[0] + s * nx, p[1] + s * ny];
-      A[4 * i + 3] = 0;
-      if (A[4 * i + 2] > 0)
-        A[4 * i + 2] = Math.hypot(q[0] - A[4 * i], q[1] - A[4 * i + 1]);
+      const s = (S[i] = pull * (scale ? scale[li][i] : 1) * (sum / n));
+      let dx = NX[i],
+        dy = NY[i];
+      const ux = p[0] - arcs[4 * i],
+        uy = p[1] - arcs[4 * i + 1],
+        ul = Math.hypot(ux, uy);
+      if (ul > 1e-6) {
+        const c = (ux * dx + uy * dy) / ul;
+        if (Math.abs(c) > 0.5) {
+          dx = (Math.sign(c) * ux) / ul;
+          dy = (Math.sign(c) * uy) / ul;
+        }
+      }
+      DX[i] = dx;
+      DY[i] = dy;
+      Q[i] = [p[0] + s * dx, p[1] + s * dy];
+    }
+    const samePiece = (i: number, j: number) => {
+      const ri = arcs[4 * i + 2],
+        rj = arcs[4 * j + 2];
+      if (ri > 0 || rj > 0)
+        return (
+          ri === rj &&
+          arcs[4 * i] === arcs[4 * j] &&
+          arcs[4 * i + 1] === arcs[4 * j + 1]
+        );
+      return DX[i] * DX[j] + DY[i] * DY[j] > 0.9994; // the same straight side, within 2 degrees
+    };
+    /** Where the moved sides at i and j meet: each is a line (a straight side) or a circle. */
+    const meet = (i: number, j: number): Pt | null => {
+      const curve = (k: number) =>
+        arcs[4 * k + 2] > 0
+          ? {
+              c: [arcs[4 * k], arcs[4 * k + 1]] as Pt,
+              r: dist(Q[k], [arcs[4 * k], arcs[4 * k + 1]]),
+            }
+          : { p: Q[k], t: [-DY[k], DX[k]] as Pt };
+      const a: any = curve(i),
+        b: any = curve(j),
+        xs: Pt[] = [];
+      const lineCircle = (p: Pt, t: Pt, c: Pt, r: number) => {
+        const fx = p[0] - c[0],
+          fy = p[1] - c[1],
+          B = fx * t[0] + fy * t[1],
+          Cq = fx * fx + fy * fy - r * r,
+          D = B * B - Cq;
+        if (D < 0) return;
+        for (const u of [-B - Math.sqrt(D), -B + Math.sqrt(D)])
+          xs.push([p[0] + u * t[0], p[1] + u * t[1]]);
+      };
+      if (a.t && b.t) {
+        const den = a.t[0] * b.t[1] - a.t[1] * b.t[0];
+        if (Math.abs(den) < 1e-9) return null;
+        const u =
+          ((b.p[0] - a.p[0]) * b.t[1] - (b.p[1] - a.p[1]) * b.t[0]) / den;
+        xs.push([a.p[0] + u * a.t[0], a.p[1] + u * a.t[1]]);
+      } else if (a.t) lineCircle(a.p, a.t, b.c, b.r);
+      else if (b.t) lineCircle(b.p, b.t, a.c, a.r);
+      else {
+        const dx = b.c[0] - a.c[0],
+          dy = b.c[1] - a.c[1],
+          d = Math.hypot(dx, dy);
+        if (d < 1e-9 || d > a.r + b.r || d < Math.abs(a.r - b.r)) return null;
+        const m = (d * d + a.r * a.r - b.r * b.r) / (2 * d),
+          h = Math.sqrt(Math.max(0, a.r * a.r - m * m));
+        const mx = a.c[0] + (m * dx) / d,
+          my = a.c[1] + (m * dy) / d;
+        xs.push(
+          [mx - (h * dy) / d, my + (h * dx) / d],
+          [mx + (h * dy) / d, my - (h * dx) / d]
+        );
+      }
+      let best: Pt | null = null,
+        bd = Infinity;
+      for (const x of xs) {
+        const v = dist(x, Q[i]) + dist(x, Q[j]);
+        if (v < bd) {
+          bd = v;
+          best = x;
+        }
+      }
+      if (!best) return null;
+      // the sides are carried on forward from i and back from j, by at most a few times the pull
+      const ta = [
+        pts[i][0] - pts[(i - 1 + N) % N][0],
+        pts[i][1] - pts[(i - 1 + N) % N][1],
+      ];
+      const tb = [
+        pts[(j + 1) % N][0] - pts[j][0],
+        pts[(j + 1) % N][1] - pts[j][1],
+      ];
+      if ((best[0] - Q[i][0]) * ta[0] + (best[1] - Q[i][1]) * ta[1] < 0)
+        return null;
+      if ((Q[j][0] - best[0]) * tb[0] + (Q[j][1] - best[1]) * tb[1] < 0)
+        return null;
+      const lim = 4 * Math.max(S[i], S[j]) + 2 * ds;
+      return dist(best, Q[i]) <= lim && dist(best, Q[j]) <= lim ? best : null;
+    };
+    // the moved points, with a corner (and points every ds up to it and on from it) between two pieces
+    const P: Pt[] = [],
+      src: number[] = [];
+    for (let i = 0; i < N; i++) {
+      P.push(Q[i]);
+      src.push(i);
+      const j = (i + 1) % N;
+      if (kind[i] === 2 || kind[j] === 2 || samePiece(i, j)) continue;
+      if (dist(Q[i], Q[j]) <= dist(pts[i], pts[j]) + 1e-6) continue; // the sides cross here (untie cuts it)
+      const x = meet(i, j);
+      if (!x) continue;
+      for (const [a, b, last] of [
+        [Q[i], x, true],
+        [x, Q[j], false],
+      ] as [Pt, Pt, boolean][]) {
+        const m = Math.max(1, Math.round(dist(a, b) / ds));
+        for (let t = 1; t < m + (last ? 1 : 0); t++) {
+          P.push([
+            a[0] + ((b[0] - a[0]) * t) / m,
+            a[1] + ((b[1] - a[1]) * t) / m,
+          ]);
+          src.push(-1 - i);
+        }
+      }
+    }
+    const M = P.length,
+      out: Pt[] = [],
+      A = new Float64Array(4 * M),
+      H = new Float64Array(M),
+      K = new Uint8Array(M);
+    for (let e = 0; e < M; e++) {
+      const i = src[e] >= 0 ? src[e] : -1 - src[e],
+        p = src[e] >= 0 ? pts[i] : P[e];
+      H[e] = hw[i];
+      K[e] = src[e] >= 0 ? kind[i] : 0;
+      if (src[e] >= 0) A.set(arcs.subarray(4 * i, 4 * i + 4), 4 * e);
+      else A.set([P[e][0], P[e][1], 0, 0], 4 * e);
+      if (src[e] >= 0 && kind[i] === 2) {
+        out.push(p);
+        continue;
+      }
+      let q = P[e];
+      A[4 * e + 3] = 0;
+      if (A[4 * e + 2] > 0)
+        A[4 * e + 2] = Math.hypot(q[0] - A[4 * e], q[1] - A[4 * e + 1]);
       // a bulge stays whole: a point pulled into one stops on its edge
       let deepest = 0,
         hit = -1;
@@ -2510,28 +2646,29 @@ const neckOutline = (region: Region, bulges: Prim[], pull: number): Loop[] => {
         }
       }
       if (hit >= 0) {
-        const e = ontoBulge(bulges[hit], q);
+        const e2 = ontoBulge(bulges[hit], q);
         // where a keep-out zone cuts the bulge, its edge is the zone's: the point stays where it was
         let cut = false;
-        region.zoneGrid.each(e.p[0], e.p[1], e.p[0], e.p[1], (z) => {
-          if (!cut && primD(region.zones[z], e.p[0], e.p[1], false) < -1e-6)
+        region.zoneGrid.each(e2.p[0], e2.p[1], e2.p[0], e2.p[1], (z) => {
+          if (!cut && primD(region.zones[z], e2.p[0], e2.p[1], false) < -1e-6)
             cut = true;
         });
         if (cut) {
           out.push(p);
-          A.set(arcs.subarray(4 * i, 4 * i + 4), 4 * i);
+          if (src[e] >= 0) A.set(arcs.subarray(4 * i, 4 * i + 4), 4 * e);
+          else A[4 * e + 2] = 0;
           continue;
         }
-        q = e.p;
-        A[4 * i] = e.c[0];
-        A[4 * i + 1] = e.c[1];
-        A[4 * i + 2] = e.r;
+        q = e2.p;
+        A[4 * e] = e2.c[0];
+        A[4 * e + 1] = e2.c[1];
+        A[4 * e + 2] = e2.r;
       }
       out.push(q);
     }
     // a knot spans at most a few times the largest pull along the outline; cutting knots can leave
     // a crossing just behind the scan, so it runs again until a pass cuts nothing
-    let r: Loop = { pts: out, arcs: A, hw, kind };
+    let r: Loop = { pts: out, arcs: A, hw: H, kind: K };
     const w = Math.ceil((4 * pull * cap) / (dist(l.pts[0], l.pts[1]) || 1)) + 4;
     for (let pass = 0; pass < 8; pass++) {
       const n = r.pts.length;
@@ -2628,18 +2765,52 @@ const untie = (
 type SmoothOpts = SkelOpts & {
   neck?: number;
   roundness?: number;
+  holes?: boolean;
   res?: number;
 };
 type Smooth = { loops: Pt[][]; skel: Skeleton; sigma: number; signals: Loop[] };
 const regionMemo = stageMemo<Region>();
 const neckMemo = stageMemo<Loop[]>();
+/** `holes: false` (the default): every hole of the traced region that holds no avoided node is
+ *  filled, by dropping its loop (and any piece inside it). A hole holds an avoided node when part
+ *  of its edge is a keep-out zone's or a zone's center lies in it, so a clearance circle stays
+ *  exactly as cut, and so does a cycle that has an avoided node inside. Holes are only ever
+ *  dropped, never made, so this keeps the pieces as traced. */
+const fillHoles = (region: Region, zones: Prim[]): Region => {
+  const loops = region.loops;
+  if (loops.length < 2) return region;
+  const areas = loops.map((l) => signedArea(l.pts));
+  const outer = Math.sign(
+    areas.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0)
+  );
+  const centers: Pt[] = zones.map((z) =>
+    z.k === 2 ? [(z.x1 + z.x2) / 2, (z.y1 + z.y2) / 2] : [z.x1, z.y1]
+  );
+  const empty = loops.filter(
+    (l, i) =>
+      Math.sign(areas[i]) !== outer &&
+      !l.kind!.some((k) => k === 1) &&
+      !centers.some((c) => inPolyFast(c, l.pts))
+  );
+  if (!empty.length) return region;
+  const keep = loops.filter(
+    (l) =>
+      !empty.includes(l) &&
+      !empty.some(
+        (h) =>
+          Math.abs(signedArea(h.pts)) > Math.abs(signedArea(l.pts)) &&
+          inPolyFast(l.pts[0], h.pts)
+      )
+  );
+  return { ...region, loops: keep };
+};
 /** Steps 2-3: the region traced exactly, then rounded along its outline. */
 const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
   const sk = skeleton(members, o);
   const clearance = o.clearance ?? 4,
     res = o.res ?? 1,
     neck = Math.max(0.05, Math.min(1, o.neck ?? 1));
-  const region = regionMemo([sk], [res], () => {
+  const region = regionMemo([sk], [res, o.holes ? 1 : 0], () => {
     // faces first: they cover the most area, so a place deep inside the region is settled soonest
     // Pieces that lie inside other pieces add nothing to the union, and only cost time, so they are
     // left out: a link inside a wider link on the same segment (a spanning-tree link along a face
@@ -2704,27 +2875,56 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
           capsulePrim(pts[Math.floor(key / 1048576)], pts[key % 1048576], h)
         );
     const zones = (o.avoiding ?? []).map((m) => grownPrim(m, clearance));
-    return traceRegion(pieces, zones, res, Math.min(1, res));
+    const traced = traceRegion(pieces, zones, res, Math.min(1, res));
+    return o.holes ? traced : fillHoles(traced, zones);
   });
   // Like rounding, pulling in never changes the topology: should two parts of the outline still
-  // cross (where the half-width is misjudged at a sharp tip), the pull is narrowed until they do not.
+  // cross (where the half-width is misjudged at a sharp tip), the pull is halved near each
+  // crossing (within two link widths of it) until none is left, and dropped there on the last
+  // pass. Only the places that cross give way: the rest of the outline keeps the asked neck.
   const necked = neckMemo([region], [neck], () => {
     const bulges = members.map((m) => grownPrim(m, o.pad)),
-      at = (pull: number) => neckOutline(region, bulges, pull);
-    let pull = 1 - neck,
-      out = at(pull);
-    if (pull > 0 && loopsCross(out.map((l) => l.pts))) {
-      let lo = 0,
-        hi = pull;
-      for (let it = 0; it < 6; it++) {
-        const mid = (lo + hi) / 2;
-        if (loopsCross(at(mid).map((l) => l.pts))) hi = mid;
-        else lo = mid;
-      }
-      pull = lo;
-      out = at(pull);
+      pull = 1 - neck;
+    if (pull <= 0) return region.loops;
+    const scale = region.loops.map((l) =>
+      new Float64Array(l.pts.length).fill(1)
+    );
+    let cap = 0;
+    for (const l of region.loops)
+      for (let i = 0; i < l.pts.length; i++)
+        if (l.kind![i] !== 2) cap = Math.max(cap, l.hw![i]);
+    const reach = 2 * cap + 2;
+    let out = neckOutline(region, bulges, pull, scale);
+    for (let pass = 0; pass < 6; pass++) {
+      const hits: Pt[] = [];
+      if (
+        !loopsCross(
+          out.map((l) => l.pts),
+          hits
+        )
+      )
+        return out;
+      const near = boxGrid(
+        hits.map((h) => [
+          h[0] - reach,
+          h[1] - reach,
+          h[0] + reach,
+          h[1] + reach,
+        ])
+      );
+      region.loops.forEach((l, li) =>
+        l.pts.forEach((p, i) => {
+          if (
+            near
+              .query(p[0], p[1], p[0], p[1])
+              .some((k) => dist(p, hits[k]) <= reach)
+          )
+            scale[li][i] = pass < 5 ? scale[li][i] / 2 : 0;
+        })
+      );
+      out = neckOutline(region, bulges, pull, scale);
     }
-    return out;
+    return loopsCross(out.map((l) => l.pts)) ? region.loops : out;
   });
   // `roundness` is the smoothing's reach: a Gaussian of width sigma = roundness / 2 along the
   // outline. It stops at the smallest circle in the region (a member's bulge, a link's

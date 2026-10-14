@@ -6,10 +6,11 @@ import type { Pt } from "./blob";
 type State = Params & {
   dataset: string;
   skeleton: boolean;
-  edgesAsMembers: boolean;
+  /** the datasets whose avoid checkbox is on (off by default) */
+  avoidOn: string[];
 };
-const DEFAULTS = { convexity: 0.5, neck: 1 }; // roundness defaults to padding; clearance to 4
-const KEY = "blob-playground-v2";
+const DEFAULTS = { convexity: 0.5, neck: 1, holes: false }; // roundness defaults to padding; clearance to 4
+const KEY = "blob-playground-v3";
 
 const ds0 = DATASETS[1];
 let state: State = {
@@ -19,7 +20,7 @@ let state: State = {
   padding: ds0.padding,
   clearance: ds0.clearance,
   skeleton: false,
-  edgesAsMembers: false,
+  avoidOn: [],
 };
 try {
   const saved = JSON.parse(localStorage.getItem(KEY) || "null");
@@ -35,10 +36,9 @@ const save = () => {
     /* ignore */
   }
 };
-const dataset = (): Dataset => {
-  const d = DATASETS.find((x) => x.id === state.dataset)!;
-  return d.variant && state.edgesAsMembers ? { ...d, ...d.variant } : d;
-};
+const dataset = (): Dataset => DATASETS.find((x) => x.id === state.dataset)!;
+/** Does this dataset's set avoid anything now? (always, unless it has an avoid checkbox that is off) */
+const avoiding = (d: Dataset) => !d.avoidToggle || state.avoidOn.includes(d.id);
 
 const $ = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -73,10 +73,11 @@ const syncControls = () => {
     b.tabIndex = on ? 0 : -1;
   }
   $("ds-note").textContent = dataset().note;
-  const v = DATASETS.find((x) => x.id === state.dataset)!.variant;
-  $("variant-wrap").hidden = !v;
-  if (v) $("variant-label").textContent = v.label;
-  $<HTMLInputElement>("variant").checked = state.edgesAsMembers;
+  const d = dataset();
+  $("avoid-wrap").hidden = !d.avoidToggle;
+  if (d.avoidToggle) $("avoid-label").textContent = d.avoidToggle;
+  $<HTMLInputElement>("avoid").checked = avoiding(d);
+  $<HTMLInputElement>("holes").checked = state.holes;
   const p = presetOf();
   $("preset-readout").textContent = p;
   for (const b of document.querySelectorAll<HTMLButtonElement>("[data-preset]"))
@@ -93,6 +94,7 @@ const presetOf = () => {
   if (
     eq(state.convexity, 0.5) &&
     eq(state.neck, 1) &&
+    !state.holes &&
     eq(state.roundness, state.padding)
   )
     return "blob defaults";
@@ -112,8 +114,10 @@ const spelling = () => {
   if (fn !== "hull" && !eq(state.neck, 1)) o.push(`neck: ${num(state.neck)}`);
   if (!eq(state.roundness, state.padding))
     o.push(`roundness: ${num(state.roundness)}`);
-  o.push(d.shapeArgs);
-  if (!eq(state.clearance, 4)) o.push(`clearance: ${num(state.clearance)}`);
+  if (state.holes) o.push("holes: true");
+  if (avoiding(d)) o.push(d.shapeArgs);
+  if (avoiding(d) && !eq(state.clearance, 4))
+    o.push(`clearance: ${num(state.clearance)}`);
   const shape = `Shape.${fn}(${o.length ? `{ ${o.join(", ")} }` : ""})`;
   return `enclose({ shape: ${shape}, padding: ${num(state.padding)} }, ${d.call})`;
 };
@@ -178,7 +182,7 @@ let pending: number | null = null,
   applied: number | null = null; // the roundness the last drawing used (2 sigma), the least over sets
 const recompute = () => {
   const d = dataset(),
-    p: Params = { ...state };
+    p: Params = { ...state, avoid: avoiding(d) };
   $("stage-wrap").setAttribute("aria-busy", "true");
   let out: SetResult[];
   const t0 = performance.now();
@@ -233,8 +237,17 @@ $<HTMLInputElement>("skeleton").addEventListener("change", (e) => {
   save();
 });
 
-$<HTMLInputElement>("variant").addEventListener("change", (e) =>
-  update({ edgesAsMembers: (e.target as HTMLInputElement).checked })
+$<HTMLInputElement>("avoid").addEventListener("change", (e) => {
+  const id = state.dataset,
+    on = (e.target as HTMLInputElement).checked;
+  update({
+    avoidOn: on
+      ? [...new Set([...state.avoidOn, id])]
+      : state.avoidOn.filter((x) => x !== id),
+  });
+});
+$<HTMLInputElement>("holes").addEventListener("change", (e) =>
+  update({ holes: (e.target as HTMLInputElement).checked })
 );
 
 const tabs = $("ds-tabs");

@@ -720,6 +720,46 @@ https://vis.uib.no/wp-content/papercite-data/pdfs/Alsallakh_et_al-2016-Computer_
   2), `precedent/bubblesets-fig3-virtual-edge-routing.png` (Bubble Sets Figure
   3, page 1012). Cropped from the author PDFs above.
 
+### 3.11 Concave hulls in GIS: a separate switch for holes
+
+The GIS libraries keep the fill dial and the holes switch apart. Each has one
+number for how concave the hull may be and a separate boolean for holes, and
+holes are off unless asked for. Checked on 2026-10-14 against each library's
+reference page.
+
+| Library     | Signature                                                                                                                                                      | Holes default                      | Source                                                                                          |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
+| PostGIS     | `ST_ConcaveHull(geometry param_geom, float param_pctconvex, boolean param_allow_holes = false)`                                                                | false                              | https://postgis.net/docs/ST_ConcaveHull.html                                                    |
+| Shapely 2   | `shapely.concave_hull(geometry, ratio=0.0, allow_holes=False, **kwargs)`                                                                                       | False                              | https://shapely.readthedocs.io/en/stable/reference/shapely.concave_hull.html                    |
+| JTS         | `ConcaveHull.concaveHullByLengthRatio(Geometry geom, double lengthRatio, boolean isHolesAllowed)`, also `concaveHullByLength(geom, maxLength, isHolesAllowed)` | off unless `setHolesAllowed(true)` | https://locationtech.github.io/jts/javadoc/org/locationtech/jts/algorithm/hull/ConcaveHull.html |
+| JTS (alpha) | `ConcaveHull.alphaShape(Geometry geom, double alpha, boolean isHolesAllowed)`                                                                                  | no default; the flag is required   | same page                                                                                       |
+
+PostGIS describes it as "The polygon will not contain holes unless the
+optional `param_allow_holes` argument is specified as true." Shapely says
+that with `allow_holes` true the hull may contain holes. JTS: "Optionally the concave hull
+can be allowed to contain holes by calling setHolesAllowed(boolean)." The JTS
+alpha shape takes `alpha` as "the radius of the eroding disc", with the holes
+flag beside it, so even the alpha shape, our `convexity` rule, keeps holes as a
+separate switch there.
+
+### 3.12 ChartAccent: a bubble set around one region
+
+Ren, Brehmer, Lee, Höllerer, Choe, "ChartAccent: Annotation for Data-Driven
+Storytelling", PacificVis 2017 (https://chartaccent.github.io/). Its example
+"Fertility Rate vs. Life Expectancy" draws a soft bubble set around the
+Sub-Saharan countries of a scatterplot of 191 countries, with bubble area by
+population and the other regions faded.
+
+- Image: `precedent/chartaccent-fertility-vs-life-expectancy.png`, downloaded
+  from https://chartaccent.github.io/images/example5.png.
+- Data: `precedent/chartaccent-gapminder.csv`, ChartAccent's own sample file,
+  downloaded from
+  https://raw.githubusercontent.com/chartaccent/chartaccent/master/assets/datasets/gapminder.csv
+  (columns Country, LifeExpectancy, FertilityRate, Population, Region; one
+  year, about 2000, not named in the file; 48 Sub-Saharan countries).
+- The outline covers some faded bubbles of other regions, so it does not
+  avoid them strictly.
+
 ---
 
 ## 4. Design tools

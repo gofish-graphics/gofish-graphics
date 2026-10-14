@@ -449,8 +449,10 @@
     <code>Shape.blob()</code>, fills the space between members with the alpha
     shape's rule (dialed by <code>convexity</code>), links them with a spanning
     tree so the set stays in one piece, and rounds the outline so its curvature
-    never jumps. Two knobs shape it, and they do not overlap:
-    <code>convexity</code> alone decides what is filled, and
+    never jumps. Its knobs do not overlap: <code>convexity</code> decides the
+    silhouette (how much of the space between members is filled),
+    <code>holes</code> (off by default, as in PostGIS, Shapely and JTS) decides
+    whether a cycle left open inside it stays a hole, and
     <code>roundness</code> changes only how sharply the outline bends, never
     filling a gap, opening a hole or joining two pieces. The convex hull and the
     spine are shortcuts of it, the way <code>sina()</code> and
@@ -466,8 +468,8 @@
       <strong>Recommendation.</strong> Rebuild <code>enclose</code> with
       <code>createRelationalMark</code> and give it
       <code
-        >shape: Shape.box({ rx, ry }) | Shape.blob({ convexity, roundness, neck,
-        avoiding, clearance })</code
+        >shape: Shape.box({ rx, ry }) | Shape.blob({ convexity, holes,
+        roundness, neck, avoiding, clearance })</code
       >, with two shortcuts: <code>Shape.hull(opts)</code> =
       <code>Shape.blob({ convexity: 1, neck: 1, ...opts })</code> and
       <code>Shape.spine(opts)</code> =
@@ -733,13 +735,26 @@ enclose([spread([circle(**d) for d in planets],
         <td><code>convexity</code></td>
         <td><code>Shape.blob</code></td>
         <td>
-          How much of the space between members is filled, from 0 (a spanning
-          tree of links) to 1 (every Delaunay triangle: the convex hull).
-          Unitless. It is the only parameter that fills gaps, so it alone
-          decides the pieces, the holes and the filled area.
+          The silhouette: how much of the space between members is filled, from
+          0 (a spanning tree of links) to 1 (every Delaunay triangle: the convex
+          hull). Unitless. It is the only parameter that fills gaps between
+          members, so it decides the pieces and the filled area.
         </td>
         <td>Bigger is fuller and more convex.</td>
         <td>0.5</td>
+      </tr>
+      <tr>
+        <td><code>holes</code></td>
+        <td><code>Shape.blob</code></td>
+        <td>
+          Whether a hole inside the silhouette that holds no avoided node stays
+          a hole. Off, every such hole is filled; an avoided node's clearance
+          circle stays a hole either way, because avoidance is asked for
+          explicitly. As <code>allow_holes</code> in PostGIS and Shapely, and
+          <code>isHolesAllowed</code> in JTS.
+        </td>
+        <td><code>true</code> keeps open cycles open.</td>
+        <td><code>false</code></td>
       </tr>
       <tr>
         <td><code>roundness</code></td>
@@ -764,8 +779,10 @@ enclose([spread([circle(**d) for d in planets],
           region by (1 − <code>neck</code>) times the region's half-width there,
           and at most (1 − <code>neck</code>) times the bulge. So a lone link
           becomes a tube <code>neck</code> times the bulge, and the edge of a
-          filled region sinks in between its members. It changes shape only: the
-          pieces and holes are those of <code>neck: 1</code>, at every value.
+          filled region sinks in between its members. A thinned link meets its
+          member's bulge in a plain corner, which only
+          <code>roundness</code> rounds. It changes shape only: the pieces and
+          holes are those of <code>neck: 1</code>, at every value.
         </td>
         <td>
           0 to 1. Bigger is fuller; 1 does not pull in. Above 1 is an error: the
@@ -836,17 +853,25 @@ enclose([spread([circle(**d) for d in planets],
       a tube, a box, a triangle, or a tube bent around an avoided node), so each
       outline point is found to a ten-thousandth of a pixel, on a 1 px grid that
       is searched only near the outline. Each point records the circle it lies
-      on, if any, and whether it lies on a member's bulge. This step does not
-      depend on <code>neck</code> or <code>roundness</code>.
+      on, if any, and whether it lies on a member's bulge. With
+      <code>holes: false</code>, every hole of the traced outline that holds no
+      avoided node is then dropped, which fills it; a hole holds an avoided node
+      when part of its edge is a keep-out circle or a node's center lies in it.
+      This step does not depend on <code>neck</code> or <code>roundness</code>.
     </li>
     <li>
       <strong>Neck.</strong> Every outline point that is not on a member's bulge
-      moves inward along the outline's normal by (1 − <code>neck</code>) times
-      the region's half-width there: the radius of the largest disc inside the
-      region that touches the outline at that point, capped at the link's own
-      half-width. Along a lone link that disc is the link's tube, so the tube
-      thins to <code>neck</code> times its width about its middle. On a filled
-      region's edge the cap holds, so the edge sinks in by (1 −
+      moves inward by (1 − <code>neck</code>) times the region's half-width
+      there: the radius of the largest disc inside the region that touches the
+      outline at that point, capped at the link's own half-width. It moves along
+      its own piece's normal (straight toward a link's middle line, or straight
+      away from a keep-out circle's center), so each side of a link moves
+      exactly as a thinner tube's side would. Where two pieces meet in a corner,
+      the two moved sides are carried on until they meet, so the corner stays a
+      corner: the pull never rounds anything, and <code>roundness</code> alone
+      sets the fillet. Along a lone link the disc is the link's tube, so the
+      tube thins to <code>neck</code> times its width about its middle. On a
+      filled region's edge the cap holds, so the edge sinks in by (1 −
       <code>neck</code>) times the bulge between its members. Where two parts of
       the region only touch, the disc is the narrow place between them, so it
       thins but never parts. A point that would move into a member's bulge stops
@@ -857,8 +882,9 @@ enclose([spread([circle(**d) for d in planets],
       full-width region. Where moving points by different amounts makes a short
       run of the outline cross itself (a small knot, at a cusp between two
       bulges), the knot is cut out at the crossing. If two parts of the outline
-      would still cross, the pull is narrowed by bisection until they do not, as
-      for rounding.
+      would still cross, the pull is halved near that crossing only (within two
+      link widths of it) until they do not; the rest of the outline keeps the
+      asked <code>neck</code>.
     </li>
     <li>
       <strong>Rounding.</strong> The outline is smoothed along its own length
@@ -888,10 +914,12 @@ enclose([spread([circle(**d) for d in planets],
   <p>
     <strong>Holes and detours.</strong> Step 1 decides whether an avoided node
     becomes a hole or the outline goes around it, and the user does not choose.
-    A node inside a filled triangle is inside the region, so it becomes a hole.
-    A node that no filled triangle covers stays outside, and the links route
-    around it. In the Topology example, a and c form no triangle, so b is never
-    inside, and the band passes under b at every <code>convexity</code>.
+    <code>holes</code> does not change this: a clearance circle is a hole at
+    every setting. A node inside a filled triangle is inside the region, so it
+    becomes a hole. A node that no filled triangle covers stays outside, and the
+    links route around it. In the Topology example, a and c form no triangle, so
+    b is never inside, and the band passes under b at every
+    <code>convexity</code>.
   </p>
   <p>
     <strong>The convexity scale.</strong> alpha = <em>m</em> ×
@@ -1157,21 +1185,18 @@ enclose([spread([circle(**d) for d in planets],
     <code>clearance</code>.
   </p>
   <p>
-    The neck check, on its own: every set of every playground dataset (U,
-    Topology, the penguins, the hyperedges with <code>via</code> and with edges
-    as members, the trout and Munkres' panel, 13 sets), at
-    <code>convexity</code> 0, 0.25, 0.5, 0.75 and 1, with
-    <code>neck</code> swept from 0.3 to 1 in steps of 0.01. Before, the counts
-    stayed the same along 53 of 65 sweeps, and the links or their routes changed
-    along 30 of them. Now the counts, the links and the routes stay the same
-    along 65 of 65, with <code>roundness</code> 0 and with
-    <code>roundness</code> equal to <code>padding</code>. (With
-    <code>roundness</code> twice the padding, one tiny hole in the Gentoo set,
-    about 6 px², is rounded down to no area at every <code>neck</code>, 1
-    included, so its loop counts as a hole or a piece by rounding error: that is
-    rounding, not <code>neck</code>.) Josh's two spellings on the Adelie set
-    (spine, <code>padding: 4</code>, <code>roundness: 0</code>, the other
-    species avoided) now draw the same pieces and holes.
+    The neck check, on its own: every set of every playground dataset, 14 sets
+    (Topology, the U, the penguins avoiding nothing and avoiding the other
+    species, the hyperedges, ChartAccent avoiding nothing and avoiding the other
+    regions, and Munkres' panel), at <code>convexity</code> 0, 0.25, 0.5, 0.75
+    and 1, with <code>neck</code> swept from 0.1 to 1 in steps of 0.02, with
+    <code>roundness</code> 0 and with <code>roundness</code> equal to
+    <code>padding</code>, and with <code>holes</code> off and on. The pieces and
+    holes stay the same along 140 of 140 sweeps at each
+    <code>holes</code> value, and no necked outline crosses itself. Josh's two
+    spellings on the Adelie set (spine, <code>padding: 4</code>,
+    <code>roundness: 0</code>, the other species avoided) draw the same pieces
+    and holes.
   </p>
   <figure>
     <div class="shot wide">
@@ -1186,13 +1211,13 @@ enclose([spread([circle(**d) for d in planets],
   </figure>
   <p>
     Columns are <code>convexity</code> and rows are <code>neck</code> (0.4, 0.6,
-    0.8, 1), with <code>roundness</code> equal to <code>padding</code>. Down a
-    column the pieces and holes never change. At <code>convexity: 1</code> the
-    hull's edges sink in between their members, so the outline waists between
-    neighbors while the inside stays filled and the holes stay exact. At 0 the
-    tubes thin. Where the full-width region already had a hairline slit between
-    two rows of dots (the U at 0 and 0.25), thinning widens it into a visible
-    notch.
+    0.8, 1), with <code>roundness</code> equal to <code>padding</code>; the
+    penguins avoid nothing, and all three species thin together. Down a column
+    the pieces and holes never change. At <code>convexity: 1</code> the hull's
+    edges sink in between their members, so the outline waists between neighbors
+    while the inside stays filled and the holes stay exact. At 0 the tubes thin.
+    Where the full-width region already had a hairline slit between two rows of
+    dots (the U at 0 and 0.25), thinning widens it into a visible notch.
   </p>
   <figure>
     <div class="shot wide">
@@ -1209,155 +1234,146 @@ enclose([spread([circle(**d) for d in planets],
     <div class="shot wide">
       <img
         src="img/neck-grid-penguins.png"
-        alt="The three penguin species, each avoiding the others, at convexity 0 to 1 across and neck 0.4 to 1 down; the tubes thin down each column and the pieces and holes stay the same"
+        alt="The three penguin species, nothing avoided, at convexity 0 to 1 across and neck 0.4 to 1 down; all three species thin down each column and the pieces and holes stay the same"
       />
     </div>
     <figcaption>
-      Penguins, each species avoiding the others: <code>convexity</code> across,
+      Penguins, nothing avoided: <code>convexity</code> across,
       <code>neck</code> down.
     </figcaption>
   </figure>
   <p>
-    The topology check, on its own: each dataset (with the hyperedges both with
-    edges as members and with <code>via</code>) at seven values of
-    <code>convexity</code> (0, 0.25, 0.5, 0.65, 0.75, 0.9 and 1), with the
-    second knob swept over 0, ¼, ½, 1, 1.5, 2, 3 and 4 times the padding. A cell
-    lists pieces/holes along the sweep.
-  </p>
-  <p>
-    Before, the counts stayed the same along 26 of 35 sweeps; after, along 35 of
-    35, with roundness 0 included. (The exact trace keeps one more small gap
-    open on the Gentoo at low convexity than the old 0.5 px grid did, at every
-    roundness.) The sweeps that changed before:
-  </p>
-  <div class="tablewrap">
-    <table>
-      <tr>
-        <th>dataset</th>
-        <th>convexity</th>
-        <th>before (<code>smoothing</code>)</th>
-        <th>after (<code>roundness</code>)</th>
-      </tr>
-      <tr>
-        <td>U</td>
-        <td class="num">0.9</td>
-        <td class="num">1/2 1/2 1/2 1/3 1/2 1/2 1/2 1/2</td>
-        <td class="num">1/2 1/2 1/2 1/2 1/2 1/2 1/2 1/2</td>
-      </tr>
-      <tr>
-        <td>U</td>
-        <td class="num">1</td>
-        <td class="num">1/2 1/2 1/2 1/3 1/2 1/2 1/2 1/2</td>
-        <td class="num">1/2 1/2 1/2 1/2 1/2 1/2 1/2 1/2</td>
-      </tr>
-      <tr>
-        <td>Gentoo</td>
-        <td class="num">0</td>
-        <td class="num">1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0</td>
-        <td class="num">1/5 1/5 1/5 1/5 1/5 1/5 1/5 1/5</td>
-      </tr>
-      <tr>
-        <td>Gentoo</td>
-        <td class="num">0.25</td>
-        <td class="num">1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0</td>
-        <td class="num">1/5 1/5 1/5 1/5 1/5 1/5 1/5 1/5</td>
-      </tr>
-      <tr>
-        <td>Gentoo</td>
-        <td class="num">0.5</td>
-        <td class="num">1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0</td>
-        <td class="num">1/4 1/4 1/4 1/4 1/4 1/4 1/4 1/4</td>
-      </tr>
-      <tr>
-        <td>Gentoo</td>
-        <td class="num">0.65</td>
-        <td class="num">1/2 1/2 1/2 1/0 2/0 2/0 2/0 1/0</td>
-        <td class="num">1/2 1/2 1/2 1/2 1/2 1/2 1/2 1/2</td>
-      </tr>
-      <tr>
-        <td>Gentoo</td>
-        <td class="num">0.75</td>
-        <td class="num">1/0 1/0 1/0 1/0 2/0 2/0 1/0 1/0</td>
-        <td class="num">1/0 1/0 1/0 1/0 1/0 1/0 1/0 1/0</td>
-      </tr>
-      <tr>
-        <td>hyperedges, <code>via</code></td>
-        <td class="num">0</td>
-        <td class="num">3/3 3/3 3/3 3/3 3/1 3/0 3/0 3/0</td>
-        <td class="num">3/3 3/3 3/3 3/3 3/3 3/3 3/3 3/3</td>
-      </tr>
-      <tr>
-        <td>hyperedges, <code>via</code></td>
-        <td class="num">0.25</td>
-        <td class="num">3/3 3/3 3/3 3/3 3/1 3/0 3/0 3/0</td>
-        <td class="num">3/3 3/3 3/3 3/3 3/3 3/3 3/3 3/3</td>
-      </tr>
-    </table>
-  </div>
-  <p>
-    Josh's two cases, before and after. On the U at high convexity, the old
-    smoothing first left triangle-shaped holes, then half-rounded them, and only
-    at high values cut just the circles. Now the holes are the clearance circles
+    The topology check, on its own: the same 14 sets at seven values of
+    <code>convexity</code> (0, 0.25, 0.5, 0.65, 0.75, 0.9 and 1), with
+    <code>roundness</code> swept over 0, ¼, ½, 1, 1.5, 2, 3 and 4 times the
+    padding. The pieces and holes stay the same along 98 of 98 sweeps, with
+    <code>holes</code> off and with it on. (The comparison with the old
+    <code>smoothing</code>, which changed them along 9 of 35 sweeps, is in
+    History, v6.) On the U at high convexity the holes are the clearance circles
     at every roundness, and roundness only softens the corners, from the angular
-    hull at 0 to the softest the 9 px keep-out circles allow. Convexity 0.65 is
-    the third case Josh named; there too only the corners soften.
+    hull at 0 to the softest the 9 px keep-out circles allow.
   </p>
-  <figure>
-    <div class="shot wide">
-      <img
-        src="img/before-smoothing-u.png"
-        alt="Before: the U at convexity 0.65, 0.9 and 1 with the old smoothing at 0, 4, 8, 16 and 24 px; the holes go from triangles to half-rounded shapes to circles"
-      />
-    </div>
-    <figcaption>Before: <code>smoothing</code> across.</figcaption>
-  </figure>
   <figure>
     <div class="shot wide">
       <img
         src="img/roundness-u.png"
-        alt="After: the U at convexity 0.65, 0.9 and 1 with roundness at 0, 4, 8, 12 and 15 px; the holes are circles in every cell and only the corners soften"
-      />
-    </div>
-    <figcaption>After: <code>roundness</code> across, same rows.</figcaption>
-  </figure>
-  <p>
-    On the hyperedges at convexity 0.25, the old smoothing filled the three
-    cycles at 12 px and above, which looked like a higher convexity. With
-    roundness the cycles stay open at every value. The holes get smaller as
-    their corners round, because a triangle's corners are the part of it that is
-    cut. With edges as members (the last row), roundness changes little, because
-    the edge members are slim tubes (6.75 px), and roundness stops at the
-    smallest circle in the region.
-  </p>
-  <figure>
-    <div class="shot wide">
-      <img
-        src="img/before-smoothing-hyperedges.png"
-        alt="Before: hyperedges with via at convexity 0.25, old smoothing 0 to 24 px; the cycles fill from 12 px"
+        alt="The U at convexity 0.65, 0.9 and 1 with roundness at 0, 4, 8, 12 and 15 px; the holes are circles in every cell and only the corners soften"
       />
     </div>
     <figcaption>
-      Before: <code>smoothing</code> across, with <code>via</code>.
+      <code>roundness</code> across, at convexity 0.65, 0.9 and 1.
     </figcaption>
-  </figure>
-  <figure>
-    <div class="shot wide">
-      <img
-        src="img/roundness-hyperedges.png"
-        alt="After: hyperedges with via at convexity 0.25, roundness 0 to 15 px; the three cycles stay open"
-      />
-    </div>
-    <figcaption>After: <code>roundness</code> across, same row.</figcaption>
   </figure>
   <figure>
     <div class="shot wide">
       <img
         src="img/roundness-hyperedges-members.png"
-        alt="After: hyperedges with edges as members at convexity 0.25, roundness 0 to 15 px"
+        alt="Hyperedges with edges as members at convexity 0.25, roundness 0 to 15 px"
       />
     </div>
-    <figcaption>After, with edges as members.</figcaption>
+    <figcaption>
+      Hyperedges at convexity 0.25: roundness changes little, because the edge
+      members are slim tubes (6.75 px), and roundness stops at the smallest
+      circle in the region.
+    </figcaption>
   </figure>
+
+  <h3 id="holes">Holes are a separate switch</h3>
+  <p>
+    Josh: lowering <code>convexity</code> on the hyperedges did not only change
+    the silhouette, it also opened holes, so the name did not fit. Now
+    <code>convexity</code> is the silhouette and <code>holes</code> is a
+    separate boolean, off by default, as in the GIS libraries that compute
+    concave hulls:
+  </p>
+  <div class="tablewrap">
+    <table>
+      <tr>
+        <th>Library</th>
+        <th>Spelling</th>
+        <th>Holes</th>
+      </tr>
+      <tr>
+        <td>PostGIS</td>
+        <td>
+          <code
+            >ST_ConcaveHull(geom, param_pctconvex, param_allow_holes =
+            false)</code
+          >
+        </td>
+        <td>off unless asked</td>
+      </tr>
+      <tr>
+        <td>Shapely 2</td>
+        <td>
+          <code
+            >shapely.concave_hull(geometry, ratio=0.0, allow_holes=False)</code
+          >
+        </td>
+        <td>off unless asked</td>
+      </tr>
+      <tr>
+        <td>JTS</td>
+        <td>
+          <code
+            >ConcaveHull.concaveHullByLengthRatio(geom, lengthRatio,
+            isHolesAllowed)</code
+          >
+        </td>
+        <td>off unless asked</td>
+      </tr>
+      <tr>
+        <td>JTS</td>
+        <td>
+          <code>ConcaveHull.alphaShape(geom, alpha, isHolesAllowed)</code>
+        </td>
+        <td>the flag is required</td>
+      </tr>
+    </table>
+  </div>
+  <p class="small">
+    Sources: <a href="https://postgis.net/docs/ST_ConcaveHull.html">PostGIS</a>,
+    <a
+      href="https://shapely.readthedocs.io/en/stable/reference/shapely.concave_hull.html"
+      >Shapely</a
+    >,
+    <a
+      href="https://locationtech.github.io/jts/javadoc/org/locationtech/jts/algorithm/hull/ConcaveHull.html"
+      >JTS</a
+    >
+    (checked 2026-10-14; details in <code>survey-precedent.md</code>, section
+    3.11).
+  </p>
+  <p>
+    With <code>holes: false</code>, every hole that holds no avoided node is
+    filled. With <code>holes: true</code> it stays, which is the behavior before
+    this change. A hole cut by an avoided node is its clearance circle in both.
+    Filling only drops loops of the traced outline, so it costs nothing
+    measurable, and it never joins or splits pieces.
+  </p>
+  <pre><code>enclose({ shape: Shape.blob({ convexity: 0.35, holes: true,
+                              avoiding: selectAll("nodes") }),
+          padding: 6 }, setNodesAndEdges)</code></pre>
+  <figure>
+    <div class="shot">
+      <img
+        src="img/holes-hyperedges-penguins.png"
+        alt="Holes on and off: the hyperedges at convexity 0.35 with a hole in each set's triangle when holes is true and none by default; the penguins at 0.25 with small gaps kept when holes is true and filled by default"
+      />
+    </div>
+    <figcaption>
+      On the hyperedges at 0.35, each set's links are drawn but its triangles
+      are not yet filled, so with <code>holes: true</code> each set has a hole
+      in each triangle; the default fills them. On the penguins at 0.25,
+      <code>holes: true</code> keeps the small gaps between touching dots
+      (Adelie has five), and the default fills them.
+    </figcaption>
+  </figure>
+  <p>
+    The presets: <code>Shape.hull()</code> has no empty holes, so nothing
+    changes. <code>Shape.spine()</code> over a cycle of member edges gets its
+    cycle filled unless <code>holes: true</code> is given (open decision 15).
+  </p>
 
   <h3>Custom shapes and the ellipse</h3>
   <p>
@@ -1448,12 +1464,12 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
     </button>
     <button
       role="tab"
-      id="tab-trout"
-      aria-controls="ds-trout"
+      id="tab-chartaccent"
+      aria-controls="ds-chartaccent"
       aria-selected="false"
       tabindex="-1"
     >
-      Trout across lakes
+      ChartAccent
     </button>
     <button
       role="tab"
@@ -1596,12 +1612,13 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
   >
     <h3>(d) Hyperedges over a node-link graph</h3>
     <p>
-      <span class="tag ok">proposed change</span>
       <strong>The edges are members.</strong> Each set's members are its nodes
       plus the graph edges whose two ends are both in the set. An edge member is
       a line, held inside the outline at <code>padding</code> along its whole
-      length, and it already links its two ends. This replaces the earlier
-      <code>via</code> parameter (History, v5).
+      length, and it already links its two ends (History, v5, has the edge
+      parameter this replaced). As a spine, each set is its nodes and its edges,
+      drawn as slim tubes at the padding, and nothing else: the members already
+      touch, so the spanning tree adds no link.
     </p>
     <div class="pair">
       <div>
@@ -1638,28 +1655,7 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
 ])</code></pre>
       </div>
     </div>
-    <figure>
-      <div class="shot">
-        <img
-          src="img/hyperedges-members-vs-via.png"
-          alt="Three sets over a graph: edges as members (left) against via (right), as a spine (top) and at the defaults (bottom)"
-        />
-      </div>
-      <figcaption>
-        <strong
-          >Nodes + edges as members (proposed), left;
-          <code>via</code> (current), right.</strong
-        >
-        As a spine (top) the two differ. With edges as members, each set is its
-        nodes and its edges, drawn as slim tubes at the padding, and nothing
-        else: the members already touch, so the spanning tree adds no link. With
-        <code>via</code>, the spanning tree over node centers adds links the
-        graph does not have (2 to 3 in set A, 5 to 6 in set B, 3 to 7 in set C),
-        and each closes a cycle with a hole in it. At the defaults (bottom) the
-        two are the same picture, because the filled triangles cover the edges
-        either way.
-      </figcaption>
-    </figure>
+
     <figure>
       <div class="shot wide">
         <img
@@ -1668,12 +1664,11 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
         />
       </div>
       <figcaption>
-        The grid on the proposed version. At 0 and 0.25 each set is a tube along
-        its own edges. From 0.5 the triangles fill. At 0.75 and 1 set C fills
-        the triangle 3, 8, 9, which covers the graph edges 6 to 7 and 4 to 6;
-        nodes 4 and 6 stay outside. This is the same as with <code>via</code>:
-        edges as members add what must be inside, and say nothing about what
-        must stay out.
+        The grid. At 0 and 0.25 each set is a tube along its own edges. From 0.5
+        the triangles fill. At 0.75 and 1 set C fills the triangle 3, 8, 9,
+        which covers the graph edges 6 to 7 and 4 to 6; nodes 4 and 6 stay
+        outside. Edges as members add what must be inside, and say nothing about
+        what must stay out.
       </figcaption>
     </figure>
     <figure>
@@ -1687,25 +1682,22 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
         <strong>Connected only through a non-member.</strong> Set {3, 5, 10}
         reaches 5 from 3 only through node 4. Its member subgraph is in two
         pieces (node 3, and the edge 5 to 10), and the spanning tree joins them
-        with a link routed around node 4, as wide as the node bulge. The
-        <code>via</code> version draws the same link.
+        with a link routed around node 4, as wide as the node bulge.
       </figcaption>
     </figure>
     <figure>
       <div class="shot">
         <img
           src="img/hyperedges-members-near-edge.png"
-          alt="An edge u to v passing non-members x and w, as a member and with via"
+          alt="An edge u to v passing non-members x and w, as a member"
         />
       </div>
       <figcaption>
         <strong>An edge near non-members.</strong> Edge u to v passes x (13 px
-        above it) and w (17 px, then 11 px, below it). As a member, the outline
-        is a slim tube that clears both with a small notch. With
-        <code>via</code> the link is a full-bulge tube, so the cut around w and
-        x makes a lopsided shape. At 11 px, w's keep-out zone (its radius plus
-        <code>clearance</code>) reaches the edge itself, and both versions let
-        <code>clearance</code> win, so the outline touches the drawn edge at w.
+        above it) and w (17 px, then 11 px, below it). The outline is a slim
+        tube that clears both with a small notch. At 11 px, w's keep-out zone
+        (its radius plus <code>clearance</code>) reaches the edge itself, and
+        <code>clearance</code> wins, so the outline touches the drawn edge at w.
         No outline can keep both promises there; the rule is the one that
         applies to a node member near a non-member.
       </figcaption>
@@ -1782,53 +1774,92 @@ set_members = [
       inside, since both shapes are convex; it matters only for an edge whose
       end is outside the set.
     </p>
-    <h4>What <code>via</code> did that this does not</h4>
-    <p>
-      Two things, neither needed by an example. <code>via</code> could make the
-      outline follow a route it does not draw, but a route the outline follows
-      is inside it at the padding anyway, so it might as well be a member; a
-      route with no mark can be drawn as an invisible line. And
-      <code>via</code> drew each edge as a tube as wide as the node bulge, while
-      a member edge is slim (its stroke plus <code>padding</code>); a wider look
-      comes from <code>padding</code> or <code>convexity</code>. So
-      <code>via</code> can be dropped. With it gone, <code>avoiding</code> is
-      the only strategy parameter that holds refs. It could later become a
-      second operand role of <code>enclose</code> (the nodes to keep out, beside
-      the members); that is not redesigned here.
-    </p>
   </section>
 
   <section
     role="tabpanel"
-    id="ds-trout"
-    aria-labelledby="tab-trout"
+    id="ds-chartaccent"
+    aria-labelledby="tab-chartaccent"
     tabindex="0"
   >
-    <h3>(e) Trout across lakes in the grouped bars</h3>
-    <pre><code>chart(catch)
-  .flow(spread({ by: "lake", dir: "x" }),
-        spread({ by: "species", dir: "x", spacing: 9 }))
-  .mark(rect({ h: "count", fill: "species" }).name("bars"))
-  .layer(chart(selectAll("bars"))
-    .flow(filter((d) =&gt; d.species === "trout"))
-    .mark(enclose({ shape: Shape.spine({ avoiding: selectAll("bars"),
-                                         neck, roundness }),
-                    padding: 4, stroke: "#d6580c" })))</code></pre>
+    <h3>
+      (e) ChartAccent: Sub-Saharan Africa on fertility against life expectancy
+    </h3>
+    <p>
+      ChartAccent (Ren, Brehmer, Lee, Höllerer and Choe, PacificVis 2017) is a
+      chart annotation tool. One of its examples, "Fertility Rate vs. Life
+      Expectancy", draws a bubble set around the Sub-Saharan countries in a
+      scatterplot of 191 countries, with bubble area by population and the other
+      regions faded. The replica uses ChartAccent's own sample data (its
+      <code>gapminder.csv</code>, one year, about 2000; source in
+      <code>survey-precedent.md</code>, section 3.12) and the same 48 countries
+      as members. Like the original, the outline does not avoid the other
+      regions: it covers some of their faded bubbles.
+    </p>
+    <pre><code>chart(countries)
+  .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+  .mark(circle({ area: "Population", fill: "Region" }).name("countries"))
+  .layer(chart(selectAll("countries"))
+    .flow(filter((d) =&gt; d.Region === "Sub-Saharan Africa"))
+    .mark(enclose({ shape: Shape.blob({ convexity: 0.25, neck: 0.6 }),
+                    padding: 6, fill: "#47b8a0", opacity: 0.3 })))</code></pre>
+    <div class="grid2">
+      <figure>
+        <div class="shot">
+          <img
+            src="img/chartaccent-replica.png"
+            alt="Replica: the 48 Sub-Saharan countries enclosed by one teal blob with thin necks, over faded bubbles of the other regions"
+          />
+        </div>
+        <figcaption>Replica (current construction).</figcaption>
+      </figure>
+      <figure>
+        <div class="shot">
+          <img
+            src="precedent/chartaccent-fertility-vs-life-expectancy.png"
+            alt="ChartAccent's original: a soft teal bubble set around the Sub-Saharan countries"
+          />
+        </div>
+        <figcaption>Reference (ChartAccent, example 5).</figcaption>
+      </figure>
+    </div>
+    <p>
+      Matched: the same members and the same tree. The band joins the two
+      high-life-expectancy countries near fertility 2 to the one near 4, runs
+      down past the cluster at 4.7, and branches into the dense group between 5
+      and 8; the arm to the country near (2.9, 57) runs down through (3.5, 52)
+      and (4.1, 51), as in the original. Still different: ChartAccent's outline
+      is a soft, blurred field with no stroke and rounder lobes; ours is a crisp
+      outline. It fills the dense group a little less, because
+      <code>convexity: 0.25</code> fills only the smallest triangles there.
+    </p>
     <figure>
       <div class="shot wide">
         <img
-          src="img/explore-round-trout.png"
-          alt="Grid of the trout set: neck 0.5 to 1 across, roundness 0, 2, 4, 8 px down"
+          src="img/explore-round-chartaccent.png"
+          alt="Grid of the Sub-Saharan set: convexity 0 to 1 across, roundness 0, 3, 6, 12 px down, at neck 0.6"
         />
       </div>
       <figcaption>
-        <strong>Columns are <code>neck</code></strong> (0.5, 0.7, 0.85, 1),
-        because the spine is the useful setting here: the trout bars stand among
-        other bars, and a filled triangle between them would hold those bars as
-        holes. Each link runs over the bar tops as the shortest path that clears
-        the other bars. <code>neck</code> sets the tube's thickness, and
-        <code>roundness</code> rounds the bends. The prototype also avoids the
-        axis line and its labels (decision 10).
+        Columns are <code>convexity</code> and rows are <code>roundness</code>,
+        at <code>neck: 0.6</code>. From 0.75 the set fills across the middle of
+        the chart and covers South Asia and the Middle East, which is not what
+        the example says; 0.25 to 0.5 keep the reading of a connected region.
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/neck-grid-chartaccent.png"
+          alt="The Sub-Saharan set at neck 0.4, 0.6, 0.8 and 1, avoiding nothing (top) and avoiding the other regions (bottom)"
+        />
+      </div>
+      <figcaption>
+        Columns are <code>neck</code>, at <code>convexity: 0.25</code>. The top
+        row avoids nothing, as the original does; the bottom row adds
+        <code>avoiding: selectAll("countries")</code>, which routes the band
+        around the other regions' bubbles, with long detours over the top of the
+        chart.
       </figcaption>
     </figure>
   </section>
@@ -2075,14 +2106,13 @@ set_members = [
     </li>
     <li>
       In a chart, should a spine stay inside the plot area by rule, or should
-      the user list the axis in <code>avoiding</code> (the trout example)?
+      the user list the axis in <code>avoiding</code> (the trout example,
+      History v9)?
     </li>
     <li>
-      The two shape knobs: <code>convexity</code> (what is filled, 0 to 1,
-      scaled to the point spacing) and <code>roundness</code> (corner rounding
-      in pixels, never changing the topology)? Is <code>roundness</code> the
-      right name? (Alternative: <code>cornerRadius</code>, the pixel corner
-      radius of Vega-Lite's marks and Figma.)
+      Confirm <code>holes</code> (default <code>false</code>), following
+      PostGIS, Shapely and JTS, with <code>convexity</code> as the silhouette
+      only.
     </li>
     <li>
       Keep all rounding inside <code>Shape.blob()</code> (the outline rounding),
@@ -2091,16 +2121,23 @@ set_members = [
       <code>clearance</code>.)
     </li>
     <li>
-      <strong>Confirm:</strong> drop <code>via</code> in favor of enclosing the
-      edges themselves as members (the hyperedges tab)? Box and hull contain
-      line members too, since members are just shapes, and the blob reads their
-      geometry through #974's <code>boundary</code> query.
+      <strong>Confirm:</strong> a graph's edges are enclosed as members (the
+      hyperedges tab), with no separate edge parameter (History, v5). Box and
+      hull contain line members too, since members are just shapes, and the blob
+      reads their geometry through #974's <code>boundary</code> query.
     </li>
     <li>
       Should <code>roundness</code> go past the smallest circle in the region,
       so a hull's corners can round more than the members' grown radius? The
       cost is that <code>padding</code> and <code>clearance</code> become
       approximate near those circles.
+    </li>
+    <li>
+      Should <code>Shape.spine()</code> keep the one default
+      <code>holes: false</code>, so a spine over a cycle of edges is filled?
+      (Recommended: yes. In the data, the holes a spine leaves are mostly small
+      gaps between touching dots, five per penguin species; a ring is
+      <code>Shape.spine({ holes: true })</code>.)
     </li>
   </ol>
 
@@ -2431,10 +2468,10 @@ chart(catch)
         </td>
         <td>
           <strong>Matches</strong> in spirit:
-          <code>Shape.blob({ avoiding })</code>. With <code>via</code> dropped,
-          <code>avoiding</code> is the only strategy parameter that holds refs.
-          It could later become a second operand role of <code>enclose</code>;
-          not redesigned here.
+          <code>Shape.blob({ avoiding })</code>. With the graph's edges as
+          members, <code>avoiding</code> is the only strategy parameter that
+          holds refs. It could later become a second operand role of
+          <code>enclose</code>; not redesigned here.
         </td>
       </tr>
       <tr>
@@ -2626,6 +2663,32 @@ chart(catch)
         face-size limit <code>A</code> (History, v2).
       </p>
     </div>
+    <div class="card">
+      <h4>PostGIS, Shapely, JTS</h4>
+      <pre><code>ST_ConcaveHull(geom, pctconvex,
+  allow_holes = false)</code></pre>
+      <p>
+        A concave hull: one fill number, and a separate holes switch, off by
+        default (Shapely <code>allow_holes</code>, JTS
+        <code>isHolesAllowed</code>).
+        <a href="https://postgis.net/docs/ST_ConcaveHull.html">docs</a>
+      </p>
+    </div>
+    <div class="card">
+      <h4>ChartAccent</h4>
+      <div class="shot">
+        <img
+          src="precedent/chartaccent-fertility-vs-life-expectancy.png"
+          alt="ChartAccent bubble set around the Sub-Saharan countries"
+        />
+      </div>
+      <pre><code>(annotation tool; no API)</code></pre>
+      <p>
+        A bubble set drawn around a chosen group of scatterplot points. The
+        ChartAccent tab of the explorer.
+        <a href="https://chartaccent.github.io/">site</a>
+      </p>
+    </div>
   </div>
   <p>
     <strong>What GoFish should take:</strong> one name with a shape value
@@ -2653,6 +2716,11 @@ chart(catch)
     <code>concavity</code> grows more convex; alpha is a radius in CGAL and an
     inverse radius in Python's <code>alphashape</code>.
     <code>convexity</code> reads its direction from the name and has no unit.
+    Holes are a separate boolean in all three GIS libraries (<code
+      >allow_holes</code
+    >
+    in PostGIS and Shapely, <code>isHolesAllowed</code> in JTS), off by default;
+    <code>holes</code> follows them, in GoFish's plain style without the verb.
     <code>roundness</code> is a pixel length, bigger is rounder; it is the plain
     word for the property, and its unit matches the pixel corner radius of CSS
     (<code>border-radius</code>), Vega-Lite (<code>cornerRadius</code>) and
@@ -3255,6 +3323,42 @@ chart(catch)
       v5 also showed the Gentoo species alone, with the other two avoided and
       cropped to its cluster; the penguins tab now shows all three species.
     </p>
+    <p>The comparison that dropped it, on the hyperedges:</p>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/hyperedges-members-vs-via.png"
+          alt="Three sets over a graph: edges as members (left) against via (right), as a spine (top) and at the defaults (bottom)"
+        />
+      </div>
+      <figcaption>
+        <strong
+          >Nodes + edges as members , left; <code>via</code> , right.</strong
+        >
+        As a spine (top) the two differ. With edges as members, each set is its
+        nodes and its edges, drawn as slim tubes at the padding, and nothing
+        else: the members already touch, so the spanning tree adds no link. With
+        <code>via</code>, the spanning tree over node centers adds links the
+        graph does not have (2 to 3 in set A, 5 to 6 in set B, 3 to 7 in set C),
+        and each closes a cycle with a hole in it. At the defaults (bottom) the
+        two are the same picture, because the filled triangles cover the edges
+        either way.
+      </figcaption>
+    </figure>
+    <h4>What <code>via</code> did that edges as members do not</h4>
+    <p>
+      Two things, neither needed by an example. <code>via</code> could make the
+      outline follow a route it does not draw, but a route the outline follows
+      is inside it at the padding anyway, so it might as well be a member; a
+      route with no mark can be drawn as an invisible line. And
+      <code>via</code> drew each edge as a tube as wide as the node bulge, while
+      a member edge is slim (its stroke plus <code>padding</code>); a wider look
+      comes from <code>padding</code> or <code>convexity</code>. So
+      <code>via</code> can be dropped. With it gone, <code>avoiding</code> is
+      the only strategy parameter that holds refs. It could later become a
+      second operand role of <code>enclose</code> (the nodes to keep out, beside
+      the members); that is not redesigned here.
+    </p>
   </details>
 
   <details class="hist">
@@ -3337,6 +3441,148 @@ chart(catch)
         />
       </div>
     </figure>
+    <p>
+      The v6 topology check: each dataset of the time (with the hyperedges both
+      with edges as members and with <code>via</code>) at seven values of
+      <code>convexity</code> (0, 0.25, 0.5, 0.65, 0.75, 0.9 and 1), with the
+      second knob swept over 0, ¼, ½, 1, 1.5, 2, 3 and 4 times the padding. A
+      cell lists pieces/holes along the sweep.
+    </p>
+    <p>
+      Before, the counts stayed the same along 26 of 35 sweeps; after, along 35
+      of 35, with roundness 0 included. (The exact trace keeps one more small
+      gap open on the Gentoo at low convexity than the old 0.5 px grid did, at
+      every roundness.) The sweeps that changed before:
+    </p>
+    <div class="tablewrap">
+      <table>
+        <tr>
+          <th>dataset</th>
+          <th>convexity</th>
+          <th>before (<code>smoothing</code>)</th>
+          <th>after (<code>roundness</code>)</th>
+        </tr>
+        <tr>
+          <td>U</td>
+          <td class="num">0.9</td>
+          <td class="num">1/2 1/2 1/2 1/3 1/2 1/2 1/2 1/2</td>
+          <td class="num">1/2 1/2 1/2 1/2 1/2 1/2 1/2 1/2</td>
+        </tr>
+        <tr>
+          <td>U</td>
+          <td class="num">1</td>
+          <td class="num">1/2 1/2 1/2 1/3 1/2 1/2 1/2 1/2</td>
+          <td class="num">1/2 1/2 1/2 1/2 1/2 1/2 1/2 1/2</td>
+        </tr>
+        <tr>
+          <td>Gentoo</td>
+          <td class="num">0</td>
+          <td class="num">1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0</td>
+          <td class="num">1/5 1/5 1/5 1/5 1/5 1/5 1/5 1/5</td>
+        </tr>
+        <tr>
+          <td>Gentoo</td>
+          <td class="num">0.25</td>
+          <td class="num">1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0</td>
+          <td class="num">1/5 1/5 1/5 1/5 1/5 1/5 1/5 1/5</td>
+        </tr>
+        <tr>
+          <td>Gentoo</td>
+          <td class="num">0.5</td>
+          <td class="num">1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0</td>
+          <td class="num">1/4 1/4 1/4 1/4 1/4 1/4 1/4 1/4</td>
+        </tr>
+        <tr>
+          <td>Gentoo</td>
+          <td class="num">0.65</td>
+          <td class="num">1/2 1/2 1/2 1/0 2/0 2/0 2/0 1/0</td>
+          <td class="num">1/2 1/2 1/2 1/2 1/2 1/2 1/2 1/2</td>
+        </tr>
+        <tr>
+          <td>Gentoo</td>
+          <td class="num">0.75</td>
+          <td class="num">1/0 1/0 1/0 1/0 2/0 2/0 1/0 1/0</td>
+          <td class="num">1/0 1/0 1/0 1/0 1/0 1/0 1/0 1/0</td>
+        </tr>
+        <tr>
+          <td>hyperedges, <code>via</code></td>
+          <td class="num">0</td>
+          <td class="num">3/3 3/3 3/3 3/3 3/1 3/0 3/0 3/0</td>
+          <td class="num">3/3 3/3 3/3 3/3 3/3 3/3 3/3 3/3</td>
+        </tr>
+        <tr>
+          <td>hyperedges, <code>via</code></td>
+          <td class="num">0.25</td>
+          <td class="num">3/3 3/3 3/3 3/3 3/1 3/0 3/0 3/0</td>
+          <td class="num">3/3 3/3 3/3 3/3 3/3 3/3 3/3 3/3</td>
+        </tr>
+      </table>
+    </div>
+    <p>
+      Josh's two cases, before and after. On the U at high convexity, the old
+      smoothing first left triangle-shaped holes, then half-rounded them, and
+      only at high values cut just the circles. Now the holes are the clearance
+      circles at every roundness, and roundness only softens the corners, from
+      the angular hull at 0 to the softest the 9 px keep-out circles allow.
+      Convexity 0.65 is the third case Josh named; there too only the corners
+      soften.
+    </p>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/before-smoothing-u.png"
+          alt="Before: the U at convexity 0.65, 0.9 and 1 with the old smoothing at 0, 4, 8, 16 and 24 px; the holes go from triangles to half-rounded shapes to circles"
+        />
+      </div>
+      <figcaption>Before: <code>smoothing</code> across.</figcaption>
+    </figure>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/roundness-u.png"
+          alt="After: the U at convexity 0.65, 0.9 and 1 with roundness at 0, 4, 8, 12 and 15 px; the holes are circles in every cell and only the corners soften"
+        />
+      </div>
+      <figcaption>After: <code>roundness</code> across, same rows.</figcaption>
+    </figure>
+    <p>
+      On the hyperedges at convexity 0.25, the old smoothing filled the three
+      cycles at 12 px and above, which looked like a higher convexity. With
+      roundness the cycles stay open at every value. The holes get smaller as
+      their corners round, because a triangle's corners are the part of it that
+      is cut. With edges as members (the last row), roundness changes little,
+      because the edge members are slim tubes (6.75 px), and roundness stops at
+      the smallest circle in the region.
+    </p>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/before-smoothing-hyperedges.png"
+          alt="Before: hyperedges with via at convexity 0.25, old smoothing 0 to 24 px; the cycles fill from 12 px"
+        />
+      </div>
+      <figcaption>
+        Before: <code>smoothing</code> across, with <code>via</code>.
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/roundness-hyperedges.png"
+          alt="After: hyperedges with via at convexity 0.25, roundness 0 to 15 px; the three cycles stay open"
+        />
+      </div>
+      <figcaption>After: <code>roundness</code> across, same row.</figcaption>
+    </figure>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/roundness-hyperedges-members.png"
+          alt="After: hyperedges with edges as members at convexity 0.25, roundness 0 to 15 px"
+        />
+      </div>
+      <figcaption>After, with edges as members.</figcaption>
+    </figure>
   </details>
 
   <details class="hist">
@@ -3412,8 +3658,143 @@ chart(catch)
   </details>
 
   <details class="hist">
+    <summary>
+      v9: <code>neck</code> keeps its corners, <code>holes</code>, ChartAccent
+    </summary>
+    <p>
+      <strong>The flare.</strong> Josh, on the hyperedges at
+      <code>convexity: 0.22</code>, <code>neck: 0.42</code>,
+      <code>roundness: 3.5</code>, <code>padding: 4</code>,
+      <code>clearance: 3</code> (with <code>via</code>, as the playground then
+      had it): the thinned necks met node 4 through a wide triangular web, far
+      bigger than <code>roundness</code> 3.5 should give. The cause was the
+      direction of the pull. Each outline point moved along the outline's own
+      normal, and at a corner between two pieces (the corner of a hole between
+      two links that leave the same node, or where a link meets another link)
+      that normal turns through the corner. So moving every point by the same
+      distance rounded each such corner with a radius equal to the pull itself,
+      (1 − <code>neck</code>) times the bulge: about 7.5 px here, and more at
+      lower <code>neck</code>. That is an erosion of the union, while a thinned
+      tube is the union of eroded pieces; the difference is the web. Now each
+      point moves along its own piece's normal, and where two pieces meet, the
+      moved sides are carried on until they meet, so the corner stays a corner.
+      On Josh's settings the blue set's hole grows from 1545 to 1767 px², which
+      is the web removed, and the three sets lose 2 to 6 percent of their filled
+      area the same way. Curvature stays continuous with <code>roundness</code>
+      above 0, but the now-sharp corners round to a tighter bend (the largest
+      curvature on the hyperedges went from 0.18 to 0.56 per px at
+      <code>roundness: 6</code>).
+    </p>
+    <figure>
+      <div class="shot">
+        <img
+          src="img/neck-flare-before-after.png"
+          alt="Josh's hyperedge settings before and after: before, wide webs fill the corners of each set's hole near node 4; after, the thinned links meet in plain corners"
+        />
+      </div>
+      <figcaption>Josh's settings, before and after.</figcaption>
+    </figure>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/neck-flare-sweep.png"
+          alt="The same settings after the fix at neck 0.2, 0.42, 0.7 and 1"
+        />
+      </div>
+      <figcaption>
+        The same settings after, with <code>neck</code> at 0.2, 0.42, 0.7 and 1.
+      </figcaption>
+    </figure>
+    <p>
+      <strong><code>neck</code> only thinned the blue penguins.</strong> Josh:
+      on the penguins, <code>neck</code> only changed the blue (Adelie) necks.
+      The cause was the guard against crossings. When two parts of a necked
+      outline crossed anywhere (a misjudged half-width at a sharp tip), the pull
+      for the whole set was narrowed by bisection until nothing crossed. On the
+      Chinstrap and Gentoo sets some crossing always appeared, so their pull was
+      cut to about 0.16 of what was asked (at <code>convexity: 0</code> the
+      Chinstrap pull was 0 for every <code>neck</code> from 0.7 to 1), while the
+      Adelie set happened to have none. Now the pull is halved only near each
+      crossing, within two link widths of it, and the rest of the outline keeps
+      the asked <code>neck</code>. With the other species avoided, at
+      <code>convexity: 0.5</code>, <code>neck</code> from 1 to 0.1 took the
+      Chinstrap area from 9500 to 8692 px² and now takes it to 6707; the Gentoo
+      went from 11476 to 10373 and now goes to 8914. The Adelie area is
+      unchanged (14700 to 11447).
+    </p>
+    <p>
+      <strong>Penguins avoid nothing.</strong> Josh: the species overlap too
+      much for avoidance to look good. The penguin images now avoid nothing; the
+      playground keeps avoidance behind a checkbox, as a speed test.
+    </p>
+    <p>
+      <strong><code>via</code> is gone</strong> from the construction, the
+      playground and the current images. The comparisons that used it are in v5
+      and v6.
+    </p>
+    <p>
+      <strong>Trout, dropped.</strong> Josh: it looks bad. ChartAccent's
+      fertility example replaces it in the explorer. The trout grid as it was:
+    </p>
+
+    <pre><code>chart(catch)
+  .flow(spread({ by: "lake", dir: "x" }),
+        spread({ by: "species", dir: "x", spacing: 9 }))
+  .mark(rect({ h: "count", fill: "species" }).name("bars"))
+  .layer(chart(selectAll("bars"))
+    .flow(filter((d) =&gt; d.species === "trout"))
+    .mark(enclose({ shape: Shape.spine({ avoiding: selectAll("bars"),
+                                         neck, roundness }),
+                    padding: 4, stroke: "#d6580c" })))</code></pre>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/explore-round-trout.png"
+          alt="Grid of the trout set: neck 0.5 to 1 across, roundness 0, 2, 4, 8 px down"
+        />
+      </div>
+      <figcaption>
+        <strong>Columns are <code>neck</code></strong> (0.5, 0.7, 0.85, 1),
+        because the spine is the useful setting here: the trout bars stand among
+        other bars, and a filled triangle between them would hold those bars as
+        holes. Each link runs over the bar tops as the shortest path that clears
+        the other bars. <code>neck</code> sets the tube's thickness, and
+        <code>roundness</code> rounds the bends. The prototype also avoids the
+        axis line and its labels (decision 10).
+      </figcaption>
+    </figure>
+
+    <p>
+      <strong><code>holes</code>.</strong> Josh: lowering
+      <code>convexity</code> on the hyperedges also opened holes, so
+      <code>convexity</code> did not name what it did. Rejected alternative:
+      rename <code>convexity</code> to <code>solidity</code> (the area share of
+      the convex hull) and keep holes tied to it. Chosen: keep
+      <code>convexity</code> for the silhouette and add <code>holes</code>, off
+      by default, as PostGIS, Shapely and JTS do.
+    </p>
+  </details>
+
+  <details class="hist">
     <summary>Retired decisions</summary>
     <ul>
+      <li>
+        <strong>The two shape knobs as open decision 11</strong>
+        (<code>convexity</code> and <code>roundness</code>, and whether
+        <code>roundness</code> should be <code>cornerRadius</code>) (v9).
+        Replaced by the <code>holes</code> decision.
+      </li>
+      <li>
+        <strong
+          >Narrowing the whole set's pull when two parts of its outline
+          cross</strong
+        >
+        (v9). Now only the places that cross give way.
+      </li>
+      <li>
+        <strong>Trout across lakes as a dataset</strong> (v9). Josh: it looks
+        bad.
+      </li>
       <li>
         <strong
           ><code>neck</code> as the width of the links that do not bound a

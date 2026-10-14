@@ -1,10 +1,10 @@
 // The six datasets of the proposal's dataset explorer, with the exact members, positions and
-// paint of the stories (BackgroundHull.stories.tsx, sections (a), (b1), (b3), (b4), (e), (f)).
+// paint of the stories (BackgroundHull.stories.tsx).
 import { discPoly, dist, type Member, type Pt } from "./blob";
 import PENGUINS from "./penguins.json";
+import GAPMINDER from "./chartaccent.json";
 
 type Circle = Extract<Member, { kind: "circle" }>;
-type Rect = Extract<Member, { kind: "rect" }>;
 const C = (cx: number, cy: number, r = 7): Circle => ({
   kind: "circle",
   cx,
@@ -17,7 +17,6 @@ export type BlobSet = {
   name: string;
   members: Member[];
   avoiding: Member[];
-  via?: [Pt, Pt][];
   color: string;
   fillOpacity: number;
   strokeWidth: number;
@@ -38,14 +37,12 @@ export type Dataset = {
   over: string;
   /** what the members argument reads as in the code line */
   call: string;
-  /** the shape options that name the avoided nodes and via edges */
+  /** the shape option that names the avoided nodes */
   shapeArgs: string;
   note: string;
-  /** an alternative reading of the same data, behind a checkbox (hyperedges: edges as members) */
-  variant?: { label: string } & Pick<
-    Dataset,
-    "sets" | "call" | "shapeArgs" | "note"
-  >;
+  /** when set, avoiding is behind a checkbox with this label, off by default (penguins: nothing
+   *  is avoided unless asked, which is also the slow case worth timing) */
+  avoidToggle?: string;
 };
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -244,7 +241,8 @@ const penguins: Dataset = {
   over: PEN.map((d) => dot(d.m, SPECIES_COLORS[d.s])).join(""),
   call: "species",
   shapeArgs: "avoiding: otherSpecies",
-  note: "One blob per species; each avoids the other two species' points. The heaviest dataset: three sets, 342 points.",
+  note: "One blob per species, avoiding nothing: the species overlap too much for avoidance to look good. The checkbox makes each species avoid the other two, the heaviest case (three sets, 342 points), for timing.",
+  avoidToggle: "Avoid other species (speed test)",
 };
 
 // ── (d) hyperedges over a node-link graph ────────────────────────────────────
@@ -280,6 +278,8 @@ const SETS = [
   { name: "C", nodes: ["n3", "n8", "n7", "n9"], color: "#54a24b" },
 ];
 const hyperNode = (id: string) => C(NODES[id][0], NODES[id][1], 9);
+// Each set's members are its nodes plus the graph edges whose two ends are both in the set, as
+// segment members (stroke width 1.5), as in the stories' section (g).
 const hyperedges: Dataset = {
   id: "hyperedges",
   label: "Hyperedges",
@@ -288,13 +288,18 @@ const hyperedges: Dataset = {
   view: [8, 4, 345, 225],
   sets: SETS.map((s) => ({
     name: `set ${s.name}`,
-    members: s.nodes.map(hyperNode),
+    members: [
+      ...s.nodes.map(hyperNode),
+      ...EDGES.filter(
+        ([p, q]) => s.nodes.includes(p) && s.nodes.includes(q)
+      ).map(
+        ([p, q]) =>
+          ({ kind: "segment", a: NODES[p], b: NODES[q], w: 1.5 }) as Member
+      ),
+    ],
     avoiding: Object.keys(NODES)
       .filter((id) => !s.nodes.includes(id))
       .map(hyperNode),
-    via: EDGES.filter(
-      ([p, q]) => s.nodes.includes(p) && s.nodes.includes(q)
-    ).map(([p, q]) => [NODES[p], NODES[q]] as [Pt, Pt]),
     color: s.color,
     fillOpacity: 0.25,
     strokeWidth: 2,
@@ -320,111 +325,104 @@ const hyperedges: Dataset = {
     SETS.map((s, i) =>
       text(20 + i * 50, 222, `set ${s.name}`, { fill: s.color, bold: true })
     ).join(""),
-  call: "set",
-  shapeArgs: 'via: selectAll("edges"), avoiding: selectAll("nodes")',
-  note: "Each set's graph edges between its members are `via` links; every other node is avoided.",
-  // Section (g) of the stories: each set's members are its nodes plus the graph edges whose two
-  // ends are both in the set, as segment members (stroke width 1.5); no `via`.
-  variant: {
-    label: "Edges as members",
-    sets: SETS.map((s) => ({
-      name: `set ${s.name}`,
-      members: [
-        ...s.nodes.map(hyperNode),
-        ...EDGES.filter(
-          ([p, q]) => s.nodes.includes(p) && s.nodes.includes(q)
-        ).map(
-          ([p, q]) =>
-            ({ kind: "segment", a: NODES[p], b: NODES[q], w: 1.5 }) as Member
-        ),
-      ],
-      avoiding: Object.keys(NODES)
-        .filter((id) => !s.nodes.includes(id))
-        .map(hyperNode),
-      color: s.color,
-      fillOpacity: 0.25,
-      strokeWidth: 2,
-    })),
-    call: "[...setNodes, ...setEdges]",
-    shapeArgs: 'avoiding: selectAll("nodes")',
-    note: "Each set's members are its nodes and the graph edges between them (segment members, as in the stories' section (g)); every other node is avoided.",
-  },
+  call: "setNodesAndEdges",
+  shapeArgs: 'avoiding: selectAll("nodes")',
+  note: "Each set's members are its nodes and the graph edges between them (line members); every other node is avoided.",
 };
 
-// ── (e) trout across lakes ───────────────────────────────────────────────────
-const LAKES = ["Erie", "Huron", "Michigan", "Ontario"];
-const FISH = ["bass", "trout", "perch"];
-const SP_COLORS = ["#9ecae9", "#f58518", "#bab0ac"];
-const COUNTS = [
-  [40, 95, 60],
-  [70, 55, 85],
-  [30, 110, 45],
-  [80, 70, 50],
+// ── (e) ChartAccent: Sub-Saharan Africa on fertility rate against life expectancy ──────
+// Ren, Brehmer, Lee, Höllerer, Choe, "ChartAccent", PacificVis 2017: the bubble set around the
+// Sub-Saharan countries in its "Fertility Rate vs. Life Expectancy" example, on its own data
+// (github.com/chartaccent/chartaccent, assets/datasets/gapminder.csv; 191 countries, one year).
+// Bubble area is population; the other regions are drawn pale, as in the original.
+export const CA_REGIONS = [
+  "America",
+  "East Asia & Pacific",
+  "Europe & Central Asia",
+  "Middle East & North Africa",
+  "South Asia",
+  "Sub-Saharan Africa",
 ];
-const BW = 20,
-  GAP = 9,
-  GROUP = 3 * BW + 2 * GAP,
-  GG = 34,
-  BASE = 170,
-  X0 = 20;
-const BARS: { m: Rect; sp: number }[] = LAKES.flatMap((_, li) =>
-  FISH.map((_, si) => {
-    const h = COUNTS[li][si] * 1.3;
-    return {
-      m: {
-        kind: "rect",
-        x: X0 + li * (GROUP + GG) + si * (BW + GAP),
-        y: BASE - h,
-        w: BW,
-        h,
-      } as Rect,
-      sp: si,
-    };
+export const CA_COLORS = [
+  "#5aa3b8",
+  "#9cb850",
+  "#f2b45c",
+  "#a99bc0",
+  "#e07b9b",
+  "#47b8a0",
+];
+const CW = 480,
+  CH = 280,
+  CL = 34;
+const cx = (v: number) => CL + (v / 8) * CW;
+const cy = (v: number) => CH - ((v - 45) / 40) * CH;
+const CA = (GAPMINDER as [string, number, number, number, number][]).map(
+  ([name, f, le, pop, region]) => ({
+    name,
+    region,
+    m: C(cx(f), cy(le), Math.max(1.6, 22 * Math.sqrt(pop / 1.26e9))),
   })
 );
-const AXIS_BAND: Rect = {
-  kind: "rect",
-  x: X0 - 6,
-  y: BASE,
-  w: 4 * GROUP + 3 * GG + 12,
-  h: 24,
-};
-const trout: Dataset = {
-  id: "trout",
-  label: "Trout",
-  padding: 4,
-  clearance: 4,
-  view: [0, -46, 450, 246],
+const SSA = 5;
+const caAxes =
+  `<rect x="${CL}" y="${CH}" width="${CW}" height="1" fill="#333"/><rect x="${CL - 1}" y="${cy(85)}" width="1" height="${CH - cy(85)}" fill="#333"/>` +
+  [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    .map((v) => text(cx(v), CH + 15, String(v), { size: 10, anchor: "middle" }))
+    .join("") +
+  [45, 50, 55, 60, 65, 70, 75, 80, 85]
+    .map((v) =>
+      text(CL - 5, cy(v) + 3.5, String(v), { size: 10, anchor: "end" })
+    )
+    .join("") +
+  text(CL + CW - 4, CH - 6, "Fertility Rate", { size: 11, anchor: "end" }) +
+  text(CL + 6, cy(85) + 12, "Life Expectancy", { size: 11 }) +
+  text(CL + 120, cy(85) - 10, "Fertility Rate vs. Life Expectancy", {
+    size: 13,
+  }) +
+  CA_REGIONS.map(
+    (r, i) =>
+      `<circle cx="${CL + CW + 14}" cy="${cy(84) + i * 15}" r="4.5" fill="${CA_COLORS[i]}"/>` +
+      text(CL + CW + 22, cy(84) + i * 15 + 4, r, { size: 10 })
+  ).join("");
+const caOver =
+  CA.filter((d) => d.region !== SSA)
+    .map((d) => dot(d.m, CA_COLORS[d.region], ' fill-opacity="0.25"'))
+    .join("") +
+  CA.filter((d) => d.region === SSA)
+    .map((d) => dot(d.m, CA_COLORS[SSA], ' stroke="#111" stroke-width="1.4"'))
+    .join("") +
+  text(cx(5.4), cy(66.5), "Sub-Saharan Africa", {
+    size: 11,
+    fill: CA_COLORS[SSA],
+  });
+export const CHARTACCENT_SSA = CA.filter((d) => d.region === SSA).map(
+  (d) => d.m
+);
+export const CHARTACCENT_OTHERS = CA.filter((d) => d.region !== SSA).map(
+  (d) => d.m
+);
+const chartaccent: Dataset = {
+  id: "chartaccent",
+  label: "ChartAccent",
+  padding: 6,
+  clearance: 3,
+  view: [0, cy(85) - 26, CL + CW + 150, CH - cy(85) + 48],
   sets: [
     {
-      name: "trout",
-      members: BARS.filter((b) => b.sp === 1).map((b) => b.m),
-      avoiding: [...BARS.filter((b) => b.sp !== 1).map((b) => b.m), AXIS_BAND],
-      color: "#d6580c",
-      fillOpacity: 0.18,
-      strokeWidth: 2,
+      name: "Sub-Saharan Africa",
+      members: CHARTACCENT_SSA,
+      avoiding: CHARTACCENT_OTHERS,
+      color: CA_COLORS[SSA],
+      fillOpacity: 0.3,
+      strokeWidth: 1.5,
     },
   ],
-  over:
-    BARS.map(
-      (b) =>
-        `<rect x="${b.m.x}" y="${b.m.y}" width="${b.m.w}" height="${b.m.h}" fill="${SP_COLORS[b.sp]}"/>`
-    ).join("") +
-    `<rect x="${X0 - 6}" y="${BASE}" width="${4 * GROUP + 3 * GG + 12}" height="1" fill="#666"/>` +
-    LAKES.map((l, li) =>
-      text(X0 + li * (GROUP + GG) + GROUP / 2, BASE + 18, l, {
-        anchor: "middle",
-      })
-    ).join("") +
-    FISH.map((s, si) =>
-      text(X0 + si * 70, -20, s, {
-        fill: si === 1 ? "#d6580c" : "#666",
-        bold: true,
-      })
-    ).join(""),
-  call: "trout",
-  shapeArgs: 'avoiding: selectAll("bars")',
-  note: "Trout bars are members; the other bars and the axis band are avoided. Every triangle holds another bar, so convexity does little.",
+  under: caAxes,
+  over: caOver,
+  call: "subSaharan",
+  shapeArgs: 'avoiding: selectAll("countries")',
+  note: "ChartAccent's bubble set around the Sub-Saharan countries (PacificVis 2017), on its own data: 191 countries in one year, bubble area by population. Its look is about convexity 0.25 and neck 0.6. Like the original, the outline may cover the pale bubbles of other regions; the checkbox avoids them.",
+  avoidToggle: "Avoid other regions",
 };
 
 export const DATASETS: Dataset[] = [
@@ -432,6 +430,6 @@ export const DATASETS: Dataset[] = [
   uCloud,
   penguins,
   hyperedges,
-  trout,
+  chartaccent,
   munkres,
 ];

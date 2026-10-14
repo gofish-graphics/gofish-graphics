@@ -272,6 +272,9 @@
     align-items: center;
     font-size: 14px;
   }
+  .field label.check {
+    justify-content: flex-start;
+  }
   .check input {
     width: 16px;
     height: 16px;
@@ -307,7 +310,8 @@
     Move the sliders to redraw <code>Shape.blob()</code> live with the current
     construction: a Delaunay skeleton, discs and tubes, the avoided nodes cut
     out, traced exactly, then rounded by smoothing along the outline. Convexity
-    alone decides what is filled; roundness only changes curvature.
+    decides the silhouette, holes decides whether open cycles stay open, and
+    roundness only changes curvature.
     <a href="https://claude.ai/artifact/2esKYS7PvWVMdoyVny6uLP"
       >Back to the proposal</a
     >.
@@ -330,9 +334,8 @@
       </div>
       <div class="below">
         <span id="status" role="status" aria-live="polite"></span>
-        <label class="check" for="variant" id="variant-wrap" hidden
-          ><input type="checkbox" id="variant" />
-          <span id="variant-label"></span
+        <label class="check" for="avoid" id="avoid-wrap" hidden
+          ><input type="checkbox" id="avoid" /> <span id="avoid-label"></span
         ></label>
       </div>
       <p id="ds-note"></p>
@@ -346,15 +349,15 @@
           ></label>
           <input type="range" id="convexity" min="0" max="1" step="0.01" />
           <div class="hint">
-            0 is a spanning tree of links; 1 fills every triangle (the hull).
-            The only knob that fills gaps.
+            The silhouette: 0 is a spanning tree of links; 1 fills every
+            triangle (the hull). The only knob that fills gaps between members.
           </div>
         </div>
         <div class="field">
           <label for="neck"
             >neck <output id="neck-out" for="neck"></output
           ></label>
-          <input type="range" id="neck" min="0.3" max="1" step="0.01" />
+          <input type="range" id="neck" min="0.1" max="1" step="0.01" />
           <div class="hint">
             how far the outline pulls in between members, as its width × the
             bulge. Shape only: pieces and holes never change.
@@ -369,6 +372,16 @@
             how far corners are rounded, in px (smoothing σ = roundness ÷ 2);
             never fills, splits or opens anything.
             <span id="roundness-hint"></span>
+          </div>
+        </div>
+        <div class="field">
+          <label class="check" for="holes"
+            ><input type="checkbox" id="holes" /> holes</label
+          >
+          <div class="hint">
+            Off (the default): every hole is filled, except the clearance
+            circles of avoided nodes. On: a cycle left open by a low convexity
+            stays a hole.
           </div>
         </div>
       </section>

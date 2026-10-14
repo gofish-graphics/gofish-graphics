@@ -25,6 +25,8 @@ import {
 // throwaway: delaunator is in the pnpm store but not a direct dependency
 import Delaunator from "../../../../node_modules/.pnpm/delaunator@5.1.0/node_modules/delaunator/index.js";
 import { penguins } from "../../src/data/penguins";
+// ChartAccent's sample data (section (j)), converted from proposals/background-hull/precedent/chartaccent-gapminder.csv
+import CA_DATA from "../../../../proposals/background-hull/playground/src/chartaccent.json";
 
 // THROWAWAY PROTOTYPE for proposals/background-hull/proposal.md.
 //
@@ -1404,11 +1406,16 @@ export const BlobTroutBars: StoryObj = {
 //     avoided node's keep-out zone touches it. Links: the filled triangles' edges,
 //     Delaunay edges with half-length <= alpha that no avoided node blocks, the
 //     minimum spanning tree over links routed around avoided nodes (always, so the
-//     set stays one piece), and `via` edges. convexity 0 = the tree, 1 = every face.
+//     set stays one piece). convexity 0 = the tree, 1 = every face. (Line members,
+//     such as a graph's edges, replaced v5's `via` edges.)
 //  2. Pieces: members grown by padding, links as tubes, filled faces; their union
 //     minus the avoided nodes' keep-out zones is the region (no closing).
 //  3. Exact outline (v7): every piece and zone has a closed-form distance, and the
 //     region's outline is traced exactly on a 1 px grid searched only near it.
+//     With `holes: false` (the default) every hole is then filled and the zones cut
+//     again, so the only holes are clearance circles (v9).
+//  Neck (v8, v9): the traced outline is pulled in along each piece's own normal,
+//     and two moved sides are carried on to the corner where they meet.
 //  4. Rounding (v7): the outline is smoothed along its length by a Gaussian of
 //     width sigma = roundness / 2, with every point on a circle first moved out by
 //     the factor that smoothing pulls that circle in, so circles and straight sides
@@ -1498,7 +1505,7 @@ const stageMemo = <T>() => {
   };
 };
 
-type SkelOpts = { avoiding?: Member[]; via?: [Pt, Pt][]; pad: number; convexity: number; clearance?: number };
+type SkelOpts = { avoiding?: Member[]; pad: number; convexity: number; clearance?: number };
 type Arc = { c: Pt; r: number; a0: number; sweep: number };
 type Part = { a: Pt; b: Pt } | Arc;
 type SkLink = { route: Pt[]; h: number; parts?: Part[] };
@@ -1660,7 +1667,7 @@ const skelMemo = stageMemo<Skeleton>();
  *  chosen and routed at its full width (the bulge at its ends), so `neck`, which only thins the
  *  drawn tubes (step 2), never changes which links there are or where they run. */
 const skeleton = (members: Member[], o: SkelOpts): Skeleton =>
-  skelMemo([members, o.avoiding, o.via], [o.pad, o.convexity, o.clearance], () => {
+  skelMemo([members, o.avoiding], [o.pad, o.convexity, o.clearance], () => {
   const clearance = o.clearance ?? 4, others = o.avoiding ?? [];
   const Cm = members.map(centerOf), Rm = members.map((m) => memberRadius(m) + o.pad), nm = members.length;
   const { P, owner, tri, cand, m, memberGrid } = sitesOfMembers(members);
@@ -1771,10 +1778,6 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton =>
     }
     r2[f2(e.a)] = f2(e.b);
     if (e.len > 0) links.push({ route: e.route!, h: e.h ?? hm(e.a, e.b), ...(e.parts && e.parts.length > 1 ? { parts: e.parts } : {}) });
-  }
-  for (const [a, b] of o.via ?? []) {
-    const i = P.findIndex((q) => dist(a, q) < 0.5), j = P.findIndex((q) => dist(b, q) < 0.5);
-    if (i >= 0 && j >= 0) links.push({ route: [P[i], P[j]], h: hw(i, j) });
   }
   return { P: Cm, R: Rm, links, faces, alpha };
 });
@@ -2245,8 +2248,9 @@ const keepOut = (pts: Pt[], zones: Prim[], grid: ReturnType<typeof boxGrid>, k: 
     return q;
   });
 };
-/** Do any two segments of these loops cross (the same loop's neighbors excepted)? */
-const loopsCross = (loops: Pt[][]) => {
+/** Do any two segments of these loops cross (the same loop's neighbors excepted)? With `hits`,
+ *  every crossing is found and its place pushed there. */
+const loopsCross = (loops: Pt[][], hits?: Pt[]) => {
   const owner: number[] = [], idx: number[] = [];
   let len = 0, X0 = Infinity, Y0 = Infinity, X1 = -Infinity, Y1 = -Infinity;
   loops.forEach((l, li) => l.forEach((p, i) => {
@@ -2266,12 +2270,12 @@ const loopsCross = (loops: Pt[][]) => {
         for (let e = head[c]; e >= 0; e = next[e]) {
           const t = seg[e], lt = owner[t], it = idx[t], L = loops[lt], m = L.length;
           if (lt === owner[s2] && (Math.abs(it - i) <= 1 || Math.abs(it - i) === m - 1)) continue;
-          if (segIntersect(p, q, L[it], L[(it + 1) % m])) return true;
+          if (segIntersect(p, q, L[it], L[(it + 1) % m])) { if (!hits) return true; hits.push(p); }
         }
         next.push(head[c]); seg.push(s2); head[c] = seg.length - 1;
       }
   }
-  return false;
+  return hits ? hits.length > 0 : false;
 };
 
 /** Move p out of a bulge it is inside onto that bulge's edge (along the bulge's normal), and give the
@@ -2297,7 +2301,8 @@ const ontoBulge = (b: Prim, p: Pt): { p: Pt; c: Pt; r: number } => {
   return { p: [qx + (dx * b.r) / d, qy + (dy * b.r) / d], c: [qx, qy], r };
 };
 /** Step 3, `neck`: pull the outline in. Every outline point not on a member's bulge moves inward
- *  along the outline's normal by `pull` (1 - neck) times
+ *  along its own piece's normal (toward a link's spine; where two pieces meet in a corner the moved
+ *  sides are carried on until they meet, so the pull never rounds a corner) by `pull` (1 - neck) times
  *  the region's half-width there: the radius of the largest disc inside the region that touches the
  *  outline at that point, capped at the link's own half-width. On a lone link that disc is the
  *  link's tube, so the tube thins to neck times its width about its middle (and a link that ran
@@ -2308,7 +2313,7 @@ const ontoBulge = (b: Prim, p: Pt): { p: Pt; c: Pt; r: number } => {
  *  moves into a member's bulge stops on its edge (a bulge stays whole, except where a zone cuts it). Since no point moves past
  *  the middle of its disc, each loop stays one loop and no two loops meet: the pieces and holes
  *  are those of the full-width region, whatever `neck` is. */
-const neckOutline = (region: Region, bulges: Prim[], pull: number): Loop[] => {
+const neckOutline = (region: Region, bulges: Prim[], pull: number, scale?: Float64Array[]): Loop[] => {
   if (pull <= 0) return region.loops;
   const loops = region.loops;
   // every outline point in a grid of cells two link widths wide
@@ -2329,7 +2334,7 @@ const neckOutline = (region: Region, bulges: Prim[], pull: number): Loop[] => {
   const areas = loops.map((l) => signedArea(l.pts));
   const side = Math.sign(areas.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0)) || 1;
   const bgrid = boxGrid(bulges.map((b) => b.bb));
-  return loops.map((l) => {
+  return loops.map((l, li) => {
     const { pts, arcs, hw, kind } = l as Required<Loop>, N = pts.length;
     if (kind.every((k) => k === 1)) return l; // a hole cut by keep-out zones alone stays exactly as cut
     // the inward normal and the half-width at every point not on a bulge
@@ -2353,35 +2358,108 @@ const neckOutline = (region: Region, bulges: Prim[], pull: number): Loop[] => {
       }
       rho[i] = r;
     }
-    const out: Pt[] = [], A = new Float64Array(4 * N);
+    // Each point moves along its own piece's normal (toward a link's spine, away from a keep-out
+    // zone's center), so a side of a link moves exactly as that link's thinner tube would. Where
+    // two pieces meet in a corner, the outline's own normal turns through the corner, and moving
+    // along it would round the corner by the pull itself (a web as wide as the pull); instead the
+    // two moved sides are carried on until they meet, so the corner stays a corner and only
+    // `roundness` rounds it.
+    const ds = dist(pts[0], pts[1]) || 1;
+    const Q: Pt[] = new Array(N), DX = new Float64Array(N), DY = new Float64Array(N), S = new Float64Array(N);
     for (let i = 0; i < N; i++) {
       const p = pts[i];
-      A.set(arcs.subarray(4 * i, 4 * i + 4), 4 * i);
-      if (kind[i] === 2) { out.push(p); continue; }
+      if (kind[i] === 2) { Q[i] = p; continue; }
       // the half-width is measured against points 1 px apart, which makes it jitter from one point
       // to the next by a fraction of a pixel; it is averaged over the 2 points either side
       let sum = 0, n = 0;
       for (let j = -2; j <= 2; j++) { const k = (i + j + N) % N; if (kind[k] !== 2) { sum += rho[k]; n++; } }
-      const s = pull * (sum / n), nx = NX[i], ny = NY[i];
-      let q: Pt = [p[0] + s * nx, p[1] + s * ny];
-      A[4 * i + 3] = 0;
-      if (A[4 * i + 2] > 0) A[4 * i + 2] = Math.hypot(q[0] - A[4 * i], q[1] - A[4 * i + 1]);
+      const s = (S[i] = pull * (scale ? scale[li][i] : 1) * (sum / n));
+      let dx = NX[i], dy = NY[i];
+      const ux = p[0] - arcs[4 * i], uy = p[1] - arcs[4 * i + 1], ul = Math.hypot(ux, uy);
+      if (ul > 1e-6) { const c = (ux * dx + uy * dy) / ul; if (Math.abs(c) > 0.5) { dx = (Math.sign(c) * ux) / ul; dy = (Math.sign(c) * uy) / ul; } }
+      DX[i] = dx; DY[i] = dy;
+      Q[i] = [p[0] + s * dx, p[1] + s * dy];
+    }
+    const samePiece = (i: number, j: number) => {
+      const ri = arcs[4 * i + 2], rj = arcs[4 * j + 2];
+      if (ri > 0 || rj > 0) return ri === rj && arcs[4 * i] === arcs[4 * j] && arcs[4 * i + 1] === arcs[4 * j + 1];
+      return DX[i] * DX[j] + DY[i] * DY[j] > 0.9994; // the same straight side, within 2 degrees
+    };
+    /** Where the moved sides at i and j meet: each is a line (a straight side) or a circle. */
+    const meet = (i: number, j: number): Pt | null => {
+      const curve = (k: number) => (arcs[4 * k + 2] > 0
+        ? { c: [arcs[4 * k], arcs[4 * k + 1]] as Pt, r: dist(Q[k], [arcs[4 * k], arcs[4 * k + 1]]) }
+        : { p: Q[k], t: [-DY[k], DX[k]] as Pt });
+      const a: any = curve(i), b: any = curve(j), xs: Pt[] = [];
+      const lineCircle = (p: Pt, t: Pt, c: Pt, r: number) => {
+        const fx = p[0] - c[0], fy = p[1] - c[1], B = fx * t[0] + fy * t[1], Cq = fx * fx + fy * fy - r * r, D = B * B - Cq;
+        if (D < 0) return;
+        for (const u of [-B - Math.sqrt(D), -B + Math.sqrt(D)]) xs.push([p[0] + u * t[0], p[1] + u * t[1]]);
+      };
+      if (a.t && b.t) {
+        const den = a.t[0] * b.t[1] - a.t[1] * b.t[0];
+        if (Math.abs(den) < 1e-9) return null;
+        const u = ((b.p[0] - a.p[0]) * b.t[1] - (b.p[1] - a.p[1]) * b.t[0]) / den;
+        xs.push([a.p[0] + u * a.t[0], a.p[1] + u * a.t[1]]);
+      } else if (a.t) lineCircle(a.p, a.t, b.c, b.r);
+      else if (b.t) lineCircle(b.p, b.t, a.c, a.r);
+      else {
+        const dx = b.c[0] - a.c[0], dy = b.c[1] - a.c[1], d = Math.hypot(dx, dy);
+        if (d < 1e-9 || d > a.r + b.r || d < Math.abs(a.r - b.r)) return null;
+        const m = (d * d + a.r * a.r - b.r * b.r) / (2 * d), h = Math.sqrt(Math.max(0, a.r * a.r - m * m));
+        const mx = a.c[0] + (m * dx) / d, my = a.c[1] + (m * dy) / d;
+        xs.push([mx - (h * dy) / d, my + (h * dx) / d], [mx + (h * dy) / d, my - (h * dx) / d]);
+      }
+      let best: Pt | null = null, bd = Infinity;
+      for (const x of xs) { const v = dist(x, Q[i]) + dist(x, Q[j]); if (v < bd) { bd = v; best = x; } }
+      if (!best) return null;
+      // the sides are carried on forward from i and back from j, by at most a few times the pull
+      const ta = [pts[i][0] - pts[(i - 1 + N) % N][0], pts[i][1] - pts[(i - 1 + N) % N][1]];
+      const tb = [pts[(j + 1) % N][0] - pts[j][0], pts[(j + 1) % N][1] - pts[j][1]];
+      if ((best[0] - Q[i][0]) * ta[0] + (best[1] - Q[i][1]) * ta[1] < 0) return null;
+      if ((Q[j][0] - best[0]) * tb[0] + (Q[j][1] - best[1]) * tb[1] < 0) return null;
+      const lim = 4 * Math.max(S[i], S[j]) + 2 * ds;
+      return dist(best, Q[i]) <= lim && dist(best, Q[j]) <= lim ? best : null;
+    };
+    // the moved points, with a corner (and points every ds up to it and on from it) between two pieces
+    const P: Pt[] = [], src: number[] = [];
+    for (let i = 0; i < N; i++) {
+      P.push(Q[i]); src.push(i);
+      const j = (i + 1) % N;
+      if (kind[i] === 2 || kind[j] === 2 || samePiece(i, j)) continue;
+      if (dist(Q[i], Q[j]) <= dist(pts[i], pts[j]) + 1e-6) continue; // the sides cross here (untie cuts it)
+      const x = meet(i, j);
+      if (!x) continue;
+      for (const [a, b, last] of [[Q[i], x, true], [x, Q[j], false]] as [Pt, Pt, boolean][]) {
+        const m = Math.max(1, Math.round(dist(a, b) / ds));
+        for (let t = 1; t < m + (last ? 1 : 0); t++) { P.push([a[0] + ((b[0] - a[0]) * t) / m, a[1] + ((b[1] - a[1]) * t) / m]); src.push(-1 - i); }
+      }
+    }
+    const M = P.length, out: Pt[] = [], A = new Float64Array(4 * M), H = new Float64Array(M), K = new Uint8Array(M);
+    for (let e = 0; e < M; e++) {
+      const i = src[e] >= 0 ? src[e] : -1 - src[e], p = src[e] >= 0 ? pts[i] : P[e];
+      H[e] = hw[i]; K[e] = src[e] >= 0 ? kind[i] : 0;
+      if (src[e] >= 0) A.set(arcs.subarray(4 * i, 4 * i + 4), 4 * e); else A.set([P[e][0], P[e][1], 0, 0], 4 * e);
+      if (src[e] >= 0 && kind[i] === 2) { out.push(p); continue; }
+      let q = P[e];
+      A[4 * e + 3] = 0;
+      if (A[4 * e + 2] > 0) A[4 * e + 2] = Math.hypot(q[0] - A[4 * e], q[1] - A[4 * e + 1]);
       // a bulge stays whole: a point pulled into one stops on its edge
       let deepest = 0, hit = -1;
       for (const k of bgrid.query(q[0], q[1], q[0], q[1])) { const d = primD(bulges[k], q[0], q[1], false); if (d < deepest) { deepest = d; hit = k; } }
       if (hit >= 0) {
-        const e = ontoBulge(bulges[hit], q);
+        const e2 = ontoBulge(bulges[hit], q);
         // where a keep-out zone cuts the bulge, its edge is the zone's: the point stays where it was
         let cut = false;
-        region.zoneGrid.each(e.p[0], e.p[1], e.p[0], e.p[1], (z) => { if (!cut && primD(region.zones[z], e.p[0], e.p[1], false) < -1e-6) cut = true; });
-        if (cut) { out.push(p); A.set(arcs.subarray(4 * i, 4 * i + 4), 4 * i); continue; }
-        q = e.p; A[4 * i] = e.c[0]; A[4 * i + 1] = e.c[1]; A[4 * i + 2] = e.r;
+        region.zoneGrid.each(e2.p[0], e2.p[1], e2.p[0], e2.p[1], (z) => { if (!cut && primD(region.zones[z], e2.p[0], e2.p[1], false) < -1e-6) cut = true; });
+        if (cut) { out.push(p); if (src[e] >= 0) A.set(arcs.subarray(4 * i, 4 * i + 4), 4 * e); else A[4 * e + 2] = 0; continue; }
+        q = e2.p; A[4 * e] = e2.c[0]; A[4 * e + 1] = e2.c[1]; A[4 * e + 2] = e2.r;
       }
       out.push(q);
     }
     // a knot spans at most a few times the largest pull along the outline; cutting knots can leave
     // a crossing just behind the scan, so it runs again until a pass cuts nothing
-    let r: Loop = { pts: out, arcs: A, hw, kind };
+    let r: Loop = { pts: out, arcs: A, hw: H, kind: K };
     const w = Math.ceil((4 * pull * cap) / (dist(l.pts[0], l.pts[1]) || 1)) + 4;
     for (let pass = 0; pass < 8; pass++) {
       const n = r.pts.length;
@@ -2435,15 +2513,31 @@ const untie = (pts: Pt[], arcs: Float64Array, hw: Float64Array, kind: Uint8Array
   }
   return { pts: P, arcs: Float64Array.from(A), hw: Float64Array.from(H), kind: Uint8Array.from(K) };
 };
-type SmoothOpts = SkelOpts & { neck?: number; roundness?: number; res?: number };
+type SmoothOpts = SkelOpts & { neck?: number; roundness?: number; holes?: boolean; res?: number };
 type Smooth = { loops: Pt[][]; skel: Skeleton; sigma: number; signals: Loop[] };
 const regionMemo = stageMemo<Region>();
 const neckMemo = stageMemo<Loop[]>();
+/** `holes: false` (the default): every hole of the traced region that holds no avoided node is
+ *  filled, by dropping its loop (and any piece inside it). A hole holds an avoided node when part
+ *  of its edge is a keep-out zone's or a zone's center lies in it, so a clearance circle stays
+ *  exactly as cut, and so does a cycle that has an avoided node inside. Holes are only ever
+ *  dropped, never made, so this keeps the pieces as traced. */
+const fillHoles = (region: Region, zones: Prim[]): Region => {
+  const loops = region.loops;
+  if (loops.length < 2) return region;
+  const areas = loops.map((l) => signedArea(l.pts));
+  const outer = Math.sign(areas.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0));
+  const centers: Pt[] = zones.map((z) => (z.k === 2 ? [(z.x1 + z.x2) / 2, (z.y1 + z.y2) / 2] : [z.x1, z.y1]));
+  const empty = loops.filter((l, i) => Math.sign(areas[i]) !== outer && !l.kind!.some((k) => k === 1) && !centers.some((c) => inPolyFast(c, l.pts)));
+  if (!empty.length) return region;
+  const keep = loops.filter((l) => !empty.includes(l) && !empty.some((h) => Math.abs(signedArea(h.pts)) > Math.abs(signedArea(l.pts)) && inPolyFast(l.pts[0], h.pts)));
+  return { ...region, loops: keep };
+};
 /** Steps 2-3: the region traced exactly, then rounded along its outline. */
 const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
   const sk = skeleton(members, o);
   const clearance = o.clearance ?? 4, res = o.res ?? 1, neck = Math.max(0.05, Math.min(1, o.neck ?? 1));
-  const region = regionMemo([sk], [res], () => {
+  const region = regionMemo([sk], [res, o.holes ? 1 : 0], () => {
     // faces first: they cover the most area, so a place deep inside the region is settled soonest
     // Pieces that lie inside other pieces add nothing to the union, and only cost time, so they are
     // left out: a link inside a wider link on the same segment (a spanning-tree link along a face
@@ -2478,19 +2572,31 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
     members.forEach((m) => pieces.push({ ...grownPrim(m, o.pad), bulge: true }));
     for (const [key, h] of widest) if (sides.get(key) !== 2) pieces.push(capsulePrim(pts[Math.floor(key / 1048576)], pts[key % 1048576], h));
     const zones = (o.avoiding ?? []).map((m) => grownPrim(m, clearance));
-    return traceRegion(pieces, zones, res, Math.min(1, res));
+    const traced = traceRegion(pieces, zones, res, Math.min(1, res));
+    return o.holes ? traced : fillHoles(traced, zones);
   });
   // Like rounding, pulling in never changes the topology: should two parts of the outline still
-  // cross (where the half-width is misjudged at a sharp tip), the pull is narrowed until they do not.
+  // cross (where the half-width is misjudged at a sharp tip), the pull is halved near each
+  // crossing (within two link widths of it) until none is left, and dropped there on the last
+  // pass. Only the places that cross give way: the rest of the outline keeps the asked neck.
   const necked = neckMemo([region], [neck], () => {
-    const bulges = members.map((m) => grownPrim(m, o.pad)), at = (pull: number) => neckOutline(region, bulges, pull);
-    let pull = 1 - neck, out = at(pull);
-    if (pull > 0 && loopsCross(out.map((l) => l.pts))) {
-      let lo = 0, hi = pull;
-      for (let it = 0; it < 6; it++) { const mid = (lo + hi) / 2; if (loopsCross(at(mid).map((l) => l.pts))) hi = mid; else lo = mid; }
-      pull = lo; out = at(pull);
+    const bulges = members.map((m) => grownPrim(m, o.pad)), pull = 1 - neck;
+    if (pull <= 0) return region.loops;
+    const scale = region.loops.map((l) => new Float64Array(l.pts.length).fill(1));
+    let cap = 0;
+    for (const l of region.loops) for (let i = 0; i < l.pts.length; i++) if (l.kind![i] !== 2) cap = Math.max(cap, l.hw![i]);
+    const reach = 2 * cap + 2;
+    let out = neckOutline(region, bulges, pull, scale);
+    for (let pass = 0; pass < 6; pass++) {
+      const hits: Pt[] = [];
+      if (!loopsCross(out.map((l) => l.pts), hits)) return out;
+      const near = boxGrid(hits.map((h) => [h[0] - reach, h[1] - reach, h[0] + reach, h[1] + reach]));
+      region.loops.forEach((l, li) => l.pts.forEach((p, i) => {
+        if (near.query(p[0], p[1], p[0], p[1]).some((k) => dist(p, hits[k]) <= reach)) scale[li][i] = pass < 5 ? scale[li][i] / 2 : 0;
+      }));
+      out = neckOutline(region, bulges, pull, scale);
     }
-    return out;
+    return loopsCross(out.map((l) => l.pts)) ? region.loops : out;
   });
   // `roundness` is the smoothing's reach: a Gaussian of width sigma = roundness / 2 along the
   // outline. It stops at the smallest circle in the region (a member's bulge, a link's
@@ -2883,24 +2989,6 @@ export const V4HullExact: StoryObj = {
   },
 };
 
-// The spine preset on the hyperedges and on trout across lakes.
-export const V4Hyperedges: StoryObj = {
-  render: () => {
-    const container = initializeContainer();
-    const outlines = SETS.flatMap((s) => {
-      const members = s.nodes.map(hyperNode);
-      const others = Object.keys(NODES).filter((id) => !s.nodes.includes(id)).map(hyperNode);
-      const via = EDGES.filter(([p, q]) => s.nodes.includes(p) && s.nodes.includes(q)).map(([p, q]) => [NODES[p], NODES[q]] as [Pt, Pt]);
-      return blobInk(smoothBlob(members, { avoiding: others, via, pad: 6, convexity: 0, neck: 0.75, roundness: 10, clearance: 3 }).loops, s.color, 0.25, 2);
-    });
-    layer([
-      ...outlines,
-      hyperPanel([]),
-      ...SETS.map((s, i) => label(20 + i * 50, 215, `set ${s.name}`, { fill: s.color, fontWeight: "bold" })),
-    ]).render(container, { w: 360, h: 240 });
-    return container;
-  },
-};
 export const V4TroutBars: StoryObj = {
   render: () => {
     const container = initializeContainer();
@@ -3023,18 +3111,6 @@ export const GridPenguins: StoryObj = {
     cell: (convexity, roundness) => penCell((ms) => smoothBlob(ms, { pad: PEN_PAD, convexity, neck: 1, roundness }).loops),
   }),
 };
-// (d) hyperedges over the node-link graph: the graph's edges between members are `via`.
-export const GridHyperedges: StoryObj = {
-  render: () => paramGrid({
-    cols: CONVEXITY, rows: roundnessAxis(6), w: 345, h: 205,
-    cell: (convexity, roundness) => [position({ x: -12, y: -8 }, [hyperPanel(SETS.flatMap((s) => {
-      const members = s.nodes.map(hyperNode);
-      const others = Object.keys(NODES).filter((id) => !s.nodes.includes(id)).map(hyperNode);
-      const via = EDGES.filter(([p, q]) => s.nodes.includes(p) && s.nodes.includes(q)).map(([p, q]) => [NODES[p], NODES[q]] as [Pt, Pt]);
-      return blobInk(smoothBlob(members, { avoiding: others, via, pad: 6, convexity, neck: 1, roundness, clearance: 3 }).loops, s.color, 0.25, 2);
-    }))])],
-  }),
-};
 // (e) trout across lakes, avoiding the other bars and the axis band.
 const troutCell = (o: Partial<SmoothOpts>) => [position({ x: -8, y: -12 }, [barsScene(false,
   blobInk(smoothBlob(TROUT, { avoiding: [...NOT_TROUT, AXIS_BAND], pad: 4, convexity: 0.5, neck: 1, roundness: 4, clearance: 4, ...o }).loops, "#d6580c", 0.18, 2), false)])];
@@ -3093,39 +3169,29 @@ const EDGE_W = 1.5;
 type HSet = { name: string; nodes: string[]; color: string };
 const edgeMembers = (nodes: string[], edges = EDGES, at = NODES): Member[] =>
   edges.filter(([p, q]) => nodes.includes(p) && nodes.includes(q)).map(([p, q]) => ({ kind: "segment", a: at[p], b: at[q], w: EDGE_W }) as Member);
-const hyperInk = (s: HSet, mode: "members" | "via", o: Partial<SmoothOpts> = {}) => {
-  const nodes = s.nodes.map(hyperNode);
+const hyperInk = (s: HSet, o: Partial<SmoothOpts> = {}) => {
+  const members = [...s.nodes.map(hyperNode), ...edgeMembers(s.nodes)];
   const avoiding = Object.keys(NODES).filter((id) => !s.nodes.includes(id)).map(hyperNode);
-  const via = EDGES.filter(([p, q]) => s.nodes.includes(p) && s.nodes.includes(q)).map(([p, q]) => [NODES[p], NODES[q]] as [Pt, Pt]);
-  const members = mode === "members" ? [...nodes, ...edgeMembers(s.nodes)] : nodes;
-  return blobInk(smoothBlob(members, { avoiding, via: mode === "via" ? via : undefined, pad: 6, convexity: 0.5, neck: 1, roundness: 6, clearance: 3, ...o }).loops, s.color, 0.25, 2);
+  return blobInk(smoothBlob(members, { avoiding, pad: 6, convexity: 0.5, neck: 1, roundness: 6, clearance: 3, ...o }).loops, s.color, 0.25, 2);
 };
-const hyperCell = (sets: HSet[], mode: "members" | "via", o: Partial<SmoothOpts> = {}) =>
-  position({ x: -12, y: -8 }, [hyperPanel(sets.flatMap((s) => hyperInk(s, mode, o)))]);
-export const HyperedgesMembersVsVia: StoryObj = {
-  render: () => titledGrid([
-    ["nodes + edges as members, convexity 0 (spine)", hyperCell(SETS, "members", { convexity: 0 })],
-    ["via (current), convexity 0 (spine)", hyperCell(SETS, "via", { convexity: 0 })],
-    ["nodes + edges as members, defaults", hyperCell(SETS, "members")],
-    ["via (current), defaults", hyperCell(SETS, "via")],
-  ], { w: 350, h: 210, cols: 2 }),
-};
+const hyperCell = (sets: HSet[], o: Partial<SmoothOpts> = {}) =>
+  position({ x: -12, y: -8 }, [hyperPanel(sets.flatMap((s) => hyperInk(s, o)))]);
 export const GridHyperedgesMembers: StoryObj = {
   render: () => paramGrid({
     cols: CONVEXITY, rows: roundnessAxis(6), w: 345, h: 205,
-    cell: (convexity, roundness) => [hyperCell(SETS, "members", { convexity, roundness })],
+    cell: (convexity, roundness) => [hyperCell(SETS, { convexity, roundness })],
   }),
 };
 // Stress cases. Set D = {3, 5, 10}: 3 reaches 5 only through the non-member 4, so
 // its member subgraph is two pieces ({3} and the edge 5-10) that the spanning tree
 // must join around 4. Below, a two-node set whose edge passes near non-members w, x.
 const SET_D: HSet = { name: "D", nodes: ["n3", "n5", "n10"], color: "#9467bd" };
-const nearInk = (mode: "members" | "via", wy = 17, o: Partial<SmoothOpts> = {}) => {
+const nearInk = (wy = 17, o: Partial<SmoothOpts> = {}) => {
   const NEAR: Record<string, Pt> = { u: [30, 50], v: [290, 50], w: [160, 50 + wy], x: [95, 50 - 13] };
   const node = (id: string) => C(NEAR[id][0], NEAR[id][1], 9);
   const nodes = ["u", "v"].map(node), avoiding = ["w", "x"].map(node);
-  const members = mode === "members" ? [...nodes, ...edgeMembers(["u", "v"], [["u", "v"]], NEAR)] : nodes;
-  const loops = smoothBlob(members, { avoiding, via: mode === "via" ? [[NEAR.u, NEAR.v]] : undefined, pad: 6, convexity: 0.5, neck: 1, roundness: 6, clearance: 3, ...o }).loops;
+  const members = [...nodes, ...edgeMembers(["u", "v"], [["u", "v"]], NEAR)];
+  const loops = smoothBlob(members, { avoiding, pad: 6, convexity: 0.5, neck: 1, roundness: 6, clearance: 3, ...o }).loops;
   const [a, b] = [NEAR.u, NEAR.v];
   return layer([
     ...blobInk(loops, "#e45756", 0.25, 2),
@@ -3139,16 +3205,13 @@ const nearInk = (mode: "members" | "via", wy = 17, o: Partial<SmoothOpts> = {}) 
 };
 export const HyperedgesMembersStress: StoryObj = {
   render: () => titledGrid([
-    ["set D = {3, 5, 10} as a spine, edges as members", hyperCell([SET_D], "members", { convexity: 0 })],
-    ["set D = {3, 5, 10} as a spine, via (current)", hyperCell([SET_D], "via", { convexity: 0 })],
-  ], { w: 350, h: 210, cols: 2 }),
+    ["set D = {3, 5, 10} as a spine", hyperCell([SET_D], { convexity: 0 })],
+  ], { w: 350, h: 210, cols: 1 }),
 };
 export const HyperedgesMembersNearEdge: StoryObj = {
   render: () => titledGrid([
-    ["edge u-v, w 17 px below it; edges as members", position({ x: 0, y: 6 }, [nearInk("members")])],
-    ["edge u-v, w 17 px below it; via (current)", position({ x: 0, y: 6 }, [nearInk("via")])],
-    ["edge u-v, w 11 px below it; edges as members", position({ x: 0, y: 6 }, [nearInk("members", 11)])],
-    ["edge u-v, w 11 px below it; via (current)", position({ x: 0, y: 6 }, [nearInk("via", 11)])],
+    ["edge u-v, w 17 px below it", position({ x: 0, y: 6 }, [nearInk()])],
+    ["edge u-v, w 11 px below it", position({ x: 0, y: 6 }, [nearInk(11)])],
   ], { w: 350, h: 95, cols: 2 }),
 };
 
@@ -3165,18 +3228,11 @@ export const RoundnessU: StoryObj = {
     cell: (roundness, convexity) => [position({ x: 2, y: 2 }, [uPanel(blobInk(smoothBlob(U, { avoiding: NON, pad: 8, convexity, neck: 1, roundness }).loops, BLUE))])],
   }),
 };
-// Hyperedges at convexity 0.25, roundness swept: the via edges' three cycles stay open.
-export const RoundnessHyperedges: StoryObj = {
-  render: () => paramGrid({
-    cols: roundCols([0, 3, 6, 12, 15], 6), rows: rowsOf([0.25]), w: 345, h: 205,
-    cell: (roundness, convexity) => [hyperCell(SETS, "via", { convexity, roundness })],
-  }),
-};
 // The same with the graph's edges as members.
 export const RoundnessHyperedgesMembers: StoryObj = {
   render: () => paramGrid({
     cols: roundCols([0, 3, 6, 12, 15], 6), rows: rowsOf([0.25]), w: 345, h: 205,
-    cell: (roundness, convexity) => [hyperCell(SETS, "members", { convexity, roundness })],
+    cell: (roundness, convexity) => [hyperCell(SETS, { convexity, roundness })],
   }),
 };
 
@@ -3194,11 +3250,12 @@ export const NeckU: StoryObj = {
     cell: (convexity, neck) => [position({ x: 2, y: 2 }, [uPanel(blobInk(smoothBlob(U, { avoiding: NON, pad: 8, convexity, neck, roundness: 8 }).loops, BLUE))])],
   }),
 };
-// All three species, each avoiding the other two, padding 4 (Josh's setting), roundness 4.
+// All three species, nothing avoided (Josh, 10-14: the species overlap too much for avoidance to
+// look good), padding 4 (Josh's setting), roundness 4.
 export const NeckPenguins: StoryObj = {
   render: () => paramGrid({
     cols: CONVEXITY, rows: NECK_ROWS, w: PCW, h: PCH,
-    cell: (convexity, neck) => penCell((ms, others) => smoothBlob(ms, { avoiding: others, pad: 4, convexity, neck, roundness: 4 }).loops),
+    cell: (convexity, neck) => penCell((ms) => smoothBlob(ms, { pad: 4, convexity, neck, roundness: 4 }).loops),
   }),
 };
 // Josh's two spellings on the Adelie set: spine, padding 4, roundness 0, the other species avoided.
@@ -3211,5 +3268,93 @@ export const NeckAdelieCheck: StoryObj = {
       ...g[0].ms.map((m) => dot(m, g[0].color)), ...others.map((m) => dot(m, "#bbb")),
     ])]);
     return titledGrid([["neck: 0.99", cell(0.99)], ["neck: 1", cell(1)]], { w: PCW + 14, h: PCH + 6, cols: 2 });
+  },
+};
+
+
+// ── (j) ChartAccent: Sub-Saharan Africa on fertility rate against life expectancy ──────────
+// Ren, Brehmer, Lee, Höllerer, Choe, "ChartAccent: Annotation for Data-Driven Storytelling",
+// PacificVis 2017 (chartaccent.github.io). Its "Fertility Rate vs. Life Expectancy" example draws
+// a bubble set around the Sub-Saharan countries. The data is ChartAccent's own sample file
+// (github.com/chartaccent/chartaccent, assets/datasets/gapminder.csv: 191 countries in one year;
+// copied to proposals/background-hull/precedent/). Bubble area is population; the other regions
+// are drawn pale and are not avoided, as in the original, whose outline covers some of them.
+const CA_REGIONS = ["America", "East Asia & Pacific", "Europe & Central Asia", "Middle East & North Africa", "South Asia", "Sub-Saharan Africa"];
+const CA_COLORS = ["#5aa3b8", "#9cb850", "#f2b45c", "#a99bc0", "#e07b9b", "#47b8a0"];
+const CAW = 480, CAH = 280, CAL = 34;
+const cax = (v: number) => CAL + (v / 8) * CAW;
+const cay = (v: number) => CAH - ((v - 45) / 40) * CAH;
+const CA_ROWS = (CA_DATA as [string, number, number, number, number][]).map(([name, f, le, pop, region]) => ({
+  name, region, m: C(cax(f), cay(le), Math.max(1.6, 22 * Math.sqrt(pop / 1.26e9))),
+}));
+const CA_SSA = CA_ROWS.filter((d) => d.region === 5).map((d) => d.m);
+const CA_OTHERS = CA_ROWS.filter((d) => d.region !== 5).map((d) => d.m);
+/** The proposal's spelling for this example: convexity 0.25, neck 0.6, padding 6. */
+const CA_OPTS: SmoothOpts = { pad: 6, convexity: 0.25, neck: 0.6, roundness: 6, clearance: 3 };
+const caScene = (loops: Pt[][], o: { legend?: boolean } = {}) => layer([
+  position({ x: CAL, y: CAH }, [rect({ w: CAW, h: 1, fill: "#333" })]),
+  position({ x: CAL - 1, y: 0 }, [rect({ w: 1, h: CAH, fill: "#333" })]),
+  ...[0, 1, 2, 3, 4, 5, 6, 7, 8].map((v) => label(cax(v) - 3, CAH + 4, String(v), { fontSize: 10 })),
+  ...[45, 50, 55, 60, 65, 70, 75, 80, 85].map((v) => label(CAL - 20, cay(v) - 6, String(v), { fontSize: 10 })),
+  label(CAL + CAW - 70, CAH - 18, "Fertility Rate", { fontSize: 11 }),
+  label(CAL + 6, cay(66) - 6, "Life Expectancy", { fontSize: 11 }),
+  ...CA_ROWS.filter((d) => d.region !== 5).map((d) => position({ x: d.m.cx - d.m.r, y: d.m.cy - d.m.r }, [ellipse({ w: 2 * d.m.r, h: 2 * d.m.r, fill: CA_COLORS[d.region], opacity: 0.25 })])),
+  ...blobInk(loops, CA_COLORS[5], 0.3, 1.5),
+  ...CA_SSA.map((m) => position({ x: m.cx - m.r, y: m.cy - m.r }, [ellipse({ w: 2 * m.r, h: 2 * m.r, fill: CA_COLORS[5], stroke: "#111", strokeWidth: 1.4 })])),
+  label(cax(5.4), cay(66.5) - 12, "Sub-Saharan Africa", { fontSize: 11, fill: CA_COLORS[5] }),
+  ...(o.legend
+    ? [
+        label(CAL + 110, -22, "Fertility Rate vs. Life Expectancy", { fontSize: 14 }),
+        ...CA_ROWS.filter((d) => d.name === "Afghanistan" || d.name === "Hong Kong, China").flatMap((d) => [
+          position({ x: d.m.cx - d.m.r, y: d.m.cy - d.m.r }, [ellipse({ w: 2 * d.m.r, h: 2 * d.m.r, fill: CA_COLORS[d.region], stroke: "#111", strokeWidth: 1.4 })]),
+          label(d.m.cx + 8, d.m.cy - 7, d.name, { fontSize: 11 }),
+        ]),
+      ]
+    : []),
+  ...(o.legend
+    ? CA_REGIONS.flatMap((r, i) => [
+        position({ x: CAL + CAW + 10, y: 4 + i * 15 }, [ellipse({ w: 9, h: 9, fill: CA_COLORS[i] })]),
+        label(CAL + CAW + 23, 1 + i * 15, r, { fontSize: 10 }),
+      ])
+    : []),
+]);
+export const ChartAccentReplica: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    position({ x: 4, y: 30 }, [caScene(smoothBlob(CA_SSA, CA_OPTS).loops, { legend: true })]).render(container, { w: CAL + CAW + 170, h: CAH + 52 });
+    return container;
+  },
+};
+// Convexity by roundness, nothing avoided, neck 0.6 (the spelling's).
+export const GridChartAccent: StoryObj = {
+  render: () => paramGrid({
+    cols: CONVEXITY, rows: roundnessAxis(6), w: CAL + CAW + 8, h: CAH + 22,
+    cell: (convexity, roundness) => [position({ x: 2, y: 4 }, [caScene(smoothBlob(CA_SSA, { ...CA_OPTS, convexity, roundness }).loops)])],
+  }),
+};
+// Neck at convexity 0.25, without and with avoiding the other regions.
+export const NeckChartAccent: StoryObj = {
+  render: () => paramGrid({
+    cols: { name: "neck", vals: [0.4, 0.6, 0.8, 1], def: 0.6 }, rows: { name: "avoiding", vals: [0, 1], fmt: (v) => (v ? "other regions" : "nothing"), def: 0 },
+    w: CAL + CAW + 8, h: CAH + 22,
+    cell: (neck, avoid) => [position({ x: 2, y: 4 }, [caScene(smoothBlob(CA_SSA, { ...CA_OPTS, neck, avoiding: avoid ? CA_OTHERS : [] }).loops)])],
+  }),
+};
+
+// ── (k) holes: off by default, as PostGIS, Shapely and JTS do ────────────────────────────
+// With `holes: false` (the default) every hole that holds no avoided node is filled; with
+// `holes: true` it stays. Convexity decides the silhouette in both.
+export const HolesCompare: StoryObj = {
+  render: () => {
+    const pen = (holes: boolean) => position({ x: 0, y: 2 }, [layer([
+      polygon({ points: [[0, 0], [PCW, 0], [PCW, PCH], [0, PCH]], fill: "none", stroke: "#e3e3e3", strokeWidth: 1 }),
+      ...penCell((ms) => smoothBlob(ms, { pad: PEN_PAD, convexity: 0.25, neck: 1, roundness: PEN_PAD, holes }).loops),
+    ])]);
+    return titledGrid([
+      ["hyperedges, convexity 0.35, holes: true", hyperCell(SETS, { convexity: 0.35, holes: true })],
+      ["hyperedges, convexity 0.35 (holes: false, the default)", hyperCell(SETS, { convexity: 0.35 })],
+      ["penguins, convexity 0.25, holes: true", pen(true)],
+      ["penguins, convexity 0.25 (holes: false, the default)", pen(false)],
+    ], { w: PCW + 20, h: PCH + 8, cols: 2 });
   },
 };
