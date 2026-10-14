@@ -85,7 +85,9 @@ export type ChannelAnnotations<T, C extends ChannelType = ChannelType> = {
  *   instead of `MaybeValue<number>` — a `field(...)` pipeline (e.g.
  *   `field("age").count()`) is evaluated the same way a bare field-name
  *   accessor is (see `evalFieldValues` in fieldExpr.ts).
- * - "color" channels: mark accepts `string | keyof T | Value<string>` instead of `MaybeValue<string>`
+ * - "color" channels: mark accepts `string | keyof T | Value<string> | FieldExpr`
+ *   instead of `MaybeValue<string>`; "raw" channels likewise take a `FieldExpr`.
+ *   One with an aggregate folds the group's rows first, as a size channel does.
  * - unannotated props: passed through with the same type
  */
 export type DeriveMarkProps<
@@ -120,6 +122,7 @@ export type DeriveMarkProps<
                 | (keyof T & string)
                 | ((d: T) => string)
                 | Value<string>
+                | FieldExpr
                 // `live(...)` reactive color (paint patch; returns a literal
                 // color — see src/interaction/live.ts).
                 | LiveValue
@@ -131,6 +134,7 @@ export type DeriveMarkProps<
                   | (keyof T & string)
                   | ((d: T) => string | number)
                   | Value<string | number>
+                  | FieldExpr
                   // `live(...)` reactive content (paint patch; the pipeline
                   // measures the resolve-time value).
                   | LiveValue

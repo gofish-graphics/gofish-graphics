@@ -200,7 +200,9 @@ Walking `withGoFish.ts:431-477`:
      `field(...)` with an aggregate (`field("a").count()`) is the
      exception: it folds all of `data` (`evalFieldValues`), as a size
      channel does, and records no field, because the value is the fold's.
-     A fold with no value (the mean of no rows) gives no color. It
+     A fold with no value (the mean of no rows) gives no color. A text
+     (`"raw"`) channel folds the same way, and `DeriveMarkProps` types
+     both kinds to accept a `FieldExpr`, as it does a size. It
      also records the field's type from the chart's `schema`
      (`DatumValueImpl.fieldType`), read off `data`, so a color scale over an
      ordered column lists its domain in that order. (A `derive` types its
