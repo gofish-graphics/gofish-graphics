@@ -782,7 +782,11 @@ enclose([spread([circle(**d) for d in planets],
           filled region sinks in between its members. A thinned link meets its
           member's bulge in a plain corner, which only
           <code>roundness</code> rounds. It changes shape only: the pieces and
-          holes are those of <code>neck: 1</code>, at every value.
+          holes are those of <code>neck: 1</code>, at every value. With line
+          members (graph edges), each edge keeps its padding band, so
+          <code>neck</code> has little effect along member edges at low
+          <code>convexity</code>; this is a declared shortcut (decision 16,
+          History v10).
         </td>
         <td>
           0 to 1. Bigger is fuller; 1 does not pull in. Above 1 is an error: the
@@ -2138,6 +2142,15 @@ set_members = [
       (Recommended: yes. In the data, the holes a spine leaves are mostly small
       gaps between touching dots, five per penguin species; a ring is
       <code>Shape.spine({ holes: true })</code>.)
+    </li>
+    <li>
+      An open question, not a decision to make now. Members versus links: a
+      graph edge is both a contained member and the enclosure's own link. Should
+      segment members be drawn like links (thinned by
+      <code>neck</code>), and should different member kinds get their own
+      padding? Revisit once more member kinds exist (labels, areas, nested
+      enclosures). For now each edge keeps its padding band, as a declared
+      shortcut (History, v10).
     </li>
   </ol>
 
@@ -3772,6 +3785,75 @@ chart(catch)
       the convex hull) and keep holes tied to it. Chosen: keep
       <code>convexity</code> for the silhouette and add <code>holes</code>, off
       by default, as PostGIS, Shapely and JTS do.
+    </p>
+  </details>
+
+  <details class="hist">
+    <summary>
+      v10: explored, segment members drawn like links (option c)
+    </summary>
+    <p>
+      Josh: on the hyperedges at low <code>convexity</code>,
+      <code>neck</code> seemed to have no effect, and only that example was
+      affected. The cause: with edges as members, the outline along each edge is
+      that edge's own padding band, a member's bulge, and
+      <code>neck</code> never pulls a member's bulge. At
+      <code>convexity: 0.2</code> and <code>neck: 1</code>
+      there are no other links, so the outline is all bulges. For sets A, B and
+      C, the edge bands are 48, 55 and 64 percent of the outline, the node discs
+      are the rest, and no part of the outline can be pulled. The area at
+      <code>neck: 0.3</code> is the area at <code>neck: 1</code> (ratio 1.000).
+      Only the hyperedges have line members, which is why no other example
+      showed it.
+    </p>
+    <p>
+      Two options. In (b), the current behavior, each edge keeps its padding
+      band. In (c), a node keeps its padding band and an edge is drawn like a
+      link: a tube of half-width <code>neck</code> × R, where R is its end
+      nodes' bulge radius (the smaller end), as a link between them would be. It
+      stops at the edge's stroke half-width plus a margin of 1 px (or
+      <code>padding</code>, if that is smaller), so the drawn edge is always
+      inside. The top two rows are <code>convexity: 0.2</code>, the bottom two
+      <code>convexity: 0.5</code>, with <code>holes: false</code> and
+      <code>roundness</code> equal to <code>padding</code>.
+    </p>
+    <figure>
+      <div class="shot wide">
+        <img
+          src="img/compare-segment-members-b-vs-c.png"
+          alt="Hyperedges with edges as members, neck 0.3 to 1 in columns: in the (b) rows at convexity 0.2 every column is the same; in the (c) rows the bands along the edges widen as neck grows"
+        />
+      </div>
+      <figcaption>
+        Rows: (b) and (c) at <code>convexity</code> 0.2, then at 0.5. Columns:
+        <code>neck</code> 0.3, 0.5, 0.75 and 1.
+      </figcaption>
+    </figure>
+    <p>
+      The (c) prototype kept every property checked: the pieces and holes stayed
+      the same along 140 of 140 <code>neck</code> sweeps and 98 of 98
+      <code>roundness</code> sweeps at each <code>holes</code> value, with no
+      necked outline crossing itself. A lone member's padding was 7.986 to 8.000
+      px (asked 8). With <code>roundness: 0</code>, no outline point came closer
+      to a node than its padding by more than 0.014 px. Clearance came out the
+      same as in (b): the least gap was 0.084 px under <code>clearance</code>,
+      on ChartAccent, which has no line members. The hole rule held, with 430
+      round holes and no radius error. Over 168 hyperedge runs (<code
+        >neck</code
+      >
+      0.05 to 1, <code>convexity</code> 0 to 1, <code>roundness</code> 0 and 6),
+      every edge stayed inside its set's outline. The least margin was 0.054 px
+      at <code>neck: 0.05</code>, where the 1 px floor binds, and at least 0.95
+      px from <code>neck: 0.2</code> up. The largest curvature step on the
+      hyperedges was 0.097 per px (0.082 in (b)). Speed was the same: 3.1 ms
+      cold against 2.7 ms in (b), and 2.4 ms per slider step in both. With (c),
+      the outline that <code>neck</code> can pull went from none to 68 to 82
+      percent, and <code>neck: 0.3</code> kept 48 to 57 percent of the
+      <code>neck: 1</code> area.
+    </p>
+    <p>
+      Josh: there is not enough information to choose, so ship (b) as a
+      shortcut. The question stays open as decision 16.
     </p>
   </details>
 
