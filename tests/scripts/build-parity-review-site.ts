@@ -31,6 +31,7 @@ import {
   type DiffEntry,
 } from "./diff-utils.js";
 import { mapJsToPython, titleToStoryId } from "./path-mapping.js";
+import { createCodeHighlighter } from "./story-specs.js";
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -193,6 +194,9 @@ interface StoryPair {
   /** Aggregate flags — true if any child has a DOM diff / screenshot. */
   hasDomDiff: boolean;
   hasScreenshots: boolean;
+  /** Whether data/sources/{js,python}/<id>.html was written. */
+  hasJsSource?: boolean;
+  hasPySource?: boolean;
   exports: ExportEntry[];
 }
 
@@ -614,24 +618,29 @@ console.log(`  ${pairs.length} story pair(s) total`);
 // Write source files and DOM diffs
 // ---------------------------------------------------------------------------
 
+// Highlighted at build time (Shiki, as on the docs site), so the page loads
+// no highlighter.
+const highlight = await createCodeHighlighter();
 for (const pair of pairs) {
   // JS source
   const jsAbsPath = join(ROOT_DIR, pair.jsFile);
   const jsRaw = readOptional(jsAbsPath);
+  pair.hasJsSource = jsRaw !== null;
   if (jsRaw !== null) {
     write(
-      join(OUT_DIR, "data/sources/js", `${pair.id}.tsx`),
-      extractJsCode(jsRaw)
+      join(OUT_DIR, "data/sources/js", `${pair.id}.html`),
+      highlight(extractJsCode(jsRaw), "tsx")
     );
   }
 
   // Python source
   const pyAbsPath = join(ROOT_DIR, pair.pythonFile);
   const pyRaw = readOptional(pyAbsPath);
+  pair.hasPySource = pyRaw !== null;
   if (pyRaw !== null) {
     write(
-      join(OUT_DIR, "data/sources/python", `${pair.id}.py`),
-      extractPythonCode(pyRaw)
+      join(OUT_DIR, "data/sources/python", `${pair.id}.html`),
+      highlight(extractPythonCode(pyRaw), "python")
     );
   }
 }
@@ -807,7 +816,8 @@ const html = `<!DOCTYPE html>
     #source-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .source-panel { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden; }
     .source-panel-header { padding: 8px 12px; background: #f8f8f8; border-bottom: 1px solid #e0e0e0; font-size: 12px; font-weight: 600; color: #555; }
-    .source-panel-content { padding: 12px; overflow-x: auto; font-family: monospace; font-size: 12px; line-height: 1.6; white-space: pre; color: #333; max-height: 500px; overflow-y: auto; }
+    .source-panel-content { overflow-x: auto; font-family: monospace; font-size: 12px; line-height: 1.6; color: #333; max-height: 500px; overflow-y: auto; }
+    .source-panel-content pre.shiki { margin: 0; padding: 12px; overflow: visible; }
     .source-missing { color: #aaa; font-style: italic; padding: 32px; text-align: center; }
 
     /* Screenshot comparison */
@@ -1163,32 +1173,27 @@ const html = `<!DOCTYPE html>
     const jsEl = document.getElementById('js-source');
     const pyEl = document.getElementById('py-source');
 
-    // JS source
-    const jsKey = 'js:' + pair.id;
-    if (sourceCache[jsKey] === undefined) {
-      try {
-        const res = await fetch('/data/sources/js/' + pair.id + '.tsx');
-        const ct = res.headers.get('content-type') || '';
-        const text = res.ok && !ct.includes('text/html') ? await res.text() : null;
-        sourceCache[jsKey] = text !== null ? escHtml(text) : null;
-      } catch { sourceCache[jsKey] = null; }
+    // Each source is pre-highlighted HTML; fetch only the ones that exist.
+    async function loadSource(lang, exists) {
+      const key = lang + ':' + pair.id;
+      if (!exists) return null;
+      if (sourceCache[key] === undefined) {
+        try {
+          const res = await fetch('/data/sources/' + lang + '/' + pair.id + '.html');
+          sourceCache[key] = res.ok ? await res.text() : null;
+        } catch { sourceCache[key] = null; }
+      }
+      return sourceCache[key];
     }
-    jsEl.innerHTML = sourceCache[jsKey] !== null
-      ? sourceCache[jsKey]
+    const [js, py] = await Promise.all([
+      loadSource('js', pair.hasJsSource),
+      loadSource('python', pair.hasPySource),
+    ]);
+    jsEl.innerHTML = js !== null
+      ? js
       : '<div class="source-missing">Source not available</div>';
-
-    // Python source
-    const pyKey = 'py:' + pair.id;
-    if (sourceCache[pyKey] === undefined) {
-      try {
-        const res = await fetch('/data/sources/python/' + pair.id + '.py');
-        const ct = res.headers.get('content-type') || '';
-        const text = res.ok && !ct.includes('text/html') ? await res.text() : null;
-        sourceCache[pyKey] = text !== null ? escHtml(text) : null;
-      } catch { sourceCache[pyKey] = null; }
-    }
-    pyEl.innerHTML = sourceCache[pyKey] !== null
-      ? sourceCache[pyKey]
+    pyEl.innerHTML = py !== null
+      ? py
       : '<div class="source-missing">No Python counterpart found</div>';
   }
 

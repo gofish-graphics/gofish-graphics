@@ -507,6 +507,9 @@ importers:
       prettier:
         specifier: ^3.8.1
         version: 3.8.1
+      shiki:
+        specifier: ^4.1.0
+        version: 4.1.0
       solid-js:
         specifier: ^1.9.11
         version: 1.9.11
