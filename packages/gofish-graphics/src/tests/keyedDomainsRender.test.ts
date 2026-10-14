@@ -8,6 +8,7 @@
  * `pnpm test:keyed-domains-render`).
  */
 import { Rect as rect } from "../ast/shapes/rect";
+import { Text } from "../ast/shapes/text";
 import { layer } from "../ast/graphicalOperators/layer";
 import { Frame } from "../ast/graphicalOperators/frame";
 import { stackX } from "../ast/graphicalOperators/stackX";
@@ -202,6 +203,31 @@ async function main() {
       "the bars map with the axis",
       axis !== undefined && near(tall?.y, axis.px(1.1)),
       { tall, axis: axis && [axis.px(0), axis.px(1.1)] }
+    );
+  }
+
+  console.log("# a text placed by its center ignores the w and h it is given");
+  {
+    // A text's box is its glyphs, so `cx`/`cy` place it by its own size,
+    // with or without a `w`/`h`: in x its anchor sits at cx, in y the middle
+    // of its box sits at cy. Before, a pixel `w`/`h` derived a `min` the
+    // text was placed at, 25 px left and 25 px up of where it is without.
+    const at = async (dims: Record<string, number>) => {
+      const dl = await toDisplayList(
+        (layer as any)([
+          (rect as any)({ x: 0, y: 0, w: 1, h: 1, fill: "none" }),
+          (Text as any)({ text: "Hello", ...dims }),
+        ]),
+        { w: 300, h: 300 }
+      );
+      return items(dl).find((i) => i.kind === "text");
+    };
+    const bare = await at({ cx: 100, cy: 100 });
+    const sized = await at({ cx: 100, w: 50, cy: 100, h: 50 });
+    check(
+      "a w and h do not move a text placed by its center",
+      near(sized?.x, bare!.x!) && near(sized?.y, bare!.y!),
+      { bare, sized }
     );
   }
 

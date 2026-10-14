@@ -308,19 +308,20 @@ export const startAtCenter = (
 };
 
 /** The pixel start of a box axis `sizePx` pixels long: by its center when it
- *  is placed by one ({@link centerOf}, {@link startAtCenter}), else at its
- *  `min` through the axis's scale. Undefined when the box has no position of
- *  its own on the axis, so the parent places it. */
+ *  has one ({@link startAtCenter}), else at its `min` through the axis's
+ *  scale. Undefined when the box has no position of its own on the axis, so
+ *  the parent places it. A pixel center with a pixel size also has the `min`
+ *  they derive, but the box is placed by the center: `sizePx` is the box's
+ *  own size, which for a text or an image is not the `w` or `h` it was
+ *  given (a text's x origin is its anchor, so it passes 0). */
 export const positionOf = (
   dim: Interval<MaybeValue<number>>,
   scale: ((x: number) => number) | undefined,
   sizePx: number
-): number | undefined => {
-  const center = centerOf(dim);
-  return center !== undefined
-    ? startAtCenter(center, scale, sizePx)
+): number | undefined =>
+  dim.center !== undefined
+    ? startAtCenter(dim.center, scale, sizePx)
     : computeAesthetic(dim.min, scale, undefined);
-};
 
 export type IndexedDims<T = number> = {
   0?: Interval<T>;
