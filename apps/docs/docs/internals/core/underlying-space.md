@@ -2249,7 +2249,10 @@ the parts asks that partition whether it is a part of a cycle
 (`calendarLevel` in `axes/elaborate.tsx`), and `partition`'s error over a
 key of parts, which names the whole key, fixes it with that unit first, as
 one product of all the levels or as a chain of them. A value falls in the part named by its own fields in
-the column's zone (`CalendarPartition.part`). TODO(#1052): a spread over a
+the column's zone (`CalendarPartition.part`). A part's `.format(fn)` reads a
+`CalendarPart` (`kind: "part"`, `cycleFields` in calendar.ts): only the fields
+below its cycle, so no field is a stand-in `NaN`. A cell of the line gives a
+`CalendarCell` (`kind: "cell"`) instead, so the formatter narrows on `kind`. TODO(#1052): a spread over a
 cycle in polar space should leave the same gap between its last part and
 its first as between any two; that default is not built.
 

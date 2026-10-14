@@ -213,23 +213,17 @@ function formatter(
 /** The quarter (1 to 4) that the month `month` (1 to 12) is in. */
 const quarterOf = (month: number): number => Math.floor((month - 1) / 3) + 1;
 
-/** One cell of a partition: the instants `[start, end)` (epoch ms, UTC), the
- *  level it belongs to (`unit`), and the calendar fields of its start in the
- *  axis's zone, as plain numbers named like pandas' and polars' `dt.*`:
- *  `year`, `quarter` (1 to 4), `month` (1 to 12), `week` (the ISO week
- *  number), `day` (of the month), `weekday` (the ISO day of the week, 1 for
- *  Monday to 7 for Sunday, whatever day a week starts on, as in polars'
- *  `dt.weekday()` and Temporal's `dayOfWeek`), `hour`, `minute` and
- *  `second`. A custom label (`.format(fn)`) is a function of this.
- *
- *  A part of a cycle (a month of the year: a bin of `Calendar.month` alone)
- *  has no one place on the time line: its `start` and `end`, `week`, and
- *  the fields of its cycle unit and above (`year` for a month of the year)
- *  are `NaN`. Its `weekday` is `NaN` too, except for a part of a week (a
- *  weekday, or an hour of a weekday), which has no `day`, `month`,
- *  `quarter` or `year` instead. The fields below its level are those of the
- *  part's first instant (`day` 1 for a month). */
+/** One cell of a partition on the time line (`kind: "cell"`): the instants
+ *  `[start, end)` (epoch ms, UTC), the level it belongs to (`unit`), and the
+ *  calendar fields of its start in the axis's zone, as plain numbers named
+ *  like pandas' and polars' `dt.*`: `year`, `quarter` (1 to 4), `month` (1
+ *  to 12), `week` (the ISO week number), `day` (of the month), `weekday`
+ *  (the ISO day of the week, 1 for Monday to 7 for Sunday, whatever day a
+ *  week starts on, as in polars' `dt.weekday()` and Temporal's
+ *  `dayOfWeek`), `hour`, `minute` and `second`. A custom label
+ *  (`.format(fn)`) is a function of this or of a {@link CalendarPart}. */
 export type CalendarCell = {
+  kind: "cell";
   start: number;
   end: number;
   unit: CalendarUnit;
@@ -244,8 +238,33 @@ export type CalendarCell = {
   second: number;
 };
 
-/** A custom label for a partition's cells (`Calendar.<unit>.format(fn)`). */
-export type CellFormat = (cell: CalendarCell) => string;
+/** One part of a cycle (`kind: "part"`): what a Calendar level binned alone
+ *  gives when it is a part of a larger unit (`Calendar.month`, the month of
+ *  the year; `Calendar.weekday`, the day of the week). It has no one place
+ *  on the time line, so it has no `start`, `end` or `week`, and no field of
+ *  its cycle's unit or above (no `year` for a month of the year). It has the
+ *  fields below its cycle, those of its first instant in the reference
+ *  cycle (`day` 1 for a month): `quarter`, `month`, `day`, `hour`, `minute`
+ *  and `second` for a part of a year, and for a part of a week, which holds
+ *  days, `weekday`, `hour`, `minute` and `second`. */
+export type CalendarPart = {
+  kind: "part";
+  unit: CalendarUnit;
+  quarter?: number;
+  month?: number;
+  day?: number;
+  weekday?: number;
+  hour?: number;
+  minute?: number;
+  second?: number;
+};
+
+/** A custom label for a partition's cells (`Calendar.<unit>.format(fn)`).
+ *  A Calendar level gives parts of a cycle when it is binned alone (or
+ *  first) and is a part of a larger unit, and cells of the time line after
+ *  a coarser level in a chain, or on an axis's `levels`, so the label is a
+ *  function of either: `kind` tells them apart. */
+export type CellFormat = (cell: CalendarCell | CalendarPart) => string;
 
 /** `fn`, checked to be a function of the cell, for `partition.format(fn)`:
  *  one check for every partition with a `.format` (a Calendar value, and
@@ -281,6 +300,7 @@ export function fieldsOf(
   unit: CalendarUnit
 ): CalendarCell {
   return {
+    kind: "cell",
     start: s.epochMilliseconds,
     end,
     unit,
@@ -296,37 +316,41 @@ export function fieldsOf(
   };
 }
 
-/** The finest first: the order of the fields a part of a cycle keeps. */
-const FIELD_ORDER = [
-  "second",
-  "minute",
-  "hour",
-  "day",
-  "month",
-  "quarter",
+/** The units a part of a cycle may name, coarsest first: each but the
+ *  year is also the name of the part's field for it. */
+const PART_UNITS = [
   "year",
+  "quarter",
+  "month",
+  "day",
+  "hour",
+  "minute",
+  "second",
 ] as const;
 
-/** The fields of a part of a cycle of `cycle` (a month of the year): those
- *  of its first instant `t` in the reference cycle (UTC), with `start`,
- *  `end`, `week`, and the fields of `cycle` and above set to `NaN`, since
- *  the part has no one place on the time line (see {@link CalendarCell}). A
- *  week holds days, so for a part of a week the day of the month and above
- *  are `NaN`; only a part of a week keeps its `weekday`. */
+/** The fields of a part of a cycle of `cycle` (a month of the year): the
+ *  fields below `cycle` of its first instant `t` in the reference cycle
+ *  (UTC), since the part has no one place on the time line (see
+ *  {@link CalendarPart}). A week holds days, so a part of a week has the
+ *  fields below a day, and only a part of a week has its `weekday`. */
 export function cycleFields(
   t: number,
   unit: CalendarUnit,
   cycle: CalendarUnit
-): CalendarCell {
-  const f = fieldsOf(zoned(t, "UTC"), NaN, unit);
-  f.start = NaN;
-  f.week = NaN;
-  if (cycle !== "week") f.weekday = NaN;
-  const above = FIELD_ORDER.indexOf(
-    (cycle === "week" ? "day" : cycle) as (typeof FIELD_ORDER)[number]
+): CalendarPart {
+  const all = fieldsOf(zoned(t, "UTC"), NaN, unit);
+  const part: CalendarPart = { kind: "part", unit };
+  if (cycle === "week") part.weekday = all.weekday;
+  const below = PART_UNITS.indexOf(
+    (cycle === "week" ? "day" : cycle) as (typeof PART_UNITS)[number]
   );
-  for (const k of FIELD_ORDER.slice(above)) f[k] = NaN;
-  return f;
+  for (const k of PART_UNITS.slice(below + 1) as Exclude<
+    (typeof PART_UNITS)[number],
+    "year"
+  >[]) {
+    part[k] = all[k];
+  }
+  return part;
 }
 
 /**
@@ -496,7 +520,7 @@ export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
    *  month, "Mon" for a day of the week, "12 AM" for an hour of the day, "05" for a minute of the hour
    *  or a second of the minute. `t` is the part's first instant in the
    *  reference cycle (UTC, {@link referencePeriod}). */
-  partLabel(cell: CalendarCell, t: number): string {
+  partLabel(cell: CalendarPart, t: number): string {
     if (this.formatCell !== undefined) return this.formatCell(cell);
     return productLabeler([this], "UTC")(t);
   }

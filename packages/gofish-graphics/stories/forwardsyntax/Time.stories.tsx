@@ -216,9 +216,10 @@ export const QuarterlyBars: StoryObj<Args> = {
         x: {
           title: false,
           levels: [
-            Calendar.quarter.format(
-              (cell) =>
-                `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`
+            Calendar.quarter.format((cell) =>
+              cell.kind === "cell"
+                ? `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`
+                : `Q${cell.quarter}`
             ),
             false,
           ],

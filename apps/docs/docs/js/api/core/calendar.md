@@ -49,18 +49,33 @@ Calendar value, bare or called.
 
 ## Parameters
 
-| Parameter | Type                             | Description                                                                                                                   |
-| --------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `every`   | `number`                         | `Calendar.month({ every })`: how many units one cell spans. A whole number, 1 or more. Default `1`. Every kind but `weekday`. |
-| `start`   | `"monday" \| "sunday"`           | `Calendar.week({ start })`, `Calendar.weekday({ start })`: the first day of a week. Default `"monday"`, as in ISO 8601.       |
-| `fn`      | `(cell: CalendarCell) => string` | `.format(fn)`: the label of each cell. Default: the level's label (see Behavior).                                             |
+| Parameter | Type                                             | Description                                                                                                                   |
+| --------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `every`   | `number`                                         | `Calendar.month({ every })`: how many units one cell spans. A whole number, 1 or more. Default `1`. Every kind but `weekday`. |
+| `start`   | `"monday" \| "sunday"`                           | `Calendar.week({ start })`, `Calendar.weekday({ start })`: the first day of a week. Default `"monday"`, as in ISO 8601.       |
+| `fn`      | `(cell: CalendarCell \| CalendarPart) => string` | `.format(fn)`: the label of each cell. Default: the level's label (see Behavior).                                             |
 
-A `CalendarCell` has these fields. The calendar fields are those of the
-cell's start in the zone of the axis's column, named like pandas' and
-polars' `dt` fields.
+`fn` takes a cell of the time line, a `CalendarCell`, or a part of a cycle, a
+`CalendarPart`. A level gives parts when it is binned alone and is a part of
+a larger unit (`field("date").bin(Calendar.month)`, the month of the year),
+and cells after a coarser level in a chain
+(`.bin(Calendar.year).bin(Calendar.month)`) or as an entry of an axis's
+`levels`. The two have a `kind`, `"cell"` or `"part"`, which tells them
+apart:
+
+```ts
+Calendar.month.format((cell) =>
+  cell.kind === "cell" ? `${cell.month}/${cell.year}` : `${cell.month}`
+);
+```
+
+A `CalendarCell` (`kind: "cell"`) has these fields. The calendar fields are
+those of the cell's start in the zone of the axis's column, named like
+pandas' and polars' `dt` fields.
 
 | Field     | Type           | Description                                                                                |
 | --------- | -------------- | ------------------------------------------------------------------------------------------ |
+| `kind`    | `"cell"`       | A cell of the time line.                                                                   |
 | `start`   | `number`       | The instant the cell starts, in epoch milliseconds.                                        |
 | `end`     | `number`       | The instant the next cell starts.                                                          |
 | `unit`    | `CalendarUnit` | The cell's level: `"second"`, `"minute"`, ... `"year"`.                                    |
@@ -74,12 +89,14 @@ polars' `dt` fields.
 | `minute`  | `number`       | The minute.                                                                                |
 | `second`  | `number`       | The second.                                                                                |
 
-A part of a cycle (a month of the year, see Bins) has no one place on the
-time line: its `start`, `end` and `week`, and the fields of its cycle and
-above (`year` for a month of the year), are `NaN`. Its `weekday` is `NaN`
-too, except for a part of a week (a weekday, or an hour of a weekday), whose
-`day`, `month`, `quarter` and `year` are `NaN` instead. Its other fields are
-those of its first instant (`day` is `1` for a month).
+A `CalendarPart` (`kind: "part"`, a month of the year, see Bins) has no one
+place on the time line, so it has no `start`, `end` or `week`, and no field of
+its cycle's unit or above (no `year` for a month of the year). It has `kind`,
+`unit`, and the fields below its cycle, those of its first instant (`day` is
+`1` for a month): `quarter`, `month`, `day`, `hour`, `minute` and `second`
+for a part of a year, `day`, `hour`, `minute` and `second` for a part of a
+month, and for a part of a week (a weekday, or an hour of a weekday), which
+holds days, `weekday`, `hour`, `minute` and `second`.
 
 ## Behavior
 
@@ -206,9 +223,10 @@ chart(prices, {
   axes: {
     x: {
       levels: [
-        Calendar.quarter.format(
-          (cell) =>
-            `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`
+        Calendar.quarter.format((cell) =>
+          cell.kind === "cell"
+            ? `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`
+            : `Q${cell.quarter}`
         ),
         false, // no year row
       ],

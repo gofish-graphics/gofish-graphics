@@ -126,6 +126,7 @@ export * as Calendar from "./families/calendar";
 export { CalendarPartition } from "./ast/calendar";
 export type {
   CalendarCell,
+  CalendarPart,
   CalendarUnit,
   CalendarJSON,
   CellFormat,

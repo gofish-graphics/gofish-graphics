@@ -310,12 +310,39 @@ async function main() {
       "UTC",
       "t"
     );
+    // A part has the fields below its cycle, and no field that is NaN.
+    const noNaN = (f: object) =>
+      Object.values(f).every((v) => !Number.isNaN(v as number));
     check(
       "a part's format reads its fields; it has no year or start",
       fields.length === 12 &&
+        fields[5].kind === "part" &&
         fields[5].month === 6 &&
-        Number.isNaN(fields[5].year) &&
-        Number.isNaN(fields[5].start)
+        fields[5].quarter === 2 &&
+        fields[5].day === 1 &&
+        !("year" in fields[5]) &&
+        !("start" in fields[5]) &&
+        !("week" in fields[5]) &&
+        !("weekday" in fields[5]) &&
+        fields.every(noNaN),
+      JSON.stringify(fields[5])
+    );
+    const chained: any[] = [];
+    chainCells(
+      [Calendar.year, Calendar.month.format((c) => (chained.push(c), ""))],
+      over([t("2024-01-01"), t("2024-03-01")]),
+      "UTC",
+      "t"
+    );
+    check(
+      "after a coarser level in a chain, a level's format reads cells of " +
+        "the time line",
+      chained.length === 3 &&
+        chained.every((c) => c.kind === "cell") &&
+        chained[1].year === 2024 &&
+        chained[1].month === 2 &&
+        chained[1].start === t("2024-02-01"),
+      JSON.stringify(chained[1])
     );
     const days = binCells(
       [Calendar.month, Calendar.day],
@@ -403,9 +430,12 @@ async function main() {
           fields.map((f) => f.weekday),
           [1, 2, 3, 4, 5, 6, 7]
         ) &&
-        Number.isNaN(fields[0].day) &&
-        Number.isNaN(fields[0].month) &&
-        Number.isNaN(fields[0].start)
+        fields.every((f) => f.kind === "part") &&
+        !("day" in fields[0]) &&
+        !("month" in fields[0]) &&
+        !("start" in fields[0]) &&
+        fields[0].hour === 0,
+      JSON.stringify(fields[0])
     );
     const monthFields: any[] = [];
     binCells(
@@ -416,7 +446,7 @@ async function main() {
     );
     check(
       "a month of the year has no weekday",
-      Number.isNaN(monthFields[0].weekday)
+      !("weekday" in monthFields[0])
     );
     const line = binCells(Calendar.week, over(twoWeeks), "UTC", "t").cells as Cell[];
     check(
