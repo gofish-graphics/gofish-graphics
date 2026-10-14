@@ -111,6 +111,7 @@
     "@types/d3-hierarchy": "^3.1.7",
     "@types/lodash": "^4.17.16",
     "@types/topojson-client": "^3.1.5",
+    "delaunator": "5.1.0",
     "fast-kde": "^0.2.2",
     "happy-dom": "^20.10.6",
     "prettier": "^3.6.2",

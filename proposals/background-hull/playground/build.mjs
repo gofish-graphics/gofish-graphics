@@ -4,7 +4,9 @@
 //   node proposals/background-hull/playground/build.mjs            # build playground.html
 //   node proposals/background-hull/playground/build.mjs --verify   # also run verify.ts in node
 //
-// esbuild and delaunator are not direct dependencies; both are resolved from the pnpm store.
+// esbuild is not a direct dependency, so it is resolved from the pnpm store. delaunator is a
+// devDependency of gofish-graphics and is resolved from that package.
+import { createRequire } from "node:module";
 import { readFileSync, writeFileSync, readdirSync, mkdtempSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -27,10 +29,9 @@ const esbuild = await import(
     join(store, pick("esbuild@"), "node_modules/esbuild/lib/main.js")
   ).href
 );
-const delaunator = join(
-  store,
-  "delaunator@5.1.0/node_modules/delaunator/index.js"
-);
+const delaunator = createRequire(
+  join(root, "packages/gofish-graphics/package.json")
+).resolve("delaunator");
 const common = {
   bundle: true,
   alias: { delaunator },

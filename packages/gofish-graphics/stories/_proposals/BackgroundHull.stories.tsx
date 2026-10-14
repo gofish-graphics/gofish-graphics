@@ -22,8 +22,7 @@ import {
   createRectangleInfluenceArea,
   defaultOptions,
 } from "bubblesets-js";
-// throwaway: delaunator is in the pnpm store but not a direct dependency
-import Delaunator from "../../../../node_modules/.pnpm/delaunator@5.1.0/node_modules/delaunator/index.js";
+import Delaunator from "delaunator";
 import { penguins } from "../../src/data/penguins";
 // ChartAccent's sample data (section (j)), converted from proposals/background-hull/precedent/chartaccent-gapminder.csv
 import CA_DATA from "../../../../proposals/background-hull/playground/src/chartaccent.json";
@@ -1486,7 +1485,7 @@ const boxGrid = (bbs: number[][]) => {
 };
 /** Remember a stage's last few results, keyed by the identity of its input arrays (held weakly)
  *  and by its numbers, so a recompute that changes one knob reruns only the stages that read it. */
-const stageMemo = <T>() => {
+const stageMemo = <T,>() => {
   const root = new WeakMap<object, any>(), NONE = {};
   return (objs: (object | undefined)[], nums: (number | undefined)[], make: () => T): T => {
     let m: WeakMap<object, any> = root, last: Map<string, T> | undefined;
