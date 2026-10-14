@@ -12,6 +12,7 @@ import {
   frameOf,
   scopeFrame,
   seatInScope,
+  type FixedSolve,
   type ScopeRegistry,
 } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
@@ -224,7 +225,9 @@ export function solveLayerScales(
     claim: Extent
   ) => [UnderlyingSpace | undefined, Extent | undefined],
   scopes: ScopeRegistry,
-  rootKey: string
+  rootKey: string,
+  // Per axis: the scope a literal size solved in the claim walk.
+  fixed: Size<FixedSolve | undefined> = [undefined, undefined]
 ): LayerScales {
   const frames: [AxisMap | undefined, AxisMap | undefined] = [
     undefined,
@@ -245,14 +248,24 @@ export function solveLayerScales(
     // A claim with no σ in it (content that is only fixed boxes) has
     // nothing to solve: the layer inherits.
     if (sized && Number.isFinite(layerSize[axis]) && scalesWithSigma(claim)) {
-      const [space, nicedClaim] = scope(axis, content, claim);
-      const solved = scopes.solveScope(
-        { kind: "sized", rootKey, axis },
-        space,
-        nicedClaim,
-        layerSize[axis]
-      );
-      checks.push({ axis, extent: nicedClaim, sigma: solved?.sigma });
+      // A literal size was solved once in the claim walk (`solveFixed`);
+      // any other sized node solves here, against the size it is given.
+      const solve = (): FixedSolve | undefined => {
+        const [space, nicedClaim] = scope(axis, content, claim);
+        const solution = scopes.solveScope(
+          { kind: "sized", rootKey, axis },
+          space,
+          nicedClaim,
+          layerSize[axis]
+        );
+        return (
+          solution &&
+          nicedClaim && { key: undefined, solution, claim: nicedClaim }
+        );
+      };
+      const s = fixed[axis] ?? solve();
+      const solved = s?.solution;
+      checks.push({ axis, extent: s?.claim, sigma: solved?.sigma });
       if (solved !== undefined) {
         sigmas[axis] = solved.sigma;
         frames[axis] = scopeFrame(solved);

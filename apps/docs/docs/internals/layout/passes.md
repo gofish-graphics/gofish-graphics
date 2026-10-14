@@ -523,18 +523,22 @@ omitted dimension is resolved per axis from the root's size claim on it:
   widths `= value` laid side by side, whose spread is ordinal but whose room is
   σ-dependent) has data to scale into pixels, so it falls back to a concrete
   canvas (`DEFAULT_CANVAS_SIZE = 400`). The exception is a keyed domain that
-  sized nodes below the root already solve, all at one σ: the root is not a
-  sized node on an axis the render does not size, so its canvas there is its
-  claim at that σ (`canvasFor` in `gofish.tsx`; see
+  nodes with a literal size below the root already solve, all at one σ
+  (`ScopeRegistry.keyedSigma`): the root is not a sized node on an axis the
+  render does not size, so it maps the domain at that σ, and its size there
+  is its claim at that σ (`rootSizes` in `gofish.tsx`; see
   [sized nodes](/internals/core/underlying-space#sized-nodes-and-measure-keyed-domains)).
+  A claim that is only pixels lays out unsized, like an axis with no claim.
 - An axis with **no claim** (a bar chart's category axis, or a bare
   fixed-size shape) has nothing to scale, so it lays out _unsized_: marks keep
   their default sizes (a mark treats a non-finite size as "use my default" via its
   `Number.isFinite` guards) and the operator shrinks to fit.
 
-`layout()` therefore distinguishes the concrete `canvasW`/`canvasH` (used to build
-the position scales and root scale factors) from the `layoutW`/`layoutH` it hands
-to `child.layout` (where a shrink-to-fit axis is left unsized). **Shared-measure
+`layout()` therefore computes the root's scope and size once per axis
+(`rootSizes`: its σ, and its claim at that σ), which the root scale factors,
+the equal-measure recentering and the root's frame in Pass 10 all read, and
+distinguishes it from the `layoutW`/`layoutH` it hands to `child.layout`
+(where a shrink-to-fit axis is left unsized). **Shared-measure
 equal scale** (#582) adds one reconciliation step here, after the per-axis scales
 are built and before `child.layout`: when `spaceUnit(x).unit` and
 `spaceUnit(y).unit` are the same DECLARED unit (two unknowns that unified
@@ -720,12 +724,16 @@ non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 // The root's axis order starts at the canvas frame's start edge: the top, or the
 // bottom for a continuous y (`direction` −1).
 const atFrameStart = (p, size = frame) => (direction === 1 ? p : size - p);
-// The root's frame is its claim at its σ: the slot when fitted, its own box
-// for a fixed size; the slot when there is no claim.
-const rootFrame = claim?.width.run(sigma ?? 0) ?? frame;
+// The root's frame is its size (`rootSizes`): its claim at its σ, which is
+// the slot when fitted and its own box for a fixed size; the slot when there
+// is no claim.
 shrinkToFit
   ? child.pinAnchor(axis, atFrameStart(offset), direction === 1 ? "min" : "max")
-  : child.place(axis, atFrameStart(offset + seatPx, rootFrame), "baseline");
+  : child.place(
+      axis,
+      atFrameStart(offset + seatPx, rootSizes[axis].px),
+      "baseline"
+    );
 ```
 
 **Implementation**: `src/ast/_node.ts`

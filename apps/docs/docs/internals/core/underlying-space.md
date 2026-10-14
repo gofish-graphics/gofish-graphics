@@ -1270,15 +1270,23 @@ inside it.
 
 A render with no `w`/`h` on an axis does not size its root there: the
 default canvas is a fallback, not a size. The root shrink-wraps its content
-and maps its keyed domain at the σ the domain is solved at below it. A
-sized node with a literal size records that σ in the claim walk
-(`_solvedSigma`, `layer.tsx`), and `KeyedDomains.solvedSigmas` lists the ones
-over the root's keyed domain. When they agree, the root's canvas on the axis
-is its claim at that σ, so the axis it draws lines up with the marks (the
-`NestedCharts` story: four mini charts 160 px tall, rendered with no size).
-When no sized node below solves the domain (the common
-`chart(...).render(el, {})`), or they solve it at different σs, the root
-solves at the default canvas, as below.
+and maps its keyed domain at the σ the domain is solved at below it. A node
+with a literal size solves its scope once, in the claim walk, through the
+registry (`ScopeRegistry.solveFixed`, called from `layer.tsx`), which records
+the σ under the keyed domain the node maps; its layout reuses that solution
+rather than solving again. The root reads the σ recorded for its own keyed
+domain (`ScopeRegistry.keyedSigma`). When the nodes agree, the root maps the
+domain at that σ, and its size on the axis is its claim at that σ, so the
+axis it draws lines up with the marks (the `NestedCharts` story: four mini
+charts 160 px tall, rendered with no size). When no node below solves the
+domain (the common `chart(...).render(el, {})`), or they solve it at
+different σs, the root solves at the default canvas, as below.
+
+Only a node whose claim has σ in it maps a domain, so only such a claim is
+widened. A claim that is only pixels (content made of boxes of a literal
+size) is left as it is by `KeyedDomains.scope`: each box already mapped the
+domain into its own size, and widening the claim would add data-scaled room
+nothing fills.
 
 Behind `GOFISH_DUMP_SCOPES` the registry prints every scope it solved as a
 printable frame equation, one line per solve, with kind `root`, `coord`,
@@ -1426,7 +1434,8 @@ upward unchanged, and its keyed domain is shared as the sharing sets say. Its
 claim, though, is its own pixels: the box solves its own σ, so its content's σ
 claim is not room its parent can scale. The node claims the content's claim
 at the σ it solves, which keeps the content's split about data 0 and sums to
-the size (`fixedClaim` in `layer.tsx`). A claim that is only pixels has no σ
+the size (`fixedClaim` in `layer.tsx`). It solves that σ once, through the
+registry (`solveFixed`), and its layout reuses the solution. A claim that is only pixels has no σ
 in it (`scalesWithSigma` in `extent.ts`): it needs no canvas at the root, and
 a sized node has nothing to solve from it. A **data-valued** `w`/`h` (a field name, a `field(...)`
 expression, a per-entry array) is a value in its parent's unit, so the node

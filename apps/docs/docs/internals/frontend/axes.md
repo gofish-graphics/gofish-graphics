@@ -465,7 +465,8 @@ inside the box it solves σ in, and its content's free baseline is placed there
 axes of the domains it solves, a bare low-level render's included. On an axis
 the render gives no size, the root maps its domain at the σ the sized nodes
 below it solve it at, when they agree, so a bare spread of 160 px mini charts
-draws a 160 px axis (`canvasFor` in `gofish.tsx`). Outside
+draws a 160 px axis (`rootSizes` in `gofish.tsx`, which reads the σ from
+`ScopeRegistry.keyedSigma`). Outside
 every chart the render root stands in for one: it claims the continuous keyed
 domains in its subtree that no chart claims. A domain its own type does not
 cover (its content is detached by a literal `position`, so its type is

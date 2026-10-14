@@ -173,7 +173,7 @@ The marginal histogram needs this order (section 6).
 | Porter-Duff operators, `enclose`                     | Like a layer.                                                                                                                                                                                                                   |
 | `coord`, `frame({ coord })`                          | A space root. It reports nothing upward, as today, and each instance starts its own space, so repeated instances of one spec do not share.                                                                                      |
 | `chart()`                                            | Nothing. A chart is a frame with one child. A chart draws axes (section 5), and its `w`/`h` is a literal size.                                                                                                                  |
-| render root                                          | A space root, and a sized node on each axis the render sizes.                                                                                                                                                                   |
+| render root                                          | A space root, and a sized node on each axis the render sizes. On any other axis it maps its keyed domain at the σ the nodes with a literal size below solve it at (section 5).                                                  |
 
 Two rows are rules of a node rather than constraints of a layer: a
 data-valued `w`/`h` and `treemap`. Each node type has a sharing rule next to its
@@ -305,8 +305,10 @@ These are the sized nodes on an axis:
 
 - the render root, sized by the canvas, on an axis the render gives a size.
   With no render size the default canvas is a fallback, not a size: the
-  root maps its keyed domain at the σ the sized nodes below solve it at
-  when they agree, and uses the default canvas only when none does;
+  root maps its keyed domain at the σ the nodes with a literal size below
+  solve it at when they agree, and uses the default canvas only when none
+  does or they disagree (an over-constrained layout). Its size on the axis
+  is its claim at that σ;
 - each coordinate transform, sized by its box;
 - a node with a literal `w`/`h`;
 - a node with a data-valued `w`/`h`, sized by its parent's σ, which then maps its
@@ -319,6 +321,16 @@ A sized node solves its σ once, through the one solve site,
 widened from its own data interval to its keyed domain. This is the same
 arithmetic `niceScope` (`extent.ts:105`) uses to widen a claim to a niced
 domain. Then the claim is niced. Every other node inherits σ, as it does today.
+
+Only the node that maps a domain widens it, and a node maps a domain only when
+its claim has σ in it. A claim that is only pixels (content that is all boxes
+of a literal size) is left as it is: each box already mapped the domain into
+its own size. A node with a literal size solves in the claim walk, since its
+size does not depend on σ: the registry records the solution under the keyed
+domain the node maps (`solveFixed`), the node claims its content's claim at
+that σ upward, and its layout reuses the solution. The render root reads the
+σ recorded for its keyed domain (`keyedSigma`) when the render gives it no
+size.
 
 A spread of magnitudes along its direction is not a sized node. Its parts are
 parts of one chain claim, as today, and the enclosing sized node solves σ

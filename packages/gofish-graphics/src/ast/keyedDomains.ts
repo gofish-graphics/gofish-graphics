@@ -26,7 +26,7 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import type { Size } from "./dims";
-import { niceScope, widenScope, type Extent } from "./extent";
+import { niceScope, scalesWithSigma, widenScope, type Extent } from "./extent";
 import { unitKey } from "./measure";
 
 /** The part of a node the table reads (duck-typed: `_node.ts` imports this
@@ -39,9 +39,6 @@ export type KeyedNode = {
   /** Set on a coordinate transform: the space it opens for its subtree. */
   _space?: unknown;
   axisDemand: [AxisTicks | undefined, AxisTicks | undefined];
-  /** Per axis, the σ a sized node with a literal size solves its keyed
-   *  domain at (`GoFishNode._solvedSigma`). */
-  _solvedSigma?: Size<number | undefined>;
   sharing(): SharingPlan;
 };
 
@@ -245,6 +242,11 @@ export class KeyedDomains {
    * ({@link ticksOf}, `niceScope`, #659). It is the one widen-then-nice: every
    * σ solve (a sized layer, the render root) and every axis drawn over the
    * domain reads it, so the ticks and the marks agree by construction.
+   *
+   * Only a claim with σ in it maps the domain. A claim that is only pixels
+   * (content that is all boxes of a literal size) maps nothing: each box
+   * already mapped the domain into its own size, so the claim is left as it
+   * is, and widening it would add data-scaled room nothing fills.
    */
   scope<S extends UnderlyingSpace | undefined>(
     node: KeyedNode,
@@ -258,12 +260,19 @@ export class KeyedDomains {
       claim,
       this.domainOf(node, axis, space, viaSet)
     );
-    return niceScope(wide, wideClaim, this.ticksOf(node, axis, space, viaSet));
+    const [niced, nicedClaim] = niceScope(
+      wide,
+      wideClaim,
+      this.ticksOf(node, axis, space, viaSet)
+    );
+    return [niced, scalesWithSigma(claim) ? nicedClaim : claim];
   }
 
   /** A name for the keyed domain a node's axis is over (its space root and
    *  key), so two axes over one keyed domain can be told to be the same axis
-   *  (`resolveAxes`). Undefined when the node is not in the table. */
+   *  (`resolveAxes`), and a render root can find the σ a literal size solves
+   *  it at (`ScopeRegistry.keyedSigma`). Undefined when the node is not in
+   *  the table. */
   axisKey(
     node: KeyedNode,
     axis: 0 | 1,
@@ -271,29 +280,6 @@ export class KeyedDomains {
   ): string | undefined {
     const key = this.keyOf(node, axis, space, true);
     return key === undefined ? undefined : `${key.spaceRoot.uid}/${key.key}`;
-  }
-
-  /** The σ of every sized node that solves the keyed domain `node`'s
-   *  content of type `space` is over on `axis` (its `_solvedSigma`, from the
-   *  claim walk), other than `node` itself. Empty when no sized node below
-   *  solves it. An unsized render root reads it: it maps its keyed domain at
-   *  the σ the domain is solved at, instead of at a canvas it was not given
-   *  (`gofish.tsx`). */
-  solvedSigmas(
-    node: KeyedNode,
-    axis: 0 | 1,
-    space: UnderlyingSpace | undefined
-  ): number[] {
-    const key = this.axisKey(node, axis, space);
-    if (key === undefined) return [];
-    const sigmas: number[] = [];
-    for (const n of this.seats.keys()) {
-      const sigma = n._solvedSigma?.[axis];
-      if (n === node || sigma === undefined) continue;
-      if (this.axisKey(n, axis, n._underlyingSpace?.[axis]) === key)
-        sigmas.push(sigma);
-    }
-    return sigmas;
   }
 
   /** A node's seat on `axis`. A node added after the build (a chrome ring,

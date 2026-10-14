@@ -11,7 +11,9 @@
  *     a node whose size is given to it (a literal or data-valued `w`/`h`, a
  *     facet panel's slot), each mapping its measure-keyed domain into that
  *     size — each calls {@link ScopeRegistry.solveScope} (or
- *     {@link ScopeRegistry.solveSize} for a grid's bare tracks);
+ *     {@link ScopeRegistry.solveSize} for a grid's bare tracks). A literal
+ *     size solves once, in the claim walk ({@link ScopeRegistry.solveFixed}),
+ *     and its layout reuses the solution;
  *   - **everyone else INHERITS** — "not a root → inherit": a non-root site
  *     simply does not call the solve, so the inherited σ propagates unchanged.
  *     This is the structural rule that stops an intermediate from re-rooting.
@@ -122,6 +124,14 @@ interface ScopeEntry extends ScopeMeta {
   hasMap: boolean;
 }
 
+/** A scope a node with a literal size solved in the claim walk: the keyed
+ *  domain it maps, the solution, and the widened, niced claim it solved. */
+export type FixedSolve = {
+  key: string | undefined;
+  solution: ScopeSolution;
+  claim: Extent;
+};
+
 /** Whether the scope dump is on. Off (and near-zero-cost) in prod. */
 const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
 
@@ -132,11 +142,63 @@ const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
  */
 export class ScopeRegistry {
   private entries: ScopeEntry[] = [];
+  /** The scope each node with a literal size solves on each axis, from the
+   *  claim walk ({@link solveFixed}), with the keyed domain it maps. */
+  private fixed = new Map<object, [FixedSolve?, FixedSolve?]>();
 
-  /** Clear recorded scopes — called at the root solve so a second layout pass
-   *  does not accumulate stale entries. */
+  /** Clear the scope dump — called before the root's claim walk so a second
+   *  layout pass does not accumulate stale entries. */
   reset(): void {
     this.entries = [];
+  }
+
+  /**
+   * Solve the scope of a node with a literal size on one axis (#1114): its
+   * content's type and claim, widened to the keyed domain it maps and niced,
+   * against its size. A literal size does not depend on σ, so the claim walk
+   * solves it once, here, to compute the pixels the node claims upward, and
+   * its layout reuses the solution ({@link fixedSolve}). `key` names the keyed
+   * domain the node maps (`KeyedDomains.axisKey`), so a render root with no
+   * size of its own can map that domain at the same σ ({@link keyedSigma}).
+   */
+  solveFixed(
+    node: object,
+    key: string | undefined,
+    meta: ScopeMeta,
+    space: UnderlyingSpace | undefined,
+    claim: Extent | undefined,
+    allocated: number
+  ): ScopeSolution | undefined {
+    const solution = this.solveScope(meta, space, claim, allocated);
+    let solves = this.fixed.get(node);
+    if (solves === undefined) this.fixed.set(node, (solves = []));
+    solves[meta.axis] =
+      solution === undefined || claim === undefined
+        ? undefined
+        : { key, solution, claim };
+    return solution;
+  }
+
+  /** The scope a node with a literal size solved on `axis` in the claim walk
+   *  ({@link solveFixed}), or undefined when it solved none. */
+  fixedSolve(node: object, axis: 0 | 1): FixedSolve | undefined {
+    return this.fixed.get(node)?.[axis];
+  }
+
+  /** The σ the nodes with a literal size solve the keyed domain `key` at on
+   *  `axis`, other than `except`: undefined when none solves it, or when they
+   *  solve it at different σs (an over-constrained layout). */
+  keyedSigma(key: string, axis: 0 | 1, except?: object): number | undefined {
+    let sigma: number | undefined;
+    for (const [node, solves] of this.fixed) {
+      const s = solves[axis];
+      if (node === except || s === undefined || s.key !== key) continue;
+      const next = s.solution.sigma;
+      if (sigma === undefined) sigma = next;
+      else if (Math.abs(next - sigma) > 1e-9 * Math.abs(sigma))
+        return undefined;
+    }
+    return sigma;
   }
 
   /**
@@ -195,6 +257,33 @@ export class ScopeRegistry {
         hasMap: hasOrigin(space),
       });
     if (sigma === undefined) return undefined;
+    return {
+      sigma,
+      originPx: hasOrigin(space) ? originPxAt(claim, sigma) : undefined,
+    };
+  }
+
+  /**
+   * A scope root on one axis at a σ solved elsewhere: a render root with no
+   * size of its own maps its keyed domain at the σ the nodes with a literal
+   * size solve it at ({@link keyedSigma}). Its `originPx` follows from its
+   * claim at that σ, as in {@link solveScope}, and its box is that claim.
+   */
+  scopeAt(
+    meta: ScopeMeta,
+    space: UnderlyingSpace | undefined,
+    claim: Extent | undefined,
+    sigma: number
+  ): ScopeSolution | undefined {
+    if (space === undefined || claim === undefined) return undefined;
+    if (DUMP_SCOPES)
+      this.entries.push({
+        ...meta,
+        allocated: claim.width.run(sigma),
+        frame: `at(σ=${sigma}) ${Monotonic.print(claim.width)}`,
+        sigma,
+        hasMap: hasOrigin(space),
+      });
     return {
       sigma,
       originPx: hasOrigin(space) ? originPxAt(claim, sigma) : undefined,

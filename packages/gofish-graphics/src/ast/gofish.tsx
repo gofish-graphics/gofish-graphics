@@ -31,7 +31,8 @@ import {
   type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
-import { scalesWithSigma, type Extent } from "./extent";
+import { scalesWithSigma } from "./extent";
+import * as Monotonic from "../util/monotonic";
 import { KeyedDomains } from "./keyedDomains";
 import {
   fromFrameStart,
@@ -433,16 +434,23 @@ export async function layout(
   }
   perfAdd("axes", perfNow() - __tAxes);
 
-  // The render root is a sized node (#1114): it maps the keyed domain of its
-  // types into the canvas. Its types and claims are widened to their keyed
-  // domains, then niced together (#659) when some chart draws an axis over
-  // the domain (with axes off no axis is drawn, so axis-less content stays
-  // at the honest raw scale). Every root consumer below — the posScale, the
-  // baseline-magnitude size solve, the equal-measure recentering,
-  // `needsCanvas` — reads this one niced domain, the same domain the tick
-  // elaboration niced (`KeyedDomains.scope`), so content and ticks agree by
-  // construction. Each nested sized node applies the same rule at its own
-  // solve; a coord scope never nices.
+  // The render's σ-scope registry: the ONE place σ / posScale is derived
+  // (Stage 6b). The root's claim walk below is where every node with a
+  // literal size solves its scope (`solveFixed`); the root and every other
+  // sized node (a slot, a coord boundary) solve through the same registry.
+  // Reset so a re-run layout pass starts with a clean dump.
+  const scopes = getScopeRegistry(contexts.session);
+  scopes.reset();
+
+  // The render root maps the keyed domain of its types (#1114). Its types
+  // and claims are widened to their keyed domains, then niced together
+  // (#659) when some chart draws an axis over the domain (with axes off no
+  // axis is drawn, so axis-less content stays at the honest raw scale).
+  // Every root consumer below — the posScale, the baseline-magnitude size
+  // solve, the equal-measure recentering, the root's size — reads this one
+  // niced domain, the same domain the tick elaboration niced
+  // (`KeyedDomains.scope`), so content and ticks agree by construction. A
+  // claim that is only pixels (content of literal sizes) is left as it is.
   const rootExtent = child.resolveExtent();
   const rootScope = (axis: 0 | 1) => {
     const space = child._underlyingSpace![axis];
@@ -456,82 +464,65 @@ export async function layout(
     debugUnderlyingSpaceTree(child);
   }
 
-  // An omitted overall dimension is resolved per axis from the root's size
-  // claim:
-  //  - a claim (a scatter axis, bar heights = value, bar widths = value laid
-  //    side by side): there's data to scale into pixels, so fall back to a
-  //    concrete canvas (DEFAULT_CANVAS_SIZE).
-  //  - no claim (a bar chart's category axis, or a bare fixed-size shape):
-  //    nothing to scale, so lay out *unsized* — marks keep their default
-  //    sizes and the operator shrinks to fit. The natural extent is recovered by
-  //    the `finalDim` readback below, so the SVG is still sized concretely.
-  // Unsized axes are handed `UNSIZED` (NaN); marks treat a non-finite size as
-  // "use my default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
-  // guards, the same path the layout engine already relies on.
-  const UNSIZED = NaN;
-  // Only a claim with σ in it is data to scale: a box with a literal size
-  // claims its own pixels, and needs no canvas.
-  const needsCanvas = scalesWithSigma;
-  // Concrete canvas for scaling a claimed axis (always a real number). The
-  // render root is a sized node only on an axis the render gives a size
-  // (#1114). On an axis with no render size it shrink-wraps its content: when
-  // sized nodes below solve its keyed domain, all at one σ, the root maps the
-  // domain at that σ too, so its canvas is its claim at that σ and the axis
-  // it draws agrees with the marks. The default canvas is a fallback, not a
-  // size: it applies only when no sized node below solves the domain (the
-  // common `chart(...).render(el, {})`), or when they solve it at different
-  // σs, an over-constrained layout like any other.
-  const canvasFor = (
-    axis: 0 | 1,
-    given: number | undefined,
-    claim: Extent | undefined
-  ): number => {
-    if (given !== undefined) return given;
-    const sigmas = keyedDomains.solvedSigmas(
-      child,
-      axis,
-      child._underlyingSpace![axis]
-    );
-    const sigma = sigmas[0];
-    const agree =
-      sigma !== undefined &&
-      sigmas.every((s) => Math.abs(s - sigma) <= 1e-9 * Math.abs(sigma));
-    if (!agree || !scalesWithSigma(claim)) return DEFAULT_CANVAS_SIZE;
-    const px = claim.width.run(sigma);
-    return Number.isFinite(px) && px > 0 ? px : DEFAULT_CANVAS_SIZE;
-  };
-  const canvasW = canvasFor(0, w, niceExtentX);
-  const canvasH = canvasFor(1, h, niceExtentY);
-  // Size handed to `child.layout`: a shrink-to-fit axis is left unsized.
-  const layoutW = w ?? (needsCanvas(niceExtentX) ? canvasW : UNSIZED);
-  const layoutH = h ?? (needsCanvas(niceExtentY) ? canvasH : UNSIZED);
-
-  // The render's σ-scope registry: the ONE place σ / posScale is derived
-  // (Stage 6b). The root is the first sized node; every other one (a node
-  // with a size of its own, a slot, a coord boundary) solves through the same
-  // registry. Reset so a re-run layout pass starts clean.
-  const scopes = getScopeRegistry(contexts.session);
-  scopes.reset();
-
-  // The root σ-scope on each continuous axis, solved by the registry from the
-  // root's type and size claim against the canvas: σ, and the pixel of data 0
-  // when the axis has an origin. Equal-measure recentering may replace both.
+  // The root's scope and size on each axis, computed once. Its σ is solved
+  // against the render's size on an axis the render gives one (the root is
+  // then a sized node, #1114). On an axis with no render size the root
+  // shrink-wraps its content: when the nodes with a literal size below map
+  // its keyed domain, all at one σ (`ScopeRegistry.keyedSigma`), the root
+  // maps it at that σ too, so the axis it draws agrees with the marks. Only
+  // when none does (the common `chart(...).render(el, {})`), or they map it
+  // at different σs (an over-constrained layout), is σ solved against the
+  // default canvas. The root's size is its claim at its σ: the slot for a
+  // root fitted to it, its own box for a claim that is only pixels (which is
+  // the same at any σ, so 0 stands in). With no claim (a bar chart's
+  // category axis, a bare fixed-size shape) it is the render's size, or the
+  // default canvas.
   const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;
   const rootClaims = [niceExtentX, niceExtentY] as const;
-  const canvas = [canvasW, canvasH] as const;
+  const rootSizes = ([0, 1] as const).map((axis) => {
+    const given = axis === 0 ? w : h;
+    const space = rootSpaces[axis];
+    const claim = rootClaims[axis];
+    const meta = { kind: "root", rootKey: "root", axis } as const;
+    const key =
+      given === undefined && scalesWithSigma(claim)
+        ? keyedDomains.axisKey(child, axis, child._underlyingSpace![axis])
+        : undefined;
+    const below =
+      key === undefined ? undefined : scopes.keyedSigma(key, axis, child);
+    const scope =
+      below === undefined
+        ? scopes.solveScope(meta, space, claim, given ?? DEFAULT_CANVAS_SIZE)
+        : scopes.scopeAt(meta, space, claim, below);
+    const px =
+      claim === undefined
+        ? undefined
+        : scope !== undefined
+          ? claim.width.run(scope.sigma)
+          : Monotonic.isConstant(claim.width)
+            ? claim.width.run(0)
+            : undefined;
+    return {
+      scope,
+      px:
+        px !== undefined && Number.isFinite(px) && px > 0
+          ? px
+          : (given ?? DEFAULT_CANVAS_SIZE),
+    };
+  });
+  // The size handed to `child.layout`: a claim with σ in it is data to scale
+  // into the root's size. Any other axis is laid out *unsized*: a box of
+  // literal size keeps its pixels, marks keep their default sizes, and the
+  // operator shrinks to fit. Unsized axes are handed `UNSIZED` (NaN); marks
+  // treat a non-finite size as "use my default" (e.g. rect's
+  // DEFAULT_RECT_SIZE) via their `Number.isFinite` guards.
+  const UNSIZED = NaN;
+  const canvas = [w ?? rootSizes[0].px, h ?? rootSizes[1].px] as const;
+  const layoutW = w ?? (scalesWithSigma(niceExtentX) ? canvas[0] : UNSIZED);
+  const layoutH = h ?? (scalesWithSigma(niceExtentY) ? canvas[1] : UNSIZED);
   let rootScopes: Size<ScopeSolution | undefined> = [
-    scopes.solveScope(
-      { kind: "root", rootKey: "root", axis: 0 },
-      rootSpaces[0],
-      rootClaims[0],
-      canvas[0]
-    ),
-    scopes.solveScope(
-      { kind: "root", rootKey: "root", axis: 1 },
-      rootSpaces[1],
-      rootClaims[1],
-      canvas[1]
-    ),
+    rootSizes[0].scope,
+    rootSizes[1].scope,
   ];
 
   if (debug) {
@@ -588,8 +579,8 @@ export async function layout(
   // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
   // content(σ)=canvas the whole chart resolves against. No-op unless
   // GOFISH_SOLVER_CHECK is set.
-  shadowCheckScaleRoot(niceExtentX, canvasW, rootScaleFactors[0], 0);
-  shadowCheckScaleRoot(niceExtentY, canvasH, rootScaleFactors[1], 1);
+  shadowCheckScaleRoot(niceExtentX, canvas[0], rootScaleFactors[0], 0);
+  shadowCheckScaleRoot(niceExtentY, canvas[1], rootScaleFactors[1], 1);
 
   // The root content sits in the root scope's frame by the one seating rule
   // (`seatInScope`): a pinned content shares the frame and places its data
@@ -711,16 +702,15 @@ export async function layout(
       child.pinAnchor(name, atFrameStart(offset), orientSide("min", direction));
       return;
     }
-    // The root's frame is its claim at its σ: the slot for a root fitted to
-    // it, its own box for a fixed size (a constant claim solves no σ, and is
-    // the same at any σ, so 0 stands in). With no claim (no data), the frame
-    // is the slot.
-    const rootSize = rootClaims[axis]?.width.run(rootScopes[axis]?.sigma ?? 0);
-    const rootFrame =
-      rootSize !== undefined && Number.isFinite(rootSize) ? rootSize : frame;
+    // The root's frame is its size (`rootSizes`): the slot for a root fitted
+    // to it, its own box for a fixed size, the slot again with no claim.
     child.place(
       name,
-      fromFrameStart(offset + rootSeats[axis].seatPx, rootFrame, direction),
+      fromFrameStart(
+        offset + rootSeats[axis].seatPx,
+        rootSizes[axis].px,
+        direction
+      ),
       "baseline"
     );
   };

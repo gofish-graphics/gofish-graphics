@@ -20,7 +20,7 @@ import {
   isUNDEFINED,
   magnitude,
 } from "../underlyingSpace";
-import { Extent, impliedExtent } from "../extent";
+import { Extent, impliedExtent, scalesWithSigma } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import type { KeyedDomains } from "../keyedDomains";
 import { isValue } from "../data";
@@ -475,33 +475,34 @@ export const layer = createNodeOperatorSequential(
           // sized node, so its content's σ is its own, and the parent must
           // not solve against the content as if it were data-scaled room.
           // The claim keeps the content's split about data 0, at the σ the
-          // box solves (its content widened to its keyed domain and niced,
-          // as `layout` solves it), so the box's 0 sits where its content's
-          // does. Without a claim in σ the content claims what it did.
-          const keyed: KeyedDomains | undefined = (
-            node as GoFishNode
-          ).tryGetRenderSession()?.keyedDomains;
-          // The σ the box solves its keyed domain at, per axis: what an
-          // unsized render root above maps the same domain at (`gofish.tsx`).
-          const solved: Size<number | undefined> = [undefined, undefined];
-          (node as GoFishNode)._solvedSigma = solved;
+          // box solves: its content widened to its keyed domain and niced,
+          // solved once against the literal size through the registry
+          // (`solveFixed`), whose solution `layout` reuses. So the box's 0
+          // sits where its content's does. Without a claim in σ the content
+          // claims what it did.
+          const session = node.tryGetRenderSession();
+          const keyed: KeyedDomains | undefined = session?.keyedDomains;
           const fixedClaim = (axis: 0 | 1, px: number): Extent | undefined => {
             const claim = resolved[axis];
-            if (claim === undefined || Monotonic.isConstant(claim.width))
-              return claim;
-            const wide: Extent =
-              keyed?.scope(
-                node as GoFishNode,
-                axis,
-                t.resolved[axis],
-                claim
-              )[1] ?? claim;
-            const sigma = wide.width.inverse(px, { upperBoundGuess: px });
-            if (sigma === undefined) return claim;
-            solved[axis] = sigma;
+            if (!scalesWithSigma(claim)) return claim;
+            const [space, wide] = keyed?.scope(
+              node,
+              axis,
+              t.resolved[axis],
+              claim
+            ) ?? [t.resolved[axis], claim];
+            const solved = getScopeRegistry(session).solveFixed(
+              node,
+              keyed?.axisKey(node, axis, t.resolved[axis]),
+              { kind: "sized", rootKey: node.key ?? node.type, axis },
+              space,
+              wide,
+              px
+            );
+            if (solved === undefined || wide === undefined) return claim;
             return Extent(
-              Monotonic.linear(0, wide.ascent.run(sigma)),
-              Monotonic.linear(0, wide.descent.run(sigma))
+              Monotonic.linear(0, wide.ascent.run(solved.sigma)),
+              Monotonic.linear(0, wide.descent.run(solved.sigma))
             );
           };
           return ([0, 1] as const).map((axis) => {
@@ -568,6 +569,7 @@ export const layer = createNodeOperatorSequential(
           // is its unit's. Any other content is in this layer's set, whose
           // domain it shares even when it carries no unit (literals).
           const viaSet = (axis: 0 | 1) => !isValue(dims[axis].size);
+          const scopes = getScopeRegistry(node.tryGetRenderSession());
           const layerScales = solveLayerScales(
             [dims[0].size !== undefined, dims[1].size !== undefined],
             layerTypes?.resolved,
@@ -582,8 +584,9 @@ export const layer = createNodeOperatorSequential(
                 space,
                 claim,
               ],
-            getScopeRegistry(node.tryGetRenderSession()),
-            node.key ?? node.type
+            scopes,
+            node.key ?? node.type,
+            [scopes.fixedSolve(node, 0), scopes.fixedSolve(node, 1)]
           );
           const childScaleFactors = layerScales.sigmas;
           for (const axis of layerScales.failedAxes) {
