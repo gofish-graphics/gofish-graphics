@@ -422,6 +422,28 @@ export type SharingPlan = {
   nested: [Set<number>, Set<number>];
 };
 
+/** What a child is to its parent on one axis, by the parent's plan:
+ *
+ *  - `shared`: in the parent's own set, read in the parent's frame;
+ *  - `nested`: in the parent's own set, with its own extent in a frame of
+ *    its own (placed at a datum, or the content of a data-valued box);
+ *  - `slot`: a set of its own in a frame of its own (a spread, grid or
+ *    treemap slot, a facet panel);
+ *  - `detached`: a set of its own, placed elsewhere (a literal position).
+ */
+export type ChildRole = "shared" | "nested" | "slot" | "detached";
+
+/** The role of child `i` on `axis` in `plan` ({@link ChildRole}). */
+export const childRole = (
+  plan: SharingPlan,
+  i: number,
+  axis: 0 | 1
+): ChildRole => {
+  const nested = plan.nested[axis].has(i);
+  if (plan.sets[axis][i] === 0) return nested ? "nested" : "shared";
+  return nested ? "slot" : "detached";
+};
+
 /** A layer's plan ({@link planSharing}): its sharing sets, and, per axis, the
  *  children a datum `position` places. The layer's own union leaves those
  *  out, since their own extent is nested at the datum. */

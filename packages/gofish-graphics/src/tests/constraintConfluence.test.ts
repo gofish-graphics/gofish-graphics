@@ -1249,7 +1249,7 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
       spaces,
       claims,
       spaces,
-      inSlot,
+      (axis) => inSlot[axis],
       [100, 80],
       sigmas,
       maps,

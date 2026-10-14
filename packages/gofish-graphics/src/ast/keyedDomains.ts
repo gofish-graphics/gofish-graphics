@@ -16,7 +16,7 @@
 // (`GoFishNode.sharing()`), never a claim or a pixel.
 
 import * as Interval from "../util/interval";
-import type { SharingPlan } from "./constraints/compose";
+import { childRole, type SharingPlan } from "./constraints/compose";
 import { unionChildSpaces } from "./graphicalOperators/alignment";
 import {
   isCONTINUOUS,
@@ -177,9 +177,9 @@ export class KeyedDomains {
       if (!isKeyedNode(child)) return;
       // A child its parent detaches or nests is the top of a set of its
       // own. Any other child is in its parent's set, and takes its seats.
-      const own = (axis: 0 | 1) =>
-        plan.sets[axis][i] === 0 && !plan.nested[axis].has(i);
-      if (own(0) && own(1)) return this.walk(child, seats);
+      const role = (axis: 0 | 1) => childRole(plan, i, axis);
+      if (role(0) === "shared" && role(1) === "shared")
+        return this.walk(child, seats);
       // A child nested while it stays in its parent's set (placed at a
       // datum, or the content of a data-valued box) has its own extent in a
       // frame of its own, measured from the datum or the box, not in its
@@ -187,14 +187,13 @@ export class KeyedDomains {
       // never joins its parent's domain, even when the two share a unit. A
       // child in a set of its own (a detached child, a spread slot) is
       // measured in the space's frame, so its domains join the space's.
-      const ownFrame = (axis: 0 | 1) =>
-        plan.sets[axis][i] === 0 && plan.nested[axis].has(i);
       const childSeats = ([0, 1] as const).map(
         (axis): Seat =>
-          own(axis)
+          role(axis) === "shared"
             ? seats[axis]
             : {
-                spaceRoot: ownFrame(axis) ? child : seats[axis].spaceRoot,
+                spaceRoot:
+                  role(axis) === "nested" ? child : seats[axis].spaceRoot,
                 top: child,
                 topType: child._underlyingSpace?.[axis],
               }

@@ -214,8 +214,9 @@ export function solveLayerScales(
   contentExtents: Size<Extent | undefined>,
   // What the layer reports upward, whose frame it has when it inherits.
   reported: Size<UnderlyingSpace> | undefined,
-  // Per axis: its parent nests it in a slot of its own (`inSlot`).
-  inSlot: Size<boolean>,
+  // Per axis: its parent nests it in a slot of its own (`inSlot`). Read
+  // last, only when the other conditions leave it to decide.
+  inSlot: (axis: 0 | 1) => boolean,
   layerSize: Size,
   handedSigmas: Size<number | undefined>,
   handedMaps: ConstraintPosScales,
@@ -243,7 +244,7 @@ export function solveLayerScales(
       ownSize[axis] ||
       (handedMaps[axis] === undefined &&
         (handedSigmas[axis] === undefined ||
-          (inSlot[axis] && originIs(content, "pinned"))));
+          (originIs(content, "pinned") && inSlot(axis))));
     const claim = contentExtents[axis];
     // A claim with no σ in it (content that is only fixed boxes) has
     // nothing to solve: the layer inherits.

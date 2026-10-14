@@ -88,7 +88,7 @@ import {
 } from "./axisDirection";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
-import type { SharingPlan } from "./constraints/compose";
+import { childRole, type SharingPlan } from "./constraints/compose";
 import type { KeyedDomains } from "./keyedDomains";
 import { relateEnv, resolveConstraintOperands } from "./constraints";
 import {
@@ -922,12 +922,6 @@ export class GoFishNode {
     return named?.[0] ?? xy;
   }
 
-  /** One of this node's axis spaces on `dim` as the axis machinery sees it:
-   *  placed ({@link placeBaseline}) when this node is seated by a sized scope
-   *  that places a free baseline at the scope's `originPx` — the render root,
-   *  or the content of a chart with a size of its own on `dim` — so the root
-   *  of a bar chart renders an absolute value axis over its free bars.
-   *  Anywhere else a free space is still waiting for its parent to place it. */
   /** Whether this node's parent nests it in a slot of its own on `dim` (a
    *  spread, grid or treemap slot): a set of its own that sits in a frame of
    *  its own. A child nested at a datum is in its parent's set, so it is not
@@ -935,11 +929,15 @@ export class GoFishNode {
   public inSlot(dim: 0 | 1): boolean {
     const p = this.parent;
     if (p === undefined) return false;
-    const i = p.children.indexOf(this);
-    const plan = p.sharing();
-    return plan.sets[dim][i] !== 0 && plan.nested[dim].has(i);
+    return childRole(p.sharing(), p.children.indexOf(this), dim) === "slot";
   }
 
+  /** One of this node's axis spaces on `dim` as the axis machinery sees it:
+   *  placed ({@link placeBaseline}) when this node is seated by a sized scope
+   *  that places a free baseline at the scope's `originPx` — the render root,
+   *  or the content of a chart with a size of its own on `dim` — so the root
+   *  of a bar chart renders an absolute value axis over its free bars.
+   *  Anywhere else a free space is still waiting for its parent to place it. */
   public placedSpace(space: UnderlyingSpace, dim: 0 | 1): UnderlyingSpace {
     return this.parent === undefined || this.isSizedChartContent(dim)
       ? placeBaseline(space)
