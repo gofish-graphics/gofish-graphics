@@ -338,6 +338,37 @@ async function main() {
     );
   }
 
+  console.log("# a chart smaller than its render sits at the top-left (#1032)");
+  {
+    // A 240 x 160 chart on a 400 x 400 canvas: the render size is a fixed
+    // slot, and the chart's box sits at its start edge in canvas order, the
+    // top, though its y grows upward. The frame top is where the same chart
+    // with no size of its own, which fills the slot, has its top. Before, the
+    // box sat at the slot's bottom, 240 px lower.
+    const rows = [
+      { item: "p", value: 1 },
+      { item: "q", value: 0.5 },
+    ];
+    const bars = (size: { w?: number; h?: number }) =>
+      chart(rows, size)
+        .flow(spread({ by: "item", dir: "x", spacing: 12 }))
+        .mark(rectMark({ w: 40, h: "value", fill: "steelblue" }))
+        .toDisplayList({ w: 400, h: 400 });
+    const axis = yAxisOf(await bars({ w: 240, h: 160 }));
+    const filled = yAxisOf(await bars({}));
+    check(
+      "the plot box's top (the axis's pixel of 1) is the frame top",
+      axis !== undefined &&
+        filled !== undefined &&
+        near(axis.px(1), filled.px(1)),
+      [axis && [axis.px(0), axis.px(1)], filled && filled.px(1)]
+    );
+    check(
+      "the plot box is the chart's 160 px",
+      axis !== undefined && near(axis.px(0) - axis.px(1), 160)
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

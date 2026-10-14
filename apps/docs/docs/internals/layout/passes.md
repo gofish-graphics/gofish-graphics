@@ -719,10 +719,12 @@ non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 ```typescript
 // The root's axis order starts at the canvas frame's start edge: the top, or the
 // bottom for a continuous y (`direction` −1).
-const atFrameStart = (p) => (direction === 1 ? p : frame - p);
+const atFrameStart = (p, size = frame) => (direction === 1 ? p : size - p);
+// A root with a size of its own (a literal claim) has its own box as its frame.
+const rootFrame = claimIsLiteral ? claim.width.run(0) : frame;
 shrinkToFit
   ? child.pinAnchor(axis, atFrameStart(offset), direction === 1 ? "min" : "max")
-  : child.place(axis, atFrameStart(offset + seatPx), "baseline");
+  : child.place(axis, atFrameStart(offset + seatPx, rootFrame), "baseline");
 ```
 
 **Implementation**: `src/ast/_node.ts`
@@ -733,9 +735,13 @@ root's axis order starts at the frame's start edge (the bottom for a continuous 
 _Which_ anchor depends on whether the axis is sized:
 
 - **Given dimension** → pin the **baseline** (local `0`) at the scope's seat from the
-  start edge. The canvas box is `[0, given]`, and any content seated outside it (axis
-  labels past the start edge, ticks past the end) is reserved as the per-side
-  overhangs in the render pass.
+  start edge of the root's own frame. The canvas box is `[0, given]`, a fixed slot. A
+  root the slot sizes fills it, so its frame is the slot. A root with a size of its
+  own (a chart's literal `w`/`h`, a claim with no σ in it) has its own box as its
+  frame, and that box sits at the slot's top-left in canvas order (#1032), not at the
+  bottom where a continuous y's axis order starts. Any content seated outside the
+  slot (axis labels past the start edge, ticks past the end) is reserved as the
+  per-side overhangs in the render pass.
 - **Shrink-to-fit dimension** (`w`/`h` omitted, so `finalH = size`) → pin the
   content's **start edge** to the frame's start. The canvas box _is_ the content's
   full extent, so the content fills `[0, size]` exactly and the overhang formulas

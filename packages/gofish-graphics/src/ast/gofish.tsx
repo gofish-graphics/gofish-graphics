@@ -32,6 +32,7 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { scalesWithSigma, type Extent } from "./extent";
+import * as Monotonic from "../util/monotonic";
 import { KeyedDomains } from "./keyedDomains";
 import {
   fromFrameStart,
@@ -677,13 +678,21 @@ export async function layout(
   // upward from there (`atFrameStart`). A position `p` along the root's axis
   // order is the pixel `p` from that edge, inward.
   //
-  // A GIVEN dimension seats the root's baseline in that frame; content seated
-  // outside it (axis labels past the frame, ticks beyond it) is reserved as the
-  // per-side overhangs below. A free (baseline-magnitude) root's local 0 is its
-  // baseline, so it is placed at the scope's `originPx` (#773: `descent·σ` from
-  // the frame's start edge, plus any overhead); a pinned root shares the frame
-  // (its map carries `originPx`), and an origin-less root has none: both sit at
-  // 0 (`seatInScope`).
+  // A GIVEN dimension is a fixed slot, and the root's box sits at its start
+  // edge in canvas order: the left on x and the top on y, for either y
+  // direction (#1032). The root's axis order starts at the start edge of the
+  // root's own frame. When the root scope solves σ against the slot, that
+  // frame is the slot, which the root fills. When the root has a size of its
+  // own (a claim with no σ in it: a chart's literal `w`/`h`), its frame is
+  // that box, smaller than the slot, so the box sits at the slot's top-left
+  // rather than at its bottom. A baseline lines up siblings (facets sharing
+  // their 0s); a lone root has none, so the slot's start edge is its
+  // reference. In its frame the root is seated by the one seating rule
+  // (`seatInScope`): a free (baseline-magnitude) root's baseline at the
+  // scope's `originPx` (#773: `descent·σ` from the frame's start edge, plus
+  // any overhead), and a pinned or origin-less root at 0. Content seated
+  // outside the slot (axis gutters, titles, a legend) is reserved as the
+  // per-side overhangs below.
   //
   // A SHRINK-TO-FIT dimension makes the canvas box the content's full extent,
   // so pin the box's start edge to the frame's start — content then fills the
@@ -699,14 +708,20 @@ export async function layout(
     const direction = axis === 0 ? 1 : rootYDirection;
     const frame = axis === 0 ? finalW : finalH;
     const atFrameStart = (p: number) => fromFrameStart(p, frame, direction);
-    if ((axis === 0 ? w : h) === undefined)
+    if ((axis === 0 ? w : h) === undefined) {
       child.pinAnchor(name, atFrameStart(offset), orientSide("min", direction));
-    else
-      child.place(
-        name,
-        atFrameStart(offset + rootSeats[axis].seatPx),
-        "baseline"
-      );
+      return;
+    }
+    const claim = rootClaims[axis];
+    const rootFrame =
+      claim !== undefined && Monotonic.isConstant(claim.width)
+        ? claim.width.run(0)
+        : frame;
+    child.place(
+      name,
+      fromFrameStart(offset + rootSeats[axis].seatPx, rootFrame, direction),
+      "baseline"
+    );
   };
   placeRoot(0);
   placeRoot(1);

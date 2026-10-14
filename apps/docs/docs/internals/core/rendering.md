@@ -73,9 +73,13 @@ meets the canvas (see
 
 **Root placement.** The canvas is a frame `[0, final]` on each axis, and the root's
 axis order starts at the frame's start edge: the top for a y that reads top-down, the
-bottom for a continuous y. A given dimension seats the root's baseline in that frame
-(a free root's baseline at the scope's `originPx`, `descent·σ` from the start edge,
-#773; a pinned root at 0, its map carrying `originPx`); a shrink-to-fit dimension
+bottom for a continuous y. A given dimension is a fixed slot, and the root's box
+sits at its top-left (#1032): the root's axis order starts at the start edge of the
+root's own frame, which is the slot when the root scope solves σ against it, or the
+root's own box when it has a size of its own (a chart's literal `w`/`h`). In that
+frame the root's baseline is seated by `seatInScope` (a free root's baseline at the
+scope's `originPx`, `descent·σ` from the start edge, #773; a pinned root at 0, its
+map carrying `originPx`). A shrink-to-fit dimension
 pins the root's start edge to the frame's start, which already includes any descent,
 so adding it would count it twice (#574). See
 [Underlying Space](/internals/core/underlying-space).
