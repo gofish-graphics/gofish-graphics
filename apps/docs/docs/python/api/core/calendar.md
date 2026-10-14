@@ -15,7 +15,7 @@ of labels per level.
 ```python
 from gofish import chart, scatter, line, Calendar
 
-chart(readings, axes={"x": {"levels": [Calendar.hour.every(6), Calendar.day]}}).flow(
+chart(readings, axes={"x": {"levels": [Calendar.hour(every=6), Calendar.day]}}).flow(
     scatter(by="time", x="time", y="temp")
 ).mark(line(stroke="steelblue", stroke_width=2)).render(w=560, h=200)
 ```
@@ -35,7 +35,8 @@ Calendar.month
 Calendar.quarter
 Calendar.year
 
-Calendar.month.every(3)          # cells of 3 months
+Calendar.month(every=3)          # cells of 3 months
+Calendar.week(every=2, start="sunday")
 
 field("date").bin(Calendar.month)                    # the month of the year
 field("date").bin(Calendar.weekday)                  # the day of the week
@@ -44,17 +45,24 @@ field("date").bin(Calendar.year).bin(Calendar.month) # the months of each year
 axes={"x": {"levels": [Calendar.month, Calendar.year]}}
 ```
 
+No Calendar kind has a required option, so each is a Calendar value as it
+is, and calling it sets options: `Calendar.month` and `Calendar.month()` are
+the same value. This holds in every strategy family, such as
+[`Curve`](/python/api/curve).
+([#1145](https://github.com/gofish-graphics/gofish-graphics/issues/1145)
+moves the examples to the bare spelling.)
+
 ## Parameters
 
-| Parameter | Type                   | Description                                                                                                             |
-| --------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `n`       | `int`                  | `.every(n)`: how many units one cell spans. A whole number, 1 or more. Default `1`.                                     |
-| `start`   | `"monday" \| "sunday"` | `Calendar.week(start=...)`, `Calendar.weekday(start=...)`: the first day of a week. Default `"monday"`, as in ISO 8601. |
+| Parameter | Type                   | Description                                                                                                                   |
+| --------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `every`   | `int`                  | `Calendar.month(every=...)`: how many units one cell spans. A whole number, 1 or more. Default `1`. Every kind but `weekday`. |
+| `start`   | `"monday" \| "sunday"` | `Calendar.week(start=...)`, `Calendar.weekday(start=...)`: the first day of a week. Default `"monday"`, as in ISO 8601.       |
 
-A Calendar value is a dict, its wire form: `Calendar.month.every(3)` is
-`{"kind": "month", "step": 3}`, and `Calendar.weekday` is
-`{"kind": "weekday", "start": "monday"}`, with no step. Custom labels (`.format(fn)` in JS) are
-JS-only: a function has no wire form.
+A Calendar value is a dict, its wire form: `Calendar.month(every=3)` is
+`{"kind": "month", "every": 3}`, and `Calendar.weekday` is
+`{"kind": "weekday"}`. Custom labels (`.format(fn)` in JS) are JS-only: a
+function has no wire form.
 
 ## Behavior
 
@@ -63,15 +71,18 @@ JS-only: a function has no wire form.
 - A cell starts where the calendar of the column's zone says the level
   starts: a day at local midnight, a month on its first day, a week on its
   first day. A day in a zone with daylight saving can last 23 or 25 hours.
-- `.every(n)` counts from the level above: `Calendar.month.every(3)` starts
-  its cells in January, April, July and October, `Calendar.hour.every(6)` at
-  0, 6, 12 and 18 o'clock, and `Calendar.day.every(2)` on days 1, 3, 5, ... of
+- `every` counts from the level above: `Calendar.month(every=3)` starts its
+  cells in January, April, July and October, `Calendar.hour(every=6)` at 0,
+  6, 12 and 18 o'clock, and `Calendar.day(every=2)` on days 1, 3, 5, ... of
   each month, so the last cell of a 31-day month is one day long.
-  `Calendar.year.every(5)` starts on years divisible by 5. Weeks count from
+  `Calendar.year(every=5)` starts on years divisible by 5. Weeks count from
   the week of 1970-01-01.
 - `Calendar.quarter` is months in steps of 3, labeled `Q1` to `Q4`.
 - `Calendar.weekday` is days, labeled by the day of the week (`Mon`). It has
-  no steps: `Calendar.weekday.every(n)` is an error.
+  no steps: `Calendar.weekday(every=n)` is an error.
+- An unknown option is a `TypeError` that lists the kind's options. The step
+  was once a method, `.every(n)`; `Calendar.month.every(3)` is now an error
+  that names `Calendar.month(every=...)`.
 
 **Bins.**
 
@@ -95,7 +106,7 @@ JS-only: a function has no wire form.
   `Calendar.weekday(start="sunday")` they are `Sun` to `Sat`. A week is a
   part of nothing (weeks do not nest in months or years), and nothing holds
   a year, so they stay on the time line. A step counts from
-  the level above: `Calendar.month.every(3)` alone is 4 cells, starting in
+  the level above: `Calendar.month(every=3)` alone is 4 cells, starting in
   January, April, July and October.
 
 - A list is a product, `[Calendar.year, Calendar.month]`: one cell where

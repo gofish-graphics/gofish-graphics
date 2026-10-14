@@ -19,6 +19,7 @@ covers:
   - packages/gofish-graphics/src/ast/polygonCells.ts
   - packages/gofish-graphics/src/ast/structExpr.ts
   - packages/gofish-graphics/src/families/bin.ts
+  - packages/gofish-graphics/src/families/calendar.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
   - packages/gofish-graphics/src/ast/shapes/region.tsx
   - packages/gofish-graphics/src/ast/measure.ts
@@ -1972,6 +1973,9 @@ reads only the classes, never the builder words. Four classes exist:
   times alike. Calendar cells
   (`CalendarPartition`) live in `calendar.ts`, which runs all calendar math
   on Temporal, native or the polyfill it loads when the runtime has none.
+  The values a user writes are the `Calendar` strategy family
+  (`families/calendar.ts`): each kind is a `CalendarPartition` used bare or
+  called with its options (`Calendar.month({ every: 3 })`, #1133).
 - `HasUnit` (`{ unit, symbol? }`, #994, #955): the values are amounts in
   the declared unit `unit`. Both `Schema.unit(u)` and `.unit(u)` (after
   another builder) declare the unit `u` and write the symbol `u`. A column

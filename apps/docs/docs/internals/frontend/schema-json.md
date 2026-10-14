@@ -370,7 +370,7 @@ for the API.
               "const": "bin"
             },
             "partition": {
-              "description": "The partition each value is binned into: a Calendar value (Calendar.month.every(3) is { kind: month, step: 3 }), Bin.step(size) or Bin.thresholds(countOrEdges), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
+              "description": "The partition each value is binned into: a Calendar value (Calendar.month({ every: 3 }) is { kind: month, every: 3 }), Bin.step(size) or Bin.thresholds(countOrEdges), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
               "oneOf": [
                 {
                   "$ref": "#/$defs/Partition"
@@ -2867,150 +2867,6 @@ for the API.
       },
       "description": "How one axis's labels are drawn: their angle and their alignment, each per level by the same depths as `levels`."
     },
-    "Calendar": {
-      "anyOf": [
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "second"
-            },
-            "step": {
-              "type": "number",
-              "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
-              "default": 1
-            }
-          },
-          "required": ["kind"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "minute"
-            },
-            "step": {
-              "type": "number",
-              "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
-              "default": 1
-            }
-          },
-          "required": ["kind"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "hour"
-            },
-            "step": {
-              "type": "number",
-              "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
-              "default": 1
-            }
-          },
-          "required": ["kind"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "day"
-            },
-            "step": {
-              "type": "number",
-              "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
-              "default": 1
-            }
-          },
-          "required": ["kind"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "weekday"
-            },
-            "start": {
-              "enum": ["monday", "sunday"],
-              "description": "The first day of a week. Monday is the ISO 8601 default.",
-              "default": "monday"
-            }
-          },
-          "required": ["kind"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "week"
-            },
-            "step": {
-              "type": "number",
-              "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
-              "default": 1
-            },
-            "start": {
-              "enum": ["monday", "sunday"],
-              "description": "The first day of a week. Monday is the ISO 8601 default.",
-              "default": "monday"
-            }
-          },
-          "required": ["kind"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "month"
-            },
-            "step": {
-              "type": "number",
-              "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
-              "default": 1
-            }
-          },
-          "required": ["kind"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "quarter"
-            },
-            "step": {
-              "type": "number",
-              "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
-              "default": 1
-            }
-          },
-          "required": ["kind"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "year"
-            },
-            "step": {
-              "type": "number",
-              "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
-              "default": 1
-            }
-          },
-          "required": ["kind"]
-        }
-      ],
-      "description": "Partitions of the time line into calendar cells, one kind per level: the value of `field(x).bin(...)` over a time column, and an entry of an axis's `levels`."
-    },
     "AxesOptions": {
       "anyOf": [
         {
@@ -3145,10 +3001,10 @@ for the API.
             "kind": {
               "const": "second"
             },
-            "step": {
-              "type": "number",
+            "every": {
+              "type": "integer",
               "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
               "default": 1
             }
           },
@@ -3160,10 +3016,10 @@ for the API.
             "kind": {
               "const": "minute"
             },
-            "step": {
-              "type": "number",
+            "every": {
+              "type": "integer",
               "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
               "default": 1
             }
           },
@@ -3175,10 +3031,10 @@ for the API.
             "kind": {
               "const": "hour"
             },
-            "step": {
-              "type": "number",
+            "every": {
+              "type": "integer",
               "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
               "default": 1
             }
           },
@@ -3190,10 +3046,10 @@ for the API.
             "kind": {
               "const": "day"
             },
-            "step": {
-              "type": "number",
+            "every": {
+              "type": "integer",
               "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
               "default": 1
             }
           },
@@ -3219,10 +3075,10 @@ for the API.
             "kind": {
               "const": "week"
             },
-            "step": {
-              "type": "number",
+            "every": {
+              "type": "integer",
               "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
               "default": 1
             },
             "start": {
@@ -3239,10 +3095,10 @@ for the API.
             "kind": {
               "const": "month"
             },
-            "step": {
-              "type": "number",
+            "every": {
+              "type": "integer",
               "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
               "default": 1
             }
           },
@@ -3254,10 +3110,10 @@ for the API.
             "kind": {
               "const": "quarter"
             },
-            "step": {
-              "type": "number",
+            "every": {
+              "type": "integer",
               "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
               "default": 1
             }
           },
@@ -3269,10 +3125,10 @@ for the API.
             "kind": {
               "const": "year"
             },
-            "step": {
-              "type": "number",
+            "every": {
+              "type": "integer",
               "minimum": 1,
-              "description": "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
               "default": 1
             }
           },
@@ -3317,7 +3173,7 @@ for the API.
           "required": ["kind", "thresholds"]
         }
       ],
-      "description": "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour.every(6)), Bin.step(size) or Bin.thresholds(countOrEdges)."
+      "description": "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Bin.step(size) or Bin.thresholds(countOrEdges)."
     },
     "StructBin": {
       "anyOf": [
@@ -3716,6 +3572,150 @@ for the API.
         }
       ],
       "description": "The cells a key is binned into. `step` and `thresholds` cut the line of one field into intervals: the value of `field(x).bin(...)`. `hex` and `voronoi` divide the plane of two fields into polygons: the value of `struct({ x, y }).bin(...)`. Each kind makes cells that do not overlap, and puts each row in the cell its value falls in."
+    },
+    "Calendar": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "second"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "minute"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "hour"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "day"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "weekday"
+            },
+            "start": {
+              "enum": ["monday", "sunday"],
+              "description": "The first day of a week. Monday is the ISO 8601 default.",
+              "default": "monday"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "week"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            },
+            "start": {
+              "enum": ["monday", "sunday"],
+              "description": "The first day of a week. Monday is the ISO 8601 default.",
+              "default": "monday"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "month"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "quarter"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "year"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "Partitions of the time line into calendar cells, one kind per level: the value of `field(x).bin(...)` over a time column, and an entry of an axis's `levels`."
     }
   }
 }
