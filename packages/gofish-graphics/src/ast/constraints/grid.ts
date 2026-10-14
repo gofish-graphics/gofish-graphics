@@ -42,7 +42,8 @@ import type { GoFishAST } from "../_ast";
 import { type ConstraintRef } from "./shared";
 import { sliceExtent } from "./folds";
 import {
-  ORDINAL,
+  ordinalOver,
+  type OrdinalKey,
   UNDEFINED,
   type UnderlyingSpace,
   originIs,
@@ -54,12 +55,17 @@ export interface GridOptions {
   numCols: number;
   /** [x, y] gaps between tracks; a scalar applies to both. Default 0. */
   spacing?: number | [number, number];
-  colKeys?: string[];
-  rowKeys?: string[];
+  /** The column and row keys, in order: text, or cells for a binned key
+   *  (`ORDINAL_TYPE.cells`). */
+  colKeys?: OrdinalKey[];
+  rowKeys?: OrdinalKey[];
   /** Grouping fields (table's `by.x`/`by.y`) → the col/row ORDINAL measures, so
    *  the table axes name themselves off their own spaces. */
   colMeasure?: string;
   rowMeasure?: string;
+  /** The grouping fields' values have an order (`HasOrder`). */
+  colHasOrder?: boolean;
+  rowHasOrder?: boolean;
 }
 
 export interface GridConstraint {
@@ -67,10 +73,12 @@ export interface GridConstraint {
   numCols: number;
   xSpacing: number;
   ySpacing: number;
-  colKeys?: string[];
-  rowKeys?: string[];
+  colKeys?: OrdinalKey[];
+  rowKeys?: OrdinalKey[];
   colMeasure?: string;
   rowMeasure?: string;
+  colHasOrder?: boolean;
+  rowHasOrder?: boolean;
   /** Cells in row-major order (index i → column i % numCols, row ⌊i/numCols⌋). */
   children: ConstraintRef[];
 }
@@ -89,6 +97,8 @@ export const createGridConstraint = (
     rowKeys: options.rowKeys,
     colMeasure: options.colMeasure,
     rowMeasure: options.rowMeasure,
+    colHasOrder: options.colHasOrder,
+    rowHasOrder: options.rowHasOrder,
     children,
   };
 };
@@ -371,7 +381,7 @@ export function gridSpaces(
   c: GridConstraint,
   cells: GoFishAST[]
 ): [UnderlyingSpace, UnderlyingSpace] {
-  const keyAt = (i: number): string | undefined =>
+  const keyAt = (i: number): OrdinalKey | undefined =>
     cells[i] instanceof GoFishNode ? (cells[i] as GoFishNode).key : undefined;
   const colKeys =
     c.colKeys && c.colKeys.length > 0
@@ -384,9 +394,13 @@ export function gridSpaces(
       ? c.rowKeys
       : Array.from({ length: numRowsOf(c) }, (_, r) =>
           keyAt(r * c.numCols)
-        ).filter((k): k is string => k !== undefined);
+        ).filter((k): k is OrdinalKey => k !== undefined);
   return [
-    colKeys.length > 0 ? ORDINAL(colKeys, c.colMeasure) : UNDEFINED,
-    rowKeys.length > 0 ? ORDINAL(rowKeys, c.rowMeasure) : UNDEFINED,
+    colKeys.length > 0
+      ? ordinalOver(colKeys, c.colMeasure, undefined, c.colHasOrder)
+      : UNDEFINED,
+    rowKeys.length > 0
+      ? ordinalOver(rowKeys, c.rowMeasure, undefined, c.rowHasOrder)
+      : UNDEFINED,
   ];
 }

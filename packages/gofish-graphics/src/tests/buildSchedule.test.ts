@@ -11,7 +11,7 @@
  * is a nested time frame whose children start when its slot starts.
  */
 // The library first, so its modules initialize in their usual order.
-import { field } from "../lib";
+import { Bin, field } from "../lib";
 import {
   solveSchedule,
   wavesOf,
@@ -19,6 +19,7 @@ import {
   type Clip,
 } from "../animation/schedule";
 import { groupEntries, rowsOf } from "../animation/grouping";
+import { setColumnTypes } from "../ast/schema";
 
 let passed = 0;
 let failed = 0;
@@ -233,6 +234,30 @@ console.log("# by: equal keys start together, groups in the key's order");
     threw = true;
   }
   ok("a child with rows of two keys is an error", threw);
+
+  // A binned key groups the children by cell: a child's rows agree on their
+  // cell, not on their value (#1059). Each child's rows carry their column
+  // types, as a split leaf's do, `v`'s domain among them.
+  const vTypes = { v: { HasDomain: { lo: 0.2, hi: 2.5 } } };
+  const binnedChildren = [
+    [{ v: 0.2 }, { v: 0.7 }],
+    [{ v: 2.5 }],
+    [{ v: 1.1 }, { v: 1.9 }],
+    [{ v: 0.4 }],
+  ].map((rows) => ({ datum: setColumnTypes(rows, vTypes) }));
+  const cells = groupEntries(
+    binnedChildren,
+    rowsOf,
+    field("v").bin(Bin.step(1))
+  );
+  ok(
+    "a binned key groups the children by their cell, in the cells' order",
+    JSON.stringify([...cells.keys()].map(String)) ===
+      JSON.stringify(["0", "1", "2"]) &&
+      cells.get([...cells.keys()][0])!.length === 2 &&
+      cells.get([...cells.keys()][0])![1] === binnedChildren[3],
+    JSON.stringify([...cells.entries()].map(([k, g]) => [String(k), g.length]))
+  );
 
   // Ties start together: a stagger over the grouped children.
   const clips: Clip<string>[][] = [...plain.values()].map((g) =>

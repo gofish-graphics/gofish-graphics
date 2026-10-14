@@ -10,6 +10,9 @@ import {
   allExamples,
   validate,
   checkStrategy,
+  checkStructBin,
+  checkPartition,
+  checkOption,
   encodeIR,
   decodeNonFinite,
   FRONTEND_IR_JSON_SCHEMA,
@@ -319,7 +322,10 @@ check(
       h: 300,
       coord: { type: "polar" },
       color: { type: "palette", values: "tableau10" },
-      axes: { x: { title: "Year", labelAngle: 45, side: "end" }, y: true },
+      axes: {
+        x: { title: "Year", label: { angle: 45 }, side: "end" },
+        y: true,
+      },
       legend: false,
       padding: 20,
       schema: { response: { type: "ordered", levels: ["a", "b"] } },
@@ -468,6 +474,206 @@ check(
   ).valid
 );
 
+const binBy = (partition: unknown) =>
+  chart([
+    {
+      type: "spread",
+      dir: "x",
+      by: {
+        type: "field",
+        name: "d",
+        ops: [{ op: "bin", ...(partition === undefined ? {} : { partition }) }],
+      },
+    },
+  ]);
+for (const [name, partition] of [
+  ["no partition", undefined],
+  ["a Calendar value", { kind: "month", every: 3 }],
+  ["a week start", { kind: "week", every: 1, start: "sunday" }],
+  ["a weekday", { kind: "weekday" }],
+  ["a weekday start", { kind: "weekday", start: "sunday" }],
+  ["a step", { kind: "step", size: 0.5 }],
+  ["a threshold count", { kind: "thresholds", thresholds: 20 }],
+  ["threshold edges", { kind: "thresholds", thresholds: [1, 2, 5] }],
+] as const) {
+  const r = validate(binBy(partition));
+  check(
+    `bin with ${name} accepts`,
+    r.valid,
+    r.valid ? undefined : JSON.stringify(r.errors)
+  );
+}
+for (const [name, partition] of [
+  ["an unknown kind", { kind: "fortnight" }],
+  ["a step with thresholds", { kind: "step", size: 1, thresholds: 10 }],
+  ["a non-numeric step", { kind: "step", size: "1" }],
+  ["a zero step", { kind: "step", size: 0 }],
+  ["a threshold count below 1", { kind: "thresholds", thresholds: 0 }],
+  ["a fractional threshold count", { kind: "thresholds", thresholds: 2.5 }],
+  ["an empty list of edges", { kind: "thresholds", thresholds: [] }],
+  ["a non-numeric edge", { kind: "thresholds", thresholds: [1, "2"] }],
+  ["a Calendar value with no kind", { every: 1, start: "sunday" }],
+  ["the old untagged Calendar form", { unit: "month", step: 1 }],
+  ["a start on a level other than weeks", { kind: "month", start: "sunday" }],
+  ["a weekday step", { kind: "weekday", every: 2 }],
+  ["the old Calendar step key", { kind: "month", step: 3 }],
+  ["a fractional Calendar step", { kind: "month", every: 1.5 }],
+  ["the old flat thresholds", 10],
+  ["the untagged step", { step: 0.5 }],
+  ["the untagged thresholds", { thresholds: 20 }],
+  ["a bin of two fields", { kind: "hex", radius: 1 }],
+  ["a product of one", [{ kind: "month" }]],
+  [
+    "a product with a numeric bin",
+    [{ kind: "year" }, { kind: "step", size: 1 }],
+  ],
+] as const) {
+  check(`bin with ${name} rejected`, !validate(binBy(partition)).valid);
+}
+{
+  const r = validate(binBy([{ kind: "year" }, { kind: "month", every: 1 }]));
+  check(
+    "bin with a product of Calendar values accepts",
+    r.valid,
+    r.valid ? undefined : JSON.stringify(r.errors)
+  );
+  const chained = validate(
+    chart([
+      {
+        type: "spread",
+        dir: "x",
+        by: {
+          type: "field",
+          name: "d",
+          ops: [
+            { op: "bin", partition: { kind: "year" } },
+            { op: "bin", partition: { kind: "month" } },
+          ],
+        },
+      },
+    ])
+  );
+  check(
+    "a chain of bins (one op per bin) accepts",
+    chained.valid,
+    chained.valid ? undefined : JSON.stringify(chained.errors)
+  );
+}
+// The old flat spelling, `{ op: "bin", thresholds: 20 }`, is an unknown key
+// on the op: rejected, not read as the default partition.
+{
+  const flat = {
+    type: "field",
+    name: "d",
+    ops: [{ op: "bin", thresholds: 20 }],
+  };
+  check(
+    "bin with a key beside the partition rejected",
+    !validate(chart([{ type: "spread", dir: "x", by: flat }])).valid
+  );
+  // Where the key's `type` picks its branch, the error names the key.
+  const r = validate(chart([{ type: "partition", by: flat, dir: "x" }]));
+  check(
+    "bin with a key beside the partition rejected, naming the key",
+    !r.valid && r.errors.some((e) => e.path.endsWith(".thresholds")),
+    JSON.stringify(r)
+  );
+}
+
+// partition's `by`: one binned key with a `dir`, or a binned struct
+// (#1059). A key per axis is two partitions on the wire.
+const binned = (
+  name: string,
+  partition: unknown = { kind: "step", size: 1 }
+) => ({
+  type: "field",
+  name,
+  ops: [{ op: "bin", partition }],
+});
+for (const [name, op] of [
+  ["one key and a dir", { type: "partition", by: binned("a"), dir: "x" }],
+  [
+    "a binned struct",
+    {
+      type: "partition",
+      by: {
+        type: "struct",
+        fields: { x: "a", y: "b" },
+        ops: [{ op: "bin", partition: { kind: "hex", radius: 1 } }],
+      },
+    },
+  ],
+] as const) {
+  const r = validate(chart([op]));
+  check(
+    `partition with ${name} accepts`,
+    r.valid,
+    r.valid ? undefined : JSON.stringify(r.errors)
+  );
+}
+check(
+  "partition with a struct binned by a field bin rejected",
+  !validate(
+    chart([
+      {
+        type: "partition",
+        by: {
+          type: "struct",
+          fields: { x: "a", y: "b" },
+          ops: [{ op: "bin", partition: { kind: "step", size: 1 } }],
+        },
+      },
+    ])
+  ).valid
+);
+for (const [name, by] of [
+  ["a key per axis", { x: binned("a"), y: binned("b") }],
+  ["a string per axis", { x: "a", y: "b" }],
+] as const) {
+  check(
+    `partition with ${name} rejected`,
+    !validate(chart([{ type: "partition", by }])).valid
+  );
+}
+// A key's `type` picks the branch it is checked against, so a bad bin
+// reports what is wrong with the bin, not that no shape matched.
+{
+  const r = validate(
+    chart([
+      {
+        type: "partition",
+        by: binned("a", { kind: "step", size: "1" }),
+        dir: "x",
+      },
+    ])
+  );
+  check(
+    "partition with a bad bin names the bin",
+    !r.valid &&
+      r.errors.every(
+        (e) => e.path.includes(".by.ops") && !/did not match/.test(e.message)
+      ),
+    JSON.stringify(r.errors)
+  );
+}
+// A partition is one tagged union: an unknown kind is named at its `kind`.
+{
+  const r = validate(
+    chart([
+      {
+        type: "partition",
+        by: binned("a", { kind: "fortnight" }),
+        dir: "x",
+      },
+    ])
+  );
+  check(
+    "partition with an unknown kind names the kind",
+    !r.valid && r.errors.every((e) => e.path.endsWith(".partition.kind")),
+    JSON.stringify(r.errors)
+  );
+}
+
 check(
   "filter without a predicate rejected",
   !validate(chart([{ type: "filter" }])).valid
@@ -565,7 +771,7 @@ check(
 );
 
 check(
-  "axis side and labelAngle accept",
+  "axis side and label.angle accept",
   validate(
     chart([
       {
@@ -573,8 +779,8 @@ check(
         by: "lake",
         dir: "x",
         axes: {
-          x: { side: "end", labelAngle: [45] },
-          y: { labelAngle: "auto" },
+          x: { side: "end", label: { angle: [45] } },
+          y: { label: { angle: "auto" } },
         },
       },
     ])
@@ -588,10 +794,86 @@ check(
   ).valid
 );
 
+{
+  // The flat keys this nested object replaced are unknown keys now, and the
+  // error lists the accepted ones, `label` among them.
+  const result = validate(
+    chart([{ type: "spread", axes: { x: { labelAngle: 45 } } as any }])
+  );
+  check(
+    "the old flat labelAngle key is rejected, naming label",
+    !result.valid &&
+      result.errors.some(
+        (e) => e.message.includes("labelAngle") && e.message.includes("label")
+      )
+  );
+}
+
 check(
-  "axis labelAngle of the wrong type rejected",
+  "axis label.angle of the wrong type rejected",
   !validate(
-    chart([{ type: "spread", axes: { x: { labelAngle: "45" } } as any }])
+    chart([{ type: "spread", axes: { x: { label: { angle: "45" } } } as any }])
+  ).valid
+);
+
+check(
+  "axis label.align accepts a value or a per-level array with true",
+  validate(
+    chart([
+      {
+        type: "spread",
+        by: "lake",
+        dir: "x",
+        axes: {
+          x: { label: { align: [true, "start"] } },
+          y: { label: { align: "center" } },
+        },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "axis label.align of an unknown value rejected",
+  !validate(
+    chart([
+      { type: "spread", axes: { x: { label: { align: "left" } } } as any },
+    ])
+  ).valid
+);
+
+check(
+  "axis levels of booleans and Calendar values accept",
+  validate(
+    chart([
+      {
+        type: "spread",
+        by: "lake",
+        dir: "x",
+        axes: { x: { levels: [false, true, { kind: "year", every: 1 }] } },
+      },
+    ])
+  ).valid
+);
+
+for (const [name, levels] of [
+  ["a field name", ["weather"]],
+  ["an unknown kind", [{ kind: "decade" }]],
+  ["the old untagged Calendar form", [{ unit: "year", step: 1 }]],
+  ["a list of lists", [[true]]],
+] as const) {
+  check(
+    `axis levels with ${name} rejected`,
+    !validate(chart([{ type: "spread", axes: { x: { levels } } as any }])).valid
+  );
+}
+
+check(
+  "the old axis rows option is gone: rejected",
+  !validate(
+    chart([
+      { type: "spread", axes: { x: { rows: [{ kind: "month" }] } } as any },
+    ])
   ).valid
 );
 
@@ -838,6 +1120,13 @@ console.log("\n# Strategies");
     ["Curve", { kind: "monotone" }],
     ["Curve", { kind: "arc", direction: "down" }],
     ["Curve", { kind: "perfectArrows", bow: 0.3, padEnd: 4 }],
+    ["Bin", { kind: "step", size: 0.5 }],
+    ["Bin", { kind: "thresholds", thresholds: 20 }],
+    ["Bin", { kind: "thresholds", thresholds: [0, 5, 10] }],
+    ["Bin", { kind: "hex", radius: 1 }],
+    ["Calendar", { kind: "month" }],
+    ["Calendar", { kind: "month", every: 3 }],
+    ["Calendar", { kind: "week", every: 2, start: "sunday" }],
   ];
   for (const [family, value] of accepts) {
     const why = thrown(family, value);
@@ -845,6 +1134,17 @@ console.log("\n# Strategies");
   }
   const rejects: Array<[Parameters<typeof checkStrategy>[0], unknown, RegExp]> =
     [
+      // A strategy kind used bare is read as its value where the option
+      // enters (gofish-graphics' withKindValues), so a function never
+      // reaches the check: one that does is not a strategy.
+      [
+        "Curve",
+        Object.assign(() => ({ kind: "monotone" }), {
+          kind: "monotone",
+          toJSON: () => ({ kind: "monotone" }),
+        }),
+        /expected object, got function/,
+      ],
       ["Tile", { kind: "strip" }, /where\.kind: unknown kind "strip"/],
       ["Tile", "squarify", /expected object/],
       ["Tile", { kind: "squarify", ratio: 0.5 }, /at least 1/],
@@ -860,6 +1160,20 @@ console.log("\n# Strategies");
       ["Curve", { type: "monotone" }, /unknown kind undefined/],
       ["Curve", { kind: "arc", direction: "left" }, /direction/],
       ["Curve", { kind: "linear", options: {} }, /unknown field "options"/],
+      ["Bin", { kind: "step", size: 0 }, /above 0/],
+      ["Bin", { kind: "step", size: Infinity }, /finite/],
+      ["Bin", { kind: "step" }, /size/],
+      ["Bin", { step: 1 }, /unknown kind undefined/],
+      ["Bin", { kind: "thresholds", thresholds: 0 }, /at least 1/],
+      ["Calendar", { kind: "month", every: 0 }, /at least 1/],
+      ["Calendar", { kind: "month", every: 1.5 }, /whole number/],
+      [
+        "Calendar",
+        { kind: "month", step: 3 },
+        /unknown field "step"; expected one of "kind", "every"/,
+      ],
+      ["Calendar", { kind: "weekday", every: 2 }, /unknown field "every"/],
+      ["Curve", () => ({ kind: "monotone" }), /expected object, got function/],
     ];
   for (const [family, value, pattern] of rejects) {
     const why = thrown(family, value);
@@ -869,6 +1183,65 @@ console.log("\n# Strategies");
       why
     );
   }
+
+  // A Bin kind is valid only on its key, and the error names the key that
+  // takes it.
+  const errorIn = (fn: () => void): string => {
+    try {
+      fn();
+      return "";
+    } catch (e) {
+      return (e as Error).message;
+    }
+  };
+  check(
+    "checkPartition accepts a field bin",
+    errorIn(() => checkPartition({ kind: "step", size: 1 }, "where")) === ""
+  );
+  check(
+    "checkStructBin accepts a struct bin",
+    errorIn(() => checkStructBin({ kind: "hex", radius: 1 }, "where")) === ""
+  );
+  {
+    const why = errorIn(() =>
+      checkPartition({ kind: "hex", radius: 1 }, "where")
+    );
+    check(
+      "checkPartition rejects Bin.hex, naming struct",
+      /Bin\.hex bins two fields/.test(why) && why.includes("struct({ x, y })"),
+      why
+    );
+  }
+  {
+    const why = errorIn(() =>
+      checkStructBin({ kind: "step", size: 1 }, "where")
+    );
+    check(
+      "checkStructBin rejects Bin.step, naming field",
+      /Bin\.step bins one field/.test(why) && why.includes("field(x).bin"),
+      why
+    );
+  }
+  check(
+    "checkPartition checks the params",
+    /above 0/.test(
+      errorIn(() => checkPartition({ kind: "step", size: -1 }, "where"))
+    )
+  );
+  check(
+    "checkOption rejects an unknown axis option, naming the declared ones",
+    /axes\.x\.dividers: unknown field "dividers"; expected one of .*"divider"/.test(
+      errorIn(() => checkOption("AxisOptions", { dividers: true }, "axes.x"))
+    )
+  );
+  check(
+    "checkOption checks a nested option's type",
+    /axes\.x\.label\.align/.test(
+      errorIn(() =>
+        checkOption("AxisOptions", { label: { align: "left" } }, "axes.x")
+      )
+    )
+  );
 
   // The validator walks a strategy option the same way.
   const doc = (tile: unknown) =>

@@ -7,7 +7,8 @@
  * errors (checked where the order is used, so a `filter` in the flow can drop
  * a stray), the HasOrder prerequisite of HasMidpoint, the one-unit rule, the
  * levels-fit rule, a spread of centered stacks lining up on their midpoints,
- * and the schema keeping the column types (bin()'s units) its data carries.
+ * and the schema keeping the column types (a column's quantity and unit)
+ * its data carries.
  *
  * Run: `pnpm build && tsx src/tests/schema.test.ts` (wired as
  * `pnpm test:schema`). The rendering checks import from `dist` for the same
@@ -25,12 +26,12 @@ import {
   columnTypeOf,
   getColumnTypes,
   orderByLevels,
+  setColumnTypes,
   stackOrigin,
   Schema as SrcSchema,
   type ColumnType,
 } from "../ast/schema";
 import { interval } from "../util/interval";
-import { bin } from "../ast/transforms";
 import { textsOf } from "./testHelpers";
 import {
   distributeSpaceFold,
@@ -345,6 +346,23 @@ async function main() {
     );
   }
 
+  console.log("\n# a column's domain is computed, never declared");
+  {
+    // The wire form of a schema is a record, so nothing but this check
+    // stops one from carrying a domain: declaring one is not supported yet.
+    const declared = await errorOf(() =>
+      applySchema([{ v: 1 }, { v: 2 }], {
+        v: { HasDomain: { lo: 0, hi: 10 } },
+      } as any)
+    );
+    check(
+      "a schema record with HasDomain is a loud error",
+      declared?.includes('schema: column "v" declares HasDomain') === true &&
+        declared.includes("not supported yet"),
+      declared
+    );
+  }
+
   console.log("\n# HasMidpoint needs HasOrder and a midpoint on the order");
   {
     check("Schema has no `diverging` factory", !("diverging" in Schema));
@@ -517,19 +535,29 @@ async function main() {
 
   console.log("\n# a schema keeps what the data array already carries");
   {
-    const binned = bin([{ x: 1 }, { x: 2 }, { x: 7 }], "x");
+    const edge = { HasQuantity: { name: "x" } };
+    const binned = setColumnTypes(
+      [
+        { start: 0, end: 5, count: 2 },
+        { start: 5, end: 10, count: 1 },
+      ],
+      { start: edge, end: edge, count: { HasUnit: { unit: "count" } } }
+    );
     const typed = await applySchema(binned, {
       count: SrcSchema.ordered([0, 1, 2]),
     });
     check(
-      "bin()'s unit survives a schema for another column",
+      "a column's quantity survives a schema for another column",
       getColumnTypes(typed)?.start?.HasQuantity?.name === "x",
       JSON.stringify(getColumnTypes(typed))
     );
     check(
-      "a schema entry is the column's whole type",
+      "a schema entry is the column's whole type, with its domain",
       JSON.stringify(getColumnTypes(typed)?.count) ===
-        JSON.stringify({ HasOrder: { levels: [0, 1, 2] } }),
+        JSON.stringify({
+          HasOrder: { levels: [0, 1, 2] },
+          HasDomain: { lo: 1, hi: 2 },
+        }),
       JSON.stringify(getColumnTypes(typed)?.count)
     );
     check(

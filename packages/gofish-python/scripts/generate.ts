@@ -27,14 +27,17 @@
  *    `_label_opts` for `.label(accessor, **options)` (LABEL_OPTIONS).
  *  - `_OPTION_TYPES` + `_to_wire`: the key structure of each named option
  *    type (OPTION_TYPES) and the one interpreter that renames the keys of a
- *    nested option dict (`axes={"x": {"label_angle": 45}}`) to wire keys by
+ *    nested option dict (`axes={"x": {"label": {"angle": 45}}}`) to wire keys by
  *    the field's declared type, raising TypeError on an undeclared key.
  *  - The strategy family modules, `gofish/<family>.py` (`tile.py`,
- *    `overlap.py`, `curve.py`), one factory per kind and per preset of the
- *    STRATEGIES table. Each builds `{"kind": ..., **params}` with snake_case
- *    keys, which `_to_wire` renames at the option the strategy is passed to
- *    (each family is an OPTION_TYPES entry). Each factory first checks its
- *    params at the call, from their types (`pyParamChecks`).
+ *    `overlap.py`, `curve.py`, `bin.py`, `calendar.py`), one factory per kind
+ *    and per preset of the STRATEGIES table. Each builds
+ *    `{"kind": ..., **params}` with snake_case keys, which `_to_wire` renames
+ *    at the option the strategy is passed to (each family is an OPTION_TYPES
+ *    entry). Each factory first checks its params at the call, from their
+ *    types (`pyParamChecks`). A factory with no required param is made a
+ *    bare kind (`_strategy.bare_kind`, #1133): `Curve.monotone` is the dict
+ *    `Curve.monotone()` returns, and can be called to set options.
  * `derive`/`resolve`/`join` (real logic: RPC bridge, ref-shape narrowing,
  * DataFrame conversion), `field`/`datum`/`normalize`/`repeat`/`ref`/
  * `selectAll`, and the Color and Coord family modules (`color.py`,
@@ -404,9 +407,10 @@ parts.push(
       `    """Rename the keys of a nested option value from Python to wire spelling.`,
       ``,
       `    \`shape\` is the value's declared type, compiled from the descriptor table,`,
-      `    so only declared option keys are renamed (\`label_angle\` to \`labelAngle\`,`,
-      `    by the same rule as top-level kwargs). A key the type does not declare`,
-      `    raises TypeError, as an unknown kwarg does. Record keys (column names,`,
+      `    so only declared option keys are renamed (a snake_case key to its`,
+      `    camelCase wire key, by the same rule as top-level kwargs). A key the`,
+      `    type does not declare raises TypeError, as an unknown kwarg does.`,
+      `    Record keys (column names,`,
       `    axis names) and values of any other type pass through unchanged. A`,
       `    tagged union picks its branch by the dict's tag key (\`kind\`); a missing`,
       `    or unknown tag raises TypeError. A channel value built by field(...) or`,
@@ -483,6 +487,7 @@ const GENERATED_LEAF_MARKS = [
   "image",
   "polygon",
   "blank",
+  "region",
 ];
 
 parts.push(
@@ -562,6 +567,8 @@ const DUAL_FORM_OPERATOR_CORES: Array<[string, string]> = [
   ["table", "_table_opts"],
   ["treemap", "_treemap_opts"],
   ["pack", "_pack_opts"],
+  // Operator-only, like group: the wrapper in ast.py takes `by` and `dir`.
+  ["partition", "_partition_opts"],
 ];
 for (const [opType, fnName] of DUAL_FORM_OPERATOR_CORES) {
   const d = OPERATORS[opType];
@@ -690,7 +697,12 @@ function pyFStr(text: string, tail: string): string {
 function describeType(type: FieldType): string {
   switch (type.kind) {
     case "number":
-      return `a${type.finite ? " finite" : ""} number${type.min !== undefined ? ` >= ${type.min}` : ""}`;
+      return `a${type.finite ? " finite" : ""} ${type.integer ? "whole number" : "number"}${type.min !== undefined ? ` >= ${type.min}` : ""}${type.exclusiveMin !== undefined ? ` > ${type.exclusiveMin}` : ""}`;
+    case "object":
+      return `a dict with the keys ${Object.keys(type.fields).map(pyKwarg).join(", ")}`;
+    case "array":
+      if (isTable(type)) return "a table (a list of dict rows, or a dataframe)";
+      return `a list${type.minItems !== undefined ? ` of at least ${type.minItems} item${type.minItems === 1 ? "" : "s"}` : ""}, each item ${describeType(type.items)}`;
     case "string":
       return "a str";
     case "boolean":
@@ -711,15 +723,28 @@ function describeType(type: FieldType): string {
 function pyTypeTest(type: FieldType, v: string): string {
   switch (type.kind) {
     case "number":
-      return `isinstance(${v}, (int, float)) and not isinstance(${v}, bool)`;
+      return type.integer
+        ? `isinstance(${v}, int) and not isinstance(${v}, bool)`
+        : `isinstance(${v}, (int, float)) and not isinstance(${v}, bool)`;
     case "string":
     case "enum":
       return `isinstance(${v}, str)`;
     case "boolean":
       return `isinstance(${v}, bool)`;
+    case "object":
+      return `isinstance(${v}, dict)`;
+    case "array":
+      return `isinstance(${v}, list)`;
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }
+}
+
+/** Whether a param type is a table: an array of rows, each a record. A
+ *  Python factory takes any table `to_records` reads (a list of dict rows,
+ *  or a dataframe) and puts it on the wire as dict rows. */
+function isTable(type: FieldType): boolean {
+  return type.kind === "array" && type.items.kind === "record";
 }
 
 /** The ValueError checks for a value already known to be of `type`'s Python
@@ -738,13 +763,67 @@ function pyValueChecks(
   switch (type.kind) {
     case "number":
       return [
-        ...(type.finite
-          ? fail(`not math.isfinite(${v})`, "must be finite")
-          : fail(`math.isnan(${v})`, "must not be NaN")),
+        // A Python int is always finite.
+        ...(type.integer
+          ? []
+          : type.finite
+            ? fail(`not math.isfinite(${v})`, "must be finite")
+            : fail(`math.isnan(${v})`, "must not be NaN")),
         ...(type.min !== undefined
           ? fail(`${v} < ${type.min}`, `must be >= ${type.min}`)
           : []),
+        ...(type.exclusiveMin !== undefined
+          ? fail(
+              `${v} <= ${type.exclusiveMin}`,
+              `must be > ${type.exclusiveMin}`
+            )
+          : []),
       ];
+    case "array":
+      // A table's rows are data; any other list is checked item by item.
+      if (isTable(type)) return [];
+      return [
+        ...(type.minItems !== undefined
+          ? fail(
+              `len(${v}) < ${type.minItems}`,
+              `must have at least ${type.minItems} item${type.minItems === 1 ? "" : "s"}`
+            )
+          : []),
+        `for ${v}_item in ${v}:`,
+        ...pyParamChecks(type.items, `${v}_item`, `${label} item`).map(
+          (l) => `    ${l}`
+        ),
+      ];
+    case "object": {
+      // Its keys, then each value by its own type. A key is snake_case, as
+      // in any nested option dict.
+      const fields = Object.entries(type.fields);
+      const keys = fields.map(([f]) => pyKwarg(f));
+      const known = `(${keys.map(pyStr).join(", ")}${keys.length === 1 ? "," : ""})`;
+      return [
+        `for _key in ${v}:`,
+        `    if _key not in ${known}:`,
+        `        raise TypeError(${pyFStr(`${label} got an unexpected key `, `{_key!r}; expected ${keys.join(", ")}"`.slice(0, -1))})`,
+        ...fields.flatMap(([f, spec]) => {
+          const key = pyKwarg(f);
+          // The value is bound to a name first: an f-string cannot hold a
+          // quoted subscript before Python 3.12.
+          const at = `${v}_${key}`;
+          const sub = `${label}['${key}']`;
+          return [
+            ...(spec.required
+              ? [
+                  `if ${pyStr(key)} not in ${v}:`,
+                  `    raise TypeError(${pyStr(`${label} is missing the key '${key}'`)})`,
+                ]
+              : []),
+            `if ${pyStr(key)} in ${v}:`,
+            `    ${at} = ${v}[${pyStr(key)}]`,
+            ...pyParamChecks(spec.type, at, sub).map((l) => `    ${l}`),
+          ];
+        }),
+      ];
+    }
     case "enum":
       return fail(
         `${v} not in (${type.values.map((s) => JSON.stringify(s)).join(", ")}${type.values.length === 1 ? "," : ""})`,
@@ -800,8 +879,10 @@ function renderStrategyFactory(opts: {
   params: FieldGroup;
   preset: Record<string, unknown>;
   doc: string;
+  /** The kind's one param is positional-only (`StrategyKind.positional`). */
+  positional?: true;
 }): string {
-  const { family, name, kind, params, preset, doc } = opts;
+  const { family, name, kind, params, preset, doc, positional } = opts;
   const ents = entries(params);
   // A preset value is this factory's default for that param.
   const docLines = ents
@@ -822,20 +903,42 @@ function renderStrategyFactory(opts: {
       ([field, value]) => `${pyStr(pyKwarg(field))}: ${pyLiteral(value)}`
     ),
   ].join(", ");
+  // A factory with no required param is a bare kind (#1133).
+  const bare = Object.values(params).every((spec) => !spec.required)
+    ? [`@bare_kind(${pyStr(family)})`]
+    : [];
   if (ents.length === 0) {
     return [
+      ...bare,
       `def ${name}() -> Dict[str, Any]:`,
       docstring,
       `    return {${head}}`,
     ].join("\n");
   }
   const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
-  const checks = ents.flatMap(([py, , spec]) => [
-    `    if ${py} is not None:`,
-    ...pyParamChecks(spec.type, py, `${family}.${name}(${py}=...)`).map(
-      (l) => `        ${l}`
-    ),
-  ]);
+  const checks = ents.flatMap(([py, , spec]) => {
+    // An optional param is checked when it is given; a required one always,
+    // so None, which is no value of it, is a TypeError at the call.
+    const lines = pyParamChecks(
+      spec.type,
+      py,
+      positional ? `${family}.${name}(${py})` : `${family}.${name}(${py}=...)`
+    );
+    return [
+      // A table is read into dict rows first (a dataframe, or a list of
+      // rows), when there is one.
+      ...(isTable(spec.type)
+        ? [
+            `    if ${py} is not None:`,
+            `        from .arrow_utils import to_records`,
+            `        ${py} = to_records(${py})`,
+          ]
+        : []),
+      ...(spec.required
+        ? lines.map((l) => `    ${l}`)
+        : [`    if ${py} is not None:`, ...lines.map((l) => `        ${l}`)]),
+    ];
+  });
   const body = [
     ...checks,
     `    out: Dict[str, Any] = {${head}}`,
@@ -846,9 +949,15 @@ function renderStrategyFactory(opts: {
     `            out[_k] = _v`,
     `    return out`,
   ].join("\n");
-  return [`def ${name}(*, ${sig}) -> Dict[str, Any]:`, docstring, body].join(
-    "\n"
-  );
+  if (positional && ents.length !== 1)
+    throw new Error(`${family}.${name}: a positional kind takes one param`);
+  const paramList = positional ? `${sig}, /` : `*, ${sig}`;
+  return [
+    ...bare,
+    `def ${name}(${paramList}) -> Dict[str, Any]:`,
+    docstring,
+    body,
+  ].join("\n");
 }
 
 for (const [family, spec] of Object.entries(STRATEGIES) as Array<
@@ -863,6 +972,7 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
       params: k.params,
       preset: {},
       doc: k.doc,
+      positional: k.positional,
     })),
     ...Object.entries(spec.presets ?? {}).map(([name, p]) => ({
       family,
@@ -874,25 +984,37 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
     })),
   ];
   const example = factories[0].name;
+  const isBare = (f: (typeof factories)[number]) =>
+    Object.values(f.params).every((spec) => !spec.required);
+  const bareExample = factories.find(isBare)?.name;
   const functions = factories.map(renderStrategyFactory);
   const usesMath = functions.some((f) => f.includes("math."));
+  const anyBare = bareExample !== undefined;
   const source = [
     `# GENERATED by packages/gofish-python/scripts/generate.ts from the gofish-ir`,
     `# STRATEGIES table — do not edit; run \`pnpm --filter gofish-python gen\`.`,
     `"""`,
     `The \`\`${family}\`\` family. ${spec.doc}`,
     ``,
-    `The package binds this module as \`\`${family}\`\`, so \`\`${family}.${example}()\`\` and`,
-    `\`\`from gofish.${module} import ${example}\`\` reach the same function. A strategy is a`,
+    `The package binds this module as \`\`${family}\`\`, so \`\`${family}.${example}\`\` and`,
+    `\`\`from gofish.${module} import ${example}\`\` reach the same member. A strategy is a`,
     `plain dict, \`\`{"kind": ..., **params}\`\`, with snake_case param keys; the option it`,
     `is passed to renames them to the camelCase wire keys. Mirrors JS`,
     `\`\`gofish-graphics/${module}\`\`.`,
+    ...(anyBare
+      ? [
+          ``,
+          `A kind with no required option is a value as it is, and calling it sets`,
+          `options: \`\`${family}.${bareExample}\`\` is \`\`${family}.${bareExample}()\`\` (#1133).`,
+        ]
+      : []),
     `"""`,
     ``,
     `from __future__ import annotations`,
     ``,
     ...(usesMath ? [`import math`] : []),
     `from typing import Any, Dict, Literal, Optional`,
+    ...(anyBare ? [``, `from ._strategy import bare_kind`] : []),
     ``,
     `__all__ = [${factories.map((f) => pyStr(f.name)).join(", ")}]`,
     ``,

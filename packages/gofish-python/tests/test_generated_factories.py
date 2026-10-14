@@ -15,6 +15,7 @@ import json
 import pytest
 
 from gofish import (
+    Calendar,
     Schema,
     blank,
     chart,
@@ -27,16 +28,20 @@ from gofish import (
     layer,
     line,
     pack,
+    partition,
     petal,
     polygon,
     rect,
+    region,
     ribbon,
     spread,
     scatter,
     stack,
+    struct,
     table,
     text,
     treemap,
+    Bin,
     Color,
     Overlap,
     Tile,
@@ -101,6 +106,106 @@ def test_pack_serializes_by():
     # One packing strategy, so no option to choose one (#1013).
     with pytest.raises(TypeError):
         pack(by="lake", method={"kind": "circles"})
+
+
+def test_partition_serializes_a_binned_key():
+    d = partition(by=field("date").bin(Calendar.month), dir="x").to_dict()
+    assert d["type"] == "partition"
+    assert d["dir"] == "x"
+    assert d["by"] == {
+        "type": "field",
+        "name": "date",
+        "ops": [{"op": "bin", "partition": {"kind": "month"}}],
+    }
+
+
+def test_partition_requires_a_key_with_a_region():
+    for by in ["rating", field("rating")]:
+        with pytest.raises(ValueError, match=r'field\("rating"\)\.bin\('):
+            partition(by=by, dir="x")
+
+
+def test_partition_key_per_axis_is_two_partitions():
+    a = field("a").bin(Bin.step(1))
+    b = field("b").bin(Bin.step(0.5))
+    product = partition(by={"x": a, "y": b})
+    assert [op.to_dict() for op in product.operators] == [
+        partition(by=a, dir="x").to_dict(),
+        partition(by=b, dir="y").to_dict(),
+    ]
+
+
+def test_partition_key_per_axis_checks():
+    a = field("a").bin(Bin.step(1))
+    with pytest.raises(ValueError, match="exactly the keys x and y"):
+        partition(by={"x": a})
+    with pytest.raises(ValueError, match="divides both axes"):
+        partition(by={"x": a, "y": a}, dir="x")
+    with pytest.raises(ValueError, match="divides both axes"):
+        partition(by={"x": a, "y": a}, alignment="middle")
+    with pytest.raises(ValueError, match=r'field\("b"\)\.bin\('):
+        partition(by={"x": a, "y": field("b")})
+    with pytest.raises(ValueError, match="`dir` names the axis"):
+        partition(by=a)
+
+
+def test_partition_serializes_a_binned_struct():
+    key = struct(x="lon", y="lat").bin(Bin.hex(radius={"x": 2, "y": 500}))
+    d = partition(by=key).to_dict()
+    assert "dir" not in d
+    assert d["by"] == {
+        "type": "struct",
+        "fields": {"x": "lon", "y": "lat"},
+        "ops": [{"op": "bin", "partition": {"kind": "hex", "radius": {"x": 2, "y": 500}}}],
+    }
+    seeds = [{"lon": 1, "lat": 2}]
+    v = struct(x="lon", y="lat").bin(Bin.voronoi(seeds=seeds))
+    assert v["ops"][0]["partition"] == {"kind": "voronoi", "seeds": seeds}
+
+
+def test_partition_struct_checks():
+    with pytest.raises(ValueError, match="has none until it is binned"):
+        partition(by=struct(x="a", y="b"))
+    key = struct(x="a", y="b").bin(Bin.hex(radius=1))
+    with pytest.raises(ValueError, match="divides both axes at once"):
+        partition(by=key, dir="x")
+    with pytest.raises(ValueError, match="already binned"):
+        key.bin(Bin.hex(radius=1))
+    with pytest.raises(TypeError, match="Bin family"):
+        struct(x="a", y="b").bin({"size": 1})
+    with pytest.raises(TypeError, match=r"field\(x\)\.bin\(Bin\.step"):
+        struct(x="a", y="b").bin(Bin.step(1))
+
+
+def test_bin_factories_check_their_params():
+    assert Bin.hex(radius=0.5) == {"kind": "hex", "radius": 0.5}
+    with pytest.raises(ValueError, match="must be > 0"):
+        Bin.hex(radius=0)
+    with pytest.raises(TypeError, match="missing the key 'y'"):
+        Bin.hex(radius={"x": 1})
+    with pytest.raises(TypeError, match="unexpected key 'z'"):
+        Bin.hex(radius={"x": 1, "y": 1, "z": 1})
+    with pytest.raises(ValueError, match=r"\['x'\] must be > 0"):
+        Bin.hex(radius={"x": -1, "y": 1})
+
+
+def test_voronoi_seeds_take_a_dataframe():
+    import pandas as pd
+
+    rows = Bin.voronoi(seeds=pd.DataFrame({"lon": [1.5, 2.0], "lat": [3.0, 4.0]}))
+    assert rows["seeds"] == [{"lon": 1.5, "lat": 3.0}, {"lon": 2.0, "lat": 4.0}]
+
+
+def test_region_takes_paint_only():
+    d = region(fill=field("a").count(), stroke="white", stroke_width=1).to_dict()
+    assert d["type"] == "region"
+    assert d["strokeWidth"] == 1
+    with pytest.raises(TypeError):
+        region(w=10)
+
+
+def test_rect_inset_is_a_kwarg():
+    assert rect(h="count", inset=1).to_dict()["inset"] == 1
 
 
 def test_scatter_serializes_separate_overlap():
@@ -381,27 +486,27 @@ def test_camel_case_kwargs_are_rejected():
 # descriptors.ts). Dicts whose keys are data pass through untouched.
 
 
-def test_nested_axes_keys_serialize_to_camel_case_wire_keys():
+def test_nested_axes_keys_serialize_to_wire_keys():
     ir = (
         chart(
             [{"a": "x", "v": 1}],
-            axes={"x": {"label_angle": 45, "side": "end"}, "y": True},
+            axes={"x": {"label": {"angle": 45}, "side": "end"}, "y": True},
         )
         .flow(
             spread(
                 by="a",
                 dir="x",
-                axes={"y": {"label_angle": [90], "title": False}},
+                axes={"y": {"label": {"angle": [90]}, "title": False}},
             )
         )
         .mark(rect(h="v"))
         .to_ir()
     )
     assert ir["options"]["axes"] == {
-        "x": {"labelAngle": 45, "side": "end"},
+        "x": {"label": {"angle": 45}, "side": "end"},
         "y": True,
     }
-    assert ir["operators"][0]["axes"] == {"y": {"labelAngle": [90], "title": False}}
+    assert ir["operators"][0]["axes"] == {"y": {"label": {"angle": [90]}, "title": False}}
     # The boolean forms pass through at both levels.
     assert chart([], axes=False).mark(rect()).to_ir()["options"]["axes"] is False
     assert stack([], dir="x", axes={"x": False}).to_dict()["options"]["axes"] == {
@@ -409,9 +514,15 @@ def test_nested_axes_keys_serialize_to_camel_case_wire_keys():
     }
 
 
-def test_nested_camel_case_key_is_rejected():
-    with pytest.raises(TypeError, match="did you mean 'label_angle'"):
-        chart([], axes={"x": {"labelAngle": 45}})
+def test_nested_unknown_key_is_rejected():
+    # The flat label keys the nested `label` dict replaced are unknown keys,
+    # and the error lists the keys an axis takes, `label` among them.
+    with pytest.raises(TypeError, match="unexpected key 'label_angle'.*'label'"):
+        chart([], axes={"x": {"label_angle": 45}})
+    with pytest.raises(TypeError, match="unexpected key 'labelAlign'.*'label'"):
+        chart([], axes={"x": {"labelAlign": "center"}})
+    with pytest.raises(TypeError, match="unexpected key 'rotate'.*'angle'"):
+        chart([], axes={"x": {"label": {"rotate": 45}}})
     with pytest.raises(TypeError, match="unexpected key 'z'"):
         spread(by="a", dir="x", axes={"z": True})
     with pytest.raises(TypeError, match="unexpected key 'colour'"):
@@ -420,7 +531,7 @@ def test_nested_camel_case_key_is_rejected():
 
 def test_unknown_chart_option_is_rejected():
     with pytest.raises(TypeError):
-        chart([], labelAngle=45)
+        chart([], label_angle=45)
 
 
 def test_data_keyed_dicts_are_untouched():
@@ -451,12 +562,12 @@ def test_layer_of_charts_takes_js_layer_options():
     # on the wire, and a render option such as `padding` is rejected.
     c1 = chart([{"v": 1}]).mark(rect(h="v"))
     c2 = chart([{"v": 2}]).mark(rect(h="v"))
-    ir = layer([c1, c2], axes={"x": {"label_angle": 45}}).to_ir()
-    assert ir["options"] == {"axes": {"x": {"labelAngle": 45}}}
-    with pytest.raises(TypeError, match="did you mean 'label_angle'"):
-        layer([c1, c2], axes={"x": {"labelAngle": 45}})
+    ir = layer([c1, c2], axes={"x": {"label": {"angle": 45}}}).to_ir()
+    assert ir["options"] == {"axes": {"x": {"label": {"angle": 45}}}}
+    with pytest.raises(TypeError, match="unexpected key 'label_angle'"):
+        layer([c1, c2], axes={"x": {"label_angle": 45}})
     with pytest.raises(TypeError):
-        layer([c1, c2], labelAngle=45)
+        layer([c1, c2], label_angle=45)
     with pytest.raises(TypeError):
         layer([c1, c2], padding=80)
 
@@ -467,12 +578,12 @@ def test_render_axes_convert_on_every_render_path():
     # an unknown key raises TypeError.
     c = chart([{"v": 1}]).mark(rect(h="v"))
     for renderable in [c, rect(w=10, h=10), layer([c])]:
-        widget = renderable.render(axes={"x": {"label_angle": 45}, "y": False})
-        assert widget.axes == {"x": {"labelAngle": 45}, "y": False}
+        widget = renderable.render(axes={"x": {"label": {"angle": 45}}, "y": False})
+        assert widget.axes == {"x": {"label": {"angle": 45}}, "y": False}
         assert renderable.render(axes=True).axes is True
         assert renderable.render().axes is None
-        with pytest.raises(TypeError, match="did you mean 'label_angle'"):
-            renderable.render(axes={"x": {"labelAngle": 45}})
+        with pytest.raises(TypeError, match="unexpected key 'label_angle'"):
+            renderable.render(axes={"x": {"label_angle": 45}})
 
 
 # --- Axis-name dims -----------------------------------------------------------

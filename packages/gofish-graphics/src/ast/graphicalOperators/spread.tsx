@@ -1,4 +1,4 @@
-import { GoFishNode } from "../_node";
+import { axisOverrideOf, GoFishNode } from "../_node";
 import type { AxisOptions } from "../gofish";
 import { fieldNameOf, MaybeValue } from "../data";
 import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
@@ -63,6 +63,7 @@ export const Spread = createNodeOperator(
       reverse = false,
       glue = false,
       origin,
+      hasOrder,
       size,
       axes,
       axisMeasures,
@@ -89,6 +90,10 @@ export const Spread = createNodeOperator(
        *  `HasMidpoint` column (`stackOrigin` in schema.ts). Ignored without
        *  `glue`: a spread packs boxes and has no origin. */
       origin?: StackOrigin<number>;
+      /** The `by` column's values have an order (`HasOrder`, from the chart's
+       *  `schema`): the split sets it, and the ORDINAL space this spread
+       *  folds carries it, so its axis knows its keys are ordered. */
+      hasOrder?: boolean;
       /** Per-entry stack-axis extent — one value per child, in child order.
        *  Wraps each child in a sized layer on the stack axis before the
        *  align/distribute elaboration. See the doc comment above. */
@@ -141,6 +146,8 @@ export const Spread = createNodeOperator(
           if (child instanceof GoFishNode) {
             wrapped.setKey(child.key ?? "");
             wrapped._syntheticKey = child._syntheticKey;
+            wrapped.keyCell = child.keyCell;
+            wrapped.keyBy = child.keyBy;
             (wrapped as any).__splitBy = (child as any).__splitBy;
             wrapped.datum = child.datum;
           }
@@ -193,6 +200,7 @@ export const Spread = createNodeOperator(
               // space's measure, so a spread-by-category axis titles itself
               // off its space.
               measure: axisMeasures?.[dirName],
+              hasOrder,
             },
             refs
           ),
@@ -206,14 +214,7 @@ export const Spread = createNodeOperator(
     // solves σ locally and shares it with descendants. The layer honors this in
     // `layout` (it self-solves per axis when `shared`, into a fresh array).
     node.shared = [sharedScale, sharedScale];
-    if (axes !== undefined) {
-      const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
-        opt === undefined ? undefined : opt === false ? false : true;
-      node._axisOverride =
-        typeof axes === "boolean"
-          ? { x: axes, y: axes }
-          : { x: toShow(axes.x), y: toShow(axes.y) };
-    }
+    if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
     return node;
   }
 );
@@ -262,9 +263,13 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   // part's tail; the split knows the groups present, so it computes it. It
   // reorders every level of the order the way it reorders the groups, so the
   // stack knows which way it lays the order out even in a row with one part.
+  // Over ordered keys, the split says so (`SplitGroups.hasOrder`), so the
+  // ordinal space it folds knows its keys are ordered.
   split: ({ by, glue, reverse }, d) => {
     const entries = splitEntries(by, d);
-    if (!glue) return entries;
+    const hasOrder = entries.hasOrder;
+    if (!glue)
+      return hasOrder ? { entries, layoutOpts: { hasOrder } } : entries;
     const column = fieldNameOf(by);
     const type = columnType(d, column);
     const levels = (type?.HasOrder?.levels ?? []) as (string | number)[];
@@ -279,7 +284,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
       [...entries.keys()],
       reverse
     );
-    return origin === undefined ? entries : { entries, layoutOpts: { origin } };
+    return { entries, layoutOpts: { hasOrder, origin } };
   },
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
   axisFields: ({ by, dir }) => {

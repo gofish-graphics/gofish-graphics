@@ -16,6 +16,7 @@ import type { LayerContext } from "./marks/chart";
 import { datumOfInput, resolveMarkResult } from "./marks/markResult";
 import {
   CHANNEL_INFER,
+  hasNoValue,
   resolveChannelAccessors,
   ChannelAnnotations,
   ChannelType,
@@ -39,6 +40,8 @@ import type { MarkTransition } from "../animation/transition";
 import { attachTerminals } from "./marks/terminals";
 import { withWire } from "./wire";
 import { isThenable } from "../util";
+import { breadthFirst } from "./elaborationUtils";
+import { withKindValues } from "./strategyKind";
 
 export interface RenderOptions {
   w?: number;
@@ -436,8 +439,15 @@ export function createMark(
   cfg?: { kind?: MarkKind }
 ): any {
   const kind: MarkKind = cfg?.kind ?? "per-item";
+  // A strategy kind used bare is read as its value from here on.
   return (markOpts: Record<string, any>) =>
-    buildCreatedMark(shapeFn, channels, serialize, kind, markOpts);
+    buildCreatedMark(
+      shapeFn,
+      channels,
+      serialize,
+      kind,
+      withKindValues(markOpts)
+    );
 }
 
 /**
@@ -490,6 +500,13 @@ function buildCreatedMark(
     );
     const pending = resolveChannelAccessors(staticOpts, channels, () => d);
     const resolvedOpts = isThenable(pending) ? await pending : pending;
+    // A data channel the mark is given that has no value over its rows (the
+    // mean of no rows, a field of no first row) leaves the mark nothing to
+    // draw it with, whichever channel it is (a size, a position, a color, a
+    // text, a slot of a `dims` bag: `hasNoValue`), so the mark is not drawn
+    // (Vega-Lite's default `invalid: "filter"`). It keeps its place in the
+    // layout. A sum or a count of no rows is 0, a value, and draws.
+    let noValue = false;
     for (const propName of Object.keys(resolvedOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
@@ -507,6 +524,11 @@ function buildCreatedMark(
         shapeProps[propName] = inferEntrySize(markValue, d);
       } else if (channelType !== undefined) {
         shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);
+        if (
+          markValue !== undefined &&
+          hasNoValue(channelType, shapeProps[propName])
+        )
+          noValue = true;
       } else {
         shapeProps[propName] = markValue;
       }
@@ -541,6 +563,9 @@ function buildCreatedMark(
     }
     const node = await resolveMarkResult(raw, {});
     if (liveChannels) node.__gfLive = liveChannels;
+    // Its whole drawing, not only its own lowering: a component's children
+    // lower on their own.
+    if (noValue) for (const n of breadthFirst(node)) n.INTERNAL_emitNothing();
     return sealComponent(node, d);
   };
   withMarkKind(baseMark, kind);

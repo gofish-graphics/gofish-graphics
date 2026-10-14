@@ -117,23 +117,8 @@ columns a `derive` computes (`lo`, `hi`, a box plot's quartiles) share an
 axis with no annotation. Two different declared units on one axis are an
 error. See [`Schema.unit`](/python/api/core/schema).
 
-A built-in transform like `bin()` types its output columns: the bin edges
-`start`/`end` are amounts of the source column, not of the columns "start"
-and "end", so they title their axis as the source does and share its unit.
-Those types travel in the operator's IR across the bridge:
-
-```python
-from gofish import bin, chart, derive, rect, scatter
-
-# The x axis is titled "Beak Length (mm)", with no annotation:
-chart(penguins, h=80).flow(
-    derive(bin("Beak Length (mm)")),
-    scatter(x_min="start", x_max="end"),
-).mark(rect(h="count"))
-```
-
-Your **own** `derive` lambda can declare the unit of a column it makes with
-its `schema`:
+A `derive` lambda can declare the unit of a column it makes with its
+`schema`:
 
 ```python
 from gofish import Schema, derive

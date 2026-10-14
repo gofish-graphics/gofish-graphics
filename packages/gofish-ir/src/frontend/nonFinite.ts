@@ -94,7 +94,9 @@ const swapNonFinite = (v: unknown): unknown =>
  * number in its tagged form ({@link encodeNonFinite}), and every IR value
  * instance in its plain form. An IR value instance is an object whose
  * `toJSON()` returns an object, such as gofish-graphics' `field(...)` and
- * `datum(...)`; its plain form is walked the same way. A value whose
+ * `datum(...)`; its plain form is walked the same way. A function is no IR
+ * value: a strategy kind used bare (`Curve.monotone`) is read as its value
+ * where an option enters, before any IR is made. A value whose
  * `toJSON()` returns a primitive (a `Date`, a Temporal value) is data, not an
  * IR value, and stays as it is, so an in-memory reader gets it back
  * unchanged. Shares every subtree that did not change, so data rows with

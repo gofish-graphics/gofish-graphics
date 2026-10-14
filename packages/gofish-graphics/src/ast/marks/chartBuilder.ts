@@ -2,6 +2,8 @@ import { GoFishNode } from "../_node";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { type ColorConfig } from "../colorSchemes";
 import { applySchema, type SchemaEntry } from "../schema";
+import { withKindValues } from "../strategyKind";
+import { rowsReached } from "../datumProjection";
 import type { AxesOptions } from "../gofish";
 import { Mark, Operator } from "../types";
 import { Frame } from "../graphicalOperators/frame";
@@ -11,7 +13,6 @@ import { ref } from "../shapes/ref";
 import { fieldNameOf, isField } from "../data";
 import {
   type SplitBy,
-  type TierSplit,
   type InferredRelational,
   type TimeTier,
 } from "../datumProjection";
@@ -402,25 +403,21 @@ function resolveTravelAxis(
   return flowOrderTravelAxis(classified);
 }
 
-/** The default split: the combination of every flow tier's `by` EXCEPT the
- *  path tier's (which orders the path and never splits), read off the bag
- *  by `splitByTiers`. `undefined` when there's nothing to split on (no
- *  other grouping tier). The path tier stays in the list: a position key
- *  (`chunk(n)`) under it counts rows within the groups it makes. Every
- *  tier reads the refs' rows, as its operator read them. */
+/** The default split: every flow tier's `by` EXCEPT the path tier's (which
+ *  orders the path and never splits), outermost first, read off the bag by
+ *  `splitByTiers`, which keys each ref by the key each tier's split gave its
+ *  mark. `undefined` when there's nothing to split on (no other grouping
+ *  tier). */
 function computeDefaultSplit(
   classified: OperatorClass[],
   pathTierIndex: number | undefined
-): TierSplit | undefined {
+): SplitBy[] | undefined {
   const tiers: SplitBy[] = [];
-  let path: number | undefined;
   classified.forEach((cls, i) => {
-    if (cls.by === undefined) return;
-    if (i === pathTierIndex) path = tiers.length;
+    if (cls.by === undefined || i === pathTierIndex) return;
     tiers.push(cls.by);
   });
-  const splits = tiers.length - (path === undefined ? 0 : 1);
-  return splits === 0 ? undefined : { tiers, path };
+  return tiers.length === 0 ? undefined : tiers;
 }
 
 /**
@@ -1064,11 +1061,17 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
    *  on its own, and its mark gets the empty scope as it is. */
   private async resolveData(): Promise<unknown> {
     if (this.usesPreviousLayerMarks()) return this.state.data;
-    const data =
-      this.state.data instanceof GoFishRef
-        ? resolveRefData(this.state.data, this.state.layerContext)
-        : this.state.data;
-    return applySchema(data as any, this.state.options?.schema);
+    if (!(this.state.data instanceof GoFishRef))
+      return applySchema(this.state.data as any, this.state.options?.schema);
+    // A list of refs stands for the rows of the marks it names: its columns'
+    // domains are over those rows.
+    const refs = resolveRefData(this.state.data, this.state.layerContext);
+    return applySchema(
+      refs as any,
+      this.state.options?.schema,
+      undefined,
+      rowsReached(refs)
+    );
   }
 
   withLayerContext(layerContext: LayerContext): ChartBuilder<TInput, TOutput> {
@@ -1115,7 +1118,8 @@ export function chart<T>(
     : options;
   return new ChartBuilder<any, any>({
     data: resolvedData,
-    options: resolvedOptions,
+    // A strategy kind used bare is read as its value from here on.
+    options: withKindValues(resolvedOptions),
     operators: [],
     layerContext: {},
   });

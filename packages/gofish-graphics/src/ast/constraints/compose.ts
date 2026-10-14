@@ -36,6 +36,7 @@
 // pin) is not yet modeled; the distribute claim wins on a shared axis for now.
 
 import type { GoFishAST } from "../_ast";
+import type { Cell } from "../cells";
 import { Size } from "../dims";
 import {
   UNDEFINED,
@@ -43,6 +44,9 @@ import {
   isCONTINUOUS,
   joinUnits,
   CONTINUOUS,
+  withCells,
+  mergeCells,
+  type OrdinalKey,
   type UnitRecord,
 } from "../underlyingSpace";
 import {
@@ -65,19 +69,23 @@ import {
   type StackOrigin,
 } from "./distribute";
 import { type AlignConstraint } from "./align";
-import { isPositionInterval, type PositionConstraint } from "./position";
+import {
+  axisCoordinates,
+  isPositionInterval,
+  type PositionConstraint,
+} from "./position";
 import { axisIndex, buildNameIndex, type AlignAnchor } from "./shared";
 
-/** A position constraint whose coordinates are *purely* interval form (at least
- *  one interval axis, no point axis). It size-sets its axis without blocking
- *  composition. A position carrying any *point*
+/** A position constraint that places its target only across spans: its
+ *  `x`/`y` are intervals where given, or it gives a region. It places its
+ *  axes without blocking composition. A position carrying any *point*
  *  coordinate is conservatively NOT span-like — it bails composition to the
  *  layer's default union (the distribute-relative-to-a-pin solve is deferred). */
-const isPureIntervalPosition = (c: ConstraintSpec): c is PositionConstraint =>
+const isSpanPosition = (c: ConstraintSpec): c is PositionConstraint =>
   c.type === "position" &&
   (c.x === undefined || isPositionInterval(c.x)) &&
   (c.y === undefined || isPositionInterval(c.y)) &&
-  (isPositionInterval(c.x) || isPositionInterval(c.y));
+  (c.x !== undefined || c.y !== undefined || c.region !== undefined);
 
 /** One distribute's slice of the layout budget: equal shares of the axis size
  *  among its covered children (consumed by `layer.tsx`'s `layout`). */
@@ -104,6 +112,10 @@ export type PositionDomains = {
    *  when they are times). */
   xMeasure?: UnitRecord;
   yMeasure?: UnitRecord;
+  /** The cells the datum positions on each axis place, when every one is a
+   *  range across a cell (see `CONTINUOUS_TYPE.cells`). */
+  xCells?: readonly Cell[];
+  yCells?: readonly Cell[];
 };
 
 /** Per axis, the direct children a `position` constraint places by a datum
@@ -118,11 +130,11 @@ export function datumPlacedChildren(
   const placed: [Set<number>, Set<number>] = [new Set(), new Set()];
   for (const c of constraints) {
     if (c.type !== "position") continue;
-    const coords = [c.x, c.y] as const;
     for (const axis of [0, 1] as const) {
-      const coord = coords[axis];
-      if (coord === undefined || !(isValue(coord) || isPositionInterval(coord)))
-        continue;
+      const datum = axisCoordinates(c, axis).some(
+        (coord) => isValue(coord) || isPositionInterval(coord)
+      );
+      if (!datum) continue;
       for (const ref of c.children) {
         const i = index.get(ref.name);
         if (i !== undefined) placed[axis].add(i);
@@ -158,7 +170,8 @@ function resolveLayerAxisSpace(
   base: UnderlyingSpace,
   axis: 0 | 1,
   positionDomain: Interval.Interval | undefined,
-  positionMeasure: UnitRecord | undefined
+  positionMeasure: UnitRecord | undefined,
+  positionCells?: readonly Cell[]
 ): UnderlyingSpace {
   if (positionDomain === undefined) return base;
   const merged = seatedUnion(
@@ -173,17 +186,23 @@ function resolveLayerAxisSpace(
   // unify as types (a clash is an error; an untagged side takes the other's
   // unit). An ordinal union's measure is its grouping field, which names a
   // category axis but is no unit, so it takes no part.
-  return CONTINUOUS(
-    merged,
-    "pinned",
-    joinUnits(
-      positionMeasure,
-      isCONTINUOUS(base) ? base.measure : undefined,
-      true,
-      {
-        axis,
-        where: "between a position constraint and the marks it sits among",
-      }
+  return withCells(
+    CONTINUOUS(
+      merged,
+      "pinned",
+      joinUnits(
+        positionMeasure,
+        isCONTINUOUS(base) ? base.measure : undefined,
+        true,
+        {
+          axis,
+          where: "between a position constraint and the marks it sits among",
+        }
+      )
+    ),
+    // Continuous children the datums do not place lie along the axis too.
+    mergeCells(
+      isCONTINUOUS(base) ? [positionCells, base.cells] : [positionCells]
     )
   );
 }
@@ -206,6 +225,7 @@ export function resolveLayerBaseSpaces(
   const spaces: Size<UnderlyingSpace> = [UNDEFINED, UNDEFINED];
   const domains = [positionDomains.x, positionDomains.y];
   const measures = [positionDomains.xMeasure, positionDomains.yMeasure];
+  const cells = [positionDomains.xCells, positionDomains.yCells];
   for (const axis of [0, 1] as const) {
     union[axis] = unionChildSpaces(
       withoutPlaced(childSpaces, axis, placed[axis], UNDEFINED),
@@ -215,7 +235,8 @@ export function resolveLayerBaseSpaces(
       union[axis],
       axis,
       domains[axis],
-      measures[axis]
+      measures[axis],
+      cells[axis]
     );
   }
   return { union, spaces };
@@ -275,8 +296,9 @@ type Seg = DistributeSegment & {
   anchor: AlignAnchor | "edge";
   glue: boolean;
   measure?: string;
+  hasOrder?: boolean;
   origin: StackOrigin<number>;
-  keys: (string | undefined)[];
+  keys: (OrdinalKey | undefined)[];
   anonymous: boolean;
 };
 type Al = { axis: 0 | 1; anchor: AlignAnchor; idx: number[] };
@@ -309,7 +331,7 @@ export function planConstraintComposition(
   // the cross-axis align fold (SIZE→POSITION) must still run (e.g. a histogram =
   // interval position on x, align on y; the align fold is what makes the count
   // axis).
-  const spans = constraints.filter(isPureIntervalPosition);
+  const spans = constraints.filter(isSpanPosition);
   // Compose only layers that are PURELY distributes + aligns + interval
   // positions. A *point* position pin (or z-order) puts the layer in a different
   // regime — the distribute-relative-to-a-pin solve is deferred
@@ -327,11 +349,15 @@ export function planConstraintComposition(
   if (distributes.length === 0 && spans.length === 0) return undefined;
 
   const indexByName = buildNameIndex(childNodes);
-  const keyOf = (i: number): string | undefined => {
+  // A child's ordinal key: its cell, for a binned key, else its `key`.
+  const keyOf = (i: number): OrdinalKey | undefined => {
     const node = childNodes[i];
-    return typeof node === "object" && node !== null && "key" in node
-      ? (node.key as string | undefined)
-      : undefined;
+    if (typeof node !== "object" || node === null || !("key" in node))
+      return undefined;
+    return (
+      (node as { keyCell?: OrdinalKey }).keyCell ??
+      (node.key as string | undefined)
+    );
   };
   // A child whose `key` was assigned positionally (no `by` — see createOperator).
   // An ordinal folded entirely from synthetic-keyed children is `anonymous`.
@@ -364,6 +390,7 @@ export function planConstraintComposition(
       anchor: d.anchor,
       glue: d.glue,
       measure: d.measure,
+      hasOrder: d.hasOrder,
       origin: distributeOrigin(d, ordered),
       keys: idx.map(keyOf),
       anonymous: idx.length > 0 && idx.every(syntheticOf),
@@ -411,6 +438,7 @@ const foldOptions = (s: Seg) => ({
   anchor: s.anchor,
   glue: s.glue,
   measure: s.measure,
+  hasOrder: s.hasOrder,
   anonymous: s.anonymous,
   origin: s.origin,
 });

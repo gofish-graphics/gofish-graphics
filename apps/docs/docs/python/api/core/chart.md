@@ -68,22 +68,106 @@ chart(data, axes={"x": True, "y": False})     # x only
 chart(data, axes={"x": {"title": "Year"}, "y": True})   # custom x title
 chart(data, axes={"x": {"title": False}, "y": True})    # suppress inferred x title
 chart(data, axes={"x": {"side": "end"}})                # x-axis on the far edge
-chart(data, axes={"x": {"label_angle": 45}})            # x labels rotated 45 degrees
-chart(data, axes={"x": {"rows": [Calendar.month, Calendar.year]}})  # rows of a time axis
+chart(data, axes={"x": {"label": {"angle": 45}}})         # x labels rotated 45 degrees
+chart(data, axes={"x": {"label": {"align": [True, "center"]}}})  # center the second level
+chart(data, axes={"x": {"levels": [Calendar.week, Calendar.month]}})  # the rows of a time axis
+chart(data, axes={"x": {"levels": [False, True]}})       # hide the innermost level
+chart(data, axes={"x": {"divider": [False, True]}})      # dividers at the second level's boundaries
 ```
 
 Keys inside the per-axis dict are snake_case, like every keyword argument:
-`"title"`, `"side"`, `"label_angle"`, and `"rows"`. Any other key, including the
-camelCase `"labelAngle"`, raises a `TypeError`.
+`"title"`, `"side"`, `"label"`, `"levels"`, and `"divider"`, and inside `"label"`, `"angle"`
+and `"align"`. Any other key raises a `TypeError` that lists
+the keys the dict takes.
 
-`"label_angle"` rotates the tick and category labels clockwise by that many
-degrees. A list rotates each tier of a nested axis separately, from the
-innermost tier outward (`[45]` rotates only the innermost row), and `"auto"`
-picks 0, 45, or 90 degrees for each label row so the labels do not collide.
+`"label"` sets how the axis's labels are drawn. Its `"angle"` rotates the tick
+and category labels clockwise by that many
+degrees. A list rotates each level of the axis separately, by the same
+depths as `"levels"`, nearest the plot first (`[45]` rotates only the
+innermost level), and `"auto"` picks 0, 45, or 90 degrees for each level so
+the labels do not collide.
 
-`"rows"` sets the label rows of a time axis, an axis over a
-[`Schema.time()`](/python/api/core/schema) column. See
-[`Calendar`](/python/api/core/calendar).
+`"levels"` sets the axis's levels, its bands of labels, by depth, nearest
+the plot first. Every axis on the dimension has levels, counted from the
+inside out:
+
+| Axis    | Inferred levels                                                                                                                                     |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| numeric | one: its ticks                                                                                                                                      |
+| time    | two rows: the level and step its domain picks for about 10 ticks, then that level's parent (see [`Calendar`](/python/api/core/calendar))            |
+| ordinal | one per split; a key binned by a chain, `field("date").bin(Calendar.year).bin(Calendar.month)`, has one per bin, nearest first (months, then years) |
+
+Each entry sets the level at its depth:
+
+- `True` keeps the level as inferred.
+- `False` hides it: its labels (and a time row's ticks) are not drawn and
+  take no space.
+- A Calendar value names its cells. On a time axis it is a row's partition.
+  On an ordinal axis over cells of time, it groups the slots by its cells:
+  `Calendar.year` over month slots labels each run of months in one year.
+
+Depths the list does not reach stay as inferred, so `[False]` hides only the
+innermost level. On the outermost axis of the dimension, a Calendar value
+past the inferred levels adds a level: `"levels": [True, Calendar.year]` over
+the slots of `field("date").bin([Calendar.year, Calendar.month])` adds a year
+level. An entry that cannot apply is an error that lists the dimension's
+levels: a Calendar value over slots that are not times, or finer than the
+slots (`Calendar.week` over months), `False` on a numeric axis, and an entry
+past the last level. A Calendar value coarser than slots that do not nest in
+it groups each slot by the cell that holds the slot's start: over week
+slots, `Calendar.month` puts each week in the month it starts in.
+`"angle"` and `"align"` lists of the label, and `"divider"` lists, use the
+same depths, and an entry of one that cannot apply at its depth, or one past
+the last level, is the same error.
+
+On an ordinal axis, the label rows of the dimension stack from the plot
+edge, whichever split draws them, so nested splits and one chained key look
+the same. A row sits 2 pixels past a row it divides (by default, a row it
+partitions) and 8 pixels past any other row. A divider is a line centered in the gap between two
+neighboring slots. It runs through the row of every level that has a
+boundary in that gap, starting at the plot edge. A level whose group
+continues across the gap stops the divider.
+
+`"divider"` sets which levels draw dividers at their boundaries. By default a
+level draws them when it partitions the value of the level inside it, that
+is, both bin the same column:
+
+| Levels                                                                                                         | Dividers               |
+| -------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| a chained key, `field("date").bin(Calendar.year).bin(Calendar.month)`                                          | between the years      |
+| nested splits that bin one column, `field("date").bin(Calendar.year)` then `field("date").bin(Calendar.month)` | between the years      |
+| a coarser Calendar entry of `"levels"`, `[True, Calendar.month]` over week slots                               | between the months     |
+| numeric bins inside bins of one column, `Bin.step(10)` then `Bin.step(2)`                                      | between the outer bins |
+| categories inside categories (a lake over its species), or months over weather categories                      | none                   |
+| the innermost level of the dimension                                                                           | none                   |
+
+So in a chart of months over weather categories, with a chained year above
+the months, the one divider is between the years, and it runs from the plot
+edge through the weather, month and year rows. `True` turns a level's
+dividers on and `False` turns them off. A single value applies to every
+ordinal level and skips a continuous axis's level, whose ticks name points,
+with no regions between them. A list is per level, by the same depths as
+`"levels"`, and a depth past its end stays as inferred:
+`"divider": [False, True]` divides only at the second level's boundaries. In
+a list, `True` at a continuous level's depth is an error.
+
+The label's `"align"` sets where each level's labels sit along the axis: `"center"` centers
+a label under what it names, and `"start"` puts it at the start of its run,
+3 pixels past the divider before it (the first run starts at the axis
+start). By default:
+
+| Level                                                                                                      | Labels                   |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------ |
+| the innermost level of the dimension (one label per slot)                                                  | centered                 |
+| an outer level over unordered categories                                                                   | centered                 |
+| an outer level over ordered groups: cells of time, numeric bins, or a column the `schema` declares ordered | at the start of each run |
+| a continuous axis's ticks                                                                                  | centered on the tick     |
+
+A single value applies to every level where it can: a single `"start"`
+skips a continuous axis's levels, since their labels name points. A list is
+per level, by the same depths as `"levels"`, and `True` keeps a level's
+inferred alignment: `"label": {"align": [True, "center"]}` centers the second
+level. In a list, `"start"` at a continuous level's depth is an error.
 
 Each per-axis dict also accepts `"side": "start" | "end"`. By default a
 **continuous/quantitative x-axis renders at the visual bottom** (and a continuous

@@ -164,7 +164,7 @@ export const EventTimeline: StoryObj<Args> = {
   },
 };
 
-// Daily counts over ten weeks, with a week row over a month row: rows are
+// Daily counts over ten weeks, with a week row over a month row: the rows are
 // independent partitions of the time line, so they need not nest.
 const visits = (() => {
   const start = Date.UTC(2024, 0, 22);
@@ -182,7 +182,7 @@ export const WeekOverMonthRows: StoryObj<Args> = {
     const container = initializeContainer();
     chart(visits, {
       schema: { day: Schema.time() },
-      axes: { x: { rows: [Calendar.week, Calendar.month] }, y: true },
+      axes: { x: { levels: [Calendar.week, Calendar.month] }, y: true },
     })
       .flow(scatter({ by: "day", x: "day", y: "visits" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
@@ -192,7 +192,8 @@ export const WeekOverMonthRows: StoryObj<Args> = {
 };
 
 // Revenue per calendar quarter, each bar spanning its quarter, with one
-// Tableau-style label row whose labels come from a format function.
+// Tableau-style label row whose labels come from a format function (the
+// inferred year row is hidden).
 const revenue = [
   ["2023-10-01", "2024-01-01", 342],
   ["2024-01-01", "2024-04-01", 325],
@@ -214,11 +215,13 @@ export const QuarterlyBars: StoryObj<Args> = {
       axes: {
         x: {
           title: false,
-          rows: [
-            Calendar.quarter.format(
-              (cell) =>
-                `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`
+          levels: [
+            Calendar.quarter.format((cell) =>
+              cell.kind === "cell"
+                ? `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`
+                : `Q${cell.quarter}`
             ),
+            false,
           ],
         },
         y: true,

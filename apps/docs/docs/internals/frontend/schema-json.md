@@ -267,6 +267,46 @@ for the API.
         }
       }
     },
+    "StructAccessor": {
+      "description": "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes Bin.hex or Bin.voronoi). Valid as a partition's `by` only once binned.",
+      "type": "object",
+      "required": ["type", "fields"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "struct"
+        },
+        "fields": {
+          "type": "object",
+          "required": ["x", "y"],
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "type": "string"
+            },
+            "y": {
+              "type": "string"
+            }
+          }
+        },
+        "ops": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["op", "partition"],
+            "additionalProperties": false,
+            "properties": {
+              "op": {
+                "const": "bin"
+              },
+              "partition": {
+                "$ref": "#/$defs/StructBin"
+              }
+            }
+          }
+        }
+      }
+    },
     "ChunkKey": {
       "description": "A `by` key that groups consecutive rows, emitted by chunk(size): row i goes to group floor(i / size), a bin over row position. It names no field, so its groups draw no axis or labels.",
       "type": "object",
@@ -329,20 +369,23 @@ for the API.
             "op": {
               "const": "bin"
             },
-            "thresholds": {
+            "partition": {
+              "description": "The partition each value is binned into: a Calendar value (Calendar.month({ every: 3 }) is { kind: month, every: 3 }), Bin.step(size) or Bin.thresholds(countOrEdges), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
               "oneOf": [
                 {
-                  "$ref": "#/$defs/Number"
+                  "$ref": "#/$defs/Partition"
                 },
                 {
                   "type": "array",
+                  "minItems": 2,
                   "items": {
-                    "$ref": "#/$defs/Number"
+                    "$ref": "#/$defs/Calendar"
                   }
                 }
               ]
             }
-          }
+          },
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -1289,14 +1332,34 @@ for the API.
           "type": "object",
           "properties": {
             "x": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/FieldAccessor"
+                },
+                {
+                  "$ref": "#/$defs/ChunkKey"
+                }
+              ]
             },
             "y": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/FieldAccessor"
+                },
+                {
+                  "$ref": "#/$defs/ChunkKey"
+                }
+              ]
             }
           },
           "required": ["x", "y"],
-          "description": "Grouping fields for the column/row keys — the table operator can't run without both."
+          "description": "The column key (x) and the row key (y), both required. Each takes what spread's `by` takes: a field name, a field(...) key (sorted, binned, a chain or product of bins, a part of a cycle), or chunk(size). A binned key's columns or rows are its cells, empty ones included. Each cell of the table holds the rows in both its column and its row."
         },
         "spacing": {
           "anyOf": [
@@ -1505,6 +1568,55 @@ for the API.
         }
       }
     },
+    "PartitionOperator": {
+      "description": "Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.",
+      "type": "object",
+      "required": ["type", "by"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "partition"
+        },
+        "by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/StructAccessor"
+            }
+          ],
+          "description": "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error."
+        },
+        "dir": {
+          "type": "string",
+          "description": "Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis."
+        },
+        "alignment": {
+          "type": "string",
+          "description": "Alignment of the children on the other axis (\"start\" | \"middle\" | \"end\" | \"baseline\"). Applies only where nothing gives the children a cell on that axis: inside a cell of another partition, each child is placed in that cell. Not allowed with a key per axis.",
+          "default": "baseline"
+        },
+        "axes": {
+          "$ref": "#/$defs/AxesOptions"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
+        }
+      }
+    },
     "OperatorIR": {
       "description": "A pipeline operator — a discriminated union, one member per operator type. See validate.ts and schema.ts for the same field shapes.",
       "oneOf": [
@@ -1543,6 +1655,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/PackOperator"
+        },
+        {
+          "$ref": "#/$defs/PartitionOperator"
         }
       ]
     },
@@ -1641,6 +1756,11 @@ for the API.
         "aspectRatio": {
           "$ref": "#/$defs/Number",
           "description": "w/h ratio to enforce; the constraining axis wins when both are data-driven."
+        },
+        "inset": {
+          "$ref": "#/$defs/Number",
+          "description": "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given.",
+          "default": 0
         },
         "debug": {
           "type": "boolean"
@@ -2341,6 +2461,60 @@ for the API.
         }
       }
     },
+    "RegionMark": {
+      "description": "Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "region"
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color, or a field name for a color scale."
+        },
+        "stroke": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Stroke color. Defaults to `fill`."
+        },
+        "strokeWidth": {
+          "$ref": "#/$defs/Number",
+          "description": "Stroke width in pixels.",
+          "default": 0
+        },
+        "opacity": {
+          "$ref": "#/$defs/Number",
+          "description": "Opacity, 0 to 1.",
+          "default": 1
+        },
+        "filter": {
+          "type": "string",
+          "description": "Raw SVG filter attribute."
+        },
+        "debug": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "relate": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateClauseIR"
+          }
+        },
+        "zOrder": {
+          "$ref": "#/$defs/Number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
     "LineMark": {
       "description": "Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
       "type": "object",
@@ -2590,6 +2764,9 @@ for the API.
           "$ref": "#/$defs/BlankMark"
         },
         {
+          "$ref": "#/$defs/RegionMark"
+        },
+        {
           "$ref": "#/$defs/LineMark"
         },
         {
@@ -2623,62 +2800,86 @@ for the API.
               "enum": ["start", "end"],
               "description": "Which frame edge the axis sits on: \"start\" is the near (origin) edge, \"end\" the far edge. Omitted, a continuous x-axis sits at the visual bottom."
             },
-            "labelAngle": {
+            "label": {
+              "$ref": "#/$defs/AxisLabelOptions",
+              "description": "How the axis's labels are drawn: their angle and their alignment, per level."
+            },
+            "levels": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "$ref": "#/$defs/Calendar"
+                  }
+                ]
+              },
+              "description": "The axis's levels, its bands of labels, by depth, nearest the plot first. Every axis on the dim has levels: a numeric axis one (its ticks), a time axis two (the level and step its domain picks for about 10 ticks, then that level's parent), and an ordinal axis one per split, plus one per bin before the last of a chained key (field(x).bin(Calendar.year).bin(Calendar.month) gives a month level and a year level). Each entry sets the level at its depth: true keeps it as inferred, false hides it, and a Calendar value names its cells: a time row's partition, or, on an ordinal axis over cells of time, the cells that group its slots: each slot falls in the cell that holds its start, so Calendar.month over week slots puts each week in the month it starts in (a level finer than the slots is an error). Depths the list does not reach stay as inferred; on the outermost axis, Calendar values past the inferred levels add levels. An entry that cannot apply is an error that lists the axis's levels. The other per-level options (label.angle, label.align, divider) use the same depths and the same rule: a plain value applies to every level where it can, and an array entry that cannot apply at its depth, or one past the last level, is this error. In JS a level's labels can be custom: Calendar.quarter.format(fn), with fn a function of the cell; an entry with a format is JS-only (it has no wire form)."
+            },
+            "divider": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Number"
+                  "type": "boolean"
                 },
                 {
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/Number"
+                    "type": "boolean"
                   }
-                },
-                {
-                  "enum": ["auto"]
                 }
               ],
-              "description": "Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite's labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; \"auto\" picks 0, 45, or 90 degrees per label row so labels do not collide."
-            },
-            "rows": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/Calendar"
-              },
-              "description": "The label rows of a time axis, inner row first, e.g. [Calendar.month, Calendar.year]. Each row is one calendar partition: its ticks are its cells' starts, and each label is centered on its cell's start tick. The domain is niced outward to the inner row's cells. Default: the level and step the domain picks for about 10 ticks, then its parent level. In JS a row's labels can be custom: Calendar.quarter.format(fn), with fn a function of the cell. A row with a format is JS-only (it has no wire form)."
+              "description": "Whether each level of an ordinal axis draws dividers: a line in each gap where its runs break, through every level whose runs also break there. Omitted, a level draws them when it partitions the value of the level inside it, that is, both bin the same column: a year level over a month level of one date (a chained key field(x).bin(Calendar.year).bin(Calendar.month), nested splits that bin the same column, or a coarser Calendar entry of levels), or numeric bins inside bins. Categories nested in other categories (a lake over its species) draw none, nor does the innermost level. true turns a level's dividers on and false turns them off. A continuous axis's level has ticks, not regions, so a plain value applies to every ordinal level and skips the continuous ones; an array is per level, by the same depths as levels, nearest the plot first, with a depth past its end left as inferred, and true at a continuous level's depth, or an entry past the last level, is an error."
             }
           }
         }
       ],
-      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, and the rows of a time axis."
+      "description": "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, label (angle and align), its levels, and their dividers."
     },
-    "Calendar": {
+    "AxisLabelOptions": {
       "type": "object",
       "properties": {
-        "unit": {
-          "enum": [
-            "second",
-            "minute",
-            "hour",
-            "day",
-            "week",
-            "month",
-            "quarter",
-            "year"
+        "angle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Number"
+              }
+            },
+            {
+              "enum": ["auto"]
+            }
           ],
-          "description": "The calendar level of each cell."
+          "description": "Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite's labelAngle). A number applies to every level of the axis where it can (a time axis does not rotate its labels yet, so it skips their rows); an array is per level, by the same depths as `levels`, nearest the plot first, and an entry that cannot apply at its depth, or one past the last level, is an error; \"auto\" picks 0, 45, or 90 degrees per level so labels do not collide."
         },
-        "step": {
-          "$ref": "#/$defs/Number",
-          "description": "How many units one cell spans; steps align to the level above.",
-          "default": 1
-        },
-        "start": {
-          "enum": ["monday", "sunday"],
-          "description": "The first day of a week (weeks only)."
+        "align": {
+          "anyOf": [
+            {
+              "enum": ["start", "center"]
+            },
+            {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "enum": ["start", "center"]
+                  },
+                  {
+                    "const": true
+                  }
+                ]
+              }
+            }
+          ],
+          "description": "Where each level's labels sit along the axis: \"center\" centers a label under what it names, \"start\" puts it at the start of its run, just past the divider before it (the first run starts at the axis start). Omitted, an ordinal axis's outer level over ordered groups (cells of time, numeric bins, or a column the schema declares ordered) starts its runs, and every other level centers: an outer level over unordered categories, the innermost level (one label per slot), and a continuous axis, whose labels name points. A plain value applies to every level where it can, so a plain \"start\" skips a continuous axis's levels; an array is per level, by the same depths as `levels`, nearest the plot first, with true keeping a level's inferred alignment, and \"start\" at a continuous level's depth, or an entry past the last level, is an error."
         }
       },
-      "description": "A calendar partition: a level (unit) at a step, e.g. Calendar.month.every(3)."
+      "description": "How one axis's labels are drawn: their angle and their alignment, each per level by the same depths as `levels`."
     },
     "AxesOptions": {
       "anyOf": [
@@ -2805,6 +3006,245 @@ for the API.
         }
       ],
       "description": "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval."
+    },
+    "Partition": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "second"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "minute"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "hour"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "day"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "weekday"
+            },
+            "start": {
+              "enum": ["monday", "sunday"],
+              "description": "The first day of a week. Monday is the ISO 8601 default.",
+              "default": "monday"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "week"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            },
+            "start": {
+              "enum": ["monday", "sunday"],
+              "description": "The first day of a week. Monday is the ISO 8601 default.",
+              "default": "monday"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "month"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "quarter"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "year"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "step"
+            },
+            "size": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "The width of each cell, in data units."
+            }
+          },
+          "required": ["kind", "size"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "thresholds"
+            },
+            "thresholds": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 1
+                }
+              ],
+              "description": "A count: about that many cells, with the width a numeric axis with that many ticks would use, so the edges are round numbers. Or a list of edges: the cells end and start at them, with the domain's ends as the outer edges, and an edge outside the domain cuts nothing."
+            }
+          },
+          "required": ["kind", "thresholds"]
+        }
+      ],
+      "description": "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Bin.step(size) or Bin.thresholds(countOrEdges)."
+    },
+    "StructBin": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "hex"
+            },
+            "radius": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "The radius in units of the x field."
+                    },
+                    "y": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "The radius in units of the y field."
+                    }
+                  },
+                  "required": ["x", "y"]
+                }
+              ],
+              "description": "The distance from a hexagon's center to its corners, in data units. A number when both fields share a unit (longitude and latitude), or `{ x, y }`, one per field, when they do not (as in ggplot2's `binwidth = c(x, y)`)."
+            }
+          },
+          "required": ["kind", "radius"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "voronoi"
+            },
+            "seeds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "description": "The seed rows, with the same two fields as the key, such as weather stations for rain gauge readings. Pass the chart's own data to give each row its own cell."
+            }
+          },
+          "required": ["kind", "seeds"]
+        }
+      ],
+      "description": "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Bin.hex({ radius }) or Bin.voronoi({ seeds })."
     },
     "Tile": {
       "anyOf": [
@@ -3053,6 +3493,245 @@ for the API.
         }
       ],
       "description": "How a path runs through its points: the value of the `curve` option of `line` and `ribbon`. `linear`, `step`, `monotone` and `smooth` are read over the parameter of the run, from the least to the most smooth; `catmullRom` is a shape on screen; `bezier`, `orthogonal`, `arc` and `perfectArrows` route each pair of neighboring points."
+    },
+    "Bin": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "step"
+            },
+            "size": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "The width of each cell, in data units."
+            }
+          },
+          "required": ["kind", "size"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "thresholds"
+            },
+            "thresholds": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 1
+                }
+              ],
+              "description": "A count: about that many cells, with the width a numeric axis with that many ticks would use, so the edges are round numbers. Or a list of edges: the cells end and start at them, with the domain's ends as the outer edges, and an edge outside the domain cuts nothing."
+            }
+          },
+          "required": ["kind", "thresholds"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "hex"
+            },
+            "radius": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "The radius in units of the x field."
+                    },
+                    "y": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "The radius in units of the y field."
+                    }
+                  },
+                  "required": ["x", "y"]
+                }
+              ],
+              "description": "The distance from a hexagon's center to its corners, in data units. A number when both fields share a unit (longitude and latitude), or `{ x, y }`, one per field, when they do not (as in ggplot2's `binwidth = c(x, y)`)."
+            }
+          },
+          "required": ["kind", "radius"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "voronoi"
+            },
+            "seeds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "description": "The seed rows, with the same two fields as the key, such as weather stations for rain gauge readings. Pass the chart's own data to give each row its own cell."
+            }
+          },
+          "required": ["kind", "seeds"]
+        }
+      ],
+      "description": "The cells a key is binned into. `step` and `thresholds` cut the line of one field into intervals: the value of `field(x).bin(...)`. `hex` and `voronoi` divide the plane of two fields into polygons: the value of `struct({ x, y }).bin(...)`. Each kind makes cells that do not overlap, and puts each row in the cell its value falls in."
+    },
+    "Calendar": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "second"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "minute"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "hour"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "day"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "weekday"
+            },
+            "start": {
+              "enum": ["monday", "sunday"],
+              "description": "The first day of a week. Monday is the ISO 8601 default.",
+              "default": "monday"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "week"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            },
+            "start": {
+              "enum": ["monday", "sunday"],
+              "description": "The first day of a week. Monday is the ISO 8601 default.",
+              "default": "monday"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "month"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "quarter"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "year"
+            },
+            "every": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "Partitions of the time line into calendar cells, one kind per level: the value of `field(x).bin(...)` over a time column, and an entry of an axis's `levels`."
     }
   }
 }

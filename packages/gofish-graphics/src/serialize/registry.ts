@@ -46,6 +46,7 @@ import { petal } from "../ast/shapes/petal";
 import { polygon } from "../ast/shapes/polygon";
 import { text } from "../ast/shapes/text";
 import { image } from "../ast/shapes/image";
+import { region } from "../ast/shapes/region";
 import { spread, stack } from "../ast/graphicalOperators/spread";
 import { scatter } from "../ast/graphicalOperators/scatter";
 import { group } from "../ast/graphicalOperators/group";
@@ -55,6 +56,7 @@ import { enclose } from "../ast/graphicalOperators/enclose";
 import { position } from "../ast/graphicalOperators/position";
 import { treemap } from "../ast/graphicalOperators/treemap";
 import { pack } from "../ast/graphicalOperators/pack";
+import { partition } from "../ast/graphicalOperators/partition";
 // `cut` (the pure slice primitive, returns an array of slice node promises)
 // and `cutMark` (the expand-mark form) — the deserializer dispatches
 // between them by context: a `cut` IR node used as a chart `.mark(...)` →
@@ -136,6 +138,7 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   image,
   polygon,
   blank,
+  region,
   // Relational marks: a leaf in a chart's `.mark(...)`, a combinator over
   // explicit children.
   line,
@@ -149,6 +152,8 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   table,
   treemap,
   pack,
+  // Operator-only: its children come from the cells of its key.
+  partition,
   // Combinator-only marks.
   layer,
   enclose,
@@ -173,9 +178,7 @@ export const OPERATOR_BUILDERS: Record<
   (opts: Record<string, any>, bridge?: DeriveBridge) => Operator<any, any>
 > = {
   // The IR names a Python lambda: the rebuilt operator calls it through the
-  // bridge and types the returned rows by the operator's `schema`. The
-  // schema also puts back the column types the rows lose on the way (e.g. a
-  // `bin`'s quantities and units, which Python writes into it).
+  // bridge and types the returned rows by the operator's `schema`.
   derive: (opts, bridge) => {
     const lambdaId = opts.lambdaId;
     if (!lambdaId) {

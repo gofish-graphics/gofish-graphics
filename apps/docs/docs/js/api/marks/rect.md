@@ -19,7 +19,7 @@ gf.chart([{ value: 80 }])
 ## Signature
 
 ```ts
-rect({ w?, h?, dims?, fill?, stroke?, strokeWidth = 0, rx?, ry? })
+rect({ w?, h?, dims?, fill?, stroke?, strokeWidth = 0, rx?, ry?, inset? })
 ```
 
 ## Parameters

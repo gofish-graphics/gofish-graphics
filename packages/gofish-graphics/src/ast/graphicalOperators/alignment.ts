@@ -10,6 +10,9 @@ import {
   joinAllUnits,
   dataWidth,
   allMirrored,
+  mergeCells,
+  mergeAxisCells,
+  withCells,
   mirrored,
   type CONTINUOUS_TYPE,
   type MeasureSite,
@@ -80,7 +83,10 @@ function overlay(
     site
   );
   return mirrored(
-    CONTINUOUS(seatedUnion(conts, seat, origin), origin, measure),
+    withCells(
+      CONTINUOUS(seatedUnion(conts, seat, origin), origin, measure),
+      mergeCells(conts.map((s) => s.cells))
+    ),
     origin !== "none" && allMirrored(conts)
   );
 }
@@ -119,11 +125,17 @@ export function unionChildSpaces(
     // Anonymous only if EVERY unioned ordinal is anonymous — one semantically
     // keyed child makes the union a real category axis.
     const anonymous = ordinals.every((o) => o.anonymous);
+    // Over cells only if every unioned ordinal is: a union with a plain
+    // category key is a plain category axis.
+    const cells = mergeAxisCells(ordinals.map((o) => o.cells));
+    const hasOrder = ordinals.every((o) => o.hasOrder);
     return {
       kind: "ordinal",
       domain: Array.from(keys),
       titles: titles.length > 0 ? titles : undefined,
       anonymous,
+      ...(cells !== undefined ? { cells } : {}),
+      ...(hasOrder ? { hasOrder } : {}),
     };
   }
 

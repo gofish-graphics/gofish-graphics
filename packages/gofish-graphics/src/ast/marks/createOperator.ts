@@ -56,8 +56,9 @@ import type {
 } from "../channels";
 import { discretePosition } from "../data";
 import { copyColumnTypes } from "../schema";
+import { KeyCell } from "../cells";
 import { fieldNameOf, isChunk } from "../data";
-import { splitByOf } from "../datumProjection";
+import { splitByOf, type SplitKey } from "../datumProjection";
 import type { MaybeValue, Value } from "../data";
 import {
   hasNormalizeOp,
@@ -81,6 +82,7 @@ import {
 } from "../../animation/transition";
 import { withWire, wireOf } from "../wire";
 import { isThenable } from "../../util";
+import { withKindValues } from "../strategyKind";
 
 export type { LayerContext } from "./markResult";
 export { resolveMarkResult } from "./markResult";
@@ -534,9 +536,9 @@ export function attachTransformModifiers<M extends object>(
  * `{entries, layoutOpts}` form instead of a bare Map.
  */
 export type SplitResult<Datum> =
-  | Map<string | number, Datum[]>
+  | Map<SplitKey, Datum[]>
   | {
-      entries: Map<string | number, Datum[]>;
+      entries: Map<SplitKey, Datum[]>;
       layoutOpts?: Record<string, unknown>;
     };
 
@@ -837,7 +839,7 @@ function applyChannels<Options extends Record<string, any>>(
   opts: Options,
   channels: ChannelAnnotations<Options> | undefined,
   d: any,
-  entries: Map<string | number, any> | undefined
+  entries: Map<SplitKey, any> | undefined
 ): Options {
   if (!channels) return opts;
   const out: any = { ...opts };
@@ -921,7 +923,7 @@ function applyChannel(
   discrete: boolean,
   val: any,
   wholeData: any[],
-  entries: Map<string | number, any> | undefined,
+  entries: Map<SplitKey, any> | undefined,
   opts: Record<string, any>
 ): any {
   // User already supplied the final-form array — leave it alone. This is
@@ -996,7 +998,7 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   channels: ChannelAnnotations<Options> | undefined,
   opts: Options,
   d: Datum[],
-  entries: Map<string | number, Datum[]> | undefined,
+  entries: Map<SplitKey, Datum[]> | undefined,
   layoutOpts: Record<string, unknown> | undefined
 ): Promise<Options> {
   const pending = resolveChannelAccessors(opts, channels, () => {
@@ -1031,9 +1033,11 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     marks: MarkChild[] | Promise<MarkChild[]>
   ): NameableMark<Datum[]>;
   function dual(
-    opts: Options,
+    given: Options,
     marks?: MarkChild[] | Promise<MarkChild[]>
   ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum[]> {
+    // A strategy kind used bare is read as its value from here on.
+    const opts = withKindValues(given);
     if (marks !== undefined) {
       // Combinator form: apply each mark to the same data d, then layout.
       const base: Mark<Datum[]> = async (
@@ -1142,7 +1146,13 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             // grouping level's axis names itself by its own keys. Uniqueness is
             // per-layer (each operator's children), which the constraint refs
             // (`ensureChildNames`) and ordinal domains rely on — never global.
-            const currentKey = i;
+            // A binned key (`field(x).bin(p)`, `struct({ x, y }).bin(b)`) is
+            // a cell: the node's key is its id, and the node keeps the cell
+            // itself for the ordinal space it folds into
+            // (`ORDINAL_TYPE.cells`).
+            const cell = i instanceof KeyCell ? i : undefined;
+            const currentKey: string | number =
+              cell?.id ?? (i as string | number);
             const leafNodes = await applyMark(
               mark,
               leaf,
@@ -1159,6 +1169,8 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             for (const node of leafNodes) {
               node.setKey(keyStr);
               node._syntheticKey = synthetic;
+              node.keyCell = cell;
+              node.keyBy = (opts as any).by;
             }
             // Record the (string) field this operator grouped by, so a later
             // `resolve(..., { from })` can match against it without the user

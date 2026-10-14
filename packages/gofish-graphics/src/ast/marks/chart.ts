@@ -85,6 +85,7 @@ import {
   type SchemaEntry,
 } from "../schema";
 import { withWire } from "../wire";
+import { withKindValues } from "../strategyKind";
 import { datumOfInput } from "./markResult";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
@@ -678,7 +679,8 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     // The opts the connector is BUILT from are the same ones a leaf mark is
     // built from: each `live(...)` replaced by its value at resolve time (see
     // `resolveLive` below), so the first paint already draws the right thing.
-    const opts = (options ?? {}) as O;
+    // A strategy kind used bare is read as its value from here on.
+    const opts = withKindValues((options ?? {}) as O);
     const liveChannels = liveChannelsOf(opts);
     /** The cell `ChartBuilder` writes the computed split / travel direction /
      *  time tier into — see `tagRelationalFusable`'s doc comment. Declared

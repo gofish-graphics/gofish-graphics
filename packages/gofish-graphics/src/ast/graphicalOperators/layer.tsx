@@ -75,6 +75,8 @@ import {
   buildChildScalePlan,
   buildLayerConstraintLayoutPlan,
   buildPositionScalePlan,
+  buildChildProposals,
+  placementConstraints,
   childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
@@ -499,7 +501,7 @@ export const layer = createNodeOperatorSequential(
           }
           return resolved;
         },
-        layout: (shared, size, scales, children, node) => {
+        layout: (shared, size, scales, children, node, region) => {
           // This layer's y direction: its children and constraints are read
           // in this axis order (see `axisDirection.ts`).
           const direction = node.yFrame.direction;
@@ -647,6 +649,17 @@ export const layer = createNodeOperatorSequential(
             node.key ?? node.type
           );
           const effectivePosScales = positionScalePlan.effectivePosScales;
+          // What the position constraints hand each child (#1059): the
+          // span an interval pins it across, which it is laid out in, and its
+          // region: its cell, and on the other axis the region this layer was
+          // given; or, for a child with no cell that no constraint places,
+          // the region this layer was given. A child is laid out in its
+          // region's length, and places itself in it.
+          const proposals = buildChildProposals(
+            node.constraints,
+            effectivePosScales,
+            region
+          );
 
           // Where a child's baseline goes on each axis (#773), by the one
           // seating rule (`seatInScope`) in this layer's frame. A free child
@@ -738,12 +751,19 @@ export const layer = createNodeOperatorSequential(
             // derived). Clamp ≥ 0; non-derived axes keep the normal child
             // proposal, so nest composes with — and wins on its derived axes
             // over — any budget slice.
+            const childRegion =
+              (childName !== undefined
+                ? proposals.regionByName.get(childName)
+                : undefined) ??
+              (constrainedChildren.has(i) ? undefined : proposals.passedOn);
             const layoutSize = applyNestLayoutProposal(
               childLayoutSizeProposal(
                 childName,
                 size,
                 gridCellByName,
-                sliceByName
+                sliceByName,
+                proposals.spanByName,
+                childRegion
               ),
               layoutPlan.nestPlan?.byDerived.get(i),
               childPlaceables
@@ -760,10 +780,14 @@ export const layer = createNodeOperatorSequential(
               effectivePosScales
             );
             childFrames[i] = layoutSize[1];
-            const childPlaceable = child.layout(layoutSize, [
-              axisScale(childScaleFactors[0], childMaps[0]),
-              axisScale(childScaleFactors[1], childMaps[1]),
-            ]);
+            const childPlaceable = child.layout(
+              layoutSize,
+              [
+                axisScale(childScaleFactors[0], childMaps[0]),
+                axisScale(childScaleFactors[1], childMaps[1]),
+              ],
+              childRegion
+            );
             if (!constrainedChildren.has(i)) {
               const [bx, by] = baselineFor(childPlaceable, i);
               childPlaceable.place("x", bx, "baseline");
@@ -888,7 +912,7 @@ export const layer = createNodeOperatorSequential(
             }
 
             applyConstraints(
-              node.constraints,
+              placementConstraints(node.constraints, proposals.regionByName),
               nameToPlaceable,
               size,
               effectivePosScales,
@@ -936,8 +960,8 @@ export const layer = createNodeOperatorSequential(
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
 
-          const translateY =
-            dims[1].min !== undefined ? dims[1].min - minY : undefined;
+          const translate = (axis: 0 | 1, min: number): number | undefined =>
+            dims[axis].min !== undefined ? dims[axis].min - min : undefined;
 
           return {
             // Store only the local box `(min, size)`; the `dims` getter derives
@@ -950,10 +974,7 @@ export const layer = createNodeOperatorSequential(
               { min: minY, size: maxY - minY },
             ],
             transform: {
-              translate: [
-                dims[0].min !== undefined ? dims[0].min - minX : undefined,
-                translateY,
-              ],
+              translate: [translate(0, minX), translate(1, minY)],
               scale: [scaleX, scaleY],
             },
           };

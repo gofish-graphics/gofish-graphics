@@ -24,8 +24,8 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(context.loaded.movies as any[], {
-      // TODO(#1017): remove once labelAngle "auto" is the default.
-      axes: { x: { labelAngle: "auto" }, y: { title: "Total Gross" } },
+      // TODO(#1017): remove once label angle "auto" is the default.
+      axes: { x: { label: { angle: "auto" } }, y: { title: "Total Gross" } },
     })
       .flow(spread({ by: "Major Genre",  dir: "x" }))
       .mark(

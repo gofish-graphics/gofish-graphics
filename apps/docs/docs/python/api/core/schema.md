@@ -143,11 +143,10 @@ column takes a unit only when its levels are numbers.
   `"Flipper Length (mm) (mm)"`. Declare its quantity
   (`Schema.quantity("Flipper Length").unit("mm")`) or set the axis `title`
   for `"Flipper Length (mm)"`.
-- `.count()` and `.distinct()` are in the unit `"count"`. The edges of
-  `bin(field)` (`start`, `end`, `size`) are amounts of `field`: they title
-  their axis as `field` does and share its unit. Its `count` is in the unit
-  `"count"`. Counts, `.normalize()` shares, and times add no unit to an axis
-  title.
+- `.count()` and `.distinct()` are in the unit `"count"`. The cells of
+  `field(x).bin(...)` are amounts of `x`: a `partition` over them titles its
+  axis as `x` does and shares its unit. Counts, `.normalize()` shares, and
+  times add no unit to an axis title.
 
 **`HasQuantity`.**
 

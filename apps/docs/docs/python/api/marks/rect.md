@@ -25,7 +25,7 @@ rect(*, x=None, cx=None, x2=None, w=None, em_x=None,
      y=None, cy=None, y2=None, h=None, em_y=None,
      dims=None,
      fill=None, stroke=None, stroke_width=None, opacity=None, filter=None,
-     rx=None, ry=None, aspect_ratio=None, key=None) -> Mark
+     rx=None, ry=None, aspect_ratio=None, inset=None, key=None) -> Mark
 ```
 
 Closed signature — no catch-all `**kwargs`. An unrecognized keyword raises a

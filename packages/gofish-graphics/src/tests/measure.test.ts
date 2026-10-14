@@ -2,9 +2,9 @@
  * Units as gradual types with inference (#955; `measure.ts`).
  *
  * A column with no declared unit has an unknown unit, a unit variable named
- * by its quantity (its declared `Schema.quantity`, the source column's for a
- * `bin()` edge, else the column),
- * which unifies with anything. A declared unit (`Schema.unit`, the
+ * by its quantity (its declared `Schema.quantity`, else the column; the
+ * cells of `field(x).bin(p)` are amounts of `x`), which unifies with
+ * anything. A declared unit (`Schema.unit`, the
  * "instant" of `Schema.time()`, the "count" of `.count()`) is concrete, and
  * two different declared units on one axis are a `MeasureClash`. A binding
  * holds for the whole render. The quantity names title the axis, followed by
@@ -51,7 +51,11 @@ const {
   rect,
   layer,
   field,
-  bin,
+  partition,
+  region,
+  struct,
+  Bin,
+  Calendar,
   ribbon,
   line,
   Schema,
@@ -85,7 +89,8 @@ const SIZE = { w: 300, h: 200 };
 
 // ── Channels: a column's quantity reaches mark channels (#534) ──────────────
 
-// A bin()-shaped array: `size` is an amount of the source column's quantity.
+// A histogram-shaped array: `size` is an amount of the source column's
+// quantity.
 const mm = { HasQuantity: { name: "Beak Length (mm)" } };
 const binned = setColumnTypes(
   [
@@ -788,14 +793,16 @@ console.log("# measure: titles are Quantity (unit)");
     counted.join(" | ")
   );
 
-  const hist = textsOf(
-    await chart(penguins, { axes: true })
-      .flow(derive(bin("flipper")), scatter({ xMin: "start", xMax: "end" }))
-      .mark(rect({ h: "count" }))
-      .toDisplayList(SIZE)
-  );
+  // The cells of `field(x).bin(p)` keep x's type (#1141): a partition places
+  // each group across its cell, and the cell's ends are amounts of x's
+  // quantity, in x's unit.
+  const histOf = (schema: any) =>
+    chart(penguins, { schema, axes: true })
+      .flow(partition({ by: field("flipper").bin(Bin.step(20)), dir: "x" }))
+      .mark(rect({ h: field("flipper").count() }));
+  const hist = textsOf(await histOf({}).toDisplayList(SIZE));
   ok(
-    "bin edges title as their source column",
+    "bin cells title as their source column",
     hist.includes("flipper") && !hist.some((t) => /start|end/.test(t)),
     hist.join(" | ")
   );
@@ -805,19 +812,126 @@ console.log("# measure: titles are Quantity (unit)");
     hist.join(" | ")
   );
 
-  const histMm = textsOf(
-    await chart(penguins, {
-      schema: { flipper: Schema.quantity("Flipper").unit("mm") },
-      axes: true,
-    })
-      .flow(derive(bin("flipper")), scatter({ xMin: "start", xMax: "end" }))
-      .mark(rect({ h: "count" }))
+  const mmSchema = {
+    flipper: Schema.quantity("Flipper Length").unit("mm"),
+    cm: Schema.unit("cm"),
+  };
+  const histMm = textsOf(await histOf(mmSchema).toDisplayList(SIZE));
+  ok(
+    "bin cells take the source's declared quantity and unit",
+    histMm.includes("Flipper Length (mm)"),
+    histMm.join(" | ")
+  );
+  ok(
+    "and their counts stay a count, with no unit",
+    histMm.includes("count") && !histMm.some((t) => /\(count\)/.test(t)),
+    histMm.join(" | ")
+  );
+
+  // Raw x over its own cells: one axis, one title.
+  const rawOver = (x: string) =>
+    histOf(mmSchema).layer(
+      chart(
+        penguins.map((p) => ({ ...p, cm: p.flipper / 10 })),
+        { schema: mmSchema }
+      )
+        .flow(scatter({ by: "id", x }))
+        .mark(rect({ w: 2, h: 2 }))
+    );
+  const overlaid = textsOf(await rawOver("flipper").toDisplayList(SIZE));
+  ok(
+    "bin cells overlaid with their raw column share one axis",
+    overlaid.filter((t) => t === "Flipper Length (mm)").length === 1,
+    overlaid.join(" | ")
+  );
+  const cmOverMm = await errorOf(() => rawOver("cm").toDisplayList(SIZE));
+  ok(
+    "bin cells in mm overlaid with a column in cm are a MeasureClash",
+    cmOverMm !== undefined &&
+      /two different units/.test(cmOverMm) &&
+      /"mm"/.test(cmOverMm) &&
+      /"cm"/.test(cmOverMm),
+    cmOverMm
+  );
+
+  // The cells of a product or a chain of calendar bins are on the time line:
+  // their ends are instants of the binned column, titled by its quantity.
+  const sales = Array.from({ length: 90 }, (_, i) => ({
+    date: Date.UTC(2024, 0, 1) + i * 4 * 86_400_000,
+    i,
+    price: i * 2,
+  }));
+  const timeSchema = {
+    date: Schema.time().quantity("Sold"),
+    price: Schema.unit("USD"),
+  };
+  const byTime = (by: any, op: any = partition) =>
+    chart(sales, { schema: timeSchema, axes: true })
+      .flow(op({ by, dir: "x" }))
+      .mark(rect({ h: field("date").count() }));
+  for (const [name, by] of [
+    ["a product", field("date").bin([Calendar.year, Calendar.month])],
+    ["a chain", field("date").bin(Calendar.year).bin(Calendar.month)],
+  ] as const) {
+    const texts = textsOf(await byTime(by).toDisplayList(SIZE));
+    ok(
+      `the cells of ${name} of calendar bins take the column's quantity`,
+      texts.includes("Sold") && texts.includes("2024"),
+      texts.join(" | ")
+    );
+  }
+  const instantOverUsd = await errorOf(() =>
+    byTime(field("date").bin([Calendar.year, Calendar.month]))
+      .layer(
+        chart(sales, { schema: timeSchema })
+          .flow(scatter({ by: "i", x: "price" }))
+          .mark(rect({ w: 2, h: 2 }))
+      )
       .toDisplayList(SIZE)
   );
   ok(
-    "bin edges take the source's declared quantity and unit",
-    histMm.includes("Flipper (mm)"),
-    histMm.join(" | ")
+    "calendar cells are instants: overlaid with USD they are a MeasureClash",
+    instantOverUsd !== undefined &&
+      /"instant" \("Sold"\)/.test(instantOverUsd) &&
+      /"USD"/.test(instantOverUsd),
+    instantOverUsd
+  );
+
+  // The parts of a cycle (the month of the year) are categories, not
+  // instants: an ordinal axis over them has no unit, and is titled by its
+  // column, as every category axis is.
+  const parts = textsOf(
+    await byTime(field("date").bin(Calendar.month), spread).toDisplayList(SIZE)
+  );
+  ok(
+    "the parts of a cycle are a category axis titled by the column",
+    parts.includes("Jan") && parts.includes("date") && !parts.includes("Sold"),
+    parts.join(" | ")
+  );
+
+  // A cell of the plane reads each axis off its own column.
+  const plane = textsOf(
+    await chart(penguins, {
+      schema: {
+        flipper: Schema.quantity("Flipper Length").unit("mm"),
+        mass: Schema.quantity("Mass").unit("g"),
+      },
+      axes: true,
+    })
+      .flow(
+        partition({
+          by: struct({ x: "flipper", y: "mass" }).bin(
+            Bin.hex({ radius: { x: 10, y: 100 } })
+          ),
+        })
+      )
+      .mark(region({ fill: field("flipper").count() }))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "hexagon cells take each axis's column quantity and unit",
+    plane.includes("Flipper Length (mm)") && plane.includes("Mass (g)"),
+    plane.join(" | ")
   );
 
   const several = textsOf(

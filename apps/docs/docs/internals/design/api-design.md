@@ -148,10 +148,38 @@ and `y.*` options. When GoFish embeds another system's grammar, it renames that
 grammar's options to GoFish's words and moves per-node styling into a mark
 function (the GoTree port, #461).
 
+**Nest a role instead of prefixing its name.** When several options share a
+prefix, such as `labelAngle` and `labelAlign`, the prefix is a hierarchy
+written into the names. Write it as structure instead: one option named for
+the role, with its details inside, as in `label: { angle, align }`. The
+grouping is then visible, the role can be passed as a whole, and a new detail
+is a new key, not a new name. CSS shorthands and ggplot2's `element_text`
+group settings the same way. Vega-Lite's flat `labelAngle` and `labelAlign`
+are the pattern to avoid (#1133).
+
+**Calls, methods and options say how much the parts know about each other.**
+A function call joins parts that are independent, or that pass very little
+between them: `chart(data)`, `field("x")`, `layer([a, b])`, and the operators
+handed to `.flow(spread(...), stack(...))`. A method chain is a universal
+interface that can read the caller's internal state, and even branch on it,
+or turn it into a new object: `.bin(...)` reads the field's type (a time
+column takes `Calendar`, a number takes `Bin`), `.format(fn)` sees fields that
+depend on the partition it is called on, `.sort()` uses the type's order, and
+`chart(...).flow(...).mark(...)` builds a spec step by step. An option is a
+local adjective of one thing, usually specific to its kind, such as
+`Calendar.month({ every: 3 })`, `Calendar.week({ start })` or
+`Bin.hex({ radius })`; a few, such as `w`, `h` and `fill`, apply almost
+everywhere. So `every` is an option, because it describes the month
+partition and reads nothing from a parent, while `.format(fn)` is a method
+(#1133).
+
 **Strategy families are uppercase namespaces.** When an option's value is one of
 several named strategies, the family is a capitalized namespace such as
-`Overlap.separate()` or `Curve.monotone()` (#1013). The details, and why an
-option with one strategy has no option at all, are in
+`Overlap.separate` or `Curve.monotone` (#1013). A kind with no required option
+is a value as it is, and calling it sets options: `Curve.monotone` is
+`Curve.monotone()`, and `Calendar.month({ every: 3 })` sets the step. A kind
+with a required option is a call only, as in `Bin.step(0.5)` (#1133). The
+details, and why an option with one strategy has no option at all, are in
 [Three Surfaces](/internals/design-evolution/three-surfaces).
 
 **Say "visualization" unless it is a chart.** GoFish draws charts, diagrams,

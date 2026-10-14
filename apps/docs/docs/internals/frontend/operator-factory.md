@@ -127,7 +127,10 @@ Three pieces:
    [Field expressions](/internals/core/underlying-space#field-expressions-a-pipeline-orthogonal-to-channel-aggregation)
    for the domain-op (`sort`/`reverse`/`bin`) semantics. `by`-string/function
    callers are unaffected — they carry no ops, so `splitEntries` reduces to
-   the old `Map.groupBy` behavior.
+   the old `Map.groupBy` behavior. A key is a `SplitKey`: a value of the
+   field, a `Cell` for a binned key (`field(x).bin(p)`), or a `PolygonCell`
+   for a binned struct (`struct({ x, y }).bin(b)`), each of which stands for
+   its id.
 3. **`channels`** (optional) — per-opt data-aware encodings. Same idea as
    `createMark`'s channels: `w: "size"` means the user can pass a field name,
    and the factory will apply `inferSize` before handing opts to `Spread`.
@@ -149,10 +152,17 @@ Walking `createOperator.ts:391-415`:
    see [Column
    types](/internals/core/underlying-space#column-types-the-chart-schema)): a
    leaf is a fresh sub-array that wouldn't otherwise inherit them, so without
-   this a _mark_ channel applied per leaf would lose a transform's unit (e.g.
-   a bin's `start`/`end`/`size`, `HasQuantity`) and fall back to the literal
-   field name — see [underlying space](/internals/core/underlying-space) and
-   #534 — and a nested split or a color channel would lose an ordered column.
+   this a _mark_ channel applied per leaf would lose its column's quantity
+   and unit (`HasQuantity`, `HasUnit`) and fall back to the literal field
+   name — see [underlying space](/internals/core/underlying-space) and
+   #534 — and a nested split or a color channel would lose an ordered
+   column. The data's domain rides along the same way, so a nested binned
+   key sees the chart's cells. A cell key becomes its id for the mark and
+   the node (`setKey`), and the node keeps the cell itself as `keyCell`,
+   which the distribute fold reads to build an ordinal over cells, and a
+   `partition` reads to give the node its cell. The node also keeps the
+   `by` it was keyed by (`keyBy`), so a fused connector's default split can
+   read a mark's key under each tier off its ancestors.
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream
@@ -473,7 +483,7 @@ read the build-in clock's `playing`/`at` (which `TerminalMethods<Extra>` adds to
 their options type), and drive `render` through `renderWithInteraction`. Every
 resolve also sets `node.rebuild` on the resolved root (the same resolve, for the
 same render pass), so a layout that must run once per candidate, such as
-`labelAngle: "auto"`, can get a fresh tree for each run. So the
+`label.angle: "auto"`, can get a fresh tree for each run. So the
 set of
 terminals is defined once — adding one (as `toDisplayList` was) touches a single
 list and lands on every surface at once, instead of being hand-rolled per

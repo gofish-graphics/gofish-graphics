@@ -25,27 +25,32 @@ gf.chart(drivingShifts, { axes: true })
 ## Signature
 
 ```ts
-Curve.linear();
-Curve.step();
-Curve.monotone();
-Curve.smooth();
-Curve.catmullRom();
-Curve.bezier();
-Curve.orthogonal({ bend?: "auto" });
-Curve.arc({ direction?: "up" | "down" });
-Curve.perfectArrows({ bow?, stretch?, stretchMin?, stretchMax?, padStart?, padEnd?, flip?, straights? });
+Curve.linear;
+Curve.step;
+Curve.monotone;
+Curve.smooth;
+Curve.catmullRom;
+Curve.bezier;
+Curve.orthogonal; // or Curve.orthogonal({ bend?: "auto" })
+Curve.arc; // or Curve.arc({ direction?: "up" | "down" })
+Curve.perfectArrows; // or Curve.perfectArrows({ bow?, stretch?, stretchMin?, stretchMax?, padStart?, padEnd?, flip?, straights? })
 ```
 
-Every member is a function call, including the ones that take no options. Each
-returns a plain object, `{ kind, ...params }`, of type `Curve.Curve`, for
-example `{ kind: "arc", direction: "down" }`. The same object is the curve's
-wire form.
+No curve has a required option, so each member is a curve as it is, and
+calling it sets options: `Curve.monotone` and `Curve.monotone()` are the same
+curve, and `Curve.arc({ direction: "down" })` sets the arc's direction. This
+holds in every strategy family: a kind with no required option is a value,
+and a kind with one is a call only, like `Bin.step(size)`. A curve is a plain
+object, `{ kind, ...params }`, of type `Curve.Curve`, for example
+`{ kind: "arc", direction: "down" }`. The same object is the curve's wire
+form. ([#1145](https://github.com/gofish-graphics/gofish-graphics/issues/1145)
+moves the examples to the bare spelling.)
 
 The family is also a module of its own:
 
 ```ts
 import { Curve } from "gofish-graphics";
-import { monotone } from "gofish-graphics/curve"; // the same function as Curve.monotone
+import { monotone } from "gofish-graphics/curve"; // the same value as Curve.monotone
 ```
 
 ## Members

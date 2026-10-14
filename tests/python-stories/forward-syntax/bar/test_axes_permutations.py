@@ -60,9 +60,9 @@ def story_axes_suppressed_title():
     return _story({"x": {"title": False}, "y": True})
 
 
-# label_angle (#746): a nested grouped bar chart (city, then year) at a small
+# label angle (#746): a nested grouped bar chart (city, then year) at a small
 # thumbnail size, where the unrotated category labels would collide under the
-# bars. Two-tier x axis: label_angle applies to both the inner (year) and
+# bars. Two-tier x axis: the label angle applies to both the inner (year) and
 # outer (city) label rows.
 CITY_YEAR = [
     {"city": "Austin", "year": "2022", "visitors": 42},
@@ -77,13 +77,13 @@ CITY_YEAR = [
 ]
 
 
-def _x_axis(label_angle):
-    return {"x": {} if label_angle is None else {"label_angle": label_angle}}
+def _x_axis(angle):
+    return {"x": {} if angle is None else {"label": {"angle": angle}}}
 
 
-def _grouped_bar(label_angle, w=300):
+def _grouped_bar(angle, w=300):
     return (
-        chart(CITY_YEAR, axes=_x_axis(label_angle))
+        chart(CITY_YEAR, axes=_x_axis(angle))
         .flow(
             spread(by="city", dir="x", spacing=24),
             spread(by="year", dir="x", spacing=0),
@@ -101,7 +101,7 @@ def story_grouped_label_angle90():
     return _grouped_bar(90)
 
 
-# Per-tier label_angle array: [45]/[90] rotates only the innermost (year) row,
+# Per-tier label angle array: [45]/[90] rotates only the innermost (year) row,
 # leaving the outer (city) row upright.
 def story_grouped_label_angle_inner45():
     return _grouped_bar([45])
@@ -111,12 +111,12 @@ def story_grouped_label_angle_inner90():
     return _grouped_bar([90])
 
 
-# The same grouped bar chart with no label_angle: the unrotated baseline.
+# The same grouped bar chart with no label angle: the unrotated baseline.
 def story_grouped_label_angle_none():
     return _grouped_bar(None)
 
 
-# label_angle "auto" (#486) chooses each label row (inner and outer tier) on its
+# label angle "auto" (#486) chooses each label row (inner and outer tier) on its
 # own: the first of 0, 45, 90 degrees at which no two labels in the row collide,
 # across the whole chart. Each story names the inner and outer angles.
 def story_grouped_label_angle_auto0():
@@ -137,7 +137,7 @@ REGION_PRODUCT = [
 
 def _grouped_products(w):
     return (
-        chart(REGION_PRODUCT, axes={"x": {"label_angle": "auto"}})
+        chart(REGION_PRODUCT, axes={"x": {"label": {"angle": "auto"}}})
         .flow(
             spread(by="region", dir="x", spacing=24),
             spread(by="product", dir="x", spacing=0),
@@ -168,7 +168,7 @@ def story_grouped_label_angle_auto_inner_hidden_outer0():
 # The same, colored by region, so no legend names the products (warns).
 def story_grouped_label_angle_auto_inner_hidden_no_legend():
     return (
-        chart(REGION_PRODUCT, axes={"x": {"label_angle": "auto"}})
+        chart(REGION_PRODUCT, axes={"x": {"label": {"angle": "auto"}}})
         .flow(
             spread(by="region", dir="x", spacing=24),
             spread(by="product", dir="x", spacing=0),
@@ -181,7 +181,7 @@ def story_grouped_label_angle_auto_inner_hidden_no_legend():
 # Horizontal grouped bars: an ordinal y axis with "auto" (both rows 0 degrees).
 def story_grouped_horizontal_label_angle_auto0():
     return (
-        chart(REGION_PRODUCT, axes={"y": {"label_angle": "auto"}})
+        chart(REGION_PRODUCT, axes={"y": {"label": {"angle": "auto"}}})
         .flow(
             spread(by="region", dir="y", spacing=16),
             spread(by="product", dir="y", spacing=0),
