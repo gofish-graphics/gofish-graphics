@@ -23,7 +23,6 @@ export {
   encodeIR,
   decodeNonFinite,
   isPlainObject,
-  isCallableValue,
   type NonFiniteNumberIR,
 } from "./nonFinite.js";
 export {

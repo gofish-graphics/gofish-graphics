@@ -47,21 +47,6 @@ export const isPlainObject = (v: unknown): v is Record<string, unknown> => {
   return proto === Object.prototype || proto === null;
 };
 
-/** Whether `v` is a value that can also be called: a strategy kind used
- *  bare (`Curve.monotone`, `Calendar.month`), which is the value its call
- *  with no arguments makes and, called, makes one with options set. It
- *  carries that value as `toJSON()`, the way `JSON.stringify` reads it, and
- *  that is what tells it apart from a callback, a function with no IR
- *  form. */
-export function isCallableValue(
-  v: unknown
-): v is ((...args: never[]) => unknown) & { toJSON(): unknown } {
-  return (
-    typeof v === "function" &&
-    typeof (v as { toJSON?: unknown }).toJSON === "function"
-  );
-}
-
 /** Is `v` the tagged form of a non-finite number? */
 export function isNonFiniteNumberIR(v: unknown): v is NonFiniteNumberIR {
   if (v === null || typeof v !== "object" || !(NON_FINITE_KEY in v))
@@ -109,8 +94,9 @@ const swapNonFinite = (v: unknown): unknown =>
  * number in its tagged form ({@link encodeNonFinite}), and every IR value
  * instance in its plain form. An IR value instance is an object whose
  * `toJSON()` returns an object, such as gofish-graphics' `field(...)` and
- * `datum(...)`, or a callable value ({@link isCallableValue}), such as
- * `Curve.monotone`; its plain form is walked the same way. A value whose
+ * `datum(...)`; its plain form is walked the same way. A function is no IR
+ * value: a strategy kind used bare (`Curve.monotone`) is read as its value
+ * where an option enters, before any IR is made. A value whose
  * `toJSON()` returns a primitive (a `Date`, a Temporal value) is data, not an
  * IR value, and stays as it is, so an in-memory reader gets it back
  * unchanged. Shares every subtree that did not change, so data rows with
@@ -121,7 +107,7 @@ export function encodeIR<T>(value: T): T {
     if (typeof v === "number") return swapNonFinite(v);
     if (
       v === null ||
-      (typeof v !== "object" && !isCallableValue(v)) ||
+      typeof v !== "object" ||
       isPlainObject(v) ||
       Array.isArray(v)
     )

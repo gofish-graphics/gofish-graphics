@@ -140,8 +140,6 @@ for (const [family, spec] of Object.entries(Frontend.STRATEGIES) as Array<
         JSON.stringify(Object.keys(member)) ===
           JSON.stringify(Object.keys(called)) &&
         JSON.stringify(member) === JSON.stringify(called) &&
-        JSON.stringify(Frontend.encodeIR({ v: member })) ===
-          JSON.stringify(Frontend.encodeIR({ v: called })) &&
         why === "",
       why ||
         `bare ${JSON.stringify(member)}, called ${JSON.stringify(called)}`
@@ -181,6 +179,34 @@ for (const [family, spec] of Object.entries(Frontend.STRATEGIES) as Array<
     "Calendar.month({ step: 3 }) is a loud error naming every",
     step.includes('unknown field "step"') && step.includes('"every"'),
     step
+  );
+  // A bare kind is read as its value where options enter, at any depth, so
+  // the IR holds only values: a chart's options (`axes.x.levels`), and an
+  // operator's or a mark's.
+  const { chart, scatter, circle, Serialize, Overlap } = GoFish as Record<
+    string,
+    any
+  >;
+  const ir = await Serialize.toJSON(
+    chart([{ d: 0, y: 1 }], {
+      axes: { x: { levels: [Calendar.year, true] } },
+    })
+      .flow(scatter({ x: "d", y: "y", overlap: Overlap.separate }))
+      .mark(circle({ r: 2 }))
+  );
+  const level = ir.root.options?.axes?.x?.levels?.[0];
+  const overlap = ir.root.operators?.[0]?.overlap;
+  const valid = Frontend.validate(ir);
+  check(
+    "a bare kind in a chart's nested options, or an operator's, is its " +
+      "value in the IR",
+    typeof level === "object" &&
+      level.kind === "year" &&
+      typeof overlap === "object" &&
+      overlap.kind === "separate" &&
+      valid.valid,
+    `${typeof level} ${JSON.stringify(level)} / ${typeof overlap} / ` +
+      JSON.stringify(valid.valid ? [] : valid.errors)
   );
   const positional = errorOf(() => Curve.arc("down"));
   check(

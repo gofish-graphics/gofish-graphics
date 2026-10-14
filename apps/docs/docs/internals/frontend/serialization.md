@@ -482,15 +482,13 @@ with that value's own keys and prototype and a `toJSON()` that returns it
 dict subclass holding that dict with a `__call__` (`StrategyKind`,
 `gofish/_strategy.py`, which the generated family modules apply to each
 factory with no required param). JSON has no functions, so the JS side
-reads a bare kind as its value once, where an option enters
-(`withKindValues` in `createOperator`, `createMark` and
-`createRelationalMark`, `checkBinStep` for a `.bin(...)` partition, and
-`levelsFromOption` for an axis's `levels`). The emitter, which drops every
-function as a callback, and `checkStrategy` then see only values. The one
-reader that still tells a bare kind from a callback by its `toJSON()` is the
-shared encoder (`encodeIR`, `Frontend.isCallableValue`), which writes that
-form as it does for a `field(...)`, for option trees that pass no door (a
-chart's `axes` before layout reads them). A Python bare kind is a dict, so
+reads a bare kind as its value once, where an option enters, at any depth
+of the options' plain objects and arrays (`withKindValues` in `chart(data,
+options)`, `createOperator`, `createMark` and `createRelationalMark`,
+`checkBinStep` for a `.bin(...)` partition, and `levelsFromOption` for an
+axis's `levels`, which render options reach without passing a chart). The
+emitter, which drops every function as a callback, the shared encoder
+(`encodeIR`), and `checkStrategy` then see only values. A Python bare kind is a dict, so
 `_to_wire` and `json.dumps` read it as one. A param
 may carry bounds, `t.num({ min: 0, finite: true })` for a pixel padding,
 `t.num({ exclusiveMin: 0, finite: true })` for a hex radius, or

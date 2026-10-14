@@ -15,13 +15,16 @@
  * and the shared IR encoder (`Frontend.encodeIR`) write it as that value.
  *
  * Options enter through a few doors, and each replaces a bare kind by its
- * value once, there ({@link kindValue}, {@link withKindValues}): an
+ * value once, there, at any depth ({@link kindValue},
+ * {@link withKindValues}): a chart's options (`chart(data, options)`), an
  * operator's and a mark's options (`createOperator`, `createMark`,
  * `createRelationalMark`), a `.bin(...)` partition (`checkBinStep`), and an
- * axis's `levels`. So no reader of a strategy ever sees a function. The
- * encoder keeps its own reading of a bare kind for option trees that pass
- * no door, such as a chart's `axes` before layout reads them.
+ * axis's `levels` (`levelsFromOption`, which render options reach without
+ * passing a chart). So no reader of a strategy, the IR encoder included,
+ * ever sees a function.
  */
+
+import { Frontend } from "gofish-ir";
 
 /** Marks a bare kind, so {@link kindValue} tells it from a callback. */
 const BARE: unique symbol = Symbol("gofish.bareKind");
@@ -72,11 +75,26 @@ export function bareKind<F extends (opts?: never) => object>(
 export const kindValue = <V>(v: V): V =>
   typeof v === "function" && BARE in v ? ((v as () => V)() as V) : v;
 
-/** `opts` with each bare kind among its values replaced by its value
- *  ({@link kindValue}); the same object when it holds none. */
+/** `opts` with each bare kind in it replaced by its value
+ *  ({@link kindValue}), at any depth of its plain objects and arrays
+ *  (`axes.x.levels[0]`). Shares every part that holds none, so `opts` comes
+ *  back as it is when it holds none. */
 export function withKindValues<O>(opts: O): O {
-  if (opts === null || typeof opts !== "object") return opts;
-  const entries = Object.entries(opts as Record<string, unknown>);
-  if (!entries.some(([, v]) => kindValue(v) !== v)) return opts;
-  return Object.fromEntries(entries.map(([k, v]) => [k, kindValue(v)])) as O;
+  const v = kindValue(opts);
+  if (v !== opts) return v;
+  if (Array.isArray(opts)) {
+    let out: unknown[] | undefined;
+    opts.forEach((item, i) => {
+      const next = withKindValues(item);
+      if (next !== item) (out ??= opts.slice())[i] = next;
+    });
+    return (out ?? opts) as O;
+  }
+  if (!Frontend.isPlainObject(opts)) return opts;
+  let out: Record<string, unknown> | undefined;
+  for (const [k, item] of Object.entries(opts)) {
+    const next = withKindValues(item);
+    if (next !== item) (out ??= { ...opts })[k] = next;
+  }
+  return (out ?? opts) as O;
 }

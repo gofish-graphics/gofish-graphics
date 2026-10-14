@@ -2,6 +2,7 @@ import { GoFishNode } from "../_node";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { type ColorConfig } from "../colorSchemes";
 import { applySchema, type SchemaEntry } from "../schema";
+import { withKindValues } from "../strategyKind";
 import { rowsReached } from "../datumProjection";
 import type { AxesOptions } from "../gofish";
 import { Mark, Operator } from "../types";
@@ -1117,7 +1118,8 @@ export function chart<T>(
     : options;
   return new ChartBuilder<any, any>({
     data: resolvedData,
-    options: resolvedOptions,
+    // A strategy kind used bare is read as its value from here on.
+    options: withKindValues(resolvedOptions),
     operators: [],
     layerContext: {},
   });
