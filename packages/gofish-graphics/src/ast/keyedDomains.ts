@@ -26,7 +26,7 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import type { Size } from "./dims";
-import { niceScope, scalesWithSigma, widenScope, type Extent } from "./extent";
+import { mapsDomain, niceScope, widenScope, type Extent } from "./extent";
 import { unitKey } from "./measure";
 
 /** The part of a node the table reads (duck-typed: `_node.ts` imports this
@@ -245,8 +245,9 @@ export class KeyedDomains {
    * σ solve (a sized layer, the render root) and every axis drawn over the
    * domain reads it, so the ticks and the marks agree by construction.
    *
-   * Only a claim with σ in it maps the domain. A claim that is only pixels
-   * (content that is all boxes of a literal size) maps nothing: each box
+   * Only a claim that maps a domain (`mapsDomain`: it has σ in it, or its
+   * type is one value) is widened. A claim that is only pixels over a wider
+   * type (content that is all boxes of a literal size) maps nothing: each box
    * already mapped the domain into its own size, so the claim is left as it
    * is, and widening it would add data-scaled room nothing fills.
    */
@@ -257,7 +258,7 @@ export class KeyedDomains {
     claim: Extent | undefined,
     viaSet: boolean = true
   ): [S, Extent | undefined] {
-    const sigmaClaim = scalesWithSigma(claim) ? claim : undefined;
+    const sigmaClaim = mapsDomain(space, claim) ? claim : undefined;
     const [wide, wideClaim] = widenScope(
       space,
       sigmaClaim,

@@ -1283,11 +1283,21 @@ charts 160 px tall, rendered with no size). When no node below solves the
 domain (the common `chart(...).render(el, {})`), or they solve it at
 different σs, the root solves at the default canvas, as below.
 
-Only a node whose claim has σ in it maps a domain, so only such a claim is
-widened. A claim that is only pixels (content made of boxes of a literal
-size) is left as it is by `KeyedDomains.scope`: each box already mapped the
-domain into its own size, and widening the claim would add data-scaled room
-nothing fills.
+Only a node that maps a domain has its claim widened (`mapsDomain` in
+`extent.ts`). A claim with σ in it maps one. A claim that is only pixels
+(content made of boxes of a literal size) is left as it is by
+`KeyedDomains.scope`: each box already mapped the domain into its own size,
+and widening the claim would add data-scaled room nothing fills.
+
+A one-value domain (`isOneValue`: a one-point chart, or every mark at one
+constant `datum`) also maps a domain, though its claim is only pixels: it has
+no width for σ to scale. It is widened to its keyed domain like any other, and
+if it is still one value, `solveScope` maps that value to the middle of the
+box, as d3 and Vega-Lite map a zero-width linear domain to the middle of the
+range: σ is 0 and the claim is centered in the box (#1107). Its axis has one
+tick, there. So every data value has a position scale, and a data value on an
+axis with none is an error (`computeAesthetic`). A domain that includes 0 and
+another value, such as a bar's, is never one value.
 
 Behind `GOFISH_DUMP_SCOPES` the registry prints every scope it solved as a
 printable frame equation, one line per solve, with kind `root`, `coord`,
@@ -1450,9 +1460,9 @@ claim, though, is its own pixels: the box solves its own σ, so its content's σ
 claim is not room its parent can scale. The node claims the content's claim
 at the σ it solves, which keeps the content's split about data 0 and sums to
 the size (`fixedClaim` in `layer.tsx`). It solves that σ once, through the
-registry (`solveFixed`), and its layout reuses the solution. A claim that is only pixels has no σ
-in it (`scalesWithSigma` in `extent.ts`): it needs no canvas at the root, and
-a sized node has nothing to solve from it. A **data-valued** `w`/`h` (a field name, a `field(...)`
+registry (`solveFixed`), and its layout reuses the solution. A claim that is only pixels over
+a type wider than one value maps no domain (`mapsDomain` in `extent.ts`): it
+needs no canvas at the root, and a sized node has nothing to solve from it. A **data-valued** `w`/`h` (a field name, a `field(...)`
 expression, a per-entry array) is a value in its parent's unit, so the node
 reports a free magnitude (`magnitude(size)`), a leaf in its parent's set like
 a rect with `w: "count"`, and its content is nested in the box: the content

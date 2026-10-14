@@ -153,12 +153,9 @@ export const Rect = ({
           let s: number | undefined;
           if (isValue(d.min) && isValue(d.max)) {
             // Both ends are values: the box spans [min, max] in data space.
-            // With no map on this axis both ends are undefined (#1107), so
-            // the size is NaN and falls back to the default below.
             s = at(d.max) - at(d.min);
           } else if (isValue(d.min) && isValue(d.size)) {
-            // A data start and size: map both ends, then subtract (NaN with
-            // no map, as above).
+            // A data start and size: map both ends, then subtract.
             s = at(value(getValue(d.min)! + getValue(d.size)!)) - at(d.min);
           } else if (isValue(d.size) && map) {
             // A data size with no start: measured from the baseline, data 0,

@@ -402,6 +402,20 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
     "an origin-less scope has σ and no originPx",
     none.sigma === 2 && none.originPx === undefined
   );
+  // A one-value domain (#1107): no σ fits it, so its value maps to the
+  // middle of the box. A circle of radius 3 at data 5 claims 3 px on each
+  // side of its value, measured from data 0 at σ = 0.
+  const one = scopes.solveScope(
+    meta,
+    CONTINUOUS(interval(5, 5), "pinned"),
+    Extent(M.linear(5, 3), M.linear(-5, 3)),
+    400
+  )!;
+  ok(
+    "a one-value domain maps its value to the middle of the box",
+    one.sigma === 0 &&
+      pxOf({ sigma: one.sigma, originPx: one.originPx! }, 5) === 200
+  );
   // Nicing widens only the data part.
   const [niced, nicedClaim] = niceScope(
     CONTINUOUS(interval(-3, 44), "pinned"),

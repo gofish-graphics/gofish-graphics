@@ -25,6 +25,7 @@ import * as Monotonic from "../../util/monotonic";
 import {
   hasOrigin,
   isCONTINUOUS,
+  isOneValue,
   originIs,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
@@ -237,8 +238,15 @@ export class ScopeRegistry {
    * low edge. For a pinned claim with no overhead that is `−σ·min`, the
    * domain's low edge at 0. A scope whose type has no data coordinates
    * (a spread of magnitudes is ordinal) still solves σ from its claim, with no
-   * `originPx`. Returns undefined when there is no claim or it cannot
-   * determine σ (a claim with no σ in it, such as a zero-width domain).
+   * `originPx`.
+   *
+   * A one-value domain (`isOneValue`: a one-point chart, a constant `datum`)
+   * has no width for σ to scale, so no σ fits its claim to the box. Its value
+   * maps to the middle of the box, as d3 and Vega-Lite map a zero-width
+   * linear domain to the middle of the range: σ is 0 and the claim (only
+   * pixels) is centered in the box. Returns undefined when there is no claim
+   * or it cannot determine σ for any other reason (a claim that is only
+   * pixels over a wider type).
    */
   solveScope(
     meta: ScopeMeta,
@@ -247,9 +255,11 @@ export class ScopeRegistry {
     allocated: number
   ): ScopeSolution | undefined {
     if (space === undefined || claim === undefined) return undefined;
-    const sigma = claim.width.inverse(allocated, {
+    const solved = claim.width.inverse(allocated, {
       upperBoundGuess: allocated,
     });
+    const oneValue = solved === undefined && isOneValue(space);
+    const sigma = oneValue ? 0 : solved;
     if (DUMP_SCOPES)
       this.entries.push({
         ...meta,
@@ -259,9 +269,11 @@ export class ScopeRegistry {
         hasMap: hasOrigin(space),
       });
     if (sigma === undefined) return undefined;
+    // Centering slack: 0 when σ fits the claim to the box.
+    const offset = oneValue ? (allocated - claim.width.run(0)) / 2 : 0;
     return {
       sigma,
-      originPx: hasOrigin(space) ? originPxAt(claim, sigma) : undefined,
+      originPx: hasOrigin(space) ? originPxAt(claim, sigma, offset) : undefined,
     };
   }
 

@@ -296,16 +296,12 @@ export const centerOf = <T>(d: Interval<T>): T | undefined =>
   d.min === undefined ? d.center : undefined;
 
 /** The pixel start of a box axis placed by its center: the center through
- *  the axis's scale, less half the box's pixel size. A data center on an axis
- *  with no position scale gives no start, so the parent places the box. */
+ *  the axis's scale, less half the box's pixel size. */
 export const startAtCenter = (
   center: MaybeValue<number>,
   scale: ((x: number) => number) | undefined,
   sizePx: number
-): number | undefined => {
-  const at = computeAesthetic(center, scale, undefined);
-  return at === undefined ? undefined : at - sizePx / 2;
-};
+): number => computeAesthetic(center, scale, undefined)! - sizePx / 2;
 
 /** The pixel start of a box axis `sizePx` pixels long: by its center when it
  *  has one ({@link startAtCenter}), else at its `min` through the axis's

@@ -31,7 +31,7 @@ import {
   type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
-import { scalesWithSigma } from "./extent";
+import { mapsDomain } from "./extent";
 import * as Monotonic from "../util/monotonic";
 import { KeyedDomains } from "./keyedDomains";
 import {
@@ -485,19 +485,24 @@ export async function layout(
     const claim = rootClaims[axis];
     const meta = { kind: "root", rootKey: "root", axis } as const;
     const key =
-      given === undefined && scalesWithSigma(claim)
+      given === undefined && mapsDomain(space, claim)
         ? keyedDomains.axisKey(child, axis, child._underlyingSpace![axis])
         : undefined;
     const below = key === undefined ? undefined : scopes.keyedSigma(key, axis);
+    const allocated = given ?? DEFAULT_CANVAS_SIZE;
     const scope =
       below === undefined
-        ? scopes.solveScope(meta, space, claim, given ?? DEFAULT_CANVAS_SIZE)
+        ? scopes.solveScope(meta, space, claim, allocated)
         : scopes.scopeAt(meta, space, claim, below);
+    // A scope solved against the box fills it (a one-value domain's claim is
+    // centered in it); one at a σ from below is its claim at that σ.
     const px =
       claim === undefined
         ? undefined
         : scope !== undefined
-          ? claim.width.run(scope.sigma)
+          ? below === undefined
+            ? allocated
+            : claim.width.run(scope.sigma)
           : Monotonic.isConstant(claim.width)
             ? claim.width.run(0)
             : undefined;
@@ -509,16 +514,18 @@ export async function layout(
           : (given ?? DEFAULT_CANVAS_SIZE),
     };
   });
-  // The size handed to `child.layout`: a claim with σ in it is data to scale
-  // into the root's size. Any other axis is laid out *unsized*: a box of
+  // The size handed to `child.layout`: a claim that maps a domain
+  // (`mapsDomain`) is data to scale into the root's size. Any other axis is laid out *unsized*: a box of
   // literal size keeps its pixels, marks keep their default sizes, and the
   // operator shrinks to fit. Unsized axes are handed `UNSIZED` (NaN); marks
   // treat a non-finite size as "use my default" (e.g. rect's
   // DEFAULT_RECT_SIZE) via their `Number.isFinite` guards.
   const UNSIZED = NaN;
   const canvas = [w ?? rootSizes[0].px, h ?? rootSizes[1].px] as const;
-  const layoutW = w ?? (scalesWithSigma(niceExtentX) ? canvas[0] : UNSIZED);
-  const layoutH = h ?? (scalesWithSigma(niceExtentY) ? canvas[1] : UNSIZED);
+  const layoutW =
+    w ?? (mapsDomain(niceUnderlyingSpaceX, niceExtentX) ? canvas[0] : UNSIZED);
+  const layoutH =
+    h ?? (mapsDomain(niceUnderlyingSpaceY, niceExtentY) ? canvas[1] : UNSIZED);
   let rootScopes: Size<ScopeSolution | undefined> = [
     rootSizes[0].scope,
     rootSizes[1].scope,

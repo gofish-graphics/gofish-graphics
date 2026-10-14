@@ -384,7 +384,10 @@ For every continuous root axis, `solveScope` solves σ from the axis's size
 claim against the canvas (`claim.width(σ) = canvas`), so pixel overhead such
 as spacing keeps its pixels, and, when the axis has an origin, the pixel of
 data 0 (`originPx`). A pinned axis hands its content the map
-`px(d) = σ·d + originPx`; a free root is placed at `originPx`.
+`px(d) = σ·d + originPx`; a free root is placed at `originPx`. A one-value
+domain (a one-point chart) has no width for σ to scale, so its value maps to
+the middle of the canvas, as in d3 and Vega-Lite: σ is 0 and the claim is
+centered.
 
 ### Pass 8.5: Embedding Resolution
 

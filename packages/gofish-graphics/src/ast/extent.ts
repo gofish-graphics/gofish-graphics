@@ -18,6 +18,7 @@ import {
   isCONTINUOUS,
   niceContinuous,
   axisOver,
+  isOneValue,
   placeBaseline,
   type AxisTicks,
   type CONTINUOUS_TYPE,
@@ -71,6 +72,17 @@ export const impliedExtent = (space: UnderlyingSpace): Extent | undefined => {
  *  it needs no canvas, and a scope has nothing to solve from it. */
 export const scalesWithSigma = (extent: Extent | undefined): extent is Extent =>
   extent !== undefined && !Monotonic.isConstant(extent.width);
+
+/** Whether a scope with type `space` and claim `extent` has a domain to map
+ *  into its box: its claim has σ in it, or its type is one data value
+ *  (`isOneValue`, #1107), which maps to the middle of the box. A claim that is
+ *  only pixels over any other type (content that is all boxes of a literal
+ *  size, each of which already mapped its domain) maps nothing. */
+export const mapsDomain = (
+  space: UnderlyingSpace | undefined,
+  extent: Extent | undefined
+): extent is Extent =>
+  scalesWithSigma(extent) || (extent !== undefined && isOneValue(space));
 
 /** {@link impliedExtent} on both axes. */
 export const impliedExtents = (

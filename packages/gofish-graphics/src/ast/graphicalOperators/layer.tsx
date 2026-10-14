@@ -20,7 +20,7 @@ import {
   isUNDEFINED,
   magnitude,
 } from "../underlyingSpace";
-import { Extent, impliedExtent, scalesWithSigma } from "../extent";
+import { Extent, impliedExtent, mapsDomain } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import type { KeyedDomains } from "../keyedDomains";
 import { isValue } from "../data";
@@ -478,13 +478,13 @@ export const layer = createNodeOperatorSequential(
           // box solves: its content widened to its keyed domain and niced,
           // solved once against the literal size through the registry
           // (`solveFixed`), whose solution `layout` reuses. So the box's 0
-          // sits where its content's does. Without a claim in σ the content
-          // claims what it did.
+          // sits where its content's does. A claim that maps no domain
+          // (`mapsDomain`) claims what it did.
           const session = node.tryGetRenderSession();
           const keyed: KeyedDomains | undefined = session?.keyedDomains;
           const fixedClaim = (axis: 0 | 1, px: number): Extent | undefined => {
             const claim = resolved[axis];
-            if (!scalesWithSigma(claim)) return claim;
+            if (!mapsDomain(t.resolved[axis], claim)) return claim;
             const [space, wide] = keyed?.scope(
               node,
               axis,

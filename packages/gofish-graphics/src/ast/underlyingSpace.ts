@@ -213,6 +213,16 @@ export const hasOrigin = (
 ): space is CONTINUOUS_TYPE =>
   originIs(space, "pinned") || originIs(space, "free");
 
+/** A space with an origin whose data interval is one value (#1107): a
+ *  one-point chart, or every mark at one constant `datum`. It has no width
+ *  for σ to scale, so a scope maps its value to the middle of its box
+ *  (`ScopeRegistry.solveScope`). A domain that includes 0 and any other value
+ *  (a bar) is never one value. */
+export const isOneValue = (
+  space: UnderlyingSpace | undefined
+): space is CONTINUOUS_TYPE =>
+  hasOrigin(space) && space.dataInterval.min === space.dataInterval.max;
+
 /** The axis a space renders over its data interval, one read of its origin
  *  state: a pinned space has data coordinates, so it renders an `"absolute"`
  *  axis; an origin-less one has only differences, so it renders a `"delta"`

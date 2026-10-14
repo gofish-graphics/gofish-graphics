@@ -121,12 +121,12 @@ export const computeAesthetic = (
   scale: ((x: number) => number) | undefined,
   provided: number | undefined
 ): number | undefined => {
-  // A data value on an axis with no position scale has no pixel of its own,
-  // so it gives none and the parent places the shape (as `startAtCenter`
-  // does). An axis has no scale when its scope solves no σ: a constant
-  // (zero-width) domain, such as a one-point chart or the ticks of its axis
-  // (#1107).
-  if (isValue(input) && scale === undefined) return undefined;
+  // Every axis a data value is placed on has a position scale: a scope
+  // solves one for any domain, a one-value domain included (#1107).
+  if (isValue(input) && scale === undefined)
+    throw new Error(
+      "[gofish] a data value was placed on an axis with no position scale"
+    );
   // A datum's pixel offset applies AFTER the scale mapping — "this data
   // position, plus pixels" (`datum(v).offset(px)`).
   return isValue(input)

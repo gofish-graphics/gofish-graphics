@@ -5,7 +5,7 @@
 import { type Size } from "../dims";
 import { isValue } from "../data";
 import { originIs, type UnderlyingSpace } from "../underlyingSpace";
-import { scalesWithSigma, type Extent } from "../extent";
+import { mapsDomain, type Extent } from "../extent";
 import type { AxisMap } from "../domain";
 import { sliceExtent } from "./folds";
 import {
@@ -246,9 +246,13 @@ export function solveLayerScales(
         (handedSigmas[axis] === undefined ||
           (originIs(content, "pinned") && inSlot(axis))));
     const claim = contentExtents[axis];
-    // A claim with no σ in it (content that is only fixed boxes) has
+    // A claim that maps no domain (content that is only fixed boxes) has
     // nothing to solve: the layer inherits.
-    if (sized && Number.isFinite(layerSize[axis]) && scalesWithSigma(claim)) {
+    if (
+      sized &&
+      Number.isFinite(layerSize[axis]) &&
+      mapsDomain(content, claim)
+    ) {
       // A literal size was solved once in the claim walk (`solveFixed`);
       // any other sized node solves here, against the size it is given.
       const solve = (): FixedSolve | undefined => {
