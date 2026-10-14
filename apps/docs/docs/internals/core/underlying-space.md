@@ -2173,11 +2173,14 @@ keeps the whole value: the interval `[start, end)` (its region), its id (its
 start, as text, so `String(cell)` is the key a node gets), its label (the
 partition's `.format(fn)`, else the default: `"0.5–1"`, or the calendar label),
 and, for a calendar cell, its calendar fields, partition and zone. Every
-cell also records the bin that made it (`KeyCell.bin`) and the column it bins
-(`KeyCell.column`, the name `domainCells` in `datumProjection.ts` passes to
-`chainCells`), so an axis can tell levels that partition one value (a year and
-a month of one date) from categories of different columns
-([Axes](/internals/frontend/axes#levels)). Cells are ordered by start.
+cell also records the bin that made it (`KeyCell.bin`). The column the cells
+bin is recorded once, on the ordinal space over them: the field it groups by
+(its title, the split's `by`), so an axis can tell levels that partition one
+value (a year and a month of one date) from categories of different columns
+([Axes](/internals/frontend/axes#levels)). A split says whether its keys have
+an order with its groups (`SplitGroups.hasOrder` from `splitEntries`): cells
+always do, and so do the levels of a column declared ordered. Cells are
+ordered by start.
 
 The cells are defined over the column's **domain**, not over the rows of the
 group being split. `binCells` takes the domain the column's type carries
@@ -2225,7 +2228,9 @@ are one cell. A week is a part of nothing (weeks do not nest in months or
 years) and nothing holds a year, so those stay on the line. A week's parts
 depend on its first day, so a weekday carries a `start`, its reference week
 starts on that day (`REFERENCE_WEEK`), and a weekday is a part of a week
-only when both start on the same day (`CalendarPartition.hasPart`). A
+only when both start on the same day (`CalendarPartition.whyNotAPart`, the
+one is-a-part-of relation, which also needs the outer level's cells to be
+one unit each, and says why when a level is not a part). A
 weekday is a day, so an hour is a part of it (`[Calendar.weekday,
 Calendar.hour]`, the hours of the week). Its part, and the `weekday` field of
 every calendar cell, is the ISO day of the week (1 for Monday), whatever the
@@ -2246,7 +2251,8 @@ each level after the first is a part of the one before it, which has a
 step of 1, so the cells where one cell of each level meets one of the next
 are each one interval, the finest level's cells (the June of 2015 is the
 2015 year met with every June). Its label names every level at once
-(`productLabel`: `"Jun 2015"`). With a first level on the line its cells are
+(`productLabeler`, which resolves its formatter once per levels and zone:
+`"Jun 2015"`). With a first level on the line its cells are
 cells of the line, every one in the range of the domain; with a first level
 that is a part (`[Calendar.month, Calendar.day]`) they are the parts of a
 cycle. A second `bin` op is a **chain** (`chainCells`): it splits each cell

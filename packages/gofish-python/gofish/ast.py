@@ -3010,7 +3010,7 @@ def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
     that takes it. The kinds of each key are the ``Partition`` and
     ``StructBin`` option types, each one tagged union (gofish-ir
     ``BIN_KINDS``). Mirrors JS ``Frontend.checkPartition`` and
-    ``Frontend.checkBin``."""
+    ``Frontend.checkStructBin``."""
     from ._generated import _OPTION_TYPES, _to_wire
 
     own, other = ("Partition", "StructBin") if key == "field" else ("StructBin", "Partition")

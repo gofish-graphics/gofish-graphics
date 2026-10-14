@@ -252,9 +252,10 @@ start, or off a part of a cycle's cell in the reference cycle,
 `CycleCell.ref`; a part of a week is grouped only by a weekday that starts
 the week on the same day). A slot that nests in the partition lies in that
 cell. One that does not, a week over months, is grouped with the month it
-starts in, as a calendar labels its weeks. A partition finer than the slots
-(its cell holding a slot's start is shorter than the slot, a week over
-months) groups nothing, and is an error. An axis with no axis above it on
+starts in, as a calendar labels its weeks. The slots are in order, so each
+slot's cell is found once per run of slots. A partition finer than the
+slots' level, by the levels' nominal lengths, as a chain compares them
+(a week over months), groups nothing, and is an error. An axis with no axis above it on
 its dim (`hasOuterAxis` reads the ancestors' still-set `axis` flags) also
 takes the Calendar entries past its inferred levels, as more levels. Time
 rows and ordinal levels apply their entries through one function,
@@ -525,10 +526,10 @@ difference axis), never off the size claim:
 
   Which levels draw dividers is a question about the data. A level
   **partitions** the value of the level inside it when both bin the same
-  column: a year level over a month level of one date. Each cell records the
-  column it bins (`KeyCell.column`, set where `field(x).bin(...)` builds its
-  cells), so each `OrdinalLevel` of cells knows its column, and two levels
-  compare columns. A chained key's levels and a `Calendar` entry of `levels`
+  column: a year level over a month level of one date. The column cells bin
+  is the field their ordinal space groups by (its title, the split's `by`),
+  so each `OrdinalLevel` of cells knows its column, and two levels compare
+  columns. A chained key's levels and a `Calendar` entry of `levels`
   are over one key, so they always partition; nested splits that bin one
   column (`spread` by `field("date").bin(Calendar.year)`, then by
   `field("date").bin(Calendar.month)`), and numeric bins inside bins, do so

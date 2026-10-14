@@ -30,15 +30,18 @@ class StrategyKind(dict):
         self.__doc__ = factory.__doc__
         self.__wrapped__ = factory
 
+    def _options(self) -> str:
+        """The kind's options, as an error message lists them."""
+        return ", ".join(
+            f"{p}=..." for p in inspect.signature(self._factory).parameters
+        )
+
     def __call__(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         try:
             inspect.signature(self._factory).bind(*args, **kwargs)
         except TypeError as e:
-            options = ", ".join(
-                f"{p}=..." for p in inspect.signature(self._factory).parameters
-            )
             raise TypeError(
-                f"{self._label}: {e}. Its options are {options or 'none'}; "
+                f"{self._label}: {e}. Its options are {self._options() or 'none'}; "
                 f"{self._label} alone is the kind with its defaults."
             ) from None
         return self._factory(*args, **kwargs)
@@ -46,12 +49,9 @@ class StrategyKind(dict):
     def __getattr__(self, name: str) -> Any:
         if name.startswith("__"):
             raise AttributeError(name)
-        options = ", ".join(
-            f"{p}=..." for p in inspect.signature(self._factory).parameters
-        )
         raise AttributeError(
             f"{self._label} has no attribute {name!r}. A kind's options are "
-            f"set by calling it: {self._label}({options})."
+            f"set by calling it: {self._label}({self._options()})."
         )
 
 
