@@ -19,10 +19,13 @@
  *    scope-nesting depth, swept independently of leaf count.
  *  - `axes` — the `scatter` workload with its default axes, so the cost of
  *    axis inference and rendering is tracked as its own number.
+ *  - `grid-axes` — the `grid` workload with its default axes: a chart nested
+ *    in every group, each drawing its own axes, so the cost of axes on by
+ *    default (#1110) across nested charts is tracked too.
  *
- * Every family but `axes` pins `axes: false`. `chart()` draws axes by default
- * (#1110), and that fixed per-chart cost, multiplied by the nested `chart()`
- * per cell in `grid` and `nest`, would swamp the layout work these families
+ * Every other family pins `axes: false`. `chart()` draws axes by default
+ * (#1110), and that per-chart cost, multiplied by the nested `chart()` per
+ * cell in `grid` and `nest`, would swamp the layout work these families
  * exist to measure.
  *
  * This module is imported by the harness Vite server (which aliases
@@ -69,54 +72,52 @@ export const stackFamily: CountFamily = (n) => ({
 const points = (n: number): { x: number; y: number }[] =>
   Array.from({ length: n }, (_, i) => ({ x: i, y: val(i) + (i % 7) }));
 
-/** `n` independently positioned points — posScale over `n` rows. */
-export const scatterFamily: CountFamily = (n) => ({
-  render: (container, { w, h }) =>
-    chart(points(n), { axes: false })
-      .flow(scatter({ x: "x", y: "y" }))
-      .mark(circle({ r: 2 }))
-      .render(container, { w, h }),
-});
+/** `n` independently positioned points — posScale over `n` rows — with or
+ *  without the chart's axes: `axes` minus `scatter` is the axis cost. */
+const scatterWith =
+  (axes: boolean): CountFamily =>
+  (n) => ({
+    render: (container, { w, h }) =>
+      chart(points(n), { axes })
+        .flow(scatter({ x: "x", y: "y" }))
+        .mark(circle({ r: 2 }))
+        .render(container, { w, h }),
+  });
 
-/** The `scatter` workload with default axes — `axes` minus `scatter` is the
- *  axis cost. */
-export const axesFamily: CountFamily = (n) => ({
-  render: (container, { w, h }) =>
-    chart(points(n))
-      .flow(scatter({ x: "x", y: "y" }))
-      .mark(circle({ r: 2 }))
-      .render(container, { w, h }),
-});
-
-/** ⌈√n⌉ groups × ⌈√n⌉ leaves — many branch points, each with many children. */
-export const gridFamily: CountFamily = (n) => {
-  const side = Math.max(1, Math.ceil(Math.sqrt(n)));
-  return {
-    render: (container, { w, h }) => {
-      const data = Array.from({ length: side * side }, (_, k) => ({
-        g: Math.floor(k / side),
-        i: k % side,
-        v: val(k),
-      }));
-      return chart(data, { axes: false })
-        .flow(spread({ by: "g", dir: "x", spacing: 4 }))
-        .mark((d: any) =>
-          chart(d, { axes: false })
-            .flow(spread({ by: "i", dir: "y", spacing: 1 }))
-            .mark(rect({ w: 4, h: 4 }))
-        )
-        .render(container, { w, h });
-    },
+/** ⌈√n⌉ groups × ⌈√n⌉ leaves — many branch points, each with many children
+ *  — with or without every chart's axes: `grid-axes` minus `grid` is the
+ *  axis cost across nested charts. */
+const gridWith =
+  (axes: boolean): CountFamily =>
+  (n) => {
+    const side = Math.max(1, Math.ceil(Math.sqrt(n)));
+    return {
+      render: (container, { w, h }) => {
+        const data = Array.from({ length: side * side }, (_, k) => ({
+          g: Math.floor(k / side),
+          i: k % side,
+          v: val(k),
+        }));
+        return chart(data, { axes })
+          .flow(spread({ by: "g", dir: "x", spacing: 4 }))
+          .mark((d: any) =>
+            chart(d, { axes })
+              .flow(spread({ by: "i", dir: "y", spacing: 1 }))
+              .mark(rect({ w: 4, h: 4 }))
+          )
+          .render(container, { w, h });
+      },
+    };
   };
-};
 
 /** All count-parameterized families, keyed by name. */
 export const countFamilies: Record<string, CountFamily> = {
   spread: spreadFamily,
   stack: stackFamily,
-  scatter: scatterFamily,
-  grid: gridFamily,
-  axes: axesFamily,
+  scatter: scatterWith(false),
+  grid: gridWith(false),
+  axes: scatterWith(true),
+  "grid-axes": gridWith(true),
 };
 
 /**

@@ -16,6 +16,7 @@
 
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
+import { check, items, report } from "./testHelpers";
 
 const {
   chart,
@@ -33,18 +34,6 @@ const {
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
-
-let passed = 0;
-let failed = 0;
-function check(name: string, ok: boolean, detail?: string): void {
-  if (ok) {
-    passed += 1;
-    console.log(`  ok  ${name}`);
-  } else {
-    failed += 1;
-    console.error(`  FAIL ${name}${detail ? ` — ${detail}` : ""}`);
-  }
-}
 
 /** Run `build` and return the thrown error's message, or undefined. */
 async function errorOf(build: () => Promise<unknown>): Promise<string> {
@@ -466,29 +455,26 @@ async function main() {
     );
   }
 
-  console.log("\n# a constant or empty domain renders with the default axes (#1107)");
+  console.log(
+    "\n# a constant or empty domain renders with the default axes (#1107)"
+  );
   {
-    const flat = (d: any): any[] => {
-      const out: any[] = [];
-      const walk = (it: any) => {
-        out.push(it);
-        (it.children ?? []).forEach(walk);
-      };
-      d.items.forEach(walk);
-      return out;
-    };
     // One row: each position axis has a zero-width domain, so its scope
     // solves no σ and has no map. The axes are still drawn.
     let onePoint: any[] = [];
     const onePointErr = await errorOf(async () => {
-      onePoint = flat(
+      onePoint = items(
         await chart([{ id: 0, a: 1, b: 2 }])
           .flow(scatter({ by: "id", x: "a", y: "b" }))
           .mark(circle({ r: 3 }))
           .toDisplayList(SIZE)
       );
     });
-    check("a one-point chart renders with axes", onePointErr === "", onePointErr);
+    check(
+      "a one-point chart renders with axes",
+      onePointErr === "",
+      onePointErr
+    );
     const dot = onePoint.filter((it) => it.kind === "ellipse");
     check(
       "the one point is drawn at a finite place",
@@ -527,8 +513,7 @@ async function main() {
     check("an empty chart renders with axes", emptyErr === "", emptyErr);
   }
 
-  console.log(`\n${passed} passed, ${failed} failed`);
-  if (failed > 0) process.exit(1);
+  report();
 }
 
 main().catch((e) => {

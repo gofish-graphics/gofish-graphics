@@ -25,33 +25,13 @@ import {
   rect as rectMark,
   Schema,
 } from "../lib";
+import { check, items, report, type Item } from "./testHelpers";
 
 declare const process: { exit(code: number): never };
 
-let passed = 0;
-let failed = 0;
-function check(name: string, cond: boolean, detail?: unknown): void {
-  if (cond) {
-    passed++;
-    console.log(`  ok  ${name}`);
-  } else {
-    failed++;
-    console.error(`  FAIL ${name}`, detail ?? "");
-  }
-}
 const near = (a: number | undefined, b: number) =>
   a !== undefined && Math.abs(a - b) < 1e-6;
 
-type Item = { kind: string; x?: number; y?: number; w?: number; h?: number; fill?: string; text?: string };
-const items = (dl: any): Item[] => {
-  const out: Item[] = [];
-  const walk = (it: any) => {
-    if (it.kind !== "group") out.push(it);
-    for (const c of it.children ?? []) walk(c);
-  };
-  dl.items.forEach(walk);
-  return out;
-};
 const byFill = (dl: any, fill: string) =>
   items(dl).filter((i) => i.kind === "rect" && (i as any).style?.fill === fill);
 
@@ -142,7 +122,11 @@ async function main() {
     ]);
     const dl = await toDisplayList(node, { w: 200, h: 50 });
     const [blue] = byFill(dl, "blue");
-    check("the rect beside a fixed box gets the rest (σ = 2)", near(blue?.w, 100), blue);
+    check(
+      "the rect beside a fixed box gets the rest (σ = 2)",
+      near(blue?.w, 100),
+      blue
+    );
   }
   {
     // Rendered with no canvas width, a fixed box needs no canvas: it is its
@@ -222,7 +206,7 @@ async function main() {
     );
     check(
       "a layered coord chart keeps its padding",
-      shapes(alone) === shapes(layered),
+      shapes(alone) === shapes(layered)
     );
   }
 
@@ -369,8 +353,7 @@ async function main() {
     );
   }
 
-  console.log(`\n${passed} passed, ${failed} failed`);
-  if (failed > 0) process.exit(1);
+  report();
 }
 
 main().catch((e) => {
