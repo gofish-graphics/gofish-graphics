@@ -111,18 +111,26 @@ export const table = createOperator<any, TableOptions>(Table, {
     const cols = splitEntries(by.x, d);
     const rows = splitEntries(by.y, d);
     // One pass over the rows: each row's row key, then each column's rows
-    // into their cells, which are made first, every one, in row-major order.
-    const cell = (colKey: unknown, rowKey: unknown) =>
-      `${String(colKey)}-${String(rowKey)}`;
+    // into their cells, which are made first, every one, in row-major order,
+    // each keyed by its place in that order. A cell is found by its column
+    // key and then its row key, never by a string of the two: keys may hold
+    // any text ("6-15", "-5").
     const rowOf = new Map<unknown, unknown>();
     for (const [rowKey, rowRows] of rows)
       for (const r of rowRows) rowOf.set(r, rowKey);
-    const entries = new Map<string | number, any[]>();
+    const cellOf = new Map<unknown, Map<unknown, any[]>>(
+      [...cols.keys()].map((colKey) => [colKey, new Map()])
+    );
+    const entries = new Map<number, any[]>();
     for (const rowKey of rows.keys())
-      for (const colKey of cols.keys()) entries.set(cell(colKey, rowKey), []);
+      for (const colKey of cols.keys()) {
+        const cell: any[] = [];
+        cellOf.get(colKey)!.set(rowKey, cell);
+        entries.set(entries.size, cell);
+      }
     for (const [colKey, colRows] of cols)
       for (const r of colRows)
-        if (rowOf.has(r)) entries.get(cell(colKey, rowOf.get(r)))!.push(r);
+        if (rowOf.has(r)) cellOf.get(colKey)!.get(rowOf.get(r))!.push(r);
     return {
       entries,
       layoutOpts: {

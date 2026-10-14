@@ -1529,6 +1529,25 @@ async function main() {
       tableCells.length === 14,
       `${tableCells.length}`
     );
+    // Keys may hold "-" (a part of a cycle "6-15", a negative bin "-5"): a
+    // cell is its column and its row, never a string of the two.
+    const dashCells = rectsOf(
+      await chart(
+        [
+          { c: "a-b", r: "c", v: 1 },
+          { c: "a", r: "b-c", v: 2 },
+        ],
+        { axes: false }
+      )
+        .flow(table({ by: { x: "c", y: "r" } }))
+        .mark(rect({ w: 10, h: 10 }))
+        .toDisplayList({ w: 200, h: 200 })
+    ).map((r: any) => (r.datum ?? []).map((d: any) => d.v));
+    check(
+      'a table whose keys hold "-" keeps every cell, each row in its own',
+      JSON.stringify(dashCells) === JSON.stringify([[1], [], [], [2]]),
+      JSON.stringify(dashCells)
+    );
 
     console.log("\n# partition over the parts of a cycle");
     const cycleErr = async (step: any) =>
