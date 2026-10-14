@@ -146,10 +146,12 @@ export class ScopeRegistry {
    *  claim walk ({@link solveFixed}), with the keyed domain it maps. */
   private fixed = new Map<object, [FixedSolve?, FixedSolve?]>();
 
-  /** Clear the scope dump — called before the root's claim walk so a second
-   *  layout pass does not accumulate stale entries. */
+  /** Clear the scope dump and the literal sizes' solves — called before the
+   *  root's claim walk, which solves them again, so a second layout pass
+   *  reads no stale solve, and a node dropped from the tree leaves none. */
   reset(): void {
     this.entries = [];
+    this.fixed.clear();
   }
 
   /**
