@@ -8,7 +8,7 @@
  * A PARTITION cuts a line (numbers, or instants on a calendar) into cells that
  * do not overlap. It is one of:
  *
- *  - a Calendar value (`Calendar.month`, `Calendar.hour.every(6)`,
+ *  - a Calendar value (`Calendar.month`, `Calendar.hour({ every: 6 })`,
  *    `Calendar.week({ start: "sunday" })`, calendar.ts), for a time column;
  *  - `Bin.step(size)`: cells `size` wide, aligned to multiples of `size`;
  *  - `Bin.thresholds(n)`: about `n` cells, with the step a numeric axis with
