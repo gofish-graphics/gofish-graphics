@@ -846,7 +846,9 @@ function elaborationsFor(
   timeAxes: [boolean, boolean];
 } {
   const space = node._underlyingSpace;
-  if (!space)
+  const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
+  // A node that draws no axis elaborates nothing.
+  if (!space || (!owns(0) && !owns(1)))
     return {
       constrained: [],
       refBased: [],
@@ -867,9 +869,9 @@ function elaborationsFor(
       "axis elaboration: the keyed domains are built by layout() before chrome"
     );
   // Per dim, computed once: the axis's space widened to its keyed domain
-  // (`spaceFor`), and that domain widened and niced, the axis's scope
+  // (`wide`), and that domain widened and niced, the axis's scope
   // (`KeyedDomains.scope`, the widen-then-nice every σ solve over the domain
-  // applies, so the ticks and the marks agree by construction). `spaceFor`
+  // applies, so the ticks and the marks agree by construction). `wide`
   // stays un-niced: a time axis picks its tick partition from it, the same
   // input the nicing picked its partition from.
   const placed = ([0, 1] as const).map((dim) =>
@@ -883,15 +885,15 @@ function elaborationsFor(
         keyed.domainOf(node, dim, placed[dim], true)
       )[0]
   );
-  const spaceFor = (dim: 0 | 1): UnderlyingSpace => wide[dim];
-  const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
   // Niced [min, max] per POSITION dim, computed ONCE: it feeds both that
   // dim's own axis line/ticks (when the node owns it) and the other axis's
   // `crossFloor` (the plot corner), so a nicing change can't skew the corner.
-  // A DIFFERENCE dim's floor is 0. The floor is read on every dim, owned or
-  // not: a facet panel that owns only its y axis still seats that axis at the
-  // floor of the shared x domain an ancestor draws (#753), since the keyed
-  // scope is the same widen-then-nice whichever node draws the axis.
+  // A DIFFERENCE dim's floor is 0. An owned dim reads its own nice and the
+  // other dim's floor, so a node that owns any axis computes both dims,
+  // owned or not: a facet panel that owns only its y axis still seats that
+  // axis at the floor of the shared x domain an ancestor draws (#753), since
+  // the keyed scope is the same widen-then-nice whichever node draws the
+  // axis.
   const nices: ([number, number] | undefined)[] = [undefined, undefined];
   const floors: (number | undefined)[] = [undefined, undefined];
   // What each owned axis ticks at, as `resolveAxes` stamped it: the same
@@ -900,7 +902,7 @@ function elaborationsFor(
   const ticksFor = (dim: 0 | 1): AxisTicks =>
     node.axisDemand[dim] ?? DEFAULT_AXIS_TICKS;
   for (const dim of [0, 1] as (0 | 1)[]) {
-    const s = spaceFor(dim);
+    const s = wide[dim];
     if (axisOver(s) === "absolute") {
       const niced = keyed.scope(
         node,
@@ -928,7 +930,7 @@ function elaborationsFor(
   const crossDirection = (dim: 0 | 1): AxisDirection =>
     dim === 0 ? wrapperDirection(node) : 1;
   const axisSide = (dim: 0 | 1): "start" | "end" =>
-    sides[dim] ?? defaultAxisSide(dim, spaceFor(dim), crossDirection(dim));
+    sides[dim] ?? defaultAxisSide(dim, wide[dim], crossDirection(dim));
   // `tier` is 0 for a continuous/difference axis (always single-tier) or the
   // bubbled-up ordinal tier index (0 = innermost) for an ordinal one. Returns
   // the full hanging-point descriptor (see `LabelRotation`), not just the
@@ -950,7 +952,7 @@ function elaborationsFor(
   const outTimeAxes: [boolean, boolean] = [...timeAxes];
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
-    const s = spaceFor(dim);
+    const s = wide[dim];
     const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
     const kind = axisOver(s);
