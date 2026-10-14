@@ -346,6 +346,23 @@ async function main() {
     );
   }
 
+  console.log("\n# a column's domain is computed, never declared");
+  {
+    // The wire form of a schema is a record, so nothing but this check
+    // stops one from carrying a domain: declaring one is not supported yet.
+    const declared = await errorOf(() =>
+      applySchema([{ v: 1 }, { v: 2 }], {
+        v: { HasDomain: { lo: 0, hi: 10 } },
+      } as any)
+    );
+    check(
+      "a schema record with HasDomain is a loud error",
+      declared?.includes('schema: column "v" declares HasDomain') === true &&
+        declared.includes("not supported yet"),
+      declared
+    );
+  }
+
   console.log("\n# HasMidpoint needs HasOrder and a midpoint on the order");
   {
     check("Schema has no `diverging` factory", !("diverging" in Schema));

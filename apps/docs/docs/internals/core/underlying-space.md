@@ -2055,10 +2055,9 @@ same record, so a split leaf holds one group's rows and its column still has
 the domain of the whole data. A chart over a selection
 (`chart(selectAll(...))`) types a list of refs, so `ChartBuilder` passes
 `applySchema` the rows the refs stand for (`rowsReached`), and the domain is
-over those. A `schema` record that gives a column a domain
-(`{ HasDomain: { lo, hi } }`, its wire form; no builder writes one) stands in
-place of the computed one, and `columnTypeOf` checks that it is two finite
-numbers, `lo` at or below `hi`.
+over those. Declaring a domain is not supported yet: a `schema` record that
+gives a column one (`{ HasDomain: { lo, hi } }`, which no builder writes) is
+a loud error in `columnTypeOf`.
 
 **Domains are types.** A column's domain is part of its type, decided where
 the data is typed, so a subset keeps it. A group-by or a filter picks out

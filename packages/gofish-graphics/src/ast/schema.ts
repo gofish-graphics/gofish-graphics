@@ -262,8 +262,11 @@ export const Schema = {
 };
 
 /** What `chart`'s `schema` option takes per column: a builder, or the record
- *  it writes (the wire form). */
-export type SchemaEntry = ColumnSchema<ColumnType> | ColumnType;
+ *  it writes (the wire form). A column's domain ({@link HasDomain}) is
+ *  computed from its values; declaring one is not supported yet. */
+export type SchemaEntry =
+  | ColumnSchema<ColumnType>
+  | Omit<ColumnType, "HasDomain">;
 
 /** The record a schema entry stands for, checked for the rules the builder
  *  enforces (a record from the wire, as Python sends it, has no types): the
@@ -274,8 +277,15 @@ export type SchemaEntry = ColumnSchema<ColumnType> | ColumnType;
  *  it, with the same check `.diverging()` runs. */
 export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   const who = `schema: column "${column}"`;
-  const { HasUnit: unit, ...rest } =
-    entry instanceof ColumnSchema ? entry.type : entry;
+  const record: ColumnType = entry instanceof ColumnSchema ? entry.type : entry;
+  if (record.HasDomain !== undefined)
+    throw new Error(
+      `${who} declares HasDomain ${JSON.stringify(record.HasDomain)}, but ` +
+        `declaring a column's domain is not supported yet: a column's ` +
+        `domain is computed from its values. Drop HasDomain from the ` +
+        `schema.`
+    );
+  const { HasUnit: unit, ...rest } = record;
   const type: ColumnType =
     rest.HasCalendar !== undefined
       ? { ...Schema.time(rest.HasCalendar).type, ...rest }
@@ -285,7 +295,6 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
     type.HasUnit = unit;
   }
   checkLevelsFit(who, type);
-  checkDomain(who, type);
   if (type.HasMidpoint === undefined) return type;
   if (!type.HasOrder) {
     throw new Error(
@@ -296,19 +305,6 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   }
   checkMidpointOnOrder(type.HasOrder.levels, type.HasMidpoint.at);
   return type;
-}
-
-/** The rule that a domain a record gives is an interval: two finite numbers,
- *  `lo` at or below `hi`. */
-function checkDomain(who: string, type: ColumnType): void {
-  const d = type.HasDomain;
-  if (d === undefined) return;
-  const finite = (v: unknown) => typeof v === "number" && Number.isFinite(v);
-  if (!finite(d.lo) || !finite(d.hi) || d.lo > d.hi)
-    throw new Error(
-      `${who} has the domain ${JSON.stringify(d)}, which is not two finite ` +
-        `numbers lo <= hi.`
-    );
 }
 
 /** The one-unit rule: a column has one unit, so a column type that already
@@ -444,8 +440,8 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
  * the rows typed here, or, for a list of refs (`chart(selectAll(...))`), in
  * `reached`, the rows they stand for. So the domain is decided once, here,
  * for every split after it; a `derive`'s result gets its own, and never its
- * input's. A domain `schema` gives a column (its wire form,
- * `{ HasDomain: { lo, hi } }`) stands in place of the computed one.
+ * input's. A `schema` that declares a domain is an error
+ * ({@link columnTypeOf}): declaring one is not supported yet.
  *
  * It does not check the values against an order: a value outside an order is
  * an error where the order is used (`orderByLevels`), so a `filter` in the
@@ -538,10 +534,8 @@ export async function applySchema<T>(
       return copy as T;
     });
   }
-  for (const [column, domain] of columnDomains(reached ?? out)) {
-    if (types[column]?.HasDomain === undefined)
-      types[column] = { ...types[column], HasDomain: domain };
-  }
+  for (const [column, domain] of columnDomains(reached ?? out))
+    types[column] = { ...types[column], HasDomain: domain };
   return Object.keys(types).length === 0 ? out : setColumnTypes(out, types);
 }
 
