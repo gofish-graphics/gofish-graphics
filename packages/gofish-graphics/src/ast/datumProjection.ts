@@ -33,18 +33,11 @@ import {
 } from "./data";
 import {
   getFieldOps,
+  binStepsOf,
   normalizeNotSupportedError,
   type FieldOp,
 } from "./fieldExpr";
-import {
-  chainCells,
-  checkBinStep,
-  Cell,
-  CycleCell,
-  DEFAULT_PARTITION,
-  KeyCell,
-  type Cells,
-} from "./cells";
+import { chainCells, Cell, CycleCell, KeyCell, type Cells } from "./cells";
 import {
   columnType,
   getColumnTypes,
@@ -184,6 +177,12 @@ export type SplitBy =
  *  for a binned struct (`struct({ x, y }).bin(b)`). A cell stands for its id
  *  (`String(cell)`). */
 export type SplitKey = string | number | KeyCell;
+
+/** The groups of a split, in order, keyed by their key, and whether the
+ *  keys have an order (`HasOrder`): the column the key names is declared
+ *  ordered, or the key is binned (cells are ordered by nature). An operator
+ *  that folds the groups into an ordinal space reads the order here. */
+export type SplitGroups<T> = Map<SplitKey, T[]> & { readonly hasOrder?: true };
 
 /**
  * The mutable cell `ChartBuilder` writes the computed default split/travel
@@ -409,13 +408,10 @@ function domainCells(
   const domain = domainOf(d, name, where);
   const build = () =>
     chainCells(
-      binOps.map((op) =>
-        checkBinStep(op.partition ?? DEFAULT_PARTITION, where)
-      ),
+      binStepsOf(binOps, where),
       domain,
       columnType(d, name)?.HasCalendar?.zone,
-      where,
-      name
+      where
     );
   return domain === undefined
     ? build()
@@ -476,9 +472,13 @@ function binKey(
   const collapse =
     (cellsOf: (r: unknown, add: (c: KeyCell) => void) => void) =>
     (r: unknown): KeyCell | undefined => {
-      const seen = new Set<KeyCell>();
-      cellsOf(r, (c) => seen.add(c));
-      return seen.size === 1 ? [...seen][0] : undefined;
+      let first: KeyCell | undefined;
+      let mixed = false;
+      cellsOf(r, (c) => {
+        if (first === undefined) first = c;
+        else if (c !== first) mixed = true;
+      });
+      return mixed ? undefined : first;
     };
   if (isStruct(by)) {
     const { x, y } = by.fields;
@@ -648,12 +648,13 @@ export const splitByOf = (by: SplitBy | undefined): SplitBy => by ?? chunk(1);
  * No `by` is a split by row identity ({@link splitByOf}).
  * Central helper so spread/group/scatter share one split+ops pipeline —
  * `by`-string/function callers get plain `Map.groupBy` behavior unchanged
- * (they carry no ops).
+ * (they carry no ops). The groups say whether their keys have an order
+ * ({@link SplitGroups}).
  */
 export function splitEntries<T extends Record<string, any>>(
   byOpt: SplitBy | undefined,
   d: T[]
-): Map<SplitKey, T[]> {
+): SplitGroups<T> {
   const by = splitByOf(byOpt);
   const ops = getFieldOps(by);
   let rows = d;
@@ -675,11 +676,13 @@ export function splitEntries<T extends Record<string, any>>(
   // `schema` declares it ordered (HasOrder). The ops below reorder from
   // there.
   const binned = binKey(by, d);
+  const column = fieldNameOf(by);
+  const ordered =
+    binned !== undefined || columnType(d, column)?.HasOrder !== undefined;
   let entries: Map<SplitKey, T[]>;
   if (binned !== undefined) entries = binEntries(binned, rows);
   else {
     entries = Map.groupBy(rows, splitKeyFn(by, d) as (r: T) => SplitKey);
-    const column = fieldNameOf(by);
     const type = columnType(d, column);
     if (type?.HasOrder) {
       const keys = orderByLevels(column!, type.HasOrder, [...entries.keys()]);
@@ -708,7 +711,9 @@ export function splitEntries<T extends Record<string, any>>(
         throw normalizeNotSupportedError();
     }
   }
-  return entries;
+  return ordered
+    ? Object.assign(entries, { hasOrder: true as const })
+    : entries;
 }
 
 /** Which axes a scatter-family opts object positions: `x`/`y` true when a

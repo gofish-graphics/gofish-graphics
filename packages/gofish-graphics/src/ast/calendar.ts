@@ -193,21 +193,25 @@ const LABEL_FORMAT: Record<
 const LABEL_LOCALE = "en-US";
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
+
+/** The `Intl.DateTimeFormat` in en-US ({@link LABEL_LOCALE}) with `options`
+ *  in `zone`, made once per `name` (which names the options) and zone. */
 function formatter(
-  unit: Exclude<CalendarUnit, "quarter">,
+  name: string,
+  options: Intl.DateTimeFormatOptions,
   zone: string
 ): Intl.DateTimeFormat {
-  const key = `${unit}|${zone}`;
+  const key = `${name}|${zone}`;
   let f = formatters.get(key);
   if (f === undefined) {
-    f = new Intl.DateTimeFormat(LABEL_LOCALE, {
-      ...LABEL_FORMAT[unit],
-      timeZone: zone,
-    });
+    f = new Intl.DateTimeFormat(LABEL_LOCALE, { ...options, timeZone: zone });
     formatters.set(key, f);
   }
   return f;
 }
+
+/** The quarter (1 to 4) that the month `month` (1 to 12) is in. */
+const quarterOf = (month: number): number => Math.floor((month - 1) / 3) + 1;
 
 /** One cell of a partition: the instants `[start, end)` (epoch ms, UTC), the
  *  level it belongs to (`unit`), and the calendar fields of its start in the
@@ -243,6 +247,30 @@ export type CalendarCell = {
 /** A custom label for a partition's cells (`Calendar.<unit>.format(fn)`). */
 export type CellFormat = (cell: CalendarCell) => string;
 
+/** `fn`, checked to be a function of the cell, for `partition.format(fn)`:
+ *  one check for every partition with a `.format` (a Calendar value, and
+ *  `Bin.step` and `Bin.thresholds`, cells.ts). */
+export function checkFormat<F>(partition: object, fn: unknown): F {
+  if (typeof fn !== "function")
+    throw new Error(
+      `${String(partition)}.format: expected a function of the cell, ` +
+        `(cell) => string.`
+    );
+  return fn as F;
+}
+
+/** The loud error for the wire form of a partition with a `.format(fn)`,
+ *  which has none: `key` is the index `JSON.stringify` passes for an entry
+ *  of a list (an axis's `levels`), named in the message. */
+export function noWireForm(partition: object, key?: string): Error {
+  const row = key !== undefined && key !== "" ? `[${key}]: ` : "";
+  return new Error(
+    `${row}${String(partition)} has no wire form: its format is a JS ` +
+      `function, which cannot be serialized (to Python or the IR). Drop the ` +
+      `.format(...) to use the default labels.`
+  );
+}
+
 const ISO_DOW: Record<WeekStart, number> = { monday: 1, sunday: 7 };
 
 /** The calendar fields of the cell of level `unit` that starts at `s` and
@@ -257,7 +285,7 @@ export function fieldsOf(
     end,
     unit,
     year: s.year,
-    quarter: Math.floor((s.month - 1) / 3) + 1,
+    quarter: quarterOf(s.month),
     month: s.month,
     week: s.weekOfYear!,
     day: s.day,
@@ -301,47 +329,40 @@ export function cycleFields(
   return f;
 }
 
-const partFormatters = new Map<string, Intl.DateTimeFormat>();
-
 /**
- * The label of a cell named by several levels at once, the instant `t` read
+ * The labels of cells named by several levels at once, the instant `t` read
  * in `zone`: each level writes its own field (`PART_FORMAT`), and
  * `Intl.DateTimeFormat` in en-US puts them in order, so a product of a year
  * and a month reads "Jun 2015", and of a month and a day "Jun 15". A
  * quarter has no Intl field: it comes first, "Q2 2015". One level alone is
- * a part of its cycle: "Jun", "15", "12 AM", "05".
+ * a part of its cycle: "Jun", "15", "12 AM", "05". The formatter is
+ * resolved once, for every cell labeled after.
  */
-export function productLabel(
+export function productLabeler(
   levels: readonly CalendarPartition[],
-  t: number,
   zone: string
-): string {
+): (t: number) => string {
   const units = levels.map((p) => p.unit);
   const intlUnits = units.filter((u) => u !== "quarter");
-  let text = "";
-  if (intlUnits.length > 0) {
-    const key = `${intlUnits.join(",")}|${zone}`;
-    let f = partFormatters.get(key);
-    if (f === undefined) {
-      const opts: Intl.DateTimeFormatOptions = { timeZone: zone };
-      for (const u of intlUnits) Object.assign(opts, PART_FORMAT[u]);
-      f = new Intl.DateTimeFormat(LABEL_LOCALE, opts);
-      partFormatters.set(key, f);
+  const options: Intl.DateTimeFormatOptions = {};
+  for (const u of intlUnits) Object.assign(options, PART_FORMAT[u]);
+  const f =
+    intlUnits.length > 0
+      ? formatter(`parts:${intlUnits.join(",")}`, options, zone)
+      : undefined;
+  // Intl writes a minute or a second alone without its leading zero.
+  const pad =
+    intlUnits.length === 1 && (units[0] === "minute" || units[0] === "second");
+  const quarter = units.includes("quarter");
+  return (t) => {
+    let text = f === undefined ? "" : f.format(t);
+    if (pad) text = text.padStart(2, "0");
+    if (quarter) {
+      const q = `Q${quarterOf(zoned(t, zone).month)}`;
+      text = text === "" ? q : `${q} ${text}`;
     }
-    text = f.format(t);
-    // Intl writes a minute or a second alone without its leading zero.
-    if (
-      intlUnits.length === 1 &&
-      (units[0] === "minute" || units[0] === "second")
-    )
-      text = text.padStart(2, "0");
-  }
-  if (units.includes("quarter")) {
-    const month = zoned(t, zone).month;
-    const q = `Q${Math.floor((month - 1) / 3) + 1}`;
-    text = text === "" ? q : `${q} ${text}`;
-  }
-  return text;
+    return text;
+  };
 }
 
 // ── Partitions ────────────────────────────────────────────────────────────
@@ -363,19 +384,8 @@ export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
      *  form. */
     readonly formatCell?: CellFormat
   ) {
-    if (!Number.isInteger(step) || step < 1) {
-      throw new Error(
-        `Calendar.${unit}({ every: ${String(step)} }): the step must be a ` +
-          `whole number of ${unit}s, 1 or more.`
-      );
-    }
-    if (unit === "weekday" && step !== 1) {
-      throw new Error(
-        `Calendar.weekday({ every: ${String(step)} }): a weekday is one day ` +
-          `of the week, so it has no steps. For cells of several days, use ` +
-          `Calendar.day({ every: ${String(step)} }).`
-      );
-    }
+    // The kinds and their options are checked where a Calendar value is
+    // made (`calendarPartition`, against `STRATEGIES`).
     this.start = hasStart(unit) ? (start ?? "monday") : undefined;
   }
 
@@ -395,13 +405,12 @@ export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
    *  String(c.year))`. JS only: a function cannot cross to Python, so a
    *  partition with a format has no wire form. */
   format(fn: CellFormat): CalendarPartition<U> {
-    if (typeof fn !== "function") {
-      throw new Error(
-        `${String(this)}.format: expected a function of the cell, ` +
-          `(cell) => string.`
-      );
-    }
-    return new CalendarPartition(this.unit, this.step, this.start, fn);
+    return new CalendarPartition(
+      this.unit,
+      this.step,
+      this.start,
+      checkFormat<CellFormat>(this, fn)
+    );
   }
 
   /** Whether `other` cuts the time line into the same cells: the same
@@ -432,16 +441,35 @@ export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
     return CYCLE[this.unit];
   }
 
-  /** Whether `next` is a part of one cell of this level, so it can follow
-   *  this level in a product or in a chain over a cycle: its cycle is this
-   *  level's unit (a month is a part of a year). A weekday is a day, so its
-   *  parts are a day's (an hour of a weekday); and a weekday is a part of a
-   *  week only when both start on the same day. */
-  hasPart(next: CalendarPartition): boolean {
+  /** Why `next` is not a part of one cell of this level, or undefined
+   *  when it is, so it can follow this level in a product, in a chain over a
+   *  cycle, or as an axis level over parts of this level's cycle. It is a
+   *  part when its cycle is this level's unit (a month is a part of a year;
+   *  a weekday is a day, so its parts are a day's: an hour of a weekday), a
+   *  weekday is a part of a week only when both start on the same day, and
+   *  this level's cells are one unit each, so the parts of one cell are one
+   *  interval. */
+  whyNotAPart(next: CalendarPartition): string | undefined {
     const unit = this.unit === "weekday" ? "day" : this.unit;
-    return (
-      next.cycle === unit && (unit !== "week" || next.start === this.start)
-    );
+    if (next.cycle === undefined)
+      return (
+        `${String(next)} is a part of no larger level (weeks do not nest ` +
+        `in months or years, and nothing holds a year)`
+      );
+    if (next.cycle !== unit)
+      return `${String(next)} is a part of a ${next.cycle}, not of a ${unit}`;
+    if (unit === "week" && next.start !== this.start)
+      return (
+        `${String(next)} is a part of a week that starts on ${next.start}, ` +
+        `and ${String(this)} starts on ${this.start}: give both the same ` +
+        `start`
+      );
+    if (this.step !== 1)
+      return (
+        `${String(this)} has ${this.step} ${this.unit}s in a cell, so the ` +
+        `${next.unit}s of one cell are not one interval`
+      );
+    return undefined;
   }
 
   /** The part of its cycle unit that the instant `z` falls in: its level's
@@ -450,8 +478,13 @@ export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
    *  April; 1 to 4 for a quarter; the ISO day of the week, 1 for Monday to 7
    *  for Sunday, for a weekday). */
   part(z: TemporalNS.ZonedDateTime): number {
-    const s = this.floor(z);
-    if (this.unit === "quarter") return Math.floor((s.month - 1) / 3) + 1;
+    return this.partAt(this.floor(z));
+  }
+
+  /** The part of its cycle unit that the cell starting at `s` is (see
+   *  {@link part}): `s` is already a cell start. */
+  partAt(s: TemporalNS.ZonedDateTime): number {
+    if (this.unit === "quarter") return quarterOf(s.month);
     if (this.unit === "weekday") return s.dayOfWeek;
     return s[
       this.unit as Exclude<CalendarUnit, "quarter" | "week" | "weekday">
@@ -465,7 +498,7 @@ export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
    *  reference cycle (UTC, {@link referencePeriod}). */
   partLabel(cell: CalendarCell, t: number): string {
     if (this.formatCell !== undefined) return this.formatCell(cell);
-    return productLabel([this], t, "UTC");
+    return productLabeler([this], "UTC")(t);
   }
 
   /** The level and step the cell math runs on: a quarter is 3 months and
@@ -547,21 +580,18 @@ export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
   label(cell: CalendarCell, zone: string): string {
     if (this.formatCell !== undefined) return this.formatCell(cell);
     if (this.unit === "quarter") return `Q${cell.quarter}`;
-    return formatter(this.unit, zone).format(cell.start);
+    return formatter(
+      this.unit,
+      LABEL_FORMAT[this.unit as Exclude<CalendarUnit, "quarter">],
+      zone
+    ).format(cell.start);
   }
 
   /** The wire form. A partition with a `.format(fn)` has none (a loud
    *  error): `key` is the index `JSON.stringify` passes for an entry of a
    *  list (an axis's `levels`). */
   toJSON(key?: string): CalendarJSON {
-    if (this.formatCell !== undefined) {
-      const row = key !== undefined && key !== "" ? `[${key}]: ` : "";
-      throw new Error(
-        `${row}${String(this)} has no wire form: its format is a JS ` +
-          `function, which cannot be serialized (to Python or the IR). ` +
-          `Drop the .format(...) to use the default labels.`
-      );
-    }
+    if (this.formatCell !== undefined) throw noWireForm(this, key);
     return {
       kind: this.unit,
       // A weekday has no steps, so no `every` on the wire.
@@ -599,15 +629,13 @@ export function describe(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(describe).join(", ")}]`;
   if (
     value !== null &&
-    (typeof value === "object" || Frontend.isCallableValue(value)) &&
-    typeof value.toString === "function" &&
-    value.toString !== Object.prototype.toString
-  )
-    return String(value);
-  if (
-    value !== null &&
     (typeof value === "object" || Frontend.isCallableValue(value))
   ) {
+    if (
+      typeof value.toString === "function" &&
+      value.toString !== Object.prototype.toString
+    )
+      return String(value);
     const fields = Object.entries(value).map(
       ([k, v]) => `${k}: ${describe(v)}`
     );

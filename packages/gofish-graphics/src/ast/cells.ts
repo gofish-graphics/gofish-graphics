@@ -43,12 +43,14 @@ import type { Temporal as TemporalNS } from "temporal-polyfill";
 import type { HasDomain } from "./schema";
 import {
   CalendarPartition,
+  checkFormat,
   cycleFields,
   describe,
   fieldsOf,
   fromWire,
+  noWireForm,
   nominalMs,
-  productLabel,
+  productLabeler,
   referencePeriod,
   zoned,
   type CalendarUnit,
@@ -86,27 +88,10 @@ abstract class NumberBin {
   /** The builder spelling, `Bin.step(0.5)`, for error messages. */
   protected abstract spelling(): string;
 
-  /** `fn`, checked to be a function of the cell, for `.format(fn)`. */
-  protected checkFormat(fn: unknown): NumberCellFormat {
-    if (typeof fn !== "function") {
-      throw new Error(
-        `${String(this)}.format: expected a function of the cell, ` +
-          `(cell) => string.`
-      );
-    }
-    return fn as NumberCellFormat;
-  }
-
   /** The wire form. A partition with a `.format(fn)` has none (a loud
-   *  error). */
-  toJSON(): Frontend.FieldBinIR {
-    if (this.#format !== undefined) {
-      throw new Error(
-        `field(...).bin(${String(this)}) has no wire form: its format is a ` +
-          `JS function, which cannot be serialized (to Python or the IR). ` +
-          `Drop the .format(...) to use the default labels.`
-      );
-    }
+   *  error), as for a Calendar value. */
+  toJSON(key?: string): Frontend.FieldBinIR {
+    if (this.#format !== undefined) throw noWireForm(this, key);
     return this.wire();
   }
 
@@ -130,7 +115,7 @@ export class StepBin extends NumberBin {
   /** The same cells, labeled by `fn`, a function of the cell. JS only: a
    *  partition with a format has no wire form. */
   format(fn: NumberCellFormat): StepBin {
-    return new StepBin(this.size, this.checkFormat(fn));
+    return new StepBin(this.size, checkFormat<NumberCellFormat>(this, fn));
   }
 
   protected wire(): Frontend.FieldBinIR {
@@ -156,7 +141,10 @@ export class ThresholdsBin extends NumberBin {
   /** The same cells, labeled by `fn`, a function of the cell. JS only: a
    *  partition with a format has no wire form. */
   format(fn: NumberCellFormat): ThresholdsBin {
-    return new ThresholdsBin(this.thresholds, this.checkFormat(fn));
+    return new ThresholdsBin(
+      this.thresholds,
+      checkFormat<NumberCellFormat>(this, fn)
+    );
   }
 
   protected wire(): Frontend.FieldBinIR {
@@ -176,7 +164,7 @@ export type NumberPartition = StepBin | ThresholdsBin;
 export type Partition = CalendarPartition | NumberPartition;
 
 /** A partition's wire form, one tagged union: a Calendar value's
- *  (`{ kind: "month", step? }`, `{ kind: "week", step?, start? }`), or a
+ *  (`{ kind: "month", every? }`, `{ kind: "week", every?, start? }`), or a
  *  numeric partition's (`{ kind: "step", size }`,
  *  `{ kind: "thresholds", thresholds }`). */
 export type PartitionJSON = Frontend.PartitionIR;
@@ -207,11 +195,6 @@ export abstract class KeyCell {
    *  `[Calendar.year, Calendar.month]`, `Bin.step(0.5)`): an axis names its
    *  levels with it. */
   declare readonly bin?: string;
-  /** The column the cell bins (`"date"` for `field("date").bin(...)`): the
-   *  levels of two keys are a partition of one value when their cells bin
-   *  the same column (a year and a month of one date), and an axis divides
-   *  their runs only then (axes/elaborate.tsx). */
-  declare readonly column?: string;
 
   toString(): string {
     return this.id;
@@ -249,8 +232,7 @@ export class Cell extends RegionCell {
     readonly label: string,
     readonly calendar?: CalendarCellInfo,
     readonly parent?: Cell,
-    readonly bin?: string,
-    readonly column?: string
+    readonly bin?: string
   ) {
     super();
   }
@@ -307,8 +289,7 @@ export class CycleCell extends KeyCell {
      *  parts reads which group each part falls in off it. */
     readonly ref: readonly [number, number],
     readonly parent?: CycleCell,
-    readonly bin?: string,
-    readonly column?: string
+    readonly bin?: string
   ) {
     super();
   }
@@ -378,17 +359,6 @@ const partExample = (unit: CalendarUnit): string =>
     weekday: "Calendar.hour",
   })[unit as string] ?? "none: nothing is a part of it";
 
-/** Why `next` is not a part of `prev` ({@link CalendarPartition.hasPart}),
- *  for error messages: a part of another level, or a weekday of a week
- *  that starts on another day. */
-const notAPart = (prev: CalendarPartition, next: CalendarPartition): string =>
-  next.cycle === prev.unit
-    ? `${String(next)} is a part of a week that starts on ${next.start}, and ` +
-      `${String(prev)} starts on ${prev.start}. Give both the same start.`
-    : `${String(next)} is a part of a ${next.cycle}, not of a ${prev.unit}. ` +
-      `To split each ${prev.unit} into ${next.unit}s, chain the bins: ` +
-      `.bin(${String(prev)}).bin(${String(next)}).`;
-
 /** Whether `p`, binned alone or first in a product, gives parts of a
  *  cycle rather than cells of the line: a calendar level that is a part of a
  *  larger one (`Calendar.month`, the month of the year). */
@@ -408,9 +378,10 @@ const finest = (step: BinStep): Partition =>
 
 /**
  * Check a product as written (`[Calendar.year, Calendar.month]`): two or more
- * calendar levels with default labels, each after the first a part of the
- * one before it, which has a step of 1 (so the cells where they meet are
- * each one interval: the June of 2015). A numeric partition has no parts,
+ * calendar levels with default labels, each after the first a part of one
+ * cell of the one before it ({@link CalendarPartition.whyNotAPart}), so the
+ * cells where they meet are each one interval: the June of 2015. A numeric
+ * partition has no parts,
  * so it cannot be in a product: numeric cells are split by chaining bins.
  */
 function checkProduct(list: readonly unknown[], where: string): Product {
@@ -441,23 +412,13 @@ function checkProduct(list: readonly unknown[], where: string): Product {
   });
   for (let i = 1; i < levels.length; i++) {
     const [prev, next] = [levels[i - 1], levels[i]];
-    if (next.cycle === undefined)
+    const why = prev.whyNotAPart(next);
+    if (why !== undefined)
       throw new Error(
-        `${at(i)}: ${String(next)} is a part of no larger level (weeks do ` +
-          `not nest in months or years, and nothing holds a year), so it ` +
-          `can only come first in a product.`
-      );
-    if (!prev.hasPart(next))
-      throw new Error(
-        `${at(i)}: each level of a product after the first is a part of the ` +
-          `one before it, but ${notAPart(prev, next)}`
-      );
-    if (prev.step !== 1)
-      throw new Error(
-        `${at(i - 1)}: ${String(prev)} has ${prev.step} ${prev.unit}s in a ` +
-          `cell, so the ${next.unit}s of one cell are not one interval. ` +
-          `Use ${String(new CalendarPartition(prev.unit))} in a product, ` +
-          `or chain the bins: .bin(${String(prev)}).bin(${String(next)}).`
+        `${at(i)}: each level of a product after the first is a part of one ` +
+          `cell of the one before it, but ${why}. To split each cell of ` +
+          `${String(prev)} by ${String(next)}, chain the bins: ` +
+          `.bin(${String(prev)}).bin(${String(next)}).`
       );
   }
   return levels;
@@ -502,8 +463,7 @@ export function checkChain(steps: readonly BinStep[], where: string): void {
       if (
         !(p instanceof CalendarPartition) ||
         !(prev instanceof CalendarPartition) ||
-        !prev.hasPart(p) ||
-        prev.step !== 1
+        prev.whyNotAPart(p) !== undefined
       )
         throw new Error(
           `${say}: ${spell(steps[0])} bins into the parts of a cycle (a ` +
@@ -609,13 +569,14 @@ function lineCells(
   step: BinStep,
   lo: number,
   hi: number,
-  zone: string | undefined,
-  column: string | undefined
+  zone: string | undefined
 ): Cell[] {
   const bin = spell(step);
   if (Array.isArray(step) || step instanceof CalendarPartition) {
     const levels: Product = Array.isArray(step) ? step : [step];
     const leaf = levels[levels.length - 1];
+    const product =
+      levels.length === 1 ? undefined : productLabeler(levels, zone!);
     return leaf
       .cells(lo, hi, zone!)
       .map(
@@ -623,13 +584,10 @@ function lineCells(
           new Cell(
             c.start,
             c.end,
-            levels.length === 1
-              ? leaf.label(c, zone!)
-              : productLabel(levels, c.start, zone!),
+            product === undefined ? leaf.label(c, zone!) : product(c.start),
             { fields: c, partition: leaf, zone: zone! },
             undefined,
-            bin,
-            column
+            bin
           )
       );
   }
@@ -637,7 +595,7 @@ function lineCells(
   const edges = numberEdges(p, lo, hi);
   return edges
     .slice(0, -1)
-    .map((start, i) => numberCell(p, start, edges[i + 1], bin, column));
+    .map((start, i) => numberCell(p, start, edges[i + 1], bin));
 }
 
 /** A numeric cell `[start, end)` of `p`, labeled by its format or its two
@@ -647,7 +605,6 @@ function numberCell(
   start: number,
   end: number,
   bin: string,
-  column: string | undefined,
   parent?: Cell
 ): Cell {
   const cell = new Cell(
@@ -656,12 +613,11 @@ function numberCell(
     numberLabel(start, end),
     undefined,
     parent,
-    bin,
-    column
+    bin
   );
   return p.formatCell === undefined
     ? cell
-    : new Cell(start, end, p.formatCell(cell), undefined, parent, bin, column);
+    : new Cell(start, end, p.formatCell(cell), undefined, parent, bin);
 }
 
 /**
@@ -675,10 +631,9 @@ function refine(
   p: Partition,
   lo: number,
   hi: number,
-  zone: string | undefined,
-  column: string | undefined
+  zone: string | undefined
 ): Cell[] {
-  const children = lineCells(p, lo, hi, zone, column);
+  const children = lineCells(p, lo, hi, zone);
   const bin = spell(p);
   const out: Cell[] = [];
   let j = 0;
@@ -694,9 +649,7 @@ function refine(
       const end = Math.min(c.end, parent.end);
       if (start >= end) continue;
       if (start === c.start && end === c.end) {
-        out.push(
-          new Cell(start, end, c.label, c.calendar, parent, bin, column)
-        );
+        out.push(new Cell(start, end, c.label, c.calendar, parent, bin));
       } else if (p instanceof CalendarPartition) {
         const fields = fieldsOf(zoned(start, zone!), end, p.unit);
         out.push(
@@ -706,14 +659,11 @@ function refine(
             p.label(fields, zone!),
             { fields, partition: p, zone: zone! },
             parent,
-            bin,
-            column
+            bin
           )
         );
       } else {
-        out.push(
-          numberCell(p as NumberPartition, start, end, bin, column, parent)
-        );
+        out.push(numberCell(p as NumberPartition, start, end, bin, parent));
       }
     }
   }
@@ -758,8 +708,7 @@ function cycleCells(
   steps: readonly BinStep[],
   lo: number,
   hi: number,
-  zone: string,
-  column: string | undefined
+  zone: string
 ): Cells {
   const levels: CalendarPartition[] = steps.flatMap((s): CalendarPartition[] =>
     Array.isArray(s) ? [...s] : [s as CalendarPartition]
@@ -767,20 +716,18 @@ function cycleCells(
   const of = levels[0].cycle!;
   const [rlo, rhi] = referencePeriod(of, levels[0].start);
   const leaf = levels[levels.length - 1];
+  // Each reference cell, with the id it has after each number of levels:
+  // its levels' parts so far, coarsest first, joined (`ids[n]`).
   const reference = leaf
     .cells(rlo, rhi - 1, "UTC")
-    .filter((c) => c.start >= rlo && c.start < rhi);
+    .filter((c) => c.start >= rlo && c.start < rhi)
+    .map((c) => ({ c, ids: prefixIds(levels, zoned(c.start, "UTC")) }));
   // How many levels each step has named so far.
   const depth: number[] = [];
   steps.reduce((n, s) => {
     depth.push(n + (Array.isArray(s) ? s.length : 1));
     return depth[depth.length - 1];
   }, 0);
-  const idOf = (z: TemporalNS.ZonedDateTime, n: number) =>
-    levels
-      .slice(0, n)
-      .map((p) => p.part(z))
-      .join("-");
   let parents = new Map<string, CycleCell>();
   let cells: CycleCell[] = [];
   steps.forEach((step, k) => {
@@ -788,25 +735,27 @@ function cycleCells(
     const byId = new Map<string, CycleCell>();
     const made: CycleCell[] = [];
     const ends = new Map<string, number>();
-    for (const c of reference) {
-      const z = zoned(c.start, "UTC");
-      const id = idOf(z, n);
+    const product = Array.isArray(step)
+      ? productLabeler(step, "UTC")
+      : undefined;
+    for (const { c, ids } of reference) {
+      const id = ids[n];
       ends.set(id, c.end);
       if (byId.has(id)) continue;
-      const label = Array.isArray(step)
-        ? productLabel(step, c.start, "UTC")
-        : (step as CalendarPartition).partLabel(
-            cycleFields(c.start, (step as CalendarPartition).unit, of),
-            c.start
-          );
+      const label =
+        product !== undefined
+          ? product(c.start)
+          : (step as CalendarPartition).partLabel(
+              cycleFields(c.start, (step as CalendarPartition).unit, of),
+              c.start
+            );
       const cell = new CycleCell(
         id,
         label,
         made.length,
         [c.start, c.end],
-        k === 0 ? undefined : parents.get(idOf(z, depth[k - 1])),
-        spell(step),
-        column
+        k === 0 ? undefined : parents.get(ids[depth[k - 1]]),
+        spell(step)
       );
       byId.set(id, cell);
       made.push(cell);
@@ -823,8 +772,7 @@ function cycleCells(
             c.index,
             [c.ref[0], ends.get(c.id)!],
             c.parent,
-            c.bin,
-            c.column
+            c.bin
           )
       ),
     };
@@ -838,8 +786,22 @@ function cycleCells(
     cellOf: (v) =>
       v < lo || v > hi
         ? undefined
-        : leaves.get(idOf(zoned(v, zone), levels.length)),
+        : leaves.get(prefixIds(levels, zoned(v, zone))[levels.length]),
   };
+}
+
+/** The id the instant `z` has after each number of `levels`: `ids[n]` is
+ *  its first `n` levels' parts, coarsest first, joined with "-" ("6" for
+ *  June, "6-15" for June 15). */
+function prefixIds(
+  levels: readonly CalendarPartition[],
+  z: TemporalNS.ZonedDateTime
+): string[] {
+  const ids = [""];
+  levels.forEach((p, i) =>
+    ids.push(i === 0 ? String(p.part(z)) : `${ids[i]}-${p.part(z)}`)
+  );
+  return ids;
 }
 
 /**
@@ -847,9 +809,7 @@ function cycleCells(
  * step) over `domain`, the column's domain (`HasDomain`, schema.ts), in
  * order: the leaves of the chain, each holding its cell of the bin before
  * it. `zone` is the column's time zone, for a Calendar value, which needs a
- * time column, and `column` the column's name, which every cell records
- * ({@link KeyCell.column}). No domain (a column with no values) has no
- * cells.
+ * time column. No domain (a column with no values) has no cells.
  *
  *  - A first bin that is a part (`Calendar.month`, or a product that starts
  *    with one) bins into the parts of a cycle ({@link cycleCells}): every
@@ -861,8 +821,7 @@ export function chainCells(
   steps: readonly BinStep[],
   domain: HasDomain | undefined,
   zone: string | undefined,
-  where: string,
-  column?: string
+  where: string
 ): Cells {
   checkChain(steps, where);
   const calendar = steps.some(
@@ -877,10 +836,10 @@ export function chainCells(
         `pass JS Date values.`
     );
   }
-  if (isCycleStep(steps[0])) return cycleCells(steps, lo, hi, zone!, column);
-  let cells = lineCells(steps[0], lo, hi, zone, column);
+  if (isCycleStep(steps[0])) return cycleCells(steps, lo, hi, zone!);
+  let cells = lineCells(steps[0], lo, hi, zone);
   for (const step of steps.slice(1))
-    cells = refine(cells, step as Partition, lo, hi, zone, column);
+    cells = refine(cells, step as Partition, lo, hi, zone);
   return { cells, cellOf: lineCellOf(cells, lo, hi) };
 }
 

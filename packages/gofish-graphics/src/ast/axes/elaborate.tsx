@@ -55,8 +55,14 @@ import {
   type LevelOptions,
   type PerLevel,
 } from "./levels";
-import { Cell, CycleCell, type AxisCell, type KeyCell } from "../cells";
-import { CalendarPartition, cycleFields, zoned } from "../calendar";
+import { Cell, CycleCell, spell, type AxisCell, type KeyCell } from "../cells";
+import {
+  CalendarPartition,
+  cycleFields,
+  fieldsOf,
+  nominalMs,
+  zoned,
+} from "../calendar";
 
 /**
  * The edge an axis on `dim` seats on when its `side` is not given, in the
@@ -732,9 +738,10 @@ type OrdinalLevel = {
   /** The groups have an order (`HasOrder`): cells, or the levels of an
    *  ordered column. */
   hasOrder: boolean;
-  /** For a level of cells, the column they bin ({@link KeyCell.column}):
-   *  two levels over one column partition one value, so the outer one's
-   *  runs get dividers by default. Undefined for a level of categories. */
+  /** For a level of cells, the column they bin: the field the axis's space
+   *  groups by (`ORDINAL_TYPE.titles`, spread's `by`). Two levels over one
+   *  column partition one value, so the outer one's runs get dividers by
+   *  default. Undefined for a level of categories. */
   column?: string;
 };
 
@@ -759,62 +766,88 @@ const chainLength = (cell: KeyCell): number => {
  * with the cell it begins in, so `Calendar.month` over week slots puts each
  * week in the month it starts in, as a calendar labels its weeks. A part of
  * a cycle falls the same way in a part of `p`'s reading of the same cycle (a
- * month of the year in a quarter of the year). `p` must be at least as
- * coarse as the slots: a cell of `p` shorter than the slot it holds the
- * start of (a week over months) would give each slot its own group. Returns
- * a reason when `p` does not group the slots.
+ * month of the year in a quarter of the year), so `p` must be a part of one
+ * cell of the cycle (`whyNotAPart`). `p` must be at least as coarse as the
+ * slots' level, compared by the levels' nominal lengths as a chain compares
+ * them (`checkChain`): a finer one (a week over months) would give each slot
+ * its own group. `column` is the column the slots bin. Returns a reason when
+ * `p` does not group the slots.
  */
 function calendarLevel(
   p: CalendarPartition,
-  cells: readonly (AxisCell | undefined)[]
+  cells: readonly (AxisCell | undefined)[],
+  column: string | undefined
 ): OrdinalLevel | string {
-  const groups: OrdinalLevel["groups"] = [];
-  const finer = (label: string | undefined) =>
-    `the cell of ${String(p)} that holds the start of "${label}" is ` +
-    `shorter than it (${String(p)} is finer than the slots), so ` +
-    `${String(p)} does not group them; name a coarser level`;
-  for (const c of cells) {
-    if (c instanceof Cell && c.calendar !== undefined) {
-      const zone = c.calendar.zone;
-      const outer = p.cells(c.start, c.start, zone)[0];
-      if (outer.end - outer.start < c.end - c.start) return finer(c.label);
-      groups.push({ id: String(outer.start), label: p.label(outer, zone) });
-    } else if (c instanceof CycleCell) {
-      const of = c.cycle.of;
-      if (p.cycle !== of)
-        return (
-          `the slots are parts of a ${of} (${c.bin ?? "a cycle"}), and ` +
-          `${String(p)} ${p.cycle === undefined ? "is a part of nothing" : `is a part of a ${p.cycle}`}, so it does not group them`
-        );
-      // A week's parts depend on the day it starts on.
-      const start = c.cycle.levels[0].start;
-      if (of === "week" && p.start !== start)
-        return (
-          `the slots are parts of a week that starts on ${start}, and ` +
-          `${String(p)} starts on ${p.start}, so it does not group them`
-        );
-      const [s, e] = c.ref;
-      const part = p.part(zoned(s, "UTC"));
-      const outer = p.cells(s, s, "UTC")[0];
-      if (outer.end - outer.start < e - s) return finer(c.label);
-      const first = p.floor(zoned(s, "UTC")).epochMilliseconds;
-      groups.push({
-        id: String(part),
-        label: p.partLabel(cycleFields(first, p.unit, of), first),
-      });
-    } else {
+  const notTime =
+    `${String(p)} groups slots of time, and these slots are not cells of a ` +
+    `time column`;
+  const first = cells[0];
+  // The slots' own level: a cell's partition, or the finest level a part of
+  // a cycle is named by.
+  let slotLevel: CalendarPartition;
+  if (first instanceof Cell && first.calendar !== undefined)
+    slotLevel = first.calendar.partition;
+  else if (first instanceof CycleCell) {
+    const { of, levels } = first.cycle;
+    const why = new CalendarPartition(
+      of,
+      1,
+      of === "week" ? levels[0].start : undefined
+    ).whyNotAPart(p);
+    if (why !== undefined)
       return (
-        `${String(p)} groups slots of time, and these slots are not cells ` +
-        `of a time column`
+        `the slots are parts of a ${of} (${first.bin ?? spell(levels)}), ` +
+        `but ${why}, so ${String(p)} does not group them`
       );
-    }
-  }
-  return {
-    name: String(p),
-    groups,
-    hasOrder: true,
-    column: cells.find((c) => c !== undefined)?.column,
+    slotLevel = levels[levels.length - 1];
+  } else return notTime;
+  if (nominalMs(p.unit, p.step) < nominalMs(slotLevel.unit, slotLevel.step))
+    return (
+      `${String(p)} is finer than the slots (${String(slotLevel)}), so it ` +
+      `does not group them; name a coarser level`
+    );
+  // The slots are in order, so neighboring slots share a cell of `p`: it is
+  // found once per run, and kept while the slots' starts lie in it.
+  const groups: OrdinalLevel["groups"] = [];
+  let outer: { start: number; end: number; id: string; label: string } = {
+    start: Infinity,
+    end: -Infinity,
+    id: "",
+    label: "",
   };
+  for (const c of cells) {
+    const onLine = c instanceof Cell && c.calendar !== undefined;
+    if (onLine !== first instanceof Cell || !(onLine || c instanceof CycleCell))
+      return notTime;
+    const start = onLine ? (c as Cell).start : (c as CycleCell).ref[0];
+    if (start < outer.start || start >= outer.end) {
+      if (onLine) {
+        const zone = (c as Cell).calendar!.zone;
+        const s = p.floor(zoned(start, zone));
+        const end = p.next(s).epochMilliseconds;
+        outer = {
+          start: s.epochMilliseconds,
+          end,
+          id: String(s.epochMilliseconds),
+          label: p.label(fieldsOf(s, end, p.unit), zone),
+        };
+      } else {
+        const s = p.floor(zoned(start, "UTC"));
+        const t = s.epochMilliseconds;
+        outer = {
+          start: t,
+          end: p.next(s).epochMilliseconds,
+          id: String(p.partAt(s)),
+          label: p.partLabel(
+            cycleFields(t, p.unit, (c as CycleCell).cycle.of),
+            t
+          ),
+        };
+      }
+    }
+    groups.push({ id: outer.id, label: outer.label });
+  }
+  return { name: String(p), groups, hasOrder: true, column };
 }
 
 /**
@@ -822,7 +855,8 @@ function calendarLevel(
  * one for a split, or, for a key binned by a chain of bins
  * (`.bin(Calendar.year).bin(Calendar.month)`), one per bin, each grouping
  * the slots by their cell of that bin (the month level, then the year
- * level).
+ * level). `title` is the field the axis's space groups by: for cells, the
+ * column they bin.
  */
 function inferredOrdinalLevels(
   slots: readonly { key: string; cell?: AxisCell }[],
@@ -849,7 +883,7 @@ function inferredOrdinalLevels(
       return { id: c?.id ?? "", label: c?.label ?? "" };
     }),
     hasOrder: true,
-    column: first.column,
+    column: title,
   }));
 }
 
@@ -928,7 +962,7 @@ function elaborateOrdinalAxis(
     entries,
     outermost,
     (p, k) => {
-      const level = calendarLevel(p, slotCells);
+      const level = calendarLevel(p, slotCells, title);
       if (typeof level !== "string") return level;
       issues.push({ dim, option: "levels", depth: depth0 + k, reason: level });
       return undefined;

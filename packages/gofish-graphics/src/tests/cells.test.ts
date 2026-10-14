@@ -461,7 +461,7 @@ async function main() {
     );
     check(
       "a weekday of a week that starts on another day is an error",
-      mismatch?.includes("Give both the same start") === true,
+      mismatch?.includes("give both the same start") === true,
       mismatch
     );
     check(

@@ -191,11 +191,7 @@ export class FieldExpr<
     const checked =
       step !== undefined ? checkBinStep(step, "field(...).bin") : undefined;
     const steps = [
-      ...this._ops.flatMap((op) =>
-        op.op === "bin"
-          ? [checkBinStep(op.partition ?? DEFAULT_PARTITION, "field(...).bin")]
-          : []
-      ),
+      ...binStepsOf(this._ops, "field(...).bin"),
       checked ?? DEFAULT_PARTITION,
     ];
     checkChain(steps, `field("${this.name}")`);
@@ -395,6 +391,16 @@ export function getFieldOps(accessor: unknown): readonly FieldOp[] {
   }
   return [];
 }
+
+/** The bin steps of a field expression's `bin` ops, in order, each checked
+ *  as written (`checkBinStep`); a `bin` op with no partition bins into
+ *  about 10 cells (`DEFAULT_PARTITION`). */
+export const binStepsOf = (ops: readonly FieldOp[], where: string): BinStep[] =>
+  ops.flatMap((op) =>
+    op.op === "bin"
+      ? [checkBinStep(op.partition ?? DEFAULT_PARTITION, where)]
+      : []
+  );
 
 /** Domain op names — valid only on a `by` (grouping) slot. */
 const DOMAIN_OPS = new Set(["sort", "reverse", "bin", "dropNulls"]);

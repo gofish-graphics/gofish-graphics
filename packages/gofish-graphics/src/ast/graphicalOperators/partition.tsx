@@ -2,7 +2,8 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { CycleCell, RegionCell } from "../cells";
+import { CycleCell, RegionCell, spell } from "../cells";
+import { CalendarPartition } from "../calendar";
 import { columnValue, resolveColumn } from "../channels";
 import { isField, type FieldAccessor } from "../data";
 import { splitEntries, type SplitBy } from "../datumProjection";
@@ -137,12 +138,10 @@ const noRegion = (by: unknown): Error => {
 const cycleHasNoRegion = (by: FieldAccessor, cell: CycleCell): Error => {
   const { of, levels } = cell.cycle;
   const parts = levels.map(String).join(", ");
-  const start = levels[0].start;
-  const cycle =
-    of === "week" && start !== undefined
-      ? `Calendar.week({ start: "${start}" })`
-      : `Calendar.${of}`;
-  const bin = cell.bin ?? (levels.length === 1 ? parts : `[${parts}]`);
+  const cycle = String(
+    new CalendarPartition(of, 1, of === "week" ? levels[0].start : undefined)
+  );
+  const bin = cell.bin ?? spell(levels.length === 1 ? levels[0] : levels);
   const f = `field("${by.name}")`;
   return new Error(
     `partition: ${f}.bin(${bin}) bins into the parts of a ${of} (the same ` +
