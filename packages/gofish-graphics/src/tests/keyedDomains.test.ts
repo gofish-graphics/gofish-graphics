@@ -191,6 +191,7 @@ withUnits(new Units(), () => {
     panel.axisDemand[1] = DEFAULT_AXIS_TICKS;
     const root = node(UNDEFINED, [panel, other], { detached: [0, 1] });
     const table = KeyedDomains.build(root);
+    table.refreshDemand();
     ok(
       "an axis over a keyed domain nices it wherever the unit sits",
       table.ticksOf(other, 1, other._underlyingSpace![1], true) ===
@@ -203,6 +204,7 @@ withUnits(new Units(), () => {
     cats.axisDemand[1] = DEFAULT_AXIS_TICKS;
     const root = node(UNDEFINED, [cats, bars]);
     const table = KeyedDomains.build(root);
+    table.refreshDemand();
     ok(
       "a category axis nices nothing",
       table.ticksOf(bars, 1, bars._underlyingSpace![1], true) === undefined

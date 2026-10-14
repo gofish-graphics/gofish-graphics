@@ -98,18 +98,17 @@ export class KeyedDomains {
         topType: root._underlyingSpace?.[axis],
       })) as [Seat, Seat]
     );
-    table.refreshDemand();
     return table;
   }
 
-  private tables(spaceRoot: KeyedNode) {
-    let d = this.domains.get(spaceRoot);
-    if (d === undefined)
-      this.domains.set(spaceRoot, (d = [new Map(), new Map()]));
-    let t = this.demand.get(spaceRoot);
-    if (t === undefined)
-      this.demand.set(spaceRoot, (t = [new Map(), new Map()]));
-    return { domains: d, demand: t };
+  /** The per-axis maps of `spaceRoot` in `table`, made on first write. */
+  private static entry<V>(
+    table: Map<KeyedNode, [Map<string, V>, Map<string, V>]>,
+    spaceRoot: KeyedNode
+  ): [Map<string, V>, Map<string, V>] {
+    let e = table.get(spaceRoot);
+    if (e === undefined) table.set(spaceRoot, (e = [new Map(), new Map()]));
+    return e;
   }
 
   /** Add a top's interval on `axis` to its key's domain. */
@@ -119,7 +118,7 @@ export class KeyedDomains {
     const iv = space.dataInterval;
     if (!Interval.isFinite(iv)) return;
     const key = domainKey(space, seat.top);
-    const { domains } = this.tables(seat.spaceRoot);
+    const domains = KeyedDomains.entry(this.domains, seat.spaceRoot);
     const prior = domains[axis].get(key);
     domains[axis].set(
       key,
@@ -132,9 +131,10 @@ export class KeyedDomains {
    *  draws is demand for the domain of its set's key: the domain is niced to
    *  its ticks (#659). A category axis ticks at its keys and nices nothing.
    *  The types are the ones the table was built from, so this reads only the
-   *  stored seats. */
+   *  stored seats. Nothing reads the demand before the axes are assigned,
+   *  so `layout()` calls this once they are. */
   refreshDemand(): void {
-    for (const t of this.demand.values()) t.forEach((m) => m.clear());
+    this.demand.clear();
     for (const node of this.seats.keys()) {
       for (const axis of [0, 1] as const) {
         const ticks = node.axisDemand[axis];
@@ -142,7 +142,10 @@ export class KeyedDomains {
         if (ticks === undefined || space === undefined || !isCONTINUOUS(space))
           continue;
         const key = this.keyOf(node, axis, space, true)!;
-        this.tables(key.spaceRoot).demand[axis].set(key.key, ticks);
+        KeyedDomains.entry(this.demand, key.spaceRoot)[axis].set(
+          key.key,
+          ticks
+        );
       }
     }
   }
@@ -217,7 +220,7 @@ export class KeyedDomains {
   ): Interval.Interval | undefined {
     const key = this.keyOf(node, axis, space, viaSet);
     if (key === undefined) return undefined;
-    return this.tables(key.spaceRoot).domains[axis].get(key.key);
+    return this.domains.get(key.spaceRoot)?.[axis].get(key.key);
   }
 
   /** The ticks of an axis some node draws over the same keyed domain, or
@@ -231,7 +234,7 @@ export class KeyedDomains {
   ): AxisTicks | undefined {
     const key = this.keyOf(node, axis, space, viaSet);
     if (key === undefined) return undefined;
-    return this.tables(key.spaceRoot).demand[axis].get(key.key);
+    return this.demand.get(key.spaceRoot)?.[axis].get(key.key);
   }
 
   /**
