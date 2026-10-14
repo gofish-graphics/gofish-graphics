@@ -494,9 +494,12 @@ chart's `axes` before layout reads them). A Python bare kind is a dict, so
 `_to_wire` and `json.dumps` read it as one. A param
 may carry bounds, `t.num({ min: 0, finite: true })` for a pixel padding,
 `t.num({ exclusiveMin: 0, finite: true })` for a hex radius, or
-`t.num({ min: 1, integer: true })` for a Calendar step, which the
-validator and the JSON Schema (`minimum`, `exclusiveMinimum`, `integer`)
-check. When a
+`t.num({ min: 1, integer: true })` for a Calendar step or a count of
+thresholds, and a list may carry a least length,
+`t.array(t.num({ finite: true }), { minItems: 1 })` for a list of edges
+that must not be empty. The validator, the JSON Schema (`minimum`,
+`exclusiveMinimum`, `integer`, `minItems`) and the Python generator check
+them. When a
 value matches no branch of an untagged union, and only one branch is of the
 value's kind (a number for `Bin.hex`'s `radius: number | { x, y }`), the
 validator reports that branch's own findings (`expected a number above 0`).
@@ -798,7 +801,9 @@ It emits:
   (`pyParamChecks` in `generate.ts`): a value of the wrong Python type raises
   a `TypeError`, and a value out of bounds or not in an enum raises a
   `ValueError` that names the call and the kwarg
-  (`Overlap.separate(padding=...) must be >= 0, got -1`). An unknown kwarg is
+  (`Overlap.separate(padding=...) must be >= 0, got -1`). An optional param
+  is checked when it is given; a required one always, so `None` is a
+  `TypeError` (`Bin.step(None)`). An unknown kwarg is
   a `TypeError` from the signature, which for a bare kind lists its options
   (`Calendar.month(step=3)` names `every=...`). A dict param (`Bin.hex`'s
   `radius={"x": 2, "y": 500}`) has its keys and each value checked the

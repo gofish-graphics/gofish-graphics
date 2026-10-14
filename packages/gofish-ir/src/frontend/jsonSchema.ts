@@ -76,7 +76,11 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
       // is a channel value and also fits an open interval object).
       return { anyOf: type.options.map(fieldTypeToSchema) };
     case "array":
-      return { type: "array", items: fieldTypeToSchema(type.items) };
+      return {
+        type: "array",
+        items: fieldTypeToSchema(type.items),
+        ...(type.minItems !== undefined ? { minItems: type.minItems } : {}),
+      };
     case "tuple":
       return {
         type: "array",

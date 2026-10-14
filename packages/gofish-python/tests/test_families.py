@@ -106,6 +106,8 @@ BAD_VALUES = [
     (lambda: Curve.arc(direction="left"), "Curve.arc(direction=...) must be one of"),
     (lambda: Curve.orthogonal(bend="always"), 'must be "auto"'),
     (lambda: Curve.perfect_arrows(bow=float("nan")), "Curve.perfect_arrows(bow=...)"),
+    (lambda: Bin.thresholds(0), "Bin.thresholds(thresholds) must be >= 1, got 0"),
+    (lambda: Bin.thresholds([]), "Bin.thresholds(thresholds) must have at least 1 item, got []"),
 ]
 
 WRONG_TYPES = [
@@ -117,6 +119,12 @@ WRONG_TYPES = [
     (lambda: Curve.arc(direction=3), 'Curve.arc(direction=...) must be one of "up", "down", got int'),
     (lambda: Curve.perfect_arrows(flip="yes"), "Curve.perfect_arrows(flip=...) must be a bool, got str"),
     (lambda: Curve.perfect_arrows(pad_end="4"), "must be a number, got str"),
+    (lambda: Bin.thresholds(2.5), "Bin.thresholds(thresholds) must be a whole number >= 1 or a list"),
+    # A required param is required: None is not a value of it.
+    (lambda: Bin.step(None), "Bin.step(size) must be a finite number > 0, got NoneType"),
+    (lambda: Bin.thresholds(None), "Bin.thresholds(thresholds) must be a whole number >= 1"),
+    (lambda: Bin.hex(radius=None), "Bin.hex(radius=...) must be a finite number > 0 or a dict"),
+    (lambda: Bin.voronoi(seeds=None), "Bin.voronoi(seeds=...) must be a table"),
 ]
 
 UNKNOWN_KWARGS = [

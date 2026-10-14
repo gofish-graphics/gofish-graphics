@@ -116,6 +116,15 @@ async function main() {
 
   console.log("\n# numeric partitions");
   {
+    const fractional = errorOf(() => field("x").bin(Bin.thresholds(2.5)));
+    const noEdges = errorOf(() => field("x").bin(Bin.thresholds([])));
+    check(
+      "a count of thresholds is a whole number, and a list of edges is not " +
+        "empty",
+      fractional?.includes("expected a whole number, got 2.5") === true &&
+        noEdges?.includes("expected at least 1 item") === true,
+      `${fractional} / ${noEdges}`
+    );
     const step = binCells(Bin.step(0.5), over([1.2, 2.6, 3]), undefined, "t");
     check(
       "a step covers the domain with cells aligned to its multiples",

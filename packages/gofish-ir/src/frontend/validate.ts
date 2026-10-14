@@ -444,6 +444,12 @@ function walkFieldType(
         fail(`expected array, got ${typeNameOf(value)}`);
         return;
       }
+      if (type.minItems !== undefined && value.length < type.minItems) {
+        fail(
+          `expected at least ${type.minItems} item${type.minItems === 1 ? "" : "s"}, got ${value.length}`
+        );
+        return;
+      }
       value.forEach((item, i) =>
         walkFieldType(type.items, item, `${path}[${i}]`, ctx)
       );

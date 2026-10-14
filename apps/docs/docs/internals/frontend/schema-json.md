@@ -3171,14 +3171,15 @@ for the API.
             "thresholds": {
               "anyOf": [
                 {
-                  "type": "number",
+                  "type": "integer",
                   "minimum": 1
                 },
                 {
                   "type": "array",
                   "items": {
                     "type": "number"
-                  }
+                  },
+                  "minItems": 1
                 }
               ],
               "description": "A count: about that many cells, with the width a numeric axis with that many ticks would use, so the edges are round numbers. Or a list of edges: the cells end and start at them, with the domain's ends as the outer edges, and an edge outside the domain cuts nothing."
@@ -3518,14 +3519,15 @@ for the API.
             "thresholds": {
               "anyOf": [
                 {
-                  "type": "number",
+                  "type": "integer",
                   "minimum": 1
                 },
                 {
                   "type": "array",
                   "items": {
                     "type": "number"
-                  }
+                  },
+                  "minItems": 1
                 }
               ],
               "description": "A count: about that many cells, with the width a numeric axis with that many ticks would use, so the edges are round numbers. Or a list of edges: the cells end and start at them, with the domain's ends as the outer edges, and an edge outside the domain cuts nothing."

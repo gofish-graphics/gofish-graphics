@@ -72,7 +72,12 @@ export type FieldType =
   | { kind: "channel"; inner: ChannelInner; infer: ChannelInfer }
   | { kind: "ref"; name: string }
   | { kind: "union"; options: readonly FieldType[] }
-  | { kind: "array"; items: FieldType }
+  | {
+      kind: "array";
+      items: FieldType;
+      /** The fewest items allowed: `1` for a list that must not be empty. */
+      minItems?: number;
+    }
   | { kind: "tuple"; items: readonly FieldType[] }
   | { kind: "object"; fields: Readonly<FieldGroup> }
   | { kind: "record"; valueType: FieldType };
@@ -192,7 +197,14 @@ export const t = {
    *  jsonSchema.ts. */
   ref: (name: string): FieldType => ({ kind: "ref", name }),
   union: (...options: FieldType[]): FieldType => ({ kind: "union", options }),
-  array: (items: FieldType): FieldType => ({ kind: "array", items }),
+  /** A list of `items`, with at least `minItems` of them when given
+   *  (`t.array(t.number, { minItems: 1 })` for a list that must not be
+   *  empty). */
+  array: (items: FieldType, bounds: { minItems?: number } = {}): FieldType => ({
+    kind: "array",
+    items,
+    ...bounds,
+  }),
   tuple: (...items: FieldType[]): FieldType => ({ kind: "tuple", items }),
   object: (fields: FieldGroup): FieldType => ({ kind: "object", fields }),
   /** `Record<string, valueType>` — a string-keyed bag with no fixed key set
@@ -708,8 +720,8 @@ export const STRATEGIES = {
         params: {
           thresholds: {
             type: t.union(
-              t.num({ min: 1, finite: true }),
-              t.array(t.num({ finite: true }))
+              t.num({ min: 1, integer: true }),
+              t.array(t.num({ finite: true }), { minItems: 1 })
             ),
             required: true,
             doc: "A count: about that many cells, with the width a numeric axis with that many ticks would use, so the edges are round numbers. Or a list of edges: the cells end and start at them, with the domain's ends as the outer edges, and an edge outside the domain cuts nothing.",

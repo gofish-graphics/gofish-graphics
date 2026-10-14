@@ -509,6 +509,8 @@ for (const [name, partition] of [
   ["a non-numeric step", { kind: "step", size: "1" }],
   ["a zero step", { kind: "step", size: 0 }],
   ["a threshold count below 1", { kind: "thresholds", thresholds: 0 }],
+  ["a fractional threshold count", { kind: "thresholds", thresholds: 2.5 }],
+  ["an empty list of edges", { kind: "thresholds", thresholds: [] }],
   ["a non-numeric edge", { kind: "thresholds", thresholds: [1, "2"] }],
   ["a Calendar value with no kind", { every: 1, start: "sunday" }],
   ["the old untagged Calendar form", { unit: "month", step: 1 }],

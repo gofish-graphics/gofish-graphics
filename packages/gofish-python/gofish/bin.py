@@ -24,13 +24,12 @@ def step(size: float, /) -> Dict[str, Any]:
     Args:
         size: The width of each cell, in data units.
     """
-    if size is not None:
-        if not (isinstance(size, (int, float)) and not isinstance(size, bool)):
-            raise TypeError(f"Bin.step(size) must be a finite number > 0, got {type(size).__name__}")
-        if not math.isfinite(size):
-            raise ValueError(f"Bin.step(size) must be finite, got {size!r}")
-        if size <= 0:
-            raise ValueError(f"Bin.step(size) must be > 0, got {size!r}")
+    if not (isinstance(size, (int, float)) and not isinstance(size, bool)):
+        raise TypeError(f"Bin.step(size) must be a finite number > 0, got {type(size).__name__}")
+    if not math.isfinite(size):
+        raise ValueError(f"Bin.step(size) must be finite, got {size!r}")
+    if size <= 0:
+        raise ValueError(f"Bin.step(size) must be > 0, got {size!r}")
     out: Dict[str, Any] = {"kind": "step"}
     for _k, _v in [
         ("size", size),
@@ -40,26 +39,25 @@ def step(size: float, /) -> Dict[str, Any]:
     return out
 
 
-def thresholds(thresholds: float | list, /) -> Dict[str, Any]:
+def thresholds(thresholds: int | list, /) -> Dict[str, Any]:
     """Cells fitted to the domain of the field in the chart's data, which they cover with both ends included: a value on the last edge falls in the last cell, as in numpy's `histogram` and d3's `bin`.
 
     Args:
         thresholds: A count: about that many cells, with the width a numeric axis with that many ticks would use, so the edges are round numbers. Or a list of edges: the cells end and start at them, with the domain's ends as the outer edges, and an edge outside the domain cuts nothing.
     """
-    if thresholds is not None:
-        if isinstance(thresholds, (int, float)) and not isinstance(thresholds, bool):
-            if not math.isfinite(thresholds):
-                raise ValueError(f"Bin.thresholds(thresholds) must be finite, got {thresholds!r}")
-            if thresholds < 1:
-                raise ValueError(f"Bin.thresholds(thresholds) must be >= 1, got {thresholds!r}")
-        elif isinstance(thresholds, list):
-            for thresholds_item in thresholds:
-                if not (isinstance(thresholds_item, (int, float)) and not isinstance(thresholds_item, bool)):
-                    raise TypeError(f"Bin.thresholds(thresholds) item must be a finite number, got {type(thresholds_item).__name__}")
-                if not math.isfinite(thresholds_item):
-                    raise ValueError(f"Bin.thresholds(thresholds) item must be finite, got {thresholds_item!r}")
-        else:
-            raise TypeError(f"Bin.thresholds(thresholds) must be a finite number >= 1 or a list, each item a finite number, got {type(thresholds).__name__}")
+    if isinstance(thresholds, int) and not isinstance(thresholds, bool):
+        if thresholds < 1:
+            raise ValueError(f"Bin.thresholds(thresholds) must be >= 1, got {thresholds!r}")
+    elif isinstance(thresholds, list):
+        if len(thresholds) < 1:
+            raise ValueError(f"Bin.thresholds(thresholds) must have at least 1 item, got {thresholds!r}")
+        for thresholds_item in thresholds:
+            if not (isinstance(thresholds_item, (int, float)) and not isinstance(thresholds_item, bool)):
+                raise TypeError(f"Bin.thresholds(thresholds) item must be a finite number, got {type(thresholds_item).__name__}")
+            if not math.isfinite(thresholds_item):
+                raise ValueError(f"Bin.thresholds(thresholds) item must be finite, got {thresholds_item!r}")
+    else:
+        raise TypeError(f"Bin.thresholds(thresholds) must be a whole number >= 1 or a list of at least 1 item, each item a finite number, got {type(thresholds).__name__}")
     out: Dict[str, Any] = {"kind": "thresholds"}
     for _k, _v in [
         ("thresholds", thresholds),
@@ -75,38 +73,37 @@ def hex(*, radius: float | dict) -> Dict[str, Any]:
     Args:
         radius: The distance from a hexagon's center to its corners, in data units. A number when both fields share a unit (longitude and latitude), or `{ x, y }`, one per field, when they do not (as in ggplot2's `binwidth = c(x, y)`).
     """
-    if radius is not None:
-        if isinstance(radius, (int, float)) and not isinstance(radius, bool):
-            if not math.isfinite(radius):
-                raise ValueError(f"Bin.hex(radius=...) must be finite, got {radius!r}")
-            if radius <= 0:
-                raise ValueError(f"Bin.hex(radius=...) must be > 0, got {radius!r}")
-        elif isinstance(radius, dict):
-            for _key in radius:
-                if _key not in ("x", "y"):
-                    raise TypeError(f"Bin.hex(radius=...) got an unexpected key {_key!r}; expected x, y")
-            if "x" not in radius:
-                raise TypeError("Bin.hex(radius=...) is missing the key 'x'")
-            if "x" in radius:
-                radius_x = radius["x"]
-                if not (isinstance(radius_x, (int, float)) and not isinstance(radius_x, bool)):
-                    raise TypeError(f"Bin.hex(radius=...)['x'] must be a finite number > 0, got {type(radius_x).__name__}")
-                if not math.isfinite(radius_x):
-                    raise ValueError(f"Bin.hex(radius=...)['x'] must be finite, got {radius_x!r}")
-                if radius_x <= 0:
-                    raise ValueError(f"Bin.hex(radius=...)['x'] must be > 0, got {radius_x!r}")
-            if "y" not in radius:
-                raise TypeError("Bin.hex(radius=...) is missing the key 'y'")
-            if "y" in radius:
-                radius_y = radius["y"]
-                if not (isinstance(radius_y, (int, float)) and not isinstance(radius_y, bool)):
-                    raise TypeError(f"Bin.hex(radius=...)['y'] must be a finite number > 0, got {type(radius_y).__name__}")
-                if not math.isfinite(radius_y):
-                    raise ValueError(f"Bin.hex(radius=...)['y'] must be finite, got {radius_y!r}")
-                if radius_y <= 0:
-                    raise ValueError(f"Bin.hex(radius=...)['y'] must be > 0, got {radius_y!r}")
-        else:
-            raise TypeError(f"Bin.hex(radius=...) must be a finite number > 0 or a dict with the keys x, y, got {type(radius).__name__}")
+    if isinstance(radius, (int, float)) and not isinstance(radius, bool):
+        if not math.isfinite(radius):
+            raise ValueError(f"Bin.hex(radius=...) must be finite, got {radius!r}")
+        if radius <= 0:
+            raise ValueError(f"Bin.hex(radius=...) must be > 0, got {radius!r}")
+    elif isinstance(radius, dict):
+        for _key in radius:
+            if _key not in ("x", "y"):
+                raise TypeError(f"Bin.hex(radius=...) got an unexpected key {_key!r}; expected x, y")
+        if "x" not in radius:
+            raise TypeError("Bin.hex(radius=...) is missing the key 'x'")
+        if "x" in radius:
+            radius_x = radius["x"]
+            if not (isinstance(radius_x, (int, float)) and not isinstance(radius_x, bool)):
+                raise TypeError(f"Bin.hex(radius=...)['x'] must be a finite number > 0, got {type(radius_x).__name__}")
+            if not math.isfinite(radius_x):
+                raise ValueError(f"Bin.hex(radius=...)['x'] must be finite, got {radius_x!r}")
+            if radius_x <= 0:
+                raise ValueError(f"Bin.hex(radius=...)['x'] must be > 0, got {radius_x!r}")
+        if "y" not in radius:
+            raise TypeError("Bin.hex(radius=...) is missing the key 'y'")
+        if "y" in radius:
+            radius_y = radius["y"]
+            if not (isinstance(radius_y, (int, float)) and not isinstance(radius_y, bool)):
+                raise TypeError(f"Bin.hex(radius=...)['y'] must be a finite number > 0, got {type(radius_y).__name__}")
+            if not math.isfinite(radius_y):
+                raise ValueError(f"Bin.hex(radius=...)['y'] must be finite, got {radius_y!r}")
+            if radius_y <= 0:
+                raise ValueError(f"Bin.hex(radius=...)['y'] must be > 0, got {radius_y!r}")
+    else:
+        raise TypeError(f"Bin.hex(radius=...) must be a finite number > 0 or a dict with the keys x, y, got {type(radius).__name__}")
     out: Dict[str, Any] = {"kind": "hex"}
     for _k, _v in [
         ("radius", radius),
@@ -125,9 +122,8 @@ def voronoi(*, seeds: Any) -> Dict[str, Any]:
     if seeds is not None:
         from .arrow_utils import to_records
         seeds = to_records(seeds)
-    if seeds is not None:
-        if not isinstance(seeds, list):
-            raise TypeError(f"Bin.voronoi(seeds=...) must be a table (a list of dict rows, or a dataframe), got {type(seeds).__name__}")
+    if not isinstance(seeds, list):
+        raise TypeError(f"Bin.voronoi(seeds=...) must be a table (a list of dict rows, or a dataframe), got {type(seeds).__name__}")
     out: Dict[str, Any] = {"kind": "voronoi"}
     for _k, _v in [
         ("seeds", seeds),

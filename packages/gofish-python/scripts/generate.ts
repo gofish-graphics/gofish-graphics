@@ -702,7 +702,7 @@ function describeType(type: FieldType): string {
       return `a dict with the keys ${Object.keys(type.fields).map(pyKwarg).join(", ")}`;
     case "array":
       if (isTable(type)) return "a table (a list of dict rows, or a dataframe)";
-      return `a list, each item ${describeType(type.items)}`;
+      return `a list${type.minItems !== undefined ? ` of at least ${type.minItems} item${type.minItems === 1 ? "" : "s"}` : ""}, each item ${describeType(type.items)}`;
     case "string":
       return "a str";
     case "boolean":
@@ -783,6 +783,12 @@ function pyValueChecks(
       // A table's rows are data; any other list is checked item by item.
       if (isTable(type)) return [];
       return [
+        ...(type.minItems !== undefined
+          ? fail(
+              `len(${v}) < ${type.minItems}`,
+              `must have at least ${type.minItems} item${type.minItems === 1 ? "" : "s"}`
+            )
+          : []),
         `for ${v}_item in ${v}:`,
         ...pyParamChecks(type.items, `${v}_item`, `${label} item`).map(
           (l) => `    ${l}`
@@ -910,22 +916,29 @@ function renderStrategyFactory(opts: {
     ].join("\n");
   }
   const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
-  const checks = ents.flatMap(([py, , spec]) => [
-    // A table is read into dict rows first (a dataframe, or a list of rows).
-    ...(isTable(spec.type)
-      ? [
-          `    if ${py} is not None:`,
-          `        from .arrow_utils import to_records`,
-          `        ${py} = to_records(${py})`,
-        ]
-      : []),
-    `    if ${py} is not None:`,
-    ...pyParamChecks(
+  const checks = ents.flatMap(([py, , spec]) => {
+    // An optional param is checked when it is given; a required one always,
+    // so None, which is no value of it, is a TypeError at the call.
+    const lines = pyParamChecks(
       spec.type,
       py,
       positional ? `${family}.${name}(${py})` : `${family}.${name}(${py}=...)`
-    ).map((l) => `        ${l}`),
-  ]);
+    );
+    return [
+      // A table is read into dict rows first (a dataframe, or a list of
+      // rows), when there is one.
+      ...(isTable(spec.type)
+        ? [
+            `    if ${py} is not None:`,
+            `        from .arrow_utils import to_records`,
+            `        ${py} = to_records(${py})`,
+          ]
+        : []),
+      ...(spec.required
+        ? lines.map((l) => `    ${l}`)
+        : [`    if ${py} is not None:`, ...lines.map((l) => `        ${l}`)]),
+    ];
+  });
   const body = [
     ...checks,
     `    out: Dict[str, Any] = {${head}}`,
