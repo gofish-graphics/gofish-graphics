@@ -28,6 +28,12 @@ import {
   type DiffEntry,
 } from "./diff-utils.js";
 import { computePixelDiff } from "./pixel-diff.js";
+import {
+  loadSpecsByPath,
+  createCodeHighlighter,
+  specHtml,
+  SPEC_CSS,
+} from "./story-specs.js";
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -101,6 +107,23 @@ for (const entry of diffs) {
 }
 
 // ---------------------------------------------------------------------------
+// data/specs/{path} — each story's spec, highlighted at build time
+// ---------------------------------------------------------------------------
+
+// A removed story has no spec: its source is gone.
+const specsByPath = await loadSpecsByPath();
+const highlight = await createCodeHighlighter();
+const withSpec = new Set<string>();
+for (const entry of diffs) {
+  const spec =
+    entry.kind === "removed" ? undefined : specsByPath.get(entry.path);
+  if (!spec) continue;
+  write(join(OUT_DIR, "data/specs", entry.path), specHtml(spec, highlight));
+  withSpec.add(entry.path);
+}
+console.log(`  ${withSpec.size} spec(s) written`);
+
+// ---------------------------------------------------------------------------
 // data/diffs.json
 // ---------------------------------------------------------------------------
 
@@ -112,6 +135,7 @@ write(
       kind: d.kind,
       status: d.status,
       diffPercent: d.diffPercent,
+      hasSpec: withSpec.has(d.path),
     })),
     null,
     2
@@ -256,6 +280,19 @@ const html = `<!DOCTYPE html>
     #pixel-diff-area img { max-width: 100%; border: 1px solid #e0e0e0; border-radius: 4px; display: block; }
     #pixel-diff-area h4 { font-size: 12px; color: #666; margin-bottom: 6px; }
 
+    /* Images and spec: side by side on wide screens, stacked otherwise */
+    #compare-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    @media (min-width: 1400px) { #compare-row { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } }
+
+    /* Spec */
+    #spec-section { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; margin-bottom: 16px; align-self: start; }
+    #spec-header { padding: 10px 16px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #e0e0e0; }
+    #spec-expand { margin-left: auto; padding: 2px 10px; border-radius: 4px; border: 1px solid #ccc; background: #f5f5f5; font-size: 12px; cursor: pointer; }
+    #spec-body { max-height: 520px; overflow: auto; }
+    #spec-body.expanded { max-height: none; }
+    .spec-missing { padding: 16px; color: #888; font-size: 13px; }
+    ${SPEC_CSS}
+
     /* DOM diff */
     #dom-diff-section { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
     #dom-diff-toggle { padding: 10px 16px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; border-bottom: 1px solid transparent; }
@@ -322,6 +359,8 @@ const html = `<!DOCTYPE html>
       <div style="font-size:13px;">Use ↑/↓ to navigate, A to accept, R to reject</div>
     </div>
 
+    <div id="compare-row" style="display:none;">
+    <div id="visual-col">
     <!-- Strobe view -->
     <div id="strobe-view" style="display:none;">
       <div id="screenshot-area">
@@ -370,6 +409,14 @@ const html = `<!DOCTYPE html>
         No pixel diff available (images may be missing).
       </div>
     </div>
+    </div>
+
+    <!-- Spec: the story's chart code, highlighted at build time -->
+    <div id="spec-section">
+      <div id="spec-header">Spec <button id="spec-expand">Expand</button></div>
+      <div id="spec-body"></div>
+    </div>
+    </div>
 
     <!-- DOM diff -->
     <div id="dom-diff-section">
@@ -400,6 +447,7 @@ const html = `<!DOCTYPE html>
   let hasUncommittedAccepts = false;
 
   const domDiffCache = {};
+  const specCache = {};
 
   function screenshotUrl(which, path) {
     const pngPath = path.replace(/\\.html$/, '.png');
@@ -537,8 +585,36 @@ const html = `<!DOCTYPE html>
       : '✓ Accept';
 
     document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('compare-row').style.display = '';
     renderCurrentView(entry);
-    await loadDomDiff(path);
+    await Promise.all([loadSpec(entry), loadDomDiff(path)]);
+  }
+
+  async function loadSpec(entry) {
+    const body = document.getElementById('spec-body');
+    const expand = document.getElementById('spec-expand');
+    body.classList.remove('expanded');
+    expand.textContent = 'Expand';
+    if (!entry.hasSpec) {
+      expand.style.display = 'none';
+      body.innerHTML = '<div class="spec-missing">' +
+        (entry.kind === 'removed' ? 'Story removed: no spec.' : 'No spec found for this story.') +
+        '</div>';
+      return;
+    }
+    if (specCache[entry.path] === undefined) {
+      body.innerHTML = '<div class="spec-missing">Loading...</div>';
+      try {
+        const res = await fetch('/data/specs/' + entry.path);
+        specCache[entry.path] = res.ok ? await res.text() : '<div class="spec-missing">Spec unavailable.</div>';
+      } catch {
+        specCache[entry.path] = '<div class="spec-missing">Failed to load spec.</div>';
+      }
+    }
+    if (currentPath !== entry.path) return;
+    body.innerHTML = specCache[entry.path];
+    // Only long specs get the Expand toggle.
+    expand.style.display = body.scrollHeight > body.clientHeight ? '' : 'none';
   }
 
   function renderCurrentView(entry) {
@@ -793,6 +869,13 @@ const html = `<!DOCTYPE html>
   document.getElementById('btn-reject').addEventListener('click', rejectCurrent);
   document.getElementById('btn-accept-all').addEventListener('click', acceptAll);
   document.getElementById('btn-commit').addEventListener('click', commitAccepted);
+
+  // Spec expand toggle
+  document.getElementById('spec-expand').addEventListener('click', () => {
+    const body = document.getElementById('spec-body');
+    const expanded = body.classList.toggle('expanded');
+    document.getElementById('spec-expand').textContent = expanded ? 'Collapse' : 'Expand';
+  });
 
   // DOM diff toggle
   document.getElementById('dom-diff-toggle').addEventListener('click', () => {
