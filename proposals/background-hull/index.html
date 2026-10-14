@@ -759,7 +759,11 @@ enclose([spread([circle(**d) for d in planets],
           Width of links that do not bound a filled triangle, as a fraction of
           the bulge.
         </td>
-        <td>Bigger is thicker; 1 is as thick.</td>
+        <td>
+          0 to 1. Bigger is thicker; 1 is as thick. Above 1 is an error: a tube
+          wider than the bulge swallows it, so the knob would only repeat
+          <code>padding</code>, unevenly.
+        </td>
         <td>1</td>
       </tr>
       <tr>
