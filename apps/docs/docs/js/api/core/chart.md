@@ -55,6 +55,7 @@ chart(data, { axes: { x: { levels: [Calendar.week, Calendar.month] } } }); // th
 chart(data, { axes: { x: { levels: [false, true] } } }); // hide the innermost level
 chart(data, { axes: { x: { label: { angle: 45 } } } }); // x labels rotated 45 degrees
 chart(data, { axes: { x: { label: { align: [true, "center"] } } } }); // center the second level
+chart(data, { axes: { x: { divider: [false, true] } } }); // dividers at the second level's boundaries
 ```
 
 The full type is:
@@ -68,6 +69,7 @@ type AxisOptions =
       side?: "start" | "end";
       label?: AxisLabelOptions;
       levels?: (boolean | CalendarPartition)[];
+      divider?: boolean | boolean[];
     };
 type AxisLabelOptions = {
   angle?: number | number[] | "auto";
@@ -113,13 +115,33 @@ depths.
 
 On an ordinal axis, the label rows of the dimension stack from the plot
 edge, whichever split draws them, so nested splits and one chained key look
-the same. The innermost level of the dimension draws no ticks. A divider is a
-line centered in the gap between two neighboring slots. It runs through the
-row of every level that has a boundary in that gap, starting at the plot
-edge: in a grouped bar chart over months, each month divider runs through
-the inner row and the month row, and the divider between two years runs on
-through the year row. A level whose group continues across the gap stops
-the divider.
+the same. A row sits 2 pixels past a row it partitions and 8 pixels past a
+row of other categories. A divider is a line centered in the gap between two
+neighboring slots. It runs through the row of every level that has a
+boundary in that gap, starting at the plot edge. A level whose group
+continues across the gap stops the divider.
+
+`divider` sets which levels draw dividers at their boundaries. By default a
+level draws them when it partitions the value of the level inside it, that
+is, both bin the same column:
+
+| Levels                                                                                                         | Dividers               |
+| -------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| a chained key, `field("date").bin(Calendar.year).bin(Calendar.month)`                                          | between the years      |
+| nested splits that bin one column, `field("date").bin(Calendar.year)` then `field("date").bin(Calendar.month)` | between the years      |
+| a coarser Calendar entry of `levels`, `levels: [true, Calendar.month]` over week slots                         | between the months     |
+| numeric bins inside bins of one column, `Bin.step(10)` then `Bin.step(2)`                                      | between the outer bins |
+| categories inside categories (a lake over its species), or months over weather categories                      | none                   |
+| the innermost level of the dimension                                                                           | none                   |
+
+So in a chart of months over weather categories, with a chained year above
+the months, the one divider is between the years, and it runs from the plot
+edge through the weather, month and year rows. `true` turns a level's
+dividers on and `false` turns them off. A single value applies to every
+level. A list is per level, by the same depths as `levels`, and a depth past
+its end stays as inferred: `divider: [false, true]` divides only at the
+second level's boundaries. `true` on a continuous axis's level is an error,
+since its ticks name points, with no regions between them.
 
 `label.align` sets where each level's labels sit along the axis: `"center"` centers
 a label under what it names, and `"start"` puts it at the start of its run,

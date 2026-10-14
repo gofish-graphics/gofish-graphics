@@ -407,7 +407,7 @@ const axisLabelOptions: FieldSpec = {
  *  object of named options. Mirrors the JS `AxisOptions` in
  *  `gofish-graphics/src/ast/gofish.tsx`. */
 const axisOptions: FieldSpec = {
-  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, label (angle and align), and its levels.",
+  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, label (angle and align), its levels, and their dividers.",
   type: t.union(
     t.boolean,
     t.object({
@@ -426,6 +426,10 @@ const axisOptions: FieldSpec = {
       levels: {
         type: t.array(t.union(t.boolean, t.ref("Calendar"))),
         doc: "The axis's levels, its bands of labels, by depth, nearest the plot first. Every axis on the dim has levels: a numeric axis one (its ticks), a time axis two (the level and step its domain picks for about 10 ticks, then that level's parent), and an ordinal axis one per split, plus one per bin before the last of a chained key (field(x).bin(Calendar.year).bin(Calendar.month) gives a month level and a year level). Each entry sets the level at its depth: true keeps it as inferred, false hides it, and a Calendar value names its cells: a time row's partition, or, on an ordinal axis over cells of time, the cells that group its slots: each slot falls in the cell that holds its start, so Calendar.month over week slots puts each week in the month it starts in (a level finer than the slots is an error). Depths the list does not reach stay as inferred; on the outermost axis, Calendar values past the inferred levels add levels. An entry that cannot apply is an error that lists the axis's levels. In JS a level's labels can be custom: Calendar.quarter.format(fn), with fn a function of the cell; an entry with a format is JS-only (it has no wire form).",
+      },
+      divider: {
+        type: t.union(t.boolean, t.array(t.boolean)),
+        doc: "Whether each level of an ordinal axis draws dividers: a line in each gap where its runs break, through every level whose runs also break there. Omitted, a level draws them when it partitions the value of the level inside it, that is, both bin the same column: a year level over a month level of one date (a chained key field(x).bin(Calendar.year).bin(Calendar.month), nested splits that bin the same column, or a coarser Calendar entry of levels), or numeric bins inside bins. Categories nested in other categories (a lake over its species) draw none, nor does the innermost level. true turns a level's dividers on and false turns them off. A plain value applies to every level; an array is per level, by the same depths as levels, nearest the plot first, with a depth past its end left as inferred. A continuous axis's level has ticks, not regions, so true at its depth is an error.",
       },
     })
   ),

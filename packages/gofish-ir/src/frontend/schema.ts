@@ -386,9 +386,11 @@ export interface ScatterOperator
  * object: `title` (string for a custom title, `false` to suppress), `side`
  * (the frame edge), `label` (how its labels are drawn: `angle`, their
  * rotation in degrees, and `align`, each level's labels centered or at the
- * start of each run), and `levels`
+ * start of each run), `levels`
  * (the axis's bands of labels by depth, nearest the plot first: `true`
- * keeps one, `false` hides it, a Calendar value names its cells).
+ * keeps one, `false` hides it, a Calendar value names its cells), and
+ * `divider` (whether each level draws dividers: one value, or one per
+ * depth).
  */
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions =
@@ -398,6 +400,7 @@ export type AxisOptions =
       side?: "start" | "end";
       label?: AxisLabelOptions;
       levels?: (boolean | CalendarPartitionIR)[];
+      divider?: boolean | boolean[];
     };
 
 /** How one axis's labels are drawn (`axes.x.label`): `angle` and `align`,

@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 # ("tuple", (shape, ...)), ("record", value_shape),
 # ("tagged", tag_key, {tag_value: shape}); None passes a value through.
 _OPTION_TYPES: Dict[str, Any] = {
-    "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label": ("label", ("ref", "AxisLabelOptions")), "levels": ("levels", ("array", ("ref", "Calendar")))}),
+    "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label": ("label", ("ref", "AxisLabelOptions")), "levels": ("levels", ("array", ("ref", "Calendar"))), "divider": ("divider", None)}),
     "AxisLabelOptions": ("object", {"angle": ("angle", None), "align": ("align", None)}),
     "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
     "AxisInterval": ("object", {"min": ("min", None), "center": ("center", None), "max": ("max", None), "size": ("size", None), "embedded": ("embedded", None)}),

@@ -186,6 +186,7 @@ const SCHEMA_OPTION_TYPE_KEYS: Record<string, Record<string, true>> = {
     side: true,
     label: true,
     levels: true,
+    divider: true,
   } satisfies Record<keyof Exclude<AxisOptions, boolean>, true>,
   AxisLabelOptions: {
     angle: true,
