@@ -720,8 +720,9 @@ non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 // The root's axis order starts at the canvas frame's start edge: the top, or the
 // bottom for a continuous y (`direction` −1).
 const atFrameStart = (p, size = frame) => (direction === 1 ? p : size - p);
-// A root with a size of its own (a literal claim) has its own box as its frame.
-const rootFrame = claimIsLiteral ? claim.width.run(0) : frame;
+// The root's frame is its claim at its σ: the slot when fitted, its own box
+// for a fixed size; the slot when there is no claim.
+const rootFrame = claim?.width.run(sigma ?? 0) ?? frame;
 shrinkToFit
   ? child.pinAnchor(axis, atFrameStart(offset), direction === 1 ? "min" : "max")
   : child.place(axis, atFrameStart(offset + seatPx, rootFrame), "baseline");

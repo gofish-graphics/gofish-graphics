@@ -32,7 +32,6 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { scalesWithSigma, type Extent } from "./extent";
-import * as Monotonic from "../util/monotonic";
 import { KeyedDomains } from "./keyedDomains";
 import {
   fromFrameStart,
@@ -681,10 +680,10 @@ export async function layout(
   // A GIVEN dimension is a fixed slot, and the root's box sits at its start
   // edge in canvas order: the left on x and the top on y, for either y
   // direction (#1032). The root's axis order starts at the start edge of the
-  // root's own frame. When the root scope solves σ against the slot, that
-  // frame is the slot, which the root fills. When the root has a size of its
-  // own (a claim with no σ in it: a chart's literal `w`/`h`), its frame is
-  // that box, smaller than the slot, so the box sits at the slot's top-left
+  // root's own frame, its size claim at its σ. When the root scope solves σ
+  // against the slot, that frame is the slot, which the root fills. When the
+  // root has a size of its own (a claim with no σ in it: a chart's literal
+  // `w`/`h`), its frame is that box, smaller than the slot, so the box sits at the slot's top-left
   // rather than at its bottom. A baseline lines up siblings (facets sharing
   // their 0s); a lone root has none, so the slot's start edge is its
   // reference. In its frame the root is seated by the one seating rule
@@ -712,11 +711,13 @@ export async function layout(
       child.pinAnchor(name, atFrameStart(offset), orientSide("min", direction));
       return;
     }
-    const claim = rootClaims[axis];
+    // The root's frame is its claim at its σ: the slot for a root fitted to
+    // it, its own box for a fixed size (a constant claim solves no σ, and is
+    // the same at any σ, so 0 stands in). With no claim (no data), the frame
+    // is the slot.
+    const rootSize = rootClaims[axis]?.width.run(rootScopes[axis]?.sigma ?? 0);
     const rootFrame =
-      claim !== undefined && Monotonic.isConstant(claim.width)
-        ? claim.width.run(0)
-        : frame;
+      rootSize !== undefined && Number.isFinite(rootSize) ? rootSize : frame;
     child.place(
       name,
       fromFrameStart(offset + rootSeats[axis].seatPx, rootFrame, direction),
