@@ -2766,7 +2766,8 @@ for the API.
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions",
-          "description": "Draw axes: a boolean for both axes, or per-axis options {x?, y?}."
+          "description": "Draw axes: a boolean for both axes, or per-axis options {x?, y?}.",
+          "default": true
         },
         "legend": {
           "type": "boolean",
