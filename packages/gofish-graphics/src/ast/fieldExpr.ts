@@ -401,11 +401,12 @@ const DOMAIN_OPS = new Set(["sort", "reverse", "bin", "dropNulls"]);
 
 export const isDomainOp = (op: FieldOp): boolean => DOMAIN_OPS.has(op.op);
 
-/** The mean of `values`, or undefined when there are none. A sum or a count
- *  over no values is 0, but a mean has no value to fall back to: a group
- *  with no rows has no mean, so a position read as one has no value. */
+/** The mean of `values`, or undefined when there are none (no values, or
+ *  only `undefined`, which is no value: the mean of no rows). A sum or a
+ *  count over no values is 0, but a mean has no value to fall back to: a
+ *  group with no rows has no mean, so a channel read as one has no value. */
 export const meanOf = (values: readonly unknown[]): number | undefined =>
-  values.length === 0 ? undefined : meanBy(values as any[]);
+  values.every((v) => v === undefined) ? undefined : meanBy(values as any[]);
 
 /**
  * Evaluate a field expression (or bare string/function accessor) against a
@@ -459,11 +460,11 @@ export function evalFieldValues<T>(
         values: [new Set(rows.map(key)).size],
         quantity: COUNT_QUANTITY,
       };
-    case "mean": {
-      // No rows, no mean: the fold has no value (`meanOf`).
-      const mean = meanOf(rows.map(key));
-      return { values: mean === undefined ? [] : [mean] };
-    }
+    case "mean":
+      // No rows, no mean: the fold is the singleton of no value
+      // (`meanOf`), which every channel's own aggregation keeps (a sum of
+      // `[undefined]` is undefined), so the channel has no value either.
+      return { values: [meanOf(rows.map(key))] };
     default: // "sum"
       return { values: [sumBy(rows.map(key) as any[])] };
   }

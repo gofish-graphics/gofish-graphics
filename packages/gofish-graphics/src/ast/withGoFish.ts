@@ -39,6 +39,7 @@ import type { MarkTransition } from "../animation/transition";
 import { attachTerminals } from "./marks/terminals";
 import { withWire } from "./wire";
 import { isThenable } from "../util";
+import { breadthFirst } from "./elaborationUtils";
 
 export interface RenderOptions {
   w?: number;
@@ -456,15 +457,6 @@ export function sealComponent(node: GoFishNode, datum: unknown[]): GoFishNode {
   return node;
 }
 
-/** Make `node` and every node it was built from draw nothing (a mark that
- *  is not drawn: its whole drawing, not only its own lowering, since a
- *  component's children lower on their own). Each keeps its layout. */
-function emitNothingBelow(node: GoFishNode): void {
-  node.INTERNAL_emitNothing();
-  for (const c of node.children)
-    if (c instanceof GoFishNode) emitNothingBelow(c);
-}
-
 function buildCreatedMark(
   shapeFn: any,
   channels: Record<string, any>,
@@ -499,12 +491,13 @@ function buildCreatedMark(
     );
     const pending = resolveChannelAccessors(staticOpts, channels, () => d);
     const resolvedOpts = isThenable(pending) ? await pending : pending;
-    // A color channel the mark is given that has no value over its rows (the
-    // mean of no rows) leaves the mark nothing to paint with, so the mark is
-    // not drawn, as a scatter does not draw a child whose position has no
-    // value (Vega-Lite's default `invalid: "filter"`). It keeps its place in
-    // the layout. A sum or a count of no rows is 0, a value, and draws.
-    let noPaint = false;
+    // A data channel the mark is given that has no value over its rows (the
+    // mean of no rows, a field of no first row) leaves the mark nothing to
+    // draw it with, whichever channel it is (a size, a position, a color, a
+    // text), so the mark is not drawn (Vega-Lite's default
+    // `invalid: "filter"`). It keeps its place in the layout. A sum or a
+    // count of no rows is 0, a value, and draws.
+    let noValue = false;
     for (const propName of Object.keys(resolvedOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
@@ -522,12 +515,8 @@ function buildCreatedMark(
         shapeProps[propName] = inferEntrySize(markValue, d);
       } else if (channelType !== undefined) {
         shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);
-        if (
-          channelType === "color" &&
-          markValue !== undefined &&
-          shapeProps[propName] === undefined
-        )
-          noPaint = true;
+        if (markValue !== undefined && shapeProps[propName] === undefined)
+          noValue = true;
       } else {
         shapeProps[propName] = markValue;
       }
@@ -562,7 +551,9 @@ function buildCreatedMark(
     }
     const node = await resolveMarkResult(raw, {});
     if (liveChannels) node.__gfLive = liveChannels;
-    if (noPaint) emitNothingBelow(node);
+    // Its whole drawing, not only its own lowering: a component's children
+    // lower on their own.
+    if (noValue) for (const n of breadthFirst(node)) n.INTERNAL_emitNothing();
     return sealComponent(node, d);
   };
   withMarkKind(baseMark, kind);

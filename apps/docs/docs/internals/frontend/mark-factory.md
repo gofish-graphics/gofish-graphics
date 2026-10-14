@@ -99,8 +99,12 @@ needs one.
 `inferSize` and `inferPos` are two instantiations of one numeric-inference
 factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumBy`
 vs `meanOf`, `fieldExpr.ts`, lodash's `meanBy` except that the mean of no
-rows is undefined, not `NaN`). An aggregation with no value makes the channel
-undefined, so a position read off a group with no rows has no value. Both take an optional third argument, the accessor's
+values is undefined, not `NaN`). An aggregation with no value makes the channel
+undefined, so a position read off a group with no rows has no value. A
+pipeline's fold with no value (`field(x).mean()` over no rows) is the
+singleton `[undefined]`, which the channel's own aggregation keeps (lodash's
+sum of `[undefined]` is undefined), so a size read as a mean of no rows has
+no value either, while a size read as a sum of no rows is 0. Both take an optional third argument, the accessor's
 resolved column (`ColumnInfo`, from `resolveColumn(data, accessor)`): its
 `Quantity` and its type in the chart's `schema`. A string/`field()` accessor's
 produced value is tagged with its quantity so the underlying-space
@@ -163,6 +167,19 @@ Walking `withGoFish.ts:431-477`:
    it is.
 2. **Apply each channel.** For each prop in the user's `markOpts`:
    - `Value`-wrapped (`v(...)`) → pass through unchanged. (Already final.)
+   - **No value means not drawn**, for every data channel, in one place: a
+     mark given a channel whose value it reads from its rows (a size, a
+     position, a color, a text) that has no value over them (the mean of no
+     rows, a field of no first row) is **not drawn**. The factory makes its
+     whole subtree emit nothing (`INTERNAL_emitNothing`, over
+     `breadthFirst`), and it keeps its place in the layout, so a heatmap's
+     empty day is a blank square in its slot and a bar whose height is the
+     mean of no rows leaves its slot empty. This is Vega-Lite's default
+     (`invalid: "filter"`). A sum or a count of no rows is 0, a value, so it
+     draws. A scatter follows the same rule for a child whose placement has
+     no value, with the one difference the domain forces: that child has no
+     place to keep, so the scatter leaves it out of the layout too
+     (`placedChildren` in `scatter.tsx`).
    - `"size"` channel → `inferSize(markValue, data)`. If `markValue` is a
      string, sum that field across `data`; if a number, use as-is.
    - `"color"` channel → `inferColor(markValue, data)`. If the string matches
@@ -174,14 +191,7 @@ Walking `withGoFish.ts:431-477`:
      `field(...)` with an aggregate (`field("a").count()`) is the
      exception: it folds all of `data` (`evalFieldValues`), as a size
      channel does, and records no field, because the value is the fold's.
-     A fold with no value (the mean of no rows) gives no color, and a mark
-     given a color channel that has no value is **not drawn**: the factory
-     makes its whole subtree emit nothing (`INTERNAL_emitNothing`), and it
-     keeps its place in the layout, so a heatmap's empty day is a blank
-     square in its slot. This is the rule a position with no value follows
-     (a scatter does not draw a child it cannot place), and Vega-Lite's
-     default (`invalid: "filter"`). A sum or a count of no rows is 0, a
-     value, so it draws. It
+     A fold with no value (the mean of no rows) gives no color. It
      also records the field's type from the chart's `schema`
      (`DatumValueImpl.fieldType`), read off `data`, so a color scale over an
      ordered column lists its domain in that order. (A `derive` types its

@@ -1779,7 +1779,8 @@ entrypoints for native ESM compatibility, but their semantics are still
 `sumBy` for size and `meanBy` for position, except that the mean of no rows
 has no value (`meanOf`, see [Cells](#cells-a-binned-key)) where `meanBy`
 gives `NaN`. A position with no value leaves a scatter's child unplaced and
-undrawn, and a color with no value leaves a mark undrawn, in its place
+undrawn, and any data channel of a mark with no value leaves the mark
+undrawn, in its place
 ([The Mark Factory](/internals/frontend/mark-factory#what-happens-at-render-time)). A computed column a `derive`
 makes is a fresh variable named by its column, and `derive(fn, { schema })`
 can declare its unit. The ends of a `partition`'s cells are read from the

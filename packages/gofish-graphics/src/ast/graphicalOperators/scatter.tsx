@@ -153,6 +153,11 @@ function assertLinearSpace(scope: AxisScope): void {
  * its values, so a child with no value in a placement it is given has no
  * place, and the scatter does not draw it: the position of a group with no
  * rows is the mean of nothing, which has no value (`meanOf`, fieldExpr.ts).
+ * It is the mark factory's rule, no value means not drawn
+ * (`buildCreatedMark` in withGoFish.ts), with one difference the domain
+ * forces: a mark whose own channel has no value keeps its place in the
+ * layout, but a child whose placement has no value has no place to keep, so
+ * the scatter leaves it out of the layout too.
  * An array that does not have one entry per child is kept whole, for
  * {@link scatterAxes} to report.
  */

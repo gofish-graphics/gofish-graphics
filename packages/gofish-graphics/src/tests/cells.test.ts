@@ -25,7 +25,7 @@ import {
 } from "../ast/cells";
 import * as Bin from "../families/bin";
 import { mergeCells } from "../ast/underlyingSpace";
-import { inferPos } from "../ast/channels";
+import { inferPos, inferSize } from "../ast/channels";
 import { evalFieldValues } from "../ast/fieldExpr";
 import { loadTemporal } from "../ast/calendar";
 import * as Calendar from "../families/calendar";
@@ -1873,14 +1873,15 @@ async function main() {
     const named = (await product(text({ text: distField("name") }))).filter(
       (t) => t.kind === "text"
     );
-    // The first column holds "a", "bbbbbbbb", and an empty cell's "". Their
-    // left edges differ, and their centers agree, for any width per letter.
+    // The first column holds "a", "bbbbbbbb", and an empty cell, whose text
+    // has no value (no first row), so it is not drawn. Their left edges
+    // differ, and their centers agree, for any width per letter.
     const column = named.filter((t) => t.x < x0 + 100);
     const leftOf = (word: string) => column.find((t) => t.text === word)?.x;
     const halfLetter = (leftOf("a")! - leftOf("bbbbbbbb")!) / (8 - 1);
     check(
       "texts of different widths in one column each sit at their cell's center",
-      column.length === 3 &&
+      column.length === 2 &&
         halfLetter > 0 &&
         column.every(
           (t) => Math.abs(t.x + halfLetter * t.text.length - (x0 + 50)) < 1e-6
@@ -1980,6 +1981,45 @@ async function main() {
       String(lines)
     );
 
+    // No value means not drawn, for every data channel of a mark: a bar
+    // whose height is the mean of no rows is not drawn, and keeps its slot.
+    // A sum of no rows is 0, a value, and draws.
+    const bars = async (h: any) =>
+      await chart(pts, noAxes)
+        .flow(spread({ by: byCell(), dir: "x" }))
+        .mark(rect({ w: 5, h }))
+        .toDisplayList({ w: 300, h: 100 })
+        .then((dl: any) => walkItems(dl).filter((it) => it.kind === "rect"));
+    const meanBars = await bars(distField("y").mean());
+    const sumBars = await bars(distField("y").sum());
+    check(
+      "a mark whose height is the mean of no rows is not drawn; the others " +
+        "keep their slots",
+      meanBars.length === 3 && sumBars.length === 5,
+      `${meanBars.length} / ${sumBars.length}`
+    );
+    // A scatter's child whose position is the mean of no rows has no place,
+    // so the scatter does not draw it either.
+    const placedGroups = await chart(pts, noAxes)
+      .flow(
+        scatter({
+          by: byCell(),
+          x: distField("x").mean(),
+          y: distField("y").mean(),
+        })
+      )
+      .mark(rect({ w: 5, h: 5 }))
+      .toDisplayList({ w: 300, h: 100 })
+      .then(
+        (dl: any) => walkItems(dl).filter((it) => it.kind === "rect").length,
+        (e: Error) => e.message
+      );
+    check(
+      "a scatter of groups draws no child for an empty group",
+      placedGroups === 3,
+      String(placedGroups)
+    );
+
     for (const [name, inner] of [
       ["stack", () => stack({ by: "y", dir: "y" })],
       ["spread", () => spread({ by: "y", dir: "y" })],
@@ -2027,7 +2067,8 @@ async function main() {
     check(
       "the mean of no rows has no value",
       inferPos("x", []) === undefined &&
-        evalFieldValues(field("x").mean(), []).values.length === 0
+        evalFieldValues(field("x").mean(), []).values[0] === undefined &&
+        inferSize(field("x").mean(), []) === undefined
     );
     const dots = walkItems(
       await chart(pts, noAxes)
