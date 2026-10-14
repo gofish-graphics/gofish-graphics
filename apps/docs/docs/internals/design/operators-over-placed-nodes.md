@@ -209,9 +209,10 @@ folds; domain inference is untouched.
 ### 2.3 Scope
 
 The fresh operand's geometry solves in the _composite's_ scope, not the ref's home scope.
-`FlowerChart` demonstrates this today: the flower opens its own `layer({ coord: polar() })`
-inside the spread, warping only the petals, while the stem ref is anchored by pure
-translate reconciliation. This is the right semantics (the attachment brings its own local
+The low-level `FlowerChart` demonstrated this: the flower opened its own
+`layer({ coord: polar() })` inside the spread, warping only the petals, while the stem ref
+was anchored by pure translate reconciliation. (The story is now fluent: a polar
+empty-scope chart aligned to the stem by `Constraint.align`.) This is the right semantics (the attachment brings its own local
 coordinate world; the anchor is a point of contact, not an inherited frame).
 
 **Latent constraint to carry forward:** ref reconciliation is translate-only
