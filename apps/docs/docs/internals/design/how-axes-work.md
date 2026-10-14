@@ -391,7 +391,14 @@ axes: {
 } // per depth, nearest the plot first
 ```
 
-These five rules make the two cases from #1115 instances of one mechanism. Grouped bars
+**One rule for every per-level option.** `levels`, `label.angle`, `label.align` and
+`divider` are all read by depth, the same way. A plain value applies to every level
+where it can, so `divider: true` divides every ordinal level and skips a numeric
+axis's ticks, which have no regions between them. A list names its levels, so an
+entry that cannot apply at its depth, such as `true` at a numeric axis's depth, or an
+entry past the last level, is an error that lists the axis's levels.
+
+These rules make the two cases from #1115 instances of one mechanism. Grouped bars
 and the time axis both list their levels with `levels`, and both decide their labels
 and marks from the types underneath. The mosaic in section 5 would be a third
 instance, once a hierarchical axis can carry nested measures.

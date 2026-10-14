@@ -16,7 +16,7 @@
  * its wire form, `{ kind, ...params }`, so it crosses the Python bridge as
  * IR. The kinds and their params are declared once, in gofish-ir's
  * `STRATEGIES` table, which checks a strategy where `.bin` reads it
- * (`Frontend.checkBin`). `Bin.step` and `Bin.thresholds` are objects of a
+ * (`Frontend.checkPartition`, `Frontend.checkStructBin`). `Bin.step` and `Bin.thresholds` are objects of a
  * class (`StepBin`, `ThresholdsBin`, ast/cells.ts) for their `.format(fn)`,
  * which labels their cells; the cells themselves are made in `ast/cells.ts`
  * (a line) and `ast/polygonCells.ts` (the plane).

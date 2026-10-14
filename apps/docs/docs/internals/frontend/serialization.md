@@ -457,8 +457,9 @@ the wire either way. The `Bin` kinds bin one of two keys (`BIN_KINDS`):
 `step` and `thresholds` cut the line of one field, and `hex` and `voronoi`
 divide the plane of two. `OPTION_TYPES.StructBin` is the kinds of the plane,
 derived from the one `Bin` entry, so a struct's bin op takes a `StructBin`,
-and the JS layout checks a bin on its key with `checkBin(key, value,
-where)`, which names the right key for a kind of the other one.
+and the JS layout checks a struct's bin with `checkStructBin(value, where)`
+and a field's with `checkPartition(value, where)`, each of which names the
+right key for a kind of the other one.
 
 A field's bin op takes a Calendar value, `{ kind: "month", every? }` or
 `{ kind: "week", every?, start? }` or `{ kind: "weekday", start? }` (a weekday
@@ -502,7 +503,12 @@ field accessor or a struct, reports what is wrong with a bad bin, not that
 no shape matched. The JS
 layout checks a strategy where it reads it, with `checkStrategy(family,
 value, where)` from `validate.ts`, the same walk the validator runs over a
-whole document. So an unknown kind, an undeclared param, and a value out of
+whole document. Every JS-side check is that one walk (`walkOrThrow`), so
+it throws the validator's own message: `checkPartition`, `checkStructBin`,
+and `checkOption(name, value, where)`, which checks a named option object
+of `OPTION_TYPES` (layout checks each axis's options against
+`AxisOptions` with it, so a JS caller and a Python one get the same
+errors). So an unknown kind, an undeclared param, and a value out of
 bounds each fail in one place, whether the strategy came from a factory, a
 hand-written object, or Python IR. `Coord` and `Color` are families on the
 two surfaces but not in this table: a coordinate transform is a JS object of

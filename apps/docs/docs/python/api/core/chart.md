@@ -116,11 +116,14 @@ slots (`Calendar.week` over months), `False` on a numeric axis, and an entry
 past the last level. A Calendar value coarser than slots that do not nest in
 it groups each slot by the cell that holds the slot's start: over week
 slots, `Calendar.month` puts each week in the month it starts in.
+`"angle"` and `"align"` lists of the label, and `"divider"` lists, use the
+same depths, and an entry of one that cannot apply at its depth, or one past
+the last level, is the same error.
 
 On an ordinal axis, the label rows of the dimension stack from the plot
 edge, whichever split draws them, so nested splits and one chained key look
-the same. A row sits 2 pixels past a row it partitions and 8 pixels past a
-row of other categories. A divider is a line centered in the gap between two
+the same. A row sits 2 pixels past a row it divides (by default, a row it
+partitions) and 8 pixels past any other row. A divider is a line centered in the gap between two
 neighboring slots. It runs through the row of every level that has a
 boundary in that gap, starting at the plot edge. A level whose group
 continues across the gap stops the divider.
@@ -142,10 +145,11 @@ So in a chart of months over weather categories, with a chained year above
 the months, the one divider is between the years, and it runs from the plot
 edge through the weather, month and year rows. `True` turns a level's
 dividers on and `False` turns them off. A single value applies to every
-level. A list is per level, by the same depths as `"levels"`, and a depth
-past its end stays as inferred: `"divider": [False, True]` divides only at
-the second level's boundaries. `True` on a continuous axis's level is an
-error, since its ticks name points, with no regions between them.
+ordinal level and skips a continuous axis's level, whose ticks name points,
+with no regions between them. A list is per level, by the same depths as
+`"levels"`, and a depth past its end stays as inferred:
+`"divider": [False, True]` divides only at the second level's boundaries. In
+a list, `True` at a continuous level's depth is an error.
 
 The label's `"align"` sets where each level's labels sit along the axis: `"center"` centers
 a label under what it names, and `"start"` puts it at the start of its run,
@@ -159,10 +163,11 @@ start). By default:
 | an outer level over ordered groups: cells of time, numeric bins, or a column the `schema` declares ordered | at the start of each run |
 | a continuous axis's ticks                                                                                  | centered on the tick     |
 
-A single value applies to every level. A list is per level, by the same
-depths as `levels`, and `True` keeps a level's inferred alignment: `"label": {"align": [True, "center"]}`
-centers the second level. `"start"` on a continuous axis is an error, since
-its labels name points.
+A single value applies to every level where it can: a single `"start"`
+skips a continuous axis's levels, since their labels name points. A list is
+per level, by the same depths as `"levels"`, and `True` keeps a level's
+inferred alignment: `"label": {"align": [True, "center"]}` centers the second
+level. In a list, `"start"` at a continuous level's depth is an error.
 
 Each per-axis dict also accepts `"side": "start" | "end"`. By default a
 **continuous/quantitative x-axis renders at the visual bottom** (and a continuous

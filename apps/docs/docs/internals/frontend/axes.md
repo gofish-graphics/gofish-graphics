@@ -218,16 +218,27 @@ city's year axis, and a DEEPER call in the bottom-up `elaborateChrome` walk
 always elaborates an inner axis before an ancestor elaborates an outer one on
 the same dim.
 
-The depths come from a `LevelFold` bubbled UP through the recursion: per dim,
-the names of the levels drawn so far (nearest the plot first), whether one of
-them is ordinal, and the `levels` entries that could not apply.
-`elaborateChrome` folds it over its own children (the longest list of names;
-ordinal if any child's is), so a node's fold depends only on ITS OWN subtree
-and two independent grouped-bar regions don't interfere, then hands it to
-`elaborationsFor`. An axis on dim `d` starts at depth `names[d].length` and
-appends the names of its own levels. Both the public `axes.x.levels` entries
-and a per-level `label.angle` array are read at those depths: `angleForTier`
-picks the number itself, or `array[depth]`.
+The depths come from a `LevelFold` bubbled UP through the recursion: per dim
+(a `DimFold`), the names of the levels drawn so far (nearest the plot first),
+whether one of them is ordinal, how deep the ordinal rows reach and the
+column their outer level bins; and the per-level entries that could not
+apply. `elaborateChrome` folds it over its own children (the longest list of
+names; ordinal if any child's is), so a node's fold depends only on ITS OWN
+subtree and two independent grouped-bar regions don't interfere, then hands
+it to `elaborationsFor`. An axis on dim `d` starts at depth `names.length`
+and appends the names of its own levels.
+
+Four options are read at those depths: `levels`, `label.angle`,
+`label.align` and `divider` (`LevelOptions` in `axes/levels.ts`, read once
+per chart by `readAxisOptions` in `gofish.tsx`, which checks the options
+object against the IR's declared `AxisOptions` with `Frontend.checkOption`).
+One reader serves all four (`readAtDepth`): a plain value is the setting at
+every depth, and a list's entry is the setting at its own. Each level kind
+says which settings it cannot take: a continuous axis's level, numeric or
+time, has ticks, not regions, so it takes no `divider: true` and no
+`label.align: "start"`, and a time axis does not rotate its labels yet. A
+plain value applies to every level where it can, so it skips such a level.
+A list entry names its level, so one that cannot apply there is an issue.
 
 `axes.x.levels` (`AxisOptions.levels` in `gofish.tsx`; read once by
 `levelsFromOption` in `axes/levels.ts`) is a list by depth. `true` keeps a
@@ -245,9 +256,12 @@ starts in, as a calendar labels its weeks. A partition finer than the slots
 (its cell holding a slot's start is shorter than the slot, a week over
 months) groups nothing, and is an error. An axis with no axis above it on
 its dim (`hasOuterAxis` reads the ancestors' still-set `axis` flags) also
-takes the Calendar entries past its inferred levels, as more levels. An entry
-that cannot apply records an issue, and `layout` raises the first one, or an
-entry past the last level, with the dim's level names (`levelsError`). So an
+takes the Calendar entries past its inferred levels, as more levels. Time
+rows and ordinal levels apply their entries through one function,
+`applyLevelEntries`; each axis kind supplies only its inferred levels and how
+a Calendar entry resolves. An entry of any per-level option that cannot
+apply records an issue, and `layout` raises the first one, or an entry past
+the last level, with the dim's level names (`levelOptionsError`). So an
 error lists every level of the chart's dim, not only the axis that found it.
 
 ### Automatic label angle (`label.angle: "auto"`)
@@ -274,7 +288,7 @@ space is UNDEFINED, so its angle never changes σ (bar widths); it only changes
 how far the labels hang into the margin. But layout measures and places in one
 recursive pass and writes each node's box once (the bbox ledger), so a subtree
 cannot be laid out again with a different angle. And the rows that can collide
-are not local to one node: a grouped bar chart's inner year tier is elaborated
+are not local to one node: a grouped bar chart's inner year level is elaborated
 separately inside each city group, so a 2024 label under Austin can hit a 2022
 label under Boston, which only the root can see. So v0 lays out the whole chart
 once per candidate, on a **freshly built tree** each time, scores the finished
@@ -285,8 +299,8 @@ sets: the builder terminals (`marks/terminals.ts`) and the `gofish()` component
 thunk path. A node built by hand has no `rebuild`, and `"auto"` on it throws.
 
 **Tagging and reading labels.** Axis elaboration tags every tick and category
-label `Text` with `axisLabel = { dim, kind, tier }` (`kind` is `"ordinal"` or
-`"continuous"`; `tier` is the label's level depth on its dim, see
+label `Text` with `axisLabel = { dim, kind, depth }` (`kind` is `"ordinal"` or
+`"continuous"`; `depth` is the label's level depth on its dim, see
 [Levels](#levels);
 difference-axis delta labels are not tagged, since the angle does not apply to
 them). After a run, `collectLabelBoxes` walks the laid-out tree, and for each
@@ -297,7 +311,7 @@ box's top in pixels less the glyphs' top). That
 puts every label in the root's layout frame, which is screen pixels up to the
 gutter offset, so overlap measured there equals overlap on screen.
 
-**The score.** Labels are grouped into rows, one per (axis, kind, tier), and
+**The score.** Labels are grouped into rows, one per (axis, kind, depth), and
 `scoreLabelRows` scores each row on its own. Within a row all labels share one
 angle, so the scorer turns every origin back by that angle and compares the
 labels as plain axis-aligned boxes in their own frame. That is exact for
@@ -497,9 +511,10 @@ difference axis), never off the size claim:
 
   The label rows of a dim form one stack measured from the plot edge,
   whichever axis draws them: the first row sits `ORDINAL_LABEL_GAP` past the
-  edge, a row that partitions the value of the row before it (see below)
-  `ROW_GAP` past that row, and a row of other categories `ORDINAL_LABEL_GAP`
-  past it, each by its depth as rotated (the box `rotatedExtent` in
+  edge, a row that divides the row before it (it partitions that row's
+  value, or `divider` says so; see below) `ROW_GAP` past that row, and any
+  other row `ORDINAL_LABEL_GAP` past it, so spacing and dividers always
+  agree, each by its depth as rotated (the box `rotatedExtent` in
   `autoLabelAngle.ts` measures). So one chained key and the same levels as
   nested splits stack alike, and a lake row sits past its species row as any
   axis sits past the content inside it. An outer
@@ -522,7 +537,8 @@ difference axis), never off the size claim:
   nested in other categories (a lake over its species, months over weather)
   do not partition anything, so they draw no dividers. A level draws them
   when it partitions the level inside it, or when the axis's `divider`
-  option says so at its depth (`true` on, `false` off), which wins.
+  option says so at its depth (`true` on, `false` off), which wins. A plain
+  `divider` applies to every ordinal level and skips continuous ones.
 
   Where they are drawn follows one rule: a divider runs through the rows of
   every level that has a boundary in its gap. In each gap between
@@ -561,8 +577,9 @@ difference axis), never off the size claim:
   start for the axis's first run. The box reads which way the slots run off
   the layout (from the axis's first slot to its last), so a reversed or
   bottom-up axis puts it on the run's side. A continuous axis's labels name
-  points, its ticks, so they stay centered on them, and `label.align:
-"start"` on one is an error.
+  points, its ticks, so they stay centered on them: a plain `label.align:
+"start"` skips its levels, and `"start"` in a list at one of its depths is
+  an error.
 
   `axisSpan` is a bake boundary
   (`BAKE_BOUNDARY_TYPES` in `bake.ts`), since it draws itself and its

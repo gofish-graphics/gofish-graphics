@@ -2168,7 +2168,7 @@ and whose `.format(fn)` is held off those keys, as a Calendar value's is. The
 wire form of the op is `{ op: "bin", partition? }` with the partition's own
 wire form, a Calendar value's `{ kind: "month", step: 1 }` or a `Bin` kind's,
 one union told apart by `kind`. `checkPartition` reads either form, and
-rejects a `Bin` kind that bins two fields (`checkBin`). A `Cell`
+rejects a `Bin` kind that bins two fields, naming `struct({ x, y }).bin`. A `Cell`
 keeps the whole value: the interval `[start, end)` (its region), its id (its
 start, as text, so `String(cell)` is the key a node gets), its label (the
 partition's `.format(fn)`, else the default: `"0.5–1"`, or the calendar label),
