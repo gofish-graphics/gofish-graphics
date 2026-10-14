@@ -448,8 +448,8 @@
     <code>curve</code> on <code>line</code>. The region member,
     <code>Shape.blob()</code>, fills the space between members with the alpha
     shape's rule (dialed by <code>convexity</code>), links them with a spanning
-    tree so the set stays in one piece, and blurs the result so the outline's
-    curvature never jumps. Two knobs shape it, and they do not overlap:
+    tree so the set stays in one piece, and rounds the outline so its curvature
+    never jumps. Two knobs shape it, and they do not overlap:
     <code>convexity</code> alone decides what is filled, and
     <code>roundness</code> changes only how sharply the outline bends, never
     filling a gap, opening a hole or joining two pieces. The convex hull and the
@@ -571,8 +571,10 @@
         A morphological closing grows a shape by <em>s</em> and shrinks it back,
         which rounds dents and fills gaps narrower than about 2<em>s</em>; the
         current construction does not use it. A Gaussian blur averages nearby
-        values with bell-curve weights. Curvature is 1 over the radius of the
-        best-fitting circle; an outline is G2 when its curvature never jumps.
+        values with bell-curve weights; the current construction smooths the
+        outline this way along its own length. Curvature is 1 over the radius of
+        the best-fitting circle; an outline is G2 when its curvature never
+        jumps.
       </p>
     </div>
     <div class="card">
@@ -743,11 +745,12 @@ enclose([spread([circle(**d) for d in planets],
         <td><code>roundness</code></td>
         <td><code>Shape.blob</code></td>
         <td>
-          How far the outline's corners are rounded, in pixels (the blur width σ
-          is half of it). It changes curvature only: the pieces and holes stay
-          the same, and the filled area moves by a few percent at most. It takes
-          effect up to the thinnest piece, a member's grown radius or a link's
-          half-width.
+          How far the outline's corners are rounded, in pixels (the smoothing
+          width σ is half of it). It changes curvature only: the pieces and
+          holes stay the same, and the filled area moves by a few percent at
+          most. It takes effect up to the smallest circle in the region: a
+          member's grown radius, a link's half-width, a box's corner, or a
+          keep-out circle.
         </td>
         <td>Bigger is rounder.</td>
         <td>same as <code>padding</code></td>
@@ -788,7 +791,7 @@ enclose([spread([circle(**d) for d in planets],
 
   <h3>How the blob is built</h3>
   <p>
-    <code>Shape.blob()</code> draws one set in five steps, after layout, in
+    <code>Shape.blob()</code> draws one set in six steps, after layout, in
     screen space (so it works under polar and other coordinate transforms the
     way curves do).
   </p>
@@ -802,9 +805,11 @@ enclose([spread([circle(**d) for d in planets],
       of the filled triangles, the other Delaunay edges no longer than 2 alpha
       that no avoided node blocks, and the minimum spanning tree over the
       members, routed around the avoided nodes (always, so the set stays in one
-      piece). A spanning-tree link runs between the closest points of two
-      members' geometries, so members that touch, like an edge and its end node,
-      are joined at no cost.
+      piece). Where a routed link wraps an avoided node, it follows that node's
+      keep-out circle exactly: the route is straight lines tangent to the
+      circles and arcs of them. A spanning-tree link runs between the closest
+      points of two members' geometries, so members that touch, like an edge and
+      its end node, are joined at no cost.
     </li>
     <li>
       <strong>Pieces.</strong> Each member grown by <code>padding</code> (its
@@ -821,22 +826,36 @@ enclose([spread([circle(**d) for d in planets],
       edge becomes a round notch.
     </li>
     <li>
-      <strong>Rounding.</strong> The region is blurred with a Gaussian of width
-      σ = <code>roundness</code> / 2 and multiplied by a smooth step that is ½
-      exactly on each keep-out zone's edge. The outline is where the product is
-      ½. A blurred region is a sum of smooth bumps, so this outline is
-      curvature-continuous, and each hole stays an exact circle at any
-      <code>roundness</code>. Blurring pulls a bulge of radius <em>r</em> in by
-      about σ²/(2<em>r</em>), so discs and tubes are drawn slightly larger to
-      cancel it, and a lone member ends exactly at <code>padding</code> and a
-      lone link at its half-width.
+      <strong>Exact outline.</strong> The outline of what is left is traced
+      exactly. Every piece and every zone has a distance in closed form (a disc,
+      a tube, a box, a triangle, or a tube bent around an avoided node), so each
+      outline point is found to a ten-thousandth of a pixel, on a 1 px grid that
+      is searched only near the outline. Each point records the circle it lies
+      on, if any. This step does not depend on <code>roundness</code>.
     </li>
     <li>
-      <strong>Topology check.</strong> If the blur would join two pieces, split
-      one, or open or close a hole, σ is narrowed by bisection until it does
-      not. So <code>roundness</code> never changes the topology. Its effect also
-      stops at the thinnest piece, because a member's own arc already has radius
-      <em>R</em>, and rounding it further would cost padding.
+      <strong>Rounding.</strong> The outline is smoothed along its own length
+      with a Gaussian of width σ = <code>roundness</code> / 2. Smoothing pulls a
+      circle of radius <em>r</em> toward its center by a known factor (about
+      σ²/(2<em>r</em>)), so first every point that lies on a circle is moved out
+      from that circle's center by the same factor. Circles and straight sides
+      then come back exactly where they were, and only corners and joins change:
+      they round. So a lone member ends exactly at <code>padding</code>, a hole
+      is exactly its clearance circle, and the outline is curvature-continuous,
+      because a smoothed curve has derivatives of every order. Two cases need
+      more. Smoothing along the outline cannot reach across a narrow inlet,
+      whose two sides are close in the plane but far apart along the outline, so
+      an inlet narrower than 1.5 σ is closed first. And smoothing fills corners
+      a little, so each point near a keep-out zone is moved out by a smooth
+      maximum of its gap and 0; the outline never enters a zone.
+    </li>
+    <li>
+      <strong>Topology.</strong> Smoothing moves each traced loop on its own, so
+      the pieces and holes are the traced ones at every <code>roundness</code>.
+      If two loops, or two parts of one, would cross, σ is narrowed by bisection
+      until they do not. Rounding also stops at the smallest circle in the
+      region (a member's bulge, a link's half-width, a box corner, a keep-out
+      circle), because rounding further would bend that circle.
     </li>
   </ol>
   <p>
@@ -877,7 +896,7 @@ enclose([spread([circle(**d) for d in planets],
       <code>roundness</code> decides only curvature.</strong
     >
     The closing is gone, so every fill comes from <code>convexity</code>'s
-    triangles, and the blur is the <code>roundness</code> knob.
+    triangles, and the rounding is the <code>roundness</code> knob.
   </p>
   <p>
     To check this, we measured eight properties of the outline over a full grid
@@ -1015,15 +1034,15 @@ enclose([spread([circle(**d) for d in planets],
       <tr>
         <td>Fill</td>
         <td class="heat" style="--v: 0.62">0.62</td>
-        <td class="heat" style="--v: 0.11">0.11</td>
-        <td class="heat" style="--v: 0.1">0.10</td>
         <td class="heat" style="--v: 0.08">0.08</td>
-        <td class="heat" style="--v: 0.04">0.04</td>
+        <td class="heat" style="--v: 0.13">0.13</td>
+        <td class="heat" style="--v: 0.09">0.09</td>
+        <td class="heat" style="--v: 0.03">0.03</td>
       </tr>
       <tr>
         <td>Gap</td>
-        <td class="heat" style="--v: 0.67">0.67</td>
-        <td class="heat" style="--v: 0.04">0.04</td>
+        <td class="heat" style="--v: 0.66">0.66</td>
+        <td class="heat" style="--v: 0.01">0.01</td>
         <td class="heat" style="--v: 0.04">0.04</td>
         <td class="heat" style="--v: 0.17">0.17</td>
         <td class="heat" style="--v: 0.14">0.14</td>
@@ -1031,48 +1050,48 @@ enclose([spread([circle(**d) for d in planets],
       <tr>
         <td>Radius</td>
         <td class="heat" style="--v: 0.47">0.47</td>
-        <td class="heat" style="--v: 0.26">0.26</td>
-        <td class="heat" style="--v: 0.15">0.15</td>
-        <td class="heat" style="--v: 0.12">0.12</td>
-        <td class="heat" style="--v: 0.05">0.05</td>
+        <td class="heat" style="--v: 0.21">0.21</td>
+        <td class="heat" style="--v: 0.16">0.16</td>
+        <td class="heat" style="--v: 0.11">0.11</td>
+        <td class="heat" style="--v: 0.07">0.07</td>
       </tr>
       <tr>
         <td>Padding</td>
-        <td class="heat" style="--v: 0.01">0.01</td>
-        <td class="heat" style="--v: 0.01">0.01</td>
         <td class="heat" style="--v: 0">0.00</td>
-        <td class="heat" style="--v: 0.96">0.96</td>
+        <td class="heat" style="--v: 0.01">0.01</td>
+        <td class="heat" style="--v: 0.01">0.01</td>
+        <td class="heat" style="--v: 0.97">0.97</td>
         <td class="heat" style="--v: 0">0.00</td>
       </tr>
       <tr>
         <td>Neck</td>
-        <td class="heat" style="--v: 0.15">0.15</td>
-        <td class="heat" style="--v: 0.09">0.09</td>
-        <td class="heat" style="--v: 0.38">0.38</td>
+        <td class="heat" style="--v: 0.17">0.17</td>
         <td class="heat" style="--v: 0.05">0.05</td>
-        <td class="heat" style="--v: 0.28">0.28</td>
+        <td class="heat" style="--v: 0.43">0.43</td>
+        <td class="heat" style="--v: 0.05">0.05</td>
+        <td class="heat" style="--v: 0.27">0.27</td>
       </tr>
       <tr>
         <td>Clearance</td>
         <td class="heat" style="--v: 0.02">0.02</td>
-        <td class="heat" style="--v: 0.11">0.11</td>
         <td class="heat" style="--v: 0.04">0.04</td>
-        <td class="heat" style="--v: 0.19">0.19</td>
-        <td class="heat" style="--v: 0.52">0.52</td>
+        <td class="heat" style="--v: 0.01">0.01</td>
+        <td class="heat" style="--v: 0.25">0.25</td>
+        <td class="heat" style="--v: 0.54">0.54</td>
       </tr>
       <tr>
         <td>Hole shape</td>
         <td class="heat" style="--v: 0">0.00</td>
+        <td class="heat" style="--v: 0.03">0.03</td>
         <td class="heat" style="--v: 0.01">0.01</td>
-        <td class="heat" style="--v: 0">0.00</td>
         <td class="heat" style="--v: 0.06">0.06</td>
-        <td class="heat" style="--v: 0.93">0.93</td>
+        <td class="heat" style="--v: 0.89">0.89</td>
       </tr>
       <tr>
         <td>Topology</td>
         <td class="heat" style="--v: 1">1.00</td>
         <td class="heat" style="--v: 0">0.00</td>
-        <td class="heat" style="--v: 0.54">0.54</td>
+        <td class="heat" style="--v: 0.48">0.48</td>
         <td class="heat" style="--v: 0.49">0.49</td>
         <td class="heat" style="--v: 0.46">0.46</td>
       </tr>
@@ -1089,13 +1108,13 @@ enclose([spread([circle(**d) for d in planets],
     (0.23) and the topology (along 48% of its sweeps), and
     <code>convexity</code> moved the smallest radius (0.23), so each knob did
     part of the other's job. After, <code>roundness</code> changes the topology
-    along none of its sweeps (0.00) and the hole shape not at all (0.01). Its
-    largest effect is on the radius (0.26), which is its job. Its smaller
+    along none of its sweeps (0.00) and the hole shape hardly at all (0.03). Its
+    largest effect is on the radius (0.21), which is its job. Its smaller
     effects on fill and clearance are the bit of area that rounding a concave
     corner adds, and the lips of a notch moving as they round.
     <code>convexity</code> still moves the radius, because filling triangles
     makes new corners, so that is the shape changing, not a second rounding
-    control. The hole shape now depends on <code>clearance</code> alone (0.93).
+    control. The hole shape now depends on <code>clearance</code> alone (0.89).
   </p>
   <p>
     The topology check, on its own: each dataset (with the hyperedges both with
@@ -1106,7 +1125,9 @@ enclose([spread([circle(**d) for d in planets],
   </p>
   <p>
     Before, the counts stayed the same along 26 of 35 sweeps; after, along 35 of
-    35, with roundness 0 included. The sweeps that changed before:
+    35, with roundness 0 included. (The exact trace keeps one more small gap
+    open on the Gentoo at low convexity than the old 0.5 px grid did, at every
+    roundness.) The sweeps that changed before:
   </p>
   <div class="tablewrap">
     <table>
@@ -1132,19 +1153,19 @@ enclose([spread([circle(**d) for d in planets],
         <td>Gentoo</td>
         <td class="num">0</td>
         <td class="num">1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0</td>
-        <td class="num">1/4 1/4 1/4 1/4 1/4 1/4 1/4 1/4</td>
+        <td class="num">1/5 1/5 1/5 1/5 1/5 1/5 1/5 1/5</td>
       </tr>
       <tr>
         <td>Gentoo</td>
         <td class="num">0.25</td>
         <td class="num">1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0</td>
-        <td class="num">1/4 1/4 1/4 1/4 1/4 1/4 1/4 1/4</td>
+        <td class="num">1/5 1/5 1/5 1/5 1/5 1/5 1/5 1/5</td>
       </tr>
       <tr>
         <td>Gentoo</td>
         <td class="num">0.5</td>
         <td class="num">1/2 1/4 1/1 1/1 2/0 2/0 2/0 1/0</td>
-        <td class="num">1/3 1/3 1/3 1/3 1/3 1/3 1/3 1/3</td>
+        <td class="num">1/4 1/4 1/4 1/4 1/4 1/4 1/4 1/4</td>
       </tr>
       <tr>
         <td>Gentoo</td>
@@ -1177,7 +1198,7 @@ enclose([spread([circle(**d) for d in planets],
     smoothing first left triangle-shaped holes, then half-rounded them, and only
     at high values cut just the circles. Now the holes are the clearance circles
     at every roundness, and roundness only softens the corners, from the angular
-    hull at 0 to the softest the members' 15 px radius allows. Convexity 0.65 is
+    hull at 0 to the softest the 9 px keep-out circles allow. Convexity 0.65 is
     the third case Josh named; there too only the corners soften.
   </p>
   <figure>
@@ -1205,7 +1226,7 @@ enclose([spread([circle(**d) for d in planets],
     their corners round, because a triangle's corners are the part of it that is
     cut. With edges as members (the last row), roundness changes little, because
     the edge members are slim tubes (6.75 px), and roundness stops at the
-    thinnest piece.
+    smallest circle in the region.
   </p>
   <figure>
     <div class="shot wide">
@@ -1366,12 +1387,11 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
         kept, so every <code>convexity</code> draws the same thing. Rows are
         <code>roundness</code> 0, 11, 22 and 44 px. The band always passes under
         b, because a and c form no triangle that could hold b. Roundness rounds
-        the joins between the band and the circles, up to the band's half-width
-        (14.5 px at <code>neck: 0.5</code>, 23 px at 0.85), so 44 px draws
-        nearly what 22 px draws. The spelling in the syntax section (<code
-          >neck: 0.85</code
-        >, <code>roundness</code> at its default of 22) is the third row of the
-        third column.
+        the joins between the band and the circles, up to the smallest circle in
+        the region (the band's half-width at small <code>neck</code>, else b's
+        20 px keep-out circle), so 44 px draws what 22 px draws. The spelling in
+        the syntax section (<code>neck: 0.85</code>, <code>roundness</code> at
+        its default of 22) is the third row of the third column.
       </figcaption>
     </figure>
   </section>
@@ -1397,9 +1417,9 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
         half-rounded triangles of the old grid (History, v6) are gone. Down each
         column only the corners change, and the waves between neighboring dots
         flatten. At 0 and 4 px the spine keeps narrow slits between touching
-        dots. At 4 px the blur would pinch each slit's mouth shut and make a new
-        hole, so the topology check holds the blur back; at 8 px the slits fill
-        completely, which keeps the topology.
+        dots. Rounding closes a slit up to where it is 1.5 σ wide, so at 4 px
+        the slits close only where they are narrowest, and at 8 px they close
+        completely; a closed slit is filled, never pinched into a hole.
       </figcaption>
     </figure>
   </section>
@@ -1786,14 +1806,15 @@ set_members = [
 
   <h2 id="hull-check">The hull preset is within half a pixel</h2>
   <p>
-    Before the blur the hull shortcut is exact: with nothing avoided, every
+    Before rounding the hull shortcut is exact: with nothing avoided, every
     Delaunay triangle is filled and every hull edge is a tube as wide as the
-    bulge, so the union is the convex hull grown by the bulge. The blur rounds
-    the corners, and the slightly larger discs that cancel the blur stand out by
-    a fraction of a pixel near them. Measured against a true padded convex hull
-    (black line), the outline is never inside it. It is at most 0.3 px outside
-    it with <code>roundness</code> equal to <code>padding</code> (U and Gentoo),
-    and 0.8 px outside at <code>roundness: 15</code>, the most the U allows.
+    bulge, so the union is the convex hull grown by the bulge. Rounding keeps
+    the circles and the straight sides where they are and changes only the joins
+    between them, where the curvature steps from 1/<em>R</em> to 0. Measured
+    against a true padded convex hull (black line), the outline is within 0.2 px
+    of it with <code>roundness</code> equal to <code>padding</code> (U and
+    Gentoo), and within 0.3 px at <code>roundness: 15</code>, the most the U
+    allows.
   </p>
   <figure>
     <div class="shot">
@@ -1817,9 +1838,8 @@ set_members = [
     section's spelling. Left: the outline with its curvature comb, a short tooth
     across the outline at many points with length proportional to the curvature
     there. Right: curvature against distance along the outline from the leftmost
-    point, computed exactly from the blurred field. The gray lines mark 1/<em
-      >R</em
-    >
+    point, from the circle through the outline points 3 px before and after each
+    point, every 0.5 px. The gray lines mark 1/<em>R</em>
     (a's circle) and −1/40 for scale.
   </p>
   <figure>
@@ -1832,10 +1852,11 @@ set_members = [
     <figcaption>
       The curve moves smoothly between 1/<em>R</em> around the circles, about 0
       along the band, and negative values at the joins, with every change spread
-      over about 20 px of outline. Padding at a is 22.0 px (asked 22), and the
-      gap to b's ring is 11.0 px, more than the 6 px asked:
-      <code>clearance</code> is a minimum, and with no closing nothing pulls the
-      band up toward b.
+      over about 20 px of outline. Under b the band follows b's keep-out circle,
+      so there the curvature is that circle's, and it turns into and out of it
+      over about 10 px. Padding at a is 22.0 px (asked 22), and the gap to b's
+      ring is 7.6 px, more than the 6 px asked: near a keep-out zone the rounded
+      outline is pushed out by a smooth maximum of its gap and 0.
     </figcaption>
   </figure>
 
@@ -1962,9 +1983,9 @@ set_members = [
       radius of Vega-Lite's marks and Figma.)
     </li>
     <li>
-      Keep all rounding inside <code>Shape.blob()</code> (the region blur), and
-      add no <code>curve</code> key to <code>enclose</code>? (History, v4, shows
-      why a curve through the outline cannot keep <code>padding</code> or
+      Keep all rounding inside <code>Shape.blob()</code> (the outline rounding),
+      and add no <code>curve</code> key to <code>enclose</code>? (History, v4,
+      shows why a curve through the outline cannot keep <code>padding</code> or
       <code>clearance</code>.)
     </li>
     <li>
@@ -1974,10 +1995,10 @@ set_members = [
       geometry through #974's <code>boundary</code> query.
     </li>
     <li>
-      Should <code>roundness</code> go past the thinnest piece, so a hull's
-      corners can round more than the members' grown radius? The cost is that
-      <code>padding</code> becomes a minimum and the area grows near the
-      corners.
+      Should <code>roundness</code> go past the smallest circle in the region,
+      so a hull's corners can round more than the members' grown radius? The
+      cost is that <code>padding</code> and <code>clearance</code> become
+      approximate near those circles.
     </li>
   </ol>
 
@@ -3214,6 +3235,37 @@ chart(catch)
         />
       </div>
     </figure>
+  </details>
+
+  <details class="hist">
+    <summary>v7: the same outline, computed in milliseconds</summary>
+    <p>
+      Josh: the computation was too slow (122 ms per slider step on the
+      penguins). v6 rasterized the region on a 0.5 px grid, blurred it, and
+      checked the topology with more blurs, so its cost grew with the area of
+      the drawing. v7 keeps the knobs and the promises and changes how the
+      outline is computed (construction steps 4 to 6): the region's outline is
+      traced exactly from closed-form distances, and it is rounded by smoothing
+      along its own length, with circles held in place. So the cost grows with
+      the length of the outline, and a change of <code>roundness</code> reruns
+      only the rounding. A Gaussian along the outline cannot join two pieces or
+      open a hole, so v6's topology check became a check that loops do not
+      cross. Two rules were added for what the blur did for free: an inlet
+      narrower than 1.5 σ is closed before smoothing, and the outline is kept
+      out of every keep-out zone by a smooth maximum. Routed links now follow
+      the avoided nodes' keep-out circles exactly where they wrap them.
+    </p>
+    <p>
+      What changed in the drawings: the band under b in the Topology example now
+      hugs b's ring (gap 7.6 px for 6 asked, was 11.0), and its joins there turn
+      over about 10 px instead of 20; holes are exact circles to 0.001 px (were
+      within 0.7 px); the hull preset is within 0.3 px of the true padded hull
+      (was 0.8 px outside); and rounding now stops at the smallest circle in the
+      region, keep-out circles and box corners included, so the trout bars'
+      corners round less at 8 px than before (the cap is their 4 px corner
+      radius). Speed in the playground: penguins about 11 ms per slider step,
+      the other datasets 1 to 3 ms.
+    </p>
   </details>
 
   <details class="hist">

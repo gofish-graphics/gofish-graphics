@@ -9,7 +9,6 @@ const settings: [string, (pad: number) => Partial<Params>][] = [
   ["hull", (pad) => ({ convexity: 1, neck: 1, roundness: pad })],
   ["spine", (pad) => ({ convexity: 0, neck: 1, roundness: pad })],
 ];
-const drag = Number(process.env.DRAG_RES ?? 1);
 let bad = 0;
 const ALL = DATASETS.flatMap((d) =>
   d.variant ? [d, { ...d, ...d.variant, id: `${d.id}+edges` }] : [d]
@@ -24,7 +23,8 @@ for (const d of ALL) {
     const t0 = performance.now();
     const out = computeDataset(d, p);
     const t1 = performance.now();
-    computeDataset(d, p, drag);
+    // a roundness change: the construction reuses its traced region and reruns the rounding only
+    computeDataset(d, { ...p, roundness: p.roundness / 2 });
     const t2 = performance.now();
     const ok = out.every(
       (s) =>
@@ -37,7 +37,7 @@ for (const d of ALL) {
     if (!ok) bad++;
     const loops = out.map((s) => s.loops.length).join("+");
     console.log(
-      `${d.id.padEnd(11)} ${name.padEnd(9)} ${ok ? "ok " : "BAD"} loops ${loops.padEnd(8)} full ${(t1 - t0).toFixed(0).padStart(5)} ms   drag(res ${drag}) ${(t2 - t1).toFixed(0).padStart(5)} ms`
+      `${d.id.padEnd(11)} ${name.padEnd(9)} ${ok ? "ok " : "BAD"} loops ${loops.padEnd(8)} first ${(t1 - t0).toFixed(1).padStart(6)} ms   roundness change ${(t2 - t1).toFixed(1).padStart(5)} ms`
     );
   }
 }

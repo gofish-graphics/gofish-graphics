@@ -9,7 +9,6 @@ type State = Params & {
   edgesAsMembers: boolean;
 };
 const DEFAULTS = { convexity: 0.5, neck: 1 }; // roundness defaults to padding; clearance to 4
-const DRAFT_RES = 1; // grid cell (px) while a slider is being dragged; release recomputes at full resolution
 const KEY = "blob-playground-v2";
 
 const ds0 = DATASETS[1];
@@ -66,7 +65,7 @@ const syncControls = () => {
   $("roundness-hint").textContent =
     applied === null
       ? ""
-      : `In effect: ${num(applied)} px${applied < state.roundness - 0.01 ? " (the thinnest piece, or less where more would change the topology)" : ""}.`;
+      : `In effect: ${num(applied)} px${applied < state.roundness - 0.01 ? " (the smallest circle in the region, or less where more would make the outline cross itself)" : ""}.`;
   $<HTMLInputElement>("skeleton").checked = state.skeleton;
   for (const b of document.querySelectorAll<HTMLButtonElement>("[data-ds]")) {
     const on = b.dataset.ds === state.dataset;
@@ -172,89 +171,62 @@ const drawResults = (results: SetResult[]) => {
 };
 
 // ── recompute scheduling ─────────────────────────────────────────────────────
-// Computation runs on the main thread, one set per task, so a slow dataset never freezes the
-// sliders. A newer request cancels an older one. While dragging, the grid is DRAFT_RES px.
-let gen = 0,
-  pending: number | null = null,
+// Every set is computed in one task, at most once per animation frame (a newer slider value
+// replaces a pending one). The construction remembers its stages, so a change reruns only the
+// stages that read the changed knob: roundness alone reruns just the rounding.
+let pending: number | null = null,
   applied: number | null = null; // the roundness the last drawing used (2 sigma), the least over sets
-const recompute = (draft: boolean) => {
-  const my = ++gen,
-    d = dataset(),
-    p: Params = { ...state },
-    out: SetResult[] = [];
-  const res = draft ? DRAFT_RES : undefined;
-  $("status").textContent = draft ? "drawing (draft grid)…" : "drawing…";
+const recompute = () => {
+  const d = dataset(),
+    p: Params = { ...state };
   $("stage-wrap").setAttribute("aria-busy", "true");
+  let out: SetResult[];
   const t0 = performance.now();
-  const step = (i: number) => {
-    if (my !== gen) return;
-    try {
-      out.push(computeDataset({ ...d, sets: [d.sets[i]] }, p, res)[0]);
-    } catch (err) {
-      $("status").textContent = `error: ${(err as Error).message}`;
-      $("stage-wrap").removeAttribute("aria-busy");
-      return;
-    }
-    if (i + 1 < d.sets.length) {
-      setTimeout(() => step(i + 1), 0);
-      return;
-    }
-    drawResults(out);
-    applied = Math.min(...out.map((r) => 2 * r.sigma));
-    syncControls();
-    const ms = performance.now() - t0;
-    lastMs[`${d.id}:${draft}`] = ms;
-    $("status").textContent =
-      `${draft ? "draft grid 1 px" : "full grid"} · ${Math.round(ms)} ms${draft ? " · refines on release" : ""}`;
+  try {
+    out = computeDataset(d, p);
+  } catch (err) {
+    $("status").textContent = `error: ${(err as Error).message}`;
     $("stage-wrap").removeAttribute("aria-busy");
-  };
-  setTimeout(() => step(0), 0);
-};
-// A safety net only: a dataset whose draft takes longer than SLOW_MS is redrawn on release only.
-// Every current dataset drafts in well under 100 ms, so none of them hits it.
-const SLOW_MS = 500;
-const lastMs: Record<string, number> = {};
-const schedule = (draft: boolean) => {
-  if (pending !== null) cancelAnimationFrame(pending);
-  const known =
-    lastMs[`${state.dataset}:true`] ?? lastMs[`${state.dataset}:false`];
-  if (draft && known !== undefined && known > SLOW_MS) {
-    gen++; // cancel anything in flight
-    $("status").textContent =
-      `release to redraw (about ${(known / 1000).toFixed(1)} s)`;
     return;
   }
+  const ms = performance.now() - t0;
+  drawResults(out);
+  applied = Math.min(...out.map((r) => 2 * r.sigma));
+  syncControls();
+  $("status").textContent = `computed in ${ms.toFixed(1)} ms`;
+  $("status").dataset.ms = String(ms);
+  $("stage-wrap").removeAttribute("aria-busy");
+};
+const schedule = () => {
+  if (pending !== null) cancelAnimationFrame(pending);
   pending = requestAnimationFrame(() => {
     pending = null;
-    recompute(draft);
+    recompute();
   });
 };
-const update = (patch: Partial<State>, draft = false) => {
+const update = (patch: Partial<State>) => {
   state = { ...state, ...patch };
   syncControls();
   save();
-  schedule(draft);
+  schedule();
 };
 
 // ── wiring ───────────────────────────────────────────────────────────────────
-const setSlider = (k: Key, v: number, draft: boolean) => {
+const setSlider = (k: Key, v: number) => {
   const patch: Partial<State> = { [k]: v };
   if (k === "padding") {
     // roundness follows padding while it sits at its default (equal to padding)
     if (eq(state.roundness, state.padding)) patch.roundness = v;
     else patch.roundness = Math.min(state.roundness, 3 * v);
   }
-  update(patch, draft);
+  update(patch);
 };
 for (const k of SLIDERS) {
   const el = $<HTMLInputElement>(k);
-  el.addEventListener("input", () => setSlider(k, +el.value, true));
-  el.addEventListener("change", () => setSlider(k, +el.value, false));
+  el.addEventListener("input", () => setSlider(k, +el.value));
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>("[data-preset]"))
-  b.addEventListener("click", () =>
-    update(PRESETS[b.dataset.preset!](), false)
-  );
+  b.addEventListener("click", () => update(PRESETS[b.dataset.preset!]()));
 $<HTMLInputElement>("skeleton").addEventListener("change", (e) => {
   state.skeleton = (e.target as HTMLInputElement).checked;
   $("skel").style.display = state.skeleton ? "" : "none";
@@ -262,7 +234,7 @@ $<HTMLInputElement>("skeleton").addEventListener("change", (e) => {
 });
 
 $<HTMLInputElement>("variant").addEventListener("change", (e) =>
-  update({ edgesAsMembers: (e.target as HTMLInputElement).checked }, false)
+  update({ edgesAsMembers: (e.target as HTMLInputElement).checked })
 );
 
 const tabs = $("ds-tabs");
@@ -282,7 +254,7 @@ const pickDataset = (id: string) => {
     roundness: Math.round(2 * ratio * d.padding) / 2,
   };
   drawScene();
-  update({}, false);
+  update({});
 };
 tabs.addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-ds]");
@@ -326,4 +298,4 @@ $("copy").addEventListener("click", async () => {
 
 drawScene();
 syncControls();
-schedule(false);
+schedule();

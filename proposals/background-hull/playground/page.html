@@ -306,8 +306,8 @@
   <p class="lede">
     Move the sliders to redraw <code>Shape.blob()</code> live with the current
     construction: a Delaunay skeleton, discs and tubes, the avoided nodes cut
-    out, then a Gaussian blur traced at level ½. Convexity alone decides what is
-    filled; roundness only changes curvature.
+    out, traced exactly, then rounded by smoothing along the outline. Convexity
+    alone decides what is filled; roundness only changes curvature.
     <a href="https://claude.ai/artifact/2esKYS7PvWVMdoyVny6uLP"
       >Back to the proposal</a
     >.
@@ -365,8 +365,8 @@
           ></label>
           <input type="range" id="roundness" min="0" max="24" step="0.5" />
           <div class="hint">
-            how far corners are rounded, in px (blur σ = roundness ÷ 2); never
-            fills, splits or opens anything.
+            how far corners are rounded, in px (smoothing σ = roundness ÷ 2);
+            never fills, splits or opens anything.
             <span id="roundness-hint"></span>
           </div>
         </div>

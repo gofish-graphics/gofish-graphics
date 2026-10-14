@@ -10,13 +10,8 @@ export type Params = {
 };
 export type SetResult = { loops: Pt[][]; skel: Skeleton; sigma: number };
 
-/** One smoothBlob call per set, exactly as the stories call it. `res` (grid cell, px)
- *  overrides the construction's own choice; the page passes a coarser one while dragging. */
-export const computeDataset = (
-  d: Dataset,
-  p: Params,
-  res?: number
-): SetResult[] =>
+/** One smoothBlob call per set, exactly as the stories call it. */
+export const computeDataset = (d: Dataset, p: Params): SetResult[] =>
   d.sets.map((s) => {
     const r = smoothBlob(s.members, {
       avoiding: s.avoiding,
@@ -26,7 +21,6 @@ export const computeDataset = (
       neck: p.neck,
       roundness: p.roundness,
       clearance: p.clearance,
-      ...(res ? { res } : {}),
     });
     return { loops: r.loops, skel: r.skel, sigma: r.sigma };
   });

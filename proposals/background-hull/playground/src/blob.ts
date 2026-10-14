@@ -242,11 +242,17 @@ const obstacleGrid = (obs: Obstacle[]) => {
     }
     return false;
   };
-  const deep = (v: Pt, { o, sg }: Obstacle) => {
+  // each obstacle's edge lengths, measured when first needed
+  const lens: number[][] = [];
+  const lensOf = (j: number) =>
+    (lens[j] ??= obs[j].o.map(
+      (p, i, o) => dist(p, o[(i + 1) % o.length]) || 1
+    ));
+  const deep = (v: Pt, { o, sg }: Obstacle, L: number[]) => {
     for (let i = 0; i < o.length; i++) {
       const p = o[i],
         q = o[(i + 1) % o.length];
-      if ((sg * cross(p, q, v)) / (dist(p, q) || 1) <= 0.01) return false;
+      if ((sg * cross(p, q, v)) / L[i] <= 0.01) return false;
     }
     return true;
   };
@@ -259,7 +265,7 @@ const obstacleGrid = (obs: Obstacle[]) => {
         v[0] < n.bb[2] &&
         v[1] > n.bb[1] &&
         v[1] < n.bb[3] &&
-        deep(v, n)
+        deep(v, n, lensOf(j))
       );
     });
   return { hits, buried };
@@ -281,27 +287,81 @@ const routeAround = (a: Pt, b: Pt, allObstacles: Poly[]): Pt[] | null => {
   const grid = obstacleGrid(near);
   // A vertex more than 0.01 px inside another obstacle can never be on a route: every segment
   // from it runs that far through the obstacle, which counts as blocked. So it is left out.
-  const pts: Pt[] = [
-    a,
-    b,
-    ...near.flatMap(({ o }, k) => o.filter((v) => !grid.buried(v, k))),
-  ];
+  // Each vertex keeps its two neighbors on its obstacle: a shortest route only bends at a vertex
+  // it wraps around, so it reaches a vertex only along a line that leaves both neighbors on one side.
+  const pts: Pt[] = [a, b],
+    nb: (Pt | null)[][] = [
+      [null, null],
+      [null, null],
+    ];
+  near.forEach(({ o }, k) =>
+    o.forEach((v, i) => {
+      if (grid.buried(v, k)) return;
+      pts.push(v);
+      nb.push([o[(i - 1 + o.length) % o.length], o[(i + 1) % o.length]]);
+    })
+  );
+  const tangent = (u: Pt, v: number) => {
+    const [p, q] = nb[v];
+    if (!p || !q) return true;
+    const s1 = cross(u, pts[v], p),
+      s2 = cross(u, pts[v], q);
+    return s1 * s2 >= 0;
+  };
+  // A* from a to b (the straight distance to b never overestimates), over a binary heap
   const n = pts.length,
-    D = new Array(n).fill(Infinity),
-    prev = new Array(n).fill(-1),
-    done = new Array(n).fill(false);
+    D = new Float64Array(n).fill(Infinity),
+    prev = new Int32Array(n).fill(-1),
+    done = new Uint8Array(n);
+  const heap: number[] = [],
+    key: number[] = [];
+  const push = (v: number, f: number) => {
+    let i = heap.length;
+    heap.push(v);
+    key.push(f);
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (key[p] <= key[i]) break;
+      [heap[p], heap[i]] = [heap[i], heap[p]];
+      [key[p], key[i]] = [key[i], key[p]];
+      i = p;
+    }
+  };
+  const pop = () => {
+    const top = heap[0],
+      lastV = heap.pop()!,
+      lastK = key.pop()!;
+    if (heap.length) {
+      heap[0] = lastV;
+      key[0] = lastK;
+      for (let i = 0; ; ) {
+        const l = 2 * i + 1,
+          r = l + 1;
+        let m = i;
+        if (l < heap.length && key[l] < key[m]) m = l;
+        if (r < heap.length && key[r] < key[m]) m = r;
+        if (m === i) break;
+        [heap[m], heap[i]] = [heap[i], heap[m]];
+        [key[m], key[i]] = [key[i], key[m]];
+        i = m;
+      }
+    }
+    return top;
+  };
   D[0] = 0;
-  for (let it = 0; it < n; it++) {
-    let u = -1;
-    for (let i = 0; i < n; i++) if (!done[i] && (u < 0 || D[i] < D[u])) u = i;
-    if (u < 0 || D[u] === Infinity || u === 1) break;
-    done[u] = true;
-    for (let v = 0; v < n; v++) {
-      if (done[v]) continue;
+  push(0, dist(a, b));
+  while (heap.length) {
+    const u = pop();
+    if (done[u]) continue;
+    if (u === 1) break;
+    done[u] = 1;
+    for (let v = 1; v < n; v++) {
+      if (done[v] || !tangent(pts[u], v)) continue;
       const d = D[u] + dist(pts[u], pts[v]);
       if (d < D[v] && !grid.hits(pts[u], pts[v])) {
         D[v] = d;
         prev[v] = u;
+        push(v, d + dist(pts[v], b));
       }
     }
   }
@@ -496,216 +556,6 @@ const erf = (x: number) => {
   );
 };
 const Phi = (x: number) => 0.5 * (1 + erf(x / Math.SQRT2));
-/** e^{-x} I0(x) (Abramowitz and Stegun 9.8.1-2). */
-const i0e = (x: number) => {
-  const ax = Math.abs(x);
-  if (ax < 3.75) {
-    const y = (x / 3.75) ** 2;
-    return (
-      Math.exp(-ax) *
-      (1 +
-        y *
-          (3.5156229 +
-            y *
-              (3.0899424 +
-                y *
-                  (1.2067492 +
-                    y * (0.2659732 + y * (0.0360768 + y * 0.0045813))))))
-    );
-  }
-  const y = 3.75 / ax;
-  return (
-    (1 / Math.sqrt(ax)) *
-    (0.39894228 +
-      y *
-        (0.01328592 +
-          y *
-            (0.00225319 +
-              y *
-                (-0.00157565 +
-                  y *
-                    (0.00916281 +
-                      y *
-                        (-0.02057706 +
-                          y *
-                            (0.02635537 +
-                              y * (-0.01647633 + y * 0.00392377))))))))
-  );
-};
-/** Gaussian-blurred (width s) indicator of a disc of radius a, at distance r from its center. */
-const discBlur = (r: number, a: number, s: number) => {
-  const lo = Math.max(0, r - 8 * s),
-    hi = Math.min(a, r + 8 * s);
-  if (hi <= lo) return 0;
-  const N = 200,
-    h = (hi - lo) / N;
-  let sum = 0;
-  for (let k = 0; k <= N; k++) {
-    const rho = lo + k * h;
-    const f =
-      (rho / (s * s)) *
-      Math.exp(-((rho - r) ** 2) / (2 * s * s)) *
-      i0e((r * rho) / (s * s));
-    sum += f * (k === 0 || k === N ? 1 : k % 2 ? 4 : 2);
-  }
-  return (sum * h) / 3;
-};
-const bisect = (g: (a: number) => number, lo: number, hi: number) => {
-  for (let k = 0; k < 50; k++) {
-    const mid = (lo + hi) / 2;
-    if (g(mid) < 0) lo = mid;
-    else hi = mid;
-  }
-  return (lo + hi) / 2;
-};
-/** Disc radius whose blurred level 1/2 lands at radius R (also a hole's cut radius for clearance R). */
-/** Remember a slow pure function of two numbers (the compensations below: a bisection over a
- *  numeric integral, asked again and again for the same few radii). */
-const remember = (fn: (a: number, b: number) => number) => {
-  const seen = new Map<string, number>();
-  return (a: number, b: number) => {
-    const key = `${a},${b}`;
-    let v = seen.get(key);
-    if (v === undefined) {
-      if (seen.size > 4096) seen.clear();
-      seen.set(key, (v = fn(a, b)));
-    }
-    return v;
-  };
-};
-const discComp = remember((R: number, s: number) =>
-  s <= 0 ? R : bisect((a) => discBlur(R, a, s) - 0.5, R, R + 4 * s)
-);
-/** Tube half-width whose blurred level 1/2 lands at half-width h. */
-const tubeComp = remember((h: number, s: number) =>
-  s <= 0
-    ? h
-    : bisect((a) => Phi((a - h) / s) - Phi((-a - h) / s) - 0.5, h, h + 4 * s)
-);
-
-/** The rounded field: B, the blurred indicator I of the region before any cut, times the avoided
- *  zones' soft cut (when there are any; `cut` gives its value and derivatives). The outline is
- *  the level 1/2 of B * cut. */
-type Field = {
-  I: Float64Array;
-  cut?: (x: number, y: number) => number[];
-  W: number;
-  H: number;
-  x0: number;
-  y0: number;
-  res: number;
-  sigma: number;
-  z: number;
-};
-/** Where each row of a grid is nonzero: its first and last nonzero column (computed once per grid). */
-const rowSpanMemo = new WeakMap<
-  Float64Array,
-  { lo: Int32Array; hi: Int32Array }
->();
-const rowSpans = (I: Float64Array, W: number, H: number) => {
-  let sp = rowSpanMemo.get(I);
-  if (!sp) {
-    sp = { lo: new Int32Array(H).fill(W), hi: new Int32Array(H).fill(-1) };
-    for (let j = 0; j < H; j++)
-      for (let i = 0; i < W; i++)
-        if (I[j * W + i] !== 0) {
-          if (sp.lo[j] === W) sp.lo[j] = i;
-          sp.hi[j] = i;
-        }
-    rowSpanMemo.set(I, sp);
-  }
-  return sp;
-};
-/** One blurred grid and its derivatives at (x, y): [B, Bx, By, Bxx, Bxy, Byy]. */
-const blurJet = (
-  I: Float64Array,
-  fd: Field,
-  x: number,
-  y: number
-): number[] => {
-  const { W, H, x0, y0, res, sigma: s, z } = fd;
-  const rad = Math.ceil((5 * s) / res),
-    fx = (x - x0) / res,
-    fy = (y - y0) / res;
-  const i0 = Math.max(0, Math.floor(fx) - rad),
-    i1 = Math.min(W - 1, Math.ceil(fx) + rad);
-  const j0 = Math.max(0, Math.floor(fy) - rad),
-    j1 = Math.min(H - 1, Math.ceil(fy) + rad);
-  if (i1 < i0 || j1 < j0) return [0, 0, 0, 0, 0, 0]; // off the grid: no field, no gradient
-  const s2 = s * s,
-    nx = i1 - i0 + 1,
-    span = rowSpans(I, W, H);
-  const g = new Float64Array(nx),
-    g1 = new Float64Array(nx),
-    g2 = new Float64Array(nx);
-  for (let i = i0; i <= i1; i++) {
-    const d = x - (x0 + i * res),
-      e = Math.exp(-(d * d) / (2 * s2));
-    g[i - i0] = e;
-    g1[i - i0] = (-d / s2) * e;
-    g2[i - i0] = ((d * d) / (s2 * s2) - 1 / s2) * e;
-  }
-  let B = 0,
-    Bx = 0,
-    By = 0,
-    Bxx = 0,
-    Bxy = 0,
-    Byy = 0;
-  for (let j = j0; j <= j1; j++) {
-    const d = y - (y0 + j * res),
-      e = Math.exp(-(d * d) / (2 * s2));
-    const h0 = e,
-      h1 = (-d / s2) * e,
-      h2 = ((d * d) / (s2 * s2) - 1 / s2) * e;
-    let S0 = 0,
-      S1 = 0,
-      S2 = 0;
-    const row = j * W;
-    // (zeros add nothing, so each row runs over its nonzero span only)
-    for (
-      let i = Math.max(i0, span.lo[j]), last = Math.min(i1, span.hi[j]);
-      i <= last;
-      i++
-    ) {
-      const v = I[row + i];
-      if (v === 0) continue;
-      S0 += v * g[i - i0];
-      S1 += v * g1[i - i0];
-      S2 += v * g2[i - i0];
-    }
-    B += h0 * S0;
-    Bx += h0 * S1;
-    By += h1 * S0;
-    Bxx += h0 * S2;
-    Bxy += h1 * S1;
-    Byy += h2 * S0;
-  }
-  const zz = z * z;
-  return [B / zz, Bx / zz, By / zz, Bxx / zz, Bxy / zz, Byy / zz];
-};
-/** The outline's field B * cut and its derivatives at (x, y) (the product rule). */
-const fieldJet = (fd: Field, x: number, y: number): number[] => {
-  const b = blurJet(fd.I, fd, x, y);
-  if (!fd.cut) return b;
-  const [B, Bx, By, Bxx, Bxy, Byy] = b,
-    [u, ux, uy, uxx, uxy, uyy] = fd.cut(x, y);
-  return [
-    B * u,
-    Bx * u + B * ux,
-    By * u + B * uy,
-    Bxx * u + 2 * Bx * ux + B * uxx,
-    Bxy * u + Bx * uy + By * ux + B * uxy,
-    Byy * u + 2 * By * uy + B * uyy,
-  ];
-};
-/** Curvature of the level line through (x, y), positive where the region is convex. */
-const levelCurvature = (j: number[]) => {
-  const [, Bx, By, Bxx, Bxy, Byy] = j;
-  return (
-    -(Bxx * By * By - 2 * Bxy * Bx * By + Byy * Bx * Bx) /
-    Math.pow(Bx * Bx + By * By, 1.5)
-  );
-};
 const resampleLoop = (loop: Pt[], ds: number): Pt[] => {
   const n = loop.length,
     cum = [0];
@@ -725,98 +575,112 @@ const resampleLoop = (loop: Pt[], ds: number): Pt[] => {
   }
   return out;
 };
-/** Move a point onto the level 1/2 of the field by Newton steps along the gradient. */
-const project = (fd: Field, p: Pt, level = 0.5): Pt => {
-  let [x, y] = p;
-  for (let k = 0; k < 6; k++) {
-    const [B, Bx, By] = fieldJet(fd, x, y),
-      g2 = Bx * Bx + By * By;
-    if (g2 < 1e-14) break;
-    const step = (B - level) / g2;
-    // a traced point starts within a cell of the level line, so a long step means the field is
-    // nearly flat here (deep inside a cut zone): keep the point rather than jump away
-    if (Math.abs(step) * Math.sqrt(g2) > Math.max(2, fd.sigma)) break;
-    x -= step * Bx;
-    y -= step * By;
-    if (Math.abs(step) * Math.sqrt(g2) < 1e-4) break;
-  }
-  return [x, y];
-};
-/** Separable Gaussian blur of a grid of values in [0, 1], normalized so a constant stays constant.
- *  For speed, a window of zeros gives 0 and a whole window of ones gives 1 without summing, and
- *  a sum skips the zeros at either end of its window. The result is the plain weighted sum, bit
- *  for bit: adding a zero changes nothing, and a window of ones adds up the weights in the same
- *  order as their total z. */
-const gaussBlur = (
-  A: Float64Array,
-  W: number,
-  H: number,
-  sigmaCells: number
-) => {
-  const rad = Math.ceil(5 * sigmaCells),
-    k = new Float64Array(2 * rad + 1);
-  for (let i = -rad; i <= rad; i++)
-    k[i + rad] = Math.exp(-(i * i) / (2 * sigmaCells * sigmaCells));
-  const z = k.reduce((a, b) => a + b, 0);
-  const N = Math.max(W, H),
-    nonzero = new Int32Array(N + 1),
-    nonone = new Int32Array(N + 1);
-  const nextNZ = new Int32Array(N),
-    prevNZ = new Int32Array(N);
-  /** Blur one line of n values from src into dst. */
-  const line = (src: Float64Array, dst: Float64Array, n: number) => {
-    for (let t = 0; t < n; t++) {
-      nonzero[t + 1] = nonzero[t] + (src[t] !== 0 ? 1 : 0);
-      nonone[t + 1] = nonone[t] + (src[t] !== 1 ? 1 : 0);
-    }
-    for (let t = n - 1, nx = n; t >= 0; t--)
-      nextNZ[t] = nx = src[t] !== 0 ? t : nx;
-    for (let t = 0, pv = -1; t < n; t++) prevNZ[t] = pv = src[t] !== 0 ? t : pv;
-    for (let t = 0; t < n; t++) {
-      const lo = Math.max(-rad, -t),
-        hi = Math.min(rad, n - 1 - t),
-        a = t + lo,
-        e = t + hi;
-      if (nonzero[e + 1] === nonzero[a]) {
-        dst[t] = 0;
-        continue;
-      }
-      if (lo === -rad && hi === rad && nonone[e + 1] === nonone[a]) {
-        dst[t] = 1;
-        continue;
-      }
-      let s = 0;
-      for (let u = nextNZ[a], last = prevNZ[e]; u <= last; u++)
-        s += src[u] * k[u - t + rad];
-      dst[t] = s / z;
-    }
-  };
-  const tmp = new Float64Array(W * H),
-    out = new Float64Array(W * H);
-  for (let j = 0; j < H; j++)
-    line(A.subarray(j * W, (j + 1) * W), tmp.subarray(j * W, (j + 1) * W), W);
-  const col = new Float64Array(H),
-    colOut = new Float64Array(H);
-  for (let i = 0; i < W; i++) {
-    for (let j = 0; j < H; j++) col[j] = tmp[j * W + i];
-    line(col, colOut, H);
-    for (let j = 0; j < H; j++) out[j * W + i] = colOut[j];
-  }
-  return { out, z };
-};
-const triDist = (p: Pt, q: Pt[]) =>
-  inPoly(p, q)
-    ? 0
-    : Math.sqrt(
-        Math.min(
-          segDist2([q[0], q[1]], p[0], p[1]),
-          segDist2([q[1], q[2]], p[0], p[1]),
-          segDist2([q[2], q[0]], p[0], p[1])
-        )
-      );
 const circumR = (a: Pt, b: Pt, c: Pt) =>
   (dist(a, b) * dist(b, c) * dist(c, a)) /
   (2 * Math.abs(cross(a, b, c)) || 1e-12);
+/** A uniform grid over boxes [x0, y0, x1, y1], about one box per cell. `query` lists, in index
+ *  order, every box that may meet a rectangle (a superset: callers still test exactly). */
+const boxGrid = (bbs: number[][]) => {
+  let X0 = Infinity,
+    Y0 = Infinity,
+    X1 = -Infinity,
+    Y1 = -Infinity,
+    size = 0;
+  for (const b of bbs) {
+    X0 = Math.min(X0, b[0]);
+    Y0 = Math.min(Y0, b[1]);
+    X1 = Math.max(X1, b[2]);
+    Y1 = Math.max(Y1, b[3]);
+    size += Math.max(b[2] - b[0], b[3] - b[1]);
+  }
+  const g = Math.max(
+    size / (bbs.length || 1),
+    (X1 - X0) / 64,
+    (Y1 - Y0) / 64,
+    1e-6
+  );
+  const nx = bbs.length ? Math.floor((X1 - X0) / g) + 1 : 0,
+    ny = bbs.length ? Math.floor((Y1 - Y0) / g) + 1 : 0;
+  const cx = (x: number) =>
+    Math.max(0, Math.min(nx - 1, Math.floor((x - X0) / g)));
+  const cy = (y: number) =>
+    Math.max(0, Math.min(ny - 1, Math.floor((y - Y0) / g)));
+  const cells: number[][] = Array.from({ length: nx * ny }, () => []);
+  bbs.forEach((b, k) => {
+    for (let j = cy(b[1]); j <= cy(b[3]); j++)
+      for (let i = cx(b[0]); i <= cx(b[2]); i++) cells[j * nx + i].push(k);
+  });
+  const stamp = new Int32Array(bbs.length);
+  let gen = 0;
+  const query = (xa: number, ya: number, xb: number, yb: number): number[] => {
+    if (!bbs.length || xb < X0 || xa > X1 || yb < Y0 || ya > Y1) return [];
+    gen++;
+    const out: number[] = [];
+    for (let j = cy(ya); j <= cy(yb); j++)
+      for (let i = cx(xa); i <= cx(xb); i++)
+        for (const k of cells[j * nx + i])
+          if (stamp[k] !== gen) {
+            stamp[k] = gen;
+            out.push(k);
+          }
+    return out.sort((a, b) => a - b);
+  };
+  /** The same boxes, unordered, without building a list. */
+  const each = (
+    xa: number,
+    ya: number,
+    xb: number,
+    yb: number,
+    fn: (k: number) => void
+  ) => {
+    if (!bbs.length || xb < X0 || xa > X1 || yb < Y0 || ya > Y1) return;
+    gen++;
+    for (let j = cy(ya); j <= cy(yb); j++)
+      for (let i = cx(xa); i <= cx(xb); i++)
+        for (const k of cells[j * nx + i])
+          if (stamp[k] !== gen) {
+            stamp[k] = gen;
+            fn(k);
+          }
+  };
+  return { query, each };
+};
+/** Remember a stage's last few results, keyed by the identity of its input arrays (held weakly)
+ *  and by its numbers, so a recompute that changes one knob reruns only the stages that read it. */
+const stageMemo = <T>() => {
+  const root = new WeakMap<object, any>(),
+    NONE = {};
+  return (
+    objs: (object | undefined)[],
+    nums: (number | undefined)[],
+    make: () => T
+  ): T => {
+    let m: WeakMap<object, any> = root,
+      last: Map<string, T> | undefined;
+    objs.forEach((o, i) => {
+      const k = o ?? NONE;
+      let next = m.get(k);
+      if (!next)
+        m.set(
+          k,
+          (next = i === objs.length - 1 ? new Map<string, T>() : new WeakMap())
+        );
+      if (i === objs.length - 1) last = next;
+      else m = next;
+    });
+    const key = nums.join(","),
+      hit = last!.get(key);
+    if (hit !== undefined) {
+      last!.delete(key);
+      last!.set(key, hit);
+      return hit;
+    }
+    const v = make();
+    last!.set(key, v);
+    if (last!.size > 24) last!.delete(last!.keys().next().value!);
+    return v;
+  };
+};
 
 type SkelOpts = {
   avoiding?: Member[];
@@ -826,10 +690,143 @@ type SkelOpts = {
   neck?: number;
   clearance?: number;
 };
+type Arc = { c: Pt; r: number; a0: number; sweep: number };
+type Part = { a: Pt; b: Pt } | Arc;
+type SkLink = { route: Pt[]; h: number; parts?: Part[] };
+/** Tighten a route found on keep-out polygons onto the circles they stand for. Each run of route
+ *  vertices on one circle (an avoided node's keep-out circle grown by h, or a box corner's) becomes
+ *  an arc of that circle, and the route between runs becomes the lines tangent to both: so a
+ *  link that wraps an avoided node follows its clearance circle exactly. `pivotOf` names the
+ *  circle a vertex lies on (radius 0: a plain corner). The result is the route as straight parts
+ *  and arcs, and as a polyline through them. */
+const snapRoute = (
+  route: Pt[],
+  pivotOf: (v: Pt) => { c: Pt; r: number }
+): { route: Pt[]; parts: Part[]; len: number } => {
+  // the circles wrapped, in order, each with the side the route passes it on (+1: turning left)
+  let piv: { c: Pt; r: number; s: number }[] = [];
+  for (let i = 1; i < route.length - 1; i++) {
+    const p = pivotOf(route[i]),
+      s = Math.sign(cross(route[i - 1], route[i], route[i + 1])) || 1;
+    const last = piv[piv.length - 1];
+    if (
+      last &&
+      last.r > 0 &&
+      last.c[0] === p.c[0] &&
+      last.c[1] === p.c[1] &&
+      last.r === p.r
+    )
+      continue;
+    piv.push({ ...p, s });
+  }
+  const a = route[0],
+    b = route[route.length - 1];
+  /** The tangent line leaving circle (or point) 1 and reaching circle (or point) 2, each passed on its side. */
+  const tangent = (
+    c1: Pt,
+    r1: number,
+    s1: number,
+    c2: Pt,
+    r2: number,
+    s2: number
+  ): [Pt, Pt] | null => {
+    // the line's left normal n has n . (c2 - c1) = s2 r2 - s1 r1; each center is s r along n from its touch point
+    const dx = c2[0] - c1[0],
+      dy = c2[1] - c1[1],
+      L = Math.hypot(dx, dy),
+      k = s2 * r2 - s1 * r1;
+    if (L < 1e-9 || Math.abs(k) > L) return null;
+    const ux = dx / L,
+      uy = dy / L,
+      ca = k / L,
+      sa = Math.sqrt(Math.max(0, 1 - ca * ca));
+    for (const sg of [1, -1]) {
+      const nx = ux * ca - sg * uy * sa,
+        ny = uy * ca + sg * ux * sa;
+      const t1: Pt = [c1[0] - s1 * r1 * nx, c1[1] - s1 * r1 * ny],
+        t2: Pt = [c2[0] - s2 * r2 * nx, c2[1] - s2 * r2 * ny];
+      // travel along d (n is d turned left) must run from t1 to t2
+      const ddx = ny,
+        ddy = -nx;
+      if ((t2[0] - t1[0]) * ddx + (t2[1] - t1[1]) * ddy > 0) return [t1, t2];
+    }
+    return null;
+  };
+  for (let attempt = 0; attempt <= route.length; attempt++) {
+    const parts: Part[] = [];
+    const ends: [Pt, Pt][] = [];
+    let ok = true;
+    const nodes = [{ c: a, r: 0, s: 1 }, ...piv, { c: b, r: 0, s: 1 }];
+    for (let i = 0; i + 1 < nodes.length; i++) {
+      const t = tangent(
+        nodes[i].c,
+        nodes[i].r,
+        nodes[i].s,
+        nodes[i + 1].c,
+        nodes[i + 1].r,
+        nodes[i + 1].s
+      );
+      if (!t) {
+        ok = false;
+        break;
+      }
+      ends.push(t);
+    }
+    if (!ok)
+      return {
+        route,
+        parts: route.slice(1).map((q, i) => ({ a: route[i], b: q })),
+        len: polyLen(route),
+      };
+    // the arc on each circle, from where the route arrives to where it leaves, turning the route's way
+    let drop = -1;
+    const arcs: (Arc | null)[] = piv.map((p, i) => {
+      if (p.r === 0) return null;
+      const A = ends[i][1],
+        B = ends[i + 1][0];
+      const a0 = Math.atan2(A[1] - p.c[1], A[0] - p.c[0]),
+        a1 = Math.atan2(B[1] - p.c[1], B[0] - p.c[0]);
+      let sweep = p.s > 0 ? a1 - a0 : a0 - a1;
+      sweep = ((sweep % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      // a route wraps a circle by less than a half turn; more means it never touches it
+      if (sweep > Math.PI && drop < 0) drop = i;
+      return { c: p.c, r: p.r, a0, sweep: p.s * sweep };
+    });
+    if (drop >= 0) {
+      piv = piv.filter((_, i) => i !== drop);
+      continue;
+    }
+    const out: Pt[] = [a];
+    for (let i = 0; i < ends.length; i++) {
+      const [t1, t2] = ends[i];
+      if (dist(out[out.length - 1], t1) > 1e-9) out.push(t1);
+      parts.push({ a: t1, b: t2 });
+      out.push(t2);
+      const arc = arcs[i];
+      if (arc && Math.abs(arc.sweep) > 1e-9) {
+        parts.push(arc);
+        const n = Math.max(1, Math.ceil(Math.abs(arc.sweep) / (Math.PI / 32)));
+        for (let k = 1; k <= n; k++) {
+          const t = arc.a0 + (arc.sweep * k) / n;
+          out.push([
+            arc.c[0] + arc.r * Math.cos(t),
+            arc.c[1] + arc.r * Math.sin(t),
+          ]);
+        }
+      }
+    }
+    return { route: out, parts, len: polyLen(out) };
+  }
+  return {
+    route,
+    parts: route.slice(1).map((q, i) => ({ a: route[i], b: q })),
+    len: polyLen(route),
+  };
+};
 type Skeleton = {
   P: Pt[];
   R: number[];
-  links: { route: Pt[]; h: number }[];
+  links: SkLink[];
   faces: Pt[][];
   alpha: number;
 };
@@ -878,329 +875,793 @@ const closestPair = (m1: Member, m2: Member): [Pt, Pt] => {
   ];
   return opts.reduce((x, y) => (dist(x[0], x[1]) <= dist(y[0], y[1]) ? x : y));
 };
+/** The members' sites (merged where two members share one), their Delaunay triangles and edges,
+ *  and the scale m (the median link of the sites' minimum spanning tree). Depends on the members alone. */
+const sitesMemo = stageMemo<{
+  P: Pt[];
+  owner: number[][];
+  tri: [number, number, number][];
+  cand: Map<string, [number, number]>;
+  m: number;
+  memberGrid: ReturnType<typeof boxGrid>;
+}>();
+const sitesOfMembers = (members: Member[]) =>
+  sitesMemo([members], [], () => {
+    const P: Pt[] = [],
+      owner: number[][] = [];
+    members.forEach((mm, k) =>
+      sitesOf(mm).forEach((q) => {
+        let i = P.findIndex((p) => dist(p, q) < 0.5);
+        if (i < 0) {
+          i = P.length;
+          P.push(q);
+          owner.push([]);
+        }
+        owner[i].push(k);
+      })
+    );
+    const n = P.length;
+    const ek = (i: number, j: number) => (i < j ? `${i},${j}` : `${j},${i}`);
+    const tri: [number, number, number][] = [],
+      cand = new Map<string, [number, number]>();
+    if (n >= 3) {
+      const d = Delaunator.from(P);
+      for (let k = 0; k < d.triangles.length; k += 3) {
+        const [i, j, l] = [
+          d.triangles[k],
+          d.triangles[k + 1],
+          d.triangles[k + 2],
+        ];
+        if (Math.abs(cross(P[i], P[j], P[l])) < 1e-9) continue;
+        tri.push([i, j, l]);
+        for (const [u, v] of [
+          [i, j],
+          [j, l],
+          [l, i],
+        ])
+          cand.set(ek(u, v), [Math.min(u, v), Math.max(u, v)]);
+      }
+    }
+    if (tri.length === 0)
+      for (let i = 0; i < n; i++)
+        for (let j = i + 1; j < n; j++) cand.set(ek(i, j), [i, j]);
+    const root = P.map((_, k) => k);
+    const find = (k: number): number =>
+      root[k] === k ? k : (root[k] = find(root[k]));
+    const mst: number[] = [];
+    for (const [i, j] of [...cand.values()].sort(
+      (a, b) => dist(P[a[0]], P[a[1]]) - dist(P[b[0]], P[b[1]])
+    ))
+      if (find(i) !== find(j)) {
+        root[find(i)] = find(j);
+        mst.push(dist(P[i], P[j]));
+      }
+    mst.sort((a, b) => a - b);
+    // where each member's geometry is (a node's center, a line's box), to find the members holding a point
+    const memberGrid = boxGrid(
+      members.map((mm) =>
+        mm.kind === "segment"
+          ? [
+              Math.min(mm.a[0], mm.b[0]),
+              Math.min(mm.a[1], mm.b[1]),
+              Math.max(mm.a[0], mm.b[0]),
+              Math.max(mm.a[1], mm.b[1]),
+            ]
+          : [...centerOf(mm), ...centerOf(mm)]
+      )
+    );
+    return {
+      P,
+      owner,
+      tri,
+      cand,
+      m: mst.length ? mst[Math.floor(mst.length / 2)] : 0,
+      memberGrid,
+    };
+  });
+/** The avoided nodes indexed by where their keep-out zones are, with each node's keep-out
+ *  polygon for a tube half-width h built when first asked for (a circle as a 32-gon around it). */
+const avoidMemo = stageMemo<{
+  near: (p: Pt, q: Pt, m: number) => number[];
+  poly: (k: number, h: number) => Poly;
+  center: Pt[];
+  radius: number[];
+}>();
+const avoidIndex = (others: Member[], clearance: number) =>
+  avoidMemo([others], [clearance], () => {
+    const keep = (mm: Member) => memberRadius(mm) + clearance;
+    const grid = boxGrid(others.map((mm) => grownPrim(mm, clearance).bb));
+    const polys = new Map<string, Poly>();
+    return {
+      near: (p, q, m) =>
+        grid.query(
+          Math.min(p[0], q[0]) - m,
+          Math.min(p[1], q[1]) - m,
+          Math.max(p[0], q[0]) + m,
+          Math.max(p[1], q[1]) + m
+        ),
+      poly: (k, h) => {
+        const key = `${k},${h}`,
+          mm = others[k];
+        let poly = polys.get(key);
+        if (!poly)
+          polys.set(
+            key,
+            (poly =
+              mm.kind === "circle"
+                ? discPoly(
+                    [mm.cx, mm.cy - 0.01],
+                    (keep(mm) + h) / Math.cos(Math.PI / 32),
+                    32
+                  )
+                : convexHull(samples(mm, clearance + h)))
+          );
+        return poly;
+      },
+      center: others.map(centerOf),
+      radius: others.map((mm) => (mm.kind === "circle" ? keep(mm) : 0)),
+    };
+  });
+/** Routes around the avoided nodes, remembered per set of avoided nodes and clearance. */
+const routeMemo =
+  stageMemo<Map<string, { route: Pt[]; parts: Part[]; len: number } | null>>();
+const skelMemo = stageMemo<Skeleton>();
 /** Step 1: the alpha complex of the members' sites plus the routed spanning tree over members.
  *  Each member is its own geometry: a segment member is already a link between its ends, and a
  *  spanning-tree link runs between the closest points of two members' geometries. */
-const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
-  const neck = o.neck ?? 0.7,
-    clearance = o.clearance ?? 4,
-    others = o.avoiding ?? [];
-  const Cm = members.map(centerOf),
-    Rm = members.map((m) => memberRadius(m) + o.pad),
-    nm = members.length;
-  // sites, merged where two members share one (an edge's end on its node)
-  const P: Pt[] = [],
-    R: number[] = [],
-    owner: number[][] = [];
-  members.forEach((mm, k) =>
-    sitesOf(mm).forEach((q) => {
-      let i = P.findIndex((p) => dist(p, q) < 0.5);
-      if (i < 0) {
-        i = P.length;
-        P.push(q);
-        R.push(Rm[k]);
-        owner.push([]);
-      } else R[i] = Math.max(R[i], Rm[k]);
-      owner[i].push(k);
-    })
-  );
-  const n = P.length;
-  const ek = (i: number, j: number) => (i < j ? `${i},${j}` : `${j},${i}`);
-  const tri: [number, number, number][] = [],
-    cand = new Map<string, [number, number]>();
-  if (n >= 3) {
-    const d = Delaunator.from(P);
-    for (let k = 0; k < d.triangles.length; k += 3) {
-      const [i, j, l] = [
-        d.triangles[k],
-        d.triangles[k + 1],
-        d.triangles[k + 2],
-      ];
-      if (Math.abs(cross(P[i], P[j], P[l])) < 1e-9) continue;
-      tri.push([i, j, l]);
-      for (const [u, v] of [
-        [i, j],
-        [j, l],
-        [l, i],
-      ])
-        cand.set(ek(u, v), [Math.min(u, v), Math.max(u, v)]);
-    }
-  }
-  if (tri.length === 0)
-    for (let i = 0; i < n; i++)
-      for (let j = i + 1; j < n; j++) cand.set(ek(i, j), [i, j]);
-  // the scale: median link of the Euclidean minimum spanning tree of the sites
-  const root = P.map((_, k) => k);
-  const find = (k: number): number =>
-    root[k] === k ? k : (root[k] = find(root[k]));
-  const mst: number[] = [];
-  for (const [i, j] of [...cand.values()].sort(
-    (a, b) => dist(P[a[0]], P[a[1]]) - dist(P[b[0]], P[b[1]])
-  ))
-    if (find(i) !== find(j)) {
-      root[find(i)] = find(j);
-      mst.push(dist(P[i], P[j]));
-    }
-  mst.sort((a, b) => a - b);
-  const m = mst.length ? mst[Math.floor(mst.length / 2)] : 0;
-  const c = Math.max(0, Math.min(1, o.convexity));
-  const alpha = c >= 1 ? Infinity : (m * c) / (1 - c);
-  const keep = (mm: Member) => memberRadius(mm) + clearance;
-  const hw = (i: number, j: number) => neck * Math.min(R[i], R[j]);
-  const faces: Pt[][] = [],
-    faceEdges = new Set<string>();
-  for (const [i, j, l] of tri) {
-    const q = [P[i], P[j], P[l]];
-    // A face is filled whatever it holds: an avoided node inside it becomes a hole, cut
-    // later as exactly its clearance zone (step 2). Only links route around avoided nodes.
-    if (circumR(q[0], q[1], q[2]) > alpha) continue;
-    faces.push(q);
-    [ek(i, j), ek(j, l), ek(l, i)].forEach((e) => faceEdges.add(e));
-  }
-  const obstacle = (mm: Member, grow: number) =>
-    mm.kind === "circle"
-      ? discPoly(
-          [mm.cx, mm.cy - 0.01],
-          (keep(mm) + grow) / Math.cos(Math.PI / 32),
-          32
-        )
-      : convexHull(samples(mm, clearance + grow));
-  // the keep-out polygons depend only on the tube half-width, so they are built once per width
-  const byWidth = new Map<number, Poly[]>();
-  const obstaclesFor = (p: Pt, q: Pt, h: number) => {
-    let all = byWidth.get(h);
-    if (!all) byWidth.set(h, (all = others.map((mm) => obstacle(mm, h))));
-    return all.filter((poly) => !inPolyFast(p, poly) && !inPolyFast(q, poly));
-  };
-  const routeFor = (p: Pt, q: Pt, h: number) =>
-    routeAround(p, q, obstaclesFor(p, q, h));
-  const links: { route: Pt[]; h: number }[] = [];
-  // spanning-tree candidates, between members: a face edge as drawn, else the routed closest-point link
-  const mk = (a: number, b: number) => (a < b ? `${a},${b}` : `${b},${a}`);
-  const routed = new Map<
-    string,
-    { a: number; b: number; route: Pt[]; len: number; h?: number }
-  >();
-  const hm = (a: number, b: number) => neck * Math.min(Rm[a], Rm[b]);
-  // the bulge where a link attaches: the widest member whose geometry holds that point
-  const onMember = (mm: Member, p: Pt) =>
-    dist(
-      p,
-      mm.kind === "segment" ? nearestOnSeg(p, mm.a, mm.b) : centerOf(mm)
-    ) < 0.5;
-  const radiusAt = (p: Pt) =>
-    Math.max(...members.map((mm, k) => (onMember(mm, p) ? Rm[k] : 0)));
-  for (const [key, [i, j]] of cand) {
-    if (faceEdges.has(key)) {
-      links.push({ route: [P[i], P[j]], h: Math.min(R[i], R[j]) });
-      // the edge carries the spanning tree only when no hole will be cut across it
-      if (clearOf(P[i], P[j], obstaclesFor(P[i], P[j], hw(i, j))))
-        for (const a of owner[i])
-          for (const b of owner[j])
-            if (a !== b && !routed.has(mk(a, b)))
-              routed.set(mk(a, b), {
-                a,
-                b,
-                route: [P[i], P[j]],
-                len: dist(P[i], P[j]),
-              });
-      continue;
-    }
-    // a short candidate joins as drawn when nothing blocks it (it is never rerouted)
-    if (
-      dist(P[i], P[j]) / 2 <= alpha &&
-      clearOf(P[i], P[j], obstaclesFor(P[i], P[j], hw(i, j)))
-    )
-      links.push({ route: [P[i], P[j]], h: hw(i, j) });
-  }
-  const pairs = new Set<string>();
-  for (const [i, j] of cand.values())
-    for (const a of owner[i])
-      for (const b of owner[j]) if (a !== b) pairs.add(mk(a, b));
-  owner.forEach((ks) =>
-    ks.forEach((a) =>
-      ks.forEach((b) => {
-        if (a !== b) pairs.add(mk(a, b));
-      })
-    )
-  );
-  members.forEach((mm, a) => {
-    if (mm.kind === "segment")
-      for (let b = 0; b < nm; b++) if (b !== a) pairs.add(mk(a, b));
-  });
-  // A pair's link is routed only when the spanning tree reaches it: until then its straight
-  // length stands in, a lower bound on the routed length (lazy Kruskal; ties keep their order).
-  type Link = {
-    a: number;
-    b: number;
-    len: number;
-    order: number;
-    route?: Pt[];
-    h?: number;
-    ends?: [Pt, Pt];
-  };
-  const queue: Link[] = [...routed.values()].map((e, order) => ({
-    ...e,
-    order,
-  }));
-  for (const key of pairs) {
-    if (routed.has(key)) continue;
-    const [a, b] = key.split(",").map(Number),
-      [p, q] = closestPair(members[a], members[b]),
-      order = queue.length;
-    if (dist(p, q) < 0.5) queue.push({ a, b, route: [p, q], len: 0, order });
-    else
-      queue.push({
-        a,
-        b,
-        len: dist(p, q),
-        order,
-        ends: [p, q],
-        h: neck * Math.min(radiusAt(p), radiusAt(q)),
-      });
-  }
-  const before = (x: Link, y: Link) =>
-    x.len < y.len || (x.len === y.len && x.order < y.order);
-  queue.sort((x, y) => x.len - y.len || x.order - y.order);
-  // the spanning tree over routed links keeps the set in one piece (members that touch join for free)
-  const r2 = members.map((_, k) => k);
-  const f2 = (k: number): number => (r2[k] === k ? k : (r2[k] = f2(r2[k])));
-  while (queue.length) {
-    const e = queue.shift()!;
-    if (f2(e.a) === f2(e.b)) continue;
-    if (e.ends) {
-      const route = routeFor(e.ends[0], e.ends[1], e.h!);
-      if (!route) continue;
-      const done: Link = {
-        a: e.a,
-        b: e.b,
-        route,
-        len: polyLen(route),
-        order: e.order,
-        h: e.h,
+const skeleton = (members: Member[], o: SkelOpts): Skeleton =>
+  skelMemo(
+    [members, o.avoiding, o.via],
+    [o.pad, o.convexity, o.neck, o.clearance],
+    () => {
+      const neck = o.neck ?? 1,
+        clearance = o.clearance ?? 4,
+        others = o.avoiding ?? [];
+      const Cm = members.map(centerOf),
+        Rm = members.map((m) => memberRadius(m) + o.pad),
+        nm = members.length;
+      const { P, owner, tri, cand, m, memberGrid } = sitesOfMembers(members);
+      const R = owner.map((ks) => Math.max(...ks.map((k) => Rm[k])));
+      const ek = (i: number, j: number) => (i < j ? `${i},${j}` : `${j},${i}`);
+      const c = Math.max(0, Math.min(1, o.convexity));
+      const alpha = c >= 1 ? Infinity : (m * c) / (1 - c);
+      const hw = (i: number, j: number) => neck * Math.min(R[i], R[j]);
+      const faces: Pt[][] = [],
+        faceEdges = new Set<string>();
+      for (const [i, j, l] of tri) {
+        const q = [P[i], P[j], P[l]];
+        // A face is filled whatever it holds: an avoided node inside it becomes a hole, cut
+        // later as exactly its clearance zone (step 2). Only links route around avoided nodes.
+        if (circumR(q[0], q[1], q[2]) > alpha) continue;
+        faces.push(q);
+        [ek(i, j), ek(j, l), ek(l, i)].forEach((e) => faceEdges.add(e));
+      }
+      const avoid = avoidIndex(others, clearance);
+      /** The keep-out polygons (each avoided node grown by the tube half-width h) whose boxes come
+       *  within mg of the box around p and q, holding neither p nor q, in the avoided nodes' order. */
+      const obstaclesNear = (p: Pt, q: Pt, h: number, mg: number) => {
+        const out: Poly[] = [];
+        for (const k of avoid.near(p, q, 1.02 * h + mg + 1)) {
+          // a node grown into a circle cannot reach a segment farther than its circumscribed radius
+          if (
+            mg === 0 &&
+            avoid.radius[k] > 0 &&
+            segD(
+              avoid.center[k][0],
+              avoid.center[k][1],
+              p[0],
+              p[1],
+              q[0],
+              q[1]
+            ) >
+              (avoid.radius[k] + h) / Math.cos(Math.PI / 32) + 0.02
+          )
+            continue;
+          const poly = avoid.poly(k, h);
+          if (!inPolyFast(p, poly) && !inPolyFast(q, poly)) out.push(poly);
+        }
+        return out;
       };
-      let at = 0;
-      while (at < queue.length && before(queue[at], done)) at++;
-      queue.splice(at, 0, done);
-      continue;
-    }
-    r2[f2(e.a)] = f2(e.b);
-    if (e.len > 0) links.push({ route: e.route!, h: e.h ?? hm(e.a, e.b) });
-  }
-  for (const [a, b] of o.via ?? []) {
-    const i = P.findIndex((q) => dist(a, q) < 0.5),
-      j = P.findIndex((q) => dist(b, q) < 0.5);
-    if (i >= 0 && j >= 0) links.push({ route: [P[i], P[j]], h: hw(i, j) });
-  }
-  return { P: Cm, R: Rm, links, faces, alpha };
-};
-
-type SmoothOpts = SkelOpts & {
-  roundness?: number;
-  res?: number;
-  compensate?: boolean;
-};
-type Smooth = { loops: Pt[][]; field: Field; skel: Skeleton; sigma: number };
-/** Steps 2-4: union, cut, Gaussian rounding (which never changes the topology), exact tracing. */
-const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
-  const sk = skeleton(members, o);
-  const pad = o.pad,
-    clearance = o.clearance ?? 4,
-    others = o.avoiding ?? [];
-  // `roundness` is the blur's reach: a Gaussian of width sigma = roundness / 2. It is at most the
-  // thinnest piece (a member's grown radius, a tube's half-width): each piece is drawn slightly
-  // larger so that, alone, it ends exactly where it should after the blur, and that holds where
-  // pieces meet only while the blur is narrower than they are. A member's own arc already has
-  // radius R, so rounding further would cost padding.
-  const thinnest = Math.min(...sk.R, ...sk.links.map((e) => e.h));
-  const asked = Math.max(0, Math.min(o.roundness ?? pad, thinnest)) / 2;
-  const comp = o.compensate ?? true;
-  // one grid cell for every roundness, so the reference below (a blur one cell wide) is the same
-  const res = o.res ?? 0.5;
-  // roundness 0 is a blur of one grid cell: the sharp region at the drawing's own resolution
-  const want = Math.max(asked, res);
-  // The pieces: each member grown by `pad`, each link a tube, each filled face. For a blur of
-  // width sigma a piece is drawn slightly larger, so that alone it ends exactly where it should
-  // (discComp, tubeComp). How much larger depends only on its kind and size, so the pieces are
-  // grouped by those: a group's field is built once, and each blur width adds one offset to it.
-  type Piece = {
-    bb: number[];
-    d: (x: number, y: number) => number;
-    group: string;
-  };
-  const grow = new Map<string, (sigma: number) => number>();
-  const disc = (R: number) => {
-    const g = `disc ${R}`;
-    if (!grow.has(g)) grow.set(g, (s) => (comp ? discComp(R, s) - R : 0));
-    return g;
-  };
-  const tube = (h: number) => {
-    const g = `tube ${h}`;
-    if (!grow.has(g)) grow.set(g, (s) => (comp ? tubeComp(h, s) - h : 0));
-    return g;
-  };
-  grow.set("face", () => 0);
-  const segD = (a: Pt, b: Pt, x: number, y: number) =>
-    Math.sqrt(segDist2([a, b], x, y));
-  const segBox = (a: Pt, b: Pt, h: number) => [
-    Math.min(a[0], b[0]) - h,
-    Math.min(a[1], b[1]) - h,
-    Math.max(a[0], b[0]) + h,
-    Math.max(a[1], b[1]) + h,
-  ];
-  const pieces: Piece[] = [];
-  members.forEach((m, k) => {
-    const R = sk.R[k];
-    if (m.kind === "circle")
-      pieces.push({
-        bb: [m.cx - R, m.cy - R, m.cx + R, m.cy + R],
-        d: (x, y) => Math.hypot(x - m.cx, y - m.cy) - R,
-        group: disc(R),
-      });
-    // a segment member: its whole length grown by `pad` (a tube of half-width w/2 + pad)
-    else if (m.kind === "segment")
-      pieces.push({
-        bb: segBox(m.a, m.b, R),
-        d: (x, y) => segD(m.a, m.b, x, y) - R,
-        group: tube(R),
-      });
-    else
-      pieces.push({
-        bb: [m.x - pad, m.y - pad, m.x + m.w + pad, m.y + m.h + pad],
-        d: (x, y) =>
-          Math.hypot(
-            Math.max(m.x - x, 0, x - m.x - m.w),
-            Math.max(m.y - y, 0, y - m.y - m.h)
-          ) - pad,
-        group: tube(pad),
-      });
-  });
-  for (const e of sk.links)
-    for (let k = 1; k < e.route.length; k++) {
-      const a = e.route[k - 1],
-        b = e.route[k];
-      pieces.push({
-        bb: segBox(a, b, e.h),
-        d: (x, y) => segD(a, b, x, y) - e.h,
-        group: tube(e.h),
-      });
-    }
-  for (const q of sk.faces)
-    pieces.push({
-      bb: bboxOf(q),
-      d: (x, y) => {
-        const e = triDist([x, y], q);
-        return e === 0
-          ? -Math.min(
-              segD(q[0], q[1], x, y),
-              segD(q[1], q[2], x, y),
-              segD(q[2], q[0], x, y)
+      const routes = routeMemo([others], [clearance], () => new Map());
+      const routeFor = (p: Pt, q: Pt, h: number) => {
+        const key = `${p[0]},${p[1]},${q[0]},${q[1]},${h}`;
+        let r = routes.get(key);
+        if (r === undefined) {
+          // most links are not blocked at all: check that first, against the nodes along the link only
+          const poly = clearOf(p, q, obstaclesNear(p, q, h, 0))
+            ? [p, q]
+            : routeAround(
+                p,
+                q,
+                obstaclesNear(p, q, h, Math.max(40, dist(p, q) * 0.6))
+              );
+          r = !poly
+            ? null
+            : poly.length === 2
+              ? { route: poly, parts: [{ a: p, b: q }], len: dist(p, q) }
+              : snapRoute(poly, (v) => pivotOf(v, h));
+          routes.set(key, r);
+        }
+        return r;
+      };
+      const clear = (p: Pt, q: Pt, h: number) =>
+        clearOf(p, q, obstaclesNear(p, q, h, 0));
+      /** The circle a keep-out polygon's vertex v stands for: an avoided node's keep-out circle grown
+       *  by h (its polygon is the 32-gon around it), or a box corner's; else v itself, a plain corner. */
+      const pivotOf = (v: Pt, h: number): { c: Pt; r: number } => {
+        for (const k of avoid.near(v, v, 1.02 * h + 1)) {
+          const mm = others[k];
+          if (mm.kind === "circle") {
+            const R = memberRadius(mm) + clearance + h;
+            if (
+              Math.abs(
+                Math.hypot(v[0] - mm.cx, v[1] - mm.cy + 0.01) -
+                  R / Math.cos(Math.PI / 32)
+              ) < 1e-6
             )
-          : e;
-      },
-      group: "face",
-    });
-  const most = Math.max(0, ...[...grow.values()].map((g) => g(want)));
+              return { c: [mm.cx, mm.cy], r: R };
+          } else if (mm.kind === "rect")
+            for (const c of [
+              [mm.x, mm.y],
+              [mm.x + mm.w, mm.y],
+              [mm.x, mm.y + mm.h],
+              [mm.x + mm.w, mm.y + mm.h],
+            ] as Pt[])
+              if (Math.abs(dist(v, c) - (clearance + h)) < 1e-6)
+                return { c, r: clearance + h };
+        }
+        return { c: v, r: 0 };
+      };
+      const links: SkLink[] = [];
+      // spanning-tree candidates, between members: a face edge as drawn, else the routed closest-point link
+      const mk = (a: number, b: number) => (a < b ? a * nm + b : b * nm + a);
+      const routed = new Map<
+        number,
+        { a: number; b: number; route: Pt[]; len: number; h?: number }
+      >();
+      const hm = (a: number, b: number) => neck * Math.min(Rm[a], Rm[b]);
+      // the bulge where a link attaches: the widest member whose geometry holds that point
+      const onMember = (mm: Member, p: Pt) =>
+        dist(
+          p,
+          mm.kind === "segment" ? nearestOnSeg(p, mm.a, mm.b) : centerOf(mm)
+        ) < 0.5;
+      const radiusAt = (p: Pt) =>
+        Math.max(
+          0,
+          ...memberGrid
+            .query(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1)
+            .map((k) => (onMember(members[k], p) ? Rm[k] : 0))
+        );
+      for (const [key, [i, j]] of cand) {
+        if (faceEdges.has(key)) {
+          links.push({ route: [P[i], P[j]], h: Math.min(R[i], R[j]) });
+          // the edge carries the spanning tree only when no hole will be cut across it
+          if (clear(P[i], P[j], hw(i, j)))
+            for (const a of owner[i])
+              for (const b of owner[j])
+                if (a !== b && !routed.has(mk(a, b)))
+                  routed.set(mk(a, b), {
+                    a,
+                    b,
+                    route: [P[i], P[j]],
+                    len: dist(P[i], P[j]),
+                  });
+          continue;
+        }
+        // a short candidate joins as drawn when nothing blocks it (it is never rerouted)
+        if (dist(P[i], P[j]) / 2 <= alpha && clear(P[i], P[j], hw(i, j)))
+          links.push({ route: [P[i], P[j]], h: hw(i, j) });
+      }
+      const pairs = new Set<number>();
+      for (const [i, j] of cand.values())
+        for (const a of owner[i])
+          for (const b of owner[j]) if (a !== b) pairs.add(mk(a, b));
+      owner.forEach((ks) =>
+        ks.forEach((a) =>
+          ks.forEach((b) => {
+            if (a !== b) pairs.add(mk(a, b));
+          })
+        )
+      );
+      members.forEach((mm, a) => {
+        if (mm.kind === "segment")
+          for (let b = 0; b < nm; b++) if (b !== a) pairs.add(mk(a, b));
+      });
+      // A pair's link is routed only when the spanning tree reaches it: until then its straight
+      // length stands in, a lower bound on the routed length (lazy Kruskal; ties keep their order).
+      type Link = {
+        a: number;
+        b: number;
+        len: number;
+        order: number;
+        route?: Pt[];
+        parts?: Part[];
+        h?: number;
+        ends?: [Pt, Pt];
+      };
+      const queue: Link[] = [...routed.values()].map((e, order) => ({
+        ...e,
+        order,
+      }));
+      for (const key of pairs) {
+        if (routed.has(key)) continue;
+        const a = Math.floor(key / nm),
+          b = key % nm,
+          [p, q] = closestPair(members[a], members[b]),
+          order = queue.length;
+        if (dist(p, q) < 0.5)
+          queue.push({ a, b, route: [p, q], len: 0, order });
+        else
+          queue.push({
+            a,
+            b,
+            len: dist(p, q),
+            order,
+            ends: [p, q],
+            h: neck * Math.min(radiusAt(p), radiusAt(q)),
+          });
+      }
+      const before = (x: Link, y: Link) =>
+        x.len < y.len || (x.len === y.len && x.order < y.order);
+      queue.sort((x, y) => x.len - y.len || x.order - y.order);
+      // the spanning tree over routed links keeps the set in one piece (members that touch join for free)
+      const r2 = members.map((_, k) => k);
+      const f2 = (k: number): number => (r2[k] === k ? k : (r2[k] = f2(r2[k])));
+      let head = 0;
+      while (head < queue.length) {
+        const e = queue[head++];
+        if (f2(e.a) === f2(e.b)) continue;
+        if (e.ends) {
+          const r = routeFor(e.ends[0], e.ends[1], e.h!);
+          if (!r) continue;
+          const done: Link = {
+            a: e.a,
+            b: e.b,
+            route: r.route,
+            parts: r.parts,
+            len: r.len,
+            order: e.order,
+            h: e.h,
+          };
+          let at = head;
+          while (at < queue.length && before(queue[at], done)) at++;
+          queue.splice(at, 0, done);
+          continue;
+        }
+        r2[f2(e.a)] = f2(e.b);
+        if (e.len > 0)
+          links.push({
+            route: e.route!,
+            h: e.h ?? hm(e.a, e.b),
+            ...(e.parts && e.parts.length > 1 ? { parts: e.parts } : {}),
+          });
+      }
+      for (const [a, b] of o.via ?? []) {
+        const i = P.findIndex((q) => dist(a, q) < 0.5),
+          j = P.findIndex((q) => dist(b, q) < 0.5);
+        if (i >= 0 && j >= 0) links.push({ route: [P[i], P[j]], h: hw(i, j) });
+      }
+      return { P: Cm, R: Rm, links, faces, alpha };
+    }
+  );
+
+// ── step 2: the region, exactly ─────────────────────────────────────────────
+// The region is the union of the pieces minus the keep-out zones. Every piece and zone is one of
+// four primitives with an exact signed distance (negative inside): a disc, a capsule (a segment
+// grown by r), a box (a rectangle grown by r) or a triangle. Its outline is traced exactly, and
+// each traced point records the circle it lies on (its center and radius), or none on a straight side.
+type Prim = {
+  k: 0 | 1 | 2 | 3 | 4;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  x3: number;
+  y3: number;
+  r: number;
+  bb: number[];
+};
+const discPrim = (x: number, y: number, r: number): Prim => ({
+  k: 0,
+  x1: x,
+  y1: y,
+  x2: 0,
+  y2: 0,
+  x3: 0,
+  y3: 0,
+  r,
+  bb: [x - r, y - r, x + r, y + r],
+});
+const capsulePrim = (a: Pt, b: Pt, r: number): Prim => ({
+  k: 1,
+  x1: a[0],
+  y1: a[1],
+  x2: b[0],
+  y2: b[1],
+  x3: 0,
+  y3: 0,
+  r,
+  bb: [
+    Math.min(a[0], b[0]) - r,
+    Math.min(a[1], b[1]) - r,
+    Math.max(a[0], b[0]) + r,
+    Math.max(a[1], b[1]) + r,
+  ],
+});
+const boxPrim = (
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+): Prim => ({
+  k: 2,
+  x1: x,
+  y1: y,
+  x2: x + w,
+  y2: y + h,
+  x3: 0,
+  y3: 0,
+  r,
+  bb: [x - r, y - r, x + w + r, y + h + r],
+});
+/** An arc of radius r around c, from angle a0 turning by sweep (signed), grown by h: a bent tube with round ends. */
+const arcPrim = (
+  c: Pt,
+  r: number,
+  a0: number,
+  sweep: number,
+  h: number
+): Prim => ({
+  k: 4,
+  x1: c[0],
+  y1: c[1],
+  x2: a0,
+  y2: sweep,
+  x3: r,
+  y3: 0,
+  r: h,
+  bb: [c[0] - r - h, c[1] - r - h, c[0] + r + h, c[1] + r + h],
+});
+/** Signed distance to an arc tube (packed fields); with `arc`, the circle its nearest edge lies on. */
+const arcD = (
+  cx: number,
+  cy: number,
+  a0: number,
+  sweep: number,
+  rr: number,
+  h: number,
+  x: number,
+  y: number,
+  arc: boolean
+) => {
+  const dx = x - cx,
+    dy = y - cy,
+    rho = Math.sqrt(dx * dx + dy * dy);
+  let rel =
+    (sweep >= 0 ? Math.atan2(dy, dx) - a0 : a0 - Math.atan2(dy, dx)) %
+    (2 * Math.PI);
+  if (rel < 0) rel += 2 * Math.PI;
+  if (rel <= Math.abs(sweep)) {
+    if (arc) {
+      ARC[0] = cx;
+      ARC[1] = cy;
+      ARC[2] = rho >= rr ? rr + h : rr - h;
+    }
+    return Math.abs(rho - rr) - h;
+  }
+  const e0x = cx + rr * Math.cos(a0),
+    e0y = cy + rr * Math.sin(a0),
+    e1x = cx + rr * Math.cos(a0 + sweep),
+    e1y = cy + rr * Math.sin(a0 + sweep);
+  const d0 = Math.hypot(x - e0x, y - e0y),
+    d1 = Math.hypot(x - e1x, y - e1y);
+  if (arc) {
+    ARC[0] = d0 < d1 ? e0x : e1x;
+    ARC[1] = d0 < d1 ? e0y : e1y;
+    ARC[2] = h;
+  }
+  return Math.min(d0, d1) - h;
+};
+const triPrim = (q: Pt[]): Prim => {
+  // counterclockwise, so that "inside" is left of every edge
+  const [a, b, c] = cross(q[0], q[1], q[2]) > 0 ? q : [q[0], q[2], q[1]];
+  return {
+    k: 3,
+    x1: a[0],
+    y1: a[1],
+    x2: b[0],
+    y2: b[1],
+    x3: c[0],
+    y3: c[1],
+    r: 0,
+    bb: bboxOf(q),
+  };
+};
+/** A member, or an avoided node, grown by r, as a primitive. */
+const grownPrim = (m: Member, r: number): Prim =>
+  m.kind === "circle"
+    ? discPrim(m.cx, m.cy, m.r + r)
+    : m.kind === "segment"
+      ? capsulePrim(m.a, m.b, m.w / 2 + r)
+      : boxPrim(m.x, m.y, m.w, m.h, r);
+/** The circle that the nearest point of the last primitive measured lies on: center, radius (0: a
+ *  straight side, and then the nearest point of its core), and 1 when that is a keep-out zone's edge. */
+const ARC = new Float64Array(4);
+const segD = (
+  x: number,
+  y: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number
+) => {
+  const ex = bx - ax,
+    ey = by - ay,
+    L = ex * ex + ey * ey;
+  const t =
+    L > 0 ? Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L)) : 0;
+  const dx = x - ax - t * ex,
+    dy = y - ay - t * ey;
+  return Math.sqrt(dx * dx + dy * dy);
+};
+/** Signed distance from (x, y) to a primitive; with `arc`, also fills ARC. */
+const primD = (p: Prim, x: number, y: number, arc: boolean): number => {
+  if (p.k === 0) {
+    if (arc) {
+      ARC[0] = p.x1;
+      ARC[1] = p.y1;
+      ARC[2] = p.r;
+    }
+    const dx = x - p.x1,
+      dy = y - p.y1;
+    return Math.sqrt(dx * dx + dy * dy) - p.r;
+  }
+  if (p.k === 1) {
+    const ex = p.x2 - p.x1,
+      ey = p.y2 - p.y1,
+      L = ex * ex + ey * ey;
+    const t = L > 0 ? ((x - p.x1) * ex + (y - p.y1) * ey) / L : 0,
+      u = t < 0 ? 0 : t > 1 ? 1 : t;
+    const qx = p.x1 + u * ex,
+      qy = p.y1 + u * ey;
+    // a capsule's ends are half circles around the segment's ends; its sides are straight
+    if (arc) {
+      ARC[0] = qx;
+      ARC[1] = qy;
+      ARC[2] = u === t && L > 0 ? 0 : p.r;
+    }
+    const dx = x - qx,
+      dy = y - qy;
+    return Math.sqrt(dx * dx + dy * dy) - p.r;
+  }
+  if (p.k === 2) {
+    const qx = x < p.x1 ? p.x1 : x > p.x2 ? p.x2 : x,
+      qy = y < p.y1 ? p.y1 : y > p.y2 ? p.y2 : y;
+    if (qx === x && qy === y) {
+      if (arc) ARC[2] = 0;
+      return -Math.min(x - p.x1, p.x2 - x, y - p.y1, p.y2 - y) - p.r;
+    }
+    // a box's corners are quarter circles around the rectangle's corners
+    if (arc) {
+      ARC[0] = qx;
+      ARC[1] = qy;
+      ARC[2] = qx !== x && qy !== y ? p.r : 0;
+    }
+    const dx = x - qx,
+      dy = y - qy;
+    return Math.sqrt(dx * dx + dy * dy) - p.r;
+  }
+  if (p.k === 4) return arcD(p.x1, p.y1, p.x2, p.y2, p.x3, p.r, x, y, arc);
+  if (arc) ARC[2] = 0;
+  const d = Math.min(
+    segD(x, y, p.x1, p.y1, p.x2, p.y2),
+    segD(x, y, p.x2, p.y2, p.x3, p.y3),
+    segD(x, y, p.x3, p.y3, p.x1, p.y1)
+  );
+  const inside =
+    (p.x2 - p.x1) * (y - p.y1) - (p.y2 - p.y1) * (x - p.x1) >= 0 &&
+    (p.x3 - p.x2) * (y - p.y2) - (p.y3 - p.y2) * (x - p.x2) >= 0 &&
+    (p.x1 - p.x3) * (y - p.y3) - (p.y1 - p.y3) * (x - p.x3) >= 0;
+  return inside ? -d : d;
+};
+/** The primitives packed 8 numbers each (kind, x1, y1, x2, y2, x3, y3, r), for the hot loops. */
+const pack = (ps: Prim[]) => {
+  const F = new Float64Array(8 * ps.length);
+  ps.forEach((p, i) =>
+    F.set([p.k, p.x1, p.y1, p.x2, p.y2, p.x3, p.y3, p.r], 8 * i)
+  );
+  return F;
+};
+/** primD on a packed primitive i, the distance alone. */
+const primV = (F: Float64Array, i: number, x: number, y: number): number => {
+  const o = 8 * i,
+    k = F[o],
+    x1 = F[o + 1],
+    y1 = F[o + 2],
+    r = F[o + 7];
+  if (k === 0) {
+    const dx = x - x1,
+      dy = y - y1;
+    return Math.sqrt(dx * dx + dy * dy) - r;
+  }
+  const x2 = F[o + 3],
+    y2 = F[o + 4];
+  if (k === 1) {
+    const ex = x2 - x1,
+      ey = y2 - y1,
+      L = ex * ex + ey * ey;
+    let t = L > 0 ? ((x - x1) * ex + (y - y1) * ey) / L : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const dx = x - x1 - t * ex,
+      dy = y - y1 - t * ey;
+    return Math.sqrt(dx * dx + dy * dy) - r;
+  }
+  if (k === 2) {
+    const qx = x < x1 ? x1 : x > x2 ? x2 : x,
+      qy = y < y1 ? y1 : y > y2 ? y2 : y;
+    if (qx === x && qy === y)
+      return -Math.min(x - x1, x2 - x, y - y1, y2 - y) - r;
+    const dx = x - qx,
+      dy = y - qy;
+    return Math.sqrt(dx * dx + dy * dy) - r;
+  }
+  if (k === 4) return arcD(x1, y1, x2, y2, F[o + 5], r, x, y, false);
+  const x3 = F[o + 5],
+    y3 = F[o + 6];
+  const d = Math.min(
+    segD(x, y, x1, y1, x2, y2),
+    segD(x, y, x2, y2, x3, y3),
+    segD(x, y, x3, y3, x1, y1)
+  );
+  const inside =
+    (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1) >= 0 &&
+    (x3 - x2) * (y - y2) - (y3 - y2) * (x - x2) >= 0 &&
+    (x1 - x3) * (y - y3) - (y1 - y3) * (x - x3) >= 0;
+  return inside ? -d : d;
+};
+/** primV with the disc and capsule cases first and small enough to inline. */
+const primFast = (F: Float64Array, i: number, x: number, y: number): number => {
+  const o = 8 * i,
+    k = F[o];
+  if (k === 0) {
+    const dx = x - F[o + 1],
+      dy = y - F[o + 2];
+    return Math.sqrt(dx * dx + dy * dy) - F[o + 7];
+  }
+  if (k === 1) {
+    const x1 = F[o + 1],
+      y1 = F[o + 2],
+      ex = F[o + 3] - x1,
+      ey = F[o + 4] - y1,
+      L = ex * ex + ey * ey;
+    let t = L > 0 ? ((x - x1) * ex + (y - y1) * ey) / L : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const dx = x - x1 - t * ex,
+      dy = y - y1 - t * ey;
+    return Math.sqrt(dx * dx + dy * dy) - F[o + 7];
+  }
+  return primV(F, i, x, y);
+};
+const FAR = 1e9;
+/** The region's signed distance at (x, y): the union of the pieces minus the union of the zones,
+ *  max(min pieces, -min zones), over candidate lists held in the arena A (pieces from po, pn of
+ *  them, or none and the zones alone decide when pn < 0; zones from zo, zn of them). */
+const regionD = (
+  PF: Float64Array,
+  ZF: Float64Array,
+  A: Int32Array,
+  po: number,
+  pn: number,
+  zo: number,
+  zn: number,
+  x: number,
+  y: number
+) => {
+  let U = pn < 0 ? -FAR : FAR,
+    Z = FAR;
+  for (let i = po; i < po + pn; i++) {
+    const d = primFast(PF, A[i], x, y);
+    if (d < U) U = d;
+  }
+  for (let i = zo; i < zo + zn; i++) {
+    const d = primFast(ZF, A[i], x, y);
+    if (d < Z) Z = d;
+  }
+  return U > -Z ? U : -Z;
+};
+/** The same, also filling ARC with the circle the nearest outline point lies on. */
+const regionArc = (
+  pieces: Prim[],
+  zones: Prim[],
+  A: Int32Array,
+  po: number,
+  pn: number,
+  zo: number,
+  zn: number,
+  x: number,
+  y: number
+) => {
+  let U = pn < 0 ? -FAR : FAR,
+    Z = FAR,
+    bu = -1,
+    bz = -1;
+  for (let i = po; i < po + pn; i++) {
+    const d = primD(pieces[A[i]], x, y, false);
+    if (d < U) {
+      U = d;
+      bu = A[i];
+    }
+  }
+  for (let i = zo; i < zo + zn; i++) {
+    const d = primD(zones[A[i]], x, y, false);
+    if (d < Z) {
+      Z = d;
+      bz = A[i];
+    }
+  }
+  ARC[2] = 0;
+  // a point on a zone's edge (as on a link wrapped around that zone) is the zone's: ARC is its circle or side
+  ARC[3] = bz >= 0 && Math.abs(Z) < 0.05 ? 1 : 0; // (a resampled point sits on a chord, within 0.05 px of the circle)
+  if (!ARC[3] && U > -Z) {
+    if (bu >= 0) primD(pieces[bu], x, y, true);
+    return U;
+  }
+  if (bz >= 0) primD(zones[bz], x, y, true);
+  return -Z;
+};
+type Region = {
+  loops: { pts: Pt[]; arcs: Float64Array }[];
+  radii: number[];
+  zones: Prim[];
+  zoneGrid: ReturnType<typeof boxGrid>;
+};
+/** Marching squares: for each corner pattern (top-left 8, top-right 4, bottom-right 2,
+ *  bottom-left 1 inside), the cell's segments as pairs of its edges (top 0, right 1, bottom 2, left 3). */
+const SEGS: number[][] = [
+  [],
+  [2, 3],
+  [1, 2],
+  [1, 3],
+  [0, 1],
+  [0, 3, 2, 1],
+  [0, 2],
+  [0, 3],
+  [3, 0],
+  [2, 0],
+  [3, 2, 1, 0],
+  [1, 0],
+  [3, 1],
+  [2, 1],
+  [3, 2],
+  [],
+];
+/** Trace the region's outline exactly. A quadtree over a grid of `res` px finds the cells the
+ *  outline crosses, keeping at each level only the primitives that can be nearest there (the
+ *  distances are 1-Lipschitz, so a cell whose center is farther from the outline than its
+ *  half-diagonal is wholly inside or outside). Marching squares joins the crossed cells into
+ *  loops, each crossing is found exactly on its grid edge, and each loop is resampled every
+ *  `ds` px with the circle each point lies on. */
+/** Grids reused from one trace to the next (allocating and clearing them each time costs more than
+ *  the trace): a grid entry counts only when its stamp is the current trace's. */
+const scratch = {
+  gen: 0,
+  size: 0,
+  V: new Float64Array(0),
+  vStamp: new Int32Array(0),
+  cellOf: new Int32Array(0),
+  cStamp: new Int32Array(0),
+  next: new Int32Array(0),
+  nStamp: new Int32Array(0),
+  seen: new Int32Array(0),
+};
+const traceRegion = (
+  pieces: Prim[],
+  zones: Prim[],
+  res: number,
+  ds: number
+): Region => {
   const bb = pieces.reduce(
     (r, p) => [
       Math.min(r[0], p.bb[0]),
@@ -1210,279 +1671,782 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
     ],
     [Infinity, Infinity, -Infinity, -Infinity]
   );
-  // the grid's cells sit on multiples of res, whatever the margin, so every roundness samples the
-  // region at the same points (and the reference blur below is the same for all of them)
-  const M = 5 * want + most + 6,
-    x0 = Math.floor((bb[0] - M) / res) * res,
-    y0 = Math.floor((bb[1] - M) / res) * res;
-  const W = Math.ceil((bb[2] - bb[0] + 2 * M) / res) + 1,
-    H = Math.ceil((bb[3] - bb[1] + 2 * M) / res) + 1;
-  // Each group's distance field (the least distance to its pieces' edges, negative inside). A cell
-  // more than two cells deep in any group is "settled": every offset is at least 0, so its
-  // indicator is 1 however deep it is, and all remaining pieces skip it (a piece's value changes
-  // by at most one cell per cell).
-  const fields = new Map<string, Float32Array>(),
-    deep = new Uint8Array(W * H);
-  for (const p of pieces) {
-    let f = fields.get(p.group);
-    if (!f) fields.set(p.group, (f = new Float32Array(W * H).fill(1e9)));
-    const r = most + 3;
-    const i0 = Math.max(0, Math.floor((p.bb[0] - r - x0) / res)),
-      i1 = Math.min(W - 1, Math.ceil((p.bb[2] + r - x0) / res));
-    const j0 = Math.max(0, Math.floor((p.bb[1] - r - y0) / res)),
-      j1 = Math.min(H - 1, Math.ceil((p.bb[3] + r - y0) / res));
-    for (let j = j0; j <= j1; j++)
-      for (let i = i0; i <= i1; i++) {
-        const k = j * W + i;
-        if (deep[k]) continue;
-        const v = p.d(x0 + i * res, y0 + j * res);
-        if (v < f[k]) {
-          f[k] = v;
-          if (v <= -2 * res) deep[k] = 1;
-        }
-      }
+  const x0 = Math.floor(bb[0] / res - 2) * res,
+    y0 = Math.floor(bb[1] / res - 2) * res;
+  const W = Math.ceil((bb[2] - x0) / res) + 3,
+    H = Math.ceil((bb[3] - y0) / res) + 3;
+  // V: the distance at the grid points of the blocks near the outline (NaN elsewhere, never read).
+  // cellOf: for each cell in such a block, 1 + its block's number; a block keeps its candidate lists.
+  if (scratch.size < W * H) {
+    const n = 2 * W * H;
+    Object.assign(scratch, {
+      size: n,
+      V: new Float64Array(n),
+      vStamp: new Int32Array(n),
+      cellOf: new Int32Array(n),
+      cStamp: new Int32Array(n),
+      next: new Int32Array(2 * n),
+      nStamp: new Int32Array(2 * n),
+      seen: new Int32Array(2 * n),
+    });
   }
-  /** The region before any cut, for a blur of width sigma, as a field F > 0 inside: each group
-   *  grown by its offset for sigma, then their union. */
-  const regionFor = (sigma: number) => {
-    const F = new Float64Array(W * H).fill(-1e9);
-    for (const [g, f] of fields) {
-      const up = grow.get(g)!(sigma);
-      for (let k = 0; k < W * H; k++) {
-        const v = up - f[k];
-        if (v > F[k]) F[k] = v;
-      }
+  const gen = ++scratch.gen,
+    { V, vStamp, cellOf: cellRaw, cStamp, next, nStamp, seen } = scratch;
+  const leaves: number[] = [],
+    blocks: number[] = [];
+  const cellOf = (c: number) => (cStamp[c] === gen ? cellRaw[c] : 0);
+  const pd = new Float64Array(pieces.length),
+    zd = new Float64Array(zones.length),
+    PF = pack(pieces),
+    ZF = pack(zones);
+  // every candidate list lives in one growing arena, as an offset and a length
+  let A = new Int32Array(1 << 16),
+    top = 0;
+  const reserve = (n: number) => {
+    if (top + n > A.length) {
+      const B = new Int32Array(Math.max(2 * A.length, top + n));
+      B.set(A);
+      A = B;
     }
-    return F;
   };
-  // The avoided nodes' keep-out zones (each node grown by `clearance`), cut out of the region: a
-  // zone inside the region is a hole, one across its edge a notch. A zone is its exact signed
-  // distance d (negative inside), never blurred, so a hole is exactly its zone at any roundness.
-  // `nearest` writes the nearest point of the node's own geometry into q and says whether that
-  // point is a corner (a center, a segment's end, a rectangle's corner), where d curves.
-  type Zone = { m: Member; c: Pt; R: number; reach: number };
-  const zones: Zone[] = others.map((m) => {
-    const R =
-      (m.kind === "circle" ? m.r : m.kind === "segment" ? m.w / 2 : 0) +
-      clearance;
-    const e =
-      m.kind === "rect"
-        ? Math.hypot(m.w, m.h) / 2
-        : m.kind === "segment"
-          ? dist(m.a, m.b) / 2
-          : 0;
-    return { m, c: centerOf(m), R, reach: e + R };
-  });
-  const q = new Float64Array(2);
-  const nearest = (z: Zone, x: number, y: number): boolean => {
-    const m = z.m;
-    if (m.kind === "circle") {
-      q[0] = m.cx;
-      q[1] = m.cy;
-      return true;
+  /** Copy the entries of A[o, o + n) whose value in d is at most lim to the top of the arena. */
+  const keepWithin = (o: number, n: number, d: Float64Array, lim: number) => {
+    reserve(n);
+    const start = top;
+    for (let i = o; i < o + n; i++) if (d[A[i]] <= lim) A[top++] = A[i];
+    return start;
+  };
+  const node = (
+    i0: number,
+    j0: number,
+    n: number,
+    po: number,
+    pn: number,
+    zo: number,
+    zn: number
+  ) => {
+    if (i0 >= W - 1 || j0 >= H - 1) return;
+    const cx = x0 + (i0 + n / 2) * res,
+      cy = y0 + (j0 + n / 2) * res,
+      r = (n * res) / Math.SQRT2;
+    let U = pn < 0 ? -FAR : FAR,
+      Z = FAR,
+      i = po;
+    // pieces first: a cell outside them all is outside the region whatever the zones; one deep
+    // inside a piece is settled by the zones alone
+    for (; i < po + pn; i++) {
+      const d = (pd[A[i]] = primFast(PF, A[i], cx, cy));
+      if (d < U) U = d;
+      if (U < -r) break;
     }
-    if (m.kind === "segment") {
-      const dx = m.b[0] - m.a[0],
-        dy = m.b[1] - m.a[1],
-        t = ((x - m.a[0]) * dx + (y - m.a[1]) * dy) / (dx * dx + dy * dy || 1);
-      const u = Math.max(0, Math.min(1, t));
-      q[0] = m.a[0] + u * dx;
-      q[1] = m.a[1] + u * dy;
-      return u !== t;
+    if (U > r) return;
+    for (let j = zo; j < zo + zn; j++) {
+      const d = (zd[A[j]] = primFast(ZF, A[j], cx, cy));
+      if (d < Z) Z = d;
     }
-    q[0] = Math.max(m.x, Math.min(m.x + m.w, x));
-    q[1] = Math.max(m.y, Math.min(m.y + m.h, y));
-    return q[0] !== x && q[1] !== y;
-  };
-  const zoneD = (z: Zone, x: number, y: number) => {
-    nearest(z, x, y);
-    return Math.hypot(x - q[0], y - q[1]) - z.R;
-  };
-  // Each zone's signed distance at the cells it can reach, on a grid `step` cells apart. It does
-  // not depend on the blur width, so it is computed once per grid and reused by every width.
-  const zoneCells = new Map<number, { k: Int32Array; d: Float32Array }[]>();
-  const cellsOf = (step: number) => {
-    let all = zoneCells.get(step);
-    if (all) return all;
-    const r2 = res * step,
-      W2 = Math.ceil(W / step),
-      H2 = Math.ceil(H / step),
-      reachOut = 6 * want + 2 * r2;
-    all = zones.map((z) => {
-      const r = z.reach + reachOut,
-        ks: number[] = [],
-        ds: number[] = [];
-      const i0 = Math.max(0, Math.floor((z.c[0] - r - x0) / r2)),
-        i1 = Math.min(W2 - 1, Math.ceil((z.c[0] + r - x0) / r2));
-      const j0 = Math.max(0, Math.floor((z.c[1] - r - y0) / r2)),
-        j1 = Math.min(H2 - 1, Math.ceil((z.c[1] + r - y0) / r2));
-      for (let j = j0; j <= j1; j++)
-        for (let i = i0; i <= i1; i++) {
-          const d = zoneD(z, x0 + i * r2, y0 + j * r2);
-          if (d < 6 * want) {
-            ks.push(j * W2 + i);
-            ds.push(d);
+    if (U < -r && Z > r) return; // deep inside a piece, clear of every zone
+    for (i++; i < po + pn; i++) {
+      const d = (pd[A[i]] = primFast(PF, A[i], cx, cy));
+      if (d < U) U = d;
+    }
+    const D = U > -Z ? U : -Z;
+    if (Math.abs(D) > r) return; // wholly inside or outside
+    // keep what can be nearest somewhere in the cell (each distance moves at most r from the center)
+    const mark = top;
+    let qo = po,
+      qn = pn,
+      wo = zo,
+      wn = 0;
+    if (-Z - r > U + r)
+      qn = -1; // the zones alone decide here
+    else if (pn >= 0) {
+      qo = keepWithin(po, pn, pd, U + 2 * r);
+      qn = top - qo;
+    }
+    if (!(U - r > -Z + r)) {
+      wo = keepWithin(zo, zn, zd, Z + 2 * r);
+      wn = top - wo;
+    } // else the pieces alone decide
+    if (n <= 2) {
+      // a block of n x n cells near the outline: every grid point is measured exactly (its lists stay in the arena)
+      blocks.push(qo, qn, wo, wn);
+      const b = blocks.length / 4;
+      for (let dj = 0; dj <= n; dj++)
+        for (let di = 0; di <= n; di++) {
+          if (i0 + di >= W || j0 + dj >= H) continue;
+          const v = (j0 + dj) * W + i0 + di;
+          if (vStamp[v] !== gen) {
+            vStamp[v] = gen;
+            V[v] = regionD(
+              PF,
+              ZF,
+              A,
+              qo,
+              qn,
+              wo,
+              wn,
+              x0 + (i0 + di) * res,
+              y0 + (j0 + dj) * res
+            );
+          }
+          if (di < n && dj < n && i0 + di < W - 1 && j0 + dj < H - 1) {
+            cellRaw[v] = b;
+            cStamp[v] = gen;
+            leaves.push(v);
           }
         }
-      return { k: Int32Array.from(ks), d: Float32Array.from(ds) };
+      return;
+    }
+    const h = n / 2,
+      nb = blocks.length;
+    node(i0, j0, h, qo, qn, wo, wn);
+    node(i0 + h, j0, h, qo, qn, wo, wn);
+    node(i0, j0 + h, h, qo, qn, wo, wn);
+    node(i0 + h, j0 + h, h, qo, qn, wo, wn);
+    if (blocks.length === nb) top = mark; // no block below keeps these lists
+  };
+  // The quadtree starts from tiles of 16 cells, each with the primitives whose boxes come within
+  // a tile's diagonal of it: any other is at least that far from every point of the tile, so it
+  // can neither be nearest where the outline is nor change a tile's inside-or-outside verdict.
+  const T = 16,
+    tw = T * res,
+    reach = tw * Math.SQRT2,
+    TX = Math.ceil((W - 1) / T),
+    TY = Math.ceil((H - 1) / T);
+  const lists = (prims: Prim[]) => {
+    const out: number[][] = Array.from({ length: TX * TY }, () => []);
+    prims.forEach((p, k) => {
+      const i0 = Math.max(0, Math.floor((p.bb[0] - reach - x0) / tw)),
+        i1 = Math.min(TX - 1, Math.floor((p.bb[2] + reach - x0) / tw));
+      const j0 = Math.max(0, Math.floor((p.bb[1] - reach - y0) / tw)),
+        j1 = Math.min(TY - 1, Math.floor((p.bb[3] + reach - y0) / tw));
+      for (let j = j0; j <= j1; j++)
+        for (let i = i0; i <= i1; i++) out[j * TX + i].push(k);
     });
-    zoneCells.set(step, all);
-    return all;
+    return out;
   };
-  /** The same factor u and its derivatives at any point: [u, ux, uy, uxx, uxy, uyy]. With
-   *  u = exp(G), G = sum of log Phi(d / sigma), the derivatives follow from d's gradient (a unit
-   *  vector n) and its Hessian ((I - n n^T) / r at a corner, 0 along a straight side). Zones are
-   *  bucketed in square cells as wide as their reach, so a point reads only its own cell and the
-   *  eight around it. */
-  const cutAt = (sigma: number) => {
-    const cell = Math.max(1, ...zones.map((z) => z.reach)) + 6 * sigma,
-      buckets = new Map<number, Zone[]>();
-    const key = (a: number, b: number) => a * 1048576 + b;
-    for (const z of zones) {
-      const k = key(Math.floor(z.c[0] / cell), Math.floor(z.c[1] / cell));
-      if (!buckets.has(k)) buckets.set(k, []);
-      buckets.get(k)!.push(z);
-    }
-    return (x: number, y: number): number[] => {
-      const ix = Math.floor(x / cell),
-        iy = Math.floor(y / cell);
-      let G = 0,
-        Gx = 0,
-        Gy = 0,
-        Gxx = 0,
-        Gxy = 0,
-        Gyy = 0;
-      for (let a = ix - 1; a <= ix + 1; a++)
-        for (let b = iy - 1; b <= iy + 1; b++) {
-          const list = buckets.get(key(a, b));
-          if (list)
-            for (const z of list) {
-              const corner = nearest(z, x, y),
-                vx = x - q[0],
-                vy = y - q[1],
-                r = Math.hypot(vx, vy),
-                t = (r - z.R) / sigma;
-              if (t >= 6) continue;
-              const P = Phi(t);
-              if (P < 1e-300) return [0, 0, 0, 0, 0, 0];
-              const lam = Math.exp(-0.5 * t * t) / Math.sqrt(2 * Math.PI) / P,
-                dlam = -lam * (t + lam);
-              const nx = r > 0 ? vx / r : 0,
-                ny = r > 0 ? vy / r : 0,
-                c = corner && r > 0 ? 1 / r : 0;
-              G += Math.log(P);
-              Gx += (lam * nx) / sigma;
-              Gy += (lam * ny) / sigma;
-              Gxx +=
-                (dlam * nx * nx) / (sigma * sigma) +
-                (lam * c * ny * ny) / sigma;
-              Gxy +=
-                (dlam * nx * ny) / (sigma * sigma) -
-                (lam * c * nx * ny) / sigma;
-              Gyy +=
-                (dlam * ny * ny) / (sigma * sigma) +
-                (lam * c * nx * nx) / sigma;
-            }
-        }
-      const u = Math.exp(G);
-      return [
-        u,
-        u * Gx,
-        u * Gy,
-        u * (Gxx + Gx * Gx),
-        u * (Gxy + Gx * Gy),
-        u * (Gyy + Gy * Gy),
-      ];
-    };
-  };
-  // Rounding: blur the region's (anti-aliased) indicator with a Gaussian of width sigma, multiply
-  // by the zones' soft cut, and trace the level 1/2 of the product exactly. Where the region is
-  // solid that level is each zone's edge, and away from the zones it is the blurred region's.
-  // The blur may only change curvature: if it would merge or split pieces, or open or close a
-  // hole, its width is narrowed until it does not. The topology to keep is the region's at the
-  // grid's own scale (blurred by one cell), so a wall or gap thinner than a cell does not count.
-  // Pieces and holes are counted on the traced loops themselves, the ones that are drawn: a hole
-  // runs the other way round from the largest loop.
-  const count = (loops: Pt[][]): [number, number] => {
-    if (!loops.length) return [0, 0];
-    const areas = loops.map(signedArea),
-      big = areas.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a));
-    const pieces = areas.filter((a) => Math.sign(a) === Math.sign(big)).length;
-    return [pieces, loops.length - pieces];
-  };
-  /** Blur on the grid, or on one `step` cells apart (sampling every step-th cell), and trace. */
-  const blurAt = (sigma: number, F: Float64Array, step = 1) => {
-    const r2 = res * step,
-      W2 = Math.ceil(W / step),
-      H2 = Math.ceil(H / step),
-      I = new Float64Array(W2 * H2);
-    for (let j = 0; j < H2; j++)
-      for (let i = 0; i < W2; i++)
-        I[j * W2 + i] = Math.max(
-          0,
-          Math.min(1, 0.5 + F[j * step * W + i * step] / r2)
-        );
-    const { out: P, z } = gaussBlur(I, W2, H2, sigma / r2);
-    // the zones' soft cut, the product over zones of Phi(d / sigma) (1/2 exactly on each zone's
-    // edge); it only lowers the value, so it is applied only where the value is still above 1/2
-    for (const { k, d } of cellsOf(step))
-      for (let i = 0; i < k.length; i++)
-        if (P[k[i]] > 0.5 && d[i] < 6 * sigma) P[k[i]] *= Phi(d[i] / sigma);
-    for (let k = 0; k < W2 * H2; k++) P[k] -= 0.5;
-    const loops = contours(P, W2, H2, x0, y0, r2);
-    return { I, z, loops, topo: count(loops) };
-  };
-  const eq = (a: [number, number], b: [number, number]) =>
-    a[0] === b[0] && a[1] === b[1];
-  const floor = res,
-    base = blurAt(floor, regionFor(floor));
-  let sigma = want,
-    b = want > floor ? blurAt(want, regionFor(want)) : base;
-  if (!eq(b.topo, base.topo)) {
-    // Search for the widest blur that keeps the topology on a grid twice as coarse (an eighth of
-    // the work per step), then confirm it on the full grid (twice at most: the width found, then
-    // half of it), else keep the reference.
-    const coarse = blurAt(floor, regionFor(floor), 2).topo;
-    let lo = floor,
-      hi = want;
-    for (let it = 0; it < 5; it++) {
-      const mid = (lo + hi) / 2;
-      if (eq(blurAt(mid, regionFor(mid), 2).topo, coarse)) lo = mid;
-      else hi = mid;
-    }
-    b = base;
-    sigma = floor;
-    for (
-      let s = lo, tries = 0;
-      s > floor + 0.02 && tries < 2;
-      s = floor + 0.5 * (s - floor), tries++
-    ) {
-      const t = blurAt(s, regionFor(s));
-      if (eq(t.topo, base.topo)) {
-        b = t;
-        sigma = s;
-        break;
+  const tp = lists(pieces),
+    tz = lists(zones);
+  for (let t = 0; t < TX * TY; t++) {
+    const mark = top,
+      nb = blocks.length;
+    reserve(tp[t].length + tz[t].length);
+    const po = top;
+    for (const k of tp[t]) A[top++] = k;
+    const zo = top;
+    for (const k of tz[t]) A[top++] = k;
+    node(
+      (t % TX) * T,
+      Math.floor(t / TX) * T,
+      T,
+      po,
+      tp[t].length,
+      zo,
+      tz[t].length
+    );
+    if (blocks.length === nb) top = mark; // no block keeps this tile's lists
+  }
+
+  // marching squares on -V (inside >= 0); an edge is 2 (j W + i) for the horizontal edge from
+  // (i, j), plus 1 for the vertical one
+  const order: number[] = [];
+  const nextOf = (e: number) => (nStamp[e] === gen ? next[e] : -1);
+  for (const k of leaves) {
+    const c =
+        (V[k] <= 0 ? 8 : 0) +
+        (V[k + 1] <= 0 ? 4 : 0) +
+        (V[k + W + 1] <= 0 ? 2 : 0) +
+        (V[k + W] <= 0 ? 1 : 0),
+      sg = SEGS[c];
+    for (let q = 0; q < sg.length; q += 2) {
+      const ea =
+        sg[q] === 0
+          ? 2 * k
+          : sg[q] === 1
+            ? 2 * (k + 1) + 1
+            : sg[q] === 2
+              ? 2 * (k + W)
+              : 2 * k + 1;
+      const eb =
+        sg[q + 1] === 0
+          ? 2 * k
+          : sg[q + 1] === 1
+            ? 2 * (k + 1) + 1
+            : sg[q + 1] === 2
+              ? 2 * (k + W)
+              : 2 * k + 1;
+      if (nStamp[ea] !== gen) {
+        order.push(ea);
+        nStamp[ea] = gen;
       }
+      next[ea] = eb;
     }
   }
-  const fd: Field = {
-    I: b.I,
-    cut: zones.length ? cutAt(sigma) : undefined,
-    W,
-    H,
-    x0,
-    y0,
-    res,
-    sigma,
-    z: b.z,
+  const cellAt = (e: number) => {
+    const v = e >> 1;
+    return cellOf(v) ? v : e & 1 ? v - 1 : v - W;
   };
-  const loops = b.loops.map((l) =>
-    resampleLoop(
-      resampleLoop(l, 1).map((p) => project(fd, p)),
-      1
-    ).map((p) => project(fd, p))
+  /** The exact crossing on edge e (regula falsi on the region's distance, from a cell that knows its primitives). */
+  const crossing = (e: number): Pt => {
+    const v = e >> 1,
+      i = v % W,
+      j = (v - i) / W,
+      vert = e & 1,
+      b = 4 * (cellOf(cellAt(e)) - 1);
+    const ax = x0 + i * res,
+      ay = y0 + j * res,
+      bx = ax + (vert ? 0 : res),
+      by = ay + (vert ? res : 0);
+    let lo = 0,
+      hi = 1,
+      flo = V[v],
+      fhi = V[vert ? v + W : v + 1],
+      side = 0,
+      t = 0;
+    for (let it = 0; it < 30; it++) {
+      t = (lo * fhi - hi * flo) / (fhi - flo);
+      const f = regionD(
+        PF,
+        ZF,
+        A,
+        blocks[b],
+        blocks[b + 1],
+        blocks[b + 2],
+        blocks[b + 3],
+        ax + t * (bx - ax),
+        ay + t * (by - ay)
+      );
+      if (Math.abs(f) < 1e-4) break; // a ten-thousandth of a pixel
+      if (f > 0 === flo > 0) {
+        lo = t;
+        flo = f;
+        if (side === -1) fhi /= 2;
+        side = -1;
+      } else {
+        hi = t;
+        fhi = f;
+        if (side === 1) flo /= 2;
+        side = 1;
+      }
+    }
+    return [ax + t * (bx - ax), ay + t * (by - ay)];
+  };
+  const loops: { pts: Pt[]; arcs: Float64Array }[] = [],
+    radii = new Set<number>();
+  for (const s0 of order) {
+    if (seen[s0] === gen) continue;
+    const raw: Pt[] = [],
+      cells: number[] = [];
+    for (let cur = s0; cur >= 0 && seen[cur] !== gen; cur = nextOf(cur)) {
+      seen[cur] = gen;
+      raw.push(crossing(cur));
+      cells.push(cellAt(cur));
+    }
+    if (raw.length <= 8) continue;
+    // resample every ds px along the traced loop, and look up the circle each point lies on
+    const m = raw.length,
+      cum = new Float64Array(m + 1);
+    for (let q = 1; q <= m; q++)
+      cum[q] = cum[q - 1] + dist(raw[q - 1], raw[q % m]);
+    const L = cum[m],
+      N = Math.max(8, Math.round(L / ds)),
+      pts: Pt[] = [],
+      arcs = new Float64Array(4 * N);
+    let k = 0;
+    for (let q = 0; q < N; q++) {
+      const t = (q / N) * L;
+      while (cum[k + 1] < t) k++;
+      const u = (t - cum[k]) / (cum[k + 1] - cum[k] || 1),
+        a = raw[k],
+        b = raw[(k + 1) % m];
+      const p: Pt = [a[0] + u * (b[0] - a[0]), a[1] + u * (b[1] - a[1])];
+      const bl = 4 * (cellOf(cells[u < 0.5 ? k : (k + 1) % m]) - 1);
+      regionArc(
+        pieces,
+        zones,
+        A,
+        blocks[bl],
+        blocks[bl + 1],
+        blocks[bl + 2],
+        blocks[bl + 3],
+        p[0],
+        p[1]
+      );
+      arcs[4 * q] = ARC[0];
+      arcs[4 * q + 1] = ARC[1];
+      arcs[4 * q + 2] = ARC[2];
+      arcs[4 * q + 3] = ARC[3];
+      if (ARC[2] > 0) radii.add(ARC[2]);
+      pts.push(p);
+    }
+    loops.push({ pts, arcs });
+  }
+  return {
+    loops,
+    radii: [...radii],
+    zones,
+    zoneGrid: boxGrid(zones.map((z) => z.bb)),
+  };
+};
+
+// ── step 3: rounding ────────────────────────────────────────────────────────
+/** Normalized Gaussian weights for a width of s samples. */
+const gaussWeights = (s: number) => {
+  const J = Math.ceil(4 * s),
+    w = new Float64Array(2 * J + 1);
+  let z = 0;
+  for (let j = -J; j <= J; j++)
+    z += w[j + J] = Math.exp(-(j * j) / (2 * s * s));
+  for (let j = 0; j < w.length; j++) w[j] /= z;
+  return w;
+};
+/** Round one closed loop: a Gaussian of width sigma along its arc length, with every point that
+ *  lies on a circle first moved out from that circle's center by 1 / f, where f is how much the
+ *  same smoothing shrinks that circle. So a circle and a straight side come out exactly where
+ *  they were, and only corners and joins (where the curvature jumps) change: they round. */
+const roundLoop = (
+  pts: Pt[],
+  arcs: Float64Array,
+  sigma: number,
+  k: number
+): Pt[] => {
+  const N = pts.length;
+  let L = 0;
+  for (let i = 0; i < N; i++) L += dist(pts[i], pts[(i + 1) % N]);
+  const ds = L / N,
+    w = gaussWeights(sigma / ds),
+    J = (w.length - 1) / 2;
+  const shrink = new Map<number, number>();
+  const f = (rho: number) => {
+    let v = shrink.get(rho);
+    if (v === undefined) {
+      v = 0;
+      for (let j = -J; j <= J; j++) v += w[j + J] * Math.cos((j * ds) / rho);
+      shrink.set(rho, v);
+    }
+    return v;
+  };
+  const X = new Float64Array(N),
+    Y = new Float64Array(N);
+  // A hole cut by avoided nodes alone (every point on a zone's edge) starts k inside them, where
+  // keepOut puts it back on their edges exactly. Elsewhere a zone only bounds the outline, which
+  // keepOut keeps at least the clearance away.
+  let hole = 1;
+  for (let i = 0; i < N; i++) hole = Math.min(hole, arcs[4 * i + 3]);
+  for (let i = 0; i < N; i++) {
+    const cx = arcs[4 * i],
+      cy = arcs[4 * i + 1],
+      rho = arcs[4 * i + 2],
+      onZone = hole;
+    const dx = pts[i][0] - cx,
+      dy = pts[i][1] - cy,
+      d = Math.hypot(dx, dy) || 1;
+    let s = onZone ? (d - k) / d : 1;
+    if (rho > 0 && sigma > 0) s /= f(rho);
+    X[i] = rho > 0 || onZone ? cx + dx * s : pts[i][0];
+    Y[i] = rho > 0 || onZone ? cy + dy * s : pts[i][1];
+  }
+  const out: Pt[] = [];
+  if (sigma <= 0) {
+    for (let i = 0; i < N; i++) out.push([X[i], Y[i]]);
+    return out;
+  }
+  // the loop is closed: pad it with J points from each end, so the sums run without wrapping
+  const PX = new Float64Array(N + 2 * J),
+    PY = new Float64Array(N + 2 * J);
+  for (let i = 0; i < N + 2 * J; i++) {
+    const q = (((i - J) % N) + N) % N;
+    PX[i] = X[q];
+    PY[i] = Y[q];
+  }
+  for (let i = 0; i < N; i++) {
+    let x = 0,
+      y = 0;
+    for (let j = 0; j < w.length; j++) {
+      x += w[j] * PX[i + j];
+      y += w[j] * PY[i + j];
+    }
+    out.push([x, y]);
+  }
+  return out;
+};
+/** Rounding along the outline reaches corners, but not across an inlet: two sides of a narrow
+ *  inlet are far apart along the outline even where they nearly touch. So before rounding, every
+ *  inlet narrower than w is closed: where the outline comes back within w of itself around a
+ *  pocket of the outside (it turns the other way from the loop) that is at most w wide on
+ *  average and holds no keep-out zone, the pocket is replaced by the straight line across its
+ *  mouth. The pocket is outside the region, so this only fills; the loop stays one loop, so the
+ *  pieces and holes stay as traced. */
+const closeInlets = (
+  pts: Pt[],
+  arcs: Float64Array,
+  w: number,
+  zones: Prim[],
+  zoneGrid: ReturnType<typeof boxGrid>
+): { pts: Pt[]; arcs: Float64Array } => {
+  const N = pts.length;
+  if (w <= 0 || N < 16) return { pts, arcs };
+  let L = 0;
+  const C = new Float64Array(N + 1); // C[k]: twice the signed area swept from point 0 to point k
+  for (let k = 0; k < N; k++) {
+    const p = pts[k],
+      q = pts[(k + 1) % N];
+    C[k + 1] = C[k] + p[0] * q[1] - q[0] * p[1];
+    L += Math.hypot(q[0] - p[0], q[1] - p[1]);
+  }
+  const ds = L / N,
+    sgn = Math.sign(C[N]),
+    minRun = Math.ceil((3 * w) / ds);
+  // twice the signed area of the pocket from i forward to j, closed by the chord
+  const area2 = (i: number, j: number) =>
+    (j >= i ? C[j] - C[i] : C[N] - C[i] + C[j]) +
+    pts[j][0] * pts[i][1] -
+    pts[i][0] * pts[j][1];
+  // points by grid cell, to find the pairs within w
+  const cells = new Map<number, number[]>(),
+    key = (a: number, b: number) => a * 1048576 + b;
+  pts.forEach((p, k) => {
+    const c = key(Math.floor(p[0] / w), Math.floor(p[1] / w));
+    let l = cells.get(c);
+    if (!l) cells.set(c, (l = []));
+    l.push(k);
+  });
+  const spans: [number, number][] = []; // [start, run]: the pocket runs from start forward run steps
+  pts.forEach((p, i) => {
+    const a = Math.floor(p[0] / w),
+      b = Math.floor(p[1] / w);
+    let best = -1,
+      bestRun = 0;
+    for (let da = -1; da <= 1; da++)
+      for (let db = -1; db <= 1; db++)
+        for (const j of cells.get(key(a + da, b + db)) ?? []) {
+          const run = (j - i + N) % N;
+          if (
+            run < minRun ||
+            run > N - minRun ||
+            run <= bestRun ||
+            dist(p, pts[j]) >= w
+          )
+            continue;
+          const A = area2(i, j) / 2;
+          if (Math.sign(A) === sgn || Math.abs(A) > (w * run * ds) / 2)
+            continue;
+          best = j;
+          bestRun = run;
+        }
+    if (best >= 0) spans.push([i, bestRun]);
+  });
+  // the widest pockets first; a pocket inside an accepted one is already closed, one that overlaps it is left
+  spans.sort((x, y) => y[1] - x[1]);
+  const taken = new Uint8Array(N),
+    cut: [number, number][] = [];
+  for (const [i, run] of spans) {
+    let free = true;
+    for (let t = 0; t <= run && free; t++) if (taken[(i + t) % N]) free = false;
+    if (!free) continue;
+    // a pocket that holds part of a keep-out zone stays open (closing it would cover the zone)
+    const poly: Pt[] = [];
+    for (let t = 0; t <= run; t++) poly.push(pts[(i + t) % N]);
+    const bb = bboxOf(poly);
+    let hit = false;
+    zoneGrid.each(bb[0], bb[1], bb[2], bb[3], (z) => {
+      if (hit) return;
+      const zp = zones[z];
+      if (
+        primD(
+          zp,
+          (pts[i][0] + pts[(i + run) % N][0]) / 2,
+          (pts[i][1] + pts[(i + run) % N][1]) / 2,
+          false
+        ) < w ||
+        inPoly([zp.x1, zp.y1], poly)
+      )
+        hit = true;
+    });
+    if (hit) continue;
+    for (let t = 0; t <= run; t++) taken[(i + t) % N] = 1;
+    cut.push([i, run]);
+  }
+  if (!cut.length) return { pts, arcs };
+  // rebuild the loop: each closed pocket becomes its mouth, sampled every ds
+  const start = new Int32Array(N).fill(-1);
+  for (const [i, run] of cut) start[i] = run;
+  const P: Pt[] = [],
+    A: number[] = [];
+  let k = 0;
+  // begin at a point outside every pocket
+  let k0 = 0;
+  while (taken[k0] && start[k0] < 0) k0++;
+  for (let n = 0; n < N; ) {
+    k = (k0 + n) % N;
+    if (start[k] >= 0) {
+      const j = (k + start[k]) % N,
+        a = pts[k],
+        b = pts[j],
+        m = Math.max(1, Math.round(dist(a, b) / ds));
+      for (let t = 0; t < m; t++) {
+        P.push([
+          a[0] + ((b[0] - a[0]) * t) / m,
+          a[1] + ((b[1] - a[1]) * t) / m,
+        ]);
+        A.push(
+          t ? 0 : arcs[4 * k],
+          t ? 0 : arcs[4 * k + 1],
+          t ? 0 : arcs[4 * k + 2],
+          0
+        );
+      }
+      n += start[k];
+      continue;
+    }
+    P.push(pts[k]);
+    A.push(arcs[4 * k], arcs[4 * k + 1], arcs[4 * k + 2], arcs[4 * k + 3]);
+    n++;
+  }
+  return { pts: P, arcs: Float64Array.from(A) };
+};
+/** A smooth max of t and 0 (the cubic one: exactly max(t, 0) beyond 1 either way, twice differentiable). */
+const smax0 = (t: number) => {
+  const h = Math.max(0, 1 - Math.abs(t));
+  return Math.max(t, 0) + (h * h * h) / 6;
+};
+/** Rounding fills a corner a little, so near a keep-out zone it could cross into it. Each rounded
+ *  point within k of a zone is moved along the nearest zone's normal from distance d to the zone's
+ *  edge (negative inside) to a ramp-smoothed max(d, 0). A point on the edge or farther than
+ *  k stays put, a point inside lands on the edge, and the map is twice differentiable, so the
+ *  outline keeps its continuous curvature. */
+const keepOut = (
+  pts: Pt[],
+  zones: Prim[],
+  grid: ReturnType<typeof boxGrid>,
+  k: number
+): Pt[] => {
+  if (k <= 0 || !zones.length) return pts;
+  return pts.map((p) => {
+    let q = p;
+    // zones overlap: each step moves out of the nearest one (the deepest, if inside several), and
+    // a step that lands in another zone is followed by one out of that
+    for (let step = 0; step < 4; step++) {
+      let best = Infinity,
+        cx = 0,
+        cy = 0;
+      grid.each(q[0] - k, q[1] - k, q[0] + k, q[1] + k, (z) => {
+        const d = primD(zones[z], q[0], q[1], true);
+        if (d < best) {
+          best = d;
+          cx = ARC[0];
+          cy = ARC[1];
+        }
+      });
+      if (best >= k || (step > 0 && best > -1e-6)) break;
+      // the zone's normal at q: away from the nearest point of its core
+      const rr = Math.hypot(q[0] - cx, q[1] - cy) || 1,
+        nd = k * smax0(best / k);
+      q = [
+        q[0] + ((nd - best) * (q[0] - cx)) / rr,
+        q[1] + ((nd - best) * (q[1] - cy)) / rr,
+      ];
+    }
+    return q;
+  });
+};
+/** Do any two segments of these loops cross (the same loop's neighbors excepted)? */
+const loopsCross = (loops: Pt[][]) => {
+  const owner: number[] = [],
+    idx: number[] = [];
+  let len = 0,
+    X0 = Infinity,
+    Y0 = Infinity,
+    X1 = -Infinity,
+    Y1 = -Infinity;
+  loops.forEach((l, li) =>
+    l.forEach((p, i) => {
+      owner.push(li);
+      idx.push(i);
+      len += dist(p, l[(i + 1) % l.length]);
+      X0 = Math.min(X0, p[0]);
+      Y0 = Math.min(Y0, p[1]);
+      X1 = Math.max(X1, p[0]);
+      Y1 = Math.max(Y1, p[1]);
+    })
   );
-  return { loops, field: fd, skel: sk, sigma };
+  const n = owner.length;
+  if (!n) return false;
+  // a grid of cells about two segments long, each holding a linked list of the segments it meets
+  const g = Math.max(2, (2 * len) / n),
+    nx = Math.floor((X1 - X0) / g) + 1,
+    ny = Math.floor((Y1 - Y0) / g) + 1;
+  const head = new Int32Array(nx * ny).fill(-1),
+    next: number[] = [],
+    seg: number[] = [];
+  for (let s2 = 0; s2 < n; s2++) {
+    const l = loops[owner[s2]],
+      i = idx[s2],
+      p = l[i],
+      q = l[(i + 1) % l.length];
+    for (
+      let a2 = Math.floor((Math.min(p[0], q[0]) - X0) / g);
+      a2 <= Math.floor((Math.max(p[0], q[0]) - X0) / g);
+      a2++
+    )
+      for (
+        let b2 = Math.floor((Math.min(p[1], q[1]) - Y0) / g);
+        b2 <= Math.floor((Math.max(p[1], q[1]) - Y0) / g);
+        b2++
+      ) {
+        const c = b2 * nx + a2;
+        for (let e = head[c]; e >= 0; e = next[e]) {
+          const t = seg[e],
+            lt = owner[t],
+            it = idx[t],
+            L = loops[lt],
+            m = L.length;
+          if (
+            lt === owner[s2] &&
+            (Math.abs(it - i) <= 1 || Math.abs(it - i) === m - 1)
+          )
+            continue;
+          if (segIntersect(p, q, L[it], L[(it + 1) % m])) return true;
+        }
+        next.push(head[c]);
+        seg.push(s2);
+        head[c] = seg.length - 1;
+      }
+  }
+  return false;
+};
+
+type SmoothOpts = SkelOpts & { roundness?: number; res?: number };
+type Smooth = {
+  loops: Pt[][];
+  skel: Skeleton;
+  sigma: number;
+  signals: { pts: Pt[]; arcs: Float64Array }[];
+};
+const regionMemo = stageMemo<Region>();
+/** Steps 2-3: the region traced exactly, then rounded along its outline. */
+const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
+  const sk = skeleton(members, o);
+  const clearance = o.clearance ?? 4,
+    res = o.res ?? 1;
+  const region = regionMemo([sk], [res], () => {
+    // faces first: they cover the most area, so a place deep inside the region is settled soonest
+    // Pieces that lie inside other pieces add nothing to the union, and only cost time, so they are
+    // left out: a link inside a wider link on the same segment (a spanning-tree link along a face
+    // edge); a disc inside a link from its center at least as wide; and a link between two filled
+    // triangles whose other sides are at least as wide. (A point within h of that edge and outside
+    // both triangles leaves a triangle through another side, within h of it, so that side's link holds it.)
+    const pieces: Prim[] = sk.faces.map(triPrim);
+    // points are numbered by their coordinates, and a segment by its two points' numbers
+    const byX = new Map<number, Map<number, number>>(),
+      pts: Pt[] = [];
+    const pid = (p: Pt) => {
+      let m = byX.get(p[0]);
+      if (!m) byX.set(p[0], (m = new Map()));
+      let i = m.get(p[1]);
+      if (i === undefined) {
+        m.set(p[1], (i = pts.length));
+        pts.push(p);
+      }
+      return i;
+    };
+    const segKey = (a: Pt, b: Pt) => {
+      const i = pid(a),
+        j = pid(b);
+      return i < j ? i * 1048576 + j : j * 1048576 + i;
+    };
+    const widest = new Map<number, number>(),
+      atEnd = new Map<number, number>();
+    for (const e of sk.links)
+      for (let k = 1; k < e.route.length && !e.parts; k++) {
+        const key = segKey(e.route[k - 1], e.route[k]);
+        widest.set(key, Math.max(widest.get(key) ?? 0, e.h));
+        for (const p of [e.route[k - 1], e.route[k]])
+          atEnd.set(pid(p), Math.max(atEnd.get(pid(p)) ?? 0, e.h));
+      }
+    const sides = new Map<number, number>(); // per face edge: how many of its triangles have both other sides as wide
+    for (const [a, b, c] of sk.faces)
+      for (const [p, q, r] of [
+        [a, b, c],
+        [b, c, a],
+        [c, a, b],
+      ]) {
+        const key = segKey(p, q),
+          h = widest.get(key) ?? 0;
+        if (
+          (widest.get(segKey(p, r)) ?? 0) >= h &&
+          (widest.get(segKey(q, r)) ?? 0) >= h
+        )
+          sides.set(key, (sides.get(key) ?? 0) + 1);
+      }
+    for (const e of sk.links)
+      if (e.parts) {
+        for (const pt of e.parts)
+          pieces.push(
+            "c" in pt
+              ? arcPrim(pt.c, pt.r, pt.a0, pt.sweep, e.h)
+              : capsulePrim(pt.a, pt.b, e.h)
+          );
+        for (const p of [e.route[0], e.route[e.route.length - 1]])
+          atEnd.set(pid(p), Math.max(atEnd.get(pid(p)) ?? 0, e.h));
+      }
+    members.forEach((m) => {
+      if (
+        !(
+          m.kind === "circle" &&
+          (atEnd.get(pid([m.cx, m.cy])) ?? 0) >= m.r + o.pad
+        )
+      )
+        pieces.push(grownPrim(m, o.pad));
+    });
+    for (const [key, h] of widest)
+      if (sides.get(key) !== 2)
+        pieces.push(
+          capsulePrim(pts[Math.floor(key / 1048576)], pts[key % 1048576], h)
+        );
+    const zones = (o.avoiding ?? []).map((m) => grownPrim(m, clearance));
+    return traceRegion(pieces, zones, res, Math.min(1, res));
+  });
+  // `roundness` is the smoothing's reach: a Gaussian of width sigma = roundness / 2 along the
+  // outline. It stops at the smallest circle in the region (a member's bulge, a link's
+  // half-width, a box corner, a keep-out zone): rounding further would bend that circle.
+  const thinnest = Math.min(
+    ...sk.R,
+    ...sk.links.map((e) => e.h),
+    ...region.radii
+  );
+  const asked = Math.max(0, Math.min(o.roundness ?? o.pad, thinnest)) / 2;
+  // Rounding never changes the topology: it moves each loop on its own, so pieces and holes stay
+  // as traced unless two loops (or two parts of one) would cross; then sigma is narrowed until they do not.
+  const roundAll = (s: number) => {
+    const k = Math.max(s, res);
+    return region.loops.map((l) => {
+      const c =
+        s > 0
+          ? closeInlets(l.pts, l.arcs, 1.5 * s, region.zones, region.zoneGrid)
+          : l;
+      return keepOut(
+        roundLoop(c.pts, c.arcs, s, k),
+        region.zones,
+        region.zoneGrid,
+        k
+      );
+    });
+  };
+  let sigma = asked,
+    loops = roundAll(sigma);
+  if (sigma > 0 && loopsCross(loops)) {
+    let lo = 0,
+      hi = sigma;
+    for (let it = 0; it < 6; it++) {
+      const mid = (lo + hi) / 2;
+      if (loopsCross(roundAll(mid))) hi = mid;
+      else lo = mid;
+    }
+    sigma = lo;
+    loops = roundAll(sigma);
+  }
+  return { loops, skel: sk, sigma, signals: region.loops };
 };
 
 export {
