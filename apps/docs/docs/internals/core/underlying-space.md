@@ -1416,12 +1416,26 @@ child nested while it stays in its parent's set (placed at a datum, or the
 content of a data-valued box) measures its own extent from the datum or the
 box, so its domains are keyed in a frame of its own and never widen its
 parent's, even in the same unit.
+
+Every reader of a plan asks the same question of it: what is this child's
+place in its parent on this axis? `childRole` (`constraints/compose.ts`, next
+to `SharingPlan`) is the one answer, with four cases. A **shared** child is
+in the parent's own set and reads its values in the parent's frame. A
+**nested** child is in the own set too, but its extent is in a frame of its
+own: it is placed at a datum, or it is the content of a data-valued box. A
+**slot** child has a set and a frame of its own (a spread slot, a grid cell).
+A **detached** child has a set of its own and is placed elsewhere. The table
+build reads it, and so does `GoFishNode.inSlot`, which a layer's σ solve asks
+(`solveLayerScales`) only for pinned content handed a σ and no map.
 Values with no unit (literals) are keyed by their set. So two facet panels
 that plot one column share one domain, and a count histogram placed beside a
 scatter of millimeters keeps its own. Chrome never decides a domain, it only
 reads one: a ring or a label wrapper added later reads the seat of the content
 it wraps. The axes drawn over each domain are recorded once `resolveAxes` has
-assigned them (`refreshDemand`).
+assigned them (`refreshDemand`, which `layout()` calls once, after the axes
+are stamped: nothing reads the demand before then). A space root's domain and
+demand maps are made on the first write to them, and a read of a root with
+none (one with no axis) makes none.
 
 Every sized node maps its keyed domain into its own size: before its solve,
 its claim is widened to the keyed domain (`widenScope` in `extent.ts`, the same

@@ -512,7 +512,10 @@ over their shared domain.
 
 The axis shows the node's keyed domain, not only the part of it the node's
 own data covers (`elaborationsFor` widens the node's space to it), so a facet
-panel's axis spans the domain every panel maps.
+panel's axis spans the domain every panel maps. `elaborationsFor` returns at
+once for a node that draws neither axis. A node that draws one widens and
+nices both dims, since an axis reads its own dim's nice and the other dim's
+floor, where a facet panel seats its axis line (#753).
 
 ## The scale-sharing seam
 

@@ -330,7 +330,8 @@ size does not depend on σ: the registry records the solution under the keyed
 domain the node maps (`solveFixed`), the node claims its content's claim at
 that σ upward, and its layout reuses the solution. The render root reads the
 σ recorded for its keyed domain (`keyedSigma`) when the render gives it no
-size.
+size. The registry forgets the recorded solutions when it is reset, just
+before the claim walk, so the walk records every one again.
 
 A spread of magnitudes along its direction is not a sized node. Its parts are
 parts of one chain claim, as today, and the enclosing sized node solves σ
