@@ -759,12 +759,17 @@ enclose([spread([circle(**d) for d in planets],
         <td><code>neck</code></td>
         <td><code>Shape.blob</code></td>
         <td>
-          Width of links that do not bound a filled triangle, as a fraction of
-          the bulge.
+          How far the outline is pulled in between members. Every part of the
+          outline that is not on a member's bulge moves toward the middle of the
+          region by (1 − <code>neck</code>) times the region's half-width there,
+          and at most (1 − <code>neck</code>) times the bulge. So a lone link
+          becomes a tube <code>neck</code> times the bulge, and the edge of a
+          filled region sinks in between its members. It changes shape only: the
+          pieces and holes are those of <code>neck: 1</code>, at every value.
         </td>
         <td>
-          0 to 1. Bigger is thicker; 1 is as thick. Above 1 is an error: a tube
-          wider than the bulge swallows it, so the knob would only repeat
+          0 to 1. Bigger is fuller; 1 does not pull in. Above 1 is an error: the
+          outline would have to move out, which only repeats
           <code>padding</code>, unevenly.
         </td>
         <td>1</td>
@@ -791,7 +796,7 @@ enclose([spread([circle(**d) for d in planets],
 
   <h3>How the blob is built</h3>
   <p>
-    <code>Shape.blob()</code> draws one set in six steps, after layout, in
+    <code>Shape.blob()</code> draws one set in seven steps, after layout, in
     screen space (so it works under polar and other coordinate transforms the
     way curves do).
   </p>
@@ -809,15 +814,15 @@ enclose([spread([circle(**d) for d in planets],
       keep-out circle exactly: the route is straight lines tangent to the
       circles and arcs of them. A spanning-tree link runs between the closest
       points of two members' geometries, so members that touch, like an edge and
-      its end node, are joined at no cost.
+      its end node, are joined at no cost. Every link is chosen and routed at
+      its full width, so <code>neck</code> never changes which links there are
+      or where they run.
     </li>
     <li>
       <strong>Pieces.</strong> Each member grown by <code>padding</code> (its
       bulge, radius <em>R</em>; for a line member, a tube around its whole
-      length). Each link that bounds a filled triangle is a tube as wide as the
-      bulge; every other link is a tube <code>neck</code> times the bulge. The
-      filled triangles. The union of these pieces is the region, and nothing
-      else fills it.
+      length). Each link, as a tube as wide as the bulge. The filled triangles.
+      The union of these pieces is the region, and nothing else fills it.
     </li>
     <li>
       <strong>Cut.</strong> Each avoided node's keep-out zone (the node grown by
@@ -831,7 +836,29 @@ enclose([spread([circle(**d) for d in planets],
       a tube, a box, a triangle, or a tube bent around an avoided node), so each
       outline point is found to a ten-thousandth of a pixel, on a 1 px grid that
       is searched only near the outline. Each point records the circle it lies
-      on, if any. This step does not depend on <code>roundness</code>.
+      on, if any, and whether it lies on a member's bulge. This step does not
+      depend on <code>neck</code> or <code>roundness</code>.
+    </li>
+    <li>
+      <strong>Neck.</strong> Every outline point that is not on a member's bulge
+      moves inward along the outline's normal by (1 − <code>neck</code>) times
+      the region's half-width there: the radius of the largest disc inside the
+      region that touches the outline at that point, capped at the link's own
+      half-width. Along a lone link that disc is the link's tube, so the tube
+      thins to <code>neck</code> times its width about its middle. On a filled
+      region's edge the cap holds, so the edge sinks in by (1 −
+      <code>neck</code>) times the bulge between its members. Where two parts of
+      the region only touch, the disc is the narrow place between them, so it
+      thins but never parts. A point that would move into a member's bulge stops
+      on the bulge's edge, so a lone member still ends exactly at
+      <code>padding</code>, and a hole cut by keep-out zones alone stays exactly
+      as cut. No point moves past the middle of its disc, so each loop stays one
+      loop and no two loops meet: the pieces and holes are those of the
+      full-width region. Where moving points by different amounts makes a short
+      run of the outline cross itself (a small knot, at a cusp between two
+      bulges), the knot is cut out at the crossing. If two parts of the outline
+      would still cross, the pull is narrowed by bisection until they do not, as
+      for rounding.
     </li>
     <li>
       <strong>Rounding.</strong> The outline is smoothed along its own length
@@ -892,8 +919,10 @@ enclose([spread([circle(**d) for d in planets],
   </p>
   <p class="rec">
     <strong
-      >Now <code>convexity</code> decides topology and filled area, and
-      <code>roundness</code> decides only curvature.</strong
+      >Now <code>convexity</code> decides topology and filled area,
+      <code>roundness</code> decides only curvature, and
+      <code>neck</code> decides only how far the outline pulls in between
+      members.</strong
     >
     The closing is gone, so every fill comes from <code>convexity</code>'s
     triangles, and the rounding is the <code>roundness</code> knob.
@@ -1033,51 +1062,51 @@ enclose([spread([circle(**d) for d in planets],
       </tr>
       <tr>
         <td>Fill</td>
-        <td class="heat" style="--v: 0.62">0.62</td>
+        <td class="heat" style="--v: 0.57">0.57</td>
         <td class="heat" style="--v: 0.08">0.08</td>
-        <td class="heat" style="--v: 0.13">0.13</td>
+        <td class="heat" style="--v: 0.16">0.16</td>
         <td class="heat" style="--v: 0.09">0.09</td>
         <td class="heat" style="--v: 0.03">0.03</td>
       </tr>
       <tr>
         <td>Gap</td>
-        <td class="heat" style="--v: 0.66">0.66</td>
+        <td class="heat" style="--v: 0.62">0.62</td>
         <td class="heat" style="--v: 0.01">0.01</td>
-        <td class="heat" style="--v: 0.04">0.04</td>
-        <td class="heat" style="--v: 0.17">0.17</td>
         <td class="heat" style="--v: 0.14">0.14</td>
+        <td class="heat" style="--v: 0.13">0.13</td>
+        <td class="heat" style="--v: 0.1">0.10</td>
       </tr>
       <tr>
         <td>Radius</td>
-        <td class="heat" style="--v: 0.47">0.47</td>
-        <td class="heat" style="--v: 0.21">0.21</td>
-        <td class="heat" style="--v: 0.16">0.16</td>
+        <td class="heat" style="--v: 0.29">0.29</td>
+        <td class="heat" style="--v: 0.23">0.23</td>
+        <td class="heat" style="--v: 0.31">0.31</td>
         <td class="heat" style="--v: 0.11">0.11</td>
-        <td class="heat" style="--v: 0.07">0.07</td>
+        <td class="heat" style="--v: 0.05">0.05</td>
       </tr>
       <tr>
         <td>Padding</td>
-        <td class="heat" style="--v: 0">0.00</td>
-        <td class="heat" style="--v: 0.01">0.01</td>
-        <td class="heat" style="--v: 0.01">0.01</td>
-        <td class="heat" style="--v: 0.97">0.97</td>
+        <td class="heat" style="--v: 0.02">0.02</td>
+        <td class="heat" style="--v: 0.03">0.03</td>
+        <td class="heat" style="--v: 0.03">0.03</td>
+        <td class="heat" style="--v: 0.93">0.93</td>
         <td class="heat" style="--v: 0">0.00</td>
       </tr>
       <tr>
         <td>Neck</td>
-        <td class="heat" style="--v: 0.17">0.17</td>
+        <td class="heat" style="--v: 0.06">0.06</td>
+        <td class="heat" style="--v: 0.04">0.04</td>
+        <td class="heat" style="--v: 0.64">0.64</td>
         <td class="heat" style="--v: 0.05">0.05</td>
-        <td class="heat" style="--v: 0.43">0.43</td>
-        <td class="heat" style="--v: 0.05">0.05</td>
-        <td class="heat" style="--v: 0.27">0.27</td>
+        <td class="heat" style="--v: 0.23">0.23</td>
       </tr>
       <tr>
         <td>Clearance</td>
+        <td class="heat" style="--v: 0.03">0.03</td>
         <td class="heat" style="--v: 0.02">0.02</td>
-        <td class="heat" style="--v: 0.04">0.04</td>
-        <td class="heat" style="--v: 0.01">0.01</td>
-        <td class="heat" style="--v: 0.25">0.25</td>
-        <td class="heat" style="--v: 0.54">0.54</td>
+        <td class="heat" style="--v: 0.38">0.38</td>
+        <td class="heat" style="--v: 0.13">0.13</td>
+        <td class="heat" style="--v: 0.34">0.34</td>
       </tr>
       <tr>
         <td>Hole shape</td>
@@ -1091,17 +1120,17 @@ enclose([spread([circle(**d) for d in planets],
         <td>Topology</td>
         <td class="heat" style="--v: 1">1.00</td>
         <td class="heat" style="--v: 0">0.00</td>
-        <td class="heat" style="--v: 0.48">0.48</td>
-        <td class="heat" style="--v: 0.49">0.49</td>
-        <td class="heat" style="--v: 0.46">0.46</td>
+        <td class="heat" style="--v: 0">0.00</td>
+        <td class="heat" style="--v: 0.33">0.33</td>
+        <td class="heat" style="--v: 0.5">0.50</td>
       </tr>
     </table>
   </div>
   <p>
-    The rows that move with <code>padding</code>, <code>clearance</code> and
-    <code>neck</code> are expected. Those knobs are distances, and a distance
-    can join two pieces or close a hole, so the claim is about the two shape
-    knobs only.
+    The rows that move with <code>padding</code> and <code>clearance</code> are
+    expected. Those knobs are distances, and a distance can join two pieces or
+    close a hole, so the claim is about the three shape knobs:
+    <code>convexity</code>, <code>roundness</code> and <code>neck</code>.
   </p>
   <p>
     Before, <code>smoothing</code> moved the filled area (0.19), the hole shape
@@ -1116,6 +1145,78 @@ enclose([spread([circle(**d) for d in planets],
     makes new corners, so that is the shape changing, not a second rounding
     control. The hole shape now depends on <code>clearance</code> alone (0.89).
   </p>
+  <p>
+    <code>neck</code> now changes the topology along none of its sweeps (0.00;
+    it was 0.48 when <code>neck</code> set the width of the drawn tubes,
+    History, v8). Its largest effect is on the neck row (0.64), which is its
+    job. It also moves the radius (0.31), because pulling a tube in makes the
+    joins to its bulges sharper, and the fill (0.16), because a thinner tube
+    covers less. It moves the clearance row (0.38) in one direction only: a link
+    routed at full width runs against a keep-out zone, and when it thins about
+    its middle it moves off that zone, so the gap grows and never shrinks below
+    <code>clearance</code>.
+  </p>
+  <p>
+    The neck check, on its own: every set of every playground dataset (U,
+    Topology, the penguins, the hyperedges with <code>via</code> and with edges
+    as members, the trout and Munkres' panel, 13 sets), at
+    <code>convexity</code> 0, 0.25, 0.5, 0.75 and 1, with
+    <code>neck</code> swept from 0.3 to 1 in steps of 0.01. Before, the counts
+    stayed the same along 53 of 65 sweeps, and the links or their routes changed
+    along 30 of them. Now the counts, the links and the routes stay the same
+    along 65 of 65, with <code>roundness</code> 0 and with
+    <code>roundness</code> equal to <code>padding</code>. (With
+    <code>roundness</code> twice the padding, one tiny hole in the Gentoo set,
+    about 6 px², is rounded down to no area at every <code>neck</code>, 1
+    included, so its loop counts as a hole or a piece by rounding error: that is
+    rounding, not <code>neck</code>.) Josh's two spellings on the Adelie set
+    (spine, <code>padding: 4</code>, <code>roundness: 0</code>, the other
+    species avoided) now draw the same pieces and holes.
+  </p>
+  <figure>
+    <div class="shot wide">
+      <img
+        src="img/neck-adelie-099-vs-1.png"
+        alt="The Adelie spine at neck 0.99 and at neck 1, with the other species in gray; the two outlines have the same pieces and holes"
+      />
+    </div>
+    <figcaption>
+      Josh's two spellings: <code>neck: 0.99</code> and <code>neck: 1</code>.
+    </figcaption>
+  </figure>
+  <p>
+    Columns are <code>convexity</code> and rows are <code>neck</code> (0.4, 0.6,
+    0.8, 1), with <code>roundness</code> equal to <code>padding</code>. Down a
+    column the pieces and holes never change. At <code>convexity: 1</code> the
+    hull's edges sink in between their members, so the outline waists between
+    neighbors while the inside stays filled and the holes stay exact. At 0 the
+    tubes thin. Where the full-width region already had a hairline slit between
+    two rows of dots (the U at 0 and 0.25), thinning widens it into a visible
+    notch.
+  </p>
+  <figure>
+    <div class="shot wide">
+      <img
+        src="img/neck-grid-u.png"
+        alt="The U cloud at convexity 0, 0.25, 0.5, 0.75 and 1 across and neck 0.4, 0.6, 0.8 and 1 down; at convexity 1 the hull edges waist between the dots and the two holes stay round"
+      />
+    </div>
+    <figcaption>
+      U: <code>convexity</code> across, <code>neck</code> down.
+    </figcaption>
+  </figure>
+  <figure>
+    <div class="shot wide">
+      <img
+        src="img/neck-grid-penguins.png"
+        alt="The three penguin species, each avoiding the others, at convexity 0 to 1 across and neck 0.4 to 1 down; the tubes thin down each column and the pieces and holes stay the same"
+      />
+    </div>
+    <figcaption>
+      Penguins, each species avoiding the others: <code>convexity</code> across,
+      <code>neck</code> down.
+    </figcaption>
+  </figure>
   <p>
     The topology check, on its own: each dataset (with the hyperedges both with
     edges as members and with <code>via</code>) at seven values of
@@ -1852,11 +1953,12 @@ set_members = [
     <figcaption>
       The curve moves smoothly between 1/<em>R</em> around the circles, about 0
       along the band, and negative values at the joins, with every change spread
-      over about 20 px of outline. Under b the band follows b's keep-out circle,
-      so there the curvature is that circle's, and it turns into and out of it
-      over about 10 px. Padding at a is 22.0 px (asked 22), and the gap to b's
-      ring is 7.6 px, more than the 6 px asked: near a keep-out zone the rounded
-      outline is pushed out by a smooth maximum of its gap and 0.
+      over about 20 px of outline. Under b the band bends around b's keep-out
+      circle, concentric with it, so there the curvature is nearly constant, and
+      it turns into and out of that bend over about 10 px. Padding at a is 22.0
+      px (asked 22), and the gap to b's ring is 9.8 px, more than the 6 px
+      asked, because <code>neck: 0.85</code> thins the band about its middle,
+      which was routed at full width to touch b's ring.
     </figcaption>
   </figure>
 
@@ -3244,16 +3346,17 @@ chart(catch)
       penguins). v6 rasterized the region on a 0.5 px grid, blurred it, and
       checked the topology with more blurs, so its cost grew with the area of
       the drawing. v7 keeps the knobs and the promises and changes how the
-      outline is computed (construction steps 4 to 6): the region's outline is
-      traced exactly from closed-form distances, and it is rounded by smoothing
-      along its own length, with circles held in place. So the cost grows with
-      the length of the outline, and a change of <code>roundness</code> reruns
-      only the rounding. A Gaussian along the outline cannot join two pieces or
-      open a hole, so v6's topology check became a check that loops do not
-      cross. Two rules were added for what the blur did for free: an inlet
-      narrower than 1.5 σ is closed before smoothing, and the outline is kept
-      out of every keep-out zone by a smooth maximum. Routed links now follow
-      the avoided nodes' keep-out circles exactly where they wrap them.
+      outline is computed (construction steps 4, 6 and 7): the region's outline
+      is traced exactly from closed-form distances, and it is rounded by
+      smoothing along its own length, with circles held in place. So the cost
+      grows with the length of the outline, and a change of
+      <code>roundness</code> reruns only the rounding. A Gaussian along the
+      outline cannot join two pieces or open a hole, so v6's topology check
+      became a check that loops do not cross. Two rules were added for what the
+      blur did for free: an inlet narrower than 1.5 σ is closed before
+      smoothing, and the outline is kept out of every keep-out zone by a smooth
+      maximum. Routed links now follow the avoided nodes' keep-out circles
+      exactly where they wrap them.
     </p>
     <p>
       What changed in the drawings: the band under b in the Topology example now
@@ -3269,8 +3372,57 @@ chart(catch)
   </details>
 
   <details class="hist">
+    <summary>v8: <code>neck</code> pulls the outline in</summary>
+    <p>
+      Josh: changing <code>neck</code> from 0.99 to 1 changed the topology of
+      the Adelie outline (spine, <code>padding: 4</code>,
+      <code>roundness: 0</code>, the other species avoided), and at
+      <code>convexity: 1</code> <code>neck</code> did nothing. Until v8,
+      <code>neck</code> was the width of the links that do not bound a filled
+      triangle, as a fraction of the bulge, and it was an input to the skeleton:
+      each link was routed as a tube <code>neck</code> times the bulge. So a
+      thinner tube had a shorter way around an avoided node, and the spanning
+      tree picked different links. On the Adelie set two links compete to join
+      the member at (221.4, 89.6) to the tree: one routed from (199.6, 66.4)
+      around an avoided Chinstrap, and a straight one from (188.0, 86.7), 33.553
+      px long. At 0.99 the routed link is 33.545 px, just shorter, so the tree
+      takes it. At 1 the wider tube wraps the Chinstrap on a larger circle, the
+      route grows past 33.553 px, and the tree takes the straight link instead.
+      Even with the routes held fixed, thinning tubes in the region changed the
+      pieces and holes: tubes that only touched at full width came apart, gaps
+      between nearby tubes became new holes, and a hull edge thinned past an
+      avoided node near it opened that node's hole to the outside. Over the 65
+      sweeps of the neck check, that was 1641 new holes, 490 lost holes and 233
+      split pieces. And since the links that bound a filled triangle were always
+      full width, <code>neck</code> did nothing at <code>convexity: 1</code>, so
+      <code>neck</code> and <code>convexity</code> overlapped in part.
+    </p>
+    <p>
+      v8 routes every link at full width and moves <code>neck</code> after the
+      trace (construction step 5): it pulls the outline in by a share of the
+      region's half-width, which cannot part what touches or open a hole. It now
+      acts at every <code>convexity</code>, it is shape only, and a change of
+      <code>neck</code> reruns only the pull and the rounding. What changed in
+      the drawings: a thin band that was routed against a keep-out zone now runs
+      about its full-width middle, so it leaves the zone (the gap to b's ring in
+      the curvature section is 9.8 px, was 7.6 px); and at
+      <code>convexity</code> above 0 the edges of filled regions sink in between
+      their members.
+    </p>
+  </details>
+
+  <details class="hist">
     <summary>Retired decisions</summary>
     <ul>
+      <li>
+        <strong
+          ><code>neck</code> as the width of the links that do not bound a
+          filled triangle</strong
+        >
+        (v8). Replaced by a pull on the outline. Josh: changing
+        <code>neck</code> from 0.99 to 1 changed the topology, and at
+        <code>convexity: 1</code> <code>neck</code> did nothing.
+      </li>
       <li>
         <strong><code>smoothing</code> on <code>Shape.blob()</code></strong>
         (v6). Replaced by <code>roundness</code>. Josh: convexity and smoothing

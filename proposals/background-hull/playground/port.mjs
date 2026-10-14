@@ -31,7 +31,7 @@ for (const [start, stop] of BLOCKS) {
   out.push(...src.slice(a, e), "");
 }
 out.push(
-  "export { smoothBlob, signedArea, loopArea, discPoly, centerOf, memberRadius, dist };",
+  "export { smoothBlob, signedArea, loopArea, discPoly, centerOf, memberRadius, dist, loopsCross };",
   "export type { Pt, Member, SmoothOpts, Smooth, Skeleton };",
   ""
 );

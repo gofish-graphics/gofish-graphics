@@ -1498,7 +1498,7 @@ const stageMemo = <T>() => {
   };
 };
 
-type SkelOpts = { avoiding?: Member[]; via?: [Pt, Pt][]; pad: number; convexity: number; neck?: number; clearance?: number };
+type SkelOpts = { avoiding?: Member[]; via?: [Pt, Pt][]; pad: number; convexity: number; clearance?: number };
 type Arc = { c: Pt; r: number; a0: number; sweep: number };
 type Part = { a: Pt; b: Pt } | Arc;
 type SkLink = { route: Pt[]; h: number; parts?: Part[] };
@@ -1656,17 +1656,19 @@ const routeMemo = stageMemo<Map<string, { route: Pt[]; parts: Part[]; len: numbe
 const skelMemo = stageMemo<Skeleton>();
 /** Step 1: the alpha complex of the members' sites plus the routed spanning tree over members.
  *  Each member is its own geometry: a segment member is already a link between its ends, and a
- *  spanning-tree link runs between the closest points of two members' geometries. */
+ *  spanning-tree link runs between the closest points of two members' geometries. Every link is
+ *  chosen and routed at its full width (the bulge at its ends), so `neck`, which only thins the
+ *  drawn tubes (step 2), never changes which links there are or where they run. */
 const skeleton = (members: Member[], o: SkelOpts): Skeleton =>
-  skelMemo([members, o.avoiding, o.via], [o.pad, o.convexity, o.neck, o.clearance], () => {
-  const neck = o.neck ?? 1, clearance = o.clearance ?? 4, others = o.avoiding ?? [];
+  skelMemo([members, o.avoiding, o.via], [o.pad, o.convexity, o.clearance], () => {
+  const clearance = o.clearance ?? 4, others = o.avoiding ?? [];
   const Cm = members.map(centerOf), Rm = members.map((m) => memberRadius(m) + o.pad), nm = members.length;
   const { P, owner, tri, cand, m, memberGrid } = sitesOfMembers(members);
   const R = owner.map((ks) => Math.max(...ks.map((k) => Rm[k])));
   const ek = (i: number, j: number) => (i < j ? `${i},${j}` : `${j},${i}`);
   const c = Math.max(0, Math.min(1, o.convexity));
   const alpha = c >= 1 ? Infinity : (m * c) / (1 - c);
-  const hw = (i: number, j: number) => neck * Math.min(R[i], R[j]);
+  const hw = (i: number, j: number) => Math.min(R[i], R[j]);
   const faces: Pt[][] = [], faceEdges = new Set<string>();
   for (const [i, j, l] of tri) {
     const q = [P[i], P[j], P[l]];
@@ -1720,13 +1722,13 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton =>
   // spanning-tree candidates, between members: a face edge as drawn, else the routed closest-point link
   const mk = (a: number, b: number) => (a < b ? a * nm + b : b * nm + a);
   const routed = new Map<number, { a: number; b: number; route: Pt[]; len: number; h?: number }>();
-  const hm = (a: number, b: number) => neck * Math.min(Rm[a], Rm[b]);
+  const hm = (a: number, b: number) => Math.min(Rm[a], Rm[b]);
   // the bulge where a link attaches: the widest member whose geometry holds that point
   const onMember = (mm: Member, p: Pt) => dist(p, mm.kind === "segment" ? nearestOnSeg(p, mm.a, mm.b) : centerOf(mm)) < 0.5;
   const radiusAt = (p: Pt) => Math.max(0, ...memberGrid.query(p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1).map((k) => (onMember(members[k], p) ? Rm[k] : 0)));
   for (const [key, [i, j]] of cand) {
     if (faceEdges.has(key)) {
-      links.push({ route: [P[i], P[j]], h: Math.min(R[i], R[j]) });
+      links.push({ route: [P[i], P[j]], h: hw(i, j) });
       // the edge carries the spanning tree only when no hole will be cut across it
       if (clear(P[i], P[j], hw(i, j)))
         for (const a of owner[i]) for (const b of owner[j]) if (a !== b && !routed.has(mk(a, b))) routed.set(mk(a, b), { a, b, route: [P[i], P[j]], len: dist(P[i], P[j]) });
@@ -1747,7 +1749,7 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton =>
     if (routed.has(key)) continue;
     const a = Math.floor(key / nm), b = key % nm, [p, q] = closestPair(members[a], members[b]), order = queue.length;
     if (dist(p, q) < 0.5) queue.push({ a, b, route: [p, q], len: 0, order });
-    else queue.push({ a, b, len: dist(p, q), order, ends: [p, q], h: neck * Math.min(radiusAt(p), radiusAt(q)) });
+    else queue.push({ a, b, len: dist(p, q), order, ends: [p, q], h: Math.min(radiusAt(p), radiusAt(q)) });
   }
   const before = (x: Link, y: Link) => x.len < y.len || (x.len === y.len && x.order < y.order);
   queue.sort((x, y) => x.len - y.len || x.order - y.order);
@@ -1782,7 +1784,7 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton =>
 // four primitives with an exact signed distance (negative inside): a disc, a capsule (a segment
 // grown by r), a box (a rectangle grown by r) or a triangle. Its outline is traced exactly, and
 // each traced point records the circle it lies on (its center and radius), or none on a straight side.
-type Prim = { k: 0 | 1 | 2 | 3 | 4; x1: number; y1: number; x2: number; y2: number; x3: number; y3: number; r: number; bb: number[] };
+type Prim = { k: 0 | 1 | 2 | 3 | 4; x1: number; y1: number; x2: number; y2: number; x3: number; y3: number; r: number; bb: number[]; bulge?: boolean };
 const discPrim = (x: number, y: number, r: number): Prim => ({ k: 0, x1: x, y1: y, x2: 0, y2: 0, x3: 0, y3: 0, r, bb: [x - r, y - r, x + r, y + r] });
 const capsulePrim = (a: Pt, b: Pt, r: number): Prim =>
   ({ k: 1, x1: a[0], y1: a[1], x2: b[0], y2: b[1], x3: 0, y3: 0, r, bb: [Math.min(a[0], b[0]) - r, Math.min(a[1], b[1]) - r, Math.max(a[0], b[0]) + r, Math.max(a[1], b[1]) + r] });
@@ -1814,8 +1816,9 @@ const triPrim = (q: Pt[]): Prim => {
 const grownPrim = (m: Member, r: number): Prim =>
   m.kind === "circle" ? discPrim(m.cx, m.cy, m.r + r) : m.kind === "segment" ? capsulePrim(m.a, m.b, m.w / 2 + r) : boxPrim(m.x, m.y, m.w, m.h, r);
 /** The circle that the nearest point of the last primitive measured lies on: center, radius (0: a
- *  straight side, and then the nearest point of its core), and 1 when that is a keep-out zone's edge. */
-const ARC = new Float64Array(4);
+ *  straight side, and then the nearest point of its core), and 1 when that is a keep-out zone's edge;
+ *  then (outline points only) the half-width of the piece it lies on, and 1 when that is a member's bulge. */
+const ARC = new Float64Array(6);
 const segD = (x: number, y: number, ax: number, ay: number, bx: number, by: number) => {
   const ex = bx - ax, ey = by - ay, L = ex * ex + ey * ey;
   const t = L > 0 ? Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L)) : 0;
@@ -1914,16 +1917,21 @@ const regionD = (PF: Float64Array, ZF: Float64Array, A: Int32Array, po: number, 
 /** The same, also filling ARC with the circle the nearest outline point lies on. */
 const regionArc = (pieces: Prim[], zones: Prim[], A: Int32Array, po: number, pn: number, zo: number, zn: number, x: number, y: number) => {
   let U = pn < 0 ? -FAR : FAR, Z = FAR, bu = -1, bz = -1;
-  for (let i = po; i < po + pn; i++) { const d = primD(pieces[A[i]], x, y, false); if (d < U) { U = d; bu = A[i]; } }
+  // on a tie (a link's round end on its member's bulge) the point is the bulge's
+  for (let i = po; i < po + pn; i++) { const d = primD(pieces[A[i]], x, y, false); if (d < U || (d < U + 1e-9 && pieces[A[i]].bulge && !(bu >= 0 && pieces[bu].bulge))) { U = d; bu = A[i]; } }
   for (let i = zo; i < zo + zn; i++) { const d = primD(zones[A[i]], x, y, false); if (d < Z) { Z = d; bz = A[i]; } }
-  ARC[2] = 0;
+  ARC[2] = 0; ARC[4] = bu >= 0 ? pieces[bu].r : 0; ARC[5] = bu >= 0 && pieces[bu].bulge ? 1 : 0;
   // a point on a zone's edge (as on a link wrapped around that zone) is the zone's: ARC is its circle or side
   ARC[3] = bz >= 0 && Math.abs(Z) < 0.05 ? 1 : 0; // (a resampled point sits on a chord, within 0.05 px of the circle)
   if (!ARC[3] && U > -Z) { if (bu >= 0) primD(pieces[bu], x, y, true); return U; }
   if (bz >= 0) primD(zones[bz], x, y, true);
   return -Z;
 };
-type Region = { loops: { pts: Pt[]; arcs: Float64Array }[]; radii: number[]; zones: Prim[]; zoneGrid: ReturnType<typeof boxGrid> };
+/** A traced loop: its points, the circle each lies on (4 numbers each, as ARC), and for each point
+ *  the half-width of the piece it lies on (hw) and what it lies on (kind: 0 a link, 1 a keep-out
+ *  zone's edge, 2 a member's bulge). */
+type Loop = { pts: Pt[]; arcs: Float64Array; hw?: Float64Array; kind?: Uint8Array };
+type Region = { loops: Loop[]; radii: number[]; zones: Prim[]; zoneGrid: ReturnType<typeof boxGrid> };
 /** Marching squares: for each corner pattern (top-left 8, top-right 4, bottom-right 2,
  *  bottom-left 1 inside), the cell's segments as pairs of its edges (top 0, right 1, bottom 2, left 3). */
 const SEGS: number[][] = [[], [2, 3], [1, 2], [1, 3], [0, 1], [0, 3, 2, 1], [0, 2], [0, 3], [3, 0], [2, 0], [3, 2, 1, 0], [1, 0], [3, 1], [2, 1], [3, 2], []];
@@ -2053,7 +2061,7 @@ const traceRegion = (pieces: Prim[], zones: Prim[], res: number, ds: number): Re
     }
     return [ax + t * (bx - ax), ay + t * (by - ay)];
   };
-  const loops: { pts: Pt[]; arcs: Float64Array }[] = [], radii = new Set<number>();
+  const loops: Loop[] = [], radii = new Set<number>();
   for (const s0 of order) {
     if (seen[s0] === gen) continue;
     const raw: Pt[] = [], cells: number[] = [];
@@ -2062,7 +2070,7 @@ const traceRegion = (pieces: Prim[], zones: Prim[], res: number, ds: number): Re
     // resample every ds px along the traced loop, and look up the circle each point lies on
     const m = raw.length, cum = new Float64Array(m + 1);
     for (let q = 1; q <= m; q++) cum[q] = cum[q - 1] + dist(raw[q - 1], raw[q % m]);
-    const L = cum[m], N = Math.max(8, Math.round(L / ds)), pts: Pt[] = [], arcs = new Float64Array(4 * N);
+    const L = cum[m], N = Math.max(8, Math.round(L / ds)), pts: Pt[] = [], arcs = new Float64Array(4 * N), hw = new Float64Array(N), kind = new Uint8Array(N);
     let k = 0;
     for (let q = 0; q < N; q++) {
       const t = (q / N) * L;
@@ -2072,10 +2080,11 @@ const traceRegion = (pieces: Prim[], zones: Prim[], res: number, ds: number): Re
       const bl = 4 * (cellOf(cells[u < 0.5 ? k : (k + 1) % m]) - 1);
       regionArc(pieces, zones, A, blocks[bl], blocks[bl + 1], blocks[bl + 2], blocks[bl + 3], p[0], p[1]);
       arcs[4 * q] = ARC[0]; arcs[4 * q + 1] = ARC[1]; arcs[4 * q + 2] = ARC[2]; arcs[4 * q + 3] = ARC[3];
+      hw[q] = ARC[4]; kind[q] = ARC[3] ? 1 : ARC[5] ? 2 : 0;
       if (ARC[2] > 0) radii.add(ARC[2]);
       pts.push(p);
     }
-    loops.push({ pts, arcs });
+    loops.push({ pts, arcs, hw, kind });
   }
   return { loops, radii: [...radii], zones, zoneGrid: boxGrid(zones.map((z) => z.bb)) };
 };
@@ -2265,20 +2274,183 @@ const loopsCross = (loops: Pt[][]) => {
   return false;
 };
 
-type SmoothOpts = SkelOpts & { roundness?: number; res?: number };
-type Smooth = { loops: Pt[][]; skel: Skeleton; sigma: number; signals: { pts: Pt[]; arcs: Float64Array }[] };
+/** Move p out of a bulge it is inside onto that bulge's edge (along the bulge's normal), and give the
+ *  circle the new point lies on (radius 0: a straight side). */
+const ontoBulge = (b: Prim, p: Pt): { p: Pt; c: Pt; r: number } => {
+  let qx = b.x1, qy = b.y1, r = b.r;
+  if (b.k === 1) {
+    const ex = b.x2 - b.x1, ey = b.y2 - b.y1, L = ex * ex + ey * ey;
+    const t = L > 0 ? ((p[0] - b.x1) * ex + (p[1] - b.y1) * ey) / L : 0, u = t < 0 ? 0 : t > 1 ? 1 : t;
+    qx = b.x1 + u * ex; qy = b.y1 + u * ey;
+    if (u === t && L > 0) r = 0; // on a straight side
+  } else if (b.k === 2) {
+    qx = Math.max(b.x1, Math.min(b.x2, p[0])); qy = Math.max(b.y1, Math.min(b.y2, p[1]));
+    if (qx === p[0] && qy === p[1]) {
+      // inside the rectangle itself: out through its nearest side
+      const d = [p[0] - b.x1, b.x2 - p[0], p[1] - b.y1, b.y2 - p[1]], k = d.indexOf(Math.min(...d));
+      const out: Pt = k === 0 ? [b.x1 - b.r, p[1]] : k === 1 ? [b.x2 + b.r, p[1]] : k === 2 ? [p[0], b.y1 - b.r] : [p[0], b.y2 + b.r];
+      return { p: out, c: out, r: 0 };
+    }
+    if (qx !== p[0] && qy !== p[1]) r = b.r; else r = 0; // a corner's quarter circle, else a side
+  }
+  const dx = p[0] - qx, dy = p[1] - qy, d = Math.hypot(dx, dy) || 1;
+  return { p: [qx + (dx * b.r) / d, qy + (dy * b.r) / d], c: [qx, qy], r };
+};
+/** Step 3, `neck`: pull the outline in. Every outline point not on a member's bulge moves inward
+ *  along the outline's normal by `pull` (1 - neck) times
+ *  the region's half-width there: the radius of the largest disc inside the region that touches the
+ *  outline at that point, capped at the link's own half-width. On a lone link that disc is the
+ *  link's tube, so the tube thins to neck times its width about its middle (and a link that ran
+ *  along a keep-out zone's edge moves off it: the gap only grows); on a filled triangle's boundary
+ *  edge the cap holds, so the edge sinks in between its two members; where two parts of the region
+ *  only touch, the disc is the narrow place between them, which thins but never closes. A hole cut
+ *  by keep-out zones alone stays exactly as cut. A point that
+ *  moves into a member's bulge stops on its edge (a bulge stays whole, except where a zone cuts it). Since no point moves past
+ *  the middle of its disc, each loop stays one loop and no two loops meet: the pieces and holes
+ *  are those of the full-width region, whatever `neck` is. */
+const neckOutline = (region: Region, bulges: Prim[], pull: number): Loop[] => {
+  if (pull <= 0) return region.loops;
+  const loops = region.loops;
+  // every outline point in a grid of cells two link widths wide
+  let cap = 0;
+  for (const l of loops) for (let i = 0; i < l.pts.length; i++) if (l.kind![i] !== 2) cap = Math.max(cap, l.hw![i]);
+  if (cap <= 0) return loops;
+  let total = 0, X0 = Infinity, Y0 = Infinity, X1 = -Infinity, Y1 = -Infinity;
+  for (const l of loops) for (const p of l.pts) { total++; X0 = Math.min(X0, p[0]); Y0 = Math.min(Y0, p[1]); X1 = Math.max(X1, p[0]); Y1 = Math.max(Y1, p[1]); }
+  // the points sorted by cell (cells cap wide), with each cell's first index: a flat grid
+  const g = cap, GW = Math.floor((X1 - X0) / g) + 1, GH = Math.floor((Y1 - Y0) / g) + 1;
+  const cellOf = (x: number, y: number) => Math.floor((y - Y0) / g) * GW + Math.floor((x - X0) / g);
+  const start = new Int32Array(GW * GH + 1), PX = new Float64Array(total), PY = new Float64Array(total);
+  for (const l of loops) for (const p of l.pts) start[cellOf(p[0], p[1]) + 1]++;
+  for (let c = 0; c < GW * GH; c++) start[c + 1] += start[c];
+  const fill = start.slice(0, GW * GH);
+  for (const l of loops) for (const p of l.pts) { const k = fill[cellOf(p[0], p[1])]++; PX[k] = p[0]; PY[k] = p[1]; }
+  // the region lies to the left of every loop when the outermost loop runs counterclockwise
+  const areas = loops.map((l) => signedArea(l.pts));
+  const side = Math.sign(areas.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0)) || 1;
+  const bgrid = boxGrid(bulges.map((b) => b.bb));
+  return loops.map((l) => {
+    const { pts, arcs, hw, kind } = l as Required<Loop>, N = pts.length;
+    if (kind.every((k) => k === 1)) return l; // a hole cut by keep-out zones alone stays exactly as cut
+    // the inward normal and the half-width at every point not on a bulge
+    const NX = new Float64Array(N), NY = new Float64Array(N), rho = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      if (kind[i] === 2) continue;
+      const p = pts[i], a = pts[(i - 1 + N) % N], b = pts[(i + 1) % N], tx = b[0] - a[0], ty = b[1] - a[1], tl = Math.hypot(tx, ty) || 1;
+      const nx = (NX[i] = (-side * ty) / tl), ny = (NY[i] = (side * tx) / tl);
+      // the largest disc tangent here inside the region: the smallest disc through p (tangent to the
+      // outline there) and another outline point, among points no farther than 2 cap
+      let r = hw[i];
+      const ci = Math.floor((p[0] - X0) / g), cj = Math.floor((p[1] - Y0) / g);
+      for (let j = Math.max(0, cj - 2); j <= Math.min(GH - 1, cj + 2); j++) {
+        const c0 = j * GW + Math.max(0, ci - 2), c1 = j * GW + Math.min(GW - 1, ci + 2);
+        for (let q = start[c0]; q < start[c1 + 1]; q++) {
+          const dx = PX[q] - p[0], dy = PY[q] - p[1], dn = dx * nx + dy * ny;
+          if (dn <= 1e-9) continue;
+          const rq = (dx * dx + dy * dy) / (2 * dn);
+          if (rq < r) r = rq;
+        }
+      }
+      rho[i] = r;
+    }
+    const out: Pt[] = [], A = new Float64Array(4 * N);
+    for (let i = 0; i < N; i++) {
+      const p = pts[i];
+      A.set(arcs.subarray(4 * i, 4 * i + 4), 4 * i);
+      if (kind[i] === 2) { out.push(p); continue; }
+      // the half-width is measured against points 1 px apart, which makes it jitter from one point
+      // to the next by a fraction of a pixel; it is averaged over the 2 points either side
+      let sum = 0, n = 0;
+      for (let j = -2; j <= 2; j++) { const k = (i + j + N) % N; if (kind[k] !== 2) { sum += rho[k]; n++; } }
+      const s = pull * (sum / n), nx = NX[i], ny = NY[i];
+      let q: Pt = [p[0] + s * nx, p[1] + s * ny];
+      A[4 * i + 3] = 0;
+      if (A[4 * i + 2] > 0) A[4 * i + 2] = Math.hypot(q[0] - A[4 * i], q[1] - A[4 * i + 1]);
+      // a bulge stays whole: a point pulled into one stops on its edge
+      let deepest = 0, hit = -1;
+      for (const k of bgrid.query(q[0], q[1], q[0], q[1])) { const d = primD(bulges[k], q[0], q[1], false); if (d < deepest) { deepest = d; hit = k; } }
+      if (hit >= 0) {
+        const e = ontoBulge(bulges[hit], q);
+        // where a keep-out zone cuts the bulge, its edge is the zone's: the point stays where it was
+        let cut = false;
+        region.zoneGrid.each(e.p[0], e.p[1], e.p[0], e.p[1], (z) => { if (!cut && primD(region.zones[z], e.p[0], e.p[1], false) < -1e-6) cut = true; });
+        if (cut) { out.push(p); A.set(arcs.subarray(4 * i, 4 * i + 4), 4 * i); continue; }
+        q = e.p; A[4 * i] = e.c[0]; A[4 * i + 1] = e.c[1]; A[4 * i + 2] = e.r;
+      }
+      out.push(q);
+    }
+    // a knot spans at most a few times the largest pull along the outline; cutting knots can leave
+    // a crossing just behind the scan, so it runs again until a pass cuts nothing
+    let r: Loop = { pts: out, arcs: A, hw, kind };
+    const w = Math.ceil((4 * pull * cap) / (dist(l.pts[0], l.pts[1]) || 1)) + 4;
+    for (let pass = 0; pass < 8; pass++) {
+      const n = r.pts.length;
+      r = untie(r.pts, r.arcs, r.hw!, r.kind!, w);
+      if (r.pts.length === n) break;
+    }
+    return r;
+  });
+};
+/** Pulling points in by different amounts can make a short run of the outline cross itself (where
+ *  the pull changes quickly: at a cusp between two bulges, or where two links meet): a small knot.
+ *  Each knot, a crossing of two segments at most w points apart, is cut out at the crossing (and
+ *  the scan goes on from the crossing, so a knot that cutting one makes ahead of it is cut too). */
+const untie = (pts: Pt[], arcs: Float64Array, hw: Float64Array, kind: Uint8Array, w: number): Loop => {
+  const N = pts.length;
+  if (N < 8) return { pts, arcs, hw, kind };
+  const keep = new Uint8Array(N).fill(1), at = new Map<number, Pt>();
+  const X = (p1: Pt, p2: Pt, p3: Pt, p4: Pt): Pt | null => {
+    const d = (p2[0] - p1[0]) * (p4[1] - p3[1]) - (p2[1] - p1[1]) * (p4[0] - p3[0]);
+    if (Math.abs(d) < 1e-12) return null;
+    const t = ((p3[0] - p1[0]) * (p4[1] - p3[1]) - (p3[1] - p1[1]) * (p4[0] - p3[0])) / d;
+    const u = ((p3[0] - p1[0]) * (p2[1] - p1[1]) - (p3[1] - p1[1]) * (p2[0] - p1[0])) / d;
+    return t > 0 && t < 1 && u > 0 && u < 1 ? [p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])] : null;
+  };
+  const W = Math.min(w, Math.floor(N / 3)), Q = pts.slice();
+  for (let i = 0; i < N; i++) {
+    if (!keep[i]) continue;
+    const a = Q[i], b = Q[(i + 1) % N];
+    // the farthest crossing within reach, so a knot inside a knot goes with it
+    for (let k = W; k >= 2; k--) {
+      const j = (i + k) % N;
+      if (!keep[j]) continue;
+      const c = Q[j], e = Q[(j + 1) % N];
+      if (Math.max(c[0], e[0]) < Math.min(a[0], b[0]) || Math.min(c[0], e[0]) > Math.max(a[0], b[0]) || Math.max(c[1], e[1]) < Math.min(a[1], b[1]) || Math.min(c[1], e[1]) > Math.max(a[1], b[1])) continue;
+      const x = X(a, b, c, e);
+      if (!x) continue;
+      for (let t = 1; t <= k; t++) keep[(i + t) % N] = 0;
+      keep[(i + 1) % N] = 1; at.set((i + 1) % N, x); Q[(i + 1) % N] = x;
+      // the new segment from the crossing runs to the point after the knot
+      for (let t = 2; t <= k; t++) Q[(i + t) % N] = x;
+      break;
+    }
+  }
+  if (!at.size) return { pts, arcs, hw, kind };
+  const P: Pt[] = [], A: number[] = [], H: number[] = [], K: number[] = [];
+  for (let i = 0; i < N; i++) if (keep[i]) {
+    const x = at.get(i);
+    P.push(x ?? pts[i]);
+    A.push(arcs[4 * i], arcs[4 * i + 1], x ? 0 : arcs[4 * i + 2], arcs[4 * i + 3]);
+    H.push(hw[i]); K.push(kind[i]);
+  }
+  return { pts: P, arcs: Float64Array.from(A), hw: Float64Array.from(H), kind: Uint8Array.from(K) };
+};
+type SmoothOpts = SkelOpts & { neck?: number; roundness?: number; res?: number };
+type Smooth = { loops: Pt[][]; skel: Skeleton; sigma: number; signals: Loop[] };
 const regionMemo = stageMemo<Region>();
+const neckMemo = stageMemo<Loop[]>();
 /** Steps 2-3: the region traced exactly, then rounded along its outline. */
 const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
   const sk = skeleton(members, o);
-  const clearance = o.clearance ?? 4, res = o.res ?? 1;
+  const clearance = o.clearance ?? 4, res = o.res ?? 1, neck = Math.max(0.05, Math.min(1, o.neck ?? 1));
   const region = regionMemo([sk], [res], () => {
     // faces first: they cover the most area, so a place deep inside the region is settled soonest
     // Pieces that lie inside other pieces add nothing to the union, and only cost time, so they are
     // left out: a link inside a wider link on the same segment (a spanning-tree link along a face
-    // edge); a disc inside a link from its center at least as wide; and a link between two filled
-    // triangles whose other sides are at least as wide. (A point within h of that edge and outside
-    // both triangles leaves a triangle through another side, within h of it, so that side's link holds it.)
+    // edge), and a link between two filled triangles whose other sides are at least as wide. (A
+    // point within h of that edge and outside both triangles leaves a triangle through another
+    // side, within h of it, so that side's link holds it.) Every member's bulge stays, so the
+    // outline knows which of its points lie on a bulge (step 3 never moves those).
     const pieces: Prim[] = sk.faces.map(triPrim);
     // points are numbered by their coordinates, and a segment by its two points' numbers
     const byX = new Map<number, Map<number, number>>(), pts: Pt[] = [];
@@ -2290,11 +2462,10 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
       return i;
     };
     const segKey = (a: Pt, b: Pt) => { const i = pid(a), j = pid(b); return i < j ? i * 1048576 + j : j * 1048576 + i; };
-    const widest = new Map<number, number>(), atEnd = new Map<number, number>();
+    const widest = new Map<number, number>();
     for (const e of sk.links) for (let k = 1; k < e.route.length && !e.parts; k++) {
       const key = segKey(e.route[k - 1], e.route[k]);
       widest.set(key, Math.max(widest.get(key) ?? 0, e.h));
-      for (const p of [e.route[k - 1], e.route[k]]) atEnd.set(pid(p), Math.max(atEnd.get(pid(p)) ?? 0, e.h));
     }
     const sides = new Map<number, number>(); // per face edge: how many of its triangles have both other sides as wide
     for (const [a, b, c] of sk.faces)
@@ -2302,25 +2473,35 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
         const key = segKey(p, q), h = widest.get(key) ?? 0;
         if ((widest.get(segKey(p, r)) ?? 0) >= h && (widest.get(segKey(q, r)) ?? 0) >= h) sides.set(key, (sides.get(key) ?? 0) + 1);
       }
-    for (const e of sk.links) if (e.parts) {
+    for (const e of sk.links) if (e.parts)
       for (const pt of e.parts) pieces.push("c" in pt ? arcPrim(pt.c, pt.r, pt.a0, pt.sweep, e.h) : capsulePrim(pt.a, pt.b, e.h));
-      for (const p of [e.route[0], e.route[e.route.length - 1]]) atEnd.set(pid(p), Math.max(atEnd.get(pid(p)) ?? 0, e.h));
-    }
-    members.forEach((m) => { if (!(m.kind === "circle" && (atEnd.get(pid([m.cx, m.cy])) ?? 0) >= m.r + o.pad)) pieces.push(grownPrim(m, o.pad)); });
+    members.forEach((m) => pieces.push({ ...grownPrim(m, o.pad), bulge: true }));
     for (const [key, h] of widest) if (sides.get(key) !== 2) pieces.push(capsulePrim(pts[Math.floor(key / 1048576)], pts[key % 1048576], h));
     const zones = (o.avoiding ?? []).map((m) => grownPrim(m, clearance));
     return traceRegion(pieces, zones, res, Math.min(1, res));
   });
+  // Like rounding, pulling in never changes the topology: should two parts of the outline still
+  // cross (where the half-width is misjudged at a sharp tip), the pull is narrowed until they do not.
+  const necked = neckMemo([region], [neck], () => {
+    const bulges = members.map((m) => grownPrim(m, o.pad)), at = (pull: number) => neckOutline(region, bulges, pull);
+    let pull = 1 - neck, out = at(pull);
+    if (pull > 0 && loopsCross(out.map((l) => l.pts))) {
+      let lo = 0, hi = pull;
+      for (let it = 0; it < 6; it++) { const mid = (lo + hi) / 2; if (loopsCross(at(mid).map((l) => l.pts))) hi = mid; else lo = mid; }
+      pull = lo; out = at(pull);
+    }
+    return out;
+  });
   // `roundness` is the smoothing's reach: a Gaussian of width sigma = roundness / 2 along the
   // outline. It stops at the smallest circle in the region (a member's bulge, a link's
   // half-width, a box corner, a keep-out zone): rounding further would bend that circle.
-  const thinnest = Math.min(...sk.R, ...sk.links.map((e) => e.h), ...region.radii);
+  const thinnest = Math.min(...sk.R, ...sk.links.map((e) => neck * e.h), ...region.radii);
   const asked = Math.max(0, Math.min(o.roundness ?? o.pad, thinnest)) / 2;
   // Rounding never changes the topology: it moves each loop on its own, so pieces and holes stay
   // as traced unless two loops (or two parts of one) would cross; then sigma is narrowed until they do not.
   const roundAll = (s: number) => {
     const k = Math.max(s, res);
-    return region.loops.map((l) => {
+    return necked.map((l) => {
       const c = s > 0 ? closeInlets(l.pts, l.arcs, 1.5 * s, region.zones, region.zoneGrid) : l;
       return keepOut(roundLoop(c.pts, c.arcs, s, k), region.zones, region.zoneGrid, k);
     });
@@ -2331,7 +2512,7 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
     for (let it = 0; it < 6; it++) { const mid = (lo + hi) / 2; if (loopsCross(roundAll(mid))) hi = mid; else lo = mid; }
     sigma = lo; loops = roundAll(sigma);
   }
-  return { loops, skel: sk, sigma, signals: region.loops };
+  return { loops, skel: sk, sigma, signals: necked };
 };
 
 /** Candidate (a): a convolution surface, one Gaussian sum over the skeleton. */
@@ -2999,3 +3180,36 @@ export const RoundnessHyperedgesMembers: StoryObj = {
   }),
 };
 
+
+// ── (i) neck: the outline's waist between members, at every convexity ──────
+// Josh (10-14): changing neck from 0.99 to 1 changed the Adelie region's topology, and at
+// convexity 1 neck did nothing. Now links are chosen and routed at full width, and `neck` pulls
+// the traced outline in (step 3) by (1 - neck) of the region's half-width there, capped at the
+// link's width: a lone link thins, a filled region's boundary edge sinks in between its members,
+// and two parts that only touch stay touching. Pieces and holes are those of neck 1.
+const NECK_ROWS: Axis = { name: "neck", vals: [0.4, 0.6, 0.8, 1], def: 1 };
+export const NeckU: StoryObj = {
+  render: () => paramGrid({
+    cols: CONVEXITY, rows: NECK_ROWS, w: 230, h: 180,
+    cell: (convexity, neck) => [position({ x: 2, y: 2 }, [uPanel(blobInk(smoothBlob(U, { avoiding: NON, pad: 8, convexity, neck, roundness: 8 }).loops, BLUE))])],
+  }),
+};
+// All three species, each avoiding the other two, padding 4 (Josh's setting), roundness 4.
+export const NeckPenguins: StoryObj = {
+  render: () => paramGrid({
+    cols: CONVEXITY, rows: NECK_ROWS, w: PCW, h: PCH,
+    cell: (convexity, neck) => penCell((ms, others) => smoothBlob(ms, { avoiding: others, pad: 4, convexity, neck, roundness: 4 }).loops),
+  }),
+};
+// Josh's two spellings on the Adelie set: spine, padding 4, roundness 0, the other species avoided.
+export const NeckAdelieCheck: StoryObj = {
+  render: () => {
+    const g = penSpecies(), others = g.slice(1).flatMap((o) => o.ms);
+    const cell = (neck: number) => position({ x: 0, y: 2 }, [layer([
+      polygon({ points: [[0, 0], [PCW, 0], [PCW, PCH], [0, PCH]], fill: "none", stroke: "#e3e3e3", strokeWidth: 1 }),
+      ...blobInkCut(smoothBlob(g[0].ms, { avoiding: others, pad: 4, convexity: 0, neck, roundness: 0 }).loops, g[0].color, 0.15, 1.2),
+      ...g[0].ms.map((m) => dot(m, g[0].color)), ...others.map((m) => dot(m, "#bbb")),
+    ])]);
+    return titledGrid([["neck: 0.99", cell(0.99)], ["neck: 1", cell(1)]], { w: PCW + 14, h: PCH + 6, cols: 2 });
+  },
+};
