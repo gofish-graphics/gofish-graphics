@@ -2026,6 +2026,22 @@ async function main() {
       meanBars.length === 3 && sumBars.length === 5,
       `${meanBars.length} / ${sumBars.length}`
     );
+    // The same rule through `dims`: a slot of a dims bag is a channel of its
+    // own, so a bag with a slot that has no value has no value.
+    const dimsBars = async (dims: any) =>
+      await chart(pts, noAxes)
+        .flow(spread({ by: byCell(), dir: "x" }))
+        .mark(rect({ w: 5, dims }))
+        .toDisplayList({ w: 300, h: 100 })
+        .then((dl: any) => walkItems(dl).filter((it) => it.kind === "rect"));
+    const dimsSize = await dimsBars({ y: { size: distField("y").mean() } });
+    const dimsBare = await dimsBars({ y: distField("y").mean() });
+    check(
+      "a dims slot that is the mean of no rows leaves the mark undrawn, as " +
+        "the top-level channel does",
+      dimsSize.length === 3 && dimsBare.length === 3,
+      `${dimsSize.length} / ${dimsBare.length}`
+    );
     // A scatter's child whose position is the mean of no rows has no place,
     // so the scatter does not draw it either.
     const placedGroups = await chart(pts, noAxes)

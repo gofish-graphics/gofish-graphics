@@ -97,14 +97,18 @@ own; `createMark` could grow a `"pos"` channel the same way if a future shape
 needs one.
 
 `inferSize` and `inferPos` are two instantiations of one numeric-inference
-factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumBy`
-vs `meanOf`, `fieldExpr.ts`, lodash's `meanBy` except that the mean of no
-values is undefined, not `NaN`). An aggregation with no value makes the channel
-undefined, so a position read off a group with no rows has no value. A
-pipeline's fold with no value (`field(x).mean()` over no rows) is the
-singleton `[undefined]`, which the channel's own aggregation keeps (lodash's
+factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumOf`
+vs `meanOf`, `fieldExpr.ts`). Both skip a missing value (null or undefined,
+`isMissing`, the rule `dropNulls` and the schema's classes use; NaN is a
+number). A mean divides by how many values there are, and over none it is
+undefined. A sum over no rows is 0, and over rows whose values are all
+missing it is undefined, as in SQL. An aggregation with no value makes the
+channel undefined, so a position read off a group with no rows has no
+value. A pipeline's fold with no value (`field(x).mean()` over no rows) is
+the singleton `[undefined]`, which the channel's own aggregation keeps (the
 sum of `[undefined]` is undefined), so a size read as a mean of no rows has
-no value either, while a size read as a sum of no rows is 0. Both take an optional third argument, the accessor's
+no value either, while a size read as a sum of no rows is 0. A `count`
+counts rows, missing values included. Both take an optional third argument, the accessor's
 resolved column (`ColumnInfo`, from `resolveColumn(data, accessor)`): its
 `Quantity` and its type in the chart's `schema`. A string/`field()` accessor's
 produced value is tagged with its quantity so the underlying-space
@@ -176,7 +180,12 @@ Walking `withGoFish.ts:431-477`:
      empty day is a blank square in its slot and a bar whose height is the
      mean of no rows leaves its slot empty. This is Vega-Lite's default
      (`invalid: "filter"`). A sum or a count of no rows is 0, a value, so it
-     draws. A scatter follows the same rule for a child whose placement has
+     draws. Whether a channel has no value is one rule per kind,
+     `hasNoValue` in `channels.ts`: a channel of one value has none when it
+     is undefined, and a `dims` bag has none when any slot it was given has
+     none, since each slot is a channel of its own, so
+     `rect({ dims: { x: field("v").mean() } })` is not drawn where
+     `rect({ x: field("v").mean() })` is not. A scatter follows the same rule for a child whose placement has
      no value, with the one difference the domain forces: that child has no
      place to keep, so the scatter leaves it out of the layout too
      (`placedChildren` in `scatter.tsx`).

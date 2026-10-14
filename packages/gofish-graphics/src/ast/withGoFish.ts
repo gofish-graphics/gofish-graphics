@@ -16,6 +16,7 @@ import type { LayerContext } from "./marks/chart";
 import { datumOfInput, resolveMarkResult } from "./marks/markResult";
 import {
   CHANNEL_INFER,
+  hasNoValue,
   resolveChannelAccessors,
   ChannelAnnotations,
   ChannelType,
@@ -502,9 +503,9 @@ function buildCreatedMark(
     // A data channel the mark is given that has no value over its rows (the
     // mean of no rows, a field of no first row) leaves the mark nothing to
     // draw it with, whichever channel it is (a size, a position, a color, a
-    // text), so the mark is not drawn (Vega-Lite's default
-    // `invalid: "filter"`). It keeps its place in the layout. A sum or a
-    // count of no rows is 0, a value, and draws.
+    // text, a slot of a `dims` bag: `hasNoValue`), so the mark is not drawn
+    // (Vega-Lite's default `invalid: "filter"`). It keeps its place in the
+    // layout. A sum or a count of no rows is 0, a value, and draws.
     let noValue = false;
     for (const propName of Object.keys(resolvedOpts)) {
       if (propName === "debug") continue;
@@ -523,7 +524,10 @@ function buildCreatedMark(
         shapeProps[propName] = inferEntrySize(markValue, d);
       } else if (channelType !== undefined) {
         shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);
-        if (markValue !== undefined && shapeProps[propName] === undefined)
+        if (
+          markValue !== undefined &&
+          hasNoValue(channelType, shapeProps[propName])
+        )
           noValue = true;
       } else {
         shapeProps[propName] = markValue;

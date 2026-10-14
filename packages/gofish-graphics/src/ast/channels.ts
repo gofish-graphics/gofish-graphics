@@ -27,6 +27,7 @@ import {
 } from "./fieldExpr";
 import { columnType, type ColumnType } from "./schema";
 import {
+  isAxisInterval,
   mapAxisDims,
   type AxisDims,
   type AxisDimsForm,
@@ -498,3 +499,23 @@ export const CHANNEL_INFER: Record<
   dims: (val: AxisDims<any>, data) =>
     mapAxisDims(val, (v, slot) => CHANNEL_INFER[axisSlotKind(slot)](v, data)),
 };
+
+/**
+ * Whether a channel that was given a value has no value once inferred (the
+ * mean of no rows, a field of no first row), by its kind: the one rule the
+ * mark factory's no-value-not-drawn rule reads (`buildCreatedMark` in
+ * withGoFish.ts). A channel of one value has none when it is undefined. The
+ * slots of a `dims` bag are channels of their own, so a bag has none when
+ * any slot it was given has none (its inference keeps the slot, undefined).
+ */
+export function hasNoValue(type: ChannelType, inferred: unknown): boolean {
+  if (inferred === undefined) return true;
+  if (type !== "dims") return false;
+  return Object.values(inferred as AxisDims<unknown>).some((entry) =>
+    isAxisInterval(entry)
+      ? Object.entries(entry).some(
+          ([key, v]) => key !== "embedded" && v === undefined
+        )
+      : entry === undefined
+  );
+}
