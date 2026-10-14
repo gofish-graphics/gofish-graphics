@@ -169,8 +169,13 @@ its call with no arguments makes, made callable (`bareKind` in
 `ast/strategyKind.ts`; `bare_kind` in `gofish/_strategy.py`). In JS it is a
 function with that value's own keys and prototype, so `Curve.monotone.kind`
 is `"monotone"` and `Calendar.month instanceof CalendarPartition`, and it
-carries the value as `toJSON()`, which is how the IR emitter and
-`checkStrategy` tell it from a callback. In Python it is a dict subclass
+carries the value as `toJSON()`, so `JSON.stringify` writes that value. Where
+an option enters (an operator's or a mark's options, a `.bin(...)`
+partition, an axis's `levels`), a bare kind is read as its value once
+(`withKindValues`), so the IR emitter, `checkStrategy` and every other
+reader see a value, never a function. The shared IR encoder still reads a
+bare kind's `toJSON()`, for option trees that pass no such door (a chart's
+`axes` before layout reads them). In Python it is a dict subclass
 with a `__call__`, so it compares equal to its call and serializes as one.
 The examples still mostly use the call spelling; #1145 moves them to the bare
 one, and also asks for `Coord` and `Animation` members (`coord: Coord.clock`),

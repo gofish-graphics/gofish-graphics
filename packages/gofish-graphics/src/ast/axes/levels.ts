@@ -13,6 +13,7 @@
  * entries that did not apply.
  */
 import { axisName } from "../constraints/shared";
+import { kindValue } from "../strategyKind";
 import {
   calendarPartition,
   describe,
@@ -114,7 +115,9 @@ export function levelsFromOption(
         `the plot first, e.g. [true, Calendar.year] or [false, true].`
     );
   }
-  return levels.map((e, i) => {
+  return levels.map((given, i) => {
+    // A Calendar kind used bare is read as its value from here on.
+    const e = kindValue(given);
     if (typeof e === "boolean" || e instanceof CalendarPartition) return e;
     const where = `axes.${axis}.levels[${i}]`;
     if (typeof e !== "object" || e === null)

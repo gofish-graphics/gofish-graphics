@@ -622,15 +622,10 @@ const hasStart = (unit: CalendarUnit): unit is StartUnit =>
 /** `value` as an error message shows it. A partition (a Calendar value, or
  *  `Bin.step(...)`, cells.ts) shows as its builder spelling, its own
  *  `toString`, and nothing calls `toJSON` (a partition with a format has no
- *  wire form, and its `toJSON` throws). A kind used bare (`Calendar.month`,
- *  `Curve.monotone`) is a value that can be called, and shows as that
- *  value. */
+ *  wire form, and its `toJSON` throws). */
 export function describe(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(describe).join(", ")}]`;
-  if (
-    value !== null &&
-    (typeof value === "object" || Frontend.isCallableValue(value))
-  ) {
+  if (value !== null && typeof value === "object") {
     if (
       typeof value.toString === "function" &&
       value.toString !== Object.prototype.toString

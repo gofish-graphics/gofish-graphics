@@ -98,7 +98,8 @@ for (const f of families) {
 // Bare kinds (#1133): every kind (and preset) of a STRATEGIES family with no
 // required option is a value as it is, and calling it sets options. The bare
 // kind is indistinguishable from its call with no arguments: same keys, same
-// JSON, same check. A kind with a required option is a call only.
+// JSON. Where it enters an option, it is read as that call (`withKindValues`),
+// so a reader checks the call. A kind with a required option is a call only.
 console.log("\n# bare strategy kinds");
 for (const [family, spec] of Object.entries(Frontend.STRATEGIES) as Array<
   [string, Frontend.StrategyFamily]
@@ -124,7 +125,11 @@ for (const [family, spec] of Object.entries(Frontend.STRATEGIES) as Array<
     const called = typeof member === "function" ? member() : undefined;
     let why = "";
     try {
-      Frontend.checkStrategy(family as Frontend.StrategyFamilyName, member, name);
+      Frontend.checkStrategy(
+        family as Frontend.StrategyFamilyName,
+        Frontend.encodeIR({ v: called }).v,
+        name
+      );
     } catch (e) {
       why = (e as Error).message;
     }

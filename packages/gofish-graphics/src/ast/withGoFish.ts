@@ -40,6 +40,7 @@ import { attachTerminals } from "./marks/terminals";
 import { withWire } from "./wire";
 import { isThenable } from "../util";
 import { breadthFirst } from "./elaborationUtils";
+import { withKindValues } from "./strategyKind";
 
 export interface RenderOptions {
   w?: number;
@@ -437,8 +438,15 @@ export function createMark(
   cfg?: { kind?: MarkKind }
 ): any {
   const kind: MarkKind = cfg?.kind ?? "per-item";
+  // A strategy kind used bare is read as its value from here on.
   return (markOpts: Record<string, any>) =>
-    buildCreatedMark(shapeFn, channels, serialize, kind, markOpts);
+    buildCreatedMark(
+      shapeFn,
+      channels,
+      serialize,
+      kind,
+      withKindValues(markOpts)
+    );
 }
 
 /**

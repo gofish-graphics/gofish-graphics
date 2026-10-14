@@ -82,6 +82,7 @@ import {
 } from "../../animation/transition";
 import { withWire, wireOf } from "../wire";
 import { isThenable } from "../../util";
+import { withKindValues } from "../strategyKind";
 
 export type { LayerContext } from "./markResult";
 export { resolveMarkResult } from "./markResult";
@@ -1032,9 +1033,11 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     marks: MarkChild[] | Promise<MarkChild[]>
   ): NameableMark<Datum[]>;
   function dual(
-    opts: Options,
+    given: Options,
     marks?: MarkChild[] | Promise<MarkChild[]>
   ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum[]> {
+    // A strategy kind used bare is read as its value from here on.
+    const opts = withKindValues(given);
     if (marks !== undefined) {
       // Combinator form: apply each mark to the same data d, then layout.
       const base: Mark<Datum[]> = async (

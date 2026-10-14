@@ -11,11 +11,20 @@
  * value the factory makes with no arguments, made callable: a function with
  * that value's own keys and prototype, so it reads, spreads, compares and
  * serializes as that value. JSON has no functions, so it also carries the
- * value as `toJSON()` (a Calendar value has its own), which is how the IR
- * emitter and `Frontend.checkStrategy` tell it from a callback
- * (`Frontend.isCallableValue`). Nothing that reads a strategy needs to know
- * which spelling it was given.
+ * value as `toJSON()` (a Calendar value has its own), so `JSON.stringify`
+ * and the shared IR encoder (`Frontend.encodeIR`) write it as that value.
+ *
+ * Options enter through a few doors, and each replaces a bare kind by its
+ * value once, there ({@link kindValue}, {@link withKindValues}): an
+ * operator's and a mark's options (`createOperator`, `createMark`,
+ * `createRelationalMark`), a `.bin(...)` partition (`checkBinStep`), and an
+ * axis's `levels`. So no reader of a strategy ever sees a function. The
+ * encoder keeps its own reading of a bare kind for option trees that pass
+ * no door, such as a chart's `axes` before layout reads them.
  */
+
+/** Marks a bare kind, so {@link kindValue} tells it from a callback. */
+const BARE: unique symbol = Symbol("gofish.bareKind");
 
 /** A strategy kind used bare: the value its factory makes with no
  *  arguments, which can also be called like the factory. */
@@ -53,5 +62,21 @@ export function bareKind<F extends (opts?: never) => object>(
   if (typeof (kind as { toJSON?: unknown }).toJSON !== "function") {
     Object.defineProperty(kind, "toJSON", { value: () => make() });
   }
+  Object.defineProperty(kind, BARE, { value: true });
   return kind;
+}
+
+/** The value a strategy option holds: a kind used bare is the value its
+ *  call with no arguments makes (`Curve.monotone` is `Curve.monotone()`);
+ *  anything else is as it is. */
+export const kindValue = <V>(v: V): V =>
+  typeof v === "function" && BARE in v ? ((v as () => V)() as V) : v;
+
+/** `opts` with each bare kind among its values replaced by its value
+ *  ({@link kindValue}); the same object when it holds none. */
+export function withKindValues<O>(opts: O): O {
+  if (opts === null || typeof opts !== "object") return opts;
+  const entries = Object.entries(opts as Record<string, unknown>);
+  if (!entries.some(([, v]) => kindValue(v) !== v)) return opts;
+  return Object.fromEntries(entries.map(([k, v]) => [k, kindValue(v)])) as O;
 }

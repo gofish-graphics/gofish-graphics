@@ -32,7 +32,6 @@ import {
 } from "./schema.js";
 import {
   decodeNonFinite,
-  isCallableValue,
   isNonFiniteNumberIR,
   isTaggedInfinity,
 } from "./nonFinite.js";
@@ -518,12 +517,6 @@ function taggedBranches(
   return key === undefined ? null : { key, byTag };
 }
 
-/** A strategy as the JS side checks it: a kind used bare
- *  (`Curve.monotone`, a callable value) is checked as the value it is, the
- *  same as its call with no arguments. */
-const strategyValue = (value: unknown): unknown =>
-  isCallableValue(value) ? value.toJSON() : value;
-
 /**
  * Walk `value` against `type` and throw the first problem, as
  * `[gofish] <path>: <message>. <hint>`, naming `where` the value was
@@ -538,7 +531,7 @@ function walkOrThrow(
   hint: string
 ): void {
   const ctx: Context = { errors: [] };
-  walkFieldType(type, strategyValue(value), where, ctx);
+  walkFieldType(type, value, where, ctx);
   if (ctx.errors.length > 0) {
     const [{ path, message }] = ctx.errors;
     throw new Error(`[gofish] ${path}: ${message}.${hint ? ` ${hint}` : ""}`);
@@ -550,9 +543,9 @@ function walkOrThrow(
  * only that kind's params, each of its declared type. Throws the first
  * problem, naming `where` the strategy was written
  * (`"treemap({ tile })"`). This is the one check a strategy gets on the JS
- * side, wherever it came from (a family member, bare or called, a
- * hand-written object, or Python IR); the validator runs the same walk over
- * a whole document.
+ * side, wherever it came from (a family member, a hand-written object, or
+ * Python IR; a kind used bare is read as its value where the option
+ * entered); the validator runs the same walk over a whole document.
  */
 export function checkStrategy(
   family: StrategyFamilyName,
@@ -587,8 +580,7 @@ export function checkOption(
  * field's line (`Bin.step`) throws, naming `field(x).bin`; anything else is
  * checked as {@link checkStrategy} checks it.
  */
-export function checkStructBin(value: unknown, where: string): void {
-  const v = strategyValue(value);
+export function checkStructBin(v: unknown, where: string): void {
   const kind = isObject(v) ? v.kind : undefined;
   if ((BIN_KINDS.field as readonly unknown[]).includes(kind))
     throw new Error(
@@ -604,8 +596,7 @@ export function checkStructBin(value: unknown, where: string): void {
  * that cuts one field's line (`OPTION_TYPES.Partition`). A `Bin` kind that
  * divides a plane (`Bin.hex`) throws, naming `struct({ x, y }).bin`.
  */
-export function checkPartition(value: unknown, where: string): void {
-  const v = strategyValue(value);
+export function checkPartition(v: unknown, where: string): void {
   const kind = isObject(v) ? v.kind : undefined;
   if ((BIN_KINDS.struct as readonly unknown[]).includes(kind))
     throw new Error(

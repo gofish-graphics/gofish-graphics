@@ -41,6 +41,7 @@ import { tickIncrement } from "d3-array";
 import { Frontend } from "gofish-ir";
 import type { Temporal as TemporalNS } from "temporal-polyfill";
 import type { HasDomain } from "./schema";
+import { kindValue } from "./strategyKind";
 import {
   CalendarPartition,
   checkFormat,
@@ -311,7 +312,9 @@ export type Cells = {
  *  {@link ThresholdsBin}. The wire form is told apart by its `kind`
  *  (`Frontend.checkPartition`); a `Bin` kind that bins two fields
  *  (`Bin.hex`) is an error naming `struct({ x, y }).bin`. */
-export function checkPartition(p: unknown, where: string): Partition {
+export function checkPartition(given: unknown, where: string): Partition {
+  // A Calendar kind used bare is read as its value from here on.
+  const p = kindValue(given);
   if (p instanceof CalendarPartition) return p;
   Frontend.checkPartition(p, where);
   if (p instanceof StepBin || p instanceof ThresholdsBin) return p;
