@@ -911,11 +911,11 @@ async function main(): Promise<void> {
     ],
     [
       { kind: "linaer" },
-      /\.kind: unknown kind "linaer".*Make one with a call in the Curve family/,
+      /\.kind: unknown kind "linaer".*Make one with the Curve family/,
     ],
     [
       "monotone",
-      /: expected object, got string\. Make one with a call in the Curve family/,
+      /: expected object, got string\. Make one with the Curve family/,
     ],
   ];
   for (const [curve, pattern] of notAMethod) {

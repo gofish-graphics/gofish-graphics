@@ -11,6 +11,7 @@
  *   pnpm test:families
  */
 import { readdirSync, readFileSync } from "node:fs";
+import { Frontend } from "gofish-ir";
 // The built bundle, as a user imports it: `dist/index.js` is the package
 // root and `dist/<name>.js` the subpath (run after `pnpm build`).
 import * as GoFish from "../../dist/index.js";
@@ -91,6 +92,96 @@ for (const f of families) {
     `${capitalize(f)}'s members are not also top-level exports`,
     flat.length === 0,
     flat.join(", ")
+  );
+}
+
+// Bare kinds (#1133): every kind (and preset) of a STRATEGIES family with no
+// required option is a value as it is, and calling it sets options. The bare
+// kind is indistinguishable from its call with no arguments: same keys, same
+// JSON, same check. A kind with a required option is a call only.
+console.log("\n# bare strategy kinds");
+for (const [family, spec] of Object.entries(Frontend.STRATEGIES) as Array<
+  [string, Frontend.StrategyFamily]
+>) {
+  const ns = (GoFish as Record<string, any>)[family];
+  const members = [
+    ...Object.entries(spec.kinds).map(([name, k]) => ({ name, kind: k })),
+    ...Object.entries(spec.presets ?? {}).map(([name, p]) => ({
+      name,
+      kind: spec.kinds[p.kind],
+    })),
+  ];
+  for (const { name, kind } of members) {
+    const member = ns?.[name];
+    const required = Object.values(kind.params).some((p) => p.required);
+    if (required) {
+      check(
+        `${family}.${name} has a required option, so it is a call only`,
+        typeof member === "function" && !("kind" in member)
+      );
+      continue;
+    }
+    const called = typeof member === "function" ? member() : undefined;
+    let why = "";
+    try {
+      Frontend.checkStrategy(family as Frontend.StrategyFamilyName, member, name);
+    } catch (e) {
+      why = (e as Error).message;
+    }
+    check(
+      `${family}.${name} bare is ${family}.${name}()`,
+      typeof member === "function" &&
+        member.kind === called?.kind &&
+        JSON.stringify(Object.keys(member)) ===
+          JSON.stringify(Object.keys(called)) &&
+        JSON.stringify(member) === JSON.stringify(called) &&
+        JSON.stringify(Frontend.encodeIR({ v: member })) ===
+          JSON.stringify(Frontend.encodeIR({ v: called })) &&
+        why === "",
+      why ||
+        `bare ${JSON.stringify(member)}, called ${JSON.stringify(called)}`
+    );
+  }
+}
+{
+  const { Calendar, Curve } = GoFish as Record<string, any>;
+  check(
+    "Calendar.month bare is a CalendarPartition, and sameCells as its call",
+    Calendar.month instanceof GoFish.CalendarPartition &&
+      Calendar.month.sameCells(Calendar.month()) &&
+      Calendar.month({ every: 3 }).sameCells(Calendar.month({ every: 3 })) &&
+      !Calendar.month.sameCells(Calendar.month({ every: 3 }))
+  );
+  check(
+    "a bare Calendar kind has .format(fn), as its call does",
+    Calendar.quarter.format(() => "q").formatCell !== undefined &&
+      Calendar.quarter().format(() => "q").formatCell !== undefined
+  );
+  const errorOf = (f: () => unknown): string => {
+    try {
+      f();
+      return "";
+    } catch (e) {
+      return (e as Error).message;
+    }
+  };
+  const every = errorOf(() => Calendar.month.every(3));
+  check(
+    "Calendar.month.every(3) is a loud error naming ({ every: 3 })",
+    every.includes("Calendar.month({ every: 3 })"),
+    every
+  );
+  const step = errorOf(() => Calendar.month({ step: 3 }));
+  check(
+    "Calendar.month({ step: 3 }) is a loud error naming every",
+    step.includes('unknown field "step"') && step.includes('"every"'),
+    step
+  );
+  const positional = errorOf(() => Curve.arc("down"));
+  check(
+    "a bare kind's call takes an options object",
+    positional.includes("Curve.arc") && positional.includes("options object"),
+    positional
   );
 }
 

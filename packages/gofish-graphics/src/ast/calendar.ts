@@ -3,8 +3,10 @@
 // </gofish-wiki>
 
 /**
- * Calendar partitions (#256, #1057): `Calendar.month`, `Calendar.hour.every(6)`,
- * `Calendar.week({ start: "sunday" })`, `Calendar.weekday`, ...
+ * Calendar partitions (#256, #1057): `Calendar.month`,
+ * `Calendar.hour({ every: 6 })`, `Calendar.week({ start: "sunday" })`,
+ * `Calendar.weekday`, ... The values themselves are the `Calendar` family,
+ * `families/calendar.ts`; this module is their cells and labels.
  *
  * A Calendar value is a PARTITION of the time line into cells: each cell is a
  * half-open interval `[start, end)` of instants (epoch milliseconds, UTC), and
@@ -19,12 +21,12 @@
  * time axis reads its rows off it (axes/timeRows.ts); the 1D `partition`
  * layout operator (#1058) is meant to read its cells off the same interface.
  *
- * Steps (`.every(n)`) are aligned to the next level up, the way calendars
- * count: `Calendar.month.every(3)` starts its cells in January, April, July
- * and October; `Calendar.hour.every(6)` at 0, 6, 12 and 18 o'clock;
- * `Calendar.day.every(2)` on days 1, 3, 5, ... of each month (so the last
- * cell of a 31-day month is one day long); `Calendar.year.every(5)` on years
- * divisible by 5. Weeks count from a fixed week (the one holding 1970-01-01),
+ * Steps (`{ every: n }`) are aligned to the next level up, the way calendars
+ * count: `Calendar.month({ every: 3 })` starts its cells in January, April,
+ * July and October; `Calendar.hour({ every: 6 })` at 0, 6, 12 and 18
+ * o'clock; `Calendar.day({ every: 2 })` on days 1, 3, 5, ... of each month
+ * (so the last cell of a 31-day month is one day long);
+ * `Calendar.year({ every: 5 })` on years divisible by 5. Weeks count from a fixed week (the one holding 1970-01-01),
  * since weeks do not nest in months.
  */
 import type { Temporal as TemporalNS } from "temporal-polyfill";
@@ -72,7 +74,7 @@ const epochDay = (): TemporalNS.PlainDate =>
 // ── Units ─────────────────────────────────────────────────────────────────
 
 /** The wire form of a Calendar value (what Python sends, and what
- *  `toJSON` writes): the IR's `CalendarPartitionIR`, `{ kind, step?,
+ *  `toJSON` writes): the IR's `CalendarPartitionIR`, `{ kind, every?,
  *  start? }`, one kind per level. `start` is only for weeks and weekdays,
  *  and a weekday has no `step`. */
 export type CalendarJSON = Frontend.CalendarPartitionIR;
@@ -345,7 +347,8 @@ export function productLabel(
 // ── Partitions ────────────────────────────────────────────────────────────
 
 /** A partition of the time line into calendar cells: a level (`unit`) at a
- *  step, with an optional label `format`. See the module comment. */
+ *  step (the `every` option), with an optional label `format`. See the
+ *  module comment. */
 export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
   /** The first day of a week, for weeks and weekdays only (Monday unless
    *  given). */
@@ -362,27 +365,33 @@ export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
   ) {
     if (!Number.isInteger(step) || step < 1) {
       throw new Error(
-        `Calendar.${unit}.every(${String(step)}): the step must be a whole ` +
-          `number of ${unit}s, 1 or more.`
+        `Calendar.${unit}({ every: ${String(step)} }): the step must be a ` +
+          `whole number of ${unit}s, 1 or more.`
       );
     }
     if (unit === "weekday" && step !== 1) {
       throw new Error(
-        `Calendar.weekday.every(${String(step)}): a weekday is one day of the ` +
-          `week, so it has no steps. For cells of several days, use ` +
-          `Calendar.day.every(${String(step)}).`
+        `Calendar.weekday({ every: ${String(step)} }): a weekday is one day ` +
+          `of the week, so it has no steps. For cells of several days, use ` +
+          `Calendar.day({ every: ${String(step)} }).`
       );
     }
     this.start = hasStart(unit) ? (start ?? "monday") : undefined;
   }
 
-  /** The same level, `n` units per cell (`Calendar.month.every(3)`). */
-  every(n: number): CalendarPartition<U> {
-    return new CalendarPartition(this.unit, n, this.start, this.formatCell);
+  /** Removed (#1133): the step is an option of the kind,
+   *  `Calendar.month({ every: 3 })`. A loud error naming that spelling.
+   *  @deprecated Use `Calendar.<unit>({ every: n })`. */
+  every(n: number): never {
+    throw new Error(
+      `[gofish] ${String(this)}.every(${String(n)}): .every is removed. The ` +
+        `step is an option of the kind: Calendar.${this.unit}({ every: ` +
+        `${String(n)} }).`
+    );
   }
 
   /** The same cells, labeled by `fn`, a function of the cell
-   *  ({@link CalendarCell}): `Calendar.month.every(3).format((c) =>
+   *  ({@link CalendarCell}): `Calendar.month({ every: 3 }).format((c) =>
    *  String(c.year))`. JS only: a function cannot cross to Python, so a
    *  partition with a format has no wire form. */
   format(fn: CellFormat): CalendarPartition<U> {
@@ -437,7 +446,7 @@ export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
 
   /** The part of its cycle unit that the instant `z` falls in: its level's
    *  field at the start of the cell that holds `z` (6 for any instant in
-   *  June; 4 for May under `Calendar.month.every(3)`, whose cell starts in
+   *  June; 4 for May under `Calendar.month({ every: 3 })`, whose cell starts in
    *  April; 1 to 4 for a quarter; the ISO day of the week, 1 for Monday to 7
    *  for Sunday, for a weekday). */
   part(z: TemporalNS.ZonedDateTime): number {
@@ -555,19 +564,22 @@ export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
     }
     return {
       kind: this.unit,
-      // A weekday has no steps, so no `step` on the wire.
-      ...(this.unit !== "weekday" ? { step: this.step } : {}),
+      // A weekday has no steps, so no `every` on the wire.
+      ...(this.unit !== "weekday" ? { every: this.step } : {}),
       ...(this.start !== undefined ? { start: this.start } : {}),
     } as CalendarJSON;
   }
 
   toString(): string {
+    const opts = [
+      ...(this.step !== 1 ? [`every: ${this.step}`] : []),
+      ...(this.start !== undefined ? [`start: "${this.start}"`] : []),
+    ];
     const base =
-      this.start !== undefined
-        ? `Calendar.${this.unit}({ start: "${this.start}" })`
+      opts.length > 0
+        ? `Calendar.${this.unit}({ ${opts.join(", ")} })`
         : `Calendar.${this.unit}`;
-    const stepped = this.step === 1 ? base : `${base}.every(${this.step})`;
-    return this.formatCell === undefined ? stepped : `${stepped}.format(...)`;
+    return this.formatCell === undefined ? base : `${base}.format(...)`;
   }
 }
 
@@ -577,66 +589,25 @@ type StartUnit = "week" | "weekday";
 const hasStart = (unit: CalendarUnit): unit is StartUnit =>
   unit === "week" || unit === "weekday";
 
-/** `Calendar.week` or `Calendar.weekday`: the Monday-start partition, also
- *  callable as `Calendar.week({ start: "sunday" })` for another first
- *  day. */
-export type StartPartition<U extends StartUnit> = CalendarPartition<U> &
-  ((opts?: { start?: WeekStart }) => CalendarPartition<U>);
-
-/** `Calendar.week`. */
-export type WeekPartition = StartPartition<"week">;
-
-function startPartition<U extends StartUnit>(unit: U): StartPartition<U> {
-  const make = ({ start }: { start?: WeekStart } = {}) =>
-    calendarPartition(
-      {
-        kind: unit,
-        ...(unit === "week" ? { step: 1 } : {}),
-        ...(start !== undefined ? { start } : {}),
-      } as CalendarJSON,
-      `Calendar.${unit}`
-    ) as CalendarPartition<U>;
-  // A function that is also the default partition: same prototype, same
-  // fields, so `Calendar.week` works as a value and as a call.
-  const fn = make as unknown as StartPartition<U>;
-  const value = make();
-  Object.setPrototypeOf(fn, CalendarPartition.prototype);
-  Object.defineProperties(fn, {
-    unit: { value: value.unit, enumerable: true },
-    step: { value: value.step, enumerable: true },
-    start: { value: value.start, enumerable: true },
-  });
-  return fn;
-}
-
-/** The calendar partitions: the cells of `field(x).bin(...)`, and the
- *  levels of a time axis (`axes: { x: { levels: [...] } }`). */
-export const Calendar = {
-  second: new CalendarPartition("second"),
-  minute: new CalendarPartition("minute"),
-  hour: new CalendarPartition("hour"),
-  day: new CalendarPartition("day"),
-  weekday: startPartition("weekday"),
-  week: startPartition("week"),
-  month: new CalendarPartition("month"),
-  quarter: new CalendarPartition("quarter"),
-  year: new CalendarPartition("year"),
-};
-
 /** `value` as an error message shows it. A partition (a Calendar value, or
  *  `Bin.step(...)`, cells.ts) shows as its builder spelling, its own
  *  `toString`, and nothing calls `toJSON` (a partition with a format has no
- *  wire form, and its `toJSON` throws). */
+ *  wire form, and its `toJSON` throws). A kind used bare (`Calendar.month`,
+ *  `Curve.monotone`) is a value that can be called, and shows as that
+ *  value. */
 export function describe(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(describe).join(", ")}]`;
   if (
     value !== null &&
-    typeof value === "object" &&
+    (typeof value === "object" || Frontend.isCallableValue(value)) &&
     typeof value.toString === "function" &&
     value.toString !== Object.prototype.toString
   )
     return String(value);
-  if (value !== null && typeof value === "object") {
+  if (
+    value !== null &&
+    (typeof value === "object" || Frontend.isCallableValue(value))
+  ) {
     const fields = Object.entries(value).map(
       ([k, v]) => `${k}: ${describe(v)}`
     );
@@ -648,9 +619,10 @@ export function describe(value: unknown): string {
 
 /** A Calendar value from a builder value or its wire form (Python sends the
  *  wire form), checked against the Calendar family
- *  (`Frontend.checkStrategy`): an unknown kind, a step below 1 (or any step
- *  on a weekday), or a `start` that is not "monday" or "sunday" or is given
- *  for a level other than weeks and weekdays, is a loud error. */
+ *  (`Frontend.checkStrategy`): an unknown kind, an `every` that is not a
+ *  whole number of at least 1 (or any `every` on a weekday), or a `start`
+ *  that is not "monday" or "sunday" or is given for a level other than
+ *  weeks and weekdays, is a loud error. */
 export function calendarPartition(
   value: CalendarPartition | CalendarJSON,
   where: string
@@ -664,7 +636,7 @@ export function calendarPartition(
 export function fromWire(v: CalendarJSON): CalendarPartition {
   return new CalendarPartition(
     v.kind,
-    "step" in v ? (v.step ?? 1) : 1,
+    "every" in v ? (v.every ?? 1) : 1,
     "start" in v ? v.start : undefined
   );
 }
@@ -712,7 +684,7 @@ export function tickPartition(
   hi: number,
   count: number
 ): CalendarPartition {
-  if (hi === lo) return Calendar.day;
+  if (hi === lo) return new CalendarPartition("day");
   const target = (hi - lo) / count;
   let best: CalendarPartition | undefined;
   let bestRatio = Infinity;

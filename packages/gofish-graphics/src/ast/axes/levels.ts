@@ -44,7 +44,7 @@ export function levelsFromOption(
     );
   }
   return levels.map((e, i) => {
-    // `Calendar.week` is also a function (`Calendar.week({ start })`).
+    // A Calendar kind used bare (`Calendar.week`) is a function too.
     if (typeof e === "boolean" || e instanceof CalendarPartition) return e;
     const where = `axes.${axis}.levels[${i}]`;
     if (typeof e !== "object" || e === null)

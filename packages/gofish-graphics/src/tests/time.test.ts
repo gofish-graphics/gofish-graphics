@@ -14,12 +14,12 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import {
-  Calendar,
   CalendarPartition,
   calendarPartition,
   loadTemporal,
   tickPartition,
 } from "../ast/calendar";
+import * as Calendar from "../families/calendar";
 import {
   applySchema,
   domainRows,
@@ -107,39 +107,36 @@ async function main() {
       "a cell ends where the next starts",
       months.every((c, i) => i === 0 || months[i - 1].end === c.start)
     );
-    const q = Calendar.month.every(3).cells(lo, Date.UTC(2024, 11, 31), "UTC");
+    const q = Calendar.month({ every: 3 }).cells(lo, Date.UTC(2024, 11, 31), "UTC");
     check(
-      "month.every(3) starts in Jan, Apr, Jul, Oct",
+      "month({ every: 3 }) starts in Jan, Apr, Jul, Oct",
       same(
         q.map((c) => c.month),
         [10, 1, 4, 7, 10]
       )
     );
-    const d2 = Calendar.day
-      .every(2)
+    const d2 = Calendar.day({ every: 2 })
       .cells(Date.UTC(2024, 0, 29), Date.UTC(2024, 1, 3), "UTC");
     check(
-      "day.every(2) restarts on the 1st (a 31st is a one-day cell)",
+      "day({ every: 2 }) restarts on the 1st (a 31st is a one-day cell)",
       same(
         d2.map((c) => c.day),
         [29, 31, 1, 3]
       ) && d2[1].end - d2[1].start === 864e5
     );
-    const h6 = Calendar.hour
-      .every(6)
+    const h6 = Calendar.hour({ every: 6 })
       .cells(Date.UTC(2024, 1, 28, 1), Date.UTC(2024, 1, 29, 1), "UTC");
     check(
-      "hour.every(6) starts at 0, 6, 12, 18",
+      "hour({ every: 6 }) starts at 0, 6, 12, 18",
       same(
         h6.map((c) => c.hour),
         [0, 6, 12, 18, 0]
       )
     );
-    const y5 = Calendar.year
-      .every(5)
+    const y5 = Calendar.year({ every: 5 })
       .cells(Date.UTC(2018, 2), Date.UTC(2031, 0), "UTC");
     check(
-      "year.every(5) starts on years divisible by 5",
+      "year({ every: 5 }) starts on years divisible by 5",
       same(
         y5.map((c) => c.year),
         [2015, 2020, 2025, 2030]
@@ -188,22 +185,22 @@ async function main() {
       "Calendar.week is a Calendar value and a function",
       Calendar.week instanceof CalendarPartition &&
         typeof Calendar.week === "function" &&
-        same(Calendar.week, { kind: "week", step: 1, start: "monday" })
+        same(Calendar.week, { kind: "week", every: 1, start: "monday" })
     );
     check(
       "Calendar values write their wire form",
-      same(Calendar.hour.every(6), { kind: "hour", step: 6 })
+      same(Calendar.hour({ every: 6 }), { kind: "hour", every: 6 })
     );
     check(
       "the wire form reads back",
       same(
-        calendarPartition({ kind: "month", step: 3 }, "x"),
-        Calendar.month.every(3)
+        calendarPartition({ kind: "month", every: 3 }, "x"),
+        Calendar.month({ every: 3 })
       )
     );
     check(
       "a step below 1 is an error",
-      (await errorOf(() => Calendar.month.every(0)))?.includes("step") === true
+      (await errorOf(() => Calendar.month({ every: 0 })))?.includes("every") === true
     );
   }
 
@@ -527,7 +524,7 @@ async function main() {
     check(
       "hourly over 3.5 days: hours in steps of 6, day",
       same(rowsOf(Date.UTC(2024, 1, 28), Date.UTC(2024, 2, 2, 12)), [
-        "Calendar.hour.every(6)",
+        "Calendar.hour({ every: 6 })",
         "Calendar.day",
       ])
     );
@@ -651,26 +648,32 @@ async function main() {
     const lo = Date.UTC(2024, 0, 1);
     const hi = Date.UTC(2024, 11, 31);
     const fmt = (c: any) => `${c.month}/${c.year % 100}`;
-    const stepped = Calendar.month.every(3).format(fmt);
+    const stepped = Calendar.month({ every: 3 }).format(fmt);
     check(
       "format on a stepped partition keeps the step and labels its cells",
       stepped.step === 3 &&
-        stepped.toString() === "Calendar.month.every(3).format(...)" &&
+        stepped.toString() === "Calendar.month({ every: 3 }).format(...)" &&
         same(
           rowLabels(stepped, lo, hi, "UTC").map((l) => l.text),
           ["1/24", "4/24", "7/24", "10/24"]
         )
     );
     check(
-      "format then every keeps the format",
-      Calendar.month.format(fmt).every(3).formatCell === fmt &&
-        Calendar.week({ start: "sunday" }).format(fmt).start === "sunday"
+      "format keeps the options of a called kind",
+      Calendar.week({ start: "sunday" }).format(fmt).start === "sunday" &&
+        Calendar.week({ start: "sunday" }).format(fmt).formatCell === fmt
+    );
+    const every = await errorOf(() => Calendar.month.format(fmt).every(3));
+    check(
+      ".every(n) is removed: a loud error naming the every option",
+      every?.includes("Calendar.month({ every: 3 })") === true,
+      every
     );
     check(
       "a bare partition still uses the default labels",
       Calendar.month.formatCell === undefined &&
         same(
-          rowLabels(Calendar.month.every(3), lo, hi, "UTC").map((l) => l.text),
+          rowLabels(Calendar.month({ every: 3 }), lo, hi, "UTC").map((l) => l.text),
           ["Jan", "Apr", "Jul", "Oct"]
         ) &&
         same(
@@ -690,14 +693,14 @@ async function main() {
     check(
       "a partition with a format has no wire form: serializing it is a loud " +
         "error naming the row",
-      wire?.includes("[1]: Calendar.month.every(3).format(...)") === true &&
+      wire?.includes("[1]: Calendar.month({ every: 3 }).format(...)") === true &&
         wire.includes("has no wire form"),
       wire
     );
     check(
       "a bare partition still serializes",
-      JSON.stringify(Calendar.month.every(3)) ===
-        JSON.stringify({ kind: "month", step: 3 })
+      JSON.stringify(Calendar.month({ every: 3 })) ===
+        JSON.stringify({ kind: "month", every: 3 })
     );
   }
 
@@ -753,7 +756,7 @@ async function main() {
     );
     check(
       "a valid wire week start is read",
-      calendarPartition({ kind: "week", step: 1, start: "sunday" }, "w")
+      calendarPartition({ kind: "week", every: 1, start: "sunday" }, "w")
         .start === "sunday"
     );
   }

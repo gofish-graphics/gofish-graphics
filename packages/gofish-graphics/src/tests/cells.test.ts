@@ -28,7 +28,8 @@ import * as Bin from "../families/bin";
 import { mergeCells } from "../ast/underlyingSpace";
 import { inferPos } from "../ast/channels";
 import { evalFieldValues } from "../ast/fieldExpr";
-import { Calendar, loadTemporal } from "../ast/calendar";
+import { loadTemporal } from "../ast/calendar";
+import * as Calendar from "../families/calendar";
 import { splitEntries } from "../ast/datumProjection";
 import { field } from "../ast/data";
 import { partition as srcPartition } from "../lib";
@@ -246,8 +247,8 @@ async function main() {
         counts(Calendar.hour) === 24 &&
         counts(Calendar.quarter) === 4 &&
         counts(Calendar.minute) === 60 &&
-        counts(Calendar.month.every(3)) === 4 &&
-        counts(Calendar.hour.every(6)) === 4
+        counts(Calendar.month({ every: 3 })) === 4 &&
+        counts(Calendar.hour({ every: 6 })) === 4
     );
     const labelsOf = (p: any) =>
       binCells(p, [t("2024-01-01")], "UTC", "t").cells.map((c) => c.label);
@@ -403,8 +404,9 @@ async function main() {
     );
     check(
       "a weekday has no steps",
-      errorOf(() => Calendar.weekday.every(2))?.includes("has no steps") ===
-        true
+      errorOf(() => Calendar.weekday({ every: 2 }))?.includes(
+        'unknown field "every"'
+      ) === true
     );
     check(
       "a weekday's wire form has a start and no step",
@@ -419,9 +421,9 @@ async function main() {
     check(
       "a weekday step on the wire is a loud error",
       errorOf(() =>
-        checkPartition({ kind: "weekday", step: 2 } as any, "w")
-      )?.includes("w.step") === true,
-      errorOf(() => checkPartition({ kind: "weekday", step: 2 } as any, "w"))
+        checkPartition({ kind: "weekday", every: 2 } as any, "w")
+      )?.includes("w.every") === true,
+      errorOf(() => checkPartition({ kind: "weekday", every: 2 } as any, "w"))
     );
 
     // Products and chains: a weekday is a part of a week (with the same
@@ -541,7 +543,7 @@ async function main() {
       ["one level", [Calendar.month], "two or more"],
       ["a day of a year", [Calendar.year, Calendar.day], "a part of a month"],
       ["a week", [Calendar.year, Calendar.week], "part of no larger level"],
-      ["a stepped parent", [Calendar.year.every(5), Calendar.month], "5 years"],
+      ["a stepped parent", [Calendar.year({ every: 5 }), Calendar.month], "5 years"],
       ["a numeric bin", [Bin.step(1), Bin.step(2)], "cannot be in a product"],
       [
         "a format",
@@ -562,8 +564,8 @@ async function main() {
         {
           op: "bin",
           partition: [
-            { kind: "year", step: 1 },
-            { kind: "month", step: 1 },
+            { kind: "year", every: 1 },
+            { kind: "month", every: 1 },
           ],
         },
       ])
@@ -685,8 +687,8 @@ async function main() {
     check(
       "a chain's wire form is one bin op per bin",
       same(field("d").bin(Calendar.year).bin(Calendar.month).toJSON().ops, [
-        { op: "bin", partition: { kind: "year", step: 1 } },
-        { op: "bin", partition: { kind: "month", step: 1 } },
+        { op: "bin", partition: { kind: "year", every: 1 } },
+        { op: "bin", partition: { kind: "month", every: 1 } },
       ])
     );
     const quarters = chainCells(
@@ -711,7 +713,7 @@ async function main() {
   {
     check(
       "the wire forms check",
-      checkPartition({ kind: "month", step: 3 }, "t") instanceof Object &&
+      checkPartition({ kind: "month", every: 3 }, "t") instanceof Object &&
         checkPartition({ kind: "step", size: 2 }, "t") instanceof StepBin &&
         same(checkPartition({ kind: "step", size: 2 }, "t"), {
           kind: "step",
@@ -759,8 +761,8 @@ async function main() {
     }
     check(
       "a field expression writes its partition's wire form",
-      same(field("d").bin(Calendar.month.every(3)).toJSON().ops, [
-        { op: "bin", partition: { kind: "month", step: 3 } },
+      same(field("d").bin(Calendar.month({ every: 3 })).toJSON().ops, [
+        { op: "bin", partition: { kind: "month", every: 3 } },
       ]) &&
         same(field("x").bin(Bin.step(0.5)).toJSON().ops, [
           { op: "bin", partition: { kind: "step", size: 0.5 } },

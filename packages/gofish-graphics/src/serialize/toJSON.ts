@@ -60,8 +60,10 @@ interface SerializeTag {
  *
  * A function value is dropped too, whatever the key: a callback or `live(...)`
  * channel is a JS closure with no JSON form (the same reason a JS `derive(fn)`
- * emits an opaque `{type: "derive"}`). A type the descriptor table does not
- * declare has no wire form at all, so it throws.
+ * emits an opaque `{type: "derive"}`). A callable value is not a callback: a
+ * strategy kind used bare (`Curve.monotone`) is the value it carries as
+ * `toJSON()`, so it is kept (`Frontend.isCallableValue`). A type the
+ * descriptor table does not declare has no wire form at all, so it throws.
  */
 function wireOpts(
   kind: Frontend.NodeKind,
@@ -77,7 +79,10 @@ function wireOpts(
   }
   const out: AnyObject = {};
   for (const [key, value] of Object.entries(opts)) {
-    if (Object.hasOwn(accepted, key) && typeof value !== "function") {
+    if (
+      Object.hasOwn(accepted, key) &&
+      (typeof value !== "function" || Frontend.isCallableValue(value))
+    ) {
       out[key] = value;
     }
   }

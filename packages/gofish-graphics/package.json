@@ -19,6 +19,10 @@
       "types": "./dist/families/bin.d.ts",
       "import": "./dist/bin.js"
     },
+    "./calendar": {
+      "types": "./dist/families/calendar.d.ts",
+      "import": "./dist/calendar.js"
+    },
     "./color": {
       "types": "./dist/families/color.d.ts",
       "import": "./dist/color.js"

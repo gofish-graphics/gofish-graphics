@@ -373,6 +373,79 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  // A strategy kind used bare is its call with no arguments (#1133): the
+  // same IR, through toJSON, real JSON text, and the validator, for one
+  // kind of each family that has kinds with no required option.
+  // -------------------------------------------------------------------------
+  {
+    const { Curve, Calendar } = GoFish as any;
+    const rows = [
+      { a: 1, b: 2, d: Date.UTC(2024, 0, 3), g: "x" },
+      { a: 2, b: 3, d: Date.UTC(2024, 4, 9), g: "y" },
+    ];
+    const builds: Array<[string, (s: any) => any]> = [
+      [
+        "Curve.monotone in line({ curve })",
+        (s) => ({
+          toJSON: () =>
+            Serialize.toJSONRawMark(
+              line({ curve: s ? Curve.monotone : Curve.monotone() })
+            ),
+        }),
+      ],
+      [
+        "Overlap.separate in scatter({ overlap })",
+        (s) =>
+          chart(rows)
+            .flow(
+              scatter({
+                x: "a",
+                overlap: s ? Overlap.separate : Overlap.separate(),
+              })
+            )
+            .mark(circle({ r: 3 })),
+      ],
+      [
+        "Overlap.jitter (a preset, with Infinity) in scatter({ overlap })",
+        (s) =>
+          chart(rows)
+            .flow(
+              scatter({ x: "a", overlap: s ? Overlap.jitter : Overlap.jitter() })
+            )
+            .mark(circle({ r: 3 })),
+      ],
+      // (A JS treemap has no IR form yet, so Tile is covered by
+      // families.test.ts, which compares each Tile kind's JSON.)
+      [
+        "Calendar.month in field(x).bin(...) and an axis's levels",
+        (s) =>
+          chart(rows, {
+            axes: { x: { levels: [s ? Calendar.year : Calendar.year()] } },
+          })
+            .flow(
+              spread({
+                by: field("d").bin(s ? Calendar.month : Calendar.month()),
+                dir: "x",
+              })
+            )
+            .mark(rect({ h: "a" })),
+      ],
+    ];
+    for (const [name, build] of builds) {
+      const bare = JSON.stringify(await build(true).toJSON());
+      const called = JSON.stringify(await build(false).toJSON());
+      const kind = name.split(" ")[0].split(".")[1];
+      check(
+        `bare ${name} writes the IR of its call`,
+        bare === called &&
+          (bare.includes(`"kind":"${kind}"`) || kind === "jitter"),
+        bare
+      );
+      validateDoc(JSON.parse(bare), `bare ${name}`);
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Non-finite numbers round-trip: toJSON tags them, the validator accepts
   // the tag, and decoding before reconstruction gives the same chart.
   // -------------------------------------------------------------------------

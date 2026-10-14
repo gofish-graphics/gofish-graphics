@@ -120,9 +120,10 @@ export type {
 } from "./ast/schema";
 // Calendar partitions (#1057): the cells of `field(x).bin(...)`, and the
 // cells a time axis's levels are made of
-// (`axes: { x: { levels: [Calendar.month, Calendar.year] } }`). Capitalized
-// like `Schema`: a namespace of values.
-export { Calendar, CalendarPartition } from "./ast/calendar";
+// (`axes: { x: { levels: [Calendar.month, Calendar.year] } }`). A strategy
+// family like the others.
+export * as Calendar from "./families/calendar";
+export { CalendarPartition } from "./ast/calendar";
 export type {
   CalendarCell,
   CalendarUnit,
