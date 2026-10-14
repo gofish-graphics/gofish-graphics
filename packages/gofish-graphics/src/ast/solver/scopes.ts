@@ -188,13 +188,13 @@ export class ScopeRegistry {
   }
 
   /** The σ the nodes with a literal size solve the keyed domain `key` at on
-   *  `axis`, other than `except`: undefined when none solves it, or when they
-   *  solve it at different σs (an over-constrained layout). */
-  keyedSigma(key: string, axis: 0 | 1, except?: object): number | undefined {
+   *  `axis`: undefined when none solves it, or when they solve it at
+   *  different σs (an over-constrained layout). */
+  keyedSigma(key: string, axis: 0 | 1): number | undefined {
     let sigma: number | undefined;
-    for (const [node, solves] of this.fixed) {
+    for (const solves of this.fixed.values()) {
       const s = solves[axis];
-      if (node === except || s === undefined || s.key !== key) continue;
+      if (s === undefined || s.key !== key) continue;
       const next = s.solution.sigma;
       if (sigma === undefined) sigma = next;
       else if (Math.abs(next - sigma) > 1e-9 * Math.abs(sigma))

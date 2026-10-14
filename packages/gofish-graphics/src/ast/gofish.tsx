@@ -488,8 +488,7 @@ export async function layout(
       given === undefined && scalesWithSigma(claim)
         ? keyedDomains.axisKey(child, axis, child._underlyingSpace![axis])
         : undefined;
-    const below =
-      key === undefined ? undefined : scopes.keyedSigma(key, axis, child);
+    const below = key === undefined ? undefined : scopes.keyedSigma(key, axis);
     const scope =
       below === undefined
         ? scopes.solveScope(meta, space, claim, given ?? DEFAULT_CANVAS_SIZE)
