@@ -475,9 +475,9 @@ above it or below it, which is where that domain's σ is solved. A node with a
 chart below it leaves that chart's domains to the chart. An ordinal axis the root
 draws on a dim still owns that dim, so a continuous level below it waits for
 hierarchical axes (#1115). A
-`.layer(...)` chart is one chart: the root tier's box (its `w`/`h` and its
-`coord`) is hoisted over the stack of tiers (`LayerBuilder.resolve`), so every
-tier's marks and the axis map with the σ that box solves. No other node claims a continuous axis, so a
+`.layer(...)` chart is one chart: the root chart's frame (its `w`/`h` and its
+`coord`) holds every tier (`LayerBuilder.resolve`), the root tier's own nodes
+first, so every tier's marks and the axis map with the σ that frame solves. No other node claims a continuous axis, so a
 `spreadY` that middle-aligns a caption with a chart does not. Two exceptions
 remain until #1032 and #1115: an operator's explicit `axes:` override still
 draws at its node, and an ordinal axis still nests at every grouping level.
