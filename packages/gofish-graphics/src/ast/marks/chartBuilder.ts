@@ -1140,17 +1140,20 @@ function isChartOptions(x: unknown): x is ChartOptions {
 }
 
 /**
- * A chart's node: a `Frame` over `children` with the chart's options. `Frame`
- * picks out what it needs (`coord`, `axes`, `padding`, and the dims, which
- * size it), so this is the whole bag rather than a key list. A chart is where
- * its axes are drawn (#1114 step 6): on an axis it has a size of its own, it
- * solves σ there and draws them around its first child, its content.
+ * A chart's node: a `Frame` with the chart's options over one layer of
+ * `children`, its content. `Frame` picks out what it needs (`coord`, `axes`,
+ * `padding`, and the dims, which size it), so this is the whole bag rather
+ * than a key list. A chart is where its axes are drawn (#1114 step 6): on an
+ * axis it has a size of its own, it solves σ there and draws them around its
+ * content. Every node the chart draws (its marks, their transitions, the
+ * tiers of a `.layer()` chain) is in that one content layer, so they all
+ * share the axes it draws.
  */
 async function frameChart(
   options: ChartOptions,
   children: GoFishNode[]
 ): Promise<GoFishNode> {
-  const node = await Frame(options, children);
+  const node = await Frame(options, [await Layer({}, children)]);
   node._chartBox = [options.w !== undefined, options.h !== undefined];
   return node;
 }
@@ -1316,8 +1319,9 @@ export class LayerBuilder extends RenderableBuilder {
     }
     // The root chart's frame holds every tier, so every tier is laid out in
     // it and its domain inference sees all of their positions at once. It
-    // is one chart (#1114 step 6): it draws the axes its tiers share. The
-    // tier charts inside it draw none of their own.
+    // is one chart (#1114 step 6): every tier is in its one content layer
+    // (`frameChart`), so it draws the axes its tiers share, and the tier
+    // charts inside that content draw none of their own.
     return root.frameNodes(nodes);
   }
 

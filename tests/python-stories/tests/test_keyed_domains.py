@@ -3,7 +3,17 @@
 Checks for measure-keyed domains (#1114): a size never splits a domain.
 """
 
-from gofish import chart, spread, stack, rect, select_all, group, text
+from gofish import (
+    chart,
+    spread,
+    stack,
+    rect,
+    select_all,
+    group,
+    text,
+    scatter,
+    circle,
+)
 
 # The largest value is 1.1, in group B.
 _VALUES = [
@@ -64,5 +74,22 @@ def story_layered_chart_own_size():
         .flow(spread(by="item", dir="x", spacing=12))
         .mark(rect(w=40, h="value", fill="item").name("bars"))
         .layer(chart(select_all("bars")).flow(group(by="item")).mark(label_mark)),
+        {"w": 400, "h": 400},
+    )
+
+
+def story_layered_chart_own_size_data_tier():
+    # A `.layer()` chart with a size of its own whose second tier is a chart
+    # of its own data. Every tier is the chart's content, so the chart draws
+    # one y axis, over both tiers' values, and the tier draws none of its own.
+    return (
+        chart(_GROUP_B, w=240, h=160)
+        .flow(spread(by="item", dir="x", spacing=12))
+        .mark(rect(w=40, h="value", fill="item").name("bars"))
+        .layer(
+            chart([{"at": 1, "value": 0.5}, {"at": 3, "value": 1.4}])
+            .flow(scatter(x="at", y="value"))
+            .mark(circle(r=4, fill="black"))
+        ),
         {"w": 400, "h": 400},
     )

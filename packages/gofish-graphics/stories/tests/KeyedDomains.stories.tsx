@@ -8,6 +8,8 @@ import {
   selectAll,
   group,
   text,
+  scatter,
+  circle,
 } from "../../src/lib";
 
 // Checks for measure-keyed domains (#1114): a size never splits a domain.
@@ -82,6 +84,31 @@ export const LayeredChartOwnSize: StoryObj = {
               text({ text: String(d[0].datum[0].value) }),
               d[0],
             ])) as any)
+      )
+      .render(container, { w: 400, h: 400 });
+    return container;
+  },
+};
+
+// A `.layer()` chart with a size of its own whose second tier is a chart of
+// its own data. Every tier is the chart's content, so the chart draws one
+// y axis, over both tiers' values, and the tier draws none of its own.
+export const LayeredChartOwnSizeDataTier: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(
+      values.filter((d) => d.group === "B"),
+      { w: 240, h: 160 }
+    )
+      .flow(spread({ by: "item", dir: "x", spacing: 12 }))
+      .mark(rect({ w: 40, h: "value", fill: "item" }).name("bars"))
+      .layer(
+        chart([
+          { at: 1, value: 0.5 },
+          { at: 3, value: 1.4 },
+        ])
+          .flow(scatter({ x: "at", y: "value" }))
+          .mark(circle({ r: 4, fill: "black" }))
       )
       .render(container, { w: 400, h: 400 });
     return container;

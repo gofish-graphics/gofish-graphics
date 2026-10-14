@@ -173,6 +173,38 @@ async function main() {
     );
   }
 
+  console.log("# a sized .layer() chart draws one y axis over all its tiers");
+  {
+    // The second tier is a chart of its own data. Every tier is the chart's
+    // content, so the chart draws one y axis, over 0..1.4, and the tier
+    // draws none. Before, the tier was a sibling of the content and drew a
+    // second axis over the first: 2 x 15 ticks.
+    const rows = [
+      { item: "p", value: 1.1 },
+      { item: "q", value: 0.3 },
+    ];
+    const dl = await chart(rows, { w: 240, h: 160 })
+      .flow(spread({ by: "item", dir: "x", spacing: 12 }))
+      .mark(rectMark({ w: 40, h: "value", fill: "steelblue" }))
+      .layer(
+        chart([
+          { at: 1, value: 0.5 },
+          { at: 3, value: 1.4 },
+        ])
+          .flow(scatter({ x: "at", y: "value" }))
+          .mark(rectMark({ w: 4, h: 4, fill: "red" }))
+      )
+      .toDisplayList({ w: 400, h: 400 });
+    const axis = yAxisOf(dl);
+    check("the chart draws one y axis", axis?.ticks === 15, axis?.ticks);
+    const tall = byFill(dl, "steelblue").sort((p, q) => p.y! - q.y!)[0];
+    check(
+      "the bars map with the axis",
+      axis !== undefined && near(tall?.y, axis.px(1.1)),
+      { tall, axis: axis && [axis.px(0), axis.px(1.1)] }
+    );
+  }
+
   console.log("# a .layer() tier leaves the root tier's box as it was");
   {
     // The hoisted box is the whole box: the coord, its padding, and the

@@ -394,9 +394,9 @@ export async function layout(
         )
       : undefined,
   };
-  // A root chart with a size of its own draws its axes around its content
-  // (`isAxisBoundary`), so the content carries the request for their titles;
-  // each node titles only the axes it draws.
+  // A root chart with a size of its own draws its axes around its content,
+  // its frame's one child (`isAxisBoundary`), so the content carries the
+  // request for their titles; each node titles only the axes it draws.
   const rootContent = child.children[0];
   if (
     child._chartBox?.some((sized) => sized) &&

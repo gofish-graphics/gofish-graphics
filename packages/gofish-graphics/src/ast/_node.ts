@@ -963,10 +963,10 @@ export class GoFishNode {
   }
 
   /** This node is the content of a `chart()` with a size of its own on
-   *  `dim`: the chart solves σ there, and seats this content in its frame. */
+   *  `dim`: the chart solves σ there, and seats this content in its frame. A
+   *  chart's frame has one child, its content (`frameChart`). */
   private isSizedChartContent(dim: 0 | 1): boolean {
-    const p = this.parent;
-    return p?._chartBox?.[dim] === true && p.children[0] === this;
+    return this.parent?._chartBox?.[dim] === true;
   }
 
   /**
@@ -985,6 +985,12 @@ export class GoFishNode {
    * caller's `claimed` check picks the root-most), which is where that
    * domain's σ is solved. A node with a chart below it leaves the chart's
    * domains to the chart. No other node draws one.
+   *
+   * A chart is a boundary whether or not a chart is above it, and it never
+   * draws a second axis: every chart nested in another is inside that
+   * chart's one content node (`frameChart`), which (or whose chart) claims
+   * each axis its type covers first, and a continuous axis has one owner.
+   * A nested chart draws only an axis no node above it claimed.
    *
    * `resolveAxes` walks top-down, so it knows whether a chart is above this
    * node (`insideChart`); whether one is below it is memoized per node
