@@ -33,6 +33,7 @@ import type {
   AxisOptions,
   AxisLabelOptions,
   BinIR,
+  CalendarPartitionIR,
   CurveIR,
   LabelSpecIR,
   OverlapIR,
@@ -301,10 +302,21 @@ const SCHEMA_STRATEGY_KEYS: Record<
     hex: { radius: true },
     voronoi: { seeds: true },
   } satisfies StrategyKeys<BinIR>,
+  Calendar: {
+    second: { every: true },
+    minute: { every: true },
+    hour: { every: true },
+    day: { every: true },
+    weekday: { start: true },
+    week: { every: true, start: true },
+    month: { every: true },
+    quarter: { every: true },
+    year: { every: true },
+  } satisfies StrategyKeys<CalendarPartitionIR>,
 };
 
 console.log(
-  "\n# STRATEGIES agree with schema.ts TileIR / OverlapIR / CurveIR / BinIR"
+  "\n# STRATEGIES agree with schema.ts TileIR / OverlapIR / CurveIR / BinIR / CalendarPartitionIR"
 );
 for (const [family, kinds] of Object.entries(SCHEMA_STRATEGY_KEYS)) {
   const table = STRATEGIES[family as keyof typeof STRATEGIES].kinds as Record<

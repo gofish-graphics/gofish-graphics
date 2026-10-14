@@ -46,8 +46,13 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
     case "number":
       // A finite number has no tagged form (`nonFinite.ts`), so it is a plain
       // JSON number; `minimum` constrains only the number, not the tag.
+      // A whole number is finite too.
       return {
-        ...(type.finite ? { type: "number" } : { $ref: "#/$defs/Number" }),
+        ...(type.integer
+          ? { type: "integer" }
+          : type.finite
+            ? { type: "number" }
+            : { $ref: "#/$defs/Number" }),
         ...(type.min !== undefined ? { minimum: type.min } : {}),
         ...(type.exclusiveMin !== undefined
           ? { exclusiveMinimum: type.exclusiveMin }
@@ -447,7 +452,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             op: { const: "bin" },
             partition: {
               description:
-                "The partition each value is binned into: a Calendar value (Calendar.month.every(3) is { kind: month, step: 3 }), Bin.step(size) or Bin.thresholds(countOrEdges), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
+                "The partition each value is binned into: a Calendar value (Calendar.month({ every: 3 }) is { kind: month, every: 3 }), Bin.step(size) or Bin.thresholds(countOrEdges), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
               oneOf: [
                 { $ref: "#/$defs/Partition" },
                 {

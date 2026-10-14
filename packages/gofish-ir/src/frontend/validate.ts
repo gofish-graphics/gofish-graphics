@@ -32,6 +32,7 @@ import {
 } from "./schema.js";
 import {
   decodeNonFinite,
+  isCallableValue,
   isNonFiniteNumberIR,
   isTaggedInfinity,
 } from "./nonFinite.js";
@@ -362,6 +363,8 @@ function walkFieldType(
         fail(`expected a number of at least ${type.min}, got ${n}`);
       else if (type.exclusiveMin !== undefined && !(n > type.exclusiveMin))
         fail(`expected a number above ${type.exclusiveMin}, got ${n}`);
+      else if (type.integer && !Number.isInteger(n))
+        fail(`expected a whole number, got ${n}`);
       return;
     }
     case "boolean":
@@ -515,26 +518,32 @@ function taggedBranches(
   return key === undefined ? null : { key, byTag };
 }
 
+/** A strategy as the JS side checks it: a kind used bare
+ *  (`Curve.monotone`, a callable value) is checked as the value it is, the
+ *  same as its call with no arguments. */
+const strategyValue = (value: unknown): unknown =>
+  isCallableValue(value) ? value.toJSON() : value;
+
 /**
- * Check a strategy against its family in `STRATEGIES` (or the `CALENDAR`
- * family, declared beside it in descriptors.ts): a known `kind`, and
+ * Check a strategy against its family in `STRATEGIES`: a known `kind`, and
  * only that kind's params, each of its declared type. Throws the first
  * problem, naming `where` the strategy was written
  * (`"treemap({ tile })"`). This is the one check a strategy gets on the JS
- * side, wherever it came from (a family factory, a hand-written object, or
- * Python IR); the validator runs the same walk over a whole document.
+ * side, wherever it came from (a family member, bare or called, a
+ * hand-written object, or Python IR); the validator runs the same walk over
+ * a whole document.
  */
 export function checkStrategy(
-  family: StrategyFamilyName | "Calendar",
+  family: StrategyFamilyName,
   value: unknown,
   where: string
 ): void {
   const ctx: Context = { errors: [] };
-  walkFieldType(OPTION_TYPES[family].type, value, where, ctx);
+  walkFieldType(OPTION_TYPES[family].type, strategyValue(value), where, ctx);
   if (ctx.errors.length > 0) {
     const [{ path, message }] = ctx.errors;
     throw new Error(
-      `[gofish] ${path}: ${message}. Make one with a call in the ${family} family.`
+      `[gofish] ${path}: ${message}. Make one with the ${family} family.`
     );
   }
 }
@@ -552,6 +561,7 @@ export function checkBin(
   value: unknown,
   where: string
 ): void {
+  value = strategyValue(value);
   const kind = isObject(value) ? value.kind : undefined;
   const isKindOf = (k: keyof typeof BIN_KINDS) =>
     (BIN_KINDS[k] as readonly unknown[]).includes(kind);
@@ -577,7 +587,8 @@ export function checkBin(
  * divides a plane throws as {@link checkBin} does, naming
  * `struct({ x, y }).bin`.
  */
-export function checkPartition(value: unknown, where: string): void {
+export function checkPartition(given: unknown, where: string): void {
+  const value = strategyValue(given);
   const kind = isObject(value) ? value.kind : undefined;
   if ((BIN_KINDS.struct as readonly unknown[]).includes(kind))
     checkBin("field", value, where);
@@ -587,7 +598,7 @@ export function checkPartition(value: unknown, where: string): void {
     const [{ path, message }] = ctx.errors;
     throw new Error(
       `[gofish] ${path}: ${message}. Make one with a Calendar value ` +
-        `(Calendar.month, Calendar.hour.every(6), ...), Bin.step(size), or ` +
+        `(Calendar.month, Calendar.hour({ every: 6 }), ...), Bin.step(size), or ` +
         `Bin.thresholds(countOrEdges).`
     );
   }

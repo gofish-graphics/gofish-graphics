@@ -408,18 +408,18 @@ export type AxisLabelOptions = {
   align?: "start" | "center" | ("start" | "center" | true)[];
 };
 
-/** A Calendar value's wire form (`Calendar.month.every(3)` is
- *  `{ kind: "month", step: 3 }`): a calendar level, its `kind`, at a step.
- *  Only a week and a weekday have a `start`, the first day of the week, and
- *  a weekday has no `step`. The kinds of the `CALENDAR` family in
- *  descriptors.ts. */
+/** A Calendar value's wire form (`Calendar.month({ every: 3 })` is
+ *  `{ kind: "month", every: 3 }`): a calendar level, its `kind`, at a step,
+ *  `every`. Only a week and a weekday have a `start`, the first day of the
+ *  week, and a weekday has no `every`. The kinds of the `Calendar` family in
+ *  `STRATEGIES` (descriptors.ts). */
 export type CalendarPartitionIR =
   | {
       kind: "second" | "minute" | "hour" | "day" | "month" | "quarter" | "year";
-      step?: number;
+      every?: number;
     }
   | { kind: "weekday"; start?: "monday" | "sunday" }
-  | { kind: "week"; step?: number; start?: "monday" | "sunday" };
+  | { kind: "week"; every?: number; start?: "monday" | "sunday" };
 
 export interface TableOperator
   extends BaseIRNode,

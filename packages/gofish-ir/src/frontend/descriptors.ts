@@ -62,6 +62,8 @@ export type FieldType =
       exclusiveMin?: number;
       /** Reject Infinity and -Infinity (NaN is never finite). */
       finite?: boolean;
+      /** Only whole numbers. */
+      integer?: boolean;
     }
   | { kind: "boolean" }
   | { kind: "any" }
@@ -158,13 +160,15 @@ export function pyKwarg(fieldName: string): string {
 export const t = {
   string: { kind: "string" } as FieldType,
   number: { kind: "number" } as FieldType,
-  /** A number with bounds: at least `min`, above `exclusiveMin`, and finite
-   *  when `finite` (`t.num({ min: 0, finite: true })` for a pixel padding,
-   *  `t.num({ exclusiveMin: 0, finite: true })` for a hex radius). */
+  /** A number with bounds: at least `min`, above `exclusiveMin`, finite
+   *  when `finite`, and whole when `integer` (`t.num({ min: 0, finite: true })`
+   *  for a pixel padding, `t.num({ exclusiveMin: 0, finite: true })` for a
+   *  hex radius, `t.num({ min: 1, integer: true })` for a calendar step). */
   num: (bounds: {
     min?: number;
     exclusiveMin?: number;
     finite?: boolean;
+    integer?: boolean;
   }): FieldType => ({
     kind: "number",
     ...bounds,
@@ -454,7 +458,10 @@ export interface StrategyPreset {
 }
 
 /** A strategy family: an option's value is one choice from its kinds, made
- *  by a call in the family's namespace (`Tile.squarify()`). */
+ *  by a member of the family's namespace. A kind with no required params is
+ *  a value as it is, and calling it sets options: `Tile.squarify` is
+ *  `Tile.squarify()`, and `Tile.squarify({ ratio: 1 })` sets its ratio. A
+ *  kind with a required param is a call only (`Bin.step(0.5)`). */
 export interface StrategyFamily {
   doc: string;
   /** The kinds, by their wire `kind`. Each also has a factory of the same
@@ -470,6 +477,26 @@ const overlapPadding: FieldSpec = {
   default: 0,
   doc: "Pixels kept between neighboring dots.",
 };
+
+/** How many units one cell of a Calendar kind spans. */
+const calendarEvery: FieldSpec = {
+  type: t.num({ min: 1, integer: true }),
+  default: 1,
+  doc: "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+};
+
+/** The first day of a week, for a week or a day of the week. */
+const weekStart: FieldSpec = {
+  type: t.enum("monday", "sunday"),
+  default: "monday",
+  doc: "The first day of a week. Monday is the ISO 8601 default.",
+};
+
+/** A Calendar kind whose only param is its step, `every`. */
+const calendarKind = (doc: string): StrategyKind => ({
+  doc,
+  params: { every: calendarEvery },
+});
 
 /**
  * The strategy families whose values cross the Python↔JS wire, by family
@@ -721,10 +748,32 @@ export const STRATEGIES = {
       },
     },
   },
+  Calendar: {
+    doc: "Partitions of the time line into calendar cells, one kind per level: the value of `field(x).bin(...)` over a time column, and an entry of an axis's `levels`.",
+    kinds: {
+      second: calendarKind("Cells of a second."),
+      minute: calendarKind("Cells of a minute."),
+      hour: calendarKind("Cells of an hour."),
+      day: calendarKind("Cells of a day, from local midnight."),
+      weekday: {
+        doc: "Cells of a day, labeled by the day of the week. Binned alone, a part of a week: the seven days of the week, from its first day, so all Mondays are one cell. It has no steps.",
+        params: { start: weekStart },
+      },
+      week: {
+        doc: "Cells of a week, from its first day.",
+        params: { every: calendarEvery, start: weekStart },
+      },
+      month: calendarKind("Cells of a month, from its first day."),
+      quarter: calendarKind(
+        "Cells of 3 months, from January, April, July and October, labeled Q1 to Q4."
+      ),
+      year: calendarKind("Cells of a year, from January 1."),
+    },
+  },
 } satisfies Record<string, StrategyFamily>;
 
-/** The name of a strategy family: `"Tile"`, `"Overlap"`, `"Curve"` or
- *  `"Bin"`. */
+/** The name of a strategy family: `"Tile"`, `"Overlap"`, `"Curve"`,
+ *  `"Bin"` or `"Calendar"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
 /** The `Bin` kinds by the key they bin: one field, `field(x).bin(b)`, whose
@@ -760,63 +809,6 @@ function strategyType(
 ): FieldType {
   return t.union(...kindBranches(family, only));
 }
-
-/** How many units one cell of a Calendar kind spans. */
-const calendarStep: FieldSpec = {
-  type: t.num({ min: 1, finite: true }),
-  default: 1,
-  doc: "How many units one cell spans, a whole number: `.every(n)`. Steps count from the level above.",
-};
-
-/** The first day of a week, for a week or a day of the week. */
-const weekStart: FieldSpec = {
-  type: t.enum("monday", "sunday"),
-  default: "monday",
-  doc: "The first day of a week. Monday is the ISO 8601 default.",
-};
-
-/** A Calendar kind whose only param is its step. */
-const calendarKind = (doc: string): StrategyKind => ({
-  doc,
-  params: { step: calendarStep },
-});
-
-/**
- * The `Calendar` family: partitions of the time line into calendar cells
- * (`CalendarPartition` in gofish-graphics/src/ast/calendar.ts), one kind per
- * level. A value is `{ kind, step?, start? }` on the wire, like any
- * strategy. The `Partition` option type puts its kinds and the `Bin` kinds
- * that cut one field's line in one tagged union.
- *
- * TODO(#1059): this family belongs in `STRATEGIES`. It is declared here, in
- * the same shape, because the Python generator writes each kind of a
- * `STRATEGIES` family as a function (`Bin.step(size)`), and a Calendar kind
- * is a value with a method instead (`Calendar.month`,
- * `Calendar.month.every(3)`), hand-written in gofish/ast.py. Moving it in
- * needs the generator to emit a kind as a value, a design decision.
- */
-export const CALENDAR = {
-  doc: "Partitions of the time line into calendar cells, one kind per level: the value of `field(x).bin(...)` over a time column, and an entry of an axis's `levels`.",
-  kinds: {
-    second: calendarKind("Cells of a second."),
-    minute: calendarKind("Cells of a minute."),
-    hour: calendarKind("Cells of an hour."),
-    day: calendarKind("Cells of a day, from local midnight."),
-    weekday: {
-      doc: "Cells of a day, labeled by the day of the week. Binned alone, a part of a week: the seven days of the week, from its first day, so all Mondays are one cell. It has no steps.",
-      params: { start: weekStart },
-    },
-    week: {
-      doc: "Cells of a week, from its first day.",
-      params: { step: calendarStep, start: weekStart },
-    },
-    month: calendarKind("Cells of a month, from its first day."),
-    quarter: calendarKind(
-      "Cells of 3 months, from January, April, July and October, labeled Q1 to Q4."
-    ),
-    year: calendarKind("Cells of a year, from January 1."),
-  },
-} satisfies StrategyFamily;
 
 /** Chart-level options: `chart(data, {...})` in JS, `chart(data, **options)`
  *  in Python, `ChartIR.options` on the wire. Mirrors the JS `ChartOptions` in
@@ -867,7 +859,6 @@ export const CHART_OPTIONS: FieldGroup = group({
 export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   AxisOptions: axisOptions,
   AxisLabelOptions: axisLabelOptions,
-  Calendar: { doc: CALENDAR.doc, type: strategyType(CALENDAR) },
   AxesOptions: {
     doc: "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own.",
     type: t.union(
@@ -924,9 +915,9 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   // `field(x).bin(...)` partition is a Calendar kind or a Bin kind that cuts
   // one field's line: one tagged union of both families' kinds.
   Partition: {
-    doc: "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour.every(6)), Bin.step(size) or Bin.thresholds(countOrEdges).",
+    doc: "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Bin.step(size) or Bin.thresholds(countOrEdges).",
     type: t.union(
-      ...kindBranches(CALENDAR),
+      ...kindBranches(STRATEGIES.Calendar),
       ...kindBranches(STRATEGIES.Bin, BIN_KINDS.field)
     ),
   },
@@ -982,7 +973,7 @@ export function pyType(
     case "enum":
       return "str";
     case "number":
-      return "float";
+      return f.integer ? "int" : "float";
     case "boolean":
       return "bool";
     case "literal":

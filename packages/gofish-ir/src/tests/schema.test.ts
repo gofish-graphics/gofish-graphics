@@ -486,8 +486,8 @@ const binBy = (partition: unknown) =>
   ]);
 for (const [name, partition] of [
   ["no partition", undefined],
-  ["a Calendar value", { kind: "month", step: 3 }],
-  ["a week start", { kind: "week", step: 1, start: "sunday" }],
+  ["a Calendar value", { kind: "month", every: 3 }],
+  ["a week start", { kind: "week", every: 1, start: "sunday" }],
   ["a weekday", { kind: "weekday" }],
   ["a weekday start", { kind: "weekday", start: "sunday" }],
   ["a step", { kind: "step", size: 0.5 }],
@@ -508,10 +508,12 @@ for (const [name, partition] of [
   ["a zero step", { kind: "step", size: 0 }],
   ["a threshold count below 1", { kind: "thresholds", thresholds: 0 }],
   ["a non-numeric edge", { kind: "thresholds", thresholds: [1, "2"] }],
-  ["a Calendar value with no kind", { step: 1, start: "sunday" }],
+  ["a Calendar value with no kind", { every: 1, start: "sunday" }],
   ["the old untagged Calendar form", { unit: "month", step: 1 }],
   ["a start on a level other than weeks", { kind: "month", start: "sunday" }],
-  ["a weekday step", { kind: "weekday", step: 2 }],
+  ["a weekday step", { kind: "weekday", every: 2 }],
+  ["the old Calendar step key", { kind: "month", step: 3 }],
+  ["a fractional Calendar step", { kind: "month", every: 1.5 }],
   ["the old flat thresholds", 10],
   ["the untagged step", { step: 0.5 }],
   ["the untagged thresholds", { thresholds: 20 }],
@@ -525,7 +527,7 @@ for (const [name, partition] of [
   check(`bin with ${name} rejected`, !validate(binBy(partition)).valid);
 }
 {
-  const r = validate(binBy([{ kind: "year" }, { kind: "month", step: 1 }]));
+  const r = validate(binBy([{ kind: "year" }, { kind: "month", every: 1 }]));
   check(
     "bin with a product of Calendar values accepts",
     r.valid,
@@ -844,7 +846,7 @@ check(
         type: "spread",
         by: "lake",
         dir: "x",
-        axes: { x: { levels: [false, true, { kind: "year", step: 1 }] } },
+        axes: { x: { levels: [false, true, { kind: "year", every: 1 }] } },
       },
     ])
   ).valid
@@ -1118,6 +1120,18 @@ console.log("\n# Strategies");
     ["Bin", { kind: "thresholds", thresholds: 20 }],
     ["Bin", { kind: "thresholds", thresholds: [0, 5, 10] }],
     ["Bin", { kind: "hex", radius: 1 }],
+    ["Calendar", { kind: "month" }],
+    ["Calendar", { kind: "month", every: 3 }],
+    ["Calendar", { kind: "week", every: 2, start: "sunday" }],
+    // A strategy kind used bare is a function that carries its value as
+    // `toJSON()`: it is checked as that value.
+    [
+      "Curve",
+      Object.assign(() => ({ kind: "monotone" }), {
+        kind: "monotone",
+        toJSON: () => ({ kind: "monotone" }),
+      }),
+    ],
   ];
   for (const [family, value] of accepts) {
     const why = thrown(family, value);
@@ -1145,6 +1159,15 @@ console.log("\n# Strategies");
       ["Bin", { kind: "step" }, /size/],
       ["Bin", { step: 1 }, /unknown kind undefined/],
       ["Bin", { kind: "thresholds", thresholds: 0 }, /at least 1/],
+      ["Calendar", { kind: "month", every: 0 }, /at least 1/],
+      ["Calendar", { kind: "month", every: 1.5 }, /whole number/],
+      [
+        "Calendar",
+        { kind: "month", step: 3 },
+        /unknown field "step"; expected one of "kind", "every"/,
+      ],
+      ["Calendar", { kind: "weekday", every: 2 }, /unknown field "every"/],
+      ["Curve", () => ({ kind: "monotone" }), /expected object, got function/],
     ];
   for (const [family, value, pattern] of rejects) {
     const why = thrown(family, value);

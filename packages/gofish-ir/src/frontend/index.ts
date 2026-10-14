@@ -22,6 +22,7 @@ export {
   encodeIR,
   decodeNonFinite,
   isPlainObject,
+  isCallableValue,
   type NonFiniteNumberIR,
 } from "./nonFinite.js";
 export {
@@ -36,7 +37,6 @@ export {
   COORDS,
   OPTION_TYPES,
   STRATEGIES,
-  CALENDAR,
   BIN_KINDS,
   CHART_OPTIONS,
   MARK_BASE_FIELDS,
