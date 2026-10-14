@@ -19,6 +19,7 @@ import {
   type SplitKey,
 } from "../ast/datumProjection";
 import { isChunk } from "../ast/data";
+import { copyColumnTypes } from "../ast/schema";
 
 export function groupEntries<C>(
   children: C[],
@@ -33,7 +34,12 @@ export function groupEntries<C>(
       C[]
     >;
   const rows = children.map(rowsOf);
-  const allRows = rows.flat() as Record<string, unknown>[];
+  // All of the rows, with the column types each child's rows carry (a binned
+  // key reads its column's domain off them).
+  const allRows = rows.reduce<Record<string, unknown>[]>(
+    (all, r) => copyColumnTypes(all, r),
+    rows.flat() as Record<string, unknown>[]
+  );
   const groups = new Map<SplitKey, C[]>(
     [...splitEntries(by, allRows).keys()].map((k) => [k, []])
   );

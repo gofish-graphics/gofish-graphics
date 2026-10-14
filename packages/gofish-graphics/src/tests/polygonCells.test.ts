@@ -23,6 +23,7 @@ import {
   type PolygonCell,
 } from "../ast/polygonCells";
 import { splitEntries } from "../ast/datumProjection";
+import { applySchema } from "../ast/schema";
 import { struct } from "../ast/structExpr";
 import * as Bin from "../families/bin";
 import { field } from "../ast/data";
@@ -32,6 +33,12 @@ const { chart, partition, region, circle } = GoFish as any;
 const DistBin = (GoFish as any).Bin;
 const distStruct = (GoFish as any).struct;
 const distField = (GoFish as any).field;
+/** The domain of `values` (a column's `HasDomain`): their least and
+ *  greatest; undefined when there are none. */
+const over = (values: readonly number[]) =>
+  values.length === 0
+    ? undefined
+    : { lo: Math.min(...values), hi: Math.max(...values) };
 
 declare const process: { exit(code: number): never };
 
@@ -125,8 +132,8 @@ async function main() {
     const grid = hexCells(
       { kind: "hex", radius: 1 },
       fields,
-      [0, 10],
-      [0, 6],
+      over([0, 10]),
+      over([0, 6]),
       where
     );
     // Points on a hexagon's edges and corners fall in a hexagon that holds
@@ -194,8 +201,8 @@ async function main() {
     const perAxis = hexCells(
       { kind: "hex", radius: { x: 2, y: 500 } },
       fields,
-      [10, 40],
-      [1500, 5000],
+      over([10, 40]),
+      over([1500, 5000]),
       where
     );
     check(
@@ -211,9 +218,28 @@ async function main() {
       "a point falls in a hexagon of the per-axis grid that holds it",
       inside([20, 3000], cell.outline, 1e-6)
     );
+    // A domain with no area along the edge between two hexagons, (0, 0)
+    // and (1, 0): neither one's inside meets it, and its points fall in
+    // both, the lower half in (1, 0) and the upper in (0, 0).
+    const edge = Math.sqrt(3) / 2;
+    const thin = hexCells(
+      { kind: "hex", radius: 1 },
+      fields,
+      over([edge]),
+      over([-0.4, 0.4]),
+      where
+    );
+    check(
+      "a domain with no area on a hexagon's edge has a cell for every point",
+      [-0.4, -0.2, 0, 0.2, 0.4].every((y) => {
+        const c = thin.cellOf(edge, y);
+        return c !== undefined && inside([edge, y], c.outline, 1e-6);
+      }),
+      thin.cells.map((c) => c.id).join(" ")
+    );
     check(
       "an empty domain has no hexagons",
-      hexCells({ kind: "hex", radius: 1 }, fields, [], [], where).cells
+      hexCells({ kind: "hex", radius: 1 }, fields, over([]), over([]), where).cells
         .length === 0
     );
   }
@@ -229,8 +255,8 @@ async function main() {
     const v = voronoiCells(
       { kind: "voronoi", seeds },
       fields,
-      [1, 9, 5, -2],
-      [1, 1, 7, 3],
+      over([1, 9, 5, -2]),
+      over([1, 1, 7, 3]),
       "test"
     );
     check("one cell per seed", v.cells.length === 3);
@@ -263,8 +289,8 @@ async function main() {
     const twice = voronoiCells(
       { kind: "voronoi", seeds: [...seeds, { name: "A2", x: 0, y: 0 }] },
       fields,
-      [],
-      [],
+      over([]),
+      over([]),
       "test"
     );
     check(
@@ -279,8 +305,8 @@ async function main() {
         seeds: [seeds[0], { name: "A2", x: 0, y: 0 }, seeds[1], seeds[2]],
       },
       fields,
-      [],
-      [],
+      over([]),
+      over([]),
       "test"
     );
     check(
@@ -294,7 +320,7 @@ async function main() {
       "no seeds is an error",
       /at least one seed/.test(
         errorOf(() =>
-          voronoiCells({ kind: "voronoi", seeds: [] }, fields, [1], [1], "t")
+          voronoiCells({ kind: "voronoi", seeds: [] }, fields, over([1]), over([1]), "t")
         ) ?? ""
       )
     );
@@ -305,8 +331,8 @@ async function main() {
           voronoiCells(
             { kind: "voronoi", seeds: [{ lon: 1, lat: 2 }] },
             fields,
-            [1],
-            [1],
+            over([1]),
+            over([1]),
             "t"
           )
         ) ?? ""
@@ -357,11 +383,11 @@ async function main() {
       struct({ x: "a", y: "b" }).bin(Bin.hex({ radius: 0 }))
     );
     check("a hex radius must be above 0", /above 0/.test(zero ?? ""), zero);
-    const rows = [
+    const rows = await applySchema([
       { a: 0.1, b: 0.1 },
       { a: 0.2, b: -0.1 },
       { a: 3, b: 3 },
-    ];
+    ]);
     const entries = splitEntries(key, rows);
     const counts = [...entries.values()].map((g) => g.length);
     check(

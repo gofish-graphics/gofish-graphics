@@ -45,7 +45,13 @@ import {
   KeyCell,
   type Cells,
 } from "./cells";
-import { columnType, domainRows, orderByLevels } from "./schema";
+import {
+  columnType,
+  getColumnTypes,
+  orderByLevels,
+  type HasDomain,
+} from "./schema";
+import { describe } from "./calendar";
 import { planeCells, type PolygonCells } from "./polygonCells";
 import { isStruct, structBin, type StructExprWire } from "./structExpr";
 import type { Cycle } from "../timeWindow";
@@ -319,93 +325,128 @@ function compareKeys(a: unknown, b: unknown): number {
 }
 
 /**
- * A memo of what is built once per domain (`domainRows`), per op object (the
- * value a `bin` op holds, the same object each time the op runs), and per
- * column key: so every group of a split over one domain gets the same cell
- * objects, in the same order.
+ * A memo of what is built once per domain (each a `HasDomain`, the record a
+ * column's type carries: the same object in every split leaf and `filter`
+ * result of the typed data), per op object (the value a `bin` op holds, the
+ * same object each time the op runs), and per column key: so every group of
+ * a split over one domain gets the same cell objects, in the same order.
  */
-function memoByDomain<V>(): (
-  domain: object,
+function memoByDomains<V>(): (
+  domains: readonly object[],
   op: object,
   key: string,
   build: () => V
 ) => V {
-  const byDomain = new WeakMap<object, WeakMap<object, Map<string, V>>>();
-  return (domain, op, key, build) => {
-    let byOp = byDomain.get(domain);
-    if (byOp === undefined) byDomain.set(domain, (byOp = new WeakMap()));
-    let byKey = byOp.get(op);
-    if (byKey === undefined) byOp.set(op, (byKey = new Map()));
+  type Level = WeakMap<object, Level | Map<string, V>>;
+  const root: Level = new WeakMap();
+  return (domains, op, key, build) => {
+    let level = root;
+    for (const o of domains) {
+      let next = level.get(o) as Level | undefined;
+      if (next === undefined) level.set(o, (next = new WeakMap()));
+      level = next;
+    }
+    let byKey = level.get(op) as Map<string, V> | undefined;
+    if (byKey === undefined) level.set(op, (byKey = new Map()));
     let v = byKey.get(key);
     if (v === undefined) byKey.set(key, (v = build()));
     return v;
   };
 }
 
-const cellsMemo = memoByDomain<Cells>();
+const cellsMemo = memoByDomains<Cells>();
 
-/** The values of the column `name` over `domain`, read with the walk a
- *  binned key reads a row with ({@link walkRows}): through a ref to the rows
- *  it stands for, and into a bag. */
-function valuesOf(domain: unknown[], name: string): unknown[] {
-  const values: unknown[] = [];
-  walkRows(domain, [name], (v) => values.push(v));
-  return values;
+/** The domain of the column `name` in `d`: the one its column type carries
+ *  (`HasDomain`, schema.ts), computed once when the data was typed, never
+ *  from the rows of `d`. Undefined when the column has no values. A column
+ *  whose values are not all finite numbers has no domain: binning it is an
+ *  error that names the column, and the value when `d` holds one. */
+function domainOf(
+  d: unknown,
+  name: string,
+  where: string
+): HasDomain | undefined {
+  const domain = columnType(d, name)?.HasDomain;
+  if (domain !== undefined) return domain;
+  let stray: unknown;
+  let any = false;
+  walkRows(d, [name], (v) => {
+    if (v == null) return;
+    any = true;
+    if (stray === undefined && (typeof v !== "number" || !Number.isFinite(v)))
+      stray = v;
+  });
+  if (!any) return undefined;
+  if (stray !== undefined)
+    throw new Error(
+      `${where}: the column "${name}" must hold finite numbers, but it has ` +
+        `the value ${describe(stray)}.`
+    );
+  throw new Error(
+    getColumnTypes(d) === undefined
+      ? `${where}: the rows carry no column types, so the column "${name}" ` +
+        `has no domain to bin over. The data a chart or a derive types ` +
+        `carries them; an operator that makes new arrays of its rows must ` +
+        `copy them (copyColumnTypes).`
+      : `${where}: the column "${name}" must hold finite numbers, but in ` +
+        `the data it was typed with it holds other values, so it has no ` +
+        `domain.`
+  );
 }
 
 /** The cells `field(name).bin(a).bin(b)...` maps values to: the cells of the
- *  chain of bins (one per `bin` op, in order) over the column's values in
- *  `d`'s DOMAIN (`domainRows`, schema.ts), the chart's data, not over `d`
- *  alone. Memoized on the last `bin` op: an op is made by appending it to
- *  an expression, so the ops before it are always the same. */
+ *  chain of bins (one per `bin` op, in order) over the column's domain, the
+ *  one its type carries ({@link domainOf}), so every group of a split over
+ *  the column has the same cells, whatever rows it holds. Memoized on the
+ *  domain and the last `bin` op: an op is made by appending it to an
+ *  expression, so the ops before it are always the same. */
 function domainCells(
   name: string,
   d: Record<string, any>[],
   binOps: readonly Extract<FieldOp, { op: "bin" }>[]
 ): Cells {
   const where = `field("${name}").bin(...)`;
-  const domain = domainRows(d);
-  return cellsMemo(domain, binOps[binOps.length - 1], name, () =>
+  const domain = domainOf(d, name, where);
+  const build = () =>
     chainCells(
       binOps.map((op) =>
         checkBinStep(op.partition ?? DEFAULT_PARTITION, where)
       ),
-      valuesOf(domain, name),
+      domain,
       columnType(d, name)?.HasCalendar?.zone,
       where,
       name
-    )
-  );
+    );
+  return domain === undefined
+    ? build()
+    : cellsMemo([domain], binOps[binOps.length - 1], name, build);
 }
 
-const planeMemo = memoByDomain<PolygonCells>();
+const planeMemo = memoByDomains<PolygonCells>();
 
-/** The cells of `struct({ x, y }).bin(bin)` over the two columns' values in
- *  `d`'s DOMAIN (`domainRows`), as {@link domainCells} does in 1D. */
+/** The cells of `struct({ x, y }).bin(bin)` over the two columns' domains
+ *  ({@link domainOf}), as {@link domainCells} does in 1D. */
 function domainPlane(
   fields: { x: string; y: string },
   d: unknown,
   bin: object,
   where: string
 ): PolygonCells {
-  const domain = domainRows(d);
-  return planeMemo(domain, bin, JSON.stringify([fields.x, fields.y]), () =>
-    planeCells(
-      bin as Parameters<typeof planeCells>[0],
-      fields,
-      valuesOf(domain, fields.x),
-      valuesOf(domain, fields.y),
-      where
-    )
-  );
+  const x = domainOf(d, fields.x, where);
+  const y = domainOf(d, fields.y, where);
+  const build = () =>
+    planeCells(bin as Parameters<typeof planeCells>[0], fields, x, y, where);
+  return x === undefined || y === undefined
+    ? build()
+    : planeMemo([x, y], bin, JSON.stringify([fields.x, fields.y]), build);
 }
 
 /** The loud error for a value a binned key has no cell for. */
 const outsideDomain = (where: string, what: string, v: string): Error =>
   new Error(
-    `${where}: the ${what} ${v} is outside the ${what === "point" ? "columns'" : "column's"} ` +
-      `values in the chart's data, so it has no cell. A derive that makes ` +
-      `new values makes a new domain: bin after it.`
+    `${where}: the ${what} ${v} is outside the ${what === "point" ? "columns' domains" : "column's domain"} ` +
+      `(its values in the data it was typed with), so it has no cell. A ` +
+      `derive that makes new values makes a new domain: bin after it.`
   );
 
 /**

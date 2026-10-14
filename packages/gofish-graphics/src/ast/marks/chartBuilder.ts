@@ -2,6 +2,7 @@ import { GoFishNode } from "../_node";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { type ColorConfig } from "../colorSchemes";
 import { applySchema, type SchemaEntry } from "../schema";
+import { rowsReached } from "../datumProjection";
 import type { AxesOptions } from "../gofish";
 import { Mark, Operator } from "../types";
 import { Frame } from "../graphicalOperators/frame";
@@ -1059,11 +1060,17 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
    *  on its own, and its mark gets the empty scope as it is. */
   private async resolveData(): Promise<unknown> {
     if (this.usesPreviousLayerMarks()) return this.state.data;
-    const data =
-      this.state.data instanceof GoFishRef
-        ? resolveRefData(this.state.data, this.state.layerContext)
-        : this.state.data;
-    return applySchema(data as any, this.state.options?.schema);
+    if (!(this.state.data instanceof GoFishRef))
+      return applySchema(this.state.data as any, this.state.options?.schema);
+    // A list of refs stands for the rows of the marks it names: its columns'
+    // domains are over those rows.
+    const refs = resolveRefData(this.state.data, this.state.layerContext);
+    return applySchema(
+      refs as any,
+      this.state.options?.schema,
+      undefined,
+      rowsReached(refs)
+    );
   }
 
   withLayerContext(layerContext: LayerContext): ChartBuilder<TInput, TOutput> {

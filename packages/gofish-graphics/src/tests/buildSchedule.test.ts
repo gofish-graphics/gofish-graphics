@@ -19,6 +19,7 @@ import {
   type Clip,
 } from "../animation/schedule";
 import { groupEntries, rowsOf } from "../animation/grouping";
+import { setColumnTypes } from "../ast/schema";
 
 let passed = 0;
 let failed = 0;
@@ -235,13 +236,15 @@ console.log("# by: equal keys start together, groups in the key's order");
   ok("a child with rows of two keys is an error", threw);
 
   // A binned key groups the children by cell: a child's rows agree on their
-  // cell, not on their value (#1059).
+  // cell, not on their value (#1059). Each child's rows carry their column
+  // types, as a split leaf's do, `v`'s domain among them.
+  const vTypes = { v: { HasDomain: { lo: 0.2, hi: 2.5 } } };
   const binnedChildren = [
-    { datum: [{ v: 0.2 }, { v: 0.7 }] },
-    { datum: [{ v: 2.5 }] },
-    { datum: [{ v: 1.1 }, { v: 1.9 }] },
-    { datum: [{ v: 0.4 }] },
-  ];
+    [{ v: 0.2 }, { v: 0.7 }],
+    [{ v: 2.5 }],
+    [{ v: 1.1 }, { v: 1.9 }],
+    [{ v: 0.4 }],
+  ].map((rows) => ({ datum: setColumnTypes(rows, vTypes) }));
   const cells = groupEntries(
     binnedChildren,
     rowsOf,

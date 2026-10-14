@@ -535,9 +535,12 @@ async function main() {
       JSON.stringify(getColumnTypes(typed))
     );
     check(
-      "a schema entry is the column's whole type",
+      "a schema entry is the column's whole type, with its domain",
       JSON.stringify(getColumnTypes(typed)?.count) ===
-        JSON.stringify({ HasOrder: { levels: [0, 1, 2] } }),
+        JSON.stringify({
+          HasOrder: { levels: [0, 1, 2] },
+          HasDomain: { lo: 1, hi: 2 },
+        }),
       JSON.stringify(getColumnTypes(typed)?.count)
     );
     check(

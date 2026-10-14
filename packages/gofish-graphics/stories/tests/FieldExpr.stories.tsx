@@ -226,9 +226,11 @@ export const SharedBinsAcrossGroups: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     // One histogram per group, binned by a count-based partition. The cells
-    // come from the chart's whole domain of `age` (0 to 99), not from each
-    // group's rows, so both rows of bars have the same ten bins in the same
-    // order, with the bins a group has no rows in kept as empty slots (#763).
+    // come from the domain of `age` (0 to 99), which is part of the column's
+    // type: the chart's data is typed once, and each group's rows keep that
+    // type, as a filter's do. So both rows of bars have the same ten bins in
+    // the same order, with the bins a group has no rows in kept as empty
+    // slots (#763), and neither group reads the other's rows.
     chart(groupedAges, { axes: true })
       .flow(
         spread({ by: "group", dir: "y", spacing: 20 }),

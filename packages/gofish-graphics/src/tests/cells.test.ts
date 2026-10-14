@@ -14,7 +14,6 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import "../lib";
-import { spawnSync } from "node:child_process";
 import {
   binCells,
   chainCells,
@@ -36,8 +35,10 @@ import { partition as srcPartition } from "../lib";
 import {
   applySchema,
   copyColumnTypes,
+  setColumnTypes,
   Schema as SrcSchema,
 } from "../ast/schema";
+import { struct as srcStruct } from "../lib";
 
 const {
   chart,
@@ -97,6 +98,17 @@ function errorOf(fn: () => unknown): string | undefined {
 }
 const same = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
+/** The domain of `values` (a column's `HasDomain`): their least and
+ *  greatest, missing values aside; undefined when there are none. */
+const over = (values: readonly unknown[]) => {
+  const ns = values.filter((v): v is number => typeof v === "number");
+  return ns.length === 0
+    ? undefined
+    : {
+        lo: ns.reduce((a, b) => Math.min(a, b)),
+        hi: ns.reduce((a, b) => Math.max(a, b)),
+      };
+};
 const edges = (cells: readonly Cell[]) => cells.map((c) => [c.start, c.end]);
 
 async function main() {
@@ -104,7 +116,7 @@ async function main() {
 
   console.log("\n# numeric partitions");
   {
-    const step = binCells(Bin.step(0.5), [1.2, 2.6, 3], undefined, "t");
+    const step = binCells(Bin.step(0.5), over([1.2, 2.6, 3]), undefined, "t");
     check(
       "a step covers the domain with cells aligned to its multiples",
       same(edges(step.cells), [
@@ -126,7 +138,7 @@ async function main() {
         String(step.cells[1]) === "1.5" &&
         step.cells[1].label === "1.5–2"
     );
-    const tenth = binCells(Bin.step(0.1), [0, 0.3], undefined, "t");
+    const tenth = binCells(Bin.step(0.1), over([0, 0.3]), undefined, "t");
     check(
       "edges are rounded multiples of the step",
       same(
@@ -136,7 +148,7 @@ async function main() {
       JSON.stringify(tenth.cells.map((c) => c.start))
     );
 
-    const count = binCells(Bin.thresholds(10), [0, 37, 99], undefined, "t");
+    const count = binCells(Bin.thresholds(10), over([0, 37, 99]), undefined, "t");
     check(
       "a count picks a round step from the domain, as axis ticks do",
       count.cells.length === 10 &&
@@ -144,7 +156,7 @@ async function main() {
         count.cells[9].end === 100,
       JSON.stringify(edges(count.cells))
     );
-    const closed = binCells(Bin.thresholds(10), [0, 100], undefined, "t");
+    const closed = binCells(Bin.thresholds(10), over([0, 100]), undefined, "t");
     check(
       "a thresholds partition puts the domain's top value in the last cell",
       closed.cells.length === 10 && closed.cellOf(100)?.start === 90,
@@ -152,7 +164,7 @@ async function main() {
     );
     const list = binCells(
       Bin.thresholds([2, 5, 50]),
-      [1, 3, 9],
+      over([1, 3, 9]),
       undefined,
       "t"
     );
@@ -167,7 +179,7 @@ async function main() {
     );
     const formatted = binCells(
       Bin.step(10).format((c: Cell) => `${c.start}–${c.end - 1}`),
-      [25, 34],
+      over([25, 34]),
       undefined,
       "t"
     );
@@ -178,7 +190,7 @@ async function main() {
     );
     check(
       "no values, no cells",
-      binCells(Bin.step(1), [null, undefined], undefined, "t").cells.length ===
+      binCells(Bin.step(1), over([null, undefined]), undefined, "t").cells.length ===
         0
     );
   }
@@ -188,7 +200,7 @@ async function main() {
     const t = (s: string) => Date.parse(`${s}T00:00:00Z`);
     const months = binCells(
       Calendar.month,
-      [t("2023-06-15"), t("2024-03-01")],
+      over([t("2023-06-15"), t("2024-03-01")]),
       "UTC",
       "t"
     );
@@ -221,7 +233,7 @@ async function main() {
     );
     const twoYears = binCells(
       Calendar.month,
-      [t("2022-06-10"), t("2023-06-20")],
+      over([t("2022-06-10"), t("2023-06-20")]),
       "UTC",
       "t"
     );
@@ -239,7 +251,7 @@ async function main() {
         jun.cycle.cells[5] === jun
     );
     const counts = (p: any) =>
-      binCells(p, [t("2024-01-01"), t("2024-01-02")], "UTC", "t").cells.length;
+      binCells(p, over([t("2024-01-01"), t("2024-01-02")]), "UTC", "t").cells.length;
     check(
       "the parts of each level: 31 days of a month, 24 hours, 4 quarters, " +
         "60 minutes, months in steps of 3",
@@ -251,7 +263,7 @@ async function main() {
         counts(Calendar.hour({ every: 6 })) === 4
     );
     const labelsOf = (p: any) =>
-      binCells(p, [t("2024-01-01")], "UTC", "t").cells.map((c) => c.label);
+      binCells(p, over([t("2024-01-01")]), "UTC", "t").cells.map((c) => c.label);
     check(
       "parts are labeled alone: Q1, 1 to 31, 12 AM, 05",
       same(labelsOf(Calendar.quarter), ["Q1", "Q2", "Q3", "Q4"]) &&
@@ -262,13 +274,13 @@ async function main() {
     );
     const years = binCells(
       Calendar.year,
-      [t("2022-06-10"), t("2023-06-20")],
+      over([t("2022-06-10"), t("2023-06-20")]),
       "UTC",
       "t"
     );
     const weeks = binCells(
       Calendar.week,
-      [t("2024-01-03"), t("2024-01-20")],
+      over([t("2024-01-03"), t("2024-01-20")]),
       "UTC",
       "t"
     );
@@ -285,7 +297,7 @@ async function main() {
     const fields: any[] = [];
     binCells(
       Calendar.month.format((c) => (fields.push(c), `${c.month}`)),
-      [t("2024-01-01")],
+      over([t("2024-01-01")]),
       "UTC",
       "t"
     );
@@ -298,7 +310,7 @@ async function main() {
     );
     const days = binCells(
       [Calendar.month, Calendar.day],
-      [t("2023-02-10")],
+      over([t("2023-02-10")]),
       "UTC",
       "t"
     );
@@ -310,7 +322,7 @@ async function main() {
       String(days.cells.length)
     );
     const err = errorOf(() =>
-      binCells(Calendar.month, [1, 2], undefined, 'field("n").bin(...)')
+      binCells(Calendar.month, over([1, 2]), undefined, 'field("n").bin(...)')
     );
     check(
       "a Calendar partition over a column that is not a time is an error",
@@ -324,7 +336,7 @@ async function main() {
     const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
     // 2024-01-01 was a Monday.
     const twoWeeks = [t("2024-01-01"), t("2024-01-03"), t("2024-01-08")];
-    const days = binCells(Calendar.weekday, twoWeeks, "UTC", "t");
+    const days = binCells(Calendar.weekday, over(twoWeeks), "UTC", "t");
     const labels = (cs: any): string[] => cs.cells.map((c) => c.label);
     check(
       "a weekday alone gives the 7 days of the week, from Monday",
@@ -349,7 +361,7 @@ async function main() {
     );
     const sunday = binCells(
       Calendar.weekday({ start: "sunday" }),
-      twoWeeks,
+      over(twoWeeks),
       "UTC",
       "t"
     );
@@ -371,7 +383,7 @@ async function main() {
     const fields: any[] = [];
     binCells(
       Calendar.weekday.format((c) => (fields.push(c), `${c.weekday}`)),
-      twoWeeks,
+      over(twoWeeks),
       "UTC",
       "t"
     );
@@ -389,7 +401,7 @@ async function main() {
     const monthFields: any[] = [];
     binCells(
       Calendar.month.format((c) => (monthFields.push(c), "")),
-      twoWeeks,
+      over(twoWeeks),
       "UTC",
       "t"
     );
@@ -397,7 +409,7 @@ async function main() {
       "a month of the year has no weekday",
       Number.isNaN(monthFields[0].weekday)
     );
-    const line = binCells(Calendar.week, twoWeeks, "UTC", "t").cells as Cell[];
+    const line = binCells(Calendar.week, over(twoWeeks), "UTC", "t").cells as Cell[];
     check(
       "a line cell's fields carry its ISO weekday",
       (line[0].calendar?.fields as any).weekday === 1
@@ -430,7 +442,7 @@ async function main() {
     // start), and a weekday is a day, so an hour is a part of it.
     const weekDays = binCells(
       [Calendar.week, Calendar.weekday],
-      [t("2024-01-01"), t("2024-01-09")],
+      over([t("2024-01-01"), t("2024-01-09")]),
       "UTC",
       "t"
     );
@@ -460,7 +472,7 @@ async function main() {
     );
     const weekHours = binCells(
       [Calendar.weekday, Calendar.hour],
-      twoWeeks,
+      over(twoWeeks),
       "UTC",
       "t"
     );
@@ -473,7 +485,7 @@ async function main() {
     );
     const chainHours = chainCells(
       [Calendar.weekday, Calendar.hour],
-      twoWeeks,
+      over(twoWeeks),
       "UTC",
       "t"
     );
@@ -486,7 +498,7 @@ async function main() {
     );
     const weekChain = chainCells(
       [Calendar.week, Calendar.weekday],
-      [t("2024-01-01"), t("2024-01-09")],
+      over([t("2024-01-01"), t("2024-01-09")]),
       "UTC",
       "t"
     );
@@ -503,7 +515,7 @@ async function main() {
     const t = (s: string) => Date.parse(`${s}T00:00:00Z`);
     const months = binCells(
       [Calendar.year, Calendar.month],
-      [t("2023-11-20"), t("2024-03-02")],
+      over([t("2023-11-20"), t("2024-03-02")]),
       "UTC",
       "t"
     );
@@ -528,7 +540,7 @@ async function main() {
     );
     const quarters = binCells(
       [Calendar.year, Calendar.quarter],
-      [t("2024-02-01"), t("2024-08-01")],
+      over([t("2024-02-01"), t("2024-08-01")]),
       "UTC",
       "t"
     );
@@ -577,7 +589,7 @@ async function main() {
     const t = (s: string) => Date.parse(`${s}T00:00:00Z`);
     const chained = chainCells(
       [Calendar.year, Calendar.month],
-      [t("2023-11-20"), t("2024-03-02")],
+      over([t("2023-11-20"), t("2024-03-02")]),
       "UTC",
       "t"
     );
@@ -603,7 +615,7 @@ async function main() {
     );
     const weeks = chainCells(
       [Calendar.year, Calendar.week],
-      [t("2023-12-20"), t("2024-01-10")],
+      over([t("2023-12-20"), t("2024-01-10")]),
       "UTC",
       "t"
     );
@@ -621,7 +633,7 @@ async function main() {
     );
     const nums = chainCells(
       [Bin.step(10), Bin.step(5)],
-      [0, 3, 12, 19],
+      over([0, 3, 12, 19]),
       undefined,
       "t"
     );
@@ -634,7 +646,7 @@ async function main() {
     );
     const cyc = chainCells(
       [Calendar.month, Calendar.day],
-      [t("2024-02-10")],
+      over([t("2024-02-10")]),
       "UTC",
       "t"
     );
@@ -667,7 +679,7 @@ async function main() {
       ["a wider step", [Bin.step(2), Bin.step(5)], "is not finer"],
     ] as const) {
       const why = errorOf(() =>
-        chainCells(steps as any, [t("2024-01-01")], "UTC", "t")
+        chainCells(steps as any, over([t("2024-01-01")]), "UTC", "t")
       );
       check(
         `a chain of ${name} is an error`,
@@ -696,7 +708,7 @@ async function main() {
         Calendar.year,
         Calendar.quarter.format((c) => `Q${c.quarter} ${c.year}`),
       ],
-      [t("2024-02-01"), t("2024-08-01")],
+      over([t("2024-02-01"), t("2024-08-01")]),
       "UTC",
       "t"
     );
@@ -778,7 +790,7 @@ async function main() {
     );
   }
 
-  console.log("\n# a split bins over the chart's domain");
+  console.log("\n# a split bins over its column type's domain");
   {
     const rows = await applySchema(
       [
@@ -788,8 +800,8 @@ async function main() {
       ],
       {}
     );
-    // An operator hands each group its rows with the domain they came from
-    // (createOperator copies it with the column types).
+    // An operator hands each group its rows with their column types, the
+    // domain among them (createOperator copies them).
     const groups = splitEntries("g", rows);
     for (const leaf of groups.values()) copyColumnTypes(leaf, rows);
     const byCell = field("x").bin(Bin.step(2));
@@ -824,6 +836,51 @@ async function main() {
     check(
       "ops after bin reorder the cells",
       same([...sorted.keys()].map(String), ["8", "6", "4", "2", "0"])
+    );
+    // A group's cells come from its column type's domain alone, never from
+    // the rows it holds or from rows outside it: a leaf whose type says
+    // [0, 30] has the cells of [0, 30], whatever its rows span.
+    const leaf = setColumnTypes([{ x: 5 }], {
+      x: { HasDomain: { lo: 0, hi: 30 } },
+    });
+    const own = splitEntries(field("x").bin(Bin.step(10)), leaf);
+    check(
+      "a split's cells follow its column type's domain, not its rows",
+      same([...own.keys()].map(String), ["0", "10", "20", "30"]) &&
+        same(
+          [...own.values()].map((r) => r.length),
+          [1, 0, 0, 0]
+        ),
+      [...own.keys()].map(String).join(" ")
+    );
+    const count = splitEntries(field("x").bin(Bin.thresholds(3)), leaf);
+    check(
+      "a threshold count picks its edges over the type's domain",
+      same(
+        [...count.keys()].map(String),
+        binCells(Bin.thresholds(3), { lo: 0, hi: 30 }, undefined, "t").cells.map(
+          String
+        )
+      ) && count.size > 1,
+      [...count.keys()].map(String).join(" ")
+    );
+    const untyped = errorOf(() =>
+      splitEntries(field("x").bin(Bin.step(10)), [{ x: 5 }])
+    );
+    check(
+      "rows with no column types have no domain: binning them is an error",
+      untyped?.includes("no column types") === true,
+      untyped
+    );
+    const stray = errorOf(() =>
+      splitEntries(field("x").bin(Bin.step(1)), [{ x: "a" }])
+    );
+    check(
+      "binning a column with no domain and values is an error that names it",
+      stray?.includes('column "x"') === true &&
+        stray.includes("finite") &&
+        stray.includes('"a"'),
+      stray
     );
     const times = await applySchema(
       [{ d: "2024-01-05" }, { d: "2024-03-20" }],
@@ -1994,51 +2051,96 @@ async function main() {
     );
   }
 
-  console.log("\n# a domain with no end");
+  console.log("\n# a column with an infinite value");
   {
-    // In a child process with a time limit, so a loop that never ends fails
-    // the check instead of hanging the suite.
-    const errorIn = (call: string): string => {
-      const cells = new URL("../ast/cells.ts", import.meta.url).href;
-      const polygons = new URL("../ast/polygonCells.ts", import.meta.url).href;
-      const code =
-        `import { binCells, StepBin, ThresholdsBin } from ${JSON.stringify(cells)};` +
-        `import { hexCells } from ${JSON.stringify(polygons)};` +
-        `try { ${call}; console.log("no error"); }` +
-        `catch (e) { console.log(e.message); }`;
-      const run = spawnSync(
-        process.execPath,
-        ["--import", "tsx", "--input-type=module", "-e", code],
-        { timeout: 20000, encoding: "utf8" }
-      );
-      return run.error !== undefined
-        ? `did not finish (${run.error.message})`
-        : String(run.stdout).trim();
-    };
-    for (const [name, call, column] of [
-      [
-        "a step",
-        `binCells(new StepBin(1), [0, Infinity], undefined, 'field("x").bin(...)')`,
-        'field("x")',
-      ],
-      [
-        "a threshold count",
-        `binCells(new ThresholdsBin(10), [-Infinity, 3], undefined, 'field("x").bin(...)')`,
-        'field("x")',
-      ],
+    // A column with an infinite value has no domain (applySchema), so
+    // binning it is an error that names it, and never a loop over cells to
+    // the end of the line.
+    const typed = await applySchema([
+      { x: 0, a: 0, b: 0 },
+      { x: Infinity, a: 1, b: Infinity },
+    ]);
+    for (const [name, by, column] of [
+      ["a step", field("x").bin(Bin.step(1)), 'column "x"'],
+      ["a threshold count", field("x").bin(Bin.thresholds(10)), 'column "x"'],
       [
         "hexagons",
-        `hexCells({ kind: "hex", radius: 1 }, { x: "a", y: "b" }, [0, 1], [0, Infinity], "t")`,
+        srcStruct({ x: "a", y: "b" }).bin(Bin.hex({ radius: 1 })),
         'column "b"',
       ],
     ] as const) {
-      const message = errorIn(call);
+      const message = errorOf(() => splitEntries(by as any, typed)) ?? "";
       check(
         `${name} over an infinite value is an error that names the column`,
         message.includes(column) && message.includes("finite"),
         message
       );
     }
+  }
+
+  console.log("\n# the domain of the chart's data, in every group");
+  {
+    // Ages of group A span 0 to 40, of group B 30 to 99. The column type's
+    // domain is 0 to 99, so both rows of bars have the same ten bins.
+    const ages = [
+      ...Array.from({ length: 30 }, (_, i) => ({
+        group: "A",
+        age: (i * 17) % 41,
+      })),
+      ...Array.from({ length: 30 }, (_, i) => ({
+        group: "B",
+        age: 30 + ((i * 23) % 70),
+      })),
+    ];
+    const rects = async (flow: unknown[]) =>
+      chart(ages)
+        .flow(...flow)
+        .mark(rect({ w: 3, h: distField("age").count() }))
+        .toDisplayList({ w: 300, h: 200 })
+        .then(
+          (dl: any) => {
+            const out: any[] = [];
+            const walk = (it: any) => {
+              if (it.kind === "rect") out.push(it);
+              for (const c of it.children ?? []) walk(c);
+            };
+            dl.items.forEach(walk);
+            return out.length;
+          },
+          (e: Error) => e.message
+        );
+    const byAge = () =>
+      spread({ by: distField("age").bin(DistBin.thresholds(10)), dir: "x" });
+    const both = await rects([spread({ by: "group", dir: "y" }), byAge()]);
+    check(
+      "each group of a nested split has the ten bins of the column's domain",
+      both === 20,
+      String(both)
+    );
+    const filtered = await rects([
+      GoFish.filter((r: any) => r.group === "A"),
+      byAge(),
+    ]);
+    check(
+      "a filter's result keeps its input's domain",
+      filtered === 10,
+      String(filtered)
+    );
+    const derived = await rects([
+      GoFish.derive((rows: any[]) => rows.filter((r) => r.group === "A")),
+      byAge(),
+    ]);
+    const ownCells = binCells(
+      Bin.thresholds(10),
+      { lo: 0, hi: 40 },
+      undefined,
+      "t"
+    ).cells.length;
+    check(
+      "a derive's result has its own domain",
+      derived === ownCells && ownCells !== 10,
+      `${derived} / ${ownCells}`
+    );
   }
 
   console.log("\n# a union of cells");
@@ -2073,7 +2175,7 @@ async function main() {
     );
     const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
     const calendarCells = (p: any, lo: string, hi: string) =>
-      binCells(p, [t(lo), t(hi)], "UTC", "t").cells;
+      binCells(p, over([t(lo), t(hi)]), "UTC", "t").cells;
     const months = calendarCells(
       [Calendar.year, Calendar.month],
       "2024-01-10",

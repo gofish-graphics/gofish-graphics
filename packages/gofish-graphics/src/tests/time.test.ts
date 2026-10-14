@@ -22,7 +22,7 @@ import {
 import * as Calendar from "../families/calendar";
 import {
   applySchema,
-  domainRows,
+  copyColumnTypes,
   getColumnTypes,
   setColumnTypes,
   toEpochMs,
@@ -69,6 +69,16 @@ async function errorOf(fn: () => unknown): Promise<string | undefined> {
   }
 }
 const iso = (t: number) => new Date(t).toISOString();
+/** `types` without the domains (`HasDomain`) applySchema computes, for a
+ *  check about the other classes. */
+const withoutDomains = (types: Record<string, any> | undefined) =>
+  types === undefined
+    ? undefined
+    : Object.fromEntries(
+        Object.entries(types)
+          .map(([k, { HasDomain: _, ...rest }]) => [k, rest])
+          .filter(([, rest]) => Object.keys(rest).length > 0)
+      );
 const same = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
 
@@ -280,7 +290,14 @@ async function main() {
     const typed = await applySchema(rows);
     check(
       "a Date column is inferred as a UTC time",
-      same(getColumnTypes(typed), { when: SrcSchema.time().type })
+      same(getColumnTypes(typed), {
+        when: {
+          ...SrcSchema.time().type,
+          HasDomain: { lo: Date.UTC(2024, 0, 1), hi: Date.UTC(2024, 0, 1) },
+        },
+        k: { HasDomain: { lo: 1, hi: 1 } },
+      }),
+      JSON.stringify(getColumnTypes(typed))
     );
     check(
       "its values become epoch ms, in copied rows",
@@ -298,14 +315,46 @@ async function main() {
       "a declared string column parses in its zone",
       (declared[0] as any).n === Date.UTC(2023, 11, 31, 15)
     );
-    const untyped = [{ a: 1 }];
+    const untyped = [{ a: "x" }];
     const copied = await applySchema(untyped);
     check(
-      "data with no types keeps its rows, in a copy that is its own domain",
+      "data with no types keeps its rows, in a copy",
       copied !== untyped &&
         copied[0] === untyped[0] &&
-        domainRows(copied) === copied &&
-        domainRows(untyped) === untyped
+        getColumnTypes(copied) === undefined
+    );
+    const numbers = [{ a: 3, b: 1 }, { a: -2, b: "x" }, { a: null }, {}];
+    const ranged = await applySchema(numbers);
+    check(
+      "a column of finite numbers gets its domain, missing values aside",
+      same(getColumnTypes(ranged)?.a, { HasDomain: { lo: -2, hi: 3 } }),
+      JSON.stringify(getColumnTypes(ranged))
+    );
+    check(
+      "a column with another value has no domain",
+      getColumnTypes(ranged)?.b === undefined &&
+        getColumnTypes(numbers) === undefined
+    );
+    const infinite = await applySchema([{ a: 1 }, { a: Infinity }]);
+    check(
+      "a column with an infinite value has no domain",
+      getColumnTypes(infinite)?.a === undefined
+    );
+    const leaf = copyColumnTypes([ranged[0]], ranged);
+    check(
+      "a split leaf keeps its column's domain, the same record",
+      getColumnTypes(leaf)?.a?.HasDomain ===
+        getColumnTypes(ranged)?.a?.HasDomain
+    );
+    const retyped = await applySchema(
+      [{ a: 10 }, { a: 20 }],
+      {},
+      getColumnTypes(ranged)
+    );
+    check(
+      "typing new rows computes their own domain, never the input's",
+      same(getColumnTypes(retyped)?.a, { HasDomain: { lo: 10, hi: 20 } }),
+      JSON.stringify(getColumnTypes(retyped))
     );
     const zoneErr = await errorOf(() =>
       applySchema([{ t: 1 }], { t: SrcSchema.time({ zone: "Mars/Olympus" }) })
@@ -347,7 +396,7 @@ async function main() {
     check(
       "a derive's Date column is a time, in epoch ms",
       fromJs[0].at === at &&
-        same(getColumnTypes(fromJs), {
+        same(withoutDomains(getColumnTypes(fromJs)), {
           day: SrcSchema.time().type,
           at: SrcSchema.time().type,
         }),
@@ -771,7 +820,9 @@ async function main() {
     check(
       "a column whose first value is null is still inferred from its Dates",
       rows[1].d === at &&
-        same(getColumnTypes(rows), { d: SrcSchema.time().type }),
+        same(withoutDomains(getColumnTypes(rows)), {
+          d: SrcSchema.time().type,
+        }),
       JSON.stringify([rows, getColumnTypes(rows)])
     );
   }

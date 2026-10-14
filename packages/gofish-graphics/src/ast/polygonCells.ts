@@ -11,20 +11,21 @@
  * polygon in data units, `[x, y]` per corner), and the box that holds the
  * outline. Unlike a 1D {@link Cell} (cells.ts), a polygon cell has no order.
  *
- * As in 1D, the cells are defined over a DOMAIN, the chart's data
- * (`domainRows`, schema.ts), not over the rows of one group, so every group
- * of a split sees the same cells and an empty cell is kept:
+ * As in 1D, the cells are defined over a DOMAIN, the box of the two
+ * columns' domains (`HasDomain`, schema.ts, which each column's type
+ * carries), not over the rows of one group, so every group of a split sees
+ * the same cells and an empty cell is kept:
  *
- *  - `Bin.hex({ radius })`: the hexagons of a fixed grid that cover the box
- *    of the two columns' values (each column's range, as the 1D domain is).
+ *  - `Bin.hex({ radius })`: the hexagons of a fixed grid that meet the box.
  *  - `Bin.voronoi({ seeds })`: one cell per seed, clipped to the box that
- *    holds the columns' values and the seeds, so every seed has a cell.
+ *    holds the domain and the seeds, so every seed has a cell.
  */
 import { Delaunay } from "d3-delaunay";
 import type { Frontend } from "gofish-ir";
 import type { Point } from "./geometry";
 import { describe } from "./calendar";
-import { numericRange, RegionCell, round12 } from "./cells";
+import { RegionCell, round12 } from "./cells";
+import type { HasDomain } from "./schema";
 import { ringExtent } from "./geometry/box";
 
 /** The two columns a key reads, one per axis of the plane. */
@@ -173,27 +174,29 @@ const radii = (
   typeof radius === "number" ? [radius, radius] : [radius.x, radius.y];
 
 /**
- * The hexagons of `Bin.hex({ radius })` over the domain `xs × ys` (every value
- * each column has in the chart's data). The grid is pointy-top, with a
- * hexagon centered on (0, 0); the radius is per axis, so a hexagon is the
- * unit hexagon scaled by the x radius on x and the y radius on y.
+ * The hexagons of `Bin.hex({ radius })` over the domain `x × y` (the box of
+ * the two columns' domains). The grid is pointy-top, with a hexagon centered
+ * on (0, 0); the radius is per axis, so a hexagon is the unit hexagon scaled
+ * by the x radius on x and the y radius on y.
  *
- * The cells are every hexagon whose inside meets the box of the domain, plus
- * the hexagon of each domain point (a point on the box's edge may fall in a
- * hexagon that only touches the box). An empty domain has no cells.
+ * The cells are every hexagon whose inside meets the box. A point on the
+ * box's edge may lie on the edge of a hexagon that only touches the box: it
+ * falls in the cell across that edge, the hexagon beside it that meets the
+ * box. A box with no area adds the hexagon of each of its corners that no
+ * such hexagon holds. No domain (a column with no values) has no cells.
  */
 export function hexCells(
   bin: Extract<Frontend.BinIR, { kind: "hex" }>,
-  fields: PlaneFields,
-  xs: readonly unknown[],
-  ys: readonly unknown[],
-  where: string
+  _fields: PlaneFields,
+  x: HasDomain | undefined,
+  y: HasDomain | undefined,
+  _where: string
 ): PolygonCells {
   const [rx, ry] = radii(bin.radius);
-  const xRange = numericRange(xs, where, `the column "${fields.x}"`);
-  const yRange = numericRange(ys, where, `the column "${fields.y}"`);
-  if (xRange === undefined || yRange === undefined)
+  if (x === undefined || y === undefined)
     return { cells: [], cellOf: () => undefined };
+  const xRange = [x.lo, x.hi] as const;
+  const yRange = [y.lo, y.hi] as const;
   // The cells, by grid coordinates.
   const byId = new Map<string, PolygonCell>();
   const add = (q: number, r: number): boolean => {
@@ -233,27 +236,41 @@ export function hexCells(
       if (hexMeetsBox(hexCenter(q, r), box)) add(unsign(q), unsign(r));
     }
   }
-  // A point inside the box is in a hexagon that meets it. A point on the
-  // box's edge may fall in a hexagon that only touches the box: add those.
-  let added = false;
-  for (let i = 0; i < xs.length; i++) {
-    const x = xs[i];
-    const y = ys[i];
-    if (typeof x !== "number" || typeof y !== "number") continue;
-    if (
-      x !== xRange[0] &&
-      x !== xRange[1] &&
-      y !== yRange[0] &&
-      y !== yRange[1]
-    )
-      continue;
-    const [q, r] = hexAt(x / rx, y / ry);
-    if (add(q, r)) added = true;
-  }
-  const cellOf = (x: number, y: number): PolygonCell | undefined => {
-    const [q, r] = hexAt(x / rx, y / ry);
-    return byId.get(`${q},${r}`);
+  // A point of the box is in a hexagon that meets the box, or on the edge
+  // of one: it falls in the hexagon that holds it ({@link hexAt}), or, when
+  // that one only touches the box, in a neighbor that holds it too.
+  const holds = (q: number, r: number, u: number, v: number): boolean => {
+    const [cu, cv] = hexCenter(q, r);
+    const du = u - cu;
+    const dv = v - cv;
+    const apothem = SQRT3 / 2 + 1e-9;
+    return (
+      Math.abs(du) <= apothem &&
+      SLANTED_NORMALS.every((n) => Math.abs(du * n[0] + dv * n[1]) <= apothem)
+    );
   };
+  const cellOf = (px: number, py: number): PolygonCell | undefined => {
+    const u = px / rx;
+    const v = py / ry;
+    const [q, r] = hexAt(u, v);
+    const own = byId.get(`${q},${r}`);
+    if (own !== undefined) return own;
+    for (const [dq, dr] of NEIGHBORS) {
+      const n = byId.get(`${unsign(q + dq)},${unsign(r + dr)}`);
+      if (n !== undefined && holds(q + dq, r + dr, u, v)) return n;
+    }
+    return undefined;
+  };
+  // A box with no area (every value of a column the same) may lie on the
+  // edges of hexagons none of whose insides it meets: its corners then
+  // fall in the hexagons that hold them.
+  let added = false;
+  for (const px of xRange)
+    for (const py of yRange)
+      if (cellOf(px, py) === undefined) {
+        const [q, r] = hexAt(px / rx, py / ry);
+        if (add(q, r)) added = true;
+      }
   if (!added) return { cells: [...byId.values()], cellOf };
   // Back in draw order: by row, then along it.
   const coords = (c: PolygonCell) => c.id.split(",").map(Number);
@@ -264,6 +281,16 @@ export function hexCells(
   });
   return { cells, cellOf };
 }
+
+/** The axial offsets of a hexagon's six neighbors. */
+const NEIGHBORS: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [1, -1],
+  [0, -1],
+  [-1, 0],
+  [-1, 1],
+  [0, 1],
+];
 
 // ---------------------------------------------------------------------------
 // Voronoi cells
@@ -281,8 +308,8 @@ export function hexCells(
 export function voronoiCells(
   bin: Extract<Frontend.BinIR, { kind: "voronoi" }>,
   fields: PlaneFields,
-  xs: readonly unknown[],
-  ys: readonly unknown[],
+  x: HasDomain | undefined,
+  y: HasDomain | undefined,
   where: string
 ): PolygonCells {
   const seeds = bin.seeds;
@@ -318,15 +345,13 @@ export function voronoiCells(
     yHi = Math.max(yHi, sy);
   });
   // The box that holds the seeds and the domain.
-  const xData = numericRange(xs, where, `the column "${fields.x}"`);
-  const yData = numericRange(ys, where, `the column "${fields.y}"`);
   const xRange = [
-    Math.min(xLo, xData?.[0] ?? Infinity),
-    Math.max(xHi, xData?.[1] ?? -Infinity),
+    Math.min(xLo, x?.lo ?? Infinity),
+    Math.max(xHi, x?.hi ?? -Infinity),
   ];
   const yRange = [
-    Math.min(yLo, yData?.[0] ?? Infinity),
-    Math.max(yHi, yData?.[1] ?? -Infinity),
+    Math.min(yLo, y?.lo ?? Infinity),
+    Math.max(yHi, y?.hi ?? -Infinity),
   ];
   if (xRange[0] === xRange[1] || yRange[0] === yRange[1])
     throw new Error(
@@ -363,15 +388,16 @@ export function voronoiCells(
   };
 }
 
-/** The cells of `bin` (a `Bin` strategy) over the domain `xs × ys`. */
+/** The cells of `bin` (a `Bin` strategy) over the domain `x × y`, the two
+ *  columns' domains. */
 export function planeCells(
   bin: Frontend.StructBinIR,
   fields: PlaneFields,
-  xs: readonly unknown[],
-  ys: readonly unknown[],
+  x: HasDomain | undefined,
+  y: HasDomain | undefined,
   where: string
 ): PolygonCells {
   return bin.kind === "hex"
-    ? hexCells(bin, fields, xs, ys, where)
-    : voronoiCells(bin, fields, xs, ys, where);
+    ? hexCells(bin, fields, x, y, where)
+    : voronoiCells(bin, fields, x, y, where);
 }

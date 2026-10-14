@@ -24,10 +24,11 @@
  * and its label. Cells are ordered by their start.
  *
  * The cells of a binned key are defined over a DOMAIN, not over the rows of one
- * group: {@link binCells} takes every value the column has in the chart's data
- * (see `domainRows` in schema.ts), so each group of a split sees the same cells,
- * in the same order, empty cells included. A count-based partition
- * (`Bin.thresholds(20)`) picks its step from that domain too.
+ * group: {@link binCells} takes the column's domain, `[lo, hi]`, which its
+ * column type carries (`HasDomain` in schema.ts, computed once when the data
+ * is typed), so each group of a split sees the same cells, in the same order,
+ * empty cells included. A count-based partition (`Bin.thresholds(20)`) picks
+ * its step from that domain too.
  *
  * A cell holds its start and not its end. A Calendar value or a `Bin.step`
  * puts every value in the cell that holds it, whatever the domain: March 1
@@ -39,6 +40,7 @@
 import { tickIncrement } from "d3-array";
 import { Frontend } from "gofish-ir";
 import type { Temporal as TemporalNS } from "temporal-polyfill";
+import type { HasDomain } from "./schema";
 import {
   CalendarPartition,
   cycleFields,
@@ -557,30 +559,6 @@ export const DEFAULT_PARTITION: NumberPartition = new ThresholdsBin(10);
  *  corners of polygon cells (polygonCells.ts). */
 export const round12 = (x: number): number => +x.toPrecision(12);
 
-/** The `[min, max]` of `values` (missing values skipped), or undefined when
- *  there are none. A value that is not a finite number is an error:
- *  `${where}: ${column} must hold finite numbers`. An infinite value has no
- *  cell: a line cut into cells of one width has no cell at its end. */
-export function numericRange(
-  values: readonly unknown[],
-  where: string,
-  column: string
-): [number, number] | undefined {
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (const v of values) {
-    if (v == null) continue;
-    if (typeof v !== "number" || !Number.isFinite(v))
-      throw new Error(
-        `${where}: ${column} must hold finite numbers, but it has the ` +
-          `value ${describe(v)}.`
-      );
-    if (v < lo) lo = v;
-    if (v > hi) hi = v;
-  }
-  return lo > hi ? undefined : [lo, hi];
-}
-
 /** The default label of a numeric cell: its two edges, "0.5–1". */
 const numberLabel = (start: number, end: number): string =>
   `${round12(start)}–${round12(end)}`;
@@ -866,12 +844,12 @@ function cycleCells(
 
 /**
  * The cells of a key binned by `steps` (`field(x).bin(...)`, once per
- * step) over the domain `values` (every value the column has in the chart's
- * data; missing values are skipped), in order: the leaves of the chain, each
- * holding its cell of the bin before it. `zone` is the column's time zone,
- * for a Calendar value, which needs a time column, and `column` the
- * column's name, which every cell records ({@link KeyCell.column}). An
- * empty domain has no cells.
+ * step) over `domain`, the column's domain (`HasDomain`, schema.ts), in
+ * order: the leaves of the chain, each holding its cell of the bin before
+ * it. `zone` is the column's time zone, for a Calendar value, which needs a
+ * time column, and `column` the column's name, which every cell records
+ * ({@link KeyCell.column}). No domain (a column with no values) has no
+ * cells.
  *
  *  - A first bin that is a part (`Calendar.month`, or a product that starts
  *    with one) bins into the parts of a cycle ({@link cycleCells}): every
@@ -881,7 +859,7 @@ function cycleCells(
  */
 export function chainCells(
   steps: readonly BinStep[],
-  values: readonly unknown[],
+  domain: HasDomain | undefined,
   zone: string | undefined,
   where: string,
   column?: string
@@ -890,13 +868,8 @@ export function chainCells(
   const calendar = steps.some(
     (s) => Array.isArray(s) || s instanceof CalendarPartition
   );
-  const range = numericRange(
-    values,
-    where,
-    calendar ? "a binned column of times" : "a binned column"
-  );
-  if (range === undefined) return { cells: [], cellOf: () => undefined };
-  const [lo, hi] = range;
+  if (domain === undefined) return { cells: [], cellOf: () => undefined };
+  const { lo, hi } = domain;
   if (calendar && zone === undefined) {
     throw new Error(
       `${where}: a Calendar partition bins times, but the column is not a ` +
@@ -911,14 +884,13 @@ export function chainCells(
   return { cells, cellOf: lineCellOf(cells, lo, hi) };
 }
 
-/** The cells of one bin step over the domain `values` (see
- *  {@link chainCells}). */
+/** The cells of one bin step over `domain` (see {@link chainCells}). */
 export const binCells = (
   step: BinStep,
-  values: readonly unknown[],
+  domain: HasDomain | undefined,
   zone: string | undefined,
   where: string
-): Cells => chainCells([step], values, zone, where);
+): Cells => chainCells([step], domain, zone, where);
 
 /** Whether every one of `cells` is a cell of the line. */
 export const allLineCells = (
