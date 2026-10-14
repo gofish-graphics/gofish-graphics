@@ -108,6 +108,15 @@ rather than the visible data extent. The standoff also keeps marks exactly on
 the domain floor (for example, a histogram bin at `y = 0`) from straddling the
 axis line.
 
+The other dimension's floor is read from its keyed domain (`KeyedDomains.scope`,
+the same widen-then-nice the marks are placed by), whether or not the node draws
+that dimension's axis itself. A facet panel that owns only its y axis, under a
+chart that draws one shared x axis below all the panels, still seats its y axis
+at the floor of the shared x domain, not just past its own lowest datum. Every
+panel's axis then sits on one line, and the axes meet at the shared corner
+(#753). Only a dimension with no keyed domain (an ordinal one) leaves the line to
+seat off the content's bbox.
+
 ### Which side the axis seats on
 
 Each axis seats in a gutter on one cross-edge, chosen in the owner's **axis order**
@@ -358,8 +367,9 @@ difference axis), never off the size claim:
   (a 1px `rect` auto-spanning the domain via `datum` endpoints), and a
   `spread([text, tickMark])` per tick pinned with
   `Constraint.position({ [axis]: datum(v) })`. The gutter is negative space;
-  the line seats one of two ways. When the **other** dim also carries a
-  position-like axis, the line is pinned just outside that axis's scale floor —
+  the line seats one of two ways. When the **other** dim is position-like
+  (whether this node or an ancestor draws its axis), the line is pinned just
+  outside that dim's scale floor —
   `position({ [cross]: datum(floor), anchor: "end", offset: -GAP })` — so the
   two lines frame the domain corner even when no datum reaches it (a scatter
   whose y domain is niced below the lowest point must not draw its x axis at

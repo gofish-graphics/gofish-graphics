@@ -299,7 +299,8 @@ function axisLine(
  *   [tick labels] ← tick marks ← axis line ← | content (at origin)
  *
  * The LINE seats one of two ways:
- *  - `crossFloor` given (the other dim also has a position-like axis): the line
+ *  - `crossFloor` given (the other dim is position-like, whichever node draws
+ *    its axis): the line
  *    sits flush at the PLOT edge — `position({[cross]: datum(crossFloor)})`,
  *    the other axis's scale minimum. The two lines then meet at the domain
  *    corner even when no datum reaches it (a scatter whose y domain starts
@@ -884,9 +885,13 @@ function elaborationsFor(
   );
   const spaceFor = (dim: 0 | 1): UnderlyingSpace => wide[dim];
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
-  // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
-  // axis's own line/ticks and the other axis's `crossFloor` (the plot corner),
-  // so a nicing change can't skew the corner. A DIFFERENCE dim's floor is 0.
+  // Niced [min, max] per POSITION dim, computed ONCE: it feeds both that
+  // dim's own axis line/ticks (when the node owns it) and the other axis's
+  // `crossFloor` (the plot corner), so a nicing change can't skew the corner.
+  // A DIFFERENCE dim's floor is 0. The floor is read on every dim, owned or
+  // not: a facet panel that owns only its y axis still seats that axis at the
+  // floor of the shared x domain an ancestor draws (#753), since the keyed
+  // scope is the same widen-then-nice whichever node draws the axis.
   const nices: ([number, number] | undefined)[] = [undefined, undefined];
   const floors: (number | undefined)[] = [undefined, undefined];
   // What each owned axis ticks at, as `resolveAxes` stamped it: the same
@@ -895,7 +900,6 @@ function elaborationsFor(
   const ticksFor = (dim: 0 | 1): AxisTicks =>
     node.axisDemand[dim] ?? DEFAULT_AXIS_TICKS;
   for (const dim of [0, 1] as (0 | 1)[]) {
-    if (!owns(dim)) continue;
     const s = spaceFor(dim);
     if (axisOver(s) === "absolute") {
       const niced = keyed.scope(

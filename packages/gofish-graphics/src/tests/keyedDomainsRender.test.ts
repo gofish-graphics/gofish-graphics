@@ -287,6 +287,57 @@ async function main() {
     );
   }
 
+  console.log("# a facet panel's axis seats at the shared domain's floor");
+  {
+    // Panels spread down y share one x domain, [0, 10], whose axis the
+    // chart draws once below them; each panel draws its own y axis. Panel
+    // "b" holds data only from x = 5, but its y axis line must sit at the
+    // floor of the shared domain, where panel "a"'s line sits and where the
+    // shared x axis starts (#753). Before, it sat just left of b's lowest
+    // datum, at the pixel of 5.
+    const rows = [
+      { g: "a", x: 0, y: 1 },
+      { g: "a", x: 10, y: 3 },
+      { g: "b", x: 5, y: 2 },
+      { g: "b", x: 10, y: 4 },
+    ];
+    const lines = (dl: any) => {
+      const all = items(dl).filter((i) => i.kind === "rect");
+      return {
+        y: all.filter((i) => i.w === 1 && i.h! > 4).map((i) => i.x!),
+        x: all.filter((i) => i.h === 1 && i.w! > 4).map((i) => i.x!),
+      };
+    };
+    const faceted = lines(
+      await chart(rows)
+        .flow(
+          spread({ by: "g", dir: "y", spacing: 20 }),
+          scatter({ x: "x", y: "y", axes: { x: false, y: true } })
+        )
+        .mark(rectMark({ w: 2, h: 2 }))
+        .toDisplayList({ w: 200, h: 200 })
+    );
+    // The same corner in a plain scatter: how far the y axis line sits left
+    // of where the x axis line starts.
+    const plain = lines(
+      await chart(rows)
+        .flow(scatter({ x: "x", y: "y" }))
+        .mark(rectMark({ w: 2, h: 2 }))
+        .toDisplayList({ w: 200, h: 200 })
+    );
+    const corner = plain.x[0] - plain.y[0];
+    check(
+      "each panel draws a y axis line",
+      faceted.y.length === 2 && faceted.x.length === 1,
+      faceted
+    );
+    check(
+      "every panel's y axis line sits at the shared x floor",
+      faceted.y.every((x) => near(faceted.x[0] - x, corner)),
+      { faceted, corner }
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }
