@@ -36,7 +36,9 @@ import type { LayerContext } from "../marks/chart";
 import { resolveRefData } from "../marks/chartBuilder";
 import { box, type Nodes, type Shape } from "../../families/shape";
 import { blobOutline, type BlobMember, type Pt } from "./enclose/blob";
-import { membersOf, nodeOf } from "./enclose/members";
+import { membersOf } from "./enclose/members";
+import { targetOf } from "../constraints/relationalPaint";
+import { ringExtent } from "../geometry/box";
 import { RelateOperand } from "../constraints/relate";
 
 export type EncloseOptions = {
@@ -178,13 +180,13 @@ function Enclose(
         let loops: Pt[][] | undefined;
         if (shape.kind === "blob") {
           const memberNodes = new Set(
-            children.slice(0, memberCount).map(nodeOf)
+            children.slice(0, memberCount).map(targetOf)
           );
           const geometry = (from: number, to: number): BlobMember[] =>
             children
               .slice(from, to)
               .flatMap((child, i) =>
-                from > 0 && memberNodes.has(nodeOf(child))
+                from > 0 && memberNodes.has(targetOf(child))
                   ? []
                   : membersOf(child, placed[from + i].dims)
               );
@@ -199,12 +201,7 @@ function Enclose(
           });
           // The box is the outline's own.
           const pts = loops.flat();
-          if (pts.length > 0) {
-            minX = Math.min(...pts.map((p) => p[0]));
-            maxX = Math.max(...pts.map((p) => p[0]));
-            minY = Math.min(...pts.map((p) => p[1]));
-            maxY = Math.max(...pts.map((p) => p[1]));
-          }
+          if (pts.length > 0) ({ minX, maxX, minY, maxY } = ringExtent(pts));
         }
         return {
           intrinsicDims: {

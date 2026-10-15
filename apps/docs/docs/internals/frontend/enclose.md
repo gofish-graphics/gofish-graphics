@@ -75,7 +75,7 @@ under any coordinate transform.
 
 1. **Sites and triangles.** Each member contributes its sites: a disc its
    center, a segment its two ends. The sites are triangulated (Delaunay, by
-   `delaunator`).
+   `d3-delaunay`).
 2. **Convexity as a share of the hull.** The triangles are taken in order of
    circumradius, the radius of their empty circle, which is how wide a gap
    the triangle spans. A triangle is filled when the midpoint of its area,

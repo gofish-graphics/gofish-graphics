@@ -151,7 +151,6 @@
     "d3-array": "^3.2.4",
     "d3-delaunay": "^6.0.4",
     "d3-hierarchy": "^3.1.2",
-    "delaunator": "5.1.0",
     "gofish-ir": "workspace:*",
     "lodash": "^4.17.21",
     "perfect-arrows": "^0.3.7",

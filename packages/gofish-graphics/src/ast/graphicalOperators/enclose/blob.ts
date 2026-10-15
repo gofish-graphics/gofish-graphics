@@ -31,7 +31,8 @@
  * Ported from the prototype of PR #1152 (`smoothBlob`); the design and its
  * history are in the PR's `proposals/background-hull/`, in git history.
  */
-import Delaunator from "delaunator";
+import { Delaunay } from "d3-delaunay";
+import { ringExtent } from "../../geometry/box";
 
 /** A point in pixels. */
 export type Pt = [number, number];
@@ -146,9 +147,8 @@ const discPoly = (c: Pt, R: number, n = 28): Poly =>
       ] as Pt
   );
 const bboxOf = (poly: Poly) => {
-  const xs = poly.map((p) => p[0]),
-    ys = poly.map((p) => p[1]);
-  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+  const { minX, minY, maxX, maxY } = ringExtent(poly);
+  return [minX, minY, maxX, maxY];
 };
 /** A polygon's bounding box and winding sign, computed once per polygon. */
 const polyInfoMemo = new WeakMap<Poly, { bb: number[]; sg: number }>();
@@ -694,7 +694,7 @@ const sitesOfMembers = (members: Member[]) => {
   const tri: [number, number, number][] = [],
     cand = new Map<string, [number, number]>();
   if (n >= 3) {
-    const d = Delaunator.from(P);
+    const d = Delaunay.from(P);
     for (let k = 0; k < d.triangles.length; k += 3) {
       const [i, j, l] = [
         d.triangles[k],

@@ -14,16 +14,11 @@
  *    stroke; a curved piece is cut into 8 straight ones.
  *  - Anything else is its bounding box.
  */
-import { GoFishNode } from "../../_node";
 import type { GoFishAST } from "../../_ast";
-import { GoFishRef } from "../../_ref";
+import { targetOf } from "../../constraints/relationalPaint";
 import type { Dimensions } from "../../dims";
 import type { Path, Point } from "../../../path";
 import type { BlobMember, Pt } from "./blob";
-
-/** The node a child stands for: a ref's target, or the node itself. */
-export const nodeOf = (child: GoFishAST): GoFishNode | undefined =>
-  child instanceof GoFishRef ? child.targetNode : (child as GoFishNode);
 
 /** A path's points, a curved piece cut into 8 straight ones. */
 const pathPoints = (path: Path): Point[] => {
@@ -63,7 +58,7 @@ export function membersOf(child: GoFishAST, dims: Dimensions): BlobMember[] {
     y0 = y.min ?? 0,
     w = x.size ?? 0,
     h = y.size ?? 0;
-  const node = nodeOf(child);
+  const node = targetOf(child);
   if (node?.type === "ellipse") {
     return [
       { kind: "disc", cx: x0 + w / 2, cy: y0 + h / 2, r: Math.max(w, h) / 2 },

@@ -351,9 +351,6 @@ importers:
       d3-hierarchy:
         specifier: ^3.1.2
         version: 3.1.2
-      delaunator:
-        specifier: 5.1.0
-        version: 5.1.0
       gofish-ir:
         specifier: workspace:*
         version: link:../gofish-ir

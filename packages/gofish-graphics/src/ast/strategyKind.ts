@@ -98,3 +98,11 @@ export function withKindValues<O>(opts: O): O {
   }
   return (out ?? opts) as O;
 }
+
+/** The options that were given: an option left `undefined` does not
+ *  override a preset (`Overlap.sina({ smoothing: undefined })` keeps the
+ *  preset's smoothing). */
+export const given = <T extends object>(opts: T): Partial<T> =>
+  Object.fromEntries(
+    Object.entries(opts).filter(([, v]) => v !== undefined)
+  ) as Partial<T>;

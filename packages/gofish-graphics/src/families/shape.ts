@@ -21,7 +21,7 @@
  * (`Frontend.NodeSelectionIR`); in JS it holds the nodes themselves.
  */
 import type { Frontend } from "gofish-ir";
-import { bareKind } from "../ast/strategyKind";
+import { bareKind, given } from "../ast/strategyKind";
 import type { GoFishAST } from "../ast/_ast";
 import type { GoFishRef } from "../ast/_ref";
 
@@ -43,13 +43,6 @@ export type Shape = BoxShape | BlobShape;
 
 /** The options `blob()`, `hull()` and `spine()` share. */
 export type BlobOptions = Omit<BlobShape, "kind">;
-
-/** The options that were given: an option left `undefined` does not
- *  override a preset. */
-const given = <T extends object>(opts: T): Partial<T> =>
-  Object.fromEntries(
-    Object.entries(opts).filter(([, v]) => v !== undefined)
-  ) as Partial<T>;
 
 /**
  * The members' bounding box, grown by `enclose`'s `padding`, with rounded
