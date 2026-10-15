@@ -37,17 +37,17 @@ expansion and elaboration. Three consumers:
 
 ## What ships in v0
 
-| Artifact                                                                                                | Path                                                                       |
-| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Construct descriptor table (single-source field lists)                                                  | `packages/gofish-ir/src/frontend/descriptors.ts`                           |
-| Schema types + validator + canonical examples                                                           | `packages/gofish-ir/src/frontend/`                                         |
-| JSON Schema (Draft 2020-12)                                                                             | `packages/gofish-ir/dist/frontend/v0.json` (build artifact)                |
-| JS-side emitter (`Serialize.toJSON`, `ChartBuilder.toJSON()`)                                           | `packages/gofish-graphics/src/serialize/toJSON.ts`                         |
-| JS-side deserializer (`Serialize.renderIR`, `buildChart`, `mapMark`, …)                                 | `packages/gofish-graphics/src/serialize/fromJSON.ts`                       |
-| Deserializer factory table, keyed by the descriptor table                                               | `packages/gofish-graphics/src/serialize/registry.ts`                       |
-| Generated Python factory layer (checked in, CI freshness-checked)                                       | `packages/gofish-python/gofish/_generated.py` (from `scripts/generate.ts`) |
-| Generated Python strategy families (checked in, CI freshness-checked)                                   | `packages/gofish-python/gofish/{tile,overlap,curve}.py` (same script)      |
-| Hand-written Python residue (dispatch, bridge, DataFrame conversion), emits IR validated against schema | `packages/gofish-python/gofish/ast.py`                                     |
+| Artifact                                                                                                | Path                                                                        |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Construct descriptor table (single-source field lists)                                                  | `packages/gofish-ir/src/frontend/descriptors.ts`                            |
+| Schema types + validator + canonical examples                                                           | `packages/gofish-ir/src/frontend/`                                          |
+| JSON Schema (Draft 2020-12)                                                                             | `packages/gofish-ir/dist/frontend/v0.json` (build artifact)                 |
+| JS-side emitter (`Serialize.toJSON`, `ChartBuilder.toJSON()`)                                           | `packages/gofish-graphics/src/serialize/toJSON.ts`                          |
+| JS-side deserializer (`Serialize.renderIR`, `buildChart`, `mapMark`, …)                                 | `packages/gofish-graphics/src/serialize/fromJSON.ts`                        |
+| Deserializer factory table, keyed by the descriptor table                                               | `packages/gofish-graphics/src/serialize/registry.ts`                        |
+| Generated Python factory layer (checked in, CI freshness-checked)                                       | `packages/gofish-python/gofish/_generated.py` (from `scripts/generate.ts`)  |
+| Generated Python strategy families (checked in, CI freshness-checked)                                   | `packages/gofish-python/gofish/{tile,overlap,curve,shape}.py` (same script) |
+| Hand-written Python residue (dispatch, bridge, DataFrame conversion), emits IR validated against schema | `packages/gofish-python/gofish/ast.py`                                      |
 
 v0 matches the existing widget wire format exactly — lowercase `type`
 discriminators, `__combinator` flag on combinator-form marks, channel
@@ -140,7 +140,14 @@ form, e.g. `{ "kind": "squarify", "ratio": 1 }`, and the JS layout
 dispatches on `kind`. `scatter`'s `overlap` (the `Overlap` family) and a
 `line` or `ribbon` `curve` (the `Curve` family:
 `{ "kind": "arc", "direction": "down" }`) work the same way; a bare curve name
-is not a curve. The families are namespaces in the two surfaces only; the
+is not a curve. So does `enclose`'s `shape` (the `Shape` family:
+`{ "kind": "blob", "convexity": 0, "avoiding": [...] }`). A blob's `avoiding`
+names nodes, so on the wire it is a `NodeSelectionIR`: a list of
+`{ "type": "ref", "selection": "b" }` refs, or every node of a named layer as
+`{ "type": "select", "layer": "nodes", "mode": "all" }`, the form chart data
+takes for `selectAll`. The emitter writes any ref or `selectAll` it finds
+inside an option this way (`nodeRefsToIR` in `toJSON.ts`), and the reader
+turns each back into a live ref (`resolveNodeRefs` in `fromJSON.ts`). The families are namespaces in the two surfaces only; the
 wire carries the plain objects. Their kinds and params are declared once, in
 the `STRATEGIES` table (below). Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
@@ -157,12 +164,13 @@ it to the rows the Python callback returns. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
-`arrow`, `position`, `line`, `ribbon`, `treemap`, `pack`, and the Porter-Duff family),
+`arrow`, `position`, `line`, `ribbon`, `enclose`, `treemap`, `pack`, and the
+Porter-Duff family),
 refs, or the two self-discriminating wrapper marks `offset` and `cut` (below).
-`position` is `enclose`'s undecorated sibling: it sets a single child's
-min-corner `(x, y)` in the parent's coordinates and draws nothing of its own
-(no hull, no styling) — a workaround for `enclose`'s convex-bbox-hull-only
-styling limits, added for the bluefish Topology story's combinator trees.
+`position` sets a single child's min-corner `(x, y)` in the parent's
+coordinates and draws nothing of its own, added for the bluefish Topology
+story's combinator trees. `line`, `ribbon` and `enclose` are also leaf marks
+(their bag forms); the `__combinator` flag tells the two forms apart.
 
 Operators and marks may also carry `translate: {x?, y?}`. This is canonical
 frontend IR, not a Python-only bridge sentinel: it records the structural
@@ -428,26 +436,30 @@ the Python generator builds `_chart_opts` from `CHART_OPTIONS`, and the docs
 build the chart options table from it (`::: gofish-ref ChartOptions`).
 
 `STRATEGIES` declares the strategy families whose values cross the wire:
-`Tile`, `Overlap` and `Curve`. For each it lists the kinds, each with its
+`Tile`, `Overlap`, `Curve` and `Shape`. For each it lists the kinds, each with its
 params (types, defaults and docs), and the presets: a factory that makes a
 kind with some params already set, such as `Overlap.sina()`, which is
 `noise` with `smoothing: "silverman"`. Each family derives its
 `OPTION_TYPES` entry, a union of one object per kind with a literal `kind`,
-so the strategy options are `t.ref("Tile")`, `t.ref("Overlap")` and
-`t.ref("Curve")`. A param may carry bounds, `t.num({ min: 0, finite: true })`
+so the strategy options are `t.ref("Tile")`, `t.ref("Overlap")`,
+`t.ref("Curve")` and `t.ref("Shape")`. A param may carry bounds, `t.num({ min: 0, finite: true })`
 for a pixel padding, which the validator and the JSON Schema check. The JS
 layout checks a strategy where it reads it, with `checkStrategy(family,
 value, where)` from `validate.ts`, the same walk the validator runs over a
 whole document. So an unknown kind, an undeclared param, and a value out of
 bounds each fail in one place, whether the strategy came from a factory, a
-hand-written object, or Python IR. `Coord` and `Color` are families on the
+hand-written object, or Python IR. The one exception is a blob's `avoiding`,
+typed `t.ref("NodeSelectionIR")`: in JS it holds the nodes themselves, not
+their IR, so `enclose` checks it and hands `checkStrategy` the rest of the
+shape. `Coord` and `Color` are families on the
 two surfaces but not in this table: a coordinate transform is a JS object of
 functions, rebuilt from a `type`-tagged config (`COORDS`), and a color scale
 is tagged by `_tag` and takes its one argument by position.
 
 `schema.ts` keeps the TypeScript types of the strategies, `TileIR`,
-`OverlapIR` and `CurveIR`, by hand, and each family's JS type is one of them
-(`Curve.Curve` is `CurveIR`). `descriptors.test.ts` checks that their kinds
+`OverlapIR`, `CurveIR` and `ShapeIR`, by hand, and each family's JS type is one of them
+(`Curve.Curve` is `CurveIR`; `Shape.Shape` is `ShapeIR` with `avoiding`
+holding nodes). `descriptors.test.ts` checks that their kinds
 and params agree with `STRATEGIES`. Every family is closed: there is no
 public way to add a kind, so every strategy can cross the wire (user-defined
 strategies are designed in #1101).
@@ -455,7 +467,11 @@ strategies are designed in #1101).
 A named type may say which Python class builds a value of it (`pyClass`):
 `FieldPredicate` here, and `FieldAccessor` in `AUTHORED_REFS`, the list of
 refs to hand-authored shapes. Such a value already carries its wire keys, so
-the Python generator passes it through. One function, `pyType` in
+the Python generator passes it through. An authored ref may instead say that
+its Python value holds marks (`pyNodes`: `NodeSelectionIR`). The generator
+passes such a value through unchecked, and `Mark.to_dict` writes each mark in
+an option as its IR (`_marks_in_options` in `ast.py`: a `select_all(name)`
+becomes the `select` form, any other mark its `to_dict()`). One function, `pyType` in
 `descriptors.ts`, gives the Python type of a field: the generated factory
 signatures (the strategy modules' too) annotate with it and the Python docs
 tables print it, so the two agree. A ref prints as its `pyClass` when it has
@@ -641,7 +657,7 @@ same function. Hand-written wrappers take `**options` and pass them to a
 generated core, so none renames by hand: `.label(accessor, **options)` on
 marks and operators calls `_label_opts`, built from `LABEL_OPTIONS` (the
 options of a `LabelSpecIR`, which the JSON Schema's `LabelIR` and the
-validator also read), and `line`/`ribbon` call `_line_opts`/`_ribbon_opts`.
+validator also read), and `line`/`ribbon`/`enclose` call `_line_opts`/`_ribbon_opts`/`_enclose_opts`.
 
 A nested option dict follows the same rule, by its declared type. The
 generator compiles a field's type into a small Python literal that records
@@ -701,8 +717,8 @@ It emits:
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
 - One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
-  `gofish/overlap.py`, `gofish/curve.py`), bound in `__init__.py` under the
-  family name (`Tile`, `Overlap`, `Curve`): one factory per kind and per
+  `gofish/overlap.py`, `gofish/curve.py`, `gofish/shape.py`), bound in
+  `__init__.py` under the family name (`Tile`, `Overlap`, `Curve`, `Shape`): one factory per kind and per
   preset, named by `pyKwarg` (`Tile.slice_dice()`, `Curve.catmull_rom()`).
   Each returns `{"kind": ..., **params}` with snake_case param keys, and the
   option it is passed to renames them to wire keys through the family's

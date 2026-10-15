@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Enclose and the Shape Family — /internals/frontend/enclose
+// </gofish-wiki>
+
 /**
  * How `enclose` reads a placed node as blob geometry (internal; see
  * `blob.ts`). The result is in the enclosure's own frame: the frame its

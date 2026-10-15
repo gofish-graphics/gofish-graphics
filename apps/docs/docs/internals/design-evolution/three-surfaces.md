@@ -82,10 +82,9 @@ designed in #1101). Every curve is a call in the `Curve` family:
 on continuous axes — see [Underlying Space](/internals/core/underlying-space)
 for the positioning-space test that decides this.
 
-`background` is a second lowercase name for `enclose`: `lib.ts` exports the
-same factory under both names, so a `background(...)` call builds and
-serializes the same `"enclose"` node. The Python package
-mirrors this with `background = enclose` in `gofish/ast.py`.
+`enclose` once had a second lowercase name, `background`. It was deleted when
+`enclose` became a relational mark with a `Shape` family (PR #1152): one
+construct, one name, in both languages.
 
 The fluent builder went through the same consolidation one layer up. It
 briefly had its own `.connect(connectorMark)` method — sugar for threading a

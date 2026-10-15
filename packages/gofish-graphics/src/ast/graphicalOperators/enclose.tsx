@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Enclose and the Shape Family — /internals/frontend/enclose
+// </gofish-wiki>
+
 /**
  * `enclose`: an outline drawn around a set of nodes, under them. The outline
  * is a value of the `Shape` family (`families/shape.ts`): the padded bounding

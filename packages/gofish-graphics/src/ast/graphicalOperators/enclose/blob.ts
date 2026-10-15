@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Enclose and the Shape Family — /internals/frontend/enclose
+// </gofish-wiki>
+
 /**
  * The outline of `Shape.blob()`: pure geometry, no GoFish nodes.
  *

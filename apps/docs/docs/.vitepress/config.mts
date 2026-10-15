@@ -578,6 +578,11 @@ export default defineConfig({
               items: [{ text: "Curve", link: "/js/api/curve" }],
             },
             {
+              text: "Shape",
+              collapsed: true,
+              items: [{ text: "Shape", link: "/js/api/shape" }],
+            },
+            {
               text: "Reactivity",
               collapsed: true,
               items: [
@@ -688,6 +693,11 @@ export default defineConfig({
               text: "Curve",
               collapsed: true,
               items: [{ text: "Curve", link: "/python/api/curve" }],
+            },
+            {
+              text: "Shape",
+              collapsed: true,
+              items: [{ text: "Shape", link: "/python/api/shape" }],
             },
           ],
         },

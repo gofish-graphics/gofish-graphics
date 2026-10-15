@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Enclose and the Shape Family — /internals/frontend/enclose
+// </gofish-wiki>
+
 /**
  * The `Shape` family: the outlines `enclose` draws, the values of its `shape`
  * option.
