@@ -104,8 +104,9 @@ def story_ref_hull():
                 shape=Shape.hull(),
                 padding=10,
                 fill="#4c78a8",
-                fill_opacity=0.2,
-                stroke="#4c78a8",
+                fill_opacity=0.15,
+                stroke="#1f3b63",
+                stroke_width=1.5,
             )
         ]),
         {"w": 260, "h": 150},

@@ -113,8 +113,9 @@ export const RefHull: StoryObj = {
             shape: Shape.hull(),
             padding: 10,
             fill: "#4c78a8",
-            fillOpacity: 0.2,
-            stroke: "#4c78a8",
+            fillOpacity: 0.15,
+            stroke: "#1f3b63",
+            strokeWidth: 1.5,
           },
           [ref("p"), ref("q"), ref("s")]
         ),
