@@ -69,11 +69,13 @@ def blob(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
     """
     if convexity is not None:
         if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):
-            raise TypeError(f"Shape.blob(convexity=...) must be a number >= 0, got {type(convexity).__name__}")
+            raise TypeError(f"Shape.blob(convexity=...) must be a number >= 0 <= 1, got {type(convexity).__name__}")
         if math.isnan(convexity):
             raise ValueError(f"Shape.blob(convexity=...) must not be NaN, got {convexity!r}")
         if convexity < 0:
             raise ValueError(f"Shape.blob(convexity=...) must be >= 0, got {convexity!r}")
+        if convexity > 1:
+            raise ValueError(f"Shape.blob(convexity=...) must be <= 1, got {convexity!r}")
     if holes is not None:
         if not isinstance(holes, bool):
             raise TypeError(f"Shape.blob(holes=...) must be a bool, got {type(holes).__name__}")
@@ -86,11 +88,13 @@ def blob(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
             raise ValueError(f"Shape.blob(roundness=...) must be >= 0, got {roundness!r}")
     if neck is not None:
         if not (isinstance(neck, (int, float)) and not isinstance(neck, bool)):
-            raise TypeError(f"Shape.blob(neck=...) must be a number >= 0, got {type(neck).__name__}")
+            raise TypeError(f"Shape.blob(neck=...) must be a number >= 0 <= 1, got {type(neck).__name__}")
         if math.isnan(neck):
             raise ValueError(f"Shape.blob(neck=...) must not be NaN, got {neck!r}")
         if neck < 0:
             raise ValueError(f"Shape.blob(neck=...) must be >= 0, got {neck!r}")
+        if neck > 1:
+            raise ValueError(f"Shape.blob(neck=...) must be <= 1, got {neck!r}")
     if clearance is not None:
         if not (isinstance(clearance, (int, float)) and not isinstance(clearance, bool)):
             raise TypeError(f"Shape.blob(clearance=...) must be a finite number >= 0, got {type(clearance).__name__}")
@@ -126,11 +130,13 @@ def hull(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
     """
     if convexity is not None:
         if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):
-            raise TypeError(f"Shape.hull(convexity=...) must be a number >= 0, got {type(convexity).__name__}")
+            raise TypeError(f"Shape.hull(convexity=...) must be a number >= 0 <= 1, got {type(convexity).__name__}")
         if math.isnan(convexity):
             raise ValueError(f"Shape.hull(convexity=...) must not be NaN, got {convexity!r}")
         if convexity < 0:
             raise ValueError(f"Shape.hull(convexity=...) must be >= 0, got {convexity!r}")
+        if convexity > 1:
+            raise ValueError(f"Shape.hull(convexity=...) must be <= 1, got {convexity!r}")
     if holes is not None:
         if not isinstance(holes, bool):
             raise TypeError(f"Shape.hull(holes=...) must be a bool, got {type(holes).__name__}")
@@ -143,11 +149,13 @@ def hull(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
             raise ValueError(f"Shape.hull(roundness=...) must be >= 0, got {roundness!r}")
     if neck is not None:
         if not (isinstance(neck, (int, float)) and not isinstance(neck, bool)):
-            raise TypeError(f"Shape.hull(neck=...) must be a number >= 0, got {type(neck).__name__}")
+            raise TypeError(f"Shape.hull(neck=...) must be a number >= 0 <= 1, got {type(neck).__name__}")
         if math.isnan(neck):
             raise ValueError(f"Shape.hull(neck=...) must not be NaN, got {neck!r}")
         if neck < 0:
             raise ValueError(f"Shape.hull(neck=...) must be >= 0, got {neck!r}")
+        if neck > 1:
+            raise ValueError(f"Shape.hull(neck=...) must be <= 1, got {neck!r}")
     if clearance is not None:
         if not (isinstance(clearance, (int, float)) and not isinstance(clearance, bool)):
             raise TypeError(f"Shape.hull(clearance=...) must be a finite number >= 0, got {type(clearance).__name__}")
@@ -183,11 +191,13 @@ def spine(*, convexity: Optional[float] = None, holes: Optional[bool] = None, ro
     """
     if convexity is not None:
         if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):
-            raise TypeError(f"Shape.spine(convexity=...) must be a number >= 0, got {type(convexity).__name__}")
+            raise TypeError(f"Shape.spine(convexity=...) must be a number >= 0 <= 1, got {type(convexity).__name__}")
         if math.isnan(convexity):
             raise ValueError(f"Shape.spine(convexity=...) must not be NaN, got {convexity!r}")
         if convexity < 0:
             raise ValueError(f"Shape.spine(convexity=...) must be >= 0, got {convexity!r}")
+        if convexity > 1:
+            raise ValueError(f"Shape.spine(convexity=...) must be <= 1, got {convexity!r}")
     if holes is not None:
         if not isinstance(holes, bool):
             raise TypeError(f"Shape.spine(holes=...) must be a bool, got {type(holes).__name__}")
@@ -200,11 +210,13 @@ def spine(*, convexity: Optional[float] = None, holes: Optional[bool] = None, ro
             raise ValueError(f"Shape.spine(roundness=...) must be >= 0, got {roundness!r}")
     if neck is not None:
         if not (isinstance(neck, (int, float)) and not isinstance(neck, bool)):
-            raise TypeError(f"Shape.spine(neck=...) must be a number >= 0, got {type(neck).__name__}")
+            raise TypeError(f"Shape.spine(neck=...) must be a number >= 0 <= 1, got {type(neck).__name__}")
         if math.isnan(neck):
             raise ValueError(f"Shape.spine(neck=...) must not be NaN, got {neck!r}")
         if neck < 0:
             raise ValueError(f"Shape.spine(neck=...) must be >= 0, got {neck!r}")
+        if neck > 1:
+            raise ValueError(f"Shape.spine(neck=...) must be <= 1, got {neck!r}")
     if clearance is not None:
         if not (isinstance(clearance, (int, float)) and not isinstance(clearance, bool)):
             raise TypeError(f"Shape.spine(clearance=...) must be a finite number >= 0, got {type(clearance).__name__}")

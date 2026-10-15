@@ -57,6 +57,7 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
         ...(type.exclusiveMin !== undefined
           ? { exclusiveMinimum: type.exclusiveMin }
           : {}),
+        ...(type.max !== undefined ? { maximum: type.max } : {}),
       };
     case "boolean":
       return { type: "boolean" };

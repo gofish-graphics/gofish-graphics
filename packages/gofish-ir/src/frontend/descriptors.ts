@@ -60,6 +60,8 @@ export type FieldType =
       /** A bound the value must be above (exclusive): `0` for a length that
        *  must be positive. NaN is never above it. */
       exclusiveMin?: number;
+      /** The greatest value allowed (inclusive). NaN is never at most it. */
+      max?: number;
       /** Reject Infinity and -Infinity (NaN is never finite). */
       finite?: boolean;
       /** Only whole numbers. */
@@ -165,13 +167,16 @@ export function pyKwarg(fieldName: string): string {
 export const t = {
   string: { kind: "string" } as FieldType,
   number: { kind: "number" } as FieldType,
-  /** A number with bounds: at least `min`, above `exclusiveMin`, finite
-   *  when `finite`, and whole when `integer` (`t.num({ min: 0, finite: true })`
-   *  for a pixel padding, `t.num({ exclusiveMin: 0, finite: true })` for a
-   *  hex radius, `t.num({ min: 1, integer: true })` for a calendar step). */
+  /** A number with bounds: at least `min`, above `exclusiveMin`, at most
+   *  `max`, finite when `finite`, and whole when `integer`
+   *  (`t.num({ min: 0, finite: true })` for a pixel padding,
+   *  `t.num({ exclusiveMin: 0, finite: true })` for a hex radius,
+   *  `t.num({ min: 0, max: 1 })` for a share, `t.num({ min: 1, integer: true })`
+   *  for a calendar step). */
   num: (bounds: {
     min?: number;
     exclusiveMin?: number;
+    max?: number;
     finite?: boolean;
     integer?: boolean;
   }): FieldType => ({
@@ -808,7 +813,7 @@ export const STRATEGIES = {
         doc: "A smooth region around the members: each member grown by `padding`, the links of a spanning tree between them (routed around avoided nodes, so the set stays in one piece), and the Delaunay triangles of their points, filled smallest gaps first up to `convexity` of their convex hull. The outline is rounded so its curvature never jumps.",
         params: {
           convexity: {
-            type: t.num({ min: 0 }),
+            type: t.num({ min: 0, max: 1 }),
             default: 0.5,
             doc: "The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area.",
           },
@@ -822,7 +827,7 @@ export const STRATEGIES = {
             doc: "How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`.",
           },
           neck: {
-            type: t.num({ min: 0 }),
+            type: t.num({ min: 0, max: 1 }),
             default: 1,
             doc: "How far the outline is NOT pulled in between members, 0 to 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. It never changes the pieces or holes.",
           },

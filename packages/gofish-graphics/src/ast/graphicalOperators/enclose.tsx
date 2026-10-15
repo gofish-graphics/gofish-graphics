@@ -80,15 +80,6 @@ function checkedShape(shape: Shape | undefined): Shape {
     throw new Error(
       "[gofish] enclose({ shape }): avoiding is a list of nodes or refs, or a selectAll(name) selection."
     );
-  if (shape.kind === "blob") {
-    for (const key of ["convexity", "neck"] as const) {
-      const v = shape[key];
-      if (v !== undefined && v > 1)
-        throw new Error(
-          `[gofish] enclose({ shape }): ${key} is at most 1, got ${v}.`
-        );
-    }
-  }
   return shape;
 }
 

@@ -698,7 +698,7 @@ function pyFStr(text: string, tail: string): string {
 function describeType(type: FieldType): string {
   switch (type.kind) {
     case "number":
-      return `a${type.finite ? " finite" : ""} ${type.integer ? "whole number" : "number"}${type.min !== undefined ? ` >= ${type.min}` : ""}${type.exclusiveMin !== undefined ? ` > ${type.exclusiveMin}` : ""}`;
+      return `a${type.finite ? " finite" : ""} ${type.integer ? "whole number" : "number"}${type.min !== undefined ? ` >= ${type.min}` : ""}${type.exclusiveMin !== undefined ? ` > ${type.exclusiveMin}` : ""}${type.max !== undefined ? ` <= ${type.max}` : ""}`;
     case "object":
       return `a dict with the keys ${Object.keys(type.fields).map(pyKwarg).join(", ")}`;
     case "array":
@@ -778,6 +778,9 @@ function pyValueChecks(
               `${v} <= ${type.exclusiveMin}`,
               `must be > ${type.exclusiveMin}`
             )
+          : []),
+        ...(type.max !== undefined
+          ? fail(`${v} > ${type.max}`, `must be <= ${type.max}`)
           : []),
       ];
     case "array":

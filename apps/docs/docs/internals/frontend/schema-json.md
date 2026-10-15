@@ -3853,6 +3853,7 @@ for the API.
             "convexity": {
               "$ref": "#/$defs/Number",
               "minimum": 0,
+              "maximum": 1,
               "description": "The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area.",
               "default": 0.5
             },
@@ -3869,6 +3870,7 @@ for the API.
             "neck": {
               "$ref": "#/$defs/Number",
               "minimum": 0,
+              "maximum": 1,
               "description": "How far the outline is NOT pulled in between members, 0 to 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. It never changes the pieces or holes.",
               "default": 1
             },

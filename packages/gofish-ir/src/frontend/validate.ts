@@ -362,6 +362,8 @@ function walkFieldType(
         fail(`expected a number of at least ${type.min}, got ${n}`);
       else if (type.exclusiveMin !== undefined && !(n > type.exclusiveMin))
         fail(`expected a number above ${type.exclusiveMin}, got ${n}`);
+      else if (type.max !== undefined && !(n <= type.max))
+        fail(`expected a number of at most ${type.max}, got ${n}`);
       else if (type.integer && !Number.isInteger(n))
         fail(`expected a whole number, got ${n}`);
       return;
