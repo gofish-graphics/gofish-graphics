@@ -90,6 +90,10 @@ export function validate(doc: unknown): ValidationResult {
 
 interface Context {
   errors: ValidationError[];
+  /** Checking an authored JS value, not IR: a ref whose authored value holds
+   *  nodes (`holdsNodes` in `AUTHORED_REFS`) is passed through, since the
+   *  nodes are only IR once serialized. */
+  authored?: boolean;
 }
 
 function walkDocument(node: unknown, path: string, ctx: Context): void {
@@ -538,7 +542,7 @@ function walkOrThrow(
   where: string,
   hint: string
 ): void {
-  const ctx: Context = { errors: [] };
+  const ctx: Context = { errors: [], authored: true };
   walkFieldType(type, value, where, ctx);
   if (ctx.errors.length > 0) {
     const [{ path, message }] = ctx.errors;
@@ -659,6 +663,7 @@ function walkRefType(
     walkFieldType(optionType.type, value, path, ctx);
     return;
   }
+  if (ctx.authored && AUTHORED_REFS[name]?.holdsNodes) return;
   switch (name) {
     case "LabelIR":
       walkLabel(value, path, ctx);

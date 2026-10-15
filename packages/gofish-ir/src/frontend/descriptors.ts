@@ -1027,7 +1027,7 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
  *  `tag` is the value's `type` field, which tells it apart from the other
  *  branches of a union (validate.ts). */
 export const AUTHORED_REFS: Readonly<
-  Record<string, { pyClass?: string; tag?: string; pyNodes?: true }>
+  Record<string, { pyClass?: string; tag?: string; holdsNodes?: true }>
 > = {
   FieldAccessor: { pyClass: "FieldAccessor", tag: "field" },
   StructAccessor: { pyClass: "StructAccessor", tag: "struct" },
@@ -1035,10 +1035,13 @@ export const AUTHORED_REFS: Readonly<
   LabelIR: {},
   TranslateIR: {},
   RelateClauseIR: {},
-  // `pyNodes`: a Python value of this type holds marks (`ref(...)`,
-  // `select_all(...)`, a `.relate()` operand). It passes through the option
-  // walks unchanged, and `Mark.to_dict` writes each mark in it as its IR.
-  NodeSelectionIR: { pyNodes: true },
+  // `holdsNodes`: an authored value of this type holds nodes (in JS a list
+  // of nodes or refs, or a `selectAll(name)`; in Python marks such as
+  // `ref(...)` or `select_all(...)`), and the IR holds their references. So
+  // a check of an authored value (`checkStrategy`) and the Python generator
+  // pass it through; the code that reads the nodes checks them, and the
+  // serializers write each node as its IR (`Mark.to_dict` in Python).
+  NodeSelectionIR: { holdsNodes: true },
 };
 
 /** The Python class for a named type, if it has one. */

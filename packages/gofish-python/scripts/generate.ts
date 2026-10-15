@@ -210,7 +210,7 @@ function wireShape(type: FieldType, where: string): string | null {
       // FieldAccessor) already carries the wire keys, so it passes through,
       // as does a value that holds marks (`Mark.to_dict` writes them).
       if (refPyClass(type.name) !== undefined) return null;
-      if (AUTHORED_REFS[type.name]?.pyNodes) return null;
+      if (AUTHORED_REFS[type.name]?.holdsNodes) return null;
       throw new Error(
         `${where}: t.ref("${type.name}") is neither a named option type ` +
           `(OPTION_TYPES in descriptors.ts) nor a known pass-through ref ` +
@@ -847,7 +847,7 @@ function pyValueChecks(
 function pyParamChecks(type: FieldType, v: string, label: string): string[] {
   // A param that holds marks (a blob's `avoiding`) is checked where JS
   // reads it: its marks have no Python type test.
-  if (type.kind === "ref" && AUTHORED_REFS[type.name]?.pyNodes) return [];
+  if (type.kind === "ref" && AUTHORED_REFS[type.name]?.holdsNodes) return [];
   const branches = type.kind === "union" ? [...type.options] : [type];
   const tests = branches.map((b) => pyTypeTest(b, v));
   if (new Set(tests).size !== tests.length)

@@ -65,21 +65,11 @@ export type Resolved = {
   fillOpacity?: number;
 };
 
-/** The shape, checked against the `Shape` family. A blob's `avoiding` holds
- *  live nodes in JS (its IR on the wire), so it is checked here and the rest
- *  against the family's table. */
+/** The shape, checked against the `Shape` family's table (a blob's
+ *  `avoiding` holds nodes, which `avoidedRefs` checks as it reads them). */
 function checkedShape(shape: Shape | undefined): Shape {
   if (shape === undefined) return box();
-  const { avoiding, ...params } = shape as Shape & { avoiding?: unknown };
-  Frontend.checkStrategy("Shape", params, "enclose({ shape })");
-  if (
-    avoiding !== undefined &&
-    !Array.isArray(avoiding) &&
-    !(avoiding instanceof GoFishRef)
-  )
-    throw new Error(
-      "[gofish] enclose({ shape }): avoiding is a list of nodes or refs, or a selectAll(name) selection."
-    );
+  Frontend.checkStrategy("Shape", shape, "enclose({ shape })");
   return shape;
 }
 
@@ -91,6 +81,10 @@ function avoidedRefs(
   layerContext: LayerContext | undefined
 ): GoFishRef[] {
   if (avoiding === undefined) return [];
+  if (!Array.isArray(avoiding) && !(avoiding instanceof GoFishRef))
+    throw new Error(
+      "[gofish] enclose({ shape }): avoiding is a list of nodes or refs, or a selectAll(name) selection."
+    );
   let items: unknown[];
   if (avoiding instanceof GoFishRef) {
     if (avoiding.multiplicity !== "all") items = [avoiding];
@@ -138,14 +132,14 @@ const loopsPath = (loops: Pt[][], toPixel: (p: Pt) => Pt) =>
 
 /** The enclosure node over `members`, keeping out `avoided`. Both are its
  *  children (an avoided ref draws nothing); only the members count toward
- *  its box. */
+ *  its box. `shape` is already checked. */
 function Enclose(
   o: Resolved,
+  shape: Shape,
   members: GoFishAST[],
   avoided: GoFishRef[]
 ): GoFishNode {
   const padding = o.padding ?? 2;
-  const shape = checkedShape(o.shape);
   const { fill = "none", stroke = gray, strokeWidth = 1 } = o;
   const { strokeDasharray, opacity = 1, fillOpacity } = o;
   const memberCount = members.length;
@@ -299,5 +293,5 @@ export function encloseNode(
   const shape = checkedShape(o.shape);
   const avoided =
     shape.kind === "blob" ? avoidedRefs(shape.avoiding, layerContext) : [];
-  return Enclose({ ...o, shape }, members, avoided);
+  return Enclose(o, shape, members, avoided);
 }

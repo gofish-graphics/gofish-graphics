@@ -524,10 +524,11 @@ of `OPTION_TYPES` (layout checks each axis's options against
 `AxisOptions` with it, so a JS caller and a Python one get the same
 errors). So an unknown kind, an undeclared param, and a value out of
 bounds each fail in one place, whether the strategy came from a factory, a
-hand-written object, or Python IR. The one exception is a blob's `avoiding`,
-typed `t.ref("NodeSelectionIR")`: in JS it holds the nodes themselves, not
-their IR, so `enclose` checks it and hands `checkStrategy` the rest of the
-shape. `Coord` and `Color` are families on the
+hand-written object, or Python IR. A JS check of an authored value passes
+over a ref whose authored value holds nodes (`holdsNodes` in
+`AUTHORED_REFS`): a blob's `avoiding`, typed `t.ref("NodeSelectionIR")`,
+holds the nodes themselves in JS, not their IR, so `enclose` checks it as it
+reads the nodes. `Coord` and `Color` are families on the
 two surfaces but not in this table: a coordinate transform is a JS object of
 functions, rebuilt from a `type`-tagged config (`COORDS`), and a color scale
 is tagged by `_tag` and takes its one argument by position.
@@ -549,7 +550,7 @@ whose bin op is checked against `OPTION_TYPES.StructBin`). `ChunkKey` is the
 consecutive rows; a split operator's `by` takes a field name, a
 `FieldAccessor`, or a `ChunkKey`. Such a value already carries its wire keys, so
 the Python generator passes it through. An authored ref may instead say that
-its Python value holds marks (`pyNodes`: `NodeSelectionIR`). The generator
+its value holds nodes (`holdsNodes`: `NodeSelectionIR`). The generator
 passes such a value through unchecked, and `Mark.to_dict` writes each mark in
 an option as its IR (`_marks_in_options` in `ast.py`: a `select_all(name)`
 becomes the `select` form, any other mark its `to_dict()`). One function, `pyType` in
