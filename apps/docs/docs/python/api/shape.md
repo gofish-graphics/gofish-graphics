@@ -88,8 +88,8 @@ A blob is built from these pieces, in the enclosure's pixels:
 
 - each member grown by `padding` (a circle is a disc, a `line` is a tube along
   its segments, and any other node is its bounding box);
-- the links of the shortest tree that joins the members, as tubes as wide as
-  the members' bulge, routed around the avoided nodes;
+- the links of the shortest tree that joins the members, as tubes that taper
+  from one member's bulge to the other's, routed around the avoided nodes;
 - the Delaunay triangles of the members' points, filled from the smallest gap
   up, until they hold `convexity` of the convex hull's area.
 

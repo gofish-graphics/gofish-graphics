@@ -92,7 +92,13 @@ under any coordinate transform.
    and arcs of them. Every link is chosen at full width, so `neck` never
    changes which links there are.
 4. **Region.** The pieces are each member grown by `padding`, each link as a
-   tube as wide as the smaller bulge at its ends, and the filled triangles.
+   tube that tapers from the bulge at one end to the bulge at the other (the
+   convex hull of the two end discs, a tapered capsule with a closed-form
+   distance; with equal ends it is the plain capsule), and the filled
+   triangles. A routed link tapers along its length, and an arc of it around
+   an avoided node keeps the larger of its two ends' half-widths. A link is
+   routed at its larger half-width, so the narrower part keeps more than the
+   clearance.
    Each avoided node grown by `clearance` is a keep-out zone. The region is
    the union of the pieces minus the union of the zones.
 5. **Exact trace.** Every piece and zone has a closed-form signed distance (a

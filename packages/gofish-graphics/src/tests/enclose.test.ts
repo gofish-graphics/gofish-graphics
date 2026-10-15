@@ -215,6 +215,88 @@ for (const [name, members, pad, roundness] of [
   );
 }
 
+// ── members of different sizes: links taper, so the hull stays convex ──────
+/** Signed distance to the convex hull of discs of any radii, each grown by
+ *  `pad` (the hull of 2000 points on each grown circle). */
+const discsHullDistance = (discs: Disc[], pad: number) => {
+  const pts: Pt[] = discs.flatMap((m) =>
+    Array.from({ length: 2000 }, (_, i): Pt => {
+      const a = (i / 2000) * 2 * Math.PI;
+      return [
+        m.cx + (m.r + pad) * Math.cos(a),
+        m.cy + (m.r + pad) * Math.sin(a),
+      ];
+    })
+  );
+  const h = convexHull(pts);
+  return (p: Pt) => {
+    let d = Infinity;
+    for (let i = 0; i < h.length; i++)
+      d = Math.min(d, segDist(p, h[i], h[(i + 1) % h.length]));
+    return inPoly(p, h) ? -d : d;
+  };
+};
+/** Seeded points (a linear congruential generator), so a run is the same
+ *  every time. */
+const seeded = (seed: number) => () =>
+  ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
+const MIXED: Disc[] = (() => {
+  const rand = seeded(7);
+  return Array.from({ length: 18 }, () =>
+    C(20 + rand() * 260, 20 + rand() * 180, 2 + rand() * 14)
+  );
+})();
+const REF_HULL: Disc[] = [C(32, 82, 12), C(138, 18, 8), C(216, 106, 16)];
+// A ring of circles of mixed radii around an avoided node, which is a hole.
+const RING: Disc[] = Array.from({ length: 12 }, (_, i) =>
+  C(
+    150 + 80 * Math.cos((i / 12) * 2 * Math.PI),
+    120 + 80 * Math.sin((i / 12) * 2 * Math.PI),
+    3 + ((i * 5) % 10)
+  )
+);
+for (const [name, members, pad] of [
+  ["the RefHull story's circles", REF_HULL, 10],
+  ["18 seeded circles of mixed radii", MIXED, 6],
+] as [string, Disc[], number][]) {
+  const loops = blobOutline(members, { padding: pad, convexity: 1, neck: 1 });
+  const sd = discsHullDistance(members, pad);
+  const worst = Math.max(...loops.flat().map((p) => Math.abs(sd(p))));
+  check(
+    `hull preset on ${name} is within 0.5 px of the true hull of the padded discs`,
+    topology(loops).pieces === 1 && worst <= 0.5,
+    `${show(topology(loops))}, ${worst.toFixed(2)} px off`
+  );
+}
+for (const [name, members, base] of [
+  ["mixed radii", MIXED, { padding: 6, convexity: 0.5 }],
+  ["mixed radii, convexity 0", MIXED, { padding: 6, convexity: 0 }],
+  [
+    "mixed-radius ring",
+    RING,
+    { padding: 6, convexity: 0.75, avoiding: [C(150, 120, 6)] },
+  ],
+] as [string, Disc[], BlobOutlineOptions][]) {
+  const ref = topology(blobOutline(members, { ...base, roundness: 0, neck: 1 }));
+  check(`${name}: has an outline (${show(ref)})`, ref.pieces >= 1);
+  for (const roundness of [0, 3, 6, 12]) {
+    const t = topology(blobOutline(members, { ...base, roundness }));
+    check(
+      `${name}: roundness ${roundness} keeps the topology`,
+      t.pieces === ref.pieces && t.holes === ref.holes,
+      `${show(t)}, want ${show(ref)}`
+    );
+  }
+  for (const neck of [0.5, 0.7, 0.85, 1]) {
+    const t = topology(blobOutline(members, { ...base, neck }));
+    check(
+      `${name}: neck ${neck} keeps the topology`,
+      t.pieces === ref.pieces && t.holes === ref.holes,
+      `${show(t)}, want ${show(ref)}`
+    );
+  }
+}
+
 // ── holes ──────────────────────────────────────────────────────────────────
 {
   const clearance = 4;

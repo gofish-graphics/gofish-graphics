@@ -494,7 +494,10 @@ type SkelOpts = {
 type Arc = { c: Pt; r: number; a0: number; sweep: number };
 type Part = { a: Pt; b: Pt } | Arc;
 type Route = { route: Pt[]; parts: Part[]; len: number };
-type SkLink = { route: Pt[]; h: number; parts?: Part[] };
+/** A link: its route, and its half-width at the route's start (h) and end (h2). A link between
+ *  ends of different radii tapers from one to the other, so a link between two members is the
+ *  convex hull of their bulges. It is routed at its larger half-width. */
+type SkLink = { route: Pt[]; h: number; h2: number; parts?: Part[] };
 /** Tighten a route found on keep-out polygons onto the circles they stand for. Each run of route
  *  vertices on one circle (an avoided node's keep-out circle grown by h, or a box corner's) becomes
  *  an arc of that circle, and the route between runs becomes the lines tangent to both: so a
@@ -777,7 +780,6 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
   const R = owner.map((ks) => Math.max(...ks.map((k) => Rm[k])));
   const ek = (i: number, j: number) => (i < j ? `${i},${j}` : `${j},${i}`);
   const c = Math.max(0, Math.min(1, o.convexity));
-  const hw = (i: number, j: number) => Math.min(R[i], R[j]);
   // convexity c fills the smallest gaps first until they hold c of the hull's area: the triangles
   // in order of circumradius, each counted when the midpoint of its area is within c (triangles
   // with the same circumradius count together). 0 fills none, 1 fills every triangle.
@@ -878,7 +880,7 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
   const mk = (a: number, b: number) => (a < b ? a * nm + b : b * nm + a);
   const routed = new Map<
     number,
-    { a: number; b: number; route: Pt[]; len: number; h?: number }
+    { a: number; b: number; route: Pt[]; len: number; h?: number; h2?: number }
   >();
   const hm = (a: number, b: number) => Math.min(Rm[a], Rm[b]);
   // the bulge where a link attaches: the widest member whose geometry holds that point
@@ -904,9 +906,9 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
       )
     )
       continue;
-    links.push({ route: [P[i], P[j]], h: hw(i, j) });
+    links.push({ route: [P[i], P[j]], h: R[i], h2: R[j] });
     // the edge carries the spanning tree only when no hole will be cut across it
-    if (clear(P[i], P[j], hw(i, j)))
+    if (clear(P[i], P[j], Math.max(R[i], R[j])))
       for (const a of owner[i])
         for (const b of owner[j])
           if (a !== b && !routed.has(mk(a, b)))
@@ -915,6 +917,8 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
               b,
               route: [P[i], P[j]],
               len: dist(P[i], P[j]),
+              h: R[i],
+              h2: R[j],
             });
   }
   const pairs = new Set<number>();
@@ -942,6 +946,7 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
     route?: Pt[];
     parts?: Part[];
     h?: number;
+    h2?: number;
     ends?: [Pt, Pt];
   };
   const queue: Link[] = [...routed.values()].map((e, order) => ({
@@ -962,7 +967,8 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
         len: dist(p, q),
         order,
         ends: [p, q],
-        h: Math.min(radiusAt(p), radiusAt(q)),
+        h: radiusAt(p),
+        h2: radiusAt(q),
       });
   }
   const before = (x: Link, y: Link) =>
@@ -976,7 +982,7 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
     const e = queue[head++];
     if (f2(e.a) === f2(e.b)) continue;
     if (e.ends) {
-      const r = routeFor(e.ends[0], e.ends[1], e.h!);
+      const r = routeFor(e.ends[0], e.ends[1], Math.max(e.h!, e.h2!));
       if (!r) continue;
       const done: Link = {
         a: e.a,
@@ -986,6 +992,7 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
         len: r.len,
         order: e.order,
         h: e.h,
+        h2: e.h2,
       };
       let at = head;
       while (at < queue.length && before(queue[at], done)) at++;
@@ -997,6 +1004,7 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
       links.push({
         route: e.route!,
         h: e.h ?? hm(e.a, e.b),
+        h2: e.h2 ?? e.h ?? hm(e.a, e.b),
         ...(e.parts && e.parts.length > 1 ? { parts: e.parts } : {}),
       });
   }
@@ -1005,11 +1013,12 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
 
 // ── step 2: the region, exactly ─────────────────────────────────────────────
 // The region is the union of the pieces minus the keep-out zones. Every piece and zone is one of
-// four primitives with an exact signed distance (negative inside): a disc, a capsule (a segment
-// grown by r), a box (a rectangle grown by r) or a triangle. Its outline is traced exactly, and
+// a few primitives with an exact signed distance (negative inside): a disc, a capsule (a segment
+// grown by r), a tapered capsule (the convex hull of two discs), a box (a rectangle grown by r), a
+// triangle, or a tube bent along an arc. Its outline is traced exactly, and
 // each traced point records the circle it lies on (its center and radius), or none on a straight side.
 type Prim = {
-  k: 0 | 1 | 2 | 3 | 4;
+  k: 0 | 1 | 2 | 3 | 4 | 5;
   x1: number;
   y1: number;
   x2: number;
@@ -1047,6 +1056,99 @@ const capsulePrim = (a: Pt, b: Pt, r: number): Prim => ({
     Math.max(a[1], b[1]) + r,
   ],
 });
+/** A tapered capsule: the convex hull of the disc of radius ra around a and the disc of radius rb
+ *  around b (x3 holds rb, r holds ra). With equal radii it is exactly the capsule. */
+const taperPrim = (a: Pt, b: Pt, ra: number, rb: number): Prim =>
+  ra === rb
+    ? capsulePrim(a, b, ra)
+    : {
+        k: 5,
+        x1: a[0],
+        y1: a[1],
+        x2: b[0],
+        y2: b[1],
+        x3: rb,
+        y3: 0,
+        r: ra,
+        bb: [
+          Math.min(a[0] - ra, b[0] - rb),
+          Math.min(a[1] - ra, b[1] - rb),
+          Math.max(a[0] + ra, b[0] + rb),
+          Math.max(a[1] + ra, b[1] + rb),
+        ],
+      };
+/** The radius of the last tapered capsule measured (with `arc`) where the outline point lies. */
+let TAPER_LOCAL = 0;
+/** Signed distance to a tapered capsule from a (radius ra) to b (radius rb): the convex hull of
+ *  the two discs, in closed form (Quilez's uneven capsule). With `arc`, fills ARC: the end circle
+ *  the nearest point lies on, or for a point on a straight side, a center along the side's
+ *  outward normal (radius 0), and TAPER_LOCAL with the tube's radius there. */
+const taperD = (
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  ra: number,
+  rb: number,
+  x: number,
+  y: number,
+  arc: boolean
+) => {
+  const ex = bx - ax,
+    ey = by - ay,
+    h = ex * ex + ey * ey,
+    b = ra - rb;
+  if (h <= b * b) {
+    // one disc holds the other: the hull is the larger disc
+    const [cx, cy, r] = ra >= rb ? [ax, ay, ra] : [bx, by, rb];
+    if (arc) {
+      ARC[0] = cx;
+      ARC[1] = cy;
+      ARC[2] = r;
+      TAPER_LOCAL = r;
+    }
+    return Math.hypot(x - cx, y - cy) - r;
+  }
+  const px = x - ax,
+    py = y - ay;
+  const qx0 = (px * ey - py * ex) / h,
+    qy = (px * ex + py * ey) / h;
+  const qx = Math.abs(qx0);
+  const cx = Math.sqrt(h - b * b);
+  const k = cx * qy - b * qx,
+    m = cx * qx + b * qy,
+    n = qx * qx + qy * qy;
+  if (k < 0) {
+    if (arc) {
+      ARC[0] = ax;
+      ARC[1] = ay;
+      ARC[2] = ra;
+      TAPER_LOCAL = ra;
+    }
+    return Math.sqrt(h * n) - ra;
+  }
+  if (k > cx) {
+    if (arc) {
+      ARC[0] = bx;
+      ARC[1] = by;
+      ARC[2] = rb;
+      TAPER_LOCAL = rb;
+    }
+    return Math.sqrt(h * (n + 1 - 2 * qy)) - rb;
+  }
+  if (arc) {
+    // the side's outward normal: (cx · the perpendicular on p's side + b · the axis) / |b - a|
+    const sg = qx0 < 0 ? -1 : 1;
+    const nx = (cx * sg * ey + b * ex) / h,
+      ny = (-cx * sg * ex + b * ey) / h;
+    const s = m > 1e-6 ? m : 1;
+    ARC[0] = x - nx * s;
+    ARC[1] = y - ny * s;
+    ARC[2] = 0;
+    TAPER_LOCAL = ra + (rb - ra) * (k / cx);
+  }
+  return m - ra;
+};
 const boxPrim = (
   x: number,
   y: number,
@@ -1213,6 +1315,7 @@ const primD = (p: Prim, x: number, y: number, arc: boolean): number => {
     return Math.sqrt(dx * dx + dy * dy) - p.r;
   }
   if (p.k === 4) return arcD(p.x1, p.y1, p.x2, p.y2, p.x3, p.r, x, y, arc);
+  if (p.k === 5) return taperD(p.x1, p.y1, p.x2, p.y2, p.r, p.x3, x, y, arc);
   if (arc) ARC[2] = 0;
   const d = Math.min(
     segD(x, y, p.x1, p.y1, p.x2, p.y2),
@@ -1267,6 +1370,7 @@ const primV = (F: Float64Array, i: number, x: number, y: number): number => {
     return Math.sqrt(dx * dx + dy * dy) - r;
   }
   if (k === 4) return arcD(x1, y1, x2, y2, F[o + 5], r, x, y, false);
+  if (k === 5) return taperD(x1, y1, x2, y2, r, F[o + 5], x, y, false);
   const x3 = F[o + 5],
     y3 = F[o + 6];
   const d = Math.min(
@@ -1370,7 +1474,11 @@ const regionArc = (
   // a point on a zone's edge (as on a link wrapped around that zone) is the zone's: ARC is its circle or side
   ARC[3] = bz >= 0 && Math.abs(Z) < 0.05 ? 1 : 0; // (a resampled point sits on a chord, within 0.05 px of the circle)
   if (!ARC[3] && U > -Z) {
-    if (bu >= 0) primD(pieces[bu], x, y, true);
+    if (bu >= 0) {
+      primD(pieces[bu], x, y, true);
+      // a tapered link's half-width is the tube's radius where the point lies
+      if (pieces[bu].k === 5) ARC[4] = TAPER_LOCAL;
+    }
     return U;
   }
   if (bz >= 0) primD(zones[bz], x, y, true);
@@ -2788,12 +2896,23 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
         j = pid(b);
       return i < j ? i * 1048576 + j : j * 1048576 + i;
     };
-    const widest = new Map<number, number>();
+    // per straight segment, its widest half-width at each end: [at the end with the smaller
+    // number, at the other]
+    const widest = new Map<number, [number, number]>();
     for (const e of sk.links)
-      for (let k = 1; k < e.route.length && !e.parts; k++) {
-        const key = segKey(e.route[k - 1], e.route[k]);
-        widest.set(key, Math.max(widest.get(key) ?? 0, e.h));
+      if (!e.parts && e.route.length === 2) {
+        const [a, b] = e.route,
+          key = segKey(a, b),
+          w = widest.get(key) ?? [0, 0];
+        const [ra, rb] = pid(a) < pid(b) ? [e.h, e.h2] : [e.h2, e.h];
+        widest.set(key, [Math.max(w[0], ra), Math.max(w[1], rb)]);
       }
+    // A link of one width along an edge of two filled triangles lies inside them and their other
+    // sides' links when those are at least as wide; a tapered link is always drawn.
+    const width = (key: number) => {
+      const w = widest.get(key);
+      return w === undefined ? 0 : w[0] === w[1] ? w[0] : -1;
+    };
     const sides = new Map<number, number>(); // per face edge: how many of its triangles have both other sides as wide
     for (const [a, b, c] of sk.faces)
       for (const [p, q, r] of [
@@ -2802,28 +2921,40 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
         [c, a, b],
       ]) {
         const key = segKey(p, q),
-          h = widest.get(key) ?? 0;
-        if (
-          (widest.get(segKey(p, r)) ?? 0) >= h &&
-          (widest.get(segKey(q, r)) ?? 0) >= h
-        )
+          h = width(key);
+        if (h < 0) continue;
+        const wp = widest.get(segKey(p, r)),
+          wq = widest.get(segKey(q, r));
+        if (Math.min(...(wp ?? [0])) >= h && Math.min(...(wq ?? [0])) >= h)
           sides.set(key, (sides.get(key) ?? 0) + 1);
       }
     for (const e of sk.links)
-      if (e.parts)
-        for (const pt of e.parts)
+      if (e.parts) {
+        // a routed link tapers along its length from h to h2; an arc around an avoided node keeps
+        // the larger of its two ends' half-widths
+        const lens = e.parts.map((pt) =>
+          "c" in pt ? Math.abs(pt.sweep) * pt.r : dist(pt.a, pt.b)
+        );
+        const total = lens.reduce((x, y) => x + y, 0) || 1;
+        let at = 0;
+        e.parts.forEach((pt, i) => {
+          const r0 = e.h + ((e.h2 - e.h) * at) / total;
+          at += lens[i];
+          const r1 = e.h + ((e.h2 - e.h) * at) / total;
           pieces.push(
             "c" in pt
-              ? arcPrim(pt.c, pt.r, pt.a0, pt.sweep, e.h)
-              : capsulePrim(pt.a, pt.b, e.h)
+              ? arcPrim(pt.c, pt.r, pt.a0, pt.sweep, Math.max(r0, r1))
+              : taperPrim(pt.a, pt.b, r0, r1)
           );
+        });
+      }
     members.forEach((m) =>
       pieces.push({ ...grownPrim(m, o.pad), bulge: true })
     );
-    for (const [key, h] of widest)
+    for (const [key, [ra, rb]] of widest)
       if (sides.get(key) !== 2)
         pieces.push(
-          capsulePrim(pts[Math.floor(key / 1048576)], pts[key % 1048576], h)
+          taperPrim(pts[Math.floor(key / 1048576)], pts[key % 1048576], ra, rb)
         );
     const zones = (o.avoiding ?? []).map((m) => grownPrim(m, clearance));
     const traced = traceRegion(pieces, zones, res, Math.min(1, res));
@@ -2882,7 +3013,7 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
   // half-width, a box corner, a keep-out zone): rounding further would bend that circle.
   const thinnest = Math.min(
     ...sk.R,
-    ...sk.links.map((e) => neck * e.h),
+    ...sk.links.map((e) => neck * Math.min(e.h, e.h2)),
     ...region.radii
   );
   const asked = Math.max(0, Math.min(o.roundness ?? o.pad, thinnest)) / 2;
