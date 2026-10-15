@@ -87,7 +87,12 @@ import {
 } from "./axisDirection";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
-import { relateEnv, resolveConstraintOperands } from "./constraints";
+import {
+  Constraint,
+  relateEnv,
+  resolveConstraintOperands,
+} from "./constraints";
+import { internalName } from "./constraints/shared";
 import {
   computeRelateSchedule,
   resolveRelateClauses,
@@ -2126,7 +2131,30 @@ export class GoFishNode {
     this.children = this.children.filter((c) => !isRelateClause(c));
     const env = relateEnv(this);
     const { constraints, nodes } = await resolveRelateClauses(fn(env), env);
-    this.constraints = constraints;
+    // A drawing clause that is a relational mark (`enclose`, `line`, ...)
+    // paints under the nodes it reads, as it does among a layer's children
+    // (`applyRelationalZBelowDefaults` in layer.tsx). Here its operands are
+    // names of this layer, so the default names them. An explicit
+    // `.zOrder(...)` on the clause wins.
+    const below: ConstraintSpec[] = [];
+    for (const node of nodes) {
+      const operands = (node as any).__relationalOperands as
+        | GoFishAST[]
+        | undefined;
+      if (!operands || node.getZOrder() !== undefined) continue;
+      const names = operands.flatMap((o) =>
+        o instanceof GoFishRef && typeof o.selection === "string"
+          ? [o.selection]
+          : []
+      );
+      if (names.length === 0) continue;
+      if (typeof node._name !== "string") node._name ??= internalName("z");
+      if (typeof node._name !== "string") continue;
+      for (const name of names)
+        below.push(Constraint.zBelow({ name: node._name }, { name }));
+      delete (node as any).__relationalOperands;
+    }
+    this.constraints = [...constraints, ...below];
     for (const node of nodes) {
       node.parent = this;
       this.children.push(node);
