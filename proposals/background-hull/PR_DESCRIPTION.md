@@ -119,14 +119,15 @@ A shortcut makes the same object as the general call, the way `sina()` and `jitt
 12. Keep all rounding inside `Shape.blob()` (the outline rounding of step 6), and add no `curve` key to `enclose`? (History, v4, shows why a curve through the outline cannot keep `padding` or `clearance`.)
 13. Confirm: a graph's edges are enclosed as members (dataset (d)), with no separate edge parameter (History, v5). Box and hull contain line members too, since members are just shapes, and the blob reads their geometry through #974's `boundary` query.
 14. Should `roundness` go past the smallest circle in the region, so a hull's corners can round more than the members' grown radius? The cost is that `padding` and `clearance` become approximate near those circles.
-15. Should `Shape.spine()` keep the one default `holes: false`, so a spine over a cycle of edges is filled? (Recommended: yes. In the data, the holes a spine leaves are mostly small gaps between touching dots, five per penguin species; a ring is `Shape.spine({ holes: true })`.)
+15. Decided: `Shape.spine()` keeps the one default `holes: false`, so a spine over a cycle of edges is filled. (Josh confirmed. In the data, the holes a spine leaves are mostly small gaps between touching dots, five per penguin species; a ring is `Shape.spine({ holes: true })`.)
 16. An open question, not a decision to make now. Members versus links: a graph edge is both a contained member and the enclosure's own link. Should segment members be drawn like links (thinned by `neck`), and should different member kinds get their own padding? Revisit once more member kinds exist (labels, areas, nested enclosures). For now each edge keeps its padding band, as a declared shortcut (History, v10).
+17. Recalibrate `convexity`? Today alpha = m·c/(1−c), and on dense data almost nothing fills until about 0.6 (penguins move 0 to 5 percent of the way from spine to hull at 0.5). A prototype fills the smallest triangles first until they hold c of the hull's triangle area, which spreads the change evenly (penguins 25 to 40 percent at 0.5). It keeps both ends exact. Weak spots: ChartAccent fills fast, and the U shows a sliver hole at 0.75. Comparison: `proposals/background-hull/img/convexity-calibration-old-vs-new.png`.
 
 ## Pictures
 
 ### The discrete choice: box, hull, blob and spine
 
-![penguins: box, hull, blob and spine](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/penguins-four-shapes.png)
+![penguins: box, hull, blob and spine](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/penguins-four-shapes-v2.png)
 
 ```js
 chart(penguins)
@@ -137,7 +138,7 @@ chart(penguins)
       .flow(group({ by: "Species" }))
       .mark(enclose({ shape, padding: 6, fill: "Species", opacity: 0.15 }))
   );
-// shape: Shape.box(), Shape.hull(), Shape.blob() or Shape.spine()
+// shape: Shape.box(), Shape.hull(), Shape.blob({ convexity: 0.75 }) or Shape.spine()
 ```
 
 ### Dataset explorer: the U with non-members inside
@@ -197,7 +198,7 @@ enclose(
 
 ### Hyperedges over a node-link graph, with the edges as members
 
-![hyperedges with edges as members: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-hyperedges-members.png)
+![hyperedges with edges as members: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-hyperedges-members-v2.png)
 
 ```js
 layer([
@@ -223,7 +224,7 @@ layer([
 
 A replica of ChartAccent's example 5 (Ren et al., PacificVis 2017), on its own sample data.
 
-![ChartAccent replica](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/chartaccent-replica.png)
+![ChartAccent replica](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/chartaccent-replica-v2.png)
 
 ```js
 chart(countries)
@@ -247,7 +248,7 @@ chart(countries)
 
 Hyperedges at `convexity: 0.35` and penguins at 0.25. The default, `holes: false`, fills every hole that holds no avoided node.
 
-![holes on and off](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/holes-hyperedges-penguins.png)
+![holes on and off](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/holes-hyperedges-penguins-v2.png)
 
 ```js
 enclose(
