@@ -14,13 +14,12 @@
  *    members, one outline per group when the flow groups them.
  */
 import { GoFishNode, placeUnplacedChild } from "../_node";
-import { displayTranslate, type Size } from "../dims";
+
 import { Frontend, type DisplayList } from "gofish-ir";
 import {
   lowerChildrenOffset,
   lowerStyle,
   rectItemFromBox,
-  roleFor,
 } from "../displayList/lowerHelpers";
 import type { GoFishAST } from "../_ast";
 import { GoFishRef } from "../_ref";
@@ -34,6 +33,7 @@ import { resolveRefData } from "../marks/chartBuilder";
 import { box, type Nodes, type Shape } from "../../families/shape";
 import { blobOutline, type BlobMember, type Pt } from "./enclose/blob";
 import { membersOf, nodeOf } from "./enclose/members";
+import { RelateOperand } from "../constraints/relate";
 
 export type EncloseOptions = {
   /** Pixels between the members and the outline. Default 2. */
@@ -113,6 +113,8 @@ function avoidedRefs(
         : new GoFishRef({ selection: item.selection! });
     }
     if (item instanceof GoFishNode) return new GoFishRef({ node: item });
+    if (item instanceof RelateOperand)
+      return new GoFishRef({ selection: item.name });
     throw new Error(
       "[gofish] enclose({ shape }): avoiding lists placed nodes or refs (a .relate() operand, ref(...)); a fresh mark has no place to avoid."
     );
@@ -121,7 +123,7 @@ function avoidedRefs(
 
 /** One SVG path over every loop: the loops wind so that the nonzero rule
  *  fills the region and leaves its holes open. */
-const loopsPath = (loops: Pt[][], toPixel: (p: Pt) => [number, number]) =>
+const loopsPath = (loops: Pt[][], toPixel: (p: Pt) => Pt) =>
   loops
     .map(
       (loop) =>
@@ -154,10 +156,10 @@ function Enclose(
       type: "enclose",
       shared: [false, false],
       color: isValue(fill) ? fill : stroke,
-      resolveUnderlyingSpace: (
-        _children: Size<UnderlyingSpace>[],
-        _childNodes: GoFishAST[]
-      ) => [UNDEFINED, UNDEFINED],
+      resolveUnderlyingSpace: (): [UnderlyingSpace, UnderlyingSpace] => [
+        UNDEFINED,
+        UNDEFINED,
+      ],
       layout: (_shared, size, scales, children) => {
         // Child placement mirrors `layer`'s own rule (`placeUnplacedChild`):
         // a FRESH child reports an undefined translate until placed, so it
@@ -195,9 +197,12 @@ function Enclose(
                   ? []
                   : membersOf(child, placed[from + i].dims)
               );
-          const { avoiding: _, ...params } = shape;
           loops = blobOutline(geometry(0, memberCount), {
-            ...params,
+            convexity: shape.convexity,
+            holes: shape.holes,
+            roundness: shape.roundness,
+            neck: shape.neck,
+            clearance: shape.clearance,
             padding,
             avoiding: geometry(memberCount, children.length),
           });
@@ -224,7 +229,14 @@ function Enclose(
       // The outline paints FIRST (under the content), then the children
       // under the node's translate on top.
       lower: (
-        { intrinsicDims, transform, coordinateTransform, renderData },
+        {
+          intrinsicDims,
+          transform,
+          coordinateTransform,
+          renderData,
+          toPixel,
+          local,
+        },
         _children,
         node
       ): DisplayList.DisplayItem[] => {
@@ -233,8 +245,9 @@ function Enclose(
           transform,
           coordinateTransform
         );
-        const [tx, ty] = displayTranslate(transform);
-        const outer = node.getRenderSession().toPixel!;
+        // The outline is in the node's local frame and axis order (the frame
+        // its children's boxes were read in); `local` places it.
+        const pixel = (p: Pt) => toPixel(local(p));
         const unit = node.getRenderSession().scaleContext?.unit;
         const style = lowerStyle({
           fill: resolveColorChannel(fill, unit),
@@ -248,7 +261,7 @@ function Enclose(
           if (loops.length === 0) return childItems;
           const path: DisplayList.DisplayItem = {
             kind: "path",
-            d: loopsPath(loops, ([x, y]) => outer([tx + x, ty + y])),
+            d: loopsPath(loops, pixel),
             role: "overlay",
             style,
           };
@@ -260,12 +273,14 @@ function Enclose(
         const h = intrinsicDims?.[1]?.size ?? 0;
         const corners: { rx?: number; ry?: number } =
           shape.kind === "box" ? shape : {};
+        const [ax, ay] = local([x0, y0]);
+        const [bx, by] = local([x0 + w, y0 + h]);
         const rect = rectItemFromBox(
-          tx + x0,
-          tx + x0 + w,
-          ty + y0,
-          ty + y0 + h,
-          outer,
+          Math.min(ax, bx),
+          Math.max(ax, bx),
+          Math.min(ay, by),
+          Math.max(ay, by),
+          toPixel,
           {
             rx: corners.rx ?? 2,
             ry: corners.ry ?? 2,
