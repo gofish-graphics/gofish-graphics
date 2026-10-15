@@ -11,7 +11,6 @@ export {
   MARK_MAP,
   OPERATOR_MAP,
   type DeriveBridge,
-  type MarkBridges,
 } from "./registry";
 
 export {

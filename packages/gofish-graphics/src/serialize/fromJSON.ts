@@ -33,7 +33,6 @@ import {
   type ChartBuilder,
   type DeriveBridge,
   type Mark,
-  type MarkBridges,
   type Operator,
 } from "./registry";
 
@@ -313,19 +312,12 @@ export function mapMarkChildren(
   specs: MarkSpec[],
   bridge: DeriveBridge | undefined,
   resolveToken: TokenResolver,
-  inputRefs?: any[],
-  markBridges?: MarkBridges
+  inputRefs?: any[]
 ): any[] {
   const out: any[] = [];
   for (const child of specs as any[]) {
     if (child && child.type === "cut") {
-      const sourceMark = mapMark(
-        child.source,
-        bridge,
-        resolveToken,
-        inputRefs,
-        markBridges
-      );
+      const sourceMark = mapMark(child.source, bridge, resolveToken, inputRefs);
       // Pure cut requires an array `size`; the field-name-string sugar is only
       // valid in the chart `.mark(cut(...))` (data-bound expand) form.
       const slices = cutSlices(sourceMark as any, {
@@ -335,9 +327,7 @@ export function mapMarkChildren(
       });
       out.push(...slices);
     } else {
-      out.push(
-        mapMark(child as MarkSpec, bridge, resolveToken, inputRefs, markBridges)
-      );
+      out.push(mapMark(child as MarkSpec, bridge, resolveToken, inputRefs));
     }
   }
   return out;
@@ -378,8 +368,7 @@ export function mapMark(
   markSpec: MarkSpec,
   bridge: DeriveBridge | undefined,
   resolveToken: TokenResolver,
-  inputRefs?: any[],
-  markBridges?: MarkBridges
+  inputRefs?: any[]
 ): Mark<any> {
   const spec = markSpec as any;
   const applyTranslate = <T>(mark: T): T =>
@@ -407,35 +396,6 @@ export function mapMark(
       (inputRef as any).name(resolveNameField(spec.name, resolveToken));
     }
     return inputRef;
-  }
-
-  // Injected reconstruction (e.g. gotree-tree, #792): a mark IR type this
-  // package doesn't itself know how to build. The factory is async (it may
-  // RPC through the bridge before it can return a Mark), so — like the
-  // mark-fn branch just below — defer resolution into an async Mark
-  // wrapper; `resolveMarkResult` (chartBuilder.ts) awaits/recurses through
-  // whatever comes back regardless of sync/async.
-  const inject = markBridges?.[spec.type];
-  if (inject) {
-    const nameVal = resolveNameField(spec.name, resolveToken);
-    return (async (data: any, key: any, layerContext: any) => {
-      let innerMark: any = await inject(spec);
-      if (spec.translate && typeof innerMark?.translate === "function") {
-        innerMark = innerMark.translate(spec.translate);
-      }
-      if (nameVal != null && typeof innerMark?.name === "function") {
-        innerMark = innerMark.name(nameVal);
-      }
-      if (
-        typeof spec.zOrder === "number" &&
-        typeof innerMark?.zOrder === "function"
-      ) {
-        innerMark = innerMark.zOrder(spec.zOrder);
-      }
-      return typeof innerMark === "function"
-        ? innerMark(data, key, layerContext)
-        : innerMark;
-    }) as unknown as Mark<any>;
   }
 
   // Mark-as-function: Python registered a `(data) -> ChartBuilder | Mark`
@@ -478,15 +438,14 @@ export function mapMark(
           (resultSpec as any).mark as MarkSpec,
           bridge,
           resolveToken,
-          newInputRefs,
-          markBridges
+          newInputRefs
         );
       }
       const cs = resultSpec as ChartSpec;
       const data2 = Array.isArray((cs as any).data)
         ? ((cs as any).data as Record<string, any>[])
         : [];
-      return buildChart(cs, data2, bridge, resolveToken, markBridges);
+      return buildChart(cs, data2, bridge, resolveToken);
     }) as unknown as Mark<any>;
   }
 
@@ -511,8 +470,7 @@ export function mapMark(
       childSpecs,
       bridge,
       resolveToken,
-      inputRefs,
-      markBridges
+      inputRefs
     );
     return applyTranslate(
       offsetOp({ x: spec.x, y: spec.y }, [
@@ -531,8 +489,7 @@ export function mapMark(
       spec.source as MarkSpec,
       bridge,
       resolveToken,
-      inputRefs,
-      markBridges
+      inputRefs
     );
     let mark = cutMark({
       source: sourceMark as any,
@@ -561,8 +518,7 @@ export function mapMark(
       (spec.children ?? []) as MarkSpec[],
       bridge,
       resolveToken,
-      inputRefs,
-      markBridges
+      inputRefs
     );
     // Resolve color/coord configs (e.g. a `layer({coord: polar()})` carries
     // its coord transform in the combinator options, not chart options).
@@ -671,8 +627,7 @@ export function buildChart(
   chartSpec: ChartSpec,
   data: Record<string, any>[],
   bridge: DeriveBridge | undefined,
-  resolveToken: TokenResolver,
-  markBridges?: MarkBridges
+  resolveToken: TokenResolver
 ): ChartBuilder<any> {
   const operators: Operator<any, any>[] = [];
   for (const opSpec of (chartSpec.operators ?? []) as OperatorSpec[]) {
@@ -680,7 +635,7 @@ export function buildChart(
     if (op) operators.push(op);
   }
   const markSpec = (chartSpec.mark ?? { type: "rect" }) as MarkSpec;
-  const mark = mapMark(markSpec, bridge, resolveToken, undefined, markBridges);
+  const mark = mapMark(markSpec, bridge, resolveToken);
   const resolvedOptions = resolveOptions(
     ((chartSpec as any).options ?? {}) as Record<string, any>
   );
