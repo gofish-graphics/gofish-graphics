@@ -126,7 +126,7 @@ A shortcut makes the same object as the general call, the way `sina()` and `jitt
 
 ### The discrete choice: box, hull, blob and spine
 
-![penguins: box, hull, blob and spine](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-NUMBER/penguins-four-shapes.png)
+![penguins: box, hull, blob and spine](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/penguins-four-shapes.png)
 
 ```js
 chart(penguins)
@@ -143,7 +143,7 @@ chart(penguins)
 
 Columns are `convexity` (0, 0.25, 0.5, 0.75, 1) and rows are `roundness`. Down a column the pieces and holes never change. The teal frame marks the defaults.
 
-![U cloud: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-NUMBER/explore-round-u.png)
+![U cloud: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-u.png)
 
 ```js
 enclose(
@@ -154,7 +154,7 @@ enclose(
 
 ### Dataset explorer: penguins
 
-![penguins: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-NUMBER/explore-round-penguins.png)
+![penguins: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-penguins.png)
 
 ```js
 .layer(enclose({ shape: Shape.blob({ convexity, roundness }), padding: 6, fill: "Species", opacity: 0.15 }))
@@ -164,9 +164,9 @@ enclose(
 
 The recommended spelling (`neck: 0.85`, `padding: 22`, `roundness` at its default), then the panel with `neck` across and `roundness` down. The pairs and the whole set are ellipses drawn through the custom-shape function.
 
-![Munkres panel](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-NUMBER/topology-munkres-panel-smooth.png)
+![Munkres panel](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/topology-munkres-panel-smooth.png)
 
-![Munkres panel: neck by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-NUMBER/explore-round-munkres.png)
+![Munkres panel: neck by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-munkres.png)
 
 ```js
 layer([a, b, c]).relate(({ a, b, c }) => [
@@ -185,7 +185,7 @@ layer([a, b, c]).relate(({ a, b, c }) => [
 
 ### Hyperedges over a node-link graph, with the edges as members
 
-![hyperedges with edges as members: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-NUMBER/explore-round-hyperedges-members.png)
+![hyperedges with edges as members: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-hyperedges-members.png)
 
 ```js
 layer([
@@ -211,7 +211,7 @@ layer([
 
 A replica of ChartAccent's example 5 (Ren et al., PacificVis 2017), on its own sample data.
 
-![ChartAccent replica](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-NUMBER/chartaccent-replica.png)
+![ChartAccent replica](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/chartaccent-replica.png)
 
 ```js
 chart(countries)
@@ -235,7 +235,7 @@ chart(countries)
 
 Hyperedges at `convexity: 0.35` and penguins at 0.25. The default, `holes: false`, fills every hole that holds no avoided node.
 
-![holes on and off](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-NUMBER/holes-hyperedges-penguins.png)
+![holes on and off](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/holes-hyperedges-penguins.png)
 
 ```js
 enclose(
@@ -276,25 +276,12 @@ Delaunator is the standard library for this. It comes from Mapbox, and `d3-delau
 - Advances #397 (bring back a bubble-set enclosure)
 - Advances #974 (a `boundary` geometry query; hull enclosures and edges as members are its first users)
 - Advances #47 (stacked and divided ribbons, where a `by` option on relational marks may come back)
-- Advances #877 (a `selectAll` plus `group({ by })` before a relational mark is ignored; the penguin spelling depends on its fix)
+- Related: #877 (a `selectAll` plus `group({ by })` before a relational mark is ignored; the penguin spelling depends on its fix)
 - Advances #957 (screen-space curves; whether its candidates work for closed curves such as enclosures)
 - Advances #1101 (custom strategies; the ellipse is drawn through its function hatch)
 
 ## Also in this branch
 
 A small edit to the `api-proposal` skill (`.claude/skills/api-proposal/SKILL.md`): it now asks the proposal to survey nearby GoFish API decisions for consistency. It is unrelated to this proposal's content.
-
-## Images to upload
-
-(For the coordinator; remove this section once the images are uploaded.) Copy these files to the `pr-assets` branch under `pr-NUMBER/`, keeping their file names:
-
-- `proposals/background-hull/img/penguins-four-shapes.png`
-- `proposals/background-hull/img/explore-round-u.png`
-- `proposals/background-hull/img/explore-round-penguins.png`
-- `proposals/background-hull/img/topology-munkres-panel-smooth.png`
-- `proposals/background-hull/img/explore-round-munkres.png`
-- `proposals/background-hull/img/explore-round-hyperedges-members.png`
-- `proposals/background-hull/img/chartaccent-replica.png`
-- `proposals/background-hull/img/holes-hyperedges-penguins.png`
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
