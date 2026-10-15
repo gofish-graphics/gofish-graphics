@@ -25,7 +25,7 @@
 import type { DisplayList } from "gofish-ir";
 import { createOperator } from "../ast/marks/createOperator";
 import { Frame } from "../ast/graphicalOperators/frame";
-import { targetOf } from "../ast/graphicalOperators/layer";
+import { targetOf } from "../ast/constraints/relationalPaint";
 import { GoFishAST } from "../ast/_ast";
 import { GoFishNode } from "../ast/_node";
 import { axisScale } from "../ast/domain";

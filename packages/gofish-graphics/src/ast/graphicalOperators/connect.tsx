@@ -43,7 +43,7 @@ import {
   monotone,
   type Curve,
 } from "../../families/curve";
-import { targetOf } from "./layer";
+import { targetOf } from "../constraints/relationalPaint";
 import { readLive } from "../../interaction/live";
 import { setLiveSlots } from "../../interaction/liveSlots";
 import {

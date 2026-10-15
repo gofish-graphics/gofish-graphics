@@ -48,7 +48,6 @@ import {
   type ZOrderConstraint,
 } from "../constraints";
 import { applyRelationalZBelowDefaults } from "../constraints/relationalPaint";
-export { targetOf } from "../constraints/relationalPaint";
 import {
   childNameKey,
   type ConstraintPosScales,
