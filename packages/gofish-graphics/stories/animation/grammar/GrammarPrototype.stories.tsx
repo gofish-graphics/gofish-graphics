@@ -44,12 +44,12 @@ export const EXAMPLES: Record<string, Example> = {
     cell: [620, 340],
   },
   e1b: {
-    title: "E1b · stacked ↔ grouped, layer + relate",
+    title: "E1b · stacked ↔ grouped, timeline + relate",
     file: "e1b-relate",
-    frames: [0, 800, 1000, 1200, 1500, 1800, 2600, 3200],
+    frames: [0, 1800, 2100, 2300, 2500, 2800, 4400, 5000],
     unit: "ms",
-    loop: [0, 3600],
-    loopMs: 3600,
+    loop: [0, 5600],
+    loopMs: 5600,
     cell: [620, 340],
   },
   e1c: {

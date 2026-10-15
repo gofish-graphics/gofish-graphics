@@ -1,16 +1,8 @@
-// E1b. Stacked <-> grouped bars, as a layer whose children are placed in
-// time by .relate() clauses. Each chart holds, then morphs into the next.
-// The third child is the stacked chart again, so a looping clock wraps onto
-// an identical frame.
-import {
-  Animation,
-  chart,
-  layer,
-  rect,
-  spread,
-  stack,
-  time,
-} from "../../../../src/lib";
+// E1b. Stacked <-> grouped bars, as a timeline of scenes placed in time by
+// .relate() clauses. Each chart is on screen for its hold, and a transition
+// fills the gap after it. The third scene is the stacked chart again, with
+// no hold, so a looping clock wraps onto an identical frame.
+import { chart, rect, spread, stack, time, timeline } from "../../../../src/lib";
 import { seafood } from "../../../../src/data/catch";
 import type { TimelineClock } from "./clock";
 
@@ -27,18 +19,16 @@ const grouped = () =>
     )
     .mark(rect({ h: "count", fill: "species" }));
 
-void Animation;
-
 export default (container: HTMLElement, clock?: TimelineClock) =>
-  layer([
-    stacked().name("stacked"),
-    grouped().name("grouped"),
+  timeline([
+    stacked().name("stacked").hold(1800),
+    grouped().name("grouped").hold(1800),
     stacked().name("back"),
   ])
     .relate(({ stacked, grouped, back }) => [
-      time.after(stacked, grouped, { gap: 1800 }),
-      time.transition(stacked, grouped, { duration: 1000, ease: "cubicInOut" }),
-      time.after(grouped, back, { gap: 1800 }),
-      time.transition(grouped, back, { duration: 1000, ease: "cubicInOut" }),
+      time.after(stacked, grouped, { gap: 1000 }),
+      time.transition(stacked, grouped, { ease: "cubicInOut" }),
+      time.after(grouped, back, { gap: 1000 }),
+      time.transition(grouped, back, { ease: "cubicInOut" }),
     ])
     .render(container, { w: 480, h: 280, loop: true, ...clock } as any);

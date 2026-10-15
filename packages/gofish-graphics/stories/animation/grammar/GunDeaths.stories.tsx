@@ -55,7 +55,7 @@ export const Animated: StoryObj = {
 
 /** ms into the build. One life alone, its stolen years, the second life, a
  *  few overlapping, the acceleration, thousands. */
-const FRAMES = [1600, 4200, 7600, 10600, 14000, 23500];
+const FRAMES = [700, 1500, 3000, 5000, 8000, 20000];
 
 export const Filmstrip: StoryObj<{ frames: number[] }> = {
   args: { frames: FRAMES },

@@ -1,7 +1,8 @@
 // E1a. Stacked <-> grouped bars, as a sequence of two charts.
 // Each child is a keyframe; the tween moves every bar matched by its data
 // key (lake/species) from one chart to the other. `cyclic` lets the last
-// child move on into the first, so the loop has no seam.
+// child move on into the first, so the loop has no seam. Each chart rests
+// for its `hold` (800 ms of its 2000 ms share) before it moves on.
 import {
   Animation,
   chart,
@@ -26,6 +27,9 @@ const grouped = chart(seafood)
 
 export default (container: HTMLElement, clock?: SequenceClock) =>
   time
-    .sequence({ duration: 4000, cyclic: true, ...clock }, [stacked, grouped])
+    .sequence({ duration: 4000, cyclic: true, hold: 800, ...clock }, [
+      stacked,
+      grouped,
+    ])
     .transition({ update: Animation.tween({ ease: "cubicInOut" }) })
     .render(container, { w: 480, h: 280 });

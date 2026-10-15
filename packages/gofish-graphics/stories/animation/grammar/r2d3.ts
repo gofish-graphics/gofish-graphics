@@ -11,14 +11,13 @@
 //      appears, then the dots fall into two piles, the homes above the line
 //      and the homes at or below it.
 //
-// Two spellings of the same piece: `sequenceForm` (time.sequence over the
-// keyframes) and `relateForm` (a layer whose children are placed in time by
-// .relate() clauses).
+// The piece is a `timeline` of scenes placed in time by .relate() clauses.
 //
-// PROTOTYPE (animation grammar proposal, approach A). Syntax not signed off.
-// The keyframes are matched dot for dot by the key each dot was split by
-// (`id`), although their paths differ (`id`, `bin/id`, `pileRow/id`): see
-// LEAF MATCHING in src/animation/identity.ts.
+// PROTOTYPE (animation grammar proposal). Syntax not signed off. The dots
+// match from scene to scene by the row each one draws (the same home), though
+// each scene puts it under different operators (scatter, bin, pile); the
+// threshold draws no rows, so it matches by its name. See
+// src/animation/identity.ts.
 import {
   Animation,
   chart,
@@ -32,6 +31,7 @@ import {
   stack,
   text,
   time,
+  timeline,
 } from "../../../src/lib";
 import { r2d3Homes } from "../../../src/data/r2d3Homes";
 
@@ -128,47 +128,35 @@ export const threshold = () =>
 
 export type Hold = { playing?: boolean; at?: number };
 
-// ---- (i) The sequence form ----------------------------------------------------
+// ---- The timeline -------------------------------------------------------------
 
-/** Four children, one per keyframe, evenly spaced and looping. The line
- *  needs a keyframe of its own (the histogram again, with the line): a
- *  sequence keyframe is an instant, so "the line appears after the dots
- *  settle" is spelled by repeating a child. */
-export const sequenceForm = (container: HTMLElement, hold?: Hold) =>
-  time
-    .sequence({ duration: 10000, cyclic: true, ...hold }, [
-      scatterplot(),
+/** One loop in ms: what the clauses add up to. */
+export const LOOP = 3000 + 2000 + 3000 + 1400 + 3000 + 1400;
+
+/** Four scenes: the scatterplot, the histogram (its threshold built in 600
+ *  ms into the scene), the split, and the scatterplot again, which a looping
+ *  clock wraps onto the first. Each transition spans the gap between two
+ *  scenes; the dots match by the row each one draws. */
+export const r2d3 = (container: HTMLElement, hold?: Hold) =>
+  timeline([
+    scatterplot().name("scatter").hold(3000),
+    layer([
       histogram(),
-      layer([histogram(), threshold()]),
-      layer([split(), threshold()]),
+      threshold().transition({ enter: Animation.fadeIn({ delay: 600 }) }),
     ])
-    .transition({ update: Animation.tween({ ease: "cubicInOut" }) })
-    .render(container, { w: 560, h: 400 });
-
-// ---- (ii) The relate form -----------------------------------------------------
-
-/** One loop in ms: what the relate form's clauses add up to. */
-export const RELATE_LOOP = 8800;
-
-export const relateForm = (container: HTMLElement, hold?: Hold) =>
-  layer([
-    scatterplot().name("scatter"),
-    histogram().name("histogram"),
-    threshold().name("line"),
-    split().name("split"),
-    scatterplot().name("back"),
+      .name("histogram")
+      .hold(3000),
+    layer([split(), threshold()]).name("split").hold(3000),
+    scatterplot().name("again"),
   ])
-    .relate(({ scatter, histogram, line, split, back }) => [
-      time.after(scatter, histogram, { gap: 3000 }),
-      time.transition(scatter, histogram, { duration: 2000, ease: "cubicInOut" }),
-      // The build-in riding the segue: the line comes in once the dots
-      // have settled into the histogram.
-      time.after(histogram, line, { gap: 600 }),
-      time.after(line, split, { gap: 2200 }),
-      time.transition(histogram, split, { duration: 1400, ease: "cubicInOut" }),
-      time.after(split, back, { gap: 3000 }),
-      time.transition(split, back, { duration: 1400, ease: "cubicInOut" }),
+    .relate(({ scatter, histogram, split, again }) => [
+      time.after(scatter, histogram, { gap: 2000 }),
+      time.transition(scatter, histogram),
+      time.after(histogram, split, { gap: 1400 }),
+      time.transition(histogram, split),
+      time.after(split, again, { gap: 1400 }),
+      time.transition(split, again),
     ])
     .render(container, { w: 560, h: 400, loop: true, ...hold } as any);
 
-export default sequenceForm;
+export default r2d3;
