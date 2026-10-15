@@ -845,7 +845,8 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
   axes: {
     type: t.ref("AxesOptions"),
-    doc: "Draw axes: a boolean for both axes, or per-axis options {x?, y?}.",
+    default: true,
+    doc: "Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead.",
   },
   legend: {
     type: t.boolean,
@@ -1206,11 +1207,6 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         default: "baseline",
         doc: 'Cross-axis alignment ("start" | "middle" | "end" | "baseline").',
       },
-      sharedScale: {
-        type: t.boolean,
-        default: false,
-        doc: "Share one scale across all children.",
-      },
       anchor: {
         type: t.enum("edge", "start", "middle", "end", "baseline"),
         default: "edge",
@@ -1258,11 +1254,6 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.string,
         default: "baseline",
         doc: 'Cross-axis alignment ("start" | "middle" | "end" | "baseline").',
-      },
-      sharedScale: {
-        type: t.boolean,
-        default: false,
-        doc: "Share one scale across all children.",
       },
       anchor: {
         type: t.enum("edge", "start", "middle", "end", "baseline"),

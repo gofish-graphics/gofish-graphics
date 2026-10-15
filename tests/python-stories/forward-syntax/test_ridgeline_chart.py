@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import chart, spread, scatter, field, rect, text, layer, ribbon, Constraint
+from gofish import chart, spread, scatter, field, rect, text, layer, ribbon, Constraint, Schema
 from python_stories.data import SEATTLE_WEATHER
 
 MONTH_NAMES = [
@@ -60,7 +60,11 @@ LABEL_MARGIN_X = -6
 def story_default():
     w, h = 500, 330
     return (
-        chart(RIDGELINE_DATA, axes={"x": True, "y": False})
+        chart(
+            RIDGELINE_DATA,
+            axes={"x": True, "y": False},
+            schema={"temp_max": Schema.quantity("Max temperature").unit("°C")},
+        )
         .flow(
             spread(
                 by=field("month").sort(MONTH_NAMES),
@@ -68,12 +72,10 @@ def story_default():
                 anchor="baseline",
                 spacing=ROW_PITCH,
                 h=h,
-                axes={"x": True, "y": False},
             ),
             scatter(
                 x="temp_max",
                 w=w,
-                axes={"x": True, "y": False},
             ),
         )
         .mark(

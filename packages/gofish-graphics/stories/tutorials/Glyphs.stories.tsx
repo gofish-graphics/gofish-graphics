@@ -37,7 +37,7 @@ export const Glyphs: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    chart(stations)
+    chart(stations, { axes: false })
       .flow(scatter({ by: "id", x: "x", y: "y" }))
       .mark((d: Station[]) => marker(d[0]))
       .render(container, { w: 260, h: 170 });

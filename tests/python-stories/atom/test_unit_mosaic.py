@@ -56,7 +56,11 @@ def _mosaic_passengers():
 
 def story_default():
     return (
-        chart(_mosaic_passengers(), color=Color.palette(["#2b8cbe", "#ff8408"]))
+        chart(
+            _mosaic_passengers(),
+            color=Color.palette(["#2b8cbe", "#ff8408"]),
+            axes=False,
+        )
         .flow(
             # pclass rows: 1st at the bottom, 3rd at the top
             spread(by="pclass", dir="y", spacing=6, alignment="start"),

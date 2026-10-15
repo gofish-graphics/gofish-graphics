@@ -14,7 +14,7 @@ from vega_datasets import data as vega_data
 def story_default():
     barley = vega_data.barley()
     return (
-        chart(barley, axes=True)
+        chart(barley)
         .flow(
             spread(by="site", dir="x", spacing=110),
             spread(by="year", dir="x", spacing=36),

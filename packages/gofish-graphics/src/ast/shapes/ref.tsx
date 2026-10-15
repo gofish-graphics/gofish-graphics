@@ -33,8 +33,10 @@ export type RefProxy = GoFishRef & {
  *
  * `path` is NOT in this set — it's the escape-hatch method, intercepted
  * before this lookup. Children named "path" need the array form.
+ *
+ * Built on first use, not when this module loads: an import cycle through
+ * `_node.ts` can evaluate this module before `GoFishRef` is defined.
  */
-const SAMPLE_REF = new GoFishRef({ selection: ["__sample__"] });
 const PLACEABLE_OPTIONAL_KEYS: readonly (keyof Placeable)[] = [
   "transform",
   "projectedTranslate",
@@ -44,31 +46,33 @@ const PLACEABLE_OPTIONAL_KEYS: readonly (keyof Placeable)[] = [
   "setSizeOnly",
   "spaceOn",
 ];
-const RESERVED_KEYS: ReadonlySet<string> = new Set<string>([
-  // Instance fields of GoFishRef (public + private)
-  ...(Reflect.ownKeys(SAMPLE_REF).filter(
-    (k): k is string => typeof k === "string"
-  ) as string[]),
-  // Prototype methods + getters
-  ...(Reflect.ownKeys(GoFishRef.prototype).filter(
-    (k): k is string => typeof k === "string"
-  ) as string[]),
-  // Object.prototype members consulted by language/library code
-  "toString",
-  "valueOf",
-  "hasOwnProperty",
-  "isPrototypeOf",
-  "propertyIsEnumerable",
-  "toLocaleString",
-  "__proto__",
-  // Thenable-detection probe — must passthrough to undefined so the proxy
-  // is never mistaken for a Promise.
-  "then",
-  // Optional Placeable members a ref does not implement. Layout probes them on
-  // whatever a child's `layout()` returns (the proxy, for a chainable ref), so
-  // they must read `undefined`, not a path segment.
-  ...PLACEABLE_OPTIONAL_KEYS,
-]);
+let reservedKeys: ReadonlySet<string> | undefined;
+const RESERVED_KEYS = (): ReadonlySet<string> =>
+  (reservedKeys ??= new Set<string>([
+    // Instance fields of GoFishRef (public + private), read off a sample
+    ...(Reflect.ownKeys(new GoFishRef({ selection: ["__sample__"] })).filter(
+      (k): k is string => typeof k === "string"
+    ) as string[]),
+    // Prototype methods + getters
+    ...(Reflect.ownKeys(GoFishRef.prototype).filter(
+      (k): k is string => typeof k === "string"
+    ) as string[]),
+    // Object.prototype members consulted by language/library code
+    "toString",
+    "valueOf",
+    "hasOwnProperty",
+    "isPrototypeOf",
+    "propertyIsEnumerable",
+    "toLocaleString",
+    "__proto__",
+    // Thenable-detection probe — must passthrough to undefined so the proxy
+    // is never mistaken for a Promise.
+    "then",
+    // Optional Placeable members a ref does not implement. Layout probes them on
+    // whatever a child's `layout()` returns (the proxy, for a chainable ref), so
+    // they must read `undefined`, not a path segment.
+    ...PLACEABLE_OPTIONAL_KEYS,
+  ]));
 
 const proxyFor = (selection: (Token | string | number)[]): RefProxy => {
   const target = new GoFishRef({ selection });
@@ -79,7 +83,7 @@ const proxyFor = (selection: (Token | string | number)[]): RefProxy => {
         return (...segments: (string | number)[]) =>
           proxyFor([...selection, ...segments]);
       }
-      if (RESERVED_KEYS.has(prop)) return Reflect.get(t, prop, receiver);
+      if (RESERVED_KEYS().has(prop)) return Reflect.get(t, prop, receiver);
       // Numeric-string keys (proxy[2], proxy["3"]) coerce to number so
       // resolveSelection treats them as positional indices, not scope-tags.
       const seg: string | number = /^\d+$/.test(prop) ? Number(prop) : prop;

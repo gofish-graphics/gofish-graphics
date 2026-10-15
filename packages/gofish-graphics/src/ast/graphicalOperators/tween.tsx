@@ -348,7 +348,6 @@ export const tween = createNodeOperator(
     const self: GoFishNode = new GoFishNode(
       {
         type: "tween",
-        shared: [false, false],
         // Data-driven paint is registered for the shared color scale the same
         // way a leaf mark's is — see `connect`'s identical note.
         color: isValue(fill) ? fill : undefined,
@@ -356,7 +355,7 @@ export const tween = createNodeOperator(
           _children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => [UNDEFINED, UNDEFINED],
-        layout: (_shared, size, scales, children) => {
+        layout: (size, scales, children) => {
           // Forward σ but not the anchored map, exactly as `connect` does:
           // the operands are placed by their own boxes, not by data position.
           const placed = children.map((child) =>

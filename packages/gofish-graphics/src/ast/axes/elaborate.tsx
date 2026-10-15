@@ -18,11 +18,11 @@ import {
   type ChromeRing,
 } from "../elaborationUtils";
 import { datum } from "../data";
+import { widenScope } from "../extent";
 import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
 import {
   isORDINAL,
   isCONTINUOUS,
-  isUNDEFINED,
   dataWidth,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
@@ -307,7 +307,8 @@ function axisLine(
  *   [tick labels] ← tick marks ← axis line ← | content (at origin)
  *
  * The LINE seats one of two ways:
- *  - `crossFloor` given (the other dim also has a position-like axis): the line
+ *  - `crossFloor` given (the other dim is position-like, whichever node draws
+ *    its axis): the line
  *    sits flush at the PLOT edge — `position({[cross]: datum(crossFloor)})`,
  *    the other axis's scale minimum. The two lines then meet at the domain
  *    corner even when no datum reaches it (a scatter whose y domain starts
@@ -1373,7 +1374,9 @@ function elaborationsFor(
     issues: [...below.issues],
   };
   const space = node._underlyingSpace;
-  if (!space)
+  const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
+  // A node that draws no axis elaborates nothing.
+  if (!space || (!owns(0) && !owns(1)))
     return {
       constrained: [],
       refBased: [],
@@ -1382,19 +1385,42 @@ function elaborationsFor(
       sides: [undefined, undefined],
       fold,
     };
-  // A node can own a dim (`resolveAxes` set `axis.x/y`) whose own
-  // `_underlyingSpace` is the UNDEFINED sentinel — self-scaled children
-  // collapse the union above them (see `GoFishNode.selfScaledSpace`'s doc
-  // comment), which is right for sizing/layout but leaves nothing here to
-  // build ticks from. `resolveAxes`'s sibling-unification branch handles
-  // exactly this by stashing the shared child space it verified onto
-  // `hoistedAxisSpace`; fall back to it only when the real space is missing,
-  // so an ordinary (non-self-scaled) space is never overridden.
-  const spaceFor = (dim: 0 | 1): UnderlyingSpace =>
-    !isUNDEFINED(space[dim])
-      ? node.placedSpace(space[dim])
-      : (node.hoistedAxisSpace?.[dim] ?? space[dim]);
-  const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
+  // The axis shows the keyed domain of the node's set (#1114): the domain of
+  // its unit wherever that unit sits in the space, which a sized node maps
+  // into its box, not only the part of it the node's own data covers.
+  // Chrome is elaborated only inside `layout()`, which builds the table
+  // first, so there is always one here.
+  const keyed = node.getRenderSession().keyedDomains;
+  if (keyed === undefined)
+    throw new Error(
+      "axis elaboration: the keyed domains are built by layout() before chrome"
+    );
+  // Per dim, computed once: the axis's space widened to its keyed domain
+  // (`wide`), and that domain widened and niced, the axis's scope
+  // (`KeyedDomains.scope`, the widen-then-nice every σ solve over the domain
+  // applies, so the ticks and the marks agree by construction). `wide`
+  // stays un-niced: a time axis picks its tick partition from it, the same
+  // input the nicing picked its partition from.
+  const placed = ([0, 1] as const).map((dim) =>
+    node.placedSpace(space[dim], dim)
+  );
+  const wide = ([0, 1] as const).map(
+    (dim) =>
+      widenScope(
+        placed[dim],
+        undefined,
+        keyed.domainOf(node, dim, placed[dim], true)
+      )[0]
+  );
+  // Niced [min, max] per POSITION dim, computed ONCE: it feeds both that
+  // dim's own axis line/ticks (when the node owns it) and the other axis's
+  // `crossFloor` (the plot corner), so a nicing change can't skew the corner.
+  // A DIFFERENCE dim's floor is 0. An owned dim reads its own nice and the
+  // other dim's floor, so a node that owns any axis computes both dims,
+  // owned or not: a facet panel that owns only its y axis still seats that
+  // axis at the floor of the shared x domain an ancestor draws (#753), since
+  // the keyed scope is the same widen-then-nice whichever node draws the
+  // axis.
   // The `levels` entries an axis on `dim` reads, from its first level on.
   const entriesFor = (dim: 0 | 1) =>
     (perLevel[dim].levels ?? []).slice(fold.dims[dim].names.length);
@@ -1406,15 +1432,13 @@ function elaborationsFor(
     cannot?: Parameters<typeof readAtDepth<N>>[5]
   ) => readAtDepth(perLevel[dim], option, dim, depth, fold.issues, cannot);
   // The rows of each owned time axis, as its levels name them. Its ticks
-  // are stamped with its inner row before anything nices its domain: the
-  // scope's solve reads the stamp (`scopeAxisTicks`), as the axis does.
+  // are stamped with its inner row before anything nices its domain, and
+  // recorded as the demand of its keyed domain (`KeyedDomains.recordDemand`):
+  // every σ solve over the domain reads that demand, as the axis does.
   const times: (ReturnType<typeof timeRows> | undefined)[] = [
     undefined,
     undefined,
   ];
-  // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
-  // axis's own line/ticks and the other axis's `crossFloor` (the plot corner),
-  // so a nicing change can't skew the corner. A DIFFERENCE dim's floor is 0.
   const nices: ([number, number] | undefined)[] = [undefined, undefined];
   const floors: (number | undefined)[] = [undefined, undefined];
   // What each owned axis ticks at, as `resolveAxes` stamped it: the same
@@ -1423,17 +1447,22 @@ function elaborationsFor(
   const ticksFor = (dim: 0 | 1): AxisTicks =>
     node.axisDemand[dim] ?? DEFAULT_AXIS_TICKS;
   for (const dim of [0, 1] as (0 | 1)[]) {
-    if (!owns(dim)) continue;
-    const s = spaceFor(dim);
+    const s = wide[dim];
     if (axisOver(s) === "absolute") {
-      if (isCONTINUOUS(s) && spaceCalendar(s)) {
+      if (owns(dim) && isCONTINUOUS(s) && spaceCalendar(s)) {
         times[dim] = timeRows(s, entriesFor(dim), !hasOuterAxis(node, dim));
         node.axisDemand[dim] = {
           ...ticksFor(dim),
           rows: times[dim]!.map((r) => r.level),
         };
+        keyed.recordDemand(node, dim);
       }
-      const niced = niceContinuous(s, ticksFor(dim)) as CONTINUOUS_TYPE;
+      const niced = keyed.scope(
+        node,
+        dim,
+        placed[dim],
+        undefined
+      )[0] as CONTINUOUS_TYPE;
       nices[dim] = [niced.dataInterval.min, niced.dataInterval.max];
       floors[dim] = nices[dim]![0];
     } else if (axisOver(s) === "delta") {
@@ -1454,7 +1483,7 @@ function elaborationsFor(
   const crossDirection = (dim: 0 | 1): AxisDirection =>
     dim === 0 ? wrapperDirection(node) : 1;
   const axisSide = (dim: 0 | 1): "start" | "end" =>
-    sides[dim] ?? defaultAxisSide(dim, spaceFor(dim), crossDirection(dim));
+    sides[dim] ?? defaultAxisSide(dim, wide[dim], crossDirection(dim));
   // Returns the full hanging-point descriptor (see `LabelRotation`), not
   // just the angle — `resolveLabelRotation` also derives the track-axis
   // alignment mode and, for an oblique angle, which end of the label anchors
@@ -1505,7 +1534,7 @@ function elaborationsFor(
   };
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
-    const s = spaceFor(dim);
+    const s = wide[dim];
     const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
     const kind = axisOver(s);

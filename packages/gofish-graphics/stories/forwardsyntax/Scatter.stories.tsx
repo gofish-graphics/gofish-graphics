@@ -30,7 +30,7 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(catchLocationsArray, { axes: true })
+    chart(catchLocationsArray)
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
       .mark(circle({ r: 5 }))
       .render(container, {
@@ -55,7 +55,7 @@ export const Connected: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(drivingShifts, { axes: true })
+    chart(drivingShifts)
       .flow(scatter({ by: "year", x: "miles", y: "gas" }))
       .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }))
       .layer(line({ stroke: "black", strokeWidth: 2 }))
@@ -81,7 +81,7 @@ export const WithPieGlyphs: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(catchLocationsArray, { axes: true })
+    chart(catchLocationsArray)
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
       // The glyph chart leaves off its data: as a nested mark it inherits its
       // parent partition (the lake's row), joins in that lake's catch rows, and
@@ -111,7 +111,7 @@ export const WithPieGlyphsDenormalized: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(catchDataWithLocations, { axes: true })
+    chart(catchDataWithLocations)
       .flow(scatter({ by: "lake", x: "x", y: "y" }))
       .mark(
         chart({ coord: clock() })

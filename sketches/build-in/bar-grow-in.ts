@@ -311,7 +311,6 @@ chart(brands)
     spread({
       by: field("name").sort("value", "desc"),
       dir: "y",
-      sharedScale: true,
     }).transition({ update: time.stagger({ lag: 20 }) })
   )
   .mark(
@@ -386,7 +385,6 @@ chart(brands)
     spread({
       by: field("name").sort("value", "desc"),
       dir: "y",
-      sharedScale: true,
     })
   )
   .mark(rect({ w: "value", fill: "category" }))
@@ -400,7 +398,6 @@ chart(brands)
     spread({
       by: field("name").sort("value", "desc"),
       dir: "y",
-      sharedScale: true,
     })
   )
   .mark(
@@ -417,7 +414,6 @@ chart(brands)
     spread({
       by: field("name").sort("value", "desc"),
       dir: "y",
-      sharedScale: true,
     })
   )
   .mark(rect({ w: "value", fill: "category" }).name("bars"))

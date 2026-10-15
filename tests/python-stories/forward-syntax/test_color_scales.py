@@ -19,7 +19,7 @@ from python_stories.data import SEAFOOD, SCORES_DATA
 
 def story_palette_named_scheme():
     return (
-        chart(SEAFOOD, color=Color.palette("tableau10"), axes=True)
+        chart(SEAFOOD, color=Color.palette("tableau10"))
         .flow(spread(by="species", dir="x"))
         .mark(rect(h="count", fill="species")),
         {"w": 400, "h": 400},
@@ -28,7 +28,7 @@ def story_palette_named_scheme():
 
 def story_palette_string_array():
     return (
-        chart(SEAFOOD, color=Color.palette(["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"]), axes=True)
+        chart(SEAFOOD, color=Color.palette(["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"]))
         .flow(spread(by="species", dir="x"))
         .mark(rect(h="count", fill="species")),
         {"w": 400, "h": 400},
@@ -37,7 +37,7 @@ def story_palette_string_array():
 
 def story_gradient_named_scheme():
     return (
-        chart(SCORES_DATA, color=Color.gradient("blues"), axes=True)
+        chart(SCORES_DATA, color=Color.gradient("blues"))
         .flow(spread(by="label", dir="x"))
         .mark(rect(h="value", fill="value")),
         {"w": 400, "h": 400},
@@ -46,7 +46,7 @@ def story_gradient_named_scheme():
 
 def story_gradient_string_array():
     return (
-        chart(SCORES_DATA, color=Color.gradient(["#f7fbff", "#42c663", "#6b0808"]), axes=True)
+        chart(SCORES_DATA, color=Color.gradient(["#f7fbff", "#42c663", "#6b0808"]))
         .flow(spread(by="label", dir="x"))
         .mark(rect(h="value", fill="value")),
         {"w": 400, "h": 400},
@@ -80,7 +80,7 @@ def story_paired_palettes():
         return out
 
     return (
-        chart(_PAIRED_BARS, axes=True)
+        chart(_PAIRED_BARS)
         .flow(
             derive(_assign_colors),
             spread(by="pair", dir="x"),
@@ -94,7 +94,7 @@ def story_paired_palettes():
 def story_nested_derive():
     lake_order = ["Lake A", "Lake B", "Lake C", "Lake D", "Lake E", "Lake F"]
     return (
-        chart(SEAFOOD, color=Color.palette({"salmon-highlight": "#e15759", "first-half": "#4e79a7"}), axes=True)
+        chart(SEAFOOD, color=Color.palette({"salmon-highlight": "#e15759", "first-half": "#4e79a7"}))
         .flow(
             derive(lambda d: [
                 {
@@ -119,7 +119,7 @@ def story_nested_derive():
 
 def story_selective_derive():
     return (
-        chart(SEAFOOD, color=Color.palette({"highlighted": "#e15759"}), axes=True)
+        chart(SEAFOOD, color=Color.palette({"highlighted": "#e15759"}))
         .flow(
             derive(lambda d: [
                 {**item, "highlight": "highlighted" if item["species"] == "Salmon" else ""}
@@ -135,7 +135,7 @@ def story_selective_derive():
 
 def story_selective_group():
     return (
-        chart(SEAFOOD, color=Color.palette({"Salmon": "#e15759"}), axes=True)
+        chart(SEAFOOD, color=Color.palette({"Salmon": "#e15759"}))
         .flow(
             spread(by="lake", dir="x"),
             stack(by="species", dir="x"),
@@ -175,7 +175,6 @@ def story_ribbon_highlight():
         chart(
             SEAFOOD,
             color=Color.palette({"Salmon": "#e15759", "Trout": "#4e79a7"}),
-            axes=True,
         )
         .flow(
             spread(by="lake", dir="x", spacing=64),

@@ -1,5 +1,5 @@
 import { Frontend } from "gofish-ir";
-import { isValue, type MaybeValue } from "./data";
+import { type MaybeValue } from "./data";
 import { computeAesthetic } from "../util";
 
 export type Interval<T = number> = {
@@ -296,16 +296,28 @@ export const centerOf = <T>(d: Interval<T>): T | undefined =>
   d.min === undefined ? d.center : undefined;
 
 /** The pixel start of a box axis placed by its center: the center through
- *  the axis's scale, less half the box's pixel size. A data center on an axis
- *  with no position scale gives no start, so the parent places the box. */
+ *  the axis's scale, less half the box's pixel size. */
 export const startAtCenter = (
   center: MaybeValue<number>,
   scale: ((x: number) => number) | undefined,
   sizePx: number
-): number | undefined => {
-  if (scale === undefined && isValue(center)) return undefined;
-  return computeAesthetic(center, scale!, undefined)! - sizePx / 2;
-};
+): number => computeAesthetic(center, scale, undefined)! - sizePx / 2;
+
+/** The pixel start of a box axis `sizePx` pixels long: by its center when it
+ *  has one ({@link startAtCenter}), else at its `min` through the axis's
+ *  scale. Undefined when the box has no position of its own on the axis, so
+ *  the parent places it. A pixel center with a pixel size also has the `min`
+ *  they derive, but the box is placed by the center: `sizePx` is the box's
+ *  own size, which for a text or an image is not the `w` or `h` it was
+ *  given (a text's x origin is its anchor, so it passes 0). */
+export const positionOf = (
+  dim: Interval<MaybeValue<number>>,
+  scale: ((x: number) => number) | undefined,
+  sizePx: number
+): number | undefined =>
+  dim.center !== undefined
+    ? startAtCenter(dim.center, scale, sizePx)
+    : computeAesthetic(dim.min, scale, undefined);
 
 export type IndexedDims<T = number> = {
   0?: Interval<T>;

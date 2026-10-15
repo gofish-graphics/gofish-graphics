@@ -4,6 +4,51 @@
 import { Units, withUnits } from "../ast/measure";
 import { quantityUnits, type UnitRecord } from "../ast/underlyingSpace";
 
+declare const process: { exit(code: number): never };
+
+/** A drawn item of a display list: every item but a group. */
+export type Item = {
+  kind: string;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  text?: string;
+  [key: string]: any;
+};
+
+/** Every drawn item of a display list, flattened out of its groups, in
+ *  paint order. */
+export const items = (dl: any): Item[] => {
+  const out: Item[] = [];
+  const walk = (it: any) => {
+    if (it.kind !== "group") out.push(it);
+    for (const c of it.children ?? []) walk(c);
+  };
+  dl.items.forEach(walk);
+  return out;
+};
+
+let passed = 0;
+let failed = 0;
+
+/** Count and log one assertion of a test file. */
+export function check(name: string, ok: boolean, detail?: unknown): void {
+  if (ok) {
+    passed++;
+    console.log(`  ok  ${name}`);
+  } else {
+    failed++;
+    console.error(`  FAIL ${name}`, detail ?? "");
+  }
+}
+
+/** Print the tally of {@link check}, and exit non-zero after a failure. */
+export function report(): void {
+  console.log(`\n${passed} passed, ${failed} failed`);
+  if (failed > 0) process.exit(1);
+}
+
 /** Every text item's string in a display list, in paint order. */
 export const textsOf = (dl: any): string[] => {
   const out: string[] = [];

@@ -1,4 +1,3 @@
-import { computeAesthetic } from "../../util";
 import { color6, resolveColorChannel } from "../../color";
 import { path, transformPath } from "../../path";
 import { GoFishNode } from "../_node";
@@ -14,7 +13,7 @@ import {
   FancySize,
   Size,
   centerOf,
-  startAtCenter,
+  positionOf,
   Transform,
 } from "../dims";
 import { aesthetic, continuous, posFn } from "../domain";
@@ -74,7 +73,7 @@ export const Ellipse = ({
         };
         return [axisSpace(0), axisSpace(1)];
       },
-      layout: (shared, size, scales, children) => {
+      layout: (size, scales, children) => {
         let w = isValue(dims[0].size)
           ? getValue(dims[0].size!) * scales[0]?.sigma!
           : (dims[0].size ?? size[0]);
@@ -97,15 +96,8 @@ export const Ellipse = ({
           }
         }
 
-        const start = (axis: 0 | 1, sizePx: number) => {
-          const center = centerOf(dims[axis]);
-          const scale = posFn(scales[axis]?.map)!;
-          return center !== undefined
-            ? startAtCenter(center, scale, sizePx)
-            : computeAesthetic(dims[axis].min, scale, undefined);
-        };
-        const x = start(0, w);
-        const y = start(1, h);
+        const x = positionOf(dims[0], posFn(scales[0]?.map), w);
+        const y = positionOf(dims[1], posFn(scales[1]?.map), h);
 
         return {
           intrinsicDims: [

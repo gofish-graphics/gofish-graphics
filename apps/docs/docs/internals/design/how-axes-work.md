@@ -83,7 +83,7 @@ axis draws one row per calendar level:
 
 ```ts
 // stories/forwardsyntax/Time.stories.tsx
-chart(prices, { schema: { date: Schema.time() }, axes: true })
+chart(prices, { schema: { date: Schema.time() } })
   .flow(scatter({ by: "date", x: "date", y: "price" }))
   .mark(line({ stroke: "steelblue", strokeWidth: 2 }));
 ```
@@ -152,11 +152,19 @@ which kept `content-box` as the default and added `border-box` later.
 **Built:** chrome belongs to a node. Since #1040 (#681), chrome is built per node, as
 rings of ordinary shapes around that node's content, not once at the root.
 
-**Decided** (#1114, rule 4): axes are drawn only at `chart()` boundaries. An axis is
-drawn at the chart where its domain is decided (see section 4).
+**Built** in #1129 (#1114, rule 4): a continuous axis is drawn only at a `chart()`
+boundary or the render root. Operator `axes:` overrides still draw at their own node
+(#1032), and nested category rows still nest at each grouping level (#1115).
 
-**Proposed**, in draft PR #1110: `axes: true` becomes the default for `chart()`. A
-bare node rendered without a chart still draws no axes.
+**Built** in #1129: `axes: true` is the default for `chart()`, and `axes: false` turns
+the axes off. Each chart's `axes` applies at that chart: a chart used as a mark reads
+its own, and draws only the axes of the domains it owns. An axis a chart turns off is
+hidden, not drawn by a chart inside it. A render's own `axes` overrides only the
+outermost chart's. The render root is an implicit chart, and a bare node rendered
+without a chart still draws no axes by default. A coordinate frame's own axes (the
+polar rings and angle ticks) still need an explicit `axes: true`; that is a declared
+shortcut until the frame reads its chart's setting (reading the default there would
+draw rings on every pie glyph and reject every geo map).
 
 Facets fall out of this rule with no special case. In a faceted chart, the outer
 chart decides the shared domain, so it draws the shared axis and the panel labels.
@@ -165,7 +173,7 @@ scatter as it is written today:
 
 ```ts
 // stories/forwardsyntax/FacetedChart.stories.tsx (FacetedScatterDriving)
-chart(drivingShifts, { axes: true })
+chart(drivingShifts)
   .flow(
     spread({ by: "side", dir: "x", spacing: 50 }),
     scatter({ x: "year", y: "miles", axes: { x: true, y: false } })
@@ -179,14 +187,18 @@ follows from where its domain is decided.
 
 ## 4. Domains at chart boundaries, ranges at every node
 
-**Decided** in #1114. Not built yet.
+**Built** in #1129, in a revised form. Domains are shared by measure and by the
+constraints that place nodes, not cut at every `chart()` boundary (see
+[Measure-keyed domains](/internals/design/measure-keyed-domains)). The rule below is
+the first form of #1114. Rules 2 and 4 hold as built. Rules 1 and 3 do not: two
+separate charts that plot the same column share a domain wherever they sit, unless a
+`frame({ coord })` starts a new space. The note's section 10 says why.
 
 ### The problem
 
-A scale scope does two jobs today. It decides the **domain**, and it decides the
-**range**. Several things start a new scope: spread panels along the spread's
-direction, a fixed `w` or `h` on a node (a "self-scaled" region, see
-[Underlying Space](/internals/core/underlying-space#self-scaling-regions-an-explicit-or-data-valued-size-absorbs-an-axis)),
+Before #1129, a scale scope did two jobs. It decided the **domain**, and it decided
+the **range**. Several things started a new scope: spread panels along the spread's
+direction, a fixed `w` or `h` on a node (a "self-scaled" region),
 and a coordinate transform. Because one scope bundles both jobs, setting a size can
 split a domain by accident. Three cases:
 
@@ -198,10 +210,10 @@ split a domain by accident. Three cases:
   the y axis disappears:
 
   ```ts
-  chart(seafood, { axes: true })
+  chart(seafood)
     .flow(
       spread({ by: "lake", dir: "x" }),
-      stack({ by: "species", dir: "x", h: 150 }) // splits the y domain today
+      stack({ by: "species", dir: "x", h: 150 }) // split the y domain before #1129
     )
     .mark(rect({ h: "count", fill: "species" }));
   ```
@@ -254,7 +266,7 @@ Here is the mosaic story:
 
 ```ts
 // stories/lowlevel/NestedMosaicChart.stories.tsx
-chart(titanic, { axes: true })
+chart(titanic)
   .flow(
     stack({ by: "class", dir: "y", size: field("count").normalize() }),
     stack({ by: "sex", dir: "x", size: field("count").normalize() }),
@@ -266,9 +278,9 @@ chart(titanic, { axes: true })
 ```
 
 Each `normalize()` turns the counts at its level into shares, so each box is a share
-of its parent box. The layout works today only because each level silently becomes
+of its parent box. Before #1129, the layout worked only because each level silently became
 its own scale scope (the "space-filling spine" in
-[Underlying Space](/internals/core/underlying-space#space-filling-spines-normalize-self-scales-a-stacking-axis)).
+[Underlying Space](/internals/core/underlying-space#space-filling-spines-normalize-nests-each-part)).
 Under the #1114 rule it keeps working for a cleaner reason: every level's shares
 cover the same 0 to 1 domain, and every box maps that domain into its own size.
 

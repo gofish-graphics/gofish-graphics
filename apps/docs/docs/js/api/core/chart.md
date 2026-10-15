@@ -46,8 +46,8 @@ Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js
 `axes` accepts a boolean, a per-dimension object, or per-dimension title control:
 
 ```ts
-chart(data, { axes: true }); // both axes, titles inferred
-chart(data, { axes: false }); // no axes (the default)
+chart(data, { axes: true }); // both axes, titles inferred (the default)
+chart(data, { axes: false }); // no axes
 chart(data, { axes: { x: true, y: false } }); // x only
 chart(data, { axes: { x: { title: "Year" }, y: true } }); // custom x title, inferred y title
 chart(data, { axes: { x: { title: false }, y: true } }); // suppress the inferred x title
@@ -169,6 +169,23 @@ Each axis title defaults to the field that dimension encodes (e.g. `count` for
 to show the axis with no title. Manual `axis: true/false` overrides on individual
 operators within the chart are still respected when `axes: true`. See
 [render › Axes](/js/api/core/render#axes) for live examples.
+
+Each chart's `axes` applies at that chart. A chart nested in another reads its
+own `axes` and draws only the axes of the domains it owns, so a shared axis is
+drawn once. An axis a chart turns off is hidden: no chart inside it draws that
+axis instead.
+
+```ts
+// The outer chart draws the lake axis. Each nested chart draws its own
+// species axis, except where it says axes: false.
+chart(seafood, { axes: true })
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark((d) =>
+    chart(d, { axes: false })
+      .flow(spread({ by: "species", dir: "y" }))
+      .mark(rect({ w: 20, h: 8 }))
+  );
+```
 
 ## Legend
 

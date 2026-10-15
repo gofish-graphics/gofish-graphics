@@ -12,7 +12,7 @@ def story_basic():
     w = 500
     lakes = 6
     return (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(spread(by="lake", dir="x", spacing=w / (lakes - 1)))
         .mark(ribbon(h="count", opacity=0.8)),
         {"w": w, "h": 300},
@@ -21,7 +21,7 @@ def story_basic():
 
 def story_stacked():
     return (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(
             spread(by="lake", dir="x", spacing=64),
             stack(by="species", dir="y"),
@@ -33,7 +33,7 @@ def story_stacked():
 
 def story_layered():
     return (
-        chart(STREAMGRAPH_DATA, axes=True)
+        chart(STREAMGRAPH_DATA)
         .flow(spread(by="x", dir="x", spacing=50), group(by="c"))
         .mark(ribbon(h="y", fill="c", opacity=0.7)),
         {"w": 500, "h": 300},

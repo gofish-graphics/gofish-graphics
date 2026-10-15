@@ -1033,11 +1033,6 @@ for the API.
           "description": "Cross-axis alignment (\"start\" | \"middle\" | \"end\" | \"baseline\").",
           "default": "baseline"
         },
-        "sharedScale": {
-          "type": "boolean",
-          "description": "Share one scale across all children.",
-          "default": false
-        },
         "anchor": {
           "enum": ["edge", "start", "middle", "end", "baseline"],
           "description": "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
@@ -1132,11 +1127,6 @@ for the API.
           "type": "string",
           "description": "Cross-axis alignment (\"start\" | \"middle\" | \"end\" | \"baseline\").",
           "default": "baseline"
-        },
-        "sharedScale": {
-          "type": "boolean",
-          "description": "Share one scale across all children.",
-          "default": false
         },
         "anchor": {
           "enum": ["edge", "start", "middle", "end", "baseline"],
@@ -2977,7 +2967,8 @@ for the API.
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions",
-          "description": "Draw axes: a boolean for both axes, or per-axis options {x?, y?}."
+          "description": "Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead.",
+          "default": true
         },
         "legend": {
           "type": "boolean",

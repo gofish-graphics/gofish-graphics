@@ -72,7 +72,7 @@ export const Default: StoryObj<Args> = {
       });
     });
 
-    chart(data, { axes: true })
+    chart(data)
       .flow(spread({ by: "cat", dir: "x" }))
       .mark(
         rect({

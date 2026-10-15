@@ -25,7 +25,7 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
 
     spreadX(
-      { spacing: 64, sharedScale: true },
+      { spacing: 64 },
       map(groupBy(penguins, "Species"), (d, species) => {
         const density = Array.from(
           density1d(d.map((p) => p["Body Mass (g)"]).filter((w) => w !== null))

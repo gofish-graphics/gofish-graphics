@@ -40,12 +40,11 @@ export function axisSpan(opts: {
   return new GoFishNode(
     {
       type: "axisSpan",
-      shared: [false, false],
       resolveUnderlyingSpace: (): Size<UnderlyingSpace> => [
         UNDEFINED,
         UNDEFINED,
       ],
-      layout: (_shared, size, _scales, layoutChildren) => {
+      layout: (size, _scales, layoutChildren) => {
         const [a, b] = layoutChildren.map((c) =>
           c.layout(size, [undefined, undefined])
         );
@@ -120,12 +119,11 @@ export function runStartBox(opts: {
   return new GoFishNode(
     {
       type: "axisSpan",
-      shared: [false, false],
       resolveUnderlyingSpace: (): Size<UnderlyingSpace> => [
         UNDEFINED,
         UNDEFINED,
       ],
-      layout: (_shared, size, _scales, layoutChildren) => {
+      layout: (size, _scales, layoutChildren) => {
         const [lo, hi, f, p] = layoutChildren
           .map((c) => c.layout(size, [undefined, undefined]))
           .map((l) => [l.dims[dim].min ?? 0, l.dims[dim].max ?? 0] as const);

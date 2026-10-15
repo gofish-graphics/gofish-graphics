@@ -2287,7 +2287,7 @@ async function main() {
   console.log("\n# a binned key over refs");
   {
     const pts = [0.5, 0.7, 2.5, 2.7, 4.2].map((x) => ({ x, y: 1 }));
-    const bars = await chart(pts)
+    const bars = await chart(pts, { axes: false })
       .flow(scatter({ x: "x", y: "y" }))
       .mark(circle({ r: 3 }).name("points"))
       .layer(
@@ -2349,7 +2349,7 @@ async function main() {
       })),
     ];
     const rects = async (flow: unknown[]) =>
-      chart(ages)
+      chart(ages, { axes: false })
         .flow(...flow)
         .mark(rect({ w: 3, h: distField("age").count() }))
         .toDisplayList({ w: 300, h: 200 })

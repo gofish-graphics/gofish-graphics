@@ -44,7 +44,9 @@ async function main() {
   ];
   const W = 16;
   const SPACING = 8;
-  const doc: DisplayList.DisplayListDocument = await chart(data)
+  // Axes off: the checks below count and measure the bars alone, and axis
+  // ticks are rects too.
+  const doc: DisplayList.DisplayListDocument = await chart(data, { axes: false })
     .flow(spread({ by: "c", dir: "x", spacing: SPACING }))
     .mark(rect({ h: "v", w: W, fill: "steelblue" }))
     .toDisplayList({ w: 200, h: 120 });
@@ -119,6 +121,9 @@ async function main() {
     d.items.forEach(walk);
     return out;
   };
+  // With the default axes on: the axis ticks are rects with no datum, so the
+  // check reads the rects that carry one. An empty group drawn as chrome
+  // would carry none and drop out of the count.
   const emptied = rectsOf(
     await chart(data)
       .flow(
@@ -127,7 +132,7 @@ async function main() {
       )
       .mark(rect({ h: "v", w: W }))
       .toDisplayList({ w: 200, h: 120 })
-  );
+  ).filter((it) => it.datum !== undefined);
   check(
     "an empty filtered group is data, not chrome",
     emptied.length === 3 &&

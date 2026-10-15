@@ -13,11 +13,11 @@ import {
 
 export const testRidgeline = () =>
   spreadY(
-    { spacing: -30, sharedScale: true },
+    { spacing: -30 },
     map(groupBy(streamgraphData, "c"), (items, c) =>
       frame([
         spreadX(
-          { spacing: 20 /* , sharedScale: true */ },
+          { spacing: 20 },
           map(items, (d) =>
             rect({
               // x: d.x * 20,

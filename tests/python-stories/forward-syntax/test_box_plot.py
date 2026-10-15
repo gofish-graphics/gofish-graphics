@@ -20,7 +20,6 @@ def story_gender_pay_gap():
                 "75-Percentile": pay,
                 "Max": pay,
             },
-            axes=True,
         )
         .flow(
             spread(by="Pay Grade", dir="x", spacing=24),

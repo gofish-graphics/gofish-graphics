@@ -26,7 +26,7 @@ from python_stories.vega_data_urls import read_json
 
 def story_default():
     return (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count").label(field("count").sum())),
         {"w": 400, "h": 300},
@@ -37,7 +37,7 @@ def story_default():
 
 def story_center():
     return (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(
             spread(by="lake", dir="x"),
             stack(by="species", dir="y"),
@@ -55,7 +55,7 @@ def story_center():
 
 def story_above():
     return (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count").label(field("count").sum(), position="outset")),
         {"w": 400, "h": 300},
@@ -105,7 +105,7 @@ def story_left():
 
 def story_right():
     return (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(spread(by="lake", dir="y"))
         .mark(
             rect(w="count").label(
@@ -120,7 +120,7 @@ def story_right():
 
 def story_above_start():
     return (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(
             spread(by="lake", dir="x"),
             stack(by="species", dir="x"),
@@ -138,7 +138,7 @@ def story_above_start():
 
 def story_above_end():
     return (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(
             spread(by="lake", dir="x"),
             stack(by="species", dir="x"),
@@ -166,7 +166,7 @@ _HEAT_DATA = [
 
 def story_heatmap_with_labels():
     return (
-        chart(_HEAT_DATA, color=Color.gradient(["#e0f3ff", "#08519c"]), axes=True)
+        chart(_HEAT_DATA, color=Color.gradient(["#e0f3ff", "#08519c"]))
         .flow(table(by={"x": "hour", "y": "day"}, spacing=4))
         .mark(
             rect(fill="value").label(
@@ -223,7 +223,7 @@ def story_label_on_stack_aggregate():
 
 def story_two_labels_per_bar():
     return (
-        chart(SEAFOOD, axes=True)
+        chart(SEAFOOD)
         .flow(spread(by="lake", dir="x", spacing=40))
         .mark(
             rect(h=field("count").sum())

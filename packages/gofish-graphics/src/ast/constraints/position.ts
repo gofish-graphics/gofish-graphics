@@ -31,6 +31,21 @@ export const isPositionInterval = (
   coord: PositionCoordinate | undefined
 ): coord is PositionInterval => Array.isArray(coord);
 
+/** How a position coordinate places its target on an axis (#1114): by a
+ *  literal pixel value (a number, or an interval whose endpoints are all
+ *  numbers), which places the target elsewhere, so it is detached there; or
+ *  by a datum (a datum point, or an interval with a datum endpoint), which
+ *  keeps it in its layer's set, nested at the datum. Undefined for no
+ *  coordinate, and for a discrete position, which takes no part. Read by the
+ *  sharing plan (`planSharing`) and by the `position` operator. */
+export const positionCoordKind = (
+  coord: PositionValue | PositionInterval | undefined
+): "pixel" | "datum" | undefined => {
+  if (isPositionInterval(coord))
+    return coord.some((e) => isValue(e)) ? "datum" : "pixel";
+  if (typeof coord === "number") return "pixel";
+  return isValue(coord) ? "datum" : undefined;
+};
 /** A value along a column, as the datum read from that column: it carries
  *  the column's measure and type (a time column's calendar). */
 export type ColumnDatum = (v: number) => MaybeValue<number>;

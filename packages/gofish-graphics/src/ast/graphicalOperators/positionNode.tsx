@@ -36,6 +36,9 @@ const offsetSpace = (
   // Shift the data interval by `value` and pin it: a pinned space moves by
   // `value`, a free or difference space hangs its origin at `value`. The claim
   // moves with it (see `offsetExtent` below).
+  // A datum offset moves the content in data, so the content stays shared
+  // with its parent (the node's sharing rule, below): the offset and the
+  // content are one unit.
   //
   // The result is a point plus a difference on one shared axis. When the
   // content is pinned, it is the point and the offset the difference that
@@ -87,7 +90,13 @@ export const positionNode = (
     {
       type: "position",
       key: options.key,
-      shared: [false, false],
+      // The child stays shared on both axes (the default rule, `shareAll`),
+      // and the type hook below reports its type upward. A datum offset
+      // moves the child in data, so the content and the offset are one
+      // unit. A pixel offset moves only paint, as `.translate()` does: the
+      // child's data still reads in its parent's frame. (A literal
+      // `Constraint.position` in a layer is different: it places its child
+      // elsewhere, so it detaches it.)
       resolveUnderlyingSpace: (children: Size<UnderlyingSpace>[]) => {
         const child = children[0] ?? [UNDEFINED, UNDEFINED];
         return [
@@ -103,7 +112,7 @@ export const positionNode = (
           offsetExtent(child[1], extent[1], options.y),
         ];
       },
-      layout: (shared, size, scales, children) => {
+      layout: (size, scales, children) => {
         if (children.length !== 1) {
           throw new Error("Position operator expects exactly one child");
         }
@@ -116,11 +125,11 @@ export const positionNode = (
         const offsetX =
           options.x === undefined
             ? undefined
-            : (computeAesthetic(options.x, posFn(scales[0]?.map)!, 0) ?? 0);
+            : (computeAesthetic(options.x, posFn(scales[0]?.map), 0) ?? 0);
         const offsetY =
           options.y === undefined
             ? undefined
-            : (computeAesthetic(options.y, posFn(scales[1]?.map)!, 0) ?? 0);
+            : (computeAesthetic(options.y, posFn(scales[1]?.map), 0) ?? 0);
 
         // The local box is the child's placed box; the offset is applied once,
         // as the translate. Adding it to the local min too would count it

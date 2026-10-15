@@ -30,7 +30,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    chart(context.loaded.movies as any[], { axes: true })
+    chart(context.loaded.movies as any[])
       .flow(
         spread({ by: field("IMDB Rating").bin(), dir: "x", spacing: 1 })
       )

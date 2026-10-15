@@ -71,10 +71,15 @@ export type ChartOptions = {
   coord?: CoordinateTransform;
   color?: ColorConfig;
   /**
-   * Whether to render axes for this chart.
+   * Whether to render axes for this chart. Default `true`.
    * - `true`  — auto-infer axes from underlying space (default inference rules apply).
    * - `false` — suppress all axis rendering for this chart.
    * - `{ x?, y? }` — control x and y independently.
+   *
+   * It applies at this chart: a chart nested in another reads its own option
+   * and draws only the axes of the domains it owns. An axis a chart turns off
+   * is hidden; no chart inside it draws that axis instead. A render's own
+   * `axes` option, if given, overrides only the outermost chart's.
    *
    * Manual `axis: true/false` overrides on individual operators within the chart
    * are still respected when `axes: true`.
@@ -916,7 +921,11 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
    *  inherits it. */
   renderMeta(): RenderMeta {
     return {
-      axes: this.state.options?.axes,
+      // The outermost chart's axes, which the render's own `axes` overrides.
+      // A chart draws its axes unless told not to. A bare node rendered
+      // without a chart (`gofish(...)`, a combinator's `.render`) keeps the
+      // render default of no axes (see `layout` in gofish.tsx).
+      axes: this.state.options?.axes ?? true,
       legend: this.state.options?.legend,
       colorConfig: this.state.options?.color,
       coord: this.state.options?.coord,
@@ -924,27 +933,16 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     };
   }
 
-  /** The chart options to hand `Frame`. `Frame` picks out what it needs
-   *  (`coord`/`axes`/`padding`, plus the dims when there is no `coord` and it
-   *  falls through to `layer`), so this is the whole bag rather than a
-   *  hand-copied key list — a list the layered path used to keep separately and
-   *  would silently drop a newly added chart option from. Both the single-tier
-   *  path and `LayerBuilder`'s hoisted frame read it. */
-  frameOptions(): ChartOptions {
-    return this.state.options ?? {};
+  /** Build this chart's node: its nodes ({@link resolveNodes}) in its frame
+   *  ({@link frameNodes}). */
+  async resolve(): Promise<GoFishNode> {
+    return this.frameNodes(await this.resolveNodes());
   }
 
-  /** A copy without the `coord` option. `LayerBuilder` uses this to HOIST the
-   *  root tier's coordinate space over EVERY tier (see `LayerBuilder.resolve`),
-   *  so the root tier itself must not build a second one around its own mark. */
-  withoutCoord(): ChartBuilder<TInput, TOutput> {
-    if (this.state.options?.coord === undefined) return this;
-    const { coord: _coord, ...rest } = this.state.options;
-    return this.with({ options: rest });
-  }
-
-  /** Build this chart's node. Named marks tag themselves during resolution
-   *  and are collected into `layerContext` by the post-resolve walk below.
+  /** This chart's nodes, before its frame: its mark's content, then the
+   *  transitions it draws over its marks. Named marks tag themselves during
+   *  resolution and are collected into `layerContext` by the post-resolve
+   *  walk below.
    *
    *  Under a `time.sequence` a mark may chain `.transition({ update })`. The
    *  tier then draws, for each tween chained on its marks (`chainedUpdates`),
@@ -954,7 +952,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
    *  is always named. It is drawn inside the tier's own frame, so a
    *  `.layer(...)` chained next still takes the tier's marks as its scope,
    *  and the tier's coordinate space holds both. */
-  async resolve(): Promise<GoFishNode> {
+  async resolveNodes(): Promise<GoFishNode[]> {
     if (!this.state.finalMark) {
       throw new Error("Cannot resolve: no mark specified. Call .mark() first.");
     }
@@ -965,11 +963,11 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     return builder.resolveNamed(name);
   }
 
-  /** `resolve`, with the name this tier's mark carries when it draws a
+  /** `resolveNodes`, with the name this tier's mark carries when it draws a
    *  transition over its marks. */
   private async resolveNamed(
     name: string | symbol | undefined
-  ): Promise<GoFishNode> {
+  ): Promise<GoFishNode[]> {
     let composedMark = this.state.finalMark as Mark<any>;
     for (const op of this.state.operators.toReversed()) {
       composedMark = await op(composedMark);
@@ -977,12 +975,10 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
 
     const data = await this.resolveData();
 
-    const content = (
-      await resolveMarkResult(
-        composedMark(data as any, undefined, this.state.layerContext),
-        this.state.layerContext
-      )
-    ).setShared([true, true]);
+    const content = await resolveMarkResult(
+      composedMark(data as any, undefined, this.state.layerContext),
+      this.state.layerContext
+    );
 
     // Populate layerContext by walking the finished tree in DFS order.
     // Tree order = parent-iteration order (because every parent operator's
@@ -1010,12 +1006,20 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
       );
     }
 
-    const node = await Frame(this.frameOptions(), [content, ...transitions]);
-
+    const nodes = [content, ...transitions];
     // A flow with a `time.sequence` plays DATA time: its marks enter and
     // leave with the data, so the build-in only checks this tier's
     // transitions against that clock (`src/animation/install.ts`).
-    if (findTimeTier(this.state.operators) !== undefined) markDataTime(node);
+    if (findTimeTier(this.state.operators) !== undefined)
+      nodes.forEach(markDataTime);
+    return nodes;
+  }
+
+  /** `nodes` framed as this chart ({@link frameChart}), with the chart's
+   *  color config, z-order and name. `LayerBuilder` frames every tier's
+   *  nodes as its root chart. */
+  async frameNodes(nodes: GoFishNode[]): Promise<GoFishNode> {
+    const node = await frameChart(this.state.options ?? {}, nodes);
 
     // Embed colorConfig on the node so it survives .resolve() inside Layer
     if (this.state.options?.color) {
@@ -1146,6 +1150,32 @@ function isChartOptions(x: unknown): x is ChartOptions {
 }
 
 /**
+ * A chart's node: a `Frame` with the chart's options over one layer of
+ * `children`, its content. `Frame` picks out what it needs (`coord`, `axes`,
+ * `padding`, and the dims, which size it), so this is the whole bag rather
+ * than a key list. A chart is where its axes are drawn (#1114 step 6): on an
+ * axis it has a size of its own, it solves σ there and draws them around its
+ * content. Every node the chart draws (its marks, their transitions, the
+ * tiers of a `.layer()` chain) is in that one content layer, so they all
+ * share the axes it draws. The chart's own `axes` option (default `true`) is
+ * stamped next to its box (`_chartAxes`), and applies at the chart.
+ *
+ * DECLARED SHORTCUT (#1110): a coord's own axes (the polar rings) read the
+ * option as written, so a polar chart draws them only with an explicit
+ * `axes`. Reading the stamped default there would draw rings on every pie
+ * glyph and throw on every geo map (a fitted space has no rings yet).
+ */
+async function frameChart(
+  options: ChartOptions,
+  children: GoFishNode[]
+): Promise<GoFishNode> {
+  const node = await Frame(options, [await Layer({}, children)]);
+  node._chartBox = [options.w !== undefined, options.h !== undefined];
+  node._chartAxes = options.axes ?? true;
+  return node;
+}
+
+/**
  * A tier in a `.layer(...)` chain. Usually a full `Chart(...)` pipeline, but a
  * bare `Mark` (or an already-resolved `GoFishNode`) is a *mark tier* — a
  * component-level, datumless annotation overlay.
@@ -1219,15 +1249,16 @@ export class LayerBuilder extends RenderableBuilder {
   async resolve(): Promise<GoFishNode> {
     const sharedContext: LayerContext = this.layerContext ?? {};
     const nodes: GoFishNode[] = [];
-    // The root tier's coordinate space is the CHART's space, not that one
-    // tier's: a basemap under `geo(...)` and the paths layered over it must
-    // share one projection, or the layer would be positioned in pixels against
-    // a map it knows nothing about. So it is hoisted here — stripped from the
-    // root tier and wrapped around every tier's nodes — and the coord's domain
-    // inference then sees all the tiers' positions at once.
-    const root = this.rootChart();
-    const rootMeta = root.renderMeta();
-    const hoistedCoord = rootMeta.coord;
+    // The root tier's box is the CHART's box, not that one tier's. Its
+    // coordinate space: a basemap under `geo(...)` and the paths layered over
+    // it must share one projection, or the layer would be positioned in pixels
+    // against a map it knows nothing about. And its size (#1114): the chart is
+    // the sized node that solves σ for every tier, and its axes are drawn
+    // inside it, so the ticks map with the σ every tier's marks map with. So
+    // the root tier is not framed on its own: its nodes and every other
+    // tier's go into one frame, the root chart's (`frameNodes`), and the
+    // coord's domain inference then sees all the tiers' positions at once.
+    let root = this.rootChart();
     // The previous tier's marks, as a `GoFishRef[]` bag — offered uniformly to
     // every tier (see class doc). `undefined` before any tier has produced
     // named nodes (the root tier, or after a producer with no name).
@@ -1239,7 +1270,6 @@ export class LayerBuilder extends RenderableBuilder {
       const hasNext = i < this.tiers.length - 1;
 
       if (tier instanceof ChartBuilder) {
-        if (i === 0 && hoistedCoord !== undefined) tier = tier.withoutCoord();
         // The root tier's clock, offered to every later tier the way the
         // previous tier's marks are (see `ChartBuilder.adoptTimeTier`): a
         // transition layered over a sequence's keyframes is inside that
@@ -1266,7 +1296,16 @@ export class LayerBuilder extends RenderableBuilder {
           tier = named.builder;
           autoName = named.name;
         }
-        nodes.push(await tier.withLayerContext(sharedContext).resolve());
+        tier = tier.withLayerContext(sharedContext);
+        // The root tier is the chart, whose frame `frameNodes` builds below
+        // around every tier, so its own nodes are not framed again: they are
+        // one layer, a tier like the others in the paint order (a relational
+        // tier's connectors go below the whole tier). Every other tier is a
+        // chart of its own inside the frame.
+        if (i === 0) {
+          root = tier;
+          nodes.push(await Layer({}, await tier.resolveNodes()));
+        } else nodes.push(await tier.resolve());
         prevRefs = autoName
           ? (sharedContext[autoName]?.nodes ?? []).map((n) => ref({ __ref: n }))
           : undefined;
@@ -1295,18 +1334,12 @@ export class LayerBuilder extends RenderableBuilder {
         prevRefs = undefined;
       }
     }
-    const stack = await Layer({}, nodes);
-    // The hoisted coordinate space wraps the whole stack, so every tier is laid
-    // out in it and its domain inference sees all of their positions at once.
-    const result =
-      hoistedCoord !== undefined
-        ? await Frame(this.rootChart().frameOptions(), [stack])
-        : stack;
-    const { colorConfig } = rootMeta;
-    if (colorConfig) {
-      (result as any).colorConfig = colorConfig;
-    }
-    return result;
+    // The root chart's frame holds every tier, so every tier is laid out in
+    // it and its domain inference sees all of their positions at once. It
+    // is one chart (#1114 step 6): every tier is in its one content layer
+    // (`frameChart`), so it draws the axes its tiers share, and the tier
+    // charts inside that content draw none of their own.
+    return root.frameNodes(nodes);
   }
 
   /** The render-time config threaded from the root tier, so a `.layer()`

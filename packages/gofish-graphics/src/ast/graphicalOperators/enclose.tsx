@@ -39,14 +39,13 @@ export const enclose = createNodeOperator(
     return new GoFishNode(
       {
         type: "enclose",
-        shared: [false, false],
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => {
           return [UNDEFINED, UNDEFINED];
         },
-        layout: (shared, size, scales, children) => {
+        layout: (size, scales, children) => {
           // Child placement mirrors `layer`'s own rule exactly (see
           // `placeUnplacedChild` in `_node.ts`, reused here rather than
           // re-derived): a FRESH child (e.g. a plain shape) reports an

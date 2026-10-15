@@ -64,7 +64,7 @@ export const testPolarRibbonOther = (size: { width: number; height: number }) =>
     coord({ transform: polar_DEPRECATED() }, [
       layer([
         stack(
-          { x: 100, y: Math.PI, dir: 1, spacing: Math.PI / 6, alignment: "middle", sharedScale: true },
+          { x: 100, y: Math.PI, dir: 1, spacing: Math.PI / 6, alignment: "middle" },
           // TODO: I could probably make the width be uniform flexible basically
           Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
             stack({ dir: 0, alignment: "middle" },

@@ -65,7 +65,7 @@ export const Region = ({
       // data-driven, as `rect` does.
       color: isValue(fill) ? fill : stroke,
       resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
-      layout: (_shared, size, _scales, _children, _node, region) => {
+      layout: (size, _scales, _children, _node, region) => {
         const extent = (axis: 0 | 1) => {
           const span = region?.spans[axis];
           if (span !== undefined)

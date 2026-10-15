@@ -7,7 +7,6 @@ type StackProps = {
   key?: string;
   dir: AxisName;
   alignment?: "start" | "middle" | "end";
-  sharedScale?: boolean;
   reverse?: boolean;
 } & FancyDims<MaybeValue<number>>;
 

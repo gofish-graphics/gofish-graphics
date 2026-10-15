@@ -31,7 +31,9 @@ import {
   type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
-import { niceScope, type Extent } from "./extent";
+import { mapsDomain } from "./extent";
+import * as Monotonic from "../util/monotonic";
+import { KeyedDomains } from "./keyedDomains";
 import {
   fromFrameStart,
   orientScales,
@@ -52,6 +54,7 @@ import {
   type LabelRowSettings,
 } from "./axes/elaborate";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
+import { dumpKeyedDomains, dumpSharing } from "./debug/dump";
 import {
   levelOptionsError,
   levelsFromOption,
@@ -310,6 +313,27 @@ function manualLabelRowSettings(
   ]);
 }
 
+/**
+ * The dims a chart's `axes` option draws, each with what its axis ticks at
+ * ({@link AxisTicks}). `true` draws both and `false` (or no option, as for a
+ * bare render) neither. For an `{ x?, y? }` object a dim is drawn unless it is
+ * explicitly `false`: specifying one axis does not turn the other off. Each
+ * drawn dim ticks at about 10 ticks. A time axis adds its rows when it is
+ * elaborated (`elaborationsFor`), since its levels depend on the axes inside
+ * it.
+ */
+export const axesEnabled = (
+  axes: AxesOptions | undefined
+): Map<0 | 1, AxisTicks> => {
+  const enabled = new Map<0 | 1, AxisTicks>();
+  if (!axes) return enabled;
+  for (const dim of [0, 1] as const) {
+    const on = axes === true || (dim === 0 ? axes.x : axes.y) !== false;
+    if (on) enabled.set(dim, DEFAULT_AXIS_TICKS);
+  }
+  return enabled;
+};
+
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
 // which needs a concrete canvas to scale data into (see the per-axis comment in
 // `layout()` for the full behavior, including the shrink-to-fit case).
@@ -340,7 +364,7 @@ export async function layout(
     labelRowSettings?: LabelRowSettings;
   },
   child: GoFishNode | Promise<GoFishNode>,
-  contexts?: {
+  contexts: {
     session: RenderSession;
   }
 ): Promise<{
@@ -358,9 +382,7 @@ export async function layout(
   legendFields: ReadonlySet<string>;
 }> {
   child = await child;
-  if (contexts?.session) {
-    child.setRenderSession(contexts.session);
-  }
+  child.setRenderSession(contexts.session);
   // Note: callers must await `document.fonts.ready` before invoking
   // `layout()`. The public `gofish()` entry handles this; standalone
   // callers of `layout()` are responsible for the wait themselves.
@@ -388,7 +410,7 @@ export async function layout(
   // color scale is NOT re-resolved: it was final before chrome was elaborated
   // (the legend shows it), and chrome adds no data colors.
   const reresolve = async (n: GoFishNode) => {
-    if (contexts?.session) n.setRenderSession(contexts.session);
+    n.setRenderSession(contexts.session);
     n.resolveNames();
     // The inserted chrome is built from operators (Spread) whose constraints
     // install in this pass; nodes resolved before are consumed and untouched.
@@ -396,32 +418,32 @@ export async function layout(
     n.clearUnderlyingSpace();
     n.resolveUnderlyingSpace();
   };
+  // The measure-keyed domains (#1114): after the type walk, per space root,
+  // axis and unit, the domain every sized node of that unit maps into its
+  // size. Decided once, here, before chrome and labels are elaborated:
+  // chrome only reads them. Axis ownership reads which keyed domain each
+  // axis is over, and the demand half (an axis drawn over a domain is what
+  // nices it) is refreshed once the axes are assigned.
+  const keyedDomains = (contexts.session.keyedDomains =
+    KeyedDomains.build(child));
 
   const __tAxes = perfNow();
-  // Axis ownership: which node draws each axis (`resolveAxes`). Which dims
-  // the chart-level `axes` option enables: `true` → both. For an `{ x?, y? }`
-  // object, a dim is enabled unless it is explicitly `false` — an unspecified
-  // (undefined) dim still shows (specifying one axis doesn't disable the
-  // other); only `false` suppresses. Each enabled dim carries what its axis
-  // ticks at: about 10 ticks. A time axis stamps its rows on it when it is
+  // Axis ownership: which node draws each axis (`resolveAxes`). The render
+  // root is the outermost chart, and the render's `axes` (the outermost
+  // chart's own option, unless the render gives one) applies there; every
+  // chart below it applies its own (`GoFishNode._chartAxes`). Each drawn dim
+  // ticks at about 10 ticks; a time axis stamps its rows on it when it is
   // elaborated (its levels, which depend on the axes inside it), before any
-  // solve nices its domain to its inner row. A dim with `levels` is always
-  // enabled: a disabled dim (`false`) has no options to hold them.
+  // solve nices its domain to its inner row. The per-level options
+  // (`levels`, `label`, `divider`) and `side` are read from the render's
+  // `axes` only.
   const read = readAxisOptions(axes);
   const perLevel: [LevelOptions, LevelOptions] = [
     read[0].perLevel,
     read[1].perLevel,
   ];
-  if (axes) {
-    const enabled = new Map<0 | 1, AxisTicks>();
-    for (const dim of [0, 1] as const) {
-      const on =
-        axes === true ||
-        (typeof axes === "object" && (dim === 0 ? axes.x : axes.y) !== false);
-      if (on) enabled.set(dim, DEFAULT_AXIS_TICKS);
-    }
-    child.resolveAxes(new Map(), enabled);
-  }
+  child.resolveAxes(new Map(), axesEnabled(axes));
+  keyedDomains.refreshDemand();
 
   // Chrome elaboration (src/ast/axes/elaborate.tsx): every node that owns
   // chrome wraps itself in it, as ordinary shapes + constraints — its axes,
@@ -432,7 +454,7 @@ export async function layout(
   // the whole render. The legend is built here, from the root as it is laid
   // out, before any chrome wraps the nodes inside it. `legend: false` drops
   // the legend; the color scale still paints the marks.
-  const unitScale = contexts?.session.scaleContext.unit;
+  const unitScale = contexts.session.scaleContext.unit;
   const hasLegend =
     legend !== false &&
     ((isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
@@ -446,6 +468,15 @@ export async function layout(
         )
       : undefined,
   };
+  // A root chart with a size of its own draws its axes around its content,
+  // its frame's one child (`isAxisBoundary`), so the content carries the
+  // request for their titles; each node titles only the axes it draws.
+  const rootContent = child.children[0];
+  if (
+    child._chartBox?.some((sized) => sized) &&
+    rootContent instanceof GoFishNode
+  )
+    rootContent._chromeRequest = { axes };
   const elaborated = await elaborateChrome(child, {
     sides: [read[0].side, read[1].side],
     labelSettings: labelRowSettings ?? manualLabelRowSettings(read),
@@ -475,84 +506,101 @@ export async function layout(
   }
   perfAdd("axes", perfNow() - __tAxes);
 
-  // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,
-  // applied AT the scope's solve (there is no pre-layout tree walk), and it is
-  // DEMAND-DRIVEN — the root scope nices a POSITION domain iff some node in it
-  // renders that dim's axis (`scopeAxisTicks` reads the persistent stamps
-  // `resolveAxes` left; with axes off no stamp exists, so axis-less content
-  // stays at the honest raw scale). When an axis IS drawn, every root consumer
-  // below — the posScale, the baseline-magnitude size solve, the equal-measure
-  // recentering, `needsCanvas` — reads this one niced domain, the same domain
-  // the tick elaboration niced, so content and ticks agree by construction.
-  // Each nested scope root (self-scaled region, shared-scale scope) applies the
-  // same rule at its own solve; a coord scope never nices.
-  const rootAxisDemand = [child.scopeAxisTicks(0), child.scopeAxisTicks(1)];
-  // The root's types and their size claims, niced together (a niced pinned
-  // domain implies its claim).
+  // The render's σ-scope registry: the ONE place σ / posScale is derived
+  // (Stage 6b). The root's claim walk below is where every node with a
+  // literal size solves its scope (`solveFixed`); the root and every other
+  // sized node (a slot, a coord boundary) solve through the same registry.
+  // Reset so a re-run layout pass starts with a clean dump.
+  const scopes = getScopeRegistry(contexts.session);
+  scopes.reset();
+
+  // The render root maps the keyed domain of its types (#1114). Its types
+  // and claims are widened to their keyed domains, then niced together
+  // (#659) when some chart draws an axis over the domain (with axes off no
+  // axis is drawn, so axis-less content stays at the honest raw scale).
+  // Every root consumer below — the posScale, the baseline-magnitude size
+  // solve, the equal-measure recentering, the root's size — reads this one
+  // niced domain, the same domain the tick elaboration niced
+  // (`KeyedDomains.scope`), so content and ticks agree by construction. A
+  // claim that is only pixels (content of literal sizes) is left as it is.
   const rootExtent = child.resolveExtent();
-  const [niceUnderlyingSpaceX, niceExtentX] = niceScope(
-    child._underlyingSpace![0],
-    rootExtent[0],
-    rootAxisDemand[0]
-  );
-  const [niceUnderlyingSpaceY, niceExtentY] = niceScope(
-    child._underlyingSpace![1],
-    rootExtent[1],
-    rootAxisDemand[1]
-  );
+  const rootScope = (axis: 0 | 1) => {
+    const space = child._underlyingSpace![axis];
+    return keyedDomains.scope(child, axis, space, rootExtent[axis]);
+  };
+  const [niceUnderlyingSpaceX, niceExtentX] = rootScope(0);
+  const [niceUnderlyingSpaceY, niceExtentY] = rootScope(1);
 
   if (debug) {
     console.log("🌳 Underlying Space Tree:");
     debugUnderlyingSpaceTree(child);
   }
 
-  // An omitted overall dimension is resolved per axis from the root's size
-  // claim:
-  //  - a claim (a scatter axis, bar heights = value, bar widths = value laid
-  //    side by side): there's data to scale into pixels, so fall back to a
-  //    concrete canvas (DEFAULT_CANVAS_SIZE).
-  //  - no claim (a bar chart's category axis, or a bare fixed-size shape):
-  //    nothing to scale, so lay out *unsized* — marks keep their default
-  //    sizes and the operator shrinks to fit. The natural extent is recovered by
-  //    the `finalDim` readback below, so the SVG is still sized concretely.
-  // Unsized axes are handed `UNSIZED` (NaN); marks treat a non-finite size as
-  // "use my default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
-  // guards, the same path the layout engine already relies on.
-  const UNSIZED = NaN;
-  const needsCanvas = (claim: Extent | undefined) => claim !== undefined;
-  // Concrete canvas for scaling a claimed axis (always a real number).
-  const canvasW = w ?? DEFAULT_CANVAS_SIZE;
-  const canvasH = h ?? DEFAULT_CANVAS_SIZE;
-  // Size handed to `child.layout`: a shrink-to-fit axis is left unsized.
-  const layoutW = w ?? (needsCanvas(niceExtentX) ? canvasW : UNSIZED);
-  const layoutH = h ?? (needsCanvas(niceExtentY) ? canvasH : UNSIZED);
-
-  // The render's σ-scope registry: the ONE place σ / posScale is derived
-  // (Stage 6b). The root is the first scope root; every other scope (self-scaled
-  // axis, constraint budget, shared, coord boundary) solves through the same
-  // registry. Reset so a re-run layout pass starts clean.
-  const scopes = getScopeRegistry(contexts?.session);
-  scopes.reset();
-
-  // The root σ-scope on each continuous axis, solved by the registry from the
-  // root's type and size claim against the canvas: σ, and the pixel of data 0
-  // when the axis has an origin. Equal-measure recentering may replace both.
+  // The root's scope and size on each axis, computed once. Its σ is solved
+  // against the render's size on an axis the render gives one (the root is
+  // then a sized node, #1114). On an axis with no render size the root
+  // shrink-wraps its content: when the nodes with a literal size below map
+  // its keyed domain, all at one σ (`ScopeRegistry.keyedSigma`), the root
+  // maps it at that σ too, so the axis it draws agrees with the marks. Only
+  // when none does (the common `chart(...).render(el, {})`), or they map it
+  // at different σs (an over-constrained layout), is σ solved against the
+  // default canvas. The root's size is its claim at its σ: the slot for a
+  // root fitted to it, its own box for a claim that is only pixels (which is
+  // the same at any σ, so 0 stands in). With no claim (a bar chart's
+  // category axis, a bare fixed-size shape) it is the render's size, or the
+  // default canvas.
   const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;
   const rootClaims = [niceExtentX, niceExtentY] as const;
-  const canvas = [canvasW, canvasH] as const;
+  const rootSizes = ([0, 1] as const).map((axis) => {
+    const given = axis === 0 ? w : h;
+    const space = rootSpaces[axis];
+    const claim = rootClaims[axis];
+    const meta = { kind: "root", rootKey: "root", axis } as const;
+    const key =
+      given === undefined && mapsDomain(space, claim)
+        ? keyedDomains.axisKey(child, axis, child._underlyingSpace![axis])
+        : undefined;
+    const below = key === undefined ? undefined : scopes.keyedSigma(key, axis);
+    const allocated = given ?? DEFAULT_CANVAS_SIZE;
+    const scope =
+      below === undefined
+        ? scopes.solveScope(meta, space, claim, allocated)
+        : scopes.scopeAt(meta, space, claim, below);
+    // A scope solved against the box fills it (a one-value domain's claim is
+    // centered in it); one at a σ from below is its claim at that σ.
+    const px =
+      claim === undefined
+        ? undefined
+        : scope !== undefined
+          ? below === undefined
+            ? allocated
+            : claim.width.run(scope.sigma)
+          : Monotonic.isConstant(claim.width)
+            ? claim.width.run(0)
+            : undefined;
+    return {
+      scope,
+      px:
+        px !== undefined && Number.isFinite(px) && px > 0
+          ? px
+          : (given ?? DEFAULT_CANVAS_SIZE),
+    };
+  });
+  // The size handed to `child.layout`: a claim that maps a domain
+  // (`mapsDomain`) is data to scale into the root's size. Any other axis is laid out *unsized*: a box of
+  // literal size keeps its pixels, marks keep their default sizes, and the
+  // operator shrinks to fit. Unsized axes are handed `UNSIZED` (NaN); marks
+  // treat a non-finite size as "use my default" (e.g. rect's
+  // DEFAULT_RECT_SIZE) via their `Number.isFinite` guards.
+  const UNSIZED = NaN;
+  const canvas = [w ?? rootSizes[0].px, h ?? rootSizes[1].px] as const;
+  const layoutW =
+    w ?? (mapsDomain(niceUnderlyingSpaceX, niceExtentX) ? canvas[0] : UNSIZED);
+  const layoutH =
+    h ?? (mapsDomain(niceUnderlyingSpaceY, niceExtentY) ? canvas[1] : UNSIZED);
   let rootScopes: Size<ScopeSolution | undefined> = [
-    scopes.solveScope(
-      { kind: "root", rootKey: "root", axis: 0 },
-      rootSpaces[0],
-      rootClaims[0],
-      canvas[0]
-    ),
-    scopes.solveScope(
-      { kind: "root", rootKey: "root", axis: 1 },
-      rootSpaces[1],
-      rootClaims[1],
-      canvas[1]
-    ),
+    rootSizes[0].scope,
+    rootSizes[1].scope,
   ];
 
   if (debug) {
@@ -609,8 +657,8 @@ export async function layout(
   // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
   // content(σ)=canvas the whole chart resolves against. No-op unless
   // GOFISH_SOLVER_CHECK is set.
-  shadowCheckScaleRoot(niceExtentX, canvasW, rootScaleFactors[0], 0);
-  shadowCheckScaleRoot(niceExtentY, canvasH, rootScaleFactors[1], 1);
+  shadowCheckScaleRoot(niceExtentX, canvas[0], rootScaleFactors[0], 0);
+  shadowCheckScaleRoot(niceExtentY, canvas[1], rootScaleFactors[1], 1);
 
   // The root content sits in the root scope's frame by the one seating rule
   // (`seatInScope`): a pinned content shares the frame and places its data
@@ -674,6 +722,10 @@ export async function layout(
   // Scope dump (#39 Stage 6b): every σ-scope solved during the layout pass just
   // above, as printable frame equations. No-op unless GOFISH_DUMP_SCOPES is set.
   scopes.dump();
+  dumpKeyedDomains(keyedDomains);
+  // Sharing dump (#1114 step 3): every layer's sharing sets, from its
+  // constraints and children. No-op unless GOFISH_DUMP_SHARING is set.
+  dumpSharing(child);
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the
   // canvas default when the content didn't report one. Read off the root's
@@ -691,16 +743,21 @@ export async function layout(
   // Root placement. The canvas is a frame `[0, final]` on each axis, and the
   // root's axis order starts at the frame's start edge: the left on x, the top
   // for a y that reads top-down, and the BOTTOM for a continuous y, which grows
-  // upward from there (`atFrameStart`). A position `p` along the root's axis
+  // upward from there (`fromFrameStart`). A position `p` along the root's axis
   // order is the pixel `p` from that edge, inward.
   //
-  // A GIVEN dimension seats the root's baseline in that frame; content seated
-  // outside it (axis labels past the frame, ticks beyond it) is reserved as the
-  // per-side overhangs below. A free (baseline-magnitude) root's local 0 is its
-  // baseline, so it is placed at the scope's `originPx` (#773: `descent·σ` from
-  // the frame's start edge, plus any overhead); a pinned root shares the frame
-  // (its map carries `originPx`), and an origin-less root has none: both sit at
-  // 0 (`seatInScope`).
+  // A GIVEN dimension is a fixed slot, and the root's box sits at its start
+  // edge in canvas order, the left on x and the top on y, for either y
+  // direction (#1032): the root's axis order starts at the start edge of the
+  // root's own frame, its size (`rootSizes`), so a root smaller than the slot
+  // sits at the slot's top-left rather than at its bottom. A lone root has no
+  // baseline to line up with siblings, so the slot's start edge is its
+  // reference. In its frame the root is seated by the one seating rule
+  // (`seatInScope`): a free (baseline-magnitude) root's baseline at the
+  // scope's `originPx` (#773: `descent·σ` from the frame's start edge, plus
+  // any overhead), and a pinned or origin-less root at 0. Content seated
+  // outside the slot (axis gutters, titles, a legend) is reserved as the
+  // per-side overhangs below.
   //
   // A SHRINK-TO-FIT dimension makes the canvas box the content's full extent,
   // so pin the box's start edge to the frame's start — content then fills the
@@ -714,16 +771,23 @@ export async function layout(
     const name = axis === 0 ? "x" : "y";
     const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
     const direction = axis === 0 ? 1 : rootYDirection;
-    const frame = axis === 0 ? finalW : finalH;
-    const atFrameStart = (p: number) => fromFrameStart(p, frame, direction);
-    if ((axis === 0 ? w : h) === undefined)
-      child.pinAnchor(name, atFrameStart(offset), orientSide("min", direction));
-    else
-      child.place(
+    if ((axis === 0 ? w : h) === undefined) {
+      child.pinAnchor(
         name,
-        atFrameStart(offset + rootSeats[axis].seatPx),
-        "baseline"
+        fromFrameStart(offset, axis === 0 ? finalW : finalH, direction),
+        orientSide("min", direction)
       );
+      return;
+    }
+    child.place(
+      name,
+      fromFrameStart(
+        offset + rootSeats[axis].seatPx,
+        rootSizes[axis].px,
+        direction
+      ),
+      "baseline"
+    );
   };
   placeRoot(0);
   placeRoot(1);

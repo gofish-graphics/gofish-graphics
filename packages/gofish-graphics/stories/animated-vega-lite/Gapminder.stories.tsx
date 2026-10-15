@@ -116,7 +116,7 @@ export const SpatialTwin: StoryObj<Args> = {
           opacity: 0.5,
         })
       )
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -158,7 +158,7 @@ export const Animated: StoryObj<Args> = {
       .mark(circle({ r: 4, fill: "country" }))
       .layer(time.transition())
       .layer(yearReadout(year))
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -183,7 +183,7 @@ export const Paused1975: StoryObj<Args> = {
       )
       .mark(circle({ r: 4, fill: "country" }))
       .layer(time.transition())
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -214,7 +214,7 @@ export const SequenceOnly: StoryObj<Args> = {
       )
       .mark(circle({ r: 4, fill: "country" }))
       .layer(yearReadout(year))
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -589,11 +589,12 @@ const sparkSamples = (samples: Sample[]) =>
  */
 const sparkRow = (samples: Sample[], clock: any, w: number) =>
   // A sparkline is a chart with no axes, and the coordinate frame is what says
-  // so here: the whole picture is rendered with `axes: true`, an embedded
-  // chart's own `axes: false` option is only read when that chart renders
-  // itself, and an `axes: false` on the operators only silences the operator
-  // that carries it, not the frame above it that ends up drawing the axis. A
-  // coordinate frame owns its space, so no Cartesian axis is drawn inside one.
+  // so here: the whole picture is rendered with `axes: true`, and the chart's
+  // own `axes: false` turns off only the axes the chart owns. The `frame`
+  // above it still claims the ordinal method axis (an ordinal axis is claimed
+  // at any node, not only at a chart, until #1115), and an `axes: false` on
+  // the operators only silences the operator that carries it. A coordinate
+  // frame owns its space, so no Cartesian axis is drawn inside one.
   frame({ w, h: SPARK_H_PX, coord: Coord.linear(), padding: 0 }, [
     frame({ w, h: SPARK_H_PX }, [
       sparkSamples(samples)
@@ -810,7 +811,7 @@ export const Frame1955: StoryObj<Args> = {
         scatter({ by: "country", x: "fertility", y: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }))
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -891,7 +892,7 @@ export const Trails: StoryObj<Args> = {
     const year = timer({ domain: yearRange(gapminder), duration: 10000 });
     trails(gapminder, year, Curve.monotone())
       .layer(yearReadout(year))
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -910,7 +911,7 @@ export const TrailsPaused: StoryObj<Args> = {
     const year = pausedClock(yearRange(gapminder), 10000, 1997.5);
     trails(gapminder, year, Curve.monotone())
       .layer(yearReadout(year))
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },

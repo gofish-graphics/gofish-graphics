@@ -311,17 +311,22 @@ if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
 
 **Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/axes/elaborate.tsx`
 
-If the chart-level `axes` option enables a dimension, `resolveAxes` walks the
-tree top-down flagging which node _owns_ an axis on each dimension. Ownership
-records a **signature** per claimed dim: a continuous axis claims it opaquely
-(single-owner — the root-most one wins, descendants defer to the chart-level
-scale), but ordinal axes **nest** — a node claims its own ordinal axis even
+`resolveAxes` walks the tree top-down flagging which node _owns_ an axis on
+each dimension, and draws it where the nearest chart's `axes` option turns
+that dimension on (the render's `axes` at the root, each chart's own below
+it). Ownership records a **signature** per claimed dim: a continuous axis
+claims it opaquely (single-owner — the root-most one wins, descendants defer to
+the chart-level scale), and only at a `chart()` boundary or the render root
+([Axes](/internals/frontend/axes#axes-are-drawn-at-chart-boundaries)). An
+axis whose chart turns it off is still owned, so it is hidden rather than
+drawn lower down. Ordinal axes **nest** — a node claims its own ordinal axis even
 under an ancestor ordinal axis, as long as it is a _different_ grouping (a finer
 level). So a grouped or faceted chart renders one ordinal axis per grouping
 level (per facet) — e.g. a `spread(lake)`+`stack(species)` bar gets an outer
 `lake` axis and a per-lake `species` axis. Wherever it sets an owning flag,
 `resolveAxes` also leaves a persistent `axisDemand` stamp — the axis's ticks
-(`AxisTicks`: a count, and a time axis's rows), which later gate and
+(`AxisTicks`: a count; a time axis adds its rows when it is elaborated,
+since they depend on the levels below it), which later gate and
 shape per-scope domain nicing at the σ-scope solves (issue #659), since
 `resolveNiceDomains`'s old per-node tree walk is gone; nicing is now demand-
 driven at each scope's own solve (below). Then
@@ -334,8 +339,10 @@ Because the rewrite inserts new nodes and moves keys onto wrappers, the name,
 alias, and underlying space passes rerun on the new tree. The color scale does
 not: it was final before the pass, and chrome adds no data colors. Label
 elaboration follows and reruns the same passes. Domain nicing is not a tree pass at
-all: each σ-scope nices its own POSITION domain at its solve, if some node in
-its space-flow region renders that dim's axis.
+all: each sized node nices its keyed domain at its solve, if some node draws
+an axis over that domain (`KeyedDomains`, built once after the first type walk,
+before chrome, so chrome only reads the domains; the nodes a rewrite adds read
+the seat of the content they wrap).
 
 See [Axes](/internals/frontend/axes) for the full elaboration story (the
 two-tier structure, origin pins, negative-space gutters, and the
@@ -380,7 +387,10 @@ For every continuous root axis, `solveScope` solves σ from the axis's size
 claim against the canvas (`claim.width(σ) = canvas`), so pixel overhead such
 as spacing keeps its pixels, and, when the axis has an origin, the pixel of
 data 0 (`originPx`). A pinned axis hands its content the map
-`px(d) = σ·d + originPx`; a free root is placed at `originPx`.
+`px(d) = σ·d + originPx`; a free root is placed at `originPx`. A one-value
+domain (a one-point chart) has no width for σ to scale, so its value maps to
+the middle of the canvas, as in d3 and Vega-Lite: σ is 0 and the claim is
+centered.
 
 ### Pass 8.5: Embedding Resolution
 
@@ -453,8 +463,7 @@ treat it as they treat a rect. The glyphs' own anchor (the point on the baseline
 `textAnchor` and `rotate` refer to) sits inside that box; the text lowers it from
 the origin by `glyphDy`, the box's top in pixels less the glyphs' top.
 
-It is read off the node's own resolved underlying space (for a node that roots its
-own σ-scope, the space it keeps for itself, `selfScaledSpace`), so it is local: an
+It is read off the node's own resolved underlying space, so it is local: an
 ordinal spread inside a bar chart reads top-down inside, and a bar chart inside an
 ordinal spread grows upward inside its row. A `coord` and everything inside it is
 `-1`, because a coordinate transform is math-handed; the `coord` reflects y where its
@@ -522,15 +531,23 @@ omitted dimension is resolved per axis from the root's size claim on it:
 - An axis with a **claim** (a scatter axis, bar heights `= value`, or bar
   widths `= value` laid side by side, whose spread is ordinal but whose room is
   σ-dependent) has data to scale into pixels, so it falls back to a concrete
-  canvas (`DEFAULT_CANVAS_SIZE = 400`).
+  canvas (`DEFAULT_CANVAS_SIZE = 400`). The exception is a keyed domain that
+  nodes with a literal size below the root already solve, all at one σ
+  (`ScopeRegistry.keyedSigma`): the root is not a sized node on an axis the
+  render does not size, so it maps the domain at that σ, and its size there
+  is its claim at that σ (`rootSizes` in `gofish.tsx`; see
+  [sized nodes](/internals/core/underlying-space#sized-nodes-and-measure-keyed-domains)).
+  A claim that is only pixels lays out unsized, like an axis with no claim.
 - An axis with **no claim** (a bar chart's category axis, or a bare
   fixed-size shape) has nothing to scale, so it lays out _unsized_: marks keep
   their default sizes (a mark treats a non-finite size as "use my default" via its
   `Number.isFinite` guards) and the operator shrinks to fit.
 
-`layout()` therefore distinguishes the concrete `canvasW`/`canvasH` (used to build
-the position scales and root scale factors) from the `layoutW`/`layoutH` it hands
-to `child.layout` (where a shrink-to-fit axis is left unsized). **Shared-measure
+`layout()` therefore computes the root's scope and size once per axis
+(`rootSizes`: its σ, and its claim at that σ), which the root scale factors,
+the equal-measure recentering and the root's frame in Pass 10 all read, and
+distinguishes it from the `layoutW`/`layoutH` it hands to `child.layout`
+(where a shrink-to-fit axis is left unsized). **Shared-measure
 equal scale** (#582) adds one reconciliation step here, after the per-axis scales
 are built and before `child.layout`: when `spaceUnit(x).unit` and
 `spaceUnit(y).unit` are the same DECLARED unit (two unknowns that unified
@@ -541,6 +558,8 @@ maps stay undistorted); the binding axis fills, the other gets a recentered
 posScale. Stage 6c makes this a named `recenterEqualMeasure` operation _on_ the
 scope registry rather than an inline rewrite, so it is the one post-solve σ
 adjustment on the registry's books and `GOFISH_DUMP_SCOPES` records the final σ.
+(After the scope dump, `GOFISH_DUMP_SHARING` prints each layer's sharing sets,
+see [Underlying Space](/internals/core/underlying-space). It only reads the tree.)
 It is type equality, not a knob, and a single-coordinate-space coupling
 — it does not reach sizes solved in separate nested operator scopes. After layout it
 reads the chart's _final_ extent back off the root via `child.dims[i].size`, so an
@@ -743,12 +762,24 @@ non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 **Location**: `src/ast/gofish.tsx`
 
 ```typescript
-// The root's axis order starts at the canvas frame's start edge: the top, or the
+// The root's axis order starts at a frame's start edge: the top, or the
 // bottom for a continuous y (`direction` −1).
-const atFrameStart = (p) => (direction === 1 ? p : frame - p);
+const fromFrameStart = (p, size, direction) => (direction === 1 ? p : size - p);
+// A shrink-to-fit root pins its edge in the canvas frame. A given size seats
+// the root in its own frame, its size (`rootSizes`): its claim at its σ,
+// which is the slot when fitted and its own box for a fixed size; the slot
+// when there is no claim.
 shrinkToFit
-  ? child.pinAnchor(axis, atFrameStart(offset), direction === 1 ? "min" : "max")
-  : child.place(axis, atFrameStart(offset + seatPx), "baseline");
+  ? child.pinAnchor(
+      axis,
+      fromFrameStart(offset, final, direction),
+      direction === 1 ? "min" : "max"
+    )
+  : child.place(
+      axis,
+      fromFrameStart(offset + seatPx, rootSizes[axis].px, direction),
+      "baseline"
+    );
 ```
 
 **Implementation**: `src/ast/_node.ts`
@@ -759,9 +790,13 @@ root's axis order starts at the frame's start edge (the bottom for a continuous 
 _Which_ anchor depends on whether the axis is sized:
 
 - **Given dimension** → pin the **baseline** (local `0`) at the scope's seat from the
-  start edge. The canvas box is `[0, given]`, and any content seated outside it (axis
-  labels past the start edge, ticks past the end) is reserved as the per-side
-  overhangs in the render pass.
+  start edge of the root's own frame. The canvas box is `[0, given]`, a fixed slot. A
+  root the slot sizes fills it, so its frame is the slot. A root with a size of its
+  own (a chart's literal `w`/`h`, a claim with no σ in it) has its own box as its
+  frame, and that box sits at the slot's top-left in canvas order (#1032), not at the
+  bottom where a continuous y's axis order starts. Any content seated outside the
+  slot (axis labels past the start edge, ticks past the end) is reserved as the
+  per-side overhangs in the render pass.
 - **Shrink-to-fit dimension** (`w`/`h` omitted, so `finalH = size`) → pin the
   content's **start edge** to the frame's start. The canvas box _is_ the content's
   full extent, so the content fills `[0, size]` exactly and the overhang formulas
