@@ -345,6 +345,9 @@ importers:
       d3-hierarchy:
         specifier: ^3.1.2
         version: 3.1.2
+      delaunator:
+        specifier: 5.1.0
+        version: 5.1.0
       gofish-ir:
         specifier: workspace:*
         version: link:../gofish-ir
@@ -388,9 +391,6 @@ importers:
       '@types/topojson-client':
         specifier: ^3.1.5
         version: 3.1.5
-      delaunator:
-        specifier: 5.1.0
-        version: 5.1.0
       fast-kde:
         specifier: ^0.2.2
         version: 0.2.2
