@@ -133,7 +133,7 @@ export const TyreTree: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 560, h: 560 });
+    const container = initializeContainer();
     tree(
       {
         node,

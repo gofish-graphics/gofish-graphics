@@ -40,12 +40,11 @@ export const HVDrawing: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 640, h: 420 });
+    const container = initializeContainer();
     tree(
       {
         node,
         link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1.5 },
-        mode: "bottomUp",
         // Both relations alternate in sync (resolved at the same node depth).
         parentChild: alternate([H, V]),
         sibling: alternate([H, V]),

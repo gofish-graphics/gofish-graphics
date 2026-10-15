@@ -53,7 +53,7 @@ export const CartesianDeepTree: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 900, h: 520 });
+    const container = initializeContainer();
     tree(
       {
         node,

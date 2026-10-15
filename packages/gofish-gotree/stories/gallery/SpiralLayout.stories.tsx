@@ -54,7 +54,7 @@ export const SpiralLayout: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 520, h: 520 });
+    const container = initializeContainer();
     tree(
       {
         node,

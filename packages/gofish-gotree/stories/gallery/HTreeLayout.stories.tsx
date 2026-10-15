@@ -66,7 +66,7 @@ export const HTreeLayout: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 720, h: 560 });
+    const container = initializeContainer();
     tree(
       {
         node,

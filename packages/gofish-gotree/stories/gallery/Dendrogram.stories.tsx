@@ -84,7 +84,7 @@ export const Dendrogram: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 900, h: 520 });
+    const container = initializeContainer();
     tree(
       {
         node,
