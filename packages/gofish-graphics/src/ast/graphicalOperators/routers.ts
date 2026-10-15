@@ -1,5 +1,5 @@
 /**
- * Curve registry — pluggable path-shaping algorithms for the `line`/`ribbon`
+ * Curve registry — the path-shaping algorithms for the `line`/`ribbon`
  * mark (and any connector). The public `curve` option resolves (via
  * `resolveCurve`) to a *router*: a function that shapes the stroke between two
  * already-resolved endpoints (their bboxes). All of these are screen-space and
@@ -7,24 +7,33 @@
  * (statistical smoothing: loess/regression) is a separate `derive` operator
  * (see issue #635), not a curve.
  *
- * Built-ins below are the *routing* curves (straight / bezier / orthogonal /
+ * Built-ins below are the *routing* curves (linear / bezier / orthogonal /
  * arc — the GoTree link styles, Li et al. CHI 2020 — plus perfect-arrows), each
- * pairwise. Sequence curves that thread the whole point run (catmullRom /
- * monotone / step) are added in a later stage.
- *
- * Register a new router with `registerRoute(name, fn)`; look one up with
- * `getRoute(name)`.
+ * pairwise, and the *sequence* curves (step, monotone, smooth,
+ * catmullRom), which thread the whole point run (`sequenceCurve`). The set is
+ * closed: the kinds of the Curve family in gofish-ir's STRATEGIES table.
  */
 import {
   type Path,
   type Point,
   type BezierCurve,
+  type Step,
+  evenStep,
   segment,
   curve,
 } from "../../path";
 import type { Dimensions } from "../dims";
+import type { Curve } from "../../families/curve";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { getBoxToBoxArrow } from "perfect-arrows";
+import { Frontend } from "gofish-ir";
+import {
+  SMOOTH_CURVES,
+  catmullRomPath,
+  centripetalKnots,
+  stepPath,
+  threadPath,
+} from "../../spline";
 
 /** Context handed to a router for one endpoint pair. */
 export type RouteContext = {
@@ -47,69 +56,88 @@ export type Router = (
 ) => Path;
 
 /**
- * A serializable curve value, produced by a curve factory (`straight()`,
- * `bezier()`, `orthogonal()`, `arc({ direction: "down" })`, …) — the same
- * builder-object idiom GoFish uses for coordinate spaces, axes, and labels.
- * `type` names a registered router; `options` are forwarded to it. A bare
- * string is accepted as shorthand for an option-less curve (`"straight"`).
- *
  * `curve` is the single screen-space path-shaping key on `line`/`ribbon` — it
- * holds both interpolating curves that thread the point sequence (straight,
- * bezier, catmullRom, …) and routing curves that shape the stroke between two
- * anchors (orthogonal, arc, perfectArrows). A curve resolves to a `Router`.
+ * holds both interpolating curves that thread the point sequence (linear,
+ * bezier, step, monotone, smooth, catmullRom) and routing curves that shape the stroke between two
+ * anchors (orthogonal, arc, perfectArrows). Its value is a `Curve`, made by a
+ * call in the `Curve` family (`families/curve.ts`). A curve resolves to a
+ * `Router`.
  */
-export type CurveSpec = { type: string; options?: Record<string, any> };
-export type Curve = string | CurveSpec;
 
-type RouteEntry = {
-  fn: Router;
-  /** Whether this route is valid for the filled `ribbon` (edge) mode. */
-  ribbon: boolean;
-};
-
-const registry = new Map<string, RouteEntry>();
-
-export function registerRoute(
-  name: string,
-  fn: Router,
-  opts?: { ribbon?: boolean }
-): void {
-  registry.set(name, { fn, ribbon: opts?.ribbon ?? false });
-}
-
-export function getRoute(name: string): Router {
-  const entry = registry.get(name);
-  if (!entry) {
-    throw new Error(
-      `connect: unknown route "${name}". Registered routes: ${[
-        ...registry.keys(),
-      ].join(", ")}.`
-    );
-  }
-  return entry.fn;
-}
-
-export function hasRoute(name: string): boolean {
-  return registry.has(name);
+/** The name of a curve value, or undefined when it is omitted. Anything that
+ *  is not a Curve-family value (an unknown kind, an undeclared or
+ *  out-of-bounds param) throws, naming `where` the option was written. */
+export function curveName(
+  curve: Curve | undefined,
+  where: string
+): string | undefined {
+  if (curve === undefined) return undefined;
+  Frontend.checkStrategy("Curve", curve, where);
+  return curve.kind;
 }
 
 /**
- * Sequence curves thread the *whole* run of points as one spline (centripetal
- * Catmull-Rom, and later monotone/step), rather than routing each consecutive
- * pair independently. `connect` builds these from the full center sequence
- * instead of the pairwise router loop. Listed here, not hardcoded at the
- * callsite, so adding monotone/step is a one-line change.
+ * A sequence curve threads the *whole* run of points as one spline, rather
+ * than routing each consecutive pair independently. `connect` builds these
+ * from the full point sequence instead of the pairwise router loop.
  */
-export const isSequenceCurve = (name: string | undefined): boolean =>
-  name === "catmullRom";
+export type SequenceCurve = {
+  /** Thread the run, as one step per interval between neighboring points.
+   *  A step is one or more segments from the one point to the next, each
+   *  with its share of the step's time (`Step`). The run's parameter is only
+   *  passed when `takesKnots`. */
+  thread: (points: Point[], parameter: RunParameter) => Step[];
+  /** Whether the curve is read over the run's parameter (so `connect` works
+   *  one out), or is a shape on screen that ignores it. */
+  takesKnots: boolean;
+};
 
-/** Resolve a `Curve` (string or spec) to its router fn + options. */
+/** What a sequence curve knows of the parameter a run is read over. */
+export type RunParameter = {
+  /** The run's own parameter, one value per point, strictly ascending; or
+   *  undefined when it has none. */
+  knots?: number[];
+  /** The coordinate (0 = x, 1 = y) that draws the parameter itself, when one
+   *  does: the x of a line chart over years, when the years are the
+   *  parameter. Undefined when no coordinate does. */
+  parameterAxis?: 0 | 1;
+};
+
+// TODO(#1101): user-defined strategies (a route of one's own) are designed
+// in #1101, one extensibility model for the strategy families. Until then the
+// curves are the built-ins below, and nothing outside this module adds one.
+
+/** The pairwise routes, by curve kind. */
+const routes = new Map<string, Router>();
+
+/** The sequence curves, by curve kind: `connect` threads them over the whole
+ *  run, which a router never sees. */
+const sequenceCurves = new Map<string, SequenceCurve>();
+
+/** The sequence curve registered under `name`, or undefined when `name` is a
+ *  pairwise route (or nothing). */
+export function sequenceCurve(
+  name: string | undefined
+): SequenceCurve | undefined {
+  return name === undefined ? undefined : sequenceCurves.get(name);
+}
+
+/** The names of the registered sequence curves. */
+export const sequenceCurveNames = (): string[] => [...sequenceCurves.keys()];
+
+/** Resolve a `Curve` to its router fn + options: the params beside its
+ *  `kind`. */
 export function resolveCurve(curve: Curve): {
   router: Router;
-  options?: Record<string, any>;
+  options: Record<string, any>;
 } {
-  if (typeof curve === "string") return { router: getRoute(curve) };
-  return { router: getRoute(curve.type), options: curve.options };
+  const { kind, ...options } = curve;
+  const router = routes.get(kind);
+  if (router === undefined)
+    throw new Error(
+      `[gofish] Curve.${kind}() is not a pairwise route (${[...routes.keys()].join(", ")}).`
+    );
+  return { router, options };
 }
 
 // --- geometry helpers -------------------------------------------------------
@@ -133,7 +161,7 @@ const byAxis = (dir: 0 | 1, mainVal: number, crossVal: number): Point => {
 // --- built-in routers -------------------------------------------------------
 
 /** Straight center-to-center line (≡ the old `linear` center mode). */
-const straightRouter: Router = (b0, b1) => [
+const linearRouter: Router = (b0, b1) => [
   segment(centerPoint(b0), centerPoint(b1)),
 ];
 
@@ -248,42 +276,29 @@ const perfectArrowsRouter: Router = (b0, b1, { opts }) => {
   return [curve(p0, control1, control2, p1)];
 };
 
-registerRoute("straight", straightRouter, { ribbon: false });
-registerRoute("bezier", bezierRouter, { ribbon: false });
-registerRoute("orthogonal", orthogonalRouter, { ribbon: false });
-registerRoute("arc", arcRouter, { ribbon: false });
-registerRoute("perfectArrows", perfectArrowsRouter, { ribbon: false });
+routes.set("linear", linearRouter);
+routes.set("bezier", bezierRouter);
+routes.set("orthogonal", orthogonalRouter);
+routes.set("arc", arcRouter);
+routes.set("perfectArrows", perfectArrowsRouter);
 
-// --- curve factories --------------------------------------------------------
-// Builder-object idiom (like `polar({…})` / axis / label specs): each returns a
-// serializable `CurveSpec` carrying its own options, so call sites read
-// `line({ curve: orthogonal() })`, `line({ curve: arc({ direction: "down" }) })`.
-
-/** Straight center-to-center line. */
-export const straight = (): CurveSpec => ({ type: "straight" });
-
-/** Cubic bezier (d3.linkVertical/horizontal convention). */
-export const bezier = (): CurveSpec => ({ type: "bezier" });
-
-/**
- * Right-angle elbow bending at the main-axis midpoint (GoTree orthogonal). The
- * bend axis is the connector's `dir` by default; pass `{ bend: "auto" }` to
- * infer it from the endpoint geometry instead (for layouts with no single
- * declared growth axis, like a diagonal tree cascade).
- */
-export const orthogonal = (options?: { bend?: "auto" }): CurveSpec => ({
-  type: "orthogonal",
-  ...(options ? { options } : {}),
+// The data-space curves are read over the run's parameter. A smooth one
+// threads a run with none with centripetal knots. `step` holds every
+// coordinate but the one that draws the parameter, which a run with no
+// parameter of its own has none of. The Catmull-Rom is a shape on screen: its
+// knots are always centripetal.
+sequenceCurves.set("step", {
+  thread: (points, { parameterAxis }) => stepPath(points, parameterAxis),
+  takesKnots: true,
 });
-
-/** Semicircular arc through both endpoints (GoTree arccurve). */
-export const arc = (options?: { direction?: "up" | "down" }): CurveSpec => ({
-  type: "arc",
-  ...(options ? { options } : {}),
-});
-
-/** Box-to-box arrow arc via perfect-arrows (bow/stretch/pad/… options). */
-export const perfectArrows = (options?: Record<string, any>): CurveSpec => ({
-  type: "perfectArrows",
-  ...(options ? { options } : {}),
+for (const smooth of SMOOTH_CURVES) {
+  sequenceCurves.set(smooth, {
+    thread: (points, { knots }) =>
+      threadPath(points, knots ?? centripetalKnots(points), smooth),
+    takesKnots: true,
+  });
+}
+sequenceCurves.set("catmullRom", {
+  thread: (points) => catmullRomPath(points).map((seg) => evenStep([seg])),
+  takesKnots: false,
 });

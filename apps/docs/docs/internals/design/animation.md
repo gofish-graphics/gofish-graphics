@@ -8,7 +8,8 @@ status: speculative
 # An animation grammar: time as the third axis
 
 > **Status: design exploration.** Conceptual model and syntax, deliberately
-> ahead of implementation (which is confined to Appendix A). Synthesizes
+> ahead of implementation (cost model in Appendix A; the one slice that is
+> actually built is Appendix B). Synthesizes
 > issues [#54](https://github.com/gofish-graphics/gofish-graphics/issues/54) (spread in time),
 > [#211](https://github.com/gofish-graphics/gofish-graphics/issues/211) (`motion()`/`tween`),
 > the reactivity substrate ([#671](https://github.com/gofish-graphics/gofish-graphics/pull/671)),
@@ -147,6 +148,18 @@ The trichotomy matters because the three kinds have different semantics
 costs and prerequisites (Appendix A). A complete animation grammar should
 express all three without forcing one kind through another kind's defaults.
 
+A line drawn in over time can come from a scene animation or from a reveal,
+and the two mean different things even when they look alike. In a scene
+animation, `time.history({ last })` under a `time.sequence({ by })` keeps
+every keyframe from `T - last` to the playhead `T`, and a `line` threaded
+through those keyframes is cut at the edges of that window by data time. Each point of the
+line sits at its keyframe's time, and time moves linearly along each segment,
+so the tip of the line is where a `time.transition()` dot would be at the same
+moment. A reveal with `stroke-dashoffset` paces the drawing by length along
+the path instead. The reveal is the right tool for presentation, where the
+author picks the order and the pace. It is a separate construct, and the cut
+by data time is not a reveal.
+
 ## 4. Where interpolation lives: upstream or downstream of layout
 
 The deepest semantic distinction in this design is _which side of the layout
@@ -229,17 +242,20 @@ that render individually.** The two-layer ggplot idiom (`geom_point() +
 geom_smooth()`) is the spatial shadow of Gemini²'s keyframe insertion: both
 densify with true points so the geometric connector between them can be dumb.
 
-One sharp technical note that falls out of taking the analogy seriously: our
-default spatial curve is _centripetal_ Catmull-Rom, whose chord-length
-parameterization depends on a **metric** — distances between points. Pixel
-space has a canonical metric; data space across axes with different units
-does not (what is the distance between (2 years, 3 dollars) and (5 years,
-1 dollar)?). So centripetal interpolation is well-defined downstream and
-ill-defined upstream without an explicit normalization — a principled reason
-the appearance-smoothing default lives in screen space, and why a data-space
-interpolation family (an `interpolate({ method: "catmullRom" })` sibling of
-`smooth` in #635's family, emitting dense rows) should default to _uniform_
-parameterization, which is affine-invariant and metric-free. The temporal
+One sharp technical note that falls out of taking the analogy seriously:
+_centripetal_ Catmull-Rom, whose chord-length parameterization depends on a
+**metric** — distances between points — is well-defined on screen, where
+pixels give a canonical metric, and ill-defined in data space across axes
+with different units (what is the distance between (2 years, 3 dollars) and
+(5 years, 1 dollar)?). That is why the default smooth curve (#635) does not
+measure distances at all when the data gives the run a parameter of its own.
+A smooth `line` or `ribbon` takes its knots from the run's own parameter: the
+times of the keyframes a line threads, else the values of the field it runs
+along, else its points' positions on a continuous connection axis. Only a
+run with none of these falls back to centripetal knots on screen. The same
+reasoning is why a data-space interpolation family (an
+`interpolate({ method: "catmullRom" })` sibling of `smooth` in #635's family,
+emitting dense rows) should never default to centripetal parameterization. The temporal
 reading: **easing is parameterization** — a time-reparameterization of the
 interpolant, independent of which space the interpolation happens in. After
 Effects' "roving keyframes" (keyframes repositioned in time for smooth
@@ -425,7 +441,7 @@ interpolation does not remove the need for identity.
 ### 9.3 Timing constraints (Gemini as constraints)
 
 ```ts
-.constrain((c) => [
+.relate((c) => [
   c.syncStart([selectAll("bars"), ref("title")]),
   c.stagger(selectAll("bars"), { by: "month", delay: 30 }),
 ])
@@ -579,6 +595,165 @@ sequencing — this is deliberately a sketch, not a plan:
 - **Cross-language:** any new constructs cross the Python/IR bridge like
   everything else (descriptor table, registry, harness — the standard
   checklist).
+
+## Appendix B: what is built (first version, issue #831)
+
+One slice of §5's table exists: the `time` namespace
+(`src/ast/marks/time.ts`), a scene animation over a fixed structure.
+
+- `time.sequence({ by, duration, loop, playing, at })` is the operator form of
+  **spread on t**. It splits the flow by a numeric field and lays every
+  keyframe group out in ONE shared frame, so the x/y domains are inferred over
+  all of them and the axes hold still. It owns the chart's clock (a `timer()`
+  over the field's own range, built lazily because the domain is not known
+  until the data has been split).
+- `time.transition({ curve, ease, … })` is **a connection mark on t**, built
+  with `createRelationalMark` like `line` and `ribbon`. Its path tier is the
+  sequence's field (resolved through the same `along` slot, from the
+  `__timeTier` tag the sequence stamps on its operator) and its split is that
+  tier's complement, so Animated Vega-Lite's `key` is inferred rather than
+  written. It reads the playhead at PAINT time: the run it walks is fixed by
+  layout, and the playhead patches the attributes of the one moving item per
+  frame (`src/ast/graphicalOperators/tween.tsx`), so the chart is laid out once
+  however long it plays. That settles which side of §4.2's bright line a
+  transition falls on — the **paint side**, pure geometry of computed layouts,
+  the temporal reading of `curve` rather than of `smooth`. Where the upstream
+  reading belongs is the data-space `interpolate()` beside it, which emits real
+  rows and re-runs the pipeline over them. The sequence's own hold is on the
+  same side, for the same reason: every keyframe group is laid out either way
+  (that is what holds the axes still), so the clock picks which placed group is
+  PAINTED, and the hold is a live opacity per keyframe rather than a re-resolve.
+  Nothing coordinates the two — a transition emits nothing at all for the
+  keyframes it takes over, and a node with no items has nothing to patch.
+- Interpolation (`src/interpolate.ts`) runs over the operands' resolved
+  geometry with **knots at the data's own time values**: step, linear, or the
+  monotone cubic (Steffen). That is the §4.2 note taken literally: the
+  parameterization is the data's, not chord length, so an uneven run of years
+  plays at an even speed. On a fixed-domain scatter the σ-affine commutativity
+  of §4.1 holds exactly, and the rendered dot matches the data-space
+  interpolation mapped through the scales to floating-point precision.
+- The keyframe marks are **paint-hidden** in §2.1's sense, by the paint-tier
+  rule (`INTERNAL_visibleWhile`), so they keep their items, at opacity 0,
+  hit-test targets included. A sequence sets the rule once per keyframe group,
+  and it covers the group's whole subtree, including marks a later elaboration
+  pass adds to it, such as `.label()` text. So a labeled keyframe shows its
+  labels only while it is held. The marks a transition moves use the
+  structural rule instead (`INTERNAL_emitNothing`, the same one `blank()`
+  uses): they emit no display items and no hit-test targets, because the
+  moving mark is their drawing. A trail behind the moving mark is a separate
+  layer of the same mark, a `time.history` of the keyframe marks (#903), so
+  head and tail are layered rather than coupled.
+- A transition moves **every leaf of a keyframe mark**, not just its top shape.
+  The leaves are the mark's own subtree leaves plus what is attached to it from
+  outside (its label `Text`s, recorded as `_attachments` by the label pass),
+  paired across keyframes by structural position. A box leaf (rect, ellipse,
+  blank) interpolates its whole box; a text leaf moves rigidly, keeping the
+  source keyframe's own drawing, so a bar's label rides with the bar. When the
+  leaves differ between keyframes (a label in one year only), the mark falls
+  back to one run of its top shape and its labels hold with their keyframes.
+- A mark need not have a row in every keyframe. The sequence records its
+  keyframes on the time tier (`TimeTier.knots`), and the tween reads each
+  stretch between two neighboring keyframes by which ends have a row for the
+  mark: both, it moves; only the later one, it **enters**, held at that
+  keyframe's geometry while its opacity ramps from 0 to 1 over the stretch;
+  only the earlier one, it **exits**, held and ramping from 1 to 0; neither, it
+  is absent (opacity 0). A gap in a run is an exit and a later enter, and the
+  mark is absent before its first keyframe and after its last. This fade in
+  place is the default Keynote's Magic Move, PowerPoint's Morph and SwiftUI's
+  `.opacity` transition give an unmatched object. It is a paint-time opacity
+  on every item the mark emits, box and text leaves together, patched through
+  the same live slots as its geometry. `enter`/`exit` options that would
+  override it, the way `curve` overrides the interpolation, are not built. A
+  transition with no sequence (explicit `along` and `at`) has no keyframe list,
+  so it treats its run's own knots as neighbors and bridges every gap.
+
+Both halves of the inference can also be written out, and the four-level
+desugaring tower that results is the surface's own proof of §4.1. `along` names
+the keyframes' time field and `at` supplies the playhead, so level 1 spells the
+key and the path tier as a `.layer(chart(selectAll(...)).flow(group({by})))`
+tier (the same expansion `line` has), and level 2 replaces the sequence with a
+plain `group({by})` plus a raw `timer` — there is nothing left of `sequence`
+once both halves are explicit, because superimposing the keyframes IS `group`.
+Level 3 drops the relational mark and interpolates in data space instead
+(`interpolate(rows, {along, key, at})`, the pure function beside the geometry
+evaluator in `src/interpolate.ts`), keeping the keyframes as `blank()` for
+domain inference only. Levels 0-2 agree exactly because they are rewrites;
+level 3 agrees because the fixed-domain scatter satisfies §4.1's affineness
+condition, and would not otherwise. The four are asserted equal (at a midpoint
+playhead and at an exact keyframe) by `src/tests/gapminderTower.test.ts`, and
+drawn side by side by the `Gapminder Tower` stories.
+
+The transition tweens rects, ellipses, blanks and text, one track per leaf of
+the keyed mark and its attached labels, and throws for other shapes.
+
+**Build-ins (prototype, draft PR #901, `src/animation/`).** A build-in is the
+ENTER case of a transition from the empty chart: with no `time.sequence` in
+the flow, every mark with an enter effect enters once, on the first render.
+The surface is the one in `sketches/build-in/` (see also
+[Build-in Animations](/internals/design/build-in-animation)), with two
+namespaces: `time.*` says WHEN (`time.stagger`, `time.parallel`) and
+`animation.*` says WHAT (`grow`, `shrink`, `fadeIn`, `fadeOut`, `appear`,
+`wipe`, and `tween` for the update phase).
+
+- Two frontends, one core. CHAINED: `operator.transition({ enter:
+time.stagger(...) })` arranges the operator's children in time, and
+  `mark.transition({ enter: animation.grow() })` says how the mark enters.
+  SELECTION: `.layer(chart(selectAll("bars")).flow(time.stagger({ by }))
+.mark(time.transition({ enter })))`, for timings that regroup the spatial
+  nesting. Both record what they say on the nodes they produce, and one walk
+  (`install.ts`) reads the records off the resolved tree: an arranged
+  operator is a time frame over its children, a mark with effects is a leaf,
+  anything else is `parallel`. A selection stagger groups its refs by `by` in
+  its own flow; a chained one groups the operator's children by its `by` when
+  the build is installed. `src/tests/buildInTower.test.ts` asserts that the
+  chained and selection forms draw the same display items at every playhead.
+- A time layout (`schedule.ts`): §5's `stagger ≡ distribute on t` taken
+  literally. Durations bottom up (a leaf lasts its longest effect; `parallel`
+  its longest child; a stagger until its last child ends), starts top down (a
+  child starts at its parent's start plus its offset), so nested arrangements
+  are nested time frames. A stagger takes one of `lag` (step between starts),
+  `spacing` (gap between one end and the next start) or `dwell` (the share of
+  the time spent between starts, from which the lag is derived), plus `by`
+  (children with equal keys start together, in the key's order) and `from`
+  (first, last, center, edges, or an index).
+- One clock per chart: a `timer` over [0, total] ms that plays once, built
+  right after the chart resolves (the timing depends on structure and data,
+  not layout). This is the hoisted-clock direction of #881, at the chart root.
+  The render options `playing: false, at` hold it still.
+- PAINT tier, like the transition: layout runs once, and each animated mark
+  carries a rule (`GoFishNode.INTERNAL_animate`) that rewrites its lowered
+  items to the clock's current state and patches the changing fields through
+  live slots. Before its start a mark shows its enter state (§2.1 fill), after
+  its end its rest state. `grow` collapses the mark's SIZE axes toward its
+  baseline (its local 0), read off the node, so a negative bar grows down and a
+  stacked segment grows in place from its own stack start (declared: gaps open
+  between segments; riding on the segments below is not built). A mark with no
+  size axis grows from its center. `wipe` clips a rect from a side, or grows a
+  circle's radius. Labels follow their mark's timing through `_attachedTo`: they
+  fade or appear with it, and wait for a geometric effect to finish (riding the
+  bar's end, #894, is not built). Under an arrangement, a mark with no effect of
+  its own fades in, the #892 default. An effect's `duration` may name a field
+  (`wipe({ duration: "days" })`, the CAST+ Gantt), a size claim on t read per
+  mark; the time scale for it is a declared shortcut (linear, the largest value
+  at 1000 ms).
+- Under a `time.sequence`, a mark's `.transition()` with
+  `update: animation.tween(...)` is the chained spelling of
+  `.layer(time.transition(...))`, and its enter and exit can only be the
+  default fade.
+- A staggered UPDATE (sketch 6a, D3's Sortable Bar Chart):
+  `spread(...).transition({ update: time.stagger({ lag }) })` under a
+  sequence. The tween reads it as a per-key warp of the playhead
+  (`updateStagger.ts`): between two keyframes each key moves in its own slice
+  of the stretch, in the order the stretch ends in, placed by the same time
+  layout. The default is FIT: the lag and every move shrink by one factor so
+  the last key arrives at the next keyframe, which keeps the dwell and keeps
+  every keyframe exact. The lag is in milliseconds, so the sequence's clock
+  exposes its milliseconds per unit (`TimeTier.msPerUnit`, from
+  `Timer.duration`).
+
+Everything else in §§5-9 is unbuilt: `sequence` as a composition of clips,
+timing constraints (`time.after`), enter and exit styling during a sequence,
+exit on a data change, segues, and reveals of chrome.
 
 ## Sources
 

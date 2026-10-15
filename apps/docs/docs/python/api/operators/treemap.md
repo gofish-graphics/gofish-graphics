@@ -1,13 +1,18 @@
+---
+title: treemap
+order: 60
+---
+
 # treemap
 
 Lays children out into a treemap: a 2D tiling of rectangles (or circles) whose
 **areas are proportional to a weight**.
 
-GoFish exposes two spellings:
+`treemap` has two forms:
 
 - **`treemap(...)`** — an operator for use inside
   [`.flow()`](/python/api/core/flow); it tiles the partitioned data of a chart.
-- **`Treemap(children, ...)`** — the low-level **combinator** form: it takes an
+- **`treemap(children, ...)`** — the low-level **combinator** form: it takes an
   explicit list of pre-data-bound marks and assigns each one its `(x, y, w, h)`.
 
 The two share the same options below.
@@ -25,13 +30,13 @@ chart(movies_raw).flow(
     treemap(
         by=field("Major Genre").drop_nulls(),
         size="Worldwide Gross",
-        paddingInner=2,
-        paddingOuter=2,
+        spacing=2,
+        padding=2,
         round=True,
     )
 ).mark(
-    circle(fill="Major Genre", stroke="gray", strokeWidth=1).label(
-        "Major Genre", position="center", color="white", fontSize=12
+    circle(fill="Major Genre", stroke="gray", stroke_width=1).label(
+        "Major Genre", position="center", color="white", font_size=12
     )
 ).render(w=700, h=420)
 ```
@@ -43,29 +48,46 @@ chart(movies_raw).flow(
 treemap(**options) -> Operator
 
 # Combinator form (explicit children)
-Treemap(children, **options) -> Mark
+treemap(children, **options) -> Mark
 ```
 
 ## Parameters
 
-| Option                     | Type                                                                                       | Description                                                                                                                                                                                                                                                                                                                                                               |
-| -------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `by`                       | `str` \| `FieldAccessor`                                                                   | **Operator form only** (`.flow()`): field to partition rows by; also accepts a `field(...)` accessor carrying domain ops (`sort`/`reverse`/`bin`/`drop_nulls`). Without `by`, one leaf is emitted per row.                                                                                                                                                                |
-| `size`                     | `str` \| `FieldAccessor` \| `list`                                                         | Per-leaf weight driving tile area — entry-flagged (one value per split entry): a field name (summed by default), a `field(...)` accessor, or an explicit per-child list (combinator form).                                                                                                                                                                                |
-| `paddingInner`             | `float`                                                                                    | Padding between sibling rectangles.                                                                                                                                                                                                                                                                                                                                       |
-| `paddingOuter`             | `float`                                                                                    | Padding around the outer edge of the treemap.                                                                                                                                                                                                                                                                                                                             |
-| `round`                    | `bool`                                                                                     | Round pixel positions/sizes.                                                                                                                                                                                                                                                                                                                                              |
-| `tile`                     | `"squarify"` \| `"slice"` \| `"dice"` \| `"binary"` \| `"slicedice"` \| `"squarifyCircle"` | Tiling strategy (`"squarify"` default).                                                                                                                                                                                                                                                                                                                                   |
-| `sort`                     | `"asc"` \| `"desc"` \| `"none"`                                                            | Sort leaves by weight before layout (`"desc"` default).                                                                                                                                                                                                                                                                                                                   |
-| `flipY`                    | `bool`                                                                                     | When `True`, mirror the layout top-to-bottom inside the treemap box (default `False`).                                                                                                                                                                                                                                                                                    |
-| `leafIntrinsicRadiusField` | `str`                                                                                      | Optional datum key for **radius** (pixels in treemap space): each leaf is laid out in a square `min(leafW, leafH, 2*radius)` so the same value can match across separate treemaps.                                                                                                                                                                                        |
-| `x`, `y`                   | `float` \| `Value`                                                                         | Optional position offset for the treemap container.                                                                                                                                                                                                                                                                                                                       |
-| `w`, `h`                   | `float` \| `Value`                                                                         | Optional size for the treemap container (the box tiled into). A `float` is an explicit pixel size; a `Value` (e.g. a data-driven `size` channel that sums a field) scales the box through the layout's scale system — and when several treemaps are faceted side by side, they share one scale so their boxes are proportional. When omitted, the treemap fills its slot. |
+::: gofish-ref treemap
+:::
+
+## Strategies
+
+`tile` holds the tiling strategy, a member of the `Tile` family. You make a
+strategy with a function call. Each one is a tiling method from d3-hierarchy.
+On the wire a strategy is a plain object, such as
+`{"kind": "squarify", "ratio": 1}`. The family is also the module
+`gofish.tile`, so `from gofish.tile import squarify` gives the same function as
+`Tile.squarify`.
+
+- `Tile.squarify(ratio=None)` makes tiles as close as it can to the aspect ratio
+  `ratio`, the longer side over the shorter side. `ratio` must be at least 1,
+  and it does not choose between wide and tall tiles. It is the default. Without `ratio`, it uses
+  d3's default, the golden ratio. `Tile.squarify(ratio=1)` aims for square tiles,
+  which suits one circle per leaf.
+- `Tile.slice()` puts the tiles in one column, stacked along y.
+- `Tile.dice()` puts the tiles in one row, side by side along x.
+- `Tile.binary()` splits the tiles into two halves of about equal weight, and
+  repeats on each half.
+- `Tile.slice_dice()` alternates between `slice` and `dice` by depth.
+
+```python
+from gofish import treemap, Tile
+
+treemap(by="genre", size="gross", tile=Tile.squarify(ratio=1))
+```
 
 ## Notes
 
+- The tile d3 places first sits at the top left. With the default
+  `sort="desc"`, that is the largest tile.
 - A treemap accepts a **flat list of children**; for multi-level treemaps,
-  compose by nesting `Treemap(...)` calls (or add a higher-level wrapper).
+  compose by nesting `treemap(...)` calls (or add a higher-level wrapper).
 - In the combinator form, each child is bound to its row with
   `mark.bind_data(d, key)`; chain `.label(accessor, ...)` on the mark to show
   a field's value on each tile. `size` in combinator form is an **explicit

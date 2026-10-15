@@ -12,11 +12,12 @@
  *   2. delegated DOM event dispatch on the root <svg>
  *      (pointermove/down/up/leave/wheel), routed to registered inputs;
  *   3. hit-testing: `publishFrame` keeps an id → item map (for
- *      `pointer().datum()`) plus the frame's data-space conversions.
+ *      `pointer().datum()`), an id → on-screen box map (for `drag().nodeBox`),
+ *      plus the frame's data-space conversions.
  *
  * Inputs register themselves during resolve (via the ambient context). At the
  * start of each resolve the runtime drops itself from every registered input's
- * `specRuntimes` set, so an input read in one resolve but not the next stops
+ * `specReaders` sets, so an input read in one resolve but not the next stops
  * invalidating this chart (a shared input keeps its edges to OTHER charts).
  */
 import type { DisplayList } from "gofish-ir";
@@ -26,6 +27,7 @@ import type {
   InteractionEventType,
   InteractionFrame,
   SpecInvalidator,
+  SvgBox,
   SvgPoint,
 } from "./types";
 import type { AmbientRegistrar } from "./resolveContext";
@@ -38,25 +40,83 @@ function sameSet<T>(a: Set<T>, b: Set<T>): boolean {
   return true;
 }
 
-/** Walk a display list depth-first, including composite/group/mask innards. */
-function* walkItems(
-  items: DisplayList.DisplayItem[]
-): Generator<DisplayList.DisplayItem> {
+/** The accumulated affine of the `group` items enclosing a display item. Display
+ *  items are absolute pixels EXCEPT inside a `group`, whose children are in its
+ *  local space, so a walk that reports boxes has to carry the fold. */
+interface Affine {
+  tx: number;
+  ty: number;
+  sx: number;
+  sy: number;
+}
+
+const IDENTITY: Affine = { tx: 0, ty: 0, sx: 1, sy: 1 };
+
+/** Walk a display list depth-first, including composite/group/mask innards,
+ *  handing each item to `visit` with the transform that maps it to svg px.
+ *  A visitor rather than a generator: the one caller wants every item, and a
+ *  generator allocated a `{ item, at }` wrapper per item to say so. */
+function walkItems(
+  items: DisplayList.DisplayItem[],
+  visit: (item: DisplayList.DisplayItem, at: Affine) => void,
+  at: Affine = IDENTITY
+): void {
   for (const item of items) {
-    yield item;
+    visit(item, at);
     switch (item.kind) {
-      case "group":
-        yield* walkItems(item.children);
+      case "group": {
+        const [tx, ty] = item.transform.translate ?? [0, 0];
+        const [sx, sy] = item.transform.scale ?? [1, 1];
+        walkItems(item.children, visit, {
+          tx: at.tx + at.sx * tx,
+          ty: at.ty + at.sy * ty,
+          sx: at.sx * sx,
+          sy: at.sy * sy,
+        });
         break;
+      }
       case "composite":
-        yield* walkItems(item.source);
-        yield* walkItems(item.dest);
+        walkItems(item.source, visit, at);
+        walkItems(item.dest, visit, at);
         break;
       case "mask":
-        yield* walkItems(item.mask);
-        yield* walkItems(item.content);
+        walkItems(item.mask, visit, at);
+        walkItems(item.content, visit, at);
         break;
     }
+  }
+}
+
+/** The item's box in svg px, for the primitives that carry one. `path` and
+ *  `text` carry no box in the display list (a path is an SVG `d` string, a text
+ *  item only its anchor), and a `group` has no box of its own, so those come
+ *  back `undefined` rather than being guessed at. */
+function itemBox(
+  item: DisplayList.DisplayItem,
+  at: Affine
+): SvgBox | undefined {
+  const local = (x: number, y: number, w: number, h: number): SvgBox => ({
+    x: at.tx + at.sx * x,
+    y: at.ty + at.sy * y,
+    w: at.sx * w,
+    h: at.sy * h,
+  });
+  switch (item.kind) {
+    case "rect":
+    case "image":
+      return local(item.x, item.y, item.w, item.h);
+    case "ellipse":
+      return local(
+        item.cx - item.rx,
+        item.cy - item.ry,
+        2 * item.rx,
+        2 * item.ry
+      );
+    case "composite":
+    case "mask":
+      return local(item.bbox.x, item.bbox.y, item.bbox.w, item.bbox.h);
+    default:
+      return undefined;
   }
 }
 
@@ -65,6 +125,10 @@ export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
   private registered = new Set<InputPrimitive>();
   /** node uid → first lowered item with that id, rebuilt each frame. */
   private itemsById = new Map<string, DisplayList.DisplayItem>();
+  /** node uid → that node's box in svg px, rebuilt each frame from the same
+   *  walk. Read off the frame exactly as the frame conversions are, so an input
+   *  can map a pointer position onto a node layout placed. */
+  private boxesById = new Map<string, SvgBox>();
   private conv?: FrameConversions;
   private svg?: SVGSVGElement;
   private detach?: () => void;
@@ -95,13 +159,29 @@ export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
     return this.conv;
   }
 
+  /** The on-screen box (svg px) of the node with uid `id` in the CURRENT frame,
+   *  or `undefined` when that node isn't in it or its primitive carries no box
+   *  (a path, a text). Frame state, not a signal: it is replaced wholesale by
+   *  every `publishFrame`, and it is what makes an absolute pixel → value map
+   *  possible without reading a screen CTM back out of the DOM. Every attached
+   *  input serves it (see `FrameBoxReader` in inputs.ts) — it is not drag state. */
+  nodeBox(id: string): SvgBox | undefined {
+    return this.boxesById.get(id);
+  }
+
   /** Reset THIS runtime's dependency edges. Called at the start of every
    *  resolve: it removes only ITSELF from each registered input's
-   *  `specRuntimes` set, so a re-resolve of this chart doesn't drop another
+   *  `specReaders` sets, so a re-resolve of this chart doesn't drop another
    *  chart's dependency on a shared input. Reads during the coming resolve
    *  re-add this runtime if the input is still read outside `live()`. */
   beginResolve(): void {
-    for (const input of this.inputs) input.specRuntimes.delete(this);
+    this.dropSpecEdges();
+  }
+
+  /** Remove this runtime from every reader set of every registered input. */
+  private dropSpecEdges(): void {
+    for (const input of this.inputs)
+      for (const readers of input.specReaders) readers.delete(this);
   }
 
   /* ---- scheduler: re-resolve + re-render on spec changes ---- */
@@ -146,9 +226,12 @@ export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
   }
 
   private async runRerender(): Promise<void> {
+    // A run scheduled before `dispose()` still fires; the chart is gone.
+    const rerender = this.rerenderFn;
+    if (!rerender) return;
     this.running = true;
     try {
-      await this.rerenderFn!();
+      await rerender();
     } finally {
       this.running = false;
       if (this.dirty) {
@@ -160,8 +243,8 @@ export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
 
   /**
    * Called by the render pass after lowering, before paint. Rebuilds the
-   * id-keyed hit-test map (fresh uids each resolve) and the data-space
-   * conversions, then notifies inputs.
+   * id-keyed hit-test map and box map (fresh uids each resolve) and the
+   * data-space conversions, then notifies inputs.
    */
   publishFrame(frame: InteractionFrame): void {
     // Build the id-keyed hit-test map + data-space conversions only when some
@@ -172,11 +255,14 @@ export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
     if (this.inputs.some((i) => i.needsFrame)) {
       this.conv = frameConversions(frame);
       this.itemsById = new Map();
-      for (const item of walkItems(frame.items)) {
+      this.boxesById = new Map();
+      walkItems(frame.items, (item, at) => {
         if (item.id !== undefined && !this.itemsById.has(item.id)) {
           this.itemsById.set(item.id, item);
+          const box = itemBox(item, at);
+          if (box) this.boxesById.set(item.id, box);
         }
-      }
+      });
     }
     for (const input of this.inputs) input.onFrame?.(frame);
   }
@@ -271,22 +357,32 @@ export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
     };
   }
 
+  private disposed = false;
+
+  /** True once {@link dispose} ran: the chart this runtime served is gone. */
+  isDisposed(): boolean {
+    return this.disposed;
+  }
+
   /**
-   * Tear down this runtime when its container is taken over by a DIFFERENT
-   * chart (gofish.tsx compares the incoming runtime against the stored one).
-   * Detaches DOM listeners, drops this runtime from every input's
-   * `specRuntimes` set (so a still-live input — e.g. a running `timer()` a user
-   * never `.stop()`ed — no longer invalidates this dead chart), and clears the
-   * rerender thunk so any stray `invalidate()` that still races in no-ops.
+   * Tear down this runtime when its chart goes away: `View.unmount()`, or a
+   * DIFFERENT chart taking over its container (gofish.tsx compares the
+   * incoming runtime against the stored one). Detaches DOM listeners, drops
+   * this runtime from every input's `specReaders` sets (so a still-live input
+   * no longer invalidates this dead chart, and a `timer()` it was the last
+   * reader of stops ticking), and clears the rerender thunk so any stray
+   * `invalidate()` that still races in no-ops.
    */
   dispose(): void {
+    this.disposed = true;
     this.detach?.();
     // Remove ourselves as a dependency of any still-live shared input.
-    for (const input of this.inputs) input.specRuntimes.delete(this);
+    this.dropSpecEdges();
     this.rerenderFn = undefined;
     this.inputs = [];
     this.registered.clear();
     this.itemsById.clear();
+    this.boxesById.clear();
     this.conv = undefined;
   }
 }

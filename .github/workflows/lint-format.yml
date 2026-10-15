@@ -17,14 +17,12 @@ jobs:
           fetch-depth: 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
 
       - name: Install dependencies
@@ -62,8 +60,17 @@ jobs:
       - name: Check internals wiki back-links
         run: pnpm --filter docs check-backlinks
 
+      - name: Check gallery story examples
+        run: pnpm --filter docs check-story-examples
+
+      - name: Check handwritten docs code snippets
+        run: pnpm --filter docs check-doc-snippets
+
       - name: Build gofish-ir
         run: pnpm --filter gofish-ir build
+
+      - name: Check API reference coverage
+        run: pnpm --filter docs check-api-coverage
 
       - name: Check Frontend IR JSON Schema docs page is in sync
         run: pnpm --filter docs check-ir-schema
@@ -71,4 +78,9 @@ jobs:
       - name: Check generated Python factory layer is in sync
         run: |
           pnpm --filter gofish-python gen
-          git diff --exit-code -- packages/gofish-python/gofish/_generated.py
+          git diff --exit-code -- packages/gofish-python/gofish/_generated.py packages/gofish-python/gofish/tile.py packages/gofish-python/gofish/overlap.py packages/gofish-python/gofish/curve.py packages/gofish-python/gofish/bin.py packages/gofish-python/gofish/calendar.py packages/gofish-python/gofish/coord.py
+
+      - name: Check generated mark channel maps are in sync
+        run: |
+          pnpm --filter gofish-graphics gen
+          git diff --exit-code -- packages/gofish-graphics/src/ast/markChannels.generated.ts

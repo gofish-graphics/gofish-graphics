@@ -14,6 +14,7 @@
  */
 import type { DisplayList } from "gofish-ir";
 import type { ToPixel } from "../ast/_node";
+import type { PixelPosScales } from "../ast/gofish";
 
 /**
  * One published layout frame: the lowered items and the recorded root-level
@@ -23,13 +24,10 @@ import type { ToPixel } from "../ast/_node";
  */
 export interface InteractionFrame {
   items: DisplayList.DisplayItem[];
-  /** GoFish-space → screen-px map for this frame (gutters + y-flip). */
+  /** Layout-pixel → screen-px map for this frame (the gutter offset). */
   toPixel?: ToPixel;
-  /** Root position scales: data → gofish space, per axis. */
-  posScales?: [
-    ((pos: number) => number) | undefined,
-    ((pos: number) => number) | undefined,
-  ];
+  /** Root position scales: data → layout pixels, per axis. */
+  posScales?: PixelPosScales;
   /** Continuous data domains per axis, when the axis has one. */
   domains?: {
     x?: [number, number];
@@ -50,6 +48,21 @@ export interface Hit {
 export interface SvgPoint {
   x: number;
   y: number;
+}
+
+/**
+ * One node's on-screen box, in svg-local pixel coordinates — the second thing
+ * the interaction layer READS OFF a published frame (the first being the frame
+ * conversions). A control that must map a pointer position onto its own track
+ * needs to know where layout put that track; the frame already carries it, so
+ * the box is recorded per node uid at publish time rather than measured back
+ * out of the DOM.
+ */
+export interface SvgBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 /** Delegated DOM event types the runtime routes to inputs. */
@@ -73,14 +86,15 @@ export interface SpecInvalidator {
  * `usedInSpec` decides the execution regime (see resolveContext.ts).
  */
 export interface InputPrimitive {
-  /** The set of runtimes for which this input is a pipeline dependency — i.e.
-   *  the charts that read it during resolve OUTSIDE a `live()` channel. A write
-   *  must invalidate every one (an input read in two charts' specs invalidates
-   *  BOTH). Each runtime deletes itself from this set at the start of its own
-   *  resolve (so a chart's re-resolve doesn't drop another chart's dependency)
-   *  and re-adds itself if the read recurs; a disposed runtime removes itself.
-   *  Replaces the former single-runtime `usedInSpec` boolean. */
-  specRuntimes: Set<SpecInvalidator>;
+  /** One reader set per READABLE of this input (a timer has two: its value
+   *  and its play state). Each set holds the runtimes for which that readable
+   *  is a pipeline dependency — the charts that read it during resolve OUTSIDE
+   *  a `live()` channel — and a write to that readable invalidates every one
+   *  (a readable read in two charts' specs invalidates BOTH). Each runtime
+   *  deletes itself from every set at the start of its own resolve (so a
+   *  chart's re-resolve doesn't drop another chart's dependency) and re-adds
+   *  itself where the read recurs; a disposed runtime removes itself. */
+  specReaders: Set<SpecInvalidator>[];
   /** The delegated DOM event types this input consumes. The runtime attaches
    *  only the union of these across registered inputs, so a wheel/timer/signal-
    *  only chart never pays pointer-move hit-testing. Omitted/empty = no DOM

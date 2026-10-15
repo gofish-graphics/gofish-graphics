@@ -10,8 +10,8 @@ from _components import heap_object  # noqa: E402
 def story_heap_object():
     return (
         heap_object(
-            objectType="tuple",
-            objectValues=[
+            object_type="tuple",
+            object_values=[
                 {"type": "string", "value": "12"},
                 {"type": "string", "value": "1"},
                 {"type": "string", "value": "0"},

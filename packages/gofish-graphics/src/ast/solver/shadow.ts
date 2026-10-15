@@ -1,10 +1,10 @@
 /**
- * Shadow assertions for the σ-affine solver (#39 endgame, Phase 1).
+ * Shadow assertions for the σ-affine solver.
  *
- * Runs the solver alongside the legacy engine and checks they agree, WITHOUT
- * the solver driving anything — the observe→assert discipline that landed the
- * ledger (stages 0–2). Guarded by `GOFISH_SOLVER_CHECK` (env or `globalThis`);
- * zero-cost and silent when off, so production behavior is unchanged.
+ * Runs the solver alongside the render engine and checks they agree, WITHOUT the
+ * solver driving anything. Guarded by `GOFISH_SOLVER_CHECK` (env or
+ * `globalThis`); zero-cost and silent when off, so production behavior is
+ * unchanged.
  *
  * Coverage = PLACEMENT COMPOSITION (does the box-key model reproduce the engine's
  * absolute positions given each child's size?) plus the σ-SCOPE frame equation
@@ -17,7 +17,6 @@
  * run means "every covered case agrees", not "everything".
  */
 import * as M from "../../util/monotonic";
-import { SolverBox } from "./index";
 import type { Placeable } from "../_node";
 import { axisIndex, isPlacedOn, type Axis } from "../constraints/shared";
 import { getValue, isValue, type MaybeValue } from "../data";
@@ -27,12 +26,12 @@ import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
 import type { AlignAnchor } from "../constraints/shared";
 import { distributePlacementAnchors } from "../constraints/distribute";
-import { isCONTINUOUS, type UnderlyingSpace } from "../underlyingSpace";
+import { originIs } from "../underlyingSpace";
+import type { Extent } from "../extent";
 
 /** Whether the solver shadow assertions run. Off (and zero-cost) in prod, so the
  *  per-constraint pre-state capture the checks need is only built when set. */
-export const solverCheckEnabled = (): boolean => envFlag("GOFISH_SOLVER_CHECK");
-const enabled = solverCheckEnabled;
+export const SOLVER_CHECK = envFlag("GOFISH_SOLVER_CHECK");
 
 // Report each (tag) once so a story's output stays readable (mirrors the ledger
 // check). A gate cares about "any divergence", not the count.
@@ -47,11 +46,11 @@ function report(tag: string, solver: number, engine: number): void {
 
 /** The subset of a distribute constraint the shadow reads. */
 interface DistributeLike {
-  type?: string;
   dir: Axis;
   spacing: number;
   anchor: AlignAnchor | "edge";
   order: "forward" | "reverse";
+  glue: boolean;
 }
 
 /**
@@ -68,20 +67,19 @@ interface DistributeLike {
  * The consistency-check-not-pack boundary (the violin case). Distribute only
  * PACKS children it places; a chain edge whose BOTH endpoints arrived
  * pre-positioned on the stack axis (e.g. the violin's `stackY` over rects pinned
- * at `y: data`) was a no-op in the lowering (`distribute.ts` skips it) — the
+ * at `y: data`) is a no-op in the lowering (`distribute.ts` skips it) — the
  * spacing relation does NOT hold there, those two keep their data positions.
  * Every other edge (≥1 unplaced endpoint) is packed, so the relation must hold.
  * Validating exactly that boundary is the point of this check: it asserts the
  * relation on packed edges and deliberately does not on the pre-placed ones,
  * matching the engine's own pack/check split.
  */
-export function shadowCheckDistribute(
+function shadowCheckDistribute(
   constraint: DistributeLike,
   targets: Placeable[],
   /** Per-target: was it already placed on the stack axis BEFORE distribute? */
   prePlaced: boolean[]
 ): void {
-  if (!enabled() || constraint.type !== "distribute") return;
   const idx = axisIndex(constraint.dir);
 
   // Placement order (`reverse` reverses the chain — mirror it index-wise so the
@@ -91,8 +89,9 @@ export function shadowCheckDistribute(
   if (order.length < 2) return;
 
   // The constraint's anchor picks the anchor pair the lowering relates:
-  // edge = prev.max→cur.min, fixed-pitch = prev.<anchor>→cur.<anchor>.
-  const anchors = distributePlacementAnchors(constraint.anchor);
+  // edge = prev.max→cur.min, fixed-pitch = prev.<anchor>→cur.<anchor>, and a
+  // stack (glue) = prev.head→cur.tail.
+  const anchors = distributePlacementAnchors(constraint);
 
   for (let k = 1; k < order.length; k++) {
     const pi = order[k - 1];
@@ -119,7 +118,6 @@ export function shadowCheckDistribute(
 /** The subset of a nest constraint the shadow reads. `x`/`y` are the paddings on
  *  the constrained axes; `children` is `[outer, inner]`. */
 interface NestLike {
-  type?: string;
   x?: number;
   y?: number;
   children: { name: string }[];
@@ -139,15 +137,14 @@ interface NestLike {
  * larger-natural-content inner overflows the derived size, so the placed sizes do
  * not satisfy the wrap relation even though the layout is correct (observed on
  * GoTree `combine({x:"nest"})` stories). The pad relation is thus validated at the
- * space-fold layer, not at placed geometry; Stage 6 folds it in as a size
- * equation, where authority tiers make the override explicit.
+ * space-fold layer, not at placed geometry.
  */
-export function shadowCheckNest(
+function shadowCheckNest(
   constraint: NestLike,
   outer: Placeable | undefined,
   inner: Placeable | undefined
 ): void {
-  if (!enabled() || constraint.type !== "nest" || !outer || !inner) return;
+  if (!outer || !inner) return;
   const axes: [Axis, number | undefined][] = [
     ["x", constraint.x],
     ["y", constraint.y],
@@ -165,7 +162,6 @@ export function shadowCheckNest(
 
 /** The subset of a grid constraint the shadow reads. */
 interface GridLike {
-  type?: string;
   numCols: number;
   xSpacing: number;
   ySpacing: number;
@@ -174,9 +170,9 @@ interface GridLike {
 
 /**
  * Check the `grid` composition — cells centered in their (column, row) tracks
- * (`grid.ts`). Stage 6e: tracks are content-sized under the unified max rule, so
- * the gap between two adjacent cells is no longer a uniform `cellExtent+spacing`
- * — it is `extent(col)/2 + spacing + extent(col+1)/2`, where a track's extent is
+ * (`grid.ts`). Tracks are content-sized under the unified max rule, so
+ * the gap between two adjacent cells is not a uniform `cellExtent+spacing` —
+ * it is `extent(col)/2 + spacing + extent(col+1)/2`, where a track's extent is
  * the max laid-out size of its cells (a cell that fills equals the extent; a
  * smaller claim cell is centered, and the column's widest cell pins the extent).
  * Recovering the track extents from the placed cell sizes and asserting the
@@ -184,13 +180,10 @@ interface GridLike {
  * the unknown layer origin). Cell EXTENT is deliberately not asserted; a cell
  * whose center is overridden by a `position` pin is skipped on that axis.
  */
-export function shadowCheckGrid(
+function shadowCheckGrid(
   constraint: GridLike,
-  targetByName: Map<string, Placeable>,
-  layerSize: [number, number]
+  targetByName: Map<string, Placeable>
 ): void {
-  if (!enabled() || constraint.type !== "grid") return;
-  void layerSize;
   const numCols = constraint.numCols;
   const numRows = Math.ceil(constraint.children.length / numCols);
   const targetOf = (i: number): Placeable | undefined =>
@@ -245,7 +238,6 @@ export function shadowCheckGrid(
 
 /** The subset of an align constraint the shadow reads. */
 interface AlignLike {
-  type?: string;
   x?: string | string[];
   y?: string | string[];
 }
@@ -268,6 +260,18 @@ function anchorCoord(
   const min = t.dims[idx].min;
   const size = t.dims[idx].size;
   if (min === undefined || size === undefined) return undefined;
+  if (anchor === "tail" || anchor === "head") {
+    // `tail`/`head` as defined at `RelationAnchor` (placementFacts.ts),
+    // checked independently over box coordinates: the head is the tail
+    // mirrored about the box's center.
+    const space = t.spaceOn?.(idx);
+    const lo = localAnchorPoint("min", min, size);
+    const hi = localAnchorPoint("max", min, size);
+    const tail =
+      (originIs(space, "free") ? anchorCoord(t, idx, "baseline") : undefined) ??
+      lo;
+    return anchor === "tail" ? tail : lo + hi - tail;
+  }
   // start/middle/end are the box keys — the same single derivation every other
   // anchor read uses (negative-size safe).
   const key = anchor === "start" ? "min" : anchor === "end" ? "max" : "center";
@@ -287,16 +291,12 @@ function anchorCoord(
  * rest are now placed; heterogeneous per-child anchor arrays are skipped (no
  * single shared line).
  */
-export function shadowCheckAlign(
+function shadowCheckAlign(
   constraint: AlignLike,
   targets: Placeable[],
   /** Per-target [x, y]: already placed on that axis BEFORE align ran. */
   prePlaced: [boolean, boolean][]
 ): void {
-  if (!enabled() || constraint.type !== "align") return;
-  // Across all 189 stories this covers 2751 aligns with zero divergences; 959
-  // are single-target (nothing to compare), 49 leave a self-positioned child
-  // unplaced, 2 use heterogeneous per-child anchor arrays — all deferred here.
   for (const axis of ["x", "y"] as const) {
     const spec = constraint[axis];
     if (spec === undefined || Array.isArray(spec)) continue; // uniform anchor only
@@ -325,7 +325,6 @@ export function shadowCheckAlign(
 
 /** The subset of a position constraint the shadow reads. */
 interface PositionLike {
-  type?: string;
   x?: MaybeValue<number>;
   y?: MaybeValue<number>;
   anchor: string;
@@ -341,14 +340,11 @@ interface PositionLike {
  *      through the same `anchorCoord` box-key model).
  * Literal (non-datum) coords are pure pixel pins (no data→position), skipped here.
  */
-export function shadowCheckPosition(
+function shadowCheckPosition(
   constraint: PositionLike,
   targets: Placeable[],
   posScales: ConstraintPosScales | undefined
 ): void {
-  if (!enabled() || constraint.type !== "position") return;
-  // Across all 189 stories this covers 5753 datum→position mappings with zero
-  // divergences; 627 literal (pixel) pins are skipped (no data→position).
   const axes: [Axis, MaybeValue<number> | undefined][] = [
     ["x", constraint.x],
     ["y", constraint.y],
@@ -393,17 +389,17 @@ export function shadowCheckPosition(
  * affine solver must handle as under/over-determined rather than silently zero.
  */
 export function shadowCheckScaleRoot(
-  sp: UnderlyingSpace,
+  extent: Extent | undefined,
   allocated: number,
   sigma: number | undefined,
   axisIdx: 0 | 1
 ): void {
-  if (!enabled() || sigma === undefined || !Number.isFinite(allocated)) return;
+  if (!SOLVER_CHECK || sigma === undefined || !Number.isFinite(allocated))
+    return;
   // Every continuous σ-scope closes the same frame equation: the extent at σ is
-  // `width.run(σ)` (anchored or not — a former POSITION/DIFFERENCE width is just
-  // `linear(extent, 0)`, so `run(σ) = extent·σ`).
-  let content: number | undefined;
-  if (isCONTINUOUS(sp)) content = sp.width.run(sigma);
+  // its claim's `width.run(σ)` (pinned or not — a pinned or difference claim is
+  // just `linear(dataWidth, 0)`, so `run(σ) = dataWidth·σ`).
+  const content = extent?.width.run(sigma);
   if (content === undefined) return;
   if (Math.abs(content - allocated) > 1e-6) {
     report(`scaleRoot.frame axis=${axisIdx}`, content, allocated);
@@ -412,23 +408,20 @@ export function shadowCheckScaleRoot(
 
 /**
  * Single per-constraint shadow hook for `applyConstraints` — one call that
- * dispatches by constraint type, so this disposable observe→assert scaffolding
- * lifts out cleanly when the solver lands. `prePlaced` is the per-target `[x, y]`
+ * dispatches by constraint type. `prePlaced` is the per-target `[x, y]`
  * placement snapshot the caller takes BEFORE the placement solve (only when the
  * check is enabled); it's `undefined` (and this no-ops) in production.
- * `nameToPlaceable`/`layerSize` are the layer's resolved children and pixel box,
- * used by the `nest` and `grid` checks (which read placeables by name and the
- * grid's track sizes).
+ * `nameToPlaceable` is the layer's resolved children by name, read by the `nest`
+ * and `grid` checks.
  */
 export function shadowCheckConstraint(
   constraint: ConstraintSpec,
   targets: Placeable[],
   posScales: ConstraintPosScales | undefined,
   prePlaced: [boolean, boolean][] | undefined,
-  nameToPlaceable: Map<string, Placeable>,
-  layerSize: [number, number]
+  nameToPlaceable: Map<string, Placeable>
 ): void {
-  if (!enabled() || !prePlaced) return;
+  if (!SOLVER_CHECK || !prePlaced) return;
   const c = constraint as { type?: string; dir?: Axis };
   if (c.type === "align") {
     shadowCheckAlign(constraint as AlignLike, targets, prePlaced);
@@ -449,6 +442,6 @@ export function shadowCheckConstraint(
       nameToPlaceable.get(nest.children[1]?.name)
     );
   } else if (c.type === "grid") {
-    shadowCheckGrid(constraint as GridLike, nameToPlaceable, layerSize);
+    shadowCheckGrid(constraint as GridLike, nameToPlaceable);
   }
 }

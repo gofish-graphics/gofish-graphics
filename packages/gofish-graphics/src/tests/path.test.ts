@@ -594,5 +594,6 @@ export function runTests() {
 
 // Run tests if this file is executed directly
 if (import.meta.url.endsWith(process.argv[1]?.replace(/\\/g, "/") || "")) {
-  runTests();
+  const ok = runTests();
+  process.exit(ok ? 0 : 1);
 }

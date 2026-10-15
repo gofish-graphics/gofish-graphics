@@ -21,14 +21,12 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
 
       - name: Install dependencies
@@ -37,8 +35,9 @@ jobs:
       - name: Build gofish-graphics library
         run: pnpm --filter gofish-graphics build
 
-      # docs:build runs predocs:build, which renders the gallery thumbnails + OG
-      # cards headlessly (they are build artifacts, not committed).
+      # docs:build first runs docs:images, which renders the gallery thumbnails + OG
+      # cards and the `::: gofish … image` pictures headlessly (they are build
+      # artifacts, not committed).
       - name: Install Playwright Chromium
         run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
 

@@ -9,7 +9,7 @@ divergence (the cross-axis baseline policies differ when no sibling is
 pre-placed), which is documented in the JS story.
 
 `spread({...}, [children])` maps to the combinator form `spread([children], ...)`;
-`layer([...]).constrain(...)` maps to the same combinator form. Data-driven
+`layer([...]).relate(...)` maps to the same combinator form. Data-driven
 sizes use `datum(v)` (JS `value(v)`).
 """
 
@@ -41,7 +41,7 @@ def story_constraint_bar():
         layer([
             rect(w=40, h=datum(v), fill=COLORS[i]).name(f"r{i}")
             for i, v in enumerate(BAR_HEIGHTS)
-        ]).constrain(lambda r0, r1, r2: [
+        ]).relate(lambda r0, r1, r2: [
             Constraint.align([r0, r1, r2], y="start"),
             Constraint.distribute([r0, r1, r2], dir="x", spacing=8),
         ]),
@@ -73,7 +73,7 @@ def story_constraint_fit():
         layer([
             rect(w=datum(v), h=60, fill=COLORS[i]).name(f"r{i}")
             for i, v in enumerate(FIT_WIDTHS)
-        ]).constrain(lambda r0, r1, r2: [
+        ]).relate(lambda r0, r1, r2: [
             Constraint.align([r0, r1, r2], y="start"),
             Constraint.distribute([r0, r1, r2], dir="x", spacing=8),
         ]),
@@ -100,7 +100,7 @@ def story_constraint_fill():
     return (
         layer([
             rect(h=40, fill=c).name(f"r{i}") for i, c in enumerate(COLORS)
-        ]).constrain(lambda r0, r1, r2: [
+        ]).relate(lambda r0, r1, r2: [
             Constraint.align([r0, r1, r2], y="start"),
             Constraint.distribute([r0, r1, r2], dir="x", spacing=8),
         ]),
@@ -132,7 +132,7 @@ def story_constraint_glue():
         layer([
             rect(w=60, h=datum(v), fill=COLORS[i]).name(f"r{i}")
             for i, v in enumerate(STACK_HEIGHTS)
-        ]).constrain(lambda r0, r1, r2: [
+        ]).relate(lambda r0, r1, r2: [
             Constraint.align([r0, r1, r2], x="start"),
             Constraint.distribute([r0, r1, r2], dir="y", glue=True),
         ]),
@@ -168,7 +168,7 @@ def story_constraint_end():
         layer([
             rect(w=40, h=datum(v), fill=COLORS[i]).name(f"r{i}")
             for i, v in enumerate(BAR_HEIGHTS)
-        ]).constrain(lambda r0, r1, r2: [
+        ]).relate(lambda r0, r1, r2: [
             Constraint.align([r0, r1, r2], y="end"),
             Constraint.distribute([r0, r1, r2], dir="x", spacing=8),
         ]),

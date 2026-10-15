@@ -1,3 +1,7 @@
+---
+order: 10
+---
+
 # spread
 
 Partitions the data and lays the groups out along an axis, with a gap between
@@ -22,15 +26,8 @@ spread(*, by=None, dir, **options) -> Operator
 
 ## Parameters
 
-| Parameter   | Type                                     | Description                                                                                                                                                                                                                                                                                                  |
-| ----------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `by`        | `str` \| `field(...)` \| `Callable`      | Field, dotted path, [`field(...)`](#field-expression-pipeline) accessor, or callable to partition by (see [path-aware `by`](#path-aware-by)). Omit to spread per row.                                                                                                                                        |
-| `dir`       | `"x"` \| `"y"`                           | **Required.** Axis to lay groups out along.                                                                                                                                                                                                                                                                  |
-| `spacing`   | `int`                                    | Gap between groups in pixels. Ignored when `glue=True`.                                                                                                                                                                                                                                                      |
-| `alignment` | `str`                                    | Cross-axis alignment of the groups.                                                                                                                                                                                                                                                                          |
-| `glue`      | `bool`                                   | Glue children together: collapse data-driven sizes into a single positional axis at this level. [`stack`](/python/api/operators/stack) sets this.                                                                                                                                                            |
-| `w`, `h`    | `int` \| `str`                           | Fixed pixel size, or a field name sizing this operator's own box from data (data-driven operator extent — e.g. a mosaic's column width).                                                                                                                                                                     |
-| `size`      | `int` \| `str` \| `field(...)` \| `list` | Per-entry stack-axis extent — a field name, a [`field(...)`](#field-expression-pipeline) accessor, or an explicit list with one value per split entry. `size=field("count").normalize()` makes the stack axis a **space-filling spine**. See [Space-filling spines](#space-filling-spines-mosaic-marimekko). |
+::: gofish-ref spread
+:::
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
@@ -50,70 +47,99 @@ chart(seafood).flow(
 ).mark(rect(h="count", fill="species"))
 ```
 
-## Path-aware `by` {#path-aware-by}
+## Naming the axis with `dir`
 
-`by` accepts a **field name**, a **dotted path string**, a **callable**, or a
-[`field(...)`](#field-expression-pipeline) accessor:
+`dir="x"` and `dir="y"` mean the first and second axis in any coordinate
+space. `dir` also takes the names the enclosing coordinate space declares, so
+under [`polar`](/python/api/coords/polar) you can write `dir="theta"` or
+`dir="r"`:
 
 ```python
-spread(by="species", dir="x")            # field on a raw record
-spread(by="datum.species", dir="x")      # path (e.g. after a selection)
-spread(by=lambda r: r.datum.species, dir="x")  # callable escape hatch
-spread(by=field("species").sort(), dir="x")    # field(...) accessor
+chart(data, coord=Coord.polar()) \
+    .flow(spread(by="month", dir="theta", spacing=0)) \
+    .mark(rect(w=0.5, h="value"))
 ```
 
-Path strings matter after a `ref` / `selectAll` selection: the stream items are then
-**refs**, not raw records, so you re-encode by the datum path —
-`by="datum.species"`.
+`dir="theta"` lays the months out exactly as `dir="x"` does. A name the
+enclosing space does not declare raises an error that lists the names it does.
+[`stack`](./stack) takes the same `dir`.
 
-### How a `datum.field` path resolves (homogeneity collapse) {#homogeneity-collapse}
+## Path-aware `by` {#path-aware-by}
+
+`by` accepts a **field name**, a **dotted path string**, a
+[`field(...)`](#field-expression-pipeline) accessor, or a
+[`chunk(size)`](#chunk) key:
+
+```python
+spread(by="species", dir="x")                # field name
+spread(by="origin.country", dir="x")         # nested path
+spread(by=field("species").sort(), dir="x")  # field(...) accessor
+spread(by=chunk(5), dir="y")                 # consecutive rows, five to a group
+```
+
+## Without `by` {#without-by}
+
+With no `by`, the split is by row identity: each row is its own group, keyed
+by its position. The mark under it gets that group, a one-row list `[row]`,
+just as it gets a group of rows under a `by` field. An item that is itself a
+list is still one item, so it becomes `[item]`. The keys are positions, not
+data, so they draw no axis and no labels.
+
+## `chunk(size)` {#chunk}
+
+`chunk(size)` groups consecutive rows: row `i` goes to group `i // size`. It is
+a bin of width `size` over row position, like Python `itertools.batched`,
+lodash `_.chunk` and Rust `chunks(n)`. Like no `by`, its keys name no field,
+so they draw no axis and no labels. `chunk(1)` is the same split as no `by`.
+
+```python
+chart(seafood).flow(
+    spread(by="lake", dir="x"),
+    derive(lambda d: [unit for row in d for unit in repeat(row, "count")]),
+    spread(by=chunk(5), dir="y", reverse=True),  # rows of five units
+    spread(dir="x"),
+).mark(rect(w=8, h=8, fill="species"))
+```
+
+The same bare field name works after a `ref` / `select_all` selection. The stream
+items are then **refs**, not raw records, but a ref is read through its `.datum`
+rows automatically, so you still write `by="species"`. Do **not** add a `datum.`
+prefix: `by="datum.species"` looks for a field named `datum` inside each row,
+finds nothing, and puts every ref in one group.
+
+### How `by` resolves on a ref (homogeneity collapse) {#homogeneity-collapse}
 
 A ref's `.datum` is the **raw bag of rows** that flowed into the node (a list; a
-fully-split leaf is a 1-row list). A `by="datum.field"` path does **not** just
+fully-split leaf is a 1-row list). A `by="field"` path on a ref does **not** just
 read the field off the first row — it **projects with homogeneity collapse**:
 
-> `datum.field` resolves to a scalar **iff every row in the node's bag agrees on
-> that field**; otherwise it is `None` — the "this field is multi-valued here,
+> `field` resolves to a scalar **iff every row in the node's bag agrees on that
+> field**; otherwise it is `None` — the "this field is multi-valued here,
 > grouping by it is ill-posed" signal.
 
 This is exactly SQL's `ONLY_FULL_GROUP_BY` / functional-dependency rule: you may
 only group by a column that is constant within each row-bag.
 
-**Example.** After `selectAll("bars")` where each ref is a _lake_ aggregate of 5
+**Example.** After `select_all("bars")` where each ref is a _lake_ aggregate of 5
 species rows:
 
 ```python
-group(by="datum.lake")     # resolves — all 5 rows share one lake
-group(by="datum.species")  # None — 5 distinct species; ill-posed
+group(by="lake")     # resolves — all 5 rows share one lake
+group(by="species")  # None — 5 distinct species; ill-posed
 ```
 
 To group by a field that is multi-valued in the current bag, **disaggregate
 first** (split the bag so each child is homogeneous in that field). A fully-split
-cell (1 row) trivially collapses, so `by="datum.species"` works once each node
-holds a single record.
-
-### `by` vs. channel: an intentional asymmetry
-
-`by` operates on the **selection stream**, but a mark's channels operate on the
-**raw record** — and they are addressed differently:
-
-| Place                                 | Reads          | How to write `species`   |
-| ------------------------------------- | -------------- | ------------------------ |
-| `by` on an operator after a selection | the ref stream | `"datum.species"` (path) |
-| a channel on a mark, e.g. `rect(...)` | the raw record | `"species"` (bare field) |
+cell (1 row) trivially collapses, so `by="species"` works once each node holds a
+single record.
 
 So a ribbon chart reads:
 
 ```python
-chart(selectAll("bars")) \
-    .flow(group(by="datum.species")) \
-    .mark(ribbon(opacity=0.8))         # channel → raw record, no prefix
+chart(select_all("bars")) \
+    .flow(group(by="species")) \
+    .mark(ribbon(opacity=0.8))
 ```
-
-Do **not** "consistency-refactor" channels into `datum.count` — a channel like
-`rect(h="count")` reads the bound record directly and is never path-prefixed.
-Only `by` (on `group`/`spread`/`stack`/`scatter`) is path-aware, because only
-`by` sees the selection stream.
 
 ## Field-expression pipeline {#field-expression-pipeline}
 
@@ -121,8 +147,9 @@ Only `by` (on `group`/`spread`/`stack`/`scatter`) is path-aware, because only
 appends one op to an ordered pipeline. It works in two disjoint places:
 
 - As `by` (a **domain** slot): `.sort(by=None, order=None)`, `.sort(values)`
-  (an explicit order list), `.reverse()`, `.bin(thresholds=None)`, and
-  `.drop_nulls()` decide **which groups exist and in what order**.
+  (an explicit order list), `.reverse()`, `.bin(partition=None)`, and
+  `.drop_nulls()` decide **which groups exist and in
+  what order**.
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
@@ -130,6 +157,20 @@ appends one op to an ordered pipeline. It works in two disjoint places:
 
 Mixing the two — an aggregate op on `by`, or a domain op on a value channel —
 raises.
+
+One method is neither: `.between(lo, hi, closed=None)` returns a **field
+predicate** for [`filter`](/python/api/operators/filter) rather than appending
+an op, because a predicate never takes part in grouping, folding or scaling.
+For the same reason it raises if the expression already carries ops.
+
+```python
+# Keep the rows whose day falls in (100, 120]
+.flow(filter(field("day").between(100, 120, closed="right")))
+```
+
+`closed` is polars' `is_between` argument: `"both"` (the default), `"left"`,
+`"right"` or `"none"`, choosing which ends of the interval are inclusive. The
+comparison is by **value**, not by row count. `lo` and `hi` are plain numbers.
 
 **Sort a stack's groups by another field's total**, instead of data order:
 
@@ -156,18 +197,67 @@ chart(data).flow(
 Groups whose key isn't in the list are appended after, in natural sort
 order.
 
-**Bin a numeric field into groups** — a histogram, with no precomputed bins:
+**Bin a field into cells** — a histogram, with no precomputed bins:
 
 ```python
-# One bar per ~10 auto-computed bins of `age`, height = row count per bin
+# One bar per half-point cell of `rating`, height = row count per cell
 chart(data).flow(
-    spread(by=field("age").bin(), dir="x")
-).mark(rect(h=field("age").count()))
+    spread(by=field("rating").bin(Bin.step(0.5)), dir="x")
+).mark(rect(h=field("rating").count()))
+
+# One bar per month of the year, all Junes in one bar
+chart(sales, schema={"date": Schema.time()}).flow(
+    spread(by=field("date").bin(Calendar.month), dir="x")
+).mark(rect(h=field("value").sum()))
+
+# One bar per month of each year, labeled "Jun 2015"
+spread(by=field("date").bin([Calendar.year, Calendar.month]), dir="x")
+
+# The months of each year: a month level and a year level on the axis
+spread(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x")
 ```
 
-Empty bins are dropped, like an ordinary group-by. Pass
-`field("age").bin(5)` (a count) or explicit thresholds (a list) to control
-the binning.
+`.bin(...)` maps each value to its **cell**: an interval `[start, end)` that
+holds its start and not its end. The partition is one of:
+
+| Partition                                     | Cells                                                                                                                                                                                                                                                                                       |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a [Calendar](/python/api/core/calendar) value | The calendar cells of a time column, in the column's zone. A level that is a part of a larger one gives its parts, a cycle: `Calendar.month` is the month of the year, so all Junes are one cell. `Calendar.year` and `Calendar.week` are parts of nothing and give cells of the time line. |
+| a list of Calendar values                     | A product, `[Calendar.year, Calendar.month]`: one cell where one cell of each level meets one of the next (the June of 2015), labeled `"Jun 2015"`.                                                                                                                                         |
+| `Bin.step(size)`                              | Cells `size` wide, starting at multiples of `size`.                                                                                                                                                                                                                                         |
+| `Bin.thresholds(n)`                           | About `n` cells, with the step a numeric axis with `n` ticks uses. The default, with no argument, is `Bin.thresholds(10)`.                                                                                                                                                                  |
+| `Bin.thresholds([t1, ...])`                   | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                                                                                                                                                                      |
+
+`Bin.step` and `Bin.thresholds` are members of the [`Bin`](/python/api/bin)
+family. A thresholds partition includes its top edge, so the largest value
+falls in the last cell. Custom cell labels (`.format`) are JS-only for now.
+
+A second `.bin(...)` splits each cell of the first, a chain:
+`.bin(Calendar.year).bin(Calendar.month)` gives the months of each year, and
+each cell keeps the cell it was split from. See
+[Calendar › Bins](/python/api/core/calendar) for which levels a product or a
+chain combines.
+
+The groups are the cells over the column's values in the **chart's data**
+(or the result of the last `derive`), not over the rows of one group. So
+every group of a nested split has the same cells in the same order, a cell
+with no rows is kept as an empty group, and a count picks its step from the
+chart's values. Ops after `.bin` reorder the cells. The mean of an empty
+group has no value, so a mark whose color is that mean is not drawn, and
+keeps its slot; a sum or a count of no rows is 0, and draws.
+
+Each group's key is its cell. Its id is the cell's start, as text, or, for
+a part of a cycle, its field values (`"6"` for June). An axis over cells
+labels each cell (its edges, `"0.5–1"`, or the calendar label `"Jan"`),
+with no ticks. A chained key adds a level per bin before the last, e.g.
+years under months, each year label at the start of its run of months, just
+past the divider between neighboring years. A part of a cycle covers the whole
+cycle: an axis over the months of the year shows all twelve. See
+[chart › Axes](/python/api/core/chart#axes) for the `"levels"` and
+`"label"` (`"align"`) options.
+
+`spread` gives each cell an equal slot. To place each cell at its true width
+on a continuous axis, use [`partition`](/python/api/operators/partition) with the same key.
 
 **Drop rows with a missing/null grouping field**, before grouping:
 
@@ -188,9 +278,8 @@ chart(data).flow(
 ).mark(rect(h=field("weight").mean()))
 ```
 
-`.count()` and `.distinct()` report measure `"count"` (they're counts, not the
-source field's own units) unless you annotate the accessor explicitly:
-`field("id", measure="my-measure").distinct()`.
+`.count()` and `.distinct()` are in the unit `"count"` (they're counts, not the
+source field's own units).
 
 ## Space-filling spines (mosaic / marimekko) {#space-filling-spines-mosaic-marimekko}
 
@@ -216,7 +305,7 @@ entry's share (the conditional):
         # survival share within each column (conditional), filling height
         stack(by="survived", dir="y", size=field("count").normalize()),
     )
-    .mark(rect(fill="survived", stroke="white", strokeWidth=1))
+    .mark(rect(fill="survived", stroke="white", stroke_width=1))
     .render(w=400, h=300)
 )
 ```

@@ -1,8 +1,12 @@
+---
+order: 140
+---
+
 # resolve
 
 Dereference reference columns into the drawn nodes they name. For each row,
 `resolve` matches the listed columns' values against the keyed nodes of `from_`
-(a [`selectAll(...)`](/python/api/marks/ref) of a prior layer) and replaces each
+(a [`select_all(...)`](/python/api/marks/ref) of a prior layer) and replaces each
 value **in place** with the matching node ref — a many-to-one join that preserves
 the row grain (no fan-out). It's the join that turns an edge or label table into
 something the chart can draw.
@@ -17,7 +21,7 @@ edges) or [`ribbon(from_=, to=)`](/python/api/marks/ribbon).
 :::
 
 ```python
-from gofish import chart, scatter, resolve, selectAll, circle, line
+from gofish import chart, scatter, resolve, select_all, circle, line
 
 nodes = [
     {"id": "a", "grp": 0},
@@ -36,7 +40,7 @@ chart(nodes).flow(scatter(by="id", x="grp", y="id")).mark(
     circle(r=14, fill="#4e79a7").name("nodes")
 ).layer(
     chart(edges)
-    .flow(resolve(["source", "target"], from_=selectAll("nodes")))
+    .flow(resolve(["source", "target"], from_=select_all("nodes")))
     .mark(line(from_="source", to="target", stroke="#888"))
 ).render(w=360, h=360)
 ```
@@ -49,15 +53,12 @@ resolve(cols, *, from_, key=None) -> Operator
 
 ## Parameters
 
-| Parameter | Type        | Description                                                                                                                            |
-| --------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `cols`    | `list[str]` | The columns whose values are references to resolve in place.                                                                           |
-| `from_`   | `GoFishRef` | A [`selectAll(layerName)`](/python/api/marks/ref) of the layer whose nodes the columns are matched against.                            |
-| `key`     | `str`       | Optional. The field on the `from_` nodes to match against. Defaults to the field those nodes were grouped by (e.g. `scatter(by=...)`). |
+::: gofish-ref resolve
+:::
 
 `from_` carries a trailing underscore because `from` is a reserved word in
-Python; it maps to the `from` wire key. Returns an `Operator` for use inside
-[`.flow()`](/python/api/core/flow).
+Python; the JavaScript API spells the same option `from`. Returns an `Operator`
+for use inside [`.flow()`](/python/api/core/flow).
 
 ## Semantics
 

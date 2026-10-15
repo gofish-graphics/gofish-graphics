@@ -7,22 +7,21 @@ import {
   rectItemFromBox,
   roleFor,
 } from "../displayList/lowerHelpers";
-import { getMeasure, getValue, isValue, MaybeValue, Value } from "../data";
+import { getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
   displayDims as displayDimsOf,
   elaborateDims,
-  extractAliasCandidates,
+  deferAxisDims,
   FancyDims,
   FancySize,
   Size,
   Transform,
 } from "../dims";
 import { aesthetic, continuous, Domain } from "../domain";
-import * as Monotonic from "../../util/monotonic";
-import { POSITION, SIZE, UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
-import { interval } from "../../util/interval";
+import { UnderlyingSpace, pointOrMagnitude } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import { MARK_CHANNELS } from "../markChannels.generated";
 /* Implementation inspired by https://web.archive.org/web/20220808041640/http://bl.ocks.org/herrstucki/6199768 */
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Petal = ({
@@ -70,27 +69,12 @@ export const Petal = ({
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]
       ) => {
-        const sizeDomain = (axis: 0 | 1): Monotonic.Monotonic =>
-          isValue(dims[axis].size)
-            ? Monotonic.linear(getValue(dims[axis].size!), 0)
-            : Monotonic.linear(0, dims[axis].size ?? 0);
-
-        const resolveAxis = (axis: 0 | 1): UnderlyingSpace => {
-          const d = dims[axis];
-          if (isValue(d.min)) {
-            const min = getValue(d.min) ?? 0;
-            return POSITION(interval(min, min), getMeasure(d.min));
-          }
-          if (isValue(d.size)) {
-            // data-driven size only — literals handled at layout time.
-            return SIZE(sizeDomain(axis), getMeasure(d.size));
-          }
-          return UNDEFINED;
-        };
-
-        return [resolveAxis(0), resolveAxis(1)];
+        return [
+          pointOrMagnitude(dims[0].min, dims[0].size),
+          pointOrMagnitude(dims[1].min, dims[1].size),
+        ];
       },
-      layout: (shared, size, scales, children) => {
+      layout: (size, scales, children) => {
         const w = isValue(dims[0].size)
           ? getValue(dims[0].size!) * scales[0]?.sigma!
           : (dims[0].size ?? size[0]);
@@ -115,11 +99,13 @@ export const Petal = ({
           },
         };
       },
-      // IR lowering — mirror of render. Petal is polar-only; `toPixel` is the
-      // coord content map set by coord.lower. The both-aesthetic branch is a
+      // IR lowering. Petal is polar-only; `toPixel` is the coord content map
+      // set by coord.lower and `coordinateTransform` is the polar transform in
+      // pixels (`inPixels`: it takes the interior's pixel y, the negated
+      // radius, and returns y-down points). The both-aesthetic branch is a
       // point rect; otherwise the petal path is built from polar-transformed
-      // points and rotated by its angular center (the legacy `rotate(deg)`),
-      // baked into each point before `toPixel`.
+      // points and rotated by its angular center, baked into each point before
+      // `toPixel`.
       lower: (
         { intrinsicDims, transform, coordinateTransform, toPixel },
         _children,
@@ -169,24 +155,27 @@ export const Petal = ({
         // Petal shape — same points as render, rotated by the angular center
         // (radians) and mapped to pixels.
         const halfRadius = (displayDims[1].size ?? 0) / 2;
+        // The interior's pixel y of radius `halfRadius` is `-halfRadius`.
         const s = space.transform([
           -displayDims[0].size / 2 + Math.PI / 2,
-          halfRadius,
+          -halfRadius,
         ]);
         const e = space.transform([
           displayDims[0].size / 2 + Math.PI / 2,
-          halfRadius,
+          -halfRadius,
         ]);
         const r = displayDims[1].size ?? 0;
         const m: [number, number] = [halfRadius + r / 2, 0];
         const c1: [number, number] = [halfRadius + r / 4, s[1]];
         const c2: [number, number] = [halfRadius + r / 4, e[1]];
 
-        const center = displayDims[0].center ?? 0; // radians
+        // Turn by the angular center (radians, counter-clockwise on screen,
+        // as polar measures angles), in y-down pixels.
+        const center = displayDims[0].center ?? 0;
         const cos = Math.cos(center);
         const sin = Math.sin(center);
         const petalToPixel = ([x, y]: [number, number]): [number, number] =>
-          toPixel([x * cos - y * sin, x * sin + y * cos]);
+          toPixel([x * cos + y * sin, -x * sin + y * cos]);
         const p = (pt: [number, number]) => petalToPixel(pt).join(",");
 
         const d =
@@ -206,18 +195,9 @@ export const Petal = ({
     },
     []
   );
-  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
-  node._pendingAliases = extractAliasCandidates(fancyDims);
+  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
+  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
   return node;
 };
 
-export const petal = createMark(
-  Petal,
-  {
-    w: "size",
-    h: "size",
-    fill: "color",
-    stroke: "color",
-  },
-  "petal"
-);
+export const petal = createMark(Petal, MARK_CHANNELS.petal, "petal");

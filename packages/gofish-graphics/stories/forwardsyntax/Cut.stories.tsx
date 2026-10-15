@@ -9,8 +9,6 @@ import {
   Constraint,
   spread,
   stack,
-  Spread,
-  Stack,
   cut,
   datum,
 } from "../../src/lib";
@@ -35,7 +33,7 @@ const abcdData = [
 ];
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Cut",
+  title: "Forward Syntax/Cut",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1200, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1200, step: 10 } },
@@ -111,15 +109,15 @@ export const ImageCutWithLabels: StoryObj<Args> = {
                   fontSize: 18,
                   fontWeight: "bold",
                   fill: "#1c5e20",
-                  text: d.datum.category,
+                  text: d.datum[0].category,
                 }).name("label"),
                 text({
                   fontSize: 36,
                   fontFamily: "Impact",
                   fill: "#1c5e20",
-                  text: `${d.datum.amount}`,
+                  text: `${d.datum[0].amount}`,
                 }).name("amount"),
-              ]).constrain(({ slice, label, amount }) => [
+              ]).relate(({ slice, label, amount }) => [
                 Constraint.align({ y: "middle" }, [slice, label]),
                 Constraint.distribute(
                   { dir: "x", spacing: 12 },
@@ -258,7 +256,7 @@ export const LowLevelForm: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Spread(
+    spread(
       { dir: "y", spacing: 4, reverse: true },
       cut(image({ href: bottlePng, w: 193, h: 600 }), {
         dir: "y",
@@ -281,7 +279,7 @@ export const RectAbsoluteSizes: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Spread(
+    spread(
       { dir: "x", spacing: 8 },
       cut(rect({ w: 600, h: 80, fill: "seagreen" }), {
         dir: "x",
@@ -304,7 +302,7 @@ export const MixedSizes: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Spread(
+    spread(
       { dir: "x", spacing: 8 },
       cut(
         rect({
@@ -375,10 +373,10 @@ export const CroissantStack: StoryObj<Args> = {
     const spacer = () =>
       rect({ w: inset / 2, h: 0, fill: "none", stroke: "none" });
     const padded = slices.map((slice) =>
-      Stack({ dir: "x" }, [spacer(), slice, spacer()])
+      stack({ dir: "x" }, [spacer(), slice, spacer()])
     );
 
-    const bands = Stack({ dir: "x" }, padded).name("bands");
+    const bands = stack({ dir: "x" }, padded).name("bands");
 
     // Hand-composed continuous x axis. The low-level Stack of masked slices has
     // SIZE space (no continuous POSITION domain), so the renderer's `axes`
@@ -399,7 +397,7 @@ export const CroissantStack: StoryObj<Args> = {
         text({ text: t.label, fontSize: 12, fill: "#555" }).name(`lab${i}`)
       ),
     ])
-      .constrain((g: any) => [
+      .relate((g: any) => [
         // Pin the baseline rect at the sub-layer origin, then place each label's
         // center at its literal x = frac * W and drop it below the line.
         Constraint.align({ x: "start", y: "start" }, [g.axisLine]),
@@ -411,7 +409,7 @@ export const CroissantStack: StoryObj<Args> = {
       .name("axis");
 
     layer([bands, axis])
-      .constrain(({ bands, axis }: any) => [
+      .relate(({ bands, axis }: any) => [
         // Axis row centered under the bands (both are W wide). y-down free
         // space: bands-first renders on top, axis below (issue #143/#16).
         Constraint.align({ x: "middle" }, [bands, axis]),

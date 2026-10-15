@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle } from "gofish-graphics";
+import { circle, Curve } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth, sampleTree } from "../data";
 import { initializeContainer } from "../helper";
@@ -17,7 +17,7 @@ import { initializeContainer } from "../helper";
 //
 // TODO: needs orthogonal links implemented — GoTree's spec asks for
 // "orthogonal" (elbow) links; gofish-gotree only supports straight links, so
-// this uses { curve: "straight" }.
+// this uses { curve: "linear" }.
 const node = (d: any) =>
   circle({
     r: 10,
@@ -40,7 +40,7 @@ export const GardenLayout: StoryObj = {
     tree(
       {
         node,
-        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1.5 },
         parentChild: combine({
           x: { kind: "align", alignment: "middle" },
           y: { kind: "distribute", spacing: 48 },

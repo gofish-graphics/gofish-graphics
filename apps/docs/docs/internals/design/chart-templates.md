@@ -73,8 +73,9 @@ Issue #35 requires that templates stay nestable inside ordinary specs ("you can 
 It turns out this needs no mechanism at all, because `.mark()` already accepts both things a
 template would naturally return:
 
-- Any function `(d) => GoFishAST` is a valid `Mark` (`src/ast/types.ts`). The FlowerChart story
-  passes a closure returning a `spread`/`layer`/`stackX` composition straight to `.mark()`.
+- Any function `(d) => GoFishAST` is a valid `Mark` (`src/ast/types.ts`). The low-level
+  FlowerChart story passed a closure returning a `spread`/`layer`/`stackX` composition
+  straight to `.mark()`.
 - A `ChartBuilder` can be passed to `.mark()` directly (issue #243). An empty-scope child
   (`chart()` with no data) inherits the incoming partition datum. The Atom stories already do
   `.mark(chart().flow(derive(...), spread(...)).mark(circle(...)))`.
@@ -203,7 +204,7 @@ carrier must still be something `.mark()` accepts.
   method. No story exercises `.stack()` yet. The `Stackable` typeclass stays; whether the wrapper
   class does is an open question below (as written it is not a `ChartBuilder` instance, so it
   cannot be nested via `.mark()`).
-- `src/templates/` (rectTemplate, waffle, and friends) predates v3, is not exported anywhere, and
+- `src/templates/` (rectTemplate, waffle, and friends) predates the fluent builder, is not exported anywhere, and
   should be deleted when this layer lands.
 
 # Forks Not Taken

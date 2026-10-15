@@ -32,9 +32,7 @@ export const SpreadBar: StoryObj<Args> = {
     const container = initializeContainer();
     spread(
       { dir: "x", alignment: "start", spacing: 8 },
-      BAR_HEIGHTS.map((v, i) =>
-        rect({ w: 40, h: value(v), fill: COLORS[i] })
-      )
+      BAR_HEIGHTS.map((v, i) => rect({ w: 40, h: value(v), fill: COLORS[i] }))
     ).render(container, { w: args.w, h: args.h });
     return container;
   },
@@ -50,7 +48,7 @@ export const ConstraintBar: StoryObj<Args> = {
         rect({ w: 40, h: value(v), fill: COLORS[i] }).name(`r${i}`)
       )
     )
-      .constrain(({ r0, r1, r2 }) => [
+      .relate(({ r0, r1, r2 }) => [
         Constraint.align({ y: "start" }, [r0, r1, r2]),
         Constraint.distribute({ dir: "x", spacing: 8 }, [r0, r1, r2]),
       ])
@@ -73,9 +71,7 @@ export const SpreadFit: StoryObj<Args> = {
     const container = initializeContainer();
     spread(
       { dir: "x", alignment: "start", spacing: 8 },
-      FIT_WIDTHS.map((v, i) =>
-        rect({ w: value(v), h: 60, fill: COLORS[i] })
-      )
+      FIT_WIDTHS.map((v, i) => rect({ w: value(v), h: 60, fill: COLORS[i] }))
     ).render(container, { w: args.w, h: args.h });
     return container;
   },
@@ -91,7 +87,7 @@ export const ConstraintFit: StoryObj<Args> = {
         rect({ w: value(v), h: 60, fill: COLORS[i] }).name(`r${i}`)
       )
     )
-      .constrain(({ r0, r1, r2 }) => [
+      .relate(({ r0, r1, r2 }) => [
         Constraint.align({ y: "start" }, [r0, r1, r2]),
         Constraint.distribute({ dir: "x", spacing: 8 }, [r0, r1, r2]),
       ])
@@ -123,10 +119,8 @@ export const ConstraintFill: StoryObj<Args> = {
   args: { w: 300, h: 80 },
   render: (args: Args) => {
     const container = initializeContainer();
-    layer(
-      COLORS.map((c, i) => rect({ h: 40, fill: c }).name(`r${i}`))
-    )
-      .constrain(({ r0, r1, r2 }) => [
+    layer(COLORS.map((c, i) => rect({ h: 40, fill: c }).name(`r${i}`)))
+      .relate(({ r0, r1, r2 }) => [
         Constraint.align({ y: "start" }, [r0, r1, r2]),
         Constraint.distribute({ dir: "x", spacing: 8 }, [r0, r1, r2]),
       ])
@@ -164,7 +158,7 @@ export const ConstraintGlue: StoryObj<Args> = {
         rect({ w: 60, h: value(v), fill: COLORS[i] }).name(`r${i}`)
       )
     )
-      .constrain(({ r0, r1, r2 }) => [
+      .relate(({ r0, r1, r2 }) => [
         Constraint.align({ x: "start" }, [r0, r1, r2]),
         Constraint.distribute({ dir: "y", glue: true }, [r0, r1, r2]),
       ])
@@ -210,7 +204,7 @@ export const ConstraintEnd: StoryObj<Args> = {
         rect({ w: 40, h: value(v), fill: COLORS[i] }).name(`r${i}`)
       )
     )
-      .constrain(({ r0, r1, r2 }) => [
+      .relate(({ r0, r1, r2 }) => [
         Constraint.align({ y: "end" }, [r0, r1, r2]),
         Constraint.distribute({ dir: "x", spacing: 8 }, [r0, r1, r2]),
       ])

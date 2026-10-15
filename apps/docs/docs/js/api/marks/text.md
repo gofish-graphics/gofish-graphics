@@ -1,3 +1,7 @@
+---
+order: 80
+---
+
 # text
 
 Draws a text label for each data item. Used for value labels on bars, point
@@ -23,20 +27,21 @@ text({ text, fill = "black", stroke?, strokeWidth = 0, fontSize = 12,
 
 ## Parameters
 
-| Option             | Type                           | Description                                                                                             |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `text`             | `string \| number`             | The string to render — a constant or a field name to read from data                                     |
-| `fill`             | `string`                       | Fill color or field name for color encoding (default `"black"`)                                         |
-| `stroke`           | `string`                       | Stroke color                                                                                            |
-| `strokeWidth`      | `number`                       | Stroke width (default `0`)                                                                              |
-| `fontSize`         | `number`                       | Font size in pixels (default `12`)                                                                      |
-| `fontFamily`       | `string`                       | Font family (default `"system-ui, sans-serif"`)                                                         |
-| `fontStyle`        | `string`                       | CSS font style, e.g. `"italic"`                                                                         |
-| `fontWeight`       | `number \| string`             | CSS font weight, e.g. `300`, `700`, `"bold"`                                                            |
-| `rotate`           | `number`                       | Rotation in degrees about the anchor; `90` reads bottom-to-top for a y-title                            |
-| `textAnchor`       | `"start" \| "middle" \| "end"` | Which end of the text sits at its own local origin, the point `rotate` pivots about (default `"start"`) |
-| `debugBoundingBox` | `boolean`                      | Draw the text's bounding box (for layout debugging)                                                     |
-| `x`, `y`, `w`, `h` | `number \| string`             | Explicit position / size accessors                                                                      |
+::: gofish-ref text
+:::
+
+## Placement
+
+A text is a box, and it is placed exactly as a rect of the same size would be.
+`y` is the box's start edge: its top where y reads top-down (a free diagram, an
+ordinal spread) and its bottom where y grows upward (a chart with a value axis).
+`cy` is the box's center. Spreads, stacks, layers and `align`/`distribute`
+constraints place it by its box, as they place a rect. In x, `x` is the
+`textAnchor` point: the left edge for the default `"start"` (as for a rect), the
+center for `"middle"`, the right edge for `"end"`.
+
+`rotate` turns the glyphs about the point on their baseline at `textAnchor`; the
+box is then the rotated glyphs' footprint.
 
 ## Examples
 
@@ -53,17 +58,18 @@ layer([
     .flow(spread({ by: "lake", dir: "x" }))
     .mark(rect({ h: "count" }).name("bars")),
   chart(selectAll("bars"))
-    .flow(group({ by: "datum.lake" }))
+    .flow(group({ by: "lake" }))
     .mark((d) =>
+      // A spread on y reads top-down: the total above its bar.
       spread({ dir: "y", alignment: "middle", spacing: 10 }, [
-        d[0],
         text({ text: String(sumBy(d[0].datum, "count")) }),
+        d[0],
       ])
     ),
 ]);
 
-// Rotated y-axis title (reads bottom-to-top)
-.mark(text({ text: "count", rotate: 90, fontSize: 13 }))
+// Rotated y-axis title (reads bottom-to-top): rotate is clockwise on screen
+.mark(text({ text: "count", rotate: -90, fontSize: 13 }))
 
 // Italic label
 .mark(text({ text: "note", fontStyle: "italic" }))

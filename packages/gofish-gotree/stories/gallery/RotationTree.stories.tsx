@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { ellipse, line, Layer, Frame, polar } from "gofish-graphics";
+import { ellipse, line, layer, frame, Coord, Curve } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -33,7 +33,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //
 //   THE SWIRL-LINK TRICK. The dsl asks for arccurve links (ArcDirection
 //   bottom); curved-link interpolation is unimplemented (tracked for PR #637).
-//   But under coord(polar()), connect's `curve:"straight"` interpolates
+//   But under coord(polar()), connect's `curve:"linear"` interpolates
 //   in (θ, r) space and ADAPTIVELY RESAMPLES the segment (adaptive-resampling.ts
 //   subdivides on the transform's curvature), so a straight (θ,r) segment
 //   renders as a smooth screen curve. We exploit that twice:
@@ -170,7 +170,7 @@ const links = placed
       return [
         line(
           {
-            curve: "straight",
+            curve: Curve.linear(),
             fill: "none",
             stroke: LINK_STROKE,
             strokeWidth: LINK_WIDTH,
@@ -185,7 +185,7 @@ const links = placed
     return [
       line(
         {
-          curve: "straight",
+          curve: Curve.linear(),
           fill: "none",
           stroke: LINK_STROKE,
           strokeWidth: LINK_WIDTH,
@@ -205,10 +205,9 @@ export const RotationTree: StoryObj = {
     // Inside a coord, paint order = array order (coord's flattenLayout ignores
     // zOrder). Links FIRST (under the nodes); the root node is last within
     // `nodes` so its dark disc caps the center.
-    Frame({ coord: polar() as any }, [Layer([...links, ...nodes])]).render(
-      container,
-      { w: 520, h: 520 }
-    );
+    frame({ coord: Coord.polar() as any }, [
+      layer([...links, ...nodes]),
+    ]).render(container, { w: 520, h: 520 });
     return container;
   },
 };

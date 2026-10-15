@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, Layer, Frame, polar } from "gofish-graphics";
+import { rect, layer, frame, Coord } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -42,7 +42,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 // So a small story-local pass computes each node's angular span (bottom-up from
 // leaf counts: leaf = 1 slot, parent span = Σ children, 37 leaf slots total) and
 // its radial band (by depth, rings INVERTED), then emits rect wedges directly
-// into a Frame({ coord: polar() }). Each wedge is the "both dimensions embedded"
+// into a frame({ coord: polar() }). Each wedge is the "both dimensions embedded"
 // rect case: emX makes the width sweep an arc (θ-units) and emY makes the height
 // a radial band (r-units), so a rect in polar space IS an annular sector (the
 // same embedded-wedge technique as the Sunburst / HierarchicalSectorChart
@@ -52,7 +52,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //  - Angular gaps: the dsl's X.Subtree Margin is "0" (no angular padding), so
 //    wedges are allotted CONTIGUOUS spans; the thin white seams between them are
 //    the white stroke, exactly as in the reference — not real angular gaps.
-//  - thetaSize angular auto-fit (#622) and polar() options (#620,
+//  - θ-extent angular auto-fit (#622) and polar() options (#620,
 //    innerRadius/direction/startAngle) would let the DSL express the angular fit
 //    and the hole once the inverted-radial gap (above) is closed; here the raw
 //    radians/pixels bypass the scale machinery (the "simple thing for now" #627
@@ -167,7 +167,7 @@ const marks = wedges
 export const OutsideInTree: StoryObj = {
   render: () => {
     const container = initializeContainer({ w: 540, h: 540 });
-    Frame({ coord: polar() as any }, [Layer(marks)]).render(container, {
+    frame({ coord: Coord.polar() as any }, [layer(marks)]).render(container, {
       w: 540,
       h: 540,
     });

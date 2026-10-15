@@ -4,56 +4,160 @@
 
 /**
  * Terminal registry — the shared definition of the "export" methods a mark /
- * combinator surface exposes (`render`, `toSVG`, `toSVGElement`, `save`,
- * `toDisplayList`).
+ * combinator / chart-builder surface exposes (`render`, `toSVG`,
+ * `toSVGElement`, `save`, `toDisplayList`).
  *
  * A terminal is the dual of a {@link ModifierConfig}: where a modifier mutates
  * the produced node and returns a chainable mark, a terminal RESOLVES the
  * surface to a final `GoFishNode` and calls through to that node's method,
- * ending the chain. Every terminal has the same shape — "resolve me to a node,
- * then invoke `node.X(...)`" — differing only in which method and which args.
+ * ending the chain. Every terminal has the same shape — "resolve me to a node
+ * plus the options to export it with, then invoke `node.X(...)`" — differing
+ * only in which method and which argument carries the options.
  *
- * Before this registry the terminals were hand-rolled and DUPLICATED across two
- * surfaces (`attachModifiers` in createOperator.ts and `addRenderMethod` in
- * withGoFish.ts), so adding one (e.g. `toDisplayList`) meant editing both — and
- * forgetting a surface silently dropped the method there. Now each surface
- * supplies only its own node-resolution strategy and calls
- * {@link attachTerminals}; the list of terminals lives here, once.
+ * A surface supplies only its own resolution strategy (call a mark with
+ * `undefined`; await a promise; run a builder's `resolve()` and merge the
+ * chart-level `axes`/`color` config) and calls {@link attachTerminals} or
+ * {@link attachBuilderTerminals}; the list of terminals lives here, once, so
+ * adding one (e.g. `toDisplayList`) reaches every surface.
  */
 
 import type { GoFishNode } from "../_node";
+import type { RenderPass } from "../../interaction/renderTerminal";
+import type { View } from "../gofish";
 
-/** One export method: its name, and how to invoke it on a resolved node. */
+/** Options a terminal call carries through to the node method. */
+export type RenderOptions = Record<string, unknown>;
+
+/** A surface resolved to the node to export and the options to export it with. */
+export type ResolvedSurface = { node: GoFishNode; options: RenderOptions };
+
+/** A surface's resolution strategy. Called with `this` bound to the surface so
+ *  a class can attach terminals to its prototype. `pass` is set when `render`
+ *  runs under the interactive render loop, which can re-render the chart. */
+export type ResolveForRender = (
+  this: any,
+  options: RenderOptions,
+  pass?: RenderPass
+) => Promise<ResolvedSurface>;
+
+/** How `render` drives a resolve. The default resolves and renders directly;
+ *  the chart builders pass `renderWithInteraction`, which runs the resolve
+ *  under the ambient interactive context so reactive reads can register. */
+export type RenderStrategy = (
+  resolve: (pass?: RenderPass) => Promise<ResolvedSurface>,
+  container: any
+) => Promise<View>;
+
+/** One export method: its name, where its options argument sits, and how to
+ *  invoke it on a resolved node. */
 export type TerminalConfig = {
   /** Method name exposed on the surface, e.g. "render" | "toDisplayList". */
   name: string;
-  /** Call the corresponding `GoFishNode` method with the surface call args. */
-  call: (node: GoFishNode, args: any[]) => unknown;
+  /** Index of the render-options argument among the call args. */
+  optionsArg: number;
+  /** Call the corresponding `GoFishNode` method with the prepared options. */
+  invoke: (node: GoFishNode, args: any[], options: RenderOptions) => unknown;
+  /** `render` alone goes through the surface's {@link RenderStrategy}. */
+  viaRenderStrategy?: true;
 };
 
 export const TERMINALS: TerminalConfig[] = [
-  { name: "render", call: (n, a) => n.render(a[0], a[1]) },
-  { name: "toSVG", call: (n, a) => n.toSVG(a[0]) },
-  { name: "toSVGElement", call: (n, a) => n.toSVGElement(a[0]) },
-  { name: "save", call: (n, a) => n.save(a[0], a[1]) },
-  { name: "toDisplayList", call: (n, a) => n.toDisplayList(a[0]) },
+  {
+    name: "render",
+    optionsArg: 1,
+    viaRenderStrategy: true,
+    invoke: (n, a, o) => n.render(a[0], o as any),
+  },
+  { name: "toSVG", optionsArg: 0, invoke: (n, _a, o) => n.toSVG(o) },
+  {
+    name: "toSVGElement",
+    optionsArg: 0,
+    invoke: (n, _a, o) => n.toSVGElement(o),
+  },
+  { name: "save", optionsArg: 1, invoke: (n, a, o) => n.save(a[0], o) },
+  {
+    name: "toDisplayList",
+    optionsArg: 0,
+    invoke: (n, _a, o) => n.toDisplayList(o),
+  },
 ];
 
+/** The terminal methods {@link attachTerminals} defines, for a class surface
+ *  that merges them into its declared type. `Extra` is the options the
+ *  surface's own resolution reads on top of the node's. */
+export interface TerminalMethods<Extra = unknown> {
+  render(
+    container: Parameters<GoFishNode["render"]>[0],
+    options?: Parameters<GoFishNode["render"]>[1] & Extra
+  ): Promise<Awaited<ReturnType<GoFishNode["render"]>>>;
+  toSVG(options?: Parameters<GoFishNode["toSVG"]>[0] & Extra): Promise<string>;
+  toSVGElement(
+    options?: Parameters<GoFishNode["toSVGElement"]>[0] & Extra
+  ): Promise<SVGSVGElement>;
+  save(
+    filename: string,
+    options?: Parameters<GoFishNode["save"]>[1] & Extra
+  ): Promise<void>;
+  toDisplayList(
+    options?: Parameters<GoFishNode["toDisplayList"]>[0] & Extra
+  ): ReturnType<GoFishNode["toDisplayList"]>;
+}
+
+const renderDirectly: RenderStrategy = async (resolve, container) => {
+  const { node, options } = await resolve();
+  return node.render(container, options as any);
+};
+
 /**
- * Attach every terminal in {@link TERMINALS} to `target`. `resolveNode` is the
- * surface-specific strategy for turning the surface into a final `GoFishNode`
- * (call a mark with `undefined`; await a promise; etc.) — it should throw if the
- * surface can't resolve to a node. Each terminal awaits it and calls through, so
- * every terminal returns a Promise.
+ * Attach every terminal in {@link TERMINALS} to `target`, for a surface that
+ * resolves straight to a node (a mark called with `undefined`; a promise of a
+ * node). `resolveNode` should throw if the surface can't resolve to one.
  */
 export function attachTerminals(
   target: object,
   resolveNode: () => Promise<GoFishNode>
 ): void {
+  attachBuilderTerminals(target, async (options) => ({
+    node: await resolveNode(),
+    options,
+  }));
+}
+
+/**
+ * Attach every terminal in {@link TERMINALS} to `target`, for a surface that
+ * also prepares the render options (e.g. merging chart-level `axes`/`color`)
+ * and optionally drives `render` through its own strategy. Every terminal
+ * returns a Promise.
+ */
+export function attachBuilderTerminals(
+  target: object,
+  resolve: ResolveForRender,
+  render: RenderStrategy = renderDirectly
+): void {
   for (const t of TERMINALS) {
     Object.defineProperty(target, t.name, {
-      value: (...args: any[]) =>
-        Promise.resolve(resolveNode()).then((node) => t.call(node, args)),
+      value: function (this: unknown, ...args: any[]) {
+        const resolveHere = async (
+          pass?: RenderPass
+        ): Promise<ResolvedSurface> => {
+          const surface = await resolve.call(
+            this,
+            args[t.optionsArg] ?? {},
+            pass
+          );
+          // The surface can build its chart again, which a choice that lays
+          // the chart out once per candidate needs (`label.angle: "auto"`, see
+          // `GoFishNode.rebuild`). A rebuild is the same resolve for the same
+          // render pass.
+          surface.node.rebuild = async () => (await resolveHere(pass)).node;
+          return surface;
+        };
+        return t.viaRenderStrategy
+          ? render(resolveHere, args[0])
+          : resolveHere().then(({ node, options }) =>
+              t.invoke(node, args, options)
+            );
+      },
       writable: true,
       configurable: true,
     });

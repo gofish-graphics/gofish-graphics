@@ -22,7 +22,7 @@ export const testGroupedBar = (size: { width: number; height: number }) => {
   return gofish(
     { width: size.width, height: size.height },
     spread(
-      { x: 0, y: 0, dir: 0, spacing: 20, alignment: "end", sharedScale: true },
+      { x: 0, y: 0, dir: 0, spacing: 20, alignment: "end" },
       Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
         spread({ dir: 0, spacing: 2, alignment: "end" },
           items.map((d) =>

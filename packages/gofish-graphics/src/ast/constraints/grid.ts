@@ -7,20 +7,19 @@
 // A grid is the symmetric 2-D layout: cells partitioned into `numCols` columns
 // (a track per column on x) and the implied rows (a track per row on y), every
 // cell pinned to its (column, row) track intersection. It's the elaboration
-// target for `table` — `layer(cells).constrain(grid(...))`.
+// target for `table` — `layer(cells).relate(grid(...))`.
 //
-// **The unified sizing rule (Stage 6e).** Per axis, a track's extent is set by
+// **The unified sizing rule.** Per axis, a track's extent is set by
 // ONE rule — the (max, +) fold every other operator already uses:
 //
 //   track claim   = Monotonic.max(claims of the cells in that track)
 //   grid claim    = Monotonic.add(track claims) + gaps          (the σ-frame LHS)
 //
 // A claim-less ("fill") cell contributes nothing to its track. This subsumes
-// today's equal-flex box-division: an all-fill grid has no track claims, so the
-// leftover (allocated − gaps) splits equally among the tracks — bit-identical to
-// the former `sliceExtent`. Content-sized tracks emerge automatically when cells
-// carry size claims (a track sizes to its widest cell). Fill tracks share
-// whatever the claimed tracks leave over, equally.
+// equal-flex box-division: an all-fill grid has no track claims, so the leftover
+// (allocated − gaps) splits equally among the tracks. Content-sized tracks
+// emerge automatically when cells carry size claims (a track sizes to its widest
+// cell). Fill tracks share whatever the claimed tracks leave over, equally.
 //
 // `resolveGridTracks` is the single site that runs this rule; both the layout
 // budget (each cell is proposed its track's extent) and the placement (each cell
@@ -43,10 +42,11 @@ import type { GoFishAST } from "../_ast";
 import { type ConstraintRef } from "./shared";
 import { sliceExtent } from "./folds";
 import {
-  ORDINAL,
+  ordinalOver,
+  type OrdinalKey,
   UNDEFINED,
-  isBaselineMagnitude,
   type UnderlyingSpace,
+  originIs,
 } from "../underlyingSpace";
 import type { ScopeRegistry } from "../solver/scopes";
 import type { PlacementFactEmitter } from "./placementFacts";
@@ -55,12 +55,17 @@ export interface GridOptions {
   numCols: number;
   /** [x, y] gaps between tracks; a scalar applies to both. Default 0. */
   spacing?: number | [number, number];
-  colKeys?: string[];
-  rowKeys?: string[];
+  /** The column and row keys, in order: text, or cells for a binned key
+   *  (`ORDINAL_TYPE.cells`). */
+  colKeys?: OrdinalKey[];
+  rowKeys?: OrdinalKey[];
   /** Grouping fields (table's `by.x`/`by.y`) → the col/row ORDINAL measures, so
    *  the table axes name themselves off their own spaces. */
   colMeasure?: string;
   rowMeasure?: string;
+  /** The grouping fields' values have an order (`HasOrder`). */
+  colHasOrder?: boolean;
+  rowHasOrder?: boolean;
 }
 
 export interface GridConstraint {
@@ -68,10 +73,12 @@ export interface GridConstraint {
   numCols: number;
   xSpacing: number;
   ySpacing: number;
-  colKeys?: string[];
-  rowKeys?: string[];
+  colKeys?: OrdinalKey[];
+  rowKeys?: OrdinalKey[];
   colMeasure?: string;
   rowMeasure?: string;
+  colHasOrder?: boolean;
+  rowHasOrder?: boolean;
   /** Cells in row-major order (index i → column i % numCols, row ⌊i/numCols⌋). */
   children: ConstraintRef[];
 }
@@ -90,6 +97,8 @@ export const createGridConstraint = (
     rowKeys: options.rowKeys,
     colMeasure: options.colMeasure,
     rowMeasure: options.rowMeasure,
+    colHasOrder: options.colHasOrder,
+    rowHasOrder: options.rowHasOrder,
     children,
   };
 };
@@ -114,7 +123,7 @@ const cellClaim = (
 ): Monotonic.Monotonic | undefined => {
   if (!(cell instanceof GoFishNode)) return undefined;
   const sp = cell._underlyingSpace?.[axis];
-  return sp !== undefined && isBaselineMagnitude(sp) ? sp.width : undefined;
+  return originIs(sp, "free") ? cell.resolveExtent()[axis]!.width : undefined;
 };
 
 /** Per-axis track claims: for each track (a column on x, a row on y), the max
@@ -200,13 +209,7 @@ function resolveAxisTracks(
     );
   }
 
-  const starts: number[] = [];
-  let cursor = 0;
-  for (let i = 0; i < n; i++) {
-    starts.push(cursor);
-    cursor += extents[i] + spacing;
-  }
-  return { starts, extents };
+  return layoutTrack(extents, spacing);
 }
 
 /** Resolve both axes' tracks for a grid laid into `size`, under the unified
@@ -296,37 +299,35 @@ export type GridCellPlacement = {
   center: [number, number];
 };
 
-/** Cell centers from resolved tracks (Stage 6e) — or, when `tracks` is omitted,
- *  the equal box-division fallback used by the direct-solver tests. */
+/** Equal box-division tracks: every column/row gets the same slice of `size`.
+ *  The fallback for `gridCellPlacements` when no resolved tracks are handed in. */
+function equalTracks(
+  c: GridConstraint,
+  size: readonly [number, number]
+): [TrackLayout, TrackLayout] {
+  const numRows = numRowsOf(c);
+  const colExtent = sliceExtent(size[0], c.xSpacing, c.numCols);
+  const rowExtent = sliceExtent(size[1], c.ySpacing, numRows);
+  return [
+    layoutTrack(
+      Array.from({ length: c.numCols }, () => colExtent),
+      c.xSpacing
+    ),
+    layoutTrack(
+      Array.from({ length: numRows }, () => rowExtent),
+      c.ySpacing
+    ),
+  ];
+}
+
+/** Cell centers from resolved tracks — or, when `tracks` is omitted, the equal
+ *  box-division fallback used by the direct-solver tests. */
 export function gridCellPlacements(
   c: GridConstraint,
   size: readonly [number, number],
   tracks?: [TrackLayout, TrackLayout]
 ): GridCellPlacement[] {
-  const [cols, rows] =
-    tracks ??
-    ([
-      {
-        extents: Array.from({ length: c.numCols }, () =>
-          sliceExtent(size[0], c.xSpacing, c.numCols)
-        ),
-        starts: Array.from(
-          { length: c.numCols },
-          (_, j) =>
-            j * (sliceExtent(size[0], c.xSpacing, c.numCols) + c.xSpacing)
-        ),
-      },
-      {
-        extents: Array.from({ length: numRowsOf(c) }, () =>
-          sliceExtent(size[1], c.ySpacing, numRowsOf(c))
-        ),
-        starts: Array.from(
-          { length: numRowsOf(c) },
-          (_, r) =>
-            r * (sliceExtent(size[1], c.ySpacing, numRowsOf(c)) + c.ySpacing)
-        ),
-      },
-    ] as [TrackLayout, TrackLayout]);
+  const [cols, rows] = tracks ?? equalTracks(c, size);
   return c.children.map((child, index) => {
     const column = index % c.numCols;
     const row = Math.floor(index / c.numCols);
@@ -373,14 +374,14 @@ export function lowerGridPlacement(
 /**
  * A grid's axes are categorical: ORDINAL over the columns (x) and rows (y).
  * Keys come from `colKeys`/`rowKeys`, else the representative cells' keys —
- * first-row cells for columns, first-column cells for rows (matching the legacy
- * table). `cells` are the layer's children in row-major order.
+ * first-row cells for columns, first-column cells for rows. `cells` are the
+ * layer's children in row-major order.
  */
 export function gridSpaces(
   c: GridConstraint,
   cells: GoFishAST[]
 ): [UnderlyingSpace, UnderlyingSpace] {
-  const keyAt = (i: number): string | undefined =>
+  const keyAt = (i: number): OrdinalKey | undefined =>
     cells[i] instanceof GoFishNode ? (cells[i] as GoFishNode).key : undefined;
   const colKeys =
     c.colKeys && c.colKeys.length > 0
@@ -393,9 +394,13 @@ export function gridSpaces(
       ? c.rowKeys
       : Array.from({ length: numRowsOf(c) }, (_, r) =>
           keyAt(r * c.numCols)
-        ).filter((k): k is string => k !== undefined);
+        ).filter((k): k is OrdinalKey => k !== undefined);
   return [
-    colKeys.length > 0 ? ORDINAL(colKeys, c.colMeasure) : UNDEFINED,
-    rowKeys.length > 0 ? ORDINAL(rowKeys, c.rowMeasure) : UNDEFINED,
+    colKeys.length > 0
+      ? ordinalOver(colKeys, c.colMeasure, undefined, c.colHasOrder)
+      : UNDEFINED,
+    rowKeys.length > 0
+      ? ordinalOver(rowKeys, c.rowMeasure, undefined, c.rowHasOrder)
+      : UNDEFINED,
   ];
 }

@@ -9,5 +9,5 @@ def story_default():
         chart(SIMPLE_BAR_DATA)
         .flow(spread(by="a", dir="x"))
         .mark(rect(h="b")),
-        {"h": 300, "axes": True},
+        {"h": 300},
     )

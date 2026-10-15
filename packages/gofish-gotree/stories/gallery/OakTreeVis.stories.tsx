@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, polar } from "gofish-graphics";
+import { circle, Coord, Curve } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — OakTreeVis (polar node-link, depth-colored circles).
@@ -38,7 +38,7 @@ import { combine, byDepth, mount } from "./_shared";
 //  2. No angular auto-fit for POINT nodes: sibling θ spacing is a fixed per-level
 //     constant (2π/6 rad between centers) that does NOT shrink with the number of
 //     nodes at a depth. GoTree allocates angle by subtree leaf-count. Wedge
-//     (rect) nodes now auto-fit via thetaSize since #622; these circle nodes hit
+//     (rect) nodes now auto-fit via a data-sized θ extent since #622; these circle nodes hit
 //     the point-node gap tracked in #627, so deep/wide trees overflow the 2π
 //     budget and wedges wrap — visible here as the spiral overlap, which actually
 //     echoes the reference. (The #627 data-position workaround is demonstrated in
@@ -52,7 +52,7 @@ import { combine, byDepth, mount } from "./_shared";
 //     x→θ default, so plain polar() is the closer match here; a θ/r swap would
 //     map the radial sibling-stagger onto θ and lose the spiral.)
 //  4. Link=curveStepBefore (orthogonal step links) is NOT supported →
-//     {curve:"straight"} (the route→curve link API lands in draft PR #637).
+//     {curve:"linear"} (the route→curve link API lands in draft PR #637).
 //     The reference's right-angle "step" corners therefore render as straight
 //     segments, which bow into arcs under the polar transform (a straight
 //     cartesian edge maps to a polar arc).
@@ -72,7 +72,7 @@ export const OakTreeVis: StoryObj = {
       {
         node,
         // curveStepBefore unsupported → linear (see GAP 4).
-        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 2 },
+        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 2 },
         parentChild: combine({
           // θ: parent angularly centered over its subtree's span (dsl within/align).
           x: { kind: "align", alignment: "middle" },
@@ -95,7 +95,7 @@ export const OakTreeVis: StoryObj = {
           // r: stagger siblings radially — the spiral/oak stagger (dsl flatten).
           y: { kind: "distribute", spacing: 30, anchor: "middle" },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       { w: 520, h: 520 }
     ),

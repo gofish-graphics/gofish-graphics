@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar, datum } from "gofish-graphics";
+import { rect, datum, Coord, Curve } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — ClockTreeWithLink (a clock-face ring of nodes whose
@@ -41,14 +41,14 @@ import { combine, byDepth, mount } from "./_shared";
 // REMAINING GAPS (flagged, not faked):
 //  - Link: curveStepBefore (an orthogonal radial-then-angular step, the inward
 //    "spoke + arc" routing in the reference) is NOT supported — gofish-gotree
-//    links only do {curve:"straight"} (orthogonal/arc throw as M4+). So
+//    links only do {curve:"linear"} (orthogonal/arc throw as M4+). So
 //    links are drawn as straight chords through the hollow center; under the
 //    polar transform a straight parent→child segment bows relative to the
 //    reference's stepped spokes.
-//  - Angular AUTO-FIT (#618): each node carries a unit `thetaSize` weight and the
+//  - Angular AUTO-FIT (#618): each node carries a unit `w` (θ) weight and the
 //    coord fits the summed weights to the budget, so the ring closes for any node
 //    count with no hand-set 2π/N. (Weighting by subtree size instead of a unit
-//    weight is just `thetaSize: datum(d.leafCount)`.)
+//    weight is just `w: datum(d.leafCount)`.)
 //  - No θ/r axis swap (no transposed variant; PolarAxis swap not expressible);
 //    not needed here.
 const meta: Meta = { title: "GoTree / Gallery / ClockTreeWithLink" };
@@ -74,13 +74,13 @@ const clockData = {
 
 const bandHeight = 60; // radial thickness of the ring band
 
-// Rectangle node: thetaSize is a unit angular WEIGHT (every node an equal slot);
+// Rectangle node: `w` (the θ extent) is a unit angular WEIGHT (every node an equal slot);
 // the coord sums the weights and fits them to the angular budget, so the ring
 // closes exactly with no hand-set 2π/N. emX/emY make θ sweep an arc and r the
 // ring thickness. Colored by depth (dark root → light leaves).
 const node = (d: any) =>
   rect({
-    thetaSize: datum(1),
+    w: datum(1),
     h: bandHeight,
     emX: true,
     emY: true,
@@ -95,7 +95,7 @@ export const ClockTreeWithLink: StoryObj = {
       {
         node,
         // curveStepBefore is unsupported → straight chord (bows under polar).
-        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1 },
+        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1 },
         parentChild: combine({
           // θ: parent at the start of its subtree's slot, group after it.
           x: { kind: "distribute", spacing: 0, anchor: "edge" },
@@ -110,7 +110,7 @@ export const ClockTreeWithLink: StoryObj = {
         }),
         // InnerRadius:0.79 — the thin outer clock rim with an empty center that
         // the step/arc links route through. Now expressible.
-        coord: polar({ innerRadius: 0.79 }),
+        coord: Coord.polar({ innerRadius: 0.79 }),
       },
       { w: 520, h: 520 },
       clockData

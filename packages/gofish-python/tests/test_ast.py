@@ -8,12 +8,13 @@ from gofish import (
     spread,
     stack,
     derive,
+    compose,
+    field,
+    chunk,
+    filter,
     log,
-    clock,
     ref,
-    selectAll,
-    palette,
-    gradient,
+    select_all,
     normalize,
     repeat,
     rect,
@@ -24,6 +25,16 @@ from gofish import (
     petal,
     text,
     image,
+    Constraint,
+    Schema,
+    ColumnSchema,
+    Calendar,
+    Bin,
+    datum,
+    scatter,
+    arrow,
+    Color,
+    Coord,
 )
 from gofish.ast import _RefProxy
 
@@ -65,6 +76,31 @@ class TestOperators:
         assert "lambdaId" in op.to_dict()
         assert op.to_dict()["type"] == "derive"
 
+    def test_derive_schema_round_trips(self):
+        """`derive(fn, schema=...)` carries the result's column types in the
+        wire form of a chart's schema, and keeps them through `.translate`."""
+        from gofish import Schema
+
+        op = derive(
+            lambda d: d,
+            schema={
+                "month": Schema.ordered(["Jan", "Feb"]),
+                "at": Schema.time(zone="America/New_York"),
+            },
+        )
+        expected = {
+            "month": {"HasOrder": {"levels": ["Jan", "Feb"]}},
+            "at": {
+                "HasCalendar": {"zone": "America/New_York"},
+                "HasUnit": {"unit": "instant"},
+            },
+        }
+        assert op.to_dict()["schema"] == expected
+        assert op.translate(x=1).to_dict()["schema"] == expected
+        assert "schema" not in derive(lambda d: d).to_dict()
+        ir = chart([{"x": 1}]).flow(op).mark(rect(h="x")).to_ir()
+        assert ir["operators"][0]["schema"] == expected
+
     def test_derive_operator_unique_ids(self):
         """Test derive operators have unique lambda IDs."""
         fn = lambda d: d
@@ -80,12 +116,145 @@ class TestOperators:
         assert d["type"] == "log"
         assert "prefix" not in d
 
+    def test_filter_field_predicate(self):
+        """A field predicate filter serializes as {type: filter, predicate}."""
+        op = filter(field("day").between(100, 120, closed="right"))
+        assert op.to_dict() == {
+            "type": "filter",
+            "predicate": {"field": "day", "between": [100, 120], "closed": "right"},
+        }
+
+    def test_filter_field_predicate_default_closed(self):
+        """An unset `closed` stays off the wire (JS defaults it to "both")."""
+        op = filter(field("day").between(1, 2))
+        assert op.to_dict() == {
+            "type": "filter",
+            "predicate": {"field": "day", "between": [1, 2]},
+        }
+
+    def test_between_rejects_pipeline_ops(self):
+        """A predicate is not a value slot: ops on the field are an error."""
+        with pytest.raises(ValueError, match="does not apply the expression"):
+            field("x").bin(Bin.step(10)).between(0, 1)
+
+    def test_bin_partitions_wire(self):
+        """`.bin` takes a Calendar value, Bin.step or Bin.thresholds, and
+        writes the partition's wire form (camelCase keys, as JS reads them)."""
+        assert field("d").bin(Calendar.month(every=3))["ops"] == [
+            {"op": "bin", "partition": {"kind": "month", "every": 3}}
+        ]
+        assert field("d").bin(Calendar.week(start="sunday"))["ops"] == [
+            {"op": "bin", "partition": {"kind": "week", "start": "sunday"}}
+        ]
+        assert field("x").bin(Bin.step(0.5))["ops"] == [
+            {"op": "bin", "partition": {"kind": "step", "size": 0.5}}
+        ]
+        assert field("x").bin(Bin.thresholds([1, 2, 5]))["ops"] == [
+            {"op": "bin", "partition": {"kind": "thresholds", "thresholds": [1, 2, 5]}}
+        ]
+        assert field("x").bin()["ops"] == [{"op": "bin"}]
+
+    def test_bin_product_and_chain_wire(self):
+        """A product is a list partition on one bin op; a chain is one bin op
+        per `.bin`."""
+        assert field("d").bin([Calendar.year, Calendar.month])["ops"] == [
+            {
+                "op": "bin",
+                "partition": [
+                    {"kind": "year"},
+                    {"kind": "month"},
+                ],
+            }
+        ]
+        assert field("d").bin(Calendar.year).bin(Calendar.month)["ops"] == [
+            {"op": "bin", "partition": {"kind": "year"}},
+            {"op": "bin", "partition": {"kind": "month"}},
+        ]
+        with pytest.raises(TypeError, match="two or more"):
+            field("d").bin([Calendar.month])
+        with pytest.raises(TypeError, match="two or more"):
+            field("d").bin([Calendar.year, Bin.step(1)])
+
+    def test_bin_rejects_other_partitions(self):
+        """The untagged forms and the removed kwargs are gone, and a Bin kind
+        of two fields names the key that takes it."""
+        with pytest.raises(TypeError, match="Calendar value"):
+            field("x").bin({"step": 1})
+        with pytest.raises(TypeError):
+            field("x").bin(step=1)
+        with pytest.raises(TypeError, match=r"struct\(x=\.\.\., y=\.\.\.\)\.bin\(Bin\.hex"):
+            field("x").bin(Bin.hex(radius=1))
+        with pytest.raises(ValueError, match="must be > 0"):
+            Bin.step(0)
+        with pytest.raises(ValueError, match=">= 1"):
+            Bin.thresholds(0)
+        with pytest.raises(TypeError):
+            Bin.step(size=1)
+
+    def test_filter_callable_is_derive(self):
+        """A Python function predicate runs through the derive bridge."""
+        op = filter(lambda row: row["day"] > 1)
+        assert op.to_dict()["type"] == "derive"
+        assert op.fn([{"day": 1}, {"day": 2}]) == [{"day": 2}]
+
+    def test_spread_by_chunk(self):
+        """chunk(size) is a by key that crosses the wire as data."""
+        assert chunk(5) == {"type": "chunk", "size": 5}
+        d = spread(by=chunk(5), dir="y").to_dict()
+        assert d["by"] == {"type": "chunk", "size": 5}
+
+    def test_chunk_rejects_a_size_below_one(self):
+        with pytest.raises(ValueError, match="chunk"):
+            chunk(0)
+        with pytest.raises(ValueError, match="chunk"):
+            chunk(2.5)  # type: ignore[arg-type]
+
+    def test_filter_rejects_other_values(self):
+        with pytest.raises(TypeError, match="filter"):
+            filter("day")
+
     def test_log_operator_with_prefix(self):
         """Test log operator with prefix."""
         op = log("my label")
         d = op.to_dict()
         assert d["type"] == "log"
         assert d["prefix"] == "my label"
+
+
+class TestCompose:
+    """Test compose() flow fragments."""
+
+    def test_flow_expands_fragment_in_order(self):
+        """A fragment in .flow() becomes its operators, left to right."""
+        ir = (
+            chart([{"category": "A"}])
+            .flow(compose(spread(by="category", dir="x"), stack(dir="y")))
+            .mark(rect(w=1, h=1))
+            .to_ir()
+        )
+        ops = ir["operators"]
+        assert [op["type"] for op in ops] == ["spread", "stack"]
+        assert ops[0]["by"] == "category"
+
+    def test_nested_fragments_flatten(self):
+        """Nested fragments flatten and keep their order."""
+        a, b, c = spread(dir="x"), stack(dir="y"), log("c")
+        fragment = compose(a, compose(b, compose(c)))
+        assert fragment.operators == (a, b, c)
+        builder = chart([]).flow(fragment)
+        assert builder.operators == [a, b, c]
+
+    def test_empty_compose_is_identity(self):
+        """compose() adds no operators."""
+        op = spread(dir="x")
+        assert chart([]).flow(compose(), op, compose()).operators == [op]
+
+    def test_fragment_keeps_derive_lambdas(self):
+        """A derive inside a fragment is still registered with the bridge."""
+        d = derive(lambda rows: rows)
+        builder = chart([{"a": 1}]).flow(compose(d, spread(dir="x")))
+        ops = builder.mark(rect(w=1, h=1)).to_ir()["operators"]
+        assert ops[0] == {"type": "derive", "lambdaId": d.lambda_id}
 
 
 class TestMarkName:
@@ -115,11 +284,11 @@ class TestMarkName:
 
 
 class TestRefData:
-    """Test `ref(...)` / `selectAll(...)` used as chart data."""
+    """Test `ref(...)` / `select_all(...)` used as chart data."""
 
     def test_select_all_returns_ref_proxy(self):
-        """Test selectAll() returns a _RefProxy carrying multiplicity='all'."""
-        s = selectAll("bars")
+        """Test select_all() returns a _RefProxy carrying multiplicity='all'."""
+        s = select_all("bars")
         assert isinstance(s, _RefProxy)
         assert s.multiplicity == "all"
         assert s._sel() == ["bars"]
@@ -137,15 +306,15 @@ class TestRefData:
         assert ir["data"] == {"type": "select", "layer": "bars", "mode": "one"}
 
     def test_chart_with_select_all_data_ir(self):
-        """Test chart(selectAll(...)) serializes with mode 'all'."""
-        c = chart(selectAll("bars")).mark(line())
+        """Test chart(select_all(...)) serializes with mode 'all'."""
+        c = chart(select_all("bars")).mark(line())
         ir = c.to_ir()
         assert ir["data"] == {"type": "select", "layer": "bars", "mode": "all"}
 
     def test_select_all_inline_raises(self):
-        """selectAll() cannot be used inline in a layout."""
+        """select_all() cannot be used inline in a layout."""
         with pytest.raises(ValueError, match="cannot be used inline"):
-            selectAll("bars").to_dict()
+            select_all("bars").to_dict()
 
     def test_chart_with_regular_data_ir(self):
         """Test regular chart has null data in IR."""
@@ -159,27 +328,27 @@ class TestColorConfig:
 
     def test_palette_string(self):
         """Test palette() with string name."""
-        p = palette("tableau10")
+        p = Color.palette("tableau10")
         assert p == {"_tag": "palette", "values": "tableau10"}
 
     def test_palette_list(self):
         """Test palette() with color list."""
-        p = palette(["red", "blue", "green"])
+        p = Color.palette(["red", "blue", "green"])
         assert p == {"_tag": "palette", "values": ["red", "blue", "green"]}
 
     def test_gradient_string(self):
         """Test gradient() with single color."""
-        g = gradient("blue")
+        g = Color.gradient("blue")
         assert g == {"_tag": "gradient", "stops": "blue"}
 
     def test_gradient_list(self):
         """Test gradient() with stop list."""
-        g = gradient(["#fff", "#000"])
+        g = Color.gradient(["#fff", "#000"])
         assert g == {"_tag": "gradient", "stops": ["#fff", "#000"]}
 
     def test_palette_in_chart_options(self):
         """Test palette flows through chart options to IR."""
-        c = chart([{"x": 1}], {"color": palette("tableau10")}).mark(rect(h="x"))
+        c = chart([{"x": 1}], color=Color.palette("tableau10")).mark(rect(h="x"))
         ir = c.to_ir()
         assert ir["options"]["color"] == {"_tag": "palette", "values": "tableau10"}
 
@@ -298,6 +467,39 @@ class TestNewMarks:
         assert d["w"] == 100
         assert d["href"] == "url"
 
+    def test_rect_dims_escape_hatch(self):
+        """`dims` names axes the way the coordinate space does, verbatim."""
+        m = rect(dims={"theta": {"size": datum(1)}, "r": "value"}, h=4)
+        d = m.to_dict()
+        assert d["dims"] == {
+            "theta": {"size": {"type": "datum", "datum": 1}},
+            "r": "value",
+        }
+        assert d["h"] == 4
+
+    def test_top_level_alias_kwargs_are_gone(self):
+        """theta/thetaSize/r/rSize are not rect kwargs; they go in `dims`."""
+        for kwarg in ["theta", "thetaSize", "r", "rSize"]:
+            with pytest.raises(TypeError):
+                rect(**{kwarg: 1})
+
+    def test_scatter_dims_and_theta_dir(self):
+        """scatter takes `dims`; spread's `dir` passes a coord name through."""
+        ir = (
+            chart([{"b": 1, "d": 2}], coord=Coord.clock())
+            .flow(
+                scatter(dims={"theta": "b", "r": {"min": "d", "max": "d"}}),
+                spread(dir="theta"),
+            )
+            .mark(circle(r=3))
+            .to_ir()
+        )
+        assert ir["operators"][0]["dims"] == {
+            "theta": "b",
+            "r": {"min": "d", "max": "d"},
+        }
+        assert ir["operators"][1]["dir"] == "theta"
+
     def test_marks_support_name(self):
         """Test all marks support .name()."""
         for mark_fn in [
@@ -316,19 +518,19 @@ class TestClockCoord:
 
     def test_clock_returns_dict(self):
         """Test clock() returns the correct sentinel dict."""
-        c = clock()
+        c = Coord.clock()
         assert c == {"type": "clock"}
 
     def test_clock_in_chart_options_ir(self):
         """Test clock() serializes correctly through chart options."""
-        c = chart([{"x": 1}], {"coord": clock()}).mark(rect(h="x"))
+        c = chart([{"x": 1}], coord=Coord.clock()).mark(rect(h="x"))
         ir = c.to_ir()
         assert ir["options"]["coord"] == {"type": "clock"}
 
     def test_clock_in_layer_options_ir(self):
         """Test clock() in layer options IR."""
         child = chart([{"x": 1}]).mark(rect(h="x"))
-        ir = layer({"coord": clock()}, [child]).to_ir()
+        ir = layer([child], coord=Coord.clock()).to_ir()
         assert ir["options"]["coord"] == {"type": "clock"}
 
 
@@ -346,10 +548,10 @@ class TestLayerBuilder:
         assert len(lb.children) == 2
 
     def test_layer_with_options(self):
-        """Test layer(options, [...]) with options dict."""
+        """Test layer([...], **options) with keyword options."""
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x"))
-        lb = layer({"coord": "clock"}, [c1])
+        lb = layer([c1], coord="clock")
         assert isinstance(lb, LayerBuilder)
         assert lb.options == {"coord": "clock"}
         assert len(lb.children) == 1
@@ -385,7 +587,7 @@ class TestLayerBuilder:
         """Test layer options appear in IR."""
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x"))
-        ir = layer({"coord": "clock"}, [c1]).to_ir()
+        ir = layer([c1], coord="clock").to_ir()
         assert ir["options"] == {"coord": "clock"}
 
     def test_layer_collect_derive_functions(self):
@@ -434,7 +636,7 @@ class TestChartBuilder:
         """Test a full chart spec round-trips to IR correctly."""
         data = [{"cat": "a", "grp": "x", "value": 1}]
         c = (
-            chart(data, {"color": palette("tableau10")})
+            chart(data, color=Color.palette("tableau10"))
             .facet(by="cat", dir="x")
             .stack(by="grp", dir="y")
             .mark(rect(h="value", fill="grp").name("bars"))
@@ -457,3 +659,357 @@ class TestChartBuilder:
         ir = c.to_ir()
         assert ir["data"] == {"type": "select", "layer": "bars", "mode": "one"}
         assert ir["mark"]["type"] == "line"
+
+
+class TestRelateCallback:
+    """`.relate()` hands the callback one ref per parameter, by name."""
+
+    def test_defaulted_parameter_keeps_its_default(self):
+        """The loop idiom `lambda a, b, gap=gap: ...` binds a value, not a
+        node: the parameter keeps its default and gets no ref."""
+        m = layer(
+            [rect(w=10, h=10).name("a"), rect(w=5, h=5).name("b")]
+        ).relate(
+            lambda a, b, gap=7: [
+                Constraint.distribute([a, b], dir="x", spacing=gap)
+            ]
+        )
+        assert m.to_dict()["relate"] == [
+            {
+                "type": "distribute",
+                "options": {"dir": "x", "spacing": 7},
+                "refs": ["a", "b"],
+            }
+        ]
+
+    def test_rest_gets_the_other_names_inside_the_layer(self):
+        """`**rest` receives every name inside the layer that is not a
+        declared parameter, including nested names, and never a defaulted
+        parameter's name."""
+        seen = {}
+
+        def cb(a, gap=3, **rest):
+            seen["gap"] = gap
+            seen["rest"] = sorted(rest)
+            return [Constraint.align([a, rest["c"]], x="middle")]
+
+        layer(
+            [
+                rect(w=10, h=10).name("a"),
+                layer([rect(w=5, h=5).name("c")]).name("gap"),
+            ]
+        ).relate(cb)
+        assert seen == {"gap": 3, "rest": ["c"]}
+
+    def test_drawing_clause_serializes_operands_as_refs(self):
+        """A drawing clause is a mark; an operand in its children serializes
+        as `ref(name)`, while a constraint operand serializes as its name."""
+        m = layer(
+            [rect(w=10, h=10).name("a"), rect(w=5, h=5).name("b")]
+        ).relate(
+            lambda a, b: [
+                Constraint.distribute([a, b], dir="x", spacing=60),
+                arrow([a, b], stroke="red"),
+                None,
+            ]
+        )
+        clauses = m.to_dict()["relate"]
+        assert clauses[0]["refs"] == ["a", "b"]
+        assert clauses[1]["type"] == "arrow"
+        assert clauses[1]["children"] == [
+            {"type": "ref", "selection": "a"},
+            {"type": "ref", "selection": "b"},
+        ]
+        assert len(clauses) == 2
+
+
+class TestSchema:
+    """`Schema.ordered(levels).diverging(midpoint=...)` builds the column-type record
+    JS reads as is (#984)."""
+
+    def test_ordered_is_has_order(self):
+        assert Schema.ordered(["a", "b"]) == {"HasOrder": {"levels": ["a", "b"]}}
+
+    def test_unit_is_has_unit(self):
+        assert Schema.unit("USD") == {"HasUnit": {"unit": "USD", "symbol": "USD"}}
+        with pytest.raises(TypeError):
+            Schema.unit(3)  # type: ignore[arg-type]
+
+    def test_quantity_is_has_quantity(self):
+        assert Schema.quantity("Pay") == {"HasQuantity": {"name": "Pay"}}
+        assert Schema.quantity("Pay").unit("USD") == {
+            "HasUnit": {"unit": "USD", "symbol": "USD"},
+            "HasQuantity": {"name": "Pay"},
+        }
+        # Either order gives the same column type.
+        assert Schema.quantity("Pay").unit("USD") == Schema.unit("USD").quantity(
+            "Pay"
+        )
+        with pytest.raises(TypeError, match=r"^name must be a string, got 3$"):
+            Schema.quantity(3)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match=r"^name must be a string, got 3$"):
+            Schema.unit("USD").quantity(3)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match=r"^unit must be a string, got 3$"):
+            Schema.unit(3)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match=r"^unit must be a string, got 3$"):
+            Schema.quantity("Pay").unit(3)  # type: ignore[arg-type]
+
+    def test_a_column_has_one_unit(self):
+        # `Schema.time()` writes the instant, so a second unit raises.
+        with pytest.raises(
+            TypeError, match=r'^\.unit: the column already has the unit "instant"\.$'
+        ):
+            Schema.time().unit("USD")
+        with pytest.raises(TypeError, match='already has the unit "USD"'):
+            Schema.unit("USD").unit("EUR")
+        assert Schema.time().quantity("When") == {
+            "HasCalendar": {"zone": "UTC"},
+            "HasUnit": {"unit": "instant"},
+            "HasQuantity": {"name": "When"},
+        }
+
+    def test_levels_fit_the_column_classes(self):
+        # Text levels are not amounts; a Likert scale's numbers are.
+        message = (
+            r'^schema: the column has the level "low", which is not a value '
+            r"HasUnit accepts\.$"
+        )
+        with pytest.raises(TypeError, match=message):
+            Schema.ordered(["low", "mid", "high"]).unit("pts")
+        with pytest.raises(TypeError, match=message):
+            Schema.ordered(["low", "high"]).diverging().unit("pts")
+        assert Schema.ordered([1, 2, 3, 4, 5]).unit("pts") == {
+            "HasOrder": {"levels": [1, 2, 3, 4, 5]},
+            "HasUnit": {"unit": "pts", "symbol": "pts"},
+        }
+
+    def test_field_takes_no_unit(self):
+        # A column's unit lives in the schema, not on a channel.
+        assert field("x") == {"type": "field", "name": "x"}
+        with pytest.raises(TypeError):
+            field("x", "plane")  # type: ignore[call-arg]
+
+    def test_diverging_defaults_the_midpoint_to_half_the_levels(self):
+        assert Schema.ordered(["a", "b"]).diverging() == {
+            "HasOrder": {"levels": ["a", "b"]},
+            "HasMidpoint": {"at": 1},
+        }
+        assert Schema.ordered(["a", "b", "c"]).diverging()["HasMidpoint"] == {
+            "at": 1.5
+        }
+
+    def test_diverging_midpoint(self):
+        levels = ["SD", "D", "N", "A", "SA"]
+        assert Schema.ordered(levels).diverging(midpoint=2) == {
+            "HasOrder": {"levels": levels},
+            "HasMidpoint": {"at": 2},
+        }
+        assert Schema.ordered(levels).diverging(midpoint=2.25)["HasMidpoint"] == {
+            "at": 2.25
+        }
+        assert Schema.ordered(levels).diverging(midpoint=0)["HasMidpoint"] == {"at": 0}
+        assert Schema.ordered(levels).diverging(midpoint=5)["HasMidpoint"] == {"at": 5}
+
+    # The same literals as the JS schema.test.ts: the two languages raise the
+    # same messages, word for word.
+    ORDER = 'the edges of the order ["SD", "D", "N", "A", "SA"]'
+    NOT_A_NUMBER = (
+        f"diverging: midpoint must be a finite number from 0 to 5, {ORDER}."
+    )
+
+    @pytest.mark.parametrize(
+        "midpoint, message",
+        [
+            (-0.5, f"diverging: midpoint -0.5 is outside 0..5, {ORDER}."),
+            (5.5, f"diverging: midpoint 5.5 is outside 0..5, {ORDER}."),
+            (6, f"diverging: midpoint 6 is outside 0..5, {ORDER}."),
+            (6.0, f"diverging: midpoint 6 is outside 0..5, {ORDER}."),
+            (float("nan"), NOT_A_NUMBER),
+            (float("inf"), NOT_A_NUMBER),
+            ("2", NOT_A_NUMBER),
+            (True, NOT_A_NUMBER),
+        ],
+    )
+    def test_diverging_midpoint_off_the_order(self, midpoint, message):
+        with pytest.raises(ValueError) as error:
+            Schema.ordered(["SD", "D", "N", "A", "SA"]).diverging(midpoint=midpoint)
+        assert str(error.value) == message
+
+    def test_diverging_needs_has_order(self):
+        with pytest.raises(ValueError, match="HasMidpoint needs HasOrder"):
+            ColumnSchema({}).diverging()
+
+    def test_schema_rides_chart_options(self):
+        ir = (
+            chart([{"r": "a"}], schema={"r": Schema.ordered(["a"]).diverging()})
+            .mark(rect(w=1))
+            .to_ir()
+        )
+        assert ir["options"]["schema"]["r"]["HasMidpoint"] == {"at": 0.5}
+
+
+class TestTime:
+    """`Schema.time()` (HasCalendar), `Calendar` partitions, and datetime
+    columns crossing the bridge (#1057)."""
+
+    def test_schema_time_record(self):
+        # A time's unit is the instant, the same INSTANT as JS measure.ts.
+        assert Schema.time() == {
+            "HasCalendar": {"zone": "UTC"},
+            "HasUnit": {"unit": "instant"},
+        }
+        assert Schema.time(zone="America/New_York") == {
+            "HasCalendar": {"zone": "America/New_York"},
+            "HasUnit": {"unit": "instant"},
+        }
+
+    def test_calendar_wire_form(self):
+        assert Calendar.month == {"kind": "month"}
+        assert Calendar.hour(every=6) == {"kind": "hour", "every": 6}
+        assert Calendar.week == {"kind": "week"}
+        assert Calendar.week(every=2, start="sunday") == {
+            "kind": "week",
+            "every": 2,
+            "start": "sunday",
+        }
+
+    def test_calendar_bare_is_called(self):
+        """A Calendar kind used bare is its call with no arguments (#1133):
+        equal, the same JSON, and the same wire form at an option."""
+        import json
+
+        for kind in ("second", "minute", "hour", "day", "weekday", "week",
+                     "month", "quarter", "year"):
+            bare = getattr(Calendar, kind)
+            assert bare == bare()
+            assert json.dumps(bare) == json.dumps(bare())
+            assert field("d").bin(bare)["ops"] == field("d").bin(bare())["ops"]
+        assert field("d").bin([Calendar.year, Calendar.month])["ops"] == field(
+            "d"
+        ).bin([Calendar.year(), Calendar.month()])["ops"]
+
+    def test_calendar_every_is_an_option(self):
+        """The step is the kind's `every` option; the old `.every(n)` method
+        and a `step` key are loud errors naming `every`."""
+        with pytest.raises(AttributeError, match=r"Calendar\.month\(every=\.\.\.\)"):
+            Calendar.month.every(3)
+        with pytest.raises(TypeError, match=r"step.*every=\.\.\."):
+            Calendar.month(step=3)
+        with pytest.raises(TypeError, match="whole number"):
+            Calendar.month(every=1.5)
+        with pytest.raises(TypeError, match="every"):
+            Calendar.weekday(every=2)
+
+    def test_calendar_weekday_wire_form(self):
+        assert Calendar.weekday == {"kind": "weekday"}
+        assert Calendar.weekday(start="sunday") == {
+            "kind": "weekday",
+            "start": "sunday",
+        }
+        assert field("d").bin(Calendar.weekday)["ops"] == [
+            {"op": "bin", "partition": {"kind": "weekday"}}
+        ]
+        assert field("d").bin([Calendar.week, Calendar.weekday])["ops"][0][
+            "partition"
+        ] == [
+            {"kind": "week"},
+            {"kind": "weekday"},
+        ]
+        with pytest.raises(ValueError, match="monday"):
+            Calendar.weekday(start="friday")
+
+    def test_calendar_old_unit_form_is_rejected(self):
+        with pytest.raises(TypeError, match="expected a Calendar value"):
+            field("d").bin({"unit": "month", "step": 1})
+
+    def test_calendar_rejects_bad_steps_and_starts(self):
+        with pytest.raises(ValueError, match=">= 1"):
+            Calendar.month(every=0)
+        with pytest.raises(ValueError, match="monday"):
+            Calendar.week(start="friday")
+
+    def test_levels_ride_axes(self):
+        ir = (
+            chart(
+                [{"t": "2024-01-01", "v": 1}],
+                schema={"t": Schema.time()},
+                axes={"x": {"levels": [Calendar.month, False, True]}},
+            )
+            .flow(scatter(by="t", x="t", y="v"))
+            .mark(line())
+            .to_ir()
+        )
+        assert ir["options"]["axes"]["x"]["levels"] == [
+            {"kind": "month"},
+            False,
+            True,
+        ]
+
+    def test_rows_is_gone(self):
+        with pytest.raises(TypeError, match="levels"):
+            chart(
+                [{"t": "2024-01-01", "v": 1}],
+                axes={"x": {"rows": [Calendar.month]}},
+            ).flow(scatter(by="t", x="t", y="v")).mark(line()).to_ir()
+
+    def test_datetime_columns_cross_as_arrow_times(self):
+        """A datetime column is not marked in the IR: its Arrow type crosses
+        unchanged, zone included, and JS reads it as a time."""
+        pd = pytest.importorskip("pandas")
+        import pyarrow as pa
+
+        from gofish.arrow_utils import data_to_arrow_bytes
+
+        df = pd.DataFrame(
+            {
+                "naive": pd.to_datetime(["2024-02-28", "2024-02-29"]),
+                "ny": pd.to_datetime(["2024-02-28", "2024-02-29"]).tz_localize(
+                    "America/New_York"
+                ),
+                "n": [1, 2],
+            }
+        )
+        ir = chart(df).flow(scatter(by="naive", x="naive", y="n")).mark(line()).to_ir()
+        assert "schema" not in (ir["options"] or {})
+        schema = pa.ipc.open_stream(data_to_arrow_bytes(df)).read_all().schema
+        assert pa.types.is_timestamp(schema.field("naive").type)
+        assert schema.field("naive").type.tz is None
+        assert schema.field("ny").type.tz == "America/New_York"
+
+    def test_a_declared_schema_wins(self):
+        pd = pytest.importorskip("pandas")
+        df = pd.DataFrame({"t": pd.to_datetime(["2024-02-28"]), "n": [1]})
+        ir = (
+            chart(df, schema={"t": Schema.time(zone="Asia/Tokyo")})
+            .mark(rect(w=1))
+            .to_ir()
+        )
+        assert ir["options"]["schema"] == {
+            "t": {"HasCalendar": {"zone": "Asia/Tokyo"}, "HasUnit": {"unit": "instant"}}
+        }
+
+    def test_strings_are_never_inferred(self):
+        ir = chart([{"t": "2024-01-01", "n": 1}]).mark(rect(w=1)).to_ir()
+        assert "schema" not in (ir["options"] or {})
+
+    def test_times_cross_as_arrow_times(self):
+        import datetime
+
+        import pyarrow as pa
+
+        from gofish.arrow_utils import arrow_table_to_bytes
+
+        table = pa.table(
+            {
+                "t": pa.array(
+                    [datetime.datetime(2024, 2, 29, 12, tzinfo=datetime.timezone.utc)],
+                    type=pa.timestamp("ns", tz="UTC"),
+                ),
+                "d": pa.array([datetime.date(2024, 3, 1)], type=pa.date32()),
+            }
+        )
+        back = pa.ipc.open_stream(arrow_table_to_bytes(table)).read_all()
+        assert back.schema.field("t").type == pa.timestamp("ns", tz="UTC")
+        assert back.schema.field("d").type == pa.date32()
+        assert back.column("t").to_pylist() == table.column("t").to_pylist()
+        assert back.column("d").to_pylist() == [datetime.date(2024, 3, 1)]

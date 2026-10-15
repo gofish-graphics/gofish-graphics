@@ -12,13 +12,19 @@ from python_stories.vega_data_urls import read_json
 
 
 def story_default():
-    movies = read_json("movies.json").to_dict("records")
+    # A few titles are numbers (1776, 2012): give the column one type.
+    movies = read_json("movies.json").astype({"Title": str})
     return (
-        chart(movies)
+        chart(
+            movies,
+            # TODO(#1017): remove the label angle once "auto" is the default.
+            axes={"x": {"label": {"angle": "auto"}}, "y": {"title": "Total Gross"}},
+        )
         .flow(spread(by="Major Genre", dir="x"))
         .mark(
             spread(
                 [
+                    # Neither column declares a unit, so they share one value axis.
                     rect(h="Worldwide Gross", fill=datum("Worldwide Gross")),
                     rect(h="US Gross", fill=datum("US Gross")),
                 ],
@@ -26,5 +32,5 @@ def story_default():
                 spacing=0,
             )
         ),
-        {"w": 600, "h": 300, "axes": True},
+        {"w": 600, "h": 300},
     )

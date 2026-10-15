@@ -1,22 +1,34 @@
 # Stories exempt from Python parity requirement.
-# These use v1/v2 APIs, Layer/select, or features not yet available in gofish-python.
+# These use the low-level operators or capitalized aliases, Layer/select, or
+# features not yet available in gofish-python.
 #
 # Remove entries as Python support is added.
 
-# Low-level API stories (v1/v2)
+# Low-level API stories
 # Ported to tests/python-stories/low-level-syntax/ (#433): BalloonChart,
-# IcicleChart, NestedWaffleChart, SankeyTree,
+# IcicleChart, NestedMosaicChart, NestedWaffleChart, SankeyTree,
 # StringlineChart, Whisker — all byte-identical to the JS baseline. The ports
-# map the v1 directional operators to combinator-form spread/stack/connect,
+# map the directional operators (stackX, spreadY, ...) to combinator-form spread/stack/connect,
 # frame→layer, and add the polar/wavy coord transforms to the Python wrapper +
 # IR bridge.
 #
 # Per-export exemption — PolarText constructs a raw custom coordinate
 # transform inline ({ type, transform: ([r, theta]) => ..., domain }), an
 # arbitrary JS closure rather than one of the IR's named coord transforms
-# (polar/clock/wavy/bipolar/arcLengthPolar/linear), so it cannot cross the
+# (polar/clock/wavy/geo), so it cannot cross the
 # bridge. The other TextMarks exports are ported.
 packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx::PolarText
+
+# pack: NestedByCount computes each pixel radius in a JS function mark,
+# because pack cannot yet scale a data-driven size (#967); a function mark
+# cannot cross the bridge. Forward Syntax/Pack::Nested and Low Level
+# Syntax/Pack are ported.
+packages/gofish-graphics/stories/forwardsyntax/Pack.stories.tsx::NestedByCount
+
+# separate: MixedRadii computes each pixel radius in a JS function mark, which
+# cannot cross the bridge. Forward Syntax/Separate::PenguinMass and ::OneSided
+# are ported.
+packages/gofish-graphics/stories/forwardsyntax/Separate.stories.tsx::MixedRadii
 
 # Docs regression test
 packages/gofish-graphics/stories/DocsContextRegression.stories.tsx
@@ -37,16 +49,14 @@ packages/gofish-graphics/stories/lowlevel/EncloseRefs.stories.tsx
 packages/gofish-graphics/stories/bench/Benchmarks.stories.tsx
 
 # Forward syntax stories needing unsupported features
-# BarWithLabels::Default is ported (#591 — ref/datum mark-fn bridge: each
-# `GoFishRef` a mark-fn receives crosses the RPC as an `{__inputRef, datum}`
-# sentinel and reconstructs Python-side as `_InputRef`, with `d[0]` itself
-# round-tripping back into a returned combinator mark). SpeciesCountPerLake
-# still needs `pluck()`, which has no Python wrapper yet.
-packages/gofish-graphics/stories/forwardsyntax/Bar/BarWithLabels.stories.tsx::SpeciesCountPerLake
 # LabeledChart uses a JS-side function-mark that composes resolved node refs
 # with fresh text — the refs can't cross the Python derive RPC, so it can't be
 # expressed with a Python mark-fn. (Ribbon/Layered and NodeLink ARE ported.)
 packages/gofish-graphics/stories/forwardsyntax/LabeledChart.stories.tsx
+# FlowerChart puts a nested chart (the polar flower) in a `layer([...])` child
+# list in mark position. Python cannot serialize a chart as a combinator child
+# yet (#1112). The old low-level port was removed with the fluent rewrite.
+packages/gofish-graphics/stories/forwardsyntax/FlowerChart.stories.tsx
 
 
 # Forward syntax stories needing coord transforms other than clock
@@ -134,3 +144,79 @@ packages/gofish-graphics/stories/interaction/TimerPulse.stories.tsx
 packages/gofish-graphics/stories/interaction/ComponentPaintOnly.stories.tsx
 packages/gofish-graphics/stories/interaction/ComponentLayoutReactive.stories.tsx
 packages/gofish-graphics/stories/interaction/ComponentPointer.stories.tsx
+packages/gofish-graphics/stories/interaction/Widgets.stories.tsx
+
+# The animated bird-migration panels — exempt for the same reason as the other
+# interaction stories above. The panels are driven by `timer()`, `live()` and a
+# `filter(...)` predicate written as a JS closure over the clock, none of which
+# cross the derive RPC. Panel A (the static species lines), a pure spec, is in
+# its own file, BirdMigrationStatic.stories.tsx, and is ported (#856).
+packages/gofish-graphics/stories/animated-vega-lite/BirdMigration.stories.tsx
+
+# Tutorials/Basics and Tutorials/Diagrams are the finished examples of the docs
+# Basics and Diagrams tutorials (the planets diagram): bare marks and operators
+# rendered with no chart() entry point. SHORTCUT: both are pure specs whose
+# constructs (circle, enclose, spread, layer, text, ref, arrow, constrain) all
+# exist in gofish-python, so they could be ported like bluefish/Planets; they
+# are teaching figures and were left exempt to keep the tutorial change
+# docs-only. TODO: port them to tests/python-stories/tutorials/.
+packages/gofish-graphics/stories/tutorials/Basics.stories.tsx
+packages/gofish-graphics/stories/tutorials/Diagrams.stories.tsx
+
+# Tutorials/Glyphs is the finished example of the docs Glyphs tutorial: a glyph
+# passed to `.mark()` as a per-group JS function, which cannot cross the bridge.
+packages/gofish-graphics/stories/tutorials/Glyphs.stories.tsx
+
+# The Gapminder animation panels — exempt for the same reason as the bird
+# migration panels above. The `Animated` and `Paused1975` stories are driven by
+# `time.sequence(...)`, which owns a `timer()` clock: a live JS signal with no
+# Python/IR bridge, so the spec cannot cross the derive RPC. The two static
+# stories in the file (SpatialTwin, Frame1955) ARE pure specs, but exemption is
+# per FILE and all four are one file (same trade-off as issue #856).
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx
+
+# The Gapminder desugaring tower — exempt for the same reason. Every level in
+# it holds a clock: levels 0 and 1 through `time.sequence(...)`, levels 2 and 3
+# through a raw `timer()` the spec closes over. Level 3 additionally reads the
+# clock inside a `derive(...)` closure, which is the one shape the derive RPC
+# cannot carry.
+packages/gofish-graphics/stories/animated-vega-lite/GapminderTower.stories.tsx
+
+# The bar chart race, Gapminder's sibling — exempt for the same reason as the
+# Gapminder panels. Every animated story in it holds a `timer()` clock through
+# `time.sequence({ on })`, a live JS signal the derive RPC cannot carry, and the
+# year readout reads it through `live()`. Frame2000 is a pure spec, but
+# exemption is per FILE (same trade-off as issue #856).
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx
+
+# The connected scatterplot — exempt for the same reason as the Gapminder
+# panels. Every story in it is driven by `time.sequence(...)`, which owns or is
+# handed a `timer()` clock, a live JS signal the derive RPC cannot carry, and
+# `history` is an option of that JS-only operator.
+packages/gofish-graphics/stories/animated-vega-lite/ConnectedScatterplot.stories.tsx
+
+# The build-in animation prototype (draft PR #901). Every story renders a
+# build-in: `.transition()` on operators and marks, `time.stagger` /
+# `time.transition({ enter })`, and a `timer()` clock the build owns, all
+# JS-only like the rest of the animation surface (no IR, no Python bridge).
+# The race example holds a `time.sequence` clock, exempt for the same reason
+# as BarChartRace above.
+packages/gofish-graphics/stories/animation/BuildInPrototype.stories.tsx
+
+# The data-space curve ladder: the same data drawn with each curve name, as a
+# test-like side-by-side comparison. It is not one spec: it lays ten charts out
+# in an HTML grid from a JS loop. Every curve name it shows is an ordinary
+# `line({ curve })` value that crosses the bridge as a string. The animated
+# exports are also driven by `time.sequence` on a `timer()` clock, a live JS
+# signal the derive RPC cannot carry (same reason as the Gapminder panels).
+packages/gofish-graphics/stories/forwardsyntax/CurveLadder.stories.tsx
+
+# Time (#1057): QuarterlyBars labels its one axis row with a JS format
+# function (Calendar.quarter.format(fn)), which cannot cross the bridge; Python
+# rows take Calendar values only. The other Time stories are ported. Port: #1105.
+packages/gofish-graphics/stories/forwardsyntax/Time.stories.tsx::QuarterlyBars
+
+# Time benchmark ports: CircleTimeline sizes each circle in a JS function mark
+# (a literal pixel radius per row), which cannot cross the bridge. StackedArea
+# and SurplusDeficitLine are ported. Port: #1105.
+packages/gofish-graphics/stories/forwardsyntax/TimeBenchmarkPorts.stories.tsx::CircleTimeline

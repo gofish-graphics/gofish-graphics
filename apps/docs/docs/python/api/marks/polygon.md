@@ -1,3 +1,7 @@
+---
+order: 70
+---
+
 # polygon
 
 Draws a closed polygon from explicit local-coordinate points. Useful for
@@ -23,7 +27,7 @@ chart([{}]).mark(
 ## Signature
 
 ```python
-polygon(*, points=None, fill=None, stroke=None, strokeWidth=None, opacity=None,
+polygon(*, points=None, fill=None, stroke=None, stroke_width=None, opacity=None,
         debug=None) -> Mark
 ```
 
@@ -32,17 +36,12 @@ Keyword-only (matches every existing call site, which already passes
 
 ## Parameters
 
-| Parameter     | Type                | Default   | Description                                                                |
-| ------------- | ------------------- | --------- | -------------------------------------------------------------------------- |
-| `points`      | `list[list[float]]` | —         | Vertices in local coordinates. GoFish is y-up: `[0, 0]` is the bottom-left |
-| `fill`        | `str`               | `"black"` | Fill color                                                                 |
-| `stroke`      | `str`               | `fill`    | Stroke color (defaults to `fill`)                                          |
-| `strokeWidth` | `int`               | `0`       | Stroke width                                                               |
-| `opacity`     | `float`             | `1`       | Opacity, `0`–`1` (applies to fill and stroke)                              |
+::: gofish-ref polygon
+:::
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark). Call
 [`.name()`](/python/api/core/mark) on the result to make it referenceable via
-[`ref`](/python/api/marks/ref) / [`selectAll`](/python/api/selection/ref) or a
+[`ref`](/python/api/marks/ref) / [`select_all`](/python/api/selection/ref) or a
 constraint.
 
 ## Coordinates
@@ -52,16 +51,18 @@ polygon — typically a `layer` or a constraint. The polygon's bounding box is
 the axis-aligned extent of its points; the parent placement system translates
 the whole polygon to position it.
 
-GoFish is y-up internally, so a trapezoid whose wide edge sits at the bottom
+Literal points are in the polygon's own frame. Where that frame's y reads
+top-down (a polygon placed by a `layer` or a constraint, outside any data-driven
+y), y grows downward like SVG, so a trapezoid whose wide edge sits at the bottom
 and narrow edge at the top is written:
 
 ```python
 polygon(
     points=[
-        [0, 0],            # bottom-left (the wider edge)
-        [width, 0],        # bottom-right
-        [width - 10, h],   # top-right  (inset)
-        [10, h],           # top-left   (inset)
+        [10, 0],           # top-left   (inset)
+        [width - 10, 0],   # top-right  (inset)
+        [width, h],        # bottom-right (the wider edge)
+        [0, h],            # bottom-left
     ],
 )
 ```
@@ -89,14 +90,27 @@ polygon(
     ],
     fill="transparent",
     stroke="black",
-    strokeWidth=2,
+    stroke_width=2,
 )
 ```
+
+## Data-driven fill
+
+`fill` and `stroke` work as they do on [`rect`](/python/api/marks/rect). A
+field name reads that field off each row and sends it through the chart's
+color scale. Any other string is a literal color. When `stroke` is omitted it
+follows the fill.
+
+```python
+chart(rows, color=Color.gradient(["#fff5eb", "#7f2704"])).mark(
+    polygon(points="ring", fill="n")
+)
+```
+
+Here `points="ring"` names a field holding one ring per row, so the mark draws
+one polygon per row, each colored by its own `n`.
 
 ## Notes
 
 - The polygon is always closed — the last point connects back to the first
   automatically.
-- Points are literals, not channel-bound. If you need a polygon whose shape
-  depends on data, compose multiple polygons or use a derived mark
-  ([`@mark`](/python/api/core/mark)).

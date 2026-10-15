@@ -17,15 +17,27 @@ export const rectTemplate = (
 ) => {
   return stackXTemplate(
     data,
-    { spacing: options.x.spacing, sharedScale: true, groupBy: { field: options.x.field, sort: options.x.sort } },
+    {
+      spacing: options.x.spacing,
+      groupBy: { field: options.x.field, sort: options.x.sort },
+    },
     (dataX) =>
       stackYTemplate(
         dataX,
-        { spacing: options.y.spacing ?? 0, groupBy: { field: options.y.field, sort: options.y.sort } },
+        {
+          spacing: options.y.spacing ?? 0,
+          groupBy: { field: options.y.field, sort: options.y.sort },
+        },
         (d, keyXY) =>
           rect({
-            w: typeof options.w === "number" ? options.w : value(d[options.w as string]),
-            h: typeof options.h === "number" ? options.h : value(d[options.h as string]),
+            w:
+              typeof options.w === "number"
+                ? options.w
+                : value(d[options.w as string]),
+            h:
+              typeof options.h === "number"
+                ? options.h
+                : value(d[options.h as string]),
             fill: options.fillFn(keyXY),
             stroke: options.stroke,
             strokeWidth: options.strokeWidth,

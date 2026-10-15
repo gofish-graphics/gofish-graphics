@@ -2,12 +2,14 @@
 
 `ref` is the single reference noun in GoFish, and it works in two positions:
 
-- **Inline in a layout** — `arrow(ref("a"), ref("b"))`, `ref(token).row[2]` — it
-  resolves at layout time against the name tree, hygienically scoped (see
+- **Inline in a layout** — `ref("a")` inside a
+  [`.relate()`](/js/api/constraints/relate) clause, `ref(token).row[2]` anywhere
+  — it resolves at layout time against the name tree, hygienically scoped (see
   [scoping](#hygienic-scoping)). This is the [`ref`](/js/api/marks/ref) mark.
 - **As chart data** — `chart(ref("maxBar")).mark(text(...))` — it resolves at
-  build time against the named-layer registry and stands in for the one node
-  registered under that name.
+  build time against the named-layer registry to a list of one ref, the node
+  registered under that name. Like all chart data it is a list; being singular
+  is a check that exactly one node matched.
 
 `selectAll(name)` is the **plural** chart-data verb: it returns an **array of
 refs**, one per node a named mark produced (node-unit; aggregate or not, no
@@ -75,9 +77,8 @@ gf.layer([
     .chart(data)
     .flow(/* ... */)
     .mark(gf.rect({ h: "total" }).name("kpi")),
-  gf.text({ text: "peak" }).name("label"),
-  // ref("kpi") as the connector's target: one ref; throws on 0 or >1 nodes
-  gf.line({ source: "middle" }, [gf.ref("label"), gf.ref("kpi")]),
+  // ref("kpi") as chart data: a list of one ref; throws on 0 or >1 nodes
+  gf.chart(gf.ref("kpi")).mark(gf.text({ text: "peak" })),
 ]);
 ```
 
@@ -126,6 +127,11 @@ component-boundary rule that string-name `ref` resolution always followed
 inline, so the inline-layout and chart-data lookup paths now share one scoping
 rule.
 
+Within that boundary the two positions differ in reach. As chart data, a name
+selects every node it was given in the chart, so a mark repeated per row can
+carry one name. Inline, a string `ref` (and a `.relate()` operand) takes the
+nearest match to the layer that relates it; see the [`ref`](/js/api/marks/ref) mark.
+
 ## Inline `selectAll` is not supported yet
 
 `selectAll` is a chart-data verb only. Using it inline inside a layout throws —
@@ -149,22 +155,20 @@ hand to connect _another_ chart's marks.
 ## Path-aware `by` after a selection {#path-aware-by-after-a-selection}
 
 After `selectAll`, the stream items are refs, not raw records. Operators' `by`
-option is path-aware (lodash `_.get`), so re-encode by the **datum path**:
+option reads a ref through its [`.datum`](/js/api/marks/ref#datum) rows, so you
+write the same bare field name you would on raw records:
 
 ```ts
 gf.chart(gf.selectAll("bars"))
-  .flow(gf.group({ by: "datum.species" })) // not "species"
+  .flow(gf.group({ by: "species" })) // not "datum.species"
   .mark(gf.ribbon({ opacity: 0.8 }));
 ```
 
-A `datum.field` path resolves to a scalar **only if every row in the ref's bag
+On a ref, a field resolves to a scalar **only if every row in the ref's bag
 agrees on that field** (homogeneity collapse — SQL's `ONLY_FULL_GROUP_BY` rule);
-otherwise it is `undefined`. So `by: "datum.lake"` works on lake-aggregate bars
-(all rows share a lake) but `by: "datum.species"` does not until you
-disaggregate. `by` also accepts a function as an escape hatch:
-`group({ by: (r) => r.datum.species })`. See
-[`spread`](/js/api/operators/spread#path-aware-by) for the full explanation of
-why `by` is path-prefixed but mark channels are not.
+otherwise it is `undefined`. So `by: "lake"` works on lake-aggregate bars (all
+rows share a lake) but `by: "species"` does not until you disaggregate. See
+[`spread`](/js/api/operators/spread#path-aware-by) for the full explanation.
 
 ## `pluck(source, path)` — every value at a path {#pluck}
 
@@ -182,13 +186,8 @@ pluck(ref, "species"); // → ["Bass", "Trout", ...] (distinct across the bag)
 `source` may be a [`ref`](/js/api/marks/ref) (reads its
 [`.datum`](/js/api/marks/ref#datum) bag), a row array, or a single row. Reach for
 `pluck` when a field is multi-valued in the current bag and you want to enumerate
-its values rather than group by it — the case where `by: "datum.field"` would
+its values rather than group by it — the case where `by: "field"` would
 resolve to `undefined`.
-
-::: info JavaScript only
-`pluck` is exported from the JS package (`gofish-graphics`). The Python wrapper
-does not expose it yet.
-:::
 
 ## `project(source, path)` — the single value at a path {#project}
 

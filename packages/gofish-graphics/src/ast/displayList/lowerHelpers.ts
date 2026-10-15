@@ -9,14 +9,17 @@
  */
 
 import type { DisplayList } from "gofish-ir";
-import type { GoFishNode, RenderSession, ToPixel } from "../_node";
-import type { FlipScope } from "../_displayObject";
-import type { GoFishAST } from "../_ast";
+import type { GoFishNode, ToPixel } from "../_node";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { displayTranslate, type Transform } from "../dims";
-import { type Path, type Point, pathToSVGPath } from "../../path";
-import { envFlag } from "../../util";
-import { bake } from "../coordinateTransforms/bake";
+import {
+  path,
+  transformPath,
+  type Path,
+  type Point,
+  pathToSVGPath,
+} from "../../path";
+import { orderChildrenForPaint } from "../paintOrder";
 
 /**
  * The display-list `role` of a lowered item, derived from whether it is
@@ -27,12 +30,15 @@ import { bake } from "../coordinateTransforms/bake";
  * disagreeing, so a host can trust `role` alone to split data from chrome
  * without also inspecting `datum`. Shape `lower` bodies call this instead of
  * hard-coding `role: "node"`, which previously mis-tagged datum-less chrome.
+ * An empty datum (a group a filter emptied) is still data.
  */
-export const roleFor = (datum: unknown): DisplayList.DisplayItem["role"] =>
+export const roleFor = (
+  datum: readonly unknown[] | undefined
+): DisplayList.DisplayItem["role"] =>
   datum !== undefined ? "node" : "overlay";
 
 /** Map every point of a path through `toPixel`, then serialize to an SVG `d`.
- *  `toPixel` is affine (translate + y-flip), so no resampling is needed. */
+ *  `toPixel` is a translate, so no resampling is needed. */
 export const pathToPixelSVG = (path: Path, toPixel: ToPixel): string =>
   pathToSVGPath(
     path.map((seg) =>
@@ -54,12 +60,34 @@ export const pathToPixelSVG = (path: Path, toPixel: ToPixel): string =>
     )
   );
 
-/** Map the two diagonal corners of an axis-aligned GoFish box through `toPixel`
- *  and return the flip-AGNOSTIC SVG rect: top-left = component-wise min, w/h =
- *  abs of the mapped span. Correct under any axis-aligned affine `toPixel` —
- *  y-down free space (top-left = `toPixel(c0)`) or the `yUp` chart scope (the
- *  flip makes `toPixel(c1)` the top-left) — so rect / image / compositor lower
- *  bodies share one box mapping (issue #143/#16). */
+/** A closed ring of layout points as a path item, drawn straight under a
+ *  linear coordinate space and adaptively resampled under any other, so a
+ *  straight edge in data space draws as the curve the space makes of it.
+ *  Shared by the polygon and region lower bodies. */
+export const ringItem = (
+  points: Point[],
+  coordinateTransform: CoordinateTransform | undefined,
+  toPixel: ToPixel,
+  datum: Record<string, unknown>[] | undefined,
+  style: DisplayList.Style
+): DisplayList.PathItem => {
+  const ring = path(points, { closed: true });
+  const drawn =
+    coordinateTransform === undefined || coordinateTransform.type === "linear"
+      ? ring
+      : transformPath(ring, coordinateTransform, { resample: true });
+  return {
+    kind: "path",
+    d: pathToPixelSVG(drawn, toPixel),
+    datum,
+    role: roleFor(datum),
+    style,
+  };
+};
+
+/** Map the two diagonal corners of an axis-aligned box through `toPixel` and
+ *  return the SVG rect: top-left = component-wise min, w/h = abs of the mapped
+ *  span. Shared by the rect / image / compositor lower bodies. */
 export const pixelBox = (
   c0: Point,
   c1: Point,
@@ -89,32 +117,6 @@ export const rectItemFromBox = (
   ...extra,
 });
 
-/** True when `toPixel` mirrors the y axis (pixel-y decreases as GoFish-y
- *  increases) — i.e. an active `yUp` chart scope. Lets orientation-dependent
- *  shapes (text rotation) pick the right sign by reading the flip out of
- *  `toPixel` rather than carrying a separate flag (issue #143/#16). Retained as
- *  the dev-mode cross-check for the DECLARED bit (see {@link declaredFlipsY}). */
-const toPixelFlipsY = (toPixel: ToPixel): boolean =>
-  toPixel([0, 1])[1] < toPixel([0, 0])[1];
-
-/** The node's DECLARED y-flip orientation — derived from the active flip scope on
- *  the render session (`session.flip !== undefined`), installed at every
- *  `toPixel` boundary. Replaces the numeric probe {@link toPixelFlipsY} at the
- *  orientation-dependent lower bodies (text rotation, value labels); under
- *  `GOFISH_FLIP_CHECK` it asserts the declared bit agrees with the probe. See
- *  issue #143/#16/#629. */
-export const declaredFlipsY = (node: GoFishNode, toPixel: ToPixel): boolean => {
-  const declared = node.getRenderSession().flip !== undefined;
-  if (envFlag("GOFISH_FLIP_CHECK")) {
-    const probed = toPixelFlipsY(toPixel);
-    if (declared !== probed)
-      console.warn(
-        `[flip-check] ${node.type}: declared flipsY=${declared} but probe=${probed}`
-      );
-  }
-  return declared;
-};
-
 /** Assemble a `Style` from resolved presentation values, dropping undefined
  *  keys (and a zero/undefined stroke-width, which the legacy render omitted). */
 export const lowerStyle = (vals: {
@@ -140,18 +142,16 @@ export const lowerStyle = (vals: {
   return style;
 };
 
-/** Install a baked entry's flip scope onto the render session (issue #629): set
- *  the active scope and derive its `toPixel` via the published per-scope factory
- *  (`session.toPixelFor`), so the entry lowers under its own scope's map. Shared
- *  by the root lower driver (`lowerToDisplayList`) and the boundary re-bake
- *  (`lowerChildrenOffset`) so the two install sites can't drift. */
-export const installFlip = (
-  session: RenderSession,
-  flip: FlipScope | undefined
-): void => {
-  session.toPixel = session.toPixelFor!(flip);
-  session.flip = flip;
-};
+/** A display item with its opacity (1 when unset) multiplied by `alpha`. How
+ *  a paint-time animation fades an item it has already lowered
+ *  (`time.transition()`, a build-in). */
+export const fadeItem = (
+  item: DisplayList.DisplayItem,
+  alpha: number
+): DisplayList.DisplayItem => ({
+  ...item,
+  style: { ...item.style, opacity: (item.style?.opacity ?? 1) * alpha },
+});
 
 /** Run `run` with the render session's `toPixel` swapped to `next`, restoring it
  *  afterward — the boundary-lowering primitive (a boundary maps its subtree into
@@ -172,19 +172,11 @@ export const withToPixel = <T>(
 };
 
 /** Lower a boundary's children under its own translate (the legacy
- *  `<g transform>`), plus an optional extra `(dx, dy)` shift — the shared body of
- *  the simple translate-only boundaries (offset, enclose, arrow).
- *
- *  Scope-aware (issue #629): rather than lower the whole subtree under the
- *  boundary's SINGLE `toPixel`, it re-runs the bake scope walk on each child —
- *  seeded with the boundary's absolute translate and its own flip scope
- *  (`session.flip`) — and lowers each leaf under that leaf's OWN scope's map.
- *  This runs the SAME logic as the root flatten, so a continuous-y subtree inside
- *  an UNDEFINED-y boundary (`enclose` / `arrow` / `connect`, whose own y space is
- *  UNDEFINED and so declares no flip) still opens its own y-up scope and flips —
- *  the regression versus the old global flip. Single-orientation content inherits
- *  the boundary's flip (`resolveNodeFlip` only opens when none is active) and
- *  lowers byte-identically to the previous single-map descent. */
+ *  `<g transform>`), plus an optional extra `(dx, dy)` pixel shift — the shared
+ *  body of the simple translate-only boundaries (offset, enclose, arrow). The
+ *  children lower under the composed `toPixel`, so this also works inside a
+ *  compositor (`mask`/`over`/`box`) that remapped `toPixel` to a bbox-local
+ *  frame. */
 export const lowerChildrenOffset = (
   node: GoFishNode,
   transform: Transform | undefined,
@@ -193,55 +185,12 @@ export const lowerChildrenOffset = (
   dy = 0
 ): DisplayList.DisplayItem[] => {
   const [tx, ty] = displayTranslate(transform);
-  const session = node.getRenderSession();
-  const toPixelFor = session.toPixelFor;
-  const outerToPixel = session.toPixel!;
-  // The scope-aware re-bake maps each leaf through `toPixelFor(leafScope)`, which
-  // is built from the AMBIENT base (viewport reserves only). That is only valid
-  // when the active `toPixel` IS still that ambient map — i.e. we're not inside a
-  // compositor (`mask`/`over`/`box`) that has remapped `toPixel` to a bbox-local
-  // frame (its children render relative to a filter region, not the viewport). In
-  // that case the scope factory's coordinates don't apply, so fall back to the
-  // single-map descent (which composes onto whatever `toPixel` the compositor
-  // installed) — preserving the pre-#629 output exactly (e.g. `cut` = `mask` over
-  // an `offset`ed image). Detect it by probing whether `toPixel` agrees with
-  // `toPixelFor(session.flip)` at two points (an affine map is fixed by two).
-  // Build the probe map ONCE (memoized in `toPixelFor`); it is also the entry map
-  // reused for any baked descendant whose scope equals `session.flip`.
-  const outerFlip = session.flip;
-  const expected = toPixelFor ? toPixelFor(outerFlip) : undefined;
-  const inAmbientFrame = (): boolean => {
-    if (!expected) return false;
-    const a0 = outerToPixel([0, 0]);
-    const e0 = expected([0, 0]);
-    const a1 = outerToPixel([1, 1]);
-    const e1 = expected([1, 1]);
-    return (
-      a0[0] === e0[0] && a0[1] === e0[1] && a1[0] === e1[0] && a1[1] === e1[1]
-    );
-  };
-  // Fallback: no scope factory published, OR a compositor remapped `toPixel`
-  // (see above) — single-map descent, preserving the pre-#629 behavior exactly.
-  if (!toPixelFor || !inAmbientFrame()) {
-    const composed: ToPixel = ([cx, cy]) =>
-      outerToPixel([tx + dx + cx, ty + dy + cy]);
-    return withToPixel(node, composed, () =>
-      (node.children as GoFishAST[]).flatMap((c) =>
-        c.INTERNAL_lower(coordinateTransform)
-      )
-    );
-  }
-  const items: DisplayList.DisplayItem[] = [];
-  try {
-    for (const child of node.children as GoFishAST[]) {
-      for (const d of bake(child, undefined, [tx + dx, ty + dy], outerFlip)) {
-        installFlip(session, d.flip);
-        items.push(...d.node.INTERNAL_lower(coordinateTransform, d.transform));
-      }
-    }
-  } finally {
-    session.toPixel = outerToPixel;
-    session.flip = outerFlip;
-  }
-  return items;
+  const outerToPixel = node.getRenderSession().toPixel!;
+  const composed: ToPixel = ([cx, cy]) =>
+    outerToPixel([tx + dx + cx, ty + dy + cy]);
+  return withToPixel(node, composed, () =>
+    orderChildrenForPaint(node).flatMap((c) =>
+      c.INTERNAL_lower(coordinateTransform)
+    )
+  );
 };

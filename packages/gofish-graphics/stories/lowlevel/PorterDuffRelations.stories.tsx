@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import bottlePng from "../assets/wilsonblanco.png";
-import { paint, image, Intersect as IntersectOp, Mask as MaskOp, subtract, rect, exclude } from "../../src/lib";
+import { paint, image, intersect, mask as maskOp, subtract, rect, exclude, type MarkChild } from "../../src/lib";
 // `over` is internal (conceptually `layer`, #196) — imported from source for
 // the low-level Union demo only; it is not part of the public lib surface.
 import { over } from "../../src/ast/marks/chart";
@@ -36,7 +36,7 @@ const DEFAULT_ARGS: Args = {
   blendMode: "color",
 };
 
-const buildChildren = (args: Args) => {
+const buildChildren = (args: Args): [MarkChild, MarkChild] => {
   const splitY = args.h - args.h * (args.splitY / 100);
   const splitH = args.h * (args.splitY / 100);
   return [
@@ -47,7 +47,7 @@ const buildChildren = (args: Args) => {
 
 const renderComposite = (
   args: Args,
-  relation: (options: { blendMode?: Args["blendMode"] }, children: ReturnType<typeof buildChildren>) => any
+  relation: typeof intersect
 ) => {
   const container = initializeContainer();
   container.innerHTML = "";
@@ -61,7 +61,7 @@ const renderComposite = (
 const renderMask = (args: Args) => {
   const container = initializeContainer();
   container.innerHTML = "";
-  MaskOp(buildChildren(args)).render(container, {
+  maskOp(buildChildren(args)).render(container, {
     w: args.w,
     h: args.h,
   });
@@ -77,7 +77,7 @@ export const Union: StoryObj<Args> = {
 export const Intersect: StoryObj<Args> = {
   name: "Intersect (in)",
   args: DEFAULT_ARGS,
-  render: (args: Args) => renderComposite(args, IntersectOp),
+  render: (args: Args) => renderComposite(args, intersect),
 };
 
 export const Exclude: StoryObj<Args> = {

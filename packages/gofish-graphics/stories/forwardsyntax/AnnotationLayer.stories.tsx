@@ -9,7 +9,7 @@ import { initializeContainer } from "../helper";
 import { chart, spread, rect, text, datum } from "../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Annotation Layer",
+  title: "Forward Syntax/Annotation Layer",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1000, step: 10 } },
@@ -31,7 +31,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(data, { axes: true })
+    chart(data)
       .flow(spread({ by: "cat", dir: "x" }))
       .mark(rect({ h: "count", fill: "#6b9bd1" }))
       // Threshold rule: a bare rect tier. `datum(60)` is a data-space count

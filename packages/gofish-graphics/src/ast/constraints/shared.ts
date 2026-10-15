@@ -1,8 +1,11 @@
-import { GoFishNode, type Placeable } from "../_node";
-import { GoFishRef } from "../_ref";
+import type { Placeable } from "../_node";
 import type { GoFishAST } from "../_ast";
 import type { AxisMap } from "../domain";
-import { isToken } from "../createName";
+import { isToken, type Token } from "../createName";
+
+/** Anything the constraint system can address by name: a GoFishNode, a
+ *  GoFishRef proxy, or a structural view of either. */
+export type NamedNode = { _name?: string | Token };
 
 export type Axis = "x" | "y";
 export type Alignment = "start" | "middle" | "end";
@@ -21,7 +24,19 @@ export type AlignAnchor = Alignment | "baseline";
  *  a box, so `position`/`distribute` do not accept them. */
 export type AlignValue = AlignAnchor | "span" | "size";
 
-/** Lightweight handle for referencing a named child inside .constrain() */
+/** Whether an align spec puts its targets at point anchors on its axis: one
+ *  anchor, or one per target. `"span"` and `"size"` are interval statistics
+ *  that write an unbound target, so they place nothing at a point. */
+export const isPointAlign = (
+  spec: AlignValue | AlignAnchor[] | undefined
+): spec is AlignAnchor | AlignAnchor[] =>
+  spec !== undefined && spec !== "span" && spec !== "size";
+
+/**
+ * A constraint operand: a node NAME, resolved at layout from the constrained
+ * layer with the same lookup `ref("name")` uses (`resolveScopedName`), and the
+ * operand's key in the placement solve.
+ */
 export type ConstraintRef = { readonly name: string };
 
 /** Per-axis data→pixel position maps, as built by `layer.tsx` and consumed
@@ -31,8 +46,24 @@ export type ConstraintRef = { readonly name: string };
  *  single {@link AxisScale} carrier. */
 export type ConstraintPosScales = [AxisMap | undefined, AxisMap | undefined];
 
+/** Per-axis pixel at which a layer seats the baselines of its free (baseline
+ *  magnitude) children (#773): the measure origin under the layer's data→pixel
+ *  map when the layer is anchored (a sized layer's own solved frame included),
+ *  0 for a free layer. Layer places unconstrained free children there; the
+ *  solver's free-origin fallback (`solveAxisProblem`) seats a floating
+ *  component's shared free baseline there. `undefined` where the layer has no
+ *  origin on the axis. */
+export type FreeOrigin = [number | undefined, number | undefined];
+
 /** Convert axis name to dimension index (0 = x, 1 = y) */
 export const axisIndex = (axis: Axis): 0 | 1 => (axis === "x" ? 0 : 1);
+
+/** Convert dimension index to axis name (inverse of {@link axisIndex}). */
+export const axisName = (axis: 0 | 1): Axis => (axis === 0 ? "x" : "y");
+
+/** Key identifying one (axis, node name) slot in the placement system. */
+export const placementKey = (axis: Axis, name: string): string =>
+  `${axis}:${name}`;
 
 /** Check if a placeable has been placed on a given axis */
 export const isPlacedOn = (p: Placeable, axisIdx: 0 | 1): boolean =>
@@ -41,41 +72,49 @@ export const isPlacedOn = (p: Placeable, axisIdx: 0 | 1): boolean =>
 /** Normalize a node's _name (string or Token) to the string used as a key in
  * the Layer's nameToPlaceable and constraint refs. Tokens contribute their
  * `__tag`. */
-export const childNameKey = (node: GoFishAST): string | undefined => {
-  if (!("_name" in node)) return undefined;
-  const n = (node as GoFishNode)._name;
+export const childNameKey = (node: NamedNode): string | undefined => {
+  const n = node._name;
   if (n === undefined) return undefined;
   return isToken(n) ? n.__tag : n;
 };
 
+let internalNameCount = 0;
+
 /**
- * Give every child a UNIQUE constraint name and return the names in order, so an
- * operator that elaborates to `layer(children).constrain(...)` (spread, scatter)
- * can reference each child. Reuses an existing name/key; else synthesizes
- * `__${prefix}_${i}`. Two subtleties both elaborations need (and both got wrong
- * before being shared):
- *   - `||` not `??`: an EMPTY-string name is as useless as a missing one (it's
- *     falsy, so the layer's phase-1 `!childName` guard would baseline-place a
- *     constraint target).
- *   - duplicates are disambiguated (cut returns N slices that all carry the
- *     source mark's name — without this they collapse onto one placeable).
- * The (possibly new) name is written back to `_name` ONLY when it changed, so an
- * unchanged `createName` Token survives for token-based `ref`/`selectAll`. A
- * `ref` child is a GoFishRef proxy (not a GoFishNode) but carries `_name` too.
+ * A fresh name for a node the library itself names so a constraint can refer
+ * to it (an operator's child, an axis tier, a label). Unique per call, so it
+ * can never equal a name a user wrote or another library name: a library name
+ * never clashes with a user's `.name("…")` in the string-name lookup, and two
+ * operators' names never make each other ambiguous.
+ */
+export const internalName = (kind: string): string =>
+  `__${kind}#${++internalNameCount}`;
+
+/**
+ * Give every child a constraint name that is unique among the children and
+ * return the names in order, so an operator that elaborates to
+ * `layer(children).relate(...)` (spread, scatter, table) can refer to each
+ * child. A child the user named keeps its name; an unnamed child, or a second
+ * child with the same user name (cut returns N slices that all carry the
+ * source mark's name), gets an `internalName`. The data key is never used as a
+ * name: it is data, not a name the user wrote. The (possibly new) name is
+ * written back to `_name` ONLY when it changed, so an unchanged `createName`
+ * Token survives for token-based `ref`/`selectAll`. A `ref` child is a
+ * GoFishRef proxy (not a GoFishNode) but carries `_name` too.
  */
 export const ensureChildNames = (
   children: GoFishAST[],
   prefix: string
 ): string[] => {
   const used = new Set<string>();
-  return children.map((c, i) => {
+  return children.map((c) => {
     const existing = childNameKey(c);
-    let nm =
-      existing || (c instanceof GoFishNode && c.key) || `__${prefix}_${i}`;
-    if (used.has(nm)) nm = `${nm}__${prefix}_${i}`;
+    const nm =
+      existing !== undefined && !used.has(existing)
+        ? existing
+        : internalName(prefix);
     used.add(nm);
-    if (nm !== existing && (c instanceof GoFishNode || c instanceof GoFishRef))
-      c._name = nm;
+    if (nm !== existing) c._name = nm;
     return nm;
   });
 };
@@ -84,7 +123,7 @@ export const ensureChildNames = (
  *  wins. Shared by the layer's constraint passes (nest plan, composition) to
  *  resolve `ConstraintRef`s against child positions. */
 export const buildNameIndex = (
-  childNodes: GoFishAST[]
+  childNodes: readonly NamedNode[]
 ): Map<string, number> => {
   const m = new Map<string, number>();
   for (let i = 0; i < childNodes.length; i++) {

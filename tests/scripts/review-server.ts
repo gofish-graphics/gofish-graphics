@@ -12,8 +12,7 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { exec } from "child_process";
 import {
-  collectDiffs,
-  collectRemovedStories,
+  collectReviewDiffs,
   acceptStory,
   removeBaselineStory,
   formatDomDiff,
@@ -43,7 +42,7 @@ pullSnapshots(getSnapshotBranchName(), join(ROOT, "__snapshots__"));
 // "Removed" stories (baseline exists, story no longer captured) are
 // first-class DiffEntry("removed") entries too — they must be reviewed and
 // accepted (which deletes the baseline) like any other diff.
-const diffs: DiffEntry[] = [...collectDiffs(), ...collectRemovedStories()];
+const diffs: DiffEntry[] = collectReviewDiffs();
 /** path → pixel diff result */
 const pixelDiffs = new Map<string, PixelDiffResult | null>();
 

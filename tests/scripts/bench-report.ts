@@ -42,6 +42,7 @@
 
 import { readFileSync, writeFileSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
+import type { SkippedExample, SkippedPoint } from "./bench";
 
 const TESTS_DIR = join(import.meta.dirname, "..");
 const BENCH_DIR = join(TESTS_DIR, "tmp/bench");
@@ -74,8 +75,10 @@ type Results = {
     ruler: RulerMeta | null;
   };
   examplesJs: ExampleResult[];
+  examplesJsSkipped?: SkippedExample[]; // absent in older history files
   examplesPy: { path: string; totalMs: Stat; loadMs: Stat; overheadMs: Stat }[];
   synthetic: SyntheticPoint[];
+  syntheticSkipped?: SkippedPoint[]; // absent in older history files
 };
 
 // --- history.json contract (fixed — the trend-plot story reads exactly this) ---
@@ -524,6 +527,26 @@ function main() {
       lines.push(`| warm \`/load\` (Python) | ${fmt(pyLoad)} ms |${span}`);
       lines.push(`| deserialize + RPC (Python) | ${fmt(pyOver)} ms |${span}`);
     }
+    lines.push("");
+  }
+  const skipped = results.examplesJsSkipped ?? [];
+  if (skipped.length > 0) {
+    lines.push(
+      `**${skipped.length} JS example(s) not measured** (left out of every number above):`
+    );
+    lines.push("");
+    for (const s of skipped)
+      lines.push(`- \`${s.title}/${s.name}\` (${s.reason})`);
+    lines.push("");
+  }
+  const synSkipped = results.syntheticSkipped ?? [];
+  if (synSkipped.length > 0) {
+    lines.push(
+      `**${synSkipped.length} synthetic point(s) not measured** (each ended its family):`
+    );
+    lines.push("");
+    for (const s of synSkipped)
+      lines.push(`- \`${s.family}\` n=${s.n} (${s.reason})`);
     lines.push("");
   }
   lines.push(

@@ -42,15 +42,21 @@ ranges in play — the _domains_. GoFish distinguishes a node's
 [underlying space](/internals/core/underlying-space) (is this dimension
 continuous, ordinal, or undefined? — and if continuous, is it a _position_, a
 _size_, or a _difference_, which since #586 are the three `origin` states of one
-continuous kind) and infers position and size domains separately. This
-pass leans on the [monotonic algebra](/internals/core/monotonic) to track, symbolically,
-how each subtree depends on the data — and to prune subtrees that don't depend on it
-at all.
+continuous kind). It does this in two walks over the tree. The first infers
+each node's _type_ (its kind and data interval, with no σ in it); the second
+infers each node's _size claim_ from its children's claims and the finished
+types. The claim walk leans on the [monotonic algebra](/internals/core/monotonic) to
+track, symbolically, how each subtree's size depends on the scale factor — and to
+prune subtrees that don't depend on it at all.
 
-**2 · Layout.** With domains known, each node computes its size. Layout dispatches on
-the continuous space's `origin` state: a `SIZE` (free) dimension resolves through the
-monotonic machinery, a `POSITION` (anchored) dimension through position scales. Bounding boxes
-([the bbox model](/internals/core/bbox)) are the common currency.
+**2 · Layout.** With domains known, each node computes its size. Every continuous
+scope solves its σ through the monotonic machinery from its size claim; a `POSITION`
+(pinned) dimension then also maps its data through `px(d) = σ·d + originPx`, while
+a `SIZE` (free) dimension is placed by its parent at its baseline. Bounding boxes
+([the bbox model](/internals/core/bbox)) are the common currency. After layout, a node can
+also describe its shape beyond its box through a lazy `geometry()` (today only an
+enclosing circle), which foreign layouts such as `pack` read (see
+[Layout Calculation](/internals/layout/passes#shape-geometry-after-layout)).
 
 **3 · Placement & render.** Final absolute positions are assigned, then the tree is
 turned into pixels in two sub-passes: **lower** — walk the baked scenegraph and emit a
@@ -62,14 +68,15 @@ a chart can update without a full rebuild. The
 [`coord` operator](/internals/layout/coord-flattening) is the notable special case: it
 flattens its subtree into a flat, absolutely-positioned list before applying its
 coordinate transform. A coordinate transform is parameterized
-(`polar()`/`clock()` take `innerRadius`/`centralAngle`/`startAngle`/…) and may declare
-**axis-name aliases** (`theta`/`r`); a small top-down pass before layout resolves those
-aliases into the canonical `x`/`y`/`w`/`h` facets (see
-[Pass 5.5](/internals/layout/passes#pass-5-5-coordinate-space-alias-resolution)).
+(`Coord.polar()`/`Coord.clock()` take `innerRadius`/`centralAngle`/`startAngle`/…) and may declare
+**names for its axes** (polar `theta`/`r`, geo `lon`/`lat`), which marks use as keys of a
+`dims` option and operators as a `dir`; a small top-down pass before layout gives those
+names their meaning in the scope of the enclosing coord (see
+[Pass 5.5](/internals/layout/passes#pass-5-5-axis-name-resolution)).
 A second top-down pass, `resolveEmbedding` (a `GoFishNode` method wired into the
 pipeline before layout), authors each dim's `embedded` flag — whether a coord
 warps that axis's extent into an arc/wedge (point/line/area) — gating a mark's
-own size on whether its measure matches the axis it sits in (see
+own size on whether it is the same quantity as the position it sits at (see
 [Pass 8.5](/internals/layout/passes#pass-8-5-embedding-resolution)).
 
 The placement pass treats every real node as a `Placeable`: it can expose its
@@ -80,16 +87,17 @@ constraint solver express alignment and distribution as equations over sibling
 boxes rather than as order-sensitive imperative writes.
 
 **Chrome is just more tree.** Axes, legends, and axis titles are not privileged
-render-time fixtures. Before layout, elaboration passes rewrite each of them into
-ordinary marks and constraints — `Layer`-wrapped `Rect`/`Text` nodes seated by
+render-time fixtures. Before layout, chrome elaboration rewrites each of them into
+ordinary marks and constraints, in rings around the node that owns them — `Layer`-wrapped `Rect`/`Text` nodes seated by
 `align`/`distribute`/`position` — so chrome flows through the same three passes
 as the data marks. **Axes are recursive**: every node can render its own
 resolved underlying-space type as an axis, so a nested grouping (a grouped or
 faceted chart) renders one ordinal axis per level — an outer `lake` axis and a
 per-facet `species` axis — each living at its own tree node, the way faceting
 already nests. Each axis names itself off its own space's **measure** (a
-continuous axis by its unit, an ordinal axis by its grouping field), so an axis
-title is derived from the data model, not a syntactic hint. The orchestrator
+continuous axis by its quantity names, never its unit; an ordinal axis by its
+grouping field), so an axis title is derived from the data model, not a
+syntactic hint. The orchestrator
 (`gofish.tsx`) then sizes the SVG off the
 laid-out tree's **measured extent on all four sides** — the legend's overhang
 past the content, the axis/title gutters past the origin, and any content a
@@ -107,7 +115,7 @@ A few systems thread through every pass rather than belonging to one:
 
 - **Contexts.** [`scopeContext`, `scaleContext`, `keyContext`](/internals/core/contexts)
   carry variable scoping, color/axis scales, and named-element tracking down the tree.
-- **Coordinate transforms.** `linear`, `polar`, `bipolar`, `wavy`, `clock` — pluggable
+- **Coordinate transforms.** `polar`, `clock`, `wavy`, `geo` (and the internal identity `linear`) — pluggable
   mappings from one plane to another, applied during render.
 - **Names & scoping.** Marks can be `name`d and referenced across charts via `ref(name)` (one node) or `selectAll(name)` (many);
   scoping is deliberately hygienic.

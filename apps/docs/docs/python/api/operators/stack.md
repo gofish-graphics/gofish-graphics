@@ -1,3 +1,7 @@
+---
+order: 20
+---
+
 # stack
 
 Stacks groups edge-to-edge along an axis with no gap between them — `spread`
@@ -25,19 +29,53 @@ Like [`spread`](/python/api/operators/spread), `stack` is polymorphic: called
 with no positional argument it returns an **operator** for use inside
 [`.flow()`](/python/api/core/flow); called with a positional list of marks it
 returns a **combinator-form mark** that stacks those explicit children (the
-low-level form behind the v1 `stackX`/`stackY` operators).
+low-level form behind the `stackX`/`stackY` operators).
 
 ## Parameters
 
-| Parameter   | Type                                     | Description                                                                                                                                                                                                                                                                                                                       |
-| ----------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `by`        | `str` \| `field(...)` \| `Callable`      | Field, dotted path, [`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor, or callable to partition by. Omit to stack per row. Path-aware (use `"datum.field"` after a selection); see [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by).                                        |
-| `dir`       | `"x"` \| `"y"`                           | **Required.** Axis to stack along.                                                                                                                                                                                                                                                                                                |
-| `alignment` | `str`                                    | Cross-axis alignment of the stacked groups.                                                                                                                                                                                                                                                                                       |
-| `w`, `h`    | `int` \| `str`                           | Fixed pixel size, or a field name sizing this operator's own box from data (data-driven operator extent — e.g. a mosaic's column width).                                                                                                                                                                                          |
-| `size`      | `int` \| `str` \| `field(...)` \| `list` | Per-entry stack-axis extent — a field name, a `field(...)` accessor, or an explicit list. `size=field("count").normalize()` makes the stacking axis a **space-filling spine** (the mosaic/marimekko conditional axis). See [`spread` → Space-filling spines](/python/api/operators/spread#space-filling-spines-mosaic-marimekko). |
+::: gofish-ref stack
+:::
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
+
+`dir` takes `"x"`, `"y"`, or an axis name the enclosing coordinate space
+declares, such as `"theta"` under polar; see
+[`spread` → naming the axis](/python/api/operators/spread#naming-the-axis-with-dir).
+
+## Signed parts
+
+`stack` places its parts end to end, in order. Each part starts where the one
+before it ends, and the first part starts at 0. A negative part goes back, so
+the stack ends at the sum of its parts, and parts that cancel overlap. Parts
+(+100, −30, +20, −50, +10) rise to 100, step back and forth, and end at 50.
+
+To pile positive parts up from 0 and negative parts down from 0 (a diverging
+stacked bar), group by sign first, so each stack holds one sign:
+
+```python
+# `direction` is "Inflow" for positive amounts and "Outflow" for negative.
+chart(cash_flows).flow(
+    spread(by="quarter", dir="x"),
+    group(by="direction"),
+    stack(by="flow", dir="y"),
+).mark(rect(h="amount", fill="flow"))
+```
+
+## Centered stacks
+
+When the chart's `schema` gives the `by` column a midpoint
+([`Schema.ordered(levels).diverging()`](/python/api/core/schema)), the stack's 0 is
+the midpoint of that order instead of the start of its first part. The parts
+must be nonnegative. This draws Likert charts and population pyramids:
+
+```python
+chart(
+    survey, schema={"response": Schema.ordered(LEVELS).diverging()}
+).flow(
+    spread(by="question", dir="y"),
+    stack(by="response", dir="x"),
+).mark(rect(w="count", fill="response"))
+```
 
 ## Examples
 
@@ -58,6 +96,6 @@ chart(seafood).flow(
 ## Notes
 
 - `dir` is required — `stack()` raises a `ValueError` without it.
-- Combine with `coord=clock()` on [`chart`](/python/api/core/chart) to turn a
+- Combine with `coord=Coord.clock()` on [`chart`](/python/api/core/chart) to turn a
   stack into a pie chart.
 - Use [`spread`](/python/api/operators/spread) when you want gaps between groups.

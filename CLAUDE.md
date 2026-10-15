@@ -64,8 +64,8 @@ All paths are relative to `packages/gofish-graphics/`:
 - `src/ast/` - Core AST implementation and rendering engine
 - `src/ast/shapes/` - Basic visual elements (rect, ellipse, petal, text, ref)
 - `src/ast/graphicalOperators/` - Composition operators (stack, stackX, stackY, spread, spreadX, spreadY, layer, connect, wrap, arrow, enclose, frame, position)
-- `src/ast/coordinateTransforms/` - Coordinate system transformations (linear, polar, bipolar, arcLengthPolar, wavy, clock)
-- `src/ast/marks/` - Higher-level fluent/builder chart API (v3)
+- `src/ast/coordinateTransforms/` - Coordinate system transformations (polar, clock, wavy, geo; plus the internal identity `linear`)
+- `src/ast/marks/` - Fluent chart builder (`chart(data).flow(...).mark(...)`) and the mark factories
 - `src/tests/` - Example charts and visual test cases (not automated unit tests)
 - `src/data/` - Sample datasets used in examples
 - `src/templates/` - Reusable chart templates
@@ -73,37 +73,30 @@ All paths are relative to `packages/gofish-graphics/`:
 
 ### Main Entry Points (packages/gofish-graphics/)
 
-- `src/lib.ts` - Main library exports (includes v1, v2, and v3 APIs)
+- `src/lib.ts` - Main library exports (both API surfaces)
 - `src/ast/gofish.tsx` - Core rendering engine and context management
 - `src/index.tsx` - Development entry point (imports and renders development examples)
 - `stories/` - Storybook stories providing visual development playground
 
-### API Versions
+### API Surfaces
 
-The library exports three API versions from `src/lib.ts`:
+`src/lib.ts` exports two surfaces over the same core AST (see
+`apps/docs/docs/internals/design-evolution/three-surfaces.md`):
 
-- **v1 (Lowercase)**: Original functional API for backwards compatibility
-  - Functions: `ellipse()`, `petal()`, `text()`, `ref()`, `stackX()`, `stackY()`, `layer()`, `wrap()`, `connect()`, etc.
-  - Example: `gofish(stack([rect({ w: 10, h: 20 }), ellipse({ r: 5 })]), { w: 400, h: 300 })`
+- **Fluent chart builder** (recommended): `chart(data)` returns a builder with chainable methods
+  - Builder methods: `.flow()`, `.mark()`, `.layer()`, `.render()`
+  - Operators (used within `.flow()`): `spread()`, `stack()`, `scatter()`, `partition()`, `group()`, `treemap()`, `derive()`, `filter()`, `resolve()`, `join()`
+  - Data helpers (used within `derive()`): `normalize()`, `repeat()`, etc.
+  - Marks (used within `.mark()`): `rect()`, `circle()`, `ellipse()`, `line()`, `ribbon()`, `text()`, `image()`, `polygon()`, `blank()`, etc.
+  - Layer naming: call `.name("bars")` on a mark so another chart can read it with `chart(selectAll("bars"))`
+  - Example: `chart(data).flow(spread({ by: "category", dir: "x" })).mark(rect({ h: "value" }).name("bars")).render(container, { w: 400, h: 300 })`
 
-- **v2 (Capitalized)**: Component-style API with capitalized function names
-  - Functions: `Rect()`, `Ellipse()`, `Petal()`, `Text()`, `Stack()`, `Spread()`, `Layer()`, etc.
-  - Same functionality as v1 but follows component naming conventions
-  - Example: `gofish(Stack([Rect({ w: 10, h: 20 }), Ellipse({ r: 5 })]), { w: 400, h: 300 })`
+- **Low-level operators (combinator form)**: operators and marks applied to an explicit array of children, with no data binding
+  - Functions: `layer([...])`, `stackX()`, `stackY()`, `spreadX()`, `spreadY()`, `spread()`, `stack()`, `frame()`, `enclose()`, `arrow()`, `position()`, `offset()`, `cut()`, `ref()`, etc.
+  - Render terminal for a bare node (no `chart()` at the root): `gofish(container, options, node | () => node)`
+  - Example: `layer([rect({ x: 0, y: 0, w: 90, h: 40 }), rect({ x: 30, y: 50, w: 90, h: 40 })]).render(container, {})`
 
-- **v3 (Fluent/Builder)**: Modern fluent API using method chaining (recommended for new projects)
-  - Main function: `chart(data)` returns a builder with chainable methods
-  - Builder methods: `.flow()`, `.mark()`, `.render()`
-  - Layer naming: call `.name("layerName")` on a mark so it can be referenced via `select("layerName")` in another chart (e.g. `rect({ h: "value" }).name("bars")`)
-  - Operators (used within `.flow()`):
-    - Visual layout: `spread()`, `stack()`, `scatter()`, `group()`
-    - Data transformation: `derive()`. Takes a callback to do arbitrary data transforms
-  - Utility functions (used within `.derive()`): Return data
-    - `normalize()`, `repeat()`, etc.
-  - Selection (used within `chart()`): `select()`
-  - Marks (used within `.mark()`): Return visual node; support `.name("layerName")` for layer selection
-    - `rect()`, `circle()`, `line()`, `area()`, `blank()`, etc.
-  - Example: `chart(data).flow(spread("category", { dir: "x" })).mark(rect({ h: "value" }).name("bars")).render(container, { w: 400, h: 300 })`
+- **One lowercase surface**: each operator has one lowercase name that works both inside `.flow(...)` and as a combinator over an explicit child list (`stack(opts, [a, b])`, `layer([...])`, `intersect([a, b])`). A combinator child may be a mark or an already-built node (e.g. `ref(...)`), and a `createMark` body may return a combinator's mark directly. The node-level building blocks (`Spread`, `Layer`, `Treemap`, the region-compositing node operators, …) are internal and not exported (#146). A capital letter means a class or a namespace (`GoFishRef`, `FieldExpr`, `Serialize`, …): the factory namespaces `Constraint` and `Schema`, and the **strategy families** (#1013). An option whose value is one choice from a set of strategies has one family namespace, a module under `src/families/` bound in `lib.ts` with `export * as`: `Overlap.separate()`, `Tile.squarify()`, `Curve.monotone()`, `Coord.polar()`, `Color.palette()`, `Animation.grow()`. The family's type is inside it (`Curve.Curve`), each family is also a subpath (`gofish-graphics/curve`), and strategies are never also top-level exports. Python mirrors this (`from . import curve as Curve`; `from gofish.curve import monotone`). The async map over a collection is the lowercase `map`.
 
 ### Context System
 
@@ -115,13 +108,12 @@ The library uses several global contexts during rendering:
 
 ### Coordinate Transforms
 
-Key coordinate systems available:
+Key coordinate systems available, all in the `Coord` family (`Coord.polar()`):
 
-- `linear` - Standard Cartesian coordinates
-- `polar` - Polar coordinate system
-- `bipolar` - Two-pole coordinate system
-- `arcLengthPolar` - Arc-length based polar coordinates
-- `wavy` - Wavy/curved coordinate transformations
+- `Coord.polar` - Polar coordinate system
+- `Coord.clock` - Polar preset (0° at 12 o'clock, clockwise)
+- `Coord.wavy` - Wavy/curved coordinate transformations
+- `Coord.geo` - Geographic coordinates through a map projection
 
 ### Build Configuration (packages/gofish-graphics/)
 
@@ -135,9 +127,11 @@ Key coordinate systems available:
 
 ## Development Notes
 
-- **Update docs on user-facing API changes**: When you change a public API surface (signatures, option shapes, exported names, default behaviors) in `packages/gofish-graphics/src/`, update the corresponding page under `apps/docs/docs/js/` in the same change — signature, examples, and any equivalences tables. For Python API changes (`packages/gofish-python/`), update the mirror page under `apps/docs/docs/python/`. The docs site has one folder per language (`js/`, `python/`) with a top-level language toggle. Do not defer this to a follow-up.
-- **Adding a cross-language construct (operator / mark / builder method)**: invoke the `add-cross-language-construct` skill BEFORE implementing — it carries the full round-trip checklist (JS factory, both reconstruction sites, descriptor entry, generated Python wrapper, parity stories, docs, pytest gotcha). Missing a step fails late (at parity-render or CI, not at JS build).
-- **Attach screenshots to visual PRs**: Any PR that introduces new examples or makes significant visual changes to the docs site (layout redesigns, new chart renders, styling overhauls) must include screenshots of the result in its description. When working from the CLI (where the GitHub image uploader isn't available), commit the PNGs to the shared orphan `pr-assets` branch under a `pr-<number>/` folder (`git fetch origin pr-assets` and add on top — do not force-push or rewrite its history) and embed them via `raw.githubusercontent.com/<org>/<repo>/pr-assets/pr-<number>/<file>.png` URLs. The branch is never merged and is append-only: deleting or rewriting it would break the images in old PR descriptions.
+- **Reference tier — options tables are generated**: When a public construct's options change, the change goes in `packages/gofish-ir/src/frontend/descriptors.ts` (the `doc` / `default` fields): the API reference options tables under `apps/docs/docs/{js,python}/api/` are generated from it via `::: gofish-ref`, so hand-editing a table is wrong. Update the handwritten Signature block and prose on that page only if the call shape or behavior changed. `pnpm --filter docs check-api-coverage` must pass. Builder methods, color helpers, constraints, and selection pages are still fully handwritten and get updated in the same change as before. The docs follow Diátaxis (diataxis.fr): `get-started`/`tutorial` are tutorials, `api/howto/` are how-to guides, `api/` pages are reference, `theory/` and `internals/` are explanation. Reference pages describe and only describe: complete, factual, structured like the code, with a usage example, and they link to a how-to or explanation page instead of instructing or explaining. Any prose Claude writes must match the voice of the `handwritten: true` pages (read two first; same sentence length and vocabulary) while keeping the page's Diátaxis role: a reference page may carry more detail than the tutorial, never more explanation. For Python API changes (`packages/gofish-python/`), update the mirror page under `apps/docs/docs/python/`. The docs site has one folder per language (`js/`, `python/`) with a top-level language toggle. Do not defer this to a follow-up.
+- **Handwritten tier — do not rewrite the maintainer's prose**: Pages with `handwritten: true` frontmatter (get-started, tutorial, guides, reactivity, gotree, and the API how-tos) are the maintainer's own writing. Edit their code blocks and correct outright factual errors (a renamed option, a wrong default); never rewrite, expand, or restructure their prose. If an API change makes a handwritten page's explanation wrong beyond a code-block fix, do not rewrite it: open a GitHub issue saying exactly what went stale and note it in the PR description. `pnpm --filter docs check-doc-snippets` must pass.
+- **Adding a cross-language construct (operator / mark / builder method)**: invoke the `add-cross-language-construct` skill BEFORE implementing — it carries the full round-trip checklist (JS factory, one deserializer-table line, descriptor entry, generated Python wrapper, parity stories, docs, pytest gotcha). Missing a step fails late (at parity-render or CI, not at JS build).
+- **Fewer, larger PRs**: Every open PR costs the maintainer a review, a CI run, and a merge-main-and-fix cycle each time another PR lands, so prefer one PR per effort over many small ones, even if its scope is larger and slightly messier. For example, a round of axis work and a round of time and binning work are two PRs, not nine. Put the steps of a multi-step change (step 2, step 3, a design note and the code it describes) as commits on one branch, not as stacked PRs. Fold review fixes, follow-up cleanups, and related bugs found along the way into the open PR, and list them in its description. Before opening a PR, check whether an open PR from the same effort exists and add to it instead. Open a separate PR only when the work is independent and should ship on its own schedule, or when the maintainer asks for one. A problem that needs its own design discussion still gets a GitHub issue, not a PR.
+- **Show visual and API changes in the PR description**: Any PR that introduces new examples or makes significant visual changes to the docs site (layout redesigns, new chart renders, styling overhauls) must include screenshots of the result in its description. When working from the CLI (where the GitHub image uploader isn't available), commit the PNGs to the shared orphan `pr-assets` branch under a `pr-<number>/` folder (`git fetch origin pr-assets` and add on top — do not force-push or rewrite its history) and embed them via `raw.githubusercontent.com/<org>/<repo>/pr-assets/pr-<number>/<file>.png` URLs. The branch is never merged and is append-only: deleting or rewriting it would break the images in old PR descriptions. When the PR adds new examples, put each example's spec (the chart code from its story) next to its screenshot in a fenced ` ```js ` / ` ```python ` block, so GitHub highlights it and a reviewer need not dig through the diff. For several examples, use a heading per example (screenshot, then code), or a collapsed `<details>` block under a screenshot table. The same goes for a user-facing API change, visual or not: when a PR adds, renames, removes or changes the behavior of a public option, operator, mark or builder method, its description shows the new call in a fenced block next to the old one (or alone if it is new), with a short example a user would write, plus its render when there is one, so a reviewer sees the API change without reading the diff.
 - **Monorepo Management**: Uses pnpm workspaces
 - **Visual Development**: Use Storybook (`pnpm storybook`) for interactive development and testing
 - **Iterating on examples with Claude**: `pnpm capture-one "<title/story>"` renders a single
@@ -172,7 +166,7 @@ Key coordinate systems available:
   - SolidJS for reactive rendering and JSX
   - D3-array for domain calculations and scales
   - Lodash for utility functions (groupBy, sumBy, orderBy, meanBy)
-  - Chroma-js and Culori for color manipulation
+  - Culori for color manipulation
   - Perfect-arrows for arrow rendering
   - Bubblesets-js for enclosure rendering
 

@@ -1,7 +1,7 @@
 """Equivalent of shapes/TextMarks.stories.tsx — Shapes/Text Marks.
 
 Text mark layout: spreads of styled text labels (vertical, middle-aligned,
-horizontal) plus a text mark spread against an ellipse. JS `For(...)` is
+horizontal) plus a text mark spread against an ellipse. JS `map(...)` is
 array-map sugar and becomes a list comprehension. The JS stories pass
 `textAnchor: "start"`, which is now a real IR field (it positions the
 rotation pivot/local origin at the text's first character, center, or last
@@ -27,10 +27,10 @@ def _label_texts():
         text(
             text=label["text"],
             fill=label["color"],
-            fontSize=28,
-            fontFamily=FONT_FAMILY,
-            textAnchor="start",
-            debugBoundingBox=True,
+            font_size=28,
+            font_family=FONT_FAMILY,
+            text_anchor="start",
+            debug_bounding_box=True,
         )
         for label in LABELS
     ]

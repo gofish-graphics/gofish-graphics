@@ -10,433 +10,557 @@ operator-vs-combinator, ref-shape narrowing, DataFrame conversion, the
 lambda/RPC bridge) stays hand-written there.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+
+from . import ast as _ast
 from .ast import Mark, _channel
+
+if TYPE_CHECKING:
+    from .ast import ChunkKey, FieldAccessor, FieldPredicate, StructAccessor
+
+
+# --- Nested option dicts -----------------------------------------------------
+
+# The key structure of each named option type (descriptors.ts OPTION_TYPES):
+# ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),
+# ("tuple", (shape, ...)), ("record", value_shape),
+# ("tagged", tag_key, {tag_value: shape}); None passes a value through.
+_OPTION_TYPES: Dict[str, Any] = {
+    "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label": ("label", ("ref", "AxisLabelOptions")), "levels": ("levels", ("array", ("ref", "Calendar"))), "divider": ("divider", None)}),
+    "AxisLabelOptions": ("object", {"angle": ("angle", None), "align": ("align", None)}),
+    "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
+    "AxisInterval": ("object", {"min": ("min", None), "center": ("center", None), "max": ("max", None), "size": ("size", None), "embedded": ("embedded", None)}),
+    "FieldPredicate": ("object", {"field": ("field", None), "between": ("between", None), "closed": ("closed", None)}),
+    "ChartOptions": ("object", {"w": ("w", None), "h": ("h", None), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", None), "padding": ("padding", None), "schema": ("schema", None)}),
+    "AxisDimsValue": ("ref", "AxisInterval"),
+    "Partition": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)}), "step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)})}),
+    "StructBin": ("tagged", "kind", {"hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
+    "Tile": ("tagged", "kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "sliceDice": ("object", {"kind": ("kind", None)})}),
+    "Overlap": ("tagged", "kind", {"separate": ("object", {"kind": ("kind", None), "padding": ("padding", None)}), "noise": ("object", {"kind": ("kind", None), "randomness": ("randomness", None), "smoothing": ("smoothing", None), "padding": ("padding", None), "seed": ("seed", None)})}),
+    "Curve": ("tagged", "kind", {"linear": ("object", {"kind": ("kind", None)}), "step": ("object", {"kind": ("kind", None)}), "monotone": ("object", {"kind": ("kind", None)}), "smooth": ("object", {"kind": ("kind", None)}), "catmullRom": ("object", {"kind": ("kind", None)}), "bezier": ("object", {"kind": ("kind", None)}), "orthogonal": ("object", {"kind": ("kind", None), "bend": ("bend", None)}), "arc": ("object", {"kind": ("kind", None), "direction": ("direction", None)}), "perfectArrows": ("object", {"kind": ("kind", None), "bow": ("bow", None), "stretch": ("stretch", None), "stretch_min": ("stretchMin", None), "stretch_max": ("stretchMax", None), "pad_start": ("padStart", None), "pad_end": ("padEnd", None), "flip": ("flip", None), "straights": ("straights", None)})}),
+    "Bin": ("tagged", "kind", {"step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
+    "Calendar": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)})}),
+}
+
+
+def _to_wire(shape: Any, value: Any, path: str) -> Any:
+    """Rename the keys of a nested option value from Python to wire spelling.
+
+    `shape` is the value's declared type, compiled from the descriptor table,
+    so only declared option keys are renamed (a snake_case key to its
+    camelCase wire key, by the same rule as top-level kwargs). A key the
+    type does not declare raises TypeError, as an unknown kwarg does.
+    Record keys (column names,
+    axis names) and values of any other type pass through unchanged. A
+    tagged union picks its branch by the dict's tag key (`kind`); a missing
+    or unknown tag raises TypeError. A channel value built by field(...) or
+    datum(...) is a dict already in wire form, so it passes through too:
+    that is how a `dims` entry tells a channel value from an interval.
+    """
+    if shape is None or value is None:
+        return value
+    if isinstance(value, (_ast.FieldAccessor, _ast.DatumValue)):
+        return value
+    kind = shape[0]
+    if kind == "ref":
+        return _to_wire(_OPTION_TYPES[shape[1]], value, path)
+    if kind == "object":
+        if not isinstance(value, dict):
+            return value
+        fields = shape[1]
+        out: Dict[str, Any] = {}
+        for key, item in value.items():
+            if key not in fields:
+                hint = next(
+                    (py for py, (wire, _) in fields.items() if wire == key),
+                    None,
+                )
+                raise TypeError(
+                    f"{path} got an unexpected key {key!r}"
+                    + (f" (did you mean {hint!r}?)" if hint else "")
+                    + f"; expected one of {', '.join(map(repr, fields))}"
+                )
+            wire, sub = fields[key]
+            out[wire] = _to_wire(sub, item, f"{path}[{key!r}]")
+        return out
+    if kind == "tagged":
+        if not isinstance(value, dict):
+            return value
+        tag, branches = shape[1], shape[2]
+        expected = ", ".join(map(repr, branches))
+        if tag not in value:
+            raise TypeError(f"{path} is missing the key {tag!r}; expected {tag!r} to be one of {expected}")
+        branch = value[tag]
+        if not isinstance(branch, str) or branch not in branches:
+            raise TypeError(f"{path}[{tag!r}] got an unexpected value {branch!r}; expected one of {expected}")
+        return _to_wire(branches[branch], value, path)
+    if kind == "record":
+        if not isinstance(value, dict):
+            return value
+        return {
+            key: _to_wire(shape[1], item, f"{path}[{key!r}]")
+            for key, item in value.items()
+        }
+    if kind == "array":
+        if not isinstance(value, (list, tuple)):
+            return value
+        return [_to_wire(shape[1], item, f"{path}[{i}]") for i, item in enumerate(value)]
+    if kind == "tuple":
+        if not isinstance(value, (list, tuple)):
+            return value
+        return [
+            _to_wire(sub, item, f"{path}[{i}]")
+            for i, (sub, item) in enumerate(zip(shape[1], value))
+        ]
+    raise AssertionError(f"unknown shape kind {kind!r}")
 
 
 # --- Leaf marks -------------------------------------------------------------
 
-def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspectRatio: Optional[float] = None) -> Mark:
+def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspect_ratio: Optional[float] = None, inset: Optional[float] = None) -> Mark:
     """A rectangle. Box geometry via the shared dims channels.
 
     Args:
-        debug: Dev-only console.log flag. Genuinely serializes on the wire today but is stripped before layout (FACTORY_ONLY_KEYS) — carries no rendering meaning.
+        debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
         x: Left edge position.
         cx: Center x.
         x2: Right edge position.
         w: Width.
-        emX: Embed x in the parent's x space.
-        y: Top/bottom edge position (y-up: bottom).
+        em_x: Embed x in the parent's x space.
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
         h: Height.
-        emY: Embed y in the parent's y space.
-        theta: Angular position alias (polar coord's x).
-        thetaSize: Angular extent alias (polar coord's w).
-        r: Radial position alias (polar coord's y).
-        rSize: Radial extent alias (polar coord's h).
+        em_y: Embed y in the parent's y space.
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         fill: Fill color, or a field name for a color scale.
         stroke: Stroke color. Defaults to `fill`.
-        strokeWidth: Default 0.
-        opacity: Default 1.
+        stroke_width: Stroke width in pixels. Default 0.
+        opacity: Opacity, 0 to 1. Default 1.
         filter: Raw SVG filter attribute.
         key: Internal per-node key override.
         rx: Corner radius, x. Default 0.
         ry: Corner radius, y. Default 0.
-        aspectRatio: w/h ratio to enforce; the constraining axis wins when both are data-driven.
+        aspect_ratio: w/h ratio to enforce; the constraining axis wins when both are data-driven.
+        inset: Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given. Default 0.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
-        ("emX", emX),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
-        ("emY", emY),
-        ("theta", theta),
-        ("thetaSize", thetaSize),
-        ("r", r),
-        ("rSize", rSize),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
+        ("emX", em_x),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
+        ("emY", em_y),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
         ("opacity", opacity),
         ("filter", filter),
         ("key", key),
         ("rx", rx),
         ("ry", ry),
-        ("aspectRatio", aspectRatio),
+        ("aspectRatio", aspect_ratio),
+        ("inset", inset),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("rect", **_kw)
 
-def circle(*, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
-    """A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth) — position it via `spread`/`scatter`.
+def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, r: Optional[int | float | str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[int | float | str] = None, fill_opacity: Optional[float] = None) -> Mark:
+    """A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by at most one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.
 
     Args:
-        debug: Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).
-        r: Radius; becomes w=h=2r on the underlying ellipse.
-        stroke: Defaults to `fill`.
-    """
-    _kw: Dict[str, Any] = {}
-    for _k, _v in [
-        ("debug", debug),
-        ("r", r),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
-    ]:
-        if _v is not None:
-            _kw[_k] = _channel(_v)
-    for _k, _v in kwargs.items():
-        if _v is not None:
-            _kw[_k] = _channel(_v)
-    return Mark("circle", **_kw)
-
-def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, aspectRatio: Optional[float] = None, **kwargs: Any) -> Mark:
-    """An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter).
-
-    Args:
-        debug: Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).
+        debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
         x: Left edge position.
         cx: Center x.
         x2: Right edge position.
         w: Width.
-        emX: Embed x in the parent's x space.
-        y: Top/bottom edge position (y-up: bottom).
+        em_x: Embed x in the parent's x space.
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
         h: Height.
-        emY: Embed y in the parent's y space.
-        theta: Angular position alias (polar coord's x).
-        thetaSize: Angular extent alias (polar coord's w).
-        r: Radial position alias (polar coord's y).
-        rSize: Radial extent alias (polar coord's h).
-        stroke: Defaults to `fill`.
-        opacity: Default 1.
-        aspectRatio: w/h ratio to enforce. When both dims are data-driven, the constraining axis is used.
+        em_y: Embed y in the parent's y space.
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
+        r: Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h.
+        fill: Fill color, or a field name for a color scale.
+        stroke: Stroke color. Defaults to `fill`.
+        stroke_width: Stroke width in pixels. Default 0.
+        opacity: Opacity, 0 to 1, applied to fill and stroke: a number, a field name, or a per-datum accessor (in JS also a `live(...)` value, which does not cross the wire). Default 1.
+        fill_opacity: Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
-        ("emX", emX),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
-        ("emY", emY),
-        ("theta", theta),
-        ("thetaSize", thetaSize),
-        ("r", r),
-        ("rSize", rSize),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
-        ("opacity", opacity),
-        ("aspectRatio", aspectRatio),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
+        ("emX", em_x),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
+        ("emY", em_y),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
+        ("r", _channel(r)),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("opacity", _channel(opacity)),
+        ("fillOpacity", fill_opacity),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
-    for _k, _v in kwargs.items():
+            _kw[_k] = _v
+    return Mark("circle", **_kw)
+
+def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
+    """An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.
+
+    Args:
+        debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
+        x: Left edge position.
+        cx: Center x.
+        x2: Right edge position.
+        w: Width.
+        em_x: Embed x in the parent's x space.
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
+        cy: Center y.
+        y2: Other y edge position.
+        h: Height.
+        em_y: Embed y in the parent's y space.
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
+        fill: Fill color, or a field name for a color scale.
+        stroke: Stroke color. Defaults to `fill`.
+        stroke_width: Stroke width in pixels. Default 0.
+        opacity: Opacity, 0 to 1. Default 1.
+        fill_opacity: Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`.
+        aspect_ratio: w/h ratio to enforce. When both dims are data-driven, the constraining axis is used.
+    """
+    _kw: Dict[str, Any] = {}
+    for _k, _v in [
+        ("debug", debug),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
+        ("emX", em_x),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
+        ("emY", em_y),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("opacity", opacity),
+        ("fillOpacity", fill_opacity),
+        ("aspectRatio", aspect_ratio),
+    ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("ellipse", **_kw)
 
-def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
+def petal(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None) -> Mark:
     """A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.
 
     Args:
-        debug: Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).
+        debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
         x: Left edge position.
         cx: Center x.
         x2: Right edge position.
         w: Width.
-        emX: Embed x in the parent's x space.
-        y: Top/bottom edge position (y-up: bottom).
+        em_x: Embed x in the parent's x space.
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
         h: Height.
-        emY: Embed y in the parent's y space.
-        theta: Angular position alias (polar coord's x).
-        thetaSize: Angular extent alias (polar coord's w).
-        r: Radial position alias (polar coord's y).
-        rSize: Radial extent alias (polar coord's h).
-        stroke: Defaults to `fill`.
+        em_y: Embed y in the parent's y space.
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
+        fill: Fill color, or a field name for a color scale.
+        stroke: Stroke color. Defaults to `fill`.
+        stroke_width: Stroke width in pixels. Default 0.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
-        ("emX", emX),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
-        ("emY", emY),
-        ("theta", theta),
-        ("thetaSize", thetaSize),
-        ("r", r),
-        ("rSize", rSize),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
+        ("emX", em_x),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
+        ("emY", em_y),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
-    for _k, _v in kwargs.items():
-        if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("petal", **_kw)
 
-def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, filter: Optional[str] = None, fontSize: Optional[float] = None, fontFamily: Optional[str] = None, fontStyle: Optional[str] = None, fontWeight: Optional[Union[float, str]] = None, debugBoundingBox: Optional[bool] = None, rotate: Optional[float] = None, textAnchor: Optional[str] = None) -> Mark:
+def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, filter: Optional[str] = None, font_size: Optional[float] = None, font_family: Optional[str] = None, font_style: Optional[str] = None, font_weight: Optional[float | str] = None, debug_bounding_box: Optional[bool] = None, rotate: Optional[float] = None, text_anchor: Optional[str] = None) -> Mark:
     """A text label. Box geometry via the shared dims channels positions the text anchor.
 
     Args:
-        debug: Factory-only dev flag; the JS factory strips it (FACTORY_ONLY_KEYS) before layout.
+        debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
         x: Left edge position.
         cx: Center x.
         x2: Right edge position.
         w: Width.
-        emX: Embed x in the parent's x space.
-        y: Top/bottom edge position (y-up: bottom).
+        em_x: Embed x in the parent's x space.
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
         h: Height.
-        emY: Embed y in the parent's y space.
-        theta: Angular position alias (polar coord's x).
-        thetaSize: Angular extent alias (polar coord's w).
-        r: Radial position alias (polar coord's y).
-        rSize: Radial extent alias (polar coord's h).
+        em_y: Embed y in the parent's y space.
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         key: Internal per-node key override.
         text: Text content (raw channel — a literal, field name, or accessor).
+        fill: Fill color, or a field name for a color scale. Default "black".
+        stroke: Stroke color.
+        stroke_width: Stroke width in pixels. Default 0.
         filter: Raw SVG filter attribute.
-        fontSize: Default 12.
-        fontFamily: Default "system-ui, sans-serif".
-        fontStyle: Raw CSS font-style (e.g. "italic").
-        fontWeight: CSS font-weight (e.g. 300, 700, "bold").
-        debugBoundingBox: Default false.
-        rotate: Rotation in degrees, applied in the chart's y-up world frame about the text anchor. Default 0.
-        textAnchor: Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character. Default "start".
+        font_size: Font size in pixels. Default 12.
+        font_family: Font family. Default "system-ui, sans-serif".
+        font_style: Raw CSS font-style (e.g. "italic").
+        font_weight: CSS font-weight (e.g. 300, 700, "bold").
+        debug_bounding_box: Draw the text's bounding box, for layout debugging. Default false.
+        rotate: Rotation in degrees, clockwise on screen, about the text anchor. Default 0.
+        text_anchor: Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character. Default "start".
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
-        ("emX", emX),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
-        ("emY", emY),
-        ("theta", theta),
-        ("thetaSize", thetaSize),
-        ("r", r),
-        ("rSize", rSize),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
+        ("emX", em_x),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
+        ("emY", em_y),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("key", key),
-        ("text", text),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
+        ("text", _channel(text)),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
         ("filter", filter),
-        ("fontSize", fontSize),
-        ("fontFamily", fontFamily),
-        ("fontStyle", fontStyle),
-        ("fontWeight", fontWeight),
-        ("debugBoundingBox", debugBoundingBox),
+        ("fontSize", font_size),
+        ("fontFamily", font_family),
+        ("fontStyle", font_style),
+        ("fontWeight", font_weight),
+        ("debugBoundingBox", debug_bounding_box),
         ("rotate", rotate),
-        ("textAnchor", textAnchor),
+        ("textAnchor", text_anchor),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("text", **_kw)
 
-def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, href: str, filter: Optional[str] = None, opacity: Optional[float] = None, preserveAspectRatio: Optional[str] = None) -> Mark:
+def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, key: Optional[str] = None, href: str, filter: Optional[str] = None, opacity: Optional[float] = None, preserve_aspect_ratio: Optional[str] = None) -> Mark:
     """An embedded raster/SVG image. Box geometry via the shared dims channels.
 
     Args:
-        debug: Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).
+        debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
         x: Left edge position.
         cx: Center x.
         x2: Right edge position.
         w: Width.
-        emX: Embed x in the parent's x space.
-        y: Top/bottom edge position (y-up: bottom).
+        em_x: Embed x in the parent's x space.
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
         h: Height.
-        emY: Embed y in the parent's y space.
-        theta: Angular position alias (polar coord's x).
-        thetaSize: Angular extent alias (polar coord's w).
-        r: Radial position alias (polar coord's y).
-        rSize: Radial extent alias (polar coord's h).
+        em_y: Embed y in the parent's y space.
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         key: Internal per-node key override.
         href: Image URL or data URI.
         filter: Raw SVG filter attribute.
-        preserveAspectRatio: Default "xMidYMid meet".
+        opacity: Opacity, 0 to 1.
+        preserve_aspect_ratio: Raw SVG preserveAspectRatio value. Default "xMidYMid meet".
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
-        ("emX", emX),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
-        ("emY", emY),
-        ("theta", theta),
-        ("thetaSize", thetaSize),
-        ("r", r),
-        ("rSize", rSize),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
+        ("emX", em_x),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
+        ("emY", em_y),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("key", key),
         ("href", href),
         ("filter", filter),
         ("opacity", opacity),
-        ("preserveAspectRatio", preserveAspectRatio),
+        ("preserveAspectRatio", preserve_aspect_ratio),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("image", **_kw)
 
-def polygon(*, debug: Optional[bool] = None, points: List[Any], fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
-    """A closed polygon defined by explicit local-coordinate points (y-up). No dims channels — the bbox is computed from `points`.
+def polygon(*, debug: Optional[bool] = None, points: list | str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
+    """A closed polygon defined by local-coordinate points (in the frame the polygon sits in: top-down on a plain canvas, upward inside a continuous y), given literally or read from a field. No dims channels — the bbox is computed from `points`.
 
     Args:
-        debug: Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).
-        points: Vertex list, at least 3 points.
-        fill: Default "black".
-        stroke: Defaults to `fill`.
-        opacity: Default 1.
+        debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
+        points: Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap).
+        fill: Fill color, or a field name for a color scale. Default "black".
+        stroke: Stroke color. Defaults to `fill`.
+        stroke_width: Stroke width in pixels. Default 0.
+        opacity: Opacity, 0 to 1, applied to both fill and stroke. Default 1.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
         ("points", points),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
         ("opacity", opacity),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("polygon", **_kw)
 
-def blank(*, debug: Optional[bool] = None, emX: Optional[bool] = None, emY: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, rx: Optional[float] = None, ry: Optional[float] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
-    """An invisible sizing/positioning guide — a transparent rect with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).
+def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, fill: Optional[str] = None) -> Mark:
+    """An invisible sizing/positioning guide — a rect that emits no display items at all, with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).
 
     Args:
-        debug: Dev-only console.log flag. Genuinely serializes on the wire today (found while grounding this table) but carries no rendering meaning.
-        w: Default 0.
-        h: Default 0.
+        debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
+        em_x: Embed x in the parent's x space.
+        em_y: Embed y in the parent's y space.
+        w: Width. Default 0.
+        h: Height. Default 0.
+        fill: Fill color. A blank never paints; `fill` only seeds the shared color scale.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
-        ("emX", emX),
-        ("emY", emY),
-        ("w", w),
-        ("h", h),
-        ("rx", rx),
-        ("ry", ry),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
+        ("emX", em_x),
+        ("emY", em_y),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
+        ("fill", _channel(fill)),
     ]:
         if _v is not None:
-            _kw[_k] = _channel(_v)
-    for _k, _v in kwargs.items():
-        if _v is not None:
-            _kw[_k] = _channel(_v)
+            _kw[_k] = _v
     return Mark("blank", **_kw)
+
+def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None) -> Mark:
+    """Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.
+
+    Args:
+        debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
+        fill: Fill color, or a field name for a color scale.
+        stroke: Stroke color. Defaults to `fill`.
+        stroke_width: Stroke width in pixels. Default 0.
+        opacity: Opacity, 0 to 1. Default 1.
+        filter: Raw SVG filter attribute.
+    """
+    _kw: Dict[str, Any] = {}
+    for _k, _v in [
+        ("debug", debug),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("opacity", opacity),
+        ("filter", filter),
+    ]:
+        if _v is not None:
+            _kw[_k] = _v
+    return Mark("region", **_kw)
 
 
 # --- Combinator-only marks ---------------------------------------------------
 
-def over(children: List["Mark"], *, blendMode: Optional[str] = None) -> Mark:
+def over(children: List["Mark"], *, blend_mode: Optional[str] = None) -> Mark:
     """Internal-only A ∪ B union compositing (not exported from lib.ts — use `layer`). Kept only so the deserializer can dispatch the wire type.
 
     Args:
-        blendMode: Default "color".
+        blend_mode: Blend used where the two regions combine. Default "color".
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
-        ("blendMode", blendMode),
+        ("blendMode", blend_mode),
     ]:
         if _v is not None:
             kwargs[_k] = _v
     return Mark("over", _children=list(children), **kwargs)
 
-def intersect(children: List["Mark"], *, blendMode: Optional[str] = None) -> Mark:
+def intersect(children: List["Mark"], *, blend_mode: Optional[str] = None) -> Mark:
     """Draw only where both regions overlap: A ∩ B. Binary only.
 
     Args:
-        blendMode: Default "color".
+        blend_mode: Blend used where the two regions combine. Default "color".
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
-        ("blendMode", blendMode),
+        ("blendMode", blend_mode),
     ]:
         if _v is not None:
             kwargs[_k] = _v
     return Mark("inside", _children=list(children), **kwargs)
 
-def exclude(children: List["Mark"], *, blendMode: Optional[str] = None) -> Mark:
+def exclude(children: List["Mark"], *, blend_mode: Optional[str] = None) -> Mark:
     """Symmetric difference (odd-overlap parity): A ^ B. Binary only.
 
     Args:
-        blendMode: Default "color".
+        blend_mode: Blend used where the two regions combine. Default "color".
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
-        ("blendMode", blendMode),
+        ("blendMode", blend_mode),
     ]:
         if _v is not None:
             kwargs[_k] = _v
     return Mark("xor", _children=list(children), **kwargs)
 
-def subtract(children: List["Mark"], *, blendMode: Optional[str] = None) -> Mark:
+def subtract(children: List["Mark"], *, blend_mode: Optional[str] = None) -> Mark:
     """Draw A with B removed: A − B. Binary only.
 
     Args:
-        blendMode: Default "color".
+        blend_mode: Blend used where the two regions combine. Default "color".
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
-        ("blendMode", blendMode),
+        ("blendMode", blend_mode),
     ]:
         if _v is not None:
             kwargs[_k] = _v
     return Mark("out", _children=list(children), **kwargs)
 
-def paint(children: List["Mark"], *, blendMode: Optional[str] = None) -> Mark:
+def paint(children: List["Mark"], *, blend_mode: Optional[str] = None) -> Mark:
     """A is a base surface B is painted onto, clipped to A: A ∪ (B ∩ A). Result sized to A. Binary only.
 
     Args:
-        blendMode: Default "color".
+        blend_mode: Blend used where the two regions combine. Default "color".
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
-        ("blendMode", blendMode),
+        ("blendMode", blend_mode),
     ]:
         if _v is not None:
             kwargs[_k] = _v
@@ -447,17 +571,18 @@ def mask(children: List["Mark"]) -> Mark:
     """
     return Mark("mask", _children=list(children))
 
-def enclose(children: List["Mark"], *, padding: Optional[float] = None, rx: Optional[float] = None, ry: Optional[float] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, strokeDasharray: Optional[str] = None, opacity: Optional[float] = None) -> Mark:
+def enclose(children: List["Mark"], *, padding: Optional[float] = None, rx: Optional[float] = None, ry: Optional[float] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None) -> Mark:
     """Draw a rounded-rect enclosure around the union of the children's bboxes, padded by `padding`.
 
     Args:
-        padding: Default 2.
-        rx: Default 2.
-        ry: Default 2.
-        fill: Default "none".
-        stroke: Default "#D1D9E2".
-        strokeWidth: Default 1.
-        opacity: Default 1.
+        padding: Pixels of slack between the children's bbox union and the drawn enclosure. Default 2.
+        rx: Corner radius, x. Default 2.
+        ry: Corner radius, y. Default 2.
+        fill: Fill color of the enclosure. Default "none".
+        stroke: Stroke color of the enclosure. Default "#D1D9E2".
+        stroke_width: Stroke width in pixels. Default 1.
+        stroke_dasharray: Raw SVG stroke-dasharray (e.g. "4 2") for a dashed enclosure.
+        opacity: Opacity, 0 to 1. Default 1.
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
@@ -466,59 +591,60 @@ def enclose(children: List["Mark"], *, padding: Optional[float] = None, rx: Opti
         ("ry", ry),
         ("fill", fill),
         ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
-        ("strokeDasharray", strokeDasharray),
+        ("strokeWidth", stroke_width),
+        ("strokeDasharray", stroke_dasharray),
         ("opacity", opacity),
     ]:
         if _v is not None:
             kwargs[_k] = _v
     return Mark("enclose", _children=list(children), **kwargs)
 
-def position(children: List["Mark"], *, key: Optional[str] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None) -> Mark:
+def position(children: List["Mark"], *, key: Optional[str] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None) -> Mark:
     """Set a single child's min-corner (x, y) in parent coordinates — an absolute-offset placement primitive, NOT center-anchored. Unlike `enclose`'s convex-hull styling, `position` draws nothing of its own; it exists for cases (e.g. the Topology story's combinator trees) that need to place one child precisely without `enclose`'s fill/stroke/hull limits.
 
     Args:
+        key: Internal per-node key override.
         x: Min-corner x offset.
         y: Min-corner y offset.
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
         ("key", key),
-        ("x", x),
-        ("y", y),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
     ]:
         if _v is not None:
             kwargs[_k] = _v
     return Mark("position", _children=list(children), **kwargs)
 
-def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optional[float] = None, stretchMin: Optional[float] = None, stretchMax: Optional[float] = None, padStart: Optional[float] = None, padEnd: Optional[float] = None, flip: Optional[bool] = None, straights: Optional[bool] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, start: Optional[bool] = None) -> Mark:
+def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optional[float] = None, stretch_min: Optional[float] = None, stretch_max: Optional[float] = None, pad_start: Optional[float] = None, pad_end: Optional[float] = None, flip: Optional[bool] = None, straights: Optional[bool] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, start: Optional[bool] = None) -> Mark:
     """A perfect-arrows box-to-box arrow between exactly two children.
 
     Args:
-        bow: Default 0.2.
-        stretch: Default 0.5.
-        stretchMin: Default 40.
-        stretchMax: Default 420.
-        padStart: Default 5.
-        padEnd: Default 20.
-        flip: Default false.
-        straights: Default true.
-        stroke: Default "black".
-        strokeWidth: Default 3.
+        bow: Baseline curvature. 0 is a straight line; higher values bow the arc further from center. Default 0.2.
+        stretch: How much the bow grows as the endpoints get closer, and shrinks as they get farther apart. Default 0.5.
+        stretch_min: Distance in pixels below which stretch has its full effect. Default 40.
+        stretch_max: Distance in pixels above which stretch has no effect. Default 420.
+        pad_start: Gap in pixels between the source box and the start of the line. Default 5.
+        pad_end: Gap in pixels between the end of the line and the target box, leaving room for the arrowhead. Default 20.
+        flip: Flip which side the arrow bows toward. Default false.
+        straights: Allow a perfectly straight line when the endpoints are axis-aligned, instead of forcing a slight bow. Default true.
+        stroke: Color of the arrow's line and head, and of the start dot when shown. Default "black".
+        stroke_width: Line width; also scales the arrowhead and the start dot. Default 3.
         start: Draw a dot at the start endpoint. Default false.
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
         ("bow", bow),
         ("stretch", stretch),
-        ("stretchMin", stretchMin),
-        ("stretchMax", stretchMax),
-        ("padStart", padStart),
-        ("padEnd", padEnd),
+        ("stretchMin", stretch_min),
+        ("stretchMax", stretch_max),
+        ("padStart", pad_start),
+        ("padEnd", pad_end),
         ("flip", flip),
         ("straights", straights),
         ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
+        ("strokeWidth", stroke_width),
         ("start", start),
     ]:
         if _v is not None:
@@ -528,22 +654,23 @@ def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optio
 
 # --- Dual-form cores (dispatch stays hand-written in ast.py) -----------------
 
-def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, size: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange children along `dir` with spacing, aligning them on the cross axis.
 
     Args:
-        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
-        dir: Direction to spread along.
+        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
+        dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
         spacing: Gap between children, px. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
-        sharedScale: Default false.
-        anchor: Default "edge".
-        reverse: Default false.
+        anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
+        reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
+        x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         w: Data-driven cross-axis extent (field/datum-sized children).
         h: Data-driven cross-axis extent (field/datum-sized children).
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
-        debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
@@ -551,36 +678,38 @@ def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing
         ("dir", dir),
         ("spacing", spacing),
         ("alignment", alignment),
-        ("sharedScale", sharedScale),
         ("anchor", anchor),
         ("reverse", reverse),
         ("glue", glue),
-        ("axes", axes),
-        ("w", w),
-        ("h", h),
-        ("size", size),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
+        ("size", _channel(size)),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, size: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).
 
     Args:
-        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
-        dir: Direction to stack along.
+        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
+        dir: Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
         spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
         glue: Spread-parity passthrough; stack always glues regardless.
-        alignment: Default "baseline".
-        sharedScale: Default false.
-        anchor: Default "edge".
-        reverse: Default false.
+        alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
+        anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
+        reverse: Reverse the children's order along dir. Default false.
+        x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         w: Data-driven cross-axis extent (field/datum-sized children).
         h: Data-driven cross-axis extent (field/datum-sized children).
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
-        debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
@@ -589,58 +718,65 @@ def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing:
         ("spacing", spacing),
         ("glue", glue),
         ("alignment", alignment),
-        ("sharedScale", sharedScale),
         ("anchor", anchor),
         ("reverse", reverse),
-        ("axes", axes),
-        ("w", w),
-        ("h", h),
-        ("size", size),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
+        ("size", _channel(size)),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, xMin: Optional[Union[int, float, str]] = None, xMax: Optional[Union[int, float, str]] = None, yMin: Optional[Union[int, float, str]] = None, yMax: Optional[Union[int, float, str]] = None, alignment: Optional[str] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _scatter_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, x_min: Optional[int | float | str] = None, x_max: Optional[int | float | str] = None, y_min: Optional[int | float | str] = None, y_max: Optional[int | float | str] = None, dims: Optional[dict] = None, alignment: Optional[str] = None, overlap: Optional[dict] = None, axes: Optional[bool | dict] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Position each child at an explicit (x, y) point or [min, max] span in data space.
 
     Args:
-        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
+        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         x: Point position, x.
         y: Point position, y.
-        xMin: Range form: left/bottom edge, x.
-        xMax: Range form: right/top edge, x.
-        yMin: Range form: left/bottom edge, y.
-        yMax: Range form: right/top edge, y.
+        x_min: Range form: left/bottom edge, x.
+        x_max: Range form: right/top edge, x.
+        y_min: Range form: left/bottom edge, y.
+        y_max: Range form: right/top edge, y.
+        dims: Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span.
         alignment: Cross-axis alignment for the axis without an explicit position. Default "baseline".
-        debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
+        overlap: How children keep clear of each other on the axis no field places, made by a call in the Overlap family. Overlap.separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. Overlap.noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is "blue" (default), "quasi" or "uniform". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or "silverman" to compute it from the data. Overlap.sina() is noise with smoothing "silverman" (a violin outline), and Overlap.jitter() is noise with randomness "uniform" and smoothing Infinity (classic jitter); both make kind "noise". Both kinds grow from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only.
+        w: Fixed cross-axis extent, or a field name sizing this operator's own box from data.
+        h: Fixed cross-axis extent, or a field name sizing this operator's own box from data.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("by", by),
-        ("x", x),
-        ("y", y),
-        ("xMin", xMin),
-        ("xMax", xMax),
-        ("yMin", yMin),
-        ("yMax", yMax),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
+        ("xMin", _channel(x_min)),
+        ("xMax", _channel(x_max)),
+        ("yMin", _channel(y_min)),
+        ("yMax", _channel(y_max)),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("alignment", alignment),
-        ("axes", axes),
-        ("w", w),
-        ("h", h),
+        ("overlap", _to_wire(("ref", "Overlap"), overlap, "overlap")),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _group_opts(*, by: Any, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _group_opts(*, by: str | FieldAccessor | ChunkKey, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Partition rows by `by` into a flat `Frame` (no layout beyond grouping).
 
     Args:
-        by: Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
-        debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
+        by: Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
@@ -651,88 +787,134 @@ def _group_opts(*, by: Any, debug: Optional[bool] = None) -> Dict[str, Any]:
             opts[_k] = _v
     return opts
 
-def _table_opts(*, by: Any, spacing: Optional[Any] = None, numCols: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _table_opts(*, by: dict, spacing: Optional[float | tuple] = None, num_cols: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange cells in a `numCols`-wide grid (or a `{x, y}` keyed grid via `by`).
 
     Args:
-        by: Grouping fields for the column/row keys — the table operator can't run without both.
+        by: The column key (x) and the row key (y), both required. Each takes what spread's `by` takes: a field name, a field(...) key (sorted, binned, a chain or product of bins, a part of a cycle), or chunk(size). A binned key's columns or rows are its cells, empty ones included. Each cell of the table holds the rows in both its column and its row.
         spacing: Cell gap: a single number for both axes, or [x, y]. Default 0.
-        numCols: Explicit column count (falls back to the number of distinct column keys).
-        debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
+        num_cols: Explicit column count (falls back to the number of distinct column keys).
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("by", by),
+        ("by", _to_wire(("object", {"x": ("x", None), "y": ("y", None)}), by, "by")),
         ("spacing", spacing),
-        ("numCols", numCols),
+        ("numCols", num_cols),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _treemap_opts(*, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, by: Optional[Any] = None, paddingInner: Optional[float] = None, paddingOuter: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, flipY: Optional[bool] = None, leafIntrinsicRadiusField: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.
 
     Args:
-        by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.
-        paddingInner: Default 0.
-        paddingOuter: Default 0.
-        round: Default true.
-        tile: Default "squarify".
-        sort: Default "desc".
+        x: Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
+        w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
+        h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
+        dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
+        by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
+        spacing: Gap between sibling tiles, in pixels. Default 0.
+        padding: Inset around the outer edge of the treemap, in pixels. Default 0.
+        round: Round pixel positions and sizes. Default true.
+        tile: The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods. Default {"kind":"squarify"}.
+        sort: Sort leaves by weight before layout. Default "desc".
         size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
-        flipY: Mirror leaf layout top-to-bottom within the treemap box. Default false.
-        leafIntrinsicRadiusField: When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field]).
-        debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("w", w),
-        ("h", h),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
-        ("paddingInner", paddingInner),
-        ("paddingOuter", paddingOuter),
+        ("spacing", spacing),
+        ("padding", padding),
         ("round", round),
-        ("tile", tile),
+        ("tile", _to_wire(("ref", "Tile"), tile, "tile")),
         ("sort", sort),
-        ("size", size),
-        ("flipY", flipY),
-        ("leafIntrinsicRadiusField", leafIntrinsicRadiusField),
+        ("size", _channel(size)),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _treemap_combinator_opts(*, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, by: Optional[Any] = None, paddingInner: Optional[float] = None, paddingOuter: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, flipY: Optional[bool] = None, leafIntrinsicRadiusField: Optional[str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.
+def _pack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping, with d3's front-chain algorithm. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).
 
     Args:
-        by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.
-        paddingInner: Default 0.
-        paddingOuter: Default 0.
-        round: Default true.
-        tile: Default "squarify".
-        sort: Default "desc".
-        size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
-        flipY: Mirror leaf layout top-to-bottom within the treemap box. Default false.
-        leafIntrinsicRadiusField: When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field]).
-        debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
+        by: Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("w", w),
-        ("h", h),
         ("by", by),
-        ("paddingInner", paddingInner),
-        ("paddingOuter", paddingOuter),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _partition_opts(*, by: FieldAccessor | StructAccessor, dir: Optional[str] = None, alignment: Optional[str] = None, axes: Optional[bool | dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.
+
+    Args:
+        by: A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.
+        dir: Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis.
+        alignment: Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Applies only where nothing gives the children a cell on that axis: inside a cell of another partition, each child is placed in that cell. Not allowed with a key per axis. Default "baseline".
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("by", by),
+        ("dir", dir),
+        ("alignment", alignment),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.
+
+    Args:
+        x: Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
+        w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
+        h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
+        dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
+        by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
+        spacing: Gap between sibling tiles, in pixels. Default 0.
+        padding: Inset around the outer edge of the treemap, in pixels. Default 0.
+        round: Round pixel positions and sizes. Default true.
+        tile: The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods. Default {"kind":"squarify"}.
+        sort: Sort leaves by weight before layout. Default "desc".
+        size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
+        key: Internal per-node key override.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("x", _channel(x)),
+        ("y", _channel(y)),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
+        ("by", by),
+        ("spacing", spacing),
+        ("padding", padding),
         ("round", round),
-        ("tile", tile),
+        ("tile", _to_wire(("ref", "Tile"), tile, "tile")),
         ("sort", sort),
-        ("size", size),
-        ("flipY", flipY),
-        ("leafIntrinsicRadiusField", leafIntrinsicRadiusField),
+        ("size", _channel(size)),
         ("key", key),
         ("debug", debug),
     ]:
@@ -740,85 +922,233 @@ def _treemap_combinator_opts(*, w: Optional[Union[int, float, str]] = None, h: O
             opts[_k] = _v
     return opts
 
-def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, strokeDasharray: Optional[str] = None, opacity: Optional[float] = None, mixBlendMode: Optional[str] = None, curve: Optional[Any] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, emX: Optional[bool] = None, emY: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.
+
+    Args:
+        x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        cx: Center x.
+        x2: Right edge position.
+        w: Data-driven cross-axis extent (field/datum-sized children).
+        em_x: Embed x in the parent's x space.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        cy: Center y.
+        y2: Other y edge position.
+        h: Data-driven cross-axis extent (field/datum-sized children).
+        em_y: Embed y in the parent's y space.
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
+        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
+        dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
+        spacing: Gap between children, px. Default 8.
+        alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
+        anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
+        reverse: Reverse the children's order along dir. Default false.
+        glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
+        size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
+        key: Internal per-node key override.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
+        ("emX", em_x),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
+        ("emY", em_y),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
+        ("by", by),
+        ("dir", dir),
+        ("spacing", spacing),
+        ("alignment", alignment),
+        ("anchor", anchor),
+        ("reverse", reverse),
+        ("glue", glue),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
+        ("size", _channel(size)),
+        ("key", key),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key` and the full box-dims group.
+
+    Args:
+        x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        cx: Center x.
+        x2: Right edge position.
+        w: Data-driven cross-axis extent (field/datum-sized children).
+        em_x: Embed x in the parent's x space.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        cy: Center y.
+        y2: Other y edge position.
+        h: Data-driven cross-axis extent (field/datum-sized children).
+        em_y: Embed y in the parent's y space.
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
+        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
+        dir: Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
+        spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
+        glue: Spread-parity passthrough; stack always glues regardless.
+        alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
+        anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
+        reverse: Reverse the children's order along dir. Default false.
+        size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
+        key: Internal per-node key override.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
+        ("emX", em_x),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
+        ("emY", em_y),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
+        ("by", by),
+        ("dir", dir),
+        ("spacing", spacing),
+        ("glue", glue),
+        ("alignment", alignment),
+        ("anchor", anchor),
+        ("reverse", reverse),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
+        ("size", _channel(size)),
+        ("key", key),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _label_opts(*, position: Optional[str] = None, font_size: Optional[float] = None, color: Optional[str] = None, offset: Optional[float] = None, rotate: Optional[float] = None, font_family: Optional[str] = None, font_weight: Optional[float | str] = None, font_style: Optional[str] = None) -> Dict[str, Any]:
+    """Options of one .label(accessor, **options) call.
+
+    Args:
+        position: Label position, e.g. "center", "outset-top", "inset-bottom-start".
+        font_size: Font size in pixels.
+        color: Label color. Omitted, it is chosen to contrast with the mark.
+        offset: Offset from the shape's edge in pixels.
+        rotate: Rotation in degrees, clockwise on screen.
+        font_family: Font family of the label's text node. Omitted, the elaborator's own font family.
+        font_weight: Font weight, e.g. "bold" or a numeric weight.
+        font_style: Font style, e.g. "italic".
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("position", position),
+        ("fontSize", font_size),
+        ("color", color),
+        ("offset", offset),
+        ("rotate", rotate),
+        ("fontFamily", font_family),
+        ("fontWeight", font_weight),
+        ("fontStyle", font_style),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, mix_blend_mode: Optional[str] = None, curve: Optional[dict] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.
 
     Args:
-        strokeDasharray: Raw SVG stroke-dasharray (e.g. "12") for a dashed line.
-        curve: Screen-space path shape: a factory call (straight()/bezier()/catmullRom()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name. Omitted = "auto" (catmullRom on a homogeneous continuous connection axis, else straight).
+        fill: A line's path is never filled. `fill` is the channel the shared color scale reads: a field name or an accessor colors each line by group (it must be constant within the line), and it is the line color when `stroke` is omitted.
+        stroke: Line color, or a field name or accessor for a color scale (constant within the line). Defaults to `fill`.
+        stroke_width: Line thickness in pixels. Default 1.
+        stroke_dasharray: Raw SVG stroke-dasharray (e.g. "12") for a dashed line.
+        opacity: Opacity, 0 to 1.
+        mix_blend_mode: Blend mode where connectors overlap.
+        curve: Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear().
+        dir: Connection axis.
         source: Anchor-mode start point: a normalized [fx, fy] on the mark's bbox, or a start/middle/end keyword.
         target: Anchor-mode end point; see `source`.
         from_: Pairwise form: column holding the source ref.
         to: Pairwise form: column holding the target ref.
         along: Names a flow tier by its `by` field: that tier becomes the path tier (threading its groups in order) and every OTHER grouping tier splits. Omitted: the path tier is inferred from the flow shape. Naming a field that matches no tier, or using `along` where the mark doesn't fuse over this chart's own flow (a refs bag, or the pairwise from/to form), is an error.
-        emX: Blank-fusion anchor key: placed directly in `.mark()` position, `line(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `line` itself.
-        emY: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
+        em_x: Blank-fusion anchor key: placed directly in `.mark()` position, `line(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `line` itself.
+        em_y: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
         w: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
         h: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
-        debug: Factory-only dev flag; the JS factory strips it (FACTORY_ONLY_KEYS) before layout.
+        debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
-        ("strokeDasharray", strokeDasharray),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("strokeDasharray", stroke_dasharray),
         ("opacity", opacity),
-        ("mixBlendMode", mixBlendMode),
-        ("curve", curve),
+        ("mixBlendMode", mix_blend_mode),
+        ("curve", _to_wire(("ref", "Curve"), curve, "curve")),
         ("dir", dir),
         ("source", source),
         ("target", target),
         ("from", from_),
         ("to", to),
         ("along", along),
-        ("emX", emX),
-        ("emY", emY),
-        ("w", w),
-        ("h", h),
+        ("emX", em_x),
+        ("emY", em_y),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, mixBlendMode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, emX: Optional[bool] = None, emY: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, mix_blend_mode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[dict] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).
 
     Args:
-        strokeWidth: Default 0.
-        mixBlendMode: Default "normal".
-        curve: Screen-space band-edge shape (straight() | bezier()). Omitted = "auto" (bezier).
+        fill: Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects.
+        stroke: Stroke color of the band's outline, or a field name or accessor for a color scale (constant within the band).
+        stroke_width: Stroke width in pixels. Default 0.
+        opacity: Opacity, 0 to 1.
+        mix_blend_mode: Blend mode where bands overlap. Default "normal".
+        dir: Connection axis.
+        curve: Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band.
         along: Names a flow tier by its `by` field: that tier becomes the path tier (threading its groups in order) and every OTHER grouping tier splits. Omitted: the path tier is inferred from the flow shape. Naming a field that matches no tier, or using `along` where the mark doesn't fuse over this chart's own flow (a refs bag, or the pairwise from/to form), is an error.
-        emX: Blank-fusion anchor key: placed directly in `.mark()` position, `ribbon(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `ribbon` itself.
-        emY: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
+        em_x: Blank-fusion anchor key: placed directly in `.mark()` position, `ribbon(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `ribbon` itself.
+        em_y: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
         w: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
         h: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
-        debug: Factory-only dev flag; the JS factory strips it (FACTORY_ONLY_KEYS) before layout.
+        debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
         ("opacity", opacity),
-        ("mixBlendMode", mixBlendMode),
+        ("mixBlendMode", mix_blend_mode),
         ("dir", dir),
-        ("curve", curve),
+        ("curve", _to_wire(("ref", "Curve"), curve, "curve")),
         ("from", from_),
         ("to", to),
         ("along", along),
-        ("emX", emX),
-        ("emY", emY),
-        ("w", w),
-        ("h", h),
+        ("emX", em_x),
+        ("emY", em_y),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _layer_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, transform: Optional[Any] = None, box: Optional[bool] = None) -> Dict[str, Any]:
+def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, key: Optional[str] = None, coord: Optional[Any] = None, axes: Optional[bool | dict] = None, transform: Optional[dict] = None, box: Optional[bool] = None) -> Dict[str, Any]:
     """Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.
 
     Args:
@@ -826,68 +1156,67 @@ def _layer_opts(*, x: Optional[Union[int, float, str]] = None, cx: Optional[Unio
         cx: Center x.
         x2: Right edge position.
         w: Width.
-        emX: Embed x in the parent's x space.
-        y: Top/bottom edge position (y-up: bottom).
+        em_x: Embed x in the parent's x space.
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
         h: Height.
-        emY: Embed y in the parent's y space.
-        theta: Angular position alias (polar coord's x).
-        thetaSize: Angular extent alias (polar coord's w).
-        r: Radial position alias (polar coord's y).
-        rSize: Radial extent alias (polar coord's h).
+        em_y: Embed y in the parent's y space.
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
+        key: Internal per-node key override.
+        coord: Coordinate transform (`Coord.polar()`, `Coord.clock()`, `Coord.wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.
+        axes: Draw the coordinate axes of this layer's `coord`. Ignored on a layer with no `coord`.
         transform: Non-affine-foldable scale applied to the composed children.
         box: True renders this as a coordinate-space transparent "box" boundary rather than a plain layer.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("x", x),
-        ("cx", cx),
-        ("x2", x2),
-        ("w", w),
-        ("emX", emX),
-        ("y", y),
-        ("cy", cy),
-        ("y2", y2),
-        ("h", h),
-        ("emY", emY),
-        ("theta", theta),
-        ("thetaSize", thetaSize),
-        ("r", r),
-        ("rSize", rSize),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
+        ("emX", em_x),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
+        ("emY", em_y),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("key", key),
-        ("transform", transform),
+        ("coord", coord),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
+        ("transform", _to_wire(("object", {"scale": ("scale", ("object", {"x": ("x", None), "y": ("y", None)}))}), transform, "transform")),
         ("box", box),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-
-# --- Coord transforms ---------------------------------------------------------
-
-def _polar_config(transform_type: str, *, inner_radius: Optional[float] = None, central_angle: Optional[float] = None, start_angle: Optional[float] = None, direction: Optional[float] = None, center: Optional[Any] = None) -> Dict[str, Any]:
-    """Shared builder for the polar-family coord configs (polar()/clock()).
-
-    Only set options are emitted, so defaults stay on the JS side. Wire keys
-    are camelCase to match the JS ``PolarOptions``.
+def _chart_opts(*, w: Optional[float] = None, h: Optional[float] = None, coord: Optional[Any] = None, color: Optional[Any] = None, axes: Optional[bool | dict] = None, legend: Optional[bool] = None, padding: Optional[float] = None, schema: Optional[dict] = None) -> Dict[str, Any]:
+    """Chart-level options for chart(data, **options).
 
     Args:
-        inner_radius: Donut hole as a fraction [0,1) of the outer radius. Default 0.
-        central_angle: Total angular sweep in radians. Default 6.283185307179586.
-        start_angle: Angle (radians) of θ=0. Default 1.5707963267948966.
-        direction: +1 counter-clockwise, -1 clockwise (numeric ±1). Default -1.
-        center: Screen-space center offset. Default [0,0].
+        w: Chart width in pixels.
+        h: Chart height in pixels.
+        coord: Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ...
+        color: Color scale for every mark, made by a call in the Color family: Color.palette(...) or Color.gradient(...).
+        axes: Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead. Default true.
+        legend: Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped. Default true.
+        padding: Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels).
+        schema: Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time().
     """
-    cfg: Dict[str, Any] = {"type": transform_type}
+    opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("innerRadius", inner_radius),
-        ("centralAngle", central_angle),
-        ("startAngle", start_angle),
-        ("direction", direction),
-        ("center", center),
+        ("w", w),
+        ("h", h),
+        ("coord", coord),
+        ("color", color),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
+        ("legend", legend),
+        ("padding", padding),
+        ("schema", schema),
     ]:
         if _v is not None:
-            cfg[_k] = list(_v) if _k == "center" else _v
-    return cfg
+            opts[_k] = _v
+    return opts
 

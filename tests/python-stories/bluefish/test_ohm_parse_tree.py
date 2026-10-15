@@ -4,20 +4,20 @@ A parse-derivation diagram for "3 + (4 * 5)": a hand-derived parse trace
 (TRACE, a nested rule/terminal tree) is walked recursively (`walk`, mirroring
 the JS `walk`), imperatively pushing marks into a flat `children` list and
 constraint specs into a flat list, exactly like the JS original. Then one
-top-level `layer(children).constrain(...)` ties everything together.
+top-level `layer(children).relate(...)` ties everything together.
 
 Dynamic-name constraint targeting: the trace generates ~30 runtime-only names
 (`marker-{uid}`, `bar-{uid}`, `label-{uid}`, `lit-{uid}`, `underline-{uid}`),
 not a fixed statically-known set a literal `lambda a, b: ...` destructure
 could spell out (JS bypasses its destructured callback param for the same
 reason, building raw `{name: token.__tag}` refs directly). The Python
-`.constrain(callback)` already hands back one `RefSentinel` per named child
+`.relate(callback)` already hands back one `RefSentinel` per named child
 as a **kwarg** keyed by that child's `.name(...)` tag string — a `dict`
 unpacked via `**refs` does not require its keys to be valid identifiers, so
 a catch-all `lambda **refs: [...]` reaches every dynamically-named child by
 indexing `refs["marker-7"]` etc., with no gap versus the JS mechanism.
 Constraint specs are recorded as small closures (capturing tag strings, not
-refs, at walk time) and only resolved against `refs` once `.constrain(...)`
+refs, at walk time) and only resolved against `refs` once `.relate(...)`
 actually runs.
 
 The invisible `{x, w}`-positioned `marker` rects are ported as-is: JS found
@@ -30,7 +30,7 @@ literally-positioned invisible rects.
 
 import itertools
 
-from gofish import Constraint, createName, layer, mark, rect, text
+from gofish import Constraint, create_name, layer, mark, rect, text
 
 # ── Grammar constants (mirroring the original's BIG_FONT_*/LABEL_* consts) ──
 
@@ -50,9 +50,9 @@ RULE_COLOR = {
     "end": "#EE092D",
 }
 
-BIG_FONT = {"fontFamily": "monospace", "fontWeight": 500, "fontSize": 25}
-LABEL_FONT = {"fontFamily": "monospace", "fontWeight": 300, "fontSize": 14}
-NOTE_FONT = {**LABEL_FONT, "fontStyle": "italic", "fill": "#777"}
+BIG_FONT = {"font_family": "monospace", "font_weight": 500, "font_size": 25}
+LABEL_FONT = {"font_family": "monospace", "font_weight": 300, "font_size": 14}
+NOTE_FONT = {**LABEL_FONT, "font_style": "italic", "fill": "#777"}
 SPECIAL_FONT = {**LABEL_FONT, "fill": "green"}
 
 
@@ -116,7 +116,7 @@ def char_box(ch: str):
             rect(w=CHAR_W, h=CHAR_H, fill="transparent").name("box"),
             text(text=ch, **BIG_FONT).name("glyph"),
         ]
-    ).constrain(
+    ).relate(
         lambda box, glyph: [
             Constraint.align([box, glyph], x="middle", y="middle"),
         ]
@@ -134,7 +134,7 @@ def label_text(main, note=None):
                 text(text=main, **LABEL_FONT).name("main"),
                 text(text=f"- {note}", **NOTE_FONT).name("note"),
             ]
-        ).constrain(
+        ).relate(
             lambda main, note: [
                 Constraint.align([main, note], y="middle"),
                 Constraint.distribute([main, note], dir="x", spacing=4),
@@ -152,14 +152,14 @@ def story_ohm_parse_tree():
     constraint_builders = []
 
     # ── Tier 1: the character row — a self-contained sub-layer with its own
-    # `.constrain()` call, exactly the two-tier pattern house style uses.
+    # `.relate()` call, exactly the two-tier pattern house style uses.
     text_ = "3 + (4 * 5)"
     chars = list(text_)
-    char_tokens = [createName(f"char-{i}") for i in range(len(chars))]
-    end_tok = createName("end-box")
+    char_tokens = [create_name(f"char-{i}") for i in range(len(chars))]
+    end_tok = create_name("end-box")
 
     row_ref_names = [t.tag for t in char_tokens] + [end_tok.tag]
-    char_row_tok = createName("char-row")
+    char_row_tok = create_name("char-row")
     children.append(
         layer(
             [
@@ -172,7 +172,7 @@ def story_ohm_parse_tree():
             x=0,
             y=0,
         )
-        .constrain(
+        .relate(
             lambda **refs: [
                 Constraint.align(
                     [refs[n] for n in row_ref_names], y="start"
@@ -197,7 +197,7 @@ def story_ohm_parse_tree():
     end_right = end_left + END_W
 
     def marker(left, right):
-        tok = createName(f"marker-{next(uid_counter)}")
+        tok = create_name(f"marker-{next(uid_counter)}")
         children.append(
             rect(x=left, w=right - left, h=1, fill="transparent").name(tok)
         )
@@ -206,7 +206,7 @@ def story_ohm_parse_tree():
     def span_of(from_, to):
         return marker(char_left(from_), char_right(to))
 
-    underline_row_tok = createName("row-underline")
+    underline_row_tok = create_name("row-underline")
     children.append(rect(h=1, y=CHAR_H, fill="gray").name(underline_row_tok))
     _row_underline_src = marker(char_left(0), end_right)
     _row_underline_tgt = underline_row_tok.tag
@@ -229,7 +229,7 @@ def story_ohm_parse_tree():
     def walk(node, depth):
         y = row_y(depth)
         if node["kind"] == "terminal":
-            label_tok = createName(f"lit-{next(uid_counter)}")
+            label_tok = create_name(f"lit-{next(uid_counter)}")
             children.append(
                 text(
                     text=f'"{node["text"]}"', y=y + 6, **SPECIAL_FONT
@@ -244,8 +244,8 @@ def story_ohm_parse_tree():
             )
             return label_name
 
-        bar_tok = createName(f"bar-{next(uid_counter)}")
-        label_tok = createName(f"label-{next(uid_counter)}")
+        bar_tok = create_name(f"bar-{next(uid_counter)}")
+        label_tok = create_name(f"label-{next(uid_counter)}")
         underlined = len(node["children"]) == 0
 
         children.append(
@@ -273,7 +273,7 @@ def story_ohm_parse_tree():
         )
 
         if underlined:
-            underline_tok = createName(f"underline-{next(uid_counter)}")
+            underline_tok = create_name(f"underline-{next(uid_counter)}")
             children.append(
                 rect(h=2, y=y + LABEL_H - 2, fill="LightGray").name(
                     underline_tok
@@ -295,8 +295,8 @@ def story_ohm_parse_tree():
 
     # Root-level "end" label, below the character row too (a sibling of Exp,
     # not nested under it).
-    end_bar_tok = createName("end-bar")
-    end_label_tok = createName("end-label")
+    end_bar_tok = create_name("end-bar")
+    end_label_tok = create_name("end-label")
     children.append(
         rect(h=LABEL_H, y=row_y(1), fill=RULE_COLOR["end"], opacity=0.5).name(
             end_bar_tok
@@ -318,7 +318,7 @@ def story_ohm_parse_tree():
     )
 
     return (
-        layer(children, x=20, y=20).constrain(
+        layer(children, x=20, y=20).relate(
             lambda **refs: [f(refs) for f in constraint_builders]
         ),
         {"w": 820, "h": 480},

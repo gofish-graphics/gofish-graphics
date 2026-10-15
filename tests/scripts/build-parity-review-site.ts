@@ -31,6 +31,7 @@ import {
   type DiffEntry,
 } from "./diff-utils.js";
 import { mapJsToPython, titleToStoryId } from "./path-mapping.js";
+import { createCodeHighlighter } from "./story-specs.js";
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -62,7 +63,7 @@ function readOptional(p: string): string | null {
 /**
  * Builds a map from Storybook story ID → relative JS file path.
  * Story ID is the title converted to kebab-case, e.g.
- *   "Forward Syntax V3/Bar/Basic" → "forward-syntax-v3/bar/basic"
+ *   "Forward Syntax/Bar/Basic" → "forward-syntax/bar/basic"
  */
 function buildStoryIndex(): Map<string, string> {
   const index = new Map<string, string>();
@@ -139,7 +140,7 @@ function extractPythonCode(source: string): string {
 
 /**
  * Derives the Python story file path from a DOM snapshot id.
- * e.g. "forward-syntax-v3/bar/basic--default" → "tests/python-stories/forward-syntax-v3/bar/test_basic.py"
+ * e.g. "forward-syntax/bar/basic--default" → "tests/python-stories/forward-syntax/bar/test_basic.py"
  */
 function domIdToPythonFile(id: string): string {
   const storyId = id.replace(/--[^/]*$/, "");
@@ -158,7 +159,7 @@ function domIdToPythonFile(id: string): string {
 interface ExportEntry {
   /** Camel-cased export name from the JS file, e.g. "Default", "AxesXOnly". */
   name: string;
-  /** Story-level id, e.g. "forward-syntax-v3/bar/basic--default". Matches
+  /** Story-level id, e.g. "forward-syntax/bar/basic--default". Matches
    * the path produced by capture-python's story-discovery + DOM diffs. */
   id: string;
   /** "story_default", "story_axes_xonly" — what we look for in Python. */
@@ -180,7 +181,7 @@ interface ExportEntry {
 
 interface StoryPair {
   /** File-level id derived from the Storybook title, e.g.
-   * "forward-syntax-v3/bar/basic". Shares a prefix with each child's id. */
+   * "forward-syntax/bar/basic". Shares a prefix with each child's id. */
   id: string;
   jsFile: string;
   pythonFile: string;
@@ -193,6 +194,9 @@ interface StoryPair {
   /** Aggregate flags — true if any child has a DOM diff / screenshot. */
   hasDomDiff: boolean;
   hasScreenshots: boolean;
+  /** Whether data/sources/{js,python}/<id>.html was written. */
+  hasJsSource?: boolean;
+  hasPySource?: boolean;
   exports: ExportEntry[];
 }
 
@@ -386,7 +390,7 @@ for (const [fileId, jsFile] of storyIndex) {
 }
 
 // Overlay DOM parity diffs onto specific exports. diff.path is e.g.
-// "forward-syntax-v3/bar/basic--default.html"; split into file id +
+// "forward-syntax/bar/basic--default.html"; split into file id +
 // export suffix, find the matching pair + export entry.
 for (const diff of parityDiffs) {
   const id = diff.path.replace(/\.html$/, "");
@@ -397,8 +401,8 @@ for (const diff of parityDiffs) {
   const pair = pairById.get(fileId);
   const domMessage =
     diff.beforeDom !== null
-      ? "DOM output does not match JS baseline"
-      : "No JS baseline exists yet";
+      ? "DOM output does not match the JS capture"
+      : "No JS capture for this story";
   const hasDomDiff = diff.beforeDom !== null;
   const hasScreenshots = diff.afterScreenshotPath !== null;
 
@@ -410,7 +414,7 @@ for (const diff of parityDiffs) {
       pair.exports.find((e) => jsExportToKebab(e.name) === exportSlug);
     if (exp) {
       // A parity-exempt export (file- or export-level) is captured + IR-
-      // validated but intentionally NOT byte-gated against the JS baseline —
+      // validated but intentionally NOT byte-gated against the JS capture —
       // compare-python.ts SKIPs it rather than failing. A DOM mismatch on such
       // an export must therefore stay in the "exempt" warning bucket, not flip
       // to a parity-mismatch failure (which is why the gate passed while this
@@ -418,7 +422,7 @@ for (const diff of parityDiffs) {
       // viewable, but keep the warning status/category.
       if (exp.category === "exempt") {
         exp.message =
-          "Parity-exempt — captured Python DOM differs from the JS baseline " +
+          "Parity-exempt — captured Python DOM differs from the JS capture " +
           "(intentionally not byte-gated)";
         exp.hasDomDiff = hasDomDiff;
         exp.hasScreenshots = hasScreenshots;
@@ -614,24 +618,29 @@ console.log(`  ${pairs.length} story pair(s) total`);
 // Write source files and DOM diffs
 // ---------------------------------------------------------------------------
 
+// Highlighted at build time (Shiki, as on the docs site), so the page loads
+// no highlighter.
+const highlight = await createCodeHighlighter();
 for (const pair of pairs) {
   // JS source
   const jsAbsPath = join(ROOT_DIR, pair.jsFile);
   const jsRaw = readOptional(jsAbsPath);
+  pair.hasJsSource = jsRaw !== null;
   if (jsRaw !== null) {
     write(
-      join(OUT_DIR, "data/sources/js", `${pair.id}.tsx`),
-      extractJsCode(jsRaw)
+      join(OUT_DIR, "data/sources/js", `${pair.id}.html`),
+      highlight(extractJsCode(jsRaw), "tsx")
     );
   }
 
   // Python source
   const pyAbsPath = join(ROOT_DIR, pair.pythonFile);
   const pyRaw = readOptional(pyAbsPath);
+  pair.hasPySource = pyRaw !== null;
   if (pyRaw !== null) {
     write(
-      join(OUT_DIR, "data/sources/python", `${pair.id}.py`),
-      extractPythonCode(pyRaw)
+      join(OUT_DIR, "data/sources/python", `${pair.id}.html`),
+      highlight(extractPythonCode(pyRaw), "python")
     );
   }
 }
@@ -807,7 +816,8 @@ const html = `<!DOCTYPE html>
     #source-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .source-panel { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden; }
     .source-panel-header { padding: 8px 12px; background: #f8f8f8; border-bottom: 1px solid #e0e0e0; font-size: 12px; font-weight: 600; color: #555; }
-    .source-panel-content { padding: 12px; overflow-x: auto; font-family: monospace; font-size: 12px; line-height: 1.6; white-space: pre; color: #333; max-height: 500px; overflow-y: auto; }
+    .source-panel-content { overflow-x: auto; font-family: monospace; font-size: 12px; line-height: 1.6; color: #333; max-height: 500px; overflow-y: auto; }
+    .source-panel-content pre.shiki { margin: 0; padding: 12px; overflow: visible; }
     .source-missing { color: #aaa; font-style: italic; padding: 32px; text-align: center; }
 
     /* Screenshot comparison */
@@ -913,7 +923,7 @@ const html = `<!DOCTYPE html>
           <div id="sbs-view" class="active">
             <div id="sbs-grid">
               <div class="sshot-panel">
-                <div class="sshot-panel-header">JS (baseline)</div>
+                <div class="sshot-panel-header">JS</div>
                 <div class="sshot-panel-body" id="sbs-js-body">
                   <div class="sshot-missing">No JS screenshot</div>
                 </div>
@@ -939,7 +949,7 @@ const html = `<!DOCTYPE html>
       <!-- DOM diff -->
       <div id="dom-diff-section" style="display:none;">
         <div id="dom-diff-toggle">
-          <span id="dom-diff-arrow">▶</span> DOM Diff (Python vs JS Baseline)
+          <span id="dom-diff-arrow">▶</span> DOM Diff (Python vs JS)
         </div>
         <div id="dom-diff-content"></div>
       </div>
@@ -1163,32 +1173,27 @@ const html = `<!DOCTYPE html>
     const jsEl = document.getElementById('js-source');
     const pyEl = document.getElementById('py-source');
 
-    // JS source
-    const jsKey = 'js:' + pair.id;
-    if (sourceCache[jsKey] === undefined) {
-      try {
-        const res = await fetch('/data/sources/js/' + pair.id + '.tsx');
-        const ct = res.headers.get('content-type') || '';
-        const text = res.ok && !ct.includes('text/html') ? await res.text() : null;
-        sourceCache[jsKey] = text !== null ? escHtml(text) : null;
-      } catch { sourceCache[jsKey] = null; }
+    // Each source is pre-highlighted HTML; fetch only the ones that exist.
+    async function loadSource(lang, exists) {
+      const key = lang + ':' + pair.id;
+      if (!exists) return null;
+      if (sourceCache[key] === undefined) {
+        try {
+          const res = await fetch('/data/sources/' + lang + '/' + pair.id + '.html');
+          sourceCache[key] = res.ok ? await res.text() : null;
+        } catch { sourceCache[key] = null; }
+      }
+      return sourceCache[key];
     }
-    jsEl.innerHTML = sourceCache[jsKey] !== null
-      ? sourceCache[jsKey]
+    const [js, py] = await Promise.all([
+      loadSource('js', pair.hasJsSource),
+      loadSource('python', pair.hasPySource),
+    ]);
+    jsEl.innerHTML = js !== null
+      ? js
       : '<div class="source-missing">Source not available</div>';
-
-    // Python source
-    const pyKey = 'py:' + pair.id;
-    if (sourceCache[pyKey] === undefined) {
-      try {
-        const res = await fetch('/data/sources/python/' + pair.id + '.py');
-        const ct = res.headers.get('content-type') || '';
-        const text = res.ok && !ct.includes('text/html') ? await res.text() : null;
-        sourceCache[pyKey] = text !== null ? escHtml(text) : null;
-      } catch { sourceCache[pyKey] = null; }
-    }
-    pyEl.innerHTML = sourceCache[pyKey] !== null
-      ? sourceCache[pyKey]
+    pyEl.innerHTML = py !== null
+      ? py
       : '<div class="source-missing">No Python counterpart found</div>';
   }
 

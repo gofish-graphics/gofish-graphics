@@ -9,22 +9,23 @@ GRAY = "#D1D9E2"
 
 
 def story_default():
-    movies_raw = read_json("movies.json").to_dict("records")
+    # A few titles are numbers (1776, 2012): give the column one type.
+    movies_raw = read_json("movies.json").astype({"Title": str})
 
     return (
-        chart(movies_raw)
+        chart(movies_raw, axes=False)
         .flow(
             treemap(
                 by=field("Major Genre").drop_nulls(),
                 size="Worldwide Gross",
-                paddingInner=2,
-                paddingOuter=2,
+                spacing=2,
+                padding=2,
                 round=True,
             )
         )
         .mark(
-            circle(fill="Major Genre", stroke=GRAY, strokeWidth=1).label(
-                "Major Genre", position="center", color="white", fontSize=12
+            circle(fill="Major Genre", stroke=GRAY, stroke_width=1).label(
+                "Major Genre", position="center", color="white", font_size=12
             )
         ),
         {"w": 700, "h": 420},

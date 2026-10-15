@@ -1,0 +1,291 @@
+/**
+ * The running example of *Animated Vega-Lite* (Zong, Pollock, Wootton,
+ * Satyanarayan, IEEE VIS 2022), one story per panel of the paper's Figure 1.
+ *
+ * Panel A, the static picture the ornithologist starts from, is a pure spec
+ * and lives in BirdMigrationStatic.stories.tsx, where it has a Python parity
+ * port. This file holds the interactive panels: panel B adds hover; panel C
+ * plays the year through with `timer()` and `filter()`; panel D adds trails
+ * with `time.history`; panel E adds the play/scrub controls — a `slider` and a
+ * `button` as ordinary low-level marks, laid out under the map with `spreadY`/`spreadX`,
+ * with the `timer()` as the single source of truth (the slider displays it one
+ * way and writes it the other, and a scrub pauses it). See the plan note at
+ * `apps/docs/docs/internals/design/bird-migration.md`.
+ */
+import type { Meta, StoryObj } from "@storybook/html";
+import { initializeContainer } from "../helper";
+import { birds } from "../../src/data/birds";
+import { world110m } from "../../src/data/world110m";
+import {
+  frame,
+  gofish,
+  button,
+  chart,
+  circle,
+  filter,
+  group,
+  layer,
+  line,
+  live,
+  polygon,
+  pointer,
+  scatter,
+  slider,
+  spreadX,
+  spreadY,
+  text,
+  time,
+  timer,
+  Coord,
+} from "../../src/lib";
+
+const meta: Meta = {
+  title: "Animated Vega-Lite/Bird Migration",
+  argTypes: {
+    w: { control: { type: "number", min: 100, max: 1200, step: 10 } },
+    h: { control: { type: "number", min: 100, max: 1200, step: 10 } },
+  },
+};
+export default meta;
+
+type Args = { w: number; h: number };
+
+/**
+ * The Americas under Equal Earth — the basemap every panel shares (panel A
+ * spells it out inline in BirdMigrationStatic.stories.tsx).
+ *
+ * `legend: false`: the bird layers color by species, and a 72-entry swatch
+ * column would take more of the canvas than the map. The colors still come
+ * from the scale; only the chrome is dropped.
+ */
+const basemap = (options: { padding?: number } = {}) =>
+  chart(world110m, {
+    coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
+    legend: false,
+    ...options,
+  }).mark(polygon({ points: "ring", fill: "#f7f7f7", stroke: "#aaa" }));
+
+export const B_HoverHighlight: StoryObj<Args> = {
+  args: { w: 600, h: 600 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Bird Migration B: Hover",
+      description:
+        "The same migration paths with interaction added: hovering a path thickens it, fades the rest, and reads the species' name out in the corner.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    const hover = pointer();
+    // A line's datum is the rows it was drawn through: one species' days, so
+    // any row gives its `species`.
+    const hot = (d: any) => hover.datum()?.[0]?.species === d?.[0]?.species;
+
+    basemap()
+      .layer(
+        chart(birds)
+          .flow(
+            group({ by: "species" }),
+            scatter({ by: "day", x: "lon", y: "lat" })
+          )
+          .mark(
+            line({
+              stroke: "species",
+              strokeWidth: live((d) => (hot(d) ? 3 : 0.1)),
+              opacity: live((d) => (hot(d) ? 1 : 0.5)),
+            })
+          )
+      )
+      // Readout instead of a cursor-following tooltip: the tooltip the plan
+      // prefers — a one-row `chart(hover)` placed at the pointer's data
+      // position — needs `pointer().dataPos()` to invert a NON-affine
+      // projection, which the interaction layer's affine frame scales cannot
+      // express today. See the report / the plan note.
+      .layer(
+        text({
+          text: live(() => hover.datum()?.[0]?.species ?? ""),
+          fontSize: 14,
+          fill: "#333",
+        })
+      )
+      .render(container, { w: args.w, h: args.h });
+
+    return container;
+  },
+};
+
+export const C_Animated: StoryObj<Args> = {
+  args: { w: 600, h: 600 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Bird Migration C: Animated",
+      description:
+        "Switching from static lines to animated circle marks: each species is one circle at its position on the current day, and the chart plays through the year in ten seconds.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    // The clock is a scale from the data's own `day` domain onto ten seconds of
+    // wall time, read backward — so `day()` is a day number, not a tick count.
+    const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
+
+    basemap()
+      .layer(
+        chart(birds)
+          .flow(
+            filter((d: any) => d.day === day()),
+            scatter({ x: "lon", y: "lat" })
+          )
+          .mark(circle({ r: 3, fill: "species" }))
+      )
+      .render(container, { w: args.w, h: args.h });
+
+    return container;
+  },
+};
+
+/** Panel D's trails on the clock `day`. */
+const trails = (day: ReturnType<typeof timer>) =>
+  chart(birds)
+    .flow(
+      // One keyframe per day. Day-of-year is cyclic, so early in January the
+      // trail reaches back into December instead of stopping.
+      time.sequence({ by: "day", on: day, cyclic: true }),
+      scatter({ x: "lon", y: "lat" })
+    )
+    .mark(
+      // Each day's mark is two layers: a faint circle kept on screen for 20
+      // days after its own (the trail), and a solid circle shown during its
+      // day.
+      layer([
+        time.history({ last: 20 }, [
+          circle({ r: 3, fill: "species", opacity: 0.1 }),
+        ]),
+        circle({ r: 3, fill: "species" }),
+      ])
+    );
+
+export const D_Trails: StoryObj<Args> = {
+  args: { w: 600, h: 600 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Bird Migration D: Trails",
+      description:
+        "Adding animated path trails for the previous twenty days, with the current day's positions at full opacity.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
+
+    basemap()
+      .layer(trails(day))
+      .render(container, { w: args.w, h: args.h });
+
+    return container;
+  },
+};
+
+/** A day clock like panel D's, held still on `at`. */
+const pausedDay = (at: number) => {
+  const day = timer({
+    domain: [1, 365],
+    step: 1,
+    duration: 10000,
+    playing: false,
+    loop: false,
+  });
+  day.set(at);
+  return day;
+};
+
+/** Panel D held still on day `at`, for a deterministic capture. */
+const pausedPanel = (at: number): StoryObj<Args> => ({
+  args: { w: 600, h: 600 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    basemap()
+      .layer(trails(pausedDay(at)))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+});
+
+/** Panel D held still on day 120, as the birds head north in spring. */
+export const D_TrailsPaused = pausedPanel(120);
+
+/** Panel D held still on day 5, where the trail reaches back across the new
+ *  year into December. */
+export const D_TrailsPausedDay5 = pausedPanel(5);
+
+export const E_Controls: StoryObj<Args> = {
+  args: { w: 600, h: 660 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Bird Migration E: Controls",
+      description:
+        "Adding an interactive slider to scrub through the animation, with a play/pause button; dragging the slider pauses the clock and seeking is exact.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
+
+    // `padding: 0`: the chart's 30px coord padding is drawn OUTSIDE the node's
+    // box, so a padded map would paint 30px past the box the `spreadY` stacks
+    // against — and the controls would sit inside the map. At the root (panels
+    // A–D) that padding is just canvas margin; in a composition it has to go,
+    // and the spacing below is the composition's own business.
+    const map = basemap({ padding: 0 }).layer(trails(day));
+
+    // The controls are ordinary marks, so they lay out under the map with the
+    // ordinary operators. The timer stays the single source of truth: the
+    // slider displays it one way and writes it the other, and a scrub takes
+    // ownership of the clock by pausing it (the paper's delegation rule).
+    const timeSlider = slider({
+      value: day,
+      onInput: (v) => {
+        day.pause();
+        day.set(v);
+      },
+      domain: day.domain as readonly [number, number],
+      step: day.step,
+      w: 300,
+      // Day-of-year is a cycle, like the time axis above: a scrub off either
+      // end of the track continues around the year instead of stopping.
+      wrap: true,
+      format: (d) => `day ${d}`,
+    });
+    const playButton = button({
+      label: () => (day.isPlaying() ? "❚❚" : "▶"),
+      onClick: () => (day.isPlaying() ? day.pause() : day.play()),
+    });
+
+    // The THUNK form of the low-level terminal: the button's caption changes
+    // the SPEC (a new caption measures differently), so the whole picture has
+    // to be re-evaluable — which is what a thunk gives a composition with no
+    // `chart()` builder at its root. The clock itself does not: the trails and
+    // the slider's handle and readout follow it at paint.
+    // `legend: false` and the map's size are options of the ROOT render here,
+    // not of the chart: the chart is no longer the root, so it is the enclosing
+    // composition that decides how big the map box is and whether the canvas
+    // grows a swatch column. `frame({ w, h })` is the low-level "this child is
+    // this many pixels" wrapper.
+    gofish(container, { w: args.w, h: args.h, legend: false }, () =>
+      spreadY({ spacing: 12 }, [
+        frame({ w: 600, h: 600 }, [map]),
+        spreadX({ spacing: 8 }, [playButton, timeSlider]),
+      ])
+    );
+
+    return container;
+  },
+};

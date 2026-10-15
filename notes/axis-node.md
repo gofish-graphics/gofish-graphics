@@ -79,7 +79,7 @@ Three constructors via `createAxisNode({ dim, space, contentSize, posScale, owne
 
 ## Polar Axes (coord.tsx)
 
-Polar charts (clock, polar, bipolar) use a separate axis path — the `coord` node renders its own axis SVG inside its `render()` callback rather than creating `_axisChildren` nodes.
+Polar charts (clock, polar) use a separate axis path — the `coord` node renders its own axis SVG inside its `render()` callback rather than creating `_axisChildren` nodes.
 
 - `resolveAxes` skips coord nodes entirely (no Cartesian axis creation inside coordinate-transform space) and collects per-operator `axis:` overrides using `_axisDir` tags.
 - `resolveNiceDomains` also skips coord nodes to preserve fixed mathematical domains.

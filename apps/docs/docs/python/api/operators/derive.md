@@ -1,3 +1,7 @@
+---
+order: 130
+---
+
 # derive
 
 Transforms the data mid-pipeline with an arbitrary **Python function**. This is
@@ -14,7 +18,7 @@ chart(data).flow(
     spread(by="origin", dir="x"),
     derive(lambda d: normalize(d, "count")),
     stack(by="cylinders", dir="y"),
-).mark(rect(h="count", fill="origin", stroke="white", strokeWidth=2)).render(
+).mark(rect(h="count", fill="origin", stroke="white", stroke_width=2)).render(
     w=500, h=300, axes=True
 )
 ```
@@ -23,15 +27,49 @@ chart(data).flow(
 
 ```python
 derive(fn) -> DeriveOperator
+derive(fn, schema={...}) -> DeriveOperator
 ```
 
 ## Parameters
 
-| Parameter | Type       | Description                                                    |
-| --------- | ---------- | -------------------------------------------------------------- |
-| `fn`      | `callable` | A function that receives the current data and returns new data |
+`fn` (required, `Callable`) receives the current group's rows and returns the
+new ones: a list of dicts, `None`, or a dataframe from any backend
+[narwhals](https://narwhals-dev.github.io/narwhals/) supports. It returns a
+list even for one row (`lambda d: [d[0]]`); a bare dict is not data. The
+options:
+
+::: gofish-ref derive
+:::
+
+`schema` takes the same column types as [`chart`'s `schema`](/python/api/core/schema).
 
 Returns a `DeriveOperator` for use inside [`.flow()`](/python/api/core/flow).
+
+## Column types of the result
+
+Each column of the returned rows is typed like chart data:
+
+- A column whose values still fit the type it had in the input keeps that
+  type. A time column of unchanged instants stays a time, and an ordered
+  column whose values are still text or numbers keeps the order, so a
+  value outside its levels is an error where the order is used.
+- A datetime column is a time.
+- Any other column has no type. A `derive` that rewrites a date to `"Mar"`
+  makes the column plain text.
+- A `schema` entry overrides these for its column and converts the values
+  as a chart's schema does: an ISO 8601 string in a `Schema.time()` column
+  becomes an instant.
+
+Fitting reads the values, not what they mean: a `derive` that turns a time
+column into plain numbers, such as years, keeps the time type, because any
+number is a valid instant
+([#1089](https://github.com/gofish-graphics/gofish-graphics/issues/1089)).
+Give the column its type with `derive(fn, schema={...})`.
+
+```python
+# Monthly highs, months in calendar order
+derive(monthly_highs, schema={"month": Schema.ordered(MONTHS)})
+```
 
 ## How it works
 
@@ -70,57 +108,31 @@ derive(lambda d: normalize(d, "count"))
 - Because it round-trips to Python, a `derive` step is a callback, not a static
   transform; it re-runs whenever the chart re-renders.
 
-## Measures: keeping units across a transform
+## Units: keeping axes shared across a transform
 
-A channel that encodes a field carries that field's **measure** — its
-unit-of-measure, like `"Beak Depth (mm)"` or `"count"`. GoFish uses measures to
-decide when two axes may share a scale: overlaying or aligning marks whose axes
-have the _same_ measure merges their domains, while mixing _different_ measures
-(say, a count axis with a millimeter axis) is refused with an error rather than
-silently corrupting the shared domain.
+A channel that encodes a column carries the column's **unit**. GoFish uses
+units to decide when two axes may share a scale. A column with no declared
+unit has an unknown unit, which shares an axis with any column, so the
+columns a `derive` computes (`lo`, `hi`, a box plot's quartiles) share an
+axis with no annotation. Two different declared units on one axis are an
+error. See [`Schema.unit`](/python/api/core/schema).
 
-By default the measure is just the field name, which is usually right. A
-built-in transform like `bin()` declares the measure of its output columns —
-the bin edges `start`/`end` are still in the source field's units, not the
-literal column names — and that **provenance now travels in the operator's IR
-across the bridge**, so a binned histogram's edges auto-unify on the source
-axis with no annotation:
+A `derive` lambda can declare the unit of a column it makes with its
+`schema`:
 
 ```python
-from gofish import bin, chart, derive, rect, scatter
+from gofish import Schema, derive
 
-# bin edges auto-tag as "Beak Length (mm)" — no field(..., measure=...) needed:
-chart(penguins, h=80).flow(
-    derive(bin("Beak Length (mm)")),
-    scatter(xMin="start", xMax="end"),
-).mark(rect(h="count"))
+derive(quartiles, schema={"lo": Schema.unit("USD"), "hi": Schema.unit("USD")})
 ```
 
-Your **own** `derive` lambda is opaque to GoFish — once it returns new columns,
-GoFish only knows their names, not their units. When such a derived column is
-really in some existing unit and its axis should share with that unit's axis,
-annotate the channel with `field(name, measure=...)`:
+An axis is titled by the quantities of its columns (each column's name,
+unless its schema declares a quantity), then a declared unit in parentheses:
+`"Pay (USD)"`. See [`Schema.quantity`](/python/api/core/schema).
 
-```python
-from gofish import chart, derive, field, rect, scatter
+If an axis combines two different units, you have two remedies:
 
-chart(data, h=80).flow(
-    derive(my_transform),  # renames a length column to "lo"/"hi"
-    scatter(xMin=field("lo", measure="Beak Length (mm)"),
-            xMax=field("hi", measure="Beak Length (mm)")),
-).mark(rect(h="count"))
-```
-
-`datum(v)` values can carry a measure the same way on the JS side.
-
-If you hit **"Cannot unify underlying spaces with different measures"**, you
-have two remedies:
-
-1. If the units really are the same, say so with `field(name, measure=...)` so
-   the axes collapse to one measure and merge.
+1. If the units really are the same, declare the same unit for both columns.
 2. If the units really differ, give the inner chart an explicit `w`/`h`
    (`chart(data, h=80)`) so it becomes a self-contained scale region and never
    shares that axis.
-
-An annotation that contradicts known provenance is itself an error — measures
-are type claims, and two contradictory claims fail fast at the channel.

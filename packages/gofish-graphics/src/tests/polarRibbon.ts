@@ -6,7 +6,7 @@ import { spread } from "../ast/graphicalOperators/spread";
 import { rect } from "../ast/shapes/rect";
 import { color, color6 } from "../color";
 import { layer } from "../ast/graphicalOperators/layer";
-import { ribbon } from "../lib";
+import { ribbon, Curve } from "../lib";
 import { ref } from "../ast/shapes/ref";
 import { color10Order } from "./color10";
 import { mix } from "spectral.js";
@@ -65,7 +65,7 @@ export const testPolarRibbon = (size: { width: number; height: number }) =>
     coord({ transform: polar_DEPRECATED() }, [
       layer([
         stack(
-          { x: 100, dir: 0, spacing: 64, alignment: "end", sharedScale: true },
+          { x: 100, dir: 0, spacing: 64, alignment: "end" },
           // TODO: I could probably make the width be uniform flexible basically
           Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
             spread({ dir: 1, spacing: 0.02, alignment: "middle" },
@@ -90,7 +90,7 @@ export const testPolarRibbon = (size: { width: number; height: number }) =>
               // fill: "black",
               // fill: "none",
               // stroke: i == 3 ? "black" : "none",
-              curve: "straight",
+              curve: Curve.linear(),
               opacity: 0.7,
               mixBlendMode: "multiply",
             },

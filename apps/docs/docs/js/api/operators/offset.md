@@ -1,3 +1,7 @@
+---
+order: 120
+---
+
 # offset
 
 Shifts a single child by `(x, y)` pixels **at render time only**. The child's
@@ -15,7 +19,7 @@ clip region.
 ```js
 gf.layer([
   gf.rect({ w: 100, h: 80, fill: gf.color.gray[2] }),
-  gf.Offset({ x: 20, y: 15 }, [
+  gf.offset({ x: 20, y: 15 }, [
     gf.rect({ w: 100, h: 80, fill: gf.color.blue[4], opacity: 0.6 }),
   ]),
 ]).render(root, { w: 160, h: 140 });
@@ -31,8 +35,6 @@ shifted by `(20, 15)`.
 ```ts
 offset({ x?, y? }, [child]);
 ```
-
-`Offset` is the v2 (capitalized) alias for the same factory.
 
 ## Parameters
 

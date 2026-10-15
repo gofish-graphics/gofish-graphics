@@ -11,7 +11,7 @@ Pure-spec story (no JS-only options); its normalized DOM should match the JS
 NestedBoxesTree story.
 """
 
-from gofish import Constraint, layer, rect, stack, text
+from gofish import Constraint, layer, mark, rect, stack, text
 
 sample = {
     "name": "project",
@@ -46,6 +46,15 @@ depthFill = ["#e3edf7", "#dbe6f3", "#cfdcec", "#c2d2e6"]
 leafFill = "#fff3e0"
 
 
+# Each subtree is its own `@mark` component, so its "outer"/"inner" names stay
+# inside it: without the boundary, a subtree's layer would also see the
+# outer/inner pairs of every subtree nested in it, and the names would be
+# ambiguous.
+@mark
+def Subtree(node, depth):
+    return buildSubtree(node, depth)
+
+
 # Each node renders as a rounded rect labeled with its name. Internal nodes also
 # wrap their children in a containing rect via Constraint.nest.
 def buildSubtree(node, depth):
@@ -62,18 +71,18 @@ def buildSubtree(node, depth):
                     else leafFill
                 ),
                 stroke="#5a7da6",
-                strokeWidth=1,
+                stroke_width=1,
             ).name("box"),
             text(
                 text=node["name"],
-                fontSize=11,
-                fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace",
+                font_size=11,
+                font_family="ui-monospace, SFMono-Regular, Menlo, monospace",
                 fill="#1d3557",
             ).name("label"),
         ],
         w=96,
         h=22,
-    ).constrain(lambda box, label: [
+    ).relate(lambda box, label: [
         Constraint.align([box, label], x="middle", y="middle"),
     ])
 
@@ -82,7 +91,7 @@ def buildSubtree(node, depth):
 
     # Stack [header, ...childSubtrees] vertically — header on top, children below.
     inner = stack(
-        [header, *[buildSubtree(c, depth + 1) for c in node["children"]]],
+        [header, *[Subtree(node=c, depth=depth + 1) for c in node["children"]]],
         dir="y",
         spacing=8,
         alignment="middle",
@@ -90,14 +99,14 @@ def buildSubtree(node, depth):
 
     # Wrap the inner stack in a containing rect.
     return layer([
-        rect(rx=6, fill="#fafbfd", stroke="#9bb1c4", strokeWidth=1.25).name(
+        rect(rx=6, fill="#fafbfd", stroke="#9bb1c4", stroke_width=1.25).name(
             "outer"
         ),
         inner.name("inner"),
-    ]).constrain(lambda outer, inner: [
+    ]).relate(lambda outer, inner: [
         Constraint.nest([outer, inner], x=10, y=10),
     ])
 
 
 def story_nested_boxes_tree():
-    return (buildSubtree(sample, 0), {})
+    return (Subtree(node=sample, depth=0), {})

@@ -4,7 +4,7 @@ import { chart, spread, scatter, line } from "../../src/lib";
 import data from "vega-datasets";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Slope Chart",
+  title: "Forward Syntax/Slope Chart",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
@@ -40,7 +40,7 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
     const barley = context.loaded.barley as any[];
 
-    chart(barley, { axes: true })
+    chart(barley)
       .flow(
         spread({ by: "site", dir: "x", spacing: 110 }),
         spread({ by: "year", dir: "x", spacing: 36 }),

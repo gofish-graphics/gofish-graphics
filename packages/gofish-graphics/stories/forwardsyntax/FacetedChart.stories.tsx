@@ -5,7 +5,7 @@ import { chart, spread, rect, scatter, circle } from "../../src/lib";
 import { drivingShifts } from "../../src/data/drivingShifts";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Faceted Chart",
+  title: "Forward Syntax/Faceted Chart",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
@@ -24,7 +24,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(
         spread({ by: "lake", dir: "x", spacing: 15 }),
         spread({ by: "species", dir: "x", spacing: 2, axes: { x: true, y: false } })
@@ -44,7 +44,7 @@ export const FacetedScatterDriving: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(drivingShifts, { axes: true })
+    chart(drivingShifts)
       .flow(
         spread({ by: "side", dir: "x", spacing: 50 }),
         scatter({ x: "year", y: "miles", axes: { x: true, y: false } })
@@ -71,7 +71,7 @@ export const FacetedScatterY: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(drivingShifts, { axes: true })
+    chart(drivingShifts)
       .flow(
         spread({ by: "side", dir: "y", spacing: 50 }),
         scatter({ x: "year", y: "gas", axes: { x: false, y: true } })

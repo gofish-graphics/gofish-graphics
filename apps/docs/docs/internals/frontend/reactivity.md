@@ -13,6 +13,7 @@ covers:
   - packages/gofish-graphics/src/interaction/frameScales.ts
   - packages/gofish-graphics/src/interaction/runtime.ts
   - packages/gofish-graphics/src/interaction/renderTerminal.ts
+  - packages/gofish-graphics/src/interaction/widgets.ts
 ---
 
 # Reactivity: signals beside a synchronous pipeline
@@ -63,37 +64,52 @@ themselves on read.
 `AmbientRegistrar`). The **render terminal** (`renderTerminal.ts`,
 `renderWithInteraction`) wraps resolution in `withInteractiveResolve(runtime,
 fn)`, which sets the variable for the duration of the resolve and restores it
-after. Every library input's accessor, when read, does:
+after. Every library input's accessor, when read, runs the `track` half of one
+of the input's **dependencies** (`dependency(input)` in `inputs.ts`):
 
 ```ts
 const reg = ambientRegistrar();
 if (!reg) return; // read outside a resolve — just a plain read
-reg.registerInput(this); // wire this input into event dispatch (idempotent)
-if (!inLiveEval()) this.usedInSpec = true; // a spec read → pipeline dependency
+reg.registerInput(input); // wire this input into event dispatch (idempotent)
+if (!inLiveEval()) readers.add(reg); // a spec read → pipeline dependency
 ```
 
-Two flags carry the whole mechanism:
+Two pieces of state carry the whole mechanism:
 
-- **`usedInSpec`** — set when the input is read _outside_ a `live()` channel.
-  The runtime resets it on every input at the start of each resolve
-  (`beginResolve`), so it always reflects reads in the _current_ resolve: an
-  input read in resolve _N_ but not _N+1_ stops invalidating.
+- **The reader sets** (`InputPrimitive.specReaders`) — one set per _readable_
+  of the input, each holding the runtimes of the charts that read that readable
+  _outside_ a `live()` channel. A runtime removes itself from every set at the
+  start of each resolve (`beginResolve`), so the sets always reflect reads in
+  the _current_ resolve: an input read in resolve _N_ but not _N+1_ stops
+  invalidating, and a shared input keeps its edges to other charts.
 - **`inLiveEval`** — a depth counter set while a `live()` channel is being
-  evaluated _at resolve time_. Reads under it wire event dispatch but do **not**
-  mark `usedInSpec`, because a live channel re-runs at paint, not at resolve.
+  evaluated _at resolve time_. Reads under it wire event dispatch but join no
+  reader set, because a live channel re-runs at paint, not at resolve.
 
-When a signal is written (pointer move, wheel tick, `signal.set`), the input asks
-the runtime to `invalidate()` **only if `usedInSpec` is true**. A purely-`live()`
-input never invalidates; its changes are picked up by Solid at paint. If nothing
-registers during a resolve, the runtime reports `hasWork() === false` and the
-chart renders down the static path untouched — no `data-gf-id`, output identical
-to a non-interactive build.
+When a signal is written (pointer move, wheel tick, `signal.set`), the input
+calls the `invalidate` half of that readable's dependency, which invalidates
+**only the runtimes in its reader set**. A purely-`live()` input never
+invalidates; its changes are picked up by Solid at paint.
+
+The edge is per readable, not per input, because one input's readables can
+change at very different rates. Most inputs have one: a pointer event writes
+position, datum and button state together, so they share a set. A `timer()`
+has two, its value and its play state, so a spec that reads only
+`isPlaying()` (a play/pause caption) re-runs on play and pause and not on every
+tick of the value. If nothing registers during a resolve, the runtime reports
+`hasWork() === false` and the chart renders down the static path untouched — no
+`data-gf-id`, output identical to a non-interactive build.
 
 > **Concurrency caveat.** The ambient context is a module variable, so two
 > charts resolving _concurrently_ (interleaving at `await` points — e.g. a Python
 > `derive` RPC) could cross-register. Registration sites are synchronous
 > spec-evaluation code in practice; a scoped-storage mechanism can replace the
-> module var if async marks ever make the race real.
+> module var if async marks ever make the race real. Paint is the exception
+> that showed up: a live slot re-runs on a clock tick, and the tick can land
+> while another chart's resolve is suspended at an `await`. So every slot
+> `setLiveSlots` stores reads under `runInLiveEval`, and a paint read never
+> becomes a pipeline dependency of whatever chart is resolving. (It can still
+> register the input with that chart's runtime, which only wires events.)
 
 ## One terminal, three callers — including components
 
@@ -103,13 +119,25 @@ run under the ambient context. It is regime- and pipeline-agnostic: given a
 it creates a fresh `InteractionRuntime`, calls `beginResolve()`, evaluates the
 thunk under `withInteractiveResolve`, threads `options.interaction = runtime`
 **iff** `hasWork()`, and wires `setRerender` to re-invoke the whole resolve into
-the same container. Three callers share it:
+the same container. It hands each resolve a `RenderPass` that says whether this
+is the chart's first render or a re-render, and lets the resolve register a
+cleanup that runs before the next render. The chart pipeline uses it to play the
+build-in on the first render only and to stop that render's build clock (a
+declared shortcut, #914). It resolves to the chart's `View` (see
+[Rendering](/internals/core/rendering)), and a re-render that finishes resolving
+after its chart was unmounted (`runtime.isDisposed()`) returns without mounting
+anything. Three callers share it:
 
-- `ChartBuilder.render` and `LayerBuilder.render` — the v3 chart pipeline. Their
+- `ChartBuilder.render` and `LayerBuilder.render` — the fluent chart pipeline. Both
+  get `render` from the shared terminal registry (`marks/terminals.ts`) with
+  `renderWithInteraction` as their render strategy, and their one shared
   `resolveForRender` runs domain inference + layout over the builder's spec.
 - the low-level `gofish()` terminal (`gofish.tsx`) when handed a **component
   thunk** — `gofish(container, opts, () => node)`, a raw shape/operator
-  composition with no `chart()` builder and no data binding.
+  composition with no `chart()` builder and no data binding — or a mark such
+  as `layer([...])`. Either is a function child, reified like a combinator
+  child through `resolveMarkResult`, which calls it with `NO_ROWS` (the
+  empty list a root gets; a node built from it has no datum).
 
 The component case is what proves the reactive layer is not tied to the chart
 pipeline. Paint reactivity already is: a `live()` channel bakes its per-item
@@ -165,6 +193,17 @@ re-lower, no re-layout. A `"text"` slot is special-cased to override text
 _content_ (the box keeps its resolve-time measure). String/headless backends
 (`displayListToSVG`) snapshot a live value by calling the thunk once, untracked.
 
+A slot named after one of the item's own **geometry** fields (`x`, `y`, `w`,
+`h`, `cx`, `cy`, `rx`, `ry`, `d`) overrides that field instead of a style key,
+through the same call-in-attribute-position path. Geometry is live for the same
+reason paint is — the value is a paint-time fact while the box it sits in is a
+layout-time one — and it carries the same obligation that live text does: the
+mark claims at layout the room it will use over every value the signal can take,
+because nothing above it is laid out again. The two known limits are also the
+paint channels': a serialized display list and the frame the runtime publishes
+for hit-testing both carry the resolve-time value, so a moving item's recorded
+box is where it started.
+
 The runtime keeps **no** paint role at all. Paint reactivity is entirely between
 the side table, `paintSVG`, and Solid.
 
@@ -182,13 +221,15 @@ layout pipeline:
    whole tree — through the immutable builder for a chart, or by re-invoking the
    component thunk for a low-level `gofish(container, opts, () => node)` — and
    renders into the _same_ container — hence the container-dispose hook below.
+   `dispose()` clears the thunk, so a run scheduled before the chart unmounted
+   does nothing when it fires.
 2. **Delegated event dispatch.** `attachSVG` puts one listener per event type
    (`pointermove/down/up/leave`, `wheel`) on the root `<svg>` and fans each event
    out to every registered input, with a `data-gf-id` hit-test resolving the
    display item (and thus datum) under the pointer.
 3. **Hit-testing + frame publication.** `publishFrame` rebuilds an id→item map
-   (uids are minted fresh each resolve) and the data↔px conversions, then
-   notifies inputs.
+   and an id→box map (uids are minted fresh each resolve) and the data↔px
+   conversions, then notifies inputs.
 
 There is **no** caching, no partial layout: any pipeline-dependency change re-runs
 everything. That is the point of v1 — correctness first, with the read-location
@@ -199,18 +240,293 @@ split positioned so incremental layout can slot in later.
 Inputs that speak in data coordinates (`pointer().dataPos()`,
 `drag().currentData()`) need to invert the chart's positional mapping. They do
 **not** re-derive scales. `render()` (`gofish.tsx`) records the root position
-scales (data → gofish-space) and `toPixel` (gofish-space → screen px) onto the
+scales (data → layout pixels, read off the placed root in its axis direction)
+and `toPixel` (layout pixels → screen px) onto the
 published `InteractionFrame`. `frameScales.ts` composes those _recorded_ forward
 maps into `dataToPx` per axis, and — because every leg is affine — obtains
 `pxToData` by **sampling two points** (`invertAffine`), never by re-running scale
 inference. This is the recorded-scale invariant: the interaction layer only ever
 _reads off_ what layout already computed.
 
+The same principle covers geometry. `nodeBox(uid)` answers "where did
+layout put that node?" by reading the box the frame already carries for it:
+`publishFrame` records one box per node uid during the same walk that builds the
+hit-test map, folding in any enclosing `group` transform (display items are
+absolute pixels except inside a group, whose children are in its local space).
+Primitives that carry no box of their own — a `path` (an SVG `d` string) and a
+`text` (an anchor plus a string) — are left out rather than guessed at. The
+alternative was reading a rendered element's screen CTM back out of the DOM,
+which would let paint inform layout; this reads off the same recorded frame the
+conversions do, which does not.
+
 A consequence worth stating: an input's data-space reads only work once the input
 is **attached** to a chart, which happens when the input is `registerInput`-ed —
 i.e. when it is read during that chart's resolve. An input read only from outside
 code (a bare `createEffect`) never attaches, so `dataPos()`/`currentData()` return
 `undefined`.
+
+## The timer is a scale, not a tick counter
+
+`timer()` is the odd input: nothing outside it writes it, so it is the one input
+that drives itself. Its model is a **scale from a data domain onto wall-clock
+time, used in the inverse direction**:
+
+```
+t() = scale(domain → [0, duration]).invert(elapsed)
+```
+
+Three consequences fall out of that, all of them in `inputs.ts`:
+
+- **Elapsed is measured, not counted.** `base` holds elapsed as of the last
+  pause or seek and `since` the `performance.now()` reading when the clock last
+  started, so pause, resume and `.set(v)` are exact and a slow frame loses
+  nothing. The `setInterval` period is a module constant (`SAMPLE_MS`, 16 ms) and
+  deliberately not an option: it only decides how often the clock is SAMPLED, and
+  a caller who wants coarser updates says so with a coarser `step`. "Is the clock
+  running" is one signal (`playing`), read through `untrack` internally so the
+  lazy start on first read does not make a spec depend on the play state.
+- **The signal holds the emitted domain value, not elapsed.** A sample that
+  lands on the same value writes nothing, so a quantized clock invalidates once
+  per step rather than once per frame. A 365-day year over ten seconds costs 365
+  pipeline re-runs, not 600.
+- **`.set(v)` is the same scale forward.** Seeking is `elapsed := scale(v)`, and
+  it deliberately leaves the playing state alone: whether a scrub pauses the
+  clock is the widget's decision, not the clock's.
+- **Play state is a readable, so it invalidates like one.** `isPlaying()` is
+  tracked at its read location like every other accessor, so `play()`, `pause()`
+  and the self-pause that ends a non-looping sweep all write it through one
+  helper that invalidates the specs reading it — and only on an actual
+  transition. It is its own dependency, separate from the value's, so a tick
+  does not re-run a spec that reads only the play state. A spec whose caption
+  says "pause" therefore refreshes on a `play()` from anywhere, not only on the click that happened to invalidate it
+  for another reason.
+
+### A timer ticks only while something reads it
+
+The sampling interval is reference-counted on the clock's readers, the way MobX
+suspends an unobserved computed (`onBecomeUnobserved`), TC39 Signals report
+`watched`/`unwatched`, and RxJS's `refCount` unsubscribes from its source. The
+readers are the two tiers a read can land in:
+
+- **spec readers**: the runtimes in either of the clock's two reader sets
+  (`specReaders`, one for the value and one for the play state), each a chart
+  that read that readable outside `live()`. A runtime leaves every set when its
+  chart unmounts (`InteractionRuntime.dispose`), and for the length of a
+  re-resolve (`beginResolve`) until its read recurs;
+- **paint readers**: the reactive computations that read the clock, such as a
+  `live()` channel's attribute effect or a `sharedDecision`. A read under a
+  Solid listener counts once (`getListener()`), and the listener's cleanup
+  uncounts it (`onCleanup`), which runs when the computation re-runs or when
+  its chart's root is disposed. This is the only place a live-tier read is
+  visible: a `live()` channel on a plain node has no runtime at all, yet its
+  paint effect still counts.
+
+Three functions in `timer()` own this, and nothing outside it knows:
+`isWatched()` says whether any reader of either kind remains (a paint reader,
+or a non-empty reader set for either readable); `watch()`, called
+on every read of `t()` or `isPlaying()`, counts the current reader and starts
+the interval if the clock is playing; and the tick (`sample`) stops the
+interval when it finds no reader left. The stop is lazy, one tick after the last
+reader leaves, so a re-render that drops its read and makes it again in the
+same pass does not restart the interval. `play()` starts ticking only if the
+clock is watched.
+
+Stopping is invisible because of the first consequence above: the value is
+derived from elapsed wall time, never accumulated per tick. A clock that is
+playing but not ticking has no reader except the one reading it now (a watched,
+playing clock always ticks), so every read first catches the value up
+(`catchUp`, the same `sample` the tick runs, including the self-pause at the end
+of a non-looping sweep). A restarted clock therefore reads exactly what a clock
+that never stopped would, and `day()` typed into a console with no chart on the
+page still returns the current day.
+
+A **quantized** domain — the band form (`domain: values[]`), or `[lo, hi]` with a
+`step` — is the same equation with a band scale, and one number decides it: the
+count of slots the loop covers (`values.length`, or `⌊(hi − lo)/step⌋ + 1`). Slot
+`k` owns `[k·duration/N, (k+1)·duration/N)` of the period, so `invert` is
+`⌊frac · N⌋` and `scale(v)` is the START of `v`'s slot. Two properties follow, and
+both are the reason the mapping is written this way: the N slots tile the loop
+evenly, so the LAST value is emitted like any other; and `set(v)` then a read
+gives back exactly `v`. Spreading the slots over `[lo, hi]` instead — the
+arithmetic this used to do — gives the last slot zero width, because `elapsed` is
+folded into `[0, duration)` by the loop: `hi` was never reached, and `set(hi)`
+read back as `lo`.
+
+A **continuous** domain with no `step` keeps that fold as its meaning: `lo` and
+`hi` are the same instant of a looping sweep, as 0° and 360° are the same angle,
+so `hi` is approached at the instant before the wrap and not emitted. An author
+who needs the high end as a value of its own gives the domain a `step`.
+
+With no domain the scale is the identity onto `[0, duration]`, which is the plain
+elapsed-milliseconds clock every other library exposes — the degenerate case, not
+a separate mode.
+
+Because it is a scale, a timer also exposes its range, `duration`, beside its
+`domain`. A reader that needs to turn a stretch of the domain into time reads
+them together: a staggered update inside a `time.sequence` gives its lag in
+milliseconds, and fits it to the milliseconds between two keyframes
+(`TimeTier.msPerUnit`, `src/animation/updateStagger.ts`).
+
+## Controls are marks, not nodes
+
+`widgets.ts` builds `slider` and `button` out of the same three pieces every
+other spec uses: shapes, operators, and inputs. Three constraints decide their
+shape, and all three are consequences of the architecture above rather than
+widget-specific choices.
+
+**What a control shows is painted; what sizes it is resolved.** A control's box
+never depends on the state it displays: the slider's handle travels inside the
+track and its readout is right-aligned in a reserved slot (both below). So the
+slider reads `value()` and the drag state only at **paint**. The readout's text
+and the handle's pressed shading are `live()` channels, and the handle's
+position is a paint rule on the handle node (`INTERNAL_animate`, the hook the
+build-in uses): lowered items are in pixels, so the rule moves the `cx` it was
+lowered at by the change in the value's fraction times the travel mapped
+through `toPixel`. The one resolve-time read is `readLive(value)`, the value
+the handle is laid out at, which registers the input without making it a
+pipeline dependency. The result is that a clock driving a slider patches three
+attributes per tick and never re-lays-out the chart around it. The button's
+caption is the opposite case: a different caption measures differently, so it
+is read at resolve and re-measures, while its pressed shading is `live()`. The
+known limit is the one every live geometry slot has: the frame the runtime
+publishes records the handle where it was laid out, so its recorded box is
+stale while the value moves. Nothing reads that box (the drag maps against the
+track's box, and hit-testing goes through the DOM element, which moves).
+
+**A control is a mark.** The layout pipeline is tree-consuming: lay a node out
+twice and the second pass finds every operand already placed, so it keeps the
+first placement. Whenever the spec around a control resolves again (a caption
+changes, or the chart reads some other input), the control must build fresh
+nodes — and a mark _is_ a deferred node constructor, re-invoked by whatever
+operator holds it. So `slider(...)` returns a mark. Its `drag()`/`click()` input
+and its write effect, by contrast, are created **once**, when the widget is made:
+recreating them per resolve would grow the runtime's input list without bound and
+drop a drag that is in flight. This is exactly the split every interactive story
+already follows by hand — inputs outside the spec, reads inside it — packaged so
+a caller cannot get it wrong. It also means the widget must be constructed
+outside the render thunk, and that the thunk form of the terminal is mandatory
+for a composition whose root is not a `chart()`.
+
+**Hit-testing is by uid, not by geometry.** `DragOptions.hitTest` takes the hit
+as well as the point, so a widget can accept exactly the drags that start on the
+nodes it drew: it records the uids of its own two nodes on each build and matches
+`hit.id` against them. The widget still computes no layout of its own — it asks by
+identity, and the surrounding operators stay in charge of placement. Both controls
+are the same three-part scaffold (`control` in `widgets.ts`): an input that only
+accepts its own hits, ONE write effect created once, and a mark that builds the
+picture on each resolve, so each widget contributes only geometry and a write.
+
+**The pixel→domain map is absolute, through the frame.** The slider maps
+`current.x` onto the fraction of the handle's travel it fell at, so a press on the
+bare track lands the handle under the pointer and the handle then follows it. It
+gets the track's on-screen box from `nodeBox(track.uid)` — the frame's own
+record of where layout put that node, read off exactly as the conversions are.
+The earlier design mapped `delta.x` from the press instead, because that box was
+not reachable without a screen-CTM read back out of the DOM; recording boxes at
+publish time removed the reason for the indirection, and with it the "clicking the
+bare track does nothing" caveat. The handle's travel is still inset by the handle
+radius (`w - 2r`), which keeps the handle on the track and the control's bbox
+independent of the value, and the mapping uses that same travel so the handle's
+center coincides with the pointer.
+
+**Wrap is a cycle length, not a flag on the clamp.** With `wrap`, the raw
+(unclamped) fraction is mapped and the quantized value folded modulo the cycle.
+The cycle is `span` for a continuous domain — `hi` and `lo` are one point, as for
+an angle — and `span + step` for a quantized one, because a quantized domain has
+`span/step + 1` distinct slots and a cycle over them is that many steps long. Get
+this wrong (fold a quantized domain modulo `span`) and the top value becomes
+unreachable, identified with the bottom one.
+
+**The readout's stability comes from its anchor, not from measurement.** The
+value is a `text` node one gap right of the track, `textAnchor: "end"` at a fixed
+x — and for text, `x` is the _anchor_, so the node's box runs leftward from it.
+The widget is therefore the same width whatever the label says, and a value change
+never jostles its siblings. The reserved slot width is a crude glyph-width
+estimate over the two end labels; it decides only how close a long readout comes
+to the track, and real measurement still happens where it belongs, inside the text
+node at layout.
+
+`click()` is the third pointer-shaped input, and it exists because a click is
+neither a pointer state nor a drag: it is the pair press-then-release on one
+target. It arms on pointerdown and commits on pointerup, accepting the release by
+the same test the press passed (`hitTest` when given, otherwise "the same node"),
+which is what lets a two-node control — a box plus its caption — read as one
+target. It keeps a COUNT, not a table of click rows, so a button is "fire when the
+count grows" rather than a callback registration. Treating an input as a dataset
+(so a click history could itself be charted) is the real design for that, tracked
+as #830.
+
+The one thing not yet expressible declaratively is the **write**: the scaffold
+runs each widget's Solid `createEffect` inside one `createRoot`, the same wiring
+`DraggableThreshold` does by hand, and hands the disposer back on the mark as
+`dispose()` rather than dropping it. Keeping it inside the widget means no spec
+ever sees it; the principled replacement is a single declarative write primitive,
+designed under #830.
+
+## Animation: containment, twice
+
+The `time` namespace is where the paint regime earns its keep, and both of its
+constructs are worth reading as small cases of the incremental engine below
+rather than as special rules. Neither reads the clock during resolve. Each reads
+it once through `readLive` — to build the clock (a sequence's is lazy, because
+its domain comes from the data) and to register it for events — and then per
+frame, in paint position.
+
+**`time.transition()`** (`tween.tsx`) consumes a run of already-placed keyframes
+and paints the one mark the run passes through at the playhead. Two facts, two
+tiers: which keyframes there are and where layout put them is decided at
+resolve; which point of that run is showing is read at paint, inside live
+geometry slots, so a tick patches four attributes of one item. The slots come
+from one helper in `liveSlots.ts`, `setLiveItems`, which the build-in's paint
+rule (`src/animation/paint.ts`) shares: it rebuilds the moving items at most
+once per distinct playhead value, and each slot reads its own field off them.
+What licenses the split is subtree containment. The node makes no size claim of
+its own and contributes no domain values, so no value it produces can be seen
+above it; and
+it has no children to place, so "lay this subtree out again" IS "recompute this
+one display item" — which is exactly what a paint-time thunk does. Containment
+asks for one thing in exchange, and the node pays it: its layout box is the
+whole trajectory, the union of the keyframes' placed boxes, not the box it
+occupies at the current playhead. That is the same box a `line` through the same
+keyframes claims.
+
+**`time.sequence()`** is the same argument one step up. Its hold looks like a
+change of structure — a different keyframe group draws — but every group is laid
+out either way, and has to be: that is what makes the axes hold still. So the
+clock decides nothing but which already-placed group is PAINTED, and the hold is
+a live opacity installed on each group's subtree
+(`GoFishNode.INTERNAL_visibleWhile`), with the band rule (`[t_i, t_{i+1})`,
+unchanged) evaluated inside the thunk. The chart is laid out once however long
+it plays.
+
+The rule is read by every item under its keyframe, so paint asks it once per
+tick and shares the answer: each rule becomes one decision for the paint
+(`sharedDecision` in `live.ts`), a computation that re-reads the clock and
+writes a signal only when its answer changes, and the items' opacity slots read
+that signal. A tick then costs one evaluation per rule plus a patch for each
+item whose keyframe changed its answer, however many rows the chart has. The
+decision writes a signal rather than being a `createMemo` because Solid marks
+everything downstream of a memo as pending on every input change, before it
+knows the value held; that visit alone was one step per item per tick.
+
+The two compose with nothing to coordinate. The keyframe marks a transition
+moves emit nothing at all, since the moving mark is their drawing, and the
+sequence's visibility thunks find nothing to act on. A trail behind the moving
+mark is a separate layer of the same mark, a `time.history({ last })`: the
+sequence gives each `time.history` inside a keyframe a visibility rule of its
+own, set under the same sequence as the rule on the keyframe group, so for the
+marks under it it stands in for the group's rule and widens the band to the
+window `[T − last, T]`. Each rule reads what its window shows through one value
+worked out once per playhead value and `last` (`sequenceWindow`).
+
+The price is the live channels' standing one: what the display list carries, and
+therefore what serialization and the runtime's hit-test frame see, is the value
+lowered at resolve. A keyframe hidden at paint is still in the frame, so it
+still answers to a pointer, and a headless `toDisplayList` shows every keyframe
+with the shown ones at their own opacity and the rest at 0. And every keyframe
+is still in the DOM: a sequence over tens of thousands of rows keeps that many
+elements, hidden ones at opacity 0, so the browser's own paint of them is what a
+tick costs once the script work is gone.
 
 ## Incremental outlook
 

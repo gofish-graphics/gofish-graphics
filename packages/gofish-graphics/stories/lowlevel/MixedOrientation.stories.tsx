@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { spreadX, spreadY, rect, ellipse, text, layer, For, v } from "../../src/lib";
+import { spreadX, spreadY, rect, ellipse, text, layer, map, v } from "../../src/lib";
 import { color6, gray } from "../../src/color";
 
 const meta: Meta = {
@@ -21,7 +21,7 @@ const barData = [
 const barChart = () =>
   spreadX(
     { spacing: 10, alignment: "start", h: 200 },
-    For(barData, (d) =>
+    map(barData, (d) =>
       rect({ key: d.cat, w: 22, h: v(d.value), fill: color6[0] })
     )
   );
@@ -35,10 +35,10 @@ const heatVal = (r: number, c: number) => (r * 7 + c * 13) % 10;
 const heatmap = () =>
   spreadY(
     { spacing: 3, alignment: "start" },
-    For(heatRows, (row, ri) =>
+    map(heatRows, (row, ri) =>
       spreadX(
         { key: row, spacing: 3, alignment: "middle" },
-        For([...Array(heatCols).keys()], (c) =>
+        map([...Array(heatCols).keys()], (c) =>
           rect({
             w: 22,
             h: 22,
@@ -60,10 +60,10 @@ const treeChart = () => {
   const levels = [["r"], ["a", "b"], ["1", "2", "3"]];
   return spreadY(
     { spacing: 30, alignment: "middle" },
-    For(levels, (row, li) =>
+    map(levels, (row, li) =>
       spreadX(
         { key: `L${li}`, spacing: 16, alignment: "middle" },
-        For(row, node)
+        map(row, node)
       )
     )
   );
@@ -75,7 +75,7 @@ export const Default: StoryObj = {
     const container = initializeContainer();
     spreadX(
       { spacing: 64, alignment: "start" },
-      For([barChart, heatmap, treeChart], (fn) => fn())
+      map([barChart, heatmap, treeChart], (fn) => fn())
     ).render(container, { axes: true });
     return container;
   },

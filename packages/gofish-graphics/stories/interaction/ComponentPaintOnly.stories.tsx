@@ -1,9 +1,9 @@
 /**
  * Component paint-only — the reactive PAINT tier with ZERO runtime.
  *
- * This is a low-level v1 COMPONENT: a `layer` of a `spreadX` of raw `rect`s plus
+ * This is a low-level COMPONENT: a `layer` of a `spreadX` of raw `rect`s plus
  * a `text` label, with no `chart()` builder and no data binding. It is rendered
- * through the plain `GoFish(container, opts, NODE)` terminal — a NODE, not a
+ * through the plain `gofish(container, opts, NODE)` terminal — a NODE, not a
  * thunk — so NO `InteractionRuntime` is ever created and NO DOM event listeners
  * are attached (there is nothing to hit-test; you will find no `data-gf-id` in
  * the output). Yet the `live()` fills and the `live()` text still patch every
@@ -22,7 +22,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { createSignal } from "solid-js";
 import { initializeContainer } from "../helper";
-import { GoFish, layer, spreadX, rect, text, live, timer } from "../../src/lib";
+import { gofish, layer, spreadX, rect, text, live, timer } from "../../src/lib";
 
 const meta: Meta = {
   title: "Interaction/Component Paint Only",
@@ -46,7 +46,7 @@ export const Default: StoryObj<Args> = {
     setInterval(() => setOn((v) => !v), 700);
 
     // A gofish timer(), read ONLY inside live() → drives paint pulses only.
-    const t = timer({ interval: 450 });
+    const t = timer({ domain: [0, 1], step: 1, duration: 900 });
 
     const node = layer([
       spreadX({ spacing: 18 }, [
@@ -58,7 +58,7 @@ export const Default: StoryObj<Args> = {
         rect({
           w: 90,
           h: 130,
-          fill: live(() => (t() % 2 === 0 ? "#2ca02c" : "#9467bd")),
+          fill: live(() => (t() === 0 ? "#2ca02c" : "#9467bd")),
         }),
         // A plain static fill for contrast — never re-evaluated.
         rect({ w: 90, h: 130, fill: "#e0a030" }),
@@ -74,7 +74,7 @@ export const Default: StoryObj<Args> = {
 
     // Plain NODE (not a thunk): the static terminal. No runtime is created,
     // yet the live channels above still patch reactively.
-    GoFish(container, { w: args.w, h: args.h }, node);
+    gofish(container, { w: args.w, h: args.h }, node);
 
     return container;
   },

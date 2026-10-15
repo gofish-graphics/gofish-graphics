@@ -1,3 +1,7 @@
+---
+order: 160
+---
+
 # log
 
 Logs the data flowing through the pipeline to the browser console. A no-op
@@ -22,9 +26,8 @@ log(prefix=None) -> Operator
 
 ## Parameters
 
-| Parameter | Type  | Description                            |
-| --------- | ----- | -------------------------------------- |
-| `prefix`  | `str` | Optional prefix for the console output |
+::: gofish-ref log
+:::
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 

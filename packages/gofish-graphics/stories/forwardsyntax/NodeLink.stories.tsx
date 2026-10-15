@@ -10,7 +10,7 @@ import {
 } from "../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/NodeLink",
+  title: "Forward Syntax/NodeLink",
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -53,7 +53,7 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(nodes)
+    chart(nodes, { axes: false })
       .flow(scatter({ by: "id", x: "grp", y: "id" }))
       .mark(circle({ r: 14, fill: "#4e79a7" }).name("nodes"))
       .layer(

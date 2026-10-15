@@ -5,7 +5,7 @@ import { chart, spread, stack } from "../../src/lib";
 import { ribbon } from "../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Streamgraph",
+  title: "Forward Syntax/Streamgraph",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
@@ -32,7 +32,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(
         spread({ by: "lake", dir: "x", spacing: 64, alignment: "middle" }),
         stack({ by: "species", dir: "y" })

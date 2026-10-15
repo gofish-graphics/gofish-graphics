@@ -20,7 +20,7 @@ pnpm test:visual:update
 
 ### Batch Capture (no Storybook build required)
 
-Instead of building a static Storybook and navigating Playwright to each story URL, the system uses a **Vite dev server** that imports all story modules via `import.meta.glob`. A single Playwright page loads the runner, then renders each story in sequence by calling its `render()` function directly — no page navigation between stories. This makes capture very fast (~76 stories in a few seconds).
+Instead of building a static Storybook and navigating Playwright to each story URL, the system uses a **Vite dev server** that imports all story modules via `import.meta.glob`. Each story renders in a fresh browser context that loads the runner page and calls the story's `render()` function directly, so no state leaks from one story to the next. Stories are captured concurrently, a few contexts at a time in one browser (default `min(4, cores)`, override with `CAPTURE_CONCURRENCY`). Logs and outputs are in story order either way.
 
 ### Pipeline
 
@@ -37,12 +37,19 @@ stories/**/*.stories.tsx
         ├──► tmp/js/<path>.html   (normalized DOM)
         └──► tmp/js/<path>.png    (screenshot)
                     │
-                    ▼
-        compare.ts: diff against __snapshots__/dom/
-                    │
-                ┌───┴───┐
-              pass     fail → diff-report.html
+          ┌─────────┴──────────────────────┐
+          ▼                                ▼
+  compare.ts: diff against        compare-python.ts: diff
+  __snapshots__/dom/              tmp/python/ against tmp/js/
+          │                                │
+      ┌───┴───┐                        ┌───┴───┐
+    pass     fail                    pass     fail
+              │
+              ▼
+       diff-report.html
 ```
+
+The regression check compares the JS capture against the accepted baselines. The parity check compares the Python capture against the JS capture of the same commit, not against the baselines, so it does not depend on whether a JS change has been reviewed yet.
 
 ### DOM Normalization
 
@@ -56,13 +63,14 @@ Both JS and Python DOM go through identical normalization (`scripts/normalize-do
 
 ## Commands
 
-| Command                       | Description                                                     |
-| ----------------------------- | --------------------------------------------------------------- |
-| `pnpm test:visual:js`         | Capture JS snapshots and compare against baselines              |
-| `pnpm test:visual:update`     | Capture and accept as new baselines                             |
-| `pnpm test:visual`            | Full test: JS capture + Python capture + compare                |
-| `pnpm test:visual:check-sync` | Check that changed JS stories have updated Python equivalents   |
-| `pnpm capture-diff <ref>`     | Diff HEAD's rendered DOM against `<ref>` — no baselines, any OS |
+| Command                       | Description                                                                 |
+| ----------------------------- | --------------------------------------------------------------------------- |
+| `pnpm test:visual:js`         | Capture JS snapshots and compare against baselines                          |
+| `pnpm test:visual:update`     | Capture and accept as new baselines                                         |
+| `pnpm test:visual`            | Full test: JS capture + Python capture + compare                            |
+| `pnpm test:visual:python`     | Capture Python snapshots and compare against the JS capture (needs tmp/js/) |
+| `pnpm test:visual:check-sync` | Check that changed JS stories have updated Python equivalents               |
+| `pnpm capture-diff <ref>`     | Diff HEAD's rendered DOM against `<ref>` — no baselines, any OS             |
 
 ## Local regression signal: `capture-diff`
 
@@ -74,7 +82,9 @@ there is no pass/fail signal for a layout change.
 `capture-diff` fills that gap. It answers **"did my change move anything I didn't
 intend?"** by capturing the normalized DOM of every story twice — once from the
 current worktree (HEAD) and once from a throwaway git worktree checked out at a
-base ref — and diffing the two per story:
+base ref — and diffing the two per story. Both captures use the current
+worktree's capture tooling (`tests/harness/` and `tests/scripts/`), so only the
+library and the stories come from the base ref:
 
 ```bash
 pnpm capture-diff main          # whole suite vs main
@@ -153,6 +163,15 @@ open tests/tmp/diff-report.html
 # See before/after screenshots → fix the bug → re-run (should pass against existing baselines)
 ```
 
+### CI
+
+The `Visual Tests` workflow splits the work into these jobs:
+
+- `js-capture` captures every story once (the slow part). It runs as a matrix of shards on parallel runners (`capture-js-dom.ts --shard i/N`), each uploading a `js-dom-capture-<i>` artifact; the job's comment in `visual-tests.yml` says how they merge.
+- `python-capture` captures the Python stories at the same time, and uploads `tests/tmp/python/` as the `python-dom-capture` artifact.
+- `visual-test` downloads the JS capture and runs `compare.ts --js-only` against the snapshot baselines. On failure it deploys the review site. Accepting diffs there sends only the run id and the accepted story paths, as a `visual-baselines-accept` repository_dispatch. The `Accept Visual Baselines` workflow (`accept-visual-baselines.yml`) has two jobs. The `accept` job runs `scripts/accept-baselines.ts`. It first checks that the run is a Visual Tests run of that branch in this repository, and only then marks the PR's `Visual Diff Review` status as pending. It copies the accepted files from the run's `js-dom-capture-<i>` artifacts to `snapshots/<branch>` in one commit, through the same writer (`commitToSnapshotBranch` in `snapshot-branch.ts`) that updates `snapshots/main` after a merge. An accept that finds the branch moved is redone on top of the new head. A full update of `snapshots/main` fails instead, so older captures never overwrite newer baselines. The `rerun` job waits for the original run to finish, since GitHub refuses to rerun jobs while any job of the run is still in progress, and then re-runs its failed jobs. That re-runs only this job, which reuses the capture from the first attempt instead of capturing again. You can accept by hand too: `pnpm --filter @gofish/tests accept-baselines <run-id> <branch> --all [--dry-run]`, or `--accept-file`/`--remove-file` with one story path per line (absolute paths, since the command runs in `tests/`). `--all` accepts exactly the diffs the run reported, which are the ones its review site lists. The diff report writes that list to `diff-list.json`, which CI uploads in the `visual-diff-report` artifact next to `diff-report.html`. `--all` fails if the file is missing.
+- `python-parity` downloads both captures and runs `compare-python.ts` on them. It runs at the same time as `visual-test` and does not wait on the visual review.
+
 ## Python Parity
 
 Every Storybook story should have a Python equivalent in `tests/python-stories/` that produces identical DOM. The Python API calls into the same JS rendering engine via IR, so DOM output should match exactly.
@@ -173,11 +192,11 @@ def story_default():
     )
 ```
 
-Stories with `derive()` use a Python HTTP server (`scripts/derive-server.py`) that executes the Python functions during rendering, mirroring the AnyWidget RPC architecture.
+Stories with `derive()` (and lambda accessors and mark functions) use a Python HTTP server (`scripts/derive-server.py`) that executes the Python functions during rendering. The harness page (`harness/main.ts`) renders the IR through the same deserializer the notebook widget uses (`Serialize.renderIR`); only its `DeriveBridge` differs, sending rows over HTTP instead of AnyWidget RPC.
 
 ### Sync enforcement
 
-`pnpm test:visual:check-sync` checks that when a JS story changes in a PR, the corresponding Python story is also updated. Stories listed in `tests/.python-sync-exempt` are excluded.
+`pnpm test:visual:check-sync` checks that when a JS story changes in a PR, the corresponding Python story is also updated. Stories listed in `tests/.python-sync-exempt` are excluded: a whole file, or one export (`file::Export`), in which case a change confined to exempt exports needs no Python update.
 
 ## Directory Structure
 
@@ -187,16 +206,19 @@ tests/
     capture-core.ts            # Shared headless-capture engine (Vite + Playwright)
     capture-js-dom.ts          # Batch capture via Vite + Playwright
     capture-diff.ts            # Diff HEAD's DOM vs a base ref (local regression signal)
+    capture-one.ts             # Capture one story (or a filter) to tmp/iterate/ for the iterate-example loop
     capture-python-dom.ts      # Python story capture via harness
-    compare.ts                 # Compare JS vs baselines + Python vs JS
+    compare.ts                 # Compare JS vs baselines (+ Python vs JS unless --js-only)
+    compare-python.ts          # Compare Python vs the JS capture (CI parity gate)
     update-baselines.ts        # Accept current snapshots as baselines
+    accept-baselines.ts        # Accept a CI run's captured diffs onto snapshots/<branch>
     diff-report.ts             # Generate HTML diff report
     normalize-dom.ts           # DOM normalization pipeline
     derive-server.py           # Python derive function HTTP server
     check-python-sync.sh       # Git-based JS↔Python sync checker
   harness/
     stories-runner.html/ts     # Batch story runner (import.meta.glob)
-    index.html / main.ts       # IR rendering harness for Python stories
+    index.html / main.ts       # Python story page: HTTP DeriveBridge + Serialize.renderIR
     vite.config.ts             # Shared Vite config (SolidJS + gofish alias)
   python-stories/
     data.py                    # Shared datasets (mirrors src/data/)

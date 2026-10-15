@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, polar } from "gofish-graphics";
+import { circle, Coord, Curve } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — SideTree (polar node-link, "side-leaning" tree).
@@ -34,7 +34,7 @@ import { combine, byDepth, mount } from "./_shared";
 //    constant, it does not shrink with node count, so wide/deep trees can
 //    overflow the 2π budget and wrap. GoTree's "adaptive" SubtreeWidth/Height
 //    allocate space by subtree size. Wedge (rect) nodes now auto-fit via
-//    thetaSize since #622; this point/circle-node gap is tracked in #627
+//    a data-sized θ extent since #622; this point/circle-node gap is tracked in #627
 //    (data-position workaround shown in RadialDeep.stories.tsx), so spacings
 //    here are hand-tuned.
 //  - The dsl's bottom-up Mode and per-relation Margins (0.01/0.07/0.94) are
@@ -50,7 +50,7 @@ export const SideTree: StoryObj = {
     mount(
       {
         node,
-        link: { curve: "straight", stroke: "#607d8b", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#607d8b", strokeWidth: 1.5 },
         // parentChild = (distribute θ, distribute r): child leans away in angle
         // and steps outward in radius from its parent.
         parentChild: combine({
@@ -67,7 +67,7 @@ export const SideTree: StoryObj = {
           x: { kind: "align", alignment: "middle" },
           y: { kind: "distribute", spacing: 90, anchor: "middle" },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       { w: 560, h: 560 }
     ),

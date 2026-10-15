@@ -9,21 +9,27 @@
  * pipeline. See apps/docs/docs/internals/frontend/reactivity.md.
  *
  * Public surface (re-exported from lib.ts): `live`, `pointer`, `drag`,
- * `wheel`, `timer`, `signal`.
+ * `click`, `wheel`, `timer`, `signal`, plus the `slider` / `button` controls.
  */
 export { live, isLive } from "./live";
 export type { LiveValue } from "./live";
-export { pointer, drag, wheel, timer, signal } from "./inputs";
+export { pointer, drag, click, wheel, timer, signal } from "./inputs";
 export type {
+  FrameBoxReader,
   Pointer,
   Drag,
   DragOptions,
+  Click,
+  ClickOptions,
   Wheel,
   WheelOptions,
   Timer,
   TimerOptions,
+  TimerValues,
   Signal,
 } from "./inputs";
+export { slider, button } from "./widgets";
+export type { Control, SliderOptions, ButtonOptions } from "./widgets";
 export { InteractionRuntime } from "./runtime";
 export {
   withInteractiveResolve,
@@ -42,5 +48,6 @@ export type {
   InteractionEventType,
   InteractionFrame,
   SpecInvalidator,
+  SvgBox,
   SvgPoint,
 } from "./types";

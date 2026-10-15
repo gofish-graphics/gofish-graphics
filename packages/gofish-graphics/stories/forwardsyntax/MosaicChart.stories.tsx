@@ -3,7 +3,7 @@ import { initializeContainer } from "../helper";
 import { chart, rect, stack, field } from "../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Mosaic Chart",
+  title: "Forward Syntax/Mosaic Chart",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
@@ -42,7 +42,7 @@ export const Default: StoryObj<Args> = {
       { origin: "USA", cylinders: "8", count: 108 },
     ];
 
-    chart(data, { axes: true })
+    chart(data)
       .flow(
         // Column widths ∝ each region's total (marginal): `size: "count"`
         // sizes each column by its raw Σcount. Stacked segments fill the

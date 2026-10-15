@@ -5,7 +5,7 @@ import { stack } from "../ast/graphicalOperators/stack";
 import { rect } from "../ast/shapes/rect";
 import { color, color6 } from "../color";
 import { layer } from "../ast/graphicalOperators/layer";
-import { line } from "../lib";
+import { line, Curve } from "../lib";
 import { ref } from "../ast/shapes/ref";
 import { color10Order } from "./color10";
 import { mix } from "spectral.js";
@@ -64,7 +64,7 @@ export const testPolarRibbonOther = (size: { width: number; height: number }) =>
     coord({ transform: polar_DEPRECATED() }, [
       layer([
         stack(
-          { x: 100, y: Math.PI, dir: 1, spacing: Math.PI / 6, alignment: "middle", sharedScale: true },
+          { x: 100, y: Math.PI, dir: 1, spacing: Math.PI / 6, alignment: "middle" },
           // TODO: I could probably make the width be uniform flexible basically
           Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
             stack({ dir: 0, alignment: "middle" },
@@ -92,7 +92,7 @@ export const testPolarRibbonOther = (size: { width: number; height: number }) =>
               // fill: "black",
               // fill: "none",
               stroke: i == 0 ? "black" : "none",
-              curve: "bezier",
+              curve: Curve.bezier(),
               opacity: 1,
             },
             items.map((d) => ref(`${d.category}-${d.group}`))

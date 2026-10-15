@@ -1,12 +1,4 @@
-import {
-  line,
-  ref,
-  straight,
-  bezier,
-  orthogonal,
-  arc,
-  type Curve,
-} from "gofish-graphics";
+import { line, ref, Curve } from "gofish-graphics";
 import type { HierarchyNode } from "d3-hierarchy";
 import type { GoTreeSpec, LinkOptions, LinkSpec } from "./spec";
 import { nodePath, toDatum } from "./data";
@@ -15,17 +7,9 @@ import { growthDirAtDepth } from "./recursion";
 const DEFAULTS: Required<
   Pick<LinkOptions, "curve" | "stroke" | "strokeWidth">
 > = {
-  curve: "straight",
+  curve: Curve.linear(),
   stroke: "gray",
   strokeWidth: 1,
-};
-
-// GoTree's Link style → a GoFish screen-space curve factory.
-const CURVE_FOR: Record<NonNullable<LinkOptions["curve"]>, () => Curve> = {
-  straight,
-  bezier,
-  orthogonal,
-  arc,
 };
 
 function resolveLinkOptions(
@@ -47,16 +31,19 @@ function linkMark(
   targetPath: string,
   growthDir: "x" | "y" | undefined
 ): any {
-  const curveName = opts.curve ?? DEFAULTS.curve;
+  const linkCurve = opts.curve ?? DEFAULTS.curve;
   // Bend/curve along the tree's growth axis: pass it as the connector's `dir`
   // so the orthogonal elbow (and bezier control points) fold on the axis the
   // tree actually grows along. When the growth axis is ambiguous (a diagonal
-  // cascade), leave `dir` unset and let `orthogonal({ bend: "auto" })` infer the
-  // bend from the endpoint geometry.
-  const curve =
-    curveName === "orthogonal" && growthDir === undefined
-      ? orthogonal({ bend: "auto" })
-      : CURVE_FOR[curveName]();
+  // cascade), leave `dir` unset and let `Curve.orthogonal({ bend: "auto" })`
+  // infer the bend from the endpoint geometry.
+  // Each link `curve` is a GoFish curve, so it passes through as is.
+  const curve: Curve.Curve =
+    linkCurve.kind === "orthogonal" &&
+    linkCurve.bend === undefined &&
+    growthDir === undefined
+      ? Curve.orthogonal({ bend: "auto" })
+      : linkCurve;
   return line(
     {
       curve,

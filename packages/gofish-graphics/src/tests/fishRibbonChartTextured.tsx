@@ -32,7 +32,7 @@ const fishColors = {
 export const testFishRibbonChartTextured = () =>
   frame([
     stackX(
-      { spacing: 128, sharedScale: true },
+      { spacing: 128 },
       _(seafood)
         .groupBy("lake")
         .map((d) =>

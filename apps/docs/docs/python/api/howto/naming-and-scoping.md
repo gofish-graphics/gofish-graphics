@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # How to name and scope
 
 When you build composable components — a `stack_slot` that itself contains a
@@ -5,14 +9,14 @@ When you build composable components — a `stack_slot` that itself contains a
 names you give to inner nodes have to _not_ collide across instances. GoFish has
 two complementary mechanisms for this:
 
-1. **Strings** are **layer-local**. Use them for constraint callbacks.
-2. **`createName(tag)`** tokens are **externally addressable**. Use them for
+1. **Strings** are **component-local**. Use them for constraint callbacks.
+2. **`create_name(tag)`** tokens are **externally addressable**. Use them for
    cross-component references.
 
-## Strings: layer-local names
+## Strings: component-local names
 
-`.name("x")` on a child of a [`layer`](/python/api/constraints/constrain) makes
-`x` available inside that layer's `.constrain()` callback. Strings never cross
+`.name("x")` on a child of a [`layer`](/python/api/constraints/relate) makes
+`x` available inside that layer's `.relate()` callback. Strings never cross
 component boundaries, never register globally, and never show up as path
 segments.
 
@@ -22,7 +26,7 @@ from gofish import layer, rect, text, Constraint
 layer([
     rect(w=200, h=150, fill="#eee").name("bg"),
     text(text="Title").name("label"),
-]).constrain(lambda bg, label: [
+]).relate(lambda bg, label: [
     Constraint.align([label, bg], x="middle", y="end"),
 ])
 ```
@@ -30,16 +34,16 @@ layer([
 This is the workhorse mechanism. Reach for strings first; strings are simpler and
 enforce composition by default.
 
-## createName
+## create_name
 
 ```python
-from gofish import createName
+from gofish import create_name
 
-my_name = createName("tag")
+my_name = create_name("tag")
 ```
 
-`createName(tag)` returns a `Token` — a unique value carrying a string tag. Each
-call produces a fresh token; two `createName("value")` calls from two component
+`create_name(tag)` returns a `Token` — a unique value carrying a string tag. Each
+call produces a fresh token; two `create_name("value")` calls from two component
 instances are _different_ tokens even though they share the tag. That's what
 makes this hygienic.
 
@@ -52,14 +56,14 @@ When you attach a token to a node with `.name(token)`:
 - The tag still works as a constraint-callback key inside the enclosing layer.
 
 ```python
-from gofish import layer, rect, text, createName, Constraint
+from gofish import layer, rect, text, create_name, Constraint
 
-value_name = createName("value")
+value_name = create_name("value")
 
 layer([
     rect(w=40, h=40).name("box"),
     text(text="5").name(value_name),
-]).constrain(lambda box, value: [
+]).relate(lambda box, value: [
     Constraint.align([box, value], x="middle", y="middle"),
 ])
 ```
@@ -73,18 +77,18 @@ leaves so the scope is inert there; user-defined component-style marks (a
 `(**props) -> Mark` function) get hygienic naming for free:
 
 ```python
-from gofish import mark, layer, spread, rect, text, createName, Constraint
+from gofish import mark, layer, spread, rect, text, create_name, Constraint
 
 @mark
 def stack_slot(variable, value):
-    box_tag = createName("box")
-    value_tag = createName("value")
+    box_tag = create_name("box")
+    value_tag = create_name("value")
     return spread([
         text(text=variable).name("variable"),
         layer([
             rect(w=40, h=40).name(box_tag),
             text(text=value).name(value_tag),
-        ]).constrain(lambda box, value: [
+        ]).relate(lambda box, value: [
             Constraint.align([box, value], x="middle", y="middle"),
         ]),
     ], dir="x", spacing=5)
@@ -93,7 +97,7 @@ def stack_slot(variable, value):
 - The component's output (the `spread` here) is the scope root.
 - `value_tag` and `box_tag` are Tokens: they register in `stack_slot`'s scope
   under tags `"value"` and `"box"`.
-- `"variable"` (the left-side text) is a plain string: layer-local only, not
+- `"variable"` (the left-side text) is a plain string: component-local only, not
   path-addressable from outside.
 
 The decorator is imported as `mark` (`from gofish import mark`) and applied as
@@ -121,10 +125,10 @@ before descending.
 ### Example: arrows between composed components
 
 ```python
-from gofish import layer, spread, arrow, ref, createName
+from gofish import layer, spread, arrow, ref, create_name
 
-global_frame_name = createName("global_frame")
-heap_name = createName("heap")
+global_frame_name = create_name("global_frame")
+heap_name = create_name("heap")
 
 layer([
     spread([
@@ -142,24 +146,24 @@ layer([
 
 ## Decision table
 
-| I want to…                                                   | Use                                                    |
-| ------------------------------------------------------------ | ------------------------------------------------------ |
-| Reference a sibling by name in a layer's `.constrain()`      | `.name("x")` string                                    |
-| Make an inner node reachable from outside the component      | `createName("tag")` + `.name(token)`                   |
-| Give a component instance a global handle the caller can use | Caller calls `createName("foo")`, then `.name(handle)` |
-| Reach deep into another component                            | Path: `ref(token).tag[i]...`                           |
-| Avoid dynamic string suffixes like `f"item-{i}"`             | Use integer positional indices in the path             |
+| I want to…                                                   | Use                                                     |
+| ------------------------------------------------------------ | ------------------------------------------------------- |
+| Reference a sibling by name in a layer's `.relate()`         | `.name("x")` string                                     |
+| Make an inner node reachable from outside the component      | `create_name("tag")` + `.name(token)`                   |
+| Give a component instance a global handle the caller can use | Caller calls `create_name("foo")`, then `.name(handle)` |
+| Reach deep into another component                            | Path: `ref(token).tag[i]...`                            |
+| Avoid dynamic string suffixes like `f"item-{i}"`             | Use integer positional indices in the path              |
 
 ## Gotchas
 
 - **Strings are not path-addressable.** If you want a name to appear in a
-  `ref(token)....` path, use `createName`.
+  `ref(token)....` path, use `create_name`.
 - **Scopes are per-node, not per-file.** Every `@mark` invocation produces a
   fresh scope at runtime, so each component instance has its own.
 - **The first path segment must be a Token.** Paths don't start from strings
   because strings have no global identity.
 - **Reserved names.** A handful of attribute names (`name`, `label`, `render`,
-  `to_dict`, `to_ir`, `constrain`, `multiplicity`, and any leading-underscore
+  `to_dict`, `to_ir`, `relate`, `multiplicity`, and any leading-underscore
   name) pass through to the underlying ref proxy instead of becoming path
   segments. Use `ref(token).path("name")` to reach a child whose tag collides
   with one of these.

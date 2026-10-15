@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { chart, spread, stack, rect, derive, palette, field } from "../../../src/lib";
+import { chart, spread, stack, rect, derive, field, Color } from "../../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/stacked_bar_weather.html
@@ -50,8 +50,8 @@ export const Default: StoryObj<Args> = {
     // GoFish equivalent: use derive() to extract month from date, then group and count.
 
     // TODO: need a better way of aggregating by count or whatever.
-    chart(context.loaded.weather as any[], { axes: true,
-      color: palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }),
+    chart(context.loaded.weather as any[], {
+      color: Color.palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }),
     })
       .flow(
         derive((d: any[]) =>

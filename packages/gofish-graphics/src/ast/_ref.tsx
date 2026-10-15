@@ -1,58 +1,38 @@
-import type { JSX } from "solid-js";
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Name Resolution & Scoping — /internals/core/names-and-scoping
+// </gofish-wiki>
+
 import {
   Anchor,
   Dimensions,
   Direction,
-  elaborateDims,
   elaborateDirection,
-  elaboratePosition,
-  elaborateSize,
-  elaborateTransform,
-  FancyDims,
   FancyDirection,
-  FancyPosition,
-  FancySize,
-  FancyTransform,
-  combineDims,
-  localAnchorPoint,
-  Position,
   Size,
   Transform,
+  anchorDetermined,
+  combineDims,
+  localAnchorOf,
+  translateForAnchor,
 } from "./dims";
-import { Domain, type AxisScale } from "./domain";
-import { GoFishNode } from "./_node";
+import type { AxisScale } from "./domain";
+import { GoFishNode, isRelateClause } from "./_node";
 import { GoFishAST } from "./_ast";
 import { MaybeValue } from "./data";
-import { ORDINAL, POSITION, UnderlyingSpace } from "./underlyingSpace";
-import type { RenderSession } from "./_node";
+import { ORDINAL, UnderlyingSpace } from "./underlyingSpace";
+import type { Extent } from "./extent";
+import type { Placeable, RenderSession } from "./_node";
+import type { Geometry } from "./geometry";
 import type { DisplayList } from "gofish-ir";
 type DisplayListItem = DisplayList.DisplayItem;
 import { isToken, Token } from "./createName";
-
-/* TODO: resolveMeasures and layout feel pretty similar... */
-
-export type Placeable = {
-  dims: Dimensions;
-  localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
-  place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
-};
-
-export type Measure = (
-  shared: Size<boolean>,
-  // scaleFactors: Size<number | undefined>,
-  size: Size,
-  children: GoFishNode[]
-) => (scaleFactors: Size) => FancySize;
-
-export type Layout = (
-  shared: Size<boolean>,
-  size: Size,
-  scaleFactors: Size<number | undefined>,
-  children: {
-    layout: (size: Size, scaleFactors: Size<number | undefined>) => Placeable;
-  }[],
-  measurement: (scaleFactors: Size) => Size
-) => { intrinsicDims: FancyDims; transform: FancyTransform };
+import { childNameKey } from "./constraints/shared";
+import {
+  CANVAS_FRAME,
+  orientView,
+  yDirection,
+  type YFrame,
+} from "./axisDirection";
 
 export class GoFishRef {
   public type: string = "ref";
@@ -74,8 +54,6 @@ export class GoFishRef {
    *  `(node as GoFishAST).transform` resolves on the union; external callers
    *  should not rely on this field. */
   public transform?: Transform;
-  public shared: Size<boolean>;
-  private measurement!: (scaleFactors: Size) => Size;
   public readonly selection?: string | Token | (Token | string | number)[];
   private directNode?: GoFishNode;
   private selectedNode?: GoFishNode;
@@ -85,20 +63,17 @@ export class GoFishRef {
     name,
     selection,
     node,
-    shared = [false, false],
     multiplicity,
   }: {
     name?: string | Token;
     selection?: string | Token | (Token | string | number)[];
     node?: GoFishNode;
-    shared?: Size<boolean>;
     multiplicity?: "one" | "all";
   }) {
     if (selection === undefined && !node) {
       throw new Error("Ref must have either selection or node");
     }
     this._name = name;
-    this.shared = shared;
     this.selection = selection;
     this.directNode = node;
     this.multiplicity = multiplicity;
@@ -125,7 +100,13 @@ export class GoFishRef {
     return this.directNode ?? this.selectedNode;
   }
 
-  /** Chainable: name this ref so a layer constraint can reference it (mirrors
+  /** A ref holds its target's box, so it has its target's y frame (see
+   *  `axisDirection.ts`). */
+  public get yFrame(): YFrame {
+    return this.targetNode?.yFrame ?? CANVAS_FRAME;
+  }
+
+  /** Chainable: name this ref so a relate clause can reference it (mirrors
    * GoFishNode.name()). Returns `this` so `ref(token).name("x")` works. */
   public name(name: string | Token): this {
     this._name = name;
@@ -149,7 +130,7 @@ export class GoFishRef {
   private resolveSelection(
     selection: string | Token | (Token | string | number)[]
   ): GoFishNode {
-    // String: layer-local lookup from the nearest enclosing Layer.
+    // String: innermost-enclosing lookup, bounded by createMark.
     if (typeof selection === "string") {
       return this.resolveLocalString(selection);
     }
@@ -229,54 +210,65 @@ export class GoFishRef {
   }
 
   private resolveLocalString(name: string): GoFishNode {
-    // Walk up to the nearest enclosing component (createMark output, marked
-    // via `_isComponent`). If none, the search root is the topmost ancestor.
-    // Then DFS for a node whose `_name` matches, NOT descending into nested
-    // components — so strings don't leak across component boundaries.
-    //
-    // We use `_isComponent` rather than `_isScope` so future operators that
-    // scope for token-registration reasons don't silently break this lookup.
-    let scope: GoFishNode | undefined = this.parent;
-    while (scope && !scope._isComponent) {
-      scope = scope.parent;
-    }
-    if (!scope) {
-      scope = this.parent;
-      while (scope?.parent) scope = scope.parent;
-    }
-    if (!scope) {
+    // A string name is a variable of the layer that relates it: legal only
+    // inside a `.relate()` clause, and resolved from that clause's layer.
+    const layer = relatingLayerOf(this);
+    if (!layer) {
       throw new Error(
-        `Can't find local name "${name}" — ref has no ancestors.`
+        `ref("${name}") is a string ref outside a .relate() clause. A string ` +
+          `name is local to the layer that relates it: move this ref into ` +
+          `the enclosing layer's .relate() callback, e.g. ` +
+          `layer([...]).relate(({ ${name} }) => [arrow({}, [${name}, ...])]). ` +
+          `To reach a node in another component, name it with createName() ` +
+          `and ref the token.`
       );
     }
-    const found = findInComponent(scope, name);
-    if (found) return found;
-    throw new Error(
-      `Can't find local name "${name}" within enclosing component.`
-    );
+    const found = resolveScopedName(layer, name, `ref("${name}")`);
+    if (!isInside(found, layer)) {
+      throw new Error(
+        `ref("${name}") in a .relate() clause names a node outside the ` +
+          `relating layer. A clause relates nodes inside its own layer; ` +
+          `attach the .relate() to a layer that contains "${name}".`
+      );
+    }
+    // A named ref stand-in is an alias for the node it points at.
+    if (found instanceof GoFishRef) {
+      if (found === this) {
+        throw new Error(
+          `ref("${name}") refers to itself: it is named "${name}" too, and ` +
+            `it is the nearest node with that name. A ref named after its own ` +
+            `target is no longer needed. Relate the named node directly ` +
+            `(names are visible anywhere inside the layer), or give the ref a ` +
+            `different name.`
+        );
+      }
+      found.resolveNames();
+      const target = found.targetNode;
+      if (!target) {
+        throw new Error(`ref("${name}") names a ref that points at nothing.`);
+      }
+      return target;
+    }
+    return found;
   }
 
   public embed(direction: FancyDirection): void {
     this.selectedNode?.embed(direction);
   }
 
-  /* TODO: what should the default be? */
   public resolveUnderlyingSpace(): Size<UnderlyingSpace> {
     return (
       this.selectedNode?.resolveUnderlyingSpace() ?? [ORDINAL([]), ORDINAL([])]
     );
   }
 
-  /* TODO: I'm not really sure what this should do */
-  public measure(size: Size): (scaleFactors: Size) => Size {
-    const measurement = (scaleFactors: Size) =>
-      // elaborateSize(this._measure(this.shared, size, this.children)(scaleFactors));
-      size;
-    this.measurement = measurement;
-    return measurement;
+  /** A ref claims what its target claims. An unresolved ref is ordinal on
+   *  both axes, so it claims nothing. */
+  public resolveExtent(): Size<Extent | undefined> {
+    return this.selectedNode?.resolveExtent() ?? [undefined, undefined];
   }
 
-  public layout(size: Size, _scales?: Size<AxisScale | undefined>): Placeable {
+  public layout(_size: Size, _scales?: Size<AxisScale | undefined>): Placeable {
     if (!this.selectedNode) {
       throw new Error("Selected node not found");
     }
@@ -284,11 +276,9 @@ export class GoFishRef {
     // Find the least common ancestor between this ref and the selected node
     const lca = findLeastCommonAncestor(this, this.selectedNode);
 
-    // Stage 3-C (#39): accumulate the LEDGER-DERIVED translate, so ref geometry
-    // survives retiring the direct translate writes. `projectedTranslate` is
-    // polymorphic across the union — a node returns its ledger projection (==
-    // written field where solved, else the fallback); a ref has no ledger so it
-    // returns its computed transform directly.
+    // Accumulate the LEDGER-DERIVED translate. `projectedTranslate` is
+    // polymorphic across the union: a node returns its ledger projection, a ref
+    // (which has no ledger) its computed transform.
     const translateOf = (n: GoFishAST, dir: Direction): number =>
       n.projectedTranslate(dir) ?? 0;
 
@@ -301,9 +291,12 @@ export class GoFishRef {
       current = current.parent;
     }
 
-    // Compute transform from LCA down to this ref
+    // Compute transform from LCA down to this ref's parent. The ref's own
+    // translate is what this method sets, so it must not be read here:
+    // including the value from a previous layout would make a second layout
+    // subtract the first result and land at 0 (#928).
     const downwardTranslate: [number, number] = [0, 0];
-    current = this;
+    current = this.parent;
     while (current && current !== lca) {
       downwardTranslate[0] += translateOf(current, 0);
       downwardTranslate[1] += translateOf(current, 1);
@@ -320,7 +313,8 @@ export class GoFishRef {
 
     this.intrinsicDims = this.selectedNode.intrinsicDims;
 
-    return this;
+    // The copy above is in pixels; the parent reads it in its own axis order.
+    return orientView(this as Placeable, yDirection(this.parent));
   }
 
   public get dims(): Dimensions {
@@ -330,7 +324,16 @@ export class GoFishRef {
     return combineDims(this.intrinsicDims, this.transform);
   }
 
-  /** The ref's origin as a `Placeable.projectedTranslate` (#39). A ref has no
+  /** The target's geometry. A ref shares its target's local frame (it copies
+   *  the target's `intrinsicDims` in `layout`), and its own `translate` maps
+   *  that frame into the ref's parent, so the target's answer is the ref's. */
+  public geometry(): Geometry {
+    if (!this.selectedNode)
+      throw new Error("[gofish] geometry() called on an unresolved ref");
+    return this.selectedNode.geometry();
+  }
+
+  /** The ref's origin as a `Placeable.projectedTranslate`. A ref has no
    *  ledger, so the projection IS its computed `transform.translate` — exposing
    *  it lets every translate reader (the coord bake, `_ref` accumulation,
    *  baseline align) call `projectedTranslate` polymorphically across the
@@ -340,15 +343,10 @@ export class GoFishRef {
   }
 
   public localAnchor(axis: FancyDirection, anchor: Anchor): number | undefined {
-    const dir = elaborateDirection(axis);
-    const intrinsic = this.intrinsicDims?.[dir];
-    if (intrinsic?.min === undefined) return undefined;
-    if (
-      (anchor === "center" || anchor === "max") &&
-      intrinsic.size === undefined
-    )
-      return undefined;
-    return localAnchorPoint(anchor, intrinsic.min, intrinsic.size ?? 0);
+    return localAnchorOf(
+      this.intrinsicDims?.[elaborateDirection(axis)],
+      anchor
+    );
   }
 
   public place(
@@ -358,35 +356,30 @@ export class GoFishRef {
   ): void {
     const dir = elaborateDirection(axis);
     const intrinsic = this.intrinsicDims?.[dir];
-    const localMin = intrinsic?.min;
-    const size = intrinsic?.size;
-
-    // center/max are DERIVED from (min, size) (mirrors GoFishNode.place): they're
-    // determined only when both are; min/baseline need only min. When not
-    // determined, only the local min is recordable (center/max aren't stored).
-    const determined =
-      anchor === "center" || anchor === "max"
-        ? localMin !== undefined && size !== undefined
-        : localMin !== undefined;
-    if (!determined) {
+    // Until the anchor's local point is determined, only the local min is
+    // recordable (mirrors GoFishNode.place).
+    if (!anchorDetermined(intrinsic, anchor)) {
       if (anchor === "min") this.intrinsicDims![dir].min = value;
       return;
     }
-
-    this.transform!.translate![dir] =
-      value - localAnchorPoint(anchor, localMin ?? 0, size ?? 0);
+    this.transform!.translate![dir] = translateForAnchor(
+      intrinsic,
+      anchor,
+      value
+    );
   }
 
   /** Authoritative placement counterpart to `GoFishNode.pinAnchor`. A ref has no
    *  bbox ledger, so overriding means directly replacing its computed translate. */
   public pinAnchor(axis: FancyDirection, value: number, anchor: Anchor): void {
     const dir = elaborateDirection(axis);
-    const intrinsic = this.intrinsicDims?.[dir];
     this.transform ??= { translate: [undefined, undefined] };
     this.transform.translate ??= [undefined, undefined];
-    this.transform.translate[dir] =
-      value -
-      localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
+    this.transform.translate[dir] = translateForAnchor(
+      this.intrinsicDims?.[dir],
+      anchor,
+      value
+    );
   }
 
   /** Refs are placement stand-ins; they draw nothing, so they lower to no
@@ -406,24 +399,44 @@ export class GoFishRef {
   }
 }
 
+/** The layer whose `.relate()` clause contains `node`: the parent of the
+ *  nearest ancestor flagged `_relateClause`, or `undefined` when `node` is not
+ *  inside a relate clause. */
+export function relatingLayerOf(node: GoFishAST): GoFishNode | undefined {
+  let cur: GoFishAST | undefined = node;
+  while (cur) {
+    if (isRelateClause(cur)) return cur.parent;
+    cur = cur.parent;
+  }
+  return undefined;
+}
+
+function isInside(node: GoFishAST, root: GoFishNode): boolean {
+  for (let cur: GoFishAST | undefined = node; cur; cur = cur.parent) {
+    if (cur === root) return true;
+  }
+  return false;
+}
+
 /**
  * The component-boundary visibility rule, in one place. Yields `root` and every
- * hygienically-visible descendant in DFS parent-iteration (pre-order): it
+ * descendant visible from inside it, in DFS parent-iteration (pre-order): it
  * descends into ordinary children, and *visits* a `_isComponent` child (it is
- * itself visible) but does NOT descend into its subtree — so names don't leak
- * across component boundaries.
+ * itself visible, since its name belongs to the enclosing scope) but does NOT
+ * descend into its subtree — so names don't leak across component boundaries.
+ * `ref` stand-ins are visited too (a named ref is a scope member).
  *
- * This is the single home for the bounded walk shared by `findInComponent`
- * (ref/selectAll string lookup, below) and `collectLayerRegistrations`
- * (chartBuilder.ts layer registry). Keeping them on one walk is what guarantees
- * a name is reachable by `ref`/`selectAll` exactly when it's registered as a
- * layer — the two can't drift.
+ * This is the single home for the bounded walk shared by string-name lookup
+ * (`resolveScopedName`, used by `ref(string)` and by `.relate()` operands),
+ * `collectLayerRegistrations` (chartBuilder.ts layer registry), and z-order
+ * operand lookup (paintOrder.ts), so the component boundary means the same
+ * thing for `ref`, `.relate()`, `selectAll` and `zAbove`/`zBelow`.
  */
-export function* visibleNodes(root: GoFishNode): Generator<GoFishNode> {
+export function* visibleNodes(root: GoFishAST): Generator<GoFishAST> {
   yield root;
+  if (!(root instanceof GoFishNode)) return;
   for (const child of root.children ?? []) {
-    if (!(child instanceof GoFishNode)) continue;
-    if (child._isComponent) {
+    if (child instanceof GoFishNode && child._isComponent) {
       // Visible (a leaf component, e.g. a createMark `rect`, can carry a name)
       // but a boundary: don't descend into it.
       yield child;
@@ -434,26 +447,96 @@ export function* visibleNodes(root: GoFishNode): Generator<GoFishNode> {
 }
 
 /**
- * DFS for a descendant of `node` whose `_name` (or token `__tag`) matches
- * `name`, without crossing `_isComponent` boundaries. The match is checked
- * before the descent guard so a leaf component (e.g. a `rect` produced by
- * createMark, which is itself a component) is still findable by name.
- *
- * The bounded traversal is `visibleNodes` above; `node` itself is the search
- * root and is never a match target, only its visible descendants.
+ * The outermost level a string-name lookup from `from` may reach: the nearest
+ * `createMark` component at or above `from` (its inside is one scope), else
+ * the topmost ancestor. Layers are NOT boundaries.
  */
-const findInComponent = (
-  node: GoFishNode,
-  name: string
-): GoFishNode | undefined => {
-  for (const candidate of visibleNodes(node)) {
-    if (candidate === node) continue;
-    const n = candidate._name;
-    const tag = n === undefined ? undefined : isToken(n) ? n.__tag : n;
-    if (tag === name) return candidate;
+function scopeRootOf(from: GoFishNode): GoFishNode {
+  let scope: GoFishNode | undefined = from;
+  while (scope && !scope._isComponent) scope = scope.parent;
+  if (scope) return scope;
+  let top = from;
+  while (top.parent) top = top.parent;
+  return top;
+}
+
+/**
+ * The CLOSEST nodes named `name` inside `level`: a breadth-first search over
+ * the nodes visible inside `level` (not `level` itself; nested `createMark`
+ * components are visited but not entered) that returns every match at the
+ * smallest depth below `level`, or `[]`. `searched` is a child subtree an
+ * earlier, narrower level already searched without a match: its root is still
+ * checked (a level never matches itself, so it was not), but its inside is
+ * not walked again.
+ */
+function closestAtLevel(
+  level: GoFishNode,
+  name: string,
+  searched: GoFishNode | undefined
+): GoFishAST[] {
+  let frontier: GoFishAST[] = level.children;
+  while (frontier.length > 0) {
+    const matches = frontier.filter((n) => childNameKey(n) === name);
+    if (matches.length > 0) return matches;
+    const next: GoFishAST[] = [];
+    for (const n of frontier) {
+      if (n === searched) continue;
+      if (n instanceof GoFishNode && !n._isComponent) next.push(...n.children);
+    }
+    frontier = next;
   }
-  return undefined;
-};
+  return [];
+}
+
+/**
+ * Resolve a string name from a use site: the layer running `.relate()`, for
+ * a constraint operand and for a string ref inside one of its clauses alike.
+ * This is the one lookup behind both.
+ *
+ * Search `from`'s subtree, then its parent's, one ancestor at a time, and stop
+ * at the first level whose subtree contains the name. Within that level the
+ * closest match wins: the one with the fewest steps down from the level's
+ * node. So a layer's direct child `x` beats an `x` nested deeper, and a deeper
+ * name is reachable when nothing closer has it. Two or more matches at that
+ * same smallest distance is a loud error, and so is no match up to the
+ * boundary. The search never crosses a `createMark` boundary (neither upward
+ * past the enclosing component, nor downward into a nested one). An inner
+ * match hides an outer one with the same name; that is intended, and it is
+ * what lets a mark repeated per row (or a helper called many times) reuse its
+ * local names. `what` names the consumer in the error message.
+ */
+export function resolveScopedName(
+  from: GoFishNode,
+  name: string,
+  what: string
+): GoFishAST {
+  const boundary = scopeRootOf(from);
+  let level = from;
+  let searched: GoFishNode | undefined;
+  for (;;) {
+    const matches = closestAtLevel(level, name, searched);
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) {
+      throw new Error(
+        `${what}: the name "${name}" is ambiguous — ${matches.length} nodes ` +
+          `named "${name}" are equally close to the use site. Give them ` +
+          `distinct names, or wrap each repeated part in its own createMark ` +
+          `component.`
+      );
+    }
+    if (level === boundary || !level.parent) break;
+    searched = level;
+    level = level.parent;
+  }
+  const where = boundary._isComponent
+    ? "the enclosing createMark component"
+    : "this diagram";
+  throw new Error(
+    `${what}: no node named "${name}" in ${where}. String names are ` +
+      `visible up to the nearest createMark boundary; to reach across one, ` +
+      `use createName("${name}") and a ref path.`
+  );
+}
 
 export const findPathToRoot = (node: GoFishAST): GoFishAST[] => {
   const path: GoFishAST[] = [];

@@ -22,7 +22,16 @@
  * resolve-time color scale). See the plan's "Design notes".
  */
 
-import { untrack } from "solid-js";
+import {
+  createComputed,
+  createSignal,
+  getOwner,
+  onCleanup,
+  untrack,
+  type Accessor,
+  type Owner,
+  type Setter,
+} from "solid-js";
 import { runInLiveEval } from "./resolveContext";
 
 const LIVE_BRAND = Symbol.for("gofish.liveValue");
@@ -50,4 +59,124 @@ export const isLive = (v: unknown): v is LiveValue =>
  * measures this value; the paint layer re-evaluates the same accessor per frame.
  */
 export const evalLiveStatic = (accessor: LiveValue, datum: unknown): unknown =>
-  untrack(() => runInLiveEval(() => accessor(datum)));
+  readLive(() => accessor(datum));
+
+/**
+ * Read a paint-time value once, at resolve time: untracked and under the
+ * `inLiveEval` flag, so the inputs it reads are wired for events but do NOT
+ * become pipeline dependencies of the chart.
+ *
+ * `evalLiveStatic` is this applied to a `live()` channel. A NODE reaches for it
+ * directly when the paint-time value is its own rather than a channel the user
+ * wrote — `tween` reads the playhead this way, to have a value to lower and to
+ * register the clock, while leaving the per-frame reading to the paint tier.
+ */
+export const readLive = <T>(read: () => T): T =>
+  untrack(() => runInLiveEval(read));
+
+/** The shared decisions of the paint in progress, per paint (the reactive
+ *  owner the paint runs under) and per thunk. */
+const decisions = new WeakMap<Owner, WeakMap<() => unknown, () => unknown>>();
+
+/**
+ * `read` as ONE reactive decision for the paint in progress, made the first
+ * time any slot of this paint asks for `read` and handed to every slot after
+ * that. The decision re-reads `read`'s inputs on each change, and the slots
+ * that read it are notified only when its VALUE changes, so a rule many items
+ * share (a keyframe's visibility) costs one evaluation per tick instead of one
+ * per item. Why it writes a signal rather than being a `createMemo` is in the
+ * Reactivity essay ("Animation: containment, twice").
+ *
+ * The decision belongs to the paint that made it, so it is disposed with that
+ * paint and a later paint makes its own. A lowering with no reactive owner (a
+ * headless `toDisplayList`) paints nothing, so no slot reads the thunk
+ * reactively there, and `read` itself is its decision.
+ */
+export function sharedDecision<T>(read: () => T): () => T {
+  const owner = getOwner();
+  if (owner === null) return read;
+  let byRead = decisions.get(owner);
+  if (byRead === undefined) {
+    decisions.set(owner, (byRead = new WeakMap()));
+    // The owner outlives this paint when it re-runs, and the decisions go
+    // with the paint.
+    onCleanup(() => decisions.delete(owner));
+  }
+  const made = byRead.get(read);
+  if (made !== undefined) return made as () => T;
+  let decision: Accessor<T> | undefined;
+  let setDecision: Setter<T> | undefined;
+  // A computation's first run is synchronous: it creates the signal from its
+  // first reading, so `decision` is set by the time `createComputed` returns.
+  createComputed(() => {
+    const next = runInLiveEval(read);
+    if (setDecision === undefined) [decision, setDecision] = createSignal(next);
+    else setDecision(() => next);
+  });
+  byRead.set(read, decision!);
+  return decision!;
+}
+
+/**
+ * The `live(...)` channels of an options bag, keyed by channel name — or
+ * `undefined` when there are none (the overwhelmingly common case, so callers
+ * skip the per-node `__gfLive` stamp on a cheap null check).
+ *
+ * This is the one place that asks "which of these channels are live?". A mark
+ * factory needs the answer at construction time, before any datum exists, so it
+ * is separate from evaluating them.
+ */
+export const liveChannelsOf = (
+  opts: Record<string, unknown>
+): Record<string, LiveValue> | undefined => {
+  let live: Record<string, LiveValue> | undefined;
+  for (const channel of Object.keys(opts)) {
+    const value = opts[channel];
+    if (isLive(value)) (live ??= {})[channel] = value;
+  }
+  return live;
+};
+
+/**
+ * An options bag whose `live(...)` channels have been substituted away: no
+ * channel can still hold a `LiveValue`. `withLiveStatics` is what produces one,
+ * and saying so in the type is what lets its consumers (a connector's `produce`,
+ * a leaf mark's channel encoding) read each channel straight through instead of
+ * casting the `LiveValue` arm back off one by one.
+ */
+export type StripLive<O> = { [K in keyof O]: Exclude<O[K], LiveValue> };
+
+/**
+ * `opts` with each live channel replaced by its resolve-time value at `datum`.
+ * Reading a live channel here is also what REGISTERS its input with the
+ * interaction runtime, so this is the single point where that happens for a
+ * mark's channels — and the single point where the `LiveValue` arm is discharged
+ * from the type.
+ */
+export const withLiveStatics = <O extends Record<string, unknown>>(
+  opts: O,
+  live: Record<string, LiveValue> | undefined,
+  datum: unknown
+): StripLive<O> =>
+  (live
+    ? {
+        ...opts,
+        ...Object.fromEntries(
+          Object.entries(live).map(([k, v]) => [k, evalLiveStatic(v, datum)])
+        ),
+      }
+    : opts) as StripLive<O>;
+
+/**
+ * Split an options bag at one datum: the live channels to stamp on the produced
+ * node as paint-time thunks, and the bag the pipeline builds from, with each of
+ * those channels replaced by its resolve-time value. The one-shot form of
+ * `liveChannelsOf` + `withLiveStatics`, for a factory that has its datum in hand.
+ */
+export const splitLiveChannels = <O extends Record<string, unknown>>(
+  opts: O,
+  datum: unknown
+): { static: StripLive<O>; live: Record<string, LiveValue> | undefined } => {
+  const live = liveChannelsOf(opts);
+  return { static: withLiveStatics(opts, live, datum), live };
+};

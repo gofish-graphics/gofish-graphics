@@ -52,7 +52,7 @@ rect(h="count", fill="#4e79a7")  # height from data, constant color
 ## Naming marks
 
 Call `.name("layerName")` on a mark so another chart can reference it with
-[`ref` / `selectAll`](/python/api/core/chart#cross-chart-references):
+[`ref` / `select_all`](/python/api/core/chart#cross-chart-references):
 
 ```python
 chart(data).flow(scatter(by="lake", x="x", y="y")).mark(blank().name("points"))
@@ -67,7 +67,7 @@ so you don't thread the data through a callback:
 
 ```python
 chart(catch_locations).flow(scatter(by="lake", x="x", y="y")).mark(
-    chart(coord=clock())  # no data -> inherits this lake's partition
+    chart(coord=Coord.clock())  # no data -> inherits this lake's partition
     .flow(stack(by="species", dir="x", h=20))
     .mark(rect(w="count", fill="species"))
 )

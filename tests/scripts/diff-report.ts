@@ -6,14 +6,19 @@
  *   - Pixel diff image (base64-embedded) with diff percentage
  *   - Colored line diff of the DOM snapshot
  *
- * Output: tests/tmp/diff-report.html
+ * Outputs:
+ *   tests/tmp/diff-report.html  the report
+ *   tests/tmp/diff-list.json    the same list, machine-readable:
+ *     { diffs: [{ kind, path }] }
+ *   CI uploads both as the `visual-diff-report` artifact, and
+ *   tests/scripts/accept-baselines.ts --all accepts exactly the diffs in
+ *   diff-list.json.
  */
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import {
-  collectDiffs,
-  collectRemovedStories,
+  collectReviewDiffs,
   formatDomDiff,
   escapeHtml,
   JS_DIR,
@@ -23,6 +28,7 @@ import {
 import { computePixelDiff } from "./pixel-diff.js";
 
 const OUTPUT = join(import.meta.dirname, "../tmp/diff-report.html");
+const LIST_OUTPUT = join(import.meta.dirname, "../tmp/diff-list.json");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -188,20 +194,28 @@ function generateReport(entries: ReportEntry[]): string {
 // ---------------------------------------------------------------------------
 
 function main() {
-  const diffs = collectDiffs();
-  const removedStories = collectRemovedStories();
-  const allDiffs = [...diffs, ...removedStories];
+  const allDiffs = collectReviewDiffs();
 
   if (allDiffs.length === 0) {
     console.log("No diffs to report.");
     return;
   }
 
+  writeFileSync(
+    LIST_OUTPUT,
+    JSON.stringify(
+      { diffs: allDiffs.map((d) => ({ kind: d.kind, path: d.path })) },
+      null,
+      2
+    ) + "\n"
+  );
+  const removedCount = allDiffs.filter((d) => d.kind === "removed").length;
+
   const entries = buildReportEntries(allDiffs);
   const html = generateReport(entries);
   writeFileSync(OUTPUT, html, "utf-8");
   console.log(
-    `Diff report written to ${OUTPUT} (${entries.length} entries, ${removedStories.length} removed)`
+    `Diff report written to ${OUTPUT} (${entries.length} entries, ${removedCount} removed), list to ${LIST_OUTPUT}`
   );
 }
 

@@ -1,6 +1,12 @@
+---
+order: 60
+---
+
 # blank
 
 Creates invisible positioning guides. Use blank when you need to define positions for other marks (like `line` or `ribbon`) without rendering visible shapes.
+
+A blank draws nothing at all: it takes part in layout, carries its datum, can be named and selected with `selectAll`, and feeds the color scale, but it produces no SVG element and no hover target. That is unconditional — there is no option that makes a blank paint.
 
 ::: gofish
 
@@ -27,21 +33,13 @@ gf.layer([
 ## Signature
 
 ```ts
-blank({ w?, h?, fill?, stroke?, strokeWidth?, rx?, ry?, debug? })
+blank({ w?, h?, fill?, debug? })
 ```
 
 ## Parameters
 
-| Option        | Type                                             | Description                                                                                                                                                                                                                 |
-| ------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `w`           | `number \| string \| Value<number> \| FieldExpr` | Width — same channel-value shapes as a leaf mark's "size" channel (e.g. rect's `w`): a number for fixed, a field name to encode data, or a `field(...)` pipeline like `field("count").sum()` for an aggregate (default `0`) |
-| `h`           | `number \| string \| Value<number> \| FieldExpr` | Height — same shapes as `w` (default `0`)                                                                                                                                                                                   |
-| `fill`        | `string`                                         | Fill color (invisible by default)                                                                                                                                                                                           |
-| `stroke`      | `string`                                         | Stroke color                                                                                                                                                                                                                |
-| `strokeWidth` | `number`                                         | Stroke width                                                                                                                                                                                                                |
-| `rx`          | `number`                                         | Horizontal border radius                                                                                                                                                                                                    |
-| `ry`          | `number`                                         | Vertical border radius                                                                                                                                                                                                      |
-| `debug`       | `boolean`                                        | When true, renders visibly for debugging                                                                                                                                                                                    |
+::: gofish-ref blank
+:::
 
 ## Examples
 
@@ -52,6 +50,6 @@ blank({ w?, h?, fill?, stroke?, strokeWidth?, rx?, ry?, debug? })
 // Blank with height encoding for area charts
 .mark(blank({ h: "value" }).name("bars"))
 
-// Debug mode to see blank positions
+// Log each blank's key and datum to the console (it still draws nothing)
 .mark(blank({ debug: true }).name("guides"))
 ```

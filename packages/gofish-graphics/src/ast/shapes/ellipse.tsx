@@ -1,31 +1,30 @@
-import { computeAesthetic } from "../../util";
-import * as Monotonic from "../../util/monotonic";
-import { color6_old, resolveColorChannel } from "../../color";
+import { color6, resolveColorChannel } from "../../color";
 import { path, transformPath } from "../../path";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
-import { getMeasure, getValue, isValue, MaybeValue, Value } from "../data";
+import { getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
   displayDims as displayDimsOf,
   elaborateDims,
-  extractAliasCandidates,
+  deferAxisDims,
   FancyDims,
   FancySize,
   Size,
+  centerOf,
+  positionOf,
   Transform,
 } from "../dims";
 import { aesthetic, continuous, posFn } from "../domain";
-import { interval } from "../../util/interval";
 import {
-  ORDINAL,
-  POSITION,
-  SIZE,
-  UNDEFINED,
   UnderlyingSpace,
+  glyphAxis,
+  pointOrMagnitude,
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import { MARK_CHANNELS } from "../markChannels.generated";
+import { boxOfDims } from "../geometry";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
@@ -34,10 +33,11 @@ import {
 } from "../displayList/lowerHelpers";
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Ellipse = ({
-  fill = color6_old[0],
+  fill = color6[0],
   stroke = fill,
   strokeWidth = 0,
   opacity = 1,
+  fillOpacity,
   aspectRatio,
   ...fancyDims
 }: {
@@ -45,6 +45,8 @@ export const Ellipse = ({
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
   opacity?: number;
+  /** Opacity of the fill alone, 0 to 1; the stroke keeps `opacity`. */
+  fillOpacity?: number;
   /** w/h ratio to enforce. When both dims are data-driven, the constraining axis is used. */
   aspectRatio?: number;
 } & FancyDims<MaybeValue<number>>) => {
@@ -56,53 +58,22 @@ export const Ellipse = ({
       // Expose `dims` so resolveAliases / resolveEmbedding can author it in place
       // (same array the closures below capture). See rect.tsx / _node passes.
       args: { dims },
-      color: fill,
+      // Used to seed the unit color scale. Prefer whichever channel is data-driven.
+      color: isValue(fill) ? fill : stroke,
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]
       ) => {
-        let wDomain = isValue(dims[0].size)
-          ? Monotonic.linear(getValue(dims[0].size!), 0)
-          : Monotonic.linear(0, dims[0].size ?? 0);
-        let hDomain = isValue(dims[1].size)
-          ? Monotonic.linear(getValue(dims[1].size!), 0)
-          : Monotonic.linear(0, dims[1].size ?? 0);
-        if (aspectRatio !== undefined && aspectRatio > 0) {
-          const wIsData = isValue(dims[0].size);
-          const hIsData = isValue(dims[1].size);
-          if (wIsData && !hIsData) {
-            hDomain = Monotonic.linear(
-              (wDomain as Monotonic.Linear).slope / aspectRatio,
-              0
-            );
-          } else if (hIsData && !wIsData) {
-            wDomain = Monotonic.linear(
-              (hDomain as Monotonic.Linear).slope * aspectRatio,
-              0
-            );
-          }
-        }
-
-        const resolveAxis = (
-          axis: 0 | 1,
-          axisDomain: Monotonic.Monotonic
-        ): UnderlyingSpace => {
-          const d = dims[axis];
-          if (isValue(d.min)) {
-            // position; treat it like a position space w/ a single element
-            const min = getValue(d.min) ?? 0;
-            return POSITION(interval(min, min), getMeasure(d.min));
-          }
-          if (isValue(d.size)) {
-            // data-driven size only — literals are handled at layout time.
-            return SIZE(axisDomain, getMeasure(d.size));
-          }
-          return UNDEFINED;
+        // A box placed by its center is a glyph, as a text or an image is.
+        const axisSpace = (axis: 0 | 1) => {
+          const center = centerOf(dims[axis]);
+          return center !== undefined
+            ? glyphAxis(center, dims[axis].size)
+            : pointOrMagnitude(dims[axis].min, dims[axis].size);
         };
-
-        return [resolveAxis(0, wDomain), resolveAxis(1, hDomain)];
+        return [axisSpace(0), axisSpace(1)];
       },
-      layout: (shared, size, scales, children) => {
+      layout: (size, scales, children) => {
         let w = isValue(dims[0].size)
           ? getValue(dims[0].size!) * scales[0]?.sigma!
           : (dims[0].size ?? size[0]);
@@ -125,16 +96,8 @@ export const Ellipse = ({
           }
         }
 
-        const x = computeAesthetic(
-          dims[0].min,
-          posFn(scales[0]?.map)!,
-          undefined
-        );
-        const y = computeAesthetic(
-          dims[1].min,
-          posFn(scales[1]?.map)!,
-          undefined
-        );
+        const x = positionOf(dims[0], posFn(scales[0]?.map), w);
+        const y = positionOf(dims[1], posFn(scales[1]?.map), h);
 
         return {
           intrinsicDims: [
@@ -180,10 +143,11 @@ export const Ellipse = ({
           stroke: resolvedStroke,
           strokeWidth: strokeWidth ?? 0,
           opacity,
+          fillOpacity,
         });
 
         // Build an EllipseItem from a display-space center; radii are unchanged
-        // by `toPixel` (it is translate + y-flip only).
+        // by `toPixel` (it is a translate).
         const ellipseItem = (
           cx: number,
           cy: number,
@@ -307,24 +271,30 @@ export const Ellipse = ({
               stroke: resolvedStroke,
               strokeWidth: strokeWidth ?? 0,
               opacity,
+              fillOpacity,
             }),
           },
         ];
       },
+      // The smallest circle enclosing an ellipse is the circle of its larger
+      // radius, centered on it.
+      geometry: ({ intrinsicDims }, _children, node) => {
+        const box = boxOfDims(intrinsicDims, node.type);
+        return {
+          box,
+          enclosingCircle: () => ({
+            cx: (box.min[0] + box.max[0]) / 2,
+            cy: (box.min[1] + box.max[1]) / 2,
+            r: Math.max(box.max[0] - box.min[0], box.max[1] - box.min[1]) / 2,
+          }),
+        };
+      },
     },
     []
   );
-  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
-  node._pendingAliases = extractAliasCandidates(fancyDims);
+  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
+  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
   return node;
 };
 
-export const ellipse = createMark(
-  Ellipse,
-  {
-    w: "size",
-    h: "size",
-    fill: "color",
-  },
-  "ellipse"
-);
+export const ellipse = createMark(Ellipse, MARK_CHANNELS.ellipse, "ellipse");

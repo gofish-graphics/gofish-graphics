@@ -20,7 +20,6 @@ export const waffleTemplate = (
     data,
     {
       spacing: options.x.spacing,
-      sharedScale: true,
       groupBy: { field: options.x.field, sort: options.x.sort },
     },
     (d) =>

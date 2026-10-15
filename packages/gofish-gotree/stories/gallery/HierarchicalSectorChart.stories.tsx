@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar, datum } from "gofish-graphics";
+import { rect, datum, Coord } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth } from "../data";
 import { initializeContainer } from "../helper";
@@ -50,8 +50,8 @@ import { initializeContainer } from "../helper";
 //    here (the dsl's clockwise / start-angle / sub-2π knobs).
 //  - PolarAxis (θ/r axis swap) is not expressible.
 //  - Link:hidden → link:"none" here (correct for a filled-wedge sector chart);
-//    polar links only support {curve:"straight"|"none"}, never arcs.
-//  - Angular AUTO-FIT (#618): leaves carry a unit thetaSize weight, nest-θ sums
+//    polar links only support {curve:"linear"|"none"}, never arcs.
+//  - Angular AUTO-FIT (#618): leaves carry a unit `w` (θ) weight, nest-θ sums
 //    them up the tree, and the coord fits the total to the circle — so the disc
 //    closes for any tree with no hand-set leafTheta.
 //  - Node:rectangle in the dsl renders, faithfully, as filled arc wedges (a
@@ -98,7 +98,7 @@ const bandHeight = 56; // radial thickness of one ring
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        thetaSize: datum(1),
+        w: datum(1),
         h: bandHeight,
         emX: true,
         emY: true,
@@ -144,7 +144,7 @@ export const HierarchicalSectorChart: StoryObj = {
           // r: siblings share the same ring.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       sectorTree
     ).render(container, { w: 560, h: 560 });

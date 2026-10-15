@@ -18,7 +18,27 @@
  * Runnable as a script: `pnpm --filter gofish-ir test`.
  */
 
-import { OPERATORS, resolveFields } from "../frontend/descriptors.js";
+import {
+  LABEL_OPTIONS,
+  OPERATORS,
+  OPTION_TYPES,
+  STRATEGIES,
+  resolveFields,
+  type FieldType,
+} from "../frontend/descriptors.js";
+import type {
+  AxesOptions,
+  AxisInterval,
+  FieldPredicateIR,
+  AxisOptions,
+  AxisLabelOptions,
+  BinIR,
+  CalendarPartitionIR,
+  CurveIR,
+  LabelSpecIR,
+  OverlapIR,
+  TileIR,
+} from "../frontend/schema.js";
 
 declare const process: { exit(code: number): never };
 
@@ -48,19 +68,21 @@ const BASE_FIELDS = ["type", "translate", "origin", "meta", "debug"] as const;
  * runtime.
  */
 const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
-  derive: ["lambdaId", "provenance"],
+  derive: ["lambdaId", "schema"],
   resolve: ["cols", "from", "key"],
   join: ["on", "right"],
+  filter: ["predicate"],
   spread: [
     "by",
     "dir",
     "spacing",
     "alignment",
-    "sharedScale",
     "anchor",
     "reverse",
     "glue",
     "axes",
+    "x",
+    "y",
     "w",
     "h",
     "size",
@@ -71,10 +93,11 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "spacing",
     "glue",
     "alignment",
-    "sharedScale",
     "anchor",
     "reverse",
     "axes",
+    "x",
+    "y",
     "w",
     "h",
     "size",
@@ -88,7 +111,9 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "xMax",
     "yMin",
     "yMax",
+    "dims",
     "alignment",
+    "overlap",
     "axes",
     "w",
     "h",
@@ -96,18 +121,21 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
   table: ["by", "spacing", "numCols"],
   log: ["prefix"],
   treemap: [
+    "x",
+    "y",
     "w",
     "h",
+    "dims",
     "by",
-    "paddingInner",
-    "paddingOuter",
+    "spacing",
+    "padding",
     "round",
     "tile",
     "sort",
     "size",
-    "flipY",
-    "leafIntrinsicRadiusField",
   ],
+  pack: ["by"],
+  partition: ["by", "dir", "alignment", "axes"],
 };
 
 console.log("\n# Descriptor fields agree with schema.ts operator interfaces");
@@ -142,6 +170,194 @@ for (const type of Object.keys(OPERATORS)) {
     `SCHEMA_OPERATOR_KEYS has an entry for "${type}"`,
     type in SCHEMA_OPERATOR_KEYS
   );
+}
+
+/**
+ * The object-form keys of schema.ts's hand-written `AxisOptions` /
+ * `AxesOptions` types. Typed as `Record<keyof ..., true>`, so a type checker
+ * flags a key added to or removed from the TS type; the runtime check below
+ * compares them with the `OPTION_TYPES` declaration.
+ */
+const SCHEMA_OPTION_TYPE_KEYS: Record<string, Record<string, true>> = {
+  AxisOptions: {
+    title: true,
+    side: true,
+    label: true,
+    levels: true,
+    divider: true,
+  } satisfies Record<keyof Exclude<AxisOptions, boolean>, true>,
+  AxisLabelOptions: {
+    angle: true,
+    align: true,
+  } satisfies Record<keyof AxisLabelOptions, true>,
+  AxesOptions: {
+    x: true,
+    y: true,
+  } satisfies Record<keyof Exclude<AxesOptions, boolean>, true>,
+  AxisInterval: {
+    min: true,
+    center: true,
+    max: true,
+    size: true,
+    embedded: true,
+  } satisfies Record<keyof AxisInterval, true>,
+  FieldPredicate: {
+    field: true,
+    between: true,
+    closed: true,
+  } satisfies Record<keyof FieldPredicateIR, true>,
+};
+
+/** The fields of the one object branch of a named option type. */
+function optionTypeObjectKeys(type: FieldType): string[] {
+  if (type.kind === "object") return Object.keys(type.fields);
+  if (type.kind === "union") return type.options.flatMap(optionTypeObjectKeys);
+  return [];
+}
+
+console.log("\n# OPTION_TYPES agree with schema.ts option types");
+for (const [name, keys] of Object.entries(SCHEMA_OPTION_TYPE_KEYS)) {
+  const spec = OPTION_TYPES[name];
+  check(`OPTION_TYPES["${name}"] exists`, spec !== undefined);
+  if (!spec) continue;
+  const schemaKeys = Object.keys(keys).sort();
+  const descriptorKeys = optionTypeObjectKeys(spec.type).sort();
+  check(
+    `${name}: OPTION_TYPES object keys === schema.ts type keys`,
+    JSON.stringify(schemaKeys) === JSON.stringify(descriptorKeys),
+    JSON.stringify({ schemaKeys, descriptorKeys })
+  );
+}
+
+console.log("\n# LABEL_OPTIONS agree with schema.ts LabelSpecIR");
+{
+  const schemaKeys = Object.keys({
+    position: true,
+    fontSize: true,
+    color: true,
+    offset: true,
+    rotate: true,
+    fontFamily: true,
+    fontWeight: true,
+    fontStyle: true,
+  } satisfies Record<Exclude<keyof LabelSpecIR, "accessor">, true>).sort();
+  const descriptorKeys = Object.keys(LABEL_OPTIONS).sort();
+  check(
+    "LABEL_OPTIONS keys === LabelSpecIR keys but accessor",
+    JSON.stringify(schemaKeys) === JSON.stringify(descriptorKeys),
+    JSON.stringify({ schemaKeys, descriptorKeys })
+  );
+}
+
+/** Per kind of a strategy IR union, its param keys (all but `kind`). Typed
+ *  so that a type checker flags a kind or a param added to or removed from
+ *  the schema.ts type; the runtime check below compares them with
+ *  `STRATEGIES`. */
+type StrategyKeys<U extends { kind: string }> = {
+  [K in U["kind"]]: Record<
+    Exclude<keyof Extract<U, { kind: K }>, "kind">,
+    true
+  >;
+};
+
+const SCHEMA_STRATEGY_KEYS: Record<
+  keyof typeof STRATEGIES,
+  Record<string, Record<string, true>>
+> = {
+  Tile: {
+    squarify: { ratio: true },
+    slice: {},
+    dice: {},
+    binary: {},
+    sliceDice: {},
+  } satisfies StrategyKeys<TileIR>,
+  Overlap: {
+    separate: { padding: true },
+    noise: { randomness: true, smoothing: true, padding: true, seed: true },
+  } satisfies StrategyKeys<OverlapIR>,
+  Curve: {
+    linear: {},
+    step: {},
+    monotone: {},
+    smooth: {},
+    catmullRom: {},
+    bezier: {},
+    orthogonal: { bend: true },
+    arc: { direction: true },
+    perfectArrows: {
+      bow: true,
+      stretch: true,
+      stretchMin: true,
+      stretchMax: true,
+      padStart: true,
+      padEnd: true,
+      flip: true,
+      straights: true,
+    },
+  } satisfies StrategyKeys<CurveIR>,
+  Bin: {
+    step: { size: true },
+    thresholds: { thresholds: true },
+    hex: { radius: true },
+    voronoi: { seeds: true },
+  } satisfies StrategyKeys<BinIR>,
+  Calendar: {
+    second: { every: true },
+    minute: { every: true },
+    hour: { every: true },
+    day: { every: true },
+    weekday: { start: true },
+    week: { every: true, start: true },
+    month: { every: true },
+    quarter: { every: true },
+    year: { every: true },
+  } satisfies StrategyKeys<CalendarPartitionIR>,
+};
+
+console.log(
+  "\n# STRATEGIES agree with schema.ts TileIR / OverlapIR / CurveIR / BinIR / CalendarPartitionIR"
+);
+for (const [family, kinds] of Object.entries(SCHEMA_STRATEGY_KEYS)) {
+  const table = STRATEGIES[family as keyof typeof STRATEGIES].kinds as Record<
+    string,
+    { params: Record<string, unknown> }
+  >;
+  check(
+    `${family}: kinds === schema.ts kinds`,
+    JSON.stringify(Object.keys(kinds).sort()) ===
+      JSON.stringify(Object.keys(table).sort()),
+    JSON.stringify({ schema: Object.keys(kinds), table: Object.keys(table) })
+  );
+  for (const [kind, params] of Object.entries(kinds)) {
+    const declared = Object.keys(table[kind]?.params ?? {}).sort();
+    check(
+      `${family}.${kind}: params === schema.ts keys`,
+      JSON.stringify(Object.keys(params).sort()) === JSON.stringify(declared),
+      JSON.stringify({ schema: Object.keys(params), table: declared })
+    );
+  }
+}
+
+console.log(
+  "\n# Every strategy preset makes a kind of its family, with its params"
+);
+for (const [family, spec] of Object.entries(STRATEGIES)) {
+  const presets = ("presets" in spec ? spec.presets : {}) as Record<
+    string,
+    { kind: string; values: Record<string, unknown> }
+  >;
+  const kinds = spec.kinds as Record<
+    string,
+    { params: Record<string, unknown> }
+  >;
+  for (const [name, preset] of Object.entries(presets)) {
+    check(
+      `${family}.${name}: preset kind and values are declared`,
+      preset.kind in kinds &&
+        !(name in kinds) &&
+        Object.keys(preset.values).every((k) => k in kinds[preset.kind].params)
+    );
+  }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -198,7 +198,7 @@ and the Layer's layout becomes a fixed pipeline: resolve size → solve σ per
 axis from the folded claim → propose per-child sizes (claim at σ, else fill
 policy) → lay out children → apply placement rules → fill unplaced at
 baseline → measure. `spread({dir, spacing, alignment, sharedScale})` compiles
-to `Layer(children).constrain(c => [align({[cross]: alignment}, all),
+to `Layer(children).relate(c => [align({[cross]: alignment}, all),
 distribute({dir, spacing}, all)])` and disappears as machinery, surviving only
 as surface sugar — option 1 of [[operators-vs-constraints]], now with the
 missing two facets identified.
@@ -281,7 +281,7 @@ Two findings sharpen the theory:
 | `enclose`, `arrow`, `connect` | derived marks                                   | already the plan; `connect` is the canonical example (bbox derived from refs, no space claim of its own)                                                                                                                                                                                                                                                                                                         |
 | `frame`                       | `layer` (or `coord`)                            | already sugar                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `group`                       | data combinator                                 | not a layout operator; untouched                                                                                                                                                                                                                                                                                                                                                                                 |
-| `table`                       | `layer` + `grid` constraint (#548, done)        | a grid is the symmetric 2-D layout: cells partitioned into column tracks (x) and row tracks (y), each cell filling its track intersection. Extents are max-plus (track = max over its cells, total = Σ tracks + spacing); v1 is equal flex tracks (box-division), the table being the flex scope root. `table` now elaborates to `layer(cells).constrain(grid(...))` (`constraints/grid.ts`)                     |
+| `table`                       | `layer` + `grid` constraint (#548, done)        | a grid is the symmetric 2-D layout: cells partitioned into column tracks (x) and row tracks (y), each cell filling its track intersection. Extents are max-plus (track = max over its cells, total = Σ tracks + spacing); v1 is equal flex tracks (box-division), the table being the flex scope root. `table` now elaborates to `layer(cells).relate(grid(...))` (`constraints/grid.ts`)                        |
 | `treemap`                     | **does not reduce** to align/distribute         | d3 computes slot rects from data and _scales children into them_ — a global algorithm assigning positions _and sizes_. Either (a) keep as a custom layout node (Bluefish's answer: arbitrary layouts are nodes; constraints are the core, not the whole), or (b) recast as a _derived-constraint_ generator: run the algorithm, emit position constraints + size assignments. (b) needs size-setting constraints |
 | `porterDuff`                  | stays                                           | a compositing/render concept, not layout                                                                                                                                                                                                                                                                                                                                                                         |
 | `coord`                       | stays, orthogonal                               | coordinate transforms warp the space the constraint network solves in; the constraint reduction is what finally lets coord-wrapped constraint pipelines auto-fit (the #475 NestedPietree failure), because the Layer's solve runs regardless of whether content was assembled by operators or constraints                                                                                                        |
@@ -354,8 +354,8 @@ sub-sums (two independent stacks overlaid); a distribute interleaved with a
 `position`-pinned anchor must solve its sum _relative to_ the pin. The extents
 remain max-plus (longest path through the network), so the solve stays
 well-defined, but the current one-space-per-axis model has no way to say
-"this fragment is a sub-stack" — that wants either sub-domain tagging (the
-existing `ordinalGroupId` field gestures at this) or the measure-keyed
+"this fragment is a sub-stack" — that wants either sub-domain tagging or the
+measure-keyed
 multi-scale-per-axis design, which this would share machinery with. Separately,
 over-constraint needs a decision: today `place()` silently no-ops on the
 second write and spread warns; Bluefish throws with ownership info. Recommend:
@@ -403,8 +403,10 @@ propagation for positions, plus an
 analytic one-unknown size solve Bluefish lacked. The known superlinear
 lurkers, both pre-existing and shared with operators today: nested
 _non-linear_ folds make an ancestor's inversion cost O(subtree closure size · 70) (mitigated by the linear fast path; could memoize `run` per σ), and
-`collectConstraintRefs`' descent into nested plain layers is O(subtree) per
-layer in the worst case (memoizable). Neither is quadratic in spec size.
+the operand lookup (`resolveScopedName`, a breadth-first search that stops at
+the first depth with a match and never walks a subtree twice) is O(scope) per
+distinct operand name in the worst case, and much less when the name is a
+direct child. Neither is quadratic in spec size.
 
 **Brittleness and linear-cost robustness fixes.** Today's constraint path is
 brittle in five identifiable ways, none of which needs a cleverer solver:
@@ -446,7 +448,7 @@ suggest it will not be needed.
   comparison: low-level constraint languages are viscous; ours stay bundled
   behind operator sugar).
 - Not a removal of operators from the _surface_. `spread`/`stack` remain the
-  v3 vocabulary; they become guaranteed-faithful sugar (per
+  fluent API's vocabulary; they become guaranteed-faithful sugar (per
   [[operators-vs-constraints]] option 1), which is also what keeps authoring
   viscosity low — the paper's §8.2 lesson is that making users assemble
   relations by hand pushes specs diffuse early.
@@ -470,7 +472,7 @@ suggest it will not be needed.
    Addresses #475. (`nest` was not revived here — it lives with the
    size-setting design, residual 1.)
 3. ✅ **`spread`/`stack` on the shared machinery** — done as _delegation_
-   rather than literal `Layer.constrain()` compilation: spread keeps its node
+   rather than literal `Layer.relate()` compilation: spread keeps its node
    type (home for sharedScale mutation, scaleContext, axisDir, reverse,
    explicit-dims translate, measure-and-report) but its fold, slicing, align
    walk, and distribute walk are the constraint implementations; the bespoke

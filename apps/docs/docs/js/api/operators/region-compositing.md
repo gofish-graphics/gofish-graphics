@@ -1,3 +1,7 @@
+---
+order: 100
+---
+
 # Region compositing
 
 Five operators combine the _regions_ (silhouettes) of two children, named
@@ -28,7 +32,7 @@ Union (`A ∪ B`) is intentionally **not** exported — it is conceptually
 ::: gofish
 
 ```js
-gf.Paint([
+gf.paint([
   gf.rect({ x: 0, y: 0, w: 120, h: 120, fill: gf.color.blue[3] }),
   gf.rect({ x: 40, y: 40, w: 120, h: 120, fill: gf.color.red[3] }),
 ]).render(root, { w: 160, h: 160 });
@@ -50,14 +54,13 @@ paint(options?, [A, B]);
 mask([A, B]);
 ```
 
-`Intersect`, `Exclude`, `Subtract`, `Paint`, and `Mask` are the v2
-(capitalized) aliases for the same factories.
+Each child may be a mark or an already-built node, such as a `ref(...)`.
+Marks are resolved against the incoming data.
 
 ## Parameters
 
-| Option      | Type                                                             | Description                                                                   |
-| ----------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `blendMode` | `"color" \| "multiply" \| "screen" \| "overlay" \| "luminosity"` | Blend used where regions combine. Default `"color"`. `mask` takes no options. |
+::: gofish-ref intersect exclude subtract paint mask
+:::
 
 ## Arity
 

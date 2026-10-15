@@ -3,7 +3,7 @@
 // </gofish-wiki>
 
 /**
- * createOperator: a factory for v3 layout operators.
+ * createOperator: a factory for the fluent API's layout operators.
  *
  * Every layout operator (spread, stack, scatter, table, group) has the same
  * underlying shape: split the data into pieces, apply a mark to each piece,
@@ -17,7 +17,7 @@
  * High-level opts are passed to `layout` directly (after channels apply and
  * meta merges). This requires high-level `OperatorOptions` to match the
  * low-level layout function's opts shape — naming and types should align
- * between the two. v3-only keys (`by`, `debug`) are stripped before layout.
+ * between the two. Fluent-only keys (`by`, `debug`) are stripped before layout.
  *
  * The returned function has two call shapes, disambiguated by whether a
  * marks-shape is passed as the second argument:
@@ -26,21 +26,39 @@
  *   combinator form (inside a mark):  createOp(opts, marksShape)    -> Mark
  *
  * See the "Operator Factory" internals essay
- * (apps/docs/docs/internals/v3/operator-factory.md) for a full walk-through.
+ * (apps/docs/docs/internals/frontend/operator-factory.md) for a full
+ * walk-through.
  */
 
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { GoFishRef } from "../_ref";
-import { Mark, Operator } from "../types";
+import { Mark, MarkChild, Operator } from "../types";
 import {
-  LayerContext,
+  datumOfInput,
+  layerKey,
   resolveMarkResult,
   stashLayerName,
-} from "./chartBuilder";
-import { inferSize, inferPos, inferColor, resolveMeasure } from "../channels";
-import { discretePosition, copyMeasureProvenance, isField } from "../data";
-import type { Measure } from "../data";
+  type LayerContext,
+} from "./markResult";
+import {
+  CHANNEL_INFER,
+  resolveChannelAccessors,
+  axisSlotKind,
+  resolveColumn,
+  type DimsChannelSpec,
+} from "../channels";
+import { mapAxisDims, type AxisDimsSlot } from "../dims";
+
+import type {
+  ChannelAnnotations as MarkChannelAnnotations,
+  ChannelSpec as MarkChannelSpec,
+  ChannelType as MarkChannelType,
+} from "../channels";
+import { discretePosition } from "../data";
+import { copyColumnTypes } from "../schema";
+import { KeyCell } from "../cells";
+import { fieldNameOf, isChunk } from "../data";
+import { splitByOf, type SplitKey } from "../datumProjection";
 import type { MaybeValue, Value } from "../data";
 import {
   hasNormalizeOp,
@@ -54,11 +72,20 @@ import {
   positionNode,
   type PositionNodeOptions,
 } from "../graphicalOperators/positionNode";
-import { attachTerminals } from "./terminals";
+import { attachBuilderTerminals } from "./terminals";
+import { installBuildIn } from "../../animation/install";
+import {
+  recordMarkTransition,
+  recordOperatorTransition,
+  type MarkTransition,
+  type OperatorTransition,
+} from "../../animation/transition";
+import { withWire, wireOf } from "../wire";
+import { isThenable } from "../../util";
+import { withKindValues } from "../strategyKind";
 
-// Re-exports for callers that previously got these from createOperator.
-export type { LayerContext } from "./chartBuilder";
-export { resolveMarkResult } from "./chartBuilder";
+export type { LayerContext } from "./markResult";
+export { resolveMarkResult } from "./markResult";
 
 // NameableMark is the same type used by createMark — see withGoFish.ts.
 export type { NameableMark } from "../withGoFish";
@@ -68,7 +95,7 @@ export type { NameableMark } from "../withGoFish";
  * operators can route correctly:
  *
  *   per-item (default): T → Element. The mark is invoked once per data item;
- *     each invocation produces one node. Matches every legacy mark.
+ *     each invocation produces one node. The default for every mark.
  *   expand: T[] → Element[]. The mark is invoked once with the whole group;
  *     it returns N nodes 1:1 with data. Used by `cut` so a single source
  *     shape can produce a sliced array of children that an upstream layout
@@ -77,8 +104,8 @@ export type { NameableMark } from "../withGoFish";
 export type MarkKind = "per-item" | "expand";
 
 /**
- * Read the dispatch kind off a mark. Defaults to per-item so untagged marks
- * keep their legacy behavior.
+ * Read the dispatch kind off a mark. Defaults to per-item, so an untagged mark
+ * is invoked once per data item.
  */
 export function getMarkKind(mark: unknown): MarkKind {
   return ((mark as any)?.__kind as MarkKind | undefined) ?? "per-item";
@@ -103,7 +130,7 @@ export function withMarkKind<M>(mark: M, kind: MarkKind): M {
  *
  *   per-item: one call per leaf with leaf-as-data. Returns `[oneNode]`.
  *             Preserves the aggregation contract of `inferSize`/`inferPos`
- *             on grouped data — every legacy mark stays unchanged.
+ *             on grouped data.
  *   expand:   call mark once with the whole array; expect an array of nodes.
  *             The returned array is flattened by the caller across leaves.
  *
@@ -112,21 +139,20 @@ export function withMarkKind<M>(mark: M, kind: MarkKind): M {
  */
 export async function applyMark<T>(
   mark: Mark<T> | Mark<T[]>,
-  group: T | T[],
+  group: T[],
   groupKey?: string | number,
   layerContext?: LayerContext
 ): Promise<GoFishNode[]> {
   const kind = getMarkKind(mark);
   if (kind === "expand") {
-    const items = Array.isArray(group) ? (group as T[]) : ([group] as T[]);
-    const result = await (mark as Mark<T[]>)(items, groupKey, layerContext);
+    const result = await (mark as Mark<T[]>)(group, groupKey, layerContext);
     return Promise.all(
-      (Array.isArray(result) ? result : [result]).map((r) =>
+      (result as unknown as GoFishNode[]).map((r) =>
         resolveMarkResult(r as any, layerContext)
       )
     );
   }
-  // per-item: legacy behavior — one call per leaf, mark may aggregate.
+  // per-item: one call per leaf; the mark may aggregate.
   const node = await resolveMarkResult(
     (mark as Mark<T>)(group as T, groupKey, layerContext),
     layerContext
@@ -137,7 +163,7 @@ export async function applyMark<T>(
 /* ------------------------------------------------------------------------ *
  * Modifier factory
  *
- * Every chainable mark method (`.name`, `.label`, `.constrain`) shares one
+ * Every chainable mark method (`.name`, `.label`, `.relate`) shares one
  * shape: calling it returns a NEW mark that, when invoked, applies a mutation
  * to each node the base mark produced — one node for a per-item mark, every
  * slice for an expand mark (`cut`) — then returns the node(s). The returned
@@ -147,7 +173,7 @@ export async function applyMark<T>(
  * `createModifier` captures that shape as a config; `attachModifiers` wires a
  * set of them (plus the export terminals from `terminals.ts`) onto a base mark.
  * This is the one system behind `nameableMark` (here), `createMark`
- * (withGoFish.ts), and `makeConstrainableMark` (chart.ts) — replacing three
+ * (withGoFish.ts), and `makeRelatableMark` (chart.ts) — replacing three
  * hand-rolled copies.
  * ------------------------------------------------------------------------ */
 
@@ -158,7 +184,7 @@ export async function applyMark<T>(
  * the IR-serialize tag or the stashed layer name.
  */
 export type ModifierConfig<Args extends any[] = any[]> = {
-  /** Method name exposed on the mark, e.g. "name" | "label" | "constrain". */
+  /** Method name exposed on the mark, e.g. "name" | "label" | "relate". */
   name: string;
   /** `datum` is the per-instance data the mark was called with (the same value
    *  the shape factory saw). Modifiers that don't need it ignore it; `.zOrder`
@@ -168,20 +194,13 @@ export type ModifierConfig<Args extends any[] = any[]> = {
     layerContext: LayerContext | undefined,
     datum: unknown,
     ...args: Args
-  ) => void;
+  ) => void | Promise<void>;
   tag?: (wrapped: Mark<any>, base: Mark<any>, ...args: Args) => void;
 };
 
 /** A paint-order hint: a constant, or a callback resolved per-instance against
  *  the datum the mark is bound to. */
 export type ZOrderValue<T = any> = number | ((datum: T) => number);
-
-/** Register a modifier. Identity at runtime; the value is the typed config. */
-export function createModifier<Args extends any[]>(
-  cfg: ModifierConfig<Args>
-): ModifierConfig<Args> {
-  return cfg;
-}
 
 export type TranslateModifierOptions = PositionNodeOptions;
 
@@ -197,11 +216,11 @@ function propagateSerialize(
   to: object,
   merge: (tag: Record<string, any>) => void
 ): void {
-  const tag = (from as any).__serialize;
+  const tag = wireOf(from);
   if (tag) {
     const nextTag: any = { ...tag };
     merge(nextTag);
-    (to as any).__serialize = nextTag;
+    withWire(to, nextTag);
   }
 }
 
@@ -220,15 +239,16 @@ function modifierMethod(
       const raw = await (base as any)(d, key, layerContext);
       // Expand-kind marks return an array of nodes; per-item return one.
       // Apply the modifier to each produced node either way.
-      if (Array.isArray(raw)) {
+      if (getMarkKind(base) === "expand") {
         const nodes = await Promise.all(
-          raw.map((r) => resolveMarkResult(r, layerContext))
+          (raw as GoFishNode[]).map((r) => resolveMarkResult(r, layerContext))
         );
-        for (const node of nodes) cfg.apply(node, layerContext, d, ...args);
+        for (const node of nodes)
+          await cfg.apply(node, layerContext, d, ...args);
         return nodes as unknown as GoFishNode;
       }
       const node = await resolveMarkResult(raw, layerContext);
-      cfg.apply(node, layerContext, d, ...args);
+      await cfg.apply(node, layerContext, d, ...args);
       return node;
     };
     // Preserve the kind tag so applyMark dispatches correctly through the
@@ -242,6 +262,12 @@ function modifierMethod(
     // applies the name/label/zOrder when invoked).
     if ((base as any).__relationalFusable) {
       (wrapped as any).__relationalFusable = (base as any).__relationalFusable;
+    }
+    // Carry the stashed `.name(...)` forward the same way, so a mark named and
+    // then chained (`.name("dots").transition(...)`, `.name("bars").label(...)`)
+    // still reads as named. A `.name` further down the chain restashes it.
+    if ((base as any).__layerName !== undefined) {
+      stashLayerName(wrapped, (base as any).__layerName);
     }
     cfg.tag?.(wrapped, base, ...args);
     return redecorate(wrapped);
@@ -289,11 +315,14 @@ export function attachModifiers<T>(
   });
   // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
   // from the shared registry, so adding one touches a single list. A mark
-  // resolves to a node by calling it with `undefined`. See terminals.ts.
-  attachTerminals(
-    base,
-    () => resolveMarkResult((base as any)(undefined)) as Promise<GoFishNode>
-  );
+  // resolves to a node as a root (`resolveMarkResult`), and plays its own
+  // `.transition({ enter })` as a chart does (`installBuildIn`, which the
+  // render options `playing` / `at` can hold). See terminals.ts.
+  attachBuilderTerminals(base, async (options) => {
+    const node = await resolveMarkResult(base as Mark<any>);
+    installBuildIn(node, options);
+    return { node, options };
+  });
   return base;
 }
 
@@ -303,15 +332,17 @@ export function attachModifiers<T>(
  * `ref(...)`/`selectAll(...)` can find it back. Registration is deferred (a
  * `__layerRegistration` tag) rather than an inline `layerContext` push so
  * registry order follows parent-iteration order, not async-completion order.
- * Tokens are hygienic handles and don't join the string-keyed registry.
+ * Tokens are hygienic handles: they are filed under their own symbol
+ * (`layerKey`), so no string name reaches them.
  */
-export const nameModifier = createModifier<[layerName: string | symbol]>({
+export const nameModifier = {
   name: "name",
   apply: (node, layerContext, _datum, layerName) => {
     node.name(layerName as any);
-    if (layerContext && typeof layerName === "string" && layerName) {
-      (node as { __layerRegistration?: string }).__layerRegistration =
-        layerName;
+    const key = layerKey(layerName);
+    if (layerContext && key !== undefined) {
+      (node as { __layerRegistration?: string | symbol }).__layerRegistration =
+        key;
     }
   },
   tag: (wrapped, base, layerName) => {
@@ -324,7 +355,7 @@ export const nameModifier = createModifier<[layerName: string | symbol]>({
     });
     stashLayerName(wrapped, layerName);
   },
-});
+} satisfies ModifierConfig<[layerName: string | symbol]>;
 
 /**
  * Compute the IR-serializable form of a `.label(accessor, options)` call, or
@@ -386,9 +417,7 @@ function pushLabelField(
 }
 
 /** `.label(accessor, options?)` — defers label placement on each node. */
-export const labelModifier = createModifier<
-  [accessor: LabelAccessor, options?: LabelOptions]
->({
+export const labelModifier = {
   name: "label",
   apply: (node, _layerContext, _datum, accessor, options) => {
     node.label(accessor, options);
@@ -398,7 +427,7 @@ export const labelModifier = createModifier<
       pushLabelField(tag, labelIRField(accessor, options));
     });
   },
-});
+} satisfies ModifierConfig<[accessor: LabelAccessor, options?: LabelOptions]>;
 
 /**
  * `.zOrder(value)` — sets the node's paint-order hint. `value` is either a
@@ -407,7 +436,7 @@ export const labelModifier = createModifier<
  * the rest) without splitting the mark into separately-named layers. The hint
  * is consumed by the bake pass's per-layer `(zOrder, index)` sort.
  */
-export const zOrderModifier = createModifier<[value: ZOrderValue]>({
+export const zOrderModifier = {
   name: "zOrder",
   apply: (node, _layerContext, datum, value) => {
     node.zOrder(typeof value === "function" ? value(datum) : value);
@@ -420,7 +449,25 @@ export const zOrderModifier = createModifier<[value: ZOrderValue]>({
       if (typeof value === "number") tag.zOrder = value;
     });
   },
-});
+} satisfies ModifierConfig<[value: ZOrderValue]>;
+
+/**
+ * `.transition({ enter, update, exit })` — how the mark looks in each phase
+ * of an animation (`Animation.grow()`, `Animation.fadeIn()`, …). It records
+ * the effects on each produced node. The build-in reads them there
+ * (`src/animation/install.ts`), and so does the chart builder when the flow
+ * has a `time.sequence` (then the phases are `time.transition()`'s,
+ * `chainedUpdates`). Animation is JS-only, so nothing reaches the IR.
+ */
+export const transitionModifier = {
+  name: "transition",
+  apply: (node, _layerContext, _datum, spec) => {
+    recordMarkTransition(node, spec);
+  },
+  tag: (wrapped, base) => {
+    propagateSerialize(base, wrapped, () => {});
+  },
+} satisfies ModifierConfig<[spec: MarkTransition]>;
 
 /**
  * Attach chainable .name(), .label(), and .zOrder() to a mark, registering it
@@ -432,6 +479,7 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
     nameModifier,
     labelModifier,
     zOrderModifier,
+    transitionModifier,
   ]) as NameableMark<T>;
 }
 
@@ -479,39 +527,38 @@ export function attachTransformModifiers<M extends object>(
  * What a split returns. Insertion order is preserved (ES Map spec), which
  * matters for layout ordering.
  *
- * Each bucket may be either a `Datum[]` (the typical groupBy case) or a
- * single `Datum` (the no-`by` per-item case). The downstream mark and
- * `inferSize`/`inferPos`/`inferColor` all normalise via
- * `Array.isArray(d) ? d : [d]`, so both forms work uniformly.
+ * Each bucket is a group: a list of the items the split was given. A split
+ * never looks inside an item, so an item that is itself an array is just an
+ * item. With no `by` the split is by row identity, and each group is `[item]`.
  *
- * If the operator also needs to feed axis labels (e.g. `{colKeys, rowKeys}`
- * for table) into the layout function's opts, return the wrapped
- * `{entries, keys}` form instead of a bare Map.
+ * If the split also computes opts for the layout function (the axis labels
+ * `{colKeys, rowKeys}` for table, a stack's `origin`), return the wrapped
+ * `{entries, layoutOpts}` form instead of a bare Map.
  */
 export type SplitResult<Datum> =
-  | Map<string | number, Datum | Datum[]>
+  | Map<SplitKey, Datum[]>
   | {
-      entries: Map<string | number, Datum | Datum[]>;
-      keys?: Record<string, string[]>;
+      entries: Map<SplitKey, Datum[]>;
+      layoutOpts?: Record<string, unknown>;
     };
 
-/** Data-encoded opts (same shape as createMark's channel annotations). */
-export type ChannelType = "size" | "pos" | "color";
+/**
+ * Data-encoded opts: the mark channels (channels.ts) minus "raw" — an
+ * operator's opts are layout values, always scaled, never unscaled content.
+ */
+export type ChannelType = Exclude<MarkChannelType, "raw">;
+export type ChannelSpec = MarkChannelSpec<ChannelType>;
 
 /**
- * Channel spec. String form is the default (aggregate over all data, produces
- * one value). Object form adds flags — notably `entry: true`, which runs the
- * inference once per split entry (using each entry's items) and collects the
- * results into an array. Entry-flagged channels are only meaningful in the
- * operator (traversal) form; in the combinator form they act as the aggregate
- * form for whatever data the combinator was called with.
+ * Same annotations as createMark's, narrowed to the operator channel types.
+ * `entry: true` runs the inference once per split entry (using each entry's
+ * items) and collects the results into an array. Entry-flagged channels are
+ * only meaningful in the operator (traversal) form; in the combinator form they
+ * act as the aggregate form for whatever data the combinator was called with.
  */
-export type ChannelSpec =
-  | ChannelType
-  | { type: ChannelType; entry?: boolean; discrete?: boolean };
-
-export type ChannelAnnotations<Options> = Partial<
-  Record<keyof Options, ChannelSpec>
+export type ChannelAnnotations<Options> = MarkChannelAnnotations<
+  Options,
+  ChannelType
 >;
 
 /**
@@ -588,35 +635,65 @@ export type OperatorConfig<Datum, Options> = {
    * Injected into the node operator as `axisMeasures` so it can stamp the
    * ORDINAL space's `measure` — e.g. `spread({by: "lake", dir: "x"})` reports
    * `{x: "lake"}`, the x-axis names itself "lake" off its own resolved space.
+   * Keyed by axis name, the way the operator names its axes (`x`/`y`, or a
+   * coord-declared name such as spread's `dir: "theta"`).
    */
-  axisFields?: (opts: Options) => { x?: string; y?: string } | undefined;
+  axisFields?: (
+    opts: Options
+  ) => Record<string, string | undefined> | undefined;
   /**
-   * Optional IR-serialization config. When set, the factory tags the
-   * produced operator with an `__serialize: { type, opts }` marker the
-   * frontend-IR emitter (gofish-graphics/serialize/toJSON) reads. Each
-   * standard-library operator should declare its IR discriminator here;
-   * user-built operators may omit it (the emitter falls back to opaque
-   * `{ type: "derive" }` for any operator that lacks a tag).
+   * Optional declaration of how this operator arranges its groups in space,
+   * read by the relational-mark travel-axis rule (`classifyOperator` in
+   * chartBuilder.ts, whose doc comment states the rule). An operator that
+   * declares nothing positions nothing ("none") and takes no part in the rule.
+   *   - "arrangement" — lays its groups out along one axis (spread/stack).
+   *   - "value" — writes literal per-item coordinates (scatter).
+   *   - "none" — positions nothing, but may still carry a splittable `by`
+   *     (group).
+   * The factory tags the built operator with the resolved classification, so a
+   * user-built operator can opt in the same way a standard-library one does.
    */
-  serialize?: {
-    /** IR discriminator (lowercase to match the wire format), e.g. "spread". */
-    type: string;
-    /**
-     * Optional shape function: takes the original options and returns the
-     * IR payload. Default behavior is to copy opts verbatim. Use this when
-     * the runtime opts diverge from what the IR should carry — e.g. to
-     * strip non-serializable fields or rename a key.
-     */
-    shape?: (opts: Options) => Record<string, unknown>;
+  arrangement?: {
+    kind: "arrangement" | "value" | "none";
+    /** Which axes this operator positions on, from its opts. Omitted means
+     *  neither. */
+    positions?: (opts: Options) => { x: boolean; y: boolean };
   };
+  /**
+   * The operator's IR discriminator (lowercase, as on the wire), e.g.
+   * "spread". When set, the factory tags the produced operator with an
+   * `__serialize: { type, opts }` marker the frontend-IR emitter
+   * (gofish-graphics/serialize/toJSON) reads. Each standard-library operator
+   * declares it; user-built operators may omit it (the emitter falls back to
+   * opaque `{ type: "derive" }` for any operator that lacks a tag). The tag
+   * holds the options as the caller passed them; the emitter keeps only the
+   * keys the operator's descriptor declares.
+   */
+  serialize?: string;
 };
+
+/** Stamp a combinator-form mark with its IR-serialization tag. `__combinator`
+ *  tells the emitter to write the spec into the mark tree (with `children`)
+ *  rather than into the operators[] list; the children ride on the tag because
+ *  they are otherwise trapped inside the mark's closure. Shared by every
+ *  combinator: this factory's combinator form, `layer`, and the Porter-Duff
+ *  operators (both in marks/chart.ts). */
+export function tagCombinator<M extends object>(
+  mark: M,
+  type: string,
+  opts: Record<string, unknown>,
+  children: unknown
+): M {
+  withWire(mark, { type, opts, __combinator: true, children });
+  return mark;
+}
 
 export type DualModeOperator<Datum, Options> = {
   (opts: Options): TranslatableOperator<Datum[], Datum[]>;
   (
     opts: Options,
-    marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
-  ): NameableMark<Datum>;
+    marks: MarkChild[] | Promise<MarkChild[]>
+  ): NameableMark<Datum[]>;
 };
 
 export type TranslatableOperator<T, U> = Operator<T, U> & {
@@ -625,6 +702,9 @@ export type TranslatableOperator<T, U> = Operator<T, U> & {
     accessor: LabelAccessor,
     options?: LabelOptions
   ): TranslatableOperator<T, U>;
+  /** How this operator's CHILDREN are arranged in time in each phase of an
+   *  animation: `time.stagger({ ... })` or `time.parallel()`. */
+  transition(spec: OperatorTransition): TranslatableOperator<T, U>;
 };
 
 function attachTranslateOption<T extends object>(
@@ -632,7 +712,7 @@ function attachTranslateOption<T extends object>(
   translate: (opts: TranslateModifierOptions) => T
 ): T {
   Object.defineProperty(target, "translate", {
-    value: (opts: TranslateModifierOptions) => translate(opts),
+    value: translate,
     writable: true,
     configurable: true,
   });
@@ -661,6 +741,27 @@ function attachLabelOption<T extends object>(
   return target;
 }
 
+/**
+ * Attach `.transition(spec)` to an operator (traversal form). Like `.label()`,
+ * the spec is closed-over state the executing operator reads (once per
+ * `.flow()` run) and records on the node it builds. Returns `target` so the
+ * call chains.
+ */
+function attachTransitionOption<T extends object>(
+  target: T,
+  setTransition: (spec: OperatorTransition) => void
+): T {
+  Object.defineProperty(target, "transition", {
+    value: (spec: OperatorTransition) => {
+      setTransition(spec);
+      return target;
+    },
+    writable: true,
+    configurable: true,
+  });
+  return target;
+}
+
 function translateOperator<T, U>(
   operator: Operator<T, U>,
   opts: TranslateModifierOptions
@@ -675,9 +776,15 @@ function translateOperator<T, U>(
   // `readTag` would find nothing here and silently fall back to the opaque
   // `{type: "derive"}` IR — losing both `.translate()` and any chained
   // `.label()` from the wire.
-  const baseTag = (operator as any).__serialize;
+  const baseTag = wireOf(operator);
   if (baseTag) {
-    (translated as any).__serialize = { ...baseTag, translate: opts };
+    withWire(translated, { ...baseTag, translate: opts });
+  }
+  // Same for the spatial classification: a translated operator arranges its
+  // groups exactly as the base one does.
+  const baseArrangement = (operator as any).__arrangement;
+  if (baseArrangement) {
+    (translated as any).__arrangement = baseArrangement;
   }
   const withTranslate = attachTranslateOption(translated, (next) =>
     translateOperator(translated, next)
@@ -689,34 +796,19 @@ function translateOperator<T, U>(
   if (typeof (operator as any).label === "function") {
     attachLabelOption(withTranslate, (accessor, options) => {
       (operator as any).label(accessor, options);
-      const tag = (translated as any).__serialize;
+      const tag = wireOf(translated);
       if (tag) {
         pushLabelField(tag, labelIRField(accessor, options));
       }
     });
   }
+  // `.transition()` delegates the same way, so either chain order works.
+  if (typeof (operator as any).transition === "function") {
+    attachTransitionOption(withTranslate, (spec) =>
+      (operator as any).transition(spec)
+    );
+  }
   return withTranslate;
-}
-
-/**
- * Run a single channel inference over a data slice. `measure` is the channel's
- * resolved {@link Measure}, computed once per channel from the operator's whole
- * input array (which carries the measure-provenance symbol even when `data` is a
- * per-entry slice that does not) and passed down so `inferSize`/`inferPos` don't
- * recompute it per split entry.
- */
-async function runChannel(
-  type: ChannelType,
-  val: any,
-  data: any[],
-  measure: Measure | undefined
-): Promise<any> {
-  if (type === "size") return inferSize(val, data, measure);
-  if (type === "pos") return inferPos(val, data, measure);
-  // `inferColor` is async (like `inferRaw`) so a callable accessor may
-  // return a Promise — the Python-bridge lambda path.
-  if (type === "color") return inferColor(val, data);
-  return val;
 }
 
 function isNonNumericEntryField(
@@ -743,85 +835,141 @@ function isNonNumericEntryField(
  * - If the opts value is already an array, channels pass it through unchanged
  *   (user supplied the final form directly).
  */
-async function applyChannels<Options extends Record<string, any>>(
+function applyChannels<Options extends Record<string, any>>(
   opts: Options,
   channels: ChannelAnnotations<Options> | undefined,
   d: any,
-  entries: Map<string | number, any> | undefined
-): Promise<Options> {
+  entries: Map<SplitKey, any> | undefined
+): Options {
   if (!channels) return opts;
-  const wholeData = Array.isArray(d) ? d : [d];
   const out: any = { ...opts };
+  const infer = (
+    type: Exclude<ChannelType, "dims">,
+    spec: ChannelSpec,
+    val: any
+  ) => {
+    const flags =
+      typeof spec === "object" && !isDimsFormSpec(spec) ? spec : undefined;
+    return applyChannel(
+      type,
+      flags?.entry === true,
+      flags?.discrete === true,
+      val,
+      d,
+      entries,
+      opts
+    );
+  };
   for (const key of Object.keys(channels) as Array<keyof Options>) {
     const spec = channels[key];
     const val = out[key];
     if (val === undefined || spec === undefined) continue;
-    // User already supplied the final-form array — leave it alone. This is
-    // also the path for combinator-form callsites that pre-built per-child
-    // arrays (e.g. `scatter({x: [0, 1, 2]}, [...marks])`), and for entry-
-    // flagged channels where the user passed an explicit array.
-    if (Array.isArray(val)) continue;
     const type: ChannelType = typeof spec === "string" ? spec : spec.type;
-    const perEntry = typeof spec === "object" && spec.entry === true;
-    const discrete = typeof spec === "object" && spec.discrete === true;
-    // The measure is loop-invariant across split entries (it depends only on
-    // the accessor and `wholeData`'s provenance, not on which items a given
-    // entry holds), so resolve it once per channel. Only size/pos consume it;
-    // computing it for color/raw would add a spurious conflict-throw site.
-    const measure =
-      type === "size" || type === "pos"
-        ? resolveMeasure(wholeData, val)
-        : undefined;
-    if (perEntry && entries !== undefined) {
-      if (
-        type === "pos" &&
-        discrete &&
-        isNonNumericEntryField(val, wholeData)
-      ) {
-        out[key] = [...entries.keys()].map((_, i) =>
-          discretePosition(i, entries.size)
-        );
-        continue;
-      }
-      // Windowed normalize (#700 Phase 2 — `field(...).normalize()` on an
-      // operator's entry-flagged size channel): this is expression
-      // evaluation, not channel logic, so the WINDOW is all this factory
-      // supplies — run the per-entry channel with the PRE-normalize
-      // expression (an aggregate op if present, else the channel's own
-      // default sum, exactly as any size accessor would), then hand the
-      // collected per-entry values to fieldExpr.ts's applyEntryNormalize to
-      // compute shares across the window. `channels.ts` gains no ops
-      // knowledge from this.
-      if (type === "size" && hasNormalizeOp(val)) {
-        const { pre } = splitAtNormalize(val);
-        const rawEntryValues = await Promise.all(
-          [...entries.values()].map((items) =>
-            runChannel(type, pre, items, measure)
-          )
-        );
-        const byOpt = (opts as any).by;
-        const byName =
-          typeof byOpt === "string"
-            ? byOpt
-            : isField(byOpt)
-              ? byOpt.name
-              : undefined;
-        out[key] = applyEntryNormalize(rawEntryValues, byName);
-        continue;
-      }
-      // Value aggregation uses each entry's items; the measure comes from
-      // `wholeData` (the binned array still carries the symbol — each per-entry
-      // slice does not).
-      out[key] = await Promise.all(
-        [...entries.values()].map((items) =>
-          runChannel(type, val, items, measure)
-        )
-      );
-    } else {
-      out[key] = await runChannel(type, val, wholeData, measure);
+    if (type !== "dims") {
+      out[key] = infer(type, spec, val);
+      continue;
     }
+    // A `dims` bag is one channel per slot: the channel of the slot's
+    // top-level counterpart when the spec names a form, else a size or a
+    // position by the slot's structure, with the bag's flags.
+    const form = isDimsFormSpec(spec) ? spec.form : undefined;
+    out[key] = mapAxisDims(
+      val,
+      (v, slot) => {
+        if (form === undefined) return infer(axisSlotKind(slot), spec, v);
+        const counterpart = counterpartSpec(channels, form, slot);
+        if (counterpart === undefined) return v;
+        const t =
+          typeof counterpart === "string" ? counterpart : counterpart.type;
+        if (t === "dims")
+          throw new Error(
+            `${form.where}: a slot cannot stand for a dims option.`
+          );
+        return infer(t, counterpart, v);
+      },
+      form
+    );
   }
   return out as Options;
+}
+
+const isDimsFormSpec = (spec: ChannelSpec): spec is DimsChannelSpec =>
+  typeof spec === "object" && "form" in spec;
+
+/** The spec of the top-level option a `dims` slot stands for
+ *  ({@link DimsChannelSpec}), or `undefined` when that option has no channel.
+ *  The counterparts on the two axes must agree, since the slot's axis is not
+ *  known until the enclosing coordinate space is. */
+function counterpartSpec(
+  channels: Record<string, ChannelSpec | undefined>,
+  form: DimsChannelSpec["form"],
+  slot: AxisDimsSlot
+): ChannelSpec | undefined {
+  const [x, y] = form.topLevel[slot]!;
+  const spec = channels[x];
+  if (JSON.stringify(spec) !== JSON.stringify(channels[y])) {
+    throw new Error(
+      `${form.where}: the ${slot} slot stands for ${x} and ${y}, whose ` +
+        `channels differ, so it has no single channel.`
+    );
+  }
+  return spec;
+}
+
+/** One channel of {@link applyChannels}: infer `val` as a `type` channel. */
+function applyChannel(
+  type: Exclude<ChannelType, "dims">,
+  perEntry: boolean,
+  discrete: boolean,
+  val: any,
+  wholeData: any[],
+  entries: Map<SplitKey, any> | undefined,
+  opts: Record<string, any>
+): any {
+  // User already supplied the final-form array — leave it alone. This is
+  // also the path for combinator-form callsites that pre-built per-child
+  // arrays (e.g. `scatter({x: [0, 1, 2]}, [...marks])`), and for entry-
+  // flagged channels where the user passed an explicit array.
+  if (Array.isArray(val)) return val;
+  // The column (its measure and its schema type) is loop-invariant across
+  // split entries (it depends only on the accessor and what `wholeData`
+  // carries, not on which items a given entry holds), so resolve it once per
+  // channel. Only size/pos consume it; computing it for color/raw would add a
+  // spurious conflict-throw site.
+  const column =
+    type === "size" || type === "pos"
+      ? resolveColumn(wholeData, val)
+      : undefined;
+  if (perEntry && entries !== undefined) {
+    if (type === "pos" && discrete && isNonNumericEntryField(val, wholeData)) {
+      return [...entries.keys()].map((_, i) =>
+        discretePosition(i, entries.size)
+      );
+    }
+    // Windowed normalize (`field(...).normalize()` on an operator's
+    // entry-flagged size channel): this is expression evaluation, not
+    // channel logic, so the WINDOW is all this factory supplies — run the
+    // per-entry channel with the PRE-normalize
+    // expression (an aggregate op if present, else the channel's own
+    // default sum, exactly as any size accessor would), then hand the
+    // collected per-entry values to fieldExpr.ts's applyEntryNormalize to
+    // compute shares across the window. `channels.ts` gains no ops
+    // knowledge from this.
+    if (type === "size" && hasNormalizeOp(val)) {
+      const { pre } = splitAtNormalize(val);
+      const rawEntryValues = [...entries.values()].map((items) =>
+        CHANNEL_INFER[type](pre, items, column)
+      );
+      return applyEntryNormalize(rawEntryValues, fieldNameOf(opts.by));
+    }
+    // Value aggregation uses each entry's items; the column comes from
+    // `wholeData` (the binned array still carries the symbol — each per-entry
+    // slice does not).
+    return [...entries.values()].map((items) =>
+      CHANNEL_INFER[type](val, items, column)
+    );
+  }
+  return CHANNEL_INFER[type](val, wholeData, column);
 }
 
 /**
@@ -842,18 +990,29 @@ function stripFactoryKeys<Options extends Record<string, any>>(
   return out as Options;
 }
 
-/** Build the low-level opts passed to `layout`. */
+/** Build the low-level opts passed to `layout`. A Python accessor in a
+ *  channel is resolved first, over every row `applyChannels` reads (the
+ *  whole input and each entry's rows), so `applyChannels` stays synchronous
+ *  (`resolveChannelAccessors`, #1080). */
 async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   channels: ChannelAnnotations<Options> | undefined,
   opts: Options,
-  d: Datum | Datum[],
-  entries: Map<string | number, Datum | Datum[]> | undefined,
-  keys: Record<string, string[]> | undefined
+  d: Datum[],
+  entries: Map<SplitKey, Datum[]> | undefined,
+  layoutOpts: Record<string, unknown> | undefined
 ): Promise<Options> {
-  const withChannels = await applyChannels(opts, channels, d, entries);
+  const pending = resolveChannelAccessors(opts, channels, () => {
+    const rows = new Set<unknown>(d);
+    for (const items of entries?.values() ?? []) {
+      for (const row of items) rows.add(row);
+    }
+    return [...rows];
+  });
+  const resolved = isThenable(pending) ? await pending : pending;
+  const withChannels = applyChannels(resolved, channels, d, entries);
   const stripped = stripFactoryKeys(withChannels);
-  // Merge split's axis keys (e.g. colKeys, rowKeys for table) into opts.
-  return keys !== undefined ? ({ ...stripped, ...keys } as Options) : stripped;
+  // Merge the opts the split computed (e.g. colKeys, rowKeys for table).
+  return { ...stripped, ...layoutOpts } as Options;
 }
 
 /**
@@ -871,21 +1030,23 @@ export function createOperator<Datum, Options extends Record<string, any>>(
   function dual(opts: Options): TranslatableOperator<Datum[], Datum[]>;
   function dual(
     opts: Options,
-    marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
-  ): NameableMark<Datum>;
+    marks: MarkChild[] | Promise<MarkChild[]>
+  ): NameableMark<Datum[]>;
   function dual(
-    opts: Options,
-    marks?: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
-  ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum> {
+    given: Options,
+    marks?: MarkChild[] | Promise<MarkChild[]>
+  ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum[]> {
+    // A strategy kind used bare is read as its value from here on.
+    const opts = withKindValues(given);
     if (marks !== undefined) {
       // Combinator form: apply each mark to the same data d, then layout.
-      const base: Mark<Datum> = async (
-        d: Datum,
+      const base: Mark<Datum[]> = async (
+        d: Datum[],
         key?: string | number,
         layerContext?: LayerContext
       ) => {
         // Marks may be a Promise<Mark[]> when produced by helpers like
-        // `For(...)` — await before mapping. Entries may also be already
+        // `map(...)` — await before mapping. Entries may also be already
         // resolved nodes (e.g. `ref(...)`) rather than mark functions, so
         // pass non-functions through as-is.
         const resolvedMarks = await Promise.resolve(marks);
@@ -910,24 +1071,12 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           undefined
         );
         const node = (await layout(lowOpts, nodes)) as GoFishNode;
-        (node as any).datum = d;
+        node.datum = datumOfInput(d);
         return node;
       };
       const combinator = nameableMark(base);
-      // Tag combinator-form mark with IR-serialization metadata, mirroring
-      // the operator-form tagging below. The `__combinator: true` flag tells
-      // the emitter to write the spec into the mark tree (with `children`)
-      // rather than into the operators[] list. We stash the child marks on
-      // the tag so the emitter can walk them — without this, the children
-      // are trapped inside the closure of `base`.
       if (cfg.serialize) {
-        const payload = cfg.serialize.shape ? cfg.serialize.shape(opts) : opts;
-        (combinator as any).__serialize = {
-          type: cfg.serialize.type,
-          opts: payload,
-          __combinator: true,
-          children: marks,
-        };
+        tagCombinator(combinator, cfg.serialize, opts, marks);
       }
       return combinator;
     }
@@ -940,6 +1089,9 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     // deferred label per call.
     let labelState: Array<{ accessor: LabelAccessor; options?: LabelOptions }> =
       [];
+    // `.transition(spec)` chained after `dual(opts)`: read at execution time
+    // like `labelState`, and recorded on the node `layout` builds.
+    let transitionState: OperatorTransition | undefined;
     const operator: Operator<Datum[], Datum[]> = async (mark) => {
       return (async (
         d: Datum[],
@@ -972,20 +1124,20 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           : cfg.split(opts, d);
         const entries =
           splitResult instanceof Map ? splitResult : splitResult.entries;
-        const keys = splitResult instanceof Map ? undefined : splitResult.keys;
+        const splitLayoutOpts =
+          splitResult instanceof Map ? undefined : splitResult.layoutOpts;
         // Split leaves are fresh sub-arrays (groupBy/filter/slice) that don't
-        // inherit `d`'s measure-provenance symbol. Re-tag each array leaf so a
+        // inherit `d`'s column types (schema.ts). Re-tag each leaf so a
         // MARK channel applied per leaf (createMark → inferSize/inferPos with no
-        // precomputed measure) reads the source measure off its own data — e.g.
+        // precomputed measure) reads the column's unit off its own data — e.g.
         // a bin's `start`/`end`/`size` resolve to the source field's units, not
-        // the literal field name, matching the operator-channel path (#534).
-        for (const leaf of entries.values()) {
-          if (Array.isArray(leaf)) copyMeasureProvenance(leaf, d);
-        }
+        // the literal field name, matching the operator-channel path (#534) —
+        // and a nested split or a mark's color channel still sees an ordered
+        // column.
+        for (const leaf of entries.values()) copyColumnTypes(leaf, d);
         // Route each leaf through applyMark so expand-kind marks (e.g. `cut`)
-        // can return arrays that we flatten across leaves. Per-item marks
-        // keep the legacy "one call per leaf" semantics — applyMark wraps
-        // their single node in a singleton array.
+        // can return arrays that we flatten across leaves. A per-item mark is
+        // called once per leaf and applyMark wraps its node in a singleton.
         const nodesPerLeaf = await Promise.all(
           [...entries.entries()].map(async ([i, leaf]) => {
             // Local group key — NOT parent-prefixed. A nested grouping's keys
@@ -994,34 +1146,38 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             // grouping level's axis names itself by its own keys. Uniqueness is
             // per-layer (each operator's children), which the constraint refs
             // (`ensureChildNames`) and ordinal domains rely on — never global.
-            const currentKey = i;
+            // A binned key (`field(x).bin(p)`, `struct({ x, y }).bin(b)`) is
+            // a cell: the node's key is its id, and the node keeps the cell
+            // itself for the ordinal space it folds into
+            // (`ORDINAL_TYPE.cells`).
+            const cell = i instanceof KeyCell ? i : undefined;
+            const currentKey: string | number =
+              cell?.id ?? (i as string | number);
             const leafNodes = await applyMark(
               mark,
-              leaf as Datum | Datum[],
+              leaf,
               currentKey,
               layerContext
             );
             const keyStr = currentKey?.toString() ?? "";
-            // Positional key when this operator did NOT group by a data field
-            // (an identity split — a `spread` with no `by`): the key is a bare
-            // index, so any ordinal folded from it is `anonymous` (renders no
-            // axis). A `by` grouping yields data-value keys (semantic).
-            const synthetic = (opts as any).by === undefined;
+            // Positional key when this operator splits by row position (no
+            // `by`, which is `chunk(1)`, or any `chunk(n)`): any ordinal
+            // folded from it is `anonymous` (renders no axis or labels). A
+            // field `by` or a key function yields data-value keys (semantic):
+            // a function's keys label their axis, which has no title.
+            const synthetic = isChunk(splitByOf((opts as any).by));
             for (const node of leafNodes) {
               node.setKey(keyStr);
               node._syntheticKey = synthetic;
+              node.keyCell = cell;
+              node.keyBy = (opts as any).by;
             }
             // Record the (string) field this operator grouped by, so a later
             // `resolve(..., { from })` can match against it without the user
             // restating the key. The innermost grouping wins (`??=`); a function
             // `by` has no field name to record, so resolve errors there unless
             // given an explicit `key`.
-            const byField =
-              typeof (opts as any).by === "string"
-                ? (opts as any).by
-                : isField((opts as any).by)
-                  ? (opts as any).by.name
-                  : undefined;
+            const byField = fieldNameOf((opts as any).by);
             if (byField !== undefined) {
               for (const node of leafNodes) {
                 if ((node as any).__splitBy === undefined) {
@@ -1058,7 +1214,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           opts,
           d,
           entries,
-          keys
+          splitLayoutOpts
         );
         // Carry the grouping field (e.g. spread's `by`) into the node operator
         // so it can stamp the ORDINAL space it builds with a `measure` — the
@@ -1069,34 +1225,45 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         const groupMeasures = cfg.axisFields?.(opts);
         if (
           groupMeasures &&
-          (groupMeasures.x !== undefined || groupMeasures.y !== undefined)
+          Object.values(groupMeasures).some((m) => m !== undefined)
         ) {
           (lowOpts as any).axisMeasures = groupMeasures;
         }
-        return (await layout(lowOpts, nodes)) as unknown as GoFishNode;
+        const built = (await layout(lowOpts, nodes)) as unknown as GoFishNode;
+        if (transitionState !== undefined) {
+          recordOperatorTransition(built, transitionState);
+        }
+        return built;
       }) as Mark<Datum[]>;
     };
-    // Axis titles now derive from each node's resolved space `measure` (set via
-    // `axisMeasures` above), not a syntactic operator field-name tag — so no
-    // `__axisFields` tag is emitted here anymore.
+    // Tag the operator with its declared spatial classification, so the
+    // relational-mark travel-axis rule reads a declaration rather than
+    // guessing from the IR discriminator. See `OperatorConfig.arrangement`.
+    if (cfg.arrangement) {
+      (operator as any).__arrangement = {
+        kind: cfg.arrangement.kind,
+        positions: cfg.arrangement.positions?.(opts) ?? { x: false, y: false },
+        by: (opts as any).by,
+        fields: cfg.axisFields?.(opts),
+      };
+    }
     // Tag the operator with IR-serialization metadata so the frontend-IR
     // emitter can reconstruct it as `{ type, ...opts }` on the wire.
     if (cfg.serialize) {
-      const payload = cfg.serialize.shape ? cfg.serialize.shape(opts) : opts;
-      (operator as any).__serialize = {
-        type: cfg.serialize.type,
-        opts: payload,
-      };
+      withWire(operator, { type: cfg.serialize, opts });
     }
     const withTranslate = attachTranslateOption(operator, (translateOpts) =>
       translateOperator(operator, translateOpts)
     ) as TranslatableOperator<Datum[], Datum[]>;
     attachLabelOption(withTranslate, (accessor, options) => {
       labelState = [...labelState, { accessor, options }];
-      const tag = (operator as any).__serialize;
+      const tag = wireOf(operator);
       if (tag) {
         pushLabelField(tag, labelIRField(accessor, options));
       }
+    });
+    attachTransitionOption(withTranslate, (spec) => {
+      transitionState = spec;
     });
     return withTranslate;
   }

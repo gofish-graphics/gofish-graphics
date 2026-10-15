@@ -1,3 +1,7 @@
+---
+order: 140
+---
+
 # resolve
 
 Dereference reference columns into the drawn nodes they name. For each row,
@@ -51,11 +55,8 @@ resolve(cols, { from, key? });
 
 ## Parameters
 
-| Parameter | Type        | Description                                                                                                                           |
-| --------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `cols`    | `string[]`  | The columns whose values are references to resolve in place.                                                                          |
-| `from`    | `GoFishRef` | A [`selectAll(layerName)`](/js/api/marks/ref) of the layer whose nodes the columns are matched against.                               |
-| `key`     | `string`    | Optional. The field on the `from` nodes to match against. Defaults to the field those nodes were grouped by (e.g. `scatter({ by })`). |
+::: gofish-ref resolve
+:::
 
 Returns an `Operator` for use inside [`.flow()`](/js/api/core/flow).
 

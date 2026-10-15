@@ -15,7 +15,7 @@ import { ribbon, group } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Ribbon",
+  title: "Forward Syntax/Ribbon",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
@@ -42,7 +42,7 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(
         spread({ by: "lake", dir: "x", spacing: 64 }),
         stack({ by: field("species").sort("count"), dir: "y" })

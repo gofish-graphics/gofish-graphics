@@ -6,6 +6,7 @@ import custom from "./custom.css";
 import "./style.css";
 import GoFishVue from "../../../components/GoFishVue.vue";
 import GoFishExample from "../../../components/GoFishExample.vue";
+import GoFishImage from "../../../components/GoFishImage.vue";
 import CheatSheet from "../../../components/MarksCheatSheet.vue";
 import CoordinateTransformsCheatSheet from "../../../components/CoordinateTransformsCheatSheet.vue";
 import OverallCheatSheet from "../../../components/OverallCheatSheet.vue";
@@ -18,6 +19,8 @@ import { GoFishLive } from "../../../components/GoFishLive";
 import LanguageToggle from "./components/LanguageToggle.vue";
 import EssayMeta from "./components/EssayMeta.vue";
 import InternalsLink from "./components/InternalsLink.vue";
+import TutorialGrid from "./components/tutorials/TutorialGrid.vue";
+import TutorialCard from "./components/tutorials/TutorialCard.vue";
 import TwoslashFloatingVue from "@shikijs/vitepress-twoslash/client";
 import "@shikijs/vitepress-twoslash/style.css";
 export default {
@@ -45,6 +48,7 @@ export default {
     app.use(TwoslashFloatingVue);
     app.component("GoFishVue", GoFishVue);
     app.component("GoFishExample", GoFishExample);
+    app.component("GoFishImage", GoFishImage);
     app.component("Sandbox", Sandbox);
     app.component("GoFishLive", GoFishLive);
     app.component("CheatSheet", CheatSheet);
@@ -56,5 +60,7 @@ export default {
     app.component("OperatorsCheatSheet", OperatorsCheatSheet);
     app.component("VegaLiteEmbed", VegaLiteEmbed);
     app.component("ObservablePlotEmbed", ObservablePlotEmbed);
+    app.component("TutorialGrid", TutorialGrid);
+    app.component("TutorialCard", TutorialCard);
   },
 } satisfies Theme;

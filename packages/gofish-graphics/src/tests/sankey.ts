@@ -5,7 +5,7 @@ import { spread } from "../ast/graphicalOperators/spread";
 import { rect } from "../ast/shapes/rect";
 import { color, color6 } from "../color";
 import { layer } from "../ast/graphicalOperators/layer";
-import { ribbon } from "../lib";
+import { ribbon, Curve } from "../lib";
 import { ref } from "../ast/shapes/ref";
 import { color10Order } from "./color10";
 import { mix } from "spectral.js";
@@ -50,7 +50,7 @@ export const testSankey = (size: { width: number; height: number }) =>
   gofish(
     { width: size.width, height: size.height },
     layer([
-      spread({ dir: "y", spacing: 64, alignment: "middle", sharedScale: true },
+      spread({ dir: "y", spacing: 64, alignment: "middle" },
         // TODO: I could probably make the width be uniform flexible basically
         Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
           spread({ dir: "x", spacing: 8, alignment: "middle" },
@@ -72,7 +72,7 @@ export const testSankey = (size: { width: number; height: number }) =>
           {
             dir: "y",
             fill: colorScale[group as keyof typeof colorScale],
-            curve: "bezier",
+            curve: Curve.bezier(),
             opacity: 0.8,
             mixBlendMode: "multiply",
           },

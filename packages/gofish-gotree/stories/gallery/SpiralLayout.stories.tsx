@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, polar } from "gofish-graphics";
+import { circle, Coord, Curve } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth, sampleTree } from "../data";
 import { initializeContainer } from "../helper";
@@ -18,7 +18,7 @@ import { initializeContainer } from "../helper";
 //     the prior sibling, so a fan of children itself spirals.
 // Point-like circle nodes ⇒ anchor: "middle" so spacing is read in domain units
 // (radians for θ, r-units for r) and bboxes don't accumulate. Color = depth.
-// Links straight ⇒ {curve: "straight"}. See the polar Sunburst /
+// Links straight ⇒ {curve: "linear"}. See the polar Sunburst /
 // RadialNodes / RadialTree siblings for the same θ/r decomposition.
 //
 // NOTES — polar gaps (no hacks; flagged for follow-up):
@@ -58,7 +58,7 @@ export const SpiralLayout: StoryObj = {
     tree(
       {
         node,
-        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1.5 },
         // parentChild: step around (θ) and outward (r) from the parent.
         parentChild: combine({
           x: {
@@ -89,7 +89,7 @@ export const SpiralLayout: StoryObj = {
             alignment: "middle",
           },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       sampleTree
     ).render(container, { w: 520, h: 520 });

@@ -1,5 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, ellipse, line, Layer, Frame, polar } from "gofish-graphics";
+import {
+  rect,
+  ellipse,
+  line,
+  layer,
+  frame,
+  Coord,
+  Curve,
+} from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -41,7 +49,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 // Like RadialDeep / OutsideInTree, this BYPASSES the tree()/combine() DSL: the
 // DSL cannot express a per-subtree template swap, so a small story-local pass
 // computes each node's angular slice directly and emits marks explicitly into a
-// Frame({ coord: polar() }).
+// frame({ coord: polar() }).
 //   • Angular allocation (X.Subtree=flatten, leaf-count weighted): the 2π circle
 //     is divided among the 19 depth-1 subtrees ∝ their leaf count (leaf = 1
 //     slot, internal = Σ children; 37 leaf slots total). Each subtree's slot is
@@ -67,7 +75,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //  - Angular gaps: GoTree's flatten Margin gives the thin white seams; here they
 //    are a small fixed angular inset per wedge plus the white stroke.
 //  - polar() options (#620: innerRadius/direction/startAngle/centralAngle) and
-//    thetaSize auto-fit (#622) would let the DSL express the ring fit and hole;
+//    θ-extent auto-fit (#622) would let the DSL express the ring fit and hole;
 //    the numbers bake them in instead. The PolarAxis θ/r swap is still not
 //    expressible (no transposed variant).
 
@@ -245,7 +253,7 @@ const pt = (theta: number, r: number) =>
 const linkMark = (l: Link) =>
   line(
     {
-      curve: "straight",
+      curve: Curve.linear(),
       fill: "none",
       stroke: LINK_STROKE,
       strokeWidth: 2,
@@ -275,7 +283,7 @@ export const MultilevelSilhouetteTree: StoryObj = {
   },
   render: () => {
     const container = initializeContainer({ w: 660, h: 660 });
-    Frame({ coord: polar() as any }, [Layer(marks)]).render(container, {
+    frame({ coord: Coord.polar() as any }, [layer(marks)]).render(container, {
       w: 660,
       h: 660,
     });

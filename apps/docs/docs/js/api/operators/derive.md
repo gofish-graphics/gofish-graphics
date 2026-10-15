@@ -1,3 +1,7 @@
+---
+order: 130
+---
+
 # derive
 
 Transforms data before it reaches the next operator or mark. The function receives the current data group and returns a new one.
@@ -20,13 +24,51 @@ gf.chart(seafood, { axes: true })
 
 ```ts
 derive(fn);
+derive(fn, { schema });
 ```
 
 ## Parameters
 
-| Parameter | Type                              | Description                       |
-| --------- | --------------------------------- | --------------------------------- |
-| `fn`      | `(d: T[]) => T[] \| Promise<T[]>` | Function that transforms the data |
+`fn` (required, `(rows: T[]) => U[] | Promise<U[]>`) receives the rows at
+this point in the flow (inside `.flow()`, the current group's rows) and returns
+the list of rows the rest of the pipeline sees. It returns a list even for one
+row (`(d) => [d[0]]`). It may be `async`. The options:
+
+::: gofish-ref derive
+:::
+
+`schema` takes the same column types as [`chart`'s `schema`](/js/api/core/schema).
+
+## Column types of the result
+
+Each column of the returned rows is typed like chart data:
+
+- A column whose values still fit the type it had in the input keeps that
+  type. A time column of unchanged instants stays a time, and an ordered
+  column whose values are still text or numbers keeps the order, so a
+  value outside its levels is an error where the order is used.
+- A column of `Date` values is a time in UTC.
+- Any other column has no type. A `derive` that rewrites a date to `"Mar"`
+  makes the column plain text.
+- A `schema` entry overrides these for its column and converts the values
+  as a chart's schema does: an ISO 8601 string in a `Schema.time()` column
+  becomes an instant.
+
+A result that is one object, not an array, is typed as one row the same way.
+A column of `Date` values that had a time type in the input keeps it, time
+zone included. Fitting reads the values, not what they mean: a `derive`
+that turns a time column into plain numbers, such as years, keeps the time
+type, because any number is a valid instant
+([#1089](https://github.com/gofish-graphics/gofish-graphics/issues/1089)).
+Give the column its type with `derive(fn, { schema })`.
+
+[`filter`](/js/api/operators/filter) carries the input's types over as they
+are, since its rows are the input's rows.
+
+```ts
+// Monthly highs, months in calendar order
+derive(monthlyHighs, { schema: { month: Schema.ordered(MONTHS) } });
+```
 
 ## Examples
 
@@ -52,45 +94,34 @@ derive(fn);
 )
 ```
 
-## Measures: keeping units across a transform
+## Units: keeping axes shared across a transform
 
-A channel that encodes a field carries that field's **measure** — its
-unit-of-measure, like `"Beak Depth (mm)"` or `"count"`. GoFish uses measures to
-decide when two axes may share a scale: overlaying or aligning marks whose axes
-have the _same_ measure merges their domains, while mixing _different_ measures
-(say, a count axis with a millimeter axis) is refused with an error rather than
-silently corrupting the shared domain.
+A channel that encodes a column carries the column's **unit**. GoFish uses
+units to decide when two axes may share a scale. A column with no declared
+unit has an unknown unit, which shares an axis with any column, so the
+columns a `derive` computes (`lo`, `hi`, a box plot's quartiles) share an
+axis with no annotation. Two different declared units on one axis are an
+error. See [`Schema.unit`](/js/api/core/schema).
 
-By default the measure is just the field name, which is usually right. Two
-things change it:
-
-- **`bin()` and other built-in transforms** tag their output automatically — a
-  histogram's `start`/`end`/`size` columns keep the _source_ field's units, and
-  `count` becomes `"count"`. You don't annotate anything; the tag survives
+- **A column's type** (its declared quantity and unit, `HasQuantity` and
+  `HasUnit`) rides the data array, so a column the input declares keeps it
   through `derive`.
-- **An arbitrary `derive`** can lose that connection — once you compute a new
-  column, GoFish only knows its name, not its unit. When the new column is
-  really in some existing unit (and you want its axis to share with that unit's
-  axis), annotate the channel with the second argument to `field`:
+- **An arbitrary `derive`** can declare the unit of a column it makes with
+  its `schema`:
 
   ```ts
-  import { field } from "gofish-graphics";
-
-  // `depthMm` was derived but is still millimeters:
-  .mark(rect({ y: field("depthMm", "Beak Depth (mm)") }))
+  derive(quartiles, {
+    schema: { lo: Schema.unit("USD"), hi: Schema.unit("USD") },
+  });
   ```
 
-  `datum(v, measure)` does the same for a literal value.
+An axis is titled by the quantities of its columns (each column's name,
+unless its schema declares a quantity), then a declared unit in parentheses:
+`"Pay (USD)"`. See [`Schema.quantity`](/js/api/core/schema).
 
-If you hit **"Cannot unify underlying spaces with different measures"**, you
-have two remedies:
+If an axis combines two different units, you have two remedies:
 
-1. If the units really are the same, say so with `field(name, measure)` /
-   `datum(v, measure)` so the axes collapse to one measure and merge.
+1. If the units really are the same, declare the same unit for both columns.
 2. If the units really differ, give the inner chart an explicit `w`/`h` so it
    becomes a [self-contained scale region](/js/api/core/render#explicit-size-makes-a-self-contained-scale-region)
    and never shares that axis.
-
-Annotating a channel whose measure contradicts a transform's provenance (e.g.
-calling `field("count", "mm")` on a `bin()` output) is itself an error — the
-annotation and the provenance are contradictory claims.

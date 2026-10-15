@@ -11,11 +11,11 @@ example when one chart draws colors from more than one gradient, so a single
 `fill` field can't reference a single scale.
 
 ```python
-from gofish import chart, derive, spread, stack, rect, gradient
+from gofish import chart, derive, spread, stack, rect, Color
 from gofish.ast import assign_gradient_color
 
-warm_gradient = gradient(["#ffe0b2", "#e65100"])
-cold_gradient = gradient(["#bbdefb", "#0d47a1"])
+warm_gradient = Color.gradient(["#ffe0b2", "#e65100"])
+cold_gradient = Color.gradient(["#bbdefb", "#0d47a1"])
 
 
 def assign_colors(rows):

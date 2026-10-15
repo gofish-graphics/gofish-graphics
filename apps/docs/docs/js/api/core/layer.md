@@ -298,14 +298,14 @@ Returns a `LayerBuilder` — chain `.layer(...)` again for more tiers, then `.re
   paint-order constraint, not a hardcoded z-index, so it composes with other
   constraints — a `line()` or `ribbon()` tier needs no zOrder incantation to
   sit under the marks it connects. An explicit `.zOrder(...)` or
-  `.constrain(...)` on the connector's own chain overrides the default.
+  `.relate(...)` on the connector's own chain overrides the default.
 - **Field references on refs** — `by` / `resolve` read bare field names off the
   refs (`by: "species"`, not `by: "datum.species"`); a ref descends into its row
   bag automatically.
 
 ## `.layer(child)` vs. the `layer([...])` operator
 
-This page documents the **v3 builder method** `ChartBuilder.layer(child)`, which
+This page documents the **builder method** `ChartBuilder.layer(child)`, which
 stacks a `chart(...)` tier over the current one and auto-wires an empty `chart()`
 scope to the previous tier's marks. It's sugar over the lower-level
 [`layer([...])` operator](/js/api/operators/layer) (which composes an explicit

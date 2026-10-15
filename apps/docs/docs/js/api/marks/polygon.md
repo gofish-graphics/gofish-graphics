@@ -1,8 +1,13 @@
+---
+order: 70
+---
+
 # polygon
 
-Draws a closed polygon from explicit local-coordinate points. Useful for
-non-rectangular glyphs (trapezoids, arrows, custom shapes) that can't be
-expressed by the standard shape primitives.
+Draws a closed polygon. Its `points` are either literal local coordinates — for
+non-rectangular glyphs (trapezoids, arrows, custom shapes) that the standard
+shape primitives can't express — or the name of a field holding one ring per
+data row, which is how a map's outlines are drawn.
 
 ::: gofish
 
@@ -30,33 +35,32 @@ gf.chart([{}])
 polygon({ points, fill?, stroke?, strokeWidth?, opacity = 1 })
 ```
 
+`points` is either a literal ring or a field name.
+
 ## Parameters
 
-| Option        | Type                 | Default   | Description                                                                |
-| ------------- | -------------------- | --------- | -------------------------------------------------------------------------- |
-| `points`      | `[number, number][]` | —         | Vertices in local coordinates. GoFish is y-up: `[0, 0]` is the bottom-left |
-| `fill`        | `string`             | `"black"` | Fill color                                                                 |
-| `stroke`      | `string`             | `fill`    | Stroke color (defaults to `fill`)                                          |
-| `strokeWidth` | `number`             | `0`       | Stroke width                                                               |
-| `opacity`     | `number`             | `1`       | Opacity, `0`–`1` (applies to fill and stroke)                              |
+::: gofish-ref polygon
+:::
 
 ## Coordinates
 
 Points are interpreted in the local coordinate system of whatever places the
-polygon — typically a `Layer` or a constraint. The polygon's bounding box is
+polygon — typically a `layer` or a constraint. The polygon's bounding box is
 the axis-aligned extent of its points; the parent placement system translates
 the whole polygon to position it.
 
-GoFish is y-up internally, so a trapezoid whose wide edge sits at the bottom
+Literal points are in the polygon's own frame. Where that frame's y reads
+top-down (a polygon placed by a `layer` or a constraint, outside any data-driven
+y), y grows downward like SVG, so a trapezoid whose wide edge sits at the bottom
 and narrow edge at the top is written:
 
 ```ts
 polygon({
   points: [
-    [0, 0], // bottom-left (the wider edge)
-    [width, 0], // bottom-right
-    [width - 10, h], // top-right  (inset)
-    [10, h], // top-left   (inset)
+    [10, 0], // top-left   (inset)
+    [width - 10, 0], // top-right  (inset)
+    [width, h], // bottom-right (the wider edge)
+    [0, h], // bottom-left
   ],
 });
 ```
@@ -88,10 +92,41 @@ polygon({
 });
 ```
 
+## Field-bound points
+
+When `points` is a string, it names a field on each row of the mark's data, and
+the mark draws one polygon per row. The vertices are then **data positions**,
+not local pixels: they go through the chart's position scales, and each polygon
+places itself where its own coordinates put it.
+
+That is how a basemap is drawn — one row per country ring, each ring a list of
+`[longitude, latitude]` pairs, under a [`geo`](../coords/geo) coordinate space:
+
+```ts
+chart(world110m, {
+  coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
+}).mark(polygon({ points: "ring", fill: "#f7f7f7", stroke: "#aaa" }));
+```
+
+Under a curved coordinate space the edges are adaptively resampled, so an
+outline follows the projection rather than joining its vertices with straight
+pixels.
+
+## Data-driven fill
+
+`fill` and `stroke` work as they do on [`rect`](./rect). A field name reads
+that field off each row and sends it through the chart's color scale. Any other
+string is a literal color. When `stroke` is omitted it follows the fill.
+
+```ts
+chart(counties, { color: Color.gradient(["#fff5eb", "#7f2704"]) }).mark(
+  polygon({ points: "ring", fill: "rate" })
+);
+```
+
 ## Notes
 
 - The polygon is always closed — the last point connects back to the first
   automatically.
-- Points are literals, not channel-bound. If you need a polygon whose shape
-  depends on data, compose multiple polygons or use a derived mark
-  (`createMark`).
+- A polygon has no holes. A ring drawn inside another ring paints over it
+  rather than cutting it out.

@@ -1,14 +1,19 @@
+---
+order: 100
+---
+
 # ref
 
 References another node so later marks can reuse its position or bounding box — the basis for overlays, connectors, and arrows.
 
 `ref` is the single reference noun, usable in two positions:
 
-- **Inline in a layout** (this page): `arrow(ref("a"), ref("b"))`,
-  `ref(token).row[2]` — resolved at layout time against the name tree.
+- **Inline in a layout** (this page): `arrow({}, [ref("a"), ref("b")])` inside
+  a [`.relate()`](/js/api/constraints/relate) clause, `ref(token).row[2]`
+  anywhere — resolved at layout time against the name tree.
 - **As chart data**: `chart(ref("maxBar")).mark(text(...))` — resolved at build
-  time against the named-layer registry, where it must match **exactly one**
-  node (use [`selectAll`](/js/api/selection/ref) for many). See
+  time against the named-layer registry to a list of one ref, where it must
+  match **exactly one** node (use [`selectAll`](/js/api/selection/ref) for many). See
   [ref / selectAll](/js/api/selection/ref) for the chart-data role and node-unit
   selection.
 
@@ -19,7 +24,7 @@ See also [How to name and scope](/js/api/howto/naming-and-scoping) for when to u
 ```ts
 ref(
   nodeOrSelection:
-    | string                              // layer-local lookup
+    | string                              // nearest-match lookup, bounded by createMark
     | Token                               // global lookup; chainable as ref(token).foo[i].bar
     | (Token | string | number)[]         // path (array form)
     | GoFishNode                          // direct node
@@ -29,16 +34,20 @@ ref(
 
 ## Forms
 
-### String — layer-local
+### String — nearest match
 
-`ref("x")` walks up the parent chain to the nearest `Layer` and picks the direct child named `.name("x")`. Strings do **not** cross component boundaries.
+A string `ref("x")` is legal only inside a [`.relate()`](/js/api/constraints/relate) clause. Anywhere else it throws, and the message says to move it into `.relate()`. Inside a clause it finds the node named `.name("x")` (or carrying a token tagged `"x"`) that is nearest to the layer that relates it: the closest match inside that layer wins, counted in steps down from the layer, so a direct child beats a node with the same name nested deeper. The search never crosses a `createMark` boundary, in either direction, and the match must lie inside the related layer. Two matches at the same smallest distance is an error, and so is no match at all. A data key is not a name, so `ref("a")` does not find a mark just because its row is keyed `"a"`.
 
 ```ts
-Layer([
+layer([
   rect({ w: 80, h: 40 }).name("bg"),
-  ref("bg"), // resolves to the rect above
+  text({ text: "label" }).name("label"),
+]).relate(() => [
+  arrow({}, [ref("label"), ref("bg")]), // resolve to the text and the rect
 ]);
 ```
+
+A `.relate()` operand is the same thing spelled as a variable: `({ bg, label }) => [arrow({}, [label, bg])]` builds those two refs. See [How to name and scope](/js/api/howto/naming-and-scoping) and [Name Resolution & Scoping](/internals/core/names-and-scoping).
 
 ### Token — globally addressable
 
@@ -47,7 +56,7 @@ A `Token` (from [`createName`](/js/api/howto/naming-and-scoping#createname)) is 
 ```ts
 const targetName = createName("target");
 
-Layer([
+layer([
   rect({ w: 80, h: 40 }).name(targetName),
   // ...somewhere in a sibling subtree:
   ref(targetName),
@@ -87,7 +96,7 @@ Pass a `GoFishNode` (or a `.__ref` wrapper) to reference it without name resolut
 
 ```ts
 const bar = rect({ h: "value" });
-Layer([bar, ref(bar)]);
+layer([bar, ref(bar)]);
 ```
 
 ## Parameters
@@ -108,7 +117,8 @@ bars[0].datum; // the raw row-bag behind the first bar
 
 `ref.datum` is the **raw bag of rows** that flowed into the referenced node — an
 **array** of records. A fully-split leaf (one datum per node) is a **1-row
-array**; an aggregate — for example a bar produced by `rect({ h: "count" })` over
+array**, and so is a mark under an operator with no `by` and each slice of a
+[`cut`](/js/api/operators/cut); an aggregate — for example a bar produced by `rect({ h: "count" })` over
 a partition, whose height auto-sums several rows — holds all the rows of its
 partition.
 
@@ -119,9 +129,9 @@ import { sumBy } from "lodash";
 sumBy(bars[0].datum, "count"); // total count across the bar's rows
 ```
 
-Operators read this same bag when you re-encode a selection by a datum path,
-e.g. `group({ by: "datum.species" })`, but with **homogeneity collapse** applied:
-the path resolves to a scalar only if every row in the bag agrees on the field —
+Operators read this same bag when you re-encode a selection by a field, e.g.
+`group({ by: "species" })`, but with **homogeneity collapse** applied: the field
+resolves to a scalar only if every row in the bag agrees on it —
 see [path-aware `by`](/js/api/operators/spread#path-aware-by). To get _every_
 distinct value at a path instead, use [`pluck`](/js/api/selection/ref#pluck).
 

@@ -7,7 +7,7 @@ import { chart, spread, scatter, circle, rect, layer } from "../../src/lib";
 // overall size is computed during layout rather than propagating NaN. Each
 // story omits both dimensions; the caption notes the expected computed extent.
 const meta: Meta = {
-  title: "Forward Syntax V3/Inferred Size",
+  title: "Forward Syntax/Inferred Size",
 };
 export default meta;
 
@@ -43,7 +43,7 @@ export const LayerShrinkToFit: StoryObj = {
 export const DataDrivenHeightDefault: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: "count" }))
       .render(container, {});
@@ -55,7 +55,7 @@ export const DataDrivenHeightDefault: StoryObj = {
 export const PositionScatterDefault: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    chart(catchLocationsArray, { axes: true })
+    chart(catchLocationsArray)
       .flow(scatter({ by: "lake", x: "x", y: "y" }))
       .mark(circle({ r: 5 }))
       .render(container, {});

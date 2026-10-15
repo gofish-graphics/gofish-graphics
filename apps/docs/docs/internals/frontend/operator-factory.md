@@ -82,8 +82,8 @@ into N pieces, followed by a fan-in back to a single node:
 
 1. **Split.** Partition the data into pieces. For `spread`, this is
    "groupBy `by`-field"; for `table`, it's the cartesian product of two
-   fields; for `group`, it's groupBy. For `scatter` with no `by`, it's
-   "one piece per item".
+   fields; for `group`, it's groupBy. With no `by`, the split is by row
+   identity (`chunk(1)`): one piece `[item]` per item.
 2. **fmap.** Apply the user's mark to each piece, producing one
    `GoFishNode` per piece.
 3. **Combine.** Hand the array of nodes to the low-level layout function
@@ -99,8 +99,7 @@ From `src/ast/graphicalOperators/spread.tsx:430`:
 
 ```ts
 export const spread = createOperator<any, SpreadOptions>(Spread, {
-  split: ({ by }, d) =>
-    by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
+  split: ({ by }, d) => splitEntries(by, d),
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
 });
 ```
@@ -111,16 +110,27 @@ Three pieces:
    `createNodeOperator`-built node builder that already knows how to position
    children along an axis. This is the **combine** step.
 2. **`split(opts, d)`** — partition `d` into an ordered `Map<key, subdata>`.
-   Insertion order matters (it determines layout order). When `by` is omitted,
-   each item becomes its own one-element group. `spread`/`stack`/`group`/
-   `scatter` all delegate to the shared `splitEntries` helper
+   Insertion order matters (it determines layout order). Every piece is a
+   list of the items the split was given, and a split never looks inside an
+   item, so an item that is itself an array is still one item. When `by` is
+   omitted, the split is by row identity, `chunk(1)` (`splitByOf` applies
+   that default, in one place): each item becomes its
+   own one-item group `[item]`, keyed by its position. `chunk(size)` is a `by`
+   key over row position (row `i` goes to group `floor(i / size)`), so no
+   `by` and `by: chunk(1)` are one split. A position key (no `by`, or any
+   `chunk(n)`) marks its keys positional (`_syntheticKey`), so they draw no
+   axis or labels. A key function's keys are values, like a field's: they
+   label a category axis, which has no title, since no field names it. `spread`/`stack`/`group`/`scatter` all delegate to the shared `splitEntries` helper
    (`datumProjection.ts`, #700) rather than a bare `Map.groupBy`: it groups by
    `by` first (a `field(...)` accessor groups by its `.name`, identically to a
    bare string), then applies any pipeline ops the accessor carries — see
    [Field expressions](/internals/core/underlying-space#field-expressions-a-pipeline-orthogonal-to-channel-aggregation)
    for the domain-op (`sort`/`reverse`/`bin`) semantics. `by`-string/function
    callers are unaffected — they carry no ops, so `splitEntries` reduces to
-   the old `Map.groupBy` behavior.
+   the old `Map.groupBy` behavior. A key is a `SplitKey`: a value of the
+   field, a `Cell` for a binned key (`field(x).bin(p)`), or a `PolygonCell`
+   for a binned struct (`struct({ x, y }).bin(b)`), each of which stands for
+   its id.
 3. **`channels`** (optional) — per-opt data-aware encodings. Same idea as
    `createMark`'s channels: `w: "size"` means the user can pass a field name,
    and the factory will apply `inferSize` before handing opts to `Spread`.
@@ -135,14 +145,24 @@ factory.
 Walking `createOperator.ts:391-415`:
 
 1. **Split** — `cfg.split(opts, d)` partitions the input into a
-   `Map<key, subdata>`. (Some operators, like `table`, also return `keys` —
-   row/column labels that get merged into the layout opts.) Each array leaf is
-   then re-tagged with `d`'s measure provenance (`copyMeasureProvenance`): a
-   leaf is a fresh sub-array that wouldn't otherwise inherit the
-   `MEASURE_PROVENANCE` symbol, so without this a _mark_ channel applied per
-   leaf would lose a transform's measure (e.g. a bin's `start`/`end`/`size`) and
-   fall back to the literal field name — see [underlying
-   space](/internals/core/underlying-space) and #534.
+   `Map<key, subdata>`. (Some operators also return `layoutOpts`, opts the
+   split computed that get merged into the layout opts: `table`'s row/column
+   labels, or a `stack`'s `origin` when its `by` column has `HasMidpoint`.) Each
+   leaf (always an array) is then re-tagged with `d`'s column types (`copyColumnTypes`,
+   see [Column
+   types](/internals/core/underlying-space#column-types-the-chart-schema)): a
+   leaf is a fresh sub-array that wouldn't otherwise inherit them, so without
+   this a _mark_ channel applied per leaf would lose its column's quantity
+   and unit (`HasQuantity`, `HasUnit`) and fall back to the literal field
+   name — see [underlying space](/internals/core/underlying-space) and
+   #534 — and a nested split or a color channel would lose an ordered
+   column. The data's domain rides along the same way, so a nested binned
+   key sees the chart's cells. A cell key becomes its id for the mark and
+   the node (`setKey`), and the node keeps the cell itself as `keyCell`,
+   which the distribute fold reads to build an ordinal over cells, and a
+   `partition` reads to give the node its cell. The node also keeps the
+   `by` it was keyed by (`keyBy`), so a fused connector's default split can
+   read a mark's key under each tier off its ancestors.
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream
@@ -159,21 +179,23 @@ Walking `createOperator.ts:391-415`:
    `inferColor` on annotated opts. For an entry-flagged channel
    (`{type, entry: true}`), the inference runs once per split entry,
    producing an array of values (one per child); otherwise it aggregates
-   over all of `d` and produces one value. `applyChannels`/`runChannel`/
-   `buildLayoutOpts` are all `async` because `inferColor` is (see [The Mark
-   Factory](/internals/frontend/mark-factory) — it awaits a function
-   accessor, which is how a Python-bridge `fill` lambda resolves).
+   over all of `d` and produces one value. Inference is synchronous, so
+   `buildLayoutOpts` first resolves any Python accessor in a channel with
+   `resolveChannelAccessors` (#1080), one call per accessor over every row
+   inference reads: the rows of `d` plus each split entry's rows. That row
+   set is built only when some channel holds a Python accessor.
 4. **Strip factory keys** — `by` and `debug` never reach the low-level
    layout; remove them from opts.
 5. **Inject the grouping measure** — `by` is stripped, but a grouping operator
    needs its field to name the ORDINAL axis it builds. So the resolved per-axis
    grouping field (`cfg.axisFields?.(opts)`, e.g. `{ x: "lake" }`) is passed
    through to the low-level layout in opts as `axisMeasures`, where the node
-   builder stamps it onto the ORDINAL space's `measure` — the discrete analogue
-   of a continuous channel's field becoming its space's measure. That measure is
-   the sole source for the axis title (a continuous space's unit or an ordinal
-   space's grouping field); there is no longer any field-name title _hint_ or
-   fallback (the former `__axisFields` tag is gone).
+   builder stamps it onto the ORDINAL space's `measure` as its title — the
+   discrete analogue of a continuous channel's column becoming its space's
+   title. A space's titles are the sole source for the axis title (a
+   continuous space's quantity names or an ordinal space's grouping field);
+   there is no longer any field-name title _hint_ or fallback (the former
+   `__axisFields` tag is gone).
 6. **Combine** — call the low-level `layout` with the encoded opts and the
    array of child nodes.
 
@@ -181,9 +203,15 @@ Walking `createOperator.ts:391-415`:
 
 Same machinery, simpler:
 
-1. Apply each mark in `marks` to the same `d`. Marks may be any of:
-   `Mark<T>` functions, already-resolved `GoFishNode`s (e.g. `ref(...)`),
-   or a `Promise<Mark<T>[]>` (e.g. when produced by SolidJS `For(...)`).
+1. Apply each mark in `marks` to the same `d`. Each child is a `MarkChild`
+   (`src/ast/types.ts`): a `Mark<T>` function, an already-resolved node
+   (e.g. `ref(...)`), a promise of one (e.g. a `cut(...)` slice), or a chart
+   or layer builder. The list itself may be a promise (e.g. when produced by
+   `map(...)`). Every child goes through `resolveMarkResult`. `layer` and the
+   Porter-Duff combinators in `chart.ts` take the same `MarkChild` type. The
+   internal node-level operators (`Spread`, `Layer`, ...) that `layout` wraps
+   are not exported; the combinator form is the public way to pass explicit
+   children.
 2. Apply channels (no per-entry inference — there's no split).
 3. Strip factory keys.
 4. Combine.
@@ -213,11 +241,40 @@ field name like `x: "miles"` becomes a per-group mean position
 `discrete: true`, so a grouped nonnumeric field such as `x: "lake"` becomes a
 slot coordinate instead of an invalid numeric mean.
 
+A `{ type: "dims", form }` channel is an axis-name-keyed bag
+(`scatter({ dims: { theta: "bearing", r: "distance" } })`). `form` is the
+same `AxisDimsForm` the operator later merges the bag with, and its
+`topLevel` table names the top-level option each anchor stands for. For each
+slot, `applyChannels` looks up that option's own channel spec and applies it,
+so a slot infers exactly as its counterpart: scatter's bare value and
+`center` as `x` (per entry, discrete for a nonnumeric field), its `min` as
+`xMin` (per entry, never discrete). A counterpart with no channel leaves the
+slot as given (treemap's `min` stands for its unannotated `x`), and the
+counterparts on the two axes must share one spec.
+
+A `size` or `pos` channel resolves its column (`resolveColumn`: its quantity
+and its type from the chart's `schema`) off the whole input once, and passes
+it to every entry's inference, since a split entry's slice may not carry
+the column types. The value then records the type (`fieldType`), which is
+how a scatter's `x` over a `Schema.time()` column puts its points on a
+calendar. Which axis `theta` means is
+not known here: the scatter defers the constraints that need it to the
+[axis-name pass](/internals/layout/passes#pass-5-5-axis-name-resolution).
+
+`axisFields` returns its grouping fields keyed by axis **name**, the way the
+operator names the axis (`spread({ by, dir: "theta" })` reports
+`{ theta: by }`), and the node builder looks its own measure up by that same
+name, so the measure needs no axis index at build time. The factory also
+copies these fields onto the operator's `__arrangement` tag as `fields`, which
+the relational-mark pass reads to tell whether a path tier draws its own `by`
+on an axis (`inferred.parameterAxis`; see
+[the mark factory](/internals/frontend/mark-factory)).
+
 **Windowed `normalize()` on an entry-flagged `size` channel.** `spread`/
 `stack` declare `size: { type: "size", entry: true }` (#700 Phase 2) — a
 per-entry stack-axis extent, one value per split entry, that `Spread` wraps
 each child in its own sized `layer` with (see [Underlying
-Space](/internals/core/underlying-space#space-filling-spines-normalize-self-scales-a-stacking-axis)
+Space](/internals/core/underlying-space#space-filling-spines-normalize-nests-each-part)
 for the layout side). When that channel's value carries a `field(...)
 .normalize()` op (checked via `hasNormalizeOp`), `applyChannels` takes a
 different path than plain per-entry inference: it splits the pipeline at
@@ -270,8 +327,9 @@ If `Wrap` accepts a width-per-child, you'd add `channels: { width: "size" }`
 so consumers can pass a field name there.
 
 If your operator needs to feed extra data (like `colKeys`/`rowKeys`) into
-the layout opts, return the wrapped `{entries, keys}` form from `split`
-instead of a bare Map — see `table.tsx:228` for an example.
+the layout opts, return the wrapped `{entries, layoutOpts}` form from `split`
+instead of a bare Map — see `table.tsx` for an example, and `spread.tsx`'s
+split for a stack's `origin`.
 
 Operators created with `createOperator` automatically support
 `.translate({ x?, y? })`. You do not implement this per operator; the factory
@@ -282,7 +340,7 @@ translation wrapper around the produced node.
 
 `stack({ by: "class", dir: "y" }).label(accessor, options?)` labels each
 **group** the split produces, rather than each mark instance. It is not
-built on the `createModifier`/`attachModifiers` system section 8 describes
+built on the `ModifierConfig`/`attachModifiers` system section 8 describes
 (that system decorates a _mark_; the operator form needs to affect the
 _execution_ of a still-being-called operator, after `.label()` has already
 returned). Instead:
@@ -309,13 +367,12 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   operator's closed-over `labelState`. That's what makes both
   `.translate().label()` and `.label().translate()` work identically.
 - `resolveLabelText` (`ast/labels/labelPlacement.ts`) resolves the accessor
-  in one of three ways, depending on both the accessor's shape and the
-  datum's shape:
-  - A **bare string** over the group's array-of-rows datum must be constant
-    across every row (true by construction for a `by`-field, since every row
-    in the group shares that value) — `resolveLabelText` throws a loud error
-    if it isn't, rather than silently reading just the first row. Over a
-    scalar (non-array) datum it just reads the field directly.
+  over the node's datum, which is always a list of rows, in one of three
+  ways, depending on the accessor's shape:
+  - A **bare string** must be constant across every row (true by
+    construction for a `by`-field, since every row in the group shares that
+    value) — `resolveLabelText` throws a loud error if it isn't, rather than
+    silently reading just the first row.
   - A **`field(...)` aggregate** (`field("count").sum()`/`.mean()`/`.count()`/
     `.distinct()`) folds the group's rows to one value via `evalFieldValues`
     (the same evaluator the `by`/`size`/`pos` channel pipelines use) — this is
@@ -328,14 +385,26 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   checked in order string → field-expression → function): a string accessor
   becomes `tag.label = {accessor, ...options}`; a `field(...)` accessor
   serializes via its own `.toJSON()` (the `FieldExprWire` shape) into
-  `tag.label = {accessor: {type: "field", name, measure?, ops?}, ...options}`;
+  `tag.label = {accessor: {type: "field", name, ops?}, ...options}`;
   a function accessor warns and is dropped from the emitted IR (functions
   aren't serializable). `.translate()`'s wrapper has no tag of its own by
   default (the wrapped function is new), so `translateOperator` copies the
-  base operator's `__serialize` tag onto the wrapper and stamps
+  base operator's wire tag (`wireOf`) onto the wrapper and stamps
   `tag.translate` — without that copy, a translated operator would silently
   serialize as the opaque `{type: "derive"}` fallback, losing both
   `translate` and any chained `.label()`.
+
+`.transition(spec)` on the operator form (the build-in prototype, see
+`src/animation/`) is built the same way. `dual` closes over a
+`transitionState` that `.transition()` (`attachTransitionOption`) sets, and
+the execution closure records it on the node `layout` builds
+(`recordOperatorTransition`), so the build-in can read the operator's
+arrangement of its children off the resolved tree. `translateOperator`
+delegates `.transition()` to the base operator, as it does `.label()`. Which
+phases can play depends on the chart's clock, so the build-in checks the
+recorded phases when it reads them (`checkPhases`), including an arrangement
+under a `time.sequence`, where it is not built yet. Animation is
+JavaScript-only, so nothing reaches the IR.
 
 ## 8. The relationship with `createMark`
 
@@ -348,14 +417,14 @@ The two factories are siblings:
 
 Both use channel annotations to encode opts; both produce mark types
 supporting `.name(...)` and `.label(...)` chaining. That chaining is wired by
-the **modifier factory** that also lives in this file — `createModifier` +
+the **modifier factory** that also lives in this file — `ModifierConfig` +
 `attachModifiers` — a single config-driven system shared by `nameableMark`
-(combinator marks), `createMark` (leaf marks), and `makeConstrainableMark`
-(layer / Porter-Duff marks, which add `.constrain()`). `.name(...)` also
+(combinator marks), `createMark` (leaf marks), and `makeRelatableMark`
+(layer / Porter-Duff marks, which add `.relate()`). `.name(...)` also
 stashes the passed name on the returned mark function via `stashLayerName`
-(defined in `chartBuilder.ts`, called by the `name` modifier's `tag` hook), so
+(defined in `markResult.ts`, called by the `name` modifier's `tag` hook), so
 [`.layer()`](/js/api/core/layer)'s producer-tier auto-naming can detect a
-user-chained name without parsing the `__serialize` tag. (An earlier
+user-chained name without parsing the wire tag (`wireOf`). (An earlier
 `ChartBuilder.connect()` method used this same stashed name; it was deleted
 in favor of `.layer()`, which generalizes the pattern to every tier — see
 [The Mark Factory](/internals/frontend/mark-factory#createrelationalmark-connectors-as-marks).)
@@ -367,12 +436,26 @@ by-split-form relational marks (see
 [The Mark Factory](/internals/frontend/mark-factory#blank-fusion-mark-r-opts-sugar)).
 Without this, `ribbon(opts).name("area")` would lose the tag the moment
 `.name(...)` wraps it in a new function, and `.mark(ribbon(opts).name("area"))`
-would silently stop fusing.
+would silently stop fusing. It carries the stashed `.name(...)` forward the same
+way, so `.name("dots").transition(...)` or `.name("bars").label(...)` still
+reads as named; without it, a tier that names its mark when the mark has no
+name (`ensureNamedMark`, for a later `.layer()` tier or a `time.sequence`'s
+transitions) would rename the mark and break `selectAll("dots")`.
+The `transition` modifier (`transitionModifier`, in `nameableMark`'s set)
+tags nothing on the mark. It records the mark's effects on each produced node,
+and every reader finds them there: the build-in, and under a `time.sequence`
+the chart builder (`chainedUpdates`). So a spec chained on a mark inside
+`time.history({ last }, [...])`, `spread({...}, [...])` or a `createMark`
+component reaches them with no combinator having to pass it up.
+
+A modifier's `apply` may return a promise, and the wrapped mark awaits it:
+`relateModifier` does, because `.relate()` reifies its drawing clauses (marks
+and operator calls) before it attaches them to the node.
 
 A modifier's `apply(node, layerContext, datum, ...args)` receives the
 **per-instance datum** the mark was called with — the same value the shape
 factory saw — so a modifier can produce a _data-driven_ value rather than a
-constant. `nameModifier` / `labelModifier` / `constrainModifier` ignore it, but
+constant. `nameModifier` / `labelModifier` / `relateModifier` ignore it, but
 `zOrderModifier` uses it: `.zOrder(value)` takes a `ZOrderValue<T> = number |
 ((datum: T) => number)` and, when handed a callback, evaluates it against this
 datum to set each produced node's paint-order hint. That is what lets paint
@@ -389,13 +472,23 @@ produced node and returns a chainable mark, a terminal _resolves_ the surface to
 a final `GoFishNode` and calls through to that node's method, ending the chain.
 They live in their own registry (`terminals.ts`): a `TERMINALS` list plus
 `attachTerminals(target, resolveNode)`, where each surface supplies only its own
-node-resolution strategy (a combinator mark resolves by calling itself with
-`undefined`; a `withGoFish` promise resolves by awaiting). Both `attachModifiers`
-here and `addRenderMethod` in `withGoFish.ts` call `attachTerminals`, so the set
-of terminals is defined once — adding one (as `toDisplayList` was) touches a
-single list and lands on every surface at once, instead of being hand-rolled per
-surface (which previously left `toDisplayList` off the combinator surface
-entirely).
+node-resolution strategy (a `withGoFish` promise resolves by awaiting). The
+other surfaces go through the same list via `attachBuilderTerminals(target,
+resolveForRender, render)`, which lets a surface also prepare the render options
+and drive `render` through its own strategy. A combinator mark resolves as a
+root (`resolveMarkResult`, with `NO_ROWS`) and installs the build-in its own
+`.transition({ enter })` asks for, reading the clock's `playing`/`at`.
+`ChartBuilder` and `LayerBuilder` merge in the chart-level `axes`/`color` config,
+read the build-in clock's `playing`/`at` (which `TerminalMethods<Extra>` adds to
+their options type), and drive `render` through `renderWithInteraction`. Every
+resolve also sets `node.rebuild` on the resolved root (the same resolve, for the
+same render pass), so a layout that must run once per candidate, such as
+`label.angle: "auto"`, can get a fresh tree for each run. So the
+set of
+terminals is defined once — adding one (as `toDisplayList` was) touches a single
+list and lands on every surface at once, instead of being hand-rolled per
+surface (which previously left `toDisplayList` off the combinator surface and
+off `LayerBuilder` entirely).
 
 A second flavor, `attachTransformModifiers`, handles methods that map a mark to
 a _different_ mark rather than mutating its nodes — e.g. `image(...).cut(opts)`
@@ -453,8 +546,10 @@ to `createOperator`; Encodable doesn't address layout multiplicity.
     extracted to keep the chartBuilder ↔ createOperator import graph
     acyclic).
 - The companion mark factory: [The Mark Factory](/internals/frontend/mark-factory).
-- The `serialize` config field tags the produced operator with
-  `__serialize` metadata the frontend-IR emitter reads — see
+- The `serialize` config field (the IR `type`, e.g. `"spread"`) attaches the produced operator's
+  wire tag (`withWire`), which the frontend-IR emitter reads. The tag holds the
+  options as the caller passed them, and the emitter keeps only the keys the
+  operator's descriptor declares — see
   [Frontend IR (Serialization)](/internals/frontend/serialization).
 - Encodable: paper [arxiv:2009.00722](https://arxiv.org/abs/2009.00722),
   source [github.com/kristw/encodable](https://github.com/kristw/encodable).

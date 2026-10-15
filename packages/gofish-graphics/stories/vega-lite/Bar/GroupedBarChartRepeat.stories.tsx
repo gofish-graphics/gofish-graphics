@@ -23,10 +23,14 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    chart(context.loaded.movies as any[], {axes: true})
+    chart(context.loaded.movies as any[], {
+      // TODO(#1017): remove once label angle "auto" is the default.
+      axes: { x: { label: { angle: "auto" } }, y: { title: "Total Gross" } },
+    })
       .flow(spread({ by: "Major Genre",  dir: "x" }))
       .mark(
         spread({ dir: "x", spacing: 0 }, [
+          // Neither column declares a unit, so they share one value axis.
           rect({ h: "Worldwide Gross", fill: v("Worldwide Gross") }),
           rect({ h: "US Gross", fill: v("US Gross") }),
         ])

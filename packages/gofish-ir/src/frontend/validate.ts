@@ -5,9 +5,8 @@
 /**
  * Runtime validator for the GoFish frontend IR.
  *
- * Hand-rolled, dependency-free. Strict mode rejects unknown fields (used in
- * CI and tests); the default permissive mode ignores them, suitable for
- * forward-compatible reading.
+ * Hand-rolled, dependency-free. There is one mode: an unknown field is an
+ * error everywhere, on the envelope, on operators, and on marks alike.
  */
 
 import {
@@ -15,8 +14,11 @@ import {
   LEAF_MARK_TYPES,
   OPERATOR_TYPES,
   type ChannelValue,
+  type AxisInterval,
   type CombinatorMarkIR,
   type ConstraintIR,
+  type RelateClauseIR,
+  isConstraintIR,
   type CutMarkIR,
   type DataIR,
   type FrontendIRDocument,
@@ -29,14 +31,39 @@ import {
   type RefMarkIR,
 } from "./schema.js";
 import {
-  LEAF_MARKS,
+  decodeNonFinite,
+  isNonFiniteNumberIR,
+  isTaggedInfinity,
+} from "./nonFinite.js";
+import {
+  AUTHORED_REFS,
+  BIN_KINDS,
+  LABEL_OPTIONS,
+  OPTION_TYPES,
+  acceptedFields,
   MARK_BASE_FIELDS,
-  OPERATOR_BASE_FIELDS,
-  OPERATORS,
-  resolveFields,
+  t,
+  type FieldGroup,
   type FieldSpec,
   type FieldType,
+  type StrategyFamilyName,
 } from "./descriptors.js";
+
+/**
+ * Is `value` a number as the IR carries it: a JSON number, or the tagged
+ * form of `Infinity` / `-Infinity` (see `nonFinite.ts`)? The tagged `NaN` is
+ * not: a NaN where a number is expected is always a bug, so it fails loudly.
+ */
+function isIRNumber(value: unknown): boolean {
+  return typeof value === "number" || isTaggedInfinity(value);
+}
+
+/** The error for a value that is not an IR number. */
+function notANumber(value: unknown, expected = "number"): string {
+  return isNonFiniteNumberIR(value)
+    ? `expected ${expected}, got NaN`
+    : `expected ${expected}, got ${typeNameOf(value)}`;
+}
 
 export interface ValidationError {
   /** Dotted path into the document. */
@@ -44,43 +71,17 @@ export interface ValidationError {
   message: string;
 }
 
-/**
- * A non-fatal finding — currently emitted only for leaf-mark channel fields
- * that aren't in the enumerated descriptor list (`descriptors.ts`'s
- * `LEAF_MARKS`). Leaf marks stay open-world for now (the gradual rollout the
- * python-wrapper-codegen design doc calls for): an unrecognized channel is a
- * signal worth surfacing, but not a validity failure — strict mode must NOT
- * start rejecting these until the enumerated lists are proven against the
- * story corpus.
- */
-export interface ValidationWarning {
-  path: string;
-  message: string;
-}
-
 export type ValidationResult =
-  | { valid: true; warnings: ValidationWarning[] }
-  | { valid: false; errors: ValidationError[]; warnings: ValidationWarning[] };
-
-export interface ValidateOptions {
-  /** Reject unknown fields. Default: false (permissive). */
-  strict?: boolean;
-}
+  | { valid: true }
+  | { valid: false; errors: ValidationError[] };
 
 /** Validate a document against the frontend-IR schema. */
-export function validate(
-  doc: unknown,
-  options: ValidateOptions = {}
-): ValidationResult {
-  const ctx: Context = {
-    strict: options.strict === true,
-    errors: [],
-    warnings: [],
-  };
+export function validate(doc: unknown): ValidationResult {
+  const ctx: Context = { errors: [] };
   walkDocument(doc, "$", ctx);
   return ctx.errors.length === 0
-    ? { valid: true, warnings: ctx.warnings }
-    : { valid: false, errors: ctx.errors, warnings: ctx.warnings };
+    ? { valid: true }
+    : { valid: false, errors: ctx.errors };
 }
 
 // ---------------------------------------------------------------------------
@@ -88,9 +89,7 @@ export function validate(
 // ---------------------------------------------------------------------------
 
 interface Context {
-  strict: boolean;
   errors: ValidationError[];
-  warnings: ValidationWarning[];
 }
 
 function walkDocument(node: unknown, path: string, ctx: Context): void {
@@ -114,9 +113,7 @@ function walkDocument(node: unknown, path: string, ctx: Context): void {
   });
   optionalField(node, "$schema", path, ctx, expectString);
   expectField(node, "root", path, ctx, walkRoot);
-  if (ctx.strict) {
-    rejectUnknown(node, ["irVersion", "ir", "$schema", "root"], path, ctx);
-  }
+  rejectUnknown(node, ["irVersion", "ir", "$schema", "root"], path, ctx);
 }
 
 function walkRoot(node: unknown, path: string, ctx: Context): void {
@@ -158,27 +155,29 @@ function walkChart(
     walkArray(v, p, ctx, walkOperator)
   );
   expectField(node, "mark", path, ctx, walkMark);
-  optionalField(node, "options", path, ctx, expectObject);
+  // Chart-level options (`CHART_OPTIONS`), checked like every declared
+  // object: typed values, no unknown keys.
+  optionalField(node, "options", path, ctx, (v, p) =>
+    walkFieldType(t.ref("ChartOptions"), v, p, ctx)
+  );
   optionalField(node, "zOrder", path, ctx, expectNumber);
   optionalField(node, "name", path, ctx, expectNameOrToken);
-  if (ctx.strict) {
-    rejectUnknown(
-      node,
-      [
-        "type",
-        "data",
-        "operators",
-        "mark",
-        "options",
-        "zOrder",
-        "name",
-        "origin",
-        "meta",
-      ],
-      path,
-      ctx
-    );
-  }
+  rejectUnknown(
+    node,
+    [
+      "type",
+      "data",
+      "operators",
+      "mark",
+      "options",
+      "zOrder",
+      "name",
+      "origin",
+      "meta",
+    ],
+    path,
+    ctx
+  );
 }
 
 function walkLayer(
@@ -191,18 +190,16 @@ function walkLayer(
     walkArray(v, p, ctx, walkLayerChild)
   );
   optionalField(node, "options", path, ctx, expectObject);
-  optionalField(node, "constraints", path, ctx, (v, p) =>
-    walkArray(v, p, ctx, walkConstraint)
+  optionalField(node, "relate", path, ctx, (v, p) =>
+    walkArray(v, p, ctx, walkRelateClause)
   );
   optionalField(node, "builder", path, ctx, expectBoolean);
-  if (ctx.strict) {
-    rejectUnknown(
-      node,
-      ["type", "charts", "options", "constraints", "builder", "origin", "meta"],
-      path,
-      ctx
-    );
-  }
+  rejectUnknown(
+    node,
+    ["type", "charts", "options", "relate", "builder", "origin", "meta"],
+    path,
+    ctx
+  );
 }
 
 function walkLayerChild(node: unknown, path: string, ctx: Context): void {
@@ -210,7 +207,7 @@ function walkLayerChild(node: unknown, path: string, ctx: Context): void {
     walkChart(node, path, ctx);
     return;
   }
-  // A v3 `chart(...).layer(mark)` builder chain drops a component-level
+  // A `chart(...).layer(mark)` builder chain drops a component-level
   // annotation tier straight into `charts` as a raw-mark.
   if (isObject(node) && node.type === "raw-mark") {
     walkRawMark(node, path, ctx);
@@ -231,14 +228,7 @@ function walkRawMark(
   walkBaseFields(node, path, ctx);
   expectField(node, "mark", path, ctx, walkMark);
   optionalField(node, "options", path, ctx, expectObject);
-  if (ctx.strict) {
-    rejectUnknown(
-      node,
-      ["type", "mark", "options", "origin", "meta"],
-      path,
-      ctx
-    );
-  }
+  rejectUnknown(node, ["type", "mark", "options", "origin", "meta"], path, ctx);
 }
 
 function walkData(node: unknown, path: string, ctx: Context): void {
@@ -252,7 +242,7 @@ function walkData(node: unknown, path: string, ctx: Context): void {
         if (!Array.isArray(v))
           ctx.errors.push({ path: p, message: "rows must be an array" });
       });
-      if (ctx.strict) rejectUnknown(node, ["type", "rows"], path, ctx);
+      rejectUnknown(node, ["type", "rows"], path, ctx);
       return;
     case "select":
       expectField(node, "layer", path, ctx, expectString);
@@ -263,14 +253,14 @@ function walkData(node: unknown, path: string, ctx: Context): void {
             message: `mode must be "one" | "all", got ${JSON.stringify(v)}`,
           });
       });
-      if (ctx.strict) rejectUnknown(node, ["type", "layer", "mode"], path, ctx);
+      rejectUnknown(node, ["type", "layer", "mode"], path, ctx);
       return;
     case "external":
       optionalField(node, "id", path, ctx, expectString);
-      if (ctx.strict) rejectUnknown(node, ["type", "id"], path, ctx);
+      rejectUnknown(node, ["type", "id"], path, ctx);
       return;
     case "previous-tier":
-      if (ctx.strict) rejectUnknown(node, ["type"], path, ctx);
+      rejectUnknown(node, ["type"], path, ctx);
       return;
     default:
       ctx.errors.push({
@@ -285,193 +275,389 @@ function walkData(node: unknown, path: string, ctx: Context): void {
 /**
  * Generic per-type field interpreter: walks the descriptor table
  * (`descriptors.ts`) for a construct's type instead of a hand-written
- * per-type switch. Shared by operators (errors — the CRITICAL behavior
- * contract is that accepted/rejected documents stay exactly as before) and,
- * with `asWarning: true`, leaf marks (warnings only — the gradual rollout the
- * python-wrapper-codegen design doc calls for).
+ * per-type switch. Shared by operators and leaf marks. A key the construct
+ * does not declare is an error.
+ *
+ * `callerKeys` are the keys the caller checks itself (`type`, and any field it
+ * walks with a structural check of its own): they are accepted here and not
+ * checked a second time, even when `fields` declares them.
  */
 function walkDescriptorFields(
   node: Record<string, unknown>,
   path: string,
   ctx: Context,
   fields: Record<string, FieldSpec>,
-  extraKnownKeys: readonly string[],
-  opts: { asWarning?: boolean; rejectUnknownInStrict?: boolean } = {}
+  callerKeys: readonly string[]
 ): void {
-  const push = (path: string, message: string) => {
-    if (opts.asWarning) ctx.warnings.push({ path, message });
-    else ctx.errors.push({ path, message });
-  };
   for (const [name, spec] of Object.entries(fields)) {
-    const check = (v: unknown, p: string) =>
-      walkFieldType(spec.type, v, p, ctx, push);
+    if (callerKeys.includes(name)) continue;
     if (spec.required) {
       if (!(name in node)) {
-        push(`${path}.${name}`, `required field "${name}" is missing`);
+        ctx.errors.push({
+          path: `${path}.${name}`,
+          message: `required field "${name}" is missing`,
+        });
       } else {
-        check(node[name], `${path}.${name}`);
+        walkFieldType(spec.type, node[name], `${path}.${name}`, ctx);
       }
     } else {
       if (!(name in node) || node[name] === undefined || node[name] === null)
         continue;
-      check(node[name], `${path}.${name}`);
+      walkFieldType(spec.type, node[name], `${path}.${name}`, ctx);
     }
   }
-  // Errors: unknown-field rejection is strict-mode-gated, matching the
-  // pre-descriptor behavior exactly. Warnings are advisory and non-blocking,
-  // so they surface regardless of strict mode — there's no reason to hide an
-  // "unrecognized channel" signal from a permissive-mode caller.
-  const shouldCheckUnknown = opts.asWarning ? true : ctx.strict;
-  if (shouldCheckUnknown && (opts.rejectUnknownInStrict ?? true)) {
-    const known = [...extraKnownKeys, ...Object.keys(fields)];
-    for (const k of Object.keys(node)) {
-      // Double-underscore keys are Python-bridge wire extensions
-      // (__combinator, __datum, __key, __gofish_lambda, ... — see the
-      // serialization essay's "Bridge extensions"), not channels; the
-      // permissive envelope owns them, so they're outside this check.
-      if (k.startsWith("__")) continue;
-      if (!known.includes(k)) {
-        push(
-          `${path}.${k}`,
-          opts.asWarning
-            ? `unrecognized channel "${k}" for this mark type`
-            : `unknown field "${k}" (strict)`
-        );
-      }
-    }
+  rejectUnknown(node, [...callerKeys, ...Object.keys(fields)], path, ctx);
+}
+
+/** Whether `value` is of the JSON kind a field type takes (a number, a
+ *  string, an object, ...), whatever its finer constraints. A channel, a
+ *  ref, or `any` takes values of several kinds, so it is never singled out. */
+function sameKind(type: FieldType, value: unknown): boolean {
+  switch (type.kind) {
+    case "number":
+      return isIRNumber(value);
+    case "string":
+    case "enum":
+      return typeof value === "string";
+    case "boolean":
+      return typeof value === "boolean";
+    case "literal":
+      return typeof value === typeof type.value;
+    case "object":
+    case "record":
+      return isObject(value) && !Array.isArray(value);
+    case "array":
+    case "tuple":
+      return Array.isArray(value);
+    default:
+      return false;
   }
 }
 
-/** Dispatch a single value against a descriptor `FieldType`. `push` routes to
- *  either `ctx.errors` or `ctx.warnings` depending on the caller. */
+/** Check a single value against a descriptor `FieldType`, recording each
+ *  finding in `ctx.errors`. */
 function walkFieldType(
   type: FieldType,
   value: unknown,
   path: string,
-  ctx: Context,
-  push: (path: string, message: string) => void
+  ctx: Context
 ): void {
+  const fail = (message: string, at = path) =>
+    ctx.errors.push({ path: at, message });
   switch (type.kind) {
     case "string":
       if (typeof value !== "string")
-        push(path, `expected string, got ${typeNameOf(value)}`);
+        fail(`expected string, got ${typeNameOf(value)}`);
       return;
-    case "number":
-      if (typeof value !== "number")
-        push(path, `expected number, got ${typeNameOf(value)}`);
+    case "number": {
+      if (!isIRNumber(value)) {
+        fail(notANumber(value));
+        return;
+      }
+      const n =
+        typeof value === "number" ? value : (decodeNonFinite(value) as number);
+      if (type.finite && !Number.isFinite(n))
+        fail(`expected a finite number, got ${n}`);
+      else if (type.min !== undefined && !(n >= type.min))
+        fail(`expected a number of at least ${type.min}, got ${n}`);
+      else if (type.exclusiveMin !== undefined && !(n > type.exclusiveMin))
+        fail(`expected a number above ${type.exclusiveMin}, got ${n}`);
+      else if (type.integer && !Number.isInteger(n))
+        fail(`expected a whole number, got ${n}`);
       return;
+    }
     case "boolean":
       if (typeof value !== "boolean")
-        push(path, `expected boolean, got ${typeNameOf(value)}`);
+        fail(`expected boolean, got ${typeNameOf(value)}`);
+      return;
+    case "literal":
+      if (value !== type.value)
+        fail(
+          `expected ${JSON.stringify(type.value)}, got ${JSON.stringify(value)}`
+        );
       return;
     case "any":
       return;
     case "enum":
       if (typeof value !== "string" || !type.values.includes(value)) {
-        push(
-          path,
+        fail(
           `expected one of ${type.values.map((v) => JSON.stringify(v)).join(", ")}, got ${JSON.stringify(value)}`
         );
       }
       return;
-    case "channel": {
-      // Delegate to the existing permissive ChannelValue walker, but redirect
-      // through a scratch context so its findings route through `push` (this
-      // matters when `push` targets ctx.warnings — the leaf-mark descriptor
-      // walk — rather than ctx.errors directly).
-      const probe: Context = { strict: false, errors: [], warnings: [] };
-      walkChannelValue(value, path, probe);
-      for (const e of probe.errors) push(e.path, e.message);
+    case "channel":
+      walkChannelValue(value, path, ctx);
       return;
-    }
-    case "ref": {
-      // Same probe indirection as "channel": walkRefType pushes to
-      // ctx.errors unconditionally, but this field's findings must route
-      // through `push` (errors for operators, warnings for leaf marks).
-      const probe: Context = { strict: ctx.strict, errors: [], warnings: [] };
-      walkRefType(type.name, value, path, probe);
-      for (const e of probe.errors) push(e.path, e.message);
+    case "ref":
+      walkRefType(type.name, value, path, ctx);
       return;
-    }
     case "union": {
-      // Valid if ANY branch matches cleanly (no errors raised by that branch).
-      for (const branch of type.options) {
-        const probe: Context = { strict: false, errors: [], warnings: [] };
-        walkFieldType(branch, value, path, probe, (p, m) =>
-          probe.errors.push({ path: p, message: m })
-        );
-        if (probe.errors.length === 0) return;
+      // A tagged union (every branch an object whose `kind` is a literal, or
+      // every branch a ref tagged by its `type`, as `field(...)` and
+      // `struct(...)` are): the value's tag picks the one branch to check it
+      // against, as the Python generator's `_to_wire` does, so an unknown
+      // tag and a bad param each get their own message.
+      const tagged = taggedBranches(type.options);
+      if (tagged !== null) {
+        const { key, byTag } = tagged;
+        if (!isObject(value)) {
+          fail(`expected object, got ${typeNameOf(value)}`);
+          return;
+        }
+        const branch = byTag.get(value[key] as string);
+        if (branch === undefined) {
+          fail(
+            `unknown ${key} ${JSON.stringify(value[key])}; expected one of ${[...byTag.keys()].map((k) => JSON.stringify(k)).join(", ")}`,
+            `${path}.${key}`
+          );
+          return;
+        }
+        walkFieldType(branch, value, path, ctx);
+        return;
       }
-      push(
-        path,
+      // Otherwise valid if ANY branch matches cleanly: each branch is
+      // checked into a probe context of its own.
+      const probes: Context[] = [];
+      for (const branch of type.options) {
+        const probe: Context = { errors: [] };
+        walkFieldType(branch, value, path, probe);
+        if (probe.errors.length === 0) return;
+        probes.push(probe);
+      }
+      // When only one branch is of the value's kind (a number for a number
+      // branch, an object for an object branch), its own findings say what
+      // is wrong (`expected a number above 0`).
+      const ofKind = type.options.flatMap((b, i) =>
+        sameKind(b, value) ? [probes[i]] : []
+      );
+      if (ofKind.length === 1) {
+        ctx.errors.push(...ofKind[0].errors);
+        return;
+      }
+      fail(
         `value did not match any of the expected shapes: ${JSON.stringify(value)}`
       );
       return;
     }
     case "array":
       if (!Array.isArray(value)) {
-        push(path, `expected array, got ${typeNameOf(value)}`);
+        fail(`expected array, got ${typeNameOf(value)}`);
+        return;
+      }
+      if (type.minItems !== undefined && value.length < type.minItems) {
+        fail(
+          `expected at least ${type.minItems} item${type.minItems === 1 ? "" : "s"}, got ${value.length}`
+        );
         return;
       }
       value.forEach((item, i) =>
-        walkFieldType(type.items, item, `${path}[${i}]`, ctx, push)
+        walkFieldType(type.items, item, `${path}[${i}]`, ctx)
       );
       return;
     case "tuple":
       if (!Array.isArray(value) || value.length !== type.items.length) {
-        push(
-          path,
-          `expected a ${type.items.length}-tuple, got ${typeNameOf(value)}`
-        );
+        fail(`expected a ${type.items.length}-tuple, got ${typeNameOf(value)}`);
         return;
       }
       type.items.forEach((item, i) =>
-        walkFieldType(item, value[i], `${path}[${i}]`, ctx, push)
+        walkFieldType(item, value[i], `${path}[${i}]`, ctx)
       );
       return;
     case "record":
       if (!isObject(value)) {
-        push(path, `expected object, got ${typeNameOf(value)}`);
+        fail(`expected object, got ${typeNameOf(value)}`);
         return;
       }
       for (const [k, v] of Object.entries(value)) {
-        walkFieldType(type.valueType, v, `${path}.${k}`, ctx, push);
+        walkFieldType(type.valueType, v, `${path}.${k}`, ctx);
       }
       return;
     case "object":
       if (!isObject(value)) {
-        push(path, `expected object, got ${typeNameOf(value)}`);
+        fail(`expected object, got ${typeNameOf(value)}`);
         return;
       }
-      // Nested object fields validate the same way as top-level descriptor
-      // fields (required/optional), but do NOT reject unrecognized keys —
-      // matching the pre-descriptor behavior (e.g. `table.by` never rejected
-      // extra keys, even in strict mode).
-      for (const [name, spec] of Object.entries(type.fields)) {
-        const has =
-          name in value && value[name] !== undefined && value[name] !== null;
-        if (spec.required && !has) {
-          push(`${path}.${name}`, `required field "${name}" is missing`);
-        } else if (has) {
-          walkFieldType(spec.type, value[name], `${path}.${name}`, ctx, push);
-        }
-      }
+      // Nested object fields validate like top-level descriptor fields: a
+      // key the object does not declare is an error (an `axes` entry other
+      // than x/y, a misspelled axis option).
+      walkDescriptorFields(value, path, ctx, type.fields, []);
       return;
   }
 }
 
-/** Resolve a `t.ref(name)` against the small set of authored envelope
- *  shapes already validated elsewhere in this file. */
+/** A branch's tag: the field that names it, and its value. An object
+ *  whose required `kind` field is a string literal (a strategy) is tagged
+ *  by its `kind`; a hand-authored ref with a `tag` (`field(...)`,
+ *  `struct(...)`, AUTHORED_REFS) by its `type`. */
+function branchTag(
+  branch: FieldType
+): { key: "kind" | "type"; value: string } | null {
+  if (branch.kind === "ref") {
+    const tag = AUTHORED_REFS[branch.name]?.tag;
+    return tag === undefined ? null : { key: "type", value: tag };
+  }
+  if (branch.kind !== "object") return null;
+  const tag = branch.fields.kind;
+  return tag !== undefined &&
+    tag.required &&
+    tag.type.kind === "literal" &&
+    typeof tag.type.value === "string"
+    ? { key: "kind", value: tag.type.value }
+    : null;
+}
+
+/** The branches of a tagged union by their tag: every branch tagged by the
+ *  same field ({@link branchTag}), no two alike. Null for any other union. */
+function taggedBranches(
+  options: readonly FieldType[]
+): { key: "kind" | "type"; byTag: Map<string, FieldType> } | null {
+  const byTag = new Map<string, FieldType>();
+  let key: "kind" | "type" | undefined;
+  for (const branch of options) {
+    const tag = branchTag(branch);
+    if (tag === null || (key !== undefined && tag.key !== key)) return null;
+    if (byTag.has(tag.value)) return null;
+    key = tag.key;
+    byTag.set(tag.value, branch);
+  }
+  return key === undefined ? null : { key, byTag };
+}
+
+/**
+ * Walk `value` against `type` and throw the first problem, as
+ * `[gofish] <path>: <message>. <hint>`, naming `where` the value was
+ * written. The one way the JS side checks a value against a declared type
+ * (a strategy, a partition, a bin, an option object), so every check speaks
+ * the validator's vocabulary.
+ */
+function walkOrThrow(
+  type: FieldType,
+  value: unknown,
+  where: string,
+  hint: string
+): void {
+  const ctx: Context = { errors: [] };
+  walkFieldType(type, value, where, ctx);
+  if (ctx.errors.length > 0) {
+    const [{ path, message }] = ctx.errors;
+    throw new Error(`[gofish] ${path}: ${message}.${hint ? ` ${hint}` : ""}`);
+  }
+}
+
+/**
+ * Check a strategy against its family in `STRATEGIES`: a known `kind`, and
+ * only that kind's params, each of its declared type. Throws the first
+ * problem, naming `where` the strategy was written
+ * (`"treemap({ tile })"`). This is the one check a strategy gets on the JS
+ * side, wherever it came from (a family member, a hand-written object, or
+ * Python IR; a kind used bare is read as its value where the option
+ * entered); the validator runs the same walk over a whole document.
+ */
+export function checkStrategy(
+  family: StrategyFamilyName,
+  value: unknown,
+  where: string
+): void {
+  walkOrThrow(
+    OPTION_TYPES[family].type,
+    value,
+    where,
+    `Make one with the ${family} family.`
+  );
+}
+
+/**
+ * Check a named option object (`OPTION_TYPES`, e.g. `"AxisOptions"`)
+ * against its declared type, as the validator checks it in a document:
+ * only its declared keys, each of its declared type. Throws the first
+ * problem, naming `where` the option was written (`"axes.x"`).
+ */
+export function checkOption(
+  name: keyof typeof OPTION_TYPES,
+  value: unknown,
+  where: string
+): void {
+  walkOrThrow(OPTION_TYPES[name].type, value, where, "");
+}
+
+/**
+ * Check the `Bin` strategy of `struct({ x, y }).bin(b)`, which takes the
+ * kinds that divide a plane (`Bin.hex`, `Bin.voronoi`). A kind that cuts one
+ * field's line (`Bin.step`) throws, naming `field(x).bin`; anything else is
+ * checked as {@link checkStrategy} checks it.
+ */
+export function checkStructBin(v: unknown, where: string): void {
+  const kind = isObject(v) ? v.kind : undefined;
+  if ((BIN_KINDS.field as readonly unknown[]).includes(kind))
+    throw new Error(
+      `[gofish] ${where}: Bin.${kind} bins one field. Bin each field with ` +
+        `field(x).bin(Bin.${kind}(...)); struct({ x, y }).bin takes ` +
+        `Bin.hex({ radius }) or Bin.voronoi({ seeds }).`
+    );
+  checkStrategy("Bin", v, where);
+}
+
+/**
+ * Check the partition of `field(x).bin(p)`: a Calendar kind or a `Bin` kind
+ * that cuts one field's line (`OPTION_TYPES.Partition`). A `Bin` kind that
+ * divides a plane (`Bin.hex`) throws, naming `struct({ x, y }).bin`.
+ */
+export function checkPartition(v: unknown, where: string): void {
+  const kind = isObject(v) ? v.kind : undefined;
+  if ((BIN_KINDS.struct as readonly unknown[]).includes(kind))
+    throw new Error(
+      `[gofish] ${where}: Bin.${kind} bins two fields together into cells ` +
+        `of the plane. Bin them with struct({ x, y }).bin(Bin.${kind}(...)); ` +
+        `field(x).bin takes Bin.step(size), Bin.thresholds(countOrEdges), ` +
+        `or a Calendar value.`
+    );
+  walkOrThrow(
+    OPTION_TYPES.Partition.type,
+    v,
+    where,
+    `Make one with a Calendar value (Calendar.month, ` +
+      `Calendar.hour({ every: 6 }), ...), Bin.step(size), or ` +
+      `Bin.thresholds(countOrEdges).`
+  );
+}
+
+/** The anchors an axis interval may name: the fields of `AxisInterval` in
+ *  `OPTION_TYPES`. */
+export const AXIS_INTERVAL_KEYS = Object.keys(
+  (OPTION_TYPES.AxisInterval.type as Extract<FieldType, { kind: "object" }>)
+    .fields
+) as ReadonlyArray<keyof AxisInterval>;
+
+/**
+ * Is this value an untagged plain object? A channel value that is an object
+ * always carries a tag: `type` (`field(...)`, `datum(...)`, `literal`) or the
+ * `__gofish_lambda` bridge sentinel. So an untagged plain object is never a
+ * channel value, which is how a `dims` entry (`AxisDimsValue`, declared in
+ * `OPTION_TYPES`) tells an interval from a position, and why
+ * `walkChannelValue` rejects one. Shared with gofish-graphics' dims.ts, where a
+ * runtime value may be a class instance, hence the plain-prototype check.
+ */
+export const isAxisInterval = (v: unknown): v is Record<string, unknown> =>
+  isObject(v) &&
+  Object.getPrototypeOf(v) === Object.prototype &&
+  !("type" in v) &&
+  !("__gofish_lambda" in v);
+
+/** Resolve a `t.ref(name)`: a named option type (`OPTION_TYPES`) walks with
+ *  the generic field-type interpreter; any other name is one of the authored
+ *  envelope shapes validated elsewhere in this file. */
 function walkRefType(
   name: string,
   value: unknown,
   path: string,
   ctx: Context
 ): void {
+  const optionType = OPTION_TYPES[name];
+  if (optionType !== undefined) {
+    walkFieldType(optionType.type, value, path, ctx);
+    return;
+  }
   switch (name) {
-    case "AxesOptions":
-      walkAxesOptions(value, path, ctx);
-      return;
     case "LabelIR":
       walkLabel(value, path, ctx);
       return;
@@ -480,6 +666,9 @@ function walkRefType(
       return;
     case "ConstraintIR":
       walkConstraint(value, path, ctx);
+      return;
+    case "RelateClauseIR":
+      walkRelateClause(value, path, ctx);
       return;
     case "FieldAccessor":
       if (!isObject(value)) {
@@ -498,10 +687,32 @@ function walkRefType(
       }
       walkFieldAccessor(value, path, ctx);
       return;
-    default:
-      // Unknown ref name — permissive (forward-compat), mirrors the rest of
-      // this validator's stance on shapes it doesn't recognize yet.
+    case "StructAccessor":
+      walkStructAccessor(value, path, ctx);
       return;
+    case "ChunkKey":
+      if (!isObject(value) || value.type !== "chunk") {
+        ctx.errors.push({
+          path,
+          message: `expected a chunk(size) key, got ${JSON.stringify(value)}`,
+        });
+        return;
+      }
+      if (
+        typeof value.size !== "number" ||
+        !Number.isInteger(value.size) ||
+        value.size < 1
+      ) {
+        ctx.errors.push({
+          path: `${path}.size`,
+          message: `chunk size must be a positive integer, got ${JSON.stringify(value.size)}`,
+        });
+      }
+      return;
+    default:
+      // Every ref a descriptor names is in OPTION_TYPES or AUTHORED_REFS, so
+      // this is a descriptor that names a shape no walker knows.
+      throw new Error(`validate: no walker for the ref type "${name}"`);
   }
 }
 
@@ -523,24 +734,15 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
     return;
   }
   walkBaseFields(node, path, ctx);
-  optionalField(node, "translate", path, ctx, walkTranslate);
-  const descriptor = OPERATORS[node.type];
-  // `debug`/`label` (OPERATOR_BASE_FIELDS) ride every operator: `debug` is a
-  // factory-only dev flag JS strips before layout; `label` is the
-  // `.label(accessor, options?)` chain available on dual-mode operators.
-  const fields = descriptor
-    ? {
-        ...resolveFields(descriptor),
-        label: OPERATOR_BASE_FIELDS.label,
-        debug: OPERATOR_BASE_FIELDS.debug,
-      }
-    : {};
-  walkDescriptorFields(node, path, ctx, fields, [
-    "type",
-    "translate",
-    "origin",
-    "meta",
-  ]);
+  // The operator's own fields and OPERATOR_BASE_FIELDS (`label`, `translate`,
+  // `debug`) all sit on the node.
+  walkDescriptorFields(
+    node,
+    path,
+    ctx,
+    acceptedFields("operator", node.type) ?? {},
+    ["type", "origin", "meta"]
+  );
 }
 
 function walkTranslate(node: unknown, path: string, ctx: Context): void {
@@ -555,7 +757,7 @@ function walkTranslate(node: unknown, path: string, ctx: Context): void {
   }
   optionalField(node, "x", path, ctx, expectNumber);
   optionalField(node, "y", path, ctx, expectNumber);
-  if (ctx.strict) rejectUnknown(node, ["x", "y"], path, ctx);
+  rejectUnknown(node, ["x", "y"], path, ctx);
 }
 
 /**
@@ -565,8 +767,13 @@ function walkTranslate(node: unknown, path: string, ctx: Context): void {
  */
 function walkChannelValue(value: unknown, path: string, ctx: Context): void {
   if (value === null) return;
-  if (typeof value === "string") return;
-  if (typeof value === "number") return;
+  if (typeof value === "string" || typeof value === "number") return;
+  if (isNonFiniteNumberIR(value)) {
+    // The tagged infinities are numbers; the tagged NaN never is.
+    if (!isTaggedInfinity(value))
+      ctx.errors.push({ path, message: notANumber(value, "channel value") });
+    return;
+  }
   if (typeof value === "boolean") return;
   if (typeof value !== "object") {
     ctx.errors.push({
@@ -576,10 +783,18 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
     return;
   }
   // Object form: one of the recognized tagged shapes.
+  if (isAxisInterval(value)) {
+    ctx.errors.push({
+      path,
+      message:
+        'a channel value object must be tagged: field(...), datum(...), or {type: "literal", value}',
+    });
+    return;
+  }
   const obj = value as Record<string, unknown>;
   if ("__gofish_lambda" in obj) return; // Python-bridge sentinel
   if (obj.type === "datum") {
-    if (obj.offset !== undefined && typeof obj.offset !== "number") {
+    if (obj.offset !== undefined && !isIRNumber(obj.offset)) {
       ctx.errors.push({
         path: `${path}.offset`,
         message: 'datum "offset" must be a number (post-scale pixel offset)',
@@ -600,7 +815,7 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
               message: 'colorOp "op" must be "lighten" or "darken"',
             });
           }
-          if (typeof cop?.amount !== "number") {
+          if (!isIRNumber(cop?.amount)) {
             ctx.errors.push({
               path: `${path}.colorOps[${i}].amount`,
               message: 'colorOp "amount" must be a number',
@@ -624,11 +839,12 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
     }
     return;
   }
-  // Permissive fallback: allow unknown object shapes for forward-compat.
+  // Permissive fallback: allow an unknown `type` tag (and arrays) for
+  // forward-compat.
 }
 
 /**
- * Explicit field-accessor form (`field(name, measure?)`), optionally with a
+ * Explicit field-accessor form (`field(name)`), optionally with a
  * chained `ops` pipeline (`field("site").sort("yield")` /
  * `field("count").normalize()` — #700). Shared by `walkChannelValue`'s
  * `type: "field"` branch and `walkRefType`'s `FieldAccessor` case (the `by`
@@ -645,13 +861,6 @@ function walkFieldAccessor(
       message: 'field accessor must have a string "name"',
     });
   }
-  // Optional unit annotation (field(name, measure)); a string when present.
-  if (obj.measure !== undefined && typeof obj.measure !== "string") {
-    ctx.errors.push({
-      path: `${path}.measure`,
-      message: 'field "measure" must be a string when present',
-    });
-  }
   if (obj.ops !== undefined) {
     if (!Array.isArray(obj.ops)) {
       ctx.errors.push({
@@ -662,6 +871,61 @@ function walkFieldAccessor(
       obj.ops.forEach((op, i) => walkFieldOp(op, `${path}.ops[${i}]`, ctx));
     }
   }
+}
+
+/**
+ * A key built from two fields (`struct({ x, y })`), with the cells it is
+ * binned into: `{ type: "struct", fields: { x, y }, ops?: [{ op: "bin",
+ * partition }] }`, the partition a `Bin` kind that bins two fields
+ * (`OPTION_TYPES.StructBin`).
+ */
+function walkStructAccessor(value: unknown, path: string, ctx: Context): void {
+  const fail = (message: string, at = path) =>
+    ctx.errors.push({ path: at, message });
+  if (!isObject(value)) {
+    fail(`expected a struct(...) accessor object, got ${typeNameOf(value)}`);
+    return;
+  }
+  if (value.type !== "struct") {
+    fail(
+      `expected type "struct", got ${JSON.stringify(value.type)}`,
+      `${path}.type`
+    );
+    return;
+  }
+  const fields = value.fields;
+  if (
+    !isObject(fields) ||
+    typeof fields.x !== "string" ||
+    typeof fields.y !== "string"
+  ) {
+    fail(
+      'struct "fields" must be { x: string, y: string }, naming the column ' +
+        "read on each axis",
+      `${path}.fields`
+    );
+  } else rejectUnknown(fields, ["x", "y"], `${path}.fields`, ctx);
+  if (value.ops !== undefined) {
+    if (!Array.isArray(value.ops)) {
+      fail('struct "ops" must be an array when present', `${path}.ops`);
+    } else {
+      value.ops.forEach((op, i) => {
+        const at = `${path}.ops[${i}]`;
+        if (!isObject(op) || op.op !== "bin") {
+          fail('a struct op must be { op: "bin", partition }', at);
+          return;
+        }
+        rejectUnknown(op, ["op", "partition"], at, ctx);
+        walkFieldType(
+          OPTION_TYPES.StructBin.type,
+          op.partition,
+          `${at}.partition`,
+          ctx
+        );
+      });
+    }
+  }
+  rejectUnknown(value, ["type", "fields", "ops"], path, ctx);
 }
 
 /** Known `field(...)` pipeline op names — mirrors gofish-graphics'
@@ -716,9 +980,7 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
       if (value.values !== undefined) {
         if (
           !Array.isArray(value.values) ||
-          !value.values.every(
-            (v) => typeof v === "string" || typeof v === "number"
-          )
+          !value.values.every((v) => typeof v === "string" || isIRNumber(v))
         ) {
           ctx.errors.push({
             path: `${path}.values`,
@@ -729,20 +991,9 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
       }
       return;
     case "bin":
-      if (
-        value.thresholds !== undefined &&
-        typeof value.thresholds !== "number" &&
-        !(
-          Array.isArray(value.thresholds) &&
-          value.thresholds.every((t) => typeof t === "number")
-        )
-      ) {
-        ctx.errors.push({
-          path: `${path}.thresholds`,
-          message:
-            'bin "thresholds" must be a number or an array of numbers when present',
-        });
-      }
+      rejectUnknown(value, ["op", "partition"], path, ctx);
+      if (value.partition !== undefined)
+        walkPartition(value.partition, `${path}.partition`, ctx);
       return;
     default:
       // reverse/dropNulls/normalize/sum/mean/count/distinct carry no extra fields.
@@ -750,46 +1001,24 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
   }
 }
 
-/**
- * `axes` — per-node axis-rendering override. Either a boolean (apply to
- * both dims) or an object `{ x?: AxisOptions, y?: AxisOptions }` where each
- * AxisOptions is a boolean or `{ title?: string | false }`.
- */
-function walkAxesOptions(value: unknown, path: string, ctx: Context): void {
-  if (typeof value === "boolean") return;
-  if (!isObject(value)) {
-    ctx.errors.push({
-      path,
-      message: `axes must be boolean or {x?, y?}, got ${typeNameOf(value)}`,
-    });
-    return;
-  }
-  for (const k of ["x", "y"]) {
-    if (k in value) walkAxisOption(value[k], `${path}.${k}`, ctx);
-  }
-  if (ctx.strict) rejectUnknown(value, ["x", "y"], path, ctx);
-}
-
-function walkAxisOption(value: unknown, path: string, ctx: Context): void {
-  if (typeof value === "boolean") return;
-  if (value === undefined) return;
-  if (!isObject(value)) {
-    ctx.errors.push({
-      path,
-      message: `axis option must be boolean or { title? }, got ${typeNameOf(value)}`,
-    });
-    return;
-  }
-  if ("title" in value) {
-    const t = value.title;
-    if (t !== false && typeof t !== "string") {
+/** A `bin` op's partition: a Calendar value or a `Bin` kind that bins one
+ *  field (`OPTION_TYPES.Partition`, one tagged union), or a product of
+ *  Calendar values (a list of two or more). Which levels a product may
+ *  combine is the renderer's check (`checkBinStep` in gofish-graphics'
+ *  cells.ts). */
+function walkPartition(value: unknown, path: string, ctx: Context): void {
+  if (Array.isArray(value)) {
+    if (value.length < 2)
       ctx.errors.push({
-        path: `${path}.title`,
-        message: `axis title must be a string or false, got ${typeNameOf(t)}`,
+        path,
+        message: "a product of bins takes two or more Calendar values",
       });
-    }
+    value.forEach((v, i) =>
+      walkFieldType(OPTION_TYPES.Calendar.type, v, `${path}[${i}]`, ctx)
+    );
+    return;
   }
-  if (ctx.strict) rejectUnknown(value, ["title"], path, ctx);
+  walkFieldType(OPTION_TYPES.Partition.type, value, path, ctx);
 }
 
 function walkMark(node: unknown, path: string, ctx: Context): void {
@@ -831,12 +1060,43 @@ function walkMark(node: unknown, path: string, ctx: Context): void {
   });
 }
 
+/** The `MARK_BASE_FIELDS` a mark node of each kind carries beside its own
+ *  keys. `name` is not among them: a mark's name may be a hygienic-name token,
+ *  so every mark walker checks it with `expectNameOrToken`. */
+const markBaseFields = (...keys: string[]): FieldGroup =>
+  Object.fromEntries(keys.map((k) => [k, MARK_BASE_FIELDS[k]]));
+const {
+  name: _name,
+  debug: _debug,
+  ...COMBINATOR_NODE_FIELDS
+} = MARK_BASE_FIELDS;
+const REF_MARK_FIELDS = markBaseFields("label", "zOrder", "translate");
+const CUT_MARK_FIELDS = markBaseFields("zOrder", "translate");
+const OFFSET_MARK_FIELDS = markBaseFields("translate");
+
+/** The keys every mark walker checks itself, outside the descriptor walk. */
+const MARK_NODE_KEYS = ["type", "name", "origin", "meta"] as const;
+
+function walkMarkNode(
+  node: Record<string, unknown>,
+  path: string,
+  ctx: Context,
+  fields: FieldGroup,
+  ownKeys: readonly string[]
+): void {
+  walkBaseFields(node, path, ctx);
+  optionalField(node, "name", path, ctx, expectNameOrToken);
+  walkDescriptorFields(node, path, ctx, fields, [
+    ...MARK_NODE_KEYS,
+    ...ownKeys,
+  ]);
+}
+
 function walkRefMark(
   node: Record<string, unknown>,
   path: string,
   ctx: Context
 ): void {
-  walkBaseFields(node, path, ctx);
   expectField(node, "selection", path, ctx, (v, p) => {
     if (typeof v !== "string" && !Array.isArray(v)) {
       ctx.errors.push({
@@ -845,27 +1105,7 @@ function walkRefMark(
       });
     }
   });
-  optionalField(node, "name", path, ctx, expectNameOrToken);
-  optionalField(node, "label", path, ctx, walkLabel);
-  optionalField(node, "zOrder", path, ctx, expectNumber);
-  optionalField(node, "translate", path, ctx, walkTranslate);
-  if (ctx.strict) {
-    rejectUnknown(
-      node,
-      [
-        "type",
-        "selection",
-        "name",
-        "label",
-        "zOrder",
-        "translate",
-        "origin",
-        "meta",
-      ],
-      path,
-      ctx
-    );
-  }
+  walkMarkNode(node, path, ctx, REF_MARK_FIELDS, ["selection"]);
 }
 
 function walkOffsetMark(
@@ -873,10 +1113,8 @@ function walkOffsetMark(
   path: string,
   ctx: Context
 ): void {
-  walkBaseFields(node, path, ctx);
   optionalField(node, "x", path, ctx, expectNumber);
   optionalField(node, "y", path, ctx, expectNumber);
-  optionalField(node, "translate", path, ctx, walkTranslate);
   expectField(node, "children", path, ctx, (v, p) => {
     if (!Array.isArray(v)) {
       ctx.errors.push({ path: p, message: "children must be an array" });
@@ -890,14 +1128,7 @@ function walkOffsetMark(
     }
     v.forEach((item, i) => walkMark(item, `${p}[${i}]`, ctx));
   });
-  if (ctx.strict) {
-    rejectUnknown(
-      node,
-      ["type", "x", "y", "children", "translate", "origin", "meta"],
-      path,
-      ctx
-    );
-  }
+  walkMarkNode(node, path, ctx, OFFSET_MARK_FIELDS, ["x", "y", "children"]);
 }
 
 /**
@@ -917,9 +1148,9 @@ function walkCutSize(value: unknown, path: string, ctx: Context): void {
   }
   value.forEach((item, i) => {
     const p = `${path}[${i}]`;
-    if (typeof item === "number") return;
+    if (isIRNumber(item)) return;
     if (isObject(item) && item.type === "datum") {
-      if (item.offset !== undefined && typeof item.offset !== "number") {
+      if (item.offset !== undefined && !isIRNumber(item.offset)) {
         ctx.errors.push({
           path: `${p}.offset`,
           message: 'datum "offset" must be a number',
@@ -941,7 +1172,6 @@ function walkCutMark(
   path: string,
   ctx: Context
 ): void {
-  walkBaseFields(node, path, ctx);
   expectField(node, "source", path, ctx, walkMark);
   expectField(node, "dir", path, ctx, (v, p) => {
     if (v !== "x" && v !== "y")
@@ -952,28 +1182,12 @@ function walkCutMark(
   });
   optionalField(node, "size", path, ctx, walkCutSize);
   optionalField(node, "inset", path, ctx, expectNumber);
-  optionalField(node, "name", path, ctx, expectNameOrToken);
-  optionalField(node, "zOrder", path, ctx, expectNumber);
-  optionalField(node, "translate", path, ctx, walkTranslate);
-  if (ctx.strict) {
-    rejectUnknown(
-      node,
-      [
-        "type",
-        "source",
-        "dir",
-        "size",
-        "inset",
-        "name",
-        "zOrder",
-        "translate",
-        "origin",
-        "meta",
-      ],
-      path,
-      ctx
-    );
-  }
+  walkMarkNode(node, path, ctx, CUT_MARK_FIELDS, [
+    "source",
+    "dir",
+    "size",
+    "inset",
+  ]);
 }
 
 function walkCombinatorMark(
@@ -989,38 +1203,32 @@ function walkCombinatorMark(
       message: `combinator mark type must be one of ${COMBINATOR_MARK_TYPES.join(", ")}`,
     });
   }
-  walkBaseFields(node, path, ctx);
-  optionalField(node, "options", path, ctx, expectObject);
+  optionalField(node, "options", path, ctx, (v, p) => {
+    if (!isObject(v)) {
+      ctx.errors.push({
+        path: p,
+        message: `expected object, got ${typeNameOf(v)}`,
+      });
+      return;
+    }
+    walkDescriptorFields(
+      v,
+      p,
+      ctx,
+      acceptedFields("combinator-mark", node.type as string) ?? {},
+      []
+    );
+  });
   expectField(node, "children", path, ctx, (v, p) =>
     walkArray(v, p, ctx, walkMark)
   );
-  optionalField(node, "name", path, ctx, expectNameOrToken);
-  optionalField(node, "label", path, ctx, walkLabel);
-  optionalField(node, "constraints", path, ctx, (v, p) =>
-    walkArray(v, p, ctx, walkConstraint)
-  );
-  optionalField(node, "zOrder", path, ctx, expectNumber);
-  optionalField(node, "translate", path, ctx, walkTranslate);
-  if (ctx.strict) {
-    rejectUnknown(
-      node,
-      [
-        "type",
-        "__combinator",
-        "options",
-        "children",
-        "name",
-        "label",
-        "constraints",
-        "zOrder",
-        "translate",
-        "origin",
-        "meta",
-      ],
-      path,
-      ctx
-    );
-  }
+  // The mark's base fields sit on the node; its own options (and `debug`)
+  // sit under `options`, checked above.
+  walkMarkNode(node, path, ctx, COMBINATOR_NODE_FIELDS, [
+    "__combinator",
+    "options",
+    "children",
+  ]);
 }
 
 function walkLeafMark(
@@ -1028,55 +1236,17 @@ function walkLeafMark(
   path: string,
   ctx: Context
 ): void {
-  walkBaseFields(node, path, ctx);
-  optionalField(node, "name", path, ctx, expectNameOrToken);
-  optionalField(node, "label", path, ctx, walkLabel);
-  optionalField(node, "constraints", path, ctx, (v, p) =>
-    walkArray(v, p, ctx, walkConstraint)
+  // The mark's own fields and MARK_BASE_FIELDS all sit on the node: the
+  // enumerated channel list in `descriptors.ts`'s `LEAF_MARKS` is each mark's
+  // real channel set (its factory's options plus the shared box-dims/paint
+  // groups it includes), so any other key is an error, as on every node.
+  walkMarkNode(
+    node,
+    path,
+    ctx,
+    acceptedFields("leaf-mark", node.type as string) ?? {},
+    []
   );
-  optionalField(node, "zOrder", path, ctx, expectNumber);
-  optionalField(node, "translate", path, ctx, walkTranslate);
-  // Channel-valued props are unrestricted in v0 (mirrors widget IR).
-  // Strict mode does NOT reject unknown fields on leaf marks, because the
-  // entire point of a leaf is to carry channel-valued props with arbitrary
-  // names (h, w, fill, x, y, etc.).
-  //
-  // Descriptor-driven channel warnings (non-blocking, both permissive and
-  // strict mode): the enumerated channel list in `descriptors.ts`'s
-  // `LEAF_MARKS` documents each mark's REAL channel set (its factory's
-  // destructured options + the shared box-dims/paint groups it includes).
-  // An unrecognized field is silently dropped at render — surfacing it here
-  // as a warning turns that into a visible signal without breaking any
-  // currently-valid document (see the gradual-rollout note in
-  // ValidationWarning's docstring).
-  const descriptor = LEAF_MARKS[node.type as string];
-  if (descriptor) {
-    // `label` is deliberately excluded here: it's already validated above by
-    // `walkLabel` as the base LabelIR mechanism (`.label()`'s canonical
-    // object/string shorthand). Re-checking it here against the descriptor's
-    // own field type would risk a spurious warning divergence between the
-    // two walks.
-    const { label: _ownLabelFlag, ...fields } = resolveFields(descriptor);
-    walkDescriptorFields(
-      node,
-      path,
-      ctx,
-      // `debug` (MARK_BASE_FIELDS) rides every leaf mark, declared or not —
-      // a factory-only dev flag the JS side strips before layout.
-      { ...fields, debug: MARK_BASE_FIELDS.debug },
-      [
-        "type",
-        "name",
-        "label",
-        "constraints",
-        "zOrder",
-        "translate",
-        "origin",
-        "meta",
-      ],
-      { asWarning: true }
-    );
-  }
 }
 
 /** One entry of a `LabelIR` array — the shape a single `.label(accessor,
@@ -1111,32 +1281,7 @@ function walkLabelSpec(node: unknown, path: string, ctx: Context): void {
       message: `expected a string or field(...) accessor object, got ${typeNameOf(node.accessor)}`,
     });
   }
-  optionalField(node, "position", path, ctx, expectString);
-  optionalField(node, "fontSize", path, ctx, expectNumber);
-  optionalField(node, "color", path, ctx, expectString);
-  optionalField(node, "offset", path, ctx, expectNumber);
-  optionalField(node, "rotate", path, ctx, expectNumber);
-  optionalField(node, "fontFamily", path, ctx, expectString);
-  optionalField(node, "fontWeight", path, ctx, expectStringOrNumber);
-  optionalField(node, "fontStyle", path, ctx, expectString);
-  if (ctx.strict) {
-    rejectUnknown(
-      node,
-      [
-        "accessor",
-        "position",
-        "fontSize",
-        "color",
-        "offset",
-        "rotate",
-        "fontFamily",
-        "fontWeight",
-        "fontStyle",
-      ],
-      path,
-      ctx
-    );
-  }
+  walkDescriptorFields(node, path, ctx, LABEL_OPTIONS, ["accessor"]);
 }
 
 function walkLabel(node: unknown, path: string, ctx: Context): void {
@@ -1146,6 +1291,13 @@ function walkLabel(node: unknown, path: string, ctx: Context): void {
   if (typeof node === "boolean") return;
   // Otherwise: an array of label specs, one per `.label(...)` call.
   walkArray(node, path, ctx, walkLabelSpec);
+}
+
+/** A relate clause is a constraint when it carries `refs`, else a mark. */
+function walkRelateClause(node: unknown, path: string, ctx: Context): void {
+  if (isObject(node) && isConstraintIR(node as RelateClauseIR))
+    walkConstraint(node, path, ctx);
+  else walkMark(node, path, ctx);
 }
 
 function walkConstraint(node: unknown, path: string, ctx: Context): void {
@@ -1195,14 +1347,12 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
           message: "nest options must specify at least one of x, y",
         });
       }
-      if (ctx.strict) rejectUnknown(v, ["x", "y"], p, ctx);
+      rejectUnknown(v, ["x", "y"], p, ctx);
     });
   } else {
     optionalField(node, "options", path, ctx, expectObject);
   }
-  if (ctx.strict) {
-    rejectUnknown(node, ["type", "refs", "options"], path, ctx);
-  }
+  rejectUnknown(node, ["type", "refs", "options"], path, ctx);
 }
 
 function walkBaseFields(
@@ -1221,7 +1371,7 @@ function walkOrigin(node: unknown, path: string, ctx: Context): void {
   }
   optionalField(node, "name", path, ctx, expectNameOrToken);
   optionalField(node, "stack", path, ctx, expectString);
-  if (ctx.strict) rejectUnknown(node, ["name", "stack"], path, ctx);
+  rejectUnknown(node, ["name", "stack"], path, ctx);
 }
 
 function walkMeta(node: unknown, path: string, _ctx: Context): void {
@@ -1293,7 +1443,7 @@ function rejectUnknown(
     if (!knownKeys.includes(k)) {
       ctx.errors.push({
         path: `${path}.${k}`,
-        message: `unknown field "${k}" (strict)`,
+        message: `unknown field "${k}"; expected one of ${knownKeys.map((key) => JSON.stringify(key)).join(", ")}`,
       });
     }
   }
@@ -1309,25 +1459,7 @@ function expectString(value: unknown, path: string, ctx: Context): void {
 }
 
 function expectNumber(value: unknown, path: string, ctx: Context): void {
-  if (typeof value !== "number") {
-    ctx.errors.push({
-      path,
-      message: `expected number, got ${typeNameOf(value)}`,
-    });
-  }
-}
-
-function expectStringOrNumber(
-  value: unknown,
-  path: string,
-  ctx: Context
-): void {
-  if (typeof value !== "string" && typeof value !== "number") {
-    ctx.errors.push({
-      path,
-      message: `expected string or number, got ${typeNameOf(value)}`,
-    });
-  }
+  if (!isIRNumber(value)) ctx.errors.push({ path, message: notANumber(value) });
 }
 
 function expectBoolean(value: unknown, path: string, ctx: Context): void {
@@ -1385,6 +1517,7 @@ export type {
   ChannelValue,
   CombinatorMarkIR,
   ConstraintIR,
+  RelateClauseIR,
   CutMarkIR,
   DataIR,
   FrontendIRDocument,

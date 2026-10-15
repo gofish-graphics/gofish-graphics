@@ -1,3 +1,7 @@
+---
+order: 100
+---
+
 # Region compositing
 
 Five operators combine the _regions_ (silhouettes) of two children, named
@@ -66,9 +70,8 @@ mask(children)                   # [A, B]
 
 ## Parameters
 
-| Option      | Type                                                                     | Description                                                                   |
-| ----------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `blendMode` | `"color"` \| `"multiply"` \| `"screen"` \| `"overlay"` \| `"luminosity"` | Blend used where regions combine. Default `"color"`. `mask` takes no options. |
+::: gofish-ref intersect exclude subtract paint mask
+:::
 
 ## Arity
 

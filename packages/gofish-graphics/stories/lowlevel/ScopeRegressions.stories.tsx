@@ -7,7 +7,7 @@ import {
   layer,
   enclose,
   Constraint,
-  For,
+  map,
   v,
 } from "../../src/lib";
 import { color6 } from "../../src/color";
@@ -25,7 +25,7 @@ export default meta;
 const bars = () =>
   spreadX(
     { spacing: 10, alignment: "start", h: 160 },
-    For([40, 90, 60, 80, 55], (b, i) =>
+    map([40, 90, 60, 80, 55], (b, i) =>
       rect({ key: `b${i}`, w: 20, h: v(b), fill: color6[0] })
     )
   );
@@ -34,10 +34,10 @@ const bars = () =>
 const heat = () =>
   spreadY(
     { spacing: 3, alignment: "start" },
-    For(["A", "B", "C"], (row) =>
+    map(["A", "B", "C"], (row) =>
       spreadX(
         { key: row, spacing: 3, alignment: "middle" },
-        For([0, 1, 2, 3], (c) =>
+        map([0, 1, 2, 3], (c) =>
           rect({ w: 20, h: 20, fill: `rgba(189,0,38,${0.2 + 0.2 * c})` })
         )
       )
@@ -60,27 +60,25 @@ export const EncloseMixed: StoryObj = {
 };
 
 // Bug #3: the same mixed composition inside a layer that carries a z-order
-// (zAbove/zBelow) constraint — which routes the layer through the z-order hoist.
-// The hoist must CARRY the flip scope through each hoisted-through plain layer,
-// so adding the constraint never changes which orientation a subtree lowers
-// under: the bars still grow up, the heatmap still reads top→bottom.
+// (zAbove/zBelow) constraint. Adding the constraint must never change which
+// orientation a subtree lowers under: the bars still grow up, the heatmap still
+// reads top→bottom.
 export const ZOrderedMixed: StoryObj = {
   render: () => {
     const container = initializeContainer();
     layer([
-      // Plain nested layers wrapping each subtree: these are what
-      // flattenForZOrder hoists through — the continuous-y bars' scope must be
-      // carried through the hoist so the z-order constraint never changes it.
+      // Plain nested layers wrapping each subtree: the continuous-y bars'
+      // scope must not change when the enclosing layer has a z constraint.
       layer([bars()]).name("barsWrap"),
       layer([heat()]).name("heatWrap"),
     ])
-      .constrain((c) => [
-        // Position side by side (layout), and add a z-order relation so the
-        // layer takes the z-order hoist path (`hoistWithScope`) at bake time.
-        Constraint.distribute(
-          { dir: "x", spacing: 40, anchor: "edge" },
-          [c.barsWrap, c.heatWrap]
-        ),
+      .relate((c) => [
+        // Position side by side (layout), and add a z-order relation between
+        // the two wrappers.
+        Constraint.distribute({ dir: "x", spacing: 40, anchor: "edge" }, [
+          c.barsWrap,
+          c.heatWrap,
+        ]),
         Constraint.zAbove(c.heatWrap, c.barsWrap),
       ])
       .render(container, {});

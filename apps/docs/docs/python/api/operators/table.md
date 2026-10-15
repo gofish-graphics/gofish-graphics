@@ -1,3 +1,7 @@
+---
+order: 30
+---
+
 # table
 
 Groups data by two fields and lays the groups out in a 2D grid — one axis per
@@ -16,7 +20,7 @@ const data = days.flatMap((day, di) =>
   }))
 );
 
-gf.chart(data, { color: gf.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]) })
+gf.chart(data, { color: gf.Color.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]) })
   .flow(gf.table({ by: { x: "hour", y: "day" }, spacing: 4 }))
   .mark(gf.rect({ fill: "value" }))
   .render(root, { w: 500, h: 300, axes: true });
@@ -25,9 +29,9 @@ gf.chart(data, { color: gf.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]) })
 :::
 
 ```python
-from gofish import chart, table, rect, gradient
+from gofish import chart, table, rect, Color
 
-chart(data, color=gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes=True).flow(
+chart(data, color=Color.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes=True).flow(
     table(by={"x": "hour", "y": "day"}, spacing=4)
 ).mark(rect(fill="value")).render(w=500, h=300)
 ```
@@ -40,11 +44,8 @@ table(*, by, **options) -> Operator
 
 ## Parameters
 
-| Parameter | Type                       | Description                                                     |
-| --------- | -------------------------- | --------------------------------------------------------------- |
-| `by`      | `dict`                     | A dict with `x` and `y` keys naming the two fields              |
-| `spacing` | `int` \| `tuple[int, int]` | Gap between cells — a single number or `(x_spacing, y_spacing)` |
-| `numCols` | `int`                      | Override the inferred column count                              |
+::: gofish-ref table
+:::
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
@@ -52,7 +53,7 @@ Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
 ```python
 # Heatmap: hour on x, day on y, colored by value
-chart(data, color=gradient(["#ffffcc", "#fd8d3c", "#bd0026"])).flow(
+chart(data, color=Color.gradient(["#ffffcc", "#fd8d3c", "#bd0026"])).flow(
     table(by={"x": "hour", "y": "day"}, spacing=4)
 ).mark(rect(fill="value"))
 
@@ -62,11 +63,19 @@ chart(data).flow(table(by={"x": "col", "y": "row"}, spacing=(2, 8)))
 
 ## Notes
 
-- Data insertion order determines column and row ordering. Sort your data first
-  if you need a specific order.
+- Each of `by["x"]` and `by["y"]` takes what
+  [`spread`](/python/api/operators/spread)'s `by` takes: a field name or a
+  `field(...)` key, sorted or binned. A binned key's columns (or rows) are its
+  cells, in order, empty ones included, and its axis labels them as
+  `spread`'s does: `table(by={"x": field("date").bin(Calendar.week), "y":
+field("date").bin(Calendar.weekday)})` is a calendar heatmap, one column per
+  week and one row per day of the week.
+- A plain field name's columns and rows come in order of first appearance, or
+  in the order of its levels when the chart's `schema` declares the column
+  ordered. Sort your data first if you need a specific order.
 - Unlike nested [`spread`](/python/api/operators/spread) calls, `table` exposes
   ordinal axes on **both** dimensions, so axis labels render on x and y.
-- Pair `gradient()` on the chart `color` option with `fill="fieldName"` on the
+- Pair `Color.gradient()` on the chart `color` option with `fill="fieldName"` on the
   mark for heatmap coloring.
 
 ### Cell sizing

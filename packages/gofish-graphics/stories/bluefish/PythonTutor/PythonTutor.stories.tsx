@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
 import {
-  Arrow,
+  arrow,
   createName,
-  Layer,
+  layer,
   ref,
-  Spread,
+  spread,
 } from "../../../src/lib";
 import { globalFrame } from "./globalFrame";
 import { heap } from "./heap";
@@ -60,7 +60,7 @@ export const PythonTutor: StoryObj = {
     const stackArrows = data.stack.flatMap((slot, i) =>
       isPointer(slot.value)
         ? [
-            Arrow(
+            arrow(
               {
                 bow: 0,
                 stretch: 0,
@@ -84,7 +84,7 @@ export const PythonTutor: StoryObj = {
       obj.values.flatMap((v, j) =>
         isPointer(v)
           ? [
-              Arrow(
+              arrow(
                 {
                   bow: 0,
                   padEnd: 25,
@@ -102,10 +102,10 @@ export const PythonTutor: StoryObj = {
       )
     );
 
-    Layer([
+    layer([
       // y-down free space: cross-axis "start" tops-aligns the global frame and
       // the heap (issue #143/#16).
-      Spread({ dir: "x", alignment: "start", spacing: 100 }, [
+      spread({ dir: "x", alignment: "start", spacing: 100 }, [
         globalFrame({ stack: data.stack }).name(globalFrameName),
         heap({
           heap: data.heap,

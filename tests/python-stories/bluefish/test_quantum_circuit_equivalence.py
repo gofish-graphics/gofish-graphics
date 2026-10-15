@@ -12,7 +12,7 @@ itself a still-deferred Mark that a `@mark`/`createMark` wrapper can't take).
 from gofish import (
     Constraint,
     circle,
-    createName,
+    create_name,
     enclose,
     layer,
     line,
@@ -35,7 +35,7 @@ def wire_slot(content):
             rect(w=GATE, h=GATE, fill="transparent").name("slot"),
             content.name("content"),
         ]
-    ).constrain(
+    ).relate(
         lambda slot, content: [
             Constraint.align([slot, content], x="middle", y="middle"),
         ]
@@ -57,17 +57,17 @@ def boxed_symbol(label):
                 h=GATE,
                 fill="white",
                 stroke="black",
-                strokeWidth=3,
+                stroke_width=3,
             ).name("box"),
             text(
                 text=label,
-                fontSize=30,
-                fontFamily="serif",
-                fontStyle="italic",
+                font_size=30,
+                font_family="serif",
+                font_style="italic",
                 fill="black",
             ).name("label"),
         ]
-    ).constrain(
+    ).relate(
         lambda box, label: [
             Constraint.align([box, label], x="middle", y="middle"),
         ]
@@ -80,12 +80,12 @@ def o_plus():
     return layer(
         [
             circle(
-                r=15, fill="transparent", stroke="black", strokeWidth=3
+                r=15, fill="transparent", stroke="black", stroke_width=3
             ).name("ring"),
             rect(w=30, h=3, fill="black").name("hbar"),
             rect(w=3, h=30, fill="black").name("vbar"),
         ]
-    ).constrain(
+    ).relate(
         lambda ring, hbar, vbar: [
             Constraint.align([ring, hbar, vbar], x="middle", y="middle"),
         ]
@@ -118,7 +118,7 @@ def wire(slots, span=None):
                 alignment="middle",
             ).name("gates"),
         ]
-    ).constrain(
+    ).relate(
         lambda line, gates: [
             Constraint.align([line, gates], x="start", y="middle"),
         ]
@@ -128,10 +128,10 @@ def wire(slots, span=None):
 def story_quantum_circuit():
     # Cross-tier names: the connector lines reference marks placed deep
     # inside the wire-group layers.
-    c1 = createName("c1")
-    z = createName("z")
-    c2 = createName("c2")
-    oplus = createName("oplus")
+    c1 = create_name("c1")
+    z = create_name("z")
+    c2 = create_name("c2")
+    oplus = create_name("oplus")
 
     # The two highlight callouts (yellow boxes), built with `enclose`
     # wrapping their owned content at the point that content is constructed.
@@ -167,7 +167,7 @@ def story_quantum_circuit():
                             spacing=30,
                             alignment="start",
                         ),
-                        text(text="≡", fontSize=40, fontWeight=300),
+                        text(text="≡", font_size=40, font_weight=300),
                         # Right circuit: H-CNOT-H. Both wires span 3 columns.
                         spread(
                             [
@@ -202,11 +202,11 @@ def story_quantum_circuit():
                     alignment="middle",
                 ),
                 # ── tier 2: control-to-gate connector lines ──
-                line([ref(c1), ref(z)], stroke="black", strokeWidth=3).z_order(
+                line([ref(c1), ref(z)], stroke="black", stroke_width=3).z_order(
                     -1
                 ),
                 line(
-                    [ref(c2), ref(oplus)], stroke="black", strokeWidth=3
+                    [ref(c2), ref(oplus)], stroke="black", stroke_width=3
                 ).z_order(-1),
             ],
             x=20,

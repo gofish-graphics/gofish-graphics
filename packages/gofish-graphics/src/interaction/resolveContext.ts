@@ -18,8 +18,8 @@
  * `live()` channel is being evaluated at resolve time wires the input into
  * event dispatch but does NOT mark it a pipeline dependency (paint re-runs it
  * reactively). Any other read during resolve adds the ambient runtime to the
- * input's `specRuntimes` set, so its writes schedule a full re-run of every
- * chart that read it.
+ * reader set of the READABLE it read (one of the input's `specReaders`), so
+ * writes to that readable schedule a full re-run of every chart that read it.
  *
  * Caveat: the context is a module variable, so two charts resolving
  * CONCURRENTLY (interleaving at await points, e.g. a Python derive RPC) could
@@ -31,7 +31,7 @@ import type { InputPrimitive, SpecInvalidator } from "./types";
 
 /** The registration surface library inputs see. It is also a
  *  {@link SpecInvalidator}: a spec-read (outside `live()`) adds THIS registrar
- *  to the input's `specRuntimes` set, so the input can invalidate every chart
+ *  to the read readable's set in `specReaders`, so the input can invalidate every chart
  *  that depends on it — not just the last one attached. The runtime is the
  *  registrar, so `registerInput` and `invalidate` are the same object. */
 export interface AmbientRegistrar extends SpecInvalidator {

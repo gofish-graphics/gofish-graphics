@@ -1,5 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, rect, text, Layer, Constraint, polar } from "gofish-graphics";
+import {
+  circle,
+  rect,
+  text,
+  layer,
+  Constraint,
+  Coord,
+  Curve,
+} from "gofish-graphics";
 import { tree, nest, distribute } from "../src";
 
 const meta: Meta = {
@@ -85,7 +93,7 @@ export const NodeLink: StoryObj<Args> = {
             stroke: "#1f3a5f",
             strokeWidth: 1,
           }),
-        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1.5 },
         // distribute on y → parent first goes at low y; ``
         // flips so parent ends up at HIGH y = top of screen (y-up). Aligned
         // middle on the orthogonal x axis (separate align constraint).
@@ -106,7 +114,7 @@ export const NodeLink: StoryObj<Args> = {
 // label, built from gofish-graphics primitives. The node factory closes over the
 // hierarchy datum, so `d.data.name` flows from the user's tree into the label.
 const labeledNode = (d: any) =>
-  Layer({ w: 96, h: 26 }, [
+  layer({ w: 96, h: 26 }, [
     rect({
       w: 96,
       h: 26,
@@ -121,7 +129,7 @@ const labeledNode = (d: any) =>
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
       fill: "#1d3557",
     }).name("label"),
-  ]).constrain(({ box, label }: any) => [
+  ]).relate(({ box, label }: any) => [
     Constraint.align({ x: "middle", y: "middle" }, [box, label]),
   ]);
 
@@ -132,7 +140,7 @@ export const LabeledFileTree: StoryObj<Args> = {
     tree(
       {
         node: labeledNode,
-        link: { curve: "straight", stroke: "#9bb1c4", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#9bb1c4", strokeWidth: 1.5 },
         parentChild: distribute({
           dir: "y",
           spacing: 36,
@@ -203,7 +211,7 @@ export const NestedBoxes: StoryObj<Args> = {
 // stack. Demonstrates that `parentChild` accepts any function with the
 // `(children) => GoFishAST` shape — helpers are conveniences, not the API.
 const labeledHeader = (d: any) =>
-  Layer({ w: 96, h: 22 }, [
+  layer({ w: 96, h: 22 }, [
     rect({
       w: 96,
       h: 22,
@@ -218,7 +226,7 @@ const labeledHeader = (d: any) =>
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
       fill: "#1d3557",
     }).name("label"),
-  ]).constrain(({ box, label }: any) => [
+  ]).relate(({ box, label }: any) => [
     Constraint.align({ x: "middle", y: "middle" }, [box, label]),
   ]);
 
@@ -362,7 +370,7 @@ export const Sunburst: StoryObj<Args> = {
           spacing: 0,
           alignment: "middle",
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       deepBalancedTree
     ).render(container, { w: args.w, h: args.h });
@@ -474,7 +482,7 @@ export const NestedPietree: StoryObj<Args> = {
           spacing: NPT_SIB,
           alignment: "middle",
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       polarBalancedTree
     ).render(container, { w: args.w, h: args.h });
@@ -495,7 +503,7 @@ export const RadialNodes: StoryObj<Args> = {
             stroke: "#1f3a5f",
             strokeWidth: 1,
           }),
-        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1.5 },
         // distribute on y forward order: parent at LOW y → r=0 (canvas
         // center), children at HIGH y → outer rings. anchor: "middle" treats
         // children as points (no bbox accumulation) and reads spacing in
@@ -514,7 +522,7 @@ export const RadialNodes: StoryObj<Args> = {
           anchor: "middle",
           alignment: "middle",
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       sampleData
     ).render(container, { w: args.w, h: args.h });

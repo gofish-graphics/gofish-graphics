@@ -12,7 +12,7 @@ Exercises the Python wrapper's new `connect` operator with keyword anchors
 
 from gofish import (
     Constraint,
-    createName,
+    create_name,
     line,
     layer,
     mark,
@@ -22,7 +22,7 @@ from gofish import (
 )
 
 
-EDGE_OPTS = {"stroke": "#90a4ae", "strokeWidth": 2}
+EDGE_OPTS = {"stroke": "#90a4ae", "stroke_width": 2}
 
 
 @mark
@@ -36,13 +36,13 @@ def node(label: str):
                 rx=6,
                 fill="#e2ebf6",
                 stroke="#457b9d",
-                strokeWidth=2,
+                stroke_width=2,
             ).name("box"),
-            text(text=label, fontSize=14, fill="#1d3557").name("label"),
+            text(text=label, font_size=14, fill="#1d3557").name("label"),
         ],
         w=76,
         h=40,
-    ).constrain(
+    ).relate(
         lambda box, label: [
             Constraint.align([box, label], x="middle", y="middle"),
         ]
@@ -51,10 +51,10 @@ def node(label: str):
 
 def story_node_link():
     # Cross-tier names: edges (outer tier) reference nodes (inner tier).
-    A = createName("A")
-    B = createName("B")
-    C = createName("C")
-    D = createName("D")
+    A = create_name("A")
+    B = create_name("B")
+    C = create_name("C")
+    D = create_name("D")
 
     return (
         layer(
@@ -67,7 +67,7 @@ def story_node_link():
                         node(label="C").name(C),
                         node(label="D").name(D),
                     ]
-                ).constrain(
+                ).relate(
                     lambda A, B, C, D: [
                         Constraint.distribute(
                             [A, B, C], dir="x", spacing=60, anchor="edge"
@@ -105,13 +105,13 @@ def story_node_link():
                 .name("e3")
                 .z_order(-1),
                 # ── tier 3: edge labels ─────────────────────────────────────
-                text(text="open", fontSize=11, fill="#607d8b").name("t1"),
-                text(text="run", fontSize=11, fill="#607d8b").name("t2"),
-                text(text="drop", fontSize=11, fill="#607d8b").name("t3"),
+                text(text="open", font_size=11, fill="#607d8b").name("t1"),
+                text(text="run", font_size=11, fill="#607d8b").name("t2"),
+                text(text="drop", font_size=11, fill="#607d8b").name("t3"),
             ],
             x=20,
             y=20,
-        ).constrain(
+        ).relate(
             lambda e1, e2, e3, t1, t2, t3, **_extra: [
                 # Horizontal edges: label centered just above the edge.
                 Constraint.align([e1, t1], x="middle"),

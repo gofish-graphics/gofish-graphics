@@ -2,7 +2,7 @@
  * GoFish Python Widget — self-contained ESM bundle entry point.
  *
  * Trait-based protocol (Altair / Plotly pattern):
- *   - JS reads `spec`, `arrow_data`, render options on mount and renders.
+ *   - JS reads `spec`, `tier_arrow`, render options on mount and renders.
  *   - For `derive` operators and lambda accessors, JS sets `derive_request`
  *     and awaits a `derive_response` change. Python's `@traitlets.observe`
  *     runs the callback. Sequential — at most one in-flight derive per widget.
@@ -11,19 +11,16 @@
  *
  * The deserializer (mapMark/mapOperator/buildChart and friends) lives in
  * `gofish-graphics/serialize`. This file retains only the widget-bridge
- * concerns: WidgetModel I/O, Arrow encoding for the bridge transport,
- * and the render entry points.
+ * concerns: WidgetModel I/O, the Arrow transport (encoding in
+ * `arrowTransport.ts`, decoding in `arrowDecode.ts`, which the parity
+ * harness shares), and the render entry points.
  */
 
 import * as Arrow from "apache-arrow";
-import {
-  Layer,
-  Serialize,
-  serializeSVG,
-  type ChartBuilder,
-} from "gofish-graphics";
+import { Serialize, serializeSVG, type View } from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
 import { buildArrowTable } from "./arrowTransport";
+import { arrowB64ToRows, decodeTierRows } from "./arrowDecode";
 
 // Type aliases pointing at the canonical IR schema. Internal usages below
 // keep the legacy `…Spec` names for readability.
@@ -33,10 +30,12 @@ type RawMarkSpec = Frontend.RawMarkIR;
 
 interface WidgetModel {
   get(key: "spec"): ChartSpec | LayerSpec | RawMarkSpec;
-  get(key: "arrow_data"): string;
+  get(key: "tier_arrow"): string[];
   get(key: "width"): number;
   get(key: "height"): number;
-  get(key: "axes"): boolean;
+  get(key: "axes"): Serialize.RenderIROptions["axes"] | null;
+  get(key: "legend"): boolean | null;
+  get(key: "padding"): number | null;
   get(key: "debug"): boolean;
   get(key: "container_id"): string;
   get(
@@ -57,49 +56,9 @@ interface RawDeriveBridge {
   request(lambdaId: string, arrowB64: string): Promise<string>;
 }
 
-interface RenderOptions {
-  w: number;
-  h: number;
-  axes: boolean;
-  debug: boolean;
-}
-
 // ---------------------------------------------------------------------------
 // Arrow utilities (widget transport)
 // ---------------------------------------------------------------------------
-
-function arrowTableToArray(table: Arrow.Table): Record<string, any>[] {
-  const numRows = table.numRows;
-  const columns = table.schema.fields.map((field, i) => {
-    const column = table.getChildAt(i);
-    const values = column.toArray();
-    return { name: field.name, type: field.type, values };
-  });
-
-  const data: Record<string, any>[] = [];
-  for (let i = 0; i < numRows; i++) {
-    const row: Record<string, any> = {};
-    columns.forEach((col) => {
-      let value = col.values[i];
-      if (typeof value === "bigint") {
-        value = Number(value);
-      } else if (value !== null && value !== undefined) {
-        const typeStr = col.type ? col.type.toString() : "";
-        if (
-          typeStr.includes("Int64") ||
-          typeStr.includes("UInt64") ||
-          typeStr.includes("Int32") ||
-          typeStr.includes("UInt32")
-        ) {
-          value = Number(value);
-        }
-      }
-      row[col.name] = value;
-    });
-    data.push(row);
-  }
-  return data;
-}
 
 function arrayToArrow(rows: Record<string, any>[]): Uint8Array {
   if (!rows || rows.length === 0) {
@@ -138,13 +97,6 @@ function arrayToArrow(rows: Record<string, any>[]): Uint8Array {
   return buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
 }
 
-function decodeArrowB64(b64: string): Record<string, any>[] {
-  if (!b64) return [];
-  const arrowBuffer = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-  const table = Arrow.tableFromIPC(arrowBuffer);
-  return arrowTableToArray(table);
-}
-
 // ---------------------------------------------------------------------------
 // Bridge: low-level RPC and the typed DeriveBridge the deserializer expects
 // ---------------------------------------------------------------------------
@@ -160,11 +112,7 @@ function makeDeriveBridgeFromRaw(raw: RawDeriveBridge): Serialize.DeriveBridge {
       if (rows.length === 0) return [];
       const arrowBuffer = arrayToArrow(rows);
       const arrowB64 = btoa(String.fromCharCode(...arrowBuffer));
-      const resultB64 = await raw.request(lambdaId, arrowB64);
-      const resultBuffer = Uint8Array.from(atob(resultB64), (c) =>
-        c.charCodeAt(0)
-      );
-      return arrowTableToArray(Arrow.tableFromIPC(resultBuffer));
+      return arrowB64ToRows(await raw.request(lambdaId, arrowB64));
     },
   };
 }
@@ -258,156 +206,61 @@ function renderError(
 ): void {
   const message = error.message || String(error);
   const stack = debug && error.stack ? error.stack : "";
-  container.innerHTML = `
-    <div style="color: red; padding: 20px; border: 2px solid red; background: #ffe0e0;">
-      <h2 style="margin-top: 0;">GoFish Widget Error</h2>
-      <p><strong>${message}</strong></p>
-      ${stack ? `<pre style="background: #fff; padding: 10px; overflow: auto; white-space: pre-wrap;">${stack}</pre>` : ""}
-    </div>
-  `;
-}
-
-function renderLayer(
-  model: WidgetModel,
-  container: HTMLElement,
-  bridge: Serialize.DeriveBridge
-): void {
-  const debug = model.get("debug");
-  const log = debug
-    ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
-    : () => {};
-
-  log("Rendering layer...");
-
-  const spec = model.get("spec") as LayerSpec;
-  const arrowDataRaw = model.get("arrow_data");
-
-  let arrowDict: Record<string, string> = {};
-  try {
-    arrowDict = JSON.parse(arrowDataRaw);
-  } catch (e) {
-    throw new Error(`Failed to parse layer arrow_data JSON: ${e}`);
+  // Build with DOM APIs and `.textContent` so error text (which often echoes
+  // user data) is never parsed as HTML.
+  const panel = document.createElement("div");
+  panel.style.cssText =
+    "color: red; padding: 20px; border: 2px solid red; background: #ffe0e0;";
+  const title = document.createElement("h2");
+  title.style.cssText = "margin-top: 0;";
+  title.textContent = "GoFish Widget Error";
+  const paragraph = document.createElement("p");
+  const strong = document.createElement("strong");
+  strong.textContent = message;
+  paragraph.append(strong);
+  panel.append(title, paragraph);
+  if (stack) {
+    const pre = document.createElement("pre");
+    pre.style.cssText =
+      "background: #fff; padding: 10px; overflow: auto; white-space: pre-wrap;";
+    pre.textContent = stack;
+    panel.append(pre);
   }
-
-  const resolveToken = Serialize.makeTokenResolver();
-  // A tier is a chart (ChartBuilder) or a component-level annotation
-  // (raw-mark → a Mark). Build each accordingly; the builder chain stacks
-  // them via `.layer()`, which accepts either.
-  const childTiers = spec.charts.map((childSpec: any, i: number) => {
-    if (childSpec && childSpec.type === "raw-mark") {
-      log(`Building raw-mark tier ${i}`);
-      return Serialize.mapMark(childSpec.mark, bridge, resolveToken) as any;
-    }
-    const b64 = arrowDict[String(i)] || "";
-    const data = decodeArrowB64(b64);
-    log(`Building chart ${i}: ${data.length} rows`);
-    return Serialize.buildChart(
-      childSpec as ChartSpec,
-      data,
-      bridge,
-      resolveToken
-    );
-  });
-
-  const resolvedLayerOptions = Serialize.resolveOptions(
-    (spec.options ?? {}) as Record<string, any>
-  );
-  const renderOptions: RenderOptions = {
-    w: model.get("width"),
-    h: model.get("height"),
-    axes: model.get("axes"),
-    debug,
-  };
-
-  if ((spec as any).builder) {
-    // v3 `chart(...).layer(...)` chain: reconstruct through the real
-    // LayerBuilder so JS owns the builder's render logic (inferred axis
-    // titles, etc.) instead of the wrapper re-deriving it. The child charts
-    // are already wired (the producer mark is named, the consumer reads
-    // selectAll), so chaining `.layer()` just stacks them. The first tier is
-    // always a chart; later tiers may be mark tiers (`.layer(text({...}))`).
-    const layerBuilder = childTiers
-      .slice(1)
-      .reduce((acc: any, c) => acc.layer(c), childTiers[0] as any);
-    layerBuilder.render(container, renderOptions);
-  } else if (Object.keys(resolvedLayerOptions).length > 0) {
-    (Layer as any)(resolvedLayerOptions, childTiers).render(
-      container,
-      renderOptions
-    );
-  } else {
-    (Layer as any)(childTiers).render(container, renderOptions);
-  }
-  log("Layer rendered successfully!");
+  container.replaceChildren(panel);
 }
 
-function renderRawMark(
-  model: WidgetModel,
-  container: HTMLElement,
-  bridge: Serialize.DeriveBridge
-): void {
-  const spec = model.get("spec") as unknown as RawMarkSpec;
-  const debug = model.get("debug");
-  const log = debug
-    ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
-    : () => {};
-
-  log("Building raw mark...");
-  const resolveToken = Serialize.makeTokenResolver();
-  const mark = Serialize.mapMark(spec.mark, bridge, resolveToken) as any;
-  const renderOptions: RenderOptions = {
-    w: model.get("width"),
-    h: model.get("height"),
-    axes: model.get("axes"),
-    debug,
-  };
-  log("Rendering raw mark with options:", renderOptions);
-  mark.render(container, renderOptions);
-  log("Raw mark rendered successfully!");
-}
-
+/** Render the widget's spec into `container` through the library's one IR
+ *  renderer (`Serialize.renderIR`, which the parity harness uses too).
+ *  Building the chart throws synchronously on a bad spec; the returned
+ *  promise settles with the chart's {@link View} once it has resolved. */
 function renderChart(
   model: WidgetModel,
   container: HTMLElement,
   bridge: Serialize.DeriveBridge
-): void {
+): Promise<View> {
   const spec = model.get("spec");
-  if ((spec as any).type === "layer") {
-    renderLayer(model, container, bridge);
-    return;
-  }
-  if ((spec as any).type === "raw-mark") {
-    renderRawMark(model, container, bridge);
-    return;
-  }
-
-  const chartSpec = spec as ChartSpec;
   const debug = model.get("debug");
   const log = debug
     ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
     : () => {};
-
-  let data: Record<string, any>[] = [];
-  const arrowDataB64 = model.get("arrow_data");
-  if (arrowDataB64) {
-    log("Decoding Arrow data...");
-    data = decodeArrowB64(arrowDataB64);
-    log(`Converted to ${data.length} data objects`);
-  }
-
-  log("Building chart...");
-  const resolveToken = Serialize.makeTokenResolver();
-  const node = Serialize.buildChart(chartSpec, data, bridge, resolveToken);
-
-  const renderOptions: RenderOptions = {
+  log("Decoding Arrow data...");
+  // One base64 Arrow stream per chart tier (`tiers_arrow_bytes` in ast.py).
+  const tierRows = decodeTierRows(model.get("tier_arrow"));
+  const renderOptions: Serialize.RenderIROptions = {
     w: model.get("width"),
     h: model.get("height"),
-    axes: model.get("axes"),
+    // Each is null unless the Python render call passed it, so the chart's
+    // own option (or the default) decides.
+    axes: model.get("axes") ?? undefined,
+    legend: model.get("legend") ?? undefined,
+    padding: model.get("padding") ?? undefined,
     debug,
   };
   log("Rendering with options:", renderOptions);
-  node.render(container, renderOptions);
-  log("Chart rendered successfully!");
+  return Serialize.renderIR(spec, container, renderOptions, {
+    bridge,
+    tierRows,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -476,7 +329,8 @@ async function captureSVG(
 /**
  * `initialize` runs once per widget on mount: that's where we wire up
  * the derive bridge so its listener and pending map are scoped to this
- * widget instance. `render` paints the chart into the cell DOM.
+ * widget instance. `render` paints the chart into the cell DOM and returns
+ * the cleanup anywidget runs when that DOM goes away.
  */
 export default {
   initialize({ model }: { model: WidgetModel }) {
@@ -493,21 +347,9 @@ export default {
     log("render() called");
 
     const containerId = model.get("container_id");
-    el.innerHTML = `<div id="${containerId}"></div>`;
-    const container = el.querySelector(`#${containerId}`) as HTMLElement;
-    if (!container) {
-      const error = new Error(
-        `Container with id "${containerId}" not found after creation`
-      );
-      renderError(el, error, debug);
-      try {
-        model.set("render_result", { error: error.message });
-        model.save_changes();
-      } catch {
-        /* ignore */
-      }
-      return;
-    }
+    const container = document.createElement("div");
+    container.id = containerId;
+    el.replaceChildren(container);
 
     let bridge = (model as any).__gofishBridge as
       | Serialize.DeriveBridge
@@ -520,7 +362,7 @@ export default {
     }
 
     try {
-      renderChart(model, container, bridge);
+      const view = renderChart(model, container, bridge);
       try {
         model.set("render_result", { value: true });
         model.save_changes();
@@ -531,6 +373,10 @@ export default {
       // Fire-and-forget: it waits for the async mount, independent of the
       // synchronous render_result above.
       void captureSVG(model, container, log);
+      // anywidget calls the function `render` returns when the cell's view is
+      // removed (the output cleared, the cell re-run): the chart goes with it,
+      // detaching it from every input it read.
+      return () => void view.then((v) => v.unmount());
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       log("Error in render():", err);
@@ -541,6 +387,7 @@ export default {
       } catch {
         /* ignore */
       }
+      return undefined;
     }
   },
 };

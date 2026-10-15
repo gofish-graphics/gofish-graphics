@@ -6,8 +6,10 @@
  * nesting of distributes sits below. So the per-leaf angular allocation must NOT
  * depend on how the children are GROUPED — a flat distribute of N data-driven
  * wedges must produce the same leaf sizes as any nested grouping of the same N
- * wedges. (This is the confluence the scale-root scoping gate in
- * `buildChildScalePlan` buys; without it a nested group silently re-derives a
+ * wedges. (This is the confluence the one sized-node rule of #1114 buys
+ * (`solveLayerScales`): a nested group has no size of its own and holds a
+ * chain of magnitudes, not pinned data, so even in a distribute's slot it is
+ * not sized and inherits the coord's σ. If it solved, it would re-derive a
  * smaller σ against its equal-slice budget.)
  *
  * Run via `tsx`.
@@ -18,6 +20,7 @@ import { Rect } from "../ast/shapes/rect";
 import { value } from "../ast/data";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
+import { Frame } from "../ast/graphicalOperators/frame";
 
 let passed = 0;
 let failed = 0;
@@ -42,7 +45,7 @@ const staticWedge = (radians: number) =>
 // gotree `combine`/`distribute` helpers emit).
 const dist = (cs: any[]) => {
   const named = cs.map((c, i) => Layer([c]).name(`__d-${i}`));
-  return Layer(named).constrain((c: any) => [
+  return Layer(named).relate((c: any) => [
     Constraint.distribute(
       { dir: "x", spacing: 0, anchor: "edge", order: "forward" },
       named.map((_: any, i: number) => c[`__d-${i}`])
@@ -54,7 +57,7 @@ const dist = (cs: any[]) => {
 // extent (intrinsicDims[0].size, in radians of coord space).
 async function leafThetaSizes(child: any): Promise<number[]> {
   const root: any = await coord({ transform: polar() }, [child]);
-  root.resolveAliases();
+  await root.resolveAliases();
   root.resolveUnderlyingSpace();
   root.resolveEmbedding();
   root.layout([400, 400], [undefined, undefined]);
@@ -112,7 +115,9 @@ console.log("# coord confluence: weighted data-driven children");
 {
   // Weights 1,2,3 → budget split 1/6, 2/6, 3/6 of 2π regardless of grouping.
   const flat = await leafThetaSizes(dist([wedge(1), wedge(2), wedge(3)]));
-  const nested = await leafThetaSizes(dist([wedge(1), dist([wedge(2), wedge(3)])]));
+  const nested = await leafThetaSizes(
+    dist([wedge(1), dist([wedge(2), wedge(3)])])
+  );
   ok(
     "weighted flat → 60°/120°/180° summing to 2π",
     sameMultiset(flat, [TAU / 6, TAU / 3, TAU / 2]) &&
@@ -137,14 +142,30 @@ console.log("# coord confluence: mixed data-driven + static children");
   );
   ok(
     "mixed: static stays fixed, data wedges share the rest (flat)",
-    flat.length === 3 &&
-      flat.filter((s) => approx(s, fixed)).length === 1,
+    flat.length === 3 && flat.filter((s) => approx(s, fixed)).length === 1,
     JSON.stringify(flat)
   );
   ok(
     "mixed: nesting the data wedges is confluent with flat",
     sameMultiset(flat, nested),
     `flat=${JSON.stringify(flat)} nested=${JSON.stringify(nested)}`
+  );
+}
+
+console.log("# a frame with a coord honors its explicit w/h (#535)");
+{
+  const root: any = await Frame({ coord: polar(), w: 120, h: 80, axes: true }, [
+    dist([wedge(), wedge()]),
+  ]);
+  await root.resolveAliases();
+  root.resolveUnderlyingSpace();
+  root.resolveEmbedding();
+  const placeable: any = root.layout([400, 400], [undefined, undefined]);
+  const [w, h] = [placeable.dims[0].size, placeable.dims[1].size];
+  ok(
+    "the coord's box is the explicit 120 x 80",
+    w === 120 && h === 80,
+    `${w} x ${h}`
   );
 }
 

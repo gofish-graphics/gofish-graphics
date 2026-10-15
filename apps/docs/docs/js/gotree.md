@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # GoTree
 
 `gofish-gotree` is a declarative grammar for tree visualizations, embedded inside
@@ -20,7 +24,7 @@ instead of JSON descriptors.
 
 ```ts
 import { tree, spread } from "gofish-gotree";
-import { circle } from "gofish-graphics";
+import { circle, Curve } from "gofish-graphics";
 
 const data = {
   name: "root",
@@ -34,7 +38,7 @@ const data = {
 const chart = tree(
   {
     node: (d) => circle({ r: 10, fill: "steelblue" }),
-    link: { curve: "straight", stroke: "#888" },
+    link: { curve: Curve.linear(), stroke: "#888" },
     parentChild: spread({ dir: "y", spacing: 48, alignment: "middle" }),
     sibling: spread({ dir: "x", spacing: 24, alignment: "start" }),
   },
@@ -51,13 +55,13 @@ rectangles where each parent box wraps its children.
 
 ```ts
 import { tree, spread, nest } from "gofish-gotree";
-import { Layer, Constraint, rect, text } from "gofish-graphics";
+import { layer, Constraint, rect, text } from "gofish-graphics";
 
 const labeledNode = (d) =>
-  Layer({ w: 96, h: 22 }, [
+  layer({ w: 96, h: 22 }, [
     rect({ w: 96, h: 22, rx: 4, fill: "#e3edf7" }).name("box"),
     text({ text: d.data.name, fontSize: 11 }).name("label"),
-  ]).constrain(({ box, label }) => [
+  ]).relate(({ box, label }) => [
     Constraint.align({ x: "middle", y: "middle" }, [box, label]),
   ]);
 
@@ -113,12 +117,12 @@ node: (d) => circle({ r: 4 + d.height * 2, fill: colorByDepth(d.depth) });
   uniformly.
 - A function `(source, target) => LinkOptions` — per-edge styling.
 
-```ts
-link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 }
+```ts no-check
+link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1.5 }
 ```
 
-`curve` accepts `"straight"` (default), `"bezier"`, `"orthogonal"` (right-angle
-elbows), and `"arc"`. The `orthogonal` and `bezier` links fold along the tree's
+`curve` accepts `Curve.linear()` (default), `Curve.bezier()`, `Curve.orthogonal()` (right-angle
+elbows), and `Curve.arc()`. The `orthogonal` and `bezier` links fold along the tree's
 growth axis — the direction its `parentChild` combiner distributes — so a
 vertical tree's elbows bend downward and a horizontal tree's bend sideways. When
 the growth axis is ambiguous (a cascade that distributes on both axes), the
@@ -136,23 +140,23 @@ Two helpers cover the common cases:
 
 Returns a combiner that distributes the children along an axis. Used as
 `parentChild`, the helper places parent and children-group adjacent along `dir`
-(with the y-up swap, parent ends at high y / top of screen for `dir: "y"`). Used as
+(parent first: on the left for `dir: "x"`, at the top for `dir: "y"`, which reads top-down). Used as
 `sibling`, it spreads N children along `dir`.
 
-```ts
+```ts no-check
 parentChild: spread({ dir: "y", spacing: 48, alignment: "middle" }),
 sibling: spread({ dir: "x", spacing: 24, alignment: "start" }),
 ```
 
 #### `nest({ x?, y? })`
 
-Returns a combiner that wraps `[outer, inner]` in a Layer with
+Returns a combiner that wraps `[outer, inner]` in a layer with
 `Constraint.nest({x?, y?}, [outer, inner])`. The outer is sized to inner's
 intrinsic dims plus `2 * padding` symmetrically per constrained axis; inner is
 centered inside outer. Missing axis (e.g. `{x: 8}` only) leaves the other axis
 unconstrained.
 
-```ts
+```ts no-check
 parentChild: nest({ x: 10, y: 10 }),   // box-in-box
 ```
 
@@ -167,7 +171,7 @@ the general form: it picks one constraint **per axis** independently, which is
 exactly GoTree's `Layout(x, y)` model. Each axis takes `"align"`,
 `"distribute"`, or `"nest"` (string shorthand) or the object form with knobs:
 
-```ts
+```ts no-check
 parentChild: combine({
   x: "nest",                                  // outer grows to wrap inner on x
   y: { kind: "distribute", spacing: 40 },     // parent/group stacked on y
@@ -241,10 +245,10 @@ selection is opt-in.
 Any function with shape `(children: any[]) => any` works. For example, a sibling
 combiner that adds a small label below each spread group:
 
-```ts
-import { Layer, StackY } from "gofish-graphics";
+```ts no-check
+import { layer, stackY } from "gofish-graphics";
 
-sibling: (kids) => StackY({ spacing: 8 }, [
+sibling: (kids) => stackY({ spacing: 8 }, [
   spread({ dir: "x", spacing: 16 })(kids),
   text({ text: `${kids.length} items` }),
 ]),
@@ -257,19 +261,19 @@ sibling: (kids) => StackY({ spacing: 8 }, [
 - `"bottomUp"` — children's sizes sum into the parent (dendrogram-style).
 
 In the current implementation, `mode` is a documentation hint only — the visual
-orientation is handled by the y-up swap inside `spread`, and data-driven sizing is
+orientation is handled by the axis order `spread` reads in, and data-driven sizing is
 performed in the user's `node` factory via the existing `value()` channel.
 
 ### `coord` — coordinate transform
 
-Pass any GoFish `CoordTransform` (e.g. `polar()` for a radial layout). Defaults to
+Pass any GoFish `CoordTransform` (e.g. `Coord.polar()` for a radial layout). Defaults to
 linear cartesian.
 
 ```ts
-coord: polar(); // radial node-link
+coord: Coord.polar(); // radial node-link
 ```
 
-**Polar authoring rule**: under `coord: polar()`, nodes render as _points_
+**Polar authoring rule**: under `coord: Coord.polar()`, nodes render as _points_
 in the transform — only their center sweeps through, their bbox does not.
 Set `anchor: "middle"` on the sibling spread (and typically the parentChild
 spread too). `anchor: "middle"` lays out child centers `spacing` apart
@@ -277,10 +281,10 @@ and ignores bbox widths, matching the geometry polar expects. With
 `anchor: "edge"` (the default), shape bboxes accumulate into the cartesian-x
 span and overflow polar's `[0, 2π]` theta domain — making the tree spiral.
 
-```ts
+```ts no-check
 parentChild: spread({ dir: "y", spacing: 40,         anchor: "middle" }), // r units
 sibling:     spread({ dir: "x", spacing: Math.PI/3,  anchor: "middle" }), // radians
-coord:       polar(),
+coord:       Coord.polar(),
 ```
 
 Sibling `spacing` is in **radians** (~`π / N` for N siblings per level);
@@ -288,18 +292,18 @@ Sibling `spacing` is in **radians** (~`π / N` for N siblings per level);
 
 This is the right pattern for point-like nodes (circle, small mark used as a
 node). When the _shape itself_ needs to sweep through the transform —
-filled wedges, ribbons, polar bars — reach for `Value`-typed dims +
-`sharedScale: true` instead (the pattern in `polarBar` / `polarRibbon`).
+filled wedges, ribbons, polar bars — reach for `Value`-typed dims
+instead (the pattern in `polarBar` / `polarRibbon`).
 
 ### The 2π budget — content must fit polar's theta domain
 
-Under `coord: polar()`, the inner cartesian content's total x-extent must
+Under `coord: Coord.polar()`, the inner cartesian content's total x-extent must
 be ≤ 2π radians. Overflows wrap around the disc (theta = 2π + ε is rendered
 at theta = ε), producing self-intersecting wedges and slivers protruding
 past the disc edge.
 
 The library does not yet auto-fit content to 2π — the spread operator's
-`sharedScale` / Monotonic-inversion path does fit, but `Constraint.distribute`
+Monotonic-inversion path does fit, but `Constraint.distribute`
 and `Constraint.nest` (which the `distribute` and `nest` helpers
 build on) don't yet participate in that path. So sizes are hand-budgeted.
 
@@ -340,7 +344,7 @@ conventions and switch from JSON descriptors to callable helpers.
 | Paper                             | GoTree-in-GoFish                                   |
 | --------------------------------- | -------------------------------------------------- |
 | `Element.Node: "rectangle"`       | `node: (d) => rect({...})`                         |
-| `Element.Link: "straight"`        | `link: { curve: "straight" }`                      |
+| `Element.Link: "straight"`        | `link: { curve: Curve.linear() }`                  |
 | `Element.Color: "depth"`          | inside `node`: `fill: byDepth(d.depth)`            |
 | `Element.Width/Height`            | inside `node`: `w` / `h` on the mark               |
 | `Element.LinkWidth`               | `link.strokeWidth`                                 |
@@ -355,7 +359,7 @@ conventions and switch from JSON descriptors to callable helpers.
 | `Alignment: bottom / right`       | `alignment: "end"`                                 |
 | `SortingCriteria`                 | `sortBy: (d) => ...`                               |
 | `SubtreeWidth`/`Height`           | inside `node`: `value(d.value, "key")`             |
-| `CoordinateSystem.Category`       | `coord: linear()` or `coord: polar()`              |
+| `CoordinateSystem.Category`       | no `coord` (Cartesian) or `coord: Coord.polar()`   |
 
 ## Milestone status
 

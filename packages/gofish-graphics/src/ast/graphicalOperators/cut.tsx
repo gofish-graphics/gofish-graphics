@@ -27,7 +27,7 @@
  *        entries carry incompatible measure tags (a unit error).
  *    N = `size.length`. Equal slices = `Array(n).fill(datum(1))`.
  *
- * 2. The v3 expand-mark form `image({...}).cut({ dir, size, inset })` stays,
+ * 2. The expand-mark form `image({...}).cut({ dir, size, inset })` stays,
  *    built ON the pure function. Its `size` additionally accepts a field-name
  *    string (resolved per-row → datum-provenance, i.e. relative weights) or
  *    `undefined` (equal slices, N from data). It resolves sizes and delegates
@@ -48,8 +48,7 @@ import { mask as Mask } from "./porterDuff";
 import { offset as offsetOp } from "./offset";
 import { Rect } from "../shapes/rect";
 import { createMark } from "../withGoFish";
-import { datum, getValue, getMeasure, isValue, type Value } from "../data";
-import { mergeAllMeasures } from "../underlyingSpace";
+import { datum, getValue, isValue, type Value } from "../data";
 
 /** User-facing options for the pure `cut(source, opts)` form. */
 export type CutOptions = {
@@ -64,7 +63,7 @@ export type CutOptions = {
   inset?: number;
 };
 
-/** Options for the v3 expand-mark form `mark.cut(opts)`. Adds the field-name /
+/** Options for the expand-mark form `mark.cut(opts)`. Adds the field-name /
  *  undefined sugar on top of the pure form's `size`. */
 export type CutMarkOptions = {
   dir: "x" | "y";
@@ -97,11 +96,11 @@ async function buildSliceNode(
   const insetExtent = Math.max(0, extent - inset);
   const insetOffset = offset + inset / 2;
 
-  // Image and rect render with an internal scale(1, -1) that flips their
-  // y-axis so the source is right-side up in chart-y space. To bring source
-  // pixels [insetOffset, insetOffset + insetExtent] into slice-local
-  // [0, insetExtent] on y, translate by -(sourceDimAlong - insetOffset -
-  // insetExtent), not -insetOffset. The x axis has no such flip.
+  // The offset is in the slice's axis order. On y that order grows upward
+  // (see `axisDirection.ts`), so source pixels [insetOffset, insetOffset +
+  // insetExtent], counted from the source's top, are reached by translating
+  // by -(sourceDimAlong - insetOffset - insetExtent), counted from its
+  // bottom, not by -insetOffset. x runs with the pixels.
   const translateOffset =
     dirIdx === 1 ? -(sourceDimAlong - insetOffset - insetExtent) : -insetOffset;
 
@@ -115,7 +114,7 @@ async function buildSliceNode(
     h: sliceH,
     fill: "white",
   });
-  const sourceNode = await resolveMarkResult(source(undefined));
+  const sourceNode = await resolveMarkResult(source);
   const translated = await offsetOp(
     dirIdx === 0 ? { x: translateOffset } : { y: translateOffset },
     [sourceNode]
@@ -139,12 +138,7 @@ async function buildSliceNode(
  *   (a) the absolutes alone already sum to more than the source extent
  *       (the fixed claims don't fit);
  *   (b) there are datum entries but the remainder is ≤ 0 (no flex space left
- *       for them to fill);
- *   (c) two datum entries carry different, both-defined measure tags
- *       (incompatible units). Untagged entries are permissive — they unify
- *       with anything. The comparison reuses {@link mergeAllMeasures}, the same
- *       undefined-permissive measure unification the underlying-space type
- *       system uses (#527).
+ *       for them to fill).
  */
 function resolveExtents(
   size: Value<number>[],
@@ -186,14 +180,6 @@ function resolveExtents(
     );
   }
 
-  // Incompatible-measures guard: datum entries with different, both-defined
-  // measure tags are a unit error. mergeAllMeasures is undefined-permissive
-  // (untagged entries unify with anything) and throws on a real conflict.
-  mergeAllMeasures(
-    datumEntries.map((v) => getMeasure(v)),
-    `cut: \`size\` datum() weights carry incompatible measures`
-  );
-
   const weightTotal =
     datumEntries.reduce((sum, v) => sum + (Number(getValue(v)) || 0), 0) || 1;
   return size.map((v) =>
@@ -221,7 +207,7 @@ export function cut(
 
   // One shared probe + extent resolution; every slice awaits it.
   const geom = (async () => {
-    const probe = await resolveMarkResult(source(undefined));
+    const probe = await resolveMarkResult(source);
     const dirIdx: 0 | 1 = dir === "x" ? 0 : 1;
     const crossIdx: 0 | 1 = dirIdx === 0 ? 1 : 0;
     const probeArgs: any = (probe as any).args;
@@ -268,7 +254,7 @@ export function cut(
 }
 
 /**
- * The cut shape function for the v3 expand-mark form. createMark resolves the
+ * The cut shape function for the expand-mark form. createMark resolves the
  * entry-flagged `size` channel before calling us — a field name becomes a
  * per-row `datum()` array, an explicit array passes through, and `undefined`
  * stays `undefined`. We default `undefined` to equal slices (`datum(1)` ×N from
@@ -295,7 +281,7 @@ const cutFactory = createMark<
 });
 
 /**
- * Build the v3 expand-kind cut mark directly from an options object — the
+ * Build the expand-kind cut mark directly from an options object — the
  * deserializer entry point for a `cut` mark used in a chart `.mark(...)`
  * position. Equivalent to `source.cut(opts)` / what `attachCut` produces, but
  * callable without first having the source mark in hand as a method receiver.

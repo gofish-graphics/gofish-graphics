@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { chunk, orderBy } from "lodash";
 import { initializeContainer } from "../helper";
 
-import { chart, table, circle, derive, spread, palette } from "../../src/lib";
+import { chart, table, circle, derive, spread, Color } from "../../src/lib";
 import {
   titanicPassengers,
   type TitanicPassenger,
@@ -17,16 +17,15 @@ const meta: Meta = {
   argTypes: {
     w: { control: { type: "number", min: 200, max: 900, step: 10 } },
     h: { control: { type: "number", min: 200, max: 900, step: 10 } },
-    paddingInner: { control: { type: "number", min: 0, max: 6, step: 0.5 } },
   },
 };
 
 export default meta;
 
-type Args = { w: number; h: number; paddingInner: number };
+type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 720, h: 480, paddingInner: 0 },
+  args: { w: 720, h: 480 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -37,7 +36,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     
-     chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]), axes: true })
+     chart(titanicPassengers, { color: Color.palette(["#2b8cbe", "#ff8408"]) })
         .flow(table({
                 by: {x: "pclass", y: "sex"},
                 // Content-sized tracks (σ-affine 6e) pack facets to their dot
@@ -49,10 +48,16 @@ export const Default: StoryObj<Args> = {
       .mark(chart()
             .flow(
               derive((rows) => orderBy(rows, ["survived"], ["desc"])),
+              // Rows of √n dots. `chunk(size)` takes a fixed size, and this
+              // one depends on the cell, so the rows are built as data: each
+              // item is now one row of dots.
               derive((rows) => chunk(rows, Math.ceil(Math.sqrt(rows.length)))),
               // Fill each cell bottom-up (y-down free space: reverse so the
               // partial last row lands at the top), like a waffle that grows up.
               spread({ spacing: 2, dir: "y", reverse: true }),
+              // Each group holds one item, a row of dots: spread its dots.
+              // TODO(#1128): drop this unwrap of the one-item group.
+              derive(([dots]) => dots),
               spread({ spacing: 2, dir: "x" })
             )
             .mark(circle({ r: 4, fill: "survived" }))

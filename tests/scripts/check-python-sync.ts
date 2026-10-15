@@ -28,6 +28,7 @@ import {
   readdirSync,
 } from "fs";
 import { join, dirname, relative } from "path";
+import ts from "typescript";
 import { mapJsToPython } from "./path-mapping.js";
 export { mapJsToPython } from "./path-mapping.js";
 
@@ -122,22 +123,63 @@ function isExportExempt(
 // Spec-neutral change detection.
 //
 // A modified JS story whose spec-relevant content is unchanged does not
-// require a Python update. Two kinds of difference are spec-neutral:
+// require a Python update. The comparison is per `StoryObj` export, so a
+// modified file whose spec changes all fall in per-export exempt stories
+// (`file::Export` in the exempt list) needs no Python update either; a spec
+// change outside every export (a shared helper, a dataset, the meta) counts
+// against the whole file. These kinds of difference are spec-neutral:
 //
 //   - **Storybook chrome** — story-level `title`, `tags`, and `parameters`
 //     (e.g. the gallery annotation) are presentation metadata. Python stories
 //     key off the file path and `story_*` function name, not these.
-//   - **API-alias casing** — the v3 fluent surface is lowercase-only
-//     (`chart`, `layer`); the capitalized aliases `Chart` / `Layer` resolve to
-//     the same factories (and `Chart` was removed outright). A pure
-//     `Chart`→`chart` / `Layer`→`layer` rename in a JS story has no Python
-//     counterpart, since Python was always lowercase. Canonicalizing the case
-//     before comparing folds those renames out.
+//     `argTypes` (meta- or story-level) is chrome too: it only configures
+//     the Storybook controls panel (control kinds, slider ranges).
+//   - **Unread args** — an `args: {...}` entry whose key the file never
+//     reads cannot reach the spec, so it is dropped before comparing (e.g.
+//     removing a dead `paddingInner` control). A key counts as read when the
+//     file has `args.key`, `args["key"]`, or destructures it (`({ w, h }) =>`
+//     as the `render` parameter, `const { w } = args`); the same goes for a
+//     `render` parameter under another name and for `context.args`. Read
+//     args stay in the comparison: their default values feed the spec, and
+//     the Python story bakes them in. When reads cannot be determined (args
+//     passed whole to a helper, spread, indexed by a computed key), every
+//     entry is kept. The `Args` type that lists the keys is erased with the
+//     other types (below).
+//   - **Retired API names** — the public surface is lowercase-only (#146,
+//     #416): the capitalized spellings (`Chart`, `Layer`, `Spread`, `StackY`,
+//     `Frame`, ...) were aliases or node-level forms of the lowercase
+//     operators and are no longer exported, and `For` was renamed to `map`.
+//     A pure `Layer`→`layer` / `For`→`map` rename in a JS story has no Python
+//     counterpart, since Python was always lowercase (and uses list
+//     comprehensions where JS maps). Rewriting each retired name to its
+//     current name before comparing folds such renames out. The same goes
+//     for a strategy moved into its family namespace (#1013): `polar()` and
+//     `Coord.polar()` are one call, so the family prefix is dropped.
+//   - **Import declarations** — a Python story mirrors the spec, not the JS
+//     module's imports, which Python spells its own way (`from gofish import
+//     ...`). Adding, removing, or reordering an import changes no spec: if a
+//     spec starts using a new name, the spec body changes too. Dropping whole
+//     `ImportDeclaration`s from the parsed file handles multi-line and
+//     `import type` forms alike.
+//   - **Import aliases** — `import { mask as maskOp }` binds a JS-local name
+//     for an exported one, so renaming the alias (or dropping it) changes no
+//     spec. Before the imports are dropped, every aliased identifier in the
+//     body is renamed back to its exported name; the retired-name fold then
+//     canonicalizes it (`MaskOp` → `Mask` → `mask`). Default and namespace
+//     imports have no exported name to resolve to and are left alone.
+//   - **Type annotations** — TypeScript types have no Python counterpart.
+//     `ts.transpileModule` erases them (annotations, `as` casts, type
+//     aliases, interfaces) after the imports are gone, so it cannot elide or
+//     re-emit any import.
+//   - **Comments and whitespace** — a Python story mirrors the spec, not the
+//     prose around it, so a comment-only edit needs no Python change.
+//     Tokenizing with the TypeScript scanner drops comments without touching
+//     string contents (a `//` inside a URL string survives).
 // ---------------------------------------------------------------------------
 
 function stripStorybookChrome(source: string): string {
   const out: string[] = [];
-  let depth = 0; // > 0 while inside a `parameters: {...}` block
+  let depth = 0; // > 0 while inside a `parameters:` / `argTypes:` block
   for (const line of source.split("\n")) {
     if (depth > 0) {
       depth += (line.match(/\{/g) ?? []).length;
@@ -146,7 +188,7 @@ function stripStorybookChrome(source: string): string {
     }
     if (/^\s*tags:\s*\[[^\]]*\],?\s*$/.test(line)) continue;
     if (/^\s*title:\s*.*$/.test(line)) continue; // `meta.title` (nav path)
-    if (/^\s*parameters:\s*\{/.test(line)) {
+    if (/^\s*(parameters|argTypes):\s*\{/.test(line)) {
       depth =
         (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
       continue;
@@ -156,19 +198,361 @@ function stripStorybookChrome(source: string): string {
   return out.join("\n");
 }
 
-/** Fold the lowercased v3 aliases so a pure casing rename is spec-neutral. */
-function canonicalizeApiCasing(source: string): string {
-  return source.replace(/\bChart\b/g, "chart").replace(/\bLayer\b/g, "layer");
+/** The keys of `args` this file reads, or `undefined` when some read cannot
+ * be resolved to a fixed key (args passed whole, spread, computed index). */
+function readArgKeys(file: ts.SourceFile): Set<string> | undefined {
+  const keys = new Set<string>();
+  let unknown = false;
+
+  /** Record the keys bound by a destructuring pattern over args. */
+  const readPattern = (pattern: ts.BindingName): void => {
+    if (!ts.isObjectBindingPattern(pattern)) {
+      unknown = true; // `const a = args` / array pattern: can't follow
+      return;
+    }
+    for (const el of pattern.elements) {
+      const key = el.propertyName ?? el.name;
+      if (
+        el.dotDotDotToken ||
+        !(ts.isIdentifier(key) || ts.isStringLiteral(key))
+      ) {
+        unknown = true;
+      } else {
+        keys.add(key.text);
+      }
+    }
+  };
+
+  /** Classify one use of an expression that evaluates to the args object. */
+  const readUse = (ref: ts.Node): void => {
+    const parent = ref.parent;
+    if (ts.isPropertyAccessExpression(parent) && parent.expression === ref) {
+      keys.add(parent.name.text);
+    } else if (
+      ts.isElementAccessExpression(parent) &&
+      parent.expression === ref &&
+      ts.isStringLiteralLike(parent.argumentExpression)
+    ) {
+      keys.add(parent.argumentExpression.text);
+    } else if (ts.isVariableDeclaration(parent) && parent.initializer === ref) {
+      readPattern(parent.name);
+    } else if (
+      ts.isParenthesizedExpression(parent) ||
+      ts.isAsExpression(parent) ||
+      ts.isNonNullExpression(parent)
+    ) {
+      readUse(parent);
+    } else {
+      unknown = true;
+    }
+  };
+
+  /** True when `id` names a binding or property rather than reading a value. */
+  const isDeclarationName = (id: ts.Identifier): boolean => {
+    const p = id.parent;
+    return (
+      ((ts.isParameter(p) ||
+        ts.isBindingElement(p) ||
+        ts.isVariableDeclaration(p) ||
+        ts.isPropertyAssignment(p) ||
+        ts.isPropertyAccessExpression(p) ||
+        ts.isMethodDeclaration(p) ||
+        ts.isFunctionDeclaration(p)) &&
+        p.name === id) ||
+      (ts.isBindingElement(p) && p.propertyName === id)
+    );
+  };
+
+  /** Every read of `name` in `body` (an identifier bound to args). */
+  const readIdentifierUses = (body: ts.Node, name: string): void => {
+    const visit = (node: ts.Node): void => {
+      if (ts.isTypeNode(node)) return;
+      if (
+        ts.isIdentifier(node) &&
+        node.text === name &&
+        !isDeclarationName(node)
+      ) {
+        readUse(node);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(body);
+  };
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isTypeNode(node)) return;
+    // `context.args`: the args object reached through the story context.
+    if (ts.isPropertyAccessExpression(node) && node.name.text === "args") {
+      readUse(node);
+    }
+    // A `render` function's first parameter is the args object.
+    if (
+      (ts.isPropertyAssignment(node) || ts.isMethodDeclaration(node)) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === "render"
+    ) {
+      const fn = ts.isMethodDeclaration(node) ? node : node.initializer;
+      if (
+        ts.isArrowFunction(fn) ||
+        ts.isFunctionExpression(fn) ||
+        ts.isMethodDeclaration(fn)
+      ) {
+        const param = fn.parameters[0]?.name;
+        if (param && ts.isIdentifier(param)) {
+          if (param.text !== "args" && fn.body) {
+            readIdentifierUses(fn.body, param.text);
+          }
+        } else if (param) {
+          readPattern(param);
+        }
+      } else {
+        unknown = true; // `render: renderFn` — defined elsewhere
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  // Any value read of an identifier named `args` (render parameters so named,
+  // `const { args } = context`, ...).
+  readIdentifierUses(file, "args");
+  return unknown ? undefined : keys;
 }
 
-/** True when the file's change between baseRef's merge-base and HEAD touches
- * only spec-neutral content (Storybook chrome and/or `Chart`/`Layer` casing). */
-function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
+/** The source with each `args: {...}` entry whose key the file never reads
+ * removed. Every `args` object is re-emitted as `{ a, b }` from its kept
+ * entries, so a removal leaves no stray comma. */
+function dropUnreadArgs(source: string): string {
+  const file = ts.createSourceFile(
+    "story.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    ts.ScriptKind.TSX
+  );
+  const read = readArgKeys(file);
+  if (!read) return source;
+  const edits: [start: number, end: number, text: string][] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isPropertyAssignment(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === "args" &&
+      ts.isObjectLiteralExpression(node.initializer)
+    ) {
+      const obj = node.initializer;
+      const kept = obj.properties.filter((prop) => {
+        const name =
+          ts.isPropertyAssignment(prop) ||
+          ts.isShorthandPropertyAssignment(prop)
+            ? prop.name
+            : undefined;
+        // Spreads, methods, and computed keys are kept: can't name them.
+        if (!name || !(ts.isIdentifier(name) || ts.isStringLiteral(name))) {
+          return true;
+        }
+        return read.has(name.text);
+      });
+      const text = `{ ${kept.map((p) => p.getText(file)).join(", ")} }`;
+      edits.push([obj.getStart(file), obj.getEnd(), text]);
+      return; // outermost `args` object only
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  let out = source;
+  for (const [start, end, text] of edits.reverse()) {
+    out = out.slice(0, start) + text + out.slice(end);
+  }
+  return out;
+}
+
+/** The source with each `{ exported as local }` import alias renamed back to
+ * `exported` wherever `local` appears as an identifier (strings untouched). */
+function resolveImportAliases(source: string): string {
+  const file = ts.createSourceFile(
+    "story.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ false,
+    ts.ScriptKind.TSX
+  );
+  const aliases = new Map<string, string>();
+  for (const stmt of file.statements) {
+    const bindings = ts.isImportDeclaration(stmt)
+      ? stmt.importClause?.namedBindings
+      : undefined;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const el of bindings.elements) {
+      if (el.propertyName) aliases.set(el.name.text, el.propertyName.text);
+    }
+  }
+  if (aliases.size === 0) return source;
+  const edits: [start: number, end: number, name: string][] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node)) return;
+    if (ts.isIdentifier(node) && aliases.has(node.text)) {
+      edits.push([node.getStart(file), node.getEnd(), aliases.get(node.text)!]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  let out = source;
+  for (const [start, end, name] of edits.reverse()) {
+    out = out.slice(0, start) + name + out.slice(end);
+  }
+  return out;
+}
+
+/** The source with its TypeScript types erased (JSX left as written). */
+function eraseTypes(source: string): string {
+  return ts.transpileModule(source, {
+    fileName: "story.tsx",
+    compilerOptions: {
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.ESNext,
+      jsx: ts.JsxEmit.Preserve,
+    },
+  }).outputText;
+}
+
+/** The source as a whitespace-separated token stream, comments dropped. */
+function stripComments(source: string): string {
+  const scanner = ts.createScanner(
+    ts.ScriptTarget.Latest,
+    /* skipTrivia */ true,
+    ts.LanguageVariant.JSX,
+    source
+  );
+  const tokens: string[] = [];
+  while (scanner.scan() !== ts.SyntaxKind.EndOfFileToken) {
+    tokens.push(scanner.getTokenText());
+  }
+  return tokens.join(" ");
+}
+
+/** The retired capitalized API spellings (#146, #416); each is now its lowercase form. */
+const RETIRED_CAPITALIZED_NAMES = [
+  "Chart",
+  "Layer",
+  "Spread",
+  "Stack",
+  "Scatter",
+  "Treemap",
+  "Table",
+  "Intersect",
+  "Exclude",
+  "Subtract",
+  "Paint",
+  "Mask",
+  "StackX",
+  "StackY",
+  "SpreadX",
+  "SpreadY",
+  "Enclose",
+  "Frame",
+  "Position",
+  "Arrow",
+  "Cut",
+  "Offset",
+  "GoFish",
+];
+/** Every retired public API name, mapped to the name that replaced it. */
+const RETIRED_API_NAMES: Record<string, string> = {
+  ...Object.fromEntries(
+    RETIRED_CAPITALIZED_NAMES.map((name) => [
+      name,
+      name[0].toLowerCase() + name.slice(1),
+    ])
+  ),
+  For: "map",
+};
+const RETIRED_API_NAMES_RE = new RegExp(
+  `\\b(${Object.keys(RETIRED_API_NAMES).join("|")})\\b`,
+  "g"
+);
+
+/** The strategy families (#1013), read from `src/families/<name>.ts`: a
+ * strategy that moved from a flat export into its family (`polar()` →
+ * `Coord.polar()`) is the same call, so the `Coord.` prefix is dropped. */
+const STRATEGY_FAMILIES = readdirSync(
+  join(ROOT_DIR, "packages/gofish-graphics/src/families")
+)
+  .filter((f) => f.endsWith(".ts"))
+  .map((f) => f[0].toUpperCase() + f.slice(1, -".ts".length));
+const STRATEGY_FAMILY_PREFIX_RE = new RegExp(
+  `\\b(${STRATEGY_FAMILIES.join("|")})\\.`,
+  "g"
+);
+
+/** Rewrite retired API names to their current names so a pure rename is spec-neutral. */
+function canonicalizeRetiredApiNames(source: string): string {
+  return source
+    .replace(RETIRED_API_NAMES_RE, (name) => RETIRED_API_NAMES[name])
+    .replace(STRATEGY_FAMILY_PREFIX_RE, "");
+}
+
+/** The source split into its `export const Foo: StoryObj` statements, keyed
+ * by export name, and the rest of the file (`shared`) with them and every
+ * top-level import declaration cut out. */
+function splitStoryExports(source: string): {
+  stories: Map<string, string>;
+  shared: string;
+} {
+  const file = ts.createSourceFile(
+    "story.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ false,
+    ts.ScriptKind.TSX
+  );
+  const stories = new Map<string, string>();
+  let shared = "";
+  let pos = 0;
+  for (const stmt of file.statements) {
+    if (ts.isImportDeclaration(stmt)) {
+      shared += source.slice(pos, stmt.getStart(file));
+      pos = stmt.getEnd();
+      continue;
+    }
+    if (!ts.isVariableStatement(stmt)) continue;
+    const exported = stmt.modifiers?.some(
+      (m) => m.kind === ts.SyntaxKind.ExportKeyword
+    );
+    const decls = stmt.declarationList.declarations;
+    const decl = decls.length === 1 ? decls[0] : undefined;
+    if (
+      !exported ||
+      !decl ||
+      !ts.isIdentifier(decl.name) ||
+      !decl.type?.getText(file).startsWith("StoryObj")
+    ) {
+      continue;
+    }
+    shared += source.slice(pos, stmt.getStart(file));
+    pos = stmt.getEnd();
+    stories.set(decl.name.text, source.slice(stmt.getStart(file), pos));
+  }
+  return { stories, shared: shared + source.slice(pos) };
+}
+
+/** The `StoryObj` exports whose spec changed between `mergeBase` (baseRef's
+ * merge-base with HEAD) and HEAD, ignoring spec-neutral content (Storybook
+ * chrome, unread args, retired API names, imports, import aliases, type
+ * annotations, comments, whitespace). An export added or removed counts as
+ * changed. An empty list means the change is spec-neutral. Returns
+ * `undefined` when a spec change lies outside every story export (a shared
+ * helper, a dataset, the meta), so it cannot be pinned to one export, or
+ * when the comparison cannot be made.
+ *
+ * The whole-file passes (unread args, import aliases) run before the split,
+ * since what they drop depends on the whole file; the split drops imports;
+ * the rest run on each piece. */
+function changedStoryExports(
+  jsFile: string,
+  mergeBase: string | undefined
+): string[] | undefined {
+  if (mergeBase === undefined) return undefined;
   try {
-    const mergeBase = execSync(`git merge-base "${baseRef}" HEAD`, {
-      cwd: ROOT_DIR,
-      encoding: "utf-8",
-    }).trim();
     const baseContent = execSync(`git show ${mergeBase}:"${jsFile}"`, {
       cwd: ROOT_DIR,
       encoding: "utf-8",
@@ -176,10 +560,38 @@ function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
     });
     const headContent = readFileSync(join(ROOT_DIR, jsFile), "utf-8");
     const normalize = (s: string) =>
-      canonicalizeApiCasing(stripStorybookChrome(s));
-    return normalize(baseContent) === normalize(headContent);
+      stripComments(
+        eraseTypes(canonicalizeRetiredApiNames(stripStorybookChrome(s)))
+      );
+    const split = (s: string) =>
+      splitStoryExports(resolveImportAliases(dropUnreadArgs(s)));
+    const base = split(baseContent);
+    const head = split(headContent);
+    const same = (before: string, after: string) =>
+      before === after || normalize(before) === normalize(after);
+    if (!same(base.shared, head.shared)) return undefined;
+    const names = new Set([...base.stories.keys(), ...head.stories.keys()]);
+    return [...names].filter((name) => {
+      const before = base.stories.get(name);
+      const after = head.stories.get(name);
+      return (
+        before === undefined || after === undefined || !same(before, after)
+      );
+    });
   } catch {
-    return false; // can't prove it — fall through to the strict check
+    return undefined; // can't prove it — fall through to the strict check
+  }
+}
+
+/** baseRef's merge-base with HEAD, or `undefined` when git cannot find it. */
+function mergeBaseOf(baseRef: string): string | undefined {
+  try {
+    return execSync(`git merge-base "${baseRef}" HEAD`, {
+      cwd: ROOT_DIR,
+      encoding: "utf-8",
+    }).trim();
+  } catch {
+    return undefined;
   }
 }
 
@@ -215,12 +627,9 @@ function camelToSnake(s: string): string {
     .toLowerCase();
 }
 
-/** Extract `export const Foo: StoryObj` names from a JS story file. */
+/** The `export const Foo: StoryObj` names of a JS story file. */
 function readJsStoryExports(absPath: string): string[] {
-  const content = readFileSync(absPath, "utf-8");
-  return [...content.matchAll(/^export\s+const\s+(\w+)\s*:\s*StoryObj/gm)].map(
-    (m) => m[1]
-  );
+  return [...splitStoryExports(readFileSync(absPath, "utf-8")).stories.keys()];
 }
 
 /** Extract `def story_foo` names from a Python parity test file. */
@@ -401,6 +810,8 @@ const baseRef = process.argv[2] ?? process.env.BASE_REF ?? "origin/main";
 
 console.log(`Checking Python story sync against ${baseRef}...`);
 
+const mergeBase = mergeBaseOf(baseRef);
+
 const exemptSet = loadExemptSet();
 
 const addedJs = gitDiff("A", baseRef).filter((f) =>
@@ -534,28 +945,41 @@ for (const jsFile of modifiedJs) {
   const pythonModified = allChangedFiles.has(pythonFile);
 
   if (!pythonModified) {
-    if (isSpecNeutralChange(jsFile, baseRef)) {
+    // A changed export needs its Python story updated unless it is exempt
+    // per export (`file::Export` in the exempt list).
+    const changed = changedStoryExports(jsFile, mergeBase);
+    const needPython = changed?.filter(
+      (e) => !isExportExempt(exemptSet, jsFile, e)
+    );
+    if (needPython === undefined || needPython.length > 0) {
+      const what = needPython
+        ? `export(s) ${needPython.join(", ")} changed`
+        : `changed`;
       results.push({
         jsFile,
         pythonFile,
         changeType: "modified",
-        status: "ok",
-        message: `Only spec-neutral content changed (Storybook chrome / Chart·Layer casing) — no Python update needed`,
+        status: "error",
+        message: `JS story ${what} but Python counterpart was not updated (${pythonFile})`,
       });
-      console.log(`  OK (spec-neutral): ${jsFile}`);
+      console.error(
+        `  ERROR: ${jsFile} ${what} but ${pythonFile} was not updated`
+      );
+      errors++;
       continue;
     }
+    const label =
+      changed!.length === 0
+        ? `spec-neutral content (Storybook chrome / unread args / retired API names / comments)`
+        : `exempt exports (${changed!.join(", ")})`;
     results.push({
       jsFile,
       pythonFile,
       changeType: "modified",
-      status: "error",
-      message: `JS story modified but Python counterpart was not updated (${pythonFile})`,
+      status: "ok",
+      message: `Only ${label} changed — no Python update needed`,
     });
-    console.error(
-      `  ERROR: ${jsFile} changed but ${pythonFile} was not updated`
-    );
-    errors++;
+    console.log(`  OK (only ${label} changed): ${jsFile}`);
   } else {
     results.push({
       jsFile,

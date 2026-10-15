@@ -51,7 +51,7 @@ two specific places.
 
 **`spread` / `stack` vs `Constraint.distribute`.** `spread` is a layout
 operator; `Constraint.distribute` is the constraint primitive. The
-[constrain docs](/js/api/constraints/constrain) explicitly note that they are
+[relate docs](/js/api/constraints/relate) explicitly note that they are
 the same operation expressed at two levels:
 
 | Spread                                                     | Constraint equivalent                                   |
@@ -63,7 +63,7 @@ the same operation expressed at two levels:
 implementations of "align children on an axis." The operator form is used
 inside `layer` and `Porter-Duff`'s underlying-space resolution
 (`unionChildSpaces`); the constraint form is what users write in
-`.constrain((c) => …)`. They consume different inputs (`Size<UnderlyingSpace>`
+`.relate((c) => …)`. They consume different inputs (`Size<UnderlyingSpace>`
 vs `Placeable`) but the _idea_ is the same: take a list, pick an anchor,
 move the rest into alignment.
 
@@ -89,7 +89,7 @@ Two shapes worth considering:
 1. **Operators-on-top-of-constraints (status quo, but cleaner).** Operators
    compile to constraints at construction time and disappear as a separate
    concept. `spread({ dir: "y" }, items)` becomes shorthand for
-   `Layer(items).constrain((c) => [align({...}), distribute({...})])`. The
+   `Layer(items).relate((c) => [align({...}), distribute({...})])`. The
    surface API keeps both forms (one composable, one declarative) but only
    one machinery exists below.
 2. **One node type with two facets.** Each AST node carries both a "layout
