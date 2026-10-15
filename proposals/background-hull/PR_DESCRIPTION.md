@@ -130,12 +130,13 @@ A shortcut makes the same object as the general call, the way `sina()` and `jitt
 
 ```js
 chart(penguins)
-  .flow(
-    group({ by: "Species" }),
-    scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" })
-  )
-  .mark(circle({ r: 2.5, fill: "Species" }))
-  .layer(enclose({ shape, padding: 6, fill: "Species", opacity: 0.15 }));
+  .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+  .mark(circle({ r: 2.5, fill: "Species" }).name("points"))
+  .layer(
+    chart(selectAll("points"))
+      .flow(group({ by: "Species" }))
+      .mark(enclose({ shape, padding: 6, fill: "Species", opacity: 0.15 }))
+  );
 // shape: Shape.box(), Shape.hull(), Shape.blob() or Shape.spine()
 ```
 
@@ -166,8 +167,6 @@ The recommended spelling (`neck: 0.85`, `padding: 22`, `roundness` at its defaul
 
 ![Munkres panel](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/topology-munkres-panel-smooth.png)
 
-![Munkres panel: neck by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-munkres.png)
-
 ```js
 layer([a, b, c]).relate(({ a, b, c }) => [
   enclose({ shape: oval, padding: 30 }, [a, b, c]),
@@ -175,12 +174,25 @@ layer([a, b, c]).relate(({ a, b, c }) => [
   enclose({ shape: oval, padding: 16 }, [b, c]),
   enclose(
     {
-      shape: Shape.spine({ avoiding: [b], neck, roundness, clearance: 6 }),
+      shape: Shape.spine({ avoiding: [b], neck: 0.85, clearance: 6 }),
       padding: 22,
     },
     [a, c]
   ),
 ]);
+```
+
+![Munkres panel: neck by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-munkres.png)
+
+```js
+// the {a, c} set from above, with neck across and roundness down
+enclose(
+  {
+    shape: Shape.spine({ avoiding: [b], neck, roundness, clearance: 6 }),
+    padding: 22,
+  },
+  [a, c]
+);
 ```
 
 ### Hyperedges over a node-link graph, with the edges as members
@@ -283,5 +295,7 @@ Delaunator is the standard library for this. It comes from Mapbox, and `d3-delau
 ## Also in this branch
 
 A small edit to the `api-proposal` skill (`.claude/skills/api-proposal/SKILL.md`): it now asks the proposal to survey nearby GoFish API decisions for consistency. It is unrelated to this proposal's content.
+
+A one-sentence tightening of the "Attach screenshots to visual PRs" directive in `CLAUDE.md`: each example's code goes immediately under its own screenshot, never after a stack of screenshots or in a separate table.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
