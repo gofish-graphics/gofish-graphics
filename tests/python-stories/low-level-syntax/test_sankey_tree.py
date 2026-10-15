@@ -6,7 +6,7 @@ hierarchical tokens, and `connect` ribbons link each source to its target by
 `ref`. The bar tiers and the ribbons all live in one `layer`.
 """
 
-from gofish import layer, spread, stack, ribbon, rect, ref
+from gofish import layer, spread, stack, ribbon, rect, ref, Curve
 from python_stories.data import TITANIC, COLORS
 from python_stories._lowlevel_helpers import group_by, sum_by
 
@@ -143,9 +143,9 @@ def story_default():
                 [ref(f"{cls}-src"), ref(f"{cls}-tgt")],
                 dir="x",
                 fill=_CLASS_COLOR[cls],
-                curve="bezier",
+                curve=Curve.bezier(),
                 opacity=0.7,
-                mixBlendMode="multiply",
+                mix_blend_mode="multiply",
             )
         )
         for sex, s_items in group_by(items, "sex").items():
@@ -154,9 +154,9 @@ def story_default():
                     [ref(f"{cls}-{sex}-src"), ref(f"{cls}-{sex}-tgt")],
                     dir="x",
                     fill=_sex_color(sex),
-                    curve="bezier",
+                    curve=Curve.bezier(),
                     opacity=0.7,
-                    mixBlendMode="multiply",
+                    mix_blend_mode="multiply",
                 )
             )
             for survived, sv_items in group_by(s_items, "survived").items():
@@ -168,13 +168,14 @@ def story_default():
                         ],
                         dir="x",
                         fill=_tgt_color(sex, survived),
-                        curve="bezier",
+                        curve=Curve.bezier(),
                         opacity=0.7,
-                        mixBlendMode="multiply",
+                        mix_blend_mode="multiply",
                     )
                 )
 
+    # The ribbons are `.relate()` clauses over the bars' names.
     return (
-        layer([bars, *ribbons]),
+        layer([bars]).relate(lambda: ribbons),
         {"axes": True},
     )

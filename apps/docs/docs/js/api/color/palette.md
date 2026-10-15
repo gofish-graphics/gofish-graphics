@@ -1,7 +1,7 @@
-# palette
+# Color.palette
 
 ```ts
-palette(values);
+Color.palette(values);
 ```
 
 Creates a categorical color scale. Pass it to `chart(data, { color })` or
@@ -15,16 +15,16 @@ Creates a categorical color scale. Pass it to `chart(data, { color })` or
 
 ```ts
 // Named scheme
-chart(data, { color: palette("tableau10") })
+chart(data, { color: Color.palette("tableau10") })
   .flow(spread({ by: "category", dir: "x" }))
   .mark(rect({ h: "value", fill: "category" }))
   .render(container, { w: 500, h: 300 });
 
 // Explicit array
-chart(data, { color: palette(["#e15759", "#4e79a7", "#59a14f"]) });
+chart(data, { color: Color.palette(["#e15759", "#4e79a7", "#59a14f"]) });
 
 // Key → color map
-chart(data, { color: palette({ low: "#4e79a7", high: "#e15759" }) });
+chart(data, { color: Color.palette({ low: "#4e79a7", high: "#e15759" }) });
 ```
 
 See also [`gradient`](/js/api/color/gradient) for continuous data.

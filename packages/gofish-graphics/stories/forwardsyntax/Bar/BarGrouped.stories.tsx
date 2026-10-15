@@ -4,7 +4,7 @@ import { seafood } from "../../../src/data/catch";
 import { chart, spread, rect, stack } from "../../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Bar/Grouped",
+  title: "Forward Syntax/Bar/Grouped",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
@@ -31,7 +31,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(
         spread({ by: "lake",  dir: "x" }), //
         stack({ by: "species",  dir: "x" })

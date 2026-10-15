@@ -7,7 +7,10 @@
  *
  * It captures the normalized DOM of every (optionally filtered) story twice —
  * once from the current worktree (HEAD) and once from a throwaway git worktree
- * checked out at <base-ref> — then diffs the two per story. Because the diff is
+ * checked out at <base-ref> — then diffs the two per story. Both captures use
+ * this tree's capture tooling (driver, harness, normalization; see
+ * `withBaseRefHarness`), so only the library and stories differ between them.
+ * Because the diff is
  * over normalized geometry/DOM (not rasterized pixels), it is platform-stable:
  * it does not suffer the text-metric drift that makes `update-baselines`
  * unusable on Mac, so it gives a real pass/fail layout signal locally.
@@ -23,21 +26,30 @@
  * Output:
  *   tests/tmp/capture-diff/head/<path>.html   normalized DOM at HEAD
  *   tests/tmp/capture-diff/base/<path>.html   normalized DOM at <base-ref>
- *   tests/tmp/capture-diff/report.html        side-by-side DOM diff (changed stories)
+ *   tests/tmp/capture-diff/report.html        side-by-side DOM diff and the
+ *                                             highlighted spec (changed stories)
  *
  * Exit code 0 = nothing moved, 1 = at least one story changed/added/removed
  * (so it doubles as a pass/fail gate in an inner loop).
  */
 
-import { execSync } from "child_process";
 import { readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
-import { captureStories } from "./capture-core.js";
+import {
+  captureStories,
+  HARNESS_DIR,
+  withBaseRefHarness,
+} from "./capture-core.js";
 import { formatDomDiff, escapeHtml } from "./diff-utils.js";
-import { git, removeWorktree } from "./snapshot-branch.js";
+import { git } from "./snapshot-branch.js";
+import {
+  loadSpecsByPath,
+  createCodeHighlighter,
+  specHtml,
+  SPEC_CSS,
+} from "./story-specs.js";
 
 const TESTS_DIR = join(import.meta.dirname, "..");
-const HARNESS_DIR = join(TESTS_DIR, "harness");
 const OUT_DIR = join(TESTS_DIR, "tmp/capture-diff");
 const HEAD_DIR = join(OUT_DIR, "head");
 const BASE_DIR = join(OUT_DIR, "base");
@@ -60,7 +72,9 @@ interface Change {
 function generateReport(
   baseRef: string,
   filter: string | undefined,
-  changes: Change[]
+  changes: Change[],
+  /** path → highlighted spec fragment (HEAD's code; none for removed) */
+  specs: Map<string, string>
 ): string {
   const kindColor: Record<Change["kind"], string> = {
     changed: "#e74c3c",
@@ -92,7 +106,17 @@ function generateReport(
         <div style="max-height:600px;overflow:auto;border-top:1px solid #e0e0e0;">
           ${body}
         </div>
-      </details>
+      </details>${
+        specs.has(c.path)
+          ? `
+      <details style="padding:0;border-top:1px solid #e0e0e0;">
+        <summary style="cursor:pointer;font-weight:bold;font-size:13px;padding:8px 16px;">Spec (HEAD)</summary>
+        <div style="max-height:600px;overflow:auto;border-top:1px solid #e0e0e0;">
+          ${specs.get(c.path)}
+        </div>
+      </details>`
+          : ""
+      }
     </div>`;
     })
     .join("\n");
@@ -106,6 +130,7 @@ function generateReport(
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1200px; margin: 0 auto; padding: 24px; color: #333; }
     h1 { border-bottom: 2px solid #333; padding-bottom: 8px; }
+    ${SPEC_CSS}
   </style>
 </head>
 <body>
@@ -157,37 +182,20 @@ async function main() {
     filter,
   });
 
-  // 2. Capture <base-ref> from a throwaway worktree.
-  const wtPath = join("/tmp", `gofish-capture-diff-${process.pid}`);
-  removeWorktree(wtPath);
-  let baseResult;
-  try {
-    console.log(
-      `\n=== Checking out ${baseRef} (${baseShort}) into a temp worktree ===`
-    );
-    git(`git worktree add --detach "${wtPath}" ${baseSha}`);
-
-    // The worktree has no node_modules — install so its harness can run Vite.
-    // --ignore-scripts skips husky/postinstall (not needed for a headless render)
-    // and keeps the install fast; the pnpm store is shared so it's mostly links.
-    console.log(
-      `Installing dependencies in the temp worktree (this can take a minute)...`
-    );
-    execSync("pnpm install --ignore-scripts", {
-      cwd: wtPath,
-      stdio: "inherit",
-    });
-
+  // 2. Capture <base-ref>'s stories, with this tree's harness, from a
+  //    throwaway worktree.
+  console.log(
+    `\n=== Checking out ${baseRef} (${baseShort}) into a temp worktree ===`
+  );
+  const baseResult = await withBaseRefHarness(baseSha, (harnessDir) => {
     console.log(`\n=== Capturing ${baseRef} (${baseShort}) ===\n`);
-    baseResult = await captureStories({
-      harnessDir: join(wtPath, "tests/harness"),
+    return captureStories({
+      harnessDir,
       port: BASE_PORT,
       outDir: BASE_DIR,
       filter,
     });
-  } finally {
-    removeWorktree(wtPath);
-  }
+  });
 
   // 3. Diff per story.
   const headSet = new Set(headResult.captured);
@@ -248,7 +256,21 @@ async function main() {
       console.log(`    ! [${f.ref}] ${f.path}: ${f.error}`);
   }
 
-  writeFileSync(REPORT_PATH, generateReport(baseRef, filter, changes), "utf-8");
+  // Each moved story's spec at HEAD (a removed story has none).
+  const specs = new Map<string, string>();
+  if (changes.length) {
+    const specsByPath = await loadSpecsByPath();
+    const highlight = await createCodeHighlighter();
+    for (const c of changes) {
+      const spec = c.kind === "removed" ? undefined : specsByPath.get(c.path);
+      if (spec) specs.set(c.path, specHtml(spec, highlight));
+    }
+  }
+  writeFileSync(
+    REPORT_PATH,
+    generateReport(baseRef, filter, changes, specs),
+    "utf-8"
+  );
   if (changes.length) {
     console.log(`\n  DOM written to ${HEAD_DIR} and ${BASE_DIR}`);
     console.log(`  Diff report: ${REPORT_PATH}`);

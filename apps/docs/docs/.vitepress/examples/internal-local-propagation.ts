@@ -10,7 +10,7 @@ const box = (label, fill, w, h) =>
         .name("r"),
       gf.text({ text: label, fill: "white", fontSize: 13 }).name("t"),
     ])
-    .constrain(({ r, t }) => [
+    .relate(({ r, t }) => [
       gf.Constraint.align({ x: "middle", y: "middle" }, [r, t]),
     ]);
 

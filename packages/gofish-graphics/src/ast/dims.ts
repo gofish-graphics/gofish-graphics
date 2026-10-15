@@ -1,3 +1,7 @@
+import { Frontend } from "gofish-ir";
+import { type MaybeValue } from "./data";
+import { computeAesthetic } from "../util";
+
 export type Interval<T = number> = {
   min?: T;
   center?: T;
@@ -19,80 +23,313 @@ export type XYWHDims<T = number> = {
   y2?: T;
   h?: T;
   emY?: boolean;
-  // Coordinate-space axis aliases (e.g. polar `theta`/`r`). Stored unresolved at
-  // construction and resolved to x/y/w/h by the `resolveAliases` pass once the
-  // enclosing coord's declared aliases are known. `<name>`→position (like x/y),
-  // `<name>Size`→extent (like w/h). See KNOWN_ALIAS_KEYS / extractAliasCandidates.
-  theta?: T;
-  thetaSize?: T;
-  r?: T;
-  rSize?: T;
+  /** Axis-name-keyed options, resolved against the enclosing coordinate
+   *  space's declared axis names. See {@link AxisDims}. */
+  dims?: AxisDims<T>;
 };
 
 /**
- * Recognized coordinate-space axis aliases. Extracted unresolved at construction
- * (a mark is built before its enclosing coord exists) and resolved to x/y/w/h by
- * the `resolveAliases` pass. Static (not a transform-call-time registry) because
- * that registration would run too late. Add a transform's alias names here when
- * it declares new ones (e.g. a future bipolar's `tau`/`sigma`/`tauSize`/…).
+ * A mark's `dims` option: axis name → value or interval. The legal names are
+ * `x`/`y` (always) plus the names the enclosing coordinate space declares in
+ * its `aliases` (polar: `theta`/`r`; geo: `lon`/`lat`). A bare value is a
+ * position with the same anchor as `x` (`min`); an interval object names its
+ * anchors. The channel kind follows from the structure: `size` is a size
+ * channel, and a bare value or `min`/`center`/`max` is a position channel. A
+ * mark is built before its enclosing coord exists, so the bag is deferred at
+ * construction ({@link deferAxisDims}) and written onto the mark's per-axis
+ * dims by `GoFishNode.resolveAliases` ({@link applyAxisDims}).
  */
-export const KNOWN_ALIAS_KEYS = new Set(["theta", "thetaSize", "r", "rSize"]);
+export type AxisDims<T = number> = Record<string, T | Interval<T>>;
 
-/** Pull the alias-keyed entries out of a mark's dim options, to stash on the
- * node for the `resolveAliases` pass. Non-alias keys are left for elaborateDims. */
-export const extractAliasCandidates = <T>(
-  dims: FancyDims<T>
-): Record<string, T> => {
-  const out: Record<string, T> = {};
-  for (const key of Object.keys(dims)) {
-    if (KNOWN_ALIAS_KEYS.has(key)) out[key] = (dims as any)[key];
+// The anchors an axis interval may name, and whether a `dims` entry is an
+// interval or a bare value (a position): one definition, shared with the IR
+// validator.
+const { AXIS_INTERVAL_KEYS, isAxisInterval } = Frontend;
+export { isAxisInterval };
+export type IntervalKey = (typeof AXIS_INTERVAL_KEYS)[number];
+
+/**
+ * How a family of options reads its `dims` bag: `where` prefixes messages,
+ * `bare` is the anchor a bare value fills, `topLevel` names the top-level
+ * option that writes each allowed anchor per axis (for messages), and
+ * `badKey` explains an anchor outside `topLevel`.
+ */
+export type AxisDimsForm = {
+  where: string;
+  bare: AxisDimsSlot;
+  topLevel: Partial<Record<IntervalKey, [string, string]>>;
+  badKey: string;
+};
+
+/** A box-dims mark's form: every anchor, a bare value at `min` like `x`. */
+export const MARK_DIMS: AxisDimsForm = {
+  where: "dims",
+  bare: "min",
+  topLevel: {
+    min: ["x", "y"],
+    center: ["cx", "cy"],
+    max: ["x2", "y2"],
+    size: ["w", "h"],
+    embedded: ["emX", "emY"],
+  },
+  badKey: `An axis interval takes ${AXIS_INTERVAL_KEYS.join(", ")}.`,
+};
+
+/** Read a `dims` entry as an interval (a bare value fills `form.bare`),
+ *  rejecting an interval with a key the form does not allow. */
+const toAxisInterval = <T>(
+  name: string,
+  entry: T | Interval<T>,
+  form: AxisDimsForm
+): Interval<T> => {
+  if (!isAxisInterval(entry)) return { [form.bare]: entry } as Interval<T>;
+  for (const key of Object.keys(entry)) {
+    if (!(key in form.topLevel)) {
+      throw new Error(
+        `${form.where}.${name}: unknown key "${key}". ${form.badKey}`
+      );
+    }
+  }
+  return entry as Interval<T>;
+};
+
+/** A value slot of a `dims` entry: a `bare` value, or one anchor of an
+ *  interval. (`embedded` is a flag, not a value.) */
+export type AxisDimsSlot = Exclude<IntervalKey, "embedded">;
+
+/**
+ * Map every value in a `dims` bag, telling `f` which anchor each value fills:
+ * `form.bare` for a bare value, which stays bare, and the key itself inside an
+ * interval. `embedded` passes through. An interval key the form does not allow
+ * is an error. This is the one walk over a bag's values, shared by mark
+ * channel inference (channels.ts) and operator channel inference
+ * (createOperator.ts), which decide what each anchor's channel is.
+ */
+export const mapAxisDims = <A, B>(
+  dims: AxisDims<A>,
+  f: (value: A, slot: AxisDimsSlot) => B,
+  form: AxisDimsForm = MARK_DIMS
+): AxisDims<B> => {
+  const out: AxisDims<B> = {};
+  for (const [name, entry] of Object.entries(dims)) {
+    if (entry === undefined) continue;
+    if (!isAxisInterval(entry)) {
+      out[name] = f(entry as A, form.bare);
+      continue;
+    }
+    const src = toAxisInterval<A>(name, entry, form);
+    const iv: Interval<B> = {};
+    for (const key of ["min", "center", "max", "size"] as const) {
+      if (src[key] !== undefined) iv[key] = f(src[key] as A, key);
+    }
+    if (src.embedded !== undefined) iv.embedded = src.embedded;
+    out[name] = iv;
   }
   return out;
 };
 
-/** How an alias key resolves onto a node's `dims`: which axis, and which box key
- * (position aliases set `min` like x/y; `<name>Size` aliases set `size` like w/h). */
-export type AliasResolution = { axis: Direction; key: "min" | "size" };
-
-/** Build the alias→(axis, key) resolution map for a coord scope from the
- * transform's declared position aliases (e.g. `{ x: "theta", y: "r" }`). */
-export const buildAliasMap = (aliases: {
-  x?: string;
-  y?: string;
-}): Record<string, AliasResolution> => {
-  const map: Record<string, AliasResolution> = {};
-  if (aliases.x) {
-    map[aliases.x] = { axis: 0, key: "min" };
-    map[`${aliases.x}Size`] = { axis: 0, key: "size" };
-  }
-  if (aliases.y) {
-    map[aliases.y] = { axis: 1, key: "min" };
-    map[`${aliases.y}Size`] = { axis: 1, key: "size" };
-  }
-  return map;
+/**
+ * The axis names visible at a point in the tree, each mapped to its axis.
+ * `x`/`y` are always present and always mean axis 0/1; a coordinate space adds
+ * the names it declares (polar `theta`/`r`, geo `lon`/`lat`).
+ */
+export type AxisScope = {
+  readonly names: Readonly<Record<string, Direction>>;
+  /** The type of the nearest enclosing coordinate space that is not linear
+   *  (`"polar"`, `"geo"`, ...), if any: there the layout frame is not the
+   *  screen. */
+  readonly warpedBy?: string;
 };
+
+/** The scope outside every coordinate space. */
+export const BASE_AXIS_SCOPE: AxisScope = { names: { x: 0, y: 1 } };
+
+/** What a `coord` node declares about the space it opens: the names its
+ *  transform gives the axes (none for most spaces) and the transform's type. */
+export type SpaceDeclaration = {
+  aliases?: { x?: string; y?: string };
+  type: string;
+};
+
+/** The scope inside a coordinate space: `x`/`y` plus the names its transform
+ *  declares in `aliases`. Every space establishes its own names, so the
+ *  innermost one wins and an outer space's names are not visible inside it.
+ *  `warpedBy` is the space's own type unless it is linear, in which case the
+ *  outer scope's carries through. */
+export const axisScopeFor = (
+  space: SpaceDeclaration,
+  outer: AxisScope
+): AxisScope => {
+  const { aliases = {} } = space;
+  const warpedBy = space.type === "linear" ? outer.warpedBy : space.type;
+  let names = BASE_AXIS_SCOPE.names;
+  if (aliases.x !== undefined || aliases.y !== undefined) {
+    const own: Record<string, Direction> = { ...BASE_AXIS_SCOPE.names };
+    if (aliases.x !== undefined) own[aliases.x] = 0;
+    if (aliases.y !== undefined) own[aliases.y] = 1;
+    names = own;
+  }
+  return names === BASE_AXIS_SCOPE.names && warpedBy === undefined
+    ? BASE_AXIS_SCOPE
+    : { names, warpedBy };
+};
+
+/** Resolve an axis name against `scope`, or throw an error that lists the
+ *  names the scope declares. `where` prefixes the message. */
+export const resolveAxisName = (
+  scope: AxisScope,
+  name: AxisName,
+  where: string
+): Direction => {
+  const axis = scope.names[name];
+  if (axis !== undefined) return axis;
+  const names = Object.keys(scope.names).join(", ");
+  throw new Error(
+    scope.names === BASE_AXIS_SCOPE.names
+      ? `${where}: the innermost enclosing coordinate space (if any) does ` +
+        `not declare the axis name "${name}", so only ${names} are ` +
+        `available here. Put the mark directly inside a coordinate space ` +
+        `that declares "${name}", or use x/y.`
+      : `${where}: the enclosing coordinate space does not declare the axis ` +
+        `name "${name}". Names available here: ${names}.`
+  );
+};
+
+/**
+ * Work a node defers until the axis names around it are known, run once by
+ * `GoFishNode.resolveAliases`. `outer` is the scope the node's own box lives
+ * in (its parent's), `inner` the scope of its children (different only on a
+ * coord that declares names).
+ */
+export type AxisScopeHook = (
+  outer: AxisScope,
+  inner: AxisScope
+) => void | Promise<void>;
+
+/** The hook a box-dims factory leaves on its node: write the `dims` option
+ *  (if any) onto the node's own per-axis dims array, against `outer`. */
+export const deferAxisDims = (
+  fancyDims: FancyDims<any>,
+  into: Dimensions<any>
+): AxisScopeHook | undefined => {
+  const entries = (fancyDims as XYWHDims<any>).dims;
+  return entries === undefined
+    ? undefined
+    : (outer) => {
+        applyAxisDims(into, entries, outer);
+      };
+};
+
+/**
+ * Merge a `dims` bag into the per-axis intervals `into`, which already hold
+ * the top-level options, resolving each name against `scope`. Each (axis,
+ * anchor) slot may be set once: a slot that a top-level option or an earlier
+ * `dims` entry already set is an error. `into` is mutated by reassigning its
+ * elements (not their fields), so closures that captured the same array
+ * observe the result. Returns the option that set each slot, for messages.
+ */
+export const mergeAxisDims = (
+  into: Interval<any>[],
+  entries: AxisDims<any>,
+  scope: AxisScope,
+  form: AxisDimsForm
+): ((key: IntervalKey, axis: Direction) => string) => {
+  const setBy: Record<string, string> = {};
+  const origin = (key: IntervalKey, axis: Direction) =>
+    setBy[`${key}:${axis}`] ?? form.topLevel[key]![axis];
+  for (const [name, entry] of Object.entries(entries)) {
+    if (entry === undefined) continue;
+    const where = `${form.where}.${name}`;
+    const axis = resolveAxisName(scope, name, where);
+    const iv = toAxisInterval(name, entry, form);
+    const next: Interval<any> = { ...into[axis] };
+    for (const key of AXIS_INTERVAL_KEYS) {
+      if (iv[key] === undefined) continue;
+      if (next[key] !== undefined) {
+        throw new Error(
+          `${where}: the ${key} of axis ${axis} is set twice, here and ` +
+            `by ${origin(key, axis)}. Set each axis anchor once.`
+        );
+      }
+      next[key] = iv[key];
+      setBy[`${key}:${axis}`] = where;
+    }
+    into[axis] = next;
+  }
+  return origin;
+};
+
+/**
+ * Write a mark's `dims` bag onto its per-axis `into` array
+ * ({@link mergeAxisDims}). A `min` still missing afterwards is derived from
+ * `center` and `size`, exactly as `elaborateDims` does for `cx` and `w`.
+ */
+export const applyAxisDims = (
+  into: Dimensions<any>,
+  entries: AxisDims<any>,
+  scope: AxisScope
+): void => {
+  mergeAxisDims(into, entries, scope, MARK_DIMS);
+  for (const axis of [0, 1] as const) {
+    const d = into[axis];
+    if (d.min === undefined && d.center !== undefined && d.size !== undefined) {
+      into[axis] = { ...d, min: deriveMin(d.center, d.size) };
+    }
+  }
+};
+
+/**
+ * `min` from `center` and `size` when both are pixels: the one derivation
+ * `elaborateDims` (for `cx` with `w`) and {@link applyAxisDims} share. A data
+ * center stays a center: the shape places the box by it ({@link centerOf},
+ * {@link startAtCenter}), so the center goes through the scale and half the
+ * size comes off in pixels.
+ */
+const deriveMin = <T>(center: T, size: T): T | undefined =>
+  typeof center === "number" && typeof size === "number"
+    ? ((center - size / 2) as T)
+    : undefined;
+
+/** The center a box axis is placed by: its `center` when it has no `min`
+ *  (`cx`/`cy` with a data value, or with no size to derive a `min` from). */
+export const centerOf = <T>(d: Interval<T>): T | undefined =>
+  d.min === undefined ? d.center : undefined;
+
+/** The pixel start of a box axis placed by its center: the center through
+ *  the axis's scale, less half the box's pixel size. */
+export const startAtCenter = (
+  center: MaybeValue<number>,
+  scale: ((x: number) => number) | undefined,
+  sizePx: number
+): number => computeAesthetic(center, scale, undefined)! - sizePx / 2;
+
+/** The pixel start of a box axis `sizePx` pixels long: by its center when it
+ *  has one ({@link startAtCenter}), else at its `min` through the axis's
+ *  scale. Undefined when the box has no position of its own on the axis, so
+ *  the parent places it. A pixel center with a pixel size also has the `min`
+ *  they derive, but the box is placed by the center: `sizePx` is the box's
+ *  own size, which for a text or an image is not the `w` or `h` it was
+ *  given (a text's x origin is its anchor, so it passes 0). */
+export const positionOf = (
+  dim: Interval<MaybeValue<number>>,
+  scale: ((x: number) => number) | undefined,
+  sizePx: number
+): number | undefined =>
+  dim.center !== undefined
+    ? startAtCenter(dim.center, scale, sizePx)
+    : computeAesthetic(dim.min, scale, undefined);
 
 export type IndexedDims<T = number> = {
   0?: Interval<T>;
   1?: Interval<T>;
 };
 
-export type WrappedDims<T = number> = { dims: Dimensions<T> };
-
-export type FancyDims<T = number> =
-  | XYWHDims<T>
-  | IndexedDims<T>
-  | WrappedDims<T>;
-
-const isWrappedDims = <T>(d: FancyDims<T>): d is WrappedDims<T> => "dims" in d;
+export type FancyDims<T = number> = XYWHDims<T> | IndexedDims<T>;
 
 const isIndexedDims = <T>(d: FancyDims<T>): d is IndexedDims<T> =>
   "0" in d || "1" in d;
 
 export const elaborateDims = <T>(dims: FancyDims<T>): Dimensions<T> => {
-  if (isWrappedDims(dims)) {
-    return dims.dims;
-  }
   if (isIndexedDims(dims)) {
     return [
       {
@@ -115,12 +352,12 @@ export const elaborateDims = <T>(dims: FancyDims<T>): Dimensions<T> => {
   if (!("x" in dims))
     dims.x =
       dims.cx !== undefined && dims.w !== undefined
-        ? (((dims.cx as number) - (dims.w as number) / 2) as T)
+        ? deriveMin(dims.cx, dims.w)
         : undefined;
   if (!("y" in dims))
     dims.y =
       dims.cy !== undefined && dims.h !== undefined
-        ? (((dims.cy as number) - (dims.h as number) / 2) as T)
+        ? deriveMin(dims.cy, dims.h)
         : undefined;
 
   return [
@@ -142,7 +379,15 @@ export const elaborateDims = <T>(dims: FancyDims<T>): Dimensions<T> => {
 };
 
 export type Direction = 0 | 1;
-export type FancyDirection = "x" | "y" | "theta" | "r" | Direction;
+/** An axis by index or by its scope-free name. `x`/`y` mean axis 0/1 in every
+ *  coordinate space. */
+export type FancyDirection = "x" | "y" | Direction;
+
+/** An axis named the way an operator's `dir` or a mark's `dims` key names it:
+ *  `x`/`y`, or a name the enclosing coordinate space declares (polar
+ *  `theta`/`r`, geo `lon`/`lat`). Resolved by {@link resolveAxisName} once the
+ *  enclosing space is known. */
+export type AxisName = "x" | "y" | (string & {});
 
 export type Anchor = "min" | "max" | "center" | "baseline";
 
@@ -152,9 +397,8 @@ export type Anchor = "min" | "max" | "center" | "baseline";
  * `max → start + |size|`, `baseline → 0` (the origin). center/max are DERIVED
  * here, never read from a separately-stored anchor — so every site that needs them
  * agrees: the two placement paths (`place()` / `setExtent`'s rank-1 pin), the
- * `dims` getters (GoFishNode + GoFishRef), and `displayDims`. That removed the
- * asymmetric-box divergence that reverted the earlier `place()→setExtent` reroute
- * (#39 stage 2).
+ * `dims` getters (GoFishNode + GoFishRef), and `displayDims`. Deriving them here
+ * is what keeps an asymmetric box from diverging between those paths.
  *
  * Pure arithmetic on `(start, size)` — works in any frame. `|size|` is the
  * MAGNITUDE: a negative bar stores a signed size with `start` (its `min`) carrying
@@ -178,25 +422,44 @@ export const localAnchorPoint = (
   }
 };
 
-export const elaborateDirection = (direction: FancyDirection): Direction => {
-  switch (direction) {
-    case "x":
-      return 0;
-    case "y":
-      return 1;
-    // Coordinate-space direction aliases. Unlike mark dim aliases (resolved by
-    // the scope-bounded resolveAliases pass), `dir` is baked into an operator's
-    // constraints at construction — before its enclosing coord exists — so it
-    // can't be scope-checked. These map generically: `theta`=angular=x,
-    // `r`=radial=y, which is exactly polar's x/y assignment.
-    case "theta":
-      return 0;
-    case "r":
-      return 1;
-    default:
-      return direction;
-  }
+/**
+ * `anchor`'s point in a box's LOCAL frame, or `undefined` while the box does not
+ * determine it: `center`/`max` are derived from `(min, size)` so they need both,
+ * `min`/`baseline` need only `min`. The `undefined`-preserving read shared by
+ * `GoFishNode.localAnchor` and `GoFishRef.localAnchor`.
+ */
+export const localAnchorOf = (
+  intrinsic: Interval | undefined,
+  anchor: Anchor
+): number | undefined => {
+  if (!anchorDetermined(intrinsic, anchor)) return undefined;
+  return localAnchorPoint(anchor, intrinsic!.min!, intrinsic!.size ?? 0);
 };
+
+/** Does the local box determine `anchor`'s point? See {@link localAnchorOf}. */
+export const anchorDetermined = (
+  intrinsic: Interval | undefined,
+  anchor: Anchor
+): boolean =>
+  intrinsic?.min !== undefined &&
+  (anchor === "center" || anchor === "max"
+    ? intrinsic.size !== undefined
+    : true);
+
+/**
+ * The parent-frame translate that lands the box's `anchor` at `value` — the one
+ * placement arithmetic `GoFishNode._pinAnchor` and `GoFishRef.place`/`pinAnchor`
+ * share. Unplaced/unsized components read 0.
+ */
+export const translateForAnchor = (
+  intrinsic: Interval | undefined,
+  anchor: Anchor,
+  value: number
+): number =>
+  value - localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
+
+export const elaborateDirection = (direction: FancyDirection): Direction =>
+  typeof direction === "number" ? direction : BASE_AXIS_SCOPE.names[direction];
 
 export type Position = [number | undefined, number | undefined];
 
@@ -246,7 +509,7 @@ export type FancyTransform = { translate?: FancyPosition; scale?: FancySize };
  * into absolute per-axis display dims, DERIVING center/max from `(min, size)`
  * (the same relation as {@link localAnchorPoint} / the `dims` getter). Mirrors
  * the getter but with `?? 0` fallbacks — an unplaced/unsized anchor reads 0,
- * which is what a shape `_render` wants for drawing. Shapes share this instead
+ * which is what a shape's `lower` wants for drawing. Shapes share this instead
  * of each re-deriving center/max from a separately-stored anchor.
  */
 export const displayDims = (
@@ -269,10 +532,10 @@ export const displayDims = (
  * A node's render-side translate offset as a concrete `[tx, ty]` tuple, with the
  * `?? 0` fallback every shape/operator lower body wants for drawing (an unplaced
  * axis draws at the origin). The read of a BAKED absolute transform each
- * self-drawing boundary (coord, connect, enclose) applies to its own geometry;
- * the pure translate-only containers (box/layer, offset) no longer compose it
- * into a closure — they flatten their subtree to absolute coordinates via
- * `bakeChildren` (#39 stage 6d). Scale is left to the callers that compose it.
+ * self-drawing boundary (coord, connect, enclose) applies to its own geometry.
+ * The pure translate-only containers (box/layer, offset) instead flatten their
+ * subtree to absolute coordinates via `bakeChildren`. Scale is left to the
+ * callers that compose it.
  */
 export const displayTranslate = (transform?: {
   translate?: (number | undefined)[];
@@ -290,7 +553,7 @@ export const displayTranslate = (transform?: {
  * from a separately-stored anchor, and only once the box is both placed AND sized.
  *
  * This is the `undefined`-preserving sibling of {@link displayDims}: same
- * derivation, but `displayDims` substitutes `?? 0` because a shape `_render`
+ * derivation, but `displayDims` substitutes `?? 0` because a shape's `lower`
  * wants a concrete number to draw with.
  */
 export const combineDims = (

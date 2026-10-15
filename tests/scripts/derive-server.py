@@ -3,8 +3,10 @@ Python derive server — executes Python derive functions during test rendering.
 
 Endpoints:
   POST /load           — Import a story file, build its IR, and register
-                         derive functions in one shot. Returns the IR + data
-                         + deriveIds. Combining import + register avoids the
+                         derive functions in one shot. Returns the IR, each
+                         chart tier's rows as base64 Arrow (as the widget
+                         ships them), the render options, and the deriveIds.
+                         Combining import + register avoids the
                          two-process pitfall: `derive(lambda)` mints a fresh
                          UUID per call, so importing the story separately
                          from extracting the IR yields divergent lambda_ids.
@@ -17,6 +19,7 @@ story (which both extracts the IR and registers derives), then the test
 harness calls /derive/<id> during chart rendering.
 """
 
+import base64
 import importlib
 import importlib.util
 import json
@@ -31,8 +34,12 @@ from urllib.parse import urlparse
 def _sanitize_for_json(obj):
     """Make values JSON-safe.
 
-    - NaN/Infinity floats → None (json.dumps writes the literal `NaN`, which
-      the harness's JSON.parse rejects).
+    - ±Infinity floats → the IR's tagged form `{"$numberDouble": "Infinity"}`
+      (gofish's `_nonfinite.py`), which the harness decodes back to a number.
+      json.dumps would write a bare `Infinity`, which JSON.parse rejects.
+    - NaN floats → None: in rows (pandas' missing value) NaN means "no
+      value", which JS spells `null`. Spec fields never get here as NaN:
+      `to_ir()` has already tagged them.
     - pandas Timestamps and other "stringifiable" non-native types →
       `str(obj)` so a Seattle-weather `date` column survives the round-trip
       as the same `YYYY-MM-DD HH:MM:SS` string the harness would have seen
@@ -41,9 +48,9 @@ def _sanitize_for_json(obj):
     if obj is None or isinstance(obj, (bool, int, str)):
         return obj
     if isinstance(obj, float):
-        if math.isnan(obj) or math.isinf(obj):
+        if math.isnan(obj):
             return None
-        return obj
+        return encode_number(obj)
     if isinstance(obj, dict):
         return {k: _sanitize_for_json(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
@@ -59,6 +66,8 @@ def _sanitize_for_json(obj):
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "packages/gofish-python"))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "tests"))
+
+from gofish._nonfinite import encode_number  # noqa: E402
 
 # Registry: lambdaId → Python function
 _registry: dict = {}
@@ -99,8 +108,12 @@ class DeriveHandler(BaseHTTPRequestHandler):
         Body: {"storyFile": "/abs/path/test_X.py", "function": "story_default",
                "pythonStoriesDir": "/abs/path/tests/python-stories"}
 
-        Response (chart): {operators, mark, options, data, deriveIds}
-        Response (layer): {"_kind": "layer", charts, options, deriveIds}
+        Response: {"ir": <the builder's `to_ir()`>,
+                   "tierArrow": [<each chart tier's rows: base64 Arrow IPC,
+                                  `tiers_arrow_bytes`, as the widget ships
+                                  them>],
+                   "render": <the story's render options>,
+                   "deriveIds": [<every lambda id the IR names>]}
         """
         try:
             data = json.loads(body)
@@ -158,191 +171,134 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 })
                 return
 
+            # A story returns `(builder, render)`: `render` holds the options
+            # of the builder's `.render(...)` call (w, h, axes, ...).
             builder = result[0]
-            options = result[1] if len(result) > 1 else {}
+            render = result[1] if len(result) > 1 else {}
 
             from gofish.ast import (
                 ChartBuilder,
                 DeriveOperator,
                 LayerBuilder,
                 Mark,
-                Token,
-                _RefProxy,
                 _collect_mark_lambdas,
+                _collect_operator_lambdas,
                 _MarkFn,
                 _InputRef,
+                tiers_arrow_bytes,
             )
 
-            def serialize_chart(child) -> tuple:
-                """Return (child_payload, derive_ids) for one layer tier.
+            derive_ids: list = []
 
-                child_payload: {operators, mark, options, data, zOrder}
-                  data is the canonical Frontend.DataIR shape:
-                    - {"type": "inline", "rows": [...]} for inline rows
-                    - {"type": "select", "layer": name, "mode": ...} for ref/selectAll data
-                  See packages/gofish-ir/src/frontend/schema.ts.
+            def register(lambda_id, fn):
+                derive_ids.append(lambda_id)
+                _registry[lambda_id] = fn
 
-                A bare `Mark` tier (a component-level annotation via
-                ``.layer(mark)``) serializes as a ``{type: "raw-mark", mark}``
-                payload; its accessor lambdas are registered so paint-time reads
-                resolve over the derive RPC.
-                """
-                if isinstance(child, Mark):
-                    mark_ids = []
-                    for lambda_id, rows_fn in _collect_mark_lambdas(child):
-                        mark_ids.append(lambda_id)
-                        _registry[lambda_id] = rows_fn
-                    return (
-                        {"type": "raw-mark", "mark": child.to_dict()},
-                        mark_ids,
-                    )
-                child_ir = child.to_ir()
-                if isinstance(child.data, _RefProxy) or child._uses_previous_marks():
-                    # `_RefProxy` (ref/selectAll) → {"type": "select", ...};
-                    # an empty `chart()` scope inside a `.layer(...)` chain →
-                    # {"type": "previous-tier"} (JS's LayerBuilder derives the
-                    # auto-name/selectAll wiring from that marker — see
-                    # ChartBuilder.to_ir / _PREVIOUS_LAYER_MARKS in ast.py).
-                    child_data = child_ir["data"]
-                else:
-                    raw = child.data
-                    if hasattr(raw, "to_dict"):
-                        rows = raw.to_dict("records")
-                    elif hasattr(raw, "to_dicts"):
-                        rows = raw.to_dicts()
-                    else:
-                        rows = raw
-                    # Wrap inline rows in the canonical DataIR shape.
-                    if isinstance(rows, list):
-                        child_data = {"type": "inline", "rows": rows}
-                    else:
-                        child_data = rows
+            def register_mark(mark):
+                """Register every callable accessor in a mark tree. The
+                harness rebuilds an async arrow that POSTs `[row]` to
+                `/derive/<lambda_id>` per invocation."""
+                for lambda_id, rows_fn in _collect_mark_lambdas(mark):
+                    register(lambda_id, rows_fn)
 
-                child_derive_ids = []
-                for op in child.operators:
+            def mark_fn(user_fn):
+                """Wrap a `(data) -> ChartBuilder | Mark` mark function for
+                the rows-in / rows-out `/derive/<id>` contract: it answers
+                with a one-element list holding the result's IR."""
+
+                def wrapped(data):
+                    # The harness replaces each live `GoFishRef` argument with
+                    # an `{"__inputRef": i, "datum": ...}` sentinel (a ref
+                    # can't cross as JSON). Rebuild an `_InputRef` per
+                    # sentinel so the user's function sees `d[0].datum` as in
+                    # JS (issue #591). Plain rows pass through unchanged.
+                    wrapped_data = [
+                        _InputRef(row["__inputRef"], row.get("datum"))
+                        if isinstance(row, dict) and "__inputRef" in row
+                        else row
+                        for row in data
+                    ]
+                    return [ir_of(user_fn(wrapped_data), inline=True)]
+
+                return wrapped
+
+            # TODO(#1088): a chart a mark function returns crosses the JSON
+            # `/derive` RPC with its rows inlined, not as Arrow.
+            def chart_ir(chart_ir: dict, chart: "ChartBuilder", inline: bool) -> dict:
+                """A chart's IR, after registering the callbacks it names.
+                The story's own tiers ship their rows beside the IR, as
+                Arrow (`tierArrow`), like the widget. A chart a mark
+                function returns comes back over the JSON `/derive` RPC, so
+                with `inline` its rows are inlined in the IR's inline form,
+                `{type: "inline", rows}`. Select and previous-tier data are
+                already in the IR."""
+                for op in chart.operators:
                     if isinstance(op, DeriveOperator):
-                        child_derive_ids.append(op.lambda_id)
-                        _registry[op.lambda_id] = op.fn
+                        register(op.lambda_id, op.fn)
+                for lambda_id, rows_fn in _collect_operator_lambdas(
+                    chart.operators
+                ):
+                    register(lambda_id, rows_fn)
+                if isinstance(chart._mark, _MarkFn):
+                    register(chart._mark.lambda_id, mark_fn(chart._mark.fn))
+                elif chart._mark is not None:
+                    register_mark(chart._mark)
+                if not inline or chart_ir.get("data") is not None:
+                    return chart_ir
+                raw = chart.data
+                if hasattr(raw, "to_dict"):
+                    rows = raw.to_dict("records")
+                elif hasattr(raw, "to_dicts"):
+                    rows = raw.to_dicts()
+                else:
+                    rows = raw
+                if isinstance(rows, list):
+                    return {**chart_ir, "data": {"type": "inline", "rows": rows}}
+                return {**chart_ir, "data": rows}
 
-                # Register every callable accessor on the mark in the same
-                # registry. The harness/widget rebuilds an async arrow that
-                # POSTs `[row]` to `/derive/<lambda_id>` per invocation.
-                if child._mark is not None and not isinstance(child._mark, _MarkFn):
-                    for lambda_id, rows_fn in _collect_mark_lambdas(child._mark):
-                        child_derive_ids.append(lambda_id)
-                        _registry[lambda_id] = rows_fn
-                # Mark-as-function: register a wrapper that runs the user's
-                # `(data) -> ChartBuilder` callable, recursively serializes
-                # the resulting ChartBuilder (which also registers its own
-                # derive ops + nested mark lambdas), and returns the chart
-                # IR. The JS harness fetches this IR per invocation and
-                # builds a ChartBuilder from it.
-                if isinstance(child._mark, _MarkFn):
-                    mark_fn = child._mark
-                    child_derive_ids.append(mark_fn.lambda_id)
-
-                    def _mark_fn_wrapped(data, _user_fn=mark_fn.fn):
-                        # The JS harness/widget replaces each live `GoFishRef`
-                        # argument (e.g. `.flow(group(...)).mark((refs) =>
-                        # ...)`'s per-group refs) with an `{"__inputRef": i,
-                        # "datum": ...}` sentinel before the RPC — a ref can't
-                        # cross as JSON. Reconstruct an `_InputRef` per
-                        # sentinel so the user's function sees `d[0].datum`
-                        # exactly like the JS story does (issue #591). Rows
-                        # with no sentinel (the pre-#591 plain-data contract)
-                        # pass through unchanged.
-                        wrapped_data = [
-                            _InputRef(row["__inputRef"], row.get("datum"))
-                            if isinstance(row, dict) and "__inputRef" in row
-                            else row
-                            for row in data
-                        ]
-                        result = _user_fn(wrapped_data)
-                        # A mark-fn may return a ChartBuilder (build a chart
-                        # for the group) or a bare Mark (e.g. a `spread([...])`
-                        # combinator embedding one of the input refs directly,
-                        # mirroring JS `spread({...}, [d[0], text(...)])`).
-                        # `serialize_chart` already dispatches on both.
-                        payload, _inner_ids = serialize_chart(result)
-                        # Return as a single-element list to fit the existing
-                        # `/derive/<id>` rows-in / rows-out contract.
-                        return [payload]
-
-                    _registry[mark_fn.lambda_id] = _mark_fn_wrapped
-
-                # A chart layered with `.name(...)` carries its name so a
-                # `Layer([...]).constrain(...)` callback can reference it.
-                child_name = getattr(child, "_name", None)
-                if isinstance(child_name, Token):
-                    child_name = child_name.to_dict()
-
-                return (
-                    {
-                        "type": "chart",
-                        "operators": child_ir["operators"],
-                        "mark": child_ir["mark"],
-                        "options": child_ir.get("options", {}),
-                        "data": child_data,
-                        "zOrder": child_ir.get("zOrder"),
-                        "name": child_name,
-                    },
-                    child_derive_ids,
+            def ir_of(b, inline: bool = False) -> dict:
+                """`b.to_ir()`, unchanged except for inlined rows (with
+                `inline`; see `chart_ir`)."""
+                if isinstance(b, Mark):
+                    register_mark(b)
+                    return b.to_ir()
+                if isinstance(b, LayerBuilder):
+                    ir = b.to_ir()
+                    tiers = []
+                    for child, tier in zip(b.children, ir["charts"]):
+                        if isinstance(child, Mark):
+                            register_mark(child)
+                            tiers.append(tier)
+                        else:
+                            tiers.append(chart_ir(tier, child, inline))
+                    # A `.relate(...)` clause that draws is a mark, and may
+                    # carry accessors too (a constraint carries none).
+                    for clause in b._relate or []:
+                        if isinstance(clause, Mark):
+                            register_mark(clause)
+                    return {**ir, "charts": tiers}
+                if isinstance(b, ChartBuilder):
+                    return chart_ir(b.to_ir(), b, inline)
+                raise TypeError(
+                    f"a story must return a chart, layer or mark, got {type(b).__name__}"
                 )
 
-            if isinstance(builder, Mark):
-                # Raw-mark render path: a Mark returned directly from a
-                # story (no Chart, no Layer). Mirrors JS storybook spelling
-                # `spread(opts, [marks]).render(container, {w, h})`.
-                raw_mark_derive_ids = []
-                for lambda_id, rows_fn in _collect_mark_lambdas(builder):
-                    raw_mark_derive_ids.append(lambda_id)
-                    _registry[lambda_id] = rows_fn
-                self._json_response(200, {
-                    "_kind": "raw-mark",
-                    "mark": builder.to_dict(),
-                    "options": options,
-                    "deriveIds": raw_mark_derive_ids,
-                })
-                return
-
-            if isinstance(builder, LayerBuilder):
-                child_payloads = []
-                derive_ids: list = []
-                for child in builder.children:
-                    payload, child_derive_ids = serialize_chart(child)
-                    child_payloads.append(payload)
-                    derive_ids.extend(child_derive_ids)
-
-                layer_payload = {
-                    "_kind": "layer",
-                    "charts": child_payloads,
-                    "options": {**(builder.options or {}), **options},
-                    "deriveIds": derive_ids,
-                    # Only the fluent `chart(...).layer(...)` chain is the v3
-                    # builder (JS reconstructs it through its own LayerBuilder).
-                    # The array form `layer([c1, c2])` is the low-level
-                    # combinator, mirroring JS `layer([...])`.
-                    "builder": getattr(builder, "_builder_chain", False),
-                }
-                # `.constrain(...)` constraints relating the named children.
-                layer_constraints = getattr(builder, "_constraints", None)
-                if layer_constraints is not None:
-                    layer_payload["constraints"] = [
-                        c.to_dict() for c in layer_constraints
-                    ]
-                self._json_response(200, layer_payload)
-                return
-
-            chart_payload, derive_ids = serialize_chart(builder)
-            chart_payload["options"] = {**chart_payload["options"], **options}
-            chart_payload["deriveIds"] = derive_ids
-            self._json_response(200, chart_payload)
+            self._json_response(200, {
+                "ir": ir_of(builder),
+                "tierArrow": [
+                    base64.b64encode(b).decode("ascii")
+                    for b in tiers_arrow_bytes(builder)
+                ],
+                "render": render,
+                "deriveIds": derive_ids,
+            })
         except Exception as e:
             self._json_response(500, {
                 "error": str(e),
                 "traceback": traceback.format_exc(),
             })
 
+    # TODO(#1088): rows cross this RPC as JSON, not as the widget's Arrow.
     def _handle_derive(self, lambda_id: str, body: bytes):
         """Execute a registered derive function on JSON data."""
         if lambda_id not in _registry:

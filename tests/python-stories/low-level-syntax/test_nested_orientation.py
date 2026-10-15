@@ -7,10 +7,10 @@ would render them upside down). `PolarInChart`: a polar pie beside a continuous-
 bar chart in one free-space canvas — the `coord` pie fixes its own orientation
 and cancels the incoming flip, so the wedges keep their clockwise-from-top sense
 while the bars grow up. Combinator `spread`/`stack` in the `dir` variants stand
-in for v1 `spreadX`/`stackX`; a data-bound SIZE uses `datum(v)` (JS `value(v)`).
+in for JS `spreadX`/`stackX`; a data-bound SIZE uses `datum(v)` (JS `value(v)`).
 """
 
-from gofish import datum, layer, polar, rect, spread, stack
+from gofish import datum, layer, rect, spread, stack, Coord
 from python_stories.data import COLORS
 
 _C6 = COLORS["color6"]
@@ -65,7 +65,6 @@ _PIE_DATA = [
 
 def _pie():
     return layer(
-        {"coord": polar()},
         [
             stack(
                 [rect(w=datum(d["count"]), fill=d["color"]) for d in _PIE_DATA],
@@ -73,9 +72,9 @@ def _pie():
                 h=70,
                 spacing=0,
                 alignment="start",
-                sharedScale=True,
             )
         ],
+        coord=Coord.polar(),
     )
 
 

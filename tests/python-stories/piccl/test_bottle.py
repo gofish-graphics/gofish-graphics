@@ -44,7 +44,7 @@ DATA = [
 
 def story_default():
     return (
-        chart(DATA)
+        chart(DATA, axes=False)
         .flow(spread(by="category", dir="x", spacing=20, axes={"x": False}))
         .mark(
             layer([
@@ -53,19 +53,19 @@ def story_default():
                         image(href=BOTTLE_PNG, h=datum(100)),
                         rect(h="amount", w=175, fill="#00ff00"),
                     ],
-                    blendMode="color",
+                    blend_mode="color",
                 ).name("bottle"),
                 rect(h=1, fill="#666", w=175, y="amount").name("line"),
                 text(
                     text=lambda d: f"{d['amount']}%",
-                    fontSize=35,
+                    font_size=35,
                     fill="#666",
                 ).name("label"),
-            ]).constrain(lambda bottle, line, label: [
+            ]).relate(lambda bottle, line, label: [
                 Constraint.align([bottle, line], x="start"),
                 Constraint.distribute([line, label], dir="y", spacing=0),
                 Constraint.align([label, line], x="end"),
             ])
         ),
-        {"axes": False},
+        {},
     )

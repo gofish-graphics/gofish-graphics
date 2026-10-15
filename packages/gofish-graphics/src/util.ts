@@ -1,5 +1,11 @@
 import { getValue, getValueOffset, isValue, MaybeValue } from "./ast/data";
 
+/** Whether `v` is a promise or another thenable. */
+export const isThenable = <T>(v: T | PromiseLike<T>): v is PromiseLike<T> =>
+  v !== null &&
+  (typeof v === "object" || typeof v === "function") &&
+  typeof (v as PromiseLike<T>).then === "function";
+
 /** Read a dev-gate flag from `globalThis.<name>` or `process.env.<name>` (truthy
  *  = on). Zero-cost when off; the single reader for the #39 dev gates
  *  (`GOFISH_SOLVER_CHECK`, `GOFISH_CONFLICT_CHECK`). */
@@ -13,6 +19,15 @@ export const envFlag = (name: string): boolean => {
 export const lerp = (a: number, b: number, t: number): number => {
   return a + t * (b - a);
 };
+
+/** Confine `v` to `[lo, hi]`. */
+export const clamp = (v: number, lo: number, hi: number): number =>
+  Math.min(hi, Math.max(lo, v));
+
+/** Euclidean modulo: `a % n` with the sign of `n`, so a negative `a` wraps
+ *  around to the top of the range. */
+export const mod = (a: number, n: number): number =>
+  n === 0 ? 0 : ((a % n) + n) % n;
 
 // assumes function is monotonically increasing
 // lowerBound must be less than the target
@@ -103,13 +118,19 @@ export const foldFinite = (
 // input is a value, an aesthetic literal, or undefined. behavior differs based on this
 export const computeAesthetic = (
   input: MaybeValue<number> | undefined,
-  scale: (x: number) => number,
+  scale: ((x: number) => number) | undefined,
   provided: number | undefined
 ): number | undefined => {
+  // Every axis a data value is placed on has a position scale: a scope
+  // solves one for any domain, a one-value domain included (#1107).
+  if (isValue(input) && scale === undefined)
+    throw new Error(
+      "[gofish] a data value was placed on an axis with no position scale"
+    );
   // A datum's pixel offset applies AFTER the scale mapping — "this data
   // position, plus pixels" (`datum(v).offset(px)`).
   return isValue(input)
-    ? scale(getValue(input)!) + getValueOffset(input)
+    ? scale!(getValue(input)!) + getValueOffset(input)
     : (input ?? provided);
 };
 

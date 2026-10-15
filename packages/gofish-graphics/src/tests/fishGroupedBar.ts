@@ -20,7 +20,7 @@ const fishColors = {
 
 export const testFishGroupedBar = () =>
   stackX(
-    { spacing: 12, sharedScale: true },
+    { spacing: 12 },
     _(seafood)
       .groupBy("lake")
       .map((d, key) =>

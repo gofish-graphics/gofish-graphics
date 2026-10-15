@@ -4,31 +4,20 @@
 
 import type { ConstraintSpec } from ".";
 import type { Dimensions, Size } from "../dims";
-import { isNestConstraint, nestedSpace, type NestConstraint } from "./nest";
+import {
+  isNestConstraint,
+  nestedExtent,
+  nestedSpace,
+  type NestConstraint,
+} from "./nest";
 import type { UnderlyingSpace } from "../underlyingSpace";
+import type { Extent } from "../extent";
+import { buildNameIndex, type NamedNode } from "./shared";
 
-type NamedChild = {
-  _name?: string | { __tag: string };
+export type NestPlanChild = NamedNode & {
   key?: string;
   args?: { dims?: [{ size?: unknown }, { size?: unknown }] };
   children?: readonly unknown[];
-};
-
-export type NestPlanChild = NamedChild;
-
-const childNameKey = (node: NestPlanChild): string | undefined => {
-  const n = node._name;
-  if (n === undefined) return undefined;
-  return typeof n === "string" ? n : n.__tag;
-};
-
-const buildNameIndex = (childNodes: NestPlanChild[]): Map<string, number> => {
-  const m = new Map<string, number>();
-  for (let i = 0; i < childNodes.length; i++) {
-    const name = childNameKey(childNodes[i]);
-    if (name !== undefined && !m.has(name)) m.set(name, i);
-  }
-  return m;
 };
 
 // ── Nest pre-pass ───────────────────────────────────────────────────────────
@@ -57,7 +46,8 @@ const buildNameIndex = (childNodes: NestPlanChild[]): Map<string, number> => {
 // (source → derived) and a topological layout order (source before derived).
 // The space-resolution fold derives a space only from an 'in' edge whose inner
 // is SIZE; the layout proposal reads every edge. Single-ownership is enforced
-// per (derivedNode, axis). See size-claims.md "Dimension B".
+// per (derivedNode, axis). See
+// apps/docs/docs/internals/design/size-claims.md "Dimension B".
 
 export type NestEdge = {
   derivedIdx: number;
@@ -128,18 +118,53 @@ export function applyNestSpacePlan(
       if (e.padX !== undefined)
         effectiveChildren[i][0] = nestedSpace(
           effectiveChildren[i][0],
-          sourceSpaces[0],
-          e.padX
+          sourceSpaces[0]
         );
       if (e.padY !== undefined)
         effectiveChildren[i][1] = nestedSpace(
           effectiveChildren[i][1],
-          sourceSpaces[1],
-          e.padY
+          sourceSpaces[1]
         );
     }
   }
   return effectiveChildren;
+}
+
+/** The claim half of {@link applyNestSpacePlan}: the children's claims with
+ *  every INSIDE_OUT edge's padding applied, given the children's types after
+ *  the nest type fold (`effectiveSpaces`, from {@link applyNestSpacePlan}).
+ *  Reads the types (each derived outer is free exactly when its inner is) but
+ *  never writes them. */
+export function applyNestExtentPlan(
+  childExtents: readonly Size<Extent | undefined>[],
+  effectiveSpaces: readonly Size<UnderlyingSpace>[],
+  nestPlan: NestPlan | undefined
+): Size<Extent | undefined>[] {
+  if (nestPlan === undefined) return [...childExtents];
+  const effective = childExtents.map(
+    (s) => [s[0], s[1]] as Size<Extent | undefined>
+  );
+  for (const i of nestPlan.order) {
+    for (const e of nestPlan.byDerived.get(i) ?? []) {
+      if (e.dir !== "in") continue;
+      const src = e.sourceIdx;
+      if (e.padX !== undefined)
+        effective[i][0] = nestedExtent(
+          effective[i][0],
+          effectiveSpaces[src][0],
+          effective[src][0],
+          e.padX
+        );
+      if (e.padY !== undefined)
+        effective[i][1] = nestedExtent(
+          effective[i][1],
+          effectiveSpaces[src][1],
+          effective[src][1],
+          e.padY
+        );
+    }
+  }
+  return effective;
 }
 
 /** Classify each nest by which side carries the size, resolve a single
@@ -177,10 +202,9 @@ export function buildNestPlan(
   }
 
   // Per-axis outer→inner adjacency over resolved nests, for the `sized`
-  // recursion. An outer may nest multiple children. Treat the outer as sized if
-  // ANY same-axis inner is independently sized; using a single outer→inner map
-  // made chained nests declaration-order-sensitive because later constraints
-  // overwrote earlier candidates before ownership validation.
+  // recursion. An outer may nest multiple children, so it is sized if ANY
+  // same-axis inner is independently sized — a single outer→inner map would
+  // make chained nests declaration-order-sensitive.
   const nestedInnersByAxis: [
     Map<number, Set<number>>,
     Map<number, Set<number>>,

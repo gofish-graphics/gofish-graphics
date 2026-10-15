@@ -66,7 +66,6 @@ def story_default():
             dir="y",
             spacing=8,
             alignment="middle",
-            sharedScale=True,
         ),
         {"axes": True},
     )

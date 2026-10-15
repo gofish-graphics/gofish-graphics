@@ -89,15 +89,13 @@ jobs:
 
       - name: Setup pnpm
         if: steps.plan.outputs.skip == 'false'
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         if: steps.plan.outputs.skip == 'false'
         uses: actions/setup-node@v5
         with:
-          node-version: "24"
+          node-version: 26
           registry-url: "https://registry.npmjs.org"
           cache: pnpm
 
@@ -144,10 +142,6 @@ jobs:
         if: steps.plan.outputs.skip == 'false'
         run: pnpm --filter gofish-graphics build
 
-      - name: Generate TypeScript declarations
-        if: steps.plan.outputs.skip == 'false'
-        run: pnpm exec tsc --project packages/gofish-graphics/tsconfig.build.json || true
-
       # gofish-ir publishes first so the workspace:* dependency in
       # gofish-graphics resolves to a real published version on the registry
       # at the moment gofish-graphics publishes. `pnpm publish` rewrites
@@ -176,7 +170,7 @@ jobs:
       # from the gofish-graphics/gofish-ir dist produced earlier in this job.
       - name: Setup Python
         if: steps.plan.outputs.skip == 'false'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 

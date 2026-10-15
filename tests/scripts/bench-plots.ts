@@ -129,11 +129,19 @@ async function main() {
       }
     );
 
+    const stories: { id: string; moduleKey: string; name: string }[] =
+      await page.evaluate(() => (window as any).__listStories__());
+
     for (const id of STORY_IDS) {
       process.stdout.write(`  ${id} ... `);
+      const story = stories.find((s) => s.id === id);
+      if (!story) {
+        console.log("FAILED: story not found");
+        continue;
+      }
       const ok = await page.evaluate(
-        (sid) => (window as any).__renderStory__(sid),
-        id
+        (s) => (window as any).__renderStory__(s),
+        story
       );
       if (!ok) {
         console.log(

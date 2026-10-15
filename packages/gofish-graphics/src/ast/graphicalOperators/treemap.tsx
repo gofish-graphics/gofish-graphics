@@ -9,53 +9,61 @@ import {
 } from "d3-hierarchy";
 import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 
-import { GoFishNode, Placeable } from "../_node";
+import { GoFishNode, Placeable, nestEach } from "../_node";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
-import { FancyDims, Size, Direction, elaborateDims } from "../dims";
-import { getMeasure, getValue, isValue, MaybeValue } from "../data";
+import {
+  FancyDims,
+  Size,
+  Direction,
+  MARK_DIMS,
+  deferAxisDims,
+  elaborateDims,
+} from "../dims";
+import { getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
-import {
-  POSITION,
-  SIZE,
-  isCONTINUOUS,
-  UnderlyingSpace,
-} from "../underlyingSpace";
-import { interval } from "../../util/interval";
+import { UnderlyingSpace, UNDEFINED, magnitude } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
-import * as Monotonic from "../../util/monotonic";
 import { createOperator } from "../marks/createOperator";
 import { SplitBy, splitEntries } from "../datumProjection";
 import type { FieldExpr } from "../fieldExpr";
+import { squarify, type Tile } from "../../families/tile";
+import { Frontend } from "gofish-ir";
 
-type TreemapTile =
-  | "squarify"
-  | "slice"
-  | "dice"
-  | "binary"
-  | "slicedice"
-  | "squarifyCircle";
+const D3_TILES = {
+  squarify: treemapSquarify,
+  slice: treemapSlice,
+  dice: treemapDice,
+  binary: treemapBinary,
+  sliceDice: treemapSliceDice,
+} satisfies Record<Tile["kind"], unknown>;
+
+/** The d3 tiling method of a `Tile` strategy, checked against its family
+ *  (a known kind; a squarify ratio of at least 1, which d3 would clamp
+ *  silently). */
+function d3Tile(tile: Tile) {
+  Frontend.checkStrategy("Tile", tile, "treemap({ tile })");
+  return tile.kind === "squarify" && tile.ratio !== undefined
+    ? treemapSquarify.ratio(tile.ratio)
+    : D3_TILES[tile.kind];
+}
+
 type TreemapSort = "asc" | "desc" | "none";
 
 type TreemapProps = {
   key?: string;
-  paddingInner?: number;
-  paddingOuter?: number;
+  /** Gap between sibling tiles, in pixels. Default 0. */
+  spacing?: number;
+  /** Inset around the outer edge of the treemap, in pixels. Default 0. */
+  padding?: number;
   round?: boolean;
-  tile?: TreemapTile;
+  /** The tiling strategy. Default `Tile.squarify()`. */
+  tile?: Tile;
   sort?: TreemapSort;
   /** Per-entry weight driving each leaf's tile area — one value per child, in
    *  child order (mirrors `spread`'s entry-flagged `size`, #700-style). */
   size?: MaybeValue<number>[];
-  /** When true, mirror leaf layout top-to-bottom within the treemap box (SVG y grows downward). */
-  flipY?: boolean;
-  /**
-   * When set, each leaf is laid out in a square of side `min(leafW, leafH, 2*datum[field])`
-   * so mark size can follow a **global** scale across facets. Default fills the full leaf
-   * rectangle (`[w,h]`).
-   */
-  leafIntrinsicRadiusField?: string;
 } & FancyDims<MaybeValue<number>>;
 
 type LeafDatum = {
@@ -74,76 +82,71 @@ function resolveWeight(
   return Number.isFinite(num) && num > 0 ? num : 0;
 }
 
-export const Treemap = createNodeOperator(
+const Treemap = createNodeOperator(
   (opts: TreemapProps, children: GoFishAST[]) => {
     const {
       key,
-      paddingInner = 0,
-      paddingOuter = 0,
+      spacing = 0,
+      padding = 0,
       round = true,
-      tile = "squarify",
+      tile = squarify(),
       sort = "desc",
       size: sizeChannel,
-      flipY = false,
-      leafIntrinsicRadiusField,
       ...fancyDims
     } = opts;
 
     const dims = elaborateDims(fancyDims);
 
-    return new GoFishNode(
+    const node = new GoFishNode(
       {
         type: "treemap",
         args: {
           key,
-          paddingInner,
-          paddingOuter,
+          spacing,
+          padding,
           round,
           tile,
           sort,
           size: sizeChannel,
-          flipY,
-          leafIntrinsicRadiusField,
           dims,
         },
         key,
-        shared: [false, false],
+        // The treemap sizes each child from data into a tile of its own, so
+        // on both axes each child is detached from the others and nested in
+        // its tile, as a grid cell is.
+        resolveSharing: nestEach,
         resolveUnderlyingSpace: (): Size<UnderlyingSpace> => {
           // Mirror Spread's explicit-size handling (spread.tsx:123-131): when a
           // data-driven size is declared on an axis (e.g. `h: "fare"` auto-summed
           // to a Value), emit SIZE so the parent faceting spread can co-solve a
-          // scale shared across sibling treemaps. Otherwise the treemap is a
-          // positioned box that fills the slot it is given.
+          // scale shared across sibling treemaps. Otherwise the treemap orders
+          // nothing along the axis by data: it has no axis there and fills the
+          // slot it is given.
           const axisSpace = (i: Direction): UnderlyingSpace =>
-            isValue(dims[i].size)
-              ? SIZE(
-                  Monotonic.linear(getValue(dims[i].size!)!, 0),
-                  getMeasure(dims[i].size)
-                )
-              : POSITION(interval(0, 1));
+            isValue(dims[i].size) ? magnitude(dims[i].size) : UNDEFINED;
           return [axisSpace(0), axisSpace(1)];
         },
-        layout: (_shared, size, scales, childAsts, node) => {
+        layout: (size, scales, childAsts, node) => {
           const xPos = computeAesthetic(
             dims[0].min,
-            posFn(scales?.[0]?.map)!,
+            posFn(scales?.[0]?.map),
             undefined
           );
           const yPos = computeAesthetic(
             dims[1].min,
-            posFn(scales?.[1]?.map)!,
+            posFn(scales?.[1]?.map),
             undefined
           );
 
-          // Re-solve a local scale factor from this node's own underlying space,
+          // Re-solve a local scale factor from this node's own size claim,
           // mirroring Spread.computeScaleFactor (spread.tsx:242-259). Used as a
           // fallback for the standalone (non-faceted) data-driven case.
-          const myUSpace = node._underlyingSpace!;
+          const myExtent = node.resolveExtent();
           const localScaleFactor = (dir: Direction): number | undefined => {
-            const space = myUSpace[dir];
-            if (isCONTINUOUS(space)) {
+            const extent = myExtent[dir];
+            if (extent !== undefined) {
               return (
-                space.width.inverse(size[dir], {
+                extent.width.inverse(size[dir], {
                   upperBoundGuess: size[dir],
                 }) ?? 0
               );
@@ -221,17 +224,10 @@ export const Treemap = createNodeOperator(
 
           const treemapLayout = d3Treemap<any>()
             .size([resolvedSize[0], resolvedSize[1]])
-            .paddingInner(paddingInner)
-            .paddingOuter(paddingOuter)
-            .round(round);
-
-          // Keep default squarify unless we explicitly choose something else.
-          if (tile === "slice") treemapLayout.tile(treemapSlice);
-          else if (tile === "dice") treemapLayout.tile(treemapDice);
-          else if (tile === "binary") treemapLayout.tile(treemapBinary);
-          else if (tile === "slicedice") treemapLayout.tile(treemapSliceDice);
-          else if (tile === "squarifyCircle")
-            treemapLayout.tile(treemapSquarify.ratio(1));
+            .paddingInner(spacing)
+            .paddingOuter(padding)
+            .round(round)
+            .tile(d3Tile(tile));
 
           const rectRoot = treemapLayout(root) as HierarchyRectangularNode<any>;
           const leaves = rectRoot.leaves();
@@ -257,23 +253,11 @@ export const Treemap = createNodeOperator(
             const w = Math.max(0, x1 - x0);
             const h = Math.max(0, y1 - y0);
 
-            const child = childAsts[i];
-            let lw = w;
-            let lh = h;
-            if (leafIntrinsicRadiusField && child instanceof GoFishNode) {
-              const datum = (child as GoFishNode & { datum?: unknown }).datum;
-              const d = datum as Record<string, unknown> | undefined;
-              const rad = Number(d?.[leafIntrinsicRadiusField]);
-              if (Number.isFinite(rad) && rad > 0) {
-                const side = Math.min(2 * rad, w, h);
-                lw = side;
-                lh = side;
-              }
-            }
-            const placeable = child.layout([lw, lh], scales);
+            const placeable = childAsts[i].layout([w, h], scales);
+            // d3's tiles are placed in the treemap's own axis order, like
+            // any operator's: top-down in free space, upward in a chart.
             placeable.place(0, x0 + w / 2, "center");
-            const cy = flipY ? resolvedSize[1] - (y0 + h / 2) : y0 + h / 2;
-            placeable.place(1, cy, "center");
+            placeable.place(1, y0 + h / 2, "center");
             placed[i] = placeable;
           }
 
@@ -304,6 +288,10 @@ export const Treemap = createNodeOperator(
       },
       children
     );
+    // The treemap's own box is named by axis in `dims` like a mark's; defer it
+    // to the resolveAliases pass.
+    node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
+    return node;
   }
 );
 
@@ -323,13 +311,12 @@ export const treemap = createOperator<any, TreemapOptions>(
   ((props: TreemapProps, children: GoFishAST[]) =>
     Treemap(props, children)) as any,
   {
-    // With `by`: groupBy on the field (mirrors spread). Without `by`:
-    // identity split — one leaf per row.
-    split: ({ by }, d) =>
-      by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
+    split: ({ by }, d) => splitEntries(by, d),
     channels: {
       w: "size",
       h: "size",
+      // Each `dims` slot infers as its top-level counterpart (`size` as w/h).
+      dims: { type: "dims", form: MARK_DIMS },
       size: { type: "size", entry: true },
     } as any,
   }

@@ -34,9 +34,10 @@ could be generated mechanically, from what source, and what the options are.
   - `_wire_layer_tier` re-derives the `.layer()` auto-naming + `selectAll`
     rewiring in Python, even though the `builder: true` IR tag exists
     precisely so JS's `LayerBuilder` can own that logic.
-  - `ConstrainableMark.constrain` re-implements the JS
-    `collectConstraintRefs` tree-walk (documented as a mirror of
-    `ast/constraints/index.ts`) so callbacks get refs synchronously.
+  - `RelatableMark.relate` re-implemented the JS
+    `collectConstraintRefs` tree-walk so callbacks got refs synchronously.
+    (Since removed: the callback now gets one ref per declared parameter
+    without a default, and JS resolves the names at layout.)
   - The empty-placeholder Arrow table construction is copy-pasted ~4×.
   - Four wire-name tables (Porter-Duff-style compositing renames, constraint
     type strings, mark type strings, operator type strings) are hand-copied
@@ -169,32 +170,44 @@ every option.
 
 Leaf marks are open-world in the IR today, but they aren't _really_ open on
 the JS side either: a mark's channels are exactly the destructured options of
-its factory plus the `FancyDims` box channels plus the coord aliases in
-`KNOWN_ALIAS_KEYS`. Everything else is silently ignored. Case in point,
-found while grounding this doc: **the current Python `rect()` exposes `rs=`
-and `ts=` kwargs that exist nowhere in JS** (the real alias names are
-`rSize`/`thetaSize`) — they serialize, pass the open-world validator, and
-are dropped on the floor at render. A closed list turns that class of bug
-into an autocomplete error.
+its factory plus the `FancyDims` box channels (plus, at the time, the coord
+aliases in a hand-kept `KNOWN_ALIAS_KEYS`). Everything else is silently
+ignored. Case in point, found while grounding this doc: **the Python `rect()`
+of the time exposed `rs=` and `ts=` kwargs that exist nowhere in JS** (the
+real alias names were `rSize`/`thetaSize`) — they serialize, pass the
+open-world validator, and are dropped on the floor at render. A closed list
+turns that class of bug into an autocomplete error.
 
 Decision: **enumerate channels per mark in the descriptor**, built up
 incrementally. Two things keep the maintenance cost low:
 
 - **Shared field groups.** Most channels aren't per-mark. `boxDims` (the
-  14 `FancyDims`/alias channels: `x, cx, x2, w, emX, y, cy, y2, h, emY,
-theta, thetaSize, r, rSize`) and `paint` (`fill, stroke, strokeWidth,
-opacity, filter`) are declared once and included by reference; a mark
-  entry then lists only its genuinely own fields (rect: `rx, ry,
-aspectRatio`).
+  `FancyDims` channels: `x, cx, x2, w, emX, y, cy, y2, h, emY, dims`) and
+  `paint` (`fill, stroke, strokeWidth, opacity, filter`) are declared once
+  and included by reference; a mark entry then lists only its genuinely own
+  fields (rect: `rx, ry, aspectRatio`).
 - **An explicit escape hatch instead of open kwargs.** If raw SVG
   passthrough is ever needed, it gets one named kwarg (e.g. `svg={...}` /
   a `style` dict), not `**kwargs` — autocomplete and closed-world checking
   survive.
 
-Strictness rolls out gradually: the generated Python signatures are closed
-immediately (that's where autocomplete lives); `validate.ts` can start
-warning rather than rejecting unknown leaf-mark fields until the enumerated
-lists have been proven against the story corpus, then flip to strict.
+**Axis names are the first such escape hatch (#838).** A coordinate space
+declares names for its axes (polar `theta`/`r`, geo `lon`/`lat`), and any
+coordinate space, including one a user writes, may declare new ones. A closed
+signature cannot list names that only exist at render time, and the earlier
+approach (the four polar names as top-level kwargs, from a hand-kept list)
+drifted: geo's `lon`/`lat` were silently dropped. So the names moved into one
+named kwarg, `dims={...}`, on the box-dims marks and on `scatter`. Its keys
+are open (`t.record(t.ref("AxisDimsValue"))`, a dict in Python; the values
+are still checked), and every
+other kwarg stays closed. The top-level `x/y/w/h` keys keep working in every
+coordinate space, where they mean axis 0 and axis 1.
+
+Strictness rolled out gradually: the generated Python signatures were closed
+immediately (that's where autocomplete lives); `validate.ts` warned rather
+than rejecting unknown leaf-mark fields until the enumerated lists had been
+proven against the story corpus. That flip has now happened: the validator
+has one mode, and an unknown field is an error everywhere.
 
 ## What a descriptor entry looks like
 
@@ -206,13 +219,13 @@ small field-type DSL (`t.*`):
 ```ts
 // Shared field groups — declared once, included by reference.
 const boxDims = group({
-  x: ch.num("Left edge position."),        cx: ch.num("Center x."),
-  x2: ch.num("Right edge position."),      w: ch.num("Width."),
+  x: ch.pos("Left edge position."),        cx: ch.pos("Center x."),
+  x2: ch.pos("Right edge position."),      w: ch.size("Width."),
   emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
-  y: ch.num(), cy: ch.num(), y2: ch.num(), h: ch.num(),
+  y: ch.pos(), cy: ch.pos(), y2: ch.pos(), h: ch.size(),
   emY: { type: t.boolean },
-  // Coord aliases (KNOWN_ALIAS_KEYS) — resolved to x/y/w/h by resolveAliases.
-  theta: ch.num(), thetaSize: ch.num(), r: ch.num(), rSize: ch.num(),
+  // Axis names a coordinate space declares — resolved by resolveAliases.
+  dims: { type: t.record(t.ref("AxisDimsValue")) },
 });
 
 const paint = group({
@@ -262,26 +275,29 @@ mark("inside", {
 });
 ```
 
-`ch.num(doc?)` / `ch.color(doc?)` are shorthand for
-`{ type: t.channel(number|color) }` — a `ChannelValue` slot accepting a
-literal, a field name, or a `datum()` wrapper. Python-keyword collisions
-declare `pyName` per _field_ the same way (`{ pyName: "from_", wire: "from" }`
-on `line`'s `from` field).
+`ch.size(doc?)` / `ch.pos(doc?)` / `ch.color(doc?)` / `ch.raw(inner, doc?)`
+are shorthand for `{ type: t.channel(inner, infer) }`, a `ChannelValue` slot
+accepting a literal, a field name, or a `datum()` wrapper. `infer` is how the
+JS mark infers the value (sum, mean, color scale, or as is); the JS mark
+factories' channel maps are generated from it. The Python kwarg for a field
+is its name in snake case (`strokeWidth` becomes `stroke_width`), computed by
+one function, `pyKwarg`, which adds a trailing underscore when the name is a
+Python keyword (`line`'s `from` field becomes `from_`).
 
 From the `rect` entry the generator emits, mechanically:
 
 ```python
-def rect(*, x=None, cx=None, x2=None, w=None, emX=None,
-         y=None, cy=None, y2=None, h=None, emY=None,
-         theta=None, thetaSize=None, r=None, rSize=None,
-         fill=None, stroke=None, strokeWidth=None, opacity=None, filter=None,
-         rx=None, ry=None, aspectRatio=None,
+def rect(*, x=None, cx=None, x2=None, w=None, em_x=None,
+         y=None, cy=None, y2=None, h=None, em_y=None,
+         dims=None,
+         fill=None, stroke=None, stroke_width=None, opacity=None, filter=None,
+         rx=None, ry=None, aspect_ratio=None,
          key=None, label=None) -> Mark:
     """A rectangle. Box geometry via the shared dims channels.
 
     Args:
         rx: Corner radius, x. Default 0.
-        aspectRatio: w/h ratio to enforce; ...
+        aspect_ratio: w/h ratio to enforce; ...
         ...
     """
     return _leaf("rect", locals())
@@ -290,15 +306,16 @@ def rect(*, x=None, cx=None, x2=None, w=None, emX=None,
 plus a `Rect` `$def` in the JSON Schema (closed property list), the
 `knownFields` row + typed checks in the validator, and the `LeafMarkIR`
 member type in `schema.ts` — one authored entry, four generated artifacts.
-Note the emitted signature is exactly today's hand-written `rect()` minus
-its two phantom kwargs (`rs`, `ts`) and plus the four coord aliases it was
-missing — i.e., the generator's first diff already fixes real drift.
+Note the first emitted signature was the hand-written `rect()` of the time
+minus its two phantom kwargs (`rs`, `ts`) and plus the four coord aliases it
+was missing — i.e., the generator's first diff already fixed real drift.
+Those four aliases have since folded into `dims` (see above).
 
 ## Recommended staging
 
 1. **Shallow-port refactor (no codegen yet).** Move `_wire_layer_tier`'s
    auto-naming/`selectAll` wiring JS-side behind the existing
-   `builder: true` tag; evaluate doing the same for the constrain ref-walk;
+   `builder: true` tag; evaluate doing the same for the relate ref-walk;
    dedupe the placeholder-Arrow helper. Shrinks and regularizes the residue
    so the generated/hand-written boundary is clean.
 2. **Descriptor table + Python generator** for operators, constraints,
@@ -317,11 +334,11 @@ pass-through"); 3–4 are where the checklist itself starts shrinking.
 ## Hand-written residue (permanent, by design)
 
 Callback/lambda bridge (`derive`, mark-fn, accessor sentinels), widget +
-RPC + save/display, DataFrame⇄Arrow (incl. the Int64 downcast), `DatumValue`
+RPC + save/display, DataFrame⇄Arrow, `DatumValue`
 arithmetic, `_RefProxy`, the builder chain itself (`.flow/.mark/.layer/…` —
 thin methods over generated factories), and the d3 `bin` port (until/unless
 binning becomes a declarative operator resolved JS-side, which would delete
-it).
+it; #1058 did, with `field(x).bin(p)`).
 
 ## What shipped
 
@@ -348,7 +365,7 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   renames, constraint/mark/operator type strings) are gone, replaced by
   descriptor lookups. Two real drift bugs were fixed as a byproduct: the
   hand-written `rect()` had phantom `rs=`/`ts=` kwargs that don't exist in
-  JS (the real names are `rSize`/`thetaSize`) and silently dropped on the
+  JS (the real names were then `rSize`/`thetaSize`) and silently dropped on the
   floor at render; `text()` had a phantom `fontWeight` and a phantom
   `label` kwarg and was missing its box-dims channels. IR for all 161
   Python stories was verified byte-identical across the change.
@@ -363,21 +380,105 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   Arrow path was fixed in passing (deduped into one
   `empty_placeholder_arrow_bytes()` helper using `schema.empty_table()`).
 
+- **Snake case Python names.** Every option a Python user types is in
+  snake case, as PEP 8 expects (`stroke_width`, `font_size`,
+  `padding_inner`), and the two camel case functions became `select_all`
+  and `create_name`. The wire format did not change: it stays in camel
+  case, so the Python IR is byte-identical to before. The mapping is one
+  function, `pyKwarg(fieldName)` in `descriptors.ts`: a field's Python
+  name is its name in snake case, with a trailing underscore when that is a
+  Python keyword (`from` becomes `from_`). The
+  generator emits each generated function's `(wireKey, pyName)` pairs, so
+  each function builds its IR dict under the camel case wire key, and a
+  camel case kwarg is a `TypeError`. The docs options tables call the same
+  `pyKwarg`, so a Python page shows the names a user types. Hand-written
+  wrappers (`.label()`, `line`, `ribbon`, the dual-form dispatchers) take
+  `**options` and pass them to a generated core (`_label_opts` from
+  `LABEL_OPTIONS`, `_line_opts`, ...), so they never rename by hand. To route the `spread` combinator and the `stack` operator and
+  combinator through generated cores (before, they passed their kwargs to
+  the wire unchecked), `OPERATORS.spread` and `OPERATORS.stack` now declare
+  the box position `x`/`y` (as `treemap` does), and their combinator
+  entries declare `key`.
+
+- **Snake case keys in nested option dicts.** The keys a user types inside
+  a nested option dict are in snake case too:
+  `axes={"x": {"label_angle": 45}}`. The conversion follows the declared
+  type, not the dict. `descriptors.ts` gained `OPTION_TYPES`, which
+  declares `AxesOptions` and `AxisOptions` in the `t.*` type language, and
+  `CHART_OPTIONS`, the chart-level options. The generator compiles each
+  field's type into a Python literal of its key structure and emits one
+  interpreter, `_to_wire`, that renames declared keys with `pyKwarg` and
+  raises `TypeError` on any other key, as an unknown kwarg does. `chart()`
+  now calls a generated `_chart_opts` core, so its keywords are checked as
+  well, and so does the chart-tier `layer([chart1, chart2], **options)`.
+  Keys that are data are never touched: a `record` type's keys (the
+  `schema` column names, `dims` axis names) and a field typed `any` (a
+  `palette` dict keyed by category, a `coord` config) pass through
+  unchanged. A union with several dict branches is allowed only when it is
+  tagged: each branch is an object with a `kind` literal or enum, the
+  `kind` values do not overlap, and `_to_wire` picks the branch by the
+  dict's `kind` (treemap's `tile` strategies); any other such union fails
+  generation. The JSON Schema and the validator read the same `OPTION_TYPES`
+  entries, which replaced their hand-written axes shapes; those had fallen
+  behind the JS type and lacked `side` and `labelAngle`. See
+  [§ Generating the Python factory layer](/internals/frontend/serialization#generating-the-python-factory-layer).
+
+- **Closed signatures on every leaf mark (#1007).** `circle`, `ellipse`,
+  `petal`, and `blank` used to end in an open `**kwargs` that sent any
+  unknown key to the wire unchanged. That let a camel case name through
+  (`circle(fillOpacity=0.6)`) and sent a snake case one unconverted, which
+  JS then ignored. The four now have closed signatures like every other
+  generated factory, so an unknown kwarg is a `TypeError`. The one key a
+  story used that the descriptors lacked, `fillOpacity`, is now a real
+  option: JS `Ellipse` paints it as `fill-opacity`, `circle` passes it
+  through, and both descriptors declare it (`fill_opacity` in Python). The
+  bar chart template stories pass `circle` as the custom mark, and the
+  template calls it with `h` or `w`, which `circle` did not take. `circle`
+  now takes `ellipse`'s box dimensions, and `w` or `h` sets its diameter
+  (#851); the stories pass a small mark function that draws a dot at the
+  value (`circle({ r: 5, cy: h })`). No escape hatch was needed.
+
+- **The last unchecked option surfaces (#1010).** `dims` values are
+  checked: `AxisInterval` and `AxisDimsValue` moved into `OPTION_TYPES`,
+  replacing their hand-written JSON Schema `$defs` and validator walker.
+  `_to_wire` passes a `field(...)` or `datum(...)` value through by its
+  class, since it is already in wire form, so a channel branch no longer
+  counts against the one-dict-branch rule and any other dict in a `dims`
+  entry is an interval whose keys are checked. On the JS side, a channel
+  value that is an untagged object is now an error, which is what lets the
+  validator's generic union walk read such an object only as an interval.
+  The validator walks `ChartIR.options` against `CHART_OPTIONS`, the JSON
+  Schema emits a `ChartOptions` `$def` for it, and the `chart` reference
+  pages build their options table from it with `::: gofish-ref ChartOptions`
+  instead of a hand-written copy. The JSON Schema now writes every
+  descriptor union as `anyOf`, matching the validator's "any branch"
+  reading (a `datum(...)` object fits both branches of `AxisDimsValue`).
+  The `axes` option of `.render(...)` was already converted in the widget
+  constructor; a test now covers it on charts, marks, and layers.
+
+- **One validator mode.** The validator's permissive mode is gone: an
+  unknown field is an error on the envelope, on operators, on leaf marks
+  (no longer a warning), and in a combinator mark's `options`. The Python
+  bridge fields the renderer reads (`__scope`, `__datum`, `__key`) are
+  declared in `MARK_BASE_FIELDS`. Every Python story validates.
+
 **Deliberately deferred**, not follow-up bugs:
 
-- **The constrain ref-walk** (`ConstrainableMark.constrain`'s Python-side
-  mirror of `collectConstraintRefs`) — evaluated and kept hand-written.
-  Dropping it needs a loud unknown/duplicate-ref guard added JS-side
-  first; without one, authoring errors that are cheap to catch in Python
-  today would surface as cryptic solver failures instead.
-- **Generifying the deserializer registry and the parity-harness
-  switch** off the descriptor table (option 5 in § Option A above) —
-  both remain hand-maintained; see the CLAUDE.md checklist's step 2 note.
+- **The relate ref-walk** (`RelatableMark.relate`'s Python-side
+  mirror of `collectConstraintRefs`) — kept hand-written at the time, pending
+  a loud unknown/duplicate-ref guard JS-side. That guard now exists
+  (`resolveScopedName`, #819), and the walk is gone: Python passes one ref
+  per callback parameter without a default and JS resolves and checks the names at layout.
+- **Generifying the deserializer registry** off the descriptor table
+  (option 5 in § Option A above). Since done (#691): the registry is one
+  wire-type-to-factory table looked up through the descriptor's kind, with
+  four hand-written operator builders, and the emitter filters each
+  construct's options through its descriptor. A test fails when the table
+  and the descriptors disagree. The parity harness no longer has its own
+  switch: it renders through the same deserializer as the widget
+  (`Serialize.renderIR`).
 - **Closing the `spread`/`stack`/`scatter` operator-vs-combinator `w`/`h`
   schema drift** — the low-level combinator forms accept explicit `w`/`h`
-  passthrough that the v3-operator IR doesn't expose; `descriptors.ts`
+  passthrough that the fluent operators' IR doesn't expose; `descriptors.ts`
   documents this as IR truth rather than resolving it (see the `NOTE`
   comments on `OPERATORS.spread`/`OPERATORS.stack`).
-- **Flipping leaf-mark validation from warn to strict** — waiting on the
-  enumerated channel lists being checked against the full story corpus,
-  per the gradual-rollout stance in § The mark-channel decision above.

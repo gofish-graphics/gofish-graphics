@@ -7,7 +7,7 @@ import "./gallery.css";
 
 // The example gallery is a horizontally-scrolling "museum hall": every registered
 // example hangs a PRECOMPUTED PNG thumbnail (built at docs-build time by
-// `pnpm --filter @gofish/tests capture-gallery` → public/gallery/<id>.png +
+// `pnpm --filter docs docs:images` → public/gallery/<id>.png +
 // public/gallery/manifest.json), framed proportional to its captured size, packed
 // greedily onto a long wall, lit by spotlights, and walked by silhouette visitors
 // that step aside from the pointer. Ported from prototypes/gallery/index.html — see
@@ -22,7 +22,7 @@ import "./gallery.css";
 // The thumbnails + manifest are build artifacts (gitignored, NOT committed): the
 // manifest is fetched at runtime rather than statically imported, so `docs:dev`
 // works for everyone even before anyone has run the capture (the wall just renders
-// empty with a hint until `pnpm --filter @gofish/tests capture-gallery` is run; the
+// empty with a hint until `pnpm --filter docs docs:images` is run; the
 // docs BUILD always generates them first). Dimensions come from the manifest, so the
 // wall packs without measuring.
 type ThumbDims = Record<string, { w: number; h: number }>;
@@ -1719,7 +1719,7 @@ onMounted(() => {
       else throw new Error(`manifest ${res.status}`);
     } catch (err) {
       console.warn(
-        "gallery: thumbnails not generated — run `pnpm --filter @gofish/tests capture-gallery` (the docs build does this automatically).",
+        "gallery: thumbnails not generated — run `pnpm --filter docs docs:images` (the docs build does this automatically).",
         err
       );
     }

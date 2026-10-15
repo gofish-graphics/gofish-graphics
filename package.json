@@ -4,6 +4,7 @@
   "description": "GoFish Graphics monorepo",
   "type": "module",
   "private": true,
+  "packageManager": "pnpm@12.6.0+sha512.3ef68f951cb111ac204b4a5a16f0b2ddf0da56a96e0413e81d855d9f0b55ef926714709028e1cd00c405c2c5fb7b9e8ec4dc46777c805d0373c2f2ff00fd20ec",
   "license": "MIT",
   "scripts": {
     "dev": "pnpm --filter gofish-graphics dev",
@@ -48,13 +49,5 @@
     "lint-staged": "^16.3.2",
     "prettier": "^3.6.2",
     "typescript-eslint": "^8.56.1"
-  },
-  "dependencies": {
-    "seedrandom": "^3.0.5"
-  },
-  "pnpm": {
-    "overrides": {
-      "vue": "3.5.24"
-    }
   }
 }

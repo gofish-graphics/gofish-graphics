@@ -12,7 +12,7 @@ import {
 } from "../../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Bar/With Labels",
+  title: "Forward Syntax/Bar/With Labels",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
@@ -39,7 +39,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: "count" }))
       // `.layer()`'s empty scope yields one ref per lake; each ref's datum is
@@ -51,10 +51,11 @@ export const Default: StoryObj<Args> = {
         chart()
           .flow(group({ by: "lake" }))
           .mark(((d: any[]) => {
+            // A spread on y reads top-down: the label above its bar.
             return spread({ dir: "y", alignment: "middle", spacing: 10 },
               [
-                d[0],
                 text({ text: String(sumBy(d[0].datum, "count")) }),
+                d[0],
               ]
             );
           }) as any)
@@ -70,14 +71,14 @@ export const Default: StoryObj<Args> = {
 
 // Demonstrates `pluck` — the un-collapsed sibling of the `by: "field"`
 // homogeneity collapse. Within a lake the `species` field is multi-valued, so
-// `datum.species` would NOT resolve (the "ill-posed" undefined). `pluck` is how
+// `by: "species"` would NOT resolve (the "ill-posed" undefined). `pluck` is how
 // you ask for *every* distinct value: here, the count of species in each lake.
 export const SpeciesCountPerLake: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: "count" }))
       .layer(
@@ -88,8 +89,8 @@ export const SpeciesCountPerLake: StoryObj<Args> = {
             const species = pluck(d[0], "species") as string[];
             return spread({ dir: "y", alignment: "middle", spacing: 10 },
               [
-                d[0],
                 text({ text: `${species.length} spp` }),
+                d[0],
               ]
             );
           }) as any)

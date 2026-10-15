@@ -1,11 +1,21 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seattleWeather } from "../../src/data/seatle-weather";
-import { chart, spread, scatter, field, rect, text, layer, Constraint } from "../../src/lib";
+import {
+  chart,
+  spread,
+  scatter,
+  field,
+  rect,
+  text,
+  layer,
+  Constraint,
+  Schema,
+} from "../../src/lib";
 import { ribbon } from "../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Ridgeline Chart",
+  title: "Forward Syntax/Ridgeline Chart",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
@@ -99,7 +109,10 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(ridgelineData, { axes: { x: true, y: false } })
+    chart(ridgelineData, {
+      axes: { x: true, y: false },
+      schema: { temp_max: Schema.quantity("Max temperature").unit("°C") },
+    })
       .flow(
         spread({
           by: field("month").sort(monthNames),
@@ -107,12 +120,10 @@ export const Default: StoryObj<Args> = {
           anchor: "baseline",
           spacing: rowPitch,
           h: args.h,
-          axes: { x: true, y: false },
         }),
         scatter({
           x: "temp_max",
           w: args.w,
-          axes: { x: true, y: false },
         })
       )
       .mark(
@@ -134,8 +145,8 @@ export const Default: StoryObj<Args> = {
       //  - RULES: the same fixed-pitch baseline spread as the ridges, marking
       //    a bare rect per month. The rect sits at its row's baseline anchor,
       //    so it registers exactly on the ribbon's zero line. `.zOrder(-1)`
-      //    paints the rules BEHIND the ribbons — visible only outside the
-      //    silhouettes, the classic look.
+      //    on the tier paints the rules BEHIND the ribbons — visible only
+      //    outside the silhouettes, the classic look.
       //  - LABELS: a datumless annotation overlay (a bare mark tier — no
       //    flow), one text per month at literal frame coordinates. This is
       //    deliberate: a spread-laid row normalizes away any extent above or
@@ -145,7 +156,8 @@ export const Default: StoryObj<Args> = {
       //    the ridge peaks reach above the first baseline. Each label's END
       //    is constraint-aligned to a same-row invisible anchor rect fixed at
       //    `labelMarginX` (6px left of the plot edge) — see `labelMarginX`'s
-      //    comment; y = k·pitch − 9 puts the glyph baseline on the rule.
+      //    comment — and its bottom edge to the anchor, which sits on the
+      //    rule at y = k·pitch, so the label stands on its rule.
       .layer(
         chart(monthNames.map((month) => ({ month })))
           .flow(
@@ -157,7 +169,8 @@ export const Default: StoryObj<Args> = {
               h: args.h,
             })
           )
-          .mark(rect({ h: 1, w: args.w, fill: "#999" }).zOrder(-1))
+          .mark(rect({ h: 1, w: args.w, fill: "#999" }))
+          .zOrder(-1)
       )
       .layer(
         layer(
@@ -169,12 +182,14 @@ export const Default: StoryObj<Args> = {
               text: month,
               fontSize: 11,
               fill: "#666",
-              y: rowPitch * k - 9,
             }).name(`label${k}`),
           ])
-        ).constrain((g) =>
+        ).relate((g) =>
           monthNames.map((_, k) =>
-            Constraint.align({ x: "end" }, [g[`label${k}`], g[`anchor${k}`]])
+            Constraint.align({ x: "end", y: "end" }, [
+              g[`label${k}`],
+              g[`anchor${k}`],
+            ])
           )
         )
       )

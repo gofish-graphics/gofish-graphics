@@ -16,8 +16,10 @@ This essay will document the workflow and its CI wiring.
 - How parity is captured and compared (JS DOM snapshots vs. Python-built charts).
 - The story/example format parity tests expect.
 - Common failure modes and how to triage them.
-- CI wiring: the `python-parity` job depends on the `visual-test` job, so a JS visual
-  regression skips parity entirely — worth knowing when a parity run looks "green".
+- CI wiring: the `js-capture` job captures every JS story once and uploads it as an
+  artifact. The `python-parity` job compares the Python capture against that JS capture,
+  not against the snapshot baselines, so it runs in parallel with `visual-test` and a
+  pending JS visual review does not hold it up.
 
 ## Source
 

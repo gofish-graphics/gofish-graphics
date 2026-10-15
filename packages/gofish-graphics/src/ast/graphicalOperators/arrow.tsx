@@ -6,6 +6,7 @@ import { lowerStyle, withToPixel } from "../displayList/lowerHelpers";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { axisScale } from "../domain";
 import { createNodeOperator } from "../withGoFish";
+import { orderChildrenForPaint } from "../paintOrder";
 import { type ArrowOptions, getBoxToBoxArrow } from "perfect-arrows";
 import { bbox, union } from "../../util/bbox";
 
@@ -51,12 +52,11 @@ export const arrow = createNodeOperator(
     return new GoFishNode(
       {
         type: "arrow",
-        shared: [false, false],
         resolveUnderlyingSpace: (
           _childSpaces: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => [UNDEFINED, UNDEFINED],
-        layout: (shared, size, scales, layoutChildren) => {
+        layout: (size, scales, layoutChildren, node) => {
           if (layoutChildren.length < 2) {
             return {
               intrinsicDims: [
@@ -101,6 +101,8 @@ export const arrow = createNodeOperator(
             bbox(toDims[0].min!, toDims[0].max!, toDims[1].min!, toDims[1].max!)
           );
 
+          // The arrow is computed and kept in the arrow's axis order; `lower`
+          // places it through its `local` map.
           return {
             intrinsicDims: [
               {
@@ -126,12 +128,11 @@ export const arrow = createNodeOperator(
             },
           };
         },
-        // IR lowering — mirror of render. The arrow's parts live under the
-        // node's translate (no local flip), so each point is offset by that
-        // translate and pushed through `toPixel`. The arrowhead's
+        // IR lowering. The arrow's parts live under the node's translate, so
+        // each point is offset by that translate and pushed through `toPixel`. The arrowhead's
         // `translate(ex,ey) rotate(θ)` is baked into the emitted points.
         lower: (
-          { transform, renderData, coordinateTransform },
+          { transform, renderData, coordinateTransform, local },
           _children,
           node
         ): DisplayList.DisplayItem[] => {
@@ -141,19 +142,17 @@ export const arrow = createNodeOperator(
           const [tx, ty] = displayTranslate(transform);
           const session = node.getRenderSession();
           const outer = session.toPixel!;
-          // LIMITATION (#657, a #629 follow-up): the arrow body + head map
-          // through this single `toPixel`, so an arrow spanning two DIFFERENT
-          // orientation scopes (a y-up bar to a y-down heatmap cell) mirrors one
-          // endpoint incorrectly. Per-endpoint scopes need a mid-curve
-          // reconciliation; deferred. Single-scope arrows are correct.
+          // Children are placed in pixels under the arrow's translate; the
+          // arrow's own points are in its axis order, placed by `local`.
           const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
-          const px = (x: number, y: number) => composed([x, y]).join(",");
+          const own: ToPixel = (p) => outer(local(p));
+          const px = (x: number, y: number) => own([x, y]).join(",");
 
           const stroke = props.stroke;
           const items: DisplayList.DisplayItem[] = [];
 
           if (props.start) {
-            const [cx, cy] = composed([data.sx, data.sy]);
+            const [cx, cy] = own([data.sx, data.sy]);
             items.push({
               kind: "ellipse",
               cx,
@@ -195,10 +194,12 @@ export const arrow = createNodeOperator(
             style: lowerStyle({ fill: stroke }),
           });
 
-          // Children lower under the same translate.
+          // Children lower under the same translate, in the shared paint
+          // order (#982). Which child is the source and which the target is
+          // read from `node.children` by index; paint order does not change it.
           items.push(
             ...withToPixel(node, composed, () =>
-              node.children.flatMap((c) =>
+              orderChildrenForPaint(node).flatMap((c) =>
                 c.INTERNAL_lower(coordinateTransform)
               )
             )

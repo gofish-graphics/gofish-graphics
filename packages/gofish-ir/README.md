@@ -4,7 +4,7 @@ Serialized intermediate representation (IR) for GoFish chart specifications.
 
 This package provides the canonical TypeScript types, runtime validator, and
 (coming soon) JSON Schema for the JSON-serializable form of a GoFish chart —
-the artifact produced by the v3 fluent API at construction time, consumed by
+the artifact produced by the fluent chart API at construction time, consumed by
 downstream tools (the renderer, the Python bridge, and the Olli accessibility
 adapter).
 

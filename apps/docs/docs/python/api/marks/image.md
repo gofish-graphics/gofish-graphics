@@ -1,3 +1,7 @@
+---
+order: 90
+---
+
 # image
 
 Draws a raster or SVG image for each data item. Use it for logos, icons, photo
@@ -19,13 +23,8 @@ image(href=None, w=None, h=None, x=None, y=None, debug=None) -> Mark
 
 ## Parameters
 
-| Parameter | Type           | Description                                                  |
-| --------- | -------------- | ------------------------------------------------------------ |
-| `href`    | `str`          | Image source — a URL or `data:` URI (required)               |
-| `w`       | `int` \| `str` | Width — a constant in pixels or a field name to encode data  |
-| `h`       | `int` \| `str` | Height — a constant in pixels or a field name to encode data |
-| `x`, `y`  | `int` \| `str` | Explicit position accessors                                  |
-| `debug`   | `bool`         | Log debug info to the console                                |
+::: gofish-ref image
+:::
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 

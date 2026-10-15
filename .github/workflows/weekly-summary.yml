@@ -5,7 +5,7 @@ on:
   workflow_dispatch: # Allow manual triggers
     inputs:
       dry_run:
-        description: "Dry run mode (skip Slack posting, output to logs)"
+        description: "Dry run mode (print the Discord messages to the logs instead of posting them, and skip the archive PR)"
         required: false
         default: "false"
         type: choice
@@ -16,6 +16,12 @@ on:
 jobs:
   summarize:
     runs-on: ubuntu-latest
+    permissions:
+      # The archive PR is pushed and opened with the summary bot app token,
+      # so GITHUB_TOKEN only needs to read.
+      contents: read
+      pull-requests: read # gh pr list
+      id-token: write # claude-code-action authenticates to GitHub via OIDC
     steps:
       - uses: actions/checkout@v5
         with:
@@ -50,35 +56,53 @@ jobs:
           echo "upper_label=$(date -u -d "$UPPER_TS" +%Y-%m-%d)" >> $GITHUB_OUTPUT
 
       - name: Get merged PRs for the window
-        id: prs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOWER: ${{ steps.dates.outputs.lower }}
+          UPPER: ${{ steps.dates.outputs.upper }}
         run: |
           # Half-open interval [lower, upper): a PR merged exactly on a boundary
-          # belongs to one window only, never both.
-          PRS=$(gh pr list \
+          # belongs to one window only, never both. Saved once as prs.json,
+          # with the screenshots each PR body embeds added as an images list
+          # (see prs.jq), so the summary can show new charts.
+          set -o pipefail
+          source .github/scripts/image-line.sh
+          gh pr list \
             --state merged \
-            --search "merged:>=${{ steps.dates.outputs.lower }} merged:<${{ steps.dates.outputs.upper }}" \
+            --limit 200 \
+            --search "merged:>=${LOWER} merged:<${UPPER}" \
             --json number,title,body,author,mergedAt,url \
-            --jq '.[] | "### PR #\(.number): \(.title)\n- **Author:** \(.author.login)\n- **Merged:** \(.mergedAt[:10])\n- **URL:** \(.url)\n- **Description:** \(.body // "No description" | split("\n")[0:3] | join(" ") | .[0:300])\n"')
-          if [ -z "$PRS" ]; then
-            PRS="No PRs merged this week."
-          fi
-          # Store in file to avoid escaping issues
-          echo "$PRS" > prs.txt
+            | jq -L .github/scripts 'include "prs"; with_images' > prs.json
 
-      - name: Summarize with Claude
-        id: summary
+      - name: Build summary prompt
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # The maintainer's PRs (and bots') carry no Author line, so the
+          # summary only credits outside contributors.
+          MAINTAINER: joshpoll
         run: |
-          bash .github/scripts/summarize-with-claude.sh
+          bash .github/scripts/build-summary-prompt.sh
+
+      # Runs on the maintainer's Claude subscription via the OAuth token, like
+      # the other Claude workflows. Claude reads prompt.md and writes the
+      # summary to summary.md; it gets no tools beyond reading and writing.
+      - name: Summarize with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: "Read the file prompt.md in the repository root and follow its instructions exactly."
+          claude_args: |
+            --allowedTools "Read,Write"
+            --max-turns 5
+
+      - name: Check summary
+        run: |
+          bash .github/scripts/check-summary.sh
 
       - name: Display summary (always shown)
         run: |
           echo "## 📋 Generated Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          cat summary.txt >> $GITHUB_STEP_SUMMARY
+          cat summary.md >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
 
@@ -86,67 +110,106 @@ jobs:
           echo "=========================================="
           echo "GENERATED SUMMARY:"
           echo "=========================================="
-          cat summary.txt
+          cat summary.md
           echo "=========================================="
 
-      - name: Post to Slack
+      - name: Post to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TITLE: "# 🐟 GoFish Weekly Update (${{ steps.dates.outputs.lower_label }} → ${{ steps.dates.outputs.upper_label }})"
+          # A scheduled run has no inputs, so it posts for real.
+          DRY_RUN: ${{ inputs.dry_run == 'true' && '1' || '' }}
+        # Chunks the summary under Discord's message limit and uploads its
+        # screenshots as files, each right after the bullet it illustrates.
+        # In a dry run (here, or locally with DRY_RUN=1) it still splits the
+        # summary and downloads the images, but prints the messages instead of
+        # posting them.
+        run: |
+          bash .github/scripts/post-to-discord.sh
+
+      # Archive this week's summary to main at summaries/<upper_label>.md so it
+      # can feed release notes and the website later. main requires status
+      # checks, so the commit goes through a PR that auto-merges once they pass.
+      # The PR is opened by the summary bot, a GitHub App: PRs opened with
+      # GITHUB_TOKEN do not trigger CI, so the required checks would never run.
+      # The Bot PR Guard workflow keeps the bot's PRs limited to summaries/.
+      - name: Check archive configuration
+        id: archive-config
         if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.dry_run != 'true') }}
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.GOFISH_SLACK_CHANNEL_WEBHOOK_URL }}
+          APP_ID: ${{ secrets.SUMMARY_BOT_APP_ID }}
         run: |
-          if [ -z "$SLACK_WEBHOOK_URL" ]; then
-            echo "⚠️  SLACK_WEBHOOK_URL secret not set. Skipping Slack post."
+          if [ -z "$APP_ID" ]; then
+            echo "⚠️  SUMMARY_BOT_APP_ID secret not set. Skipping the archive PR."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Mint summary bot token
+        id: app-token
+        if: ${{ steps.archive-config.outputs.configured == 'true' }}
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.SUMMARY_BOT_APP_ID }}
+          private-key: ${{ secrets.SUMMARY_BOT_PRIVATE_KEY }}
+
+      - name: Archive summary
+        if: ${{ steps.archive-config.outputs.configured == 'true' }}
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+          BOT_NAME: ${{ steps.app-token.outputs.app-slug }}[bot]
+          BOT_EMAIL: ${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com
+          LOWER_LABEL: ${{ steps.dates.outputs.lower_label }}
+          UPPER_LABEL: ${{ steps.dates.outputs.upper_label }}
+        run: |
+          set -euo pipefail
+          FILE="summaries/${UPPER_LABEL}.md"
+          BRANCH="weekly-summary/${UPPER_LABEL}"
+          TITLE="Add weekly summary for ${LOWER_LABEL} → ${UPPER_LABEL}"
+
+          # Assemble the entry outside the checkout, before switching branches.
+          TMP_DIR="${RUNNER_TEMP:-$(mktemp -d)}"
+          ENTRY="$TMP_DIR/weekly-summary-entry.md"
+          {
+            printf '# 🐟 GoFish Weekly Update (%s → %s)\n\n' "$LOWER_LABEL" "$UPPER_LABEL"
+            cat summary.md
+          } > "$ENTRY"
+
+          git fetch origin main
+          git checkout -B "$BRANCH" origin/main
+
+          # A re-run after the PR already merged: main has this exact file.
+          if [ -f "$FILE" ] && cmp -s "$ENTRY" "$FILE"; then
+            echo "✅ $FILE is already on main with identical content; nothing to do."
             exit 0
           fi
 
-          # A Slack "section" block's text field is capped at 3000 chars, so a long
-          # summary (a big PR week) must be split across multiple section blocks or
-          # Slack rejects the whole payload with "invalid_blocks". Chunk at line
-          # boundaries, staying under 2900 to leave headroom, and hard-wrap any
-          # single line that is itself too long.
-          jq -n \
-            --arg header "🐟 GoFish Weekly Update (${{ steps.dates.outputs.lower_label }} → ${{ steps.dates.outputs.upper_label }})" \
-            --rawfile summary summary.txt \
-            --argjson max 2900 \
-            '
-              def chunk($limit):
-                reduce (./"\n")[] as $line ({chunks: [], cur: ""};
-                  (if ($line | length) == 0 then [""]
-                   else ($line | [while(length > 0; .[$limit:]) | .[:$limit]]) end) as $parts
-                  | reduce $parts[] as $p (.;
-                      if (.cur | length) == 0 then .cur = $p
-                      elif ((.cur | length) + 1 + ($p | length)) <= $limit
-                        then .cur = .cur + "\n" + $p
-                      else .chunks += [.cur] | .cur = $p
-                      end))
-                | .chunks + (if (.cur | length) > 0 then [.cur] else [] end);
-              {
-                blocks: (
-                  [ {type: "header", text: {type: "plain_text", text: $header, emoji: true}},
-                    {type: "divider"} ]
-                  + ($summary | chunk($max) | map({type: "section", text: {type: "mrkdwn", text: .}}))
-                )
-              }' > payload.json
+          mkdir -p summaries
+          cp "$ENTRY" "$FILE"
+          git config user.name "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
+          git add "$FILE"
+          git commit -q -m "$TITLE"
+          # --force so a re-run after a failed merge refreshes the branch.
+          git push --force \
+            "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:refs/heads/${BRANCH}"
 
-          # Slack incoming webhooks return HTTP 200 with body "ok" on success, and an
-          # HTTP 4xx with an error body (e.g. "invalid_blocks") on rejection. curl does
-          # not fail on an error *body*, so check the status/body explicitly — otherwise
-          # a rejected post leaves the job green and the failure goes unnoticed.
-          HTTP_CODE=$(curl -sS -X POST "$SLACK_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            --data @payload.json \
-            -w "%{http_code}" -o slack_response.txt)
-          RESPONSE=$(cat slack_response.txt)
-          echo "Slack responded HTTP $HTTP_CODE: $RESPONSE"
-
-          if [ "$HTTP_CODE" != "200" ] || [ "$RESPONSE" != "ok" ]; then
-            echo "::error::Slack rejected the weekly summary (HTTP $HTTP_CODE): $RESPONSE"
-            exit 1
+          export GH_TOKEN="$TOKEN"
+          PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$PR" ]; then
+            echo "Reusing open PR #$PR for $BRANCH."
+          else
+            gh pr create --base main --head "$BRANCH" --title "$TITLE" \
+              --body "Auto-generated by the weekly-summary workflow. It adds this week's summary at \`$FILE\` and auto-merges once the required checks pass."
+            PR="$BRANCH"
           fi
-          echo "✅ Weekly summary posted to Slack."
+          gh pr merge "$PR" --auto --squash --delete-branch
+          echo "✅ The archive PR for $FILE is set to auto-merge once checks pass."
 
       - name: Dry run notice
         if: ${{ inputs.dry_run == 'true' }}
         run: |
-          echo "✅ DRY RUN MODE: Summary generated but NOT posted to Slack"
-          echo "To post to Slack, run the workflow with dry_run set to 'false'"
+          echo "✅ DRY RUN MODE: Summary generated and its Discord messages printed above, but NOT posted to Discord and NOT archived (no archive PR opened)"
+          echo "To post to Discord and open the archive PR, run the workflow with dry_run set to 'false'"

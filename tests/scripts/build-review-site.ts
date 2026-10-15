@@ -22,13 +22,18 @@ import {
 } from "fs";
 import { join, dirname } from "path";
 import {
-  collectDiffs,
-  collectRemovedStories,
+  collectReviewDiffs,
   formatDomDiff,
   escapeHtml,
   type DiffEntry,
 } from "./diff-utils.js";
 import { computePixelDiff } from "./pixel-diff.js";
+import {
+  loadSpecsByPath,
+  createCodeHighlighter,
+  specHtml,
+  SPEC_CSS,
+} from "./story-specs.js";
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -69,12 +74,14 @@ console.log("Building review site...");
 // are first-class DiffEntry("removed") too — they fail the job like any
 // other unreviewed change (see compare.ts), and accepting one deletes the
 // baseline instead of writing a new one.
-const removedEntries = collectRemovedStories();
-const diffs: DiffEntry[] = [...collectDiffs(), ...removedEntries];
+// This is the same list the diff report writes to diff-list.json, which
+// accept-baselines.ts --all accepts.
+const diffs: DiffEntry[] = collectReviewDiffs();
+const removedCount = diffs.filter((d) => d.kind === "removed").length;
 console.log(`  ${diffs.length} diff(s) found`);
-if (removedEntries.length > 0) {
+if (removedCount > 0) {
   console.log(
-    `  ${removedEntries.length} removed stor${removedEntries.length === 1 ? "y" : "ies"} found`
+    `  ${removedCount} removed stor${removedCount === 1 ? "y" : "ies"} found`
   );
 }
 
@@ -100,6 +107,23 @@ for (const entry of diffs) {
 }
 
 // ---------------------------------------------------------------------------
+// data/specs/{path} — each story's spec, highlighted at build time
+// ---------------------------------------------------------------------------
+
+// A removed story has no spec: its source is gone.
+const specsByPath = await loadSpecsByPath();
+const highlight = await createCodeHighlighter();
+const withSpec = new Set<string>();
+for (const entry of diffs) {
+  const spec =
+    entry.kind === "removed" ? undefined : specsByPath.get(entry.path);
+  if (!spec) continue;
+  write(join(OUT_DIR, "data/specs", entry.path), specHtml(spec, highlight));
+  withSpec.add(entry.path);
+}
+console.log(`  ${withSpec.size} spec(s) written`);
+
+// ---------------------------------------------------------------------------
 // data/diffs.json
 // ---------------------------------------------------------------------------
 
@@ -111,6 +135,7 @@ write(
       kind: d.kind,
       status: d.status,
       diffPercent: d.diffPercent,
+      hasSpec: withSpec.has(d.path),
     })),
     null,
     2
@@ -121,16 +146,18 @@ write(
 // data/meta.json
 // ---------------------------------------------------------------------------
 
-const codeBranch = process.env.REVIEW_BRANCH ?? "unknown";
 const meta = {
   repo: process.env.REVIEW_REPO ?? "unknown/repo",
-  branch: codeBranch,
+  /** Code branch. Accepted baselines go to the snapshot branch
+   *  `snapshots/<branch>`. */
+  branch: process.env.REVIEW_BRANCH ?? "unknown",
   sha: process.env.REVIEW_SHA ?? "unknown",
-  /** The orphan branch that receives accepted snapshots. */
-  snapshotBranch: `snapshots/${codeBranch}`,
-  /** Workflow run id, used by the commit endpoint to trigger rerun-failed-jobs
-   *  after Commit Accepted, so visual-test re-runs against the new baselines
-   *  and python-parity (blocked on visual-test) is allowed to run. */
+  /** Workflow run id. Commit Accepted sends it, with the accepted paths, to
+   *  the commit endpoint, which dispatches the accept-visual-baselines
+   *  workflow. That workflow copies the accepted files from this run's
+   *  `js-dom-capture-<i>` artifacts, commits them, and then re-runs the run's
+   *  failed jobs, which re-runs only the cheap `visual-test` compare job
+   *  against the new baselines. */
   runId: process.env.REVIEW_RUN_ID ?? "",
 };
 
@@ -141,7 +168,7 @@ console.log(
 );
 
 // ---------------------------------------------------------------------------
-// data/dom-diffs/{path}.html  and  screenshots/  and  _after-files/
+// data/dom-diffs/{path}.html  and  screenshots/
 // ---------------------------------------------------------------------------
 
 for (const entry of diffs) {
@@ -177,20 +204,6 @@ for (const entry of diffs) {
     copyFile(
       entry.afterScreenshotPath,
       join(OUT_DIR, "screenshots/after", pngPath)
-    );
-  }
-
-  // _after-files/dom/{path}.html  — used by Pages Functions for accept
-  if (entry.afterDom !== null) {
-    write(join(OUT_DIR, "_after-files/dom", entry.path), entry.afterDom);
-  }
-
-  // _after-files/screenshots/{path}.png
-  if (entry.afterScreenshotPath) {
-    const pngPath = entry.path.replace(/\.html$/, ".png");
-    copyFile(
-      entry.afterScreenshotPath,
-      join(OUT_DIR, "_after-files/screenshots", pngPath)
     );
   }
 }
@@ -267,6 +280,19 @@ const html = `<!DOCTYPE html>
     #pixel-diff-area img { max-width: 100%; border: 1px solid #e0e0e0; border-radius: 4px; display: block; }
     #pixel-diff-area h4 { font-size: 12px; color: #666; margin-bottom: 6px; }
 
+    /* Images and spec: side by side on wide screens, stacked otherwise */
+    #compare-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    @media (min-width: 1400px) { #compare-row { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } }
+
+    /* Spec */
+    #spec-section { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; margin-bottom: 16px; align-self: start; }
+    #spec-header { padding: 10px 16px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #e0e0e0; }
+    #spec-expand { margin-left: auto; padding: 2px 10px; border-radius: 4px; border: 1px solid #ccc; background: #f5f5f5; font-size: 12px; cursor: pointer; }
+    #spec-body { max-height: 520px; overflow: auto; }
+    #spec-body.expanded { max-height: none; }
+    .spec-missing { padding: 16px; color: #888; font-size: 13px; }
+    ${SPEC_CSS}
+
     /* DOM diff */
     #dom-diff-section { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
     #dom-diff-toggle { padding: 10px 16px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; border-bottom: 1px solid transparent; }
@@ -333,6 +359,8 @@ const html = `<!DOCTYPE html>
       <div style="font-size:13px;">Use ↑/↓ to navigate, A to accept, R to reject</div>
     </div>
 
+    <div id="compare-row" style="display:none;">
+    <div id="visual-col">
     <!-- Strobe view -->
     <div id="strobe-view" style="display:none;">
       <div id="screenshot-area">
@@ -381,6 +409,14 @@ const html = `<!DOCTYPE html>
         No pixel diff available (images may be missing).
       </div>
     </div>
+    </div>
+
+    <!-- Spec: the story's chart code, highlighted at build time -->
+    <div id="spec-section">
+      <div id="spec-header">Spec <button id="spec-expand">Expand</button></div>
+      <div id="spec-body"></div>
+    </div>
+    </div>
 
     <!-- DOM diff -->
     <div id="dom-diff-section">
@@ -411,6 +447,7 @@ const html = `<!DOCTYPE html>
   let hasUncommittedAccepts = false;
 
   const domDiffCache = {};
+  const specCache = {};
 
   function screenshotUrl(which, path) {
     const pngPath = path.replace(/\\.html$/, '.png');
@@ -487,13 +524,6 @@ const html = `<!DOCTYPE html>
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  function arrayBufferToBase64(buf) {
-    const bytes = new Uint8Array(buf);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    return btoa(binary);
-  }
-
   function stopStrobe() {
     if (strobeInterval) { clearInterval(strobeInterval); strobeInterval = null; }
   }
@@ -555,8 +585,36 @@ const html = `<!DOCTYPE html>
       : '✓ Accept';
 
     document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('compare-row').style.display = '';
     renderCurrentView(entry);
-    await loadDomDiff(path);
+    await Promise.all([loadSpec(entry), loadDomDiff(path)]);
+  }
+
+  async function loadSpec(entry) {
+    const body = document.getElementById('spec-body');
+    const expand = document.getElementById('spec-expand');
+    body.classList.remove('expanded');
+    expand.textContent = 'Expand';
+    if (!entry.hasSpec) {
+      expand.style.display = 'none';
+      body.innerHTML = '<div class="spec-missing">' +
+        (entry.kind === 'removed' ? 'Story removed: no spec.' : 'No spec found for this story.') +
+        '</div>';
+      return;
+    }
+    if (specCache[entry.path] === undefined) {
+      body.innerHTML = '<div class="spec-missing">Loading...</div>';
+      try {
+        const res = await fetch('/data/specs/' + entry.path);
+        specCache[entry.path] = res.ok ? await res.text() : '<div class="spec-missing">Spec unavailable.</div>';
+      } catch {
+        specCache[entry.path] = '<div class="spec-missing">Failed to load spec.</div>';
+      }
+    }
+    if (currentPath !== entry.path) return;
+    body.innerHTML = specCache[entry.path];
+    // Only long specs get the Expand toggle.
+    expand.style.display = body.scrollHeight > body.clientHeight ? '' : 'none';
   }
 
   function renderCurrentView(entry) {
@@ -689,7 +747,7 @@ const html = `<!DOCTYPE html>
     document.getElementById('btn-accept-all').disabled = busy;
     document.getElementById('btn-commit').disabled = busy || !hasUncommittedAccepts;
     if (busy) {
-      document.getElementById('action-status').innerHTML = '<span class="spinner"></span>Committing...';
+      document.getElementById('action-status').innerHTML = '<span class="spinner"></span>Sending...';
     }
   }
 
@@ -732,118 +790,50 @@ const html = `<!DOCTYPE html>
     const acceptedEntries = allDiffs.filter(d => d.status === 'accepted');
     if (acceptedEntries.length === 0) return;
 
-    // "removed" entries have no after-state to write — accepting one means
-    // deleting the baseline instead of updating it. Split so we only fetch
-    // after-files for real updates.
-    const updateEntries = acceptedEntries.filter(e => e.kind !== 'removed');
-    const removalEntries = acceptedEntries.filter(e => e.kind === 'removed');
-
-    // Cloudflare Workers cap each invocation at 50 outgoing subrequests
-    // (free plan). The Worker spends 5–7 on fixed Git data API calls and
-    // 1 blob-create per accepted screenshot, so a single /api/commit
-    // beyond ~42 entries trips the limit. Chunk the accepts (updates and
-    // removals together) and let the Worker make one commit per chunk on
-    // top of the previous chunk's HEAD — final result is a small commit
-    // chain instead of one.
-    const CHUNK_SIZE = 25;
+    // Only the decision goes to the server. The accept-visual-baselines
+    // GitHub workflow copies the files from this run's capture artifact and
+    // commits them, so nothing is downloaded or uploaded here. "removed"
+    // entries have no after-state: accepting one deletes the baseline.
+    const paths = acceptedEntries.filter(e => e.kind !== 'removed').map(e => e.path);
+    const removals = acceptedEntries.filter(e => e.kind === 'removed').map(e => e.path);
 
     setAcceptBusy(true);
     try {
-      // Phase 1: fetch file contents in the browser (avoids Worker subrequest limit)
-      document.getElementById('action-status').innerHTML =
-        '<span class="spinner"></span>Fetching ' + updateEntries.length + ' file(s)...';
-      const domContents = {};
-      const screenshotContents = {};
-      await Promise.all(updateEntries.map(async (entry) => {
-        const pngPath = entry.path.replace(/\\.html$/, '.png');
-        const [domRes, screenshotRes] = await Promise.all([
-          fetch('/_after-files/dom/' + entry.path),
-          fetch('/_after-files/screenshots/' + pngPath),
-        ]);
-        if (domRes.ok) domContents[entry.path] = await domRes.text();
-        if (screenshotRes.ok) screenshotContents[pngPath] = arrayBufferToBase64(await screenshotRes.arrayBuffer());
-      }));
-
-      // Phase 2: send to Worker for committing, chunked.
-      const combined = [
-        ...updateEntries.map(e => ({ path: e.path, action: 'update' })),
-        ...removalEntries.map(e => ({ path: e.path, action: 'remove' })),
-      ];
-      const chunks = [];
-      for (let i = 0; i < combined.length; i += CHUNK_SIZE) {
-        chunks.push(combined.slice(i, i + CHUNK_SIZE));
+      const res = await fetch('/api/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repo: meta.repo,
+          branch: meta.branch,
+          runId: meta.runId,
+          paths,
+          removals,
+        }),
+      });
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        const text = await res.text();
+        setActionStatus('Server error (' + res.status + '): expected JSON but got ' + ct.split(';')[0].trim() + '. Check that the review site was built and deployed with the latest functions.', true);
+        console.error('/api/commit non-JSON response:', text.slice(0, 500));
+        return;
       }
-
-      let totalAccepted = 0;
-      let totalRemoved = 0;
-      let lastCommitSha = '';
-      const allErrors = [];
-      const allWarnings = [];
-
-      for (let ci = 0; ci < chunks.length; ci++) {
-        const chunk = chunks[ci];
-        const isLastChunk = ci === chunks.length - 1;
-        const chunkPaths = chunk.filter(c => c.action === 'update').map(c => c.path);
-        const chunkRemovals = chunk.filter(c => c.action === 'remove').map(c => c.path);
-        const chunkDom = {};
-        const chunkScreens = {};
-        for (const path of chunkPaths) {
-          if (domContents[path] != null) chunkDom[path] = domContents[path];
-          const pngPath = path.replace(/\\.html$/, '.png');
-          if (screenshotContents[pngPath] != null) chunkScreens[pngPath] = screenshotContents[pngPath];
-        }
-
-        const label = chunks.length > 1 ? ' (' + (ci + 1) + '/' + chunks.length + ')' : '';
-        document.getElementById('action-status').innerHTML =
-          '<span class="spinner"></span>Committing' + label + '...';
-
-        const res = await fetch('/api/commit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            paths: chunkPaths,
-            removals: chunkRemovals,
-            domContents: chunkDom,
-            screenshotContents: chunkScreens,
-            repo: meta.repo,
-            branch: meta.snapshotBranch,
-            // Only run post-commit actions (CI rerun + status update) once,
-            // after the final chunk lands.
-            runId: isLastChunk ? meta.runId : undefined,
-            headSha: isLastChunk ? meta.sha : undefined,
-          }),
-        });
-        const ct = res.headers.get('content-type') || '';
-        if (!ct.includes('application/json')) {
-          const text = await res.text();
-          setActionStatus('Server error (' + res.status + ') on chunk ' + (ci + 1) + '/' + chunks.length + ': expected JSON but got ' + ct.split(';')[0].trim() + '. Check that the review site was built and deployed with the latest functions.', true);
-          console.error('/api/commit non-JSON response:', text.slice(0, 500));
-          return;
-        }
-        const data = await res.json();
-        if (res.status === 401) {
-          setActionStatus('Token expired — GITHUB_TOKEN is invalid or revoked.', true);
-          return;
-        }
-        if (!res.ok || !data.ok) {
-          setActionStatus('Error on chunk ' + (ci + 1) + '/' + chunks.length + ': ' + (data.error || 'Unknown error'), true);
-          return;
-        }
-        totalAccepted += data.accepted || 0;
-        totalRemoved += data.removed || 0;
-        lastCommitSha = data.commitSha || lastCommitSha;
-        if (data.errors && data.errors.length) allErrors.push(...data.errors);
-        if (data.postCommitWarnings && data.postCommitWarnings.length) allWarnings.push(...data.postCommitWarnings);
+      const data = await res.json();
+      if (res.status === 401) {
+        setActionStatus('Token expired: GITHUB_TOKEN is invalid or revoked.', true);
+        return;
+      }
+      if (!res.ok || !data.ok) {
+        setActionStatus('Error: ' + (data.error || 'Unknown error'), true);
+        return;
       }
 
       hasUncommittedAccepts = false;
-      const warnings = allWarnings.join('; ');
-      const commitsNote = chunks.length > 1 ? ' over ' + chunks.length + ' commits' : '';
-      const removedNote = totalRemoved > 0 ? ', removed ' + totalRemoved : '';
-      const msg = 'Committed ' + totalAccepted + ' diff(s)' + removedNote + commitsNote + ': ' + (lastCommitSha || '').slice(0, 8) +
-        (allErrors.length ? ' (' + allErrors.length + ' errors)' : '') +
-        (warnings ? ' — warnings: ' + warnings : '');
-      setActionStatus(msg, allErrors.length > 0 || Boolean(warnings));
+      const removedNote = removals.length > 0 ? ', removing ' + removals.length : '';
+      const el = document.getElementById('action-status');
+      el.className = '';
+      el.innerHTML = 'Accepting ' + paths.length + ' diff(s)' + removedNote + '. ' +
+        'A GitHub Action commits the baselines in about a minute, then re-runs the failed visual tests once this run has finished. ' +
+        '<a href="' + escHtml(data.workflowUrl) + '" target="_blank" rel="noopener">Follow it on GitHub</a>';
       renderSidebar();
       updateCommitBtn();
     } catch (e) {
@@ -879,6 +869,13 @@ const html = `<!DOCTYPE html>
   document.getElementById('btn-reject').addEventListener('click', rejectCurrent);
   document.getElementById('btn-accept-all').addEventListener('click', acceptAll);
   document.getElementById('btn-commit').addEventListener('click', commitAccepted);
+
+  // Spec expand toggle
+  document.getElementById('spec-expand').addEventListener('click', () => {
+    const body = document.getElementById('spec-body');
+    const expanded = body.classList.toggle('expanded');
+    document.getElementById('spec-expand').textContent = expanded ? 'Collapse' : 'Expand';
+  });
 
   // DOM diff toggle
   document.getElementById('dom-diff-toggle').addEventListener('click', () => {

@@ -10,7 +10,7 @@ import { chart, spread, rect } from "../../src/lib";
  * `number | "free" | "impossible"` model that matches `main`.
  */
 const meta: Meta = {
-  title: "Forward Syntax V3/Space Unification Probes",
+  title: "Forward Syntax/Space Unification Probes",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1000, step: 10 } },
@@ -41,10 +41,7 @@ export const SpacedSizeAxis: StoryObj<Args> = {
   args: { w: 520, h: 220 },
   render: (args: Args) => {
     const container = initializeContainer();
-    // `axes` is a chart-level option (`chart(data, { axes })`); passing it to
-    // `.render()` is silently dropped — its signature omits `axes`, and
-    // `resolveForRender` reads the chart-level option instead.
-    chart(tasks, { axes: true })
+    chart(tasks)
       .flow(spread({ by: "task", dir: "x", spacing: 30 }))
       .mark(rect({ w: "hours", h: 80, fill: "task" }))
       .render(container, { w: args.w, h: args.h });

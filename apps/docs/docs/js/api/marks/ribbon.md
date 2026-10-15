@@ -1,3 +1,7 @@
+---
+order: 50
+---
+
 # ribbon
 
 Fills a band between data points (edge-to-edge) — areas, streamgraphs, and sankey ribbons. Takes the array of refs returned by [`selectAll()`](/js/api/selection/ref).
@@ -26,32 +30,29 @@ gf.layer([
 ## Signature
 
 ```ts
-ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x", curve = "auto", along?, from?, to?, w?, h?, emX?, emY? })
+ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x", curve?, along?, from?, to?, w?, h?, emX?, emY? })
 ```
 
 ## Parameters
 
-| Option         | Type                                             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| -------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stroke`       | `string`                                         | Stroke color                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `strokeWidth`  | `number`                                         | Stroke width                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `opacity`      | `number`                                         | Opacity (0–1)                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `mixBlendMode` | `"normal" \| "multiply"`                         | Blend mode                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `dir`          | `"x" \| "y"`                                     | Direction axis                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `curve`        | `"straight" \| "bezier" \| CurveSpec`            | Screen-space band shape; default `"auto"` (see below)                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `along`        | `string`                                         | Names a flow tier by its `by` field (see [Default grouping](#default-grouping)): that tier becomes the band's path, and every other grouping tier splits into separate bands. Usually omitted — the path tier is inferred from the flow shape. Naming a field that matches no tier, or using `along` on a ribbon that doesn't fuse into a chart's own flow (a refs bag, or the pairwise `{from, to}` form), throws.                                                          |
-| `from`, `to`   | `string`                                         | Pairwise form: column names holding the two endpoint refs                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `w`, `h`       | `number \| string \| Value<number> \| FieldExpr` | **Ignored by `ribbon` itself.** Blank-fusion anchor keys: read only when `ribbon(opts)` is placed directly in `.mark()` position, where they become the invisible anchor tier's `blank({w, h, emX, emY})` opts — same channel-value shapes as a leaf mark's "size" channel (e.g. rect's `h`), including a `field(...)` pipeline like `field("count").sum()`. See [`.layer()`'s blank-fusion section](/js/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart). |
-| `emX`, `emY`   | `boolean`                                        | **Ignored by `ribbon` itself.** Blank-fusion anchor keys — see `w`/`h` above.                                                                                                                                                                                                                                                                                                                                                                                                |
+::: gofish-ref ribbon
+:::
 
-`curve` accepts the strings `"straight"` or `"bezier"`, or a `CurveSpec` factory:
-`straight()`, `bezier()`, `orthogonal()`, `arc({ direction: "up" | "down" })`, or
-`perfectArrows({ bow })`. The default `"auto"` inspects the connection axis: over a
-homogeneous **continuous** axis (a stacked area / streamgraph sampling a continuous
-variable) it smooths the band edges with a centripetal Catmull-Rom spline — matching
-its [`line`](/js/api/marks/line) sibling — and otherwise draws a **bezier** band
-(the band equivalent of a straight line: the honest connector between discrete
-regions, as in a sankey or a categorical ribbon).
+`curve` takes a member of the [`Curve`](/js/api/curve) family:
+`Curve.linear()`, `Curve.bezier()`, `Curve.step()`, `Curve.monotone()`,
+`Curve.smooth()` or `Curve.catmullRom()`. When `curve` is omitted, `ribbon`
+inspects the connection axis: over a homogeneous **continuous** axis (a stacked
+area / streamgraph sampling a continuous variable) it smooths the band edges
+with `Curve.monotone()` — matching its [`line`](/js/api/marks/line) sibling —
+and otherwise draws a **bezier** band, `Curve.bezier()` (the band equivalent of
+a straight line: the honest connector between discrete regions, as in a sankey
+or a categorical ribbon).
+
+A ribbon drawn with `Curve.monotone()` or `Curve.smooth()` takes the knots of
+its curve the same way a [`line`](/js/api/marks/line) does, and both edges of
+the band use the same knots. `Curve.step()` steps both edges, as Vega-Lite's
+stepped area does. The [`Curve`](/js/api/curve#curves-through-data) page
+compares the curves.
 
 Like [`line`](/js/api/marks/line), `ribbon` has a **bag form** (over a `GoFishRef[]`,
 shown below) and a **pairwise form** `ribbon({ from, to })` over rows whose

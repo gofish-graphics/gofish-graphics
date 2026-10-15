@@ -20,17 +20,16 @@ export const Frame = createNodeOperator(
     children: GoFishAST[]
   ) => {
     if (options.coord !== undefined) {
-      return coord(
-        {
-          key: options.key,
-          x: options.x,
-          y: options.y,
-          transform: options.coord,
-          axes: options.axes,
-          padding: options.padding,
-        },
-        children
-      );
+      // The coord is the frame's box: it takes the frame's dims (`w`, `h`,
+      // `dims`, ...) as the layer branch does (#535). `transform` (a pixel
+      // scale) and `box` are layer options the coord has no counterpart for.
+      const {
+        coord: transform,
+        transform: _scale,
+        box: _box,
+        ...rest
+      } = options;
+      return coord({ ...rest, transform }, children);
     } else {
       return layer(options, children);
     }

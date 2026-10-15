@@ -8,8 +8,40 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./animation": {
+      "types": "./dist/families/animation.d.ts",
+      "import": "./dist/animation.js"
+    },
+    "./bin": {
+      "types": "./dist/families/bin.d.ts",
+      "import": "./dist/bin.js"
+    },
+    "./calendar": {
+      "types": "./dist/families/calendar.d.ts",
+      "import": "./dist/calendar.js"
+    },
+    "./color": {
+      "types": "./dist/families/color.d.ts",
+      "import": "./dist/color.js"
+    },
+    "./coord": {
+      "types": "./dist/families/coord.d.ts",
+      "import": "./dist/coord.js"
+    },
+    "./curve": {
+      "types": "./dist/families/curve.d.ts",
+      "import": "./dist/curve.js"
+    },
+    "./overlap": {
+      "types": "./dist/families/overlap.d.ts",
+      "import": "./dist/overlap.js"
+    },
+    "./tile": {
+      "types": "./dist/families/tile.d.ts",
+      "import": "./dist/tile.js"
     }
   },
   "files": [
@@ -39,40 +71,66 @@
     "fetch-titanic-passengers": "node scripts/fetch-titanic-passengers.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test": "pnpm run test:path && pnpm run test:font && pnpm run test:bbox && pnpm run test:solver && pnpm run test:space && pnpm run test:measure && pnpm run test:embedding && pnpm run test:confluence && pnpm run test:coord-confluence && pnpm run test:coord-paint-order && pnpm run test:serialize && pnpm run test:display-list && pnpm run test:interaction && pnpm run test:fusion && pnpm run test:default-split",
+    "test": "pnpm run test:path && pnpm run test:interpolate && pnpm run test:spline && pnpm run test:time-window && pnpm run test:font && pnpm run test:bbox && pnpm run test:solver && pnpm run test:space && pnpm run test:measure && pnpm run test:geometry && pnpm run test:region && pnpm run test:circle && pnpm run test:resolve-accessors && pnpm run test:embedding && pnpm run test:confluence && pnpm run test:coord-confluence && pnpm run test:coord-paint-order && pnpm run test:compose && pnpm run test:sharing && pnpm run test:keyed-domains && pnpm run test:keyed-domains-render && pnpm run test:serialize && pnpm run test:display-list && pnpm run test:interaction && pnpm run test:fusion && pnpm run test:default-split && pnpm run test:gapminder-tower && pnpm run test:connected-scatterplot && pnpm run test:build-schedule && pnpm run test:build-in-tower && pnpm run test:name-scope && pnpm run test:axis-dims && pnpm run test:relate-schedule && pnpm run test:auto-label-angle && pnpm run test:signed-extent && pnpm run test:schema && pnpm run test:time && pnpm run test:cells && pnpm run test:polygon-cells && pnpm run test:stack-origin && pnpm run test:overlap && pnpm run test:families",
     "test:space": "tsx src/tests/space.test.ts",
-    "test:measure": "tsx src/tests/measure.test.ts",
+    "test:measure": "pnpm run build && tsx src/tests/measure.test.ts",
+    "test:geometry": "tsx src/tests/geometry.test.ts",
+    "test:region": "tsx src/tests/region.test.ts",
+    "test:resolve-accessors": "tsx src/tests/resolveAccessors.test.ts",
+    "test:circle": "pnpm run build && tsx src/tests/circle.test.ts",
     "test:embedding": "tsx src/tests/embedding.test.ts",
     "test:solver": "tsx src/tests/solver.test.ts",
     "test:confluence": "tsx src/tests/constraintConfluence.test.ts",
     "test:coord-confluence": "tsx src/tests/coordConfluence.test.ts",
     "test:coord-paint-order": "tsx src/tests/coordPaintOrder.test.ts",
+    "test:compose": "tsx src/tests/compose.test.ts",
+    "test:sharing": "tsx src/tests/sharing.test.ts",
+    "test:keyed-domains": "tsx src/tests/keyedDomains.test.ts",
+    "test:keyed-domains-render": "tsx src/tests/keyedDomainsRender.test.ts",
     "test:display-list": "pnpm run build && tsx src/tests/displayListEmit.test.ts",
     "test:path": "tsx src/tests/path.test.ts",
+    "test:interpolate": "tsx src/tests/interpolate.test.ts",
+    "test:spline": "tsx src/tests/spline.test.ts",
+    "test:time-window": "tsx src/tests/timeWindow.test.ts",
     "test:font": "tsx src/tests/fontUtils.test.ts",
     "test:bbox": "tsx src/tests/bbox.test.ts",
     "test:serialize": "pnpm run build && tsx src/tests/serialize.test.ts",
     "test:fusion": "pnpm run build && tsx src/tests/fusion.test.ts",
     "test:default-split": "pnpm run build && tsx src/tests/defaultSplit.test.ts",
     "test:interaction": "pnpm run build && node --conditions browser --import tsx src/tests/interaction.test.ts",
-    "typecheck": "tsc --noEmit"
+    "test:gapminder-tower": "pnpm run build && node --conditions browser --import tsx src/tests/gapminderTower.test.ts",
+    "test:connected-scatterplot": "pnpm run build && node --conditions browser --import tsx src/tests/connectedScatterplot.test.ts",
+    "test:build-schedule": "tsx src/tests/buildSchedule.test.ts",
+    "test:build-in-tower": "pnpm run build && node --conditions browser --import tsx src/tests/buildInTower.test.ts",
+    "test:name-scope": "pnpm run build && tsx src/tests/nameScope.test.ts",
+    "test:axis-dims": "pnpm run build && tsx src/tests/axisDims.test.ts",
+    "test:relate-schedule": "tsx src/tests/relateSchedule.test.ts",
+    "test:signed-extent": "pnpm run build && tsx src/tests/signedExtent.test.ts",
+    "test:schema": "pnpm run build && tsx src/tests/schema.test.ts",
+    "test:time": "pnpm run build && tsx src/tests/time.test.ts",
+    "test:cells": "pnpm run build && tsx src/tests/cells.test.ts",
+    "test:polygon-cells": "pnpm run build && tsx src/tests/polygonCells.test.ts",
+    "test:stack-origin": "pnpm run build && tsx src/tests/stackOrigin.test.ts",
+    "test:overlap": "pnpm run build && tsx src/tests/overlap.test.ts",
+    "test:families": "pnpm run build && tsx src/tests/families.test.ts",
+    "test:auto-label-angle": "tsx src/tests/autoLabelAngle.test.ts",
+    "typecheck": "tsc --noEmit",
+    "gen": "pnpm --dir ../gofish-ir run build && tsx scripts/generate-mark-channels.ts && prettier --write src/ast/markChannels.generated.ts"
   },
   "devDependencies": {
     "@storybook/addon-docs": "^9.1.6",
     "@storybook/html": "^9.1.6",
     "@storybook/react": "^9.1.6",
-    "@types/chroma-js": "^3.1.1",
     "@types/culori": "^4.0.1",
-    "@types/d3-dsv": "^3.0.7",
     "@types/d3-hierarchy": "^3.1.7",
     "@types/lodash": "^4.17.16",
-    "@types/seedrandom": "^3.0.8",
-    "d3-dsv": "^3.0.1",
+    "@types/topojson-client": "^3.1.5",
     "fast-kde": "^0.2.2",
     "happy-dom": "^20.10.6",
     "prettier": "^3.6.2",
     "storybook": "^9.1.6",
     "storybook-solidjs-vite": "^9.0.3",
+    "topojson-client": "^3.1.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vega-datasets": "^3.2.1",
@@ -82,18 +140,19 @@
   },
   "dependencies": {
     "@types/d3-array": "^3.2.1",
+    "@types/d3-delaunay": "^6.0.4",
     "bubblesets-js": "^3.0.0",
-    "chroma-js": "^3.1.2",
     "culori": "^4.0.2",
     "d3-array": "^3.2.4",
+    "d3-delaunay": "^6.0.4",
     "d3-hierarchy": "^3.1.2",
     "gofish-ir": "workspace:*",
     "lodash": "^4.17.21",
     "perfect-arrows": "^0.3.7",
     "rybitten": "^0.22.0",
-    "seedrandom": "^3.0.5",
     "solid-js": "^1.9.5",
-    "spectral.js": "^2.0.2"
+    "spectral.js": "^2.0.2",
+    "temporal-polyfill": "^1.0.5"
   },
   "peerDependencies": {
     "solid-js": "^1.9.5"

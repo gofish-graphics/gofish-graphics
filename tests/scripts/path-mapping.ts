@@ -21,44 +21,43 @@ const ROOT_DIR = dirname(TESTS_DIR);
  * the Python capture's snake→kebab rule (capture-python-dom.ts) agrees. Without
  * this fold, resolving a `.python-sync-exempt` `file::Export` line through
  * `storyToPath` kept the underscore (`spread-x_center-to-center`) and the
- * parity-skip set never matched the captured DOM path. */
-export const toKebab = (s: string) => {
-  // "GoTree" (the gofish-gotree package's title segment on every one of its
-  // story titles, e.g. "GoTree / Gallery / arc-tree") is a single proper-noun
-  // token, not two English words — the general CamelCase-split rule below
-  // would otherwise mangle it to "go-tree", diverging from the package's own
-  // "gotree" name (and from the tests/python-stories/gotree/ convention).
-  // Declared exception, not a generalizable rule: no other title segment
-  // needs this.
-  if (s.trim() === "GoTree") return "gotree";
-  return s
+ * parity-skip set never matched the captured DOM path.
+ *
+ * A digit before a capitalized word is a word break too (`Inner45Outer0` →
+ * `inner45-outer0`), matching the export → Python name rule in
+ * check-python-sync.ts (`story_…_inner45_outer0`). A digit before an acronym
+ * stays joined, so the title `1D Strip Plot` is still `1d-strip-plot`.
+ *
+ * Whitespace around a segment is dropped first: a title written with spaces
+ * around its slashes (`"GoTree / Gallery / arc-tree"`) has the same segments
+ * as one written without them (`go-tree/gallery/arc-tree`). */
+export const toKebab = (s: string) =>
+  s
+    .trim()
     .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .replace(/([0-9])([A-Z][a-z])/g, "$1-$2")
     .replace(/[\s_]+/g, "-")
     .toLowerCase();
-};
 
 /**
  * Storybook title → file-level story id used by capture + parity review.
  * e.g. "atom/TitanicUnitDots" → "atom/titanic-unit-dots"
  */
 export function titleToStoryId(title: string): string {
-  return title
-    .split("/")
-    .map((seg) => toKebab(seg.trim()))
-    .join("/");
+  return title.split("/").map(toKebab).join("/");
 }
 
 /**
  * Convert a Storybook story title + export name into a stable file-system path
  * used for snapshots/screenshots.
  *
- * e.g. ("Forward Syntax V3/Bar/Basic", "Default") → "forward-syntax-v3/bar/basic--default"
+ * e.g. ("Forward Syntax/Bar/Basic", "Default") → "forward-syntax/bar/basic--default"
  *
  * Shared by capture-js-dom.ts (full corpus) and capture-one.ts (single story) so
  * the two stay in lockstep if the kebab-casing rule ever changes.
  */
 export function storyToPath(title: string, name: string): string {
-  const segments = title.split("/").map((seg) => toKebab(seg.trim()));
+  const segments = title.split("/").map(toKebab);
   return `${segments.join("/")}--${toKebab(name)}`;
 }
 
@@ -67,47 +66,38 @@ export function storyToPath(title: string, name: string): string {
  *
  * e.g. "packages/gofish-graphics/stories/forwardsyntax/Bar/BarBasic.stories.tsx"
  *   →  "tests/python-stories/forwardsyntax/bar/test_bar_basic.py"
- *
- * gofish-gotree stories title their first segment "GoTree" (e.g. "GoTree /
- * Gallery / arc-tree"), which kebab-cases to "gotree" — so this same rule
- * naturally lands them under tests/python-stories/gotree/gallery/test_*.py
- * with no gotree-specific special case.
  */
 export function mapJsToPython(jsFile: string): string {
   // Read the Storybook title from the JS file and derive the Python path from it.
-  // e.g. title: "Forward Syntax V3/Bar/Basic" → "tests/python-stories/forward-syntax-v3/bar/test_basic.py"
+  // e.g. title: "Forward Syntax/Bar/Basic" → "tests/python-stories/forward-syntax/bar/test_basic.py"
   const absPath = join(ROOT_DIR, jsFile);
   let title: string | null = null;
   try {
     const content = readFileSync(absPath, "utf-8");
-    // Anchor the search to the `meta: Meta` object rather than matching the
-    // first `title:` in the file — some gallery stories (gofish-gotree) also
-    // carry a `parameters.gallery.title` (the gallery-card caption) that can
-    // appear earlier in the file than the Storybook nav `meta.title` this
-    // function needs.
+    // The Storybook title is the one on the `Meta` object; a gallery story
+    // also has a `parameters.gallery.title` (its card caption), which must
+    // not be read instead.
     const metaIdx = content.search(/:\s*Meta\b/);
-    const searchFrom = metaIdx >= 0 ? content.slice(metaIdx) : content;
-    const m = searchFrom.match(/title:\s*["'](.+?)["']/);
+    const m = content
+      .slice(Math.max(metaIdx, 0))
+      .match(/title:\s*["'](.+?)["']/);
     if (m) title = m[1];
   } catch {
     /* file unreadable — fall through to path-based fallback */
   }
 
   if (title) {
-    // Storybook titles are `/`-delimited nav paths; gofish-gotree writes them
-    // with spaces around the slash ("GoTree / Gallery / arc-tree"), so each
-    // segment is trimmed before kebab-casing (otherwise the surrounding
-    // whitespace folds into stray leading/trailing dashes — see toKebab).
-    const segments = title.split("/").map((seg) => toKebab(seg.trim()));
+    const segments = title.split("/").map(toKebab);
     const dirPath = segments.slice(0, -1).join("/");
     const basePart = segments[segments.length - 1].replace(/-/g, "_");
     return `tests/python-stories/${dirPath}/test_${basePart}.py`;
   }
 
   // Fallback: derive from file path (CamelCase → snake_case, flatten one level)
-  let rel = jsFile
-    .replace(/^packages\/gofish-graphics\/stories\//, "")
-    .replace(/^packages\/gofish-gotree\/stories\//, "");
+  let rel = jsFile.replace(
+    /^packages\/(gofish-graphics|gofish-gotree)\/stories\//,
+    ""
+  );
   rel = rel.replace(/\.stories\.tsx$/, "");
   const lastSlash = rel.lastIndexOf("/");
   const dirPart = lastSlash >= 0 ? rel.slice(0, lastSlash) : ".";

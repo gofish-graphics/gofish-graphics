@@ -1,3 +1,7 @@
+---
+order: 90
+---
+
 # image
 
 Draws a raster or SVG image for each data item. Use it for logos, icons, photo
@@ -27,15 +31,8 @@ image({ href, w?, h?, x?, y?, opacity?, filter?, preserveAspectRatio? })
 
 ## Parameters
 
-| Option                | Type               | Description                                                   |
-| --------------------- | ------------------ | ------------------------------------------------------------- |
-| `href`                | `string`           | Image source — a URL, asset import, or `data:` URI (required) |
-| `w`                   | `number \| string` | Width — number for fixed pixels, field name to encode data    |
-| `h`                   | `number \| string` | Height — number for fixed pixels, field name to encode data   |
-| `x`, `y`              | `number \| string` | Explicit position accessors                                   |
-| `opacity`             | `number`           | Opacity, `0`–`1`                                              |
-| `filter`              | `string`           | SVG filter reference applied to the image                     |
-| `preserveAspectRatio` | `string`           | SVG `preserveAspectRatio` value (default `"xMidYMid meet"`)   |
+::: gofish-ref image
+:::
 
 ## Sizing
 

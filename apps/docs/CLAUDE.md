@@ -9,6 +9,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Development server**: `pnpm docs:dev` - Starts VitePress dev server with hot reload
 - **Build documentation**: `pnpm docs:build` - Builds static documentation site
 - **Preview build**: `pnpm docs:preview` - Serves built documentation for testing
+- **Static story pictures**: `pnpm docs:images` - Renders the example gallery's
+  thumbnails + OG cards (`docs/public/gallery/`) and the pictures of `::: gofish … image`
+  containers (`docs/public/previews/`) headlessly. `docs:build` runs it first; `docs:dev`
+  does not, so run it once for local dev if you want those pictures (without it the
+  gallery wall is empty and each `image` shows its alt text). Needs the gofish-graphics
+  `dist/` (`pnpm --filter gofish-graphics build`) and Playwright's Chromium.
 
 ### Dependencies
 
@@ -39,6 +45,7 @@ This is a documentation site for the GoFish Graphics library built with VitePres
 #### Interactive Code Execution
 
 - **GoFishVue.vue** (`components/GoFishVue.vue`): Vue component that executes GoFish code in a sandboxed environment using `new Function()`. Provides access to lodash, datasets, and the full GoFish API. Used by the inline fenced-code `::: gofish` mode and by `internal-*` wiki diagrams.
+- **GoFishImage.vue** (`components/GoFishImage.vue`): the static counterpart of `GoFishExample`, for `::: gofish … image` containers: an `<img>` of the story's build-time PNG, its URL bound at runtime through `withBase` (a static `<img src="/…">` in markdown would compile to a build-time import and break the page when the PNG is missing).
 - **GoFishExample.vue** (`components/GoFishExample.vue`): client-only renderer that executes the **real Storybook story module** (SolidJS) for a gallery example. Targeted by `id` (gallery story id) or `storyId` (any story's harness id). Story `.stories.tsx` are compiled by `vite-plugin-solid` (scoped to the gofish-graphics package in `config.mts`; vue-jsx is excluded from that package so the two JSX compilers don't collide).
 - **GoFishLive.tsx** (`components/GoFishLive.tsx`): Sandpack-based live code editor component for interactive examples
 - **Markdown integration**: Custom markdown-it plugin (`docs/.vitepress/markdown-it-gofish.ts`) processes `::: gofish` containers
@@ -46,7 +53,7 @@ This is a documentation site for the GoFish Graphics library built with VitePres
 #### Data Management
 
 - **Dataset modules**: Located in `components/data/` - TypeScript modules exporting chart datasets (titanic, penguins, streamgraph data, etc.)
-- **Example data layer**: `docs/.vitepress/data/storyExamples.ts` scans gallery-tagged stories and synthesizes a standalone snippet (+ dataset) for each. The legacy `examples.data.js` registry is gone; only `internal-*` wiki diagrams (`.vitepress/examples/internal-*.ts`) are still loaded directly by the markdown plugin.
+- **Example data layer**: `docs/.vitepress/data/storyExamples.ts` scans gallery-tagged stories and synthesizes a standalone snippet (+ dataset) for each. The dataset comes in two forms: `datasetCode` is the whole module and goes only to the Sandpack playground, which has to run the example; `datasetPreview` cuts every array to its first `PREVIEW_ROWS` rows and is what every page shows. Inlining whole datasets is what pushed the docs build out of memory. The legacy `examples.data.js` registry is gone; only `internal-*` wiki diagrams (`.vitepress/examples/internal-*.ts`) are still loaded directly by the markdown plugin.
 - **Python example data layer**: `docs/.vitepress/data/pythonExamples.ts` resolves each gallery example's matching `tests/python-stories/**/test_*.py` parity port (same title→path convention as `tests/scripts/path-mapping.ts`, duplicated there since it's a cross-package build-time import) and synthesizes a standalone Python snippet (+ `dataset.py`) from the `story_*` function's body. Examples with no port yet get `pythonCode: null` (the page still renders, with a "not ported" note and a link to the JS version); a port whose shape the transform can't standalone-ify falls back to showing the function verbatim. `tests/.python-sync-exempt` entries mark `renderDiverges` (the port intentionally uses a different algorithm — the live render is always the JS engine, since JS/Python serialize to the same IR).
 
 ### Key Architecture Patterns
@@ -83,9 +90,77 @@ The `::: gofish` container has four modes:
 - inline fenced-code — a `::: gofish` wrapping a ` ```ts ` block runs that code
   via `GoFishVue`. `hidden` renders the chart only (no visible code).
 
+Two flags go after the mode, and each does one thing:
+
+- `hidden` — no code fence (nor dataset, nor CodePen link).
+- `image` — the chart is a static PNG of the story instead of the live story
+  (`GoFishImage`, alt text = the story's title). Only the two story modes take it
+  (`example:<id>`, `story:<storyId>`); on any other mode it is a build error, as is an
+  unknown story id. It changes nothing else, so a picture with no code is
+  `image hidden`. The PNG is `docs/public/previews/<storyId>.png` (an `example:<id>` is
+  keyed by its story id), cropped to the drawing, captured by `pnpm docs:images`
+  (`tests/scripts/capture-docs-images.ts`). That script finds the pictures to take by
+  reading the docs markdown through this same plugin (`findImageStoryIds()` in
+  `markdown-it-gofish.ts`), so adding `image` to a container is all it takes. Use it
+  where a page shows many previews that need no interaction, like the tutorials index
+  cards.
+
 #### Coordinate System Integration
 
 The GoFish library supports multiple coordinate systems (cartesian, polar, wavy) through the `coord` parameter in Frame components.
+
+#### API reference options tables come from the descriptor table
+
+An API reference page does **not** hand-write its options table. It writes
+
+```markdown
+## Parameters
+
+::: gofish-ref rect
+:::
+```
+
+and the `gofish-ref` container (`docs/.vitepress/markdown-it-gofish-ref.ts`)
+generates the `Option | Type | Default | Description` table from the construct
+descriptor table in `packages/gofish-ir/src/frontend/descriptors.ts` — the same
+single source the generated Python factory layer
+(`packages/gofish-python/gofish/_generated.py`) comes from.
+
+- **An option's description lives in the descriptor's `doc` string, and its
+  default in `default`.** Fixing or adding a description means editing
+  `descriptors.ts` and re-running `pnpm --filter gofish-python gen` (the
+  docstrings of the generated Python factories change too). Never re-add a
+  hand-written options table to a page; prose _around_ the block (semantics,
+  examples, notes) stays hand-written as usual.
+- The name is the factory name: the wire `type`, or the descriptor's `pyName`
+  for the renamed compositing operators (`intersect`, `exclude`, `subtract`,
+  `paint`). Several names in one block render one titled subsection each
+  (`::: gofish-ref intersect exclude subtract paint mask`). An unknown name
+  throws and fails the build. A name may also be an object option type in
+  `OPTION_TYPES` (`descriptors.ts`): `::: gofish-ref ChartOptions` renders the
+  chart-level options. `check-api-coverage` requires an option type used on
+  one language's page to appear on the other's too.
+- JS pages get the JS field names and a TS-ish type; Python pages get the snake_case
+  kwarg names (`pyKwarg` in `descriptors.ts`) and a Python type. The language comes from the page's path.
+- Fields a construct picks up from a shared group (`boxDims`, `paint`) render as
+  their own open subsection ("Box dimensions", "Paint"), below the table of the
+  construct's own fields.
+- `pnpm check-api-coverage` (`scripts/check-api-coverage.mjs`) asserts that every
+  descriptor construct has a `gofish-ref` block under both `docs/js/api/` and
+  `docs/python/api/`, and that every name used is a real construct. It reads the
+  built table, so `pnpm --filter gofish-ir build` runs first in CI. Constructs
+  with no user-facing factory (`mark-fn`, `over`) are allowlisted in the script.
+- A descriptor field marked `wireOnly: true` (a Python bridge handle, such as
+  `derive`'s `lambdaId`) is on the wire but is not an option a
+  user passes, so the generated table leaves it out. A positional argument the
+  descriptor does not model (`derive`'s `fn`) is described in prose above the
+  block.
+- The **Marks / Operators / Coordinates** sidebar subgroups are generated from
+  the files in `docs/<lang>/api/{marks,operators,coords}/`
+  (`collectApiSidebarGroup` in `config.mts`): a page's label is its frontmatter
+  `title` or its H1, and pages sort by frontmatter `order` then alphabetically.
+  Adding a page is enough to list it; set `order` to place it. Core / Color /
+  Constraints / Selection stay hand-listed.
 
 #### Dual-Language Docs (JavaScript + Python)
 

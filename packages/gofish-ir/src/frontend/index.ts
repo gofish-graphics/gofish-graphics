@@ -1,9 +1,14 @@
 export * from "./schema.js";
 export {
   validate,
+  checkStrategy,
+  checkOption,
+  checkStructBin,
+  checkPartition,
+  AXIS_INTERVAL_KEYS,
+  isAxisInterval,
   type ValidationResult,
   type ValidationError,
-  type ValidationWarning,
 } from "./validate.js";
 export {
   exampleBarChart,
@@ -15,19 +20,40 @@ export {
 } from "./examples.js";
 export { FRONTEND_IR_JSON_SCHEMA } from "./jsonSchema.js";
 export {
+  encodeIR,
+  decodeNonFinite,
+  isPlainObject,
+  type NonFiniteNumberIR,
+} from "./nonFinite.js";
+export {
   t,
   ch,
   group,
   resolveFields,
+  pyKwarg,
   OPERATORS,
   LEAF_MARKS,
   COMBINATOR_MARKS,
   COORDS,
+  OPTION_TYPES,
+  STRATEGIES,
+  BIN_KINDS,
+  CHART_OPTIONS,
   MARK_BASE_FIELDS,
   OPERATOR_BASE_FIELDS,
   PY_LEAF_BASE_KWARGS,
+  PY_OPERATOR_BASE_KWARGS,
+  COMBINATOR_OPTIONS_BASE_FIELDS,
+  DESCRIPTOR_TABLES,
+  acceptedFields,
+  carriesChannel,
+  pyType,
+  refPyClass,
+  AUTHORED_REFS,
+  LABEL_OPTIONS,
   boxDims,
   paint,
+  SHARED_FIELD_GROUPS,
   ALL_OPERATOR_DESCRIPTORS,
   ALL_LEAF_MARK_DESCRIPTORS,
   ALL_COMBINATOR_MARK_DESCRIPTORS,
@@ -37,5 +63,10 @@ export {
   type FieldSpec,
   type FieldGroup,
   type ConstructKind,
+  type NodeKind,
   type ConstructDescriptor,
+  type StrategyFamily,
+  type StrategyFamilyName,
+  type StrategyKind,
+  type StrategyPreset,
 } from "./descriptors.js";

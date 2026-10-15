@@ -78,6 +78,22 @@ plural refs — no implicit comprehension, `.each()` templates instead (§3.4); 
 gallery call sites are one pattern) and piccl's `lengthMatch` (§3.5); and
 ownership-conflict errors promoted from nice-to-have to prerequisite (§4, item 6).
 
+**Shipped (2026-09-25): `relate()`.** `.constrain()` is renamed `.relate()` everywhere (JS,
+Python, and the IR's `relate` field, which replaces `constraints`), with no alias. A clause
+is a constraint or a drawing term (an operator or mark such as `arrow`,
+`background`/`enclose`, or a relational `line`), and a drawing term may mix operands with
+fresh marks. Operands in term position are string refs, and a string `ref` is legal only
+inside a `.relate()` clause; tokens stay legal anywhere. Inside a layer, the clauses run in
+dependency order around the one constraint solve (`scheduleRelate`, `constraints/relate.ts`):
+a drawing clause lays out after the clauses that place what it reads, and a cycle is an
+error naming the clauses. This is §2.5's "dataflow scheduling of reads-after-writes",
+implemented per layer, and it fixed
+[#878](https://github.com/gofish-graphics/gofish-graphics/issues/878). What is still open
+for open terms (names born inside a clause, fresh `Constraint.*` operands, `spread` in
+constraint position, `.each()`) is
+[#929](https://github.com/gofish-graphics/gofish-graphics/issues/929). The mechanics are in
+[[names-and-scoping]].
+
 ## 1. Where the language is today
 
 Mechanics established by code reading (2026-07-08), so the design rests on what actually
@@ -193,9 +209,10 @@ folds; domain inference is untouched.
 ### 2.3 Scope
 
 The fresh operand's geometry solves in the _composite's_ scope, not the ref's home scope.
-`FlowerChart` demonstrates this today: the flower opens its own `layer({ coord: polar() })`
-inside the spread, warping only the petals, while the stem ref is anchored by pure
-translate reconciliation. This is the right semantics (the attachment brings its own local
+The low-level `FlowerChart` demonstrated this: the flower opened its own
+`layer({ coord: polar() })` inside the spread, warping only the petals, while the stem ref
+was anchored by pure translate reconciliation. (The story is now fluent: a polar
+empty-scope chart aligned to the stem by `Constraint.align`.) This is the right semantics (the attachment brings its own local
 coordinate world; the anchor is a point of contact, not an inherited frame).
 
 **Latent constraint to carry forward:** ref reconciliation is translate-only
@@ -221,10 +238,10 @@ whatever `emphasize` decides should bind here too.
 
 The reporting rule and the operand-kind table both fall out of one reading, borrowed from
 programming languages: **`.name()` is a binder, and a ref is a variable occurrence.** The
-`.constrain()` callback is literally a binding form today — `collectConstraintRefs` builds
-an environment from the layer's named children and passes it to the callback, a `where`
-clause scoped over siblings (and GoFish's hygienic, bounded name scoping is, in this
-reading, the choice of lexical over dynamic scope). The spec with refs is then a DAG whose
+`.constrain()` callback is literally a binding form today — `constraintEnv` hands the
+callback an environment holding the names inside the layer, each resolved lexically (closest
+match first), a `where` clause scoped over the layer's contents (and GoFish's hygienic, bounded name scoping is, in
+this reading, the choice of lexical over dynamic scope). The spec with refs is then a DAG whose
 spanning tree is the ownership tree; refs are the non-tree edges — the standard
 terms-with-sharing picture.
 
@@ -553,7 +570,12 @@ parity suite for anything touching IR). Work items 3–7 are tracked by
    only drawn ink that skips it. Requires text measurement at layout time — the same
    machinery text marks already use at measure time, so mechanical, but it changes _when_
    fonts are consulted; gate on pixels.
-5. **The mixed-row surface (+ mark-valued content) (L, design-first).** The declarative
+5. **The mixed-row surface (+ mark-valued content) (L, design-first). PARTLY SHIPPED:**
+   `relate()` with drawing clauses and open terms in operator position, scheduled in
+   dependency order (see "Shipped" at the top). Still open: names born inside a clause,
+   fresh `Constraint.*` operands, `spread` in constraint position (an operator over
+   operands only does not place them; they are pinned), and `.each()` —
+   [#929](https://github.com/gofish-graphics/gofish-graphics/issues/929). The declarative
    spelling of "arrange fresh content against a selection's nodes" with the anchor
    implicit — now concretely `relate()` with open terms and `.each()` templates, per
    §3.2/§3.3/§3.4. Needs the

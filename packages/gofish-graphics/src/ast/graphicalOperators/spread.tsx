@@ -1,24 +1,26 @@
-import { GoFishNode } from "../_node";
+import { axisOverrideOf, GoFishNode } from "../_node";
 import type { AxisOptions } from "../gofish";
-import { MaybeValue } from "../data";
-import {
-  Direction,
-  elaborateDirection,
-  FancyDims,
-  FancyDirection,
-} from "../dims";
+import { fieldNameOf, MaybeValue } from "../data";
+import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
 import { Collection } from "lodash";
-import { SplitBy, splitEntries } from "../datumProjection";
+import { SplitBy, orderEntries, splitEntries } from "../datumProjection";
 import { isField } from "../data";
+import { columnType, stackOrigin } from "../schema";
+import type { StackOrigin } from "../constraints/distribute";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import { Alignment } from "./alignment";
 import { layer } from "./layer";
 import { Constraint } from "../constraints";
-import { ensureChildNames, type AlignAnchor } from "../constraints/shared";
+import {
+  axisName,
+  ensureChildNames,
+  type AlignAnchor,
+} from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
-import { Mark, Operator } from "../types";
+import { Mark, MarkChild, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
+import { withWire, wireOf } from "../wire";
 
 // Utility function to unwrap lodash wrapped arrays
 const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
@@ -31,11 +33,10 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
 /**
  * `Spread` arranges its children along `dir` with spacing and aligns them on the
  * cross axis. It **elaborates to `layer + distribute + align`**: #547 proved the
- * space fold, budget, and auto-fit are identical to the bespoke spread, #549 made
- * the scale handling match (fresh child array, no parent mutation), and the
- * layer honors `sharedScale` as a scale scope (layer.tsx). `stack` is
+ * space fold, budget, and auto-fit are identical to the bespoke spread, and #549
+ * made the scale handling match (fresh child array, no parent mutation). `stack` is
  * `spread({ glue: true })`; `spreadX`/`spreadY` fix `dir`. The IR keeps `spread`/
- * `stack` (the v3 wrapper's `serialize` tag), so this elaboration is below the IR.
+ * `stack` (the fluent operator wrapper's `serialize` tag), so this elaboration is below the IR.
  *
  * `size` (per-entry stack-axis extent, #700 Phase 2) wraps each child in its
  * own sized layer BEFORE the align/distribute elaboration below: `layer({ [w|h]:
@@ -44,10 +45,10 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
  * unchanged — only the wrapping is new. This replaces the old `normalize`
  * layout flag: `size: field(<name>).normalize()` computes each entry's SHARE
  * of the window (see fieldExpr.ts's `applyEntryNormalize`) as a data-driven
- * SIZE claim on the wrapper, which layer.tsx's data-valued-size branch turns
- * into a local self-scaling region for that child's subtree — the same
- * space-filling-spine effect `normalize: true` used to special-case, but now
- * just the general "data-valued size ⇒ self-scaling region" rule.
+ * SIZE claim on the wrapper, whose content layer.tsx nests in the wrapper's box
+ * as a sized node — the same space-filling-spine effect `normalize: true` used
+ * to special-case, but now just the general "a data-valued size nests its
+ * content" rule.
  */
 export const Spread = createNodeOperator(
   async (
@@ -56,20 +57,22 @@ export const Spread = createNodeOperator(
       dir,
       spacing = 8,
       alignment = "baseline",
-      sharedScale = false,
       anchor = "edge",
       reverse = false,
       glue = false,
+      origin,
+      hasOrder,
       size,
       axes,
       axisMeasures,
       ...fancyDims
     }: {
       key?: string;
-      dir: FancyDirection;
+      /** The axis to spread along: `x`/`y`, a name the enclosing coordinate
+       *  space declares (`theta`, `lon`, ...), or an axis index. */
+      dir: AxisName | Direction;
       spacing?: number;
       alignment?: Alignment;
-      sharedScale?: boolean;
       /** How adjacent children relate on the stack axis: `"edge"` (default)
        *  chains facing edges (spacing = gap); `"start"|"middle"|"end"|
        *  "baseline"` chains that fixed anchor (spacing = anchor-to-anchor
@@ -79,6 +82,15 @@ export const Spread = createNodeOperator(
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
+      /** A stack's {@link StackOrigin}, its part a child index. Omitted: the
+       *  first part's tail. The `stack` operator's split sets it from a
+       *  `HasMidpoint` column (`stackOrigin` in schema.ts). Ignored without
+       *  `glue`: a spread packs boxes and has no origin. */
+      origin?: StackOrigin<number>;
+      /** The `by` column's values have an order (`HasOrder`, from the chart's
+       *  `schema`): the split sets it, and the ORDINAL space this spread
+       *  folds carries it, so its axis knows its keys are ordered. */
+      hasOrder?: boolean;
       /** Per-entry stack-axis extent — one value per child, in child order.
        *  Wraps each child in a sized layer on the stack axis before the
        *  align/distribute elaboration. See the doc comment above. */
@@ -86,10 +98,11 @@ export const Spread = createNodeOperator(
       /** Override axis rendering for this node. true/false applies to both
        * dims; object form controls x/y independently. */
       axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
-      /** Resolved grouping field per axis, injected by createOperator (the `by`
-       *  field, e.g. `{ x: "lake" }`). Stamped onto the ORDINAL space the stack
-       *  distribute builds so a category axis names itself off its own space. */
-      axisMeasures?: { x?: string; y?: string };
+      /** Resolved grouping field per axis name, injected by createOperator (the
+       *  `by` field keyed by `dir`, e.g. `{ x: "lake" }`). Stamped onto the
+       *  ORDINAL space the stack distribute builds so a category axis names
+       *  itself off its own space. */
+      axisMeasures?: Record<string, string | undefined>;
     } & FancyDims<MaybeValue<number>>,
     children: GoFishAST[] | Collection<GoFishAST>
   ) => {
@@ -101,11 +114,9 @@ export const Spread = createNodeOperator(
     }
 
     children = unwrapLodashArray(children);
-
-    const stackDir = elaborateDirection(dir);
-    const alignDir = (1 - stackDir) as Direction;
-    const alignAxis = alignDir === 0 ? "x" : "y";
-    const stackAxis = stackDir === 0 ? "x" : "y";
+    // An axis index is the same axis as its scope-free name (0 is `x`), so
+    // every use below can key by name.
+    const dirName: AxisName = typeof dir === "number" ? axisName(dir) : dir;
 
     // Give each child a unique constraint name so the align/distribute can
     // reference it (shared with scatter — see `ensureChildNames`).
@@ -118,18 +129,22 @@ export const Spread = createNodeOperator(
             `${childList.length} children — one size value is required per child.`
         );
       }
-      const sizeKey = stackAxis === "x" ? "w" : "h";
+      // The wrapper's size is on the `dir` axis, named the same way `dir`
+      // names it, so it resolves in the same scope pass as `dir` itself.
       childList = await Promise.all(
         childList.map(async (child, i) => {
-          const wrapped = (await layer({ [sizeKey]: size[i] } as any, [
-            child,
-          ])) as GoFishNode;
+          const wrapped = (await layer(
+            { dims: { [dirName]: { size: size[i] } } } as any,
+            [child]
+          )) as GoFishNode;
           // Copy split identity onto the wrapper so downstream ordinal-axis
           // labeling / resolve()-by-key see the same key/datum the unwrapped
           // child would have — the wrapper is purely a sizing shim.
           if (child instanceof GoFishNode) {
             wrapped.setKey(child.key ?? "");
             wrapped._syntheticKey = child._syntheticKey;
+            wrapped.keyCell = child.keyCell;
+            wrapped.keyBy = child.keyBy;
             (wrapped as any).__splitBy = (child as any).__splitBy;
             wrapped.datum = child.datum;
           }
@@ -141,8 +156,8 @@ export const Spread = createNodeOperator(
     const names = ensureChildNames(childList, "spread");
 
     // Elaborate to a layer carrying the cross-axis align + the stack distribute.
-    // `fancyDims` (explicit w/h) flow to the layer, whose self-scaling region
-    // handles an explicit size exactly as the bespoke spread did.
+    // `fancyDims` (explicit w/h) flow to the layer, which is then a sized
+    // node: it maps its keyed domain into that size.
     const node = (await layer(
       {
         key,
@@ -150,54 +165,61 @@ export const Spread = createNodeOperator(
       } as any,
       childList
     )) as GoFishNode;
-    node.constrain((ref) => {
-      const refs = names.map((n) => ref[n] ?? { name: n });
-      // The cross-axis align: it shares the frame (unions the children's domain)
-      // and, for free children (bars), commits a baseline. A self-positioned
-      // child (a scatter facet) is left alone by `align` automatically — the
-      // placement solver reads the child's abstract placement, so no guard flag.
-      return [
-        Constraint.align({ [alignAxis]: alignment }, refs),
-        Constraint.distribute(
-          {
-            dir: stackAxis,
-            spacing: glue ? 0 : spacing,
-            anchor,
-            glue,
-            order: reverse ? "reverse" : "forward",
-            // The grouping field for this (stack) axis → the ORDINAL space's
-            // measure, so a spread-by-category axis titles itself off its space.
-            measure: axisMeasures?.[stackAxis],
-          },
-          refs
-        ),
-      ];
-    });
+    // `dir` names an axis in the scope of the spread's children: `x`/`y`, or a
+    // name the enclosing coordinate space declares (`theta`, `lon`, ...). The
+    // spread is built before that space exists, so the constraints, which need
+    // the axis, are installed by the resolveAliases pass, after the layer's
+    // own `dims` hook (if the spread was given `dims`).
+    const layerDims = node._elaborateInAxisScope;
+    node._elaborateInAxisScope = async (outer, inner) => {
+      await layerDims?.(outer, inner);
+      const stackDir = resolveAxisName(inner, dirName, `spread({ dir })`);
+      const alignAxis = axisName((1 - stackDir) as Direction);
+      const stackAxis = axisName(stackDir);
+      await node.relate((g) => {
+        const refs = names.map((name) => g[name]);
+        // The cross-axis align: it shares the frame (unions the children's
+        // domain) and, for free children (bars), commits a baseline. A
+        // self-positioned child (a scatter facet) is left alone by `align`
+        // automatically — the placement solver reads the child's abstract
+        // placement, so no guard flag.
+        return [
+          Constraint.align({ [alignAxis]: alignment }, refs),
+          Constraint.distribute(
+            {
+              dir: stackAxis,
+              spacing: glue ? 0 : spacing,
+              anchor,
+              glue,
+              order: reverse ? "reverse" : "forward",
+              origin: origin && { ...origin, part: names[origin.part] },
+              // The grouping field for this (stack) axis → the ORDINAL
+              // space's measure, so a spread-by-category axis titles itself
+              // off its space.
+              measure: axisMeasures?.[dirName],
+              hasOrder,
+            },
+            refs
+          ),
+        ];
+      });
+      // Tag with stack direction so coord can map axis overrides to polar dims.
+      node.axisDir = stackDir;
+    };
 
-    // `sharedScale` is a scale-scope annotation (claim hoisting, #549): the node
-    // solves σ locally and shares it with descendants. The layer honors this in
-    // `layout` (it self-solves per axis when `shared`, into a fresh array).
-    node.shared = [sharedScale, sharedScale];
-    // Tag with stack direction so coord can map axis overrides to polar dims.
-    node.axisDir = stackDir;
-    if (axes !== undefined) {
-      const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
-        opt === undefined ? undefined : opt === false ? false : true;
-      node._axisOverride =
-        typeof axes === "boolean"
-          ? { x: axes, y: axes }
-          : { x: toShow(axes.x), y: toShow(axes.y) };
-    }
+    if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
     return node;
   }
 );
 
 export type SpreadOptions<T = any> = {
   by?: SplitBy;
-  dir: "x" | "y";
+  /** The axis to spread along: `x`/`y` (axis 0/1 in any coordinate space), or
+   *  a name the enclosing coordinate space declares (`theta`/`r` in polar,
+   *  `lon`/`lat` in geo). */
+  dir: AxisName;
   spacing?: number;
   alignment?: "start" | "middle" | "end" | "baseline";
-  sharedScale?: boolean;
   /** How adjacent children relate on the stack axis: `"edge"` (default)
    *  chains facing edges (spacing = gap); `"start"|"middle"|"end"|
    *  "baseline"` chains that fixed anchor (spacing = anchor-to-anchor pitch,
@@ -214,33 +236,63 @@ export type SpreadOptions<T = any> = {
    *  so the mark carries only non-positional channels. The space-filling spine
    *  (the mosaic/marimekko conditional axis) is `size: field(<name>).normalize()`
    *  — each entry's SHARE of the window (Σ over this operator's own split
-   *  entries) becomes a data-driven size claim, which makes that entry's
-   *  subtree a local self-scaling region so its segments fill the extent in
-   *  proportion to their share (see the `Spread` doc comment above). */
+   *  entries) becomes a data-driven size claim, whose box nests that entry's
+   *  subtree, so its segments fill the box in proportion to their share (see
+   *  the `Spread` doc comment above). */
   size?: (keyof T & string) | FieldExpr | MaybeValue<number>[];
   debug?: boolean;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 };
 
 export const spread = createOperator<any, SpreadOptions>(Spread as any, {
-  // With `by`: groupBy on the field. Without `by`: identity split — one leaf
-  // per row (the waffle grid relies on this to spread chunked sub-arrays).
-  // Expand-kind marks (e.g. `cut`) need the whole array in one leaf instead;
-  // that override lives in createOperator (it dispatches on the mark's kind),
-  // not here, so this split stays kind-agnostic.
-  split: ({ by }, d) =>
-    by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
+  // Without `by`, `splitEntries` splits by row identity. Expand-kind marks
+  // (e.g. `cut`) need the whole array in one leaf instead; that override
+  // lives in createOperator (it dispatches on the mark's kind), not here, so
+  // this split stays kind-agnostic.
+  //
+  // A stack over a column with HasMidpoint (from the chart's `schema`) puts its
+  // origin at the midpoint of the column's order instead of at its first
+  // part's tail; the split knows the groups present, so it computes it. It
+  // reorders every level of the order the way it reorders the groups, so the
+  // stack knows which way it lays the order out even in a row with one part.
+  // Over ordered keys, the split says so (`SplitGroups.hasOrder`), so the
+  // ordinal space it folds knows its keys are ordered.
+  split: ({ by, glue, reverse }, d) => {
+    const entries = splitEntries(by, d);
+    const hasOrder = entries.hasOrder;
+    if (!glue)
+      return hasOrder ? { entries, layoutOpts: { hasOrder } } : entries;
+    const column = fieldNameOf(by);
+    const type = columnType(d, column);
+    const levels = (type?.HasOrder?.levels ?? []) as (string | number)[];
+    const split = orderEntries(
+      by,
+      new Map(levels.map((level) => [level, entries.get(level) ?? []]))
+    );
+    const origin = stackOrigin(
+      column,
+      type,
+      [...split.keys()],
+      [...entries.keys()],
+      reverse
+    );
+    return { entries, layoutOpts: { hasOrder, origin } };
+  },
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
   axisFields: ({ by, dir }) => {
-    const name =
-      typeof by === "string" ? by : isField(by) ? by.name : undefined;
-    return name === undefined
-      ? undefined
-      : dir === "x"
-        ? { x: name }
-        : { y: name };
+    const name = fieldNameOf(by);
+    return name === undefined ? undefined : { [dir]: name };
   },
-  serialize: { type: "spread" },
+  // `dir` is the axis this operator lays its groups out along (`stack` is
+  // `spread({glue: true})`, so it inherits this). The travel-axis rule reads
+  // this at build time, before the enclosing coordinate space is known, so a
+  // coord-declared `dir` (`theta`, `lon`, ...) positions neither axis here.
+  // TODO(#838 follow-up): resolve the travel axis by name too.
+  arrangement: {
+    kind: "arrangement",
+    positions: ({ dir }) => ({ x: dir === "x", y: dir === "y" }),
+  },
+  serialize: "spread",
 });
 
 /** Stack glues children together, summing sizes into a POSITION at the spread
@@ -250,12 +302,12 @@ export type StackOptions<T = any> = Omit<SpreadOptions<T>, "spacing" | "glue">;
 
 export function stack(
   opts: StackOptions,
-  marks: Mark<any>[]
+  marks: MarkChild[]
 ): ReturnType<typeof spread>;
 export function stack(opts: StackOptions): Operator<any[], any[]>;
 export function stack(
   opts: StackOptions,
-  marks?: Mark<any>[]
+  marks?: MarkChild[]
 ): ReturnType<typeof spread> | Operator<any[], any[]> {
   const stackOpts: SpreadOptions = { ...opts, glue: true };
   const result =
@@ -266,14 +318,10 @@ export function stack(
   // of `{ type: "spread", glue: true, ... }`. Preserve `__combinator` and
   // `children` when present (combinator form) — dropping them would make
   // toJSON emit a leaf-shaped node missing its children.
-  const tag = (result as any).__serialize;
+  const tag = wireOf(result);
   if (tag) {
     const { glue: _glue, ...stackPayload } = tag.opts;
-    (result as any).__serialize = {
-      ...tag,
-      type: "stack",
-      opts: stackPayload,
-    };
+    withWire(result, { ...tag, type: "stack", opts: stackPayload });
   }
   return result;
 }

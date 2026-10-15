@@ -1,3 +1,7 @@
+---
+order: 110
+---
+
 # cut
 
 Slices a single source shape (an [`image`](/python/api/marks/rect) or
@@ -80,7 +84,7 @@ The modifier's `size` additionally accepts a **field-name string** (resolved
 per row, treated as datum-provenance — `size="amount"` is exactly
 `[datum(d["amount"]) for d in bottle_data]`) and `None` (equal slices, N taken
 from the data length). Each slice carries its source row, so a second sub-chart
-can [`selectAll(...)`](/python/api/core/chart#cross-chart-references) the named
+can [`select_all(...)`](/python/api/core/chart#cross-chart-references) the named
 slices and annotate them.
 
 ### Combining with `by`-grouping
@@ -149,9 +153,6 @@ Equal slices are `[datum(1)] * n` (or, in the modifier form, simply omit
 - the **absolutes alone exceed the source extent** (the fixed claims don't fit);
 - there are `datum()` weights but **no remainder is left** for them (the
   absolutes already consume the whole source);
-- two `datum()` entries carry **different, both-defined measure tags** — an
-  incompatible-units error. Untagged weights are permissive and unify with
-  anything.
 
 ## inset
 
@@ -183,7 +184,7 @@ spread(
 # Pure primitive — emits a `cut` node usable as a combinator child
 cut(source, *, dir, size=None, inset=None)
 
-# v3 expand-mark modifier — chainable on image()/rect()
+# expand-mark modifier — chainable on image()/rect()
 image(...).cut(dir=..., size=None, inset=None)
 ```
 

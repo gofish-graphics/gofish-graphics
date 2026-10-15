@@ -4,12 +4,12 @@ import {
   Constraint,
   createMark,
   createName,
-  Layer,
+  layer,
   rect,
   text,
 } from "../../src/lib";
 import type { Token } from "../../src/lib";
-import type { GoFishAST } from "../../src/ast/_ast";
+import type { MarkChild } from "../../src/lib";
 
 // Ported from Bluefish's example-gallery ohm-parser.tsx (#439): a parse-tree
 // / derivation diagram for the arithmetic expression "3 + (4 * 5)" under a
@@ -61,13 +61,13 @@ import type { GoFishAST } from "../../src/ast/_ast";
 //   task brief suggested — read the comment at `marker`'s definition).
 // - `Constraint.align`/`distribute` targets below are built directly as
 //   `{ name: token.__tag }` `ConstraintRef` handles (`src/ast/constraints
-//   /shared.ts`: `ConstraintRef = { readonly name: string }`) rather than
-//   through the destructured `.constrain(({a,b,c}) => ...)` callback
+//   /shared.ts`) rather than
+//   through the destructured `.relate(({a,b,c}) => ...)` callback
 //   param — the trace generates ~30 dynamically-named nodes, not a fixed
 //   set of statically-known names a literal destructure could spell out.
 //   This is exactly the `Record<string, ConstraintRef>` the callback would
-//   have handed back anyway (`collectConstraintRefs` keys it the same way,
-//   off each named child's token `__tag`), just built directly from the
+//   have handed back anyway (it keys operands the same way, off each named
+//   node's token `__tag`), just built directly from the
 //   `Token`s this file already holds instead of round-tripping through the
 //   callback's object.
 // - `LabelText`'s optional case-name note (e.g. "AddExp - plus") is a
@@ -80,7 +80,7 @@ import type { GoFishAST } from "../../src/ast/_ast";
 //   node, but a bare `text(...)` call is itself a still-deferred mark (see
 //   `EmptySlot`/`ControlDot` in QuantumCircuit.stories.tsx) — wrapping one
 //   directly in `createMark` crashes at render time. A plain function
-//   returning the mark call (or a resolved `Layer(...).constrain(...)` when
+//   returning the mark call (or a resolved `layer(...).relate(...)` when
 //   there's a note) sidesteps that, same as `EmptySlot`/`ControlDot`.
 
 const meta: Meta = {
@@ -197,10 +197,10 @@ const TRACE = R("Exp", 0, 10, [addExpOuter]);
 // ── Marks ────────────────────────────────────────────────────────────────
 
 const CharBox = createMark(({ ch }: { ch: string }) =>
-  Layer([
+  layer([
     rect({ w: CHAR_W, h: CHAR_H, fill: "transparent" }).name("box"),
     text({ text: ch, ...BIG_FONT }).name("glyph"),
-  ]).constrain(({ box, glyph }) => [
+  ]).relate(({ box, glyph }) => [
     Constraint.align({ x: "middle", y: "middle" }, [box, glyph]),
   ])
 );
@@ -209,10 +209,10 @@ const CharBox = createMark(({ ch }: { ch: string }) =>
 // "AddExp" + "- plus"). Plain function, not createMark — see friction log.
 const LabelText = ({ main, note }: { main: string; note?: string }) =>
   note
-    ? Layer([
+    ? layer([
         text({ text: main, ...LABEL_FONT }).name("main"),
         text({ text: `- ${note}`, ...NOTE_FONT }).name("note"),
-      ]).constrain(({ main: m, note: n }) => [
+      ]).relate(({ main: m, note: n }) => [
         Constraint.align({ y: "middle" }, [m, n]),
         Constraint.distribute({ dir: "x", spacing: 4 }, [m, n]),
       ])
@@ -237,11 +237,11 @@ export const OhmParseTree: StoryObj<Args> = {
     const container = initializeContainer();
 
     let uid = 0;
-    const children: GoFishAST[] = [];
+    const children: MarkChild[] = [];
     const constraints: any[] = [];
 
     // ── Tier 1: the character row — a self-contained sub-layer with its own
-    // `.constrain()` call, exactly the two-tier pattern house style uses for
+    // `.relate()` call, exactly the two-tier pattern house style uses for
     // "inner Layer fully places a unit, later tiers build off it." The
     // character glyphs' pixel geometry is ALSO reproduced analytically below
     // (`charLeft`/`charRight`) for the span markers — see the comment at
@@ -255,14 +255,14 @@ export const OhmParseTree: StoryObj<Args> = {
     const rowRefs = [...charTokens, endTok].map(asRef);
     const charRowTok = createName("char-row");
     children.push(
-      Layer(
+      layer(
         { x: 0, y: 0 },
         [
           ...chars.map((ch, i) => CharBox({ ch }).name(charTokens[i])),
           rect({ w: END_W, h: CHAR_H, fill: "transparent" }).name(endTok),
         ]
       )
-        .constrain(() => [
+        .relate(() => [
           Constraint.align({ y: "start" }, rowRefs),
           Constraint.distribute({ dir: "x", spacing: CHAR_GAP }, rowRefs),
         ])
@@ -275,7 +275,7 @@ export const OhmParseTree: StoryObj<Args> = {
     // that's what was tried first here, and it's exactly the shape the task
     // brief suggested. It didn't work, and the reason is worth recording:
     //
-    //   `Layer({x:0,y:0}, [ref(a), ref(b)])` — an explicit anchor is
+    //   `layer({x:0,y:0}, [ref(a), ref(b)])` — an explicit anchor is
     //   required for the WRAPPER itself to read as "already placed" (see
     //   the `AlignSpan`/`AlignSize` stories in Constraints.stories.tsx,
     //   where the span *source* always carries a literal `{x,y}`). But
@@ -413,8 +413,8 @@ export const OhmParseTree: StoryObj<Args> = {
       Constraint.align({ x: "middle", y: "middle" }, [asRef(endBarTok), asRef(endLabelTok)])
     );
 
-    Layer({ x: 20, y: 20 }, children)
-      .constrain(() => constraints)
+    layer({ x: 20, y: 20 }, children)
+      .relate(() => constraints)
       .render(container, { w: args.w, h: args.h });
 
     return container;

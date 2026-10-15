@@ -1,14 +1,6 @@
-import {
-  Component,
-  onMount,
-  onCleanup,
-  type JSX,
-  createEffect,
-} from "solid-js";
-import { render as solidRender } from "solid-js/web";
-import { gofish } from "./gofish";
+import { Component, onCleanup, type JSX, createEffect } from "solid-js";
+import { gofish, type AxesOptions } from "./gofish";
 import { type GoFishNode } from "./_node";
-import type { AxesOptions } from "./gofish";
 
 interface GoFishComponentProps {
   w: number;
@@ -20,39 +12,32 @@ interface GoFishComponentProps {
   defs?: JSX.Element[];
   children: GoFishNode;
   axes?: AxesOptions;
+  legend?: boolean;
 }
 
 export const GoFishSolid: Component<GoFishComponentProps> = (props) => {
   let containerRef: HTMLDivElement | undefined;
 
   createEffect(() => {
-    if (containerRef) {
-      // Clear the container first
-      containerRef.innerHTML = "";
-
-      // Call the gofish function with the container
-      gofish(
-        containerRef,
-        {
-          w: props.w,
-          h: props.h,
-          x: props.x,
-          y: props.y,
-          transform: props.transform,
-          debug: props.debug,
-          defs: props.defs,
-          axes: props.axes,
-        },
-        props.children
-      );
-    }
-
-    onCleanup(() => {
-      // Clean up any SolidJS renders when component unmounts
-      if (containerRef) {
-        containerRef.innerHTML = "";
-      }
-    });
+    if (!containerRef) return;
+    const view = gofish(
+      containerRef,
+      {
+        w: props.w,
+        h: props.h,
+        x: props.x,
+        y: props.y,
+        transform: props.transform,
+        debug: props.debug,
+        defs: props.defs,
+        axes: props.axes,
+        legend: props.legend,
+      },
+      props.children
+    );
+    // The component owns the chart's lifetime: a prop change re-runs this
+    // effect and the component's disposal ends it.
+    onCleanup(() => view.unmount());
   });
 
   return <div ref={containerRef} />;

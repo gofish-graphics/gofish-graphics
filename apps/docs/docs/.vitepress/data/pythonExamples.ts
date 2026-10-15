@@ -25,7 +25,11 @@
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadStoryExamples, type StoryExample } from "./storyExamples.ts";
+import {
+  loadStoryExamples,
+  PREVIEW_ROWS,
+  type StoryExample,
+} from "./storyExamples.ts";
 import { dedent, indent } from "./textUtils.ts";
 
 export interface PythonExample {
@@ -48,7 +52,24 @@ const __dirname = dirname(__filename);
 const REPO_ROOT = resolve(__dirname, "../../../../..");
 const TESTS_DIR = join(REPO_ROOT, "tests");
 const PYTHON_STORIES_DIR = join(TESTS_DIR, "python-stories");
-const DATA_PY = join(PYTHON_STORIES_DIR, "data.py");
+/** A `tests/python-stories` module holds datasets when it imports the shared
+ *  JSON loader (`load_json` from `_json_data.py`). A story's import from one
+ *  becomes an import from the snippet's standalone `dataset` module, so a new
+ *  dataset module needs no registration here. */
+const DATASET_LOADER_IMPORT =
+  /^from\s+python_stories\._json_data\s+import\s+load_json\b/m;
+const datasetModuleCache = new Map<string, boolean>();
+function isDatasetModule(module: string): boolean {
+  let found = datasetModuleCache.get(module);
+  if (found === undefined) {
+    const path = join(PYTHON_STORIES_DIR, `${module}.py`);
+    found =
+      existsSync(path) &&
+      DATASET_LOADER_IMPORT.test(readFileSync(path, "utf-8"));
+    datasetModuleCache.set(module, found);
+  }
+  return found;
+}
 const LOWLEVEL_DATA_DIR = join(PYTHON_STORIES_DIR, "_lowlevel_data");
 const EXEMPT_FILE = join(TESTS_DIR, ".python-sync-exempt");
 
@@ -57,20 +78,12 @@ const EXEMPT_FILE = join(TESTS_DIR, ".python-sync-exempt");
 // Kept in lockstep by hand — both are small and rarely change together.
 // ---------------------------------------------------------------------------
 
-/** CamelCase / spaced / underscored → kebab-case.
- *
- * "GoTree" (the gofish-gotree package's title segment on every one of its
- * story titles, e.g. "GoTree / Gallery / arc-tree") is a single proper-noun
- * token, not two English words — the general CamelCase-split rule below
- * would otherwise mangle it to "go-tree", diverging from the package's own
- * "gotree" name (and from the tests/python-stories/gotree/ convention).
- * Declared exception, not a generalizable rule: no other title segment
- * needs this. Kept in lockstep with tests/scripts/path-mapping.ts's toKebab
- * (this file's header explains why that one isn't imported directly). */
+/** CamelCase / spaced / underscored → kebab-case, each segment trimmed. */
 function toKebab(s: string): string {
-  if (s.trim() === "GoTree") return "gotree";
   return s
+    .trim()
     .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .replace(/([0-9])([A-Z][a-z])/g, "$1-$2")
     .replace(/[\s_]+/g, "-")
     .toLowerCase();
 }
@@ -90,18 +103,18 @@ function computeMapJsToPython(jsFileRelToRepo: string): string {
   let title: string | null = null;
   try {
     const content = readFileSync(absPath, "utf-8");
-    const m = content.match(/title:\s*["'](.+?)["']/);
+    // The title on the `Meta` object, not a `parameters.gallery.title`.
+    const metaIdx = content.search(/:\s*Meta\b/);
+    const m = content
+      .slice(Math.max(metaIdx, 0))
+      .match(/title:\s*["'](.+?)["']/);
     if (m) title = m[1];
   } catch {
     /* unreadable — fall through to path-based fallback */
   }
 
   if (title) {
-    // Trim each segment before kebab-casing — gofish-gotree's story titles
-    // put spaces around "/" ("GoTree / Gallery / arc-tree"), which without
-    // trimming leaves stray leading/trailing dashes (" Gallery " → "-gallery-")
-    // and breaks the resulting path. Mirrors path-mapping.ts's titleToStoryId.
-    const segments = title.split("/").map((seg) => toKebab(seg.trim()));
+    const segments = title.split("/").map(toKebab);
     const dirPath = segments.slice(0, -1).join("/");
     const basePart = segments[segments.length - 1].replace(/-/g, "_");
     return `tests/python-stories/${dirPath}/test_${basePart}.py`;
@@ -109,7 +122,7 @@ function computeMapJsToPython(jsFileRelToRepo: string): string {
 
   // Fallback: derive from file path (CamelCase → snake_case, flatten one level)
   let rel = jsFileRelToRepo.replace(
-    /^packages\/gofish-graphics\/stories\//,
+    /^packages\/(gofish-graphics|gofish-gotree)\/stories\//,
     ""
   );
   rel = rel.replace(/\.stories\.tsx$/, "");
@@ -394,7 +407,7 @@ function splitTopLevel(text: string, start: number, end: number): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// data.py — dataset extraction
+// Dataset modules (data.py, …) — dataset extraction
 // ---------------------------------------------------------------------------
 
 interface DataModule {
@@ -402,18 +415,23 @@ interface DataModule {
   byName: Map<string, PyBlock>;
 }
 
-let dataModuleCache: DataModule | undefined;
-function loadDataModule(): DataModule {
-  if (dataModuleCache) return dataModuleCache;
-  const source = readFileSync(DATA_PY, "utf-8");
+const dataModuleCache = new Map<string, DataModule>();
+function loadDataModule(module: string): DataModule {
+  const cached = dataModuleCache.get(module);
+  if (cached) return cached;
+  const source = readFileSync(
+    join(PYTHON_STORIES_DIR, `${module}.py`),
+    "utf-8"
+  );
   const blocks = splitTopLevelBlocks(source);
   const byName = new Map<string, PyBlock>();
   for (const b of blocks) {
     if (b.name && (b.kind === "assign" || b.kind === "def"))
       byName.set(b.name, b);
   }
-  dataModuleCache = { blocks, byName };
-  return dataModuleCache;
+  const mod = { blocks, byName };
+  dataModuleCache.set(module, mod);
+  return mod;
 }
 
 /** JS→Python literal printer (True/False/None, double-quoted strings). */
@@ -438,15 +456,15 @@ function pyRepr(value: unknown, indent = 0): string {
   return "{\n" + items.join(",\n") + ",\n" + pad + "}";
 }
 
-/** Resolve a `_load_json("name")` RHS to inlined JSON data, or null. */
+/** Resolve a `load_json("name")` RHS to inlined JSON data, or null. */
 function jsonLoadName(block: PyBlock): string | null {
-  const m = /=\s*_load_json\(\s*["']([^"']+)["']\s*\)/.exec(block.text);
+  const m = /=\s*load_json\(\s*["']([^"']+)["']\s*\)/.exec(block.text);
   return m ? m[1] : null;
 }
 
 /** Transitive closure of `byName`'s keys reachable from `seeds` by identifier
  * reference (a name pulls in every other name its block's text mentions).
- * Shared by buildDatasetCode() (data.py names) and transformPythonStory()'s
+ * Shared by buildDatasetCode() (dataset module names) and transformPythonStory()'s
  * decl closure (story-file top-level names) — same worklist/visited-set
  * shape, different `byName` map. */
 function closeOverDecls(
@@ -468,13 +486,13 @@ function closeOverDecls(
   return closure;
 }
 
-/** Transitive closure of data.py names, rendered as standalone Python source
- * (JSON-backed names inlined as Python literals; others kept verbatim). */
+/** Transitive closure of a dataset module's names, rendered as standalone
+ * Python source (JSON-backed names inlined as Python literals; others kept
+ * verbatim). */
 const jsonReprCache = new Map<string, string>();
-function buildDatasetCode(names: string[]): string | null {
-  const mod = loadDataModule();
+function buildDatasetCode(module: string, names: string[]): string[] {
+  const mod = loadDataModule(module);
   const closure = closeOverDecls(mod.byName, names);
-  if (closure.size === 0) return null;
 
   const parts: string[] = [];
   for (const block of mod.blocks) {
@@ -485,7 +503,20 @@ function buildDatasetCode(names: string[]): string | null {
       if (repr === undefined) {
         const jsonPath = join(LOWLEVEL_DATA_DIR, `${jsonName}.json`);
         const parsed = JSON.parse(readFileSync(jsonPath, "utf-8"));
-        repr = pyRepr(parsed);
+        // Only the head of the data, like the JS side — see PREVIEW_ROWS in
+        // storyExamples.ts. Nothing runs this snippet, so rows it leaves out
+        // cost nothing.
+        if (Array.isArray(parsed) && parsed.length > PREVIEW_ROWS) {
+          const dropped = (parsed.length - PREVIEW_ROWS).toLocaleString(
+            "en-US"
+          );
+          repr = pyRepr(parsed.slice(0, PREVIEW_ROWS)).replace(
+            /\n\]$/,
+            `\n    # … ${dropped} more rows\n]`
+          );
+        } else {
+          repr = pyRepr(parsed);
+        }
         jsonReprCache.set(jsonName, repr);
       }
       parts.push(`${block.name} = ${repr}`);
@@ -493,7 +524,7 @@ function buildDatasetCode(names: string[]): string | null {
       parts.push(stripTrailingCommentLines(block.text).trim());
     }
   }
-  return parts.join("\n\n") + "\n";
+  return parts;
 }
 
 type ParsedImport =
@@ -682,7 +713,8 @@ function transformPythonStory(
 
   // ----- imports -----
   const gofishNames = new Set<string>();
-  const datasetNames = new Set<string>();
+  // Names imported from each dataset module, by module.
+  const datasetNames = new Map<string, Set<string>>();
   const keepImportLines: string[] = [];
   const inlinedSiblingModules: string[] = [];
   const seenSiblingModules = new Set<string>();
@@ -703,11 +735,14 @@ function transformPythonStory(
       keepImportLines.push(`from gofish import ${names.join(", ")}`);
       continue;
     }
-    if (module === "python_stories.data") {
-      for (const n of names) datasetNames.add(n);
+    const siblingMatch = /^python_stories\.(\w+)$/.exec(module);
+    if (siblingMatch && isDatasetModule(siblingMatch[1])) {
+      const leaf = siblingMatch[1];
+      const set = datasetNames.get(leaf) ?? new Set<string>();
+      for (const n of names) set.add(n);
+      datasetNames.set(leaf, set);
       continue;
     }
-    const siblingMatch = /^python_stories\.(\w+)$/.exec(module);
     if (siblingMatch) {
       const leaf = siblingMatch[1];
       if (existsSync(join(PYTHON_STORIES_DIR, `${leaf}.py`))) {
@@ -733,9 +768,10 @@ function transformPythonStory(
     throw new FallbackNeeded("story file manipulates sys.path");
   }
 
-  if (datasetNames.size) {
+  const allDatasetNames = [...datasetNames.values()].flatMap((set) => [...set]);
+  if (allDatasetNames.length) {
     keepImportLines.push(
-      `from dataset import ${[...datasetNames].sort().join(", ")}`
+      `from dataset import ${allDatasetNames.sort().join(", ")}`
     );
   }
 
@@ -746,8 +782,11 @@ function transformPythonStory(
   parts.push(bodyParts.join("\n\n"));
 
   const code = parts.join("\n\n") + "\n";
-  const datasetCode = datasetNames.size
-    ? buildDatasetCode([...datasetNames])
+  const datasetParts = [...datasetNames].flatMap(([leaf, set]) =>
+    buildDatasetCode(leaf, [...set])
+  );
+  const datasetCode = datasetParts.length
+    ? datasetParts.join("\n\n") + "\n"
     : null;
 
   return { code, datasetCode, isFallback: false };

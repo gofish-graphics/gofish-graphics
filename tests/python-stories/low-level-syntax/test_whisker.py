@@ -1,13 +1,14 @@
 """Equivalent of lowlevel/Whisker.stories.tsx — Low Level Syntax/Whisker.
 
 Box-and-whisker glyphs over the gender pay-gap data. Each glyph is a `layer`
-of: min/max tick rects (named) joined by a vertical `connect` whisker, the
+of: min/max tick rects (named) joined by a vertical `line` whisker (a
+`.relate()` clause over the ticks), the
 interquartile box, and the median line. Three stories: a single glyph, a
 male/female pair, and the full pay-grade × gender plot. Mirrors the JS
 `boxwhisker.ts` helper (which the story file delegates to).
 """
 
-from gofish import layer, spread, line, rect, ref, datum
+from gofish import layer, spread, line, rect, ref, datum, Curve
 from python_stories.data import GENDER_PAY_GAP, PAY_GRADE
 from python_stories._lowlevel_helpers import group_by, order_by
 
@@ -24,10 +25,22 @@ def _box_and_whisker(d, tag):
     min_name, max_name = f"min-{tag}", f"max-{tag}"
     return layer(
         [
-            rect(w=8, h=1, y=datum(lo), fill="gray").name(min_name),
-            rect(w=8, h=1, y=datum(hi), fill="gray").name(max_name),
-            line(
-                [ref(min_name), ref(max_name)], dir="y", strokeWidth=1, curve="bezier"
+            # The whisker is a relate clause over the two ticks; its own layer
+            # keeps it painting under the box.
+            layer(
+                [
+                    rect(w=8, h=1, y=datum(lo), fill="gray").name(min_name),
+                    rect(w=8, h=1, y=datum(hi), fill="gray").name(max_name),
+                ]
+            ).relate(
+                lambda: [
+                    line(
+                        [ref(min_name), ref(max_name)],
+                        dir="y",
+                        stroke_width=1,
+                        curve=Curve.bezier(),
+                    )
+                ]
             ),
             rect(w=8, y=datum(q1), h=datum(q3 - q1), fill=fill),
             rect(w=8, h=1, y=datum(median), fill="white"),
@@ -48,7 +61,6 @@ def story_pair_box_whisker():
             [_box_and_whisker(male, "male"), _box_and_whisker(female, "female")],
             dir="x",
             spacing=8,
-            sharedScale=True,
         ),
         _RENDER,
     )
@@ -75,7 +87,6 @@ def story_box_whisker():
             ],
             dir="x",
             spacing=8,
-            sharedScale=True,
         ),
         _RENDER,
     )

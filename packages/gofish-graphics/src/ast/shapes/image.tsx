@@ -1,25 +1,18 @@
-import * as Monotonic from "../../util/monotonic";
-import { computeAesthetic } from "../../util";
 import { posFn, pxOf } from "../domain";
-import { interval } from "../../util/interval";
 import { GoFishNode } from "../_node";
-import { getMeasure, getValue, isAesthetic, isValue } from "../data";
+import { getValue, isValue } from "../data";
 import {
   Dimensions,
   displayTranslate,
   elaborateDims,
-  extractAliasCandidates,
+  deferAxisDims,
   FancyDims,
+  positionOf,
   Transform,
 } from "../dims";
-import {
-  DIFFERENCE,
-  ORDINAL,
-  POSITION,
-  SIZE,
-  UNDEFINED,
-} from "../underlyingSpace";
+import { glyphAxis } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import { MARK_CHANNELS } from "../markChannels.generated";
 import { attachCut } from "../graphicalOperators/cut";
 import type { DisplayList } from "gofish-ir";
 import { lowerStyle, pixelBox, roleFor } from "../displayList/lowerHelpers";
@@ -255,37 +248,11 @@ export const Image = ({
         const xPos = dims[0].center ?? dims[0].min;
         const yPos = dims[1].center ?? dims[1].min;
 
-        const resolveAxis = (axis: 0 | 1, pos: any) => {
-          if (isValue(pos)) {
-            const min = getValue(pos) ?? 0;
-            if (isValue(dims[axis].size)) {
-              return DIFFERENCE(
-                getValue(dims[axis].size)!,
-                getMeasure(dims[axis].size)
-              );
-            }
-            return POSITION(interval(min, min), getMeasure(pos));
-          }
-          if (isAesthetic(pos) && isValue(dims[axis].size)) {
-            return DIFFERENCE(
-              getValue(dims[axis].size)!,
-              getMeasure(dims[axis].size)
-            );
-          }
-          if (!isValue(pos) && isValue(dims[axis].size)) {
-            return SIZE(
-              Monotonic.linear(getValue(dims[axis].size)!, 0),
-              getMeasure(dims[axis].size)
-            );
-          }
-          // No data position, no data size — image's intrinsic dimensions
-          // are resolved at layout time via resolveRenderedDimensions.
-          return UNDEFINED;
-        };
-
-        return [resolveAxis(0, xPos), resolveAxis(1, yPos)];
+        // With no data position or size, the image's intrinsic dimensions are
+        // resolved at layout time via resolveRenderedDimensions.
+        return [glyphAxis(xPos, dims[0].size), glyphAxis(yPos, dims[1].size)];
       },
-      layout: (shared, size, scales, children) => {
+      layout: (size, scales, children) => {
         // For data-bound (Value-wrapped) dims, map from data units to pixels via
         // the anchored map when available — this keeps image sizing consistent
         // with rect's data-driven sizing. For literal-number dims, treat as pixels.
@@ -307,20 +274,17 @@ export const Image = ({
           intrinsicDimensions
         );
 
-        const positionX =
-          computeAesthetic(
-            dims[0].center,
-            posFn(scales?.[0]?.map)!,
-            undefined
-          ) ??
-          computeAesthetic(dims[0].min, posFn(scales?.[0]?.map)!, undefined);
-        const positionY =
-          computeAesthetic(
-            dims[1].center,
-            posFn(scales?.[1]?.map)!,
-            undefined
-          ) ??
-          computeAesthetic(dims[1].min, posFn(scales?.[1]?.map)!, undefined);
+        // A center places the middle of the image's box.
+        const positionX = positionOf(
+          dims[0],
+          posFn(scales?.[0]?.map),
+          resolvedDimensions.width
+        );
+        const positionY = positionOf(
+          dims[1],
+          posFn(scales?.[1]?.map),
+          resolvedDimensions.height
+        );
 
         return {
           intrinsicDims: [
@@ -340,12 +304,9 @@ export const Image = ({
           },
         };
       },
-      // IR lowering — structural mirror of `render`. Flip-AGNOSTIC: the box
-      // spans x `[x, x+width]`, y `[y, y+height]`; map both diagonal corners
-      // through `toPixel` and take the component-wise min for the SVG top-left.
-      // Correct under y-down free space and the `yUp` chart scope alike — where
-      // `toPixel` un-mirrors, the top-left is `(x, y+height)`; in y-down it is
-      // `(x, y)` (issue #143/#16).
+      // IR lowering: the box spans x `[x, x+width]`, y `[y, y+height]`; map both
+      // diagonal corners through `toPixel` and take the component-wise min for
+      // the SVG top-left.
       lower: (
         { intrinsicDims, transform, toPixel },
         _children,
@@ -380,12 +341,12 @@ export const Image = ({
     },
     []
   );
-  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
-  node._pendingAliases = extractAliasCandidates(fancyDims);
+  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
+  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
   return node;
 };
 
-const rawImage = createMark(Image, {}, "image");
+const rawImage = createMark(Image, MARK_CHANNELS.image, "image");
 
 /** Wrap an image mark so it awaits intrinsic dimension loading before producing
  *  a node. Recursively wraps .name/.label so chained calls stay awaiting. */

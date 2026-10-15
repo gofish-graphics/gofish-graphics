@@ -1,7 +1,7 @@
 /**
  * Tests for the display-list (render-IR) emitter — `toDisplayList()`.
  *
- * Builds a bar chart via the v3 fluent API, runs `toDisplayList({w, h})`, and
+ * Builds a bar chart via the fluent chart API, runs `toDisplayList({w, h})`, and
  * asserts the emitted document is (a) schema-valid against the canonical
  * display-list schema in `gofish-ir`, and (b) geometrically faithful: bars
  * share a baseline, heights are proportional to their data value, x-positions
@@ -16,7 +16,7 @@ import { DisplayList } from "gofish-ir";
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 
-const { chart, spread, rect } = GoFish as any;
+const { chart, spread, filter, layer, rect } = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -44,7 +44,9 @@ async function main() {
   ];
   const W = 16;
   const SPACING = 8;
-  const doc: DisplayList.DisplayListDocument = await chart(data)
+  // Axes off: the checks below count and measure the bars alone, and axis
+  // ticks are rects too.
+  const doc: DisplayList.DisplayListDocument = await chart(data, { axes: false })
     .flow(spread({ by: "c", dir: "x", spacing: SPACING }))
     .mark(rect({ h: "v", w: W, fill: "steelblue" }))
     .toDisplayList({ w: 200, h: 120 });
@@ -105,6 +107,50 @@ async function main() {
   check(
     "viewport is positive and finite",
     doc.viewport.w > 0 && doc.viewport.h > 0
+  );
+
+  // -- role: no rows vs an empty group ------------------------------------
+  // A mark resolved at a root has no rows, so it has no datum and is chrome.
+  // A group a filter emptied is a real, empty list of rows: it is data.
+  const rectsOf = (d: any): any[] => {
+    const out: any[] = [];
+    const walk = (it: any) => {
+      if (it.kind === "rect") out.push(it);
+      (it.children ?? []).forEach(walk);
+    };
+    d.items.forEach(walk);
+    return out;
+  };
+  // With the default axes on: the axis ticks are rects with no datum, so the
+  // check reads the rects that carry one. An empty group drawn as chrome
+  // would carry none and drop out of the count.
+  const emptied = rectsOf(
+    await chart(data)
+      .flow(
+        spread({ by: "c", dir: "x" }),
+        filter((d: any) => d.v > 100)
+      )
+      .mark(rect({ h: "v", w: W }))
+      .toDisplayList({ w: 200, h: 120 })
+  ).filter((it) => it.datum !== undefined);
+  check(
+    "an empty filtered group is data, not chrome",
+    emptied.length === 3 &&
+      emptied.every(
+        (it) =>
+          it.role === "node" && Array.isArray(it.datum) && it.datum.length === 0
+      ),
+    JSON.stringify(emptied.map((it) => [it.role, it.datum]))
+  );
+  const rooted = rectsOf(
+    await layer([rect({ w: 10, h: 10 })]).toDisplayList({ w: 50, h: 50 })
+  );
+  check(
+    "a mark at a combinator root has no datum and is chrome",
+    rooted.length === 1 &&
+      rooted[0].role === "overlay" &&
+      rooted[0].datum === undefined,
+    JSON.stringify(rooted.map((it) => [it.role, it.datum]))
   );
 
   console.log(`\n${passed} passed, ${failed} failed`);

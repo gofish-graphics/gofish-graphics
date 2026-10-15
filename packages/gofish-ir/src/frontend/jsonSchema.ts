@@ -14,16 +14,22 @@
  * `$defs` (enumerated channels, `additionalProperties: true` — the warn-
  * don't-reject rollout stance) are GENERATED from `descriptors.ts` by
  * `buildOperatorDefs()` / `buildLeafMarkDefs()` below, merged into the
- * authored `$defs` object. Field-level coverage matches `validate.ts` (which
+ * authored `$defs` object, as are the named option types (`AxesOptions`,
+ * `AxisOptions`, `AxisInterval`, `AxisDimsValue`) from `OPTION_TYPES`
+ * (`buildOptionTypeDefs()`), `ChartOptions` among them. Field-level coverage matches `validate.ts` (which
  * interprets the same descriptor table); this file is the wire artifact
  * (consumed by external tooling, language servers, and the Python wrapper's
  * parity-test harness).
  */
 
 import {
+  CHART_OPTIONS,
+  LABEL_OPTIONS,
   LEAF_MARKS,
   OPERATORS,
+  OPTION_TYPES,
   resolveFields,
+  t,
   type FieldGroup,
   type FieldType,
 } from "./descriptors.js";
@@ -38,21 +44,43 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
     case "string":
       return { type: "string" };
     case "number":
-      return { type: "number" };
+      // A finite number has no tagged form (`nonFinite.ts`), so it is a plain
+      // JSON number; `minimum` constrains only the number, not the tag.
+      // A whole number is finite too.
+      return {
+        ...(type.integer
+          ? { type: "integer" }
+          : type.finite
+            ? { type: "number" }
+            : { $ref: "#/$defs/Number" }),
+        ...(type.min !== undefined ? { minimum: type.min } : {}),
+        ...(type.exclusiveMin !== undefined
+          ? { exclusiveMinimum: type.exclusiveMin }
+          : {}),
+      };
     case "boolean":
       return { type: "boolean" };
     case "any":
       return {};
     case "enum":
       return { enum: [...type.values] };
+    case "literal":
+      return { const: type.value };
     case "channel":
       return { $ref: "#/$defs/ChannelValue" };
     case "ref":
       return { $ref: `#/$defs/${type.name}` };
     case "union":
-      return { oneOf: type.options.map(fieldTypeToSchema) };
+      // `anyOf`, as validate.ts reads a union: a value is valid when some
+      // branch accepts it. Branches may overlap (a tagged `datum(...)` object
+      // is a channel value and also fits an open interval object).
+      return { anyOf: type.options.map(fieldTypeToSchema) };
     case "array":
-      return { type: "array", items: fieldTypeToSchema(type.items) };
+      return {
+        type: "array",
+        items: fieldTypeToSchema(type.items),
+        ...(type.minItems !== undefined ? { minItems: type.minItems } : {}),
+      };
     case "tuple":
       return {
         type: "array",
@@ -104,10 +132,9 @@ const pascalCase = (s: string): string =>
  * `validate.ts`'s walkOperator field shapes with `type`/`translate`/`origin`/
  * `meta`/`debug` always present as properties. `additionalProperties` stays
  * `true`: the published schema keeps the permissive wire contract (the JS
- * low-level factories accept passthrough options the v3 IR doesn't model,
- * e.g. spread/stack `FancyDims` — real producers emit them); strict
- * unknown-field rejection is validate.ts strict mode's job, not the wire
- * artifact's.
+ * low-level factories accept passthrough options the fluent operators' IR doesn't model,
+ * e.g. spread/stack `FancyDims` — real producers emit them); rejecting an
+ * unknown field is validate.ts's job, not the wire artifact's.
  */
 function buildOperatorDefs(): Record<string, unknown> {
   const defs: Record<string, unknown> = {};
@@ -146,12 +173,11 @@ function buildOperatorDefs(): Record<string, unknown> {
 
 /**
  * Build one `$def` per leaf-mark type (`RectMark`, `TextMark`, ...) plus the
- * `LeafMarkIR` union referencing them. Unlike operators, `additionalProperties`
- * stays `true` (leaf marks are open-world for now — the gradual-rollout
- * stance `validate.ts`'s leaf-mark warnings implement) and `required` is
- * just `["type"]` regardless of the descriptor's own required fields, so an
- * external strict consumer of this schema doesn't start rejecting documents
- * our own validator only warns about.
+ * `LeafMarkIR` union referencing them. Like the operator `$defs`,
+ * `additionalProperties` stays `true`, and `required` is just `["type"]`
+ * regardless of the descriptor's own required fields: the published schema
+ * keeps the open wire contract, and rejecting an unknown or missing field is
+ * validate.ts's job.
  */
 function buildLeafMarkDefs(): Record<string, unknown> {
   const defs: Record<string, unknown> = {};
@@ -169,11 +195,11 @@ function buildLeafMarkDefs(): Record<string, unknown> {
         ...properties,
         name: { type: "string" },
         label: { $ref: "#/$defs/LabelIR" },
-        constraints: {
+        relate: {
           type: "array",
-          items: { $ref: "#/$defs/ConstraintIR" },
+          items: { $ref: "#/$defs/RelateClauseIR" },
         },
-        zOrder: { type: "number" },
+        zOrder: { $ref: "#/$defs/Number" },
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
       },
@@ -186,9 +212,17 @@ function buildLeafMarkDefs(): Record<string, unknown> {
   return defs;
 }
 
+/** One `$def` per named option type (`AxesOptions`, `AxisOptions`, ...), so
+ *  a descriptor field's `t.ref(name)` resolves to the same declaration the
+ *  validator and the Python generator read. */
+function buildOptionTypeDefs(): Record<string, unknown> {
+  return fieldsToProperties(OPTION_TYPES).properties;
+}
+
 const GENERATED_DEFS: Record<string, unknown> = {
   ...buildOperatorDefs(),
   ...buildLeafMarkDefs(),
+  ...buildOptionTypeDefs(),
 };
 
 export const FRONTEND_IR_JSON_SCHEMA = {
@@ -196,7 +230,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
   $id: "https://gofish.graphics/schema/frontend/v0.json",
   title: "GoFish Frontend IR",
   description:
-    "Source-level chart specification produced by the v3 fluent API.",
+    "Source-level chart specification produced by the fluent chart API.",
   type: "object",
   required: ["irVersion", "ir", "root"],
   additionalProperties: false,
@@ -272,12 +306,12 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         data: { oneOf: [{ $ref: "#/$defs/DataIR" }, { type: "null" }] },
         operators: { type: "array", items: { $ref: "#/$defs/OperatorIR" } },
         mark: { $ref: "#/$defs/MarkIR" },
-        options: { type: "object" },
-        zOrder: { type: "number" },
+        options: { $ref: "#/$defs/ChartOptions" },
+        zOrder: { $ref: "#/$defs/Number" },
         name: {
           type: "string",
           description:
-            "Chart-level name so a sibling Layer constrain callback can reference this chart.",
+            "Chart-level name so a sibling Layer relate callback can reference this chart.",
         },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
@@ -291,22 +325,22 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         charts: {
           type: "array",
           description:
-            "Layer tiers. Each is a ChartIR; the v3 chart(...).layer(mark) builder chain may also include a RawMarkIR tier (a component-level, datumless annotation overlay).",
+            "Layer tiers. Each is a ChartIR; the chart(...).layer(mark) builder chain may also include a RawMarkIR tier (a component-level, datumless annotation overlay).",
           items: {
             oneOf: [{ $ref: "#/$defs/ChartIR" }, { $ref: "#/$defs/RawMarkIR" }],
           },
         },
         options: { type: "object" },
-        constraints: {
+        relate: {
           type: "array",
-          items: { $ref: "#/$defs/ConstraintIR" },
+          items: { $ref: "#/$defs/RelateClauseIR" },
           description:
-            "Layer-level constraints (Layer([...]).constrain(...)), resolving refs against the child charts' names.",
+            "Layer-level relate clauses (layer([...]).relate(...)), resolving names against the child charts' names.",
         },
         builder: {
           type: "boolean",
           description:
-            "True when this came from the v3 chart(...).layer(...) builder chain (not the low-level layer([...]) combinator). The deserializer reconstructs it through the real LayerBuilder so JS owns the builder's render logic (inferred axis titles, etc.).",
+            "True when this came from the chart(...).layer(...) builder chain (not the low-level layer([...]) combinator). The deserializer reconstructs it through the real LayerBuilder so JS owns the builder's render logic (inferred axis titles, etc.).",
         },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
@@ -330,54 +364,63 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         "Structural pixel translation reapplied by the runtime deserializer.",
       type: "object",
       properties: {
-        x: { type: "number" },
-        y: { type: "number" },
+        x: { $ref: "#/$defs/Number" },
+        y: { $ref: "#/$defs/Number" },
       },
     },
-    AxesOptions: {
-      description:
-        "Per-node axis-rendering override. Boolean toggles both dimensions; object form lets x and y differ. Each `AxisOption` is `true`/`false`, or `{ title?: string | false }` to set or suppress the title.",
-      oneOf: [
-        { type: "boolean" },
-        {
-          type: "object",
-          properties: {
-            x: { $ref: "#/$defs/AxisOption" },
-            y: { $ref: "#/$defs/AxisOption" },
-          },
-        },
-      ],
-    },
-    AxisOption: {
-      oneOf: [
-        { type: "boolean" },
-        {
-          type: "object",
-          properties: {
-            title: {
-              oneOf: [{ type: "string" }, { const: false }],
-            },
-          },
-        },
-      ],
-    },
+    // AxesOptions / AxisOptions / AxisInterval / AxisDimsValue are GENERATED
+    // from descriptors.ts's OPTION_TYPES (ChartOptions among them)
+    // — see GENERATED_DEFS below.
     FieldAccessor: {
       description:
-        'Explicit field-accessor form, emitted by field(name, measure?). Optionally carries a chained pipeline (ops) — field("site").sort("yield") or field("count").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator\'s entry-flagged size channel, normalize.',
+        'Explicit field-accessor form, emitted by field(name). Optionally carries a chained pipeline (ops) — field("site").sort("yield") or field("count").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator\'s entry-flagged size channel, normalize.',
       type: "object",
       required: ["type", "name"],
       properties: {
         type: { const: "field" },
         name: { type: "string" },
-        measure: {
-          type: "string",
-          description:
-            "Optional unit annotation for the channel's underlying space (a type claim; see field(name, measure)).",
-        },
         ops: {
           type: "array",
           items: { $ref: "#/$defs/FieldOpIR" },
         },
+      },
+    },
+    StructAccessor: {
+      description:
+        "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes Bin.hex or Bin.voronoi). Valid as a partition's `by` only once binned.",
+      type: "object",
+      required: ["type", "fields"],
+      additionalProperties: false,
+      properties: {
+        type: { const: "struct" },
+        fields: {
+          type: "object",
+          required: ["x", "y"],
+          additionalProperties: false,
+          properties: { x: { type: "string" }, y: { type: "string" } },
+        },
+        ops: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["op", "partition"],
+            additionalProperties: false,
+            properties: {
+              op: { const: "bin" },
+              partition: { $ref: "#/$defs/StructBin" },
+            },
+          },
+        },
+      },
+    },
+    ChunkKey: {
+      description:
+        "A `by` key that groups consecutive rows, emitted by chunk(size): row i goes to group floor(i / size), a bin over row position. It names no field, so its groups draw no axis or labels.",
+      type: "object",
+      required: ["type", "size"],
+      properties: {
+        type: { const: "chunk" },
+        size: { type: "integer", minimum: 1 },
       },
     },
     FieldOpIR: {
@@ -393,7 +436,9 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             order: { enum: ["asc", "desc"] },
             values: {
               type: "array",
-              items: { oneOf: [{ type: "string" }, { type: "number" }] },
+              items: {
+                oneOf: [{ type: "string" }, { $ref: "#/$defs/Number" }],
+              },
               description:
                 'Explicit group order (#735), e.g. sort(["sun", "fog", ...]). Mutually exclusive with by/order. Groups whose key isn\'t in this list are appended after, in natural sort order.',
             },
@@ -409,13 +454,20 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           required: ["op"],
           properties: {
             op: { const: "bin" },
-            thresholds: {
+            partition: {
+              description:
+                "The partition each value is binned into: a Calendar value (Calendar.month({ every: 3 }) is { kind: month, every: 3 }), Bin.step(size) or Bin.thresholds(countOrEdges), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
               oneOf: [
-                { type: "number" },
-                { type: "array", items: { type: "number" } },
+                { $ref: "#/$defs/Partition" },
+                {
+                  type: "array",
+                  minItems: 2,
+                  items: { $ref: "#/$defs/Calendar" },
+                },
               ],
             },
           },
+          additionalProperties: false,
         },
         {
           type: "object",
@@ -465,8 +517,8 @@ export const FRONTEND_IR_JSON_SCHEMA = {
       required: ["type", "children"],
       properties: {
         type: { const: "offset" },
-        x: { type: "number" },
-        y: { type: "number" },
+        x: { $ref: "#/$defs/Number" },
+        y: { $ref: "#/$defs/Number" },
         children: {
           type: "array",
           minItems: 1,
@@ -480,7 +532,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
     },
     CutMarkIR: {
       description:
-        "Slice a single `source` mark into N clipped sub-shapes along `dir`. As a chart `.mark(...)` spec it deserializes to the v3 expand-mark form; as a combinator child it expands in place into its N slice nodes. `size` is a field-name string (expand form) or an array of absolute-pixel numbers / datum() flex-weight wrappers; omitted means equal slices.",
+        "Slice a single `source` mark into N clipped sub-shapes along `dir`. As a chart `.mark(...)` spec it deserializes to the expand-mark form; as a combinator child it expands in place into its N slice nodes. `size` is a field-name string (expand form) or an array of absolute-pixel numbers / datum() flex-weight wrappers; omitted means equal slices.",
       type: "object",
       required: ["type", "source", "dir"],
       properties: {
@@ -488,9 +540,9 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         source: { $ref: "#/$defs/MarkIR" },
         dir: { enum: ["x", "y"] },
         size: { $ref: "#/$defs/CutSize" },
-        inset: { type: "number" },
+        inset: { $ref: "#/$defs/Number" },
         name: { type: "string" },
-        zOrder: { type: "number" },
+        zOrder: { $ref: "#/$defs/Number" },
         translate: { $ref: "#/$defs/Translate" },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
@@ -505,15 +557,14 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           type: "array",
           items: {
             oneOf: [
-              { type: "number" },
+              { $ref: "#/$defs/Number" },
               {
                 type: "object",
                 required: ["type", "datum"],
                 properties: {
                   type: { const: "datum" },
                   datum: {},
-                  measure: { type: "string" },
-                  offset: { type: "number" },
+                  offset: { $ref: "#/$defs/Number" },
                   colorOps: {
                     type: "array",
                     items: {
@@ -521,7 +572,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
                       required: ["op", "amount"],
                       properties: {
                         op: { enum: ["lighten", "darken"] },
-                        amount: { type: "number" },
+                        amount: { $ref: "#/$defs/Number" },
                       },
                     },
                   },
@@ -565,11 +616,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         children: { type: "array", items: { $ref: "#/$defs/MarkIR" } },
         name: { type: "string" },
         label: { $ref: "#/$defs/LabelIR" },
-        constraints: {
+        relate: {
           type: "array",
-          items: { $ref: "#/$defs/ConstraintIR" },
+          items: { $ref: "#/$defs/RelateClauseIR" },
         },
-        zOrder: { type: "number" },
+        zOrder: { $ref: "#/$defs/Number" },
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
       },
@@ -584,13 +635,15 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             { type: "string" },
             {
               type: "array",
-              items: { oneOf: [{ type: "string" }, { type: "number" }] },
+              items: {
+                oneOf: [{ type: "string" }, { $ref: "#/$defs/Number" }],
+              },
             },
           ],
         },
         name: { type: "string" },
         label: { $ref: "#/$defs/LabelIR" },
-        zOrder: { type: "number" },
+        zOrder: { $ref: "#/$defs/Number" },
         translate: { $ref: "#/$defs/Translate" },
       },
     },
@@ -611,20 +664,31 @@ export const FRONTEND_IR_JSON_SCHEMA = {
               accessor: {
                 oneOf: [{ type: "string" }, { $ref: "#/$defs/FieldAccessor" }],
               },
-              position: { type: "string" },
-              fontSize: { type: "number" },
-              color: { type: "string" },
-              offset: { type: "number" },
-              rotate: { type: "number" },
-              fontFamily: { type: "string" },
-              fontWeight: {
-                oneOf: [{ type: "number" }, { type: "string" }],
-              },
-              fontStyle: { type: "string" },
+              ...fieldsToProperties(LABEL_OPTIONS).properties,
             },
           },
         },
       ],
+    },
+    Number: {
+      description:
+        'A number. JSON has no Infinity, so +/-Infinity travel as the tagged object { "$numberDouble": "Infinity" | "-Infinity" } (MongoDB Extended JSON). A tagged "NaN" is not a valid number here.',
+      oneOf: [
+        { type: "number" },
+        {
+          type: "object",
+          required: ["$numberDouble"],
+          additionalProperties: false,
+          properties: {
+            $numberDouble: { enum: ["Infinity", "-Infinity"] },
+          },
+        },
+      ],
+    },
+    RelateClauseIR: {
+      description:
+        "One clause of a .relate() callback: a constraint over names (carries refs), or a mark that draws, whose children may reference the layer's names.",
+      oneOf: [{ $ref: "#/$defs/ConstraintIR" }, { $ref: "#/$defs/MarkIR" }],
     },
     ConstraintIR: {
       type: "object",
@@ -642,7 +706,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         "Right-hand side of a channel slot. Bare primitives for the shorthand path; tagged objects for the explicit field/datum/literal constructors and Python-bridge sentinels.",
       oneOf: [
         { type: "string" },
-        { type: "number" },
+        { $ref: "#/$defs/Number" },
         { type: "boolean" },
         { type: "null" },
         { $ref: "#/$defs/FieldAccessor" },
@@ -660,9 +724,8 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           properties: {
             type: { const: "datum" },
             datum: {},
-            measure: { type: "string" },
             offset: {
-              type: "number",
+              $ref: "#/$defs/Number",
               description:
                 "Pixel offset applied after the datum maps through its scale (datum(v) + px).",
             },

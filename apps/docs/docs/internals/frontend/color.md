@@ -26,13 +26,13 @@ inherited by marks:
 
 ```ts
 // discrete — cycles by index or maps by key
-chart(data, { color: palette("tableau10") });
-chart(data, { color: palette(["#e41a1c", "#377eb8", "#4daf4a"]) });
-chart(data, { color: palette({ Salmon: "#e15759" }) }); // unmapped → fallback
+chart(data, { color: Color.palette("tableau10") });
+chart(data, { color: Color.palette(["#e41a1c", "#377eb8", "#4daf4a"]) });
+chart(data, { color: Color.palette({ Salmon: "#e15759" }) }); // unmapped → fallback
 
 // continuous — interpolates in perceptual space (Lab)
-chart(data, { color: gradient("blues") });
-chart(data, { color: gradient(["#f7fbff", "#6b0808"]) });
+chart(data, { color: Color.gradient("blues") });
+chart(data, { color: Color.gradient(["#f7fbff", "#6b0808"]) });
 ```
 
 A mark's `fill: "<field>"` is resolved against the chart's color scale; a

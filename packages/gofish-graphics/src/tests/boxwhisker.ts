@@ -1,13 +1,13 @@
 import _ from "lodash";
 import {
   line,
-  For,
+  map,
   layer,
   groupBy,
   rect,
-  ref,
   spreadX,
   v,
+  Curve,
 } from "../lib";
 import { genderPayGap, payGrade } from "../data/genderPayGap";
 import { Value } from "../ast/data";
@@ -30,11 +30,16 @@ const boxAndWhisker = ({
   const minName = `min-${Math.random().toString(36).substring(2, 9)}`;
   const maxName = `max-${Math.random().toString(36).substring(2, 9)}`;
   return layer({}, [
-    rect({ w: 8, h: 1, y: v(min), fill: "gray" }).name(minName),
-    rect({ w: 8, h: 1, y: v(max), fill: "gray" }).name(maxName),
-    line({ dir: "y", strokeWidth: 1, curve: "bezier" }, [
-      ref(minName),
-      ref(maxName),
+    // The whisker is a relate clause over the two ticks; its own layer keeps
+    // it painting under the box.
+    layer([
+      rect({ w: 8, h: 1, y: v(min), fill: "gray" }).name(minName),
+      rect({ w: 8, h: 1, y: v(max), fill: "gray" }).name(maxName),
+    ]).relate((names) => [
+      line({ dir: "y", strokeWidth: 1, curve: Curve.bezier() }, [
+        names[minName],
+        names[maxName],
+      ]),
     ]),
     rect({ w: 8, y: v(q1), h: v(q3 - q1), fill }),
     rect({ w: 8, h: 1, y: v(median), fill: "white" }),
@@ -61,7 +66,6 @@ export const testPairBoxWhisker = () => {
   return spreadX(
     {
       spacing: 8,
-      sharedScale: true,
     },
     [
       boxAndWhisker({
@@ -88,9 +92,8 @@ export const testBoxWhiskerPlot = () =>
   spreadX(
     {
       spacing: 8,
-      sharedScale: true,
     },
-    For(
+    map(
       groupBy(
         _.orderBy(genderPayGap, (d) => payGrade.indexOf(d["Pay Grade"])),
         "Pay Grade"
@@ -101,7 +104,7 @@ export const testBoxWhiskerPlot = () =>
             key,
             spacing: 8,
           },
-          For(groupBy(d, "Gender"), (d, key) =>
+          map(groupBy(d, "Gender"), (d, key) =>
             boxAndWhisker({
               median: d[0].Median,
               min: d[0].Min,

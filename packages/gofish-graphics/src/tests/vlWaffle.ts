@@ -36,7 +36,7 @@ export const testVLWaffle = (size: { width: number; height: number }) =>
   gofish(
     { width: size.width, height: size.height },
     stackX(
-      { spacing: 4, sharedScale: true },
+      { spacing: 4 },
       _(stackedBarDataset)
         .toPairs()
         .sortBy(([month]) => {

@@ -17,10 +17,7 @@ import { lowerChildrenOffset } from "../displayList/lowerHelpers";
  * translate the parent assigns, inside `render`. Never collapse the
  * `undefined`s to `0`; doing so would steal placement from the parent.
  *
- * Subtlety for image/rect children: those shapes render with an internal
- * `scale(1, -1)` y-flip, so a positive `y` offset moves content the opposite
- * way you might expect on the y axis. Callers compensate at the callsite (see
- * `cut`), not here.
+ * The shift is in pixels: a positive `y` moves the content down the screen.
  *
  * Exactly one child is required.
  */
@@ -34,9 +31,10 @@ export const offset = createNodeOperator<{ x?: number; y?: number }, GoFishAST>(
     return new GoFishNode(
       {
         type: "offset",
-        shared: [false, false],
         resolveUnderlyingSpace: (childSpaces) => childSpaces[0] ?? [],
-        layout: (_shared, size, scales, layoutChildren) => {
+        resolveExtent: (childExtents) =>
+          childExtents[0] ?? [undefined, undefined],
+        layout: (size, scales, layoutChildren) => {
           const child = layoutChildren[0].layout(size, scales);
           child.place("x", 0, "baseline");
           child.place("y", 0, "baseline");

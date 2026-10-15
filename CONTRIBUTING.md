@@ -16,7 +16,7 @@ If you want to start contributing to the codebase itself, **try the "good first 
 
 ### Installations
 
-[Ensure pnpm is installed](https://pnpm.io/installation), then build to setup the gofish-graphics package.
+[Ensure pnpm is installed](https://pnpm.io/installation), then build to setup the gofish-graphics package. The repo pins its pnpm version in the `packageManager` field of the root `package.json`. If your `pnpm` comes from corepack, you need corepack 0.34.5 or newer to run that version (`npm install -g corepack@latest`); older corepack releases fail with `Cannot find module .../bin/pnpm.cjs`.
 
 ```bash
 pnpm build
@@ -34,7 +34,7 @@ pnpm docs:dev
 
 ## Larger Contributions
 
-**Read our GitHub wiki** to learn more about the project's design philosophy. Major changes to the project (like adding a new intermediate representation or interaction/animation) will require a more back-and-forth conversation in the issues before we come to a consensus on what to do.
+**Read the [Design Philosophy](https://gofish.graphics/internals/design/philosophy) pages of our internals wiki** (`apps/docs/docs/internals/design/`) to learn more about the project's design philosophy, including its [API design rules](https://gofish.graphics/internals/design/api-design). Major changes to the project (like adding a new intermediate representation or interaction/animation) will require a more back-and-forth conversation in the issues before we come to a consensus on what to do.
 
 ## Assessing Issues and Reviewing PRs
 

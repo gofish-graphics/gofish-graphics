@@ -48,8 +48,11 @@ def bar_chart(
         fill: Fill color (CSS string) or a field name for a color scale.
         axes: Chart-level axes option (``True``/``False``/per-dimension dict),
             passed through to ``chart(data, axes=...)``.
-        mark: Mark factory to use instead of ``rect`` — called with the same
-            kwargs (``h=``/``w=`` and ``fill=``), e.g. ``mark=circle``.
+        mark: Mark factory to use instead of ``rect``, called with the same
+            kwargs: ``h=`` (vertical) or ``w=`` (horizontal), and ``fill=``.
+            The size is the bar's value, so a dot at the value turns it into
+            a position, e.g.
+            ``mark=lambda h, fill=None: circle(r=5, cy=h, fill=fill)``.
 
     Returns:
         A ``ChartBuilder``. NOTE: the JS helper wraps its builder in a
@@ -69,7 +72,7 @@ def bar_chart(
     # field, height from the y field.
     if orientation == "y":
         return (
-            chart(data, chart_options or None)
+            chart(data, **chart_options)
             .flow(spread(by=x, dir="x"))
             .mark(mark_fn(h=y, fill=fill))
         )
@@ -78,7 +81,7 @@ def bar_chart(
     # field, width from the x field.
     if orientation == "x":
         return (
-            chart(data, chart_options or None)
+            chart(data, **chart_options)
             .flow(spread(by=y, dir="y"))
             .mark(mark_fn(w=x, fill=fill))
         )

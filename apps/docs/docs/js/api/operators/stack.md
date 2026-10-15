@@ -1,3 +1,7 @@
+---
+order: 20
+---
+
 # stack
 
 Shorthand for [`spread`](/js/api/operators/spread)`({ glue: true })`. Children
@@ -30,9 +34,16 @@ stack({ dir, ... }, [m1, m2, ...])
 
 ## Parameters
 
+::: gofish-ref stack
+:::
+
+`dir` takes `"x"`, `"y"`, or an axis name the enclosing coordinate space
+declares, such as `"theta"` under polar; see
+[`spread` → naming the axis](/js/api/operators/spread#naming-the-axis-with-dir).
+
 Same as [`spread`](/js/api/operators/spread) without `spacing` or `glue` —
 `stack` always glues, so neither is configurable. Its `by` is the same
-path-aware option (`"field"`, `"datum.field"` after a
+path-aware option (`"field"`, which also works on refs after a
 [selection](/js/api/selection/ref), a function, or a
 [`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor); see
 [`spread` → path-aware `by`](/js/api/operators/spread#path-aware-by). If you want gaps between
@@ -45,6 +56,41 @@ a stack a **space-filling spine** — its segments fill the extent in
 proportion to their share (the mosaic/marimekko conditional axis). See
 [`spread` → Field-expression pipeline](/js/api/operators/spread#field-expression-pipeline)
 and [`spread` → Space-filling spines](/js/api/operators/spread#space-filling-spines-mosaic-marimekko).
+
+## Signed parts
+
+`stack` places its parts end to end, in order. Each part starts where the one
+before it ends, and the first part starts at 0. A negative part goes back, so
+the stack ends at the sum of its parts, and parts that cancel overlap. Parts
+(+100, −30, +20, −50, +10) rise to 100, step back and forth, and end at 50.
+
+To pile positive parts up from 0 and negative parts down from 0 (a diverging
+stacked bar), group by sign first, so each stack holds one sign:
+
+```ts
+// `direction` is "Inflow" for positive amounts and "Outflow" for negative.
+.flow(
+  spread({ by: "quarter", dir: "x" }),
+  group({ by: "direction" }),
+  stack({ by: "flow", dir: "y" })
+)
+```
+
+## Centered stacks
+
+When the chart's `schema` gives the `by` column a midpoint
+([`Schema.ordered(levels).diverging()`](/js/api/core/schema)), the stack's 0 is
+the midpoint of that order instead of the start of its first part. The parts
+must be nonnegative. This draws Likert charts and population pyramids:
+
+```ts
+chart(survey, { schema: { response: Schema.ordered(LEVELS).diverging() } })
+  .flow(
+    spread({ by: "question", dir: "y" }),
+    stack({ by: "response", dir: "x" })
+  )
+  .mark(rect({ w: "count", fill: "response" }));
+```
 
 ## Example
 

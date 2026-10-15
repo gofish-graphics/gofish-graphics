@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar, datum } from "gofish-graphics";
+import { rect, datum, Coord } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — ClockTree (nodes arranged around a clock-face ring).
@@ -87,14 +87,14 @@ const clockTree = {
 
 const bandUnit = 26; // radial thickness unit; node height = (rdepth+1)*bandUnit
 
-// Wedge node: thetaSize is a unit angular WEIGHT (every node an equal slot). The
+// Wedge node: `w` (the θ extent) is a unit angular WEIGHT (every node an equal slot). The
 // coord is the single σ-scale-root: it sums the weights (N·σ) and fits them to
 // the angular budget, propagating one σ down through the nested distributes — so
 // the ring closes exactly with NO hand-set 2π/N. emX/emY make θ sweep an arc and
 // r a radial band. RootHeight:rdepth → height grows with d.height: root tallest.
 const node = (d: any) =>
   rect({
-    thetaSize: datum(1),
+    w: datum(1),
     h: (d.height + 1) * bandUnit,
     emX: true,
     emY: true,
@@ -123,7 +123,7 @@ export const ClockTree: StoryObj = {
         }),
         // InnerRadius:0.72 — the hollow clock rim (nodes live in the outer band,
         // the disc is empty from the center out to 0.72·R). Now expressible.
-        coord: polar({ innerRadius: 0.72 }),
+        coord: Coord.polar({ innerRadius: 0.72 }),
       },
       { w: 540, h: 540 },
       clockTree

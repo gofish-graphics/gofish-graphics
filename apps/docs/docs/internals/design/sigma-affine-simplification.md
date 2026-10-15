@@ -544,7 +544,8 @@ on one axis is the sanctioned multi-scale reading.
   axis is a view of a scope**), nicing is **demand-driven**: a scope nices iff
   at least one node in its space-flow region renders an axis on the dim.
   `resolveAxes` leaves persistent `axisDemand` stamps (the `axis` work flags
-  are cleared by elaboration); `GoFishNode.scopeRendersAxis` walks the region —
+  are cleared by elaboration); `GoFishNode.scopeAxisTicks` (then named
+  `scopeRendersAxis`, a yes/no; since #1057 it returns the axis's ticks) walks the region —
   up while neither a self-scaled stash (`selfScaledSpace`) nor a coord boundary
   cuts the space flow, then across the region subtree stopping at deeper
   stashes/coords — so an inner shared scope under an axis-drawing root inherits

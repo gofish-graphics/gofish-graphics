@@ -4,7 +4,7 @@ import { seafood } from "../../../src/data/catch";
 import { chart, rect } from "../../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Bar/Stacked Fluent",
+  title: "Forward Syntax/Bar/Stacked Fluent",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
@@ -23,7 +23,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { axes: true })
+    chart(seafood)
       .facet({ by: "lake", dir: "x" })
       .stack({ by: "species", dir: "y" })
       .mark(rect({ h: "count", fill: "species" }))

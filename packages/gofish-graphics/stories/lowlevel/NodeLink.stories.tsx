@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
-  Layer,
+  layer,
   Constraint,
   line,
   createMark,
@@ -31,7 +31,7 @@ type Args = { w: number; h: number };
 
 // A node: a rounded box with a centered label.
 const Node = createMark(({ label }: { label: string }) =>
-  Layer({ w: 76, h: 40 }, [
+  layer({ w: 76, h: 40 }, [
     rect({
       w: 76,
       h: 40,
@@ -41,7 +41,7 @@ const Node = createMark(({ label }: { label: string }) =>
       strokeWidth: 2,
     }).name("box"),
     text({ text: label, fontSize: 14, fill: "#1d3557" }).name("label"),
-  ]).constrain(({ box, label }) => [
+  ]).relate(({ box, label }) => [
     Constraint.align({ x: "middle", y: "middle" }, [box, label]),
   ])
 );
@@ -68,17 +68,24 @@ export const NodeLink: StoryObj<Args> = {
     const C = createName("C");
     const D = createName("D");
 
-    Layer({ x: 20, y: 20 }, [
+    layer({ x: 20, y: 20 }, [
       // ── tier 1: nodes — placed by constraints, a finished unit ──────────
-      Layer([
+      layer([
         Node({ label: "A" }).name(A),
         Node({ label: "B" }).name(B),
         Node({ label: "C" }).name(C),
         Node({ label: "D" }).name(D),
-      ]).constrain((c) => [
-        Constraint.distribute({ dir: "x", spacing: 60, anchor: "edge" }, [c.A, c.B, c.C]),
+      ]).relate((c) => [
+        Constraint.distribute({ dir: "x", spacing: 60, anchor: "edge" }, [
+          c.A,
+          c.B,
+          c.C,
+        ]),
         Constraint.align({ y: "middle" }, [c.A, c.B, c.C]),
-        Constraint.distribute({ dir: "y", spacing: 60, anchor: "edge" }, [c.D, c.B]),
+        Constraint.distribute({ dir: "y", spacing: 60, anchor: "edge" }, [
+          c.D,
+          c.B,
+        ]),
         Constraint.align({ x: "middle" }, [c.B, c.D]),
       ]),
 
@@ -107,15 +114,24 @@ export const NodeLink: StoryObj<Args> = {
       text({ text: "run", fontSize: 11, fill: "#607d8b" }).name("t2"),
       text({ text: "drop", fontSize: 11, fill: "#607d8b" }).name("t3"),
     ])
-      .constrain((c) => [
+      .relate((c) => [
         // horizontal edges: label centered just above the edge
         Constraint.align({ x: "middle" }, [c.e1, c.t1]),
-        Constraint.distribute({ dir: "y", spacing: 3, anchor: "edge" }, [c.e1, c.t1]),
+        Constraint.distribute({ dir: "y", spacing: 3, anchor: "edge" }, [
+          c.e1,
+          c.t1,
+        ]),
         Constraint.align({ x: "middle" }, [c.e2, c.t2]),
-        Constraint.distribute({ dir: "y", spacing: 3, anchor: "edge" }, [c.e2, c.t2]),
+        Constraint.distribute({ dir: "y", spacing: 3, anchor: "edge" }, [
+          c.e2,
+          c.t2,
+        ]),
         // vertical edge: label centered just to the right
         Constraint.align({ y: "middle" }, [c.e3, c.t3]),
-        Constraint.distribute({ dir: "x", spacing: 4, anchor: "edge" }, [c.e3, c.t3]),
+        Constraint.distribute({ dir: "x", spacing: 4, anchor: "edge" }, [
+          c.e3,
+          c.t3,
+        ]),
       ])
       .render(container, { w: args.w, h: args.h });
 

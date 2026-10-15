@@ -4,7 +4,7 @@ Per-scope y-orientation (#629): three free-space subtrees side by side. The bar
 chart's y is a CONTINUOUS value axis, so it declares y-up and grows its bars
 UPWARD; the heatmap (keyed rows) and the tidy tree (keyed depth levels) have
 ORDINAL y axes, so they stay SVG-native y-DOWN and read top→bottom. Combinator
-`spread` in the `dir` variants stands in for v1 `spreadX`/`spreadY`; a data-bound
+`spread` in the `dir` variants stands in for JS `spreadX`/`spreadY`; a data-bound
 SIZE uses `datum(v)` (JS `value(v)`).
 """
 
@@ -77,7 +77,7 @@ def _tree_node(label):
     return layer(
         [
             ellipse(w=20, h=20, fill=_C6[2]),
-            text(text=label, fontSize=9, fill="white"),
+            text(text=label, font_size=9, fill="white"),
         ]
     )
 

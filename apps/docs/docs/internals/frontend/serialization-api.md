@@ -46,7 +46,7 @@ Four entry points, all returning `Promise<FrontendIRDocument>`:
 | `Serialize.toJSONRawMark(mark, options?)`          | A bare mark used without a chart wrapper.                                      |
 
 All entry points are async because combinator-form marks may carry their
-child list as a `Promise<Mark[]>` (e.g. from `For(...)` helpers); the
+child list as a `Promise<Mark[]>` (e.g. from `map(...)` helpers); the
 emitter resolves these to walk into them.
 
 ## Emit (Python)
@@ -86,19 +86,34 @@ const builder = Serialize.buildChart(
 await builder.render(container, { w: 500, h: 300, axes: true });
 ```
 
+To render a whole root (a chart, a layer, or a bare mark) in one call, the
+way the Python widget and the parity harness do:
+
+```ts
+await Serialize.renderIR(
+  root,
+  container,
+  { w: 500, h: 300 },
+  { bridge, tierRows }
+);
+```
+
+`tierRows` holds rows shipped beside the IR, one array per chart tier; a
+chart whose IR carries inline rows does not need it.
+
 For finer-grained reconstruction:
 
 | Function                                              | Returns              |
 | ----------------------------------------------------- | -------------------- |
 | `Serialize.buildChart(chartSpec, data, bridge?, tok)` | `ChartBuilder<any>`  |
 | `Serialize.mapOperator(opSpec, bridge?)`              | `Operator<any, any>` |
-| `Serialize.mapMark(markSpec, bridge?, tokenResolver)` | `Mark<any>`          |
 
 The `bridge` argument is a `Serialize.DeriveBridge` — required only if
 the IR contains `derive` operators or `{__gofish_lambda}` sentinels
 (both Python-bridge concerns). A pure-JS-emitted IR doesn't need one;
-pass `undefined`. The widget's bridge implementation lives in
-`packages/gofish-python/widget-src/index.ts` if you need a reference.
+pass `undefined`. The widget's bridge implementation (Arrow over anywidget)
+lives in `packages/gofish-python/widget-src/index.ts`, and the parity harness's (JSON
+over HTTP) in `tests/harness/main.ts`, if you need a reference.
 
 `makeTokenResolver()` returns a fresh per-render resolver that mints
 stable JS `Token` instances for the `{__gofish_token, __tag}` sentinels
@@ -109,17 +124,16 @@ the Python wrapper emits.
 ```ts
 import { Frontend } from "gofish-ir";
 
-const result = Frontend.validate(doc, { strict: true });
+const result = Frontend.validate(doc);
 if (!result.valid) {
   console.error(result.errors);
   // [{ path: "$.root.mark.label.accessor", message: "expected string, got null" }, ...]
 }
 ```
 
-- **Strict mode** rejects unknown fields. Use this in tests and CI.
-- **Permissive mode** (the default) ignores unknown fields. Use this
-  for forward-compatible reading — consumers should not break when the
-  schema grows.
+The validator has one mode: an unknown field is an error, wherever it sits.
+The JSON Schema artifact stays open (`additionalProperties: true`), so an
+external validator that reads it accepts fields it does not know.
 
 The JSON Schema artifact is at `packages/gofish-ir/dist/frontend/v0.json`
 (emitted during build); use it with any external validator (Python
@@ -145,7 +159,7 @@ The current gaps:
   round-trip fine through the widget.
 - **`Token` names** from `.name(createName("foo"))` aren't carried into
   the IR by `toJSON` yet (string names are). Tokens need a stable
-  per-document id scheme; deferred. `mapMark` does resolve the
+  per-document id scheme; deferred. The deserializer does resolve the
   Python-side `{__gofish_token}` sentinels via the token resolver.
 - **`arrow` / `connect` / `treemap` combinator-form marks** are built
   via a different factory (`createNodeOperator`) and aren't tagged in
@@ -185,5 +199,5 @@ in #gofish before relying on the shape — it's likely to change.
   in the Frontend IR essay's "Bridge extensions" section.
 - Source: `packages/gofish-ir/src/frontend/{schema,validate,jsonSchema,descriptors,examples}.ts`,
   `packages/gofish-graphics/src/serialize/{toJSON,fromJSON,registry}.ts`.
-- Validator at runtime: `Frontend.validate(doc, { strict?: boolean })`.
+- Validator at runtime: `Frontend.validate(doc)`.
 - JSON Schema artifact: `packages/gofish-ir/dist/frontend/v0.json` (build output).

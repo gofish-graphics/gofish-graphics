@@ -3,11 +3,11 @@
 A whimsical scatter where each lake is a balloon on a string, the whole scene
 warped by a `wavy` coordinate transform. Each balloon is a small `layer` of two
 ellipses + two rects (flipped via a y=−1 scale transform); a thin rect draws the
-string. Exercises `layer({coord: wavy()})` (Tier-2 coord transform) and
+string. Exercises `layer([...], coord=wavy())` (Tier-2 coord transform) and
 shape-level `cx`/`cy` positioning.
 """
 
-from gofish import layer, ellipse, rect, wavy
+from gofish import layer, ellipse, rect, Coord
 from python_stories.data import SEAFOOD, CATCH_LOCATIONS, COLORS
 from python_stories._lowlevel_helpers import group_by
 
@@ -44,7 +44,7 @@ def story_default():
         scene.append(
             layer(
                 [
-                    rect(x=0, y=0, w=1, h=loc["y"], emY=True, fill=_BLACK),
+                    rect(x=0, y=0, w=1, h=loc["y"], em_y=True, fill=_BLACK),
                     _balloon(0, loc["y"], palette),
                 ],
                 x=loc["x"],
@@ -52,6 +52,6 @@ def story_default():
         )
 
     return (
-        layer(scene, coord=wavy(), x=0, y=0),
+        layer(scene, coord=Coord.wavy(), x=0, y=0),
         {"axes": True},
     )

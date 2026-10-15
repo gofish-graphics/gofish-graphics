@@ -1,3 +1,7 @@
+---
+order: 30
+---
+
 # ellipse
 
 Draws an ellipse for each data item. Like [`circle`](/python/api/marks/circle),
@@ -15,19 +19,14 @@ ellipse(w=24, h=30, fill="#e15759")
 ## Signature
 
 ```python
-ellipse(w=None, h=None, fill=None, stroke=None, strokeWidth=None,
-        opacity=None, debug=None) -> Mark
+ellipse(w=None, h=None, fill=None, stroke=None, stroke_width=None,
+        opacity=None, fill_opacity=None, debug=None) -> Mark
 ```
 
 ## Parameters
 
-| Parameter     | Type           | Description                                 |
-| ------------- | -------------- | ------------------------------------------- |
-| `w`, `h`      | `int` \| `str` | Width / height — a constant or a field name |
-| `fill`        | `str`          | Fill color — a constant or a field name     |
-| `stroke`      | `str`          | Stroke color                                |
-| `strokeWidth` | `int`          | Stroke width in pixels                      |
-| `opacity`     | `float`        | Opacity, `0`–`1` (default `1`)              |
+::: gofish-ref ellipse
+:::
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 

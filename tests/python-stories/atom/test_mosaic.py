@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from gofish import chart, stack, rect, palette, field
+from gofish import chart, stack, rect, field, Color
 
 
 def _passengers():
@@ -20,13 +20,13 @@ def _passengers():
 
 def story_default():
     return (
-        chart(_passengers(), color=palette(["#2b8cbe", "#ff8408"]), axes=True)
+        chart(_passengers(), color=Color.palette(["#2b8cbe", "#ff8408"]))
         .flow(
             # columns by class — width ∝ each class's passenger count (marginal)
             stack(by="pclass", dir="x", size="count"),
             # survival share within each class column (conditional), fills height
             stack(by="survived", dir="y", size=field("count").normalize()),
         )
-        .mark(rect(fill="survived", stroke="white", strokeWidth=1)),
+        .mark(rect(fill="survived", stroke="white", stroke_width=1)),
         {"w": 520, "h": 420},
     )

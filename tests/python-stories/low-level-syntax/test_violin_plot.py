@@ -47,11 +47,14 @@ def story_default():
                     dir="y",
                     alignment="middle",
                 ),
+            ]
+        ).relate(
+            lambda: [
                 ribbon(
                     [ref(name) for name in names],
                     dir="y",
                     opacity=1,
-                    mixBlendMode="normal",
+                    mix_blend_mode="normal",
                 ),
             ]
         )
@@ -64,7 +67,6 @@ def story_default():
             ],
             dir="x",
             spacing=64,
-            sharedScale=True,
         ),
         {"w": 500, "h": 300, "axes": True},
     )

@@ -6,7 +6,6 @@ and drive its ``derive_request`` trait the way the JS bundle would.
 """
 
 import base64
-import json
 from typing import Any, Dict
 
 import pyarrow as pa
@@ -39,7 +38,7 @@ def _make_widget(derive_functions: Dict[str, Any]) -> GoFishChartWidget:
     }
     return GoFishChartWidget(
         spec=spec,
-        arrow_data=data_to_arrow_bytes([{"x": 1}]),
+        tier_arrow=[data_to_arrow_bytes([{"x": 1}])],
         derive_functions=derive_functions,
         width=400,
         height=300,
@@ -163,49 +162,27 @@ class TestRenderResultStatus:
         assert widget.error == "boom"
 
 
-class TestArrowDataWireShape:
-    """`arrow_data` carries two distinct wire shapes (#683): a single chart's
-    Arrow bytes get base64-encoded directly, while a layer's per-child bytes
-    are wrapped in a JSON object keyed by child index. `GoFishChartWidget`
-    must build the right shape for whichever of `arrow_data`/`arrow_dict` it
-    receives, and reject the ambiguous case of both/neither.
+class TestTierArrowWireShape:
+    """`tier_arrow` carries one wire shape (#683): a list of base64 Arrow
+    IPC streams, one per chart tier. A single chart is one tier, a layer is
+    one tier per child, and a bare mark has none.
     """
 
-    def test_single_chart_arrow_data_is_plain_base64(self):
-        raw = data_to_arrow_bytes([{"x": 1}])
-        widget = GoFishChartWidget(
-            spec={"data": None, "operators": [], "mark": {"type": "rect"}, "options": {}, "zOrder": None},
-            arrow_data=raw,
-            width=400,
-            height=300,
-        )
-        assert base64.b64decode(widget.arrow_data) == raw
-
-    def test_layer_arrow_dict_is_json_of_base64_by_index(self):
+    def test_tiers_are_base64_in_order(self):
         raw0 = data_to_arrow_bytes([{"x": 1}])
         raw1 = data_to_arrow_bytes([{"x": 2}])
         widget = GoFishChartWidget(
             spec={"type": "layer", "charts": [], "options": {}},
-            arrow_dict={"0": raw0, "1": raw1},
+            tier_arrow=[raw0, raw1],
             width=400,
             height=300,
         )
-        decoded = json.loads(widget.arrow_data)
-        assert base64.b64decode(decoded["0"]) == raw0
-        assert base64.b64decode(decoded["1"]) == raw1
+        assert [base64.b64decode(b) for b in widget.tier_arrow] == [raw0, raw1]
 
-    def test_requires_exactly_one_of_arrow_data_or_arrow_dict(self):
-        spec = {"data": None, "operators": [], "mark": {"type": "rect"}, "options": {}, "zOrder": None}
-        with pytest.raises(ValueError):
-            GoFishChartWidget(spec=spec, width=400, height=300)
-        with pytest.raises(ValueError):
-            GoFishChartWidget(
-                spec=spec,
-                arrow_data=b"x",
-                arrow_dict={"0": b"y"},
-                width=400,
-                height=300,
-            )
+    def test_chart_and_mark_tiers(self):
+        c = chart([{"x": 1, "y": 2}]).mark(rect(h="y"))
+        assert len(c.render().tier_arrow) == 1
+        assert rect(w=1, h=1).render().tier_arrow == []
 
     def test_layer_builder_render_does_not_raise(self):
         """Regression test for #683: rendering a `.layer()` chain through the
@@ -219,9 +196,8 @@ class TestArrowDataWireShape:
         widget = layer([c1, c2]).render()
 
         assert widget.spec["type"] == "layer"
-        decoded = json.loads(widget.arrow_data)
-        assert set(decoded.keys()) == {"0", "1"}
-        for b64 in decoded.values():
+        assert len(widget.tier_arrow) == 2
+        for b64 in widget.tier_arrow:
             buf = base64.b64decode(b64)
             reader = pa_ipc.open_stream(pa.BufferReader(buf))
             assert reader.read_all().num_rows == 1

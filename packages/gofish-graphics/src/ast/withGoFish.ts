@@ -2,28 +2,25 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-/* 
-1. Supports direct and data style.
-
-2. Supports `v` syntax. (TODO)
-
-*/
-
+import { getColumnTypes, setColumnTypes } from "./schema";
 import type { JSX } from "solid-js";
 import { GoFishAST } from "./_ast";
 import { GoFishNode } from "./_node";
-import type { AxesOptions } from "./gofish";
+import type { AxesOptions, View } from "./gofish";
 import type { ColorConfig } from "./colorSchemes";
 import _, { ListOfRecursiveArraysOrValues } from "lodash";
-import { ChartBuilder } from "./marks/chart";
+import { ChartBuilder, LayerBuilder } from "./marks/chart";
 import type { LayerContext } from "./marks/chart";
+// From markResult, which imports neither chartBuilder nor createOperator, so
+// the dependency between those modules keeps running one way.
+import { datumOfInput, resolveMarkResult } from "./marks/markResult";
 import {
+  CHANNEL_INFER,
+  hasNoValue,
+  resolveChannelAccessors,
   ChannelAnnotations,
+  ChannelType,
   DeriveMarkProps,
-  inferSize,
-  inferPos,
-  inferColor,
-  inferRaw,
   inferEntrySize,
 } from "./channels";
 import {
@@ -34,17 +31,18 @@ import {
   type ZOrderValue,
 } from "./marks/createOperator";
 import { isValue } from "./data";
-import { isLive, evalLiveStatic, type LiveValue } from "../interaction/live";
-import { KNOWN_ALIAS_KEYS } from "./dims";
-import { Mark } from "./types";
-import type { ConstraintSpec, ConstraintRef } from "./constraints";
+import { splitLiveChannels } from "../interaction/live";
+import { Mark, MarkChild } from "./types";
+import type { RelateFn } from "./constraints";
 import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
 import type { Token } from "./createName";
+import type { MarkTransition } from "../animation/transition";
 import { attachTerminals } from "./marks/terminals";
+import { withWire } from "./wire";
+import { isThenable } from "../util";
+import { breadthFirst } from "./elaborationUtils";
+import { withKindValues } from "./strategyKind";
 
-/**
- * Options for rendering a GoFish node
- */
 export interface RenderOptions {
   w?: number;
   h?: number;
@@ -58,10 +56,17 @@ export interface RenderOptions {
 }
 
 /**
- * A single child element: a GoFishAST node, a promise of one, or a mark (function).
- * Marks are resolved by calling them with `undefined` (no data) to produce a node.
+ * A single child element: a GoFishAST node, a promise of one, a mark (function),
+ * or a chart builder (`chart(...).mark(...)`, with or without `.layer(...)` tiers).
+ * Marks are resolved by calling them with `undefined` (no data) to produce a
+ * node; builders are resolved through their own `resolve()`.
  */
-type GoFishChild = GoFishAST | Promise<GoFishAST> | Mark<any>;
+type GoFishChild =
+  | GoFishAST
+  | Promise<GoFishAST>
+  | Mark<any>
+  | ChartBuilder<any, any>
+  | LayerBuilder;
 
 /**
  * Children input type that can be a recursive structure, a promise of it, or null.
@@ -86,15 +91,10 @@ type GoFishChildrenInputWithThunks =
     >
   | null;
 
-/**
- * A Promise-like object that also has chainable methods from GoFishNode.
- * This allows calling .render(), .name(), .setKey(), .setShared() on promises returned by withGoFish.
- */
+/** A Promise-like object that also carries GoFishNode's chainable methods, so
+ *  `.render()` / `.name()` / … work on the promises withGoFish returns. */
 export interface PromiseWithRender<T> extends Promise<T> {
-  render(
-    container: HTMLElement,
-    options: RenderOptions
-  ): HTMLElement | Promise<HTMLElement>;
+  render(container: HTMLElement, options: RenderOptions): Promise<View>;
   toSVG(options?: Parameters<GoFishNode["toSVG"]>[0]): Promise<string>;
   toSVGElement(
     options?: Parameters<GoFishNode["toSVGElement"]>[0]
@@ -109,10 +109,7 @@ export interface PromiseWithRender<T> extends Promise<T> {
   name(name: string | Token): PromiseWithRender<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): PromiseWithRender<T>;
   setKey(key: string): PromiseWithRender<T>;
-  setShared(shared: [boolean, boolean]): PromiseWithRender<T>;
-  constrain(
-    fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
-  ): PromiseWithRender<T>;
+  relate(fn: RelateFn): PromiseWithRender<T>;
   zOrder(value: number): PromiseWithRender<T>;
   scope(): PromiseWithRender<T>;
 }
@@ -125,16 +122,36 @@ function hasRenderMethod(value: any): value is GoFishNode {
 }
 
 /**
- * Type guard to check if value is a ChartBuilder
+ * Reify one operator child into a node. A child is a thunk/mark, a chart BUILDER
+ * (a single-tier `chart(...).mark(...)` or a layered `....layer(...)`), a
+ * thenable, or an already-built node; `resolveMarkResult` is the one place that
+ * knows all four, so both child loops below go through here. It calls a thunk
+ * with `NO_ROWS` (a root has no rows) and reifies whatever it returns.
+ *
+ * `null`/`undefined` (a thunk that opted out) comes back as `undefined` and is
+ * dropped by the caller.
  */
-function isChartBuilder(value: any): value is ChartBuilder<any, any> {
-  return value instanceof ChartBuilder;
+async function reifyChild(
+  child: unknown,
+  layerContext: LayerContext
+): Promise<GoFishAST | undefined> {
+  if (child == null) return undefined;
+  return (await resolveMarkResult(child as any, layerContext)) ?? undefined;
 }
 
-/**
- * Wraps a Promise to add chainable methods that proxy to GoFishNode.
- * This allows calling .render(), .name(), .setKey(), .setShared() on promises.
- */
+/** The GoFishNode methods `addRenderMethod` republishes on a promise: each one
+ *  applies to the resolved node and rewraps the result. */
+const CHAINABLE_NODE_METHODS = [
+  "name",
+  "scope",
+  "label",
+  "setKey",
+  "relate",
+  "zOrder",
+] as const;
+
+/** Wrap a Promise so GoFishNode's chainable methods and the export terminals
+ *  can be called on it directly. */
 export function addRenderMethod<T>(promise: Promise<T>): PromiseWithRender<T> {
   // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
   // from the shared registry, so adding one touches a single list. The promise
@@ -142,98 +159,22 @@ export function addRenderMethod<T>(promise: Promise<T>): PromiseWithRender<T> {
   // See terminals.ts.
   attachTerminals(promise, async () => {
     const result = await promise;
-    if (hasRenderMethod(result)) return result;
+    if (result instanceof GoFishNode) return result;
     throw new Error(
       "Cannot call an export terminal on this result. Only GoFishNode instances support export."
     );
   });
 
-  // Add chainable methods that return new PromiseWithRender
-  (promise as any).name = function (
-    name: string | Token
-  ): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.name(name) as T;
-        }
-        return result;
-      })
-    );
-  };
-
-  (promise as any).scope = function (): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.scope() as T;
-        }
-        return result;
-      })
-    );
-  };
-
-  (promise as any).label = function (
-    accessor: LabelAccessor,
-    options?: LabelOptions
-  ): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.label(accessor, options) as T;
-        }
-        return result;
-      })
-    );
-  };
-
-  (promise as any).setKey = function (key: string): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.setKey(key) as T;
-        }
-        return result;
-      })
-    );
-  };
-
-  (promise as any).setShared = function (
-    shared: [boolean, boolean]
-  ): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.setShared(shared) as T;
-        }
-        return result;
-      })
-    );
-  };
-
-  (promise as any).constrain = function (
-    fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
-  ): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.constrain(fn) as T;
-        }
-        return result;
-      })
-    );
-  };
-
-  (promise as any).zOrder = function (value: number): PromiseWithRender<T> {
-    return addRenderMethod(
-      promise.then((result) => {
-        if (result instanceof GoFishNode) {
-          return result.zOrder(value) as T;
-        }
-        return result;
-      })
-    );
-  };
+  for (const method of CHAINABLE_NODE_METHODS) {
+    (promise as any)[method] = (...args: any[]) =>
+      addRenderMethod(
+        promise.then((result) =>
+          result instanceof GoFishNode
+            ? ((result as any)[method](...args) as T)
+            : result
+        )
+      );
+  }
 
   return promise as PromiseWithRender<T>;
 }
@@ -244,7 +185,7 @@ export function addRenderMethod<T>(promise: Promise<T>): PromiseWithRender<T> {
  * Always returns a flat array.
  * ChartBuilder instances are automatically resolved.
  */
-async function flattenAndAwaitPromises<T>(
+export async function flattenAndAwaitPromises<T>(
   value:
     | T
     | Promise<T>
@@ -257,20 +198,14 @@ async function flattenAndAwaitPromises<T>(
     return [];
   }
 
-  // If it's a promise, await it first
   if (value instanceof Promise) {
     const resolved = await value;
     return flattenAndAwaitPromises(resolved);
   }
 
-  // If it's a ChartBuilder, preserve it (don't resolve here)
-  // ChartBuilder instances should be resolved sequentially in reifyChildrenSequentially
-  // For non-sequential contexts, they'll be resolved when processed
-  if (isChartBuilder(value)) {
-    return [value as T];
-  }
+  // A chart/layer builder falls through to the single-value case below, which
+  // preserves it unresolved — resolution is the child loops' business.
 
-  // If it's an array, recursively await all elements
   if (Array.isArray(value)) {
     const awaited = await Promise.all(
       value.map((item) => flattenAndAwaitPromises(item))
@@ -278,7 +213,6 @@ async function flattenAndAwaitPromises<T>(
     return _.flattenDeep(awaited) as T[];
   }
 
-  // Otherwise, return as single-element array
   return [value as T];
 }
 
@@ -291,48 +225,46 @@ export async function reifyChildrenSequentially(
     | GoFishAST
     | (() => GoFishAST | Promise<GoFishAST>)
     | ChartBuilder<any, any>
+    | LayerBuilder
     | Mark<any>
   )[],
   layerContext?: LayerContext
 ): Promise<GoFishAST[]> {
-  // if the child is a thunked promise, it must be resolved before the next child is resolved
+  // A thunked promise must resolve before the next child is resolved.
   const resolved: GoFishAST[] = [];
   const sharedLayerContext = layerContext ?? {};
 
   for (const child of children) {
-    if (typeof child === "function") {
-      // It's a thunk or mark — call it (marks receive undefined as data)
-      const result = (child as any)(undefined);
-      const resolvedChild = result instanceof Promise ? await result : result;
-      if (resolvedChild != null) {
-        // If it's a ChartBuilder, resolve it
-        if (isChartBuilder(resolvedChild)) {
-          const node = await resolvedChild
-            .withLayerContext(sharedLayerContext)
-            .resolve();
-          resolved.push(node);
-        } else {
-          resolved.push(resolvedChild);
-        }
-      }
-    } else if (isChartBuilder(child)) {
-      // If it's a ChartBuilder, resolve it sequentially
-      const node = await child.withLayerContext(sharedLayerContext).resolve();
-      resolved.push(node);
-    } else {
-      // It's already a GoFishAST, add it directly
-      resolved.push(child);
-    }
+    const node = await reifyChild(child, sharedLayerContext);
+    if (node != null) resolved.push(node);
   }
 
   return resolved;
 }
 
-/* 
-- Flattens deeply nested children
-- Allows opts to be optional
-- Supports arrays where individual elements can be promises
-*/
+/**
+ * Parse a node operator's `(opts?, children?)` / `(children)` overload. Both
+ * factories below share it, so the two call shapes are defined once.
+ */
+function parseOperatorArgs<T extends Record<string, any>, C>(
+  args: any[],
+  fnName: string
+): { opts: T; children: C | undefined } {
+  if (args.length > 2) {
+    throw new Error(
+      `${fnName}: Expected 0, 1, or 2 arguments, got ${args.length}`
+    );
+  }
+  if (args.length === 2)
+    return { opts: args[0] ?? ({} as T), children: args[1] };
+  return { opts: {} as T, children: args.length === 1 ? args[0] : undefined };
+}
+
+/**
+ * Turn a low-level `(opts, children) => node` function into an operator that
+ * flattens deeply nested children, awaits promises anywhere in them, and lets
+ * `opts` be omitted.
+ */
 export function createNodeOperator<T extends Record<string, any>, R>(
   func: (opts: T, children: GoFishAST[]) => R
 ): {
@@ -341,39 +273,22 @@ export function createNodeOperator<T extends Record<string, any>, R>(
 } {
   return function (...args: any[]): PromiseWithRender<Awaited<R>> {
     const promise = (async () => {
-      let opts: T;
-      let children: GoFishChildrenInput | undefined;
-      if (args.length === 2) {
-        opts = args[0] ?? ({} as T);
-        children = args[1];
-      } else if (args.length === 1) {
-        opts = {} as T;
-        children = args[0];
-      } else if (args.length === 0) {
-        opts = {} as T;
-        children = undefined;
-      } else {
-        throw new Error(
-          `createNodeOperator: Expected 0, 1, or 2 arguments, got ${args.length}`
-        );
-      }
-      // Flatten nested structures and await all promises
+      const { opts, children } = parseOperatorArgs<T, GoFishChildrenInput>(
+        args,
+        "createNodeOperator"
+      );
       const flattened = await flattenAndAwaitPromises<
-        GoFishAST | Promise<GoFishAST> | ChartBuilder<any, any> | Mark<any>
+        | GoFishAST
+        | Promise<GoFishAST>
+        | ChartBuilder<any, any>
+        | LayerBuilder
+        | Mark<any>
       >(children);
       const layerContext: LayerContext = {};
-      // Resolve marks (functions), ChartBuilder instances, and filter out promises
+      // Resolve marks (functions) and ChartBuilder instances; a mark is called
+      // with undefined data to produce its node.
       const resolvedAll = await Promise.all(
-        flattened.map(async (child) => {
-          if (typeof child === "function") {
-            // It's a mark — call with undefined to produce a GoFishNode
-            return await (child as Mark<any>)(undefined as any);
-          }
-          if (isChartBuilder(child)) {
-            return await child.withLayerContext(layerContext).resolve();
-          }
-          return child;
-        })
+        flattened.map((child) => reifyChild(child, layerContext))
       );
       const flatChildren = resolvedAll.filter(
         (child): child is GoFishAST =>
@@ -386,13 +301,9 @@ export function createNodeOperator<T extends Record<string, any>, R>(
 }
 
 /**
- * Sequential version of withGoFish that supports thunks (functions) in children.
- * Processes thunks sequentially (one at a time) rather than in parallel.
- *
- * - Flattens deeply nested children
- * - Allows opts to be optional
- * - Supports arrays where individual elements can be promises or thunks
- * - Processes thunks sequentially to ensure proper execution order
+ * Like {@link createNodeOperator}, but children may also be thunks, and they
+ * are processed one at a time rather than in parallel — a child that reads a
+ * name registered by an earlier sibling needs that order.
  */
 export function createNodeOperatorSequential<T extends Record<string, any>, R>(
   func: (opts: T, children: GoFishAST[]) => R
@@ -405,31 +316,20 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
 } {
   return function (...args: any[]): PromiseWithRender<Awaited<R>> {
     const promise = (async () => {
-      let opts: T;
-      let children: GoFishChildrenInputWithThunks | undefined;
-      if (args.length === 2) {
-        opts = args[0] ?? ({} as T);
-        children = args[1];
-      } else if (args.length === 1) {
-        opts = {} as T;
-        children = args[0];
-      } else if (args.length === 0) {
-        opts = {} as T;
-        children = undefined;
-      } else {
-        throw new Error(
-          `createNodeOperatorSequential: Expected 0, 1, or 2 arguments, got ${args.length}`
-        );
-      }
-      // First phase: flatten nested structures and await promises, preserving thunks, marks, and ChartBuilder instances
+      const { opts, children } = parseOperatorArgs<
+        T,
+        GoFishChildrenInputWithThunks
+      >(args, "createNodeOperatorSequential");
+      // First phase: flatten and await, preserving thunks, marks, and
+      // ChartBuilder instances for the sequential second phase.
       const flattenedWithThunks = await flattenAndAwaitPromises<
         | GoFishAST
         | (() => GoFishAST | Promise<GoFishAST>)
         | ChartBuilder<any, any>
+        | LayerBuilder
         | Mark<any>
       >(children);
       const layerContext: LayerContext = {};
-      // Second phase: process thunks and ChartBuilder instances sequentially
       const resolvedChildren = await reifyChildrenSequentially(
         flattenedWithThunks,
         layerContext
@@ -443,7 +343,7 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
 /**
  * A mark with chainable .name and .label, plus a top-level .render() for
  * combinator-form callsites whose children carry their own data — typically
- * `For(...)` closures over pre-computed values, refs to other layers, or
+ * `map(...)` closures over pre-computed values, refs to other layers, or
  * already-resolved nodes. Calling `.render()` invokes the mark with
  * `undefined` data, so marks that read field accessors (e.g. `rect({h: "v"})`)
  * won't get any data — for those, wrap in a Chart instead:
@@ -453,6 +353,9 @@ export type NameableMark<T> = Mark<T> & {
   name(layerName: string | Token): NameableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): NameableMark<T>;
   zOrder(value: ZOrderValue<T>): NameableMark<T>;
+  /** How the mark looks in each phase of an animation: `Animation.grow()`,
+   *  `Animation.fadeIn()`, … (see `src/animation/`). */
+  transition(spec: MarkTransition): NameableMark<T>;
   translate(opts: TranslateModifierOptions): NameableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
@@ -482,7 +385,9 @@ export type NameableMark<T> = Mark<T> & {
  *
  * Omitting `channels` is just the empty-annotations special case: all props
  * pass through as-is, which is the right default for `(props) => Node`-style
- * components composed from existing marks.
+ * components composed from existing marks. A component's body may return a
+ * built node or a mark (e.g. `layer([...])`, `spread(opts, [...])`): the
+ * result is reified like any combinator child, in a fresh name context.
  *
  * The output node is always made a scope root, so any `.name(token)`
  * registrations inside the shape function are hygienic — external paths like
@@ -492,34 +397,20 @@ export type NameableMark<T> = Mark<T> & {
  * The returned mark supports `.name("layerName" | token)` so that when used
  * in a chart, each produced node is registered for `ref("layerName")` /
  * `selectAll("layerName")`.
- */
-/**
- * Mark-factory IR serialization config — passed as the optional third
- * argument to `createMark`. A string is shorthand for `{ type: <string> }`.
  *
- * The factory tags each produced mark with `__serialize: { type, opts }`
- * so the frontend-IR emitter (gofish-graphics/serialize/toJSON) can
- * reconstruct the mark on the wire.
+ * `serialize` is the mark's IR discriminator (lowercase, as on the wire), e.g.
+ * "rect". The factory tags each produced mark with `__serialize: { type, opts }`,
+ * the options exactly as the caller passed them, so the frontend-IR emitter
+ * (gofish-graphics/serialize/toJSON) can reconstruct the mark on the wire. The
+ * emitter keeps only the keys the mark's descriptor declares.
  */
-export type MarkSerializeConfig<P = any> =
-  | string
-  | {
-      /** IR discriminator (lowercase to match the wire format), e.g. "rect". */
-      type: string;
-      /**
-       * Optional shape function. Default: copy `markOpts` verbatim. Use to
-       * strip non-serializable fields or rename keys.
-       */
-      shape?: (opts: P) => Record<string, unknown>;
-    };
-
 export function createMark<P extends Record<string, any>>(
-  shapeFn: (props: P) => GoFishNode | PromiseLike<GoFishNode>
+  shapeFn: (props: P) => MarkChild
 ): (props: P) => NameableMark<P>;
 export function createMark<P extends Record<string, any>>(
-  shapeFn: (props: P) => GoFishNode | PromiseLike<GoFishNode>,
+  shapeFn: (props: P) => MarkChild,
   channels: undefined,
-  serialize: MarkSerializeConfig<P>
+  serialize: string
 ): (props: P) => NameableMark<P>;
 export function createMark<
   ShapeProps extends Record<string, any>,
@@ -534,81 +425,93 @@ export function createMark<
     | PromiseLike<GoFishNode>
     | PromiseLike<GoFishNode[]>,
   channels: C,
-  serialize?: MarkSerializeConfig,
+  serialize?: string,
   cfg?: { kind?: MarkKind }
 ): <T extends Record<string, any>>(
   opts: DeriveMarkProps<ShapeProps, C, T>
-) => NameableMark<T | T[] | { item: T | T[]; key: number | string }>;
+) => NameableMark<T[]>;
 export function createMark(
   shapeFn: any,
   channels: Record<string, any> = {},
-  serialize?: MarkSerializeConfig,
+  serialize?: string,
   cfg?: { kind?: MarkKind }
 ): any {
   const kind: MarkKind = cfg?.kind ?? "per-item";
-  const serializeConfig: { type: string; shape?: (o: any) => any } | undefined =
-    typeof serialize === "string" ? { type: serialize } : serialize;
+  // A strategy kind used bare is read as its value from here on.
   return (markOpts: Record<string, any>) =>
-    buildCreatedMark(shapeFn, channels, serializeConfig, kind, markOpts);
+    buildCreatedMark(
+      shapeFn,
+      channels,
+      serialize,
+      kind,
+      withKindValues(markOpts)
+    );
+}
+
+/**
+ * Close a component's built node: stamp the datum it was built from (layout
+ * reads `node.datum` in some bbox / inferRaw passes), make it a scope root so
+ * the names inside it stay hygienic, and mark it a component, where string-name
+ * lookup and z-order flattening stop. `_isComponent` is separate from
+ * `_isScope` so an operator that scopes for token reasons does not also stop
+ * `ref("name")` lookups. Shared by `createMark` and the deserializer's
+ * `wrapWithScope` (the Python `@mark` decorator), so both build the same node.
+ */
+export function sealComponent(node: GoFishNode, datum: unknown[]): GoFishNode {
+  node.datum = datumOfInput(datum);
+  node.scope();
+  node._isComponent = true;
+  return node;
 }
 
 function buildCreatedMark(
   shapeFn: any,
   channels: Record<string, any>,
-  serializeConfig: { type: string; shape?: (o: any) => any } | undefined,
+  serialize: string | undefined,
   kind: MarkKind,
   markOpts: Record<string, any>
 ): any {
   const baseMark: Mark<any> = async (
-    input,
-    keyParam?: string | number,
+    d: unknown[],
+    key?: string | number,
     _layerContext?: LayerContext
   ) => {
-    // Unwrap input: handles T, T[], or { item, key } patterns
-    let d: any, key: number | string | undefined;
-    if (typeof input === "object" && input !== null && "item" in input) {
-      d = (input as any).item;
-      key = (input as any).key;
-    } else {
-      d = input;
-      key = keyParam;
-    }
-
     if (markOpts.debug) {
       console.log("mark", key, d);
     }
 
-    const data = Array.isArray(d) ? d : [d];
-
     // Build shape props by encoding each channel. The plain string spec
-    // ("size"/"pos"/"color"/"raw") aggregates over `data` and produces a
+    // ("size"/"pos"/"color"/"raw") aggregates over the rows `d` and produces a
     // single value. The object form `{type, entry: true}` produces a
     // per-row array — used by expand-kind marks. Unannotated props (which
     // is everything when channels is omitted/empty) pass through.
+    // A Python accessor is resolved over the rows first, in one batch call,
+    // so inference below is synchronous (`resolveChannelAccessors`, #1080).
     const shapeProps: Record<string, any> = {};
     // `live(...)` channels: the pipeline renders (and measures) the accessor's
     // resolve-time value; the paint layer re-evaluates it reactively per frame
-    // via the datum-bound thunk baked at lower time.
-    let liveChannels: Record<string, LiveValue> | undefined;
-    for (const propName of Object.keys(markOpts)) {
+    // via the datum-bound thunk baked at lower time. One split, shared with
+    // every other mark factory — see `splitLiveChannels`.
+    const { static: staticOpts, live: liveChannels } = splitLiveChannels(
+      markOpts,
+      d
+    );
+    const pending = resolveChannelAccessors(staticOpts, channels, () => d);
+    const resolvedOpts = isThenable(pending) ? await pending : pending;
+    // A data channel the mark is given that has no value over its rows (the
+    // mean of no rows, a field of no first row) leaves the mark nothing to
+    // draw it with, whichever channel it is (a size, a position, a color, a
+    // text, a slot of a `dims` bag: `hasNoValue`), so the mark is not drawn
+    // (Vega-Lite's default `invalid: "filter"`). It keeps its place in the
+    // layout. A sum or a count of no rows is 0, a value, and draws.
+    let noValue = false;
+    for (const propName of Object.keys(resolvedOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
-      let markValue = markOpts[propName];
-      if (isLive(markValue)) {
-        (liveChannels ??= {})[propName] = markValue;
-        markValue = evalLiveStatic(markValue, d);
-      }
+      const markValue = resolvedOpts[propName];
 
-      let channelType =
+      const channelType: ChannelType | undefined =
         typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
-      // Coordinate-space axis aliases aren't declared channels, but they carry
-      // the same value semantics as the canonical dims they resolve to: a
-      // `<name>Size` alias is a SIZE channel, a position alias (theta/r) a POS
-      // channel. Infer that here so `rSize: "field"` aggregates like `h: "field"`
-      // before the resolveAliases pass moves the value onto the dims.
-      if (channelType === undefined && KNOWN_ALIAS_KEYS.has(propName)) {
-        channelType = propName.endsWith("Size") ? "size" : "pos";
-      }
       const isEntry =
         typeof channelSpec === "object" && channelSpec?.entry === true;
 
@@ -616,18 +519,14 @@ function buildCreatedMark(
         // Already a Value wrapper (e.g. v(...)) — pass through directly
         shapeProps[propName] = markValue;
       } else if (isEntry && channelType === "size") {
-        shapeProps[propName] = inferEntrySize(markValue, data);
-      } else if (channelType === "size") {
-        shapeProps[propName] = inferSize(markValue, data);
-      } else if (channelType === "pos") {
-        shapeProps[propName] = inferPos(markValue, data);
-      } else if (channelType === "color") {
-        shapeProps[propName] = inferColor(markValue, data);
-      } else if (channelType === "raw") {
-        // `inferRaw` is async so that callable accessors may return a
-        // Promise — used by the Python wrapper to bridge `text(text=
-        // lambda d: ...)` through the derive-server RPC.
-        shapeProps[propName] = await inferRaw(markValue, data);
+        shapeProps[propName] = inferEntrySize(markValue, d);
+      } else if (channelType !== undefined) {
+        shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);
+        if (
+          markValue !== undefined &&
+          hasNoValue(channelType, shapeProps[propName])
+        )
+          noValue = true;
       } else {
         shapeProps[propName] = markValue;
       }
@@ -635,42 +534,43 @@ function buildCreatedMark(
 
     // For expand-kind marks, hand the data array to shapeFn so it can
     // build N output nodes 1:1 with input rows. shapeFn may be async.
-    const result = await shapeFn(
-      shapeProps,
-      kind === "expand" ? data : undefined
-    );
-    if (Array.isArray(result)) {
-      // Expand path: stamp each slice with its own datum.
+    // A component body may return anything a combinator child may be (a
+    // built node, or a mark such as `layer([...])`), so it is reified through
+    // the same `resolveMarkResult` path. The name context is fresh: the
+    // component is a naming boundary. An expand mark (its kind, declared at
+    // `createMark`) returns its array of slice nodes, which pass through as-is.
+    const raw = await shapeFn(shapeProps, kind === "expand" ? d : undefined);
+    if (kind === "expand") {
+      const result = raw as GoFishNode[];
+      const types = getColumnTypes(d);
+      // Expand path: stamp each slice with its own datum, a one-row group
+      // `[row]` tagged with the column types like any split leaf. A slice
+      // past the last row (a `size` array longer than the data) has no row of
+      // its own and keeps the whole group.
       for (let i = 0; i < result.length; i++) {
         const node = result[i];
-        node.name(key?.toString() ?? "");
-        node.datum = data[i] ?? d;
+        node.datum =
+          i >= d.length
+            ? datumOfInput(d)
+            : types
+              ? setColumnTypes([d[i]], types)
+              : [d[i]];
         if (liveChannels) node.__gfLive = liveChannels;
       }
       return result as unknown as GoFishNode;
     }
-    const node = result as GoFishNode;
-    node.name(key?.toString() ?? "");
-    node.datum = d;
+    const node = await resolveMarkResult(raw, {});
     if (liveChannels) node.__gfLive = liveChannels;
-    node.scope();
-    // Mark as a component for string-name search bounding. Distinct from
-    // _isScope so future operators that scope (for token reasons) don't
-    // silently break ref("name") lookups across them.
-    node._isComponent = true;
-    return node;
+    // Its whole drawing, not only its own lowering: a component's children
+    // lower on their own.
+    if (noValue) for (const n of breadthFirst(node)) n.INTERNAL_emitNothing();
+    return sealComponent(node, d);
   };
   withMarkKind(baseMark, kind);
 
   // Tag with IR-serialization metadata for the frontend-IR emitter.
-  if (serializeConfig) {
-    const payload = serializeConfig.shape
-      ? serializeConfig.shape(markOpts)
-      : markOpts;
-    (baseMark as any).__serialize = {
-      type: serializeConfig.type,
-      opts: payload,
-    };
+  if (serialize) {
+    withWire(baseMark, { type: serialize, opts: markOpts });
   }
 
   return nameableMark(baseMark);

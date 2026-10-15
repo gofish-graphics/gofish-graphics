@@ -2,8 +2,8 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { SIZE, UnderlyingSpace, isBaselineMagnitude } from "../underlyingSpace";
-import * as Monotonic from "../../util/monotonic";
+import { UnderlyingSpace, isCONTINUOUS } from "../underlyingSpace";
+import { padExtent, type Extent } from "../extent";
 import type { ConstraintRef } from "./shared";
 import type { PlacementFactEmitter } from "./placementFacts";
 
@@ -14,7 +14,8 @@ import type { PlacementFactEmitter } from "./placementFacts";
  * holds symmetrically on each constrained axis, and `inner` is centered inside
  * `outer` there. Padding is always known, so the unknown per axis is *which*
  * side is derived — dispatched by the layer's nest pre-pass on which side
- * carries the size (see `layer.tsx` and size-claims.md "Dimension B"):
+ * carries the size (see `layer.tsx` and
+ * apps/docs/docs/internals/design/size-claims.md "Dimension B"):
  *   - inner sized, outer not → INSIDE_OUT: `outer = inner + 2·padding` (boxes
  *     that shrink-wrap their content).
  *   - outer sized (or neither: the layer sizes outer) → OUTSIDE_IN:
@@ -72,22 +73,16 @@ export function lowerNestPlacement(
   emitter: PlacementFactEmitter
 ): void {
   const [outer, inner] = constraint.children;
-  if (constraint.x !== undefined)
+  for (const axis of ["x", "y"] as const) {
+    if (constraint[axis] === undefined) continue;
     emitter.relate({
-      axis: "x",
+      axis,
       from: { name: outer.name, anchor: "middle" },
       to: { name: inner.name, anchor: "middle" },
       gap: 0,
       owner,
     });
-  if (constraint.y !== undefined)
-    emitter.relate({
-      axis: "y",
-      from: { name: outer.name, anchor: "middle" },
-      to: { name: inner.name, anchor: "middle" },
-      gap: 0,
-      owner,
-    });
+  }
 }
 
 /**
@@ -97,30 +92,39 @@ export function lowerNestPlacement(
  * outer's own claim flows through the union, and `inner = outer − 2·padding` is
  * a pure layout-time proposal.)
  *
- * When inner's space is SIZE (a data-driven extent, e.g. `rect({ w: value(v) })`),
- * outer's extent is that same Monotonic shifted up by `2·padding` — a
- * `Monotonic.adds`, which stays invertible, so a parent spread/layer solving a
- * scale factor sees `outer = inner + 2·padding`. Chained nests compose: the
- * layer feeds an already-derived outer back in as the next nest's inner.
+ * When inner's space is continuous, outer has inner's type: padding is
+ * pixels, so it is no part of the data extent, whatever the origin. It goes on
+ * the claim instead ({@link nestedExtent}): the inner claim with `padding` on
+ * both sides of its baseline, a `Monotonic.adds`, which stays invertible, so a
+ * parent spread/layer solving a scale factor sees `outer = inner + 2·padding`.
+ * Chained nests compose: the layer feeds an already-derived outer back in as
+ * the next nest's inner.
  *
- * When inner is *not* SIZE (fixed-pixel / position-pinned content), there is no
- * rule to fold; `outer` keeps its own space and the layout-time pixel proposal
+ * When inner is not continuous (fixed-pixel content), there is no rule to
+ * fold; `outer` keeps its own space and the layout-time pixel proposal
  * (`inner.dims + 2·padding`) handles the sizing.
  */
 export function nestedSpace(
   outerSpace: UnderlyingSpace,
-  innerSpace: UnderlyingSpace,
-  padding: number
+  innerSpace: UnderlyingSpace
 ): UnderlyingSpace {
-  // Only a baseline magnitude ("free") folds `outer = inner + 2·padding`, and
-  // the padded outer is itself a baseline magnitude (it must stay "free" so a
-  // parent spread's auto-fit solves a scale factor against it); data-positioned
-  // or origin-less content keeps `outer`.
-  if (isBaselineMagnitude(innerSpace)) {
-    return SIZE(
-      Monotonic.adds(innerSpace.width, 2 * padding),
-      innerSpace.measure
-    );
-  }
-  return outerSpace;
+  return isCONTINUOUS(innerSpace) ? innerSpace : outerSpace;
+}
+
+/** The claim half of {@link nestedSpace}: outer claims inner's claim with
+ *  `padding` pixels on both sides of the baseline when outer takes inner's
+ *  type (inner is continuous), and also when outer has no claim of its own
+ *  and inner claims room without a continuous type (a spread of magnitudes,
+ *  whose room is σ-dependent: a sunburst parent wedge spans its children's
+ *  arc). Otherwise outer keeps its own claim. */
+export function nestedExtent(
+  outerExtent: Extent | undefined,
+  innerSpace: UnderlyingSpace,
+  innerExtent: Extent | undefined,
+  padding: number
+): Extent | undefined {
+  return innerExtent !== undefined &&
+    (isCONTINUOUS(innerSpace) || outerExtent === undefined)
+    ? padExtent(innerExtent, padding)
+    : outerExtent;
 }

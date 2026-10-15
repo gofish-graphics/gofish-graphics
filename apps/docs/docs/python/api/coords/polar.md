@@ -1,4 +1,8 @@
-# polar
+---
+order: 10
+---
+
+# Coord.polar
 
 Transforms Cartesian coordinates into a polar coordinate system. The x-axis maps to angle (theta) and the y-axis maps to radius.
 
@@ -6,9 +10,9 @@ Transforms Cartesian coordinates into a polar coordinate system. The x-axis maps
 :::
 
 ```python
-from gofish import chart, stack, rect, polar
+from gofish import chart, stack, rect, Coord
 
-chart(seafood, coord=polar()) \
+chart(seafood, coord=Coord.polar()) \
     .flow(stack(by="species", dir="x")) \
     .mark(rect(w="count", fill="species")) \
     .render(w=400, h=300)
@@ -17,7 +21,8 @@ chart(seafood, coord=polar()) \
 ## Signature
 
 ```python
-polar(
+Coord.polar(
+    *,
     inner_radius: float | None = None,   # donut hole, fraction [0,1) of outer radius
     central_angle: float | None = None,  # total sweep in radians (default 2π)
     start_angle: float | None = None,    # angle (radians) of θ=0 (default π/2)
@@ -31,27 +36,44 @@ polar(
 All optional; the defaults reproduce a centered, full-circle disc starting at 12
 o'clock and going clockwise.
 
-| Option          | Default  | Description                                                   |
-| --------------- | -------- | ------------------------------------------------------------- |
-| `inner_radius`  | `0`      | Donut hole as a fraction `[0,1)` of the outer radius.         |
-| `central_angle` | `2π`     | Total angular sweep in radians (use `<2π` for a partial fan). |
-| `start_angle`   | `π/2`    | Angle (radians) where θ=0 sits (`π/2` = 12 o'clock).          |
-| `direction`     | `-1`     | `+1` counter-clockwise, `-1` clockwise.                       |
-| `center`        | `[0, 0]` | Screen-space center offset.                                   |
+::: gofish-ref polar
+:::
 
-## Axis aliases
+## Axis names
 
-Inside a polar `coord`, dimensions can be named by their polar axis: `theta` (= `x`,
-angular position) and `r` (= `y`, radius), with extents `thetaSize` (= `w`) and
-`rSize` (= `h`). Like `emX`/`emY`, these mark options are camelCase. They coexist
-with `x`/`y` and are **scope-bounded** — valid only inside a coord that declares them.
-The operator `dir` accepts the angular/radial aliases too.
+In every coordinate space, `x`, `y`, `w`, and `h` refer to the first and
+second axis. Under polar, the first axis is the angle and the second is the
+radius, so `w` is an angular extent and `h` is a radial one.
+
+Polar also declares its own names for the two axes: `theta` for the angle and
+`r` for the radius. You can use them in two places:
+
+- in a mark's `dims` keyword, a dict keyed by axis name. A plain value is a
+  position, like `x`. A dict names the parts of the axis you want to set:
+  `"min"`, `"center"`, `"max"`, `"size"`, and `"embedded"`.
+- in an operator's `dir`, as in `stack(dir="theta")`.
 
 ```python
-chart(data, coord=polar()) \
+chart(data, coord=Coord.polar()) \
     .flow(spread(by="category", dir="theta")) \
-    .mark(rect(thetaSize=0.4, rSize="value", emX=True, emY=True))
+    .mark(rect(dims={"theta": {"size": 0.4}, "r": {"size": "value"}},
+               em_x=True, em_y=True))
 ```
+
+This is the same chart as `spread(by="category", dir="x")` with
+`rect(w=0.4, h="value", em_x=True, em_y=True)`. The names only work inside a
+coordinate space that declares them; anywhere else, `"theta"` raises an error
+that lists the names you can use there. A coordinate space nested inside polar
+that declares no names, such as `Coord.wavy()`, hides them too.
+
+Each part of an axis can be set once. `w=0.4` together with
+`dims={"theta": {"size": 0.4}}` is an error, because both set the angular size.
+`x=0` together with `dims={"theta": {"size": 0.4}}` is fine.
+
+A circle's own `r` keyword is still its radius. The polar `r` axis only appears
+as a key inside `dims`, so `scatter(by="id", dims={"theta": "bearing", "r":
+"distance"})` with `circle(r=4)` places each dot by bearing and distance and
+draws it with radius 4.
 
 ## Usage
 
@@ -59,15 +81,11 @@ Pass the coordinate transform to [`chart`](/python/api/core/chart) via the
 `coord` keyword:
 
 ```python
-chart(data, coord=polar()) \
+chart(data, coord=Coord.polar()) \
     .flow(...) \
     .mark(...) \
     .render(w=400, h=300)
 ```
-
-`coord` may also be passed as a positional options dict —
-`chart(data, {"coord": polar()})` — but the keyword form above is preferred in
-Python.
 
 ## Coordinate Mapping
 
@@ -80,23 +98,23 @@ Python.
 
 ```python
 # Basic polar chart
-chart(data, coord=polar()) \
+chart(data, coord=Coord.polar()) \
     .flow(stack(by="category", dir="x")) \
     .mark(rect(w="value"))
 
 # Polar with spread for radial segments
-chart(data, coord=polar()) \
+chart(data, coord=Coord.polar()) \
     .flow(spread(by="month", dir="x")) \
     .mark(rect(w=1, h="value"))
 
 # Donut: a hollow center (inner radius = 50% of the outer radius)
-chart(data, coord=polar(inner_radius=0.5)) \
+chart(data, coord=Coord.polar(inner_radius=0.5)) \
     .flow(stack(by="category", dir="x")) \
     .mark(rect(w="value"))
 
 # Partial fan: a 270° sweep instead of the full circle
 import math
-chart(data, coord=polar(central_angle=3 * math.pi / 2)) \
+chart(data, coord=Coord.polar(central_angle=3 * math.pi / 2)) \
     .flow(spread(by="month", dir="x")) \
     .mark(rect(w=1, h="value"))
 ```

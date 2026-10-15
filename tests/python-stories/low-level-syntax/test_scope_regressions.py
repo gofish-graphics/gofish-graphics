@@ -5,9 +5,9 @@ y-orientation even when wrapped in a bake boundary (`enclose`) or reordered by a
 z-order constraint. `EncloseMixed`: an `enclose` around a continuous-y bar chart
 beside an ordinal heatmap — the bars grow UP while the heatmap reads top→bottom
 (before the fix the whole boundary rendered y-down). `ZOrderedMixed`: the same
-mix inside a layer carrying a `z_above` constraint — the z-order hoist must carry
-the flip scope through, so adding the constraint never changes orientation.
-Combinator `spread` in the `dir` variants stands in for v1 `spreadX`/`spreadY`; a
+mix inside a layer carrying a `z_above` constraint — adding the constraint must
+never change orientation.
+Combinator `spread` in the `dir` variants stands in for JS `spreadX`/`spreadY`; a
 data-bound SIZE uses `datum(v)` (JS `value(v)`).
 """
 
@@ -67,9 +67,8 @@ def story_enclose_mixed():
 
 
 # Bug #3: the same mixed composition inside a layer that carries a z-order
-# constraint — which routes the layer through the z-order hoist. The hoist must
-# CARRY the flip scope through each hoisted-through plain layer, so adding the
-# constraint never changes which orientation a subtree lowers under.
+# constraint. Adding the constraint must never change which orientation a
+# subtree lowers under.
 def story_zordered_mixed():
     return (
         layer(
@@ -77,7 +76,7 @@ def story_zordered_mixed():
                 layer([_bars()]).name("barsWrap"),
                 layer([_heat()]).name("heatWrap"),
             ]
-        ).constrain(
+        ).relate(
             # Param names must match the child `.name(...)` values — the layer
             # passes the resolved refs as keyword args keyed by name.
             lambda barsWrap, heatWrap: [

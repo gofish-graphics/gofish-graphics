@@ -9,9 +9,11 @@ covers:
   - packages/gofish-ir/src/frontend/validate.ts
   - packages/gofish-ir/src/frontend/jsonSchema.ts
   - packages/gofish-ir/src/frontend/descriptors.ts
+  - packages/gofish-ir/src/frontend/nonFinite.ts
   - packages/gofish-graphics/src/serialize/toJSON.ts
   - packages/gofish-graphics/src/serialize/fromJSON.ts
   - packages/gofish-graphics/src/serialize/registry.ts
+  - packages/gofish-graphics/src/ast/wire.ts
   - packages/gofish-python/scripts/generate.ts
 ---
 
@@ -35,16 +37,17 @@ expansion and elaboration. Three consumers:
 
 ## What ships in v0
 
-| Artifact                                                                                                | Path                                                                       |
-| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Construct descriptor table (single-source field lists)                                                  | `packages/gofish-ir/src/frontend/descriptors.ts`                           |
-| Schema types + validator + canonical examples                                                           | `packages/gofish-ir/src/frontend/`                                         |
-| JSON Schema (Draft 2020-12)                                                                             | `packages/gofish-ir/dist/frontend/v0.json` (build artifact)                |
-| JS-side emitter (`Serialize.toJSON`, `ChartBuilder.toJSON()`)                                           | `packages/gofish-graphics/src/serialize/toJSON.ts`                         |
-| JS-side deserializer (`Serialize.buildChart`, `mapMark`, …)                                             | `packages/gofish-graphics/src/serialize/fromJSON.ts`                       |
-| Operator/mark factory registry                                                                          | `packages/gofish-graphics/src/serialize/registry.ts`                       |
-| Generated Python factory layer (checked in, CI freshness-checked)                                       | `packages/gofish-python/gofish/_generated.py` (from `scripts/generate.ts`) |
-| Hand-written Python residue (dispatch, bridge, DataFrame conversion), emits IR validated against schema | `packages/gofish-python/gofish/ast.py`                                     |
+| Artifact                                                                                                | Path                                                                               |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Construct descriptor table (single-source field lists)                                                  | `packages/gofish-ir/src/frontend/descriptors.ts`                                   |
+| Schema types + validator + canonical examples                                                           | `packages/gofish-ir/src/frontend/`                                                 |
+| JSON Schema (Draft 2020-12)                                                                             | `packages/gofish-ir/dist/frontend/v0.json` (build artifact)                        |
+| JS-side emitter (`Serialize.toJSON`, `ChartBuilder.toJSON()`)                                           | `packages/gofish-graphics/src/serialize/toJSON.ts`                                 |
+| JS-side deserializer (`Serialize.renderIR`, `buildChart`, `mapMark`, …)                                 | `packages/gofish-graphics/src/serialize/fromJSON.ts`                               |
+| Deserializer factory table, keyed by the descriptor table                                               | `packages/gofish-graphics/src/serialize/registry.ts`                               |
+| Generated Python factory layer (checked in, CI freshness-checked)                                       | `packages/gofish-python/gofish/_generated.py` (from `scripts/generate.ts`)         |
+| Generated Python strategy families (checked in, CI freshness-checked)                                   | `packages/gofish-python/gofish/{tile,overlap,curve,bin,calendar}.py` (same script) |
+| Hand-written Python residue (dispatch, bridge, DataFrame conversion), emits IR validated against schema | `packages/gofish-python/gofish/ast.py`                                             |
 
 v0 matches the existing widget wire format exactly — lowercase `type`
 discriminators, `__combinator` flag on combinator-form marks, channel
@@ -74,7 +77,7 @@ const doc4 = await Serialize.toJSONRawMark(mark, opts); // for bare marks
 ```
 
 `toJSON` is async because combinator-form marks may carry their child
-list as a `Promise<Mark[]>` (e.g. from `For(...)` helpers); the emitter
+list as a `Promise<Mark[]>` (e.g. from `map(...)` helpers); the emitter
 resolves these to walk into them.
 
 Python (via the wrapper):
@@ -91,12 +94,11 @@ Validate either against the schema:
 
 ```ts
 import { Frontend } from "gofish-ir";
-const result = Frontend.validate(doc, { strict: true });
+const result = Frontend.validate(doc);
 if (!result.valid) console.error(result.errors);
 ```
 
-`strict: true` rejects unknown fields (for tests + CI); the default
-permissive mode ignores them for forward-compatible reading.
+The validator has one mode: an unknown field is an error, wherever it sits.
 
 ## The document at a glance
 
@@ -112,12 +114,12 @@ type FrontendIRDocument = {
 };
 ```
 
-The root types mirror the v3 fluent builder shapes:
+The root types mirror the fluent builder shapes:
 
 - `ChartIR` — `{ type: "chart", data?, operators?, mark, options?, zOrder? }`
-- `LayerIR` — `{ type: "layer", charts, options? }` (each `charts` tier is a
-  `ChartIR`, or a `RawMarkIR` for a component-level annotation tier from the v3
-  `chart(...).layer(mark)` builder chain)
+- `LayerIR` — `{ type: "layer", charts, options?, relate? }` (each `charts`
+  tier is a `ChartIR`, or a `RawMarkIR` for a component-level annotation tier
+  from the `chart(...).layer(mark)` builder chain)
 - `RawMarkIR` — `{ type: "raw-mark", mark, options? }`
 
 `data` is either `{type: "inline", rows}`, `{type: "select", layer}`,
@@ -129,13 +131,47 @@ the auto-naming + `selectAll` wiring at resolve time — the producer's
 auto-minted layer name never appears in the IR (mirroring how a relational
 mark's zBelow-by-default paint order stays a resolve-time constraint rather
 than a serialized field). Operators are a flat list (`derive`, `resolve`,
-`join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`) — note `join`
+`join`, `filter`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
+`pack`). `treemap`'s `tile` is a strategy object made by a call in the `Tile`
+family (`Tile.squarify({ ratio })`, `Tile.slice()`, `Tile.dice()`,
+`Tile.binary()`, `Tile.sliceDice()` in both languages). Every strategy has
+one shape, `{ kind, ...params }`, which is both the JS value and the wire
+form, e.g. `{ "kind": "squarify", "ratio": 1 }`, and the JS layout
+dispatches on `kind`. `scatter`'s `overlap` (the `Overlap` family) and a
+`line` or `ribbon` `curve` (the `Curve` family:
+`{ "kind": "arc", "direction": "down" }`) work the same way; a bare curve name
+is not a curve. The families are namespaces in the two surfaces only; the
+wire carries the plain objects. Their kinds and params are declared once, in
+the `STRATEGIES` table (below). Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
-without a bridge. Marks are a tree — leaves
+without a bridge. `filter` round-trips the same way when its predicate is a
+field predicate: `field(name).between(lo, hi, { closed })` returns a row
+predicate that also carries its description, so the operator goes on the wire
+as `{ "type": "filter", "predicate": { "field": "day", "between": [100, 120],
+"closed": "right" } }`. The predicate is its own value, not an op in the field
+expression's `ops`. A `filter` over a hand-written JS predicate has no wire
+form and emits the opaque `derive`. A `derive`'s `schema` (`derive(fn, { schema })`, Python
+`derive(fn, schema={...})`) is plain data, the wire form of a chart's
+`schema`, and the registry passes it to the rebuilt `derive`, which applies
+it to the rows the Python callback returns. (A `derive` once also carried a
+measure `provenance` map for the rows of the `bin()` data helper; both are
+gone, #1058.) A binned key, `field("date").bin(Calendar.month)`, is an op in
+the field expression's `ops`: `{ "op": "bin", "partition": { "kind": "month",
+"step": 1 } }`, where the partition is a Calendar value's wire form, a
+`Bin` kind that bins one field, `{ "kind": "step", "size": 0.5 }` or
+`{ "kind": "thresholds", "thresholds": 20 }` (`PartitionIR`, one union told
+apart by `kind`), or a list of
+Calendar values for a product (`.bin([Calendar.year, Calendar.month])`), and
+an op with no `partition` bins into about 10 cells. A chain,
+`.bin(Calendar.year).bin(Calendar.month)`, is one `bin` op per `.bin`, in
+order. The op takes no other key, so the
+old flat spelling, `{ "op": "bin", "thresholds": 20 }`, is an error, not the
+default partition, and so is the untagged `{ "step": 0.5 }`. A partition
+with a JS `.format(fn)` has no wire form, and serializing it is an error. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
-`arrow`, `position`, `line`, `ribbon`, `treemap`, and the Porter-Duff family),
+`arrow`, `position`, `line`, `ribbon`, `treemap`, `pack`, and the Porter-Duff family),
 refs, or the two self-discriminating wrapper marks `offset` and `cut` (below).
 `position` is `enclose`'s undecorated sibling: it sets a single child's
 min-corner `(x, y)` in the parent's coordinates and draws nothing of its own
@@ -158,7 +194,7 @@ flex-weights; omitted means equal slices. It has **two deserialization surfaces
 over one JS core**, dispatched by context so extent resolution (flexbox sizing,
 absolute-vs-weight mixing, measure-unit checks) lives in ONE place, JS-side:
 
-- used as a chart `.mark(...)` → the v3 expand-mark form (`cutMark` /
+- used as a chart `.mark(...)` → the expand-mark form (`cutMark` /
   `source.cut(opts)`), so a chart flow treats it as an expand mark;
 - used as a **combinator child** (inside a Spread/Stack `children` array) → the
   deserializer expands it in place into its N slice nodes — the pure
@@ -187,21 +223,17 @@ earlier tier) survives. A `.name(...)` call on the Python `_InputRef` (#556)
 rides along as a `name` field on the sentinel and is applied to the resolved
 ref before it's returned, since `GoFishRef.name()` mutates in place — this is
 how a per-slice label overlay (`Cut.stories.tsx::ImageCutWithLabels`) can
-`.constrain(...)` against a ref it only received through the bridge. The test
-harness (`tests/harness/main.ts`) carries an equivalent
-`serializeMarkFnInput`/`__inputRef` implementation, since it renders from raw
-IR over plain HTTP rather than through the shared `fromJSON.ts`/widget path.
+`.relate(...)` against a ref it only received through the bridge. Each call asks Python again and builds
+its own mark, so an `__inputRef` always resolves against that call's own refs.
 
 The plain leaf-form `ref` node carries names the same way: `RefMarkIR`
 declares an optional `name`, emitted by Python's `_RefProxy.to_dict()` when
-the ref was renamed and re-applied by the deserializer (both `fromJSON.ts`
-and the harness's `mapMark`) via the same mutate-in-place `GoFishRef.name()`.
-This is what makes the `pull(name)` cross-tier proxy pattern —
-`ref(name).name(name)` re-exposed as a direct child so an outer layer's
-`.constrain(...)` can resolve the name (see `BakingRecipes.stories.tsx`) —
-work identically from Python: without the wire `name`, the reconstructed ref
-is invisible to the constraint solver's direct-children map and the
-constraints silently no-op.
+the ref was renamed and re-applied by the deserializer's `mapMark` via the
+same mutate-in-place `GoFishRef.name()`.
+This is what lets a named ref stand-in, such as `ref(token).name("a")`,
+serve as a constraint operand from Python exactly as from JS: without the wire
+`name`, the reconstructed ref would not answer to `"a"` and the constraint
+would fail to resolve.
 
 There is no `connect` field on the wire. `.layer(...)` — the one way to
 overlay a connector — always serializes as an ordinary `LayerIR` tier: an
@@ -215,15 +247,17 @@ and defaulting the connector to `zBelow`) is entirely JS-side, done at resolve
 time by `LayerBuilder.wireTiers()`: no name is minted or leaked into the JSON,
 and the zBelow default is applied as a paint-order constraint rather than
 serialized as a field, so it composes with any explicit `.zOrder(...)` or
-`.constrain(...)` the reader adds on top.
+`.relate(...)` the reader adds on top.
 
 A chart's **coordinate transform** rides the IR as a small spec the deserializer
 maps back to the JS factory by `type` — e.g. `{ type: "polar", innerRadius,
-centralAngle, startAngle, direction, center }`. `fromJSON.ts` reconstructs it by
-calling `polar(coordSpec)` / `clock(coordSpec)` and passing the whole spec
-through (the factory ignores the `type` key), so a parameterized polar/clock —
-donut hole, partial fan, start angle — round-trips without per-option plumbing.
-The parity render harness (`tests/harness/main.ts`) rebuilds it the same way.
+centralAngle, startAngle, direction, center }`. `fromJSON.ts` rebuilds it
+with `rebuild("coord", type, opts)`, the same call that rebuilds an operator
+or a mark (§ Modularity), from the spec without its `type`. An options-object
+factory takes the options whole (`Coord.polar(opts)`), so a parameterized
+polar/clock (donut hole, partial fan, start angle) round-trips without
+per-option plumbing, and the descriptor's `positional` field goes first
+(`Coord.geo(opts.projection, rest)`). An unknown `type` throws.
 
 Channel values (`h`, `w`, `fill`, …) accept bare primitives (the
 shorthand path) or one of three explicit tagged objects:
@@ -233,6 +267,62 @@ shorthand path) or one of three explicit tagged objects:
 - `literal(x)` → `{type: "literal", value: x}` — inline constant, not scaled.
 
 These three mirror Vega-Lite's `field` / `datum` / `value` trichotomy.
+
+### Non-finite numbers
+
+JSON has no `Infinity`, `-Infinity` or `NaN`. `JSON.stringify` writes them as
+`null`, and Python's `json.dumps` writes a bare `Infinity`, which `JSON.parse`
+rejects. So the IR carries each one as a tagged object, the canonical form of
+MongoDB Extended JSON:
+
+```json
+{ "$numberDouble": "Infinity" }
+{ "$numberDouble": "-Infinity" }
+{ "$numberDouble": "NaN" }
+```
+
+It is one mechanism for every number in the document (an option such as
+`noise`'s `smoothing`, a channel value, a data row), at the serialization
+boundary, with no per-field rule:
+
+- A writer encodes the whole document as it makes it: JS `toJSON` (through
+  `Frontend.encodeIR`, gofish-ir's `frontend/nonFinite.ts`) and Python
+  `to_ir()` (`gofish/_nonfinite.py`). The test derive server encodes the
+  infinities in what it sends the same way.
+- A reader decodes in one place, `Serialize.readIR` (`fromJSON.ts`), which
+  parses JSON text if it is given text and decodes the tags. `renderIR` reads
+  the root it is given through it, the parity harness's HTTP bridge reads each
+  derive response through it, and `buildChart` reads its own arguments
+  through it. The other reconstruction functions (`mapMark`,
+  `mapOperator`, ...) take what `readIR` returns.
+- The validator accepts the tagged `Infinity` and `-Infinity` wherever it
+  expects a number, through one check (`isIRNumber`), and the JSON Schema has
+  one shared `Number` def that every number field points to. A tagged `NaN`
+  where a number is expected is an error: a NaN option is always a bug. Data
+  rows are untyped, so a NaN there round-trips.
+- The test derive server keeps its old rule for a NaN in rows: it sends
+  `null`, which is how pandas' missing value reads in JS.
+
+The tag was chosen over protobuf's JSON mapping (a bare string `"Infinity"`
+in a number field) because a string already means a field name in a channel
+value, so a bare string would be ambiguous there; a tagged object is not, in
+any position.
+
+### `.relate()` clauses
+
+A `layer` combinator mark (and a `LayerIR`) carries its `.relate()` callback as
+`relate: RelateClauseIR[]`, the callback's clauses in order, already
+evaluated on the authoring side. A clause is a `ConstraintIR`
+(`{ type, options?, refs }`, the operands as names) or a `MarkIR` that draws
+(`arrow`, `enclose`, a relational `line`, ...), whose children may include
+`{ type: "ref", selection: "name" }` refs to the layer's names. The two are
+told apart by `refs`: a constraint always carries it and a mark never does
+(`isConstraintIR`, which the validator uses too). Both readers (`fromJSON.ts`
+and the parity harness, which both go through `fromJSON.ts`) rebuild a constraint with the same `constraintFromIR`
+and hand the list back through `.relate(() => clauses)`, so the
+layer schedules the clauses exactly as it would for a JS author. The field was
+called `constraints`, and held constraints only, before the `.constrain()` →
+`.relate()` rename.
 
 ## A worked example
 
@@ -310,7 +400,7 @@ chart(data).mark(
 
 The `__combinator: true` flag tells the deserializer to dispatch this
 node through the combinator factory registry (`layer`, `spread`,
-`arrow`, `position`, `line`, `ribbon`, `treemap`, Porter-Duff) rather than the
+`arrow`, `position`, `line`, `ribbon`, `treemap`, `pack`, Porter-Duff) rather than the
 leaf-mark registry — same `type` discriminator namespace, different code path.
 
 ## The descriptor table — one authored source for construct field lists
@@ -323,58 +413,227 @@ default to) was hand-duplicated across four places: the TS type in
 `OPERATOR_TYPES` listed `"treemap"` while the `OperatorIR` union and the
 JSON Schema enum omitted it, and the hand-written Python `rect()` exposed
 `rs=`/`ts=` kwargs that don't exist anywhere in JS (the real names are
-`rSize`/`thetaSize`; they serialized, passed the open-world validator, and
+`rSize`/`thetaSize` at the time; they serialized, passed the open-world validator, and
 were silently dropped at render).
 
 [`descriptors.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-ir/src/frontend/descriptors.ts)
 collapses three of those four into one authored table: one entry per
 construct (operator, leaf mark, combinator mark, coord transform) listing
 its fields in a small type DSL (`t.string`, `t.number`, `t.enum(...)`,
-`t.channel(...)` for a `ChannelValue` slot, `t.ref("AxesOptions")` for a
-pointer at an authored envelope `$def`, and so on — see the file's `t`/`ch`
-exports). Shared field groups (`boxDims`, the 14 box-geometry/coord-alias
-channels; `paint`, the five paint channels) are declared once and pulled
+`t.literal(v)` for exactly one value, such as the `false` in an axis
+title's `string | false`, `t.channel(...)` for a `ChannelValue` slot, `t.ref("AxesOptions")` for a
+pointer at a named type, and so on — see the file's `t`/`ch`
+exports). Shared field groups (`boxDims`, the ten closed x/y/w/h box channels plus the open `dims` bag
+keyed by axis name; `paint`, the five paint channels) are declared once and pulled
 into a mark's entry by reference, so most mark entries list only the
 fields genuinely their own.
 
+Three smaller tables sit beside the construct entries. `OPTION_TYPES` declares
+the nested option objects a field points at by name, in the same type DSL:
+today `AxesOptions` (a boolean, or `{x, y}`), `AxisOptions` (a boolean, or
+`{title, side, label, levels}`), `AxisLabelOptions` (`{angle, align}`, the
+value of an axis's `label`), `AxisInterval` (`{min, center, max, size,
+embedded}`), `AxisDimsValue` (a channel value or an `AxisInterval`, the
+value of a `dims` entry), `FieldPredicate` (`{field, between, closed}`,
+the predicate of `filter`), `Calendar`, `Partition` and `StructBin` (the
+kinds valid on each key, below), and one entry per strategy family. A
+`t.ref(name)` resolves against it first, so the validator, the JSON Schema,
+and the Python generator all read one declaration of each. `ChartOptions` is
+one of them: `t.object(CHART_OPTIONS)`, the chart-level options (`w`, `h`,
+`coord`, `color`, `axes`, `legend`, `padding`, `schema`), mirroring the JS
+`ChartOptions`. The validator walks `ChartIR.options` as
+`t.ref("ChartOptions")`, the JSON Schema emits its `$def` with the others,
+the Python generator builds `_chart_opts` from `CHART_OPTIONS`, and the docs
+build the chart options table from it (`::: gofish-ref ChartOptions`).
+
+`STRATEGIES` declares the strategy families whose values cross the wire:
+`Tile`, `Overlap`, `Curve`, `Bin` and `Calendar`. For each it lists the kinds, each with its
+params (types, defaults and docs), and the presets: a factory that makes a
+kind with some params already set, such as `Overlap.sina()`, which is
+`noise` with `smoothing: "silverman"`. Each family derives its
+`OPTION_TYPES` entry, a union of one object per kind with a literal `kind`,
+so the strategy options are `t.ref("Tile")`, `t.ref("Overlap")` and
+`t.ref("Curve")`. A kind may take a param by position
+(`positional: "size"`): `Bin.step(0.5)` in JS, `Bin.step(0.5)` with a
+positional-only parameter in Python, and `{ kind: "step", size: 0.5 }` on
+the wire either way. A construct descriptor has the same field: `COORDS.geo`
+takes `projection` by position (`Coord.geo("mercator", { lon })`). The `Bin` kinds bin one of two keys (`BIN_KINDS`):
+`step` and `thresholds` cut the line of one field, and `hex` and `voronoi`
+divide the plane of two. `OPTION_TYPES.StructBin` is the kinds of the plane,
+derived from the one `Bin` entry, so a struct's bin op takes a `StructBin`,
+and the JS layout checks a struct's bin with `checkStructBin(value, where)`
+and a field's with `checkPartition(value, where)`, each of which names the
+right key for a kind of the other one.
+
+A field's bin op takes a Calendar value, `{ kind: "month", every? }` or
+`{ kind: "week", every?, start? }` or `{ kind: "weekday", start? }` (a weekday
+has no step), or a `Bin` kind that cuts one field's line.
+The `Calendar` family declares the Calendar kinds, one per level, and
+`OPTION_TYPES.Calendar` is its union. `OPTION_TYPES.Partition` is one tagged
+union of the Calendar kinds and the `Bin` kinds `step` and `thresholds`, so
+the validator, the JSON Schema and the Python generator each read a field's
+partition by its `kind`, and the JS layout checks one with
+`checkPartition(value, where)`. An axis's `levels` entries take
+`OPTION_TYPES.Calendar`.
+
+A kind with no required param is a value as it is, and calling it sets
+options (#1133): `Curve.monotone` is `Curve.monotone()`, and
+`Calendar.month({ every: 3 })` sets the month's step. Neither the wire nor
+the table has a second form for this. The bare kind is the value its call
+with no arguments makes, made callable, in both languages: in JS a function
+with that value's own keys and prototype and a `toJSON()` that returns it
+(`bareKind`, `gofish-graphics/src/ast/strategyKind.ts`), and in Python a
+dict subclass holding that dict with a `__call__` (`StrategyKind`,
+`gofish/_strategy.py`, which the generated family modules apply to each
+factory with no required param). JSON has no functions, so the JS side
+reads a bare kind as its value once, where an option enters, at any depth
+of the options' plain objects and arrays (`withKindValues` in `chart(data,
+options)`, `createOperator`, `createMark` and `createRelationalMark`,
+`checkBinStep` for a `.bin(...)` partition, and `levelsFromOption` for an
+axis's `levels`, which render options reach without passing a chart). The
+emitter, which drops every function as a callback, the shared encoder
+(`encodeIR`), and `checkStrategy` then see only values. A Python bare kind is a dict, so
+`_to_wire` and `json.dumps` read it as one. A param
+may carry bounds, `t.num({ min: 0, finite: true })` for a pixel padding,
+`t.num({ exclusiveMin: 0, finite: true })` for a hex radius, or
+`t.num({ min: 1, integer: true })` for a Calendar step or a count of
+thresholds, and a list may carry a least length,
+`t.array(t.num({ finite: true }), { minItems: 1 })` for a list of edges
+that must not be empty. The validator, the JSON Schema (`minimum`,
+`exclusiveMinimum`, `integer`, `minItems`) and the Python generator check
+them. When a
+value matches no branch of an untagged union, and only one branch is of the
+value's kind (a number for `Bin.hex`'s `radius: number | { x, y }`), the
+validator reports that branch's own findings (`expected a number above 0`).
+A union whose branches are all tagged by the same field is checked against
+the one branch its value's tag names: a strategy's `kind`, or the `type` of
+a hand-authored ref that declares a `tag` in `AUTHORED_REFS` (`"field"` for
+`FieldAccessor`, `"struct"` for `StructAccessor`). So `partition`'s `by`, a
+field accessor or a struct, reports what is wrong with a bad bin, not that
+no shape matched. The JS
+layout checks a strategy where it reads it, with `checkStrategy(family,
+value, where)` from `validate.ts`, the same walk the validator runs over a
+whole document. Every JS-side check is that one walk (`walkOrThrow`), so
+it throws the validator's own message: `checkPartition`, `checkStructBin`,
+and `checkOption(name, value, where)`, which checks a named option object
+of `OPTION_TYPES` (layout checks each axis's options against
+`AxisOptions` with it, so a JS caller and a Python one get the same
+errors). So an unknown kind, an undeclared param, and a value out of
+bounds each fail in one place, whether the strategy came from a factory, a
+hand-written object, or Python IR. `Coord` and `Color` are families on the
+two surfaces but not in this table: a coordinate transform is a JS object of
+functions, rebuilt from a `type`-tagged config (`COORDS`), and a color scale
+is tagged by `_tag` and takes its one argument by position.
+
+`schema.ts` keeps the TypeScript types of the strategies, `TileIR`,
+`OverlapIR`, `CurveIR`, `BinIR` and `CalendarPartitionIR`, by hand, and each family's JS type is one of them
+(`Curve.Curve` is `CurveIR`). `descriptors.test.ts` checks that their kinds
+and params agree with `STRATEGIES`. Every family is closed: there is no
+public way to add a kind, so every strategy can cross the wire (user-defined
+strategies are designed in #1101).
+
+A named type may say which Python class builds a value of it (`pyClass`):
+`FieldPredicate` here, and `FieldAccessor`, `StructAccessor` and `ChunkKey`
+in `AUTHORED_REFS`, the list of refs to hand-authored shapes (a struct key,
+`{ type: "struct", fields: { x, y }, ops? }`, is walked by its own walker,
+whose bin op is checked against `OPTION_TYPES.StructBin`). `ChunkKey` is the
+`{ type: "chunk", size }` that `chunk(size)` builds, the `by` key that groups
+consecutive rows; a split operator's `by` takes a field name, a
+`FieldAccessor`, or a `ChunkKey`. Such a value already carries its wire keys, so
+the Python generator passes it through. One function, `pyType` in
+`descriptors.ts`, gives the Python type of a field: the generated factory
+signatures (the strategy modules' too) annotate with it and the Python docs
+tables print it, so the two agree. A ref prints as its `pyClass` when it has
+one, else as the Python type it stands for (`AxesOptions` is `bool | dict`).
+A strategy family's entry names its Python namespace (`pyFamily`: `Tile`,
+`Overlap`, `Curve`): the docs print that name, since users write
+`Tile.squarify(...)`, and a signature annotates the value it makes (`dict`),
+since a namespace is not a type.
+
 **What's still authored, not in the table**: the envelope
 (`ChartIR`/`LayerIR`/`DataIR`/`MarkIR` union, `ChannelValue`,
-`ConstraintIR`, `LabelIR`, `TranslateIR`, `AxesOptions`) and `cut`/`offset`/
+`ConstraintIR`, `LabelIR`, `TranslateIR`) and `cut`/`offset`/
 `ref` — these are structural or recursive shapes rather than flat field
 bags, and stay hand-written in `schema.ts` and `jsonSchema.ts` (the parts
 of those files the doc comment marks as "stays hand-written below").
 Constraints likewise stay authored.
 
-Three consumers read the table:
+A `dims` option is `t.record(t.ref("AxisDimsValue"))`: each value is a bare
+`ChannelValue` or an interval object with only
+`min`/`center`/`max`/`size`/`embedded` keys. The two are told apart by a tag.
+A channel value that is an object always carries one (`type` for
+`field(...)`, `datum(...)`, and literals, or the `__gofish_lambda` bridge
+sentinel), so an untagged plain object is an interval. `validate.ts` exports
+that test as `isAxisInterval`, and its channel check rejects an untagged
+object, so the generic union walk reads an untagged object only as an
+interval and reports a misspelled anchor or a mistyped one.
+The renderer's `dims.ts` imports `isAxisInterval` and the key list
+`AXIS_INTERVAL_KEYS`, so the wire and the renderer share one definition; a
+test checks that the key list matches the `AxisInterval` declaration.
+The keys of `dims` are axis names that only mean something inside the enclosing
+coordinate space, so the wire keeps them open and carries them verbatim; the
+same goes for `spread`/`stack`'s `dir`, which is a plain string on the wire.
+
+Six consumers read the table:
 
 - **`validate.ts`** interprets it generically — a single walk over each
   descriptor's resolved fields instead of a per-type imperative switch.
-  **Operators keep their original exact accept/reject behavior**: an
-  unknown field or a wrong-shaped known one is a hard validation error,
-  same as before the refactor. **Leaf marks only warn**, never reject, on
-  an unknown or mistyped field — a deliberate rollout stance. Leaf-mark
-  channel lists were previously open-world in the IR (`[key: string]:
-unknown`) even though they aren't really open on the JS side (a mark's
-  real channels are exactly its factory's destructured options); flipping
-  straight to strict rejection risked breaking specs that happen to rely
-  on a field the descriptor entry hasn't caught up to yet. The warning
-  period is the mechanism for finding those gaps safely; once the
-  enumerated lists have been checked against the story corpus, leaf marks
-  flip to strict like operators. Until then, don't read "validated"
-  against a leaf mark's field list as "guaranteed accepted."
+  Operators, leaf marks, and a combinator mark's `options` are all checked
+  the same way: an unknown field or a wrong-shaped known one is an error.
+  Leaf marks used to only warn, during a rollout that ended once every
+  Python story validated with no warnings. The Python bridge fields the
+  renderer reads (`__scope`, `__datum`, `__key`) are declared in
+  `MARK_BASE_FIELDS` like any other field, so nothing is exempt by name.
 - **`jsonSchema.ts`** builds one `$def` per operator (`SpreadOperator`,
   `TableOperator`, …) and one per leaf mark (`RectMark`, `TextMark`, …)
-  from the table (`buildOperatorDefs()` / `buildLeafMarkDefs()`), merged
-  into the hand-written `$defs` object. Operator `$defs` are
-  `additionalProperties: false` (schema-level strict, matching
-  `validate.ts`'s operator behavior); leaf-mark `$defs` stay
-  `additionalProperties: true` so an external strict consumer of the
-  published schema doesn't start rejecting documents our own validator
-  only warns about.
+  from the table (`buildOperatorDefs()` / `buildLeafMarkDefs()`), and one
+  per named option type (`buildOptionTypeDefs()`), merged into the
+  hand-written `$defs` object. These `$defs` stay
+  `additionalProperties: true`: the published schema keeps the open wire
+  contract, and rejecting an unknown field is `validate.ts`'s job.
+- **The JS emitter** (`toJSON`) filters what reaches the wire through it.
+  A factory tags its options as the caller passed them; `wireOpts` keeps
+  only the keys `acceptedFields(kind, type)` lists, and drops any function
+  value, since a callback has no JSON form. So a key the descriptor does not
+  know never reaches the IR, and a construct with no descriptor (such as
+  `time.transition`) has no IR form: `toJSON` throws.
+
+  `acceptedFields` (in `descriptors.ts`) is the one statement of which keys an
+  options object takes on the wire: the descriptor's fields plus the base fields
+  that sit in the same object. An operator's and a leaf mark's options are spread
+  onto the node, so all of `OPERATOR_BASE_FIELDS` or `MARK_BASE_FIELDS` sit
+  beside them. A combinator mark nests its options under `options`, where only
+  `COMBINATOR_OPTIONS_BASE_FIELDS` (`debug`) ride; its other base fields sit on
+  the node. The emitter keeps these keys, and the validator checks an operator
+  or leaf-mark node against them. On a leaf mark, the base fields that Mark
+  methods set (`name`, `label`, `relate`, `zOrder`, `translate`) are checked by
+  their own walkers, so the check of the mark's channels skips them. The
+  emitter writes each `field(...)` or `datum(...)` instance, and each
+  strategy kind used bare (`Curve.monotone`), in its plain `toJSON()` form, so the document it returns validates as the wire carries
+  it. It does this in the same pass that encodes non-finite numbers
+  (`Frontend.encodeIR`), which shares unchanged subtrees, so inline rows are
+  not copied, and leaves a value whose `toJSON()` is a primitive (a `Date`,
+  a Temporal value) as it is.
+
+- **The JS deserializer** (`registry.ts`) rebuilds a wire type through
+  the factory its descriptor names — see § Modularity below.
 - **`gofish-python/scripts/generate.ts`** emits the mechanical part of the
   Python wrapper from the same table — see
   [§ Generating the Python factory layer](#generating-the-python-factory-layer)
   below.
+- **The docs site** generates every API reference page's options table
+  from it. A page under `apps/docs/docs/{js,python}/api/` writes
+  `::: gofish-ref rect` under its `## Parameters` heading, and the
+  container (`docs/.vitepress/markdown-it-gofish-ref.ts`) renders the
+  construct's `doc` line plus an Option/Type/Default/Description table —
+  JS field names and a TS-ish type on a JS page, snake case kwarg names
+  (from `pyKwarg`, see § Generating the Python factory layer) and a
+  Python type on a Python page, with the shared groups (`boxDims`,
+  `paint`) folded into a collapsed block. So an option's one-line
+  description lives in its `doc` string and reaches the reader and the
+  generated Python docstring from there. `apps/docs/scripts/check-api-coverage.mjs`
+  closes the loop in CI: every construct in the table has a page in both
+  languages, and every name a page references is a real construct.
 
 ## The JSON Schema
 
@@ -415,7 +674,9 @@ The high-level structure:
     "LeafMarkIR": { /* GENERATED oneOf: RectMark | CircleMark | ... */ },
     "LabelIR":      { "oneOf": [/* boolean shorthand, array of {accessor, position, fontSize, ...} specs */] },
     "ConstraintIR": { /* type, options, refs */ },
-    "ChannelValue": { "oneOf": [/* primitives, field, datum, literal, bridge sentinels */] }
+    "ChannelValue": { "oneOf": [/* primitives, field, datum, literal, bridge sentinels */] },
+    "ChartOptions": { /* GENERATED from CHART_OPTIONS: w, h, coord, color, axes, ... */ },
+    "AxesOptions":  { /* GENERATED from OPTION_TYPES, as are AxisOptions, AxisInterval, AxisDimsValue, FieldPredicate */ }
   }
 }
 ```
@@ -424,11 +685,15 @@ The validator at
 [`validate.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-ir/src/frontend/validate.ts)
 covers the same shapes, generically interpreting the descriptor table as
 described above, plus the structural checks for the hand-authored parts
-(e.g. `table.by` requires `{x, y}`, `spread`/`stack`/`scatter` accept an
-`axes` override of shape `AxesOptions`). It runs in permissive mode by
-default (unknown fields ignored, for forward-compat) and strict mode in
-CI tests — "strict" here composes with the operator-reject/leaf-mark-warn
-split above, it doesn't override it.
+(e.g. `table.by` requires `{x, y}`). A field typed with a named option type,
+such as the `axes` override on `spread`/`stack`/`scatter`, is walked by the
+same generic interpreter against its `OPTION_TYPES` entry, and so is a
+chart's `options`, against `CHART_OPTIONS`. A nested object rejects a key it
+does not declare. A tagged union (every branch an object with a literal
+`kind`, as a strategy family is) is walked by the branch its `kind` picks, so
+an unknown kind gets its own error. Any other union accepts a value when any
+branch does, each branch checked into a probe context of its own, which is
+why the JSON Schema writes a union as `anyOf`, not `oneOf`.
 
 ## Generating the Python factory layer
 
@@ -442,33 +707,137 @@ its JSON Schema enum, matching what `descriptors.ts` already modeled.
 [`packages/gofish-python/scripts/generate.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-python/scripts/generate.ts)
 imports the same `descriptors.ts` table (via the `gofish-ir/frontend`
 package export, so it needs `pnpm --filter gofish-ir build` to have run
-first) and emits `gofish/_generated.py` — checked into the repo, with a
+first) and emits `gofish/_generated.py` and the family modules
+`gofish/tile.py`, `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`
+and `gofish/calendar.py` (from `STRATEGIES`) and `gofish/coord.py` (from
+`COORDS`) — checked into the repo, with a
 CI freshness check (`pnpm --filter gofish-python gen` then `git diff
 --exit-code`) rather than a build-time step, matching the "commit the
-generated Python" norm Altair and Plotly.py both follow. It emits:
+generated Python" norm Altair and Plotly.py both follow.
+
+Python kwargs are in snake case, while the wire stays in camel case. One
+function in `descriptors.ts`, `pyKwarg(fieldName)`, gives each field's
+Python name: the field name in snake case (`strokeWidth` becomes
+`stroke_width`, `emX` becomes `em_x`), with a trailing underscore when that
+is a Python keyword (`from` becomes `from_`). Every generated function lists
+its `(wireKey, pyName)` pairs and builds its IR dict under the wire key, so
+`rect(stroke_width=2)` serializes as `{"strokeWidth": 2}`, and
+`rect(strokeWidth=2)` is a `TypeError`. The docs options tables call the
+same function. Hand-written wrappers take `**options` and pass them to a
+generated core, so none renames by hand: `.label(accessor, **options)` on
+marks and operators calls `_label_opts`, built from `LABEL_OPTIONS` (the
+options of a `LabelSpecIR`, which the JSON Schema's `LabelIR` and the
+validator also read), and `line`/`ribbon` call `_line_opts`/`_ribbon_opts`.
+
+A nested option dict follows the same rule, by its declared type. The
+generator compiles a field's type into a small Python literal that records
+only its key structure: for an object, each Python key (from `pyKwarg`)
+paired with its wire key and the shape of its value. A field whose type has
+no option keys compiles to nothing and its value passes through as is. The
+generated module holds one entry per named option type (`_OPTION_TYPES`) and
+one interpreter, `_to_wire`, which every generated function calls on such a
+field. A declared camelCase key would be snake_case in the dict; no nested
+option type declares one today, so `chart(data, axes={"x": {"label":
+{"angle": 45}}})` serializes as `{"axes": {"x": {"label": {"angle": 45}}}}`.
+An undeclared key, such as a flat `"label_angle"`, is a `TypeError` that
+names the expected keys.
+Python's `chart()` now goes through a generated `_chart_opts` core built from
+`CHART_OPTIONS`, so an unknown chart keyword is a `TypeError` too. The
+`axes` option of `.render(...)`, on a chart, a mark, or a layer, goes through
+`_to_wire` as well (in the widget constructor), so it is spelled and checked
+as in `chart()`.
+
+The conversion is driven by the declared type, never by the dict itself, so
+dicts whose keys are data keep them: a `record` type's keys (a `schema` keyed
+by column name, the axis names of `dims`) are never renamed, and a field
+typed `any` (`color=Color.palette({...})` keyed by category, `coord`) passes
+through whole. A channel value built by `field(...)` or `datum(...)` is a
+dict already in wire form, so `_to_wire` passes it through by its class
+wherever it appears. That is how a `dims` entry works: `field("x")` passes
+through, and any other dict is an interval whose keys are checked
+(`dims={"theta": {"width": 2}}` is a `TypeError`). Two rules keep this
+honest. A union may have only one branch that a dict could match (a channel
+branch does not count, for the reason just given), or generation fails,
+since `_to_wire` would have to guess. The one exception is a tagged union: when every dict branch is an
+object whose `kind` field is a literal or enum, and no two branches share a
+`kind` value (a strategy family: treemap's `tile`, `{kind: "squarify",
+ratio?}` or `{kind: "slice"}` or ...; scatter's `overlap`; a `curve`), the generator emits a
+`("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
+the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
+branch does not declare (`ratio` on `slice`), is a `TypeError`. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
+few refs the generator lists as already in wire form (today
+`FieldAccessor`, built by `field(...)`, and `ChunkKey`, built by `chunk(...)`), or generation fails, so a new nested
+type has to be declared before Python can take it.
+
+It emits:
 
 - Closed-signature **leaf mark** factories (`rect`, `circle`, `ellipse`,
   `petal`, `text`, `image`, `polygon`, `blank`) — pure kwargs-collection
-  plus wire-key rename, with docstrings from each field's `doc`.
+  plus wire-key rename, with docstrings from each field's `doc`. An
+  undeclared kwarg is a `TypeError` on all of them; none takes `**kwargs`.
 - Compositing-quartet and other **combinator-only** marks — the
   Porter-Duff-style renames (`inside`→`intersect`, `xor`→`exclude`,
   `out`→`subtract`, `atop`→`paint`) come from the descriptor's `pyName`,
   killing four previously hand-copied wire-name tables.
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
-  `layer`, the polar coord family) — just the kwargs→dict half. The
+  `layer`, `pack`), with separate combinator-form
+  cores for `spread`, `stack`, and `treemap` (their combinator entries add
+  `key`; `spread` and `stack` also include the whole `boxDims` group, since
+  JS `Spread` spreads its `FancyDims` into its box), and `_chart_opts` for
+  `chart()` and the chart-tier `layer([...])` — just the kwargs→dict half. The
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
+- One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
+  `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
+  `gofish/calendar.py`), bound in `__init__.py` under the family name
+  (`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`): one factory per kind and
+  per preset, named by `pyKwarg` (`Tile.slice_dice`, `Curve.catmull_rom`).
+  A factory with no required param is decorated with `bare_kind`, so it is
+  also the value its call with no arguments makes.
+  Each returns `{"kind": ..., **params}` with snake_case param keys, and the
+  option it is passed to renames them to wire keys through the family's
+  `_OPTION_TYPES` entry, like any nested option dict, so
+  `Curve.perfect_arrows(pad_end=4)` reaches the wire as
+  `{"kind": "perfectArrows", "padEnd": 4}`. Each factory checks its params
+  at the call, with checks the generator writes from each param's type
+  (`pyParamChecks` in `generate.ts`): a value of the wrong Python type raises
+  a `TypeError`, and a value out of bounds or not in an enum raises a
+  `ValueError` that names the call and the kwarg
+  (`Overlap.separate(padding=...) must be >= 0, got -1`). An optional param
+  is checked when it is given; a required one always, so `None` is a
+  `TypeError` (`Bin.step(None)`). An unknown kwarg is
+  a `TypeError` from the signature, which for a bare kind lists its options
+  (`Calendar.month(step=3)` names `every=...`). A dict param (`Bin.hex`'s
+  `radius={"x": 2, "y": 500}`) has its keys and each value checked the
+  same way, and a table param (an array of records: `Bin.voronoi`'s
+  `seeds`) is read first with `to_records`, so a dataframe works too, and
+  goes on the wire as dict rows. These are the same constraints
+  `checkStrategy` checks on the JS side, read from the same table, so Python
+  users see the error at the line that made it.
+- The **Coord family** module, `gofish/coord.py`, bound in `__init__.py` as
+  `Coord`, written by the same family-module writer (`writeFamilyModule`)
+  with one factory per `COORDS` entry (`Coord.polar`). Three things differ,
+  each a parameter of the writer. A coord dict is tagged by `type`, not
+  `kind`. It carries the camelCase wire keys itself, since a `coord` option
+  is typed `any` and `_to_wire` does not route it. And no coord is a bare
+  kind, as no JS coord is. Each factory checks its params at the call as a
+  strategy factory does (`Coord.geo("robinson")` raises a `ValueError`), takes
+  the descriptor's `positional` field as a positional-only parameter and
+  every other option as keyword-only, as JS does
+  (`Coord.geo("mercator", lon=(-170, -30))`, `Coord.polar(inner_radius=0.5)`),
+  and puts a tuple on the wire as a list.
 
-`derive`/`resolve`/`join` (real RPC-bridge/ref-shape/DataFrame logic) and
-`palette`/`gradient`/`field`/`datum`/`normalize`/`repeat`/`ref`/`selectAll`
-(not in the descriptor table at all) stay fully hand-written in `ast.py`,
+`derive`/`resolve`/`join`/`filter` (real RPC-bridge/ref-shape/DataFrame/
+predicate logic) and
+`field`/`datum`/`normalize`/`repeat`/`ref`/`select_all`
+(not in the descriptor table at all) stay fully hand-written in `ast.py`, as
+does the `Color` family module (`color.py`),
 alongside the builder chain, `_RefProxy`, `DatumValue` arithmetic, and the
 widget/RPC layer — see
 [Design space: generating the Python wrapper](/internals/design/python-wrapper-codegen)
 for the full hand-written-residue accounting and what's still deferred
-(closing the deserializer-registry/parity-harness generification, the
-`.layer()`/constrain-ref-walk follow-ups).
+(the `.layer()`/relate-ref-walk follow-ups).
 
 Generating this layer fixed real drift along the way: the hand-written
 `rect()` had exposed phantom `rs=`/`ts=` kwargs (see the descriptor-table
@@ -479,8 +848,8 @@ JS factory, and gained the box-dims channels it was missing.
 ## Modularity — the registry pattern
 
 Each operator and leaf-mark factory takes an optional `serialize`
-config; the factory tags the produced value with `__serialize`
-metadata. The emitter (`toJSON`) reads the tag at walk time. Adding a
+config; the factory attaches the produced value's wire form with `withWire`
+(`ast/wire.ts`). The emitter (`toJSON`) reads the tag at walk time. Adding a
 new operator is a one-line config change to its existing factory call,
 not a switch-statement edit.
 
@@ -490,7 +859,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread, {
   split: ({ by }, d) => /* ... */,
   channels: { w: "size", h: "size" },
   axisFields: ({ by, dir }) => /* ... */,
-  serialize: { type: "spread" },        // <-- new
+  serialize: "spread",                 // <-- new
 });
 
 // shapes/rect.tsx
@@ -501,7 +870,36 @@ export const rect = createMark(Rect, { w: "size", h: "size", /* ... */ }, "rect"
 Combinator-form marks (`spread([m1, m2])`, Porter-Duff, etc.) tag with
 `__combinator: true` and stash the child marks on the tag so the
 emitter can walk them. Untagged operators emit as opaque
-`{type: "derive"}`; untagged marks throw.
+`{type: "derive"}`; untagged marks throw. The tag holds the options as the
+caller passed them, and the emitter filters them through the descriptor (see
+the descriptor-table consumers above), so a factory never lists its own
+fields.
+
+The way back is one table. `FACTORIES` in `registry.ts` maps each wire
+type to the public factory that rebuilds it, and
+`rebuild(kind, type, opts, { children, bridge })` calls it: it returns
+`undefined` unless the descriptor table declares that type for that kind, and
+the kind decides the call. An operator, a leaf mark or a coord transform is
+`factory(opts)`; a combinator mark is `factory(opts, children)`. A
+descriptor's `positional` field is taken out of the options and passed first
+(`geo(projection, { lon, lat })`); when that field is required and missing,
+`rebuild` throws and names it (`coord geo: missing required field
+"projection"`). A dual-form construct such as
+`spread` or `line` therefore has one entry for both forms, and the compositing
+wire types map to their renamed factories (`inside` to `intersect`, and so on).
+The coord transforms (`polar`, `clock`, `wavy`, `geo`) are entries of the same
+table. Only an `OPERATOR_BUILDERS` entry sees the bridge.
+
+Five operators keep a hand-written builder in `OPERATOR_BUILDERS`, because
+their IR is not their factory's options object: `derive` (it calls a Python
+lambda through the bridge and types the returned rows with its `schema`),
+`resolve` (the IR names a layer, the factory takes a selection), `join` and
+`log` (their factories take positional arguments), and `filter` (the IR
+describes a field predicate, the factory takes the predicate function, which
+`fieldPredicate` builds from that description). `mark-fn`, `cut`,
+`offset` and `ref` are rebuilt structurally in `fromJSON.ts`'s `mapMark`.
+The serialize test fails when a descriptor has no factory or a factory has no
+descriptor.
 
 User-defined custom marks via the no-channels `createMark((data, props) => …)`
 overload are an open question (deferred to v0.1+ — Olli treats them as
@@ -519,7 +917,7 @@ in the design improvements:
 - **`__combinator` removal** — discriminate operator-form vs
   combinator-form by position (inside `operators[]` vs inside the mark
   tree's `children`) rather than a flag.
-- **`ChannelExpr`-only IR** — the v3 API would desugar all shorthand
+- **`ChannelExpr`-only IR** — the fluent API would desugar all shorthand
   strings to `field()` at construction time; the IR sees only the
   canonical tagged-object form.
 - **Multi-stage sibling schemas** — distinct frontend / core /
@@ -544,12 +942,100 @@ public schema — they extend it for the round-trip across anywidget:
 | `__scope: true`     | The `@mark` decorator's scope-wrap signal.                            |
 | `__datum` / `__key` | `bind_data()` pre-binding for Treemap-style invocation.               |
 
+A `{__gofish_lambda}` sentinel may sit at any depth of a channel option, not
+only as a top-level channel: for each option whose descriptor type can hold
+a channel (`carriesChannel`), the generated Python factory wraps every
+callable it finds in the option's plain dicts and lists
+(`dims={"r": {"size": lambda d: ...}}`), and `unwrapOpts` resolves the
+sentinels at any depth of both mark and operator options. When the Python
+`Mark` or `Operator` is built, one walk of its options (`_scan_options`)
+records the accessors per option and raises a `TypeError` for a callable in
+any other option (`spread(by=lambda d: ...)`), since the JS side resolves
+accessors only in channels. Serializing and registering the accessors read
+that record, so only the options that hold one are walked again. The Python
+option walks share one copy-on-write `walk` (`_nonfinite.py`), which keeps
+unchanged values as the same objects. The accessor JS
+builds has only a batch form (`RESOLVE_ROWS`): channel inference is
+synchronous, so the mark factory and the operator factory first resolve every
+Python accessor in a channel over the rows they are about to infer from
+(`resolveChannelAccessors` in `channels.ts`), with one `applyLambda(id, rows)`
+call per accessor, and inference reads the resolved values (#1080). That works
+the same in every channel kind, size and position included. It is the one
+place a Python accessor crosses the bridge, and calling one per row throws. A
+JS `async (d) => ...` accessor is not supported: only Python accessors are
+resolved this way. When no channel holds a Python accessor, nothing is awaited
+or copied.
+
 Python's `datum(x)` emits the canonical `{type: "datum", datum: x}` shape
 directly — no bridge sentinel needed.
 
 Olli and other pure-JS consumers don't see these — they're a
 `FrontendIRWithBridge` extension declared in the Python widget code
 (see [The Jupyter Bridge & RPC](/internals/python/bridge)).
+
+### One renderer, two hosts
+
+Two hosts render Python IR: the notebook widget
+(`packages/gofish-python/widget-src/index.ts`) and the Python parity harness
+(`tests/harness/main.ts`). Both call the same function,
+`Serialize.renderIR(root, container, renderOptions, { bridge, tierRows })`
+in `fromJSON.ts`, which dispatches on the root (chart, layer, bare mark) and
+renders it. What differs between the hosts is only transport:
+
+- **Callbacks.** The widget's `DeriveBridge` sends rows as Arrow over
+  anywidget traitlets; the harness's sends them as JSON in an HTTP POST to
+  `tests/scripts/derive-server.py` (`/derive/<id>`).
+- **Rows.** Both hosts ship each chart tier's rows the same way: Python's
+  `tiers_arrow_bytes` (`gofish/ast.py`) gives one Arrow IPC stream per tier
+  (one for a chart, one per child for a layer, none for a bare mark), and
+  each crosses as a list of base64 strings. The widget sends the list in its
+  `tier_arrow` trait; the derive server returns it as `tierArrow` beside the
+  builder's own `to_ir()`, which it returns untouched. Both decode it with
+  `decodeTierRows` (`widget-src/arrowDecode.ts`, which the harness imports
+  as the `gofish-python/arrowDecode` package export) and pass the result as
+  `tierRows`. Data in the IR wins over `tierRows`. The decode converts each
+  column once by its Arrow type: a tz-aware timestamp becomes epoch
+  milliseconds and marks the column as a time (`HasCalendar` in its zone,
+  attached with `Serialize.setColumnTypes`); a naive timestamp or a date is
+  a wall-clock value, so it becomes an ISO string without an offset and is
+  marked `HasCalendar` in UTC, which `applySchema` reads in the zone the
+  chart declares for the column, as it reads the same string from JS data.
+  The decode attaches types and converts no time to an instant itself:
+  every reader of decoded rows runs `applySchema` with its own schema
+  before it reads a value. A tier is chart data; a lambda accessor's rows
+  go through `applyLambdaTyped` (`registry.ts`), and a `derive` types its
+  result with its own `schema` as it does a JS function's, so a derive's
+  result and an accessor's result hold epoch milliseconds. A derive's lambda always gets
+  a list: data flows as a list, and a split with no `by` hands on `[row]`. A list becomes a
+  plain array, a struct a plain object, a 64-bit integer a JS number, and a
+  null stays `null`. No schema names a value inside a list or a struct, so
+  a time there decodes to epoch milliseconds (a naive timestamp or a date
+  read in UTC, as a chart with no zone reads it), and a list of structs, a
+  list of rows, carries its own column types (`HasCalendar` in the
+  timestamp's zone, or UTC). A float NaN stays NaN: GoFish never reads NaN as missing. Only a
+  pandas DataFrame's NaN crosses as null, because pandas defines NaN as the
+  missing value of its float columns and pyarrow's `from_pandas` follows
+  that rule. A column whose rows mix types (a string in one, a number in
+  another) is a loud error in `to_arrow_table`, never a silent coercion.
+  [The one exception](https://github.com/gofish-graphics/gofish-graphics/issues/1088)
+  is a chart that a mark function returns: it comes back over the derive
+  RPC, so the derive server inlines its rows in the IR as
+  `{type: "inline", rows}`.
+- **Render options.** These are the JS `.render(container, options)` options:
+  `w`, `h`, `axes`, `padding`, `debug`. The widget reads them from its traits,
+  which the Python `.render(...)` call sets; the harness reads the story's
+  render-options dict. `axes` and `padding` stay unset unless the caller
+  passed them, so a chart's own `axes` option (or a layer chain's root
+  tier's) decides, and the default padding applies.
+
+The layer cases live in `renderIR` too: `builder: true` rebuilds the real
+`LayerBuilder`; otherwise the tiers go to the JS `layer(options, tiers)`
+combinator with the layer's options as they are, and its `relate` clauses are
+rebuilt once and handed to `.relate(...)`. A tier named with
+`chart(...).name(n)` carries `name` on its `ChartIR`, which `buildChart`
+applies with `ChartBuilder.name`, so the clauses can refer to it. Python's
+`layer([...], **options)` takes exactly JS `layer`'s options; `padding` is a
+render option in both languages.
 
 ## Prior art
 

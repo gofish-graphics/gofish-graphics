@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar, datum } from "gofish-graphics";
+import { rect, datum, Coord } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — SectorTree (concentric rings of thin sector wedges).
@@ -53,7 +53,7 @@ import { combine, byDepth, mount } from "./_shared";
 //    polar({ innerRadius, direction, startAngle, centralAngle }) since #620 —
 //    not yet applied here (the hollow-center inner radius, CW/CCW direction,
 //    start angle, and sub-2π central angle).
-//  - Angular AUTO-FIT (#618): leaves carry a unit thetaSize weight, nest-θ grows
+//  - Angular AUTO-FIT (#618): leaves carry a unit `w` (θ) weight, nest-θ grows
 //    parents to their children's arc, and the coord fits the summed weights to
 //    the circle — so the rings close for any tree with no hand-set leafTheta.
 //  - Link: none — correct for filled wedges; matches the dsl.
@@ -98,7 +98,7 @@ const RING_GAP = 13; // radial gap between consecutive rings
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        thetaSize: datum(1),
+        w: datum(1),
         h: RING_THICKNESS,
         emX: true,
         emY: true,
@@ -134,7 +134,7 @@ export const SectorTree: StoryObj = {
           x: { kind: "distribute", spacing: 0, anchor: "edge" },
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: polar(),
+        coord: Coord.polar(),
       },
       { w: 560, h: 560 },
       deepBalancedTree

@@ -39,14 +39,13 @@ export const enclose = createNodeOperator(
     return new GoFishNode(
       {
         type: "enclose",
-        shared: [false, false],
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => {
           return [UNDEFINED, UNDEFINED];
         },
-        layout: (shared, size, scales, children) => {
+        layout: (size, scales, children) => {
           // Child placement mirrors `layer`'s own rule exactly (see
           // `placeUnplacedChild` in `_node.ts`, reused here rather than
           // re-derived): a FRESH child (e.g. a plain shape) reports an
@@ -117,7 +116,7 @@ export const enclose = createNodeOperator(
           const h = intrinsicDims?.[1]?.size ?? 0;
           // Enclosure rect at local (localMinX, localMinY, w, h) — the hull's
           // own box (children's bbox union ± padding; see `layout` above),
-          // inside the node's translate → absolute y-up box, mapped via the
+          // inside the node's translate → absolute box, mapped via the
           // outer toPixel. `localMinX/Y` collapse to `-padding` in the common
           // (all-fresh-children) case, matching the old hardcoded assumption.
           const box = rectItemFromBox(

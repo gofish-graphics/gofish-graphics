@@ -6,7 +6,8 @@ import { Size, displayTranslate } from "../dims";
 import { pixelBox } from "../displayList/lowerHelpers";
 import { UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
-import { unionChildSpaces } from "./alignment";
+import { unionChildExtents, unionChildSpaces } from "./alignment";
+import { assertNoPaintOrder } from "../paintOrder";
 
 type BlendMode = "color" | "multiply" | "screen" | "overlay" | "luminosity";
 type CompositeOperator = "over" | "in" | "xor" | "out" | "atop";
@@ -47,12 +48,15 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
       return new GoFishNode(
         {
           type,
-          shared: [false, false],
           resolveUnderlyingSpace: (
             children: Size<UnderlyingSpace>[],
             _childNodes: GoFishAST[]
           ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
-          layout: (_shared, size, scales, layoutChildren) => {
+          resolveExtent: (childExtents, childSpaces, spaces) => [
+            unionChildExtents(childExtents, childSpaces, 0, spaces[0]),
+            unionChildExtents(childExtents, childSpaces, 1, spaces[1]),
+          ],
+          layout: (size, scales, layoutChildren) => {
             requireTwoChildren(layoutChildren);
 
             const childPlaceables = layoutChildren.map((child) =>
@@ -108,9 +112,7 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             const minY = intrinsicDims?.[1]?.min ?? 0;
             const width = intrinsicDims?.[0]?.size ?? 0;
             const height = intrinsicDims?.[1]?.size ?? 0;
-            // Pixel bbox top-left, flip-AGNOSTIC (see `pixelBox`): under the
-            // y-up flip the top edge is `gyMax`, in y-down free space it is
-            // `gyMin` — the component-wise min picks the right one (issue #143/#16).
+            // Pixel bbox top-left and size (see `pixelBox`).
             const {
               x: bx,
               y: by,
@@ -133,6 +135,7 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
               return [ax - bx, ay - by];
             };
 
+            assertNoPaintOrder(node);
             session.toPixel = composed;
             let source: DisplayList.DisplayItem[];
             let dest: DisplayList.DisplayItem[];
@@ -222,12 +225,15 @@ export const mask = createNodeOperator(
     return new GoFishNode(
       {
         type: "mask",
-        shared: [false, false],
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
-        layout: (_shared, size, scales, layoutChildren) => {
+        resolveExtent: (childExtents, childSpaces, spaces) => [
+          unionChildExtents(childExtents, childSpaces, 0, spaces[0]),
+          unionChildExtents(childExtents, childSpaces, 1, spaces[1]),
+        ],
+        layout: (size, scales, layoutChildren) => {
           requireTwoChildren(layoutChildren);
 
           const childPlaceables = layoutChildren.map((child) =>
@@ -278,6 +284,7 @@ export const mask = createNodeOperator(
           const outer = session.toPixel!;
           const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
 
+          assertNoPaintOrder(node);
           session.toPixel = composed;
           let maskItems: DisplayList.DisplayItem[];
           let content: DisplayList.DisplayItem[];

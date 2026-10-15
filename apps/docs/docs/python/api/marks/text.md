@@ -1,3 +1,7 @@
+---
+order: 80
+---
+
 # text
 
 Draws a text label for each data item. Used for value labels on bars, point
@@ -7,19 +11,19 @@ annotations, node names in diagrams, and axis titles.
 from gofish import chart, text
 
 chart([{"label": "GoFish"}]).mark(
-    text(text="label", fontSize=28, fill="steelblue")
+    text(text="label", font_size=28, fill="steelblue")
 ).render(w=240, h=80)
 ```
 
 ## Signature
 
 ```python
-text(*, text=None, fill=None, stroke=None, strokeWidth=None, filter=None,
-     fontSize=None, fontFamily=None, fontStyle=None, fontWeight=None,
-     debugBoundingBox=None, rotate=None, textAnchor=None,
-     x=None, cx=None, x2=None, w=None, emX=None,
-     y=None, cy=None, y2=None, h=None, emY=None,
-     theta=None, thetaSize=None, r=None, rSize=None, key=None) -> Mark
+text(*, text=None, fill=None, stroke=None, stroke_width=None, filter=None,
+     font_size=None, font_family=None, font_style=None, font_weight=None,
+     debug_bounding_box=None, rotate=None, text_anchor=None,
+     x=None, cx=None, x2=None, w=None, em_x=None,
+     y=None, cy=None, y2=None, h=None, em_y=None,
+     dims=None, key=None) -> Mark
 ```
 
 Keyword-only (matches every existing call site, which already passes
@@ -27,24 +31,23 @@ Keyword-only (matches every existing call site, which already passes
 
 ## Parameters
 
-| Parameter                                                | Type           | Description                                                                                                                                  |
-| -------------------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `text`                                                   | `str` \| `int` | The string to render — a constant, a field name, or a `(row) -> str` callable                                                                |
-| `fill`                                                   | `str`          | Fill color — a constant or a field name                                                                                                      |
-| `stroke`, `strokeWidth`                                  | `str`, `int`   | Outline color / width                                                                                                                        |
-| `filter`                                                 | `str`          | Raw SVG filter attribute                                                                                                                     |
-| `fontSize`                                               | `int` \| `str` | Font size in pixels (default 12)                                                                                                             |
-| `fontFamily`                                             | `str`          | Font family (default `"system-ui, sans-serif"`)                                                                                              |
-| `fontStyle`                                              | `str`          | CSS font style, e.g. `"italic"`                                                                                                              |
-| `fontWeight`                                             | `int` \| `str` | CSS font weight, e.g. `300`, `700`, `"bold"`                                                                                                 |
-| `debugBoundingBox`                                       | `bool`         | Draw the text's bounding box (for layout debugging)                                                                                          |
-| `rotate`                                                 | `int`          | Rotation in degrees about the text anchor                                                                                                    |
-| `textAnchor`                                             | `str`          | `"start"` \| `"middle"` \| `"end"` — which end of the text sits at its own local origin, the point `rotate` pivots about (default `"start"`) |
-| `x`, `cx`, `x2`, `w`, `emX`, `y`, `cy`, `y2`, `h`, `emY` | `int` \| `str` | Box-geometry position channels (position the text anchor)                                                                                    |
-| `theta`, `thetaSize`, `r`, `rSize`                       | `int` \| `str` | Polar coord-space aliases for `x`/`w`/`y`/`h`                                                                                                |
-| `key`                                                    | `str`          | Internal per-node key override                                                                                                               |
+::: gofish-ref text
+:::
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
+
+## Placement
+
+A text is a box, and it is placed exactly as a rect of the same size would be.
+`y` is the box's start edge: its top where y reads top-down (a free diagram, an
+ordinal spread) and its bottom where y grows upward (a chart with a value axis).
+`cy` is the box's center. Spreads, stacks, layers and `align`/`distribute`
+constraints place it by its box, as they place a rect. In x, `x` is the
+`text_anchor` point: the left edge for the default `"start"` (as for a rect), the
+center for `"middle"`, the right edge for `"end"`.
+
+`rotate` turns the glyphs about the point on their baseline at `text_anchor`; the
+box is then the rotated glyphs' footprint.
 
 ## Encoding
 
@@ -61,15 +64,15 @@ text(text=lambda row: f"{row['amount']}%")  # computed per row
 
 ```python
 # Static label
-chart([{"label": "GoFish"}]).mark(text(text="label", fontSize=24, fill="steelblue"))
+chart([{"label": "GoFish"}]).mark(text(text="label", font_size=24, fill="steelblue"))
 
 # Value labels: layer text totals on top of bars
 layer([
     chart(seafood)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count").name("bars")),
-    chart(selectAll("bars"))
-        .flow(group(by="datum.lake"))
+    chart(select_all("bars"))
+        .flow(group(by="lake"))
         .mark(lambda d: spread(
             [d[0], text(text=str(sum(r["count"] for r in d[0].datum)))],
             dir="y", alignment="middle", spacing=10,
@@ -77,11 +80,11 @@ layer([
 ])
 
 # Computed per-row label
-chart(bottles).mark(text(text=lambda d: f"{d['amount']}%", fontSize=35, fill="#666"))
+chart(bottles).mark(text(text=lambda d: f"{d['amount']}%", font_size=35, fill="#666"))
 
 # Italic label
-text(text="note", fontStyle="italic")
+text(text="note", font_style="italic")
 
 # Light-weight label
-text(text="caption", fontWeight=300)
+text(text="caption", font_weight=300)
 ```

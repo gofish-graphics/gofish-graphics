@@ -9,8 +9,16 @@
 import {
   allExamples,
   validate,
+  checkStrategy,
+  checkStructBin,
+  checkPartition,
+  checkOption,
+  encodeIR,
+  decodeNonFinite,
+  FRONTEND_IR_JSON_SCHEMA,
   type FrontendIRDocument,
 } from "../frontend/index.js";
+import { encodeNonFinite } from "../frontend/nonFinite.js";
 
 declare const process: { exit(code: number): never };
 
@@ -28,24 +36,14 @@ function check(name: string, ok: boolean, detail?: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Examples accept (permissive and strict)
+// Examples accept
 // ---------------------------------------------------------------------------
 
-console.log("\n# Examples validate (permissive)");
+console.log("\n# Examples validate");
 for (const { name, doc } of allExamples) {
   const r = validate(doc);
   check(
-    `${name} accepts in permissive mode`,
-    r.valid,
-    r.valid ? undefined : JSON.stringify(r.errors)
-  );
-}
-
-console.log("\n# Examples validate (strict)");
-for (const { name, doc } of allExamples) {
-  const r = validate(doc, { strict: true });
-  check(
-    `${name} accepts in strict mode`,
+    `${name} accepts`,
     r.valid,
     r.valid ? undefined : JSON.stringify(r.errors)
   );
@@ -178,65 +176,46 @@ check(
 );
 
 // ---------------------------------------------------------------------------
-// Strict-mode rejects unknown fields
+// Unknown fields are rejected
 // ---------------------------------------------------------------------------
 
-console.log("\n# Strict mode rejects unknown fields");
+console.log("\n# Unknown fields are rejected");
 
 check(
-  "unknown root field rejected in strict",
-  !validate(
-    {
-      irVersion: 0,
-      ir: "gofish-frontend",
-      root: { type: "chart", mark: { type: "rect" } },
-      extraTopLevel: "no",
-    } as unknown as FrontendIRDocument,
-    { strict: true }
-  ).valid
-);
-
-check(
-  "unknown root field accepted in permissive",
-  validate({
+  "unknown root field rejected",
+  !validate({
     irVersion: 0,
     ir: "gofish-frontend",
     root: { type: "chart", mark: { type: "rect" } },
-    extraTopLevel: "shrug",
+    extraTopLevel: "no",
   } as unknown as FrontendIRDocument).valid
 );
 
 check(
-  "unknown chart field rejected in strict",
-  !validate(
-    {
-      irVersion: 0,
-      ir: "gofish-frontend",
-      root: { type: "chart", mark: { type: "rect" }, unexpected: 1 },
-    } as unknown as FrontendIRDocument,
-    { strict: true }
-  ).valid
+  "unknown chart field rejected",
+  !validate({
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root: { type: "chart", mark: { type: "rect" }, unexpected: 1 },
+  } as unknown as FrontendIRDocument).valid
 );
 
 check(
-  "leaf marks allow unknown channel-valued fields even in strict",
-  validate(
-    {
-      irVersion: 0,
-      ir: "gofish-frontend",
-      root: {
-        type: "chart",
-        mark: {
-          type: "rect",
-          h: "count",
-          w: 5,
-          fill: "red",
-          customChannel: "foo",
-        },
+  "an unknown leaf-mark field is rejected",
+  !validate({
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root: {
+      type: "chart",
+      mark: {
+        type: "rect",
+        h: "count",
+        w: 5,
+        fill: "red",
+        customChannel: "foo",
       },
-    } as unknown as FrontendIRDocument,
-    { strict: true }
-  ).valid
+    },
+  } as unknown as FrontendIRDocument).valid
 );
 
 // ---------------------------------------------------------------------------
@@ -258,9 +237,147 @@ check(
   validate(chart([{ type: "spread", by: "lake", dir: "x" }])).valid
 );
 
+// `dir` names an axis the way the enclosing coordinate space does (#838), so
+// the wire accepts any name; an undeclared one is a render-time error.
 check(
-  "spread with invalid dir rejected",
-  !validate(chart([{ type: "spread", by: "lake", dir: "diagonal" }])).valid
+  "spread with a coord-declared dir accepts",
+  validate(chart([{ type: "spread", by: "lake", dir: "theta" }])).valid
+);
+
+check(
+  "spread with non-string dir rejected",
+  !validate(chart([{ type: "spread", by: "lake", dir: 0 }])).valid
+);
+
+check(
+  "rect with dims (value and interval) accepts",
+  validate(
+    chart([], {
+      type: "rect",
+      dims: { theta: { size: { type: "datum", datum: 1 } }, r: "value" },
+    })
+  ).valid
+);
+
+check(
+  "scatter with dims accepts",
+  validate(
+    chart([
+      { type: "scatter", dims: { lon: "lon", lat: { min: "a", max: "b" } } },
+    ])
+  ).valid
+);
+
+// `AxisDimsValue` is declared in OPTION_TYPES: an interval is an object like
+// any other declared object, so an unknown key and a mistyped anchor are both
+// rejected.
+check(
+  "scatter dims interval with a non-anchor key rejected",
+  !validate(chart([{ type: "scatter", dims: { lon: { width: 2 } } }])).valid
+);
+
+check(
+  "scatter dims interval with a non-boolean embedded rejected",
+  !validate(chart([{ type: "scatter", dims: { lon: { embedded: "yes" } } }]))
+    .valid
+);
+
+check(
+  "scatter dims interval with an untagged object anchor rejected",
+  !validate(chart([{ type: "scatter", dims: { lon: { min: { name: "a" } } } }]))
+    .valid
+);
+
+check(
+  "scatter dims with a field(...) value accepts",
+  validate(
+    chart([
+      {
+        type: "scatter",
+        dims: { lon: { type: "field", name: "lon" }, lat: { size: 4 } },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "an untagged object in a channel slot rejected",
+  !validate(chart([{ type: "scatter", x: { name: "hp" } }])).valid
+);
+
+// ChartIR.options is walked against CHART_OPTIONS.
+function chartWithOptions(options: unknown) {
+  return {
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root: { type: "chart", mark: { type: "rect" }, options },
+  } as unknown as FrontendIRDocument;
+}
+
+check(
+  "chart options accept every CHART_OPTIONS key",
+  validate(
+    chartWithOptions({
+      w: 400,
+      h: 300,
+      coord: { type: "polar" },
+      color: { type: "palette", values: "tableau10" },
+      axes: {
+        x: { title: "Year", label: { angle: 45 }, side: "end" },
+        y: true,
+      },
+      legend: false,
+      padding: 20,
+      schema: { response: { type: "ordered", levels: ["a", "b"] } },
+    })
+  ).valid
+);
+
+check(
+  "chart options with a mistyped value rejected",
+  !validate(chartWithOptions({ legend: "no" })).valid
+);
+
+check(
+  "chart options with a bad nested axis option rejected",
+  !validate(chartWithOptions({ axes: { x: { side: "left" } } })).valid
+);
+
+check(
+  "chart options with an unknown key rejected",
+  !validate(chartWithOptions({ bogus: 1 })).valid
+);
+
+check("chart options must be an object", !validate(chartWithOptions(5)).valid);
+
+check(
+  "JSON Schema ChartIR.options refers to the generated ChartOptions $def",
+  (FRONTEND_IR_JSON_SCHEMA as any).$defs.ChartIR.properties.options.$ref ===
+    "#/$defs/ChartOptions" &&
+    JSON.stringify(
+      Object.keys(
+        (FRONTEND_IR_JSON_SCHEMA as any).$defs.ChartOptions.properties
+      )
+    ) ===
+      JSON.stringify([
+        "w",
+        "h",
+        "coord",
+        "color",
+        "axes",
+        "legend",
+        "padding",
+        "schema",
+      ])
+);
+
+check(
+  "JSON Schema AxisDimsValue is generated: a channel value or an AxisInterval",
+  JSON.stringify((FRONTEND_IR_JSON_SCHEMA as any).$defs.AxisDimsValue.anyOf) ===
+    JSON.stringify([
+      { $ref: "#/$defs/ChannelValue" },
+      { $ref: "#/$defs/AxisInterval" },
+    ])
 );
 
 check(
@@ -327,6 +444,242 @@ check(
 );
 
 check(
+  "filter with a field predicate accepts",
+  validate(
+    chart([
+      {
+        type: "filter",
+        predicate: { field: "day", between: [100, 120], closed: "right" },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "filter predicate with a non-numeric bound rejected",
+  !validate(
+    chart([{ type: "filter", predicate: { field: "day", between: [1, "x"] } }])
+  ).valid
+);
+
+check(
+  "filter predicate with an unknown closed rejected",
+  !validate(
+    chart([
+      {
+        type: "filter",
+        predicate: { field: "day", between: [1, 2], closed: "open" },
+      },
+    ])
+  ).valid
+);
+
+const binBy = (partition: unknown) =>
+  chart([
+    {
+      type: "spread",
+      dir: "x",
+      by: {
+        type: "field",
+        name: "d",
+        ops: [{ op: "bin", ...(partition === undefined ? {} : { partition }) }],
+      },
+    },
+  ]);
+for (const [name, partition] of [
+  ["no partition", undefined],
+  ["a Calendar value", { kind: "month", every: 3 }],
+  ["a week start", { kind: "week", every: 1, start: "sunday" }],
+  ["a weekday", { kind: "weekday" }],
+  ["a weekday start", { kind: "weekday", start: "sunday" }],
+  ["a step", { kind: "step", size: 0.5 }],
+  ["a threshold count", { kind: "thresholds", thresholds: 20 }],
+  ["threshold edges", { kind: "thresholds", thresholds: [1, 2, 5] }],
+] as const) {
+  const r = validate(binBy(partition));
+  check(
+    `bin with ${name} accepts`,
+    r.valid,
+    r.valid ? undefined : JSON.stringify(r.errors)
+  );
+}
+for (const [name, partition] of [
+  ["an unknown kind", { kind: "fortnight" }],
+  ["a step with thresholds", { kind: "step", size: 1, thresholds: 10 }],
+  ["a non-numeric step", { kind: "step", size: "1" }],
+  ["a zero step", { kind: "step", size: 0 }],
+  ["a threshold count below 1", { kind: "thresholds", thresholds: 0 }],
+  ["a fractional threshold count", { kind: "thresholds", thresholds: 2.5 }],
+  ["an empty list of edges", { kind: "thresholds", thresholds: [] }],
+  ["a non-numeric edge", { kind: "thresholds", thresholds: [1, "2"] }],
+  ["a Calendar value with no kind", { every: 1, start: "sunday" }],
+  ["the old untagged Calendar form", { unit: "month", step: 1 }],
+  ["a start on a level other than weeks", { kind: "month", start: "sunday" }],
+  ["a weekday step", { kind: "weekday", every: 2 }],
+  ["the old Calendar step key", { kind: "month", step: 3 }],
+  ["a fractional Calendar step", { kind: "month", every: 1.5 }],
+  ["the old flat thresholds", 10],
+  ["the untagged step", { step: 0.5 }],
+  ["the untagged thresholds", { thresholds: 20 }],
+  ["a bin of two fields", { kind: "hex", radius: 1 }],
+  ["a product of one", [{ kind: "month" }]],
+  [
+    "a product with a numeric bin",
+    [{ kind: "year" }, { kind: "step", size: 1 }],
+  ],
+] as const) {
+  check(`bin with ${name} rejected`, !validate(binBy(partition)).valid);
+}
+{
+  const r = validate(binBy([{ kind: "year" }, { kind: "month", every: 1 }]));
+  check(
+    "bin with a product of Calendar values accepts",
+    r.valid,
+    r.valid ? undefined : JSON.stringify(r.errors)
+  );
+  const chained = validate(
+    chart([
+      {
+        type: "spread",
+        dir: "x",
+        by: {
+          type: "field",
+          name: "d",
+          ops: [
+            { op: "bin", partition: { kind: "year" } },
+            { op: "bin", partition: { kind: "month" } },
+          ],
+        },
+      },
+    ])
+  );
+  check(
+    "a chain of bins (one op per bin) accepts",
+    chained.valid,
+    chained.valid ? undefined : JSON.stringify(chained.errors)
+  );
+}
+// The old flat spelling, `{ op: "bin", thresholds: 20 }`, is an unknown key
+// on the op: rejected, not read as the default partition.
+{
+  const flat = {
+    type: "field",
+    name: "d",
+    ops: [{ op: "bin", thresholds: 20 }],
+  };
+  check(
+    "bin with a key beside the partition rejected",
+    !validate(chart([{ type: "spread", dir: "x", by: flat }])).valid
+  );
+  // Where the key's `type` picks its branch, the error names the key.
+  const r = validate(chart([{ type: "partition", by: flat, dir: "x" }]));
+  check(
+    "bin with a key beside the partition rejected, naming the key",
+    !r.valid && r.errors.some((e) => e.path.endsWith(".thresholds")),
+    JSON.stringify(r)
+  );
+}
+
+// partition's `by`: one binned key with a `dir`, or a binned struct
+// (#1059). A key per axis is two partitions on the wire.
+const binned = (
+  name: string,
+  partition: unknown = { kind: "step", size: 1 }
+) => ({
+  type: "field",
+  name,
+  ops: [{ op: "bin", partition }],
+});
+for (const [name, op] of [
+  ["one key and a dir", { type: "partition", by: binned("a"), dir: "x" }],
+  [
+    "a binned struct",
+    {
+      type: "partition",
+      by: {
+        type: "struct",
+        fields: { x: "a", y: "b" },
+        ops: [{ op: "bin", partition: { kind: "hex", radius: 1 } }],
+      },
+    },
+  ],
+] as const) {
+  const r = validate(chart([op]));
+  check(
+    `partition with ${name} accepts`,
+    r.valid,
+    r.valid ? undefined : JSON.stringify(r.errors)
+  );
+}
+check(
+  "partition with a struct binned by a field bin rejected",
+  !validate(
+    chart([
+      {
+        type: "partition",
+        by: {
+          type: "struct",
+          fields: { x: "a", y: "b" },
+          ops: [{ op: "bin", partition: { kind: "step", size: 1 } }],
+        },
+      },
+    ])
+  ).valid
+);
+for (const [name, by] of [
+  ["a key per axis", { x: binned("a"), y: binned("b") }],
+  ["a string per axis", { x: "a", y: "b" }],
+] as const) {
+  check(
+    `partition with ${name} rejected`,
+    !validate(chart([{ type: "partition", by }])).valid
+  );
+}
+// A key's `type` picks the branch it is checked against, so a bad bin
+// reports what is wrong with the bin, not that no shape matched.
+{
+  const r = validate(
+    chart([
+      {
+        type: "partition",
+        by: binned("a", { kind: "step", size: "1" }),
+        dir: "x",
+      },
+    ])
+  );
+  check(
+    "partition with a bad bin names the bin",
+    !r.valid &&
+      r.errors.every(
+        (e) => e.path.includes(".by.ops") && !/did not match/.test(e.message)
+      ),
+    JSON.stringify(r.errors)
+  );
+}
+// A partition is one tagged union: an unknown kind is named at its `kind`.
+{
+  const r = validate(
+    chart([
+      {
+        type: "partition",
+        by: binned("a", { kind: "fortnight" }),
+        dir: "x",
+      },
+    ])
+  );
+  check(
+    "partition with an unknown kind names the kind",
+    !r.valid && r.errors.every((e) => e.path.endsWith(".partition.kind")),
+    JSON.stringify(r.errors)
+  );
+}
+
+check(
+  "filter without a predicate rejected",
+  !validate(chart([{ type: "filter" }])).valid
+);
+
+check(
   "derive with non-string lambdaId rejected",
   !validate(chart([{ type: "derive", lambdaId: 42 }])).valid
 );
@@ -354,17 +707,11 @@ check(
   !validate(chart([{ type: "scatter", x: { type: "literal" } }])).valid
 );
 
-console.log("\n# Strict mode rejects unknown operator fields");
+console.log("\n# Unknown operator fields are rejected");
 
 check(
-  "unknown spread field rejected in strict",
-  !validate(chart([{ type: "spread", by: "lake", quux: 1 }]), { strict: true })
-    .valid
-);
-
-check(
-  "unknown spread field accepted in permissive",
-  validate(chart([{ type: "spread", by: "lake", quux: 1 }])).valid
+  "unknown spread field rejected",
+  !validate(chart([{ type: "spread", by: "lake", quux: 1 }])).valid
 );
 
 // Per-operator `axes` override — boolean and object forms (matches the
@@ -372,21 +719,17 @@ check(
 console.log("\n# Per-operator axes overrides");
 
 check(
-  "spread with axes: true accepts (strict)",
-  validate(chart([{ type: "spread", by: "lake", dir: "x", axes: true }]), {
-    strict: true,
-  }).valid
+  "spread with axes: true accepts",
+  validate(chart([{ type: "spread", by: "lake", dir: "x", axes: true }])).valid
 );
 
 check(
-  "spread with axes: false accepts (strict)",
-  validate(chart([{ type: "spread", by: "lake", dir: "x", axes: false }]), {
-    strict: true,
-  }).valid
+  "spread with axes: false accepts",
+  validate(chart([{ type: "spread", by: "lake", dir: "x", axes: false }])).valid
 );
 
 check(
-  "spread with axes object form accepts (strict)",
+  "spread with axes object form accepts",
   validate(
     chart([
       {
@@ -395,23 +738,20 @@ check(
         dir: "x",
         axes: { x: false, y: { title: "Count" } },
       },
-    ]),
-    { strict: true }
+    ])
   ).valid
 );
 
 check(
-  "stack with axes accepts (strict)",
-  validate(chart([{ type: "stack", by: "s", dir: "y", axes: { y: true } }]), {
-    strict: true,
-  }).valid
+  "stack with axes accepts",
+  validate(chart([{ type: "stack", by: "s", dir: "y", axes: { y: true } }]))
+    .valid
 );
 
 check(
-  "scatter with axes accepts (strict)",
+  "scatter with axes accepts",
   validate(
-    chart([{ type: "scatter", x: "hp", y: "mpg", axes: { x: true, y: true } }]),
-    { strict: true }
+    chart([{ type: "scatter", x: "hp", y: "mpg", axes: { x: true, y: true } }])
   ).valid
 );
 
@@ -426,10 +766,137 @@ check(
 );
 
 check(
-  "axes object with unknown sub-key rejected in strict",
-  !validate(chart([{ type: "spread", axes: { z: true } as any }]), {
-    strict: true,
-  }).valid
+  "axes object with unknown sub-key rejected",
+  !validate(chart([{ type: "spread", axes: { z: true } as any }])).valid
+);
+
+check(
+  "axis side and label.angle accept",
+  validate(
+    chart([
+      {
+        type: "spread",
+        by: "lake",
+        dir: "x",
+        axes: {
+          x: { side: "end", label: { angle: [45] } },
+          y: { label: { angle: "auto" } },
+        },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "axis option with unknown key rejected",
+  !validate(
+    chart([{ type: "spread", axes: { x: { label_angle: 45 } } as any }])
+  ).valid
+);
+
+{
+  // The flat keys this nested object replaced are unknown keys now, and the
+  // error lists the accepted ones, `label` among them.
+  const result = validate(
+    chart([{ type: "spread", axes: { x: { labelAngle: 45 } } as any }])
+  );
+  check(
+    "the old flat labelAngle key is rejected, naming label",
+    !result.valid &&
+      result.errors.some(
+        (e) => e.message.includes("labelAngle") && e.message.includes("label")
+      )
+  );
+}
+
+check(
+  "axis label.angle of the wrong type rejected",
+  !validate(
+    chart([{ type: "spread", axes: { x: { label: { angle: "45" } } } as any }])
+  ).valid
+);
+
+check(
+  "axis label.align accepts a value or a per-level array with true",
+  validate(
+    chart([
+      {
+        type: "spread",
+        by: "lake",
+        dir: "x",
+        axes: {
+          x: { label: { align: [true, "start"] } },
+          y: { label: { align: "center" } },
+        },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "axis label.align of an unknown value rejected",
+  !validate(
+    chart([
+      { type: "spread", axes: { x: { label: { align: "left" } } } as any },
+    ])
+  ).valid
+);
+
+check(
+  "axis levels of booleans and Calendar values accept",
+  validate(
+    chart([
+      {
+        type: "spread",
+        by: "lake",
+        dir: "x",
+        axes: { x: { levels: [false, true, { kind: "year", every: 1 }] } },
+      },
+    ])
+  ).valid
+);
+
+for (const [name, levels] of [
+  ["a field name", ["weather"]],
+  ["an unknown kind", [{ kind: "decade" }]],
+  ["the old untagged Calendar form", [{ unit: "year", step: 1 }]],
+  ["a list of lists", [[true]]],
+] as const) {
+  check(
+    `axis levels with ${name} rejected`,
+    !validate(chart([{ type: "spread", axes: { x: { levels } } as any }])).valid
+  );
+}
+
+check(
+  "the old axis rows option is gone: rejected",
+  !validate(
+    chart([
+      { type: "spread", axes: { x: { rows: [{ kind: "month" }] } } as any },
+    ])
+  ).valid
+);
+
+// JS types an axis title `string | false`: `false` suppresses the inferred
+// title, and `true` is not a title.
+check(
+  "axis title false and a string accept",
+  validate(
+    chart([
+      {
+        type: "spread",
+        by: "lake",
+        dir: "x",
+        axes: { x: { title: false }, y: { title: "Count" } },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "axis title true rejected",
+  !validate(chart([{ type: "spread", axes: { x: { title: true } } as any }]))
+    .valid
 );
 
 // ---------------------------------------------------------------------------
@@ -451,21 +918,19 @@ function chartWithLabel(label: any) {
 
 check(
   "label: true accepts (boolean shorthand)",
-  validate(chartWithLabel(true), { strict: true }).valid
+  validate(chartWithLabel(true)).valid
 );
 check(
   "label: false accepts (boolean shorthand)",
-  validate(chartWithLabel(false), { strict: true }).valid
+  validate(chartWithLabel(false)).valid
 );
 check(
   "label: 'field' is rejected (bare-string shorthand was dropped)",
-  !validate(chartWithLabel("amount"), { strict: true }).valid
+  !validate(chartWithLabel("amount")).valid
 );
 check(
   "label: [{ accessor }] accepts (array-of-specs form)",
-  validate(chartWithLabel([{ accessor: "amount", position: "outset" }]), {
-    strict: true,
-  }).valid
+  validate(chartWithLabel([{ accessor: "amount", position: "outset" }])).valid
 );
 check(
   "label: [{ accessor }, { accessor }] accepts (multiple specs)",
@@ -473,15 +938,12 @@ check(
     chartWithLabel([
       { accessor: "amount", position: "outset" },
       { accessor: "count", position: "center", fontWeight: "bold" },
-    ]),
-    { strict: true }
+    ])
   ).valid
 );
 check(
   "label: { accessor } is rejected (bare object shorthand was dropped; must be an array)",
-  !validate(chartWithLabel({ accessor: "amount", position: "outset" }), {
-    strict: true,
-  }).valid
+  !validate(chartWithLabel({ accessor: "amount", position: "outset" })).valid
 );
 check(
   "label: number is rejected (not a recognized shape)",
@@ -502,6 +964,312 @@ check(
 // ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Non-finite numbers ({ "$numberDouble": ... })
+// ---------------------------------------------------------------------------
+
+console.log("\n# Non-finite numbers");
+{
+  const inf = { $numberDouble: "Infinity" };
+  const nan = { $numberDouble: "NaN" };
+  const doc = (smoothing: unknown, zOrder: unknown = 1) =>
+    ({
+      irVersion: 0,
+      ir: "gofish-frontend",
+      root: {
+        type: "chart",
+        data: { type: "inline", rows: [{ v: 1 }, { v: Infinity }] },
+        operators: [
+          {
+            type: "scatter",
+            x: "v",
+            overlap: { kind: "noise", smoothing },
+          },
+        ],
+        mark: { type: "circle", r: 3 },
+        zOrder,
+      },
+    }) as unknown as FrontendIRDocument;
+
+  const plain = validate(doc(5));
+  check("a finite number field validates", plain.valid, JSON.stringify(plain));
+  const tagged = validate(doc(inf, { $numberDouble: "-Infinity" }));
+  check(
+    "a number field accepts the tagged Infinity and -Infinity",
+    tagged.valid,
+    JSON.stringify(tagged.errors)
+  );
+  const bad = validate(doc(nan));
+  check(
+    "a number field rejects the tagged NaN loudly",
+    !bad.valid && bad.errors.some((e) => /NaN/.test(e.message)),
+    JSON.stringify(bad.errors)
+  );
+  const channel = validate({
+    ...doc(5),
+    root: { ...(doc(5).root as object), mark: { type: "circle", r: inf } },
+  } as unknown as FrontendIRDocument);
+  check(
+    "a channel value accepts the tagged Infinity",
+    channel.valid,
+    JSON.stringify(channel.errors)
+  );
+  const silverman = validate(doc("silverman"));
+  check(
+    'noise smoothing accepts "silverman" (sina())',
+    silverman.valid,
+    JSON.stringify(silverman.errors)
+  );
+  check("noise smoothing rejects another name", !validate(doc("scott")).valid);
+  const zero = validate(doc(0));
+  check(
+    "noise smoothing accepts 0 (the default)",
+    zero.valid,
+    JSON.stringify(zero.errors)
+  );
+
+  const raw = {
+    a: Infinity,
+    b: [-Infinity, 2, NaN],
+    c: { d: "x", e: { f: Infinity } },
+  };
+  const enc = encodeNonFinite(raw);
+  check(
+    "encode writes every non-finite number as its tag",
+    JSON.stringify(enc) ===
+      '{"a":{"$numberDouble":"Infinity"},"b":[{"$numberDouble":"-Infinity"},2,{"$numberDouble":"NaN"}],"c":{"d":"x","e":{"f":{"$numberDouble":"Infinity"}}}}',
+    JSON.stringify(enc)
+  );
+  const back = decodeNonFinite(JSON.parse(JSON.stringify(enc)));
+  check(
+    "decode after JSON text restores Infinity, -Infinity and NaN",
+    back.a === Infinity &&
+      back.b[0] === -Infinity &&
+      back.b[1] === 2 &&
+      Number.isNaN(back.b[2]) &&
+      back.c.e.f === Infinity &&
+      back.c.d === "x"
+  );
+  const finite = { a: 1, b: [2, { c: "x" }] };
+  check(
+    "encode and decode share an unchanged value",
+    encodeNonFinite(finite) === finite && decodeNonFinite(finite) === finite
+  );
+  {
+    // encodeIR: IR value instances become their plain form in the same
+    // pass; data rows with nothing to encode are shared, and a Date stays.
+    class Tagged {
+      constructor(readonly v: number) {}
+      toJSON() {
+        return { type: "datum", datum: this.v };
+      }
+    }
+    const when = new Date(0);
+    const rows = [{ t: when, n: 1 }];
+    const doc = { mark: { h: new Tagged(Infinity) }, rows };
+    const enc = encodeIR(doc) as any;
+    check(
+      "encodeIR writes an IR value instance as its plain form, encoded",
+      enc.mark.h.type === "datum" &&
+        enc.mark.h.datum.$numberDouble === "Infinity" &&
+        Object.getPrototypeOf(enc.mark.h) === Object.prototype
+    );
+    check("encodeIR shares unchanged data rows", enc.rows === rows);
+    check("encodeIR leaves a Date as it is", enc.rows[0].t === when);
+  }
+  check(
+    "a look-alike object with another key is not decoded",
+    (decodeNonFinite({ x: { $numberDouble: "Infinity", y: 1 } }) as any).x
+      .$numberDouble === "Infinity"
+  );
+  const defs = (FRONTEND_IR_JSON_SCHEMA as any).$defs;
+  check(
+    "the JSON Schema has one shared Number def admitting the tag",
+    JSON.stringify(defs.Number).includes("$numberDouble")
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Strategies (STRATEGIES, checkStrategy)
+// ---------------------------------------------------------------------------
+
+console.log("\n# Strategies");
+{
+  /** The error checkStrategy throws, or "" when it accepts the value. */
+  const thrown = (
+    family: Parameters<typeof checkStrategy>[0],
+    value: unknown
+  ): string => {
+    try {
+      checkStrategy(family, value, "where");
+      return "";
+    } catch (e) {
+      return (e as Error).message;
+    }
+  };
+  const accepts: Array<[Parameters<typeof checkStrategy>[0], unknown]> = [
+    ["Tile", { kind: "squarify" }],
+    ["Tile", { kind: "squarify", ratio: 1 }],
+    ["Tile", { kind: "squarify", ratio: undefined }],
+    ["Tile", { kind: "sliceDice" }],
+    ["Overlap", { kind: "separate", padding: 2 }],
+    ["Overlap", { kind: "noise", smoothing: Infinity, randomness: "uniform" }],
+    ["Overlap", { kind: "noise", smoothing: { $numberDouble: "Infinity" } }],
+    ["Overlap", { kind: "noise", smoothing: "silverman", seed: 3 }],
+    ["Curve", { kind: "monotone" }],
+    ["Curve", { kind: "arc", direction: "down" }],
+    ["Curve", { kind: "perfectArrows", bow: 0.3, padEnd: 4 }],
+    ["Bin", { kind: "step", size: 0.5 }],
+    ["Bin", { kind: "thresholds", thresholds: 20 }],
+    ["Bin", { kind: "thresholds", thresholds: [0, 5, 10] }],
+    ["Bin", { kind: "hex", radius: 1 }],
+    ["Calendar", { kind: "month" }],
+    ["Calendar", { kind: "month", every: 3 }],
+    ["Calendar", { kind: "week", every: 2, start: "sunday" }],
+  ];
+  for (const [family, value] of accepts) {
+    const why = thrown(family, value);
+    check(`${family} accepts ${JSON.stringify(value)}`, why === "", why);
+  }
+  const rejects: Array<[Parameters<typeof checkStrategy>[0], unknown, RegExp]> =
+    [
+      // A strategy kind used bare is read as its value where the option
+      // enters (gofish-graphics' withKindValues), so a function never
+      // reaches the check: one that does is not a strategy.
+      [
+        "Curve",
+        Object.assign(() => ({ kind: "monotone" }), {
+          kind: "monotone",
+          toJSON: () => ({ kind: "monotone" }),
+        }),
+        /expected object, got function/,
+      ],
+      ["Tile", { kind: "strip" }, /where\.kind: unknown kind "strip"/],
+      ["Tile", "squarify", /expected object/],
+      ["Tile", { kind: "squarify", ratio: 0.5 }, /at least 1/],
+      ["Tile", { kind: "slice", ratio: 2 }, /unknown field "ratio"/],
+      ["Overlap", { kind: "separate", padding: -1 }, /at least 0/],
+      ["Overlap", { kind: "separate", padding: Infinity }, /finite/],
+      ["Overlap", { kind: "noise", randomness: "pink" }, /randomness/],
+      ["Overlap", { kind: "noise", smoothing: -1 }, /smoothing/],
+      ["Overlap", { kind: "noise", smoothing: NaN }, /smoothing/],
+      ["Overlap", { kind: "noise", smoothing: "scott" }, /smoothing/],
+      ["Overlap", { kind: "noise", seed: Infinity }, /seed: expected a finite/],
+      ["Overlap", { kind: "swarm" }, /unknown kind "swarm"/],
+      ["Curve", { type: "monotone" }, /unknown kind undefined/],
+      ["Curve", { kind: "arc", direction: "left" }, /direction/],
+      ["Curve", { kind: "linear", options: {} }, /unknown field "options"/],
+      ["Bin", { kind: "step", size: 0 }, /above 0/],
+      ["Bin", { kind: "step", size: Infinity }, /finite/],
+      ["Bin", { kind: "step" }, /size/],
+      ["Bin", { step: 1 }, /unknown kind undefined/],
+      ["Bin", { kind: "thresholds", thresholds: 0 }, /at least 1/],
+      ["Calendar", { kind: "month", every: 0 }, /at least 1/],
+      ["Calendar", { kind: "month", every: 1.5 }, /whole number/],
+      [
+        "Calendar",
+        { kind: "month", step: 3 },
+        /unknown field "step"; expected one of "kind", "every"/,
+      ],
+      ["Calendar", { kind: "weekday", every: 2 }, /unknown field "every"/],
+      ["Curve", () => ({ kind: "monotone" }), /expected object, got function/],
+    ];
+  for (const [family, value, pattern] of rejects) {
+    const why = thrown(family, value);
+    check(
+      `${family} rejects ${JSON.stringify(value)}`,
+      pattern.test(why) && why.includes(`the ${family} family`),
+      why
+    );
+  }
+
+  // A Bin kind is valid only on its key, and the error names the key that
+  // takes it.
+  const errorIn = (fn: () => void): string => {
+    try {
+      fn();
+      return "";
+    } catch (e) {
+      return (e as Error).message;
+    }
+  };
+  check(
+    "checkPartition accepts a field bin",
+    errorIn(() => checkPartition({ kind: "step", size: 1 }, "where")) === ""
+  );
+  check(
+    "checkStructBin accepts a struct bin",
+    errorIn(() => checkStructBin({ kind: "hex", radius: 1 }, "where")) === ""
+  );
+  {
+    const why = errorIn(() =>
+      checkPartition({ kind: "hex", radius: 1 }, "where")
+    );
+    check(
+      "checkPartition rejects Bin.hex, naming struct",
+      /Bin\.hex bins two fields/.test(why) && why.includes("struct({ x, y })"),
+      why
+    );
+  }
+  {
+    const why = errorIn(() =>
+      checkStructBin({ kind: "step", size: 1 }, "where")
+    );
+    check(
+      "checkStructBin rejects Bin.step, naming field",
+      /Bin\.step bins one field/.test(why) && why.includes("field(x).bin"),
+      why
+    );
+  }
+  check(
+    "checkPartition checks the params",
+    /above 0/.test(
+      errorIn(() => checkPartition({ kind: "step", size: -1 }, "where"))
+    )
+  );
+  check(
+    "checkOption rejects an unknown axis option, naming the declared ones",
+    /axes\.x\.dividers: unknown field "dividers"; expected one of .*"divider"/.test(
+      errorIn(() => checkOption("AxisOptions", { dividers: true }, "axes.x"))
+    )
+  );
+  check(
+    "checkOption checks a nested option's type",
+    /axes\.x\.label\.align/.test(
+      errorIn(() =>
+        checkOption("AxisOptions", { label: { align: "left" } }, "axes.x")
+      )
+    )
+  );
+
+  // The validator walks a strategy option the same way.
+  const doc = (tile: unknown) =>
+    ({
+      irVersion: 0,
+      ir: "gofish-frontend",
+      root: {
+        type: "chart",
+        data: { type: "inline", rows: [] },
+        operators: [{ type: "treemap", tile }],
+        mark: { type: "rect" },
+      },
+    }) as unknown as FrontendIRDocument;
+  const unknownKind = validate(doc({ kind: "strip" }));
+  check(
+    "the validator names an unknown strategy kind",
+    !unknownKind.valid &&
+      unknownKind.errors.some(
+        (e) =>
+          /tile\.kind$/.test(e.path) && /unknown kind "strip"/.test(e.message)
+      ),
+    JSON.stringify(unknownKind)
+  );
+  check(
+    "the validator checks a strategy's param bounds",
+    !validate(doc({ kind: "squarify", ratio: 0 })).valid
+  );
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) {

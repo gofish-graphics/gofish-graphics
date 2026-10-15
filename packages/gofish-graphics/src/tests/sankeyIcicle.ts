@@ -23,11 +23,12 @@ import {
   stackX,
   rect,
   groupBy,
-  For,
+  map,
   ribbon,
   ref,
   spreadX,
   spreadY,
+  Curve,
 } from "../lib";
 
 // const classColor = {
@@ -205,7 +206,7 @@ export const testSankeyIcicle = () =>
           {
             dir: "x",
             fill: classColor[cls as keyof typeof classColor],
-            curve: "bezier",
+            curve: Curve.bezier(),
             opacity: 0.7,
             mixBlendMode: "multiply",
           },
@@ -231,7 +232,7 @@ export const testSankeyIcicle = () =>
                 //     neutral,
                 //     mixPct[cls as keyof typeof mixPct]
                 //   ),
-                curve: "bezier",
+                curve: Curve.bezier(),
                 opacity: 0.7,
                 mixBlendMode: "multiply",
               },
@@ -261,7 +262,7 @@ export const testSankeyIcicle = () =>
                     //     neutral,
                     //     mixPct[cls as keyof typeof mixPct]
                     //   ),
-                    curve: "bezier",
+                    curve: Curve.bezier(),
                     opacity: 0.7,
                     mixBlendMode: "multiply",
                   },
@@ -278,12 +279,12 @@ export const testSankeyIcicle = () =>
       .value(),
   ]);
 
-export const testSankeyIcicleAPIv2 = () =>
+export const testSankeyIcicleWithFor = () =>
   frame([
     spreadX({ spacing: layerSpacing, alignment: "middle" }, [
       stackY(
         { alignment: "middle" },
-        For(groupBy(titanic, "class"), (items, cls) =>
+        map(groupBy(titanic, "class"), (items, cls) =>
           rect({
             w: 40,
             h: _(items).sumBy("count") / 10,
@@ -293,11 +294,11 @@ export const testSankeyIcicleAPIv2 = () =>
       ),
       spreadY(
         { spacing: internalSpacing, alignment: "middle" },
-        For(groupBy(titanic, "class"), (items, cls) =>
+        map(groupBy(titanic, "class"), (items, cls) =>
           spreadX({ spacing: layerSpacing, alignment: "middle" }, [
             stackY(
               { alignment: "middle" },
-              For(groupBy(items, "sex"), (items, sex) =>
+              map(groupBy(items, "sex"), (items, sex) =>
                 rect({
                   w: 40,
                   h: _(items).sumBy("count") / 10,
@@ -311,13 +312,13 @@ export const testSankeyIcicleAPIv2 = () =>
                 spacing: internalSpacing * 2,
                 alignment: "middle",
               },
-              For(groupBy(items, "sex"), (items, sex) =>
+              map(groupBy(items, "sex"), (items, sex) =>
                 spreadX({ spacing: layerSpacing, alignment: "middle" }, [
                   stackY(
                     {
                       alignment: "middle",
                     },
-                    For(groupBy(items, "survived"), (survivedItems, survived) =>
+                    map(groupBy(items, "survived"), (survivedItems, survived) =>
                       rect({
                         name: `${cls}-${sex}-${survived}-src`,
                         w: 40,
@@ -332,7 +333,7 @@ export const testSankeyIcicleAPIv2 = () =>
                       spacing: internalSpacing * 4,
                       alignment: "middle",
                     },
-                    For(
+                    map(
                       groupBy(items, "survived"),
                       (survivedItems, survived) => {
                         return rect({
@@ -361,29 +362,29 @@ export const testSankeyIcicleAPIv2 = () =>
         )
       ),
     ]),
-    For(groupBy(titanic, "class"), (items, cls) => [
+    map(groupBy(titanic, "class"), (items, cls) => [
       ribbon(
         {
           dir: "x",
           fill: classColor[cls as keyof typeof classColor],
-          curve: "bezier",
+          curve: Curve.bezier(),
           opacity: 0.7,
           mixBlendMode: "multiply",
         },
         [ref(`${cls}-src`), ref(`${cls}-tgt`)]
       ),
-      For(groupBy(items, "sex"), (sexItems, sex) => [
+      map(groupBy(items, "sex"), (sexItems, sex) => [
         ribbon(
           {
             dir: "x",
             fill: sex === "Female" ? color6_old[2] : color6_old[3],
-            curve: "bezier",
+            curve: Curve.bezier(),
             opacity: 0.7,
             mixBlendMode: "multiply",
           },
           [ref(`${cls}-${sex}-src`), ref(`${cls}-${sex}-tgt`)]
         ),
-        For(groupBy(sexItems, "survived"), (survivedItems, survived) =>
+        map(groupBy(sexItems, "survived"), (survivedItems, survived) =>
           ribbon(
             {
               dir: "x",
@@ -395,7 +396,7 @@ export const testSankeyIcicleAPIv2 = () =>
                   : survived === "No"
                     ? mix(color6_old[3], black, 0.5)
                     : mix(color6_old[3], white, 0.5),
-              curve: "bezier",
+              curve: Curve.bezier(),
               opacity: 0.7,
               mixBlendMode: "multiply",
             },

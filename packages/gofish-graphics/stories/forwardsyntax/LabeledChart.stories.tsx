@@ -12,7 +12,7 @@ import {
 } from "../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax V3/LabeledChart",
+  title: "Forward Syntax/LabeledChart",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1000, step: 10 } },
@@ -43,7 +43,7 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(nodes)
+    chart(nodes, { axes: false })
       .flow(scatter({ by: "id", x: "grp", y: "grp" }))
       .mark(circle({ r: 16, fill: "#59a14f" }).name("nodes"))
       .layer(

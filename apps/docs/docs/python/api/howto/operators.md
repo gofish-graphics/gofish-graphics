@@ -1,3 +1,7 @@
+---
+handwritten: true
+---
+
 # How to pick a layout operator
 
 GoFish provides three layout operators for positioning marks:
@@ -69,7 +73,7 @@ to show part-to-whole relationships.
 Divides space into separate regions for each group, with optional gaps between
 them.
 
-```python
+```python no-check
 .flow(spread(by="category", dir="x", spacing=8))
 ```
 
@@ -90,7 +94,7 @@ chart(data).flow(
 Arranges items along a continuous shared scale, with each item starting where
 the previous one ended.
 
-```python
+```python no-check
 .flow(stack(by="weather", dir="y"))
 ```
 
@@ -111,7 +115,7 @@ chart(data).flow(
 Groups data by a field and positions each group at the mean x/y coordinates of
 its members.
 
-```python
+```python no-check
 .flow(scatter(by="species", x="bill_length", y="flipper_length"))
 ```
 
@@ -130,7 +134,7 @@ chart(penguins).flow(
 
 You can chain multiple operators in `.flow()` to create nested layouts:
 
-```python
+```python no-check
 # First spread by category (with gaps), then stack within each category
 .flow(
     spread(by="category", dir="x", spacing=16),

@@ -4,73 +4,26 @@
 
 import { Interval } from "./dims";
 import { FieldExpr, type FieldOp } from "./fieldExpr";
+import type { ColumnType } from "./schema";
+import { sameUnitVar, unitOf, type Quantity } from "./measure";
 
 export type { FieldOp } from "./fieldExpr";
 export { FieldExpr } from "./fieldExpr";
 
-export type Measure = string;
-
-export const measure = (unit: string): Measure => unit;
-
 /**
- * Well-known symbol used to tag a data ARRAY with the *measure provenance* of
- * its columns — a map from field name to the {@link Measure} that produced it.
- * This is how a data-transform like `bin()` declares that its output `start`/
- * `end`/`size` columns are still expressed in the *source* field's units (e.g.
- * "Beak Length (mm)") rather than the literal field-name "start". The symbol
- * rides the array (not each row) so it survives `derive(...)`, which passes the
- * transformed array straight through to the next operator.
- *
- * Channel inference (`resolveMeasure` in channels.ts) reads this as one of the
- * three measure sources; see issue #266 for the field/datum/literal trichotomy.
+ * Tag a data array with `value` under the symbol `sym`: a non-enumerable own
+ * property, so the tag rides the array (not each row, and not an enumerable
+ * key that would leak into `{...d}` spreads). The column types and the
+ * domain (schema.ts) ride a data array this way.
  */
-export const MEASURE_PROVENANCE: unique symbol = Symbol.for(
-  "gofish.measureProvenance"
-);
-export type MeasureProvenance = Record<string, Measure>;
-
-/** Read the measure-provenance map a data array carries, if any. */
-export const getMeasureProvenance = (
-  data: unknown
-): MeasureProvenance | undefined =>
-  data != null
-    ? ((data as any)[MEASURE_PROVENANCE] as MeasureProvenance | undefined)
-    : undefined;
-
-/**
- * Tag a data array with a measure-provenance map under {@link MEASURE_PROVENANCE}.
- * Owns the non-enumerable encoding so the symbol rides the array (not each row,
- * not an enumerable own-key that would leak into `{...d}` spreads) and survives
- * `derive(...)`. Used by transforms like `bin()`.
- */
-export const setMeasureProvenance = <T>(
-  data: T,
-  provenance: MeasureProvenance
-): T => {
-  Object.defineProperty(data, MEASURE_PROVENANCE, {
-    value: provenance,
+export const tagArray = <T>(data: T, sym: symbol, value: unknown): T => {
+  Object.defineProperty(data, sym, {
+    value,
     enumerable: false,
     configurable: true,
     writable: true,
   });
   return data;
-};
-
-/**
- * Copy the measure-provenance map from `source` onto `target` (both arrays), if
- * `source` carries one. A split leaf is a FRESH sub-array (groupBy/filter/slice)
- * that doesn't inherit the operator input's symbol, so without this a MARK
- * channel bound to a transform-output field (e.g. `bin()`'s `start`/`end`/`size`)
- * sees no provenance and falls back to the literal field name — making a
- * legitimate overlay against the source-field axis a false measure conflict.
- * Re-tagging each leaf with its parent's provenance lets `inferSize`/`inferPos`
- * read the source measure off their own `data` argument, so marks and operators
- * share one mechanism. See {@link resolveMeasure} and #534.
- */
-export const copyMeasureProvenance = <T>(target: T, source: unknown): T => {
-  const provenance = getMeasureProvenance(source);
-  if (provenance !== undefined) setMeasureProvenance(target, provenance);
-  return target;
 };
 
 export type Value<T> = T | DatumValue | DatumValueImpl;
@@ -105,11 +58,6 @@ export const isDiscretePosition = (value: unknown): value is DiscretePosition =>
 
 export type PositionValue = MaybeValue<number> | DiscretePosition;
 
-/** The datum wrapper's WIRE shape — what the Python bridge emits and what the
- *  {@link getValue} / {@link getMeasure} casts read. `offset` is a pixel
- *  offset added AFTER the datum maps through its scale ("a fixed standoff
- *  from a data position"); set via `datum(v).offset(px)` in JS or
- *  `datum(v) + px` in Python, read with {@link getValueOffset}. */
 /**
  * A post-scale color transform carried by a datum value, applied AFTER the
  * datum maps through its color scale ("this category's color, lightened"). The
@@ -119,12 +67,20 @@ export type PositionValue = MaybeValue<number> | DiscretePosition;
  */
 export type ColorOp = { op: "lighten" | "darken"; amount: number };
 
+/** The datum wrapper's WIRE shape — what the Python bridge emits and what the
+ *  {@link getValue} / {@link getQuantity} casts read. `offset` is a pixel
+ *  offset added AFTER the datum maps through its scale ("a fixed standoff
+ *  from a data position"); set via `datum(v).offset(px)` in JS or
+ *  `datum(v) + px` in Python, read with {@link getValueOffset}. */
 type DatumValue = {
   type: "datum";
   datum: any;
-  measure?: Measure;
+  /** What the value is an amount of, when a channel read it from a column
+   *  (set by channel inference, never by the user; see `measure.ts`). */
+  quantity?: Quantity;
   offset?: number;
   colorOps?: ColorOp[];
+  field?: string;
 };
 
 /**
@@ -139,11 +95,22 @@ export class DatumValueImpl {
   public readonly type = "datum" as const;
   constructor(
     public readonly datum: any,
-    public readonly measure?: Measure,
+    /** What the value is an amount of, when a channel read it from a column
+     *  (see `measure.ts`). Read via {@link getQuantity}. */
+    public readonly quantity?: Quantity,
     /** @internal accumulated pixel offset; read via {@link getValueOffset} */
     public readonly _offset?: number,
     /** @internal accumulated color transforms; read via {@link getValueColorOps} */
-    public readonly _colorOps?: ColorOp[]
+    public readonly _colorOps?: ColorOp[],
+    /** The data field this datum was read from, when a channel named one
+     *  (`fill: "product"` reads `row.product`). Provenance only: it plays no
+     *  part in unit checking ({@link quantity} does). Read via
+     *  {@link getValueField}. */
+    public readonly field?: string,
+    /** The type the chart's `schema` declares for {@link field}, when it
+     *  declares one (schema.ts). A color scale over an ordered column lists
+     *  its domain in the column's order. Read via {@link getValueFieldType}. */
+    public readonly fieldType?: ColumnType
   ) {}
 
   /** A new value at the same datum, shifted `px` pixels post-scale —
@@ -151,9 +118,11 @@ export class DatumValueImpl {
   offset(px: number): DatumValueImpl {
     return new DatumValueImpl(
       this.datum,
-      this.measure,
+      this.quantity,
       (this._offset ?? 0) + px,
-      this._colorOps
+      this._colorOps,
+      this.field,
+      this.fieldType
     );
   }
 
@@ -172,25 +141,29 @@ export class DatumValueImpl {
   }
 
   private _withColorOp(op: ColorOp): DatumValueImpl {
-    return new DatumValueImpl(this.datum, this.measure, this._offset, [
-      ...(this._colorOps ?? []),
-      op,
-    ]);
+    return new DatumValueImpl(
+      this.datum,
+      this.quantity,
+      this._offset,
+      [...(this._colorOps ?? []), op],
+      this.field,
+      this.fieldType
+    );
   }
 
   toJSON(): DatumValue {
     return {
       type: this.type,
       datum: this.datum,
-      ...(this.measure !== undefined ? { measure: this.measure } : {}),
+      ...(this.quantity !== undefined ? { quantity: this.quantity } : {}),
       ...(this._offset ? { offset: this._offset } : {}),
       ...(this._colorOps?.length ? { colorOps: this._colorOps } : {}),
+      ...(this.field !== undefined ? { field: this.field } : {}),
     };
   }
 }
 
-export const value = <T>(datum: T, measure?: Measure): DatumValueImpl =>
-  new DatumValueImpl(datum, measure);
+export const value = <T>(datum: T): DatumValueImpl => new DatumValueImpl(datum);
 
 /**
  * `datum(x)` is the recommended name for the data-driven value wrapper
@@ -201,24 +174,9 @@ export const value = <T>(datum: T, measure?: Measure): DatumValueImpl =>
 export const datum = value;
 
 /**
- * `field(name, measure?)` is an explicit field-accessor wrapper. The channel
- * inference functions (`inferSize` / `inferPos` / `inferColor` / `inferRaw`)
- * recognize the tag and resolve it to a per-row value, identical to passing a
- * bare string. Use this when the field name could be confused with a literal
- * (e.g. `field("0.5")`).
- *
- * The optional `measure` is an *explicit unit annotation* — a real type claim
- * about the channel's underlying space (see {@link Measure}). It is one of the
- * three measure sources `resolveMeasure` (channels.ts) checks: a bare string
- * accessor's field-name is only a *weak default*, whereas this annotation (and
- * `bin()`'s {@link MEASURE_PROVENANCE}) is a hard claim that triggers a type
- * error if it contradicts inferred provenance. Issue #266 is the field/datum/
- * literal trichotomy this completes.
- */
-/**
  * The field-accessor WIRE shape (what `field(...)` serializes to and what a
  * deserialized IR/Python-bridge accessor looks like as a plain object). `ops`
- * is the field-expression pipeline (#700 Phase 1) — see {@link FieldOp} and
+ * is the field-expression pipeline — see {@link FieldOp} and
  * `fieldExpr.ts`'s `FieldExpr` class, which `field(...)` actually returns so
  * `.sort()`/`.bin()`/`.mean()`/etc. can chain while still serializing to this
  * shape via `toJSON`.
@@ -226,16 +184,62 @@ export const datum = value;
 export type FieldAccessor = {
   type: "field";
   name: string;
-  measure?: Measure;
   ops?: FieldOp[];
 };
-export const field = (name: string, measure?: Measure): FieldExpr =>
-  new FieldExpr(name, measure);
+
+/**
+ * `field(name)` is an explicit field-accessor wrapper. The channel
+ * inference functions (`inferSize` / `inferPos` / `inferColor` / `inferRaw`)
+ * recognize the tag and resolve it to a per-row value, identical to passing a
+ * bare string. Use this when the field name could be confused with a literal
+ * (e.g. `field("0.5")`), or to chain a pipeline (`field("v").mean()`). A
+ * column's unit is declared in the chart's schema (`Schema.unit`), not here.
+ */
+export const field = (name: string): FieldExpr<false, false> =>
+  new FieldExpr<false, false>(name);
 export const isField = (v: unknown): v is FieldAccessor =>
   typeof v === "object" &&
   v !== null &&
   (v as any).type === "field" &&
   typeof (v as any).name === "string";
+
+/**
+ * The `chunk(size)` grouping key's wire shape: a bin over row position.
+ * Serializes as-is (it is plain data, not a function).
+ */
+export type ChunkKey = { type: "chunk"; size: number };
+
+/**
+ * `chunk(size)` is a `by` key that groups consecutive rows: row `i` goes to
+ * group `Math.floor(i / size)`. It is a bin of width `size` over row
+ * position, so `spread({ by: chunk(5), dir: "y" })` lays the rows out five to
+ * a group (the rows of a waffle chart). If a row-position field ever exists,
+ * this is that field binned by `size`. Like lodash `_.chunk`, Rust
+ * `chunks(n)` and Python `itertools.batched`. The key names no field, so the
+ * groups draw no axis or labels. `chunk(1)` is row identity: one group per
+ * row, which is the split an operator does when it has no `by`.
+ */
+export const chunk = (size: number): ChunkKey => {
+  if (!Number.isInteger(size) || size < 1) {
+    throw new Error(
+      `chunk(size): size must be a positive integer, got ${size}`
+    );
+  }
+  return { type: "chunk", size };
+};
+export const isChunk = (v: unknown): v is ChunkKey =>
+  typeof v === "object" &&
+  v !== null &&
+  (v as any).type === "chunk" &&
+  typeof (v as any).size === "number";
+
+/** The field name a `by`-style selector names, or `undefined` when it names
+ *  none (a key function or `chunk`).The one reading of "which field did this group by",
+ *  shared by every site that needs it. */
+export function fieldNameOf(by: unknown): string | undefined {
+  if (typeof by === "string") return by;
+  return isField(by) ? by.name : undefined;
+}
 
 /**
  * `literal(x)` is an explicit constant wrapper. Channel inference passes
@@ -279,19 +283,26 @@ export const getValue = <T>(value: MaybeValue<T>): T => {
 };
 
 /**
- * The {@link Measure} carried by a datum value, or `undefined` when it carries
- * none (a measureless datum) or is a raw aesthetic (not a datum at all).
- *
- * Returns `undefined` rather than a sentinel string ("unit"/"unknown") so that
- * a measureless value unifies *permissively* with a tagged one — see
- * `mergeMeasures` in underlyingSpace.ts, whose undefined-permissive rule is the
- * whole point of distinguishing "no claim" from "a specific unit".
+ * The {@link Quantity} a datum value is an amount of, or `undefined` when it
+ * was not read from a column (a literal datum) or is a raw aesthetic (not a
+ * datum at all). A value with no quantity makes no claim: its space's
+ * units are undefined, which join with anything (`joinUnits`).
  */
-export const getMeasure = <T>(value: MaybeValue<T>): Measure | undefined => {
-  if (isValue(value)) {
-    return (value as DatumValue).measure;
-  }
-  return undefined;
+export const getQuantity = <T>(value: MaybeValue<T>): Quantity | undefined =>
+  isValue(value) ? (value as DatumValue).quantity : undefined;
+
+/** Whether two values are in the same unit, read through the type walk's
+ *  union-find (`unitOf`): one declared unit, or one class of unknowns. Two
+ *  values with no quantity (literals) are; a literal and a column's value
+ *  are not. */
+export const sameValueUnit = <T>(
+  a: MaybeValue<T>,
+  b: MaybeValue<T>
+): boolean => {
+  const qa = getQuantity(a);
+  const qb = getQuantity(b);
+  if (qa === undefined || qb === undefined) return qa === qb;
+  return sameUnitVar(unitOf(qa), unitOf(qb));
 };
 
 /**
@@ -314,6 +325,19 @@ export const getValueOffset = <T>(value: MaybeValue<T>): number => {
  * (a plain object with a `colorOps` array, as the Python wrapper emits for
  * `datum(v).lighten(t)`). Empty when the value carries no color transform.
  */
+/** The data field a value was read from (see {@link DatumValueImpl.field}),
+ *  in either the class or the wire form; `undefined` for a literal, a
+ *  hand-made value, or one read by a function accessor. */
+export const getValueField = <T>(value: MaybeValue<T>): string | undefined =>
+  isValue(value) ? (value as DatumValue).field : undefined;
+
+/** The schema type of the field a value was read from, if any (only a live
+ *  {@link DatumValueImpl} carries one; the wire shape does not). */
+export const getValueFieldType = <T>(
+  value: MaybeValue<T>
+): ColumnType | undefined =>
+  value instanceof DatumValueImpl ? value.fieldType : undefined;
+
 export const getValueColorOps = <T>(value: MaybeValue<T>): ColorOp[] => {
   if (!isValue(value)) return [];
   const v = value as any;
@@ -324,14 +348,15 @@ export const getValueColorOps = <T>(value: MaybeValue<T>): ColorOp[] => {
 /**
  * The intrinsic-embedding predicate: a dim's *own* extent is a coordinate-space
  * extent (so a coord warps it) iff its size is a data {@link Value} (or unsized —
- * the nest-growth case) AND its `min` doesn't contradict the size's measure. This
- * is the measure-free half; the {@link GoFishNode.resolveEmbedding} pass layers
- * the Route-B measure gate on top (a size denominated in a *foreign* measure to
- * the axis stays ink, not a coord extent). Extracted so the pass is the sole
- * author of `embedded` and the rule lives in one place. See #534.
+ * the nest-growth case) AND its `min` is in the same unit as its size
+ * ({@link sameValueUnit}, read through the render's union-find). This is the coord-free half; the
+ * {@link GoFishNode.resolveEmbedding} pass layers the Route-B unit gate on
+ * top (a size in a unit *foreign* to the axis stays ink, not a coord extent).
+ * Extracted so the pass is the sole author of `embedded` and the rule lives
+ * in one place. See #534.
  */
 export const baseEmbedded = <T>(interval: Interval<T>): boolean =>
   (isValue(interval.size) || interval.size === undefined) &&
   (interval.min === undefined ||
     !isValue(interval.min) ||
-    getMeasure(interval.min) === getMeasure(interval.size));
+    sameValueUnit(interval.min, interval.size));

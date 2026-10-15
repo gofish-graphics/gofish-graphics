@@ -1,3 +1,7 @@
+---
+order: 30
+---
+
 # table
 
 Groups data by two fields and lays out groups in a 2D grid — one axis per field. The primary operator for heatmaps and other grid-based visualizations.
@@ -22,7 +26,7 @@ const data = days.flatMap((day) =>
 );
 
 gf.chart(data, {
-  color: gf.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]),
+  color: gf.Color.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]),
   axes: true,
 })
   .flow(gf.table({ by: { x: "hour", y: "day" }, spacing: 4 }))
@@ -40,17 +44,14 @@ table({ by: { x, y }, spacing?, numCols? })
 
 ## Parameters
 
-| Option    | Type                         | Description                                                        |
-| --------- | ---------------------------- | ------------------------------------------------------------------ |
-| `by`      | `{ x: string; y: string }`   | Two fields whose unique values become columns and rows             |
-| `spacing` | `number \| [number, number]` | Gap between cells (single number, or `[xSpacing, ySpacing]` tuple) |
-| `numCols` | `number`                     | Override the inferred column count                                 |
+::: gofish-ref table
+:::
 
 ## Examples
 
 ```ts
 // Heatmap: hour on x, day on y, colored by value
-chart(data, { color: gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes: true })
+chart(data, { color: Color.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes: true })
   .flow(table({ by: { x: "hour", y: "day" }, spacing: 4 }))
   .mark(rect({ fill: "value" }))
   .render(container, { w: 600, h: 400 });
@@ -61,9 +62,10 @@ chart(data, { color: gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes: true })
 
 ## Notes
 
-- Data insertion order determines column and row ordering. Sort your data first if you need a specific order.
+- Each of `by.x` and `by.y` takes what [`spread`](/js/api/operators/spread)'s `by` takes: a field name or a `field(...)` key, sorted or binned. A binned key's columns (or rows) are its cells, in order, empty ones included, and its axis labels them as `spread`'s does: `table({ by: { x: field("date").bin(Calendar.week), y: field("date").bin(Calendar.weekday) } })` is a calendar heatmap, one column per week and one row per day of the week.
+- A plain field name's columns and rows come in order of first appearance, or in the order of its levels when the chart's `schema` declares the column ordered. Sort your data first if you need a specific order.
 - Unlike nested `spread` calls, `table` correctly exposes ordinal axes on both dimensions so axis labels render on both x and y.
-- Pair with `gradient()` on the chart color option and `fill: "fieldName"` on the mark for heatmap coloring.
+- Pair with `Color.gradient()` on the chart color option and `fill: "fieldName"` on the mark for heatmap coloring.
 
 ### Cell sizing
 

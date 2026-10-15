@@ -21,31 +21,41 @@ export { value as v } from "./ast/data";
 // accessor; `literal(x)` is an explicit constant.
 export { datum, field, literal } from "./ast/data";
 export type { FieldAccessor, LiteralValue } from "./ast/data";
+// `chunk(size)` — a `by` key that groups consecutive rows `size` at a time
+// (a bin over row position).
+export { chunk } from "./ast/data";
+export type { ChunkKey } from "./ast/data";
 // `field(name)` returns a `FieldExpr` — a chainable pipeline expression
 // (`.sort()`, `.bin()`, `.normalize()`, aggregates); `FieldOp` is one step of
 // its serialized `ops` pipeline. Exported so consumers can type against the
 // value the operator docs describe.
-export { FieldExpr } from "./ast/fieldExpr";
-export type { FieldOp } from "./ast/fieldExpr";
-// Measure-provenance tagging: how a data transform (e.g. `bin`) declares that
-// its output columns are in a source field's units. The deserializer re-applies
-// it to RPC-returned rows (the array symbol can't cross the bridge).
-export { setMeasureProvenance } from "./ast/data";
-export type { MeasureProvenance } from "./ast/data";
-export { For as map } from "./ast/iterators/for";
+export { FieldExpr, between } from "./ast/fieldExpr";
+export type {
+  FieldOp,
+  BetweenOptions,
+  FieldPredicate,
+  FieldPredicateWire,
+} from "./ast/fieldExpr";
+export { map } from "./ast/iterators/map";
 
-// Coordinate Transforms
+// Strategy families (#1013): an option whose value is one choice from a set
+// of named strategies gets one namespace, with a capitalized name. Each is a
+// module (`src/families/<name>.ts`, also published as the subpath
+// `gofish-graphics/<name>`), so `Curve.monotone` here and
+// `import { monotone } from "gofish-graphics/curve"` are the same function.
+// The family's type is inside its namespace under the family's name
+// (`Curve.Curve`). Strategies are not also exported at the top level. Each
+// family is exported where its members used to be, which keeps the order the
+// modules run in (lib.ts's imports reach some modules that import lib.ts
+// back, so moving them changes which class is defined first).
+export * as Coord from "./families/coord";
+
+// The low-level coordinate combinator `coord({ transform }, children)`; the
+// transforms themselves are the `Coord` family.
 export { coord } from "./ast/coordinateTransforms/coord";
-export { linear } from "./ast/coordinateTransforms/linear";
-export { polar } from "./ast/coordinateTransforms/polar";
-export { clock } from "./ast/coordinateTransforms/clock";
-export { polar_DEPRECATED } from "./ast/coordinateTransforms/polar_DEPRECATED";
-export { arcLengthPolar } from "./ast/coordinateTransforms/arcLengthPolar";
-export { bipolar } from "./ast/coordinateTransforms/bipolar";
-export { wavy } from "./ast/coordinateTransforms/wavy";
 
 // Main API
-export { gofish as GoFish } from "./ast/gofish";
+export { gofish } from "./ast/gofish";
 export { GoFishSolid } from "./ast/GoFishSolid";
 
 // SVG export
@@ -56,7 +66,11 @@ export {
   saveSVGString,
   gofishSave,
 } from "./ast/gofish";
-export type { GoFishRenderOptions, GoFishExportOptions } from "./ast/gofish";
+export type {
+  GoFishRenderOptions,
+  GoFishExportOptions,
+  View,
+} from "./ast/gofish";
 
 // Display-list (render-IR) export
 export { toDisplayList } from "./ast/displayList/toDisplayList";
@@ -66,12 +80,10 @@ export { createName } from "./ast/createName";
 export type { Token } from "./ast/createName";
 export { createMark } from "./ast/withGoFish";
 
-/* API v2 */
+/* Low-level operators */
 // Data
-export { For } from "./ast/iterators/for";
 // export { groupBy } from "./ast/iterators/groupBy";
 export { groupBy, sumBy, orderBy, meanBy };
-export { bin } from "./ast/transforms";
 
 // Shapes
 export { ref } from "./ast/shapes/ref";
@@ -93,10 +105,64 @@ export { GoFishRef } from "./ast/_ref";
 // from ./ast/datumProjection directly.)
 export { pluck, projectPath as project } from "./ast/datumProjection";
 
+// Column types for `chart(data, { schema })` (#984): `Schema` is the
+// capitalized factory namespace, like `Constraint`.
+export { Schema, ColumnSchema } from "./ast/schema";
+export type {
+  ColumnType,
+  HasOrder,
+  HasMidpoint,
+  HasCalendar,
+  HasUnit,
+  HasQuantity,
+  Level,
+  SchemaEntry,
+} from "./ast/schema";
+// Calendar partitions (#1057): the cells of `field(x).bin(...)`, and the
+// cells a time axis's levels are made of
+// (`axes: { x: { levels: [Calendar.month, Calendar.year] } }`). A strategy
+// family like the others.
+export * as Calendar from "./families/calendar";
+export { CalendarPartition } from "./ast/calendar";
+export type {
+  CalendarCell,
+  CalendarPart,
+  CalendarUnit,
+  CalendarJSON,
+  CellFormat,
+  WeekStart,
+} from "./ast/calendar";
+export type { LevelOption } from "./ast/axes/levels";
+// Cells (#1058): what `field(x).bin(partition)` maps each value to. A
+// partition is a Calendar value, `Bin.step(size)`, or
+// `Bin.thresholds(countOrEdges)`; a list of Calendar values is a product
+// (`[Calendar.year, Calendar.month]`). A level that is a part of a larger
+// one (`Calendar.month`, the month of the year) gives parts of a cycle.
+export type {
+  Cell,
+  CycleCell,
+  HasCycle,
+  BinStep,
+  Product,
+  Partition,
+  NumberPartition,
+  NumberCellFormat,
+  PartitionJSON,
+} from "./ast/cells";
+// A key that reads two fields at once (#1059), binned into the cells of the
+// plane by a call in the Bin family: `struct({ x, y }).bin(Bin.hex({ radius }))`.
+export { struct, StructExpr } from "./ast/structExpr";
+export type { StructOp, StructExprWire } from "./ast/structExpr";
+export type { PolygonCell, PlaneFields } from "./ast/polygonCells";
+export * as Bin from "./families/bin";
+
 // Constraints
 export { Constraint } from "./ast/constraints";
 export type {
   ConstraintRef,
+  RelateEnv,
+  RelateClause,
+  RelateFn,
   ConstraintSpec,
   AlignConstraint,
   DistributeConstraint,
@@ -108,50 +174,42 @@ export type {
 } from "./ast/constraints";
 
 // Graphical Operators
-export { stackX, stackX as StackX } from "./ast/graphicalOperators/stackX";
-export { stackY, stackY as StackY } from "./ast/graphicalOperators/stackY";
-export { Spread, spread, stack } from "./ast/graphicalOperators/spread";
-export { stack as Stack } from "./ast/graphicalOperators/stack";
-export { Scatter, scatter } from "./ast/graphicalOperators/scatter";
-export { spreadX, spreadX as SpreadX } from "./ast/graphicalOperators/spreadX";
-export { spreadY, spreadY as SpreadY } from "./ast/graphicalOperators/spreadY";
-export { layer as Layer } from "./ast/graphicalOperators/layer";
+// Each operator has one lowercase name that works at both levels: inside
+// `chart(...).flow(...)` and as a combinator over marks (`stack(opts, [a, b])`,
+// `layer([...]).render(...)`). The node-level building blocks they are made
+// from (`Spread`, `Layer`, the region-compositing node operators, ...) are
+// internal and not exported (#146).
+export { stackX } from "./ast/graphicalOperators/stackX";
+export { stackY } from "./ast/graphicalOperators/stackY";
+export { spread, stack } from "./ast/graphicalOperators/spread";
+export { scatter } from "./ast/graphicalOperators/scatter";
+export { spreadX } from "./ast/graphicalOperators/spreadX";
+export { spreadY } from "./ast/graphicalOperators/spreadY";
+export * as Curve from "./families/curve";
+export { treemap } from "./ast/graphicalOperators/treemap";
+export * as Tile from "./families/tile";
+export type { TreemapOptions } from "./ast/graphicalOperators/treemap";
+export { pack } from "./ast/graphicalOperators/pack";
+export type { PackOptions } from "./ast/graphicalOperators/pack";
+export { partition } from "./ast/graphicalOperators/partition";
+export type {
+  PartitionOptions,
+  PartitionAxisOptions,
+  PartitionProductOptions,
+  PartitionPlaneOptions,
+} from "./ast/graphicalOperators/partition";
+export * as Overlap from "./families/overlap";
 export {
-  registerRoute,
-  getRoute,
-  hasRoute,
-  resolveCurve,
-  straight,
-  bezier,
-  orthogonal,
-  arc,
-  perfectArrows,
-  type Router,
-  type RouteContext,
-  type Curve,
-  type CurveSpec,
-} from "./ast/graphicalOperators/routers";
-export { treemap, Treemap } from "./ast/graphicalOperators/treemap";
-export { enclose, enclose as Enclose } from "./ast/graphicalOperators/enclose";
-export { Frame, Frame as frame } from "./ast/graphicalOperators/frame";
+  enclose,
+  enclose as background,
+} from "./ast/graphicalOperators/enclose";
+export { Frame as frame } from "./ast/graphicalOperators/frame";
 export { group } from "./ast/graphicalOperators/group";
-export {
-  position,
-  position as Position,
-} from "./ast/graphicalOperators/position";
-export { arrow, arrow as Arrow } from "./ast/graphicalOperators/arrow";
-export { Table, table } from "./ast/graphicalOperators/table";
-export { cut, cut as Cut, cutMark } from "./ast/graphicalOperators/cut";
-export { offset, offset as Offset } from "./ast/graphicalOperators/offset";
-// Region-compositing node operators (Figma-inspired names, #196/#202). `over`
-// is intentionally not exported — it is conceptually `layer` (#196).
-export {
-  intersect as Intersect,
-  exclude as Exclude,
-  subtract as Subtract,
-  paint as Paint,
-  mask as Mask,
-} from "./ast/graphicalOperators/porterDuff";
+export { position } from "./ast/graphicalOperators/position";
+export { arrow } from "./ast/graphicalOperators/arrow";
+export { table } from "./ast/graphicalOperators/table";
+export { cut, cutMark } from "./ast/graphicalOperators/cut";
+export { offset } from "./ast/graphicalOperators/offset";
 
 // Marks (lowercase, from createMark)
 export { ellipse } from "./ast/shapes/ellipse";
@@ -159,11 +217,13 @@ export { petal } from "./ast/shapes/petal";
 export { polygon } from "./ast/shapes/polygon";
 export { text } from "./ast/shapes/text";
 export { image } from "./ast/shapes/image";
+export { region } from "./ast/shapes/region";
 
 /* Chart Syntax */
 export {
   chart,
   derive,
+  filter,
   resolve,
   join,
   rect,
@@ -182,37 +242,52 @@ export {
   exclude,
   subtract,
   mask,
-  // `over` is NOT public API — use `layer` (#196). It is re-exported only so
-  // the IR test harness can key its `"over"` wire-type combinator factory off
-  // the package's public entry instead of deep-importing internals. The
-  // deserializer's registry.ts maps the "over" wire type to this same factory.
-  over,
-  // `PREVIOUS_LAYER_MARKS` is NOT public API — users spell "inherit the
-  // previous tier's marks" as an empty `chart()` scope. Re-exported only so
-  // the IR test harness can map the `{type: "previous-tier"}` DataIR variant
-  // to this same sentinel without deep-importing internals (mirrors `over`).
-  PREVIOUS_LAYER_MARKS,
 } from "./ast/marks/chart";
-export type { ConstrainableMark } from "./ast/marks/chart";
+export type { RelatableMark, DeriveOptions } from "./ast/marks/chart";
+export { compose } from "./ast/marks/compose";
+// Animation (JS-only, like the rest of the reactive layer: a sequence owns a
+// clock, which is a live signal and does not cross the Python bridge).
+// Exported as ONE namespace object so the temporal vocabulary reads as its
+// own surface — `time.sequence` / `time.transition` — rather than as two more
+// bare names beside the spatial operators.
+export { time } from "./ast/marks/time";
+export type {
+  SequenceOptions,
+  HistoryOptions,
+  TransitionOptions,
+} from "./ast/marks/time";
+// The effects of `.transition({ enter, exit, update })`: WHAT changes as a
+// mark enters (grow, fadeIn, wipe, …), the partner of `time.*` (WHEN).
+// JS-only like the rest of `time`. The types below belong to `.transition()`
+// and `time.*`.
+export * as Animation from "./families/animation";
+export type { Ease } from "./animation/effects";
+export type {
+  MarkTransition,
+  OperatorTransition,
+} from "./animation/transition";
+export type { StaggerOptions } from "./animation/timeArrangements";
+export type { BuildClockOptions } from "./animation/install";
+// The data-space reading of a transition: read a table of keyframes at one
+// moment and hand the result to an ordinary chart. See `src/interpolate.ts`.
+export { interpolate } from "./interpolate";
+export type { InterpolateOptions } from "./interpolate";
 export type {
   Mark,
   Operator,
   ChartOptions,
   ChartBuilder,
 } from "./ast/marks/chart";
+export type { MarkChild } from "./ast/types";
 // Side-effect import: attaches .facet() / .stack() to ChartBuilder.
 import "./ast/marks/builderMixins";
 
 // Frontend-IR deserializer — re-exported as a namespace so the symbol set
-// stays scoped (`Serialize.mapMark`, etc.).
+// stays scoped (`Serialize.renderIR`, etc.).
 export * as Serialize from "./serialize";
-export { palette, gradient, assignGradientColor } from "./ast/colorSchemes";
+export * as Color from "./families/color";
+export { assignGradientColor } from "./ast/colorSchemes";
 export { barChart } from "./charts/bar";
-export type {
-  ColorConfig,
-  PaletteScale,
-  GradientScale,
-} from "./ast/colorSchemes";
 export type { NameableMark } from "./ast/withGoFish";
 export type {
   LabelSpec,
@@ -222,15 +297,34 @@ export type {
 
 // Reactive interaction layer (JS-only; no Python/IR bridge). Signals live
 // OUTSIDE the layout pipeline — see src/interaction/ and the reactivity docs.
-export { live, pointer, drag, wheel, timer, signal } from "./interaction";
+export {
+  live,
+  pointer,
+  drag,
+  click,
+  wheel,
+  timer,
+  signal,
+  slider,
+  button,
+} from "./interaction";
 export type {
   LiveValue,
   Pointer,
   Drag,
   DragOptions,
+  Click,
+  ClickOptions,
+  SliderOptions,
+  ButtonOptions,
+  Control,
+  FrameBoxReader,
   Wheel,
   WheelOptions,
   Timer,
   TimerOptions,
+  TimerValues,
   Signal,
+  SvgPoint,
+  SvgBox,
 } from "./interaction";

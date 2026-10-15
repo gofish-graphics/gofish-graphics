@@ -1,3 +1,7 @@
+---
+order: 80
+---
+
 # position
 
 Sets a single child's **min-corner** `(x, y)` offset in the parent's coordinate
@@ -22,22 +26,20 @@ gf.layer([
 position({ x?, y?, key? }, [child]);
 ```
 
-`Position` is the v2 alias for the same factory. `position` takes **exactly
+`position` takes **exactly
 one** child; passing more is not meaningful (the operator only tracks one
 child's box).
 
-## Options
+## Parameters
 
-| Option | Type     | Default     | Description                                       |
-| ------ | -------- | ----------- | ------------------------------------------------- |
-| `x`    | `number` | `undefined` | Min-corner x offset, in the parent's coordinates. |
-| `y`    | `number` | `undefined` | Min-corner y offset, in the parent's coordinates. |
-| `key`  | `string` | `undefined` | Internal per-node key override.                   |
+::: gofish-ref position
+:::
 
 ## Notes
 
 - **Not center-anchored.** `position`'s `(x, y)` moves the child's min corner
-  (its bbox's left/bottom edge in y-up terms), not its center — unlike, say,
+  (its bbox's left edge and the start edge of its y: the top where y reads
+  top-down, the bottom where y is continuous), not its center — unlike, say,
   `spread`'s point placement. If you want center anchoring, offset by half the
   child's size yourself, or reach for `spread`/`scatter` instead.
 - `position` is a workaround for `enclose`'s styling limits, not a

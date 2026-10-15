@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { ellipse, line, Layer, Frame, polar } from "gofish-graphics";
+import { ellipse, line, layer, frame, Coord, Curve } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -35,7 +35,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //   Links: the dsl asks for `curve` links; curve interpolation is unimplemented
 //   (tracked for PR #637). `curve:"bezier"` was tried first, but under
 //   the polar transform its control-point resampling winds the parent→child
-//   segments into wild spirals, so we fall back to `curve:"straight"`.
+//   segments into wild spirals, so we fall back to `curve:"linear"`.
 //   Linear segments resample cleanly into the (near-)radial spokes seen here;
 //   the reference's gentle curve is therefore drawn straight. Link thickness
 //   tapers by depth (dsl Thickness=depth, Min 1 / Max 9): thick near the root,
@@ -172,7 +172,7 @@ const links = placed
       parent.depth === 0 ? [p.theta, 0] : [parent.theta, parent.r];
     return line(
       {
-        curve: "straight",
+        curve: Curve.linear(),
         fill: "none",
         stroke: "#5f6b7a",
         strokeWidth: linkWidth(parent.depth),
@@ -196,10 +196,9 @@ export const RadialDeep: StoryObj = {
     // zOrder — that's resolved by the ROOT bake, and coord is a bake boundary).
     // So links go FIRST in the array to draw under the nodes, and the root node
     // is last within `nodes` so its dark disc caps the spoke convergence.
-    Frame({ coord: polar() as any }, [Layer([...links, ...nodes])]).render(
-      container,
-      { w: 520, h: 520 }
-    );
+    frame({ coord: Coord.polar() as any }, [
+      layer([...links, ...nodes]),
+    ]).render(container, { w: 520, h: 520 });
     return container;
   },
 };

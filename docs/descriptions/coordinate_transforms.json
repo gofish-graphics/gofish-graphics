@@ -1,36 +1,24 @@
 {
-    "name": "Coordinate Transforms",
-    "description": "Coordinate transforms are used to transform the coordinate system of your data representation.",
-    "usage": {
-        "coord": {
-            "description": "The coord method is used to specify the coordinate transform of a layer.",
-            "example": "layer({ coord: clock() }, [chart(seafood).flow(spread('lake', { dir: 'x' })).mark(rect({ h: 'count' })); chart(seafood).flow(spread('lake', { dir: 'x' })).mark(rect({ h: 'count' }));]).render(root, { w: 500, h: 300 });"
-        }
-    },
-    "components": {
-        "linear": {
-            "type": "linear",
-            "description": "A linear coordinate transform."
-        },
-        "polar": {
-            "type": "polar",
-            "description": "A polar coordinate transform."
-        },
-        "clock": {
-            "type": "clock",
-            "description": "A clock coordinate transform."
-        },
-        "wavy": {
-            "type": "wavy",
-            "description": "A wavy coordinate transform."
-        },
-        "bipolar": {
-            "type": "bipolar",
-            "description": "A bipolar coordinate transform."
-        },
-        "arcLengthPolar": {
-            "type": "arcLengthPolar",
-            "description": "An arc length polar coordinate transform."
-        }
+  "name": "Coordinate Transforms",
+  "description": "Coordinate transforms are used to transform the coordinate system of your data representation.",
+  "usage": {
+    "coord": {
+      "description": "The coord method is used to specify the coordinate transform of a layer.",
+      "example": "layer({ coord: clock() }, [chart(seafood).flow(spread('lake', { dir: 'x' })).mark(rect({ h: 'count' })); chart(seafood).flow(spread('lake', { dir: 'x' })).mark(rect({ h: 'count' }));]).render(root, { w: 500, h: 300 });"
     }
+  },
+  "components": {
+    "polar": {
+      "type": "polar",
+      "description": "A polar coordinate transform."
+    },
+    "clock": {
+      "type": "clock",
+      "description": "A clock coordinate transform."
+    },
+    "wavy": {
+      "type": "wavy",
+      "description": "A wavy coordinate transform."
+    }
+  }
 }

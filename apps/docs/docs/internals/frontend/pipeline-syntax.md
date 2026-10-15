@@ -58,7 +58,7 @@ settled on `chart(data).flow(...).mark(...)`, and the ribbon-chart case above
 is now `.layer(ribbon({ opacity: 0.8 }))` chained on the builder — no split
 option at all, since a ribbon fused over the chart's own flow splits at the
 flow's grouping by default (issue #752), the re-partition this "Reverse"
-sketch spells as a separate `.group({ by: "datum.species" })` step. There is
+sketch spells as a separate `.group({ by: "species" })` step. There is
 no `.connect()` method. See [`.layer()`](/js/api/core/layer) for the current
 semantics.
 :::
@@ -333,7 +333,7 @@ layer([
 **pie chart**
 
 ```ts
-chart(seafood, { coord: clock() })
+chart(seafood, { coord: Coord.clock() })
   .flow(stack("species", { dir: "theta" }))
   .mark(rect({ "theta-size": "count", fill: "species" }));
 ```
@@ -371,7 +371,7 @@ layer([
 **donut chart**
 
 ```ts
-chart(seafood, { coord: clock() })
+chart(seafood, { coord: Coord.clock() })
   .flow(stack("species", { dir: "theta", r: 50, "r-size": 50 }))
   .mark(rect({ "theta-size": "count", fill: "species" }));
 ```
@@ -380,7 +380,7 @@ chart(seafood, { coord: clock() })
 
 ```ts
 // TODO: the R direction should be sqrt'd I guess?
-chart(nightingale, { coord: clock() })
+chart(nightingale, { coord: Coord.clock() })
   .flow(stack("Month", { dir: "theta" }), stack("Type", { dir: "r" }))
   .mark(rect({ "r-size": "Death", fill: "Type" }));
 ```
@@ -422,8 +422,8 @@ chart(cars)
 chart(seafood)
   .flow(
     spread("lake", { spacing: 8, dir: "x" }),
-    derive((d) => d.repeat("count").chunk(5)),
-    spread({ spacing: 2, dir: "y" }),
+    derive((d) => d.repeat("count")),
+    spread({ by: chunk(5), spacing: 2, dir: "y" }),
     spread({ spacing: 2, dir: "x" })
   )
   .mark(rect({ w: 8, h: 8, fill: "species" }));
@@ -453,7 +453,7 @@ layer([
 **polar ribbon**
 
 ```ts
-plot({ coord: clock() }).mark([
+plot({ coord: Coord.clock() }).mark([
   plot(seafood)
     .flow(
       spread("lake", { dir: "theta", r: 50, spacing: 60, mode: "center" }),
@@ -511,7 +511,7 @@ chart(seafood)
 
 ```ts
 const pie = createMark((data, { category, value }) =>
-  chart(data, { coord: clock() })
+  chart(data, { coord: Coord.clock() })
     .flow(stack(category, { dir: "theta" }))
     .mark(rect({ "theta-size": value, fill: category }))
 );

@@ -1,7 +1,7 @@
 /**
  * Synthetic micro-benchmark spec generators.
  *
- * Each family is a function of a single scale parameter `n` that builds a v3
+ * Each family is a function of a single scale parameter `n` that builds a
  * `chart(...)` and returns a `BenchSpec` whose `render` paints it into a
  * container. The bench runner (`tests/harness/bench-runner.ts`) sweeps `n` over
  * a family and records the per-pass timings reported by the engine's perf
@@ -17,6 +17,16 @@
  *    points* each with many children (the σ-solve fan-out case).
  *  - `nest` — a chain of `depth` nested single-child facets: pure recursion /
  *    scope-nesting depth, swept independently of leaf count.
+ *  - `axes` — the `scatter` workload with its default axes, so the cost of
+ *    axis inference and rendering is tracked as its own number.
+ *  - `grid-axes` — the `grid` workload with its default axes: a chart nested
+ *    in every group, each drawing its own axes, so the cost of axes on by
+ *    default (#1110) across nested charts is tracked too.
+ *
+ * Every other family pins `axes: false`. `chart()` draws axes by default
+ * (#1110), and that per-chart cost, multiplied by the nested `chart()` per
+ * cell in `grid` and `nest`, would swamp the layout work these families
+ * exist to measure.
  *
  * This module is imported by the harness Vite server (which aliases
  * `gofish-graphics` to the package source), so it always runs against
@@ -44,7 +54,7 @@ const rows = (n: number): { i: number; v: number }[] =>
 /** `n` rects spread along x — flat fan-out, one branch point. */
 export const spreadFamily: CountFamily = (n) => ({
   render: (container, { w, h }) =>
-    chart(rows(n))
+    chart(rows(n), { axes: false })
       .flow(spread({ dir: "x", spacing: 1 }))
       .mark(rect({ w: 4, h: "v" }))
       .render(container, { w, h }),
@@ -53,54 +63,61 @@ export const spreadFamily: CountFamily = (n) => ({
 /** `n` rects stacked along y — flat fan-out plus an `n`-way position sum. */
 export const stackFamily: CountFamily = (n) => ({
   render: (container, { w, h }) =>
-    chart(rows(n))
+    chart(rows(n), { axes: false })
       .flow(stack({ dir: "y" }))
       .mark(rect({ w: 20, h: "v" }))
       .render(container, { w, h }),
 });
 
-/** `n` independently positioned points — posScale over `n` rows. */
-export const scatterFamily: CountFamily = (n) => ({
-  render: (container, { w, h }) => {
-    const data = Array.from({ length: n }, (_, i) => ({
-      x: i,
-      y: val(i) + (i % 7),
-    }));
-    return chart(data)
-      .flow(scatter({ x: "x", y: "y" }))
-      .mark(circle({ r: 2 }))
-      .render(container, { w, h });
-  },
-});
+const points = (n: number): { x: number; y: number }[] =>
+  Array.from({ length: n }, (_, i) => ({ x: i, y: val(i) + (i % 7) }));
 
-/** ⌈√n⌉ groups × ⌈√n⌉ leaves — many branch points, each with many children. */
-export const gridFamily: CountFamily = (n) => {
-  const side = Math.max(1, Math.ceil(Math.sqrt(n)));
-  return {
-    render: (container, { w, h }) => {
-      const data = Array.from({ length: side * side }, (_, k) => ({
-        g: Math.floor(k / side),
-        i: k % side,
-        v: val(k),
-      }));
-      return chart(data)
-        .flow(spread({ by: "g", dir: "x", spacing: 4 }))
-        .mark((d: any) =>
-          chart(d)
-            .flow(spread({ by: "i", dir: "y", spacing: 1 }))
-            .mark(rect({ w: 4, h: 4 }))
-        )
-        .render(container, { w, h });
-    },
+/** `n` independently positioned points — posScale over `n` rows — with or
+ *  without the chart's axes: `axes` minus `scatter` is the axis cost. */
+const scatterWith =
+  (axes: boolean): CountFamily =>
+  (n) => ({
+    render: (container, { w, h }) =>
+      chart(points(n), { axes })
+        .flow(scatter({ x: "x", y: "y" }))
+        .mark(circle({ r: 2 }))
+        .render(container, { w, h }),
+  });
+
+/** ⌈√n⌉ groups × ⌈√n⌉ leaves — many branch points, each with many children
+ *  — with or without every chart's axes: `grid-axes` minus `grid` is the
+ *  axis cost across nested charts. */
+const gridWith =
+  (axes: boolean): CountFamily =>
+  (n) => {
+    const side = Math.max(1, Math.ceil(Math.sqrt(n)));
+    return {
+      render: (container, { w, h }) => {
+        const data = Array.from({ length: side * side }, (_, k) => ({
+          g: Math.floor(k / side),
+          i: k % side,
+          v: val(k),
+        }));
+        return chart(data, { axes })
+          .flow(spread({ by: "g", dir: "x", spacing: 4 }))
+          .mark((d: any) =>
+            chart(d, { axes })
+              .flow(spread({ by: "i", dir: "y", spacing: 1 }))
+              .mark(rect({ w: 4, h: 4 }))
+          )
+          .render(container, { w, h });
+      },
+    };
   };
-};
 
 /** All count-parameterized families, keyed by name. */
 export const countFamilies: Record<string, CountFamily> = {
   spread: spreadFamily,
   stack: stackFamily,
-  scatter: scatterFamily,
-  grid: gridFamily,
+  scatter: scatterWith(false),
+  grid: gridWith(false),
+  axes: scatterWith(true),
+  "grid-axes": gridWith(true),
 };
 
 /**
@@ -112,11 +129,11 @@ export const nestFamily = (depth: number): BenchSpec => {
   const build = (level: number): any => {
     const data = [{ i: 0, v: 30 }];
     if (level <= 0) {
-      return chart(data)
+      return chart(data, { axes: false })
         .flow(spread({ dir: "x" }))
         .mark(rect({ w: 8, h: "v" }));
     }
-    return chart(data)
+    return chart(data, { axes: false })
       .flow(spread({ dir: "x" }))
       .mark(() => build(level - 1));
   };
