@@ -103,9 +103,8 @@ columns a `derive` computes (`lo`, `hi`, a box plot's quartiles) share an
 axis with no annotation. Two different declared units on one axis are an
 error. See [`Schema.unit`](/js/api/core/schema).
 
-- **`bin()`** types its output: the edges `start`/`end`/`size` are amounts
-  of the source column, so they title their axis as the source does and
-  take its unit, and `count` is in the unit `"count"`. The types survive
+- **A column's type** (its declared quantity and unit, `HasQuantity` and
+  `HasUnit`) rides the data array, so a column the input declares keeps it
   through `derive`.
 - **An arbitrary `derive`** can declare the unit of a column it makes with
   its `schema`:

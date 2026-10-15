@@ -14,24 +14,22 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import {
-  Calendar,
   CalendarPartition,
   calendarPartition,
   loadTemporal,
   tickPartition,
 } from "../ast/calendar";
+import * as Calendar from "../families/calendar";
 import {
   applySchema,
+  copyColumnTypes,
   getColumnTypes,
   setColumnTypes,
   toEpochMs,
   Schema as SrcSchema,
 } from "../ast/schema";
-import {
-  defaultTimeRows,
-  rowLabels,
-  timeRowsFromOption,
-} from "../ast/axes/timeRows";
+import { rowLabels } from "../ast/axes/timeRows";
+import { levelsFromOption } from "../ast/axes/levels";
 import {
   CONTINUOUS,
   niceContinuous,
@@ -71,6 +69,16 @@ async function errorOf(fn: () => unknown): Promise<string | undefined> {
   }
 }
 const iso = (t: number) => new Date(t).toISOString();
+/** `types` without the domains (`HasDomain`) applySchema computes, for a
+ *  check about the other classes. */
+const withoutDomains = (types: Record<string, any> | undefined) =>
+  types === undefined
+    ? undefined
+    : Object.fromEntries(
+        Object.entries(types)
+          .map(([k, { HasDomain: _, ...rest }]) => [k, rest])
+          .filter(([, rest]) => Object.keys(rest).length > 0)
+      );
 const same = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
 
@@ -109,39 +117,36 @@ async function main() {
       "a cell ends where the next starts",
       months.every((c, i) => i === 0 || months[i - 1].end === c.start)
     );
-    const q = Calendar.month.every(3).cells(lo, Date.UTC(2024, 11, 31), "UTC");
+    const q = Calendar.month({ every: 3 }).cells(lo, Date.UTC(2024, 11, 31), "UTC");
     check(
-      "month.every(3) starts in Jan, Apr, Jul, Oct",
+      "month({ every: 3 }) starts in Jan, Apr, Jul, Oct",
       same(
         q.map((c) => c.month),
         [10, 1, 4, 7, 10]
       )
     );
-    const d2 = Calendar.day
-      .every(2)
+    const d2 = Calendar.day({ every: 2 })
       .cells(Date.UTC(2024, 0, 29), Date.UTC(2024, 1, 3), "UTC");
     check(
-      "day.every(2) restarts on the 1st (a 31st is a one-day cell)",
+      "day({ every: 2 }) restarts on the 1st (a 31st is a one-day cell)",
       same(
         d2.map((c) => c.day),
         [29, 31, 1, 3]
       ) && d2[1].end - d2[1].start === 864e5
     );
-    const h6 = Calendar.hour
-      .every(6)
+    const h6 = Calendar.hour({ every: 6 })
       .cells(Date.UTC(2024, 1, 28, 1), Date.UTC(2024, 1, 29, 1), "UTC");
     check(
-      "hour.every(6) starts at 0, 6, 12, 18",
+      "hour({ every: 6 }) starts at 0, 6, 12, 18",
       same(
         h6.map((c) => c.hour),
         [0, 6, 12, 18, 0]
       )
     );
-    const y5 = Calendar.year
-      .every(5)
+    const y5 = Calendar.year({ every: 5 })
       .cells(Date.UTC(2018, 2), Date.UTC(2031, 0), "UTC");
     check(
-      "year.every(5) starts on years divisible by 5",
+      "year({ every: 5 }) starts on years divisible by 5",
       same(
         y5.map((c) => c.year),
         [2015, 2020, 2025, 2030]
@@ -190,22 +195,22 @@ async function main() {
       "Calendar.week is a Calendar value and a function",
       Calendar.week instanceof CalendarPartition &&
         typeof Calendar.week === "function" &&
-        same(Calendar.week, { unit: "week", step: 1, start: "monday" })
+        same(Calendar.week, { kind: "week", every: 1, start: "monday" })
     );
     check(
       "Calendar values write their wire form",
-      same(Calendar.hour.every(6), { unit: "hour", step: 6 })
+      same(Calendar.hour({ every: 6 }), { kind: "hour", every: 6 })
     );
     check(
       "the wire form reads back",
       same(
-        calendarPartition({ unit: "month", step: 3 }, "x"),
-        Calendar.month.every(3)
+        calendarPartition({ kind: "month", every: 3 }, "x"),
+        Calendar.month({ every: 3 })
       )
     );
     check(
       "a step below 1 is an error",
-      (await errorOf(() => Calendar.month.every(0)))?.includes("step") === true
+      (await errorOf(() => Calendar.month({ every: 0 })))?.includes("every") === true
     );
   }
 
@@ -285,7 +290,14 @@ async function main() {
     const typed = await applySchema(rows);
     check(
       "a Date column is inferred as a UTC time",
-      same(getColumnTypes(typed), { when: SrcSchema.time().type })
+      same(getColumnTypes(typed), {
+        when: {
+          ...SrcSchema.time().type,
+          HasDomain: { lo: Date.UTC(2024, 0, 1), hi: Date.UTC(2024, 0, 1) },
+        },
+        k: { HasDomain: { lo: 1, hi: 1 } },
+      }),
+      JSON.stringify(getColumnTypes(typed))
     );
     check(
       "its values become epoch ms, in copied rows",
@@ -303,10 +315,46 @@ async function main() {
       "a declared string column parses in its zone",
       (declared[0] as any).n === Date.UTC(2023, 11, 31, 15)
     );
-    const untyped = [{ a: 1 }];
+    const untyped = [{ a: "x" }];
+    const copied = await applySchema(untyped);
     check(
-      "data with no types is returned as is",
-      (await applySchema(untyped)) === untyped
+      "data with no types keeps its rows, in a copy",
+      copied !== untyped &&
+        copied[0] === untyped[0] &&
+        getColumnTypes(copied) === undefined
+    );
+    const numbers = [{ a: 3, b: 1 }, { a: -2, b: "x" }, { a: null }, {}];
+    const ranged = await applySchema(numbers);
+    check(
+      "a column of finite numbers gets its domain, missing values aside",
+      same(getColumnTypes(ranged)?.a, { HasDomain: { lo: -2, hi: 3 } }),
+      JSON.stringify(getColumnTypes(ranged))
+    );
+    check(
+      "a column with another value has no domain",
+      getColumnTypes(ranged)?.b === undefined &&
+        getColumnTypes(numbers) === undefined
+    );
+    const infinite = await applySchema([{ a: 1 }, { a: Infinity }]);
+    check(
+      "a column with an infinite value has no domain",
+      getColumnTypes(infinite)?.a === undefined
+    );
+    const leaf = copyColumnTypes([ranged[0]], ranged);
+    check(
+      "a split leaf keeps its column's domain, the same record",
+      getColumnTypes(leaf)?.a?.HasDomain ===
+        getColumnTypes(ranged)?.a?.HasDomain
+    );
+    const retyped = await applySchema(
+      [{ a: 10 }, { a: 20 }],
+      {},
+      getColumnTypes(ranged)
+    );
+    check(
+      "typing new rows computes their own domain, never the input's",
+      same(getColumnTypes(retyped)?.a, { HasDomain: { lo: 10, hi: 20 } }),
+      JSON.stringify(getColumnTypes(retyped))
     );
     const zoneErr = await errorOf(() =>
       applySchema([{ t: 1 }], { t: SrcSchema.time({ zone: "Mars/Olympus" }) })
@@ -348,7 +396,7 @@ async function main() {
     check(
       "a derive's Date column is a time, in epoch ms",
       fromJs[0].at === at &&
-        same(getColumnTypes(fromJs), {
+        same(withoutDomains(getColumnTypes(fromJs)), {
           day: SrcSchema.time().type,
           at: SrcSchema.time().type,
         }),
@@ -507,8 +555,14 @@ async function main() {
 
   console.log("\n# default rows and nicing");
   {
-    const rowsOf = (lo: number, hi: number) =>
-      defaultTimeRows(tickPartition(lo, hi, 10)).map((r) => r.toString());
+    // A time axis's default rows: the partition its domain picks, and that
+    // partition's parent level.
+    const rowsOf = (lo: number, hi: number) => {
+      const inner = tickPartition(lo, hi, 10);
+      return [inner, ...(inner.parent ? [inner.parent] : [])].map((r) =>
+        r.toString()
+      );
+    };
     check(
       "daily over 14 months: month, year",
       same(rowsOf(Date.UTC(2023, 10, 1), Date.UTC(2024, 11, 31)), [
@@ -519,7 +573,7 @@ async function main() {
     check(
       "hourly over 3.5 days: hours in steps of 6, day",
       same(rowsOf(Date.UTC(2024, 1, 28), Date.UTC(2024, 2, 2, 12)), [
-        "Calendar.hour.every(6)",
+        "Calendar.hour({ every: 6 })",
         "Calendar.day",
       ])
     );
@@ -600,32 +654,40 @@ async function main() {
     );
   }
 
-  console.log("\n# the rows option");
+  console.log("\n# the levels option");
   {
     const fmt = (c: any) => `Q${c.quarter}`;
-    const rows = timeRowsFromOption(
-      [Calendar.week, { unit: "month" } as any, Calendar.quarter.format(fmt)],
+    const levels = levelsFromOption(
+      [
+        Calendar.week,
+        { kind: "month" } as any,
+        false,
+        true,
+        Calendar.quarter.format(fmt),
+      ],
       "x"
     );
     check(
-      "rows read Calendar values, wire forms, and formatted partitions",
-      rows.length === 3 &&
-        rows[0].unit === "week" &&
-        rows[1].unit === "month" &&
-        rows[2].formatCell === fmt
+      "levels read Calendar values, wire forms, booleans, and formatted partitions",
+      levels.length === 5 &&
+        (levels[0] as any).unit === "week" &&
+        (levels[1] as any).unit === "month" &&
+        levels[2] === false &&
+        levels[3] === true &&
+        (levels[4] as any).formatCell === fmt
     );
-    const bad = await errorOf(() => timeRowsFromOption(["month"] as any, "x"));
+    const bad = await errorOf(() => levelsFromOption(["month"] as any, "x"));
     check(
-      "a row that is not a Calendar value is a loud error",
-      bad?.includes("axes.x.rows[0]") === true,
+      "an entry that is not a boolean or a Calendar value is a loud error",
+      bad?.includes("axes.x.levels[0]") === true,
       bad
     );
     const old = await errorOf(() =>
-      timeRowsFromOption([{ unit: Calendar.month, format: fmt }] as any, "x")
+      levelsFromOption([{ unit: Calendar.month, format: fmt }] as any, "x")
     );
     check(
       "the { unit, format } object form is gone: a loud error",
-      old?.includes("axes.x.rows[0]") === true,
+      old?.includes("axes.x.levels[0]") === true,
       old
     );
   }
@@ -635,26 +697,32 @@ async function main() {
     const lo = Date.UTC(2024, 0, 1);
     const hi = Date.UTC(2024, 11, 31);
     const fmt = (c: any) => `${c.month}/${c.year % 100}`;
-    const stepped = Calendar.month.every(3).format(fmt);
+    const stepped = Calendar.month({ every: 3 }).format(fmt);
     check(
       "format on a stepped partition keeps the step and labels its cells",
       stepped.step === 3 &&
-        stepped.toString() === "Calendar.month.every(3).format(...)" &&
+        stepped.toString() === "Calendar.month({ every: 3 }).format(...)" &&
         same(
           rowLabels(stepped, lo, hi, "UTC").map((l) => l.text),
           ["1/24", "4/24", "7/24", "10/24"]
         )
     );
     check(
-      "format then every keeps the format",
-      Calendar.month.format(fmt).every(3).formatCell === fmt &&
-        Calendar.week({ start: "sunday" }).format(fmt).start === "sunday"
+      "format keeps the options of a called kind",
+      Calendar.week({ start: "sunday" }).format(fmt).start === "sunday" &&
+        Calendar.week({ start: "sunday" }).format(fmt).formatCell === fmt
+    );
+    const every = await errorOf(() => Calendar.month.format(fmt).every(3));
+    check(
+      ".every(n) is removed: a loud error naming the every option",
+      every?.includes("Calendar.month({ every: 3 })") === true,
+      every
     );
     check(
       "a bare partition still uses the default labels",
       Calendar.month.formatCell === undefined &&
         same(
-          rowLabels(Calendar.month.every(3), lo, hi, "UTC").map((l) => l.text),
+          rowLabels(Calendar.month({ every: 3 }), lo, hi, "UTC").map((l) => l.text),
           ["Jan", "Apr", "Jul", "Oct"]
         ) &&
         same(
@@ -669,19 +737,19 @@ async function main() {
       notFn
     );
     const wire = await errorOf(() =>
-      JSON.stringify({ rows: [Calendar.year, stepped] })
+      JSON.stringify({ levels: [Calendar.year, stepped] })
     );
     check(
       "a partition with a format has no wire form: serializing it is a loud " +
         "error naming the row",
-      wire?.includes("rows[1]: Calendar.month.every(3).format(...)") === true &&
+      wire?.includes("[1]: Calendar.month({ every: 3 }).format(...)") === true &&
         wire.includes("has no wire form"),
       wire
     );
     check(
       "a bare partition still serializes",
-      JSON.stringify(Calendar.month.every(3)) ===
-        JSON.stringify({ unit: "month", step: 3 })
+      JSON.stringify(Calendar.month({ every: 3 })) ===
+        JSON.stringify({ kind: "month", every: 3 })
     );
   }
 
@@ -690,14 +758,13 @@ async function main() {
     const message = await errorOf(() =>
       calendarPartition(
         { unit: Calendar.quarter.format((c) => `Q${c.quarter}`) } as any,
-        "rows[0]"
+        "levels[0]"
       )
     );
     check(
       "the error describes the value without calling its toJSON",
       message !== undefined &&
-        message.includes("expected a Calendar value") &&
-        message.includes("Calendar.quarter.format(...)") &&
+        message.includes("levels[0].kind: unknown kind") &&
         !message.includes("no wire form"),
       message
     );
@@ -706,17 +773,39 @@ async function main() {
   console.log("\n# week starts are checked in the wire form");
   {
     const bad = await errorOf(() =>
-      calendarPartition({ unit: "week", start: "tuesday" } as any, "rows[0]")
+      calendarPartition({ kind: "week", start: "tuesday" } as any, "levels[0]")
     );
     check(
       'a week start that is not "monday" or "sunday" is a loud error',
-      bad?.includes('start must be "monday" or "sunday"') === true &&
-        bad.includes("rows[0]"),
+      bad?.includes('levels[0].start: expected one of "monday", "sunday"') ===
+        true,
       bad
+    );
+    const old = await errorOf(() =>
+      calendarPartition({ unit: "month", step: 1 } as any, "levels[0]")
+    );
+    check(
+      "the old untagged { unit } form is a loud error",
+      old?.includes("levels[0].kind: unknown kind") === true,
+      old
+    );
+    const monthStart = await errorOf(() =>
+      calendarPartition({ kind: "month", start: "sunday" } as any, "w")
+    );
+    check(
+      "only a week takes a start",
+      monthStart?.includes("w.start") === true,
+      monthStart
+    );
+    check(
+      "a weekday takes a start on the wire",
+      calendarPartition({ kind: "weekday", start: "sunday" }, "w").start ===
+        "sunday" &&
+        calendarPartition({ kind: "weekday" }, "w").start === "monday"
     );
     check(
       "a valid wire week start is read",
-      calendarPartition({ unit: "week", step: 1, start: "sunday" }, "w")
+      calendarPartition({ kind: "week", every: 1, start: "sunday" }, "w")
         .start === "sunday"
     );
   }
@@ -731,7 +820,9 @@ async function main() {
     check(
       "a column whose first value is null is still inferred from its Dates",
       rows[1].d === at &&
-        same(getColumnTypes(rows), { d: SrcSchema.time().type }),
+        same(withoutDomains(getColumnTypes(rows)), {
+          d: SrcSchema.time().type,
+        }),
       JSON.stringify([rows, getColumnTypes(rows)])
     );
   }
@@ -911,6 +1002,23 @@ async function main() {
       .flow(scatter({ by: "date", x: "date", y: "price" }))
       .mark(line())
       .toDisplayList({ w: 560, h: 200 });
+    const weekDl = await chart(prices.slice(0, 10), {
+      schema: { date: Schema.time() },
+      axes: { x: { title: false, levels: [DistCalendar.weekday] }, y: false },
+    })
+      .flow(scatter({ by: "date", x: "date", y: "price" }))
+      .mark(line())
+      .toDisplayList({ w: 560, h: 200 });
+    const weekWords = textsOf(weekDl).map((t) => t.text);
+    check(
+      "a weekday level labels each day of a time axis by its weekday, " +
+        "with its week below",
+      // 2023-11-01 was a Wednesday; its week starts on Monday, Oct 30.
+      same(weekWords.slice(0, 3), ["Wed", "Thu", "Fri"]) &&
+        weekWords.includes("Oct 30") &&
+        weekWords.includes("Nov 6"),
+      weekWords.join(" ")
+    );
     // A count over a time column is a count, not an instant: a stack of
     // `field("date").count()` bars keeps a numeric axis.
     const counts = textsOf(
@@ -962,11 +1070,12 @@ async function main() {
       axes: {
         x: {
           title: false,
-          rows: [
+          levels: [
             DistCalendar.quarter.format(
               (c: any) =>
                 `Q${c.quarter} '${String(c.year % 100).padStart(2, "0")}`
             ),
+            false,
           ],
         },
         y: false,
@@ -988,21 +1097,23 @@ async function main() {
 
     const notTime = await errorOf(() =>
       chart([{ a: 1, b: 2 }], {
-        axes: { x: { rows: [DistCalendar.month] } },
+        axes: { x: { levels: [DistCalendar.month] } },
       })
         .flow(scatter({ by: "a", x: "a", y: "b" }))
         .mark(circle({ r: 2 }))
         .toDisplayList({ w: 100, h: 100 })
     );
     check(
-      "rows on a non-time axis are a loud error",
-      notTime?.includes("need a time axis") === true,
+      "a Calendar level on a numeric axis is a loud error listing its levels",
+      notTime?.includes("axes.x.levels[0]") === true &&
+        notTime.includes("numeric axis") &&
+        notTime.includes("[0] the numeric ticks"),
       notTime
     );
 
     // A faceted chart: the facets' ordinal x axis shares the dim with the
-    // time axis in each facet. The rows reach the time axes and the ordinal
-    // axis ignores them.
+    // time axis in each facet. The time axes' rows are the first two levels
+    // of x, and the facets' level is the third.
     const cities = ["A", "B"].flatMap((city) =>
       ["2024-01-15", "2024-03-10", "2024-05-20"].map((date, i) => ({
         city,
@@ -1013,7 +1124,7 @@ async function main() {
     const facetWords = textsOf(
       await chart(cities, {
         schema: { date: Schema.time() },
-        axes: { x: { rows: [DistCalendar.month] }, y: false },
+        axes: { x: { levels: [DistCalendar.month, false, true] }, y: false },
       })
         .flow(
           spread({ by: "city", dir: "x" }),
@@ -1023,7 +1134,7 @@ async function main() {
         .toDisplayList({ w: 400, h: 200 })
     ).map((t) => t.text);
     check(
-      "a faceted chart's rows reach its time axes, not its category axis",
+      "a faceted chart's levels: the time axes' rows, then the facets'",
       facetWords.filter((w) => w === "Jan").length === 2 &&
         !facetWords.includes("2024") &&
         facetWords.includes("A"),

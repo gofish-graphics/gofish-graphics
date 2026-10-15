@@ -37,17 +37,17 @@ expansion and elaboration. Three consumers:
 
 ## What ships in v0
 
-| Artifact                                                                                                | Path                                                                       |
-| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Construct descriptor table (single-source field lists)                                                  | `packages/gofish-ir/src/frontend/descriptors.ts`                           |
-| Schema types + validator + canonical examples                                                           | `packages/gofish-ir/src/frontend/`                                         |
-| JSON Schema (Draft 2020-12)                                                                             | `packages/gofish-ir/dist/frontend/v0.json` (build artifact)                |
-| JS-side emitter (`Serialize.toJSON`, `ChartBuilder.toJSON()`)                                           | `packages/gofish-graphics/src/serialize/toJSON.ts`                         |
-| JS-side deserializer (`Serialize.renderIR`, `buildChart`, `mapMark`, …)                                 | `packages/gofish-graphics/src/serialize/fromJSON.ts`                       |
-| Deserializer factory table, keyed by the descriptor table                                               | `packages/gofish-graphics/src/serialize/registry.ts`                       |
-| Generated Python factory layer (checked in, CI freshness-checked)                                       | `packages/gofish-python/gofish/_generated.py` (from `scripts/generate.ts`) |
-| Generated Python strategy families (checked in, CI freshness-checked)                                   | `packages/gofish-python/gofish/{tile,overlap,curve}.py` (same script)      |
-| Hand-written Python residue (dispatch, bridge, DataFrame conversion), emits IR validated against schema | `packages/gofish-python/gofish/ast.py`                                     |
+| Artifact                                                                                                | Path                                                                               |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Construct descriptor table (single-source field lists)                                                  | `packages/gofish-ir/src/frontend/descriptors.ts`                                   |
+| Schema types + validator + canonical examples                                                           | `packages/gofish-ir/src/frontend/`                                                 |
+| JSON Schema (Draft 2020-12)                                                                             | `packages/gofish-ir/dist/frontend/v0.json` (build artifact)                        |
+| JS-side emitter (`Serialize.toJSON`, `ChartBuilder.toJSON()`)                                           | `packages/gofish-graphics/src/serialize/toJSON.ts`                                 |
+| JS-side deserializer (`Serialize.renderIR`, `buildChart`, `mapMark`, …)                                 | `packages/gofish-graphics/src/serialize/fromJSON.ts`                               |
+| Deserializer factory table, keyed by the descriptor table                                               | `packages/gofish-graphics/src/serialize/registry.ts`                               |
+| Generated Python factory layer (checked in, CI freshness-checked)                                       | `packages/gofish-python/gofish/_generated.py` (from `scripts/generate.ts`)         |
+| Generated Python strategy families (checked in, CI freshness-checked)                                   | `packages/gofish-python/gofish/{tile,overlap,curve,bin,calendar}.py` (same script) |
+| Hand-written Python residue (dispatch, bridge, DataFrame conversion), emits IR validated against schema | `packages/gofish-python/gofish/ast.py`                                             |
 
 v0 matches the existing widget wire format exactly — lowercase `type`
 discriminators, `__combinator` flag on combinator-form marks, channel
@@ -153,7 +153,21 @@ expression's `ops`. A `filter` over a hand-written JS predicate has no wire
 form and emits the opaque `derive`. A `derive`'s `schema` (`derive(fn, { schema })`, Python
 `derive(fn, schema={...})`) is plain data, the wire form of a chart's
 `schema`, and the registry passes it to the rebuilt `derive`, which applies
-it to the rows the Python callback returns. Marks are a tree — leaves
+it to the rows the Python callback returns. (A `derive` once also carried a
+measure `provenance` map for the rows of the `bin()` data helper; both are
+gone, #1058.) A binned key, `field("date").bin(Calendar.month)`, is an op in
+the field expression's `ops`: `{ "op": "bin", "partition": { "kind": "month",
+"step": 1 } }`, where the partition is a Calendar value's wire form, a
+`Bin` kind that bins one field, `{ "kind": "step", "size": 0.5 }` or
+`{ "kind": "thresholds", "thresholds": 20 }` (`PartitionIR`, one union told
+apart by `kind`), or a list of
+Calendar values for a product (`.bin([Calendar.year, Calendar.month])`), and
+an op with no `partition` bins into about 10 cells. A chain,
+`.bin(Calendar.year).bin(Calendar.month)`, is one `bin` op per `.bin`, in
+order. The op takes no other key, so the
+old flat spelling, `{ "op": "bin", "thresholds": 20 }`, is an error, not the
+default partition, and so is the untagged `{ "step": 0.5 }`. A partition
+with a JS `.format(fn)` has no wire form, and serializing it is an error. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
@@ -414,10 +428,12 @@ fields genuinely their own.
 Three smaller tables sit beside the construct entries. `OPTION_TYPES` declares
 the nested option objects a field points at by name, in the same type DSL:
 today `AxesOptions` (a boolean, or `{x, y}`), `AxisOptions` (a boolean, or
-`{title, side, labelAngle}`), `AxisInterval` (`{min, center, max, size,
+`{title, side, label, levels}`), `AxisLabelOptions` (`{angle, align}`, the
+value of an axis's `label`), `AxisInterval` (`{min, center, max, size,
 embedded}`), `AxisDimsValue` (a channel value or an `AxisInterval`, the
 value of a `dims` entry), `FieldPredicate` (`{field, between, closed}`,
-the predicate of `filter`), `Calendar`, and one entry per strategy family. A
+the predicate of `filter`), `Calendar`, `Partition` and `StructBin` (the
+kinds valid on each key, below), and one entry per strategy family. A
 `t.ref(name)` resolves against it first, so the validator, the JSON Schema,
 and the Python generator all read one declaration of each. `ChartOptions` is
 one of them: `t.object(CHART_OPTIONS)`, the chart-level options (`w`, `h`,
@@ -428,17 +444,77 @@ the Python generator builds `_chart_opts` from `CHART_OPTIONS`, and the docs
 build the chart options table from it (`::: gofish-ref ChartOptions`).
 
 `STRATEGIES` declares the strategy families whose values cross the wire:
-`Tile`, `Overlap` and `Curve`. For each it lists the kinds, each with its
+`Tile`, `Overlap`, `Curve`, `Bin` and `Calendar`. For each it lists the kinds, each with its
 params (types, defaults and docs), and the presets: a factory that makes a
 kind with some params already set, such as `Overlap.sina()`, which is
 `noise` with `smoothing: "silverman"`. Each family derives its
 `OPTION_TYPES` entry, a union of one object per kind with a literal `kind`,
 so the strategy options are `t.ref("Tile")`, `t.ref("Overlap")` and
-`t.ref("Curve")`. A param may carry bounds, `t.num({ min: 0, finite: true })`
-for a pixel padding, which the validator and the JSON Schema check. The JS
+`t.ref("Curve")`. A kind may take its one param by position
+(`positional: true`): `Bin.step(0.5)` in JS, `Bin.step(0.5)` with a
+positional-only parameter in Python, and `{ kind: "step", size: 0.5 }` on
+the wire either way. The `Bin` kinds bin one of two keys (`BIN_KINDS`):
+`step` and `thresholds` cut the line of one field, and `hex` and `voronoi`
+divide the plane of two. `OPTION_TYPES.StructBin` is the kinds of the plane,
+derived from the one `Bin` entry, so a struct's bin op takes a `StructBin`,
+and the JS layout checks a struct's bin with `checkStructBin(value, where)`
+and a field's with `checkPartition(value, where)`, each of which names the
+right key for a kind of the other one.
+
+A field's bin op takes a Calendar value, `{ kind: "month", every? }` or
+`{ kind: "week", every?, start? }` or `{ kind: "weekday", start? }` (a weekday
+has no step), or a `Bin` kind that cuts one field's line.
+The `Calendar` family declares the Calendar kinds, one per level, and
+`OPTION_TYPES.Calendar` is its union. `OPTION_TYPES.Partition` is one tagged
+union of the Calendar kinds and the `Bin` kinds `step` and `thresholds`, so
+the validator, the JSON Schema and the Python generator each read a field's
+partition by its `kind`, and the JS layout checks one with
+`checkPartition(value, where)`. An axis's `levels` entries take
+`OPTION_TYPES.Calendar`.
+
+A kind with no required param is a value as it is, and calling it sets
+options (#1133): `Curve.monotone` is `Curve.monotone()`, and
+`Calendar.month({ every: 3 })` sets the month's step. Neither the wire nor
+the table has a second form for this. The bare kind is the value its call
+with no arguments makes, made callable, in both languages: in JS a function
+with that value's own keys and prototype and a `toJSON()` that returns it
+(`bareKind`, `gofish-graphics/src/ast/strategyKind.ts`), and in Python a
+dict subclass holding that dict with a `__call__` (`StrategyKind`,
+`gofish/_strategy.py`, which the generated family modules apply to each
+factory with no required param). JSON has no functions, so the JS side
+reads a bare kind as its value once, where an option enters, at any depth
+of the options' plain objects and arrays (`withKindValues` in `chart(data,
+options)`, `createOperator`, `createMark` and `createRelationalMark`,
+`checkBinStep` for a `.bin(...)` partition, and `levelsFromOption` for an
+axis's `levels`, which render options reach without passing a chart). The
+emitter, which drops every function as a callback, the shared encoder
+(`encodeIR`), and `checkStrategy` then see only values. A Python bare kind is a dict, so
+`_to_wire` and `json.dumps` read it as one. A param
+may carry bounds, `t.num({ min: 0, finite: true })` for a pixel padding,
+`t.num({ exclusiveMin: 0, finite: true })` for a hex radius, or
+`t.num({ min: 1, integer: true })` for a Calendar step or a count of
+thresholds, and a list may carry a least length,
+`t.array(t.num({ finite: true }), { minItems: 1 })` for a list of edges
+that must not be empty. The validator, the JSON Schema (`minimum`,
+`exclusiveMinimum`, `integer`, `minItems`) and the Python generator check
+them. When a
+value matches no branch of an untagged union, and only one branch is of the
+value's kind (a number for `Bin.hex`'s `radius: number | { x, y }`), the
+validator reports that branch's own findings (`expected a number above 0`).
+A union whose branches are all tagged by the same field is checked against
+the one branch its value's tag names: a strategy's `kind`, or the `type` of
+a hand-authored ref that declares a `tag` in `AUTHORED_REFS` (`"field"` for
+`FieldAccessor`, `"struct"` for `StructAccessor`). So `partition`'s `by`, a
+field accessor or a struct, reports what is wrong with a bad bin, not that
+no shape matched. The JS
 layout checks a strategy where it reads it, with `checkStrategy(family,
 value, where)` from `validate.ts`, the same walk the validator runs over a
-whole document. So an unknown kind, an undeclared param, and a value out of
+whole document. Every JS-side check is that one walk (`walkOrThrow`), so
+it throws the validator's own message: `checkPartition`, `checkStructBin`,
+and `checkOption(name, value, where)`, which checks a named option object
+of `OPTION_TYPES` (layout checks each axis's options against
+`AxisOptions` with it, so a JS caller and a Python one get the same
+errors). So an unknown kind, an undeclared param, and a value out of
 bounds each fail in one place, whether the strategy came from a factory, a
 hand-written object, or Python IR. `Coord` and `Color` are families on the
 two surfaces but not in this table: a coordinate transform is a JS object of
@@ -446,15 +522,17 @@ functions, rebuilt from a `type`-tagged config (`COORDS`), and a color scale
 is tagged by `_tag` and takes its one argument by position.
 
 `schema.ts` keeps the TypeScript types of the strategies, `TileIR`,
-`OverlapIR` and `CurveIR`, by hand, and each family's JS type is one of them
+`OverlapIR`, `CurveIR`, `BinIR` and `CalendarPartitionIR`, by hand, and each family's JS type is one of them
 (`Curve.Curve` is `CurveIR`). `descriptors.test.ts` checks that their kinds
 and params agree with `STRATEGIES`. Every family is closed: there is no
 public way to add a kind, so every strategy can cross the wire (user-defined
 strategies are designed in #1101).
 
 A named type may say which Python class builds a value of it (`pyClass`):
-`FieldPredicate` here, and `FieldAccessor` and `ChunkKey` in `AUTHORED_REFS`,
-the list of refs to hand-authored shapes. `ChunkKey` is the
+`FieldPredicate` here, and `FieldAccessor`, `StructAccessor` and `ChunkKey`
+in `AUTHORED_REFS`, the list of refs to hand-authored shapes (a struct key,
+`{ type: "struct", fields: { x, y }, ops? }`, is walked by its own walker,
+whose bin op is checked against `OPTION_TYPES.StructBin`). `ChunkKey` is the
 `{ type: "chunk", size }` that `chunk(size)` builds, the `by` key that groups
 consecutive rows; a split operator's `by` takes a field name, a
 `FieldAccessor`, or a `ChunkKey`. Such a value already carries its wire keys, so
@@ -526,8 +604,8 @@ Six consumers read the table:
   or leaf-mark node against them. On a leaf mark, the base fields that Mark
   methods set (`name`, `label`, `relate`, `zOrder`, `translate`) are checked by
   their own walkers, so the check of the mark's channels skips them. The
-  emitter writes each `field(...)` or `datum(...)` instance in its plain
-  `toJSON()` form, so the document it returns validates as the wire carries
+  emitter writes each `field(...)` or `datum(...)` instance, and each
+  strategy kind used bare (`Curve.monotone`), in its plain `toJSON()` form, so the document it returns validates as the wire carries
   it. It does this in the same pass that encodes non-finite numbers
   (`Frontend.encodeIR`), which shares unchanged subtrees, so inline rows are
   not copied, and leaves a value whose `toJSON()` is a primitive (a `Date`,
@@ -653,9 +731,11 @@ paired with its wire key and the shape of its value. A field whose type has
 no option keys compiles to nothing and its value passes through as is. The
 generated module holds one entry per named option type (`_OPTION_TYPES`) and
 one interpreter, `_to_wire`, which every generated function calls on such a
-field. So `chart(data, axes={"x": {"label_angle": 45}})` serializes as
-`{"axes": {"x": {"labelAngle": 45}}}`, and an undeclared key, including the
-camelCase `"labelAngle"`, is a `TypeError` that names the expected keys.
+field. A declared camelCase key would be snake_case in the dict; no nested
+option type declares one today, so `chart(data, axes={"x": {"label":
+{"angle": 45}}})` serializes as `{"axes": {"x": {"label": {"angle": 45}}}}`.
+An undeclared key, such as a flat `"label_angle"`, is a `TypeError` that
+names the expected keys.
 Python's `chart()` now goes through a generated `_chart_opts` core built from
 `CHART_OPTIONS`, so an unknown chart keyword is a `TypeError` too. The
 `axes` option of `.render(...)`, on a chart, a mark, or a layer, goes through
@@ -704,9 +784,12 @@ It emits:
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
 - One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
-  `gofish/overlap.py`, `gofish/curve.py`), bound in `__init__.py` under the
-  family name (`Tile`, `Overlap`, `Curve`): one factory per kind and per
-  preset, named by `pyKwarg` (`Tile.slice_dice()`, `Curve.catmull_rom()`).
+  `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
+  `gofish/calendar.py`), bound in `__init__.py` under the family name
+  (`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`): one factory per kind and
+  per preset, named by `pyKwarg` (`Tile.slice_dice`, `Curve.catmull_rom`).
+  A factory with no required param is decorated with `bare_kind`, so it is
+  also the value its call with no arguments makes.
   Each returns `{"kind": ..., **params}` with snake_case param keys, and the
   option it is passed to renames them to wire keys through the family's
   `_OPTION_TYPES` entry, like any nested option dict, so
@@ -716,8 +799,15 @@ It emits:
   (`pyParamChecks` in `generate.ts`): a value of the wrong Python type raises
   a `TypeError`, and a value out of bounds or not in an enum raises a
   `ValueError` that names the call and the kwarg
-  (`Overlap.separate(padding=...) must be >= 0, got -1`). An unknown kwarg is
-  a `TypeError` from the signature. These are the same constraints
+  (`Overlap.separate(padding=...) must be >= 0, got -1`). An optional param
+  is checked when it is given; a required one always, so `None` is a
+  `TypeError` (`Bin.step(None)`). An unknown kwarg is
+  a `TypeError` from the signature, which for a bare kind lists its options
+  (`Calendar.month(step=3)` names `every=...`). A dict param (`Bin.hex`'s
+  `radius={"x": 2, "y": 500}`) has its keys and each value checked the
+  same way, and a table param (an array of records: `Bin.voronoi`'s
+  `seeds`) is read first with `to_records`, so a dataframe works too, and
+  goes on the wire as dict rows. These are the same constraints
   `checkStrategy` checks on the JS side, read from the same table, so Python
   users see the error at the line that made it.
 
@@ -780,8 +870,7 @@ Only an `OPERATOR_BUILDERS` entry sees the bridge.
 
 Five operators keep a hand-written builder in `OPERATOR_BUILDERS`, because
 their IR is not their factory's options object: `derive` (it calls a Python
-lambda through the bridge and types the returned rows with its `schema`,
-which also carries the units a Python `bin` declares),
+lambda through the bridge and types the returned rows with its `schema`),
 `resolve` (the IR names a layer, the factory takes a selection), `join` and
 `log` (their factories take positional arguments), and `filter` (the IR
 describes a field predicate, the factory takes the predicate function, which

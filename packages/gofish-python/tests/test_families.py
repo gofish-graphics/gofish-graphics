@@ -7,7 +7,7 @@ import math
 import pytest
 
 import gofish
-from gofish import Curve, Overlap, Tile, line, ribbon
+from gofish import Bin, Calendar, Curve, Overlap, Tile, field, line, ribbon, scatter, chart, circle
 
 FAMILIES = {
     "Color": ("color", ["palette", "gradient"]),
@@ -28,6 +28,11 @@ FAMILIES = {
     ),
     "Overlap": ("overlap", ["separate", "noise", "sina", "jitter"]),
     "Tile": ("tile", ["squarify", "slice", "dice", "binary", "slice_dice"]),
+    "Bin": ("bin", ["step", "thresholds", "hex", "voronoi"]),
+    "Calendar": (
+        "calendar",
+        ["second", "minute", "hour", "day", "weekday", "week", "month", "quarter", "year"],
+    ),
 }
 
 
@@ -76,7 +81,7 @@ def test_curves_are_calls_on_the_wire():
 def test_strategy_modules_are_generated():
     # gofish/<family>.py for the strategy families is written by
     # scripts/generate.ts from the gofish-ir STRATEGIES table.
-    for module_name in ("tile", "overlap", "curve"):
+    for module_name in ("tile", "overlap", "curve", "bin", "calendar"):
         module = importlib.import_module(f"gofish.{module_name}")
         with open(module.__file__) as f:
             assert f.readline().startswith("# GENERATED")
@@ -101,6 +106,8 @@ BAD_VALUES = [
     (lambda: Curve.arc(direction="left"), "Curve.arc(direction=...) must be one of"),
     (lambda: Curve.orthogonal(bend="always"), 'must be "auto"'),
     (lambda: Curve.perfect_arrows(bow=float("nan")), "Curve.perfect_arrows(bow=...)"),
+    (lambda: Bin.thresholds(0), "Bin.thresholds(thresholds) must be >= 1, got 0"),
+    (lambda: Bin.thresholds([]), "Bin.thresholds(thresholds) must have at least 1 item, got []"),
 ]
 
 WRONG_TYPES = [
@@ -112,6 +119,12 @@ WRONG_TYPES = [
     (lambda: Curve.arc(direction=3), 'Curve.arc(direction=...) must be one of "up", "down", got int'),
     (lambda: Curve.perfect_arrows(flip="yes"), "Curve.perfect_arrows(flip=...) must be a bool, got str"),
     (lambda: Curve.perfect_arrows(pad_end="4"), "must be a number, got str"),
+    (lambda: Bin.thresholds(2.5), "Bin.thresholds(thresholds) must be a whole number >= 1 or a list"),
+    # A required param is required: None is not a value of it.
+    (lambda: Bin.step(None), "Bin.step(size) must be a finite number > 0, got NoneType"),
+    (lambda: Bin.thresholds(None), "Bin.thresholds(thresholds) must be a whole number >= 1"),
+    (lambda: Bin.hex(radius=None), "Bin.hex(radius=...) must be a finite number > 0 or a dict"),
+    (lambda: Bin.voronoi(seeds=None), "Bin.voronoi(seeds=...) must be a table"),
 ]
 
 UNKNOWN_KWARGS = [
@@ -148,3 +161,65 @@ def test_strategy_values_in_range_pass():
     assert Overlap.noise(smoothing=math.inf)["smoothing"] == math.inf
     assert Overlap.noise(smoothing="silverman", seed=3, randomness="quasi")["seed"] == 3
     assert Curve.perfect_arrows(bow=-0.5, flip=True)["flip"] is True
+
+
+# Bare kinds (#1133): a kind with no required option is a value as it is, and
+# calling it sets options. The bare kind is its call with no arguments: equal,
+# the same JSON, and the same wire form at the option it is passed to.
+BARE = [
+    (Curve, "monotone"),
+    (Curve, "perfect_arrows"),
+    (Tile, "squarify"),
+    (Tile, "slice_dice"),
+    (Overlap, "separate"),
+    (Overlap, "jitter"),
+    (Calendar, "month"),
+    (Calendar, "week"),
+]
+
+
+@pytest.mark.parametrize("family, name", BARE)
+def test_bare_kind_is_its_call(family, name):
+    import json
+
+    bare = getattr(family, name)
+    assert bare == bare()
+    assert json.dumps(bare) == json.dumps(bare())
+    assert dict(bare) == bare()
+
+
+def test_every_kind_without_a_required_option_is_bare():
+    from gofish._strategy import StrategyKind
+
+    for family in (Tile, Overlap, Curve, Calendar):
+        for name in family.__all__:
+            assert isinstance(getattr(family, name), StrategyKind), name
+    # A kind with a required option is a function only.
+    for name in Bin.__all__:
+        assert not isinstance(getattr(Bin, name), dict), name
+
+
+def test_bare_kind_wire_form_at_an_option():
+    def ir(curve, overlap):
+        return (
+            chart([{"a": 1, "b": 2}])
+            .flow(scatter(x="a", overlap=overlap))
+            .mark(circle(r=2))
+            .to_ir(),
+            line(curve=curve).to_dict(),
+        )
+
+    assert ir(Curve.monotone, Overlap.separate) == ir(
+        Curve.monotone(), Overlap.separate()
+    )
+    assert line(curve=Curve.perfect_arrows).to_dict()["curve"] == {
+        "kind": "perfectArrows"
+    }
+    assert field("d").bin(Calendar.month) == field("d").bin(Calendar.month())
+
+
+def test_bare_kind_errors_name_its_options():
+    with pytest.raises(AttributeError, match=r"Curve\.arc\(direction=\.\.\.\)"):
+        Curve.arc.bend
+    with pytest.raises(TypeError, match=r"Curve\.arc: .*direction=\.\.\."):
+        Curve.arc(bend="auto")

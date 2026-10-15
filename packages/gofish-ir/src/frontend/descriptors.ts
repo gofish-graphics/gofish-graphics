@@ -57,8 +57,13 @@ export type FieldType =
       kind: "number";
       /** The least value allowed (inclusive). NaN is never at least it. */
       min?: number;
+      /** A bound the value must be above (exclusive): `0` for a length that
+       *  must be positive. NaN is never above it. */
+      exclusiveMin?: number;
       /** Reject Infinity and -Infinity (NaN is never finite). */
       finite?: boolean;
+      /** Only whole numbers. */
+      integer?: boolean;
     }
   | { kind: "boolean" }
   | { kind: "any" }
@@ -67,7 +72,12 @@ export type FieldType =
   | { kind: "channel"; inner: ChannelInner; infer: ChannelInfer }
   | { kind: "ref"; name: string }
   | { kind: "union"; options: readonly FieldType[] }
-  | { kind: "array"; items: FieldType }
+  | {
+      kind: "array";
+      items: FieldType;
+      /** The fewest items allowed: `1` for a list that must not be empty. */
+      minItems?: number;
+    }
   | { kind: "tuple"; items: readonly FieldType[] }
   | { kind: "object"; fields: Readonly<FieldGroup> }
   | { kind: "record"; valueType: FieldType };
@@ -155,9 +165,16 @@ export function pyKwarg(fieldName: string): string {
 export const t = {
   string: { kind: "string" } as FieldType,
   number: { kind: "number" } as FieldType,
-  /** A number with bounds: at least `min`, and finite when `finite`
-   *  (`t.num({ min: 0, finite: true })` for a pixel padding). */
-  num: (bounds: { min?: number; finite?: boolean }): FieldType => ({
+  /** A number with bounds: at least `min`, above `exclusiveMin`, finite
+   *  when `finite`, and whole when `integer` (`t.num({ min: 0, finite: true })`
+   *  for a pixel padding, `t.num({ exclusiveMin: 0, finite: true })` for a
+   *  hex radius, `t.num({ min: 1, integer: true })` for a calendar step). */
+  num: (bounds: {
+    min?: number;
+    exclusiveMin?: number;
+    finite?: boolean;
+    integer?: boolean;
+  }): FieldType => ({
     kind: "number",
     ...bounds,
   }),
@@ -180,7 +197,14 @@ export const t = {
    *  jsonSchema.ts. */
   ref: (name: string): FieldType => ({ kind: "ref", name }),
   union: (...options: FieldType[]): FieldType => ({ kind: "union", options }),
-  array: (items: FieldType): FieldType => ({ kind: "array", items }),
+  /** A list of `items`, with at least `minItems` of them when given
+   *  (`t.array(t.number, { minItems: 1 })` for a list that must not be
+   *  empty). */
+  array: (items: FieldType, bounds: { minItems?: number } = {}): FieldType => ({
+    kind: "array",
+    items,
+    ...bounds,
+  }),
   tuple: (...items: FieldType[]): FieldType => ({ kind: "tuple", items }),
   object: (fields: FieldGroup): FieldType => ({ kind: "object", fields }),
   /** `Record<string, valueType>` — a string-keyed bag with no fixed key set
@@ -373,11 +397,29 @@ export const LABEL_OPTIONS: FieldGroup = group({
 // Option types — named nested option objects
 // ---------------------------------------------------------------------------
 
+/** How one axis's labels are drawn (`axes.x.label`). */
+const axisLabelOptions: FieldSpec = {
+  doc: "How one axis's labels are drawn: their angle and their alignment, each per level by the same depths as `levels`.",
+  type: t.object({
+    angle: {
+      type: t.union(t.number, t.array(t.number), t.enum("auto")),
+      doc: 'Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite\'s labelAngle). A number applies to every level of the axis where it can (a time axis does not rotate its labels yet, so it skips their rows); an array is per level, by the same depths as `levels`, nearest the plot first, and an entry that cannot apply at its depth, or one past the last level, is an error; "auto" picks 0, 45, or 90 degrees per level so labels do not collide.',
+    },
+    align: {
+      type: t.union(
+        t.enum("start", "center"),
+        t.array(t.union(t.enum("start", "center"), t.literal(true)))
+      ),
+      doc: 'Where each level\'s labels sit along the axis: "center" centers a label under what it names, "start" puts it at the start of its run, just past the divider before it (the first run starts at the axis start). Omitted, an ordinal axis\'s outer level over ordered groups (cells of time, numeric bins, or a column the schema declares ordered) starts its runs, and every other level centers: an outer level over unordered categories, the innermost level (one label per slot), and a continuous axis, whose labels name points. A plain value applies to every level where it can, so a plain "start" skips a continuous axis\'s levels; an array is per level, by the same depths as `levels`, nearest the plot first, with true keeping a level\'s inferred alignment, and "start" at a continuous level\'s depth, or an entry past the last level, is an error.',
+    },
+  }),
+};
+
 /** One axis's options: a boolean (show or hide it, title inferred) or an
  *  object of named options. Mirrors the JS `AxisOptions` in
  *  `gofish-graphics/src/ast/gofish.tsx`. */
 const axisOptions: FieldSpec = {
-  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, labelAngle, and the rows of a time axis.",
+  doc: "One axis's options: a boolean shows or hides it (title inferred); an object sets title, side, label (angle and align), its levels, and their dividers.",
   type: t.union(
     t.boolean,
     t.object({
@@ -389,13 +431,17 @@ const axisOptions: FieldSpec = {
         type: t.enum("start", "end"),
         doc: 'Which frame edge the axis sits on: "start" is the near (origin) edge, "end" the far edge. Omitted, a continuous x-axis sits at the visual bottom.',
       },
-      labelAngle: {
-        type: t.union(t.number, t.array(t.number), t.enum("auto")),
-        doc: 'Rotate tick and category labels by this many degrees, clockwise on screen (like Vega-Lite\'s labelAngle). A number applies to every tier of a nested ordinal axis; an array is per tier, from the innermost tier outward; "auto" picks 0, 45, or 90 degrees per label row so labels do not collide.',
+      label: {
+        type: t.ref("AxisLabelOptions"),
+        doc: "How the axis's labels are drawn: their angle and their alignment, per level.",
       },
-      rows: {
-        type: t.array(t.ref("Calendar")),
-        doc: "The label rows of a time axis, inner row first, e.g. [Calendar.month, Calendar.year]. Each row is one calendar partition: its ticks are its cells' starts, and each label is centered on its cell's start tick. The domain is niced outward to the inner row's cells. Default: the level and step the domain picks for about 10 ticks, then its parent level. In JS a row's labels can be custom: Calendar.quarter.format(fn), with fn a function of the cell. A row with a format is JS-only (it has no wire form).",
+      levels: {
+        type: t.array(t.union(t.boolean, t.ref("Calendar"))),
+        doc: "The axis's levels, its bands of labels, by depth, nearest the plot first. Every axis on the dim has levels: a numeric axis one (its ticks), a time axis two (the level and step its domain picks for about 10 ticks, then that level's parent), and an ordinal axis one per split, plus one per bin before the last of a chained key (field(x).bin(Calendar.year).bin(Calendar.month) gives a month level and a year level). Each entry sets the level at its depth: true keeps it as inferred, false hides it, and a Calendar value names its cells: a time row's partition, or, on an ordinal axis over cells of time, the cells that group its slots: each slot falls in the cell that holds its start, so Calendar.month over week slots puts each week in the month it starts in (a level finer than the slots is an error). Depths the list does not reach stay as inferred; on the outermost axis, Calendar values past the inferred levels add levels. An entry that cannot apply is an error that lists the axis's levels. The other per-level options (label.angle, label.align, divider) use the same depths and the same rule: a plain value applies to every level where it can, and an array entry that cannot apply at its depth, or one past the last level, is this error. In JS a level's labels can be custom: Calendar.quarter.format(fn), with fn a function of the cell; an entry with a format is JS-only (it has no wire form).",
+      },
+      divider: {
+        type: t.union(t.boolean, t.array(t.boolean)),
+        doc: "Whether each level of an ordinal axis draws dividers: a line in each gap where its runs break, through every level whose runs also break there. Omitted, a level draws them when it partitions the value of the level inside it, that is, both bin the same column: a year level over a month level of one date (a chained key field(x).bin(Calendar.year).bin(Calendar.month), nested splits that bin the same column, or a coarser Calendar entry of levels), or numeric bins inside bins. Categories nested in other categories (a lake over its species) draw none, nor does the innermost level. true turns a level's dividers on and false turns them off. A continuous axis's level has ticks, not regions, so a plain value applies to every ordinal level and skips the continuous ones; an array is per level, by the same depths as levels, nearest the plot first, with a depth past its end left as inferred, and true at a continuous level's depth, or an entry past the last level, is an error.",
       },
     })
   ),
@@ -410,6 +456,11 @@ const axisOptions: FieldSpec = {
 export interface StrategyKind {
   doc: string;
   params: FieldGroup;
+  /** The factory takes the kind's one param as its argument, not in an
+   *  options object: `Bin.step(0.5)`, not `Bin.step({ size: 0.5 })`. In
+   *  Python it is a positional-only parameter. The wire form is the same
+   *  either way (`{ kind: "step", size: 0.5 }`). */
+  positional?: true;
 }
 
 /** A factory that makes a kind with some of its params already set
@@ -423,7 +474,10 @@ export interface StrategyPreset {
 }
 
 /** A strategy family: an option's value is one choice from its kinds, made
- *  by a call in the family's namespace (`Tile.squarify()`). */
+ *  by a member of the family's namespace. A kind with no required params is
+ *  a value as it is, and calling it sets options: `Tile.squarify` is
+ *  `Tile.squarify()`, and `Tile.squarify({ ratio: 1 })` sets its ratio. A
+ *  kind with a required param is a call only (`Bin.step(0.5)`). */
 export interface StrategyFamily {
   doc: string;
   /** The kinds, by their wire `kind`. Each also has a factory of the same
@@ -439,6 +493,26 @@ const overlapPadding: FieldSpec = {
   default: 0,
   doc: "Pixels kept between neighboring dots.",
 };
+
+/** How many units one cell of a Calendar kind spans. */
+const calendarEvery: FieldSpec = {
+  type: t.num({ min: 1, integer: true }),
+  default: 1,
+  doc: "How many units one cell spans, a whole number: 3 on a month is cells of 3 months. Steps count from the level above.",
+};
+
+/** The first day of a week, for a week or a day of the week. */
+const weekStart: FieldSpec = {
+  type: t.enum("monday", "sunday"),
+  default: "monday",
+  doc: "The first day of a week. Monday is the ISO 8601 default.",
+};
+
+/** A Calendar kind whose only param is its step, `every`. */
+const calendarKind = (doc: string): StrategyKind => ({
+  doc,
+  params: { every: calendarEvery },
+});
 
 /**
  * The strategy families whose values cross the Python↔JS wire, by family
@@ -626,50 +700,131 @@ export const STRATEGIES = {
       },
     },
   },
+  Bin: {
+    doc: "The cells a key is binned into. `step` and `thresholds` cut the line of one field into intervals: the value of `field(x).bin(...)`. `hex` and `voronoi` divide the plane of two fields into polygons: the value of `struct({ x, y }).bin(...)`. Each kind makes cells that do not overlap, and puts each row in the cell its value falls in.",
+    kinds: {
+      step: {
+        doc: "Cells of one width, aligned to multiples of it: a value is in the cell that starts at the largest multiple of the width at or below it. Every value has a cell, whatever the domain.",
+        positional: true,
+        params: {
+          size: {
+            type: t.num({ exclusiveMin: 0, finite: true }),
+            required: true,
+            doc: "The width of each cell, in data units.",
+          },
+        },
+      },
+      thresholds: {
+        doc: "Cells fitted to the domain of the field in the chart's data, which they cover with both ends included: a value on the last edge falls in the last cell, as in numpy's `histogram` and d3's `bin`.",
+        positional: true,
+        params: {
+          thresholds: {
+            type: t.union(
+              t.num({ min: 1, integer: true }),
+              t.array(t.num({ finite: true }), { minItems: 1 })
+            ),
+            required: true,
+            doc: "A count: about that many cells, with the width a numeric axis with that many ticks would use, so the edges are round numbers. Or a list of edges: the cells end and start at them, with the domain's ends as the outer edges, and an edge outside the domain cuts nothing.",
+          },
+        },
+      },
+      hex: {
+        doc: "A grid of hexagons with a corner at the top (pointy-top, as in d3-hexbin, ggplot2's `geom_hex` and Observable Plot), with one hexagon centered on the origin (0, 0). The grid covers the domain of the two fields in the chart's data, and every hexagon in it is a cell, empty ones included.",
+        params: {
+          radius: {
+            type: t.union(
+              t.num({ exclusiveMin: 0, finite: true }),
+              t.object({
+                x: {
+                  type: t.num({ exclusiveMin: 0, finite: true }),
+                  required: true,
+                  doc: "The radius in units of the x field.",
+                },
+                y: {
+                  type: t.num({ exclusiveMin: 0, finite: true }),
+                  required: true,
+                  doc: "The radius in units of the y field.",
+                },
+              })
+            ),
+            required: true,
+            doc: "The distance from a hexagon's center to its corners, in data units. A number when both fields share a unit (longitude and latitude), or `{ x, y }`, one per field, when they do not (as in ggplot2's `binwidth = c(x, y)`).",
+          },
+        },
+      },
+      voronoi: {
+        doc: "One cell per seed: the points nearer to that seed than to any other (a Voronoi diagram). Each row goes to its nearest seed. The cells are clipped to the box that holds the data and the seeds.",
+        params: {
+          seeds: {
+            type: t.array(t.record(t.any)),
+            required: true,
+            doc: "The seed rows, with the same two fields as the key, such as weather stations for rain gauge readings. Pass the chart's own data to give each row its own cell.",
+          },
+        },
+      },
+    },
+  },
+  Calendar: {
+    doc: "Partitions of the time line into calendar cells, one kind per level: the value of `field(x).bin(...)` over a time column, and an entry of an axis's `levels`.",
+    kinds: {
+      second: calendarKind("Cells of a second."),
+      minute: calendarKind("Cells of a minute."),
+      hour: calendarKind("Cells of an hour."),
+      day: calendarKind("Cells of a day, from local midnight."),
+      weekday: {
+        doc: "Cells of a day, labeled by the day of the week. Binned alone, a part of a week: the seven days of the week, from its first day, so all Mondays are one cell. It has no steps.",
+        params: { start: weekStart },
+      },
+      week: {
+        doc: "Cells of a week, from its first day.",
+        params: { every: calendarEvery, start: weekStart },
+      },
+      month: calendarKind("Cells of a month, from its first day."),
+      quarter: calendarKind(
+        "Cells of 3 months, from January, April, July and October, labeled Q1 to Q4."
+      ),
+      year: calendarKind("Cells of a year, from January 1."),
+    },
+  },
 } satisfies Record<string, StrategyFamily>;
 
-/** The name of a strategy family: `"Tile"`, `"Overlap"` or `"Curve"`. */
+/** The name of a strategy family: `"Tile"`, `"Overlap"`, `"Curve"`,
+ *  `"Bin"` or `"Calendar"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
-/** The value type of a strategy family: a union of one object per kind, told
- *  apart by its `kind`. */
-function strategyType(family: StrategyFamily): FieldType {
-  return t.union(
-    ...Object.entries(family.kinds).map(([kind, { params }]) =>
+/** The `Bin` kinds by the key they bin: one field, `field(x).bin(b)`, whose
+ *  cells are intervals of a line, or two fields together,
+ *  `struct({ x, y }).bin(b)`, whose cells are polygons of the plane. A kind
+ *  is valid only on its key. */
+export const BIN_KINDS = {
+  field: ["step", "thresholds"],
+  struct: ["hex", "voronoi"],
+} as const satisfies Record<
+  "field" | "struct",
+  readonly (keyof typeof STRATEGIES.Bin.kinds)[]
+>;
+
+/** One object type per kind of a strategy family (or per kind in `only`),
+ *  each tagged by its `kind`. */
+function kindBranches(
+  family: StrategyFamily,
+  only?: readonly string[]
+): FieldType[] {
+  return Object.entries(family.kinds)
+    .filter(([kind]) => only === undefined || only.includes(kind))
+    .map(([kind, { params }]) =>
       t.object({ kind: { type: t.literal(kind), required: true }, ...params })
-    )
-  );
+    );
 }
 
-/** A Calendar value's wire form: a partition of the time line into calendar
- *  cells (`CalendarPartition` in gofish-graphics/src/ast/calendar.ts). */
-const calendarPartition: FieldSpec = {
-  doc: "A calendar partition: a level (unit) at a step, e.g. Calendar.month.every(3).",
-  type: t.object({
-    unit: {
-      type: t.enum(
-        "second",
-        "minute",
-        "hour",
-        "day",
-        "week",
-        "month",
-        "quarter",
-        "year"
-      ),
-      doc: "The calendar level of each cell.",
-    },
-    step: {
-      type: t.number,
-      default: 1,
-      doc: "How many units one cell spans; steps align to the level above.",
-    },
-    start: {
-      type: t.enum("monday", "sunday"),
-      doc: "The first day of a week (weeks only).",
-    },
-  }),
-};
+/** The value type of a strategy family: a union of one object per kind (or
+ *  per kind in `only`), told apart by its `kind`. */
+function strategyType(
+  family: StrategyFamily,
+  only?: readonly string[]
+): FieldType {
+  return t.union(...kindBranches(family, only));
+}
 
 /** Chart-level options: `chart(data, {...})` in JS, `chart(data, **options)`
  *  in Python, `ChartIR.options` on the wire. Mirrors the JS `ChartOptions` in
@@ -713,14 +868,14 @@ export const CHART_OPTIONS: FieldGroup = group({
  *  consumer resolves a ref through this table: `jsonSchema.ts` emits one
  *  `$def` per entry, `validate.ts` walks the value with the generic field-type
  *  interpreter, and the Python generator renames the keys of a nested dict
- *  with `pyKwarg`, the same rule as the top-level kwargs
- *  (`axes={"x": {"label_angle": 45}}` serializes as `labelAngle`).
+ *  with `pyKwarg`, the same rule as the top-level kwargs (a camelCase key
+ *  such as `strokeWidth` is `stroke_width` in a Python dict).
  *
  *  A ref that is not in this table names a hand-authored envelope `$def`
  *  (LabelIR, TranslateIR, FieldAccessor, ...). */
 export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   AxisOptions: axisOptions,
-  Calendar: calendarPartition,
+  AxisLabelOptions: axisLabelOptions,
   AxesOptions: {
     doc: "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own.",
     type: t.union(
@@ -773,6 +928,20 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
     doc: "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval.",
     type: t.union(t.channel("number", "pos"), t.ref("AxisInterval")),
   },
+  // The cells a key is binned into, by the key (BIN_KINDS). A
+  // `field(x).bin(...)` partition is a Calendar kind or a Bin kind that cuts
+  // one field's line: one tagged union of both families' kinds.
+  Partition: {
+    doc: "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Bin.step(size) or Bin.thresholds(countOrEdges).",
+    type: t.union(
+      ...kindBranches(STRATEGIES.Calendar),
+      ...kindBranches(STRATEGIES.Bin, BIN_KINDS.field)
+    ),
+  },
+  StructBin: {
+    doc: "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Bin.hex({ radius }) or Bin.voronoi({ seeds }).",
+    type: strategyType(STRATEGIES.Bin, BIN_KINDS.struct),
+  },
   // Each strategy family (`STRATEGIES`) is one entry, under its family name.
   ...Object.fromEntries(
     Object.entries(STRATEGIES).map(([name, family]) => [
@@ -784,10 +953,15 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
 
 /** The refs a field may name that are not `OPTION_TYPES` entries: shapes
  *  authored by hand in schema.ts / jsonSchema.ts and walked by their own
- *  validator walkers. `pyClass` names the Python class that builds a value. */
-export const AUTHORED_REFS: Readonly<Record<string, { pyClass?: string }>> = {
-  FieldAccessor: { pyClass: "FieldAccessor" },
-  ChunkKey: { pyClass: "ChunkKey" },
+ *  validator walkers. `pyClass` names the Python class that builds a value;
+ *  `tag` is the value's `type` field, which tells it apart from the other
+ *  branches of a union (validate.ts). */
+export const AUTHORED_REFS: Readonly<
+  Record<string, { pyClass?: string; tag?: string }>
+> = {
+  FieldAccessor: { pyClass: "FieldAccessor", tag: "field" },
+  StructAccessor: { pyClass: "StructAccessor", tag: "struct" },
+  ChunkKey: { pyClass: "ChunkKey", tag: "chunk" },
   LabelIR: {},
   TranslateIR: {},
   RelateClauseIR: {},
@@ -816,7 +990,7 @@ export function pyType(
     case "enum":
       return "str";
     case "number":
-      return "float";
+      return f.integer ? "int" : "float";
     case "boolean":
       return "bool";
     case "literal":
@@ -830,6 +1004,9 @@ export function pyType(
     case "union":
       return [...new Set(f.options.map((o) => pyType(o, use)))].join(" | ");
     case "array":
+      // An array of records is a table: Python reads a dataframe too.
+      if (f.items.kind === "record")
+        return use === "doc" ? "list | DataFrame" : "Any";
       return "list";
     case "tuple":
       return "tuple";
@@ -1142,11 +1319,17 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
     fields: {
       by: {
         type: t.object({
-          x: { type: t.string, required: true },
-          y: { type: t.string, required: true },
+          x: {
+            type: t.union(t.string, t.ref("FieldAccessor"), t.ref("ChunkKey")),
+            required: true,
+          },
+          y: {
+            type: t.union(t.string, t.ref("FieldAccessor"), t.ref("ChunkKey")),
+            required: true,
+          },
         }),
         required: true,
-        doc: "Grouping fields for the column/row keys — the table operator can't run without both.",
+        doc: "The column key (x) and the row key (y), both required. Each takes what spread's `by` takes: a field name, a field(...) key (sorted, binned, a chain or product of bins, a part of a cycle), or chunk(size). A binned key's columns or rows are its cells, empty ones included. Each cell of the table holds the rows in both its column and its row.",
       },
       spacing: {
         type: t.union(t.number, t.tuple(t.number, t.number)),
@@ -1241,6 +1424,27 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       ),
     },
   }),
+
+  partition: operator("partition", {
+    doc: "Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.",
+    fields: {
+      by: {
+        type: t.union(t.ref("FieldAccessor"), t.ref("StructAccessor")),
+        required: true,
+        doc: "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.",
+      },
+      dir: {
+        type: t.string,
+        doc: "Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis.",
+      },
+      alignment: {
+        type: t.string,
+        default: "baseline",
+        doc: 'Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Applies only where nothing gives the children a cell on that axis: inside a cell of another partition, each child is placed in that cell. Not allowed with a key per axis.',
+      },
+      axes: { type: t.ref("AxesOptions") },
+    },
+  }),
 };
 
 // ---------------------------------------------------------------------------
@@ -1259,6 +1463,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       aspectRatio: {
         type: t.number,
         doc: "w/h ratio to enforce; the constraining axis wins when both are data-driven.",
+      },
+      inset: {
+        type: t.number,
+        default: 0,
+        doc: "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given.",
       },
       // A fluent-factory-wide dev flag (`FACTORY_ONLY_KEYS` in
       // marks/createOperator.ts strips `by`/`debug` before layout, generically
@@ -1464,6 +1673,17 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       fill: ch.color(
         "Fill color. A blank never paints; `fill` only seeds the shared color scale."
       ),
+      debug: {
+        type: t.boolean,
+        doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
+      },
+    },
+  }),
+
+  region: leafMark("region", {
+    doc: "Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
+    include: [paint],
+    fields: {
       debug: {
         type: t.boolean,
         doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",

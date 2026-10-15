@@ -84,7 +84,6 @@ export { createMark } from "./ast/withGoFish";
 // Data
 // export { groupBy } from "./ast/iterators/groupBy";
 export { groupBy, sumBy, orderBy, meanBy };
-export { bin } from "./ast/transforms";
 
 // Shapes
 export { ref } from "./ast/shapes/ref";
@@ -119,18 +118,43 @@ export type {
   Level,
   SchemaEntry,
 } from "./ast/schema";
-// Calendar partitions (#1057): the cells a time axis's rows are made of
-// (`axes: { x: { rows: [Calendar.month, Calendar.year] } }`). Capitalized
-// like `Schema`: a namespace of values.
-export { Calendar, CalendarPartition } from "./ast/calendar";
+// Calendar partitions (#1057): the cells of `field(x).bin(...)`, and the
+// cells a time axis's levels are made of
+// (`axes: { x: { levels: [Calendar.month, Calendar.year] } }`). A strategy
+// family like the others.
+export * as Calendar from "./families/calendar";
+export { CalendarPartition } from "./ast/calendar";
 export type {
   CalendarCell,
+  CalendarPart,
   CalendarUnit,
   CalendarJSON,
   CellFormat,
   WeekStart,
 } from "./ast/calendar";
-export type { TimeRowOption } from "./ast/axes/timeRows";
+export type { LevelOption } from "./ast/axes/levels";
+// Cells (#1058): what `field(x).bin(partition)` maps each value to. A
+// partition is a Calendar value, `Bin.step(size)`, or
+// `Bin.thresholds(countOrEdges)`; a list of Calendar values is a product
+// (`[Calendar.year, Calendar.month]`). A level that is a part of a larger
+// one (`Calendar.month`, the month of the year) gives parts of a cycle.
+export type {
+  Cell,
+  CycleCell,
+  HasCycle,
+  BinStep,
+  Product,
+  Partition,
+  NumberPartition,
+  NumberCellFormat,
+  PartitionJSON,
+} from "./ast/cells";
+// A key that reads two fields at once (#1059), binned into the cells of the
+// plane by a call in the Bin family: `struct({ x, y }).bin(Bin.hex({ radius }))`.
+export { struct, StructExpr } from "./ast/structExpr";
+export type { StructOp, StructExprWire } from "./ast/structExpr";
+export type { PolygonCell, PlaneFields } from "./ast/polygonCells";
+export * as Bin from "./families/bin";
 
 // Constraints
 export { Constraint } from "./ast/constraints";
@@ -167,6 +191,13 @@ export * as Tile from "./families/tile";
 export type { TreemapOptions } from "./ast/graphicalOperators/treemap";
 export { pack } from "./ast/graphicalOperators/pack";
 export type { PackOptions } from "./ast/graphicalOperators/pack";
+export { partition } from "./ast/graphicalOperators/partition";
+export type {
+  PartitionOptions,
+  PartitionAxisOptions,
+  PartitionProductOptions,
+  PartitionPlaneOptions,
+} from "./ast/graphicalOperators/partition";
 export * as Overlap from "./families/overlap";
 export {
   enclose,
@@ -186,6 +217,7 @@ export { petal } from "./ast/shapes/petal";
 export { polygon } from "./ast/shapes/polygon";
 export { text } from "./ast/shapes/text";
 export { image } from "./ast/shapes/image";
+export { region } from "./ast/shapes/region";
 
 /* Chart Syntax */
 export {

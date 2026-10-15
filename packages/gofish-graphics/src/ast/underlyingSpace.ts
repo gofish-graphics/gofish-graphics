@@ -34,6 +34,7 @@ import {
 export { MeasureClash, type MeasureSite } from "./measure";
 import { nice as d3Nice } from "d3-array";
 import type { HasCalendar } from "./schema";
+import { Cell, CycleCell, type AxisCell, type KeyCell } from "./cells";
 import { niceToCells, tickPartition, type CalendarPartition } from "./calendar";
 
 // This module is the TYPE half of an axis: what the axis means, with no σ in
@@ -109,6 +110,13 @@ export type CONTINUOUS_TYPE = {
    *  part has it ({@link allMirrored}).
    *  TODO(#995): layer axis merging, a coord's declared window, and anchorAt drop it. */
   mirrored?: true;
+  /** Set when every range placed along this axis is a CELL (a `partition`'s
+   *  child spans its cell, cells.ts): the cells, in order. The axis then
+   *  places cells, not points: on a time axis the row of the cells'
+   *  partition labels each cell between its two boundary ticks
+   *  (axes/elaborate.tsx). A union keeps them only when every part has them
+   *  ({@link mergeCells}). */
+  cells?: readonly Cell[];
 };
 
 export type ORDINAL_TYPE = {
@@ -127,6 +135,22 @@ export type ORDINAL_TYPE = {
    *  `distributeSpaceFold`), never sniffed back from the domain. An
    *  explicitly-keyed or `by`-grouped ordinal leaves this false. */
   anonymous?: boolean;
+  /** Set when every key is a cell of a binned field (`field(x).bin(p)`,
+   *  cells.ts): cells of the line, each once, in order of their starts, or
+   *  parts of one cycle, in the cycle's order (the keys' order is
+   *  `domain`'s; a key is its cell's id). The axis labels each slot with its
+   *  cell's label, and a cell of a chain of bins adds a level per bin
+   *  before it (its year, for a month), each labeling the run of slots in
+   *  one cell (axes/elaborate.tsx). A union keeps them only when every part
+   *  has them ({@link mergeAxisCells}), as a continuous axis's cells are. */
+  cells?: readonly AxisCell[];
+  /** True when the keys have an order: they are the levels of a column the
+   *  chart's `schema` declares ordered (`HasOrder`), or cells, which are
+   *  ordered by nature (cells of the line by their starts, parts of a cycle
+   *  by the cycle). An axis puts an outer level's labels over ordered keys at
+   *  the start of each run, and centers them over unordered ones
+   *  (axes/elaborate.tsx). A union keeps it only when every part has it. */
+  hasOrder?: boolean;
 };
 
 export type UNDEFINED_TYPE = {
@@ -254,24 +278,34 @@ export const dataWidth = (space: CONTINUOUS_TYPE): number =>
 
 /** What an axis ticks at, which is what a scope that draws the axis nices
  *  its domain to (#659, #1057): about `count` ticks, or, on a time axis, the
- *  cells of its `rows` (`axes.x.rows`, parsed once by `layout`), whose inner
- *  row (`rows[0]`) sets the nicing. A time axis with no `rows` picks its
- *  inner row from its domain and `count` ({@link axisTickPartition}).
- *  `resolveAxes` stamps it on every node that draws an axis
- *  (`GoFishNode.axisDemand`), and the axis is drawn from the same stamp. */
+ *  cells of its `rows`, whose inner row (`rows[0]`) sets the nicing. A time
+ *  axis with no `rows` picks its inner row from its domain and `count`
+ *  ({@link axisTickPartition}). `resolveAxes` stamps it on every node that
+ *  draws an axis (`GoFishNode.axisDemand`), and the axis is drawn from the
+ *  same stamp; a time axis stamps its rows (its levels, `axes.x.levels`)
+ *  when it is elaborated, before any solve nices its domain. */
 export type AxisTicks = { count: number; rows?: CalendarPartition[] };
 
 /** An axis's ticks when it asks for nothing else: about 10. */
 export const DEFAULT_AXIS_TICKS: AxisTicks = { count: 10 };
 
 /** The partition a time axis over `space` ticks at: its explicit inner row,
- *  else the one its domain picks ({@link tickPartition}). */
+ *  else the partition of the cells it places ({@link cellPartition}), else
+ *  the one its domain picks ({@link tickPartition}). */
 export const axisTickPartition = (
   space: CONTINUOUS_TYPE,
   ticks: AxisTicks
 ): CalendarPartition =>
   ticks.rows?.[0] ??
+  cellPartition(space) ??
   tickPartition(space.dataInterval.min, space.dataInterval.max, ticks.count);
+
+/** The calendar partition of the cells an axis places (`space.cells`), when
+ *  they are calendar cells: a time axis over them ticks at their partition,
+ *  so each cell is a cell of its inner row. */
+export const cellPartition = (
+  space: CONTINUOUS_TYPE
+): CalendarPartition | undefined => space.cells?.[0]?.calendar?.partition;
 
 /** Nice the interval a space renders an axis over (issue #659): a pinned
  *  domain's `[min, max]`, or a delta axis's width from 0, rounded outward to
@@ -366,13 +400,63 @@ export const anchorAt = (
 export const ORDINAL = (
   domain?: string[],
   title?: string,
-  anonymous?: boolean
+  anonymous?: boolean,
+  cells?: readonly AxisCell[],
+  hasOrder?: boolean
 ): UnderlyingSpace => ({
   kind: "ordinal",
   domain,
   titles: title === undefined ? undefined : [title],
   anonymous,
+  ...(cells !== undefined ? { cells } : {}),
+  ...(hasOrder || cells !== undefined ? { hasOrder: true } : {}),
 });
+
+/** An ordinal axis's keys: plain text, or cells (`field(x).bin(p)`), which
+ *  stand for their ids. */
+export type OrdinalKey = string | KeyCell;
+
+/** The ORDINAL over `keys`, in order: over cells when every key is a cell
+ *  of a binned field ({@link ORDINAL_TYPE.cells}). A cell of the plane lies
+ *  along no one axis, so an ordinal over those is over its keys' ids. */
+export const ordinalOver = (
+  keys: readonly OrdinalKey[],
+  title?: string,
+  anonymous?: boolean,
+  hasOrder?: boolean
+): UnderlyingSpace => {
+  const cells = keys.every(
+    (k): k is AxisCell => k instanceof Cell || k instanceof CycleCell
+  )
+    ? mergeAxisCells([keys])
+    : undefined;
+  return ORDINAL(keys.map(String), title, anonymous, cells, hasOrder);
+};
+
+/** The cells of a union of ordinal parts: {@link mergeCells} for cells of
+ *  the line, and, for parts of a cycle, every part once, in the cycle's
+ *  order, when all are of one cycle. Undefined when any part holds no
+ *  cells, or the parts mix kinds or cycles. The siblings of a split over
+ *  one key hold the same cells, so parts that are all one list are that
+ *  list, and parts of one cycle with a part that holds all of it are the
+ *  cycle's cells. */
+export const mergeAxisCells = (
+  parts: (readonly AxisCell[] | undefined)[]
+): readonly AxisCell[] | undefined => {
+  if (parts.length === 0 || parts.some((p) => p === undefined))
+    return undefined;
+  if (parts.every((p) => p === parts[0])) return parts[0];
+  const all = (parts as (readonly AxisCell[])[]).flat();
+  if (all.every((c): c is Cell => c instanceof Cell))
+    return mergeCells(parts as (readonly Cell[])[]);
+  if (!all.every((c): c is CycleCell => c instanceof CycleCell))
+    return undefined;
+  const cycle = all[0]?.cycle;
+  if (all.some((c) => c.cycle !== cycle)) return undefined;
+  if (parts.some((p) => p!.length === cycle.cells.length)) return cycle.cells;
+  const byId = new Map(all.map((c) => [c.id, c]));
+  return [...byId.values()].sort((a, b) => a.index - b.index);
+};
 export const isORDINAL = (space: UnderlyingSpace): space is ORDINAL_TYPE =>
   space.kind === "ordinal";
 
@@ -385,6 +469,54 @@ export const isUNDEFINED = (space: UnderlyingSpace): space is UNDEFINED_TYPE =>
 const pointAt = (pos: MaybeValue<number | undefined>): CONTINUOUS_TYPE => {
   const at = getValue(pos) ?? 0;
   return CONTINUOUS(interval(at, at), "pinned", valueUnits(pos));
+};
+
+/** `space` over `cells` (see {@link CONTINUOUS_TYPE.cells}), or `space`
+ *  unchanged when there are none. */
+export const withCells = <T extends CONTINUOUS_TYPE>(
+  space: T,
+  cells: readonly Cell[] | undefined
+): T => (cells === undefined ? space : { ...space, cells });
+
+/**
+ * The cells of a union of parts on one axis, when they are the cells of one
+ * partition of the line: every part's cells, in order of their starts, each
+ * once. Undefined when any part does not hold cells (an axis that also places
+ * points is not over cells), when there are no parts, and when the cells are
+ * not of one partition, as two parts binned differently are not:
+ *
+ *  - no two cells overlap (a cell in two parts is one interval in both, so
+ *    `[0, 10)` and `[5, 10)` are of two partitions), and
+ *  - calendar cells share a calendar partition (`sameCells`): an axis over
+ *    calendar cells labels them all by one partition's rows.
+ *
+ * That is what the parts agree on, not how they were binned: a `Bin.step`
+ * over two domains gives cells of one partition, and a `Bin.thresholds`
+ * fitted to two domains may not.
+ */
+export const mergeCells = (
+  parts: (readonly Cell[] | undefined)[]
+): readonly Cell[] | undefined => {
+  if (parts.length === 0 || parts.some((p) => p === undefined))
+    return undefined;
+  if (parts.length === 1) return parts[0];
+  const all = (parts as (readonly Cell[])[])
+    .flat()
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+  const partition = all[0]?.calendar?.partition;
+  const out: Cell[] = [];
+  for (const c of all) {
+    const p = c.calendar?.partition;
+    if (p === undefined ? partition !== undefined : !p.sameCells(partition))
+      return undefined;
+    const prev = out[out.length - 1];
+    // The same cell, from another part: the later part's stands for it.
+    if (prev !== undefined && prev.start === c.start && prev.end === c.end)
+      out[out.length - 1] = c;
+    else if (prev !== undefined && c.start < prev.end) return undefined;
+    else out.push(c);
+  }
+  return out;
 };
 
 /** One axis of a mark sized about a point (an ellipse, a petal): a datum

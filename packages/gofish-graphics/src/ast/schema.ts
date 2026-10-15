@@ -4,6 +4,7 @@
 
 import type { StackOrigin } from "./constraints/distribute";
 import { loadTemporal, temporal } from "./calendar";
+import { tagArray } from "./data";
 import { INSTANT } from "./measure";
 
 /**
@@ -34,10 +35,16 @@ import { INSTANT } from "./measure";
  *    quantity, when that is not the column's name. Declared with
  *    `Schema.quantity(name)` (or `.quantity(name)` after another builder).
  *    The quantity titles the axis and names the unit variable.
+ *  - {@link HasDomain}: the interval `[lo, hi]` the column's values span in
+ *    the data it was typed with. Never declared: {@link applySchema} computes
+ *    it for every column of finite numbers (a time's are epoch
+ *    milliseconds), once, before any split, so every group of a split reads
+ *    the same domain off its column type. The cells of `field(x).bin(p)` are
+ *    over it (cells.ts).
  *
- * A transform writes these for the columns it makes: `bin()` says its
- * `start`/`end`/`size` are amounts of its source column's quantity, in the
- * source's unit, and its `count` is a count.
+ * A column made from another keeps that column's type: the cells of
+ * `field(x).bin(p)` are amounts of `x`'s quantity, in `x`'s unit, and a
+ * `.count()` is a count.
  *
  * A column type is a record keyed by class name, so a later class (`HasZero`,
  * `HasCycle`, ...) is one more optional key. The record is also the wire form:
@@ -78,16 +85,25 @@ export type HasCalendar = { zone: string };
  *    that unifies with any unit (`measure.ts`).
  *  - `symbol`: what an axis title appends to show the unit, "Pay (USD)".
  *    `Schema.unit(u)` writes `u`. The engine's own units (the "count" of
- *    `bin()`'s `count`) have none, so their axes add nothing.
+ *    `.count()`) have none, so their axes add nothing.
  */
 export type HasUnit = { unit: string; symbol?: string };
 
 /** The class of a column whose values are amounts of the quantity `name`
  *  (`Schema.quantity("Pay")`), when that is not the column's own name.
  *  Columns of one quantity share one unit variable, and the quantity titles
- *  the axis: `bin()`'s `start` is an amount of its source column's
- *  quantity, and the five summary columns of a box plot can all be "Pay". */
+ *  the axis: the five summary columns of a box plot can all be "Pay". */
 export type HasQuantity = { name: string };
+
+/** The class of a column of finite numbers (or instants, as epoch
+ *  milliseconds): its DOMAIN, the interval `[lo, hi]` from its least value
+ *  to its greatest in the data it was typed with (the chart's data, or a
+ *  `derive`'s result), missing values aside. {@link applySchema} computes
+ *  it; a split leaf and a `filter`'s result keep it with the rest of the
+ *  column's type ({@link copyColumnTypes}), and a `derive` computes its
+ *  result's own. A binned key's cells cover it (cells.ts), so every group
+ *  of a split over the column has the same cells, whatever rows it holds. */
+export type HasDomain = { lo: number; hi: number };
 
 /** A column's type: the classes it has, keyed by class name. */
 export type ColumnType = {
@@ -96,6 +112,7 @@ export type ColumnType = {
   HasCalendar?: HasCalendar;
   HasUnit?: HasUnit;
   HasQuantity?: HasQuantity;
+  HasDomain?: HasDomain;
 };
 
 /** Whether `v` is a time column's value as the engine reads it: epoch
@@ -117,7 +134,8 @@ const isEpochMs = (v: unknown): boolean =>
  *  - `HasMidpoint`: anything; its values are its order's.
  *  - `HasUnit`: numbers, the amounts the unit measures. In the instant
  *    unit, also a valid `Date`, which is an instant (see `HasCalendar`).
- *  - `HasQuantity`: anything; a name says nothing about the values. */
+ *  - `HasQuantity`: anything; a name says nothing about the values.
+ *  - `HasDomain`: numbers from `lo` to `hi`. */
 const ACCEPTS: {
   [K in keyof ColumnType]-?: (
     v: unknown,
@@ -130,6 +148,8 @@ const ACCEPTS: {
   HasUnit: (v, { unit }) =>
     v == null || typeof v === "number" || (unit === INSTANT.unit && isDate(v)),
   HasQuantity: () => true,
+  HasDomain: (v, { lo, hi }) =>
+    v == null || (typeof v === "number" && lo <= v && v <= hi),
 };
 
 /** Whether `v` is a valid `Date`. */
@@ -242,8 +262,11 @@ export const Schema = {
 };
 
 /** What `chart`'s `schema` option takes per column: a builder, or the record
- *  it writes (the wire form). */
-export type SchemaEntry = ColumnSchema<ColumnType> | ColumnType;
+ *  it writes (the wire form). A column's domain ({@link HasDomain}) is
+ *  computed from its values; declaring one is not supported yet. */
+export type SchemaEntry =
+  | ColumnSchema<ColumnType>
+  | Omit<ColumnType, "HasDomain">;
 
 /** The record a schema entry stands for, checked for the rules the builder
  *  enforces (a record from the wire, as Python sends it, has no types): the
@@ -254,8 +277,15 @@ export type SchemaEntry = ColumnSchema<ColumnType> | ColumnType;
  *  it, with the same check `.diverging()` runs. */
 export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   const who = `schema: column "${column}"`;
-  const { HasUnit: unit, ...rest } =
-    entry instanceof ColumnSchema ? entry.type : entry;
+  const record: ColumnType = entry instanceof ColumnSchema ? entry.type : entry;
+  if (record.HasDomain !== undefined)
+    throw new Error(
+      `${who} declares HasDomain ${JSON.stringify(record.HasDomain)}, but ` +
+        `declaring a column's domain is not supported yet: a column's ` +
+        `domain is computed from its values. Drop HasDomain from the ` +
+        `schema.`
+    );
+  const { HasUnit: unit, ...rest } = record;
   const type: ColumnType =
     rest.HasCalendar !== undefined
       ? { ...Schema.time(rest.HasCalendar).type, ...rest }
@@ -343,21 +373,14 @@ export const columnType = (
   column === undefined ? undefined : getColumnTypes(data)?.[column];
 
 /** Tag a data array with column types. */
-export const setColumnTypes = <T>(data: T, types: ColumnTypes): T => {
-  Object.defineProperty(data, COLUMN_TYPES, {
-    value: types,
-    enumerable: false,
-    configurable: true,
-    writable: true,
-  });
-  return data;
-};
+export const setColumnTypes = <T>(data: T, types: ColumnTypes): T =>
+  tagArray(data, COLUMN_TYPES, types);
 
 /** Copy `source`'s column types onto `target` (both arrays), for every
- *  column `target` does not type itself. A split leaf or a filter's result is
- *  a fresh array, so it has to be told. Without it, a mark channel over a
- *  split leaf would lose its column's order, time, and unit (a bin's `start`
- *  would fall back to the quantity "start", see `resolveColumn`). */
+ *  column `target` does not type itself. A split leaf or a filter's result
+ *  is a fresh array, so it has to be told. Without it, a mark channel over a
+ *  split leaf would lose its column's order, time, unit, and quantity (see
+ *  `resolveColumn`), and a binned key its domain ({@link HasDomain}). */
 export const copyColumnTypes = <T>(target: T, source: unknown): T => {
   const types = getColumnTypes(source);
   if (types === undefined) return target;
@@ -389,7 +412,8 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
  * Type `rows` with `schema`: a copy of the array carrying the column types.
  * The types are, each winning over the one before:
  *
- *  1. `inherited` (an operator's input's, for its result), each kept only
+ *  1. `inherited` (an operator's input's, for its result), but its domains
+ *     ({@link HasDomain}), each kept only
  *     when every value of its column fits it as it stands
  *     ({@link ACCEPTS}). The inherited types never reinterpret or check the
  *     values: a column that no longer fits (a date rewritten to "Mar") just
@@ -398,7 +422,7 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
  *     its Dates become epoch milliseconds below. Fitting reads values, not
  *     meanings: a time recoded to plain numbers (years) still fits, since
  *     any finite number is epoch milliseconds (#1089); `schema` fixes it.
- *  2. The types the array already carries.
+ *  2. The types the array already carries, but their domains.
  *  3. `schema`'s.
  *
  * A column none of these type is a time column (`HasCalendar`, UTC) when its
@@ -410,6 +434,15 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
  * already. The copy leaves the caller's array untagged, so one array can
  * feed charts with different schemas.
  *
+ * Then every column whose values are all finite numbers (missing values
+ * aside, a time's values as epoch milliseconds) gets its domain
+ * ({@link HasDomain}): the interval from its least value to its greatest, in
+ * the rows typed here, or, for a list of refs (`chart(selectAll(...))`), in
+ * `reached`, the rows they stand for. So the domain is decided once, here,
+ * for every split after it; a `derive`'s result gets its own, and never its
+ * input's. A `schema` that declares a domain is an error
+ * ({@link columnTypeOf}): declaring one is not supported yet.
+ *
  * It does not check the values against an order: a value outside an order is
  * an error where the order is used (`orderByLevels`), so a `filter` in the
  * flow can drop it first.
@@ -417,12 +450,22 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
 export async function applySchema<T>(
   rows: T[],
   schema: Record<string, SchemaEntry> = {},
-  inherited?: ColumnTypes
+  inherited?: ColumnTypes,
+  reached?: readonly unknown[]
 ): Promise<T[]> {
   const own = getColumnTypes(rows);
   const records = rows as unknown as (Record<string, unknown> | null)[];
   const types: ColumnTypes = {};
-  for (const [column, type] of Object.entries(inherited ?? {})) {
+  // A domain is of the rows it was computed over, never of these. A type
+  // that was only a domain is no type.
+  const withoutDomain = ({
+    HasDomain: _,
+    ...rest
+  }: ColumnType): ColumnType | undefined =>
+    Object.keys(rest).length > 0 ? rest : undefined;
+  for (const [column, inheritedType] of Object.entries(inherited ?? {})) {
+    const type = withoutDomain(inheritedType);
+    if (type === undefined) continue;
     const fits = fitsType(type);
     if (
       records.every(
@@ -431,7 +474,10 @@ export async function applySchema<T>(
     )
       types[column] = type;
   }
-  Object.assign(types, own);
+  for (const [column, ownType] of Object.entries(own ?? {})) {
+    const type = withoutDomain(ownType);
+    if (type !== undefined) types[column] = type;
+  }
   for (const [column, entry] of Object.entries(schema)) {
     types[column] = columnTypeOf(column, entry);
   }
@@ -452,7 +498,6 @@ export async function applySchema<T>(
       unresolved.delete(column);
     }
   }
-  if (Object.keys(types).length === 0) return rows;
   const timeColumns = Object.entries(types).filter(
     ([, t]) => t.HasCalendar !== undefined
   );
@@ -489,7 +534,38 @@ export async function applySchema<T>(
       return copy as T;
     });
   }
-  return setColumnTypes(out, types);
+  for (const [column, domain] of columnDomains(reached ?? out))
+    types[column] = { ...types[column], HasDomain: domain };
+  return Object.keys(types).length === 0 ? out : setColumnTypes(out, types);
+}
+
+/** The domain ({@link HasDomain}) of each column of `rows` whose values are
+ *  all finite numbers, missing values aside. A column with any other value
+ *  has none. It is the one pass of `applySchema` over every value: type
+ *  inference reads a column's first non-null value only, and the time
+ *  conversion runs only when some time value is not epoch milliseconds, so
+ *  neither has a scan to fold it into (about 0.5 ms for 10,000 rows of six
+ *  columns). */
+function columnDomains(rows: readonly unknown[]): Map<string, HasDomain> {
+  // A column whose values are not all finite numbers maps to null.
+  const domains = new Map<string, HasDomain | null>();
+  for (const row of rows) {
+    if (row == null || typeof row !== "object") continue;
+    for (const column in row) {
+      const v = (row as Record<string, unknown>)[column];
+      if (v == null) continue;
+      const d = domains.get(column);
+      if (d === null) continue;
+      if (typeof v !== "number" || !Number.isFinite(v))
+        domains.set(column, null);
+      else if (d === undefined) domains.set(column, { lo: v, hi: v });
+      else if (v < d.lo) d.lo = v;
+      else if (v > d.hi) d.hi = v;
+    }
+  }
+  return new Map(
+    [...domains].filter((e): e is [string, HasDomain] => e[1] !== null)
+  );
 }
 
 /** The zones {@link checkZone} has found valid. */

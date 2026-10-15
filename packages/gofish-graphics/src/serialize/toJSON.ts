@@ -60,8 +60,10 @@ interface SerializeTag {
  *
  * A function value is dropped too, whatever the key: a callback or `live(...)`
  * channel is a JS closure with no JSON form (the same reason a JS `derive(fn)`
- * emits an opaque `{type: "derive"}`). A type the descriptor table does not
- * declare has no wire form at all, so it throws.
+ * emits an opaque `{type: "derive"}`). A strategy kind used bare
+ * (`Curve.monotone`) is no function here: the factory that tagged the
+ * options read it as its value (`withKindValues`). A type the descriptor
+ * table does not declare has no wire form at all, so it throws.
  */
 function wireOpts(
   kind: Frontend.NodeKind,

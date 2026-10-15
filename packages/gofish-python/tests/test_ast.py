@@ -8,7 +8,6 @@ from gofish import (
     spread,
     stack,
     derive,
-    bin,
     compose,
     field,
     chunk,
@@ -30,6 +29,7 @@ from gofish import (
     Schema,
     ColumnSchema,
     Calendar,
+    Bin,
     datum,
     scatter,
     arrow,
@@ -135,7 +135,61 @@ class TestOperators:
     def test_between_rejects_pipeline_ops(self):
         """A predicate is not a value slot: ops on the field are an error."""
         with pytest.raises(ValueError, match="does not apply the expression"):
-            field("x").bin(10).between(0, 1)
+            field("x").bin(Bin.step(10)).between(0, 1)
+
+    def test_bin_partitions_wire(self):
+        """`.bin` takes a Calendar value, Bin.step or Bin.thresholds, and
+        writes the partition's wire form (camelCase keys, as JS reads them)."""
+        assert field("d").bin(Calendar.month(every=3))["ops"] == [
+            {"op": "bin", "partition": {"kind": "month", "every": 3}}
+        ]
+        assert field("d").bin(Calendar.week(start="sunday"))["ops"] == [
+            {"op": "bin", "partition": {"kind": "week", "start": "sunday"}}
+        ]
+        assert field("x").bin(Bin.step(0.5))["ops"] == [
+            {"op": "bin", "partition": {"kind": "step", "size": 0.5}}
+        ]
+        assert field("x").bin(Bin.thresholds([1, 2, 5]))["ops"] == [
+            {"op": "bin", "partition": {"kind": "thresholds", "thresholds": [1, 2, 5]}}
+        ]
+        assert field("x").bin()["ops"] == [{"op": "bin"}]
+
+    def test_bin_product_and_chain_wire(self):
+        """A product is a list partition on one bin op; a chain is one bin op
+        per `.bin`."""
+        assert field("d").bin([Calendar.year, Calendar.month])["ops"] == [
+            {
+                "op": "bin",
+                "partition": [
+                    {"kind": "year"},
+                    {"kind": "month"},
+                ],
+            }
+        ]
+        assert field("d").bin(Calendar.year).bin(Calendar.month)["ops"] == [
+            {"op": "bin", "partition": {"kind": "year"}},
+            {"op": "bin", "partition": {"kind": "month"}},
+        ]
+        with pytest.raises(TypeError, match="two or more"):
+            field("d").bin([Calendar.month])
+        with pytest.raises(TypeError, match="two or more"):
+            field("d").bin([Calendar.year, Bin.step(1)])
+
+    def test_bin_rejects_other_partitions(self):
+        """The untagged forms and the removed kwargs are gone, and a Bin kind
+        of two fields names the key that takes it."""
+        with pytest.raises(TypeError, match="Calendar value"):
+            field("x").bin({"step": 1})
+        with pytest.raises(TypeError):
+            field("x").bin(step=1)
+        with pytest.raises(TypeError, match=r"struct\(x=\.\.\., y=\.\.\.\)\.bin\(Bin\.hex"):
+            field("x").bin(Bin.hex(radius=1))
+        with pytest.raises(ValueError, match="must be > 0"):
+            Bin.step(0)
+        with pytest.raises(ValueError, match=">= 1"):
+            Bin.thresholds(0)
+        with pytest.raises(TypeError):
+            Bin.step(size=1)
 
     def test_filter_callable_is_derive(self):
         """A Python function predicate runs through the derive bridge."""
@@ -735,11 +789,6 @@ class TestSchema:
         with pytest.raises(TypeError):
             field("x", "plane")  # type: ignore[call-arg]
 
-    def test_bin_edges_are_amounts_of_the_source_quantity(self):
-        types = bin("flipper")._gofish_column_types
-        assert types["start"] == {"HasQuantity": {"name": "flipper"}}
-        assert types["count"] == {"HasUnit": {"unit": "count"}}
-
     def test_diverging_defaults_the_midpoint_to_half_the_levels(self):
         assert Schema.ordered(["a", "b"]).diverging() == {
             "HasOrder": {"levels": ["a", "b"]},
@@ -815,37 +864,93 @@ class TestTime:
         }
 
     def test_calendar_wire_form(self):
-        assert Calendar.month == {"unit": "month", "step": 1}
-        assert Calendar.hour.every(6) == {"unit": "hour", "step": 6}
-        assert Calendar.week == {"unit": "week", "step": 1, "start": "monday"}
-        assert Calendar.week(start="sunday") == {
-            "unit": "week",
-            "step": 1,
+        assert Calendar.month == {"kind": "month"}
+        assert Calendar.hour(every=6) == {"kind": "hour", "every": 6}
+        assert Calendar.week == {"kind": "week"}
+        assert Calendar.week(every=2, start="sunday") == {
+            "kind": "week",
+            "every": 2,
             "start": "sunday",
         }
-        assert Calendar.week(start="sunday").every(2)["step"] == 2
+
+    def test_calendar_bare_is_called(self):
+        """A Calendar kind used bare is its call with no arguments (#1133):
+        equal, the same JSON, and the same wire form at an option."""
+        import json
+
+        for kind in ("second", "minute", "hour", "day", "weekday", "week",
+                     "month", "quarter", "year"):
+            bare = getattr(Calendar, kind)
+            assert bare == bare()
+            assert json.dumps(bare) == json.dumps(bare())
+            assert field("d").bin(bare)["ops"] == field("d").bin(bare())["ops"]
+        assert field("d").bin([Calendar.year, Calendar.month])["ops"] == field(
+            "d"
+        ).bin([Calendar.year(), Calendar.month()])["ops"]
+
+    def test_calendar_every_is_an_option(self):
+        """The step is the kind's `every` option; the old `.every(n)` method
+        and a `step` key are loud errors naming `every`."""
+        with pytest.raises(AttributeError, match=r"Calendar\.month\(every=\.\.\.\)"):
+            Calendar.month.every(3)
+        with pytest.raises(TypeError, match=r"step.*every=\.\.\."):
+            Calendar.month(step=3)
+        with pytest.raises(TypeError, match="whole number"):
+            Calendar.month(every=1.5)
+        with pytest.raises(TypeError, match="every"):
+            Calendar.weekday(every=2)
+
+    def test_calendar_weekday_wire_form(self):
+        assert Calendar.weekday == {"kind": "weekday"}
+        assert Calendar.weekday(start="sunday") == {
+            "kind": "weekday",
+            "start": "sunday",
+        }
+        assert field("d").bin(Calendar.weekday)["ops"] == [
+            {"op": "bin", "partition": {"kind": "weekday"}}
+        ]
+        assert field("d").bin([Calendar.week, Calendar.weekday])["ops"][0][
+            "partition"
+        ] == [
+            {"kind": "week"},
+            {"kind": "weekday"},
+        ]
+        with pytest.raises(ValueError, match="monday"):
+            Calendar.weekday(start="friday")
+
+    def test_calendar_old_unit_form_is_rejected(self):
+        with pytest.raises(TypeError, match="expected a Calendar value"):
+            field("d").bin({"unit": "month", "step": 1})
 
     def test_calendar_rejects_bad_steps_and_starts(self):
-        with pytest.raises(ValueError, match="step must be a whole number"):
-            Calendar.month.every(0)
+        with pytest.raises(ValueError, match=">= 1"):
+            Calendar.month(every=0)
         with pytest.raises(ValueError, match="monday"):
             Calendar.week(start="friday")
 
-    def test_rows_ride_axes(self):
+    def test_levels_ride_axes(self):
         ir = (
             chart(
                 [{"t": "2024-01-01", "v": 1}],
                 schema={"t": Schema.time()},
-                axes={"x": {"rows": [Calendar.month, Calendar.year]}},
+                axes={"x": {"levels": [Calendar.month, False, True]}},
             )
             .flow(scatter(by="t", x="t", y="v"))
             .mark(line())
             .to_ir()
         )
-        assert ir["options"]["axes"]["x"]["rows"] == [
-            {"unit": "month", "step": 1},
-            {"unit": "year", "step": 1},
+        assert ir["options"]["axes"]["x"]["levels"] == [
+            {"kind": "month"},
+            False,
+            True,
         ]
+
+    def test_rows_is_gone(self):
+        with pytest.raises(TypeError, match="levels"):
+            chart(
+                [{"t": "2024-01-01", "v": 1}],
+                axes={"x": {"rows": [Calendar.month]}},
+            ).flow(scatter(by="t", x="t", y="v")).mark(line()).to_ir()
 
     def test_datetime_columns_cross_as_arrow_times(self):
         """A datetime column is not marked in the IR: its Arrow type crosses

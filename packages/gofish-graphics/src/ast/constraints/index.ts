@@ -1,7 +1,13 @@
 import type { GoFishAST } from "../_ast";
 import { GoFishNode, type Placeable } from "../_node";
 import { getValue, isValue, type MaybeValue } from "../data";
-import { joinUnits, valueUnits, type UnitRecord } from "../underlyingSpace";
+import {
+  joinUnits,
+  mergeCells,
+  valueUnits,
+  type UnitRecord,
+} from "../underlyingSpace";
+import { Cell } from "../cells";
 import type { PositionDomains } from "./compose";
 import * as Interval from "../../util/interval";
 import { createAlignConstraint } from "./align";
@@ -13,7 +19,11 @@ import {
   isZOrderConstraint,
 } from "./zorder";
 import { createNestConstraint } from "./nest";
-import { isPositionInterval, spanDatumInterval } from "./position";
+import {
+  isPositionInterval,
+  spanDatumInterval,
+  type PositionCoordinate,
+} from "./position";
 import type { AlignConstraint, AlignOptions } from "./align";
 import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
@@ -50,10 +60,11 @@ export type { AlignConstraint, AlignOptions } from "./align";
 export type { DistributeConstraint, DistributeOptions } from "./distribute";
 export type {
   PositionConstraint,
+  PositionCoordinate,
   PositionInterval,
   PositionOptions,
 } from "./position";
-export { isPositionInterval } from "./position";
+export { isPositionInterval, PositionRegion } from "./position";
 export type {
   ZAboveConstraint,
   ZBelowConstraint,
@@ -259,57 +270,85 @@ export function resolveConstraintOperands(
 export function collectPositionDomains(
   constraints: ConstraintSpec[]
 ): PositionDomains {
-  let x: Interval.Interval | undefined;
-  let y: Interval.Interval | undefined;
-  let xMeasure: UnitRecord | undefined;
-  let yMeasure: UnitRecord | undefined;
-  const pointInterval = (
-    coord: PositionConstraint["x"]
-  ): Interval.Interval | undefined => {
-    if (!isValue(coord)) return undefined;
-    const n = getValue(coord as MaybeValue<number>);
-    return Interval.interval(n, n);
-  };
-  const unionIv = (
-    acc: Interval.Interval | undefined,
-    iv: Interval.Interval | undefined
-  ) => (iv === undefined ? acc : acc ? Interval.unionAll(acc, iv) : iv);
-  // A point datum's measure; literals carry none. An interval's `[min,max]`
-  // endpoints unify their two measures the same way (mixed units are a conflict).
-  const coordMeasure = (
-    coord: PositionConstraint["x"] | undefined,
-    axis: 0 | 1
-  ): UnitRecord | undefined => {
-    if (coord === undefined) return undefined;
-    return isPositionInterval(coord)
-      ? joinUnits(valueUnits(coord[0]), valueUnits(coord[1]), true, {
-          axis,
-          where: "at the two ends of a position range",
-        })
-      : valueUnits(coord);
-  };
-  const coordInterval = (
-    coord: PositionConstraint["x"] | undefined
-  ): Interval.Interval | undefined =>
-    coord === undefined
-      ? undefined
-      : isPositionInterval(coord)
-        ? spanDatumInterval(coord)
-        : pointInterval(coord);
+  const axes = [newAxisDomain(), newAxisDomain()] as const;
   for (const c of constraints) {
     if (c.type !== "position") continue;
-    x = unionIv(x, coordInterval(c.x));
-    y = unionIv(y, coordInterval(c.y));
-    xMeasure = joinUnits(xMeasure, coordMeasure(c.x, 0), true, {
-      axis: 0,
-      where: "across position constraints",
-    });
-    yMeasure = joinUnits(yMeasure, coordMeasure(c.y, 1), true, {
-      axis: 1,
-      where: "across position constraints",
-    });
+    for (const axis of [0, 1] as const) {
+      const acc = axes[axis];
+      const point = axis === 0 ? c.x : c.y;
+      if (point !== undefined) {
+        foldCoordinate(acc, point, axis);
+        acc.cells = undefined;
+      }
+      const span = c.region?.spans[axis];
+      if (span !== undefined) {
+        foldCoordinate(acc, span, axis);
+        const cell = c.region!.cell;
+        if (cell instanceof Cell) acc.cells?.push([cell]);
+        else acc.cells = undefined;
+      }
+    }
   }
-  return { x, y, xMeasure, yMeasure };
+  const [x, y] = axes;
+  return {
+    x: x.domain,
+    y: y.domain,
+    xMeasure: x.measure,
+    yMeasure: y.measure,
+    xCells: x.cells && mergeCells(x.cells),
+    yCells: y.cells && mergeCells(y.cells),
+  };
+}
+
+/** What {@link collectPositionDomains} folds on one axis. */
+type AxisDomain = {
+  domain: Interval.Interval | undefined;
+  /** The units of the datums, with their calendar when they are times
+   *  ({@link UnitRecord}); literals carry none. */
+  measure: UnitRecord | undefined;
+  /** The cells the coordinates place on this axis, while every one so far
+   *  is a region's cell of a line placed along this axis alone; undefined
+   *  once a point, an interval, or a cell of the plane (a hexagon: no cell
+   *  of this axis alone) is seen. */
+  cells: (readonly Cell[])[] | undefined;
+};
+
+const newAxisDomain = (): AxisDomain => ({
+  domain: undefined,
+  measure: undefined,
+  cells: [],
+});
+
+/** Fold one coordinate into `acc`: an interval reads as its two edges, a
+ *  point as itself. Literal (pixel) coordinates carry no domain or units. An
+ *  interval's two endpoints join their units the same way as two
+ *  coordinates do (mixed units are a conflict). */
+function foldCoordinate(
+  acc: AxisDomain,
+  coord: PositionCoordinate,
+  axis: 0 | 1
+): void {
+  let iv: Interval.Interval | undefined;
+  let measure: UnitRecord | undefined;
+  if (isPositionInterval(coord)) {
+    iv = spanDatumInterval(coord);
+    measure = joinUnits(valueUnits(coord[0]), valueUnits(coord[1]), true, {
+      axis,
+      where: "at the two ends of a position range",
+    });
+  } else {
+    if (isValue(coord)) {
+      const n = getValue(coord as MaybeValue<number>);
+      iv = Interval.interval(n, n);
+    }
+    measure = valueUnits(coord);
+  }
+  if (iv !== undefined)
+    acc.domain = acc.domain ? Interval.unionAll(acc.domain, iv) : iv;
+  acc.measure = joinUnits(acc.measure, measure, true, {
+    axis,
+    where: "across position constraints",
+  });
 }
 
 /**

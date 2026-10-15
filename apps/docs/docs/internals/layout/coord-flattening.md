@@ -172,7 +172,8 @@ which the render entry maps over directly.
   children" is a **bake boundary**: it emits a single `DisplayObject` and renders its
   own subtree internally. These are the space-remappers (`coord`), the compositors
   (`over` / `atop` / `in` / `out` / `xor` / `mask`), and the cross-child self-drawers
-  (`connect` / `tween` / `arrow` / `enclose` / `box`), plus any label-bearing node. So `coord`
+  (`connect` / `tween` / `arrow` / `enclose` / `box`, and an axis's `axisSpan`, which
+  draws a divider between two `ref` stand-ins), plus any label-bearing node. So `coord`
   stays a boundary — `bake` never recurses _through_ a coordinate transform (which
   would compose a single global translate across a space remap); `coord` keeps doing
   its own coord-local `flattenLayout` inside. The bake is **boundary-recursive**. (The

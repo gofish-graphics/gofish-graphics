@@ -10,7 +10,7 @@
  * pass and writes each node's box once, so a subtree cannot be laid out again
  * with a different setting. The only way to compare candidates today is to run
  * the entire pipeline once per candidate, on a freshly built tree each time,
- * and keep the best result. `labelAngle: "auto"` (axes/autoLabelAngle.ts) is
+ * and keep the best result. `label.angle: "auto"` (axes/autoLabelAngle.ts) is
  * the first user.
  *
  * The later, compositional form is a node-local choice: each choice point lays

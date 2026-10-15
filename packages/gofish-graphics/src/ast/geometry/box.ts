@@ -43,3 +43,24 @@ export function boxOfDims(dims: Dimensions, nodeType = "node"): Box {
   const [y0, y1] = axisExtent(dims[1], 1, nodeType);
   return { min: [x0, y0], max: [x1, y1] };
 }
+
+/**
+ * A ring's axis-aligned extent, in one pass. (`Math.min(...ring.map(...))` reads
+ * nicely but allocates two arrays per axis and blows the argument limit on a
+ * detailed coastline.)
+ */
+export const ringExtent = (
+  ring: readonly (readonly [number, number])[]
+): { minX: number; maxX: number; minY: number; maxY: number } => {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of ring) {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return { minX, maxX, minY, maxY };
+};

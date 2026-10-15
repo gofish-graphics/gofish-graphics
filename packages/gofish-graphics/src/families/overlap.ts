@@ -4,7 +4,9 @@
  * `lib.ts` binds this module as `Overlap` (`Overlap.separate({ padding: 1 })`),
  * and `gofish-graphics/overlap` exports the same module, so
  * `import { separate } from "gofish-graphics/overlap"` reaches the same
- * function. A strategy is a plain object made by a function call,
+ * function. No strategy has a required option, so each is a value as it is,
+ * and calling it sets options: `Overlap.separate` is `Overlap.separate()`
+ * (#1133, `ast/strategyKind.ts`). A strategy is a plain object,
  * `{ kind, ...params }`, and that object is also its wire form, so it crosses
  * the Python bridge as IR. `kind` names the strategy. `sina()` and `jitter()`
  * are `noise()` with other params preset, so their objects have kind
@@ -13,6 +15,7 @@
  * reads it. The placement itself is in `ast/graphicalOperators/overlap.ts`.
  */
 import type { Frontend } from "gofish-ir";
+import { bareKind } from "../ast/strategyKind";
 
 /** Every built-in overlap strategy: the value of `scatter`'s `overlap`. */
 export type Overlap = Frontend.OverlapIR;
@@ -51,11 +54,13 @@ const given = <T extends object>(opts: T): Partial<T> =>
  *
  * @param padding Pixels kept between neighboring dots. Default 0.
  */
-export function separate(
-  opts: Omit<SeparateStrategy, "kind"> = {}
-): SeparateStrategy {
-  return { kind: "separate", ...given(opts) };
-}
+export const separate = bareKind(
+  "Overlap.separate",
+  (opts: Omit<SeparateStrategy, "kind"> = {}): SeparateStrategy => ({
+    kind: "separate",
+    ...given(opts),
+  })
+);
 
 /**
  * Noise. Each dot keeps its position on the data axis and gets an offset on
@@ -83,9 +88,13 @@ export function separate(
  * @param seed Seed for `"blue"` and `"uniform"`. Default 0, so a render is the
  *   same every time.
  */
-export function noise(opts: NoiseOptions = {}): NoiseStrategy {
-  return { kind: "noise", ...given(opts) };
-}
+export const noise = bareKind(
+  "Overlap.noise",
+  (opts: NoiseOptions = {}): NoiseStrategy => ({
+    kind: "noise",
+    ...given(opts),
+  })
+);
 
 /**
  * A sina plot: `noise()` with a bandwidth computed from the data by
@@ -94,20 +103,26 @@ export function noise(opts: NoiseOptions = {}): NoiseStrategy {
  * The bandwidth is computed per scatter, so each group of a `spread` gets its
  * own. Any option overrides the default.
  */
-export function sina(opts: NoiseOptions = {}): NoiseStrategy {
-  return { kind: "noise", smoothing: "silverman", ...given(opts) };
-}
+export const sina = bareKind(
+  "Overlap.sina",
+  (opts: NoiseOptions = {}): NoiseStrategy => ({
+    kind: "noise",
+    smoothing: "silverman",
+    ...given(opts),
+  })
+);
 
 /**
  * Classic jitter: `noise()` with uniform random offsets in a flat band
  * (`randomness: "uniform"`, `smoothing: Infinity`). Any option overrides the
  * default.
  */
-export function jitter(opts: NoiseOptions = {}): NoiseStrategy {
-  return {
+export const jitter = bareKind(
+  "Overlap.jitter",
+  (opts: NoiseOptions = {}): NoiseStrategy => ({
     kind: "noise",
     randomness: "uniform",
     smoothing: Infinity,
     ...given(opts),
-  };
-}
+  })
+);

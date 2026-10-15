@@ -19,9 +19,9 @@ import type { ColumnType, HasCalendar, HasUnit } from "./schema";
  * A quantity whose unit is declared is that unit, a concrete term: two
  * charts that each declare their own "value" column, one USD and one EUR,
  * share nothing. Only an UNKNOWN unit is a variable, named by its QUANTITY:
- * the column's declared quantity (`HasQuantity`, from `Schema.quantity(name)`
- * or, for a column a transform derived from another such as `bin()`'s edges,
- * the source column's), else the column's name. The same name is the same
+ * the column's declared quantity (`HasQuantity`, from `Schema.quantity(name)`),
+ * else the column's name. The cells of `field(x).bin(p)` are amounts of
+ * `x`'s quantity, in `x`'s unit. The same name is the same
  * variable across the whole figure, and a binding holds for the whole
  * render: a column bound to USD on one axis is USD everywhere, so meeting
  * "count" on another axis is a clash. A declared unit and an unknown meet
@@ -63,11 +63,8 @@ export const INSTANT: HasUnit = { unit: "instant" };
 /** The unit of a difference of two instants: a duration. */
 export const DURATION: HasUnit = { unit: "duration" };
 
-/** The unit `.count()`, `.distinct()` and `bin()`'s `count` declare. */
+/** The unit `.count()` and `.distinct()` declare. */
 export const COUNT: HasUnit = { unit: "count" };
-
-/** The column type of a count column (`bin()`'s `count`). */
-export const COUNT_COLUMN: ColumnType = { HasUnit: COUNT };
 
 /** The {@link Quantity} of column `column`, whose type is `type`. */
 export const columnQuantity = (

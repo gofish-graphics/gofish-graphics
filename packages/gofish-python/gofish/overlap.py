@@ -3,11 +3,14 @@
 """
 The ``Overlap`` family. How `scatter` keeps its children clear of each other on the axis no field places: the value of its `overlap` option. Both kinds grow from the `alignment` line and move only that free axis.
 
-The package binds this module as ``Overlap``, so ``Overlap.separate()`` and
-``from gofish.overlap import separate`` reach the same function. A strategy is a
+The package binds this module as ``Overlap``, so ``Overlap.separate`` and
+``from gofish.overlap import separate`` reach the same member. A strategy is a
 plain dict, ``{"kind": ..., **params}``, with snake_case param keys; the option it
 is passed to renames them to the camelCase wire keys. Mirrors JS
 ``gofish-graphics/overlap``.
+
+A kind with no required option is a value as it is, and calling it sets
+options: ``Overlap.separate`` is ``Overlap.separate()`` (#1133).
 """
 
 from __future__ import annotations
@@ -15,9 +18,12 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, Literal, Optional
 
+from ._strategy import bare_kind
+
 __all__ = ["separate", "noise", "sina", "jitter"]
 
 
+@bare_kind("Overlap")
 def separate(*, padding: Optional[float] = None) -> Dict[str, Any]:
     """Keep dots apart: each dot keeps its position on the data axis and moves along the free axis to the free spot nearest the alignment line, in data order, so no two dots overlap. The result is a beeswarm (Observable Plot's `dodge`).
 
@@ -40,6 +46,7 @@ def separate(*, padding: Optional[float] = None) -> Dict[str, Any]:
     return out
 
 
+@bare_kind("Overlap")
 def noise(*, randomness: Optional[str] = None, smoothing: Optional[float | str] = None, padding: Optional[float] = None, seed: Optional[float] = None) -> Dict[str, Any]:
     """Spread the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. Dots may still touch.
 
@@ -89,6 +96,7 @@ def noise(*, randomness: Optional[str] = None, smoothing: Optional[float | str] 
     return out
 
 
+@bare_kind("Overlap")
 def sina(*, randomness: Optional[str] = None, smoothing: Optional[float | str] = None, padding: Optional[float] = None, seed: Optional[float] = None) -> Dict[str, Any]:
     """A sina plot: noise with smoothing "silverman", a bandwidth computed per scatter from the data (ggforce's `geom_sina`). The outline is the curve a violin plot draws. Any option overrides the preset.
 
@@ -138,6 +146,7 @@ def sina(*, randomness: Optional[str] = None, smoothing: Optional[float | str] =
     return out
 
 
+@bare_kind("Overlap")
 def jitter(*, randomness: Optional[str] = None, smoothing: Optional[float | str] = None, padding: Optional[float] = None, seed: Optional[float] = None) -> Dict[str, Any]:
     """Classic jitter: noise with randomness "uniform" and smoothing Infinity, so the dots get uniform random offsets in a flat band. Any option overrides the preset.
 

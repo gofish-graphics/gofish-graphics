@@ -26,7 +26,8 @@
  * Output:
  *   tests/tmp/capture-diff/head/<path>.html   normalized DOM at HEAD
  *   tests/tmp/capture-diff/base/<path>.html   normalized DOM at <base-ref>
- *   tests/tmp/capture-diff/report.html        side-by-side DOM diff (changed stories)
+ *   tests/tmp/capture-diff/report.html        side-by-side DOM diff and the
+ *                                             highlighted spec (changed stories)
  *
  * Exit code 0 = nothing moved, 1 = at least one story changed/added/removed
  * (so it doubles as a pass/fail gate in an inner loop).
@@ -41,6 +42,12 @@ import {
 } from "./capture-core.js";
 import { formatDomDiff, escapeHtml } from "./diff-utils.js";
 import { git } from "./snapshot-branch.js";
+import {
+  loadSpecsByPath,
+  createCodeHighlighter,
+  specHtml,
+  SPEC_CSS,
+} from "./story-specs.js";
 
 const TESTS_DIR = join(import.meta.dirname, "..");
 const OUT_DIR = join(TESTS_DIR, "tmp/capture-diff");
@@ -65,7 +72,9 @@ interface Change {
 function generateReport(
   baseRef: string,
   filter: string | undefined,
-  changes: Change[]
+  changes: Change[],
+  /** path → highlighted spec fragment (HEAD's code; none for removed) */
+  specs: Map<string, string>
 ): string {
   const kindColor: Record<Change["kind"], string> = {
     changed: "#e74c3c",
@@ -97,7 +106,17 @@ function generateReport(
         <div style="max-height:600px;overflow:auto;border-top:1px solid #e0e0e0;">
           ${body}
         </div>
-      </details>
+      </details>${
+        specs.has(c.path)
+          ? `
+      <details style="padding:0;border-top:1px solid #e0e0e0;">
+        <summary style="cursor:pointer;font-weight:bold;font-size:13px;padding:8px 16px;">Spec (HEAD)</summary>
+        <div style="max-height:600px;overflow:auto;border-top:1px solid #e0e0e0;">
+          ${specs.get(c.path)}
+        </div>
+      </details>`
+          : ""
+      }
     </div>`;
     })
     .join("\n");
@@ -111,6 +130,7 @@ function generateReport(
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1200px; margin: 0 auto; padding: 24px; color: #333; }
     h1 { border-bottom: 2px solid #333; padding-bottom: 8px; }
+    ${SPEC_CSS}
   </style>
 </head>
 <body>
@@ -236,7 +256,21 @@ async function main() {
       console.log(`    ! [${f.ref}] ${f.path}: ${f.error}`);
   }
 
-  writeFileSync(REPORT_PATH, generateReport(baseRef, filter, changes), "utf-8");
+  // Each moved story's spec at HEAD (a removed story has none).
+  const specs = new Map<string, string>();
+  if (changes.length) {
+    const specsByPath = await loadSpecsByPath();
+    const highlight = await createCodeHighlighter();
+    for (const c of changes) {
+      const spec = c.kind === "removed" ? undefined : specsByPath.get(c.path);
+      if (spec) specs.set(c.path, specHtml(spec, highlight));
+    }
+  }
+  writeFileSync(
+    REPORT_PATH,
+    generateReport(baseRef, filter, changes, specs),
+    "utf-8"
+  );
   if (changes.length) {
     console.log(`\n  DOM written to ${HEAD_DIR} and ${BASE_DIR}`);
     console.log(`  Diff report: ${REPORT_PATH}`);

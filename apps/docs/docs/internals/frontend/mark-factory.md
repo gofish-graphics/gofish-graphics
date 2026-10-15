@@ -97,9 +97,18 @@ own; `createMark` could grow a `"pos"` channel the same way if a future shape
 needs one.
 
 `inferSize` and `inferPos` are two instantiations of one numeric-inference
-factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumBy`
-vs `meanBy`, imported through lodash's per-helper entrypoints so this path is
-safe under native ESM). Both take an optional third argument, the accessor's
+factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumOf`
+vs `meanOf`, `fieldExpr.ts`). Both skip a missing value (null or undefined,
+`isMissing`, the rule `dropNulls` and the schema's classes use; NaN is a
+number). A mean divides by how many values there are, and over none it is
+undefined. A sum over no rows is 0, and over rows whose values are all
+missing it is undefined, as in SQL. An aggregation with no value makes the
+channel undefined, so a position read off a group with no rows has no
+value. A pipeline's fold with no value (`field(x).mean()` over no rows) is
+the singleton `[undefined]`, which the channel's own aggregation keeps (the
+sum of `[undefined]` is undefined), so a size read as a mean of no rows has
+no value either, while a size read as a sum of no rows is 0. A `count`
+counts rows, missing values included. Both take an optional third argument, the accessor's
 resolved column (`ColumnInfo`, from `resolveColumn(data, accessor)`): its
 `Quantity` and its type in the chart's `schema`. A string/`field()` accessor's
 produced value is tagged with its quantity so the underlying-space
@@ -107,9 +116,9 @@ layer can unify units and title axes (see
 [Underlying Space](/internals/core/underlying-space)). When the caller doesn't
 pass a column (e.g. `createMark`'s size channel), the inferer resolves it
 locally from `data`. The quantity comes from `resolveColumn`: named by the
-column's declared quantity (`HasQuantity`, which `bin()` also writes for its
-edges), else by the column, in the column's declared unit (`HasUnit`, or an
-instant for a time column), else in an unknown unit.
+column's declared quantity (`HasQuantity`), else by the column, in the
+column's declared unit (`HasUnit`, or an instant for a time column), else in
+an unknown unit.
 `createOperator` hoists `resolveColumn` to once per channel and passes the
 result down, since the accessor and what the data carries are loop-invariant
 across split entries. A value read from a column with a type also records
@@ -162,6 +171,24 @@ Walking `withGoFish.ts:431-477`:
    it is.
 2. **Apply each channel.** For each prop in the user's `markOpts`:
    - `Value`-wrapped (`v(...)`) → pass through unchanged. (Already final.)
+   - **No value means not drawn**, for every data channel, in one place: a
+     mark given a channel whose value it reads from its rows (a size, a
+     position, a color, a text) that has no value over them (the mean of no
+     rows, a field of no first row) is **not drawn**. The factory makes its
+     whole subtree emit nothing (`INTERNAL_emitNothing`, over
+     `breadthFirst`), and it keeps its place in the layout, so a heatmap's
+     empty day is a blank square in its slot and a bar whose height is the
+     mean of no rows leaves its slot empty. This is Vega-Lite's default
+     (`invalid: "filter"`). A sum or a count of no rows is 0, a value, so it
+     draws. Whether a channel has no value is one rule per kind,
+     `hasNoValue` in `channels.ts`: a channel of one value has none when it
+     is undefined, and a `dims` bag has none when any slot it was given has
+     none, since each slot is a channel of its own, so
+     `rect({ dims: { x: field("v").mean() } })` is not drawn where
+     `rect({ x: field("v").mean() })` is not. A scatter follows the same rule for a child whose placement has
+     no value, with the one difference the domain forces: that child has no
+     place to keep, so the scatter leaves it out of the layout too
+     (`placedChildren` in `scatter.tsx`).
    - `"size"` channel → `inferSize(markValue, data)`. If `markValue` is a
      string, sum that field across `data`; if a number, use as-is.
    - `"color"` channel → `inferColor(markValue, data)`. If the string matches
@@ -169,7 +196,13 @@ Walking `withGoFish.ts:431-477`:
      picks it up; otherwise treat the string as a literal color. A value
      read from a named field (a field-name string or `field(...)`) records
      that field as its provenance, `DatumValueImpl.field`, so the color
-     scale knows which field it maps; a function accessor records none. It
+     scale knows which field it maps; a function accessor records none. A
+     `field(...)` with an aggregate (`field("a").count()`) is the
+     exception: it folds all of `data` (`evalFieldValues`), as a size
+     channel does, and records no field, because the value is the fold's.
+     A fold with no value (the mean of no rows) gives no color. A text
+     (`"raw"`) channel folds the same way, and `DeriveMarkProps` types
+     both kinds to accept a `FieldExpr`, as it does a size. It
      also records the field's type from the chart's `schema`
      (`DatumValueImpl.fieldType`), read off `data`, so a color scale over an
      ordered column lists its domain in that order. (A `derive` types its
@@ -410,7 +443,7 @@ Today's channels are `"size"` and `"color"`. To add (say) `"angle"`:
 
 1. Add `"angle"` to the `ChannelType` union in `channels.ts`.
 2. If a numeric aggregation fits, instantiate the existing factory —
-   `export const inferAngle = inferNumeric(meanBy)` (or whatever aggregation
+   `export const inferAngle = inferNumeric(meanOf)` (or whatever aggregation
    makes sense) — and measure tagging comes along for free. Otherwise write
    `inferAngle(accessor, data, measure?)` next to it with the same signature.
 3. Extend `DeriveMarkProps`'s conditional with the input type for `"angle"`.
@@ -621,15 +654,16 @@ Either way, once the path tier index is settled, the path tier's own `by`
 orders the path and never splits; every _other_ flow tier's `by` becomes one
 term of a composite split key (`ChartBuilder`'s `computeDefaultSplit` lists
 the tiers, and `splitByTiers` in datumProjection.ts reads them off the bag).
-Each tier keys a ref as its operator keyed the ref's rows: a field `by`
-projects through `GoFishRef.datum`, a key function reads each row, and a
-position key (`chunk(n)`, or a key function's second argument) reads the
-row's position within the tier's parent group, the group every outer tier,
-the path tier included, put it in. That is why the path tier stays in the
-list: a `chunk(5)` under a spread by category counts five rows within each
-category, as the operator did, not along the whole bag. The group's key is
-handed to the connector (`produce`'s `key`), so `time.transition()` names a
-run by it without reading a key back off a row.
+A ref's term for a tier is the key that tier's split gave the group the
+ref's mark is in: the `key` of the mark's ancestor that the split made,
+which `createOperator` stamps with the split's `by` (`GoFishNode.keyBy`).
+So string/field/function `by` forms key a ref exactly as the real operator
+keyed its group, a position key (`chunk(n)`, or a key function's second
+argument) is the position the operator read within the tier's parent group,
+and a binned tier keys it by the cell over the domain the split ran over,
+which the mark's own row does not carry. The group's key is handed to the
+connector (`produce`'s `key`), so `time.transition()` names a run by it
+without reading a key back off a row.
 Each operator declares how it arranges its groups (`createOperator`'s
 `arrangement` config, read back by `chartBuilder.ts`'s `classifyOperator`), so
 an operator that declares nothing simply takes no part in the rule. One

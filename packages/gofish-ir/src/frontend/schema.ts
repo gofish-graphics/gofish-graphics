@@ -176,7 +176,8 @@ export type OperatorIR =
   | TableOperator
   | LogOperator
   | TreemapOperator
-  | PackOperator;
+  | PackOperator
+  | PartitionOperator;
 
 /**
  * `derive(fn)` — opaque user transformation. Function bodies are not
@@ -381,8 +382,13 @@ export interface ScatterOperator
  *
  * `AxisOptions` per-dim is either a boolean (show/hide, infer title) or an
  * object: `title` (string for a custom title, `false` to suppress), `side`
- * (the frame edge), `labelAngle` (label rotation in degrees), and `rows` (the
- * label rows of a time axis, inner row first).
+ * (the frame edge), `label` (how its labels are drawn: `angle`, their
+ * rotation in degrees, and `align`, each level's labels centered or at the
+ * start of each run), `levels`
+ * (the axis's bands of labels by depth, nearest the plot first: `true`
+ * keeps one, `false` hides it, a Calendar value names its cells), and
+ * `divider` (whether each level draws dividers: one value, or one per
+ * depth).
  */
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions =
@@ -390,25 +396,31 @@ export type AxisOptions =
   | {
       title?: string | false;
       side?: "start" | "end";
-      labelAngle?: number | number[] | "auto";
-      rows?: CalendarPartitionIR[];
+      label?: AxisLabelOptions;
+      levels?: (boolean | CalendarPartitionIR)[];
+      divider?: boolean | boolean[];
     };
 
-/** A Calendar value's wire form (`Calendar.month.every(3)`): a calendar level
- *  at a step. `start` is the first day of a week, for weeks only. */
-export type CalendarPartitionIR = {
-  unit:
-    | "second"
-    | "minute"
-    | "hour"
-    | "day"
-    | "week"
-    | "month"
-    | "quarter"
-    | "year";
-  step?: number;
-  start?: "monday" | "sunday";
+/** How one axis's labels are drawn (`axes.x.label`): `angle` and `align`,
+ *  each one value for every level or an array per level, nearest the plot
+ *  first. */
+export type AxisLabelOptions = {
+  angle?: number | number[] | "auto";
+  align?: "start" | "center" | ("start" | "center" | true)[];
 };
+
+/** A Calendar value's wire form (`Calendar.month({ every: 3 })` is
+ *  `{ kind: "month", every: 3 }`): a calendar level, its `kind`, at a step,
+ *  `every`. Only a week and a weekday have a `start`, the first day of the
+ *  week, and a weekday has no `every`. The kinds of the `Calendar` family in
+ *  `STRATEGIES` (descriptors.ts). */
+export type CalendarPartitionIR =
+  | {
+      kind: "second" | "minute" | "hour" | "day" | "month" | "quarter" | "year";
+      every?: number;
+    }
+  | { kind: "weekday"; start?: "monday" | "sunday" }
+  | { kind: "week"; every?: number; start?: "monday" | "sunday" };
 
 export interface TableOperator
   extends BaseIRNode,
@@ -417,7 +429,11 @@ export interface TableOperator
   type: "table";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
-  by: { x: string; y: string };
+  /** The column and row keys, each what `SpreadOperator.by` takes. */
+  by: {
+    x: string | FieldAccessor | ChunkKeyIR;
+    y: string | FieldAccessor | ChunkKeyIR;
+  };
   spacing?: number | [number, number];
   numCols?: number;
 }
@@ -491,6 +507,34 @@ export interface PackOperator
   by?: string | FieldAccessor | ChunkKeyIR;
 }
 
+/**
+ * `partition({ by, dir })` — divide the space along `dir` into the cells of
+ * a binned key (`field(x).bin(p)`), and give each group its cell on one
+ * continuous scale. `partition({ by: { x, y } })` divides both axes: it is
+ * the partition on x, then the partition on y. `partition({ by:
+ * struct({ x, y }).bin(cells) })` divides the plane into the polygon cells
+ * of a `Bin` strategy (hexagons, Voronoi cells). Operator-only: its children
+ * are the groups of its key. Mirrors JS's `PartitionOptions`
+ * (`graphicalOperators/partition.tsx`).
+ */
+export interface PartitionOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "partition";
+  /** See `SpreadOperator.label`. */
+  label?: LabelIR;
+  /** A key that has a region: a binned field accessor, one per axis, or a
+   *  binned struct of two fields. */
+  by: FieldAccessor | { x: FieldAccessor; y: FieldAccessor } | StructAccessor;
+  /** The axis to divide. Required with a single key; not allowed with a
+   *  key per axis. */
+  dir?: string;
+  /** Alignment on the other axis. Default `"baseline"`. */
+  alignment?: string;
+  axes?: AxesOptions;
+}
+
 // ---------------------------------------------------------------------------
 // Strategies
 // ---------------------------------------------------------------------------
@@ -547,6 +591,23 @@ export type CurveIR =
       straights?: boolean;
     };
 
+/** The cells a key is binned into, made by a call in the `Bin` family.
+ *  `Bin.step(size)` and `Bin.thresholds(countOrEdges)` bin one field
+ *  (`field(x).bin(...)`, {@link FieldBinIR}); `Bin.hex({ radius })` and
+ *  `Bin.voronoi({ seeds })` bin two together (`struct({ x, y }).bin(...)`,
+ *  {@link StructBinIR}). */
+export type BinIR = FieldBinIR | StructBinIR;
+
+/** The `Bin` kinds that cut the line of one field into intervals. */
+export type FieldBinIR =
+  | { kind: "step"; size: number }
+  | { kind: "thresholds"; thresholds: number | number[] };
+
+/** The `Bin` kinds that divide the plane of two fields into polygons. */
+export type StructBinIR =
+  | { kind: "hex"; radius: number | { x: number; y: number } }
+  | { kind: "voronoi"; seeds: Record<string, unknown>[] };
+
 // ---------------------------------------------------------------------------
 // Marks
 // ---------------------------------------------------------------------------
@@ -564,6 +625,7 @@ export type LeafMarkType =
   | "line"
   | "ribbon"
   | "blank"
+  | "region"
   | "ellipse"
   | "petal"
   | "text"
@@ -747,11 +809,32 @@ export type AxisDims = Record<string, ChannelValue | AxisInterval>;
  *  (`sort`/`reverse`/`bin`); a value (size/pos) channel slot accepts the
  *  aggregate ops (`sum`/`mean`/`count`/`distinct`) and, only on an
  *  operator's entry-flagged `size` channel, `normalize`. */
+/** A partition's wire form (`field(x).bin(p)`): a Calendar value, or a
+ *  `Bin` kind that bins one field (`Bin.step(size)`,
+ *  `Bin.thresholds(countOrEdges)`). One tagged union, told apart by `kind`
+ *  (`OPTION_TYPES.Partition`). */
+export type PartitionIR = CalendarPartitionIR | FieldBinIR;
+
 export interface FieldAccessor {
   type: "field";
   name: string;
   ops?: FieldOpIR[];
 }
+
+/** A key built from two fields at once, emitted by `struct({ x, y })`
+ *  (after polars' `pl.struct`), with the cells it is binned into. `fields`
+ *  names the column read on each axis. Its one op is `bin`, which takes a
+ *  `Bin` strategy; a struct is a key only once it is binned (a
+ *  `partition`'s `by`). Mirrors gofish-graphics' `StructExpr`
+ *  (`ast/structExpr.ts`). */
+export interface StructAccessor {
+  type: "struct";
+  fields: { x: string; y: string };
+  ops?: StructOpIR[];
+}
+
+/** One op in a `struct(...)` pipeline: the cells it is binned into. */
+export type StructOpIR = { op: "bin"; partition: StructBinIR };
 
 /** One op in a `field(...)` pipeline — mirrors gofish-graphics'
  *  `FieldOp` (`ast/fieldExpr.ts`) exactly. See {@link FieldAccessor}. */
@@ -766,7 +849,15 @@ export type FieldOpIR =
       values?: (string | number)[];
     }
   | { op: "reverse" }
-  | { op: "bin"; thresholds?: number | number[] }
+  | {
+      op: "bin";
+      /** The partition each value is binned into: a Calendar value,
+       *  `Bin.step(size)` or `Bin.thresholds(countOrEdges)`, or a product of
+       *  Calendar values (`[year, month]`: one cell where they meet).
+       *  Absent: about 10 cells. A second `bin` op splits the cells of the
+       *  one before it (`.bin(Calendar.year).bin(Calendar.month)`). */
+      partition?: PartitionIR | CalendarPartitionIR[];
+    }
   | { op: "dropNulls" }
   | { op: "normalize" }
   | { op: "sum" }
@@ -933,6 +1024,7 @@ export const OPERATOR_TYPES = [
   "log",
   "treemap",
   "pack",
+  "partition",
 ] as const;
 
 /** The set of leaf-mark type discriminators recognized in v0. */
@@ -942,6 +1034,7 @@ export const LEAF_MARK_TYPES: readonly LeafMarkType[] = [
   "line",
   "ribbon",
   "blank",
+  "region",
   "ellipse",
   "petal",
   "text",

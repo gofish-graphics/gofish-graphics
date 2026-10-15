@@ -127,27 +127,31 @@ export class KeyedDomains {
   }
 
   /** Record the axes drawn over each keyed domain, from the `axisDemand`
-   *  stamps `resolveAxes` left on the seated nodes. A continuous axis a node
-   *  draws is demand for the domain of its set's key: the domain is niced to
-   *  its ticks (#659). A category axis ticks at its keys and nices nothing.
+   *  stamps `resolveAxes` left on the seated nodes ({@link recordDemand}).
    *  The types are the ones the table was built from, so this reads only the
    *  stored seats. Nothing reads the demand before the axes are assigned,
    *  so `layout()` calls this once they are. */
   refreshDemand(): void {
     this.demand.clear();
-    for (const node of this.seats.keys()) {
-      for (const axis of [0, 1] as const) {
-        const ticks = node.axisDemand[axis];
-        const space = node._underlyingSpace?.[axis];
-        if (ticks === undefined || space === undefined || !isCONTINUOUS(space))
-          continue;
-        const key = this.keyOf(node, axis, space, true)!;
-        KeyedDomains.entry(this.demand, key.spaceRoot)[axis].set(
-          key.key,
-          ticks
-        );
-      }
-    }
+    for (const node of this.seats.keys())
+      for (const axis of [0, 1] as const) this.recordDemand(node, axis);
+  }
+
+  /** Record the axis `node` draws on `axis` (its `axisDemand` stamp) as
+   *  demand for the domain of its set's key: a continuous axis's domain is
+   *  niced to its ticks (#659). A category axis ticks at its keys and nices
+   *  nothing. Called for every seated node once the axes are assigned
+   *  ({@link refreshDemand}), and again by a time axis when its elaboration
+   *  stamps its rows, which depend on the levels below it (#1059): that is
+   *  before any solve reads the demand. */
+  recordDemand(node: KeyedNode, axis: 0 | 1): void {
+    const ticks = node.axisDemand[axis];
+    const space = node._underlyingSpace?.[axis];
+    if (ticks === undefined || space === undefined || !isCONTINUOUS(space))
+      return;
+    const key = this.keyOf(node, axis, space, true);
+    if (key === undefined) return;
+    KeyedDomains.entry(this.demand, key.spaceRoot)[axis].set(key.key, ticks);
   }
 
   private walk(node: KeyedNode, seats: [Seat, Seat]): void {

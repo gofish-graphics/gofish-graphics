@@ -108,7 +108,13 @@ and the y title is simply rotated `-90°`.
 
 `toPixel` is a translate, so a straight path stays straight: a shape with a curved
 path maps each of its control points through `toPixel` and re-serializes
-(`pathToPixelSVG` in `lowerHelpers.ts`), with no resampling.
+(`pathToPixelSVG` in `lowerHelpers.ts`), with no resampling. `toPixel` never
+resamples. A coordinate transform does: a closed ring of layout points (a
+`polygon`, or a `region` with an outline) is lowered by `ringItem`
+(`lowerHelpers.ts`), which draws the ring straight under a linear coordinate space
+and, under any other, maps it through the space with adaptive resampling
+(`transformPath(..., { resample: true })`), so a straight edge in data space draws as
+the curve the space makes of it. Only then does it go through `toPixel`.
 
 ## The lower pass
 
@@ -137,8 +143,11 @@ labels), so by the time `bake`/`INTERNAL_lower` see the tree, a label is just an
 ordinary sibling shape with its own `_lower` fragment.
 
 The display list is the **concatenation of every node's fragment**. A node with no
-`_lower` throws — the migration is complete, so every shipping shape/operator supplies
-one.
+`_lower` draws only its children, which `bake` lowers directly, so it reaches
+`INTERNAL_lower` only when it has none: then it draws nothing (an operator over a
+group with no rows, such as an empty cell's `pack` or `treemap`). A node with
+children and no `_lower` throws: the migration is complete, so every shipping shape
+and every bake boundary supplies one.
 
 A shape's `_lower` switches on the per-axis **`embedded`** flag to decide
 point (0 embedded axes — drawn at pixel size at the transformed center) /
@@ -357,11 +366,11 @@ The mechanism is: `data-gf-id` is the hit-test hook; the side table + JSX
 attribute calls are the paint reactivity; the runtime carries neither — it owns
 scheduling, event dispatch, and hit-testing only.
 
-## Laying out more than once: `labelAngle: "auto"`
+## Laying out more than once: `label.angle: "auto"`
 
 Every render path reaches layout through `runLayout`, which normally runs the
 pipeline once (`layoutOnce`). The one exception is an axis with
-`labelAngle: "auto"`: `runLayout` then hands off to
+`label.angle: "auto"`: `runLayout` then hands off to
 `layoutWithAutoLabelAngles` (`axes/autoLabelAngle.ts`), which builds and lays out
 the chart once per candidate angle, scores the finished label geometry per label
 row, and returns the winning `LayoutData` (laying out once more when the rows
@@ -370,7 +379,7 @@ legend shows) lets it warn when a hidden category row is left unnamed. Paint
 then proceeds from that data
 exactly as above. Because layout writes each node's box once, each run needs a
 fresh tree, which comes from the root's `rebuild` (set by the surface that built
-it). See [Axes](/internals/frontend/axes#automatic-label-angle-labelangle-auto).
+it). See [Axes](/internals/frontend/axes#automatic-label-angle-label-angle-auto).
 
 ## `toDisplayList`: stopping at the IR
 

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, spread, stack, rect, ribbon, field } from "../../src/lib";
+import { chart, spread, stack, rect, ribbon, field, Bin } from "../../src/lib";
 
 const meta: Meta = {
   title: "Tests/Field Expression Pipeline",
@@ -201,11 +201,46 @@ export const BinnedRibbonHistogram: StoryObj<Args> = {
     // per bin, and the connector bands the resulting bin-tops into an area
     // histogram. The anchors are points (no `w`): a ribbon spans the gap
     // between consecutive anchors' facing edges, so the spacing is what
-    // gives the band its width. Bins with zero rows are dropped rather than
-    // rendered as zero-height gaps, so the band visibly skips them — see #763.
+    // gives the band its width. A bin with no rows is kept, with a count of
+    // 0, so the band returns to the baseline there (#763).
     chart(binData)
       .flow(spread({ by: field("age").bin(), dir: "x", spacing: 40 }))
       .mark(ribbon({ h: field("age").count(), fill: "steelblue" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+// Two groups whose ages cover different ranges: group A from 0 to 40, group B
+// from 30 to 99.
+const groupedAges = [
+  ...Array.from({ length: 30 }, (_, i) => ({ group: "A", age: (i * 17) % 41 })),
+  ...Array.from({ length: 30 }, (_, i) => ({
+    group: "B",
+    age: 30 + ((i * 23) % 70),
+  })),
+];
+
+export const SharedBinsAcrossGroups: StoryObj<Args> = {
+  args: { w: 500, h: 300 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    // One histogram per group, binned by a count-based partition. The cells
+    // come from the domain of `age` (0 to 99), which is part of the column's
+    // type: the chart's data is typed once, and each group's rows keep that
+    // type, as a filter's do. So both rows of bars have the same ten bins in
+    // the same order, with the bins a group has no rows in kept as empty
+    // slots (#763), and neither group reads the other's rows.
+    chart(groupedAges, { axes: true })
+      .flow(
+        spread({ by: "group", dir: "y", spacing: 20 }),
+        spread({
+          by: field("age").bin(Bin.thresholds(10)),
+          dir: "x",
+          spacing: 2,
+        })
+      )
+      .mark(rect({ w: 30, h: field("age").count() }))
       .render(container, { w: args.w, h: args.h });
     return container;
   },

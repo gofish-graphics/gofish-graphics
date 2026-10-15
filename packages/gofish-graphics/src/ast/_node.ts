@@ -9,6 +9,7 @@
 // Type-only (erased) so no runtime cycle with solver/scopes.ts, which imports
 // RenderSession from here.
 import type { ScopeRegistry } from "./solver/scopes";
+import type { SplitBy } from "./datumProjection";
 import {
   Anchor,
   Dimensions,
@@ -79,7 +80,8 @@ import { impliedExtents, type Extent } from "./extent";
 import { toJSON } from "../util/interval";
 import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
-import type { AxesOptions, ScaleContext } from "./gofish";
+import type { AxesOptions, AxisOptions, ScaleContext } from "./gofish";
+import type { LabelRow } from "./axes/elaborate";
 import type { ChromeRing } from "./elaborationUtils";
 import type { TokenContext } from "./tokenContext";
 import {
@@ -120,11 +122,14 @@ import {
   type LabelSpec,
 } from "./labels/labelPlacement";
 import { packEnclose } from "d3-hierarchy";
+import type { KeyCell } from "./cells";
 import {
   boxOfDims,
   enclosingCircle,
+  reflectRegionY,
   translateCircle,
   type Geometry,
+  type Region,
 } from "./geometry";
 
 export type RenderSession = {
@@ -240,11 +245,18 @@ export function placeUnplacedChild(
 // applied; `transform.translate` is its offset in the parent's frame. `dims`
 // composes the two exactly once (`combineDims`), so a layout must never fold
 // its translate into `intrinsicDims.min` too (#755).
+//
+// `region` is the space the parent gives the node, when it gives one (#1059,
+// `geometry/region.ts`), in the node's axis order and measured from the
+// parent's origin, as `translate` is. A layout may place itself by it (a
+// `region` mark fills it, a `layer` that hands regions on passes it to its
+// children); one that does not is centered in it by `GoFishNode.layout`.
 export type Layout = (
   size: Size,
   scales: Size<AxisScale | undefined>,
   children: GoFishAST[],
-  node: GoFishNode
+  node: GoFishNode,
+  region?: Region
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
 
 /** Map a layout pixel (y-down, layout origin) to a final absolute canvas
@@ -414,6 +426,19 @@ const reportConflict = (type: string, dir: 0 | 1, c: BBoxConflict): void => {
  *  auto-claims on that dim. Ordinal owners record `"o:<keys>"` instead. */
 const AXIS_CLAIM_OPAQUE = "continuous";
 
+/** An operator's `axes` option as the {@link GoFishNode._axisOverride} it
+ *  sets: one boolean for both axes, or per axis, where `false` hides the
+ *  axis and any other option shows it. */
+export const axisOverrideOf = (
+  axes: boolean | { x?: AxisOptions; y?: AxisOptions }
+): { x?: boolean; y?: boolean } => {
+  const show = (opt: AxisOptions | undefined): boolean | undefined =>
+    opt === undefined ? undefined : opt !== false;
+  return typeof axes === "boolean"
+    ? { x: axes, y: axes }
+    : { x: show(axes.x), y: show(axes.y) };
+};
+
 export class GoFishNode {
   public readonly uid: string;
   private static uidCounter = 0;
@@ -426,6 +451,16 @@ export class GoFishNode {
    *  spread that renders no axis. Set in `createOperator`; read when folding the
    *  distribute ordinal (see `compose` / `distributeSpaceFold`). */
   public _syntheticKey?: boolean;
+  /** The cell the node's `key` names, when the operator grouped by a binned
+   *  key (`field(x).bin(p)`): the key is the cell's id. Set in
+   *  `createOperator`; read when folding the distribute ordinal, which then
+   *  holds cells (`ORDINAL_TYPE.cells`, see `distributeSpaceFold`). */
+  public keyCell?: KeyCell;
+  /** The `by` the operator that made this node grouped by, when it grouped
+   *  by one: the node's `key` is its group's key under it. Set in
+   *  `createOperator`; a fused relational mark's default split reads it, to
+   *  key a mark by the groups it is in (`computeDefaultBy`). */
+  public keyBy?: SplitBy;
   public _name?: string | Token;
   public _isScope: boolean = false;
   /**
@@ -477,7 +512,8 @@ export class GoFishNode {
   private _layout: Layout;
   /** Per-primitive IR lowering (see {@link Lower}) — the node's sole draw
    *  description. Absent on operators that never lower themselves (their
-   *  children are lowered directly); lowering such a node throws. */
+   *  children are lowered directly); lowering such a node draws nothing
+   *  when it has no children, and throws otherwise. */
   private _lower?: Lower;
   /** The lowering the node was built with, kept when
    *  {@link INTERNAL_emitNothing} silences it, so what it lends
@@ -580,21 +616,16 @@ export class GoFishNode {
   public _ordinalKeyMap?: Record<string, GoFishNode>;
   /** Set on a tick or category label `Text` made by axis elaboration: the
    *  label row it belongs to — which axis (`dim`), whether it labels
-   *  categories or continuous ticks (`kind`), and which ordinal tier
-   *  (0 = innermost; always 0 on a continuous axis). `labelAngle: "auto"` reads
-   *  these tags after layout to score label collisions per row across the
-   *  whole chart (see axes/autoLabelAngle.ts). */
-  public axisLabel?: {
-    dim: 0 | 1;
-    kind: "ordinal" | "continuous";
-    tier: number;
-    /** The data field a category row labels (its ordinal space's measure). */
-    field?: string;
-  };
+   *  categories or continuous ticks (`kind`), and its level's depth among
+   *  the levels of the dim (0 = nearest the plot) — and, for a category
+   *  row, the data field it labels (its ordinal space's measure).
+   *  `label.angle: "auto"` reads these tags after layout to score label
+   *  collisions per row across the whole chart (see axes/autoLabelAngle.ts). */
+  public axisLabel?: LabelRow & { field?: string };
   /** Set on a ROOT node by the surface that built it (a chart builder or a
    *  component thunk): builds a fresh, unlaid-out copy of the same chart.
    *  Layout writes each node's box once, so a choice that must lay the chart
-   *  out once per candidate (`labelAngle: "auto"`) needs a new tree for each
+   *  out once per candidate (`label.angle: "auto"`) needs a new tree for each
    *  run (see `runLayout` in gofish.tsx). A node built by hand has none. */
   public rebuild?: () => Promise<GoFishNode>;
   /**
@@ -1366,13 +1397,27 @@ export class GoFishNode {
    * `orientTransform`), and the node is handed back to its parent as a view in
    * the PARENT's axis order (`orientView`). The y scale is reflected on the
    * way in when the two directions differ (`orientScales`).
+   *
+   * `region` is the space the parent gives the node (#1059,
+   * `geometry/region.ts`), in the PARENT's axis order. The node's own layout
+   * reads it in its own order. On each axis where the region has a span and
+   * the node's layout did not place itself, the node is centered in the span:
+   * a node with no size of its own there was laid out in the span's length
+   * (the size proposal), so it fills the span, and any other node keeps its
+   * size and sits in the middle.
    */
-  public layout(size: Size, scales: Size<AxisScale | undefined>): Placeable {
+  public layout(
+    size: Size,
+    scales: Size<AxisScale | undefined>,
+    region?: Region
+  ): Placeable {
     // Layout re-joins a layer's position measures (`collectPositionDomains`),
     // so it reads the type walk's union-find of units, whose bindings it
     // must see. The outermost call installs it, as the walk's root does.
     if (!hasUnits()) {
-      return withUnits(this.walkUnits(), () => this.layout(size, scales));
+      return withUnits(this.walkUnits(), () =>
+        this.layout(size, scales, region)
+      );
     }
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
@@ -1380,7 +1425,10 @@ export class GoFishNode {
       size,
       orientScales(scales, direction, parentDirection),
       this.children,
-      this
+      this,
+      region === undefined || direction === parentDirection
+        ? region
+        : reflectRegionY(region)
     );
 
     this.intrinsicDims = orientDims(elaborateDims(intrinsicDims), direction);
@@ -1408,7 +1456,12 @@ export class GoFishNode {
       // `place()` short-circuits on the solved ledger, not on the translate.
       this._clearTranslateIfSolved(dir);
     }
-    return orientView(this, parentDirection);
+    const view = orientView(this, parentDirection);
+    region?.spans.forEach((span, dir) => {
+      if (span === undefined || view.dims[dir].min !== undefined) return;
+      view.place(dir === 0 ? "x" : "y", (span[0] + span[1]) / 2, "center");
+    });
+    return view;
   }
 
   /**
@@ -1462,8 +1515,8 @@ export class GoFishNode {
   /** The node's parent-frame offset (`transform.translate`) as a DERIVED VIEW of
    *  the ledger — `ledger.min − localMin` on a fully solved axis, else the written
    *  `transform.translate` (the unplaced/under-determined fallback). Uses the
-   *  CURRENT `intrinsicDims.min` (a rank-2 `setExtent` resets it to 0), never a
-   *  stale local box. */
+   *  CURRENT `intrinsicDims.min` (a rank-2 `setExtent` keeps it and sets the
+   *  size), never a stale local box. */
   private _projectTranslate(dir: Direction): number | undefined {
     const ledger = this._bbox?.[dir];
     if (!ledger?.solved) return this.transform?.translate?.[dir];
@@ -1561,8 +1614,9 @@ export class GoFishNode {
    * Write a node's per-axis extent from OWNED bbox keys (min/max/center/size)
    * — the bbox-backed primitive that `span` and an authoritative `position` pin
    * share. Two or more owned keys DETERMINE the box (size included — the
-   * size-setting case, e.g. span's two edges), so the local box is reset to
-   * `[0, size]` and the translate to the absolute min. A single owned key is a
+   * size-setting case, e.g. span's two edges): the local box keeps its min and
+   * takes the size, and the translate is the absolute min less that local
+   * min. A single owned key is a
    * position pin: the size comes from the node's own layout (the second
    * equation), the local box is left intact, and only the translate moves — so
    * the pin OVERRIDES a self-placed translate, which the write-once `place()`
@@ -1571,8 +1625,8 @@ export class GoFishNode {
    *
    * The rank-2 solve writes through the PERSISTENT per-axis ledger
    * ({@link _bbox}) so it mirrors the node's authoritative geometry: a
-   * determining constraint resets the axis (overriding the self-layout seed),
-   * matching the local-frame reset below. Cross-call over-determination
+   * determining constraint resets the axis's ledger (overriding the
+   * self-layout seed). Cross-call over-determination
    * detection (two constraints fighting over one axis) waits on the authority
    * model — a self-layout default vs a hard constraint pin.
    */
@@ -1604,9 +1658,8 @@ export class GoFishNode {
 
     // Rank-2: two+ owned keys DETERMINE the box (size included). This is an
     // overriding determination — it discards whatever the node's own layout seed
-    // (or an earlier pin) recorded for this axis, exactly as it resets the local
-    // frame to [0, size] at the absolute min. So the persistent ledger is RESET
-    // to hold just these keys — and is now the SOLE record of this axis's
+    // (or an earlier pin) recorded for this axis. So the persistent ledger is
+    // RESET to hold just these keys — and is now the SOLE record of this axis's
     // position.
     this._bbox ??= [undefined, undefined];
     const bbox = (this._bbox[dir] = new BBox());
@@ -1618,9 +1671,14 @@ export class GoFishNode {
 
     if (!this.intrinsicDims) this.intrinsicDims = [];
     // Store only the local box (min, size); the `dims` getter derives center/max.
+    // The local min stays where the node's own layout put it: a container's
+    // children are placed in its local frame, so moving that frame's min to 0
+    // would draw them off the box by the old min (a spread pinned across a
+    // cell on an upward y drew its bars one cell away). The translate is
+    // read as `absMin − localMin` either way.
     this.intrinsicDims[dir] = {
       ...(this.intrinsicDims[dir] ?? {}),
-      min: 0,
+      min: this.intrinsicDims[dir]?.min ?? 0,
       size,
     };
     this._geometry = undefined;
@@ -1863,6 +1921,10 @@ export class GoFishNode {
     // `flattenLayout`) so descendants land in absolute coordinates before
     // `toPixel`. Pre-recursed, parent-relative child items would be mispositioned.
     if (!this._lower) {
+      // A node with no lowering of its own draws only its children (the bake
+      // lowers them directly), so with no children it draws nothing: an
+      // operator over a group with no rows, such as an empty cell's.
+      if (this.children.length === 0) return [];
       throw new Error(
         `[gofish] node type "${this.type}" has no lower() yet — cannot ` +
           `emit the display list.`

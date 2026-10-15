@@ -54,10 +54,10 @@ The cases we have met so far, from #1115:
 | Chart                  | What the axis has to show                                        | Status                                                                           |
 | ---------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Diverging stacked bars | A center point, with positive labels on both sides of it         | Built: a mirrored axis labels each tick by its distance from 0                   |
-| Time                   | Nested calendar units, e.g. days inside months inside years      | Built: one row of labels per calendar partition (#1066)                          |
-| Binning                | Bin edges, not points                                            | Proposed                                                                         |
+| Time                   | Nested calendar units, e.g. days inside months inside years      | Built: one row of labels per calendar partition (#1066), set with `levels`       |
+| Binning                | Bin edges, not points                                            | Built: cells label between their edges (#1133)                                   |
 | Streamgraph            | A layout with no meaningful zero                                 | Built: a centered layout gets a difference axis that labels steps, not positions |
-| Grouped bars           | Nested categories, with the groups outside and the series inside | Built: nested rows of category labels                                            |
+| Grouped bars           | Nested categories, with the groups outside and the series inside | Built: nested rows of category labels, set with `levels`                         |
 | Mosaic plot            | Nested conditional shares                                        | Proposed (see [section 5](#_5-the-mosaic-plot))                                  |
 
 The built rows each read their shape off the column's type. The diverging case is a
@@ -305,17 +305,126 @@ _Handbook of Data Visualization_). The proposal in #1115:
 - This builds on an earlier idea, **measure-keyed spaces per axis**: each axis holds a
   set of spaces keyed by measure, instead of one space. A hierarchical axis is how to
   draw such a set when its keys are nested.
-- Grouped bars already draw nested category rows, and the time axis already draws
-  nested calendar rows. These would become two instances of the same mechanism, and
-  the mosaic would be a third.
+- Grouped bars draw nested category rows, and the time axis draws nested calendar
+  rows. #1133 makes these two instances of one mechanism (see
+  [section 6](#_6-levels-labels-and-separators)), and the mosaic would be a third.
 
-## 6. Open questions
+## 6. Levels, labels and separators
+
+**Decided** in [#1133](https://github.com/gofish-graphics/gofish-graphics/pull/1133),
+which builds the time datatype's cells and bins
+([#1058](https://github.com/gofish-graphics/gofish-graphics/issues/1058),
+[#1059](https://github.com/gofish-graphics/gofish-graphics/issues/1059)).
+
+An axis with nested levels has more structure than it first seems to. Each rule below
+is a question about the data, not a style choice. The axis answers it from the spec's
+own hierarchy and types, so nothing on the axis is set by hand.
+
+**Levels are listed by depth.** A continuous axis and an ordinal axis list their levels
+the same way: one entry per depth, nearest the plot first. A time axis has two inferred
+levels, the inner calendar unit and its parent. An ordinal axis has one level per split
+on that axis, plus one for each extra `.bin` in a chained key such as
+`field("date").bin(Calendar.year).bin(Calendar.month)`. `levels` keeps (`true`), hides
+(`false`) or replaces (a `Calendar` value) the level at each depth:
+
+```ts
+axes: {
+  x: {
+    levels: [Calendar.week, Calendar.month];
+  }
+} // a time axis
+axes: {
+  x: {
+    levels: [false, true];
+  }
+} // grouped bars, inner level hidden
+```
+
+The two kinds of axis place their levels differently. A time axis places each level's
+cells on its scale, so its levels need not nest. A week row can sit over a month row,
+even though weeks cross month edges. An ordinal axis has no positions between its
+slots, so a level there labels runs of neighboring slots. A coarser level over slots
+that do not nest in it groups each slot by the cell that holds the slot's start. This
+is how GitHub's contribution graph labels its weeks by month.
+
+**Points or cells.** A label names either a point or a cell. A point's label is
+centered on its tick, as on a numeric axis or a line chart of dates. A cell's label is
+centered between the cell's edges, as on a histogram's bins. The axis reads which one
+it has from the space's type after `.bin`, never from a tick setting on the datatype.
+
+**Ticks or separators.** The two marks follow opposite rules, because they mean
+different things.
+
+- A time-axis tick marks a point and aims at the middle of its label. Where an inner
+  row has its own tick at the same place, the outer tick stops, since the inner tick
+  already marks the spot. Where the inner row has none, the outer tick is long, so it
+  runs through the inner row to reach its own label.
+- A divider on an ordinal axis separates regions. It runs through every level whose
+  regions also break at that gap, and it stops at a level whose region continues
+  across it. By default the innermost level draws no marks at all, because its
+  labels already name single slots.
+
+**Ordered or not.** A centered label collects unordered items under it, such as a lake
+over its species. A start-aligned label marks where an ordered run of equal values
+begins, such as a year over its months. So by default an outer level over an ordered
+type (calendar cells, numeric bins, `Schema.ordered`) starts each label at its run, an
+unordered outer level centers its labels, and the innermost level stays centered. A
+color, a bracket or another grouping cue could do the job of start alignment, so it
+can be overridden per depth:
+
+```ts
+axes: {
+  x: {
+    label: {
+      align: [true, "center"];
+    }
+  }
+}
+```
+
+**Partition or category.** Dividers are the default only where the levels partition
+one value. Month and year are both bins of the same date, so the year boundaries are
+also month boundaries, and a divider shows where one year's months end. Lake and
+species are different datatypes, so neither is a binned view of the other, and the
+axis draws no dividers between them. That holds for nested splits that bin the same
+field, for a chained key, for a coarser `Calendar` level, and for numeric bins inside
+bins. Any axis can still opt in:
+
+```ts
+axes: {
+  x: {
+    divider: true;
+  }
+}
+axes: {
+  x: {
+    divider: [false, true];
+  }
+} // per depth, nearest the plot first
+```
+
+**One rule for every per-level option.** `levels`, `label.angle`, `label.align` and
+`divider` are all read by depth, the same way. A plain value applies to every level
+where it can, so `divider: true` divides every ordinal level and skips a numeric
+axis's ticks, which have no regions between them. A list names its levels, so an
+entry that cannot apply at its depth, such as `true` at a numeric axis's depth, or an
+entry past the last level, is an error that lists the axis's levels.
+
+These rules make the two cases from #1115 instances of one mechanism. Grouped bars
+and the time axis both list their levels with `levels`, and both decide their labels
+and marks from the types underneath. The mosaic in section 5 would be a third
+instance, once a hierarchical axis can carry nested measures.
+
+## 7. Open questions
 
 From #1115:
 
 - How does a child declare its measure key? It could reuse `Measure`.
 - How does the axis decide how levels nest? It could follow the nesting of the
-  operators, or the nesting of the measures.
+  operators, or the nesting of the measures. **Partly answered** in
+  [section 6](#_6-levels-labels-and-separators): ordinal levels follow the nesting of
+  the splits and the `.bin`s of a chained key, and time levels are calendar
+  partitions. Nested measures are still open.
 - What does a hierarchical axis look like for each case in the table in section 1? A
   mosaic might show category labels at each level, a share ruler, or both.
 

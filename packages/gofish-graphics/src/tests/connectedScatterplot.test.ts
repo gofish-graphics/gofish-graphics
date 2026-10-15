@@ -50,6 +50,7 @@ const {
   selectAll,
   spread,
   field,
+  Bin,
   time,
   Animation,
   Curve,
@@ -491,7 +492,7 @@ async function main(): Promise<void> {
           .toDisplayList(OPTIONS)
       );
     const [binned, plain] = [
-      await tip(offStart, field("year").bin({ thresholds: starts.slice(1) })),
+      await tip(offStart, field("year").bin(Bin.thresholds(starts.slice(1)))),
       await tip(atStart, "year"),
     ];
     ok(
@@ -910,11 +911,11 @@ async function main(): Promise<void> {
     ],
     [
       { kind: "linaer" },
-      /\.kind: unknown kind "linaer".*Make one with a call in the Curve family/,
+      /\.kind: unknown kind "linaer".*Make one with the Curve family/,
     ],
     [
       "monotone",
-      /: expected object, got string\. Make one with a call in the Curve family/,
+      /: expected object, got string\. Make one with the Curve family/,
     ],
   ];
   for (const [curve, pattern] of notAMethod) {

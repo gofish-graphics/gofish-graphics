@@ -10,6 +10,22 @@ import { sameUnitVar, unitOf, type Quantity } from "./measure";
 export type { FieldOp } from "./fieldExpr";
 export { FieldExpr } from "./fieldExpr";
 
+/**
+ * Tag a data array with `value` under the symbol `sym`: a non-enumerable own
+ * property, so the tag rides the array (not each row, and not an enumerable
+ * key that would leak into `{...d}` spreads). The column types and the
+ * domain (schema.ts) ride a data array this way.
+ */
+export const tagArray = <T>(data: T, sym: symbol, value: unknown): T => {
+  Object.defineProperty(data, sym, {
+    value,
+    enumerable: false,
+    configurable: true,
+    writable: true,
+  });
+  return data;
+};
+
 export type Value<T> = T | DatumValue | DatumValueImpl;
 export type MaybeValue<T> = T | Value<T>;
 
@@ -179,7 +195,8 @@ export type FieldAccessor = {
  * (e.g. `field("0.5")`), or to chain a pipeline (`field("v").mean()`). A
  * column's unit is declared in the chart's schema (`Schema.unit`), not here.
  */
-export const field = (name: string): FieldExpr => new FieldExpr(name);
+export const field = (name: string): FieldExpr<false, false> =>
+  new FieldExpr<false, false>(name);
 export const isField = (v: unknown): v is FieldAccessor =>
   typeof v === "object" &&
   v !== null &&

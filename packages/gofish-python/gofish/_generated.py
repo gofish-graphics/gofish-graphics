@@ -18,7 +18,7 @@ from . import ast as _ast
 from .ast import Mark, _channel
 
 if TYPE_CHECKING:
-    from .ast import ChunkKey, FieldAccessor, FieldPredicate
+    from .ast import ChunkKey, FieldAccessor, FieldPredicate, StructAccessor
 
 
 # --- Nested option dicts -----------------------------------------------------
@@ -28,16 +28,20 @@ if TYPE_CHECKING:
 # ("tuple", (shape, ...)), ("record", value_shape),
 # ("tagged", tag_key, {tag_value: shape}); None passes a value through.
 _OPTION_TYPES: Dict[str, Any] = {
-    "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label_angle": ("labelAngle", None), "rows": ("rows", ("array", ("ref", "Calendar")))}),
-    "Calendar": ("object", {"unit": ("unit", None), "step": ("step", None), "start": ("start", None)}),
+    "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label": ("label", ("ref", "AxisLabelOptions")), "levels": ("levels", ("array", ("ref", "Calendar"))), "divider": ("divider", None)}),
+    "AxisLabelOptions": ("object", {"angle": ("angle", None), "align": ("align", None)}),
     "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
     "AxisInterval": ("object", {"min": ("min", None), "center": ("center", None), "max": ("max", None), "size": ("size", None), "embedded": ("embedded", None)}),
     "FieldPredicate": ("object", {"field": ("field", None), "between": ("between", None), "closed": ("closed", None)}),
     "ChartOptions": ("object", {"w": ("w", None), "h": ("h", None), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", None), "padding": ("padding", None), "schema": ("schema", None)}),
     "AxisDimsValue": ("ref", "AxisInterval"),
+    "Partition": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)}), "step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)})}),
+    "StructBin": ("tagged", "kind", {"hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
     "Tile": ("tagged", "kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "sliceDice": ("object", {"kind": ("kind", None)})}),
     "Overlap": ("tagged", "kind", {"separate": ("object", {"kind": ("kind", None), "padding": ("padding", None)}), "noise": ("object", {"kind": ("kind", None), "randomness": ("randomness", None), "smoothing": ("smoothing", None), "padding": ("padding", None), "seed": ("seed", None)})}),
     "Curve": ("tagged", "kind", {"linear": ("object", {"kind": ("kind", None)}), "step": ("object", {"kind": ("kind", None)}), "monotone": ("object", {"kind": ("kind", None)}), "smooth": ("object", {"kind": ("kind", None)}), "catmullRom": ("object", {"kind": ("kind", None)}), "bezier": ("object", {"kind": ("kind", None)}), "orthogonal": ("object", {"kind": ("kind", None), "bend": ("bend", None)}), "arc": ("object", {"kind": ("kind", None), "direction": ("direction", None)}), "perfectArrows": ("object", {"kind": ("kind", None), "bow": ("bow", None), "stretch": ("stretch", None), "stretch_min": ("stretchMin", None), "stretch_max": ("stretchMax", None), "pad_start": ("padStart", None), "pad_end": ("padEnd", None), "flip": ("flip", None), "straights": ("straights", None)})}),
+    "Bin": ("tagged", "kind", {"step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
+    "Calendar": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)})}),
 }
 
 
@@ -45,9 +49,10 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
     """Rename the keys of a nested option value from Python to wire spelling.
 
     `shape` is the value's declared type, compiled from the descriptor table,
-    so only declared option keys are renamed (`label_angle` to `labelAngle`,
-    by the same rule as top-level kwargs). A key the type does not declare
-    raises TypeError, as an unknown kwarg does. Record keys (column names,
+    so only declared option keys are renamed (a snake_case key to its
+    camelCase wire key, by the same rule as top-level kwargs). A key the
+    type does not declare raises TypeError, as an unknown kwarg does.
+    Record keys (column names,
     axis names) and values of any other type pass through unchanged. A
     tagged union picks its branch by the dict's tag key (`kind`); a missing
     or unknown tag raises TypeError. A channel value built by field(...) or
@@ -114,7 +119,7 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
 
 # --- Leaf marks -------------------------------------------------------------
 
-def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
+def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspect_ratio: Optional[float] = None, inset: Optional[float] = None) -> Mark:
     """A rectangle. Box geometry via the shared dims channels.
 
     Args:
@@ -139,6 +144,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         rx: Corner radius, x. Default 0.
         ry: Corner radius, y. Default 0.
         aspect_ratio: w/h ratio to enforce; the constraining axis wins when both are data-driven.
+        inset: Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given. Default 0.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
@@ -163,6 +169,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         ("rx", rx),
         ("ry", ry),
         ("aspectRatio", aspect_ratio),
+        ("inset", inset),
     ]:
         if _v is not None:
             _kw[_k] = _v
@@ -462,6 +469,30 @@ def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Op
             _kw[_k] = _v
     return Mark("blank", **_kw)
 
+def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None) -> Mark:
+    """Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.
+
+    Args:
+        debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
+        fill: Fill color, or a field name for a color scale.
+        stroke: Stroke color. Defaults to `fill`.
+        stroke_width: Stroke width in pixels. Default 0.
+        opacity: Opacity, 0 to 1. Default 1.
+        filter: Raw SVG filter attribute.
+    """
+    _kw: Dict[str, Any] = {}
+    for _k, _v in [
+        ("debug", debug),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("opacity", opacity),
+        ("filter", filter),
+    ]:
+        if _v is not None:
+            _kw[_k] = _v
+    return Mark("region", **_kw)
+
 
 # --- Combinator-only marks ---------------------------------------------------
 
@@ -760,7 +791,7 @@ def _table_opts(*, by: dict, spacing: Optional[float | tuple] = None, num_cols: 
     """Arrange cells in a `numCols`-wide grid (or a `{x, y}` keyed grid via `by`).
 
     Args:
-        by: Grouping fields for the column/row keys — the table operator can't run without both.
+        by: The column key (x) and the row key (y), both required. Each takes what spread's `by` takes: a field name, a field(...) key (sorted, binned, a chain or product of bins, a part of a cycle), or chunk(size). A binned key's columns or rows are its cells, empty ones included. Each cell of the table holds the rows in both its column and its row.
         spacing: Cell gap: a single number for both axes, or [x, y]. Default 0.
         num_cols: Explicit column count (falls back to the number of distinct column keys).
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -824,6 +855,27 @@ def _pack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, debug: Op
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("by", by),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _partition_opts(*, by: FieldAccessor | StructAccessor, dir: Optional[str] = None, alignment: Optional[str] = None, axes: Optional[bool | dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.
+
+    Args:
+        by: A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.
+        dir: Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis.
+        alignment: Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Applies only where nothing gives the children a cell on that axis: inside a cell of another partition, each child is placed in that cell. Not allowed with a key per axis. Default "baseline".
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("by", by),
+        ("dir", dir),
+        ("alignment", alignment),
+        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("debug", debug),
     ]:
         if _v is not None:

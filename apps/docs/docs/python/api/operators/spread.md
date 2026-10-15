@@ -147,8 +147,9 @@ chart(select_all("bars")) \
 appends one op to an ordered pipeline. It works in two disjoint places:
 
 - As `by` (a **domain** slot): `.sort(by=None, order=None)`, `.sort(values)`
-  (an explicit order list), `.reverse()`, `.bin(thresholds=None)`, and
-  `.drop_nulls()` decide **which groups exist and in what order**.
+  (an explicit order list), `.reverse()`, `.bin(partition=None)`, and
+  `.drop_nulls()` decide **which groups exist and in
+  what order**.
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
@@ -196,18 +197,67 @@ chart(data).flow(
 Groups whose key isn't in the list are appended after, in natural sort
 order.
 
-**Bin a numeric field into groups** — a histogram, with no precomputed bins:
+**Bin a field into cells** — a histogram, with no precomputed bins:
 
 ```python
-# One bar per ~10 auto-computed bins of `age`, height = row count per bin
+# One bar per half-point cell of `rating`, height = row count per cell
 chart(data).flow(
-    spread(by=field("age").bin(), dir="x")
-).mark(rect(h=field("age").count()))
+    spread(by=field("rating").bin(Bin.step(0.5)), dir="x")
+).mark(rect(h=field("rating").count()))
+
+# One bar per month of the year, all Junes in one bar
+chart(sales, schema={"date": Schema.time()}).flow(
+    spread(by=field("date").bin(Calendar.month), dir="x")
+).mark(rect(h=field("value").sum()))
+
+# One bar per month of each year, labeled "Jun 2015"
+spread(by=field("date").bin([Calendar.year, Calendar.month]), dir="x")
+
+# The months of each year: a month level and a year level on the axis
+spread(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x")
 ```
 
-Empty bins are dropped, like an ordinary group-by. Pass
-`field("age").bin(5)` (a count) or explicit thresholds (a list) to control
-the binning.
+`.bin(...)` maps each value to its **cell**: an interval `[start, end)` that
+holds its start and not its end. The partition is one of:
+
+| Partition                                     | Cells                                                                                                                                                                                                                                                                                       |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a [Calendar](/python/api/core/calendar) value | The calendar cells of a time column, in the column's zone. A level that is a part of a larger one gives its parts, a cycle: `Calendar.month` is the month of the year, so all Junes are one cell. `Calendar.year` and `Calendar.week` are parts of nothing and give cells of the time line. |
+| a list of Calendar values                     | A product, `[Calendar.year, Calendar.month]`: one cell where one cell of each level meets one of the next (the June of 2015), labeled `"Jun 2015"`.                                                                                                                                         |
+| `Bin.step(size)`                              | Cells `size` wide, starting at multiples of `size`.                                                                                                                                                                                                                                         |
+| `Bin.thresholds(n)`                           | About `n` cells, with the step a numeric axis with `n` ticks uses. The default, with no argument, is `Bin.thresholds(10)`.                                                                                                                                                                  |
+| `Bin.thresholds([t1, ...])`                   | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                                                                                                                                                                      |
+
+`Bin.step` and `Bin.thresholds` are members of the [`Bin`](/python/api/bin)
+family. A thresholds partition includes its top edge, so the largest value
+falls in the last cell. Custom cell labels (`.format`) are JS-only for now.
+
+A second `.bin(...)` splits each cell of the first, a chain:
+`.bin(Calendar.year).bin(Calendar.month)` gives the months of each year, and
+each cell keeps the cell it was split from. See
+[Calendar › Bins](/python/api/core/calendar) for which levels a product or a
+chain combines.
+
+The groups are the cells over the column's values in the **chart's data**
+(or the result of the last `derive`), not over the rows of one group. So
+every group of a nested split has the same cells in the same order, a cell
+with no rows is kept as an empty group, and a count picks its step from the
+chart's values. Ops after `.bin` reorder the cells. The mean of an empty
+group has no value, so a mark whose color is that mean is not drawn, and
+keeps its slot; a sum or a count of no rows is 0, and draws.
+
+Each group's key is its cell. Its id is the cell's start, as text, or, for
+a part of a cycle, its field values (`"6"` for June). An axis over cells
+labels each cell (its edges, `"0.5–1"`, or the calendar label `"Jan"`),
+with no ticks. A chained key adds a level per bin before the last, e.g.
+years under months, each year label at the start of its run of months, just
+past the divider between neighboring years. A part of a cycle covers the whole
+cycle: an axis over the months of the year shows all twelve. See
+[chart › Axes](/python/api/core/chart#axes) for the `"levels"` and
+`"label"` (`"align"`) options.
+
+`spread` gives each cell an equal slot. To place each cell at its true width
+on a continuous axis, use [`partition`](/python/api/operators/partition) with the same key.
 
 **Drop rows with a missing/null grouping field**, before grouping:
 

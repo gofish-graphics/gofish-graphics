@@ -46,9 +46,17 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
     case "number":
       // A finite number has no tagged form (`nonFinite.ts`), so it is a plain
       // JSON number; `minimum` constrains only the number, not the tag.
+      // A whole number is finite too.
       return {
-        ...(type.finite ? { type: "number" } : { $ref: "#/$defs/Number" }),
+        ...(type.integer
+          ? { type: "integer" }
+          : type.finite
+            ? { type: "number" }
+            : { $ref: "#/$defs/Number" }),
         ...(type.min !== undefined ? { minimum: type.min } : {}),
+        ...(type.exclusiveMin !== undefined
+          ? { exclusiveMinimum: type.exclusiveMin }
+          : {}),
       };
     case "boolean":
       return { type: "boolean" };
@@ -68,7 +76,11 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
       // is a channel value and also fits an open interval object).
       return { anyOf: type.options.map(fieldTypeToSchema) };
     case "array":
-      return { type: "array", items: fieldTypeToSchema(type.items) };
+      return {
+        type: "array",
+        items: fieldTypeToSchema(type.items),
+        ...(type.minItems !== undefined ? { minItems: type.minItems } : {}),
+      };
     case "tuple":
       return {
         type: "array",
@@ -373,6 +385,34 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         },
       },
     },
+    StructAccessor: {
+      description:
+        "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes Bin.hex or Bin.voronoi). Valid as a partition's `by` only once binned.",
+      type: "object",
+      required: ["type", "fields"],
+      additionalProperties: false,
+      properties: {
+        type: { const: "struct" },
+        fields: {
+          type: "object",
+          required: ["x", "y"],
+          additionalProperties: false,
+          properties: { x: { type: "string" }, y: { type: "string" } },
+        },
+        ops: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["op", "partition"],
+            additionalProperties: false,
+            properties: {
+              op: { const: "bin" },
+              partition: { $ref: "#/$defs/StructBin" },
+            },
+          },
+        },
+      },
+    },
     ChunkKey: {
       description:
         "A `by` key that groups consecutive rows, emitted by chunk(size): row i goes to group floor(i / size), a bin over row position. It names no field, so its groups draw no axis or labels.",
@@ -414,13 +454,20 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           required: ["op"],
           properties: {
             op: { const: "bin" },
-            thresholds: {
+            partition: {
+              description:
+                "The partition each value is binned into: a Calendar value (Calendar.month({ every: 3 }) is { kind: month, every: 3 }), Bin.step(size) or Bin.thresholds(countOrEdges), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
               oneOf: [
-                { $ref: "#/$defs/Number" },
-                { type: "array", items: { $ref: "#/$defs/Number" } },
+                { $ref: "#/$defs/Partition" },
+                {
+                  type: "array",
+                  minItems: 2,
+                  items: { $ref: "#/$defs/Calendar" },
+                },
               ],
             },
           },
+          additionalProperties: false,
         },
         {
           type: "object",

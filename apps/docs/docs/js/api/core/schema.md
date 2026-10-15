@@ -123,11 +123,10 @@ its levels are numbers.
   `"Flipper Length (mm) (mm)"`. Declare its quantity
   (`Schema.quantity("Flipper Length").unit("mm")`) or set the axis `title`
   for `"Flipper Length (mm)"`.
-- `.count()` and `.distinct()` are in the unit `"count"`. The edges of
-  `bin(field)` (`start`, `end`, `size`) are amounts of `field`'s quantity:
-  they title their axis as `field` does and take its unit. Its `count` is in
-  the unit `"count"`. Counts, `.normalize()` shares, and times add no unit to
-  an axis title.
+- `.count()` and `.distinct()` are in the unit `"count"`. The cells of
+  `field(x).bin(p)` are amounts of `x`'s quantity: a `partition` over them
+  titles its axis as `x` does and takes its unit. Counts, `.normalize()`
+  shares, and times add no unit to an axis title.
 
 **`HasQuantity`.**
 
@@ -136,7 +135,7 @@ its levels are numbers.
   the column's name.
 - Columns of the same quantity have the same unit, like columns with the
   same name.
-- The edges of `bin(field)` take `field`'s quantity. `.sum()` and `.mean()`
+- The cells of `field(x).bin(p)` take `x`'s quantity. `.sum()` and `.mean()`
   keep the column's quantity. `.count()` is the quantity `"count"`.
 - An `axes` option's `title` replaces the inferred title.
 
