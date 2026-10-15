@@ -98,12 +98,8 @@ import { isToken, Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
 import { childRole, type SharingPlan } from "./constraints/compose";
 import type { KeyedDomains } from "./keyedDomains";
-import {
-  Constraint,
-  relateEnv,
-  resolveConstraintOperands,
-} from "./constraints";
-import { internalName } from "./constraints/shared";
+import { relateEnv, resolveConstraintOperands } from "./constraints";
+import { applyRelationalZBelowDefaults } from "./constraints/relationalPaint";
 import {
   computeRelateSchedule,
   resolveRelateClauses,
@@ -2161,34 +2157,16 @@ export class GoFishNode {
     this.children = this.children.filter((c) => !isRelateClause(c));
     const env = relateEnv(this);
     const { constraints, nodes } = await resolveRelateClauses(fn(env), env);
-    // A drawing clause that is a relational mark (`enclose`, `line`, ...)
-    // paints under the nodes it reads, as it does among a layer's children
-    // (`applyRelationalZBelowDefaults` in layer.tsx). Here its operands are
-    // names of this layer, so the default names them. An explicit
-    // `.zOrder(...)` on the clause wins.
-    const below: ConstraintSpec[] = [];
-    for (const node of nodes) {
-      const operands = (node as any).__relationalOperands as
-        | GoFishAST[]
-        | undefined;
-      if (!operands || node.getZOrder() !== undefined) continue;
-      const names = operands.flatMap((o) =>
-        o instanceof GoFishRef && typeof o.selection === "string"
-          ? [o.selection]
-          : []
-      );
-      if (names.length === 0) continue;
-      if (typeof node._name !== "string") node._name ??= internalName("z");
-      if (typeof node._name !== "string") continue;
-      for (const name of names)
-        below.push(Constraint.zBelow({ name: node._name }, { name }));
-      delete (node as any).__relationalOperands;
-    }
-    this.constraints = [...constraints, ...below];
+    this.constraints = constraints;
     for (const node of nodes) {
       node.parent = this;
       this.children.push(node);
     }
+    // A drawing clause that is a relational mark (`enclose`, `line`, ...)
+    // paints under the nodes it reads, by the same default a layer gives its
+    // children (`applyRelationalZBelowDefaults`); a clause's operands are
+    // names of this layer.
+    applyRelationalZBelowDefaults(this, nodes);
     this._hasRelateClauses = nodes.length > 0;
     return this;
   }

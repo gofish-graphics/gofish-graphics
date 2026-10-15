@@ -8,6 +8,7 @@ covers:
   - packages/gofish-graphics/src/ast/channels.ts
   - packages/gofish-graphics/src/ast/marks/chart.ts
   - packages/gofish-graphics/src/ast/marks/markResult.ts
+  - packages/gofish-graphics/src/ast/constraints/relationalPaint.ts
 ---
 
 # `createMark`: turning a shape into a frontend mark
@@ -520,8 +521,9 @@ them from the serialized opts.)
 
 Every node a relational mark produces, in every call form above, is tagged
 with the operand nodes/refs it was built from (`tagRelationalOperands`, which
-stashes `__relationalOperands` on the node). The `layer` combinator
-(`graphicalOperators/layer.tsx`) reads that tag and installs a default
+stashes `__relationalOperands` on the node). One pass,
+`applyRelationalZBelowDefaults` (`constraints/relationalPaint.ts`), reads
+that tag and installs a default
 `zBelow(self, operand)` paint-order **constraint** — not a hardcoded z-index —
 so the connector paints under whatever it references. Because it's a real
 constraint, it composes with any other constraint in the layer; an explicit
@@ -531,10 +533,11 @@ This is what lets `line()`/`ribbon()` sit under the marks they connect with no
 zOrder incantation needed, in every call form including the low-level
 combinator one. Two refinements: an operand that is the connector's own fresh
 child (`enclose(opts, [spread(...)])` lays its children out and paints them
-itself, over its outline) is not tagged; and a connector written as a
-`.relate()` clause, whose operands are string refs with no target yet, gets
-the same default by name from `GoFishNode.relate` (see
-[Names and Scoping](/internals/core/names-and-scoping)).
+itself, over its outline) is not tagged; and the `layer` combinator runs the
+pass over its children, and `GoFishNode.relate` over its drawing clauses. A
+clause's operands are string refs with no target yet, and the pass names
+such a ref's node by its string, with no scope check, since the name is the
+relating layer's (see [Names and Scoping](/internals/core/names-and-scoping)).
 
 ### Blank-fusion: `.mark(R(opts))` sugar
 

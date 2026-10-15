@@ -250,10 +250,10 @@ rewrites the tree runs `resolveNames` again, which recomputes it.
 A clause paints after the plain children, in clause order, except that a
 clause built by `createRelationalMark` (`enclose`, `line`, `ribbon`) paints
 under the nodes it reads. A clause's operands are string refs, which are not
-resolved when the clause is attached, so `GoFishNode.relate` installs that
-default by name: `zBelow(clause, name)` for each string-ref operand, the same
-constraint `layer` installs for a connector among its children (see
-[The Mark Factory](/internals/frontend/mark-factory)). An explicit
+resolved when the clause is attached, so the default names them:
+`GoFishNode.relate` runs the same pass `layer` runs for its children
+(`applyRelationalZBelowDefaults`), which adds `zBelow(clause, name)` for
+each string-ref operand (see [The Mark Factory](/internals/frontend/mark-factory)). An explicit
 `.zOrder(...)` on the clause wins.
 
 ## History

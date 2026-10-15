@@ -43,15 +43,14 @@ import {
   resolveGridTracks,
   gridCellSizeByName,
   gridTracksFromSizes,
-  Constraint,
   relateScheduleForLayout,
   type ConstraintSpec,
   type ZOrderConstraint,
 } from "../constraints";
-import { GoFishRef, findPathToRoot } from "../_ref";
+import { applyRelationalZBelowDefaults } from "../constraints/relationalPaint";
+export { targetOf } from "../constraints/relationalPaint";
 import {
   childNameKey,
-  internalName,
   type ConstraintPosScales,
   type FreeOrigin,
 } from "../constraints/shared";
@@ -89,121 +88,6 @@ import {
 // the child that contains it, and a constraint whose operands share a child is
 // pushed down into that child's own order, whatever kind of node the child is
 // (every node that paints its children orders them through the same function).
-
-/** Find every relational-mark connector node (tagged `__relationalOperands`
- *  by `createRelationalMark`, chart.ts) anywhere in `node`'s subtree that
- *  hasn't already been claimed by an inner enclosing layer. Bounded to
- *  `GoFishNode`s (a ref carries no children of its own). */
-function findUnclaimedConnectors(node: GoFishAST, out: GoFishNode[]): void {
-  if (!(node instanceof GoFishNode)) return;
-  if ((node as any).__relationalOperands) out.push(node);
-  for (const child of node.children ?? []) {
-    findUnclaimedConnectors(child, out);
-  }
-}
-
-/** The node identity of a `GoFishAST` (a ref's target, or the node itself). */
-export function targetOf(n: GoFishAST): GoFishNode | undefined {
-  return n instanceof GoFishRef ? n.targetNode : (n as GoFishNode);
-}
-
-/** Give `node` a resolvable constraint name if it doesn't already have one
- *  (a fresh `internalName`, as `ensureChildNames` does). */
-function ensureConstraintName(node: GoFishNode): string {
-  if (node._name !== undefined) {
-    return typeof node._name === "string" ? node._name : internalName("z");
-  }
-  node._name = internalName("z");
-  return node._name;
-}
-
-/**
- * Install the default `zBelow(connector, operand)` paint-order constraint for
- * every relational-mark connector (`line`, `ribbon`, …) found anywhere in
- * `children`'s subtrees, against whichever of `children` contains the node(s)
- * it references — in EVERY call form (bag, pairwise, `by`-split, and the
- * low-level explicit-children form), since all of them route through the same
- * `createRelationalMark` tagging (chart.ts). No dispatch on mark kind here:
- * any node carrying the tag participates.
- *
- * A connector whose author already set an explicit `.zOrder(...)` (including
- * `.zOrder(0)` — the unset state is `undefined`, so any explicit call counts
- * as an author decision) or `.relate(...)` (a non-empty constraints array)
- * is left alone — the explicit choice wins over the default.
- *
- * A connector whose referenced node lies outside `children`'s subtrees (e.g.
- * both live several `.layer()` tiers up) is left tagged so an OUTER `layer()`
- * call gets a chance to resolve it — the tag is only cleared once consumed.
- *
- * Returns the auto-derived zBelow constraints (merged with any that already
- * existed on `node` — there are none for a freshly built layer, but this
- * stays defensive) to install via `node.relate(...)`-equivalent direct
- * assignment (this runs before any user `.relate()` chain, which replaces
- * `constraints` wholesale and so always wins over the default, matching the
- * "explicit override" rule).
- */
-function applyRelationalZBelowDefaults(
-  node: GoFishNode,
-  children: GoFishAST[]
-): void {
-  const connectors: GoFishNode[] = [];
-  for (const child of children) findUnclaimedConnectors(child, connectors);
-  if (connectors.length === 0) return;
-
-  const pairs: [string, string][] = [];
-  for (const connector of connectors) {
-    const operands: GoFishAST[] | undefined = (connector as any)
-      .__relationalOperands;
-    if (!operands) continue;
-    // Explicit author override (zOrder hint or their own constraints) wins.
-    if (
-      connector.getZOrder() !== undefined ||
-      connector.constraints.length > 0
-    ) {
-      delete (connector as any).__relationalOperands;
-      continue;
-    }
-    let claimedAny = false;
-    for (const operand of operands) {
-      const target = targetOf(operand);
-      if (!target) continue;
-      // Only claim an operand that actually lives within `children`'s
-      // subtrees at this level (found via an ancestor walk against
-      // `children`) — otherwise leave the tag for an outer `layer()` call to
-      // resolve. The constraint names the operand itself: paint order lifts
-      // it to whichever child holds it, or pushes it down when the connector
-      // shares that child. Names are visible through any non-component node.
-      const path = findPathToRoot(target);
-      const withinScope = children.some(
-        (c) => c !== connector && path.includes(c as GoFishAST)
-      );
-      if (!withinScope) continue;
-      // An operand that is itself a plain layer (a `layer([...])` mark, a
-      // `time.history`) names that whole layer, so the connector goes under
-      // everything it paints.
-      pairs.push([
-        ensureConstraintName(connector),
-        ensureConstraintName(target),
-      ]);
-      claimedAny = true;
-    }
-    // Consumed (fully or partially) at this level — don't let an outer layer
-    // re-process it. An operand this level couldn't place (e.g. it lives
-    // further up the tree) is simply not constrained; that's a rarer shape
-    // than the sibling-tier case this covers.
-    if (claimedAny) delete (connector as any).__relationalOperands;
-  }
-  if (pairs.length === 0) return;
-  const refs: Record<string, { name: string }> = {};
-  for (const [a, b] of pairs) {
-    refs[a] ??= { name: a };
-    refs[b] ??= { name: b };
-  }
-  const zBelowConstraints = pairs.map(([a, b]) =>
-    Constraint.zBelow(refs[a], refs[b])
-  );
-  node.constraints = [...node.constraints, ...zBelowConstraints];
-}
 
 export const layer = createNodeOperatorSequential(
   async (
