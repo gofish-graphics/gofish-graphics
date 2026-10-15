@@ -19,8 +19,8 @@
  *    marks — pure kwargs-collection, `pyName` supplies the Python-facing
  *    rename (wire `type` stays the descriptor's `type`).
  *  - `_opts(...) -> dict` **cores** for the dual-form constructs (spread,
- *    stack, scatter, group, table, treemap, line, ribbon, layer, the polar
- *    family) — the mechanical kwargs→dict half. The polymorphic
+ *    stack, scatter, group, table, treemap, line, ribbon, layer) — the
+ *    mechanical kwargs→dict half. The polymorphic
  *    operator-vs-combinator (or bag-vs-pairwise-vs-combinator) DISPATCH stays
  *    hand-written in `ast.py`, calling these cores. `_chart_opts` is the
  *    same kind of core for `chart(data, **options)` (CHART_OPTIONS), and
@@ -38,10 +38,12 @@
  *    types (`pyParamChecks`). A factory with no required param is made a
  *    bare kind (`_strategy.bare_kind`, #1133): `Curve.monotone` is the dict
  *    `Curve.monotone()` returns, and can be called to set options.
+ *  - The Coord family module, `gofish/coord.py`: one factory per COORDS
+ *    entry, building the transform's `{"type": ..., **options}` wire config.
  * `derive`/`resolve`/`join` (real logic: RPC bridge, ref-shape narrowing,
  * DataFrame conversion), `field`/`datum`/`normalize`/`repeat`/`ref`/
- * `selectAll`, and the Color and Coord family modules (`color.py`,
- * `coord.py`; see the note on STRATEGIES) stay hand-written.
+ * `selectAll`, and the Color family module (`color.py`; see the note on
+ * STRATEGIES) stay hand-written.
  */
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -64,6 +66,7 @@ import {
   type FieldGroup,
   type FieldSpec,
   type FieldType,
+  type ConstructDescriptor,
   carriesChannel,
   pyType,
   refPyClass,
@@ -628,46 +631,6 @@ parts.push(
   ) + "\n"
 );
 
-// --- Coord transforms --------------------------------------------------------
-parts.push(
-  "\n# --- Coord transforms ---------------------------------------------------------\n"
-);
-{
-  const d = COORDS["polar"];
-  const ents = entries(d.fields);
-  const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
-  const docLines = ents
-    .map(([py, , spec]) => docLine(py, spec))
-    .filter(Boolean);
-  const docstring = [
-    `    """Shared builder for the polar-family coord configs (polar()/clock()).`,
-    "",
-    "    Only set options are emitted, so defaults stay on the JS side. Wire keys",
-    "    are camelCase to match the JS ``PolarOptions``.",
-    "",
-    "    Args:",
-    ...docLines,
-    `    """`,
-  ].join("\n");
-  const pairs = renderPairs(ents);
-  const body = [
-    `    cfg: Dict[str, Any] = {"type": transform_type}`,
-    `    for _k, _v in [`,
-    pairs,
-    `    ]:`,
-    `        if _v is not None:`,
-    `            cfg[_k] = list(_v) if _k == "center" else _v`,
-    `    return cfg`,
-  ].join("\n");
-  parts.push(
-    [
-      `def _polar_config(transform_type: str, *, ${sig}) -> Dict[str, Any]:`,
-      docstring,
-      body,
-    ].join("\n") + "\n"
-  );
-}
-
 writeFileSync(OUT_FILE, parts.join("\n").replace(/\n{3,}/g, "\n\n\n") + "\n");
 console.log(`wrote ${OUT_FILE}`);
 
@@ -1023,6 +986,83 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
     ``,
   ].join("\n");
   const outFile = join(HERE, "..", "gofish", `${module}.py`);
+  writeFileSync(outFile, source);
+  console.log(`wrote ${outFile}`);
+}
+
+// ---------------------------------------------------------------------------
+// The Coord family: gofish/coord.py, one factory per COORDS entry
+// ---------------------------------------------------------------------------
+
+/** One coord factory: a function that builds the transform's wire config,
+ *  `{"type": ..., **options}` with camelCase wire keys. Only the options set
+ *  are emitted, so the defaults stay on the JS side. Its params are
+ *  positional-or-keyword, so a transform JS calls with a positional option
+ *  (`bipolar(120)`, `geo("equalEarth", ...)`) reads the same in Python. A
+ *  tuple value goes on the wire as a list. */
+function renderCoordFactory(type: string, d: ConstructDescriptor): string {
+  const name = pyKwarg(d.pyName ?? type);
+  // A required option comes first, as Python requires.
+  const ents = entries(resolveFields(d)).sort(
+    ([, , a], [, , b]) => Number(!!b.required) - Number(!!a.required)
+  );
+  const docLines = ents
+    .map(([py, , spec]) => docLine(py, spec))
+    .filter(Boolean);
+  const doc = d.doc ?? "";
+  const docstring = docLines.length
+    ? [`    """${doc}`, "", "    Args:", ...docLines, `    """`].join("\n")
+    : `    """${doc}"""`;
+  const head = `${pyStr("type")}: ${pyStr(type)}`;
+  if (ents.length === 0) {
+    return [
+      `def ${name}() -> Dict[str, Any]:`,
+      docstring,
+      `    return {${head}}`,
+    ].join("\n");
+  }
+  const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
+  const body = [
+    `    out: Dict[str, Any] = {${head}}`,
+    `    for _k, _v in [`,
+    renderPairs(ents),
+    `    ]:`,
+    `        if _v is not None:`,
+    `            out[_k] = list(_v) if isinstance(_v, tuple) else _v`,
+    `    return out`,
+  ].join("\n");
+  return [`def ${name}(${sig}) -> Dict[str, Any]:`, docstring, body].join("\n");
+}
+
+{
+  const factories = Object.entries(COORDS).map(([type, d]) => ({
+    name: pyKwarg(d.pyName ?? type),
+    source: renderCoordFactory(type, d),
+  }));
+  const source = [
+    `# GENERATED by packages/gofish-python/scripts/generate.ts from the gofish-ir`,
+    `# COORDS table — do not edit; run \`pnpm --filter gofish-python gen\`.`,
+    `"""`,
+    `The \`\`Coord\`\` family: the coordinate transforms of a chart's or a layer's`,
+    `\`\`coord\`\` option.`,
+    ``,
+    `The package binds this module as \`\`Coord\`\`, so \`\`Coord.polar()\`\` and`,
+    `\`\`from gofish.coord import polar\`\` reach the same function. Each transform is`,
+    `a plain dict on the wire, tagged by \`\`type\`\`, with camelCase option keys; the`,
+    `JS side rebuilds the transform from it. Mirrors JS \`\`gofish-graphics/coord\`\`.`,
+    `"""`,
+    ``,
+    `from __future__ import annotations`,
+    ``,
+    `from typing import Any, Dict, Literal, Optional`,
+    ``,
+    `__all__ = [${factories.map((f) => pyStr(f.name)).join(", ")}]`,
+    ``,
+    ``,
+    factories.map((f) => f.source).join("\n\n\n"),
+    ``,
+  ].join("\n");
+  const outFile = join(HERE, "..", "gofish", "coord.py");
   writeFileSync(outFile, source);
   console.log(`wrote ${outFile}`);
 }

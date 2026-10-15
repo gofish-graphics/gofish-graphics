@@ -1256,6 +1256,33 @@ async function main() {
       orphanBuilders.length === 0,
       orphanBuilders.join(", ")
     );
+    const coordMissing = Object.keys(Frontend.COORDS).filter(
+      (type) => typeof Serialize.COORD_FACTORIES[type] !== "function"
+    );
+    check(
+      "every coord descriptor has a coord factory",
+      coordMissing.length === 0,
+      coordMissing.join(", ")
+    );
+    const coordOrphans = Object.keys(Serialize.COORD_FACTORIES).filter(
+      (type) => !Object.hasOwn(Frontend.COORDS, type)
+    );
+    check(
+      "every coord factory has a coord descriptor",
+      coordOrphans.length === 0,
+      coordOrphans.join(", ")
+    );
+    // A positional option is read off the wire config (`bipolar(fociDistance)`).
+    const rebuilt = Serialize.COORD_FACTORIES.bipolar({ fociDistance: 120 });
+    const sample: [number, number] = [0.5, 1];
+    check(
+      "a bipolar wire config rebuilds Coord.bipolar(fociDistance)",
+      rebuilt.type === "bipolar" &&
+        JSON.stringify(rebuilt.transform(sample)) ===
+          JSON.stringify(GoFish.Coord.bipolar(120).transform(sample)) &&
+        JSON.stringify(rebuilt.transform(sample)) !==
+          JSON.stringify(GoFish.Coord.bipolar().transform(sample))
+    );
     check(
       "rebuild is kind-checked (no operator `layer`)",
       Serialize.rebuild("operator", "layer", {}) === undefined

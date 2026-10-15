@@ -7,11 +7,11 @@ import math
 import pytest
 
 import gofish
-from gofish import Bin, Calendar, Curve, Overlap, Tile, field, line, ribbon, scatter, chart, circle
+from gofish import Bin, Calendar, Coord, Curve, Overlap, Tile, field, line, ribbon, scatter, chart, circle
 
 FAMILIES = {
     "Color": ("color", ["palette", "gradient"]),
-    "Coord": ("coord", ["polar", "clock", "wavy"]),
+    "Coord": ("coord", ["polar", "clock", "wavy", "bipolar", "arc_length_polar", "linear"]),
     "Curve": (
         "curve",
         [
@@ -53,6 +53,20 @@ def test_member_import_from_the_family_module():
 
     assert separate is gofish.Overlap.separate
     assert separate(padding=1) == {"kind": "separate", "padding": 1}
+
+
+def test_coords_are_type_tagged_configs_on_the_wire():
+    assert Coord.linear() == {"type": "linear"}
+    assert Coord.arc_length_polar() == {"type": "arcLengthPolar"}
+    assert Coord.bipolar() == {"type": "bipolar"}
+    # The option is positional, as in JS `bipolar(fociDistance)`, or a kwarg.
+    assert Coord.bipolar(120) == {"type": "bipolar", "fociDistance": 120}
+    assert Coord.bipolar(foci_distance=120) == {"type": "bipolar", "fociDistance": 120}
+    assert Coord.polar(inner_radius=0.5, center=(1, 2)) == {
+        "type": "polar",
+        "innerRadius": 0.5,
+        "center": [1, 2],
+    }
 
 
 def test_curves_are_calls_on_the_wire():

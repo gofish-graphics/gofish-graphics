@@ -251,10 +251,15 @@ serialized as a field, so it composes with any explicit `.zOrder(...)` or
 
 A chart's **coordinate transform** rides the IR as a small spec the deserializer
 maps back to the JS factory by `type` — e.g. `{ type: "polar", innerRadius,
-centralAngle, startAngle, direction, center }`. `fromJSON.ts` reconstructs it by
-calling `Coord.polar(coordSpec)` / `Coord.clock(coordSpec)` and passing the whole spec
-through (the factory ignores the `type` key), so a parameterized polar/clock —
-donut hole, partial fan, start angle — round-trips without per-option plumbing.
+centralAngle, startAngle, direction, center }`. `fromJSON.ts` reconstructs it
+through `COORD_FACTORIES` in `registry.ts`, one entry per `COORDS` descriptor,
+keyed by `type`. Each entry gets the spec without its `type` and calls the
+`Coord` factory: an options-object factory takes it whole
+(`Coord.polar(opts)`), so a parameterized polar/clock (donut hole, partial fan,
+start angle) round-trips without per-option plumbing, and a factory that takes
+its option positionally reads it off the spec (`Coord.bipolar(opts.fociDistance)`).
+An unknown `type` throws. The serialize test checks that `COORD_FACTORIES` and
+`COORDS` name the same transforms.
 
 Channel values (`h`, `w`, `fill`, …) accept bare primitives (the
 shorthand path) or one of three explicit tagged objects:
@@ -776,13 +781,19 @@ It emits:
   killing four previously hand-copied wire-name tables.
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
-  `layer`, `pack`, the polar coord family), with separate combinator-form
+  `layer`, `pack`), with separate combinator-form
   cores for `spread`, `stack`, and `treemap` (their combinator entries add
   `key`; `spread` and `stack` also include the whole `boxDims` group, since
   JS `Spread` spreads its `FancyDims` into its box), and `_chart_opts` for
   `chart()` and the chart-tier `layer([...])` — just the kwargs→dict half. The
   polymorphic operator-vs-combinator dispatch stays hand-written in
   `ast.py`, calling into these generated cores.
+- The **Coord family** module, `gofish/coord.py`, bound in `__init__.py` as
+  `Coord`: one factory per `COORDS` entry, named by `pyKwarg`
+  (`Coord.arc_length_polar`). Each returns `{"type": ..., **options}` with the
+  camelCase wire keys and only the options that were set, so the defaults stay
+  on the JS side. Its params are positional-or-keyword, so a transform that JS
+  calls with a positional option reads the same in Python (`Coord.bipolar(120)`).
 - One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
   `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
   `gofish/calendar.py`), bound in `__init__.py` under the family name
@@ -815,7 +826,7 @@ It emits:
 predicate logic) and
 `field`/`datum`/`normalize`/`repeat`/`ref`/`select_all`
 (not in the descriptor table at all) stay fully hand-written in `ast.py`, as
-do the `Color` and `Coord` family modules (`color.py`, `coord.py`),
+does the `Color` family module (`color.py`),
 alongside the builder chain, `_RefProxy`, `DatumValue` arithmetic, and the
 widget/RPC layer — see
 [Design space: generating the Python wrapper](/internals/design/python-wrapper-codegen)

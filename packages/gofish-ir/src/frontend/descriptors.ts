@@ -2124,7 +2124,7 @@ export const COORDS: Record<string, ConstructDescriptor> = {
     fields: {},
   }),
   bipolar: coordTransform("bipolar", {
-    doc: "Bipolar coordinates from two foci. JS takes `fociDistance` positionally, not as an options object.",
+    doc: "Bipolar coordinates from two foci. Takes `fociDistance` positionally, not as an options object.",
     fields: {
       fociDistance: {
         type: t.number,
