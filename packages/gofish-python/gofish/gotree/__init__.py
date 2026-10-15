@@ -16,6 +16,10 @@ Each function mirrors its JS counterpart in ``helpers.ts``, ``recursion.ts``,
 ``tests/python-stories/go-tree/`` check that the two produce the same render.
 A change to the JS grammar needs the same change here.
 
+This module is a declared shortcut: it re-implements the JS grammar instead of
+sharing it. TODO(#1163): extension packages (gotree, and later others) should
+each cross to Python from one definition, without a second implementation.
+
     from gofish.gotree import tree, combine, spread, distribute, nest, alternate
 """
 
