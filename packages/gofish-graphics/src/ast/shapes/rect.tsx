@@ -8,7 +8,6 @@ import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
 import {
-  getMeasure,
   getValue,
   isAesthetic,
   isValue,
@@ -26,7 +25,7 @@ import {
   Size,
   Transform,
   centerOf,
-  startAtCenter,
+  positionOf,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
 import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
@@ -34,12 +33,10 @@ import { computeAesthetic, computeSize } from "../../util";
 import {
   UNDEFINED,
   UnderlyingSpace,
-  mergeMeasures,
+  joinUnits,
   CONTINUOUS,
-  mergeCalendars,
-  positionCalendar,
-  withCalendar,
   magnitude,
+  valueUnits,
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
@@ -55,6 +52,21 @@ import {
 
 const DEFAULT_RECT_SIZE = 16;
 
+/** A drawn extent moved in by `inset` pixels at each end, about the same
+ *  center, and never below zero size. */
+const insetBy = (
+  d: { min: number; size: number; center: number; max: number },
+  inset: number
+) => {
+  const size = Math.max(0, Math.abs(d.size) - 2 * inset);
+  return {
+    min: d.center - size / 2,
+    max: d.center + size / 2,
+    center: d.center,
+    size,
+  };
+};
+
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Rect = ({
   key,
@@ -66,6 +78,7 @@ export const Rect = ({
   filter,
   opacity = 1,
   aspectRatio,
+  inset = 0,
   ...fancyDims
 }: {
   key?: string;
@@ -79,10 +92,26 @@ export const Rect = ({
   /** w/h ratio to enforce. w = h * aspectRatio. When both dims are data-driven,
    *  the constraining axis (smaller of the two scaled sizes) is used. */
   aspectRatio?: number;
+  /** Pixels drawn in from each side of the space the rect fills: on an axis
+   *  where it has no size or span of its own (a bar's width in a `spread` or
+   *  a `partition` cell), so neighbors are drawn apart. A side the rect sizes
+   *  itself (a bar's data height) is never inset. Paint only: the rect's
+   *  box, which layout and refs read, stays the space it was given. */
+  inset?: number;
 } & FancyDims<MaybeValue<number>>) => {
   // `embedded` is authored by the resolveEmbedding pass (after underlying-space
   // resolves the axis measure), not inferred here — see _node.resolveEmbedding.
   const dims = elaborateDims(fancyDims);
+  if (!(Number.isFinite(inset) && inset >= 0))
+    throw new Error(
+      `rect: inset must be a number of pixels, 0 or more, got ${inset}.`
+    );
+  // Whether the rect fills the space its parent gives it on `axis`: it sets
+  // no size and no span there (read after the resolveAliases pass, which
+  // writes the axis-name-keyed `dims` onto `dims`).
+  const fills = (axis: 0 | 1): boolean =>
+    dims[axis].size === undefined &&
+    !(dims[axis].min !== undefined && dims[axis].max !== undefined);
   const node = new GoFishNode(
     {
       key,
@@ -110,16 +139,13 @@ export const Rect = ({
           const center = centerOf(d);
           if (center !== undefined) return glyphAxis(center, d.size);
           if (isValue(d.min) && isValue(d.max)) {
-            return withCalendar(
-              CONTINUOUS(
-                interval(getValue(d.min)!, getValue(d.max)!),
-                "pinned",
-                mergeMeasures(getMeasure(d.min), getMeasure(d.max), {
-                  axis,
-                  where: "between a rect's two ends",
-                })
-              ),
-              mergeCalendars([positionCalendar(d.min), positionCalendar(d.max)])
+            return CONTINUOUS(
+              interval(getValue(d.min)!, getValue(d.max)!),
+              "pinned",
+              joinUnits(valueUnits(d.min), valueUnits(d.max), true, {
+                axis,
+                where: "between a rect's two ends",
+              })
             );
           }
           if (!isValue(d.min) && !isValue(d.size)) {
@@ -139,107 +165,44 @@ export const Rect = ({
           // has position (data-driven), maybe with literal/no size → POSITION.
           const min = isValue(d.min) ? getValue(d.min)! : 0;
           const size = isValue(d.size) ? getValue(d.size)! : 0;
-          return withCalendar(
-            CONTINUOUS(interval(min, min + size), "pinned", getMeasure(d.min)),
-            positionCalendar(d.min)
+          return CONTINUOUS(
+            interval(min, min + size),
+            "pinned",
+            valueUnits(d.min)
           );
         };
 
         return [resolveAxis(0), resolveAxis(1)];
       },
-      layout: (shared, size, scales, children) => {
-        let x = computeAesthetic(
-          dims[0].min,
-          posFn(scales?.[0]?.map)!,
-          undefined
-        );
-        let y = computeAesthetic(
-          dims[1].min,
-          posFn(scales?.[1]?.map)!,
-          undefined
-        );
-
-        let w: number | undefined;
-        if (isValue(dims[0].min) && isValue(dims[0].max)) {
-          // Both min and max are values -> width spans [min, max] in data space
-          x = computeAesthetic(
-            dims[0].min,
-            posFn(scales?.[0]?.map)!,
-            undefined
-          );
-          const xMax = computeAesthetic(
-            dims[0].max,
-            posFn(scales?.[0]?.map)!,
-            undefined
-          );
-          // the map above guarantees a defined scale, so computeAesthetic
-          // returns a number here.
-          w = xMax! - x!;
-        } else if (isValue(dims[0].min) && isValue(dims[0].size)) {
-          // If a map for x exists, scale min and min+size, then subtract
-          const min = x;
-          const max = computeAesthetic(
-            value(getValue(dims[0].min)! + getValue(dims[0].size)!),
-            posFn(scales?.[0]?.map)!,
-            undefined
-          );
-          // Same invariant as the min/max branch: the map above
-          // guarantees a defined scale.
-          w = max! - min!;
-        } else if (isValue(dims[0].size) && scales?.[0]?.map) {
-          // If we have size but no min, and a map exists, use position scale
-          // Treat min as 0 (baseline) and compute width from position scale
-          const minPos = pxOf(scales[0]!.map!, 0);
-          const maxPos = pxOf(scales[0]!.map!, getValue(dims[0].size)!);
-          w = maxPos - minPos;
-        } else {
-          w = computeSize(dims[0].size, scales?.[0]?.sigma!, size[0]);
-        }
-        // When parent constraints are unresolved and rect width is unspecified,
-        // keep a visible default instead of propagating undefined.
-        if (w === undefined || !Number.isFinite(w)) {
-          w = DEFAULT_RECT_SIZE;
-        }
-
-        let h: number | undefined;
-        if (isValue(dims[1].min) && isValue(dims[1].max)) {
-          // Both min and max are values -> height spans [min, max] in data space
-          y = computeAesthetic(
-            dims[1].min,
-            posFn(scales?.[1]?.map)!,
-            undefined
-          );
-          const yMax = computeAesthetic(
-            dims[1].max,
-            posFn(scales?.[1]?.map)!,
-            undefined
-          );
-          // the map above guarantees a defined scale, so computeAesthetic
-          // returns a number here.
-          h = yMax! - y!;
-        } else if (isValue(dims[1].min) && isValue(dims[1].size)) {
-          // If a map for y exists, scale min and min+size, then subtract
-          const min = y;
-          const max = computeAesthetic(
-            value(getValue(dims[1].min)! + getValue(dims[1].size)!),
-            posFn(scales?.[1]?.map)!,
-            undefined
-          );
-          // Same invariant as the min/max branch: the map above
-          // guarantees a defined scale.
-          h = max! - min!;
-        } else if (isValue(dims[1].size) && scales?.[1]?.map) {
-          // If we have size but no min, and a map exists, use position scale
-          // Treat min as 0 (baseline) and compute height from position scale
-          const minPos = pxOf(scales[1]!.map!, 0);
-          const maxPos = pxOf(scales[1]!.map!, getValue(dims[1].size)!);
-          h = maxPos - minPos;
-        } else {
-          h = computeSize(dims[1].size, scales?.[1]?.sigma!, size[1]);
-        }
-        if (h === undefined || !Number.isFinite(h)) {
-          h = DEFAULT_RECT_SIZE;
-        }
+      layout: (size, scales, children) => {
+        const pos = [posFn(scales?.[0]?.map), posFn(scales?.[1]?.map)];
+        // The box's pixel size on one axis.
+        const sizeOn = (k: 0 | 1): number => {
+          const d = dims[k];
+          const at = (v: MaybeValue<number> | undefined) =>
+            computeAesthetic(v, pos[k], undefined)!;
+          const map = scales?.[k]?.map;
+          let s: number | undefined;
+          if (isValue(d.min) && isValue(d.max)) {
+            // Both ends are values: the box spans [min, max] in data space.
+            s = at(d.max) - at(d.min);
+          } else if (isValue(d.min) && isValue(d.size)) {
+            // A data start and size: map both ends, then subtract.
+            s = at(value(getValue(d.min)! + getValue(d.size)!)) - at(d.min);
+          } else if (isValue(d.size) && map) {
+            // A data size with no start: measured from the baseline, data 0,
+            // through the map.
+            s = pxOf(map, getValue(d.size)!) - pxOf(map, 0);
+          } else {
+            s = computeSize(d.size, scales?.[k]?.sigma!, size[k]);
+          }
+          // When parent constraints are unresolved and the size is
+          // unspecified, keep a visible default instead of propagating
+          // undefined.
+          return s === undefined || !Number.isFinite(s) ? DEFAULT_RECT_SIZE : s;
+        };
+        let w = sizeOn(0);
+        let h = sizeOn(1);
 
         if (aspectRatio !== undefined && aspectRatio > 0) {
           const wIsData = isValue(dims[0].size);
@@ -259,13 +222,8 @@ export const Rect = ({
           }
         }
 
-        // A box placed by its center starts half its pixel size before it.
-        const c0 = centerOf(dims[0]);
-        if (c0 !== undefined)
-          x = startAtCenter(c0, posFn(scales?.[0]?.map)!, w);
-        const c1 = centerOf(dims[1]);
-        if (c1 !== undefined)
-          y = startAtCenter(c1, posFn(scales?.[1]?.map)!, h);
+        const x = positionOf(dims[0], pos[0], w);
+        const y = positionOf(dims[1], pos[1], h);
 
         return {
           intrinsicDims: {
@@ -302,7 +260,10 @@ export const Rect = ({
         const space = coordinateTransform ?? linear();
         const isXEmbedded = intrinsicDims![0].embedded;
         const isYEmbedded = intrinsicDims![1].embedded;
-        const displayDims = displayDimsOf(intrinsicDims, transform);
+        const displayDims = displayDimsOf(intrinsicDims, transform).map(
+          (d, axis) =>
+            inset > 0 && fills(axis as 0 | 1) ? insetBy(d, inset) : d
+        );
 
         const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);

@@ -41,6 +41,7 @@ const {
   createMark,
   derive,
   group,
+  chunk,
   interpolate,
   layer,
   line,
@@ -49,6 +50,7 @@ const {
   selectAll,
   spread,
   field,
+  Bin,
   time,
   Animation,
   Curve,
@@ -490,7 +492,7 @@ async function main(): Promise<void> {
           .toDisplayList(OPTIONS)
       );
     const [binned, plain] = [
-      await tip(offStart, field("year").bin({ thresholds: starts.slice(1) })),
+      await tip(offStart, field("year").bin(Bin.thresholds(starts.slice(1)))),
       await tip(atStart, "year"),
     ];
     ok(
@@ -881,6 +883,22 @@ async function main(): Promise<void> {
     /time\.transition\(\): the run for "us" has two rows at year = 1958\b/
   );
   ok("a transition split by a function names the run's key", !why, why);
+  // A position key names it too: the split hands the run its key, so no key
+  // function is read off a row that carries no position.
+  why = await throws(
+    () =>
+      chart(doubled)
+        .flow(
+          time.sequence({ by: "year", on: clockAt(1958.5) }),
+          group({ by: chunk(10) }),
+          scatter({ x: "miles", y: "gas" })
+        )
+        .mark(circle({ r: 4 }))
+        .layer(time.transition())
+        .toDisplayList(OPTIONS),
+    /time\.transition\(\): the run for "0" has two rows at year = 1958\b/
+  );
+  ok("a transition split by chunk(n) names the run's key", !why, why);
 
   // A curve that is not a reading of values over time is an error wherever
   // it is written, and Catmull-Rom says it is a path curve. An unknown kind
@@ -893,11 +911,11 @@ async function main(): Promise<void> {
     ],
     [
       { kind: "linaer" },
-      /\.kind: unknown kind "linaer".*Make one with a call in the Curve family/,
+      /\.kind: unknown kind "linaer".*Make one with the Curve family/,
     ],
     [
       "monotone",
-      /: expected object, got string\. Make one with a call in the Curve family/,
+      /: expected object, got string\. Make one with the Curve family/,
     ],
   ];
   for (const [curve, pattern] of notAMethod) {

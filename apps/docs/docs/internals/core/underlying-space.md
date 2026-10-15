@@ -6,6 +6,7 @@ status: draft
 covers:
   - packages/gofish-graphics/src/ast/underlyingSpace.ts
   - packages/gofish-graphics/src/ast/extent.ts
+  - packages/gofish-graphics/src/ast/keyedDomains.ts
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/alignment.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
@@ -15,6 +16,14 @@ covers:
   - packages/gofish-graphics/src/ast/datumProjection.ts
   - packages/gofish-graphics/src/ast/schema.ts
   - packages/gofish-graphics/src/ast/calendar.ts
+  - packages/gofish-graphics/src/ast/cells.ts
+  - packages/gofish-graphics/src/ast/polygonCells.ts
+  - packages/gofish-graphics/src/ast/structExpr.ts
+  - packages/gofish-graphics/src/families/bin.ts
+  - packages/gofish-graphics/src/families/calendar.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
+  - packages/gofish-graphics/src/ast/shapes/region.tsx
+  - packages/gofish-graphics/src/ast/measure.ts
   - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/proposalPlan.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
@@ -30,6 +39,7 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/nestPlan.ts
   - packages/gofish-graphics/src/ast/constraints/grid.ts
   - packages/gofish-graphics/src/ast/constraints/bbox.ts
+  - packages/gofish-graphics/src/ast/debug/dump.ts
 ---
 
 # The underlying space tree
@@ -159,9 +169,9 @@ sub-budget layer scales size against a local extent but positions against an
 inherited map (a sub-budget vs inherited split) — two honest scopes on one axis,
 the multi-scale reading of the same equation, not a slope with a redundant,
 drifting twin. A niced-ticks-vs-raw-content split is _not_ a sanctioned case:
-that was the #659 bug (a self-scaled panel's stashed domain escaping the old
-pre-layout nice walk), and since nicing moved onto the scope solve
-([below](#nicing-is-a-scope-operation-applied-on-demand)) a scope's map and σ
+that was the #659 bug (a panel's own domain escaping the old pre-layout nice
+walk), and since nicing moved onto the solve
+([below](#nicing-is-a-keyed-domain-operation-applied-on-demand)) a scope's map and σ
 read one domain by construction.
 
 ## Why an explicit IR
@@ -240,11 +250,11 @@ type CONTINUOUS_TYPE = {
   kind: "continuous";
   dataInterval: Interval; // signed data extent about the local origin
   origin: Origin; // where that origin sits
-  measure?: Measure;
+  measure?: UnitRecord; // { unit?, calendar?, titles }
   mirrored?: true;
-  calendar?: HasCalendar; // the data are instants on this calendar
+  cells?: readonly Cell[]; // every region placed along the axis is a cell
 };
-type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: Measure; ... };
+type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; titles?: string[]; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
 ```
 
@@ -308,8 +318,8 @@ the two sides:
   (`nestedExtent`). Its type keeps the inner's data interval.
 - `anchorAt` puts the baseline at the given coordinate:
   `[at − descent, at + ascent]`.
-- A scope root over a free extent (the chart root, or a layer's self-scaled
-  free stash) fits the claim's `ascent + descent` to its box and seats the
+- A sized node over a free extent (the chart root, or a layer with a size of
+  its own) fits the claim's `ascent + descent` to its box and seats the
   baseline at the scope's `originPx`: `descent·σ` above the box's low edge,
   overhead below the baseline included.
 - A stack lays its parts end to end, in order, as vectors. Each part's
@@ -346,18 +356,44 @@ the two sides:
 
 With every descent 0, all of this reduces to a single width.
 
-`ORDINAL` carries a `measure` too (the grouping field, e.g. `"lake"`) — the
-discrete analogue of `CONTINUOUS`'s measure. It's set from the grouping operator
-(`spread`'s `by`) when the ordinal space is built (`distributeSpaceFold` →
-`ORDINAL(keys, measure)`) and preserved through `unionChildSpaces`. So
-`spaceMeasure(space)` reads a measure off **both** continuous and ordinal kinds
-(only `UNDEFINED` is measureless), which is what lets an axis name itself off its
-own resolved space — a continuous axis by its unit, an ordinal axis by its
-grouping field (see [the layout passes](/internals/layout/passes)).
+`ORDINAL` carries `titles`: its grouping fields (e.g. `"lake"`), and no
+unit, since categories set up no scale. It's set from the grouping operator
+(`spread`'s `by`) when the ordinal space is built
+(`distributeSpaceFold` → `ORDINAL(keys, by)`), and `unionChildSpaces` unions
+the titles of the ordinals it overlays, in order. So `spaceTitle(space)` reads a title off
+**both** continuous and ordinal kinds (only `UNDEFINED` has none), which is what
+lets an axis name itself off its own resolved space — a continuous axis by its
+quantity names, an ordinal axis by its grouping field (see [the layout
+passes](/internals/layout/passes)).
+
+An `ORDINAL` can also hold **cells** (`ORDINAL_TYPE.cells`, the cells in
+order of their starts, as `CONTINUOUS_TYPE.cells` holds them; a key is its
+cell's id). A split keyed by a binned key (`field(x).bin(p)`) gives each child
+node its cell (`keyCell`, set in `createOperator` beside the key, which is
+the cell's id), the distribute fold reads a child's cell as its key
+(`keyOf` in `compose.ts`), and `ordinalOver` builds the ordinal over those
+keys, with the cells when every key is a cell of a line. `unionChildSpaces`
+keeps them when every unioned ordinal has them and they are the cells of one
+partition (`mergeCells`, see [Partition](#partition-each-group-in-its-cell)).
+The type is what tells the axis it
+places cells, not points: an axis over cells labels each cell between its
+boundary ticks ([Axes](/internals/frontend/axes)). It is read off the
+space, never off a datatype flag on the column.
+
+An `ORDINAL` also says whether its keys have an order
+(`ORDINAL_TYPE.hasOrder`). Cells are ordered by nature, so an ordinal over
+cells has it. A split over a column the chart's `schema` declares ordered
+(`HasOrder`) says so too: `spread`'s split reads the `by` column's type and
+returns `hasOrder` in its layout options, and the spread passes it through
+its distribute (`DistributeOptions.hasOrder`) to `ordinalOver`, as it passes
+the grouping field as the `measure`. `unionChildSpaces` keeps it when every
+unioned ordinal has it. The axis reads it to place an outer level's labels:
+at the start of each run of ordered keys, centered over unordered ones
+([Axes](/internals/frontend/axes)).
 
 A datum value can also carry a `field`: the data field it was read from, set
 by `inferColor` when a color channel names one. That is provenance, not a
-measure: it never enters `resolveMeasure` or unit unification, and only the
+quantity: it never enters `resolveColumn` or unit unification, and only the
 color scale reads it (see [Color Scale Resolution](/internals/layout/color-scales)).
 
 A companion predicate, **`isPositioningSpace`**, folds the two axis-bearing
@@ -453,7 +489,7 @@ each inherent to what the origin states are:
 
 - **Who applies `originPx`**: one seating rule (`seatInScope` in
   `solver/scopes.ts`), used by the render root, a coord, and every layer
-  (a self-scaled stash included). A pinned child shares its parent's frame,
+  (a sized layer included). A pinned child shares its parent's frame,
   so it sits at 0 and places its data through the frame's map; a free child
   has a frame of its own whose 0 is its baseline (`{σ, 0}`, `frameOf`), so
   its parent places that baseline at the frame's `originPx`; a child with no
@@ -628,11 +664,25 @@ composes its targets' spaces into the layer's claim on that axis:
   cross-axis `align` fold still runs — a histogram is an interval position on x
   plus an `align` on y, and it is that align fold (SIZE→POSITION) that makes the
   count axis. The solved `(min, size)` is bridged into GoFish's
-  `(local box, translate)` split by stamping `[0, size]` into the local box and
-  deriving the absolute `min` through the placement ledger. `scatter` uses both
+  `(local box, translate)` split by keeping the local box's own `min` (where
+  the target's layout put it), stamping the solved `size`, and deriving the
+  translate as the absolute `min` less that local `min` through the placement
+  ledger. The local `min` must stay: a container's children are placed in its
+  local frame, so moving its `min` to 0 would draw them away from its box by
+  the old `min` (on an upward y, a spread pinned across a cell drew its bars
+  one cell away). The interval also sizes the target before its layout: the
+  layer proposes the span's pixel length as the child's size on that axis
+  (`buildChildProposals`, `constraints/proposalPlan.ts`), so the child's
+  content fills the span it will be pinned across rather than being laid out
+  in the whole layer and then stretched. `scatter` uses both
   forms of `Constraint.position`: plain `x`/`y` → a point coordinate, range
   `xMin`/`xMax`/`yMin`/`yMax` → an interval coordinate (the operator no longer
-  has a bespoke layout). A categorical
+  has a bespoke layout). A position constraint may instead give its target
+  a **region** (`region: PositionRegion`, #1059), which is what `partition`
+  uses. It is not a pin: the
+  layer turns it into the region it hands the target in its layout call,
+  and the target places itself there, keeping the size its layout gave it
+  (see [Partition](#partition-each-group-in-its-cell)). A categorical
   scatter channel such as `x: "lake"` lowers to discrete placement coordinates
   `i / count · axisSize`; those are placement coordinates, not datum values, so
   they become numeric placement facts without affecting the layer's data domain.
@@ -668,7 +718,7 @@ fold is authoritative and overrides the layer's default `unionChildSpaces` —
 **even when the fold is UNDEFINED**. This matters for an `align` over ORDINAL
 cross-axis children: the alignment fold is UNDEFINED (no anchored axis), and if
 the default union were allowed to win it would resurrect an ORDINAL space and a
-spurious axis (a waffle's chunked-row index leaking a row "axis"). The
+spurious axis (a waffle's `chunk(n)` row index leaking a row "axis"). The
 composition is planned once from the constraints and the child nodes alone
 (`planConstraintComposition`, `constraints/compose.ts`): which children each
 distribute and align covers, on which axis. The type fold
@@ -690,6 +740,36 @@ reach the same expressive ceiling as the spread pipeline, auto-fit included
 (issue #475). Composition beyond one distribute (+ one align) per axis falls
 back to `unionChildSpaces`; the general algebra is sketched in
 [[constraints-as-core]].
+
+**Sharing sets.** A second plan reads the same inputs, the constraints and the
+child nodes: `planSharing` (`constraints/compose.ts`) splits a layer's children,
+per axis, into sharing sets. Two children in one set read their data values on
+that axis in one frame. Set 0 is the layer's own set, and a child in any other
+set is detached on that axis. A literal pixel `position` detaches its child, a
+spread's `distribute` detaches each part and nests it in its slot, a grid does
+both on both axes, and `align`, a stack's glued `distribute` and `nest` join
+their children. One classifier, `positionCoordKind` (`constraints/position.ts`),
+says whether a coordinate is pixels (a number, or an interval of numbers) or a
+datum (a datum point, or an interval with a datum endpoint). A position's
+coordinate on an axis is its point or interval there, or its region's span
+there (`axisCoordinates`): a `partition` cell's edges are datums, so a cell's
+child is nested at its cell, as a scatter's glyph is at its point. Detaches run first
+and joins second, so an `align` beats a `position` on the same axis. The
+`nested` half is the datum placements plus the spread slots and grid cells. The
+plan also returns the datum placements on their own (`datumPlaced`), which the
+layer's own union leaves out. Unlike `planConstraintComposition`, the plan
+exists for every layer, point positions included. The layer's type hook, the
+keyed domain table and the `GOFISH_DUMP_SHARING` dump read it. It is step 3 of
+the [measure-keyed domains design](/internals/design/measure-keyed-domains),
+which lists what each construct contributes. `planSharing` is the layer's
+sharing rule. Like the type hook, each node type has its own rule
+(`resolveSharing`, read through `GoFishNode.sharing()`, which memoizes the plan
+and clears it with the types), and a node without one lets every child share
+(`shareAll`). Three rows of the table are node-level rules: a layer with a
+data-valued `w`/`h` nests its content on that axis, a `treemap` detaches each
+child and nests it in its tile on both axes (`nestEach`), and the `position`
+operator detaches its child on an axis with a pixel offset and keeps it shared
+on an axis with a datum offset.
 
 `distribute`'s `anchor` option (`"edge" | "start" | "middle" | "end" |
 "baseline"`, default `"edge"`) picks which pair of anchors the chain relates
@@ -761,7 +841,9 @@ whatever its origin. A `transform.scale` is a pixel-space operation, like
 translate, so it scales the claim and never the data interval.
 `childLayoutSizeProposal` is the final per-child proposal priority before nest:
 the cell's own track extent (grid), else distribute slice for that named child,
-else the full layer box.
+else the full layer box; then, on an axis an interval `position` spans, the
+span's pixel length (the pins set the child's extent there, whatever else
+proposed one).
 `buildLayerConstraintLayoutPlan` packages the per-layer execution plan — which
 children skip baseline placement, nest source-before-derived order, and
 datum-position target axes — so the layer executes deterministic artifacts
@@ -793,7 +875,10 @@ claim (no fill to absorb the slack), the grid claim is inverted against the
 allocated size by the same scope registry that solves any other frame equation.
 Because a categorical track axis cannot simultaneously be a SIZE magnitude, the
 grid's _reported_ space stays ORDINAL over the columns/rows (`gridSpaces`, for
-axis rendering) while the size claim is consumed at layout time by the track
+axis rendering; `ordinalOver` the keys `table`'s split found, so a binned
+column or row key gives an ordinal over its cells, as a spread's does: the
+split runs `splitEntries` once per key, as `spread` does, and each cell of
+the table holds the rows in both groups) while the size claim is consumed at layout time by the track
 resolution. The layout budget sizes fill cells to their track extent; the
 authoritative **placement tracks** are recomputed from the actual laid-out cell
 sizes (`gridTracksFromSizes`) so each cell pins to the real geometry — one source
@@ -810,10 +895,9 @@ elaboration target.
 The same proposal plan marks datum-valued `position` targets
 (`buildPositionTargetDims`) so the layer does not also forward the consumed
 data→pixel scale to that child axis; literal pixel pins are not marked because
-they do not consume a data scale. `buildPositionScalePlan` chooses the effective
-scale the placement solver consumes: inherited/self-scaled base first, otherwise
-a local scale from the layer POSITION space when the layer owns a datum-position
-axis. Child scale forwarding itself is the same plan (`childPosScalesFor`):
+they do not consume a data scale. The placement solver resolves datum positions against the layer's frame
+(`solveLayerScales`): the frame it is handed, or its own when it is sized.
+Child scale forwarding reads the same frame (`childPosScalesFor`):
 unowned axes forward inherited/base scales, while owned axes forward the layer's
 effective scale only to non-target children whose own space is POSITION.
 
@@ -860,7 +944,7 @@ last-writer-wins an ungoverned second write would otherwise produce
 unbound-target check, and `lowerAlignPlacement` separately warns (not
 throws) when a constraint ends up with nothing movable — every listed
 operand already placed — except the deliberate `isDataPositionedAlignTarget`
-skip (a self-scaled scatter facet), which stays silent.
+skip (a data-positioned scatter facet), which stays silent.
 
 Before any of this, the layer resolves every placement operand to a node
 inside it (`resolveConstraintOperands`, `constraints/index.ts`). Every
@@ -888,7 +972,8 @@ through the already-solved data→pixel scale plus any post-scale offset. A
 box placed by a data center (`circle({ cy: "value", r: 5 })`, a `rect` with
 `cx`) is a glyph like a text or an image: its axis space is `glyphAxis` of the
 center, and its layout puts the center through the scale and takes half its
-pixel size off (`centerOf` / `startAtCenter` in `dims.ts`). This
+pixel size off (`positionOf` in `dims.ts`, which every box mark places its
+start by: a rect, an ellipse, a text and an image). This
 keeps the unified constraint semantics without a generic dense linear solver:
 strong facts win, relation cycles are checked for contradiction, and components
 without an absolute pin are normalized so the minimum solved coordinate in that
@@ -953,8 +1038,8 @@ the rounded −40. A free
 layer is itself seated by its parent at its own baseline, so its frame has
 that baseline at local 0 (`frameOf`), and so does its free-child origin:
 applying the map again would count the offset twice, and letting the component
-float would let min-normalization lift a descent off the baseline. A layer's
-self-scaled stash roots its own σ-scope, so its frame is that scope's, with its
+float would let min-normalization lift a descent off the baseline. A sized
+layer solves its own σ-scope, so its frame is that scope's, with its
 origin at the scope's `originPx` (`descent·σ`), the same rule as the chart
 root. A layer with no data 0 on the axis has no frame, and its components
 float. Anchored children share the layer's frame and stay at 0, as the next
@@ -1153,11 +1238,9 @@ gofish.tsx (root):
   pass one `AxisScale` = { sigma?, map? } downward per axis — a child reads
   `sigma` for size, `map` for data position (they're mutually exclusive at root)
 
-layer.layout, on an axis the node scopes (node.shared[axis] — set by
-`spread`/`stack`'s `sharedScale` and on every chart's content; default
-[false, false] is a no-op), when it roots the scope (no inherited σ, or a
-self-scaled stash — a chart nested in another chart's mark inherits):
-    if claim[axis] exists → claim[axis].width.inverse(size[axis])
+layer.layout, on an axis where the layer is sized (`solveLayerScales`):
+    claim = KeyedDomains.scope(claim[axis]): widen to the keyed domain, nice on demand
+    if claim exists → claim.width.inverse(size[axis])
     else → undefined (no σ-dependent room, e.g. an ordinal of fixed boxes)
 ```
 
@@ -1193,18 +1276,14 @@ per-axis `AxisScale` via the `scales` parameter and read its `sigma` in
 
 `spread`/`stack` no longer have their own `layout` — they **elaborate to
 `layer + align + distribute`** (`spread.tsx`), so the dispatch above lives
-entirely in `layer.layout`. `buildChildScalePlan` is the shared layout-time
-planner: explicit self-scaled axes first derive local maps/scale factors, a
-layer whose constraints fold to a SIZE claim then inverts that fold against its
-allotted size (`fold.inverse(size[axis])`) to derive a local scale factor for
-its constrained children (returning failures so `layer` can warn before falling
-back), and a `sharedScale` scope finally runs the per-axis solve in the
-pseudocode above. `layer` recombines the per-axis σ and `map` into one
+entirely in `layer.layout`. `solveLayerScales` is the shared layout-time
+planner: on each axis where the layer is sized it runs the solve in the
+pseudocode above (returning the failed axes so `layer` can warn before falling back),
+and elsewhere it inherits. `layer` recombines the per-axis σ and `map` into one
 `AxisScale` per child at `child.layout`. The result is a **fresh `childScaleFactors`
-array** handed to descendants — **no node ever mutates the inherited σ**. That is the
-claim-hoisting form of `sharedScale` (#549): a scale solves at the lowest node
-where its measure stops being shared, and the result flows to descendants only,
-never leaking to siblings.
+array** handed to descendants — **no node ever mutates the inherited σ**. A scale solves
+at a sized node, and the result flows to descendants only, never leaking to
+siblings.
 
 This dispatch is the practical embodiment of the underlying-space-kind
 distinction. It also happens to make the rendering pipeline more readable:
@@ -1213,142 +1292,124 @@ once you know the kind, you know which arithmetic applies.
 ## The one solve site: the σ-scope registry
 
 Every scale above resolves the same frame equation — `content(σ) = allocated`,
-inverted once by `Monotonic.inverse` — but historically that inversion was
-written out at four-plus places, each with its own pixel budget and fallback:
-the render root (`gofish.tsx`), an explicit-pixel-size axis and a composed
-distribute budget and a `sharedScale` scope (all three inside
-`buildChildScalePlan`), and a coord boundary (`coord.tsx`'s `fitAxis`). Keeping
-them consistent needed a hand-written guard (the #618 "an intermediate must
-propagate the inherited σ, not re-root against its own budget" rule).
+inverted once by `Monotonic.inverse` — and one registry does the inversion. A
+`ScopeRegistry` (`ast/solver/scopes.ts`), created once per render on the
+`RenderSession`, is the one place σ / posScale is derived: `solveScope(space,
+claim, allocated)` solves a sized node's σ and its `originPx`, and
+`solveSize(frame, allocated)` inverts a bare claim (a grid's tracks).
 
-Stage 6b makes those a **single mechanism**. A `ScopeRegistry`
-(`ast/solver/scopes.ts`), created once per render on the `RenderSession`, is the
-one place σ / posScale is derived: `solveScope(space, claim, allocated)`
-solves a scope root's σ and its `originPx`, and `solveSize(frame, allocated)`
-inverts a bare claim (a grid's tracks). The
-derivation sites are now **σ-scope roots** — the render root, an axis with an
-explicit pixel size, a constraint budget that roots its own scope, a
-`sharedScale` operator, and a coord boundary — and each calls the registry.
-**Everyone else inherits**: the #618 guard is now the structural rule "not a root
-→ don't call the solve", so the inherited σ propagates unchanged (in
-`buildChildScalePlan`, an intermediate budget simply skips the solve — the
-`inheritedScaleFactors[axis] !== undefined && selfScaledSpaces[axis] ===
-undefined` test that _was_ the guard is now the "is this a scope root?"
-predicate). Because the arithmetic is exactly what the sites ran inline, the
-solved numbers are unchanged; the registry only adds the choke-point.
+**Only a sized node solves; everyone else inherits** (#1114). A node is sized on
+an axis when its size there is given to it rather than computed from σ:
 
-Within one layer the three roots are one decision per axis, solved once: an
-explicit size roots a scope over the stashed type and claim; otherwise, when no
-ancestor owns σ, a composed constraint budget or a `sharedScale` node roots one
-over the layer's own type and claim. Each is niced at the solve on demand, so
-a budget never re-solves a stash's σ from the raw claim (that split put bar
-tops off their ticks, the #659 symptom).
+- the render root, on an axis the render gives a `w`/`h`, sized by the
+  canvas;
+- each coordinate transform, sized by its box;
+- a node with a literal `w`/`h`;
+- a node with a data-valued `w`/`h`, whose box its parent's σ sizes and whose
+  content it maps into that box;
+- a node with pinned data in a slot its parent nests it in (a spread, grid
+  or treemap slot: a facet panel), sized by its slot;
+- a node handed no σ at all because nothing above it could solve one, sized
+  by the box it is given.
+
+A node its parent places at a datum (a scatter's glyph) is not sized. It is in
+its parent's set, so it inherits its parent's σ. It is handed no map, since
+the datum places it, so its frame is its own, with its 0 at the origin its
+parent places (`frameOf` in `solver/scopes.ts`).
+
+`solveLayerScales` (`constraints/proposalPlan.ts`) is the layer's form of the
+rule. A spread of magnitudes along its direction is not sized: its parts are
+parts of one chain claim, and the sized node above it solves σ against the
+chain. Two sized nodes that map one keyed domain into unequal sizes are an
+over-constrained layout, handled like any other: each node's own size wins
+inside it.
+
+A render with no `w`/`h` on an axis does not size its root there: the
+default canvas is a fallback, not a size. The root shrink-wraps its content
+and maps its keyed domain at the σ the domain is solved at below it. A node
+with a literal size solves its scope once, in the claim walk, through the
+registry (`ScopeRegistry.solveFixed`, called from `layer.tsx`), which records
+the σ under the keyed domain the node maps; its layout reuses that solution
+rather than solving again. The root reads the σ recorded for its own keyed
+domain (`ScopeRegistry.keyedSigma`). When the nodes agree, the root maps the
+domain at that σ, and its size on the axis is its claim at that σ, so the
+axis it draws lines up with the marks (the `NestedCharts` story: four mini
+charts 160 px tall, rendered with no size). When no node below solves the
+domain (the common `chart(...).render(el, {})`), or they solve it at
+different σs, the root solves at the default canvas, as below.
+
+Only a node that maps a domain has its claim widened (`mapsDomain` in
+`extent.ts`). A claim with σ in it maps one. A claim that is only pixels
+(content made of boxes of a literal size) is left as it is by
+`KeyedDomains.scope`: each box already mapped the domain into its own size,
+and widening the claim would add data-scaled room nothing fills.
+
+A one-value domain (`isOneValue`: a one-point chart, or every mark at one
+constant `datum`) also maps a domain, though its claim is only pixels: it has
+no width for σ to scale. It is widened to its keyed domain like any other, and
+if it is still one value, `solveScope` maps that value to the middle of the
+box, as d3 and Vega-Lite map a zero-width linear domain to the middle of the
+range: σ is 0 and the claim is centered in the box (#1107). Its axis has one
+tick, there. So every data value has a position scale, and a data value on an
+axis with none is an error (`computeAesthetic`). A domain that includes 0 and
+another value, such as a bar's, is never one value.
 
 Behind `GOFISH_DUMP_SCOPES` the registry prints every scope it solved as a
-printable frame equation — the debuggability bar the σ-affine model was chosen
-for. One line per scope, e.g. a stacked bar (root POSITION scope + a shared SIZE
-scope on the same axis, agreeing on one slope) and a sunburst (a coord boundary
-re-rooting σ on the angular axis):
+printable frame equation, one line per solve, with kind `root`, `coord`,
+`sized`, `grid` or `recenter`:
 
 ```
 [scope] root   key=root  axis=y [0,140]→[0,400] = 400  σ=2.857 map=yes
-[scope] shared key=layer axis=y 140σ = 400            σ=2.857 map=no
+[scope] sized  key=layer axis=y 140σ = 150            σ=1.071 map=yes
 [scope] coord  key=coord axis=x 16σ = 6.283           σ=0.393 map=no
 ```
 
-That the root and shared scopes on one axis print the same σ is Stage 6's
-invariant made visible: **one slope per σ-scope, by construction**, because the
-frame equation is solved once and the posScale is a derived view of that solve.
+After them, `dumpKeyedDomains` prints one line per keyed domain: its space
+root, axis, key and domain, marked `axis` when an axis is drawn over it.
 
-Stage 6c makes the registry the _sole_ producer of every slope, so that "by
-construction" holds everywhere the carrier flows. Two former exceptions closed:
-a coord boundary's POSITION axis used to hand down a fabricated `σ = 1` alongside
-its map (a scope-less slope that no consumer read) — it now hands down the one
-σ its scope solves, which its map shares; and the #582 equal-measure
-recentering (equating x and y when they share a unit of measure) used to rewrite
-the root's σ inline in `gofish.tsx`, off the registry's books. It is now a named
-`recenterEqualMeasure` operation _on_ the registry, so the dump records the FINAL
-σ (a `recenter` entry per axis) rather than the pre-recentering root σ. With both
-closed, the only way a carrier shows two different slopes on one axis is the
-legitimate **two-scope** case above (a SIZE scope and a POSITION scope, e.g. a
-sub-budget panel's local size scale vs an inherited position map) — each half
-still a single registry-solved scope σ, never independent state.
+Behind `GOFISH_DUMP_SHARING`, `dumpSharing` prints each layer's sharing sets
+instead, one line per layer, skipping chrome rings. A `*` marks a nested child.
+Both dumps live in `debug/dump.ts`.
+`tests/scripts/dump-scopes.ts "<filter>" --sharing` prints them for a story.
+The marginal histogram's layer prints as:
 
-### Nicing is a scope operation, applied on demand
+```
+[sharing] layer __axisContent (3) [position×3,align×2] x: own{scatter,topHist} detached {rightHist} | y: own{scatter,rightHist} detached {topHist}
+```
+
+The registry is the sole producer of every slope. A coord boundary hands down
+the one σ its scope solves, which its map shares, and the #582 equal-measure
+recentering (equating x and y when they share a declared unit) is a named
+`recenterEqualMeasure` operation _on_ the registry, so the dump records the
+FINAL σ.
+
+### Nicing is a keyed-domain operation, applied on demand
 
 Domain rounding — `d3.nice` stretching `[0, 44]` to `[0, 45]` so ticks land on
-round numbers — used to be a **pre-layout tree walk** (`resolveNiceDomains`)
-that mutated every node's POSITION domain in place. That per-node formulation
-had two failure modes (issue #659): a self-scaled region's stashed space never
-got walked, so a marginal panel's bars sized the _raw_ domain while its niced
-width solved an orphan scope (two slopes for one space — a genuine dual-slope
-bug, not the sanctioned two-scope case); and any node could in principle nice
-its own _subset_ of a shared domain differently from the union.
+round numbers — is applied once, at a sized node's solve, to its keyed domain,
+so every consumer of that domain (content sizes, the position map, axis ticks)
+reads the same rounded domain (#659). `niceContinuous` (`underlyingSpace.ts`)
+is the one nicing function, and `niceScope` (`extent.ts`) widens the claim to
+match. It nices exactly the spaces that render an axis over their interval
+(`axisOver`), or will once placed: a pinned domain's two ends, a free one's two
+ends about its 0, and a delta axis's width from 0. A **coord scope never
+nices** (its domains map into a fixed coordinate range).
 
-The settled semantics, recorded on #659: **scale resolution is per-scope; axis
-rendering is per-node. An axis is a view of a scope, drawn at whatever node
-wants one.** Nicing is therefore an operation on the _scope's_ domain — applied
-once, at the scope's solve, so every consumer in the scope (content sizes, the
-position map, axis ticks) reads the same rounded domain. `niceContinuous`
-(`underlyingSpace.ts`) is the one nicing function; the non-coord scope roots
-apply it at their solve sites — the render root (`gofish.tsx`), the self-scaled
-stash and the shared-scale step (`buildChildScalePlan`), and the layer-local
-datum-position scale (`buildPositionScalePlan`). It nices exactly the spaces
-that render an axis over their interval (`axisOver`), or will once placed: a
-pinned domain's two ends, a free one's two ends about its 0 (the absolute
-axis of the scope that places its baseline; each side of the claim widens by
-its own end), and a delta axis's width from 0, so a delta axis steps evenly
-(ticks 20, 40, …, 160 rather than 20, 40, …, 140 and a last step of 7). A
-**coord scope never
-nices** (its domains map into a fixed coordinate range; rounding them would
-break the mapping).
+A domain nices **to the ticks of the axis drawn over it** (`AxisTicks`): a tick
+count (10) on a numeric axis, rounded with `d3.nice`; on a **time** space
+(`calendar` set, see the column types below) the calendar partition of the
+axis's inner row, rounded outward to its cells (`niceToCells` in
+`calendar.ts`), so both ends of the axis are ticks. Both read the domain and the
+axis options only, never pixels.
 
-A scope nices to **the ticks of the axis that demands it** (`AxisTicks`): a
-tick count (10) on a numeric axis, rounded with `d3.nice`; on a **time**
-space (`calendar` set, see the column types below) the calendar partition of
-the axis's inner row, rounded outward to its cells (`niceToCells` in
-`calendar.ts`), so both ends of the axis are ticks. A round number of
-milliseconds means nothing on a calendar, so a time space branches on its
-kind inside the one `niceContinuous`. The partition is the axis's explicit
-inner row (`rows[0]` of the stamped `AxisTicks`: `layout` parses
-`axes.x.rows` once, and the axis is drawn from the same rows), else the one
-the domain picks for about the tick count
-(`tickPartition`, like d3's time ticks). Both read the domain and the axis
-options only, never pixels.
-
-And it is **demand-driven**: a scope nices its domain **iff at least one node
-in the scope renders an axis on that dim**. Nicing is a presentation
-adjustment whose demand comes from axis views — with no axis there is no tick
-grid to round for, so axis-less content stays at the honest raw scale; with an
-axis, content and ticks share the one niced domain, which is the contract.
-Mechanically, `resolveAxes` leaves a persistent `axisDemand` stamp on every
-axis-owning node: the axis's `AxisTicks`, which the chart's `axes` option
-sets per dim (undefined for no axis). The `axis` work flags are consumed and
-cleared by elaboration; the stamps survive to layout. Each solve site asks
-`GoFishNode.scopeAxisTicks(dim)`, which returns the ticks of an axis in the
-scope, or undefined for none: a walk over the scope's **space-flow
-region** — up from the scope root while neither a self-scaled stash nor a coord
-boundary cuts the flow, then across that region's subtree, stopping at deeper
-stashes and coords. The region is exactly the neighborhood whose axes all view
-the same underlying domain (an inner shared scope under an axis-drawing root
-inherits the root's demand, because its space is what bubbled up into the
-domain that axis draws; a stashed panel does not, because its space never
-reached the ancestor's axis). The walk scans the whole region, so the answer is
-kept on the render session, per dim, keyed by the region's root: every scope in
-a region shares it, and the region is scanned once per render however many
-scopes ask. A layer asks only when it roots a scope the answer changes (most
-layers, e.g. one per keyframe mark under a `time.sequence`, root none), so the
-solve takes the demand as a per-axis read, `axisDemand(dim)`.
-Tick elaboration nices node-locally with the same `niceContinuous`, applied to
-the axis-owning node's space — the same union that bubbled to the scope root —
-so elaboration and the solve cannot disagree.
-
-The facet corollaries fall out of the one rule: shared-scale facets all render
-the parent scope's identical niced axis, and free-scale facets are their own
-scope roots and nice per-panel — iff they draw their own axis. The marginal
-histogram's panels draw no count axis, so their scopes stay raw and the panel's
-map and σ agree on the raw domain; give a panel a count axis and its one scope
-nices once, keeping bars and ticks consistent by construction.
+And it is **demand-driven**: a keyed domain is niced **iff some node draws a
+continuous axis over it**. With no axis there is no tick grid to round for, so
+axis-less content stays at the honest raw scale. `resolveAxes` leaves a
+persistent `axisDemand` stamp on every axis-owning node, and the keyed domain
+table records each stamp against the domain of the stamping node's set
+(`KeyedDomains.ticksOf`). A time axis's stamp gains its rows at elaboration
+(`recordDemand`). Tick elaboration nices the same keyed domain through
+the same `KeyedDomains.scope`, so elaboration and the solve cannot disagree.
 
 ## Scales generalize flex factors
 
@@ -1398,270 +1459,313 @@ The payoff is conceptual economy: "fill the container proportionally" is not
 a bespoke layout mode, it is what a size scale already does once its range is
 the parent's extent.
 
-## Self-scaling regions: an explicit or data-valued size absorbs an axis
+## Sized nodes and measure-keyed domains
 
-The root resolves its scales against the canvas: POSITION → a posScale onto
-the pixel box, SIZE → invert the Monotonic against the canvas size. A
-`layer` (or `frame`) given an **explicit size on a dim** — a literal pixel
-number, or a data-valued claim (a field name, a `field(...)` expression, or a
-per-entry array) — does the same thing one level down — "a chart embeds the
-way it renders." On that dim it becomes a self-contained **scaling region**:
-its data space is absorbed internally rather than contributed to whatever
-shared space its parent is building.
+A size never splits a domain (#1114, the design note
+[Measure-keyed domains](/internals/design/measure-keyed-domains)). Which
+children share an axis is a fact about a node's composition, its **sharing
+sets** (`planSharing` in `constraints/compose.ts`, one rule per node type,
+`GoFishNode.sharing()`): children of a layer share both axes, a literal
+`position` detaches a child on its axis, an `align` joins the children it
+names, a stack shares its parts, and a spread or a grid gives each part a slot
+of its own. A layer's type is the union of its own set only; a detached child
+does not flow into it. Units meet through the one join, `joinUnits`, with
+`shared` true inside a set and false between a spread's parts.
 
-The motivating case is a marginal histogram, seaborn-jointplot style: a
-center scatter in data units, with a count histogram pinned along each edge.
-The histograms are sized to a fixed pixel band (`chart(data, { h: 80 })`),
-and their count axis must not union into the scatter's shared x/y domains —
-counts and beak-length millimeters are foreign units. The explicit pixel
-size is exactly the signal that this region carries its own scale.
+After the type walk, one pass builds the **keyed domain table**
+(`KeyedDomains` in `keyedDomains.ts`), once per render, before chrome and
+labels are elaborated: per space root (the render root, each coordinate
+transform), per axis and per unit after unification, the union of the
+intervals at the top of every sharing set with that unit. The top of a set is
+where it stops: a child its parent detaches or nests, or the space root. A
+child nested while it stays in its parent's set (placed at a datum, or the
+content of a data-valued box) measures its own extent from the datum or the
+box, so its domains are keyed in a frame of its own and never widen its
+parent's, even in the same unit.
 
-The rule lives in `layer`'s resolver and layout
-(`graphicalOperators/layer.tsx`), in two halves, and it branches on whether
-the explicit size is a **literal** or a **data value**:
+Every reader of a plan asks the same question of it: what is this child's
+place in its parent on this axis? `childRole` (`constraints/compose.ts`, next
+to `SharingPlan`) is the one answer, with four cases. A **shared** child is
+in the parent's own set and reads its values in the parent's frame. A
+**nested** child is in the own set too, but its extent is in a frame of its
+own: it is placed at a datum, or it is the content of a data-valued box. A
+**slot** child has a set and a frame of its own (a spread slot, a grid cell).
+A **detached** child has a set of its own and is placed elsewhere. The table
+build reads it, and so does `GoFishNode.inSlot`, which a layer's σ solve asks
+(`solveLayerScales`) only for pinned content handed a σ and no map.
+Values with no unit (literals) are keyed by their set. So two facet panels
+that plot one column share one domain, and a count histogram placed beside a
+scatter of millimeters keeps its own. Chrome never decides a domain, it only
+reads one: a ring or a label wrapper added later reads the seat of the content
+it wraps. The axes drawn over each domain are recorded once `resolveAxes` has
+assigned them (`refreshDemand`, which `layout()` calls once, after the axes
+are stamped: nothing reads the demand before then). A time axis adds its rows
+to its stamp when it is elaborated, since its levels depend on the axes below
+it, and records the new stamp then (`recordDemand`), before any solve reads
+it. A space root's domain and
+demand maps are made on the first write to them, and a read of a root with
+none (one with no axis) makes none.
 
-- **`resolveUnderlyingSpace` and `resolveExtent`.** Both hooks follow the
-  same steps (the type hook keeps the layer's composed types from
-  `composeLayerTypes`, and the claim hook reads them, since a node resolves
-  its types before its claim and the two memos are cleared together), and
-  each stashes its own half.
-  - **Literal pixel size** (`w: 80`). After resolving each axis normally, for
-    any dim that has an explicit pixel size and whose resolved space is
-    continuous (any origin), the real type is **stashed** verbatim and
-    `UNDEFINED` is reported upward; the claim hook stashes the matching claim
-    and reports none. The stash keys on the claim, not on the type's kind:
-    a spread of magnitudes has an ORDINAL (or UNDEFINED) type, which is
-    still reported upward so its keys label the parent's axis, but its room
-    depends on σ, so the layer stashes its type and claim, roots its own
-    scope, and reports no claim. An ordinal axis with no claim has no scale
-    to absorb, so it is left untouched.
-  - **Data-valued size** (`w: "count"`, `w: field("count").normalize()`, an
-    entry-flagged `size` array). This is the "DATA-DRIVEN operator extent"
-    case (#4/#20 — nested mosaic): the layer's own `w`/`h` becomes a `SIZE`
-    claim reported **upward**, so the _enclosing_ scale scope solves this
-    layer's pixel extent — the layer is a leaf in its ancestor's scope,
-    exactly like a leaf `rect({ w: "count" })`. But that leaves the layer's
-    own _composed content_ (its children's real space) needing somewhere to
-    go: if the composed space is continuous, it is stashed as it is,
-    together with the composed claim, before being overridden by the new
-    data-valued claim. (It used to be converted to a free magnitude first, so
-    that its descendants would get a σ and not only a map; a pinned stash now
-    solves both, so the conversion, which dropped the content's position, is
-    gone.) This is what makes "data-valued size ⇒ self-scaling
-    region" the **general** rule (fixed #651 smell 1: without the stash, a
-    subtree under a data-valued size silently consumed the _ancestor's_ σ
-    instead of getting its own local scope): the node's own box is solved by
-    the ancestor scope, and its interior is a fresh scope resolved against
-    that box.
-  - A parent layer's `unionChildSpaces` ignores an axis reported `UNDEFINED`
-    (no opinion — see [The contract](#the-contract)) instead of polluting a
-    shared domain with the absorbed region's units.
-- **`layout`.** The stashed space gets a **local** scope solved against the
-  layer's own resolved box (`solveScope(stashed, stashedClaim, size[dim])`):
-  σ for every stash, and, when the stash has an origin, the layer's frame
-  (the scope's map), in which each child sits by the one seating rule
-  (`seatInScope`): a pinned child places its data through it, and a free
-  child's baseline sits at its `originPx`. These locals override the inherited posScale /
-  scale factor on that dim — definitionally, since the inherited scale is in
-  the parent's foreign units. If the size can't be resolved (NaN), the locals
-  are left undefined and the dim degrades to the inherited path rather than
-  producing NaN scales. The stashed domain participates in demand-driven
-  nicing exactly like the root's
-  ([above](#nicing-is-a-scope-operation-applied-on-demand), issue #659): if
-  the region renders an axis on the dim, the stash is niced at this solve, so
-  the local map, the local σ, and the ticks read one rounded domain; if not,
-  it stays raw. (Before #659 the stash escaped the pre-layout nice walk
-  entirely — the panel's content sized the raw domain while a niced width
-  solved an orphan scope.)
+Every sized node maps its keyed domain into its own size: before its solve,
+its claim is widened to the keyed domain (`widenScope` in `extent.ts`, the same
+arithmetic as nicing: only the data part widens, so pixel overhead keeps its
+pixels), then niced on demand, then solved. The widen-then-nice is one method,
+`KeyedDomains.scope`, read by every sized layer's solve, by the render root,
+and by the axis drawn over the domain.
 
-Note that a histogram's count axis is **anchored, not origin-less**, at the
-frame boundary. Under start/end/baseline alignment, `resolveAlignmentSpace`
-(`alignment.ts`) folds the baseline magnitudes into `pinned [0, max]` — it
-commits the data-driven extents to an anchored axis so they can be aligned.
-Without the self-scaling rule, that count POSITION would union straight into
-the shared axes as if it were data units; the rule is what keeps the absorbed
-axis from leaking.
+A **literal** `w`/`h` carries no data, so the node reports its content's type
+upward unchanged, and its keyed domain is shared as the sharing sets say. Its
+claim, though, is its own pixels: the box solves its own σ, so its content's σ
+claim is not room its parent can scale. The node claims the content's claim
+at the σ it solves, which keeps the content's split about data 0 and sums to
+the size (`fixedClaim` in `layer.tsx`). It solves that σ once, through the
+registry (`solveFixed`), and its layout reuses the solution. A claim that is only pixels over
+a type wider than one value maps no domain (`mapsDomain` in `extent.ts`): it
+needs no canvas at the root, and a sized node has nothing to solve from it. A **data-valued** `w`/`h` (a field name, a `field(...)`
+expression, a per-entry array) is a value in its parent's unit, so the node
+reports a free magnitude (`magnitude(size)`), a leaf in its parent's set like
+a rect with `w: "count"`, and its content is nested in the box: the content
+is the top of a set of its own, and the node maps the content's keyed domain
+into the box its parent's σ sized. This is the one inherent special case of
+the sharing table, and the note justifies it: a data-valued size already has
+a type on its axis, so its content is a second coordinate inside the box.
 
-The space reported upward is plain `UNDEFINED` for now. Issue #508's
-proposed CONSTANT kind — "this axis has a known fixed pixel extent" (a
-genuinely _constant_ width Monotonic, `linear(0, w)`, with no inverse, as
-opposed to the through-origin `linear(w, 0)` of a scaling extent) — is the
-eventual, more honest home for what a self-scaling region contributes to its
-parent.
-
-### Space-filling spines: `normalize` self-scales a stacking axis
+### Space-filling spines: `normalize` nests each part
 
 The **space-filling spine** — the conditional axis of a mosaic / marimekko —
-is now a plain instance of the general data-valued-size rule above, with no
-layout-side special case at all (#700 Phase 2; this replaced the earlier
-`stack({ normalize: true })` layout flag and its bespoke `__normalizeAxis`
-hint). Its segments should _fill_ the extent in proportion to their value,
-showing a conditional distribution (each column of a mosaic runs 0–100%
-locally): `stack({ by, dir, size: field("count").normalize() })`.
+is an instance of the data-valued size above, with no layout-side special
+case. Its segments _fill_ the extent in proportion to their value:
+`stack({ by, dir, size: field("count").normalize() })`.
 
-The split is: `.normalize()` is a **data** transform, evaluated once, up
-front, by `applyChannels` (`marks/createOperator.ts`) via
-`splitAtNormalize`/`applyEntryNormalize` in `fieldExpr.ts` — it has nothing to
-do with layout. For each of the operator's own split entries it runs the
-PRE-normalize expression exactly as any size accessor would (an aggregate op
-like `.count()` if chained, else the channel's default sum), then replaces
-those per-entry values with each entry's **share** of their sum,
-`v_e / Σv_e` — a windowed data transform over the operator's own children,
-tagged with a share [measure](#measures-units-are-types) (`"<base> share by <by>"`,
-via `shareMeasure`) so a share axis can never silently union with the base
-measure's own axis.
+`.normalize()` is a **data** transform, evaluated once, up front, by
+`applyChannels` (`marks/createOperator.ts`) via
+`splitAtNormalize`/`applyEntryNormalize` in `fieldExpr.ts`. For each of the
+operator's own split entries it computes the entry's **share** of their sum,
+`v_e / Σv_e`, tagged with a share [unit](#measures-units-are-types)
+(`"<base> share by <by>"`, via `shareQuantity`) so a share axis can never
+silently union with the base quantity's own axis.
 
-`spread`/`stack`'s `size` option (one value per split entry, computed this
-way) then wraps **each child** in its own sized `layer({ [w|h]: size[i] },
-[child])`, before the usual align/distribute elaboration (`spread.tsx`). Each
-wrapper's `w`/`h` is a **data-valued size claim** like any other — an ordinary
-instance of the rule above, not a special stacking-axis hint. The wrapper is
-purely a sizing shim: it copies the wrapped child's key/datum/`__splitBy`
-identity onto itself so downstream ordinal-axis labeling and
+`spread`/`stack`'s `size` option then wraps **each child** in its own sized
+`layer({ [w|h]: size[i] }, [child])`, before the usual align/distribute
+elaboration (`spread.tsx`). The wrapper copies the wrapped child's
+key/datum/`__splitBy` identity onto itself so ordinal-axis labeling and
 `resolve(..., { from })` still see the un-wrapped child's identity.
 
 This is the whole trick behind **nested mosaics**. Each level plays two roles
-on its two axes: its stacking axis's per-entry `size` shares (each child a
-local, isolated self-scaling region, reporting `UNDEFINED` up from that
-child's wrapper), while its cross axis reports its raw `Σcount` SIZE _up_ from
-the operator as a whole (the ordinary data-driven-operator-extent path — the
-operator is a leaf in its ancestor's scale scope). Because the per-entry
-self-scaling regions are local and the raw count is never mutated, the
-marginal × conditional × conditional factorization composes to any depth:
-`class → sex → survived` alternates y → x → y, and every level reads `count`
-raw. See the `stack` operator and the mosaic gallery examples.
-
-An earlier iteration (the `stack({ normalize: true })` layout flag) needed a
-bake-side escape hatch: because `resolveUnderlyingSpace` reports `UNDEFINED`
-upward for a self-scaled axis, the bake's y-flip rule (since replaced by
-[axis direction](/internals/layout/passes#axis-direction)) couldn't see that
-the axis was _really_ CONTINUOUS, so a parallel `_selfScaledSpace` field on
-`GoFishNode` carried the true kind alongside the reported `UNDEFINED`, purely so
-the flip could still open over a normalized spine. The per-entry `size`-claim mechanism
-doesn't need that: each entry gets its own wrapper wired through the ordinary
-data-valued-size path above, and stacking now follows **data order** directly
-at every level rather than needing a flip to correct it — so `_selfScaledSpace`
-and its fallback were deleted outright, not generalized.
-
-A differently-shaped side channel came back later for a different consumer.
-`layer.tsx`'s self-scaling branch now also writes the real (anchored/
-difference) space it's about to replace with `UNDEFINED` into
-`GoFishNode.selfScaledSpace` — its presence (`!== undefined`) IS the "this
-dim is self-scaled" marker, so there is no separate boolean field to keep in
-sync. Nothing in layout reads it — `_underlyingSpace` is still
-`UNDEFINED` there, so sizing is exactly as before. The reader is `resolveAxes`
-(see [Axes](/internals/frontend/axes)'s "unifying duplicate axes across
-self-scaled siblings" section): a `spread` whose per-group children are each
-self-scaled to the same explicit pixel width over the same domain (a ridgeline
-chart's per-month panels) collapses the union to `UNDEFINED` at the parent
-exactly like the mosaic case above, but here the parent needs to tell "my
-children all silently agree on one real scale" apart from "my children are
-independently self-scaled" — a distinction the boolean alone can't make. The
-stash makes that comparison possible without touching layout at all.
+on its two axes: on its stacking axis each entry's wrapper is a share
+magnitude whose content is nested in it, while on its cross axis the level
+reports its content's type up. The class, sex and survived shares are three
+declared units, so each level keeps its own domain, `class → sex → survived`
+alternates y → x → y, and every level reads `count` raw.
 
 ## Measures: units are types
 
-The self-scaling region above is the heavy hammer — give a sub-chart an
-explicit pixel size and its axis stops talking to the outside entirely. But
-the marginal histogram has a subtler need at the _shared_ boundary. When the
+The sharing sets above decide which children share an axis. But the marginal
+histogram has a subtler need at the _shared_ boundary. When the
 top count histogram and the center scatter overlay on x, the union should
-succeed (both are beak-length millimeters along x) and the count axis, folded
+succeed (both are beak lengths along x) and the count axis, folded
 into a position interval, should _not_ pollute that millimeter domain. The
 shared union has to tell "same units, merge" from "foreign units, refuse"
 without a human reading the field names.
 
-That distinction is a **measure**: a unit-of-measure tag carried on a space.
-`CONTINUOUS` carries an optional `measure?: Measure` (`Measure` is just a
-string — a field name like `"Beak Depth (mm)"`, or `"count"`). It is the dead
-`source?` slot's replacement, but with teeth: spaces now **unify per
-measure**.
+That distinction is a space's **unit record** (`underlyingSpace.ts`). It holds
+three things:
 
 ```ts
 // underlyingSpace.ts
-export type CONTINUOUS_TYPE = { kind: "continuous"; dataInterval: Interval; origin: Origin; measure?: Measure; ... };
+type UnitRecord = {
+  unit?: UnitVar; // a declared unit or an unknown, a term of the render's union-find
+  calendar?: HasCalendar; // over instants: the calendar they read on
+  titles: string[]; // the quantities on the axis: they title it
+};
+export type CONTINUOUS_TYPE = { kind: "continuous"; dataInterval: Interval; origin: Origin; measure?: UnitRecord; ... };
 ```
 
-**Merging.** Two helpers in `underlyingSpace.ts` decide what happens when two
-measures meet. `undefined` is always permissive — it means "no claim", unifies
-with anything, and yields the other side (this is why `getMeasure` returns
-`undefined` rather than a `"unit"`/`"unknown"` sentinel: a measureless value
-must merge silently into a tagged one).
+The **unit** decides which axes may share a scale. The **titles** name the
+axis. The two are kept apart, following the terms of metrology: a
+**quantity** is what is measured ("Production Budget"), and a **unit** is the
+scale it is measured in ("USD"). The titles are quantities, and a declared
+unit only adds its symbol after them, `Quantity (unit)` (see **Titles**
+below).
 
-- `mergeMeasures(a, b, context)` — unify as **types**. Equal measures unify to
-  themselves; two _different_ defined measures are a type error and it
-  **throws**. This is the one policy for every continuous composition, and it
-  is decided by the measures alone, never by the origin state: overlays and
-  alignments (`alignment.ts`), spreads and stacks (`distributeSpaceFold`),
-  coords, and a layer's datum domain all use it. So overlaying a count axis
-  onto a millimeter axis fails loudly instead of corrupting the domain, and so
-  does stacking or overlaying two magnitudes in different units.
-- `forgetOnConflict(a, b)` — a conflict **forgets** (returns `undefined`)
-  rather than throwing. Used only for ORDINAL axes, whose measure is the
-  grouping field that names a category axis: categories set up no σ, so two
-  grouping fields on one axis lose the name, not the scale. A grouping field
-  is no unit, so it never enters `mergeMeasures`: a datum position in dollars
-  beside a category spread on the same axis, or a spread whose targets mix a
-  category spread with dollar bars, unifies only the continuous units.
+**Gradual unit typing.** Units are checked the way F# infers units of measure,
+but gradually (unannotated code is allowed, in the style of gradual typing):
+a column whose unit nobody declared has an _unknown_ unit, a **unit variable**,
+which unifies with anything. A declared unit is concrete. Two different
+concrete units on one axis are a type error. The concrete units are:
 
-Why one policy: the measures of an axis decide how many σ-scopes it needs,
+- a column's `Schema.unit(u)` (`HasUnit`, see
+  [column types](#column-types-the-chart-schema));
+- `"instant"`, which `Schema.time()` writes as the `HasUnit` of every time
+  column, so a start and an end time share an axis; the time zone stays in
+  the calendar, a display parameter;
+- `"count"`, for `.count()` and `.distinct()`;
+- `"duration"`, for a size read from a time column: a difference of two
+  instants (`differenceUnits`, which `magnitude` applies; the calendar is
+  dropped too);
+- `"<base> share by <by>"`, for `.normalize()` (`shareQuantity`), so a share
+  axis never silently unions with its base's own axis.
+
+Each declared unit is a `HasUnit` (the column type, `schema.ts`): a `unit`
+name, which says which units are the same, and an optional **symbol**, which
+an axis title shows. `Schema.unit(u)` writes the symbol `u`. The engine's own
+units (`INSTANT`, `DURATION`, `COUNT` in `measure.ts`, a share) have none: a
+count or a share is a plain number, and a time axis's ticks already read as
+dates.
+
+A quantity whose unit is declared is that unit, a concrete term, and nothing
+more: two charts that each declare their own `"value"` column, one in USD and
+one in EUR, share nothing, and a column `"count"` declared in people is not
+the `"count"` of `.count()`. Only an unknown is a variable. A unit variable
+is named by its **quantity**: the column's declared quantity
+(`HasQuantity`, from `Schema.quantity(name)`), or, for a column a transform
+derived from another, the source column's quantity (`bin(field)`'s
+`start`/`end`/`size` are amounts of `field`), or else the column's name. The
+column name is a weak default: it makes no claim, so two columns with
+different names are different quantities until a declaration or a meeting
+says otherwise. The same name is the same variable across the whole figure. A
+variable binds to another variable or to a concrete unit only where a join
+meets them (`joinUnits`, below), and **the binding holds for the whole
+render**: a column bound to USD on one axis is USD everywhere, so meeting
+`"count"` on another axis is a clash. That is plain unification with a
+chart-wide substitution.
+
+**The union-find.** `Units` (`measure.ts`) is the union-find over the
+render's unknowns, keyed by quantity name. `unitOf(quantity)` reads a
+quantity's unit: a declared unit is a fresh concrete term that needs no
+table, and an unknown is the variable of its name in the installed table.
+There is one table per type walk, owned by the walk's root: the render
+session's (`RenderSession.units`) when there is one, else one the root
+node of the first walk over the tree creates and keeps
+(`GoFishNode.walkUnits`). So it is figure-wide, and union-find gives the same
+classes in any order of meetings. The outermost call of the type walk
+(`GoFishNode.resolveUnderlyingSpace`) installs it with `withUnits`, and so do
+the outermost calls of the embedding pass (`resolveEmbedding`) and the
+layout pass (`GoFishNode.layout`, whose layers re-join their position
+measures in `collectPositionDomains`). So a datum value that becomes a space
+anywhere (`valueUnits`, used by `magnitude`, a point, a rect's ends, a
+position constraint, a `position` offset) takes its variable from the one
+table, and layout sees every binding the type walk made. A standalone
+`node.resolveUnderlyingSpace()` or `node.layout(...)` needs no session. A
+read outside all three passes is an engine bug, and `currentUnits` throws an
+internal error. A space holds its variable (a `UnitVar` node), so reading its
+unit later needs no walk: **`spaceUnit(space)`** returns the record with the
+unit replaced by its representative, a declared unit or the unknown its class
+stands for. It is THE accessor for "which domain is this": the titles (axis
+elaboration) read through it. Two unit variables are compared with
+`sameUnitVar` (one class, or two classes bound to one declared unit), which
+the #582 recentering and the embedding gate use. Read units after the walk,
+when every binding is made.
+
+**Joining.** One function, `joinUnits(a, b, shared, site)`, joins the
+records that meet on one axis, in every composition: overlays and alignments
+(`alignment.ts`), spreads and stacks (`distributeSpaceFold`), coords, a
+layer's datum domain, a rect's two ends, a `position` offset and its content.
+An absent record makes no claim and yields the other side. `shared` says
+whether the two sides share the axis, and the result follows the join table
+of the measure-keyed domains design (#1114):
+
+| Meeting                | Shared                                | Not shared                 |
+| ---------------------- | ------------------------------------- | -------------------------- |
+| declared A, declared A | one unit A                            | one unit A                 |
+| declared A, declared B | a `MeasureClash` (until #528)         | two units, no error        |
+| declared A, unknown x  | x is bound to A, for the whole render | forget: x stays unknown    |
+| unknown x, unknown x   | one unit (the same column)            | one unit (the same column) |
+| unknown x, unknown y   | x and y unify                         | forget: two units          |
+
+"Forget" records nothing and raises nothing, and the result keeps `a`'s
+record. A shared join unions the titles in order. Either way the calendars
+must agree (two time zones on one axis throw). Two errors remain, both
+`MeasureClash`: two declared units on one shared axis (a stack's parts in two
+units among them), and one unknown bound to two declared units (a column
+that meets `"count"` on one shared axis and `"mm"` on another).
+
+The sharing plan (`planSharing`, `compose.ts`) decides which children share
+an axis, and only the children it keeps in the layer's own set meet in the
+layer's union. A spread's parts each sit in a slot of their own, so the
+spread folds their units with `shared: false`; every other composition
+passes `true`. The decision is by the units alone, never by the origin
+state, so overlaying a count axis onto a column declared in millimeters
+fails loudly instead of corrupting the domain.
+
+The `position` operator's offset meets its content on one shared axis too,
+but as a point plus a difference, not two points. When the content is
+pinned, it is the point and the offset is the difference that moves it.
+Otherwise the content is a difference (a magnitude, a width) and the offset
+is the point it hangs from. The difference must be in the point's difference
+units (`differenceUnits`), so the join is between `differenceUnits(point)`
+and the difference: a USD position moves by USD, and a time position moves
+by a duration, or by a plain number, which is bound to one. Two instants
+clash (`"instant"` against `"duration"`), since a time does not move a time.
+The result takes the point's unit and calendar, titled by both sides. An ordinal axis has titles and no unit, so it takes no part in the
+join: a datum position beside a category spread on the same axis, or a
+spread whose targets mix a category spread with bars, unifies only the
+continuous units.
+
+Why one policy: the units of an axis decide how many σ-scopes it needs,
 which is part of setting up the layout problem, not of solving it. One axis
-holds one measure and one σ. An axis that genuinely needs two (a dual-axis
-chart) is multi-scale (#525), not a unit to forget. Two fields that are the
-same unit (a movie's US and worldwide gross, both dollars) say so with
-`field(name, measure)`; their field names alone are different measures.
+holds one unit and one σ. Under unification that is automatic: every
+quantity on an axis is in one class, so an axis has one unit unless two
+concrete units meet, which is the clash. An axis that genuinely needs two
+(a dual-axis chart) is multi-scale (#525), not a unit to forget.
 
-**Where measures come from** is itself a small type system with three sources,
-checked (not silently prioritized) in `resolveMeasure` (`channels.ts`):
-the channel aggregators use lodash's per-helper entrypoints for native ESM
-compatibility, but their semantics are still `sumBy` for size and `meanBy` for
-position.
+What the gradual rule gives up: a column with no declared unit unifies with
+anything, so a count and a bare length on one axis, or a price and a volume,
+render on one scale with no message. The axis title (`"count, Flipper
+Length"`) shows the mix-up. Declaring the units restores the check.
 
-1. **Explicit annotation** — `field(name, measure)` / `datum(v, measure)`
-   (`data.ts`). A real type claim about the channel's unit.
-2. **Inferred provenance** — a transform tags its output array. `bin()`
-   (`transforms.ts`) attaches a field→measure map under the well-known
-   `MEASURE_PROVENANCE` symbol (`data.ts`): its `start`/`end`/`size` columns
-   are still in the _source_ field's units (e.g. millimeters), and `count` is
-   `"count"`. The symbol rides the array, not each row, so it survives
-   `derive(...)`. Also a real type claim.
-3. **Field-name default** — a bare string accessor's field name. A _weak_
-   binding, not a claim; it yields to either of the above.
+**Where quantities come from.** `resolveColumn` (`channels.ts`) reads a
+channel's quantity off its column's type (`columnQuantity`, `measure.ts`):
+named by `HasQuantity` or else the column, in the unit `HasUnit` (a time
+column's is `"instant"`), or else unknown. A function accessor or a
+literal has no column, so no quantity: its value makes no claim.
+`inferSize`/`inferPos` tag the `value(...)` they emit with it, and a pipeline
+that determines its own quantity (`.count()`) overrides it; `.sum()` and
+`.mean()` keep the column's. The channel aggregators are a sum for size
+and a mean for position (`sumOf` and `meanOf` in `fieldExpr.ts`), and both
+skip a missing value (null or undefined, `isMissing`, the rule `dropNulls`
+uses). The mean of no values has no value (see
+[Cells](#cells-a-binned-key)); so has the sum of values that are all
+missing, as in SQL, while the sum of no rows is 0. A position with no value leaves a scatter's child unplaced and
+undrawn, and any data channel of a mark with no value leaves the mark
+undrawn, in its place
+([The Mark Factory](/internals/frontend/mark-factory#what-happens-at-render-time)). A computed column a `derive`
+makes is a fresh variable named by its column, and `derive(fn, { schema })`
+can declare its unit. The ends of a `partition`'s cells are read from the
+binned column the same way (`resolveColumn` on `field(x).bin(p)`'s `x`), so
+a histogram's x axis is `x`'s, titled and unified as `x` is (see
+[Cells](#cells-a-binned-key)).
 
-`resolveMeasure` reads annotation and provenance together: if both are present
-and **disagree**, it throws immediately at the channel — before any space union
-runs — naming the field and both measures. Otherwise annotation refines the
-weak default, and with no annotation the result is `provenance ?? field-name`.
-This completes the field/datum/literal trichotomy of issue #266: a literal has
-no field identity (no measure), a bare field name is a weak default, and an
-annotation or provenance is a hard claim. `inferSize`/`inferPos` tag the
-`value(...)` they emit with this resolved measure, which is what eventually
-lands on the space.
+**Units must reach mark channels, not only operator channels.** An operator
+resolves each channel's quantity once from its whole input array (which carries
+the column types), but a _mark_ channel runs per split leaf — and a leaf is a
+fresh sub-array (groupBy/filter/slice) that doesn't inherit them. So the
+operator re-tags each leaf with its parent's column types at the split
+site (`copyColumnTypes`, `schema.ts`, applied in `createOperator`), letting a
+mark bound to a column the chart types read the column's quantity off its
+own data instead of falling back to the literal field name. The column types
+can't ride the rows across the Python derive-RPC bridge; a derive's `schema`
+puts them back on the returned rows. Every leaf is an array: an operator
+with no `by` splits by row identity (`chunk(1)`), so each leaf is `[row]` and
+is tagged like any other.
 
-**Provenance must reach mark channels, not only operator channels.** An operator
-resolves each channel's measure once from its whole input array (which carries
-the `MEASURE_PROVENANCE` symbol), but a _mark_ channel runs per split leaf — and
-a leaf is a fresh sub-array (groupBy/filter/slice) that doesn't inherit the
-symbol. So the operator re-tags each array leaf with its parent's provenance at
-the split site (`copyMeasureProvenance`, `data.ts`, applied in `createOperator`),
-letting a mark bound to a transform-output field (e.g. a bin's `start`/`end`/
-`size`) read the source measure off its own data instead of falling back to the
-literal field name — which would otherwise turn a legitimate same-unit overlay
-into a false conflict. (Residual, tracked in #534: single-`Datum` leaves and the
-Python derive-RPC bridge still need a wrap-time / RPC-carried tag.)
-
-This same size-vs-position measure comparison drives **embedding** (`baseEmbedded`,
-`data.ts`): inside a coordinate space, a dim's size becomes a swept coord extent
-only when its measure matches the dim's own position measure — a foreign-measure
-size (a bubble's area) stays a flat point. See the embedding-resolution pass under
+This same size-vs-position comparison drives **embedding** (`baseEmbedded`,
+`data.ts`): inside a coordinate space, a dim's size becomes a swept coord
+extent only when it is in the same unit as the dim's own position — a size in
+a foreign unit (a bubble's area) stays a flat point. It reads the units
+through the render's union-find (`sameValueUnit`, which compares the
+variables with `sameUnitVar`), after the walk: two unknowns are the same unit only when
+they are one column or met on a shared axis. See
+the embedding-resolution pass under
 [layout passes](/internals/layout/passes#pass-8-5-embedding-resolution).
 
 **Constraint-domain measures.** A `position` constraint's datum coordinate
-carries the same resolved measure, and `collectPositionDomains` folds those per
-axis with `mergeMeasures` — so a layer's own positioning constraints in clashing
+carries the same quantity, and `collectPositionDomains` folds the measures per
+axis with `joinUnits` — so a layer's own positioning constraints in clashing
 units (an interval coordinate with one endpoint in `mm` and the other in `inch`)
-throw at the source. The layer then unifies this constraint-domain measure with
-its children's, as types, like any other composition. A child that a datum
-position places (`datumPlacedChildren`, `compose.ts`) is left out of that
+throw at the source. The layer then merges this constraint-domain measure with
+its children's, like any other composition. A child that a datum
+position places (the sharing plan's `datumPlaced`, `compose.ts`) is left out of that
 union altogether: it sits where its datum maps, so its own extent and measure
 are in its own frame (a `scatter`'s circle sized in its own units, a pie glyph
 in its angle), not in the axis's data. This restores the unit tag the scatter
@@ -1670,43 +1774,64 @@ operator's reduction onto constraints had dropped.
 **Propagation through the baseline → anchored conversion.** A histogram's
 count axis is all baseline magnitudes (origin 0) at the children, and
 `resolveAlignmentSpace`'s start/end/baseline path folds them into
-`pinned [0, max]`. That conversion carries the unified child measure forward —
-it is load-bearing, because it is exactly how the count axis acquires its
-`"count"` tag so a later overlay union can recognize it as foreign and refuse.
+`pinned [0, max]`. That conversion carries the merged child measure forward —
+it is load-bearing, because it is exactly how the count axis keeps its
+`"count"` unit so a later overlay union can recognize a declared foreign unit
+and refuse.
 
-**The error and its remedies.** A clash from `mergeMeasures` is a
-`MeasureClash`, and it reads, for a grouped bar chart over two gross columns:
+**The error and its remedies.** A clash is a `MeasureClash`, and it reads, for
+a grouped bar chart over a column declared in dollars and one in euros:
 
-> The y axis combines two different measures, "Worldwide Gross" and "US
-> Gross" (where marks are lined up). One axis can show only one measure.
-> If both are the same kind of quantity, give them the same measure, e.g. if
-> both are dollars, field("Worldwide Gross", "dollars") and field("US Gross",
-> "dollars"). To title the axis, use the axes option (its title).
+> The y axis combines two different units, "USD" ("Worldwide Gross") and
+> "EUR" ("Revenue") (where marks are lined up). One axis can show only one
+> unit.
+> If they are the same kind of quantity, declare the same unit for their
+> columns in the chart's schema, e.g. schema: { "Worldwide Gross":
+> Schema.unit("EUR") }.
 > If they are different kinds of quantity, each needs its own axis: give the
 > inner chart its own w and h so it scales on its own.
 
-Each fold passes its axis index and a plain phrase for the composition (a
-`MeasureSite`). The fold does not know what the axis is called, so the node
-whose type hook raised the clash names it on the way out
-(`GoFishNode.axisName`): `x` or `y`, or the name the innermost enclosing
-coordinate space gives it (`r`, `theta`, `lon`, `lat`). It reads the same
-axis scope the name pass uses (`axisScopeFor`), so a space that declares no
-names leaves `x` and `y` even inside a polar one. The example is a unit,
-because a measure says what kind of quantity a column holds; the axis title
-is a separate choice, made with the `axes` option. `field(name, measure)` is
-spelled the same in Python, so one message serves both.
+A schema is keyed by column, so the example names a column of one side, given
+the other side's unit, even when the column declares a quantity of another
+name (each class of the union-find keeps its columns beside its quantity
+names). A side read from no column, a count or a share, has no unit a schema
+can declare, so when neither side has a column the message leaves the
+example out.
+
+Each side lists the quantities bound to its unit, so a clash that a binding
+made elsewhere caused (a variable bound to USD on one axis, meeting `"count"`
+on another) shows where the unit came from. Each fold passes its axis index
+and a plain phrase for the composition (a `MeasureSite`). The fold does not
+know what the axis is called, so the node whose type hook raised the clash
+names it on the way out (`GoFishNode.axisName`): `x` or `y`, or the name the
+innermost enclosing coordinate space gives it (`r`, `theta`, `lon`, `lat`). It
+reads the same axis scope the name pass uses (`axisScopeFor`), so a space that
+declares no names leaves `x` and `y` even inside a polar one.
+`Schema.unit` is spelled the same in Python, so one message serves both.
 
 The two remedies are the two escape hatches this essay already describes:
-annotate to declare the units _are_ the same (collapsing them to one measure),
-or wrap the foreign region in an explicit pixel size so it absorbs its own
-axis (the [self-scaling region](#self-scaling-regions-an-explicit-or-data-valued-size-absorbs-an-axis)
-above) and never reaches the shared union at all.
+declare that the units _are_ the same, or place the foreign region apart
+(a literal `position` detaches it, see
+[sized nodes](#sized-nodes-and-measure-keyed-domains) above) so it never
+reaches the shared union at all.
 
-**Stage 2.** This is Stage 1: one measure per axis, unified or refused. The
-sequel is a measure-keyed _family_ of underlying spaces per axis — true
-multi-scale, where a single axis can host several measures at once (dual axes).
-That is also the natural place for axis titles to read a measure off the space
-they describe (cf. issues #452, #386).
+**Titles.** An axis is titled by `spaceTitle`, the one place the title
+string is built, in the SI style `Quantity (unit)`: the space's titles (its
+quantities), joined with `", "` in the order the merge met them, then the
+symbol of the axis's unit in parentheses when that unit is declared and has
+a symbol. A histogram's edges title as their source column, an axis over
+`lo` and `hi` reads `"lo, hi"`, and the four summary columns of a box plot
+declared `Schema.quantity("Pay").unit("USD")` read `"Pay (USD)"`. A count, a
+share, a time, and an unknown unit add nothing. The rule never reads the
+names, so a column named `"Flipper Length (mm)"` declared in `"mm"` titles
+`"Flipper Length (mm) (mm)"`. The clean title comes from declaring the
+quantity (`Schema.quantity("Flipper Length").unit("mm")`) or from the `axes`
+option's `title`, which overrides all of this.
+
+**Stage 2.** This is Stage 1: one unit per axis, unified or refused. The
+sequel is a unit-keyed _family_ of underlying spaces per axis — true
+multi-scale, where a single axis can host several units at once (dual axes),
+keyed by `spaceUnit` (cf. issues #452, #386).
 
 ## Column types: the chart schema
 
@@ -1718,7 +1843,7 @@ chart(survey, { schema: { response: Schema.ordered(LEVELS).diverging() } });
 ```
 
 A column type is a record keyed by class name (`ColumnType`), and the engine
-reads only the classes, never the builder words. Three classes exist:
+reads only the classes, never the builder words. Six classes exist:
 
 - `HasOrder` (`Schema.ordered(levels)`): the values are the levels of a fixed
   order. `splitEntries` groups a `by` over the column in that order instead
@@ -1771,20 +1896,23 @@ reads only the classes, never the builder words. Three classes exist:
   entry (which wins over the decoded type) exactly as it reads the same
   string from JS data, or in UTC without one. The decode only attaches
   types: whoever reads the rows converts them first with its own schema (a
-  chart tier is chart data, and a callback's result goes through
-  `applyLambdaTyped` in `serialize/registry.ts`, so a lambda accessor's or a
-  single-datum `derive`'s result holds epoch milliseconds). No schema names
+  chart tier is chart data, a lambda accessor's result goes through
+  `applyLambdaTyped` in `serialize/registry.ts`, and a `derive` types its
+  result with its own `schema`, so each holds epoch milliseconds). No schema names
   a value inside a list or a struct, so a time there decodes to epoch
   milliseconds (a naive one read in UTC), and a list of structs, a list of
   rows, carries its own column types. An instant has no zero. A position read from the column carries the
   class on its `DatumValueImpl` (`fieldType`, which `inferNumeric` now sets
   for any typed column, with `createOperator` passing the column it resolved
-  from the whole input, measure and type together, `resolveColumn`), and the point space it
-  builds carries it as `CONTINUOUS_TYPE.calendar` (`positionCalendar`,
-  `withCalendar`). The folds that build a continuous space from parts keep
-  it (`mergeCalendars`: the overlay fold, a layer's datum-position domain in
+  from the whole input, quantity and type together, `resolveColumn`), and its
+  quantity carries the calendar, so the point space it builds has it in its
+  measure (`measure.calendar`, read with `spaceCalendar`). The one merge
+  (`joinUnits`) keeps it through every fold that builds a continuous
+  space from parts (the overlay fold, a layer's datum-position domain in
   `compose.ts`, a rect's two ends, the `position` operator's offset), and
-  two parts on different zones are an error, like two measures. A time space
+  two parts on different zones are an error. `Schema.time()` also writes
+  the unit `"instant"` (`HasUnit`), so two time columns share an axis. A
+  time space
   is niced to the cells of its axis's inner row (`niceToCells`: the
   smallest run of whole cells that covers the domain, so a domain of one
   instant, which `tickPartition` ticks at days, spans the day that holds
@@ -1794,11 +1922,34 @@ reads only the classes, never the builder words. Three classes exist:
   times alike. Calendar cells
   (`CalendarPartition`) live in `calendar.ts`, which runs all calendar math
   on Temporal, native or the polyfill it loads when the runtime has none.
+  The values a user writes are the `Calendar` strategy family
+  (`families/calendar.ts`): each kind is a `CalendarPartition` used bare or
+  called with its options (`Calendar.month({ every: 3 })`, #1133).
+- `HasUnit` (`{ unit, symbol? }`, #994, #955): the values are amounts in
+  the declared unit `unit`. Both `Schema.unit(u)` and `.unit(u)` (after
+  another builder) declare the unit `u` and write the symbol `u`. A column
+  without it has an unknown unit, a unit variable (see
+  [measures](#measures-units-are-types)). A column has one unit, and an
+  order's levels must fit its other classes, so a time or a text-level
+  column takes no other unit (`checkNoUnit` and `checkLevelsFit` in
+  `schema.ts`).
+- `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
+  `name` (`Schema.quantity(name)`, or `.quantity(name)` after another
+  builder), when it is not the column's own name. It titles the axis and
+  names the unit variable. A transform writes it for the columns it makes
+  (`bin(field)`'s `start`/`end`/`size` are amounts of `field`'s quantity, in
+  `field`'s declared unit if it has one; its `count` is in `"count"`).
+- `HasDomain` (`{ lo, hi }`, #1059): the interval the column's values span,
+  from the least to the greatest, in the data it was typed with. It is the
+  one class nothing declares: `applySchema` computes it for every column whose
+  values are all finite numbers (missing values aside; a time's values are
+  epoch milliseconds by then), after the other classes. It is what a binned
+  key's cells cover (see [Cells](#cells-a-binned-key)).
 
-The types ride the chart's data array under the `COLUMN_TYPES` symbol, the
-same way a transform's measure provenance does: `ChartBuilder` copies the
-array and tags it (`applySchema`, which keeps the measure provenance the
-array already carries), `createOperator` copies the tag onto each
+The types ride the chart's data array under the `COLUMN_TYPES` symbol:
+`ChartBuilder` copies the array and tags it (`applySchema`, which keeps the
+types the array already carries, such as a bin's units), `createOperator`
+copies the tag onto each
 split leaf, and each data-transform operator (`mapOperator` in
 `marks/chart.ts`) types its result by its own typing rule. A `derive`
 (`typeLikeChartData`, also `resolve` and `join`) types its result with
@@ -1806,9 +1957,9 @@ split leaf, and each data-transform operator (`mapOperator` in
 types, whether or not the function returned its input array. It keeps only
 those that still fit the result's values: each class has one predicate for
 the values it accepts as they stand (`ACCEPTS` in `schema.ts`: a time holds
-instants, epoch milliseconds or `Date`s, and an order holds text or
-numbers), and a type fits a value when every class it has accepts it, the
-predicates built once per column. A `Date` is an instant, so a time column
+instants, epoch milliseconds or `Date`s, an order holds text or numbers,
+and a unit holds numbers, plus `Date`s in the instant unit), and a type
+fits a value when every class it has accepts it. A `Date` is an instant, so a time column
 of `Date`s keeps its inherited type, zone included, and its Dates become
 epoch milliseconds; a string needs a zone to read, so it does not fit. The
 inherited types never reinterpret or check values, so a date rewritten to
@@ -1819,9 +1970,9 @@ since any finite number is epoch milliseconds (#1089), and
 inherited ones column by column, inference types a column of `Date`s as a
 UTC time, and `derive(fn, { schema })` overrides all of that for the columns
 it names and converts their values like a chart's schema (a datetime column
-a Python callback returns arrives typed from the widget's decode). A result
-that is one object, not an array (a derive over a single datum), is typed
-as one row and converted the same way. The operator never tags the array its
+a Python callback returns arrives typed from the widget's decode). The
+result is a list, as all data is; `derive`'s type says so and nothing checks
+it at run time. The operator never tags the array its
 function returned. `log` returns its input, types and all. A `filter`
 returns a subset of its input's row objects, so its typing rule carries the
 input's types over as they are, with no fit check (a predicate that changes
@@ -1836,23 +1987,62 @@ its `by` column's type off the data it splits, and a color channel's
 lets the categorical color scale list its domain in the column's order. A
 later class (`HasZero`, `HasCycle`, ...) is one more key on the record.
 
-TODO(#984): measure provenance is the unit part of the same per-column record
-and could fold into it; it stays a separate symbol for now.
+A column's unit is one of these classes, `HasUnit`, so a unit moves with
+the rest of the column's type, by the same rules: it survives a split, a
+`filter`, and a `derive` whose column still holds numbers, and a `schema`
+entry that names the column replaces it with the rest of the type (#994).
+`chart(data, { schema })` and `derive(fn, { schema })` declare it with
+`Schema.unit(u)`.
+
+A column's **domain** (`HasDomain`) moves with the rest of its type, by the
+rules above, with one difference: it is of the rows it was computed over.
+`applySchema` computes it for the chart's data and for each `derive`'s
+result over the rows it types, and drops the domains it inherits or finds on
+the array, so a `derive` never keeps its input's. `copyColumnTypes` hands it
+to each split leaf and to a `filter`'s result with the other classes, the
+same record, so a split leaf holds one group's rows and its column still has
+the domain of the whole data. A chart over a selection
+(`chart(selectAll(...))`) types a list of refs, so `ChartBuilder` passes
+`applySchema` the rows the refs stand for (`rowsReached`), and the domain is
+over those. Declaring a domain is not supported yet: a `schema` record that
+gives a column one (`{ HasDomain: { lo, hi } }`, which no builder writes) is
+a loud error in `columnTypeOf`.
+
+**Domains are types.** A column's domain is part of its type, decided where
+the data is typed, so a subset keeps it. A group-by or a filter picks out
+rows. It does not change which values the column can take, just as filtering
+a list of `Int` gives a list of `Int`. So every group's `field(x).bin(p)`
+computes the same cells, empty ones included, with no group reading
+another's rows. This recasts Vega-Lite's
+`resolve: { scale: "shared" | "independent" }`, a setting on the
+composition, as type inference. Sharing is the default, because the type
+flows with the data from the place it was inferred, as TypeScript infers
+`number[]` for an array literal where it is defined. Independence is
+narrowing: a group that wants its own domain re-types its rows to the
+narrower type. In type-theory terms a domain is a refinement type, such as
+`{ v: number | 0 ≤ v ≤ 99 }`: a group inherits its parent's refinement by
+default, an independent group narrows to the one its own rows give (a
+subtype, since its rows are a subset), and groups that meet again on a
+shared axis combine at their join, the smallest domain that covers them
+all, which is what Vega-Lite's shared resolve computes. Units work the same
+way already (a unit is a type, and a
+mismatch is a type error). #1147 applies the same rule to categorical
+levels.
 
 ## Field expressions: a pipeline orthogonal to channel aggregation
 
 `field(name)` (`fieldExpr.ts`, #700) returns a chainable expression — a
 Polars-column-expression-style builder where each method appends one op to an
-ordered pipeline (`field("age").bin().sort()` bins first, then sorts the
-resulting bins). The pipeline is read off either a live `FieldExpr` instance
-or its deserialized wire shape (`{ type: "field", name, measure?, ops? }`, what
+ordered pipeline (`field("age").bin().reverse()` bins first, then reverses
+the resulting cells). The pipeline is read off either a live `FieldExpr` instance
+or its deserialized wire shape (`{ type: "field", name, ops? }`, what
 the Python bridge/IR produce directly) by the same `getFieldOps` helper, so
 every evaluation site handles both forms identically.
 
 Two op families consume disjoint **slots**, and mixing them is a checked
 error rather than silently doing the wrong thing:
 
-- **Domain ops** (`.sort(by?, order?)`, `.reverse()`, `.bin({thresholds?})`,
+- **Domain ops** (`.sort(by?, order?)`, `.reverse()`, `.bin(partition?)`,
   `.dropNulls()`) apply to a `by` grouping key. `splitEntries`
   (`datumProjection.ts`) is the shared split-plus-ops helper behind
   `spread`/`stack`/`group`/`scatter`/`treemap`'s `by` (and `time.sequence`'s,
@@ -1867,13 +2057,24 @@ error rather than silently doing the wrong thing:
   rows whose value at the field is `null`/`undefined` FIRST (so it composes
   the same regardless of where it sits in the chain — every other domain op
   re-derives its grouping from these filtered rows), then it groups the
-  remaining rows (`Map.groupBy` via `splitKeyFn`, which reads a `field(...)`'s
-  `.name` exactly like a bare string) in order of first appearance, or in the
-  order of the column's levels when the data declares the column ordered
-  (`HasOrder`, see [Column types](#column-types-the-chart-schema)), then
-  applies each remaining domain op
-  in pipeline order — `bin` **replaces** the base grouping entirely (re-groups
-  the raw rows into numeric bins, dropping empty ones); `sort` reorders the
+  remaining rows by the key `splitKeyFn` gives each row. That reads a
+  `field(...)`'s `.name` exactly like a bare string, passes a key function
+  the row and its position, and keys a `chunk(size)` by position alone,
+  `floor(i / size)` (an operator with no `by` splits by `chunk(1)`, row
+  identity), and the groups come in
+  order of first appearance, or in the order of the column's levels when the
+  data declares the column ordered (`HasOrder`, see
+  [Column types](#column-types-the-chart-schema)). A binned key (`bin`, or a
+  binned struct) instead keys each row by its **cell**, and its groups are the
+  cells of its partition, in order, one entry per cell, empty cells included
+  (`binEntries`; see [Cells](#cells-a-binned-key)). The same key function
+  keys a stagger's children by their cell, so they group the same way the
+  split did. A fused connector's default split reads no key function: it
+  keys each ref by the keys the flow's splits gave the groups it is in (each
+  split stamps the nodes it makes with its `by`, `GoFishNode.keyBy`, beside
+  the key), since a single row does not carry the domain its cell is over.
+  Then it applies each remaining domain op
+  in pipeline order: `sort` reorders the
   resulting entries, either by the group key itself or by the SUM of another
   named field over each group's rows; `reverse` reverses the entries. An
   aggregate op or `normalize` reaching a `by` slot throws — a domain op
@@ -1889,7 +2090,7 @@ predicate `(row) => boolean` for the `filter` flow operator, and a predicate
 belongs to none of the three slots: it never decides which groups exist, never
 folds a group to a value, and never scales anything. Giving it an op would mean
 a fourth slot that every evaluation site had to learn to ignore. For the same
-reason it THROWS when the expression carries ops: `field("x").bin(10).between(...)`
+reason it THROWS when the expression carries ops: `field("x").bin(Bin.step(10)).between(...)`
 would have tested the raw `x`, silently. `closed` is polars' `is_between`
 argument, comparing by value (SQL `RANGE`) rather than by row count (Vega's
 window `frame`). The bounds are plain numbers; a window that follows a `timer()`
@@ -1903,9 +2104,293 @@ builds both from that description), and `filter` puts it on the wire as
 `{ type: "filter", predicate }`. The description travels with the operator,
 never in the expression's `ops`, so the three slots stay as they are.
 
+### Cells: a binned key
+
+`field(x).bin(p)` (#1058) is a value transform: it maps each value of `x` to
+its **cell** in the partition `p` (`cells.ts`). A partition is a Calendar
+value (`calendar.ts`), `Bin.step(size)`, or `Bin.thresholds(countOrEdges)`
+(a count, or a list of edges), the two `Bin` kinds that bin one field
+(`families/bin.ts`). Those two are objects of a class, `StepBin` and
+`ThresholdsBin`, whose own keys are their wire form (`{ kind: "step", size }`)
+and whose `.format(fn)` is held off those keys, as a Calendar value's is. The
+wire form of the op is `{ op: "bin", partition? }` with the partition's own
+wire form, a Calendar value's `{ kind: "month", every: 1 }` or a `Bin` kind's,
+one union told apart by `kind`. `checkPartition` reads either form, and
+rejects a `Bin` kind that bins two fields, naming `struct({ x, y }).bin`. A `Cell`
+keeps the whole value: the interval `[start, end)` (its region), its id (its
+start, as text, so `String(cell)` is the key a node gets), its label (the
+partition's `.format(fn)`, else the default: `"0.5–1"`, or the calendar label),
+and, for a calendar cell, its calendar fields, partition and zone. Every
+cell also records the bin that made it (`KeyCell.bin`). The column the cells
+bin is recorded once, on the ordinal space over them: the field it groups by
+(its title, the split's `by`), so an axis can tell levels that partition one
+value (a year and a month of one date) from categories of different columns
+([Axes](/internals/frontend/axes#levels)). A split says whether its keys have
+an order with its groups (`SplitGroups.hasOrder` from `splitEntries`): cells
+always do, and so do the levels of a column declared ordered. Cells are
+ordered by start.
+
+The cells are defined over the column's **domain**, not over the rows of the
+group being split. `binCells` takes the domain the column's type carries
+(`HasDomain`, see [Column types](#column-types-the-chart-schema)), read off
+the rows being split (`domainOf` in `datumProjection.ts`), and returns the
+cells in order and the cell each value falls in (`cellOf`). Since every
+split leaf has its column's type, `splitEntries` gives every group of a
+nested split the same cells in the same order, an entry per cell, empty or
+not, and a count picks its step from the whole domain (#763); no group reads
+another group's rows. A value outside the domain has no cell, which is an
+error. A column with values that are not all finite numbers has no domain
+(the cells of a line have no cell at an infinity), so binning it is an
+error that names the column, and the value when the group holds one; a
+column with no values has no cells. The cells of a domain are built once per
+partition value and column (a cache keyed by the `HasDomain` record and the
+op's partition object), so the groups share the very same `Cell` objects.
+
+**A group with no rows.** An empty cell is a group with no rows, and every
+operator over it is well defined: an operator over no rows makes no
+children and draws nothing (a node with no lowering of its own and no
+children lowers to nothing, see [Rendering](/internals/core/rendering)). A
+position read from a group's rows is a statistic of them, so a group with
+no rows has none: a position channel is a mean (`inferPos`), and the mean of
+no rows is no value (`meanOf` in `fieldExpr.ts`; a sum or a count of no rows
+is 0, which is a value). A position with no value is in no domain, since
+only defined positions make position constraints. And `scatter`, which
+places each child at its position, does not draw a child that has no value
+in a placement it is given (`placedChildren` in `scatter.tsx`): there is no
+place to draw it. So `scatter({ by: field("x").bin(p), x, y })` draws one
+point per cell that holds rows, and the empty cells leave the scale of the
+others alone.
+
+A cell holds its start and not its end, and a Calendar value or a `Bin.step`
+puts a value in the cell that holds it whatever the domain (March 1 is in
+March). A `Bin.thresholds` partition is fitted to the domain, so it covers
+the closed domain: the count's step is the one a numeric axis with that many
+ticks uses (`tickIncrement`), and the largest value falls in the last cell
+when it sits on an edge, as in numpy's `histogram` and d3's `bin`.
+
+**Cycles, products and chains.** A calendar level binned alone is a part
+of the next larger level (`CalendarPartition.cycle`): `Calendar.month` is
+the month of the year, so all Junes are one cell, and `Calendar.weekday` (a
+day, labeled by its day of the week) is the day of the week, so all Mondays
+are one cell. A week is a part of nothing (weeks do not nest in months or
+years) and nothing holds a year, so those stay on the line. A week's parts
+depend on its first day, so a weekday carries a `start`, its reference week
+starts on that day (`REFERENCE_WEEK`), and a weekday is a part of a week
+only when both start on the same day (`CalendarPartition.whyNotAPart`, the
+one is-a-part-of relation, which also needs the outer level's cells to be
+one unit each, and says why when a level is not a part). A
+weekday is a day, so an hour is a part of it (`[Calendar.weekday,
+Calendar.hour]`, the hours of the week). Its part, and the `weekday` field of
+every calendar cell, is the ISO day of the week (1 for Monday), whatever the
+start; the start only orders the parts. The parts are not cells of the line: a
+`CycleCell` (cells.ts) has an id (its field values, `"6"` for June), a
+label, its place in the cycle, and no region. The cells of a cycle are read
+off one cell of the cycle unit, the reference cycle (`referencePeriod` in
+calendar.ts: the leap year 2000, so February 29 is a part of the year; its
+31-day January for the days of a month), so a key over them has every part,
+in order, whatever the data holds. That is the key's `HasCycle`: the order,
+the whole cycle, and the cycle's unit as a partition whose every cell is one
+cycle (`unit`: `Calendar.year` for the months of a year, `Calendar.week` with
+the parts' week start for the parts of a week). An axis level that groups
+the parts asks that partition whether it is a part of a cycle
+(`calendarLevel` in `axes/elaborate.tsx`), and `partition`'s error over a
+key of parts, which names the whole key, fixes it with that unit first, as
+one product of all the levels or as a chain of them. A value falls in the part named by its own fields in
+the column's zone (`CalendarPartition.part`). A part's `.format(fn)` reads a
+`CalendarPart` (`kind: "part"`, `cycleFields` in calendar.ts): only the fields
+below its cycle, so no field is a stand-in `NaN`. A cell of the line gives a
+`CalendarCell` (`kind: "cell"`) instead, so the formatter narrows on `kind`. TODO(#1052): a spread over a
+cycle in polar space should leave the same gap between its last part and
+its first as between any two; that default is not built.
+
+A list is a **product**, `[Calendar.year, Calendar.month]` (`checkProduct`):
+each level after the first is a part of the one before it, which has a
+step of 1, so the cells where one cell of each level meets one of the next
+are each one interval, the finest level's cells (the June of 2015 is the
+2015 year met with every June). Its label names every level at once
+(`productLabeler`, which resolves its formatter once per levels and zone:
+`"Jun 2015"`). With a first level on the line its cells are
+cells of the line, every one in the range of the domain; with a first level
+that is a part (`[Calendar.month, Calendar.day]`) they are the parts of a
+cycle. A second `bin` op is a **chain** (`chainCells`): it splits each cell
+of the bin before it, and each cell keeps the cell it was split from
+(`KeyCell.parent`). On the line the next bin must be finer, its cells are
+read on the line, and a cell it shares with two cells before it is cut in
+two (`refine`); on a cycle the next bin must be a part of the one before it,
+as in a product. So `.bin(Calendar.year).bin(Calendar.month)` and
+`.bin([Calendar.year, Calendar.month])` have the same leaves; only the chain
+keeps their years, which an ordinal axis over it shows as a level
+([Axes](/internals/frontend/axes#levels)). The type follows the cells: a key
+first binned by a part (`RegionOf` in `fieldExpr.ts`, read off the level's
+unit) has no region, and a chain keeps the kind of its first bin (the
+phantom `binned` flag).
+
+The keys of a split may now be cells (`SplitKey`). Everything that reads a
+key as text or a number reads the cell's id (its start, or a part's field
+values), so `.sort()` orders cells of the line by start and parts of a cycle
+by their place in it, and `time.sequence` keys its frames at cell starts.
+
+### Partition: each group in its cell
+
+`spread`, `stack` and `table` read a cell's id and order. Only the
+`partition` operator (`graphicalOperators/partition.tsx`) reads its region:
+it gives each group its cell's interval `[start, end)` on one continuous
+scale, so a 29-day February is narrower than a 31-day March and an empty
+cell keeps its place (it is a group with no rows, and it is still placed).
+Its key must have a region. Only `.bin(p)` with cells of the line makes one,
+so the type of a field expression says whether it does (`FieldExpr<true>`,
+a phantom `hasRegion` flag that domain ops keep and aggregates drop, and
+that a part of a cycle does not set), and the split checks the wire form
+from Python with an error that names the fix (for a part of a cycle: bin by
+the year too, as a product or a chain).
+
+It has no layout code of its own. It is a layer with one `position`
+constraint per child that gives it its cell (`Constraint.position({ region
+})`, with a `PositionRegion` per cell) and one `align` on each axis the
+key's columns are not placed along (the other axis, for a 1D key), as in a
+scatter.
+
+**Regions flow down in the layout call.** A region is the space a parent
+gives a child, and it travels with the size proposal:
+`child.layout(size, scales, region)` (`geometry/region.ts`). A region is a
+span `[min, max]` per axis, either of which may be missing, plus an optional
+outline, measured from the parent's origin in the axis order of whoever
+holds it (`GoFishNode.layout` reflects it into the child's own order when
+the two y directions differ). The layer builds each child's region in
+`buildChildProposals` (`constraints/proposalPlan.ts`): on an axis where the
+child's `region` spans, the cell's two edges mapped to pixels; on an axis
+where it spans none, the region the layer itself was handed there, if any. Each region bounds a different axis, so that is their intersection. The
+child is proposed each span's length as its size (`childLayoutSizeProposal`)
+and then places itself in the span: a node whose own layout did not place it
+on that axis is centered there by `GoFishNode.layout`. So a `rect` or a
+`region` with no size there fills its cell, a `stack` or `spread` inside a
+cell divides the cell, and a circle or a text keeps its own size and sits in
+the middle of the cell. An interval would pin both edges instead, which sets
+the child's size and would stretch a circle into an ellipse. The region
+itself lowers to no placement fact: its target is already placed when the
+solve runs, so the layer takes it out of what the solve sees
+(`placementConstraints`, `constraints/proposalPlan.ts`). There an `align`
+also loses each axis on which every one of its operands has a span in its
+region, since the regions placed them there.
+
+A child with no region of its own gets the region the layer was handed,
+outline and all, unless the layer's constraints place it (a stack's
+children are placed by its distribute and align). So a layer of a `region`
+and a `text` as a partition's mark gives each cell to both: the region
+draws it, and the text sits at its center. A layer passes the region it was
+handed on in its own frame, each span starting at 0 (`rebaseRegion`), and
+`GoFishNode.layout` places the layer itself in the region it was handed, as
+it places any node.
+
+The region holds its cell (a `RegionCell`, cells.ts: an id, a label when it
+has one, a span per axis, and an outline when it is not a box) and the
+column each axis it is placed along reads, as a map from a value to its
+datum. It reads the cell through them once: `PositionRegion.spans` holds,
+per axis, the cell's two edges as datums, and each datum carries what the
+column says about its values (its quantity and declared unit, so a
+histogram's x axis is titled and unified as `x` is, and its schema type, so
+a time column gives a time axis). `collectPositionDomains` reads a region's spans
+as it reads an interval (the domain, and the units with their
+calendar), and
+collects its cell when it is a cell of a line placed along that axis, so
+the layer's type on that axis holds the cells (`CONTINUOUS_TYPE.cells`). A union keeps them only when every part has them
+and they are the cells of one partition (`mergeCells`), as an ordinal over
+cells does. That is read off the cells, not off how they were binned: no two
+cells overlap (a cell in two parts is one interval in both, so `[0, 10)` and
+`[5, 10)` are of two partitions), and calendar cells share a calendar
+partition (`CalendarPartition.sameCells`), since a time axis labels them all
+by one partition's rows. A `Bin.step` over two domains gives the cells of one
+partition; a `Bin.thresholds` fitted to two domains may not. The type is what tells the
+axis that it places cells: a time axis over calendar cells ticks at their
+partition and labels each cell between its two boundary ticks
+([Axes](/internals/frontend/axes)). A numeric axis over numeric cells keeps
+its round-number ticks.
+
+A top-level partition hands each child its cell on `dir` and no span on the
+other axis, where `alignment` places the children (bars on a shared
+baseline). Inside another partition's cell, a partition hands each child
+that cell on the other axis as well, so the child sits in a rectangle and
+`alignment` has nothing left to move. That is why two nested 1D partitions,
+one per axis, place each leaf the same way in either order; only the order
+of the children differs (`cells.test.ts` checks this for regions, rects,
+circles, and texts of different widths).
+
+**The product form.** `partition({ by: { x, y } })` divides both axes. It is
+defined as the 1D partition on x, then the 1D partition on y, and it is
+built by that rewrite (`compose`, in JS and in Python alike), so it adds no
+layout of its own, and on the wire it is the two partitions. Empty cells are groups with no rows, as in 1D, so a
+count over one is 0 and is drawn.
+
+**Regions with an outline.** A region may also hold an outline, the same
+shape the `boundary` geometry query (#974) returns, but handed from parent to
+child: a `PositionRegion` holds the cell's outline in datums (`outline`,
+`[x, y]` per corner) when the cell has one and is placed along both axes,
+`buildChildProposals` maps it
+through both scales into the child's region, and the `region` mark draws a
+region's outline as a path when it has one, and its box otherwise (under a
+nonlinear coordinate space, resampled, so a hexagon in polar coordinates
+draws curved). The cells of a binned struct, below, are what make outlines.
+One step is left for later (a TODO in `buildChildProposals`): a child that
+gets a cell of its own does not inherit the outline of the region its layer
+was handed, which would need that outline clipped to the cell.
+
+### Cells of the plane: a binned struct
+
+A hexagon depends on two fields together, so a `.bin` on each field cannot
+express it. `struct({ x, y })` (`structExpr.ts`, after polars' `pl.struct`)
+is a key that reads two columns, one per axis, and `.bin(b)` bins it with a
+strategy of the `Bin` family (`families/bin.ts`): `Bin.hex({ radius })` or
+`Bin.voronoi({ seeds })`, the two kinds that bin two fields (a kind that bins
+one field, such as `Bin.step`, is an error here that names `field(x).bin`). Its type carries the same phantom flag as a field
+expression (`StructExpr<true>` once binned), so `partition` over an unbinned
+struct is a type error, and the split checks the wire form. The class's own
+fields are its wire form (`{ type: "struct", fields, ops? }`), so the
+instance and the object Python sends are read the same way.
+
+`splitEntries` groups the rows of a struct key by the cells of the plane
+(`polygonCells.ts`), by the same key function as a binned field
+(`binKey`). A `PolygonCell` has an id, an
+outline in data, and the box that holds it (its span on each axis), and no
+order. The cells are those
+of the two columns' domain, as in 1D, so every group of a nested split sees
+the same cells and empty cells are kept (a cache keyed by the two columns'
+`HasDomain` records, the bin object and the two columns).
+
+- **Hexagons.** A pointy-top grid (as in d3-hexbin, ggplot2's `geom_hex` and
+  Observable Plot) with a hexagon centered on (0, 0), so the grid does not
+  move with the data, as `Bin.step` cells are aligned to multiples of the
+  step. The radius is in data units, one number or one per axis; a hexagon is
+  the unit hexagon scaled by the x radius on x and the y radius on y. A point
+  goes to the hexagon with the nearest center (axial coordinates and cube
+  rounding), so a point on an edge goes to one of its two hexagons, the same
+  one every time. The cells are every hexagon whose inside meets the box of
+  the domain (a separating-axis test over the box's two axes and the
+  hexagon's three edge normals). A point on the box's edge may lie on the
+  edge of a hexagon that only touches the box; it falls in the hexagon
+  beside it that is a cell and holds it too. A box with no area (a column
+  whose values are all one) may meet no hexagon's inside, so it adds the
+  hexagon of each of its corners that no cell holds.
+- **Voronoi cells.** One cell per seed (d3-delaunay, over Delaunator),
+  clipped to the box that holds the domain and the seeds, so every seed has
+  a cell; seeds at one point share the first one's cell. A cell's id is its
+  seed's index among all the seeds (the first one's, for seeds at one
+  point). A point goes to its
+  nearest seed (`Delaunay.find`). Distances are measured in data units, so
+  the cells mean something only when the two fields share a unit (longitude
+  and latitude, two lengths in millimeters).
+
+`partition`'s plane form is the same split and the same constraints as the
+1D form: the struct's two columns are placed along x and y, so each child's
+one `region` spans both axes (the cell's box) and holds the cell's outline,
+and no axis is left to align. The boxes make the axes' domains, and since a
+polygon cell is no cell of one axis alone, each axis is a plain continuous
+axis (`collectPositionDomains` collects only a cell of a line, a `Cell`). A
+`region` draws the outline; any other mark is placed in the box, so a circle
+or a text sits at a hexagon's center.
+
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always
-called `sumBy`/`meanBy` over the raw per-row values; it now instead calls
+called a sum or a mean over the raw per-row values; it now instead calls
 `evalFieldValues(accessor, data)` first — running any pipeline ops (an
 aggregate, if the accessor carries one) — and only _then_ applies its own
 default aggregation to whatever that produced. Neither side knows about the
@@ -1914,18 +2399,20 @@ channel's own sum/mean is the identity over that singleton, so
 `rect({ h: field("weight").mean() })` reports the mean, not
 `mean-of-a-1-element-array`-nonsense. A bare string or plain function accessor
 carries no ops, so this is a strict superset of the pre-#700 behavior, not a
-new code path for the common case.
+new code path for the common case. The color and raw channels, which read
+the first row, fold an aggregate the same way: `region({ fill:
+field("a").count() })` colors a cell by its count, and the count of a group
+with no rows is 0.
 
-**Measure implications.** `count`/`distinct` report values that are counts,
-not the source field's own units — `evalFieldValues` reports measure
-`"count"` for them (an explicit `field(name, measure)` annotation still wins
-over this pipeline-determined default, following the same precedence
-[`resolveMeasure`](#measures-units-are-types) already applies to provenance
-vs. annotation). Every other pipeline reports no measure of its own, leaving
-resolution to the channel as before. `.normalize()`'s share values get their
-own tag, `shareMeasure(base, byName)` — see
-[Space-filling spines](#space-filling-spines-normalize-self-scales-a-stacking-axis)
-above for why a share is a distinct unit (0–1, not the base measure's own
+**Unit implications.** `count`/`distinct` report values that are counts,
+not the source field's own units — `evalFieldValues` reports the quantity
+`"count"`, in the declared unit `"count"`, for them. Every other pipeline
+reports no quantity of its own, leaving
+[`resolveColumn`](#measures-units-are-types) to the channel as before, so
+`.sum()` and `.mean()` keep the column's unit. `.normalize()`'s share values
+get their own declared unit, `shareQuantity(base, byName)` — see
+[Space-filling spines](#space-filling-spines-normalize-nests-each-part)
+above for why a share is a distinct unit (0–1, not the base quantity's own
 units) that must never silently union with it.
 
 ## Axis inference

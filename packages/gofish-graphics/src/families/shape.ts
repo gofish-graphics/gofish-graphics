@@ -8,7 +8,9 @@
  *
  * `lib.ts` binds this module as `Shape` (`Shape.hull({ roundness: 8 })`), and
  * `gofish-graphics/shape` exports the same module. A strategy is a plain
- * object made by a function call, `{ kind, ...params }`. `hull()` and
+ * object, `{ kind, ...params }`. No shape has a required option, so each is
+ * a value as it is, and calling it sets options: `Shape.hull` is
+ * `Shape.hull()` (#1133, `ast/strategyKind.ts`). `hull()` and
  * `spine()` are `blob()` with other params preset, so their objects have
  * kind `"blob"`, the way `sina()` and `jitter()` are `noise()`. The kinds,
  * their params and the presets are declared once, in gofish-ir's
@@ -19,6 +21,7 @@
  * (`Frontend.NodeSelectionIR`); in JS it holds the nodes themselves.
  */
 import type { Frontend } from "gofish-ir";
+import { bareKind } from "../ast/strategyKind";
 import type { GoFishAST } from "../ast/_ast";
 import type { GoFishRef } from "../ast/_ref";
 
@@ -55,9 +58,13 @@ const given = <T extends object>(opts: T): Partial<T> =>
  * @param rx Corner radius in pixels, x. Default 2.
  * @param ry Corner radius in pixels, y. Default 2.
  */
-export function box(opts: Omit<BoxShape, "kind"> = {}): BoxShape {
-  return { kind: "box", ...given(opts) };
-}
+export const box = bareKind(
+  "Shape.box",
+  (opts: Omit<BoxShape, "kind"> = {}): BoxShape => ({
+    kind: "box",
+    ...given(opts),
+  })
+);
 
 /**
  * A smooth region around the members: each member grown by `enclose`'s
@@ -80,22 +87,34 @@ export function box(opts: Omit<BoxShape, "kind"> = {}): BoxShape {
  * @param clearance Pixels kept between the outline and each avoided node.
  *   Default 4.
  */
-export function blob(opts: BlobOptions = {}): BlobShape {
-  return { kind: "blob", ...given(opts) };
-}
+export const blob = bareKind(
+  "Shape.blob",
+  (opts: BlobOptions = {}): BlobShape => ({ kind: "blob", ...given(opts) })
+);
 
 /**
  * The padded convex hull, rounded: `blob()` with `convexity: 1` and
  * `neck: 1`. Any option overrides the preset.
  */
-export function hull(opts: BlobOptions = {}): BlobShape {
-  return { kind: "blob", convexity: 1, neck: 1, ...given(opts) };
-}
+export const hull = bareKind(
+  "Shape.hull",
+  (opts: BlobOptions = {}): BlobShape => ({
+    kind: "blob",
+    convexity: 1,
+    neck: 1,
+    ...given(opts),
+  })
+);
 
 /**
  * The routed spanning tree of tubes and nothing else: `blob()` with
  * `convexity: 0`. Any option overrides the preset.
  */
-export function spine(opts: BlobOptions = {}): BlobShape {
-  return { kind: "blob", convexity: 0, ...given(opts) };
-}
+export const spine = bareKind(
+  "Shape.spine",
+  (opts: BlobOptions = {}): BlobShape => ({
+    kind: "blob",
+    convexity: 0,
+    ...given(opts),
+  })
+);

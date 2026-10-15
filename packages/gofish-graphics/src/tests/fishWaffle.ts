@@ -22,7 +22,7 @@ const fishColors = {
 
 export const testFishWaffle = (opts) =>
   stackX(
-    { spacing: 8, sharedScale: true },
+    { spacing: 8 },
     _(seafood)
       .groupBy("lake")
       .map((d) =>
@@ -45,7 +45,7 @@ export const testFishWaffle = (opts) =>
 
 export const testFishWaffleWithFor = () =>
   stackX(
-    { spacing: 8, sharedScale: true },
+    { spacing: 8 },
     map(groupBy(seafood, "lake"), (d) =>
       stackY(
         { spacing: 2, alignment: "start" },

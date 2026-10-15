@@ -172,7 +172,8 @@ which the render entry maps over directly.
   children" is a **bake boundary**: it emits a single `DisplayObject` and renders its
   own subtree internally. These are the space-remappers (`coord`), the compositors
   (`over` / `atop` / `in` / `out` / `xor` / `mask`), and the cross-child self-drawers
-  (`connect` / `tween` / `arrow` / `enclose` / `box`), plus any label-bearing node. So `coord`
+  (`connect` / `tween` / `arrow` / `enclose` / `box`, and an axis's `axisSpan`, which
+  draws a divider between two `ref` stand-ins), plus any label-bearing node. So `coord`
   stays a boundary — `bake` never recurses _through_ a coordinate transform (which
   would compose a single global translate across a space remap); `coord` keeps doing
   its own coord-local `flattenLayout` inside. The bake is **boundary-recursive**. (The
@@ -254,7 +255,7 @@ pixel box, and an explicit `w`/`h` sizes that box as it sizes a layer's (a
 radial axis is drawn along the θ = 0 ray, and its title continues the ray
 past its outer end (past the last tick), reading along the ray, so it never
 sits on top of the data. The title is the `axes` option's `y` title,
-else the radial space's measure, else the space's own name for the axis (`r`)
+else the radial space's title, else the space's own name for the axis (`r`)
 (#621). There is deliberately no angular title by default: the ring's tick
 labels say what goes around, and a circle has no single natural place for a
 title. A coordinate space owns no cartesian axes, so it gets no second,
@@ -263,8 +264,8 @@ DATA-bound channels consume these — a plain number bypasses both (see
 `computeAesthetic`) — so a hand-sized (radian/pixel) mark is unaffected, while a
 mark that says `w: datum(count)` (the θ extent) auto-fits. Because the coord is the
 single σ-scale-root, an intermediate `distribute`/`nest` under it must NOT
-re-root (it propagates the inherited σ — see the scale-root scoping gate in
-`buildChildScalePlan`); this is what makes a flat distribute confluent with any
+re-root (it propagates the inherited σ: only a sized node solves, see
+`solveLayerScales`); this is what makes a flat distribute confluent with any
 nested grouping of the same data-driven children (see
 [Layout & Render Passes](/internals/layout/passes)).
 

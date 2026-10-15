@@ -4,7 +4,7 @@ order: 40
 
 # scatter
 
-Positions children at per-group means (when `by` is given) or per-item (when `by` is omitted).
+Positions children at per-group means (when `by` is given) or per-item (when `by` is omitted). Without `by`, each row is its own group, and the mark gets `[row]` (see [spread](./spread#without-by)).
 
 ::: gofish
 
@@ -260,9 +260,9 @@ Some cases are errors:
 .flow(scatter({ by: "species", x: "bill_length", y: "flipper_length" }))
 .mark(rect({ w: 8, h: 8, rx: 4 }))
 
-// Histogram with range form: each rect spans its bin in data space
-.flow(derive(bin("rating")), scatter({ xMin: "start", xMax: "end" }))
-.mark(rect({ h: "count" }))
+// Range form: each rect spans its task's start to end in data space
+.flow(scatter({ by: "task", xMin: "start", xMax: "end" }))
+.mark(rect({ h: 12 }))
 ```
 
 ## Discrete scatter and translation

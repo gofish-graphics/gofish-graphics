@@ -104,19 +104,21 @@ The `axes` option controls per-axis visibility and titles. It accepts a boolean,
 per-dimension object, or per-dimension title control:
 
 ```ts
-axes: true                                     // both axes, titles inferred
-axes: false                                    // no axes (the default)
+axes: true                                     // both axes, titles inferred (the chart() default)
+axes: false                                    // no axes (the default for a bare node)
 axes: { x: true, y: false }                    // x only
 axes: { x: { title: "Year" }, y: true }        // custom x title, inferred y title
 axes: { x: { title: false }, y: true }         // suppress the inferred x title
 axes: { x: { side: "end" } }                   // seat the x-axis on the far edge
-axes: { x: { labelAngle: 45 } }                // rotate x tick/category labels 45°
-axes: { x: { labelAngle: [45] } }              // rotate only the innermost tier
-axes: { x: { labelAngle: "auto" } }            // rotate only if labels would collide
-axes: { x: { rows: [Calendar.month, Calendar.year] } } // the label rows of a time axis
+axes: { x: { label: { angle: 45 } } }         // rotate x tick/category labels 45°
+axes: { x: { label: { angle: [45] } } }       // rotate only the innermost level
+axes: { x: { label: { angle: "auto" } } }     // rotate only if labels would collide
+axes: { x: { levels: [Calendar.week, Calendar.month] } } // the rows of a time axis
+axes: { x: { levels: [false, true] } }         // hide the innermost level
 ```
 
-`rows` applies to a time axis only. See [`Calendar`](/js/api/core/calendar).
+`levels` sets each level of the axis, nearest the plot first. See
+[chart › Axes](/js/api/core/chart#axes) and [`Calendar`](/js/api/core/calendar).
 
 Each per-axis object also accepts `side: "start" | "end"`. By default a
 **continuous/quantitative x-axis renders at the visual bottom** (and a continuous
@@ -130,7 +132,7 @@ grows upward) and `"end"` is the far edge — e.g.
 
 ### Rotating tick and category labels
 
-Each per-axis object also accepts `labelAngle: number | number[] | "auto"` — degrees,
+Each per-axis object also accepts `label: { angle: number | number[] | "auto" }` — degrees,
 **clockwise on screen**, matching Vega-Lite's `labelAngle`. It rotates both
 continuous tick labels and ordinal category labels on that axis. This is useful
 when category labels would otherwise overlap at small chart sizes:
@@ -144,20 +146,20 @@ gf.chart(seafood)
   .render(root, {
     w: 300,
     h: 210,
-    axes: { x: { labelAngle: 45 }, y: true },
+    axes: { x: { label: { angle: 45 } }, y: true },
   });
 ```
 
 :::
 
-A **plain number** applies to every tier of a nested ordinal axis — e.g. a
+A **plain number** applies to every level of the axis — e.g. a
 two-level grouped bar chart's inner (year) and outer (city) category rows both
-rotate the same amount. An **array** is per-tier instead, indexed from the
-INNERMOST tier outward: `labelAngle: [45]` rotates only the innermost row and
-leaves outer tiers unrotated; `[45, 0]` is the explicit two-tier form (same
-result). An index past the end of the array means unrotated. A continuous axis
-only ever has one tier, so it just uses the number, or `array[0]` for the array
-form.
+rotate the same amount. An **array** is per-level instead, by the depths of
+[`levels`](/js/api/core/chart#axes), nearest the plot first: `label: { angle: [45] }`
+rotates only the innermost level and leaves outer levels unrotated; `[45, 0]` is
+the explicit two-level form (same result). An index past the end of the array
+means unrotated. A numeric axis is one level, so in a faceted chart its ticks
+take the first entry and the facets' labels the next.
 
 A rotated label is anchored at its **hanging point** — the point of the label
 nearest the axis line — rather than at its bounding box's middle: `0°` and
@@ -167,7 +169,7 @@ Vega-Lite's 45° look for a positive (clockwise) angle and matplotlib's
 `ha="right"` look for a negative one.
 
 ```js
-gf.chart(cityYear, { axes: { x: { labelAngle: [45] } } }) // year rotated, city upright
+gf.chart(cityYear, { axes: { x: { label: { angle: [45] } } } }) // year rotated, city upright
   .flow(
     gf.spread({ by: "city", dir: "x", spacing: 24 }),
     gf.spread({ by: "year", dir: "x", spacing: 0 })
@@ -178,7 +180,7 @@ gf.chart(cityYear, { axes: { x: { labelAngle: [45] } } }) // year rotated, city 
 
 #### Choosing the angle automatically
 
-`labelAngle: "auto"` rotates only when it has to. Each row of labels gets its
+`label: { angle: "auto" }` rotates only when it has to. Each row of labels gets its
 own angle: GoFish tries 0°, then 45°, then 90°, and keeps the first angle at
 which no two labels in that row overlap or come closer than 2px. If a row of
 category labels collides at every angle, GoFish hides that row instead of
@@ -186,13 +188,13 @@ drawing labels on top of each other, and the rows and title outside it move in
 to take its place. A row of numeric tick labels is never hidden, because
 nothing else would show those values; if it collides at every angle, it keeps
 the angle with the least overlap. A nested axis has one row
-per tier, so in a grouped bar chart the crowded inner row can slant while the
+per level, so in a grouped bar chart the crowded inner row can slant while the
 outer row, which has plenty of room, stays upright. The check covers the whole
 chart, so a year label under one city that runs into a year label under the
 next city counts as a collision.
 
 ```js
-gf.chart(sales, { axes: { x: { labelAngle: "auto" } } })
+gf.chart(sales, { axes: { x: { label: { angle: "auto" } } } })
   .flow(
     gf.spread({ by: "region", dir: "x", spacing: 24 }),
     gf.spread({ by: "product", dir: "x", spacing: 0 })
@@ -210,7 +212,7 @@ names (North, South, West) stay at 0° at every one of these widths.
 A few rules:
 
 - `"auto"` applies to the whole axis and chooses per row. It cannot be an entry
-  of a per-tier array; to fix one row's angle yourself, write the whole array.
+  of a per-level array; to fix one row's angle yourself, write the whole array.
 - Each axis is chosen on its own, so `x` and `y` can both be `"auto"`.
 - When a category row is hidden and no legend shows its field, GoFish logs a
   console warning, because nothing on the chart names those categories any
@@ -224,9 +226,11 @@ A few rules:
   `gofish()` are. A node built ahead of time and passed to `gofish()` can be laid
   out only once, so `"auto"` there is an error.
 
-`axes` is most naturally a `chart()`/`chart()` option (e.g.
+`axes` is most naturally a `chart()` option (e.g.
 `gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as
-the examples below show.
+the examples below show. On `.render()` it overrides only the outermost chart's
+`axes`. A chart nested inside keeps its own (see
+[chart › Axes](/js/api/core/chart#axes)).
 
 ### Axes with inferred titles
 

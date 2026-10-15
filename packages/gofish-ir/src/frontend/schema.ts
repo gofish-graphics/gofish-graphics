@@ -176,7 +176,8 @@ export type OperatorIR =
   | TableOperator
   | LogOperator
   | TreemapOperator
-  | PackOperator;
+  | PackOperator
+  | PartitionOperator;
 
 /**
  * `derive(fn)` — opaque user transformation. Function bodies are not
@@ -189,16 +190,13 @@ export interface DeriveOperator
     OperatorFlagsIR {
   type: "derive";
   lambdaId?: string;
-  /** Measure provenance a transform (e.g. `bin`) declares for its output
-   *  columns — a map from output field name to the measure it carries (the
-   *  source field's units). Travels in the IR because the JS-side array symbol
-   *  can't ride the data rows across the derive RPC; the deserializer re-applies
-   *  it via `setMeasureProvenance`. */
-  provenance?: Record<string, string>;
   /** The column types of the derive's result, keyed by column name, in the
    *  wire form of a chart's `schema` (e.g. `{ HasOrder: { levels } }`). They
    *  type the result over the types it keeps or infers, and convert values
-   *  as a chart's schema does. */
+   *  as a chart's schema does. A transform (e.g. Python's `bin`) writes the
+   *  quantities of its output columns here (`{ HasQuantity: { name } }`), since the
+   *  column types the JS-side array carries can't ride the rows across the
+   *  derive RPC. */
   schema?: Record<string, Record<string, unknown>>;
 }
 
@@ -258,6 +256,13 @@ export interface FilterOperator
   predicate: FieldPredicateIR;
 }
 
+/** A `by` key that groups consecutive rows, as `chunk(size)` builds it: row
+ *  `i` goes to group `floor(i / size)`, a bin over row position. */
+export interface ChunkKeyIR {
+  type: "chunk";
+  size: number;
+}
+
 /** A field predicate: the field it reads and the interval it tests. */
 export interface FieldPredicateIR {
   field: string;
@@ -275,12 +280,11 @@ export interface SpreadOperator
    *  subdata. String accessors round-trip; function accessors don't (see
    *  `LabelIR`/`labelIRField` in createOperator.ts). */
   label?: LabelIR;
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
   /** `x`/`y`, or an axis name the enclosing coordinate space declares. */
   dir?: string;
   spacing?: number;
   alignment?: string;
-  sharedScale?: boolean;
   anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   /** Stack semantics: glue children together (sizes sum into a position at
@@ -310,7 +314,7 @@ export interface StackOperator
   type: "stack";
   /** See `SpreadOperator.label` — `stack` is `spread({glue: true})` re-tagged. */
   label?: LabelIR;
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
   /** See `SpreadOperator.dir`. */
   dir?: string;
   /** Spread-parity passthrough: the JS `stack` is `Spread({...props, glue:
@@ -320,7 +324,6 @@ export interface StackOperator
   /** Spread-parity passthrough; stack always glues regardless. */
   glue?: boolean;
   alignment?: string;
-  sharedScale?: boolean;
   anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   /** Box position, extent, and per-entry size — see `SpreadOperator`. */
@@ -339,7 +342,7 @@ export interface GroupOperator
   type: "group";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
-  by: string | FieldAccessor;
+  by: string | FieldAccessor | ChunkKeyIR;
 }
 
 export interface ScatterOperator
@@ -349,7 +352,7 @@ export interface ScatterOperator
   type: "scatter";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
   x?: ChannelValue;
   y?: ChannelValue;
   xMin?: ChannelValue;
@@ -379,8 +382,13 @@ export interface ScatterOperator
  *
  * `AxisOptions` per-dim is either a boolean (show/hide, infer title) or an
  * object: `title` (string for a custom title, `false` to suppress), `side`
- * (the frame edge), `labelAngle` (label rotation in degrees), and `rows` (the
- * label rows of a time axis, inner row first).
+ * (the frame edge), `label` (how its labels are drawn: `angle`, their
+ * rotation in degrees, and `align`, each level's labels centered or at the
+ * start of each run), `levels`
+ * (the axis's bands of labels by depth, nearest the plot first: `true`
+ * keeps one, `false` hides it, a Calendar value names its cells), and
+ * `divider` (whether each level draws dividers: one value, or one per
+ * depth).
  */
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions =
@@ -388,25 +396,31 @@ export type AxisOptions =
   | {
       title?: string | false;
       side?: "start" | "end";
-      labelAngle?: number | number[] | "auto";
-      rows?: CalendarPartitionIR[];
+      label?: AxisLabelOptions;
+      levels?: (boolean | CalendarPartitionIR)[];
+      divider?: boolean | boolean[];
     };
 
-/** A Calendar value's wire form (`Calendar.month.every(3)`): a calendar level
- *  at a step. `start` is the first day of a week, for weeks only. */
-export type CalendarPartitionIR = {
-  unit:
-    | "second"
-    | "minute"
-    | "hour"
-    | "day"
-    | "week"
-    | "month"
-    | "quarter"
-    | "year";
-  step?: number;
-  start?: "monday" | "sunday";
+/** How one axis's labels are drawn (`axes.x.label`): `angle` and `align`,
+ *  each one value for every level or an array per level, nearest the plot
+ *  first. */
+export type AxisLabelOptions = {
+  angle?: number | number[] | "auto";
+  align?: "start" | "center" | ("start" | "center" | true)[];
 };
+
+/** A Calendar value's wire form (`Calendar.month({ every: 3 })` is
+ *  `{ kind: "month", every: 3 }`): a calendar level, its `kind`, at a step,
+ *  `every`. Only a week and a weekday have a `start`, the first day of the
+ *  week, and a weekday has no `every`. The kinds of the `Calendar` family in
+ *  `STRATEGIES` (descriptors.ts). */
+export type CalendarPartitionIR =
+  | {
+      kind: "second" | "minute" | "hour" | "day" | "month" | "quarter" | "year";
+      every?: number;
+    }
+  | { kind: "weekday"; start?: "monday" | "sunday" }
+  | { kind: "week"; every?: number; start?: "monday" | "sunday" };
 
 export interface TableOperator
   extends BaseIRNode,
@@ -415,7 +429,11 @@ export interface TableOperator
   type: "table";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
-  by: { x: string; y: string };
+  /** The column and row keys, each what `SpreadOperator.by` takes. */
+  by: {
+    x: string | FieldAccessor | ChunkKeyIR;
+    y: string | FieldAccessor | ChunkKeyIR;
+  };
   spacing?: number | [number, number];
   numCols?: number;
 }
@@ -449,7 +467,7 @@ export interface TreemapOperator
   /** Field to partition rows by; also accepts a field(...) accessor carrying
    *  domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is
    *  emitted per row. */
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
   /** Gap between sibling tiles, in pixels. Default 0. */
   spacing?: number;
   /** Inset around the outer edge of the treemap, in pixels. Default 0. */
@@ -486,7 +504,35 @@ export interface PackOperator
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
   /** Field to partition rows by. Without `by`, one child per row. */
-  by?: string | FieldAccessor;
+  by?: string | FieldAccessor | ChunkKeyIR;
+}
+
+/**
+ * `partition({ by, dir })` — divide the space along `dir` into the cells of
+ * a binned key (`field(x).bin(p)`), and give each group its cell on one
+ * continuous scale. `partition({ by: { x, y } })` divides both axes: it is
+ * the partition on x, then the partition on y. `partition({ by:
+ * struct({ x, y }).bin(cells) })` divides the plane into the polygon cells
+ * of a `Bin` strategy (hexagons, Voronoi cells). Operator-only: its children
+ * are the groups of its key. Mirrors JS's `PartitionOptions`
+ * (`graphicalOperators/partition.tsx`).
+ */
+export interface PartitionOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "partition";
+  /** See `SpreadOperator.label`. */
+  label?: LabelIR;
+  /** A key that has a region: a binned field accessor, one per axis, or a
+   *  binned struct of two fields. */
+  by: FieldAccessor | { x: FieldAccessor; y: FieldAccessor } | StructAccessor;
+  /** The axis to divide. Required with a single key; not allowed with a
+   *  key per axis. */
+  dir?: string;
+  /** Alignment on the other axis. Default `"baseline"`. */
+  alignment?: string;
+  axes?: AxesOptions;
 }
 
 // ---------------------------------------------------------------------------
@@ -545,6 +591,23 @@ export type CurveIR =
       straights?: boolean;
     };
 
+/** The cells a key is binned into, made by a call in the `Bin` family.
+ *  `Bin.step(size)` and `Bin.thresholds(countOrEdges)` bin one field
+ *  (`field(x).bin(...)`, {@link FieldBinIR}); `Bin.hex({ radius })` and
+ *  `Bin.voronoi({ seeds })` bin two together (`struct({ x, y }).bin(...)`,
+ *  {@link StructBinIR}). */
+export type BinIR = FieldBinIR | StructBinIR;
+
+/** The `Bin` kinds that cut the line of one field into intervals. */
+export type FieldBinIR =
+  | { kind: "step"; size: number }
+  | { kind: "thresholds"; thresholds: number | number[] };
+
+/** The `Bin` kinds that divide the plane of two fields into polygons. */
+export type StructBinIR =
+  | { kind: "hex"; radius: number | { x: number; y: number } }
+  | { kind: "voronoi"; seeds: Record<string, unknown>[] };
+
 /** Nodes named on the wire inside an option (a blob's `avoiding`): a list of
  *  by-name references (`ref(...)` / a `.relate()` operand), or every node of
  *  a named layer (`selectAll(name)`, the plural form a chart's data takes). */
@@ -585,6 +648,7 @@ export type LeafMarkType =
   | "ribbon"
   | "enclose"
   | "blank"
+  | "region"
   | "ellipse"
   | "petal"
   | "text"
@@ -760,9 +824,7 @@ export interface AxisInterval {
  */
 export type AxisDims = Record<string, ChannelValue | AxisInterval>;
 
-/** Explicit field-accessor form, emitted by `field(name, measure?)`. The
- *  optional `measure` is a unit annotation on the channel's underlying space
- *  (a type claim — see gofish-graphics' `resolveMeasure`). `ops` is the
+/** Explicit field-accessor form, emitted by `field(name)`. `ops` is the
  *  optional chained pipeline (#700 Phase 1/2), e.g. `field("site").sort("yield")`
  *  or `field("count").normalize()` — see `FieldOpIR` and gofish-graphics'
  *  `fieldExpr.ts` (`FieldOp`), which this mirrors exactly. Two disjoint
@@ -770,12 +832,32 @@ export type AxisDims = Record<string, ChannelValue | AxisInterval>;
  *  (`sort`/`reverse`/`bin`); a value (size/pos) channel slot accepts the
  *  aggregate ops (`sum`/`mean`/`count`/`distinct`) and, only on an
  *  operator's entry-flagged `size` channel, `normalize`. */
+/** A partition's wire form (`field(x).bin(p)`): a Calendar value, or a
+ *  `Bin` kind that bins one field (`Bin.step(size)`,
+ *  `Bin.thresholds(countOrEdges)`). One tagged union, told apart by `kind`
+ *  (`OPTION_TYPES.Partition`). */
+export type PartitionIR = CalendarPartitionIR | FieldBinIR;
+
 export interface FieldAccessor {
   type: "field";
   name: string;
-  measure?: string;
   ops?: FieldOpIR[];
 }
+
+/** A key built from two fields at once, emitted by `struct({ x, y })`
+ *  (after polars' `pl.struct`), with the cells it is binned into. `fields`
+ *  names the column read on each axis. Its one op is `bin`, which takes a
+ *  `Bin` strategy; a struct is a key only once it is binned (a
+ *  `partition`'s `by`). Mirrors gofish-graphics' `StructExpr`
+ *  (`ast/structExpr.ts`). */
+export interface StructAccessor {
+  type: "struct";
+  fields: { x: string; y: string };
+  ops?: StructOpIR[];
+}
+
+/** One op in a `struct(...)` pipeline: the cells it is binned into. */
+export type StructOpIR = { op: "bin"; partition: StructBinIR };
 
 /** One op in a `field(...)` pipeline — mirrors gofish-graphics'
  *  `FieldOp` (`ast/fieldExpr.ts`) exactly. See {@link FieldAccessor}. */
@@ -790,7 +872,15 @@ export type FieldOpIR =
       values?: (string | number)[];
     }
   | { op: "reverse" }
-  | { op: "bin"; thresholds?: number | number[] }
+  | {
+      op: "bin";
+      /** The partition each value is binned into: a Calendar value,
+       *  `Bin.step(size)` or `Bin.thresholds(countOrEdges)`, or a product of
+       *  Calendar values (`[year, month]`: one cell where they meet).
+       *  Absent: about 10 cells. A second `bin` op splits the cells of the
+       *  one before it (`.bin(Calendar.year).bin(Calendar.month)`). */
+      partition?: PartitionIR | CalendarPartitionIR[];
+    }
   | { op: "dropNulls" }
   | { op: "normalize" }
   | { op: "sum" }
@@ -957,6 +1047,7 @@ export const OPERATOR_TYPES = [
   "log",
   "treemap",
   "pack",
+  "partition",
 ] as const;
 
 /** The set of leaf-mark type discriminators recognized in v0. */
@@ -967,6 +1058,7 @@ export const LEAF_MARK_TYPES: readonly LeafMarkType[] = [
   "ribbon",
   "enclose",
   "blank",
+  "region",
   "ellipse",
   "petal",
   "text",

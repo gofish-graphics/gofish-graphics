@@ -292,8 +292,8 @@ Sibling `spacing` is in **radians** (~`π / N` for N siblings per level);
 
 This is the right pattern for point-like nodes (circle, small mark used as a
 node). When the _shape itself_ needs to sweep through the transform —
-filled wedges, ribbons, polar bars — reach for `Value`-typed dims +
-`sharedScale: true` instead (the pattern in `polarBar` / `polarRibbon`).
+filled wedges, ribbons, polar bars — reach for `Value`-typed dims
+instead (the pattern in `polarBar` / `polarRibbon`).
 
 ### The 2π budget — content must fit polar's theta domain
 
@@ -303,7 +303,7 @@ at theta = ε), producing self-intersecting wedges and slivers protruding
 past the disc edge.
 
 The library does not yet auto-fit content to 2π — the spread operator's
-`sharedScale` / Monotonic-inversion path does fit, but `Constraint.distribute`
+Monotonic-inversion path does fit, but `Constraint.distribute`
 and `Constraint.nest` (which the `distribute` and `nest` helpers
 build on) don't yet participate in that path. So sizes are hand-budgeted.
 

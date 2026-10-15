@@ -149,6 +149,7 @@ const BAKE_BOUNDARY_TYPES = new Set([
   "mask",
   ...RELATIONAL_TYPES,
   "arrow",
+  "axisSpan",
   "enclose",
   "box",
 ]);

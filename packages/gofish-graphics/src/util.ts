@@ -118,13 +118,19 @@ export const foldFinite = (
 // input is a value, an aesthetic literal, or undefined. behavior differs based on this
 export const computeAesthetic = (
   input: MaybeValue<number> | undefined,
-  scale: (x: number) => number,
+  scale: ((x: number) => number) | undefined,
   provided: number | undefined
 ): number | undefined => {
+  // Every axis a data value is placed on has a position scale: a scope
+  // solves one for any domain, a one-value domain included (#1107).
+  if (isValue(input) && scale === undefined)
+    throw new Error(
+      "[gofish] a data value was placed on an axis with no position scale"
+    );
   // A datum's pixel offset applies AFTER the scale mapping — "this data
   // position, plus pixels" (`datum(v).offset(px)`).
   return isValue(input)
-    ? scale(getValue(input)!) + getValueOffset(input)
+    ? scale!(getValue(input)!) + getValueOffset(input)
     : (input ?? provided);
 };
 

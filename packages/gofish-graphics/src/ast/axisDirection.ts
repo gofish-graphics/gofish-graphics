@@ -84,7 +84,6 @@ export const CANVAS_FRAME: YFrame = DOWN;
 type SpacedNode = {
   type?: string;
   _underlyingSpace?: Size<UnderlyingSpace>;
-  selfScaledSpace?: [UnderlyingSpace | undefined, UnderlyingSpace | undefined];
   axisDir?: 0 | 1;
 };
 
@@ -96,14 +95,13 @@ export type FramedNode = { readonly yFrame: YFrame };
  * The y frame of a node with these spaces, sitting in the frame `parent`
  * (see the module doc).
  *
- * The node's OWN space is the one it lays its children out in. A node that
- * roots its own σ-scope on y (an explicit pixel size over data) reports
- * UNDEFINED upward, so that its parent's union ignores it, and keeps its own
- * space in `selfScaledSpace`; that kept space is the one read here.
+ * The node's y space is the type it reports (`_underlyingSpace`). A literal
+ * size carries no data, so a node with one reports its content's type, the
+ * space it lays its children out in (#1114).
  */
 export const yFrameIn = (node: SpacedNode, parent: YFrame): YFrame => {
   if (parent.inCoord || node.type === "coord") return COORD;
-  const space = node.selfScaledSpace?.[1] ?? node._underlyingSpace?.[1];
+  const space = node._underlyingSpace?.[1];
   if (space !== undefined && isCONTINUOUS(space)) return UP;
   // A discrete y: an ordinal space, or a spread that orders its children
   // along y (whose space is UNDEFINED when they carry no keys).

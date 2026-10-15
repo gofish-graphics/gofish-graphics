@@ -64,15 +64,17 @@ These rules were already agreed in the #773 discussion, and this note takes them
 This section lists what exists, with file and line, and where a distribution type would
 plug in.
 
-**Values and measures.** A channel value is a raw number or string, or a `datum` wrapper
-that carries the value and an optional measure
-(`packages/gofish-graphics/src/ast/data.ts:122` for the wire shape,
-`data.ts:139` for the class, `data.ts:203` for `value` and `datum`). A measure is a plain
-string (`data.ts:11`). There are three sources of a measure. The field name is a weak
-default. `field(name, measure)` is a hard annotation (`data.ts:243`). A transform such as
-`bin()` tags its output array with a provenance map under a symbol
-(`MEASURE_PROVENANCE`, `data.ts:27`). `resolveMeasure` combines the three and throws on a
-conflict (`packages/gofish-graphics/src/ast/channels.ts:165`).
+**Values and quantities.** A channel value is a raw number or string, or a `datum`
+wrapper that carries the value and an optional quantity
+(`packages/gofish-graphics/src/ast/data.ts`, `DatumValue` for the wire shape and
+`DatumValueImpl` for the class). A quantity is a name and an optional declared unit
+(`Quantity` in `ast/measure.ts`). It comes from the column's type in the chart's schema.
+`Schema.quantity(name)` (`HasQuantity`) names it, and otherwise the column's name does.
+`Schema.unit(u)` (`HasUnit`) declares its unit. The cells of `field(x).bin(p)` keep
+`x`'s quantity and unit, since their ends are read from `x`. `columnQuantity`
+(`measure.ts`) reads them, and `resolveColumn` (`ast/channels.ts`) applies it to a
+channel's column. A column with no declared unit has an unknown unit, which unifies
+with anything.
 
 **Field expressions.** `field(name)` returns a `FieldExpr` with a pipeline of operations.
 The full list is `sort`, `reverse`, `bin`, `dropNulls`, `normalize`, `sum`, `mean`,
@@ -96,8 +98,9 @@ number.
 (`packages/gofish-graphics/src/ast/underlyingSpace.ts:11`). A continuous space has three
 cases, built by `POSITION` (`underlyingSpace.ts:170`), `SIZE` (`underlyingSpace.ts:232`)
 and `DIFFERENCE` (`underlyingSpace.ts:224`). `ORDINAL` is at `underlyingSpace.ts:261`.
-Positioned spaces unify per measure, and `mergeMeasures` throws when two measures differ
-(`underlyingSpace.ts:301`). `stack` sums its children's widths into a position that starts
+Spaces that meet on one axis join their units with `joinUnits` (`underlyingSpace.ts`),
+which throws a `MeasureClash` when two different declared units share the axis. `stack`
+sums its children's widths into a position that starts
 at 0 (`packages/gofish-graphics/src/ast/constraints/distribute.ts:219` to `226`). The
 underlying space describes the layout space. It is not a datatype, but it is the
 "picture" half of the expressiveness check.
@@ -122,7 +125,8 @@ is a spread on the time axis, which is the direction a hypothetical outcome plot
 1. **A column type.** Something has to record that a column holds `Dist<T>` and what `T`
    is. Today the only per-column record is the measure string and the provenance symbol.
    Either the measure grows into a structured type (a carrier type, a unit and a set of
-   capabilities), or a second sidecar like `MEASURE_PROVENANCE` carries column types. The
+   capabilities), or a second sidecar like the provenance symbol carries column types.
+   (Since #994 there is one record: the unit is the `HasUnit` class of a column type.) The
    #773 work on putting the origin on the datatype needs the same record, so the two
    should share it.
 2. **Channel inference.** `inferNumeric` in `channels.ts` is where a `Dist<T>` value would
@@ -544,7 +548,7 @@ import { chart, derive, normal, spread, interval } from "gofish-graphics";
 
 chart(estimates)
   .flow(
-    derive((d) => ({ ...d, sales: normal(d.mean, d.se) })),
+    derive((rows) => rows.map((d) => ({ ...d, sales: normal(d.mean, d.se) }))),
     spread({ by: "region", dir: "x" })
   )
   .mark(interval({ y: "sales" }));

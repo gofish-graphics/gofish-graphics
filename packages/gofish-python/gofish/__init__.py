@@ -15,8 +15,6 @@ from .ast import (
     Constraint,
     Schema,
     ColumnSchema,
-    Calendar,
-    CalendarPartition,
     ref,
     arrow,
     over,
@@ -38,6 +36,7 @@ from .ast import (
     scatter,
     treemap,
     pack,
+    partition,
     table,
     log,
     select_all,
@@ -49,6 +48,7 @@ from .ast import (
     line,
     ribbon,
     blank,
+    region,
     ellipse,
     petal,
     text,
@@ -56,14 +56,17 @@ from .ast import (
     polygon,
     datum,
     field,
+    struct,
+    chunk,
 )
-from .transforms import bin
 from .datum_projection import pluck
 from .charts import bar_chart
 
 # Strategy families (#1013): one module per family, with a lowercase file
 # name, bound here under its capitalized name. `Curve.monotone` and
 # `from gofish.curve import monotone` are the same function.
+from . import bin as Bin
+from . import calendar as Calendar
 from . import color as Color
 from . import coord as Coord
 from . import curve as Curve
@@ -85,7 +88,6 @@ __all__ = [
     "Schema",
     "ColumnSchema",
     "Calendar",
-    "CalendarPartition",
     "ref",
     "arrow",
     "over",
@@ -107,6 +109,7 @@ __all__ = [
     "scatter",
     "treemap",
     "pack",
+    "partition",
     "table",
     "log",
     "select_all",
@@ -118,6 +121,7 @@ __all__ = [
     "line",
     "ribbon",
     "blank",
+    "region",
     "ellipse",
     "petal",
     "text",
@@ -125,9 +129,11 @@ __all__ = [
     "polygon",
     "datum",
     "field",
-    "bin",
+    "struct",
+    "chunk",
     "pluck",
     "bar_chart",
+    "Bin",
     "Color",
     "Coord",
     "Curve",

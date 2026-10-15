@@ -77,7 +77,7 @@ export const L0Sugar: StoryObj<Args> = {
       )
       .mark(circle({ r: 4, fill: "country" }))
       .layer(time.transition())
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -108,7 +108,7 @@ export const L1ExplicitKey: StoryObj<Args> = {
           .flow(group({ by: "country" }))
           .mark(time.transition({ along: "year" }))
       )
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -139,7 +139,7 @@ export const L2ExplicitClock: StoryObj<Args> = {
           .flow(group({ by: "country" }))
           .mark(time.transition({ along: "year", at: year }))
       )
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },
@@ -186,7 +186,7 @@ export const L3DataSpace: StoryObj<Args> = {
           )
           .mark(circle({ r: 4, fill: "country" }))
       )
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h } as any);
 
     return container;
   },

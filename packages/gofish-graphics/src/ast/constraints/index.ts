@@ -1,18 +1,13 @@
 import type { GoFishAST } from "../_ast";
 import { GoFishNode, type Placeable } from "../_node";
+import { getValue, isValue, type MaybeValue } from "../data";
 import {
-  getMeasure,
-  getValue,
-  isValue,
-  type MaybeValue,
-  type Measure,
-} from "../data";
-import {
-  mergeCalendars,
-  mergeMeasures,
-  positionCalendar,
+  joinUnits,
+  mergeCells,
+  valueUnits,
+  type UnitRecord,
 } from "../underlyingSpace";
-import type { HasCalendar } from "../schema";
+import { Cell } from "../cells";
 import type { PositionDomains } from "./compose";
 import * as Interval from "../../util/interval";
 import { createAlignConstraint } from "./align";
@@ -24,7 +19,11 @@ import {
   isZOrderConstraint,
 } from "./zorder";
 import { createNestConstraint } from "./nest";
-import { isPositionInterval, spanDatumInterval } from "./position";
+import {
+  isPositionInterval,
+  spanDatumInterval,
+  type PositionCoordinate,
+} from "./position";
 import type { AlignConstraint, AlignOptions } from "./align";
 import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
@@ -61,10 +60,11 @@ export type { AlignConstraint, AlignOptions } from "./align";
 export type { DistributeConstraint, DistributeOptions } from "./distribute";
 export type {
   PositionConstraint,
+  PositionCoordinate,
   PositionInterval,
   PositionOptions,
 } from "./position";
-export { isPositionInterval } from "./position";
+export { isPositionInterval, PositionRegion } from "./position";
 export type {
   ZAboveConstraint,
   ZBelowConstraint,
@@ -256,87 +256,99 @@ export function resolveConstraintOperands(
  * `resolveUnderlyingSpace` merges this with the children's spaces (see
  * `layer.tsx`).
  *
- * Measure (Stage-1 guard): a datum coordinate's `measure` is folded per axis
- * with {@link mergeMeasures} (equal measures unify; two *different* defined
- * measures throw — a unit conflict among a layer's own position constraints).
+ * Measure (Stage-1 guard): a datum coordinate's units are folded per axis
+ * with {@link joinUnits} (equal units unify; two *different* units throw — a
+ * unit conflict among a layer's own position constraints; calendars and
+ * titles join too).
  * An interval's two endpoints unify their measures the same way (an interval in
- * mixed units is a conflict). The layer's `resolveAxis` then treats this as the
- * axis's unit, PREFERRING it over the children's POSITION measure (falling back
- * to the children only for untagged literal-pixel coords) — restoring the unit
- * tag the scatter reduction dropped, without strict-unifying against a
- * self-scaling child's leaked unit.
+ * mixed units is a conflict). The layer's type hook then joins it with the
+ * units of its own set (`resolveLayerAxisSpace` in compose.ts, a shared
+ * `joinUnits`: an untagged side takes the other's unit) — restoring the unit
+ * tag the scatter reduction dropped. A child its sharing sets detach or a
+ * datum places is not in that union, so its unit takes no part.
  */
 export function collectPositionDomains(
   constraints: ConstraintSpec[]
 ): PositionDomains {
-  let x: Interval.Interval | undefined;
-  let y: Interval.Interval | undefined;
-  let xMeasure: Measure | undefined;
-  let yMeasure: Measure | undefined;
-  // The calendar of time datums (`CONTINUOUS_TYPE.calendar`); literals carry
-  // none.
-  let xCalendar: HasCalendar | undefined;
-  let yCalendar: HasCalendar | undefined;
-  const coordCalendar = (
-    coord: PositionConstraint["x"] | undefined
-  ): HasCalendar | undefined =>
-    coord === undefined
-      ? undefined
-      : isPositionInterval(coord)
-        ? mergeCalendars([
-            positionCalendar(coord[0]),
-            positionCalendar(coord[1]),
-          ])
-        : positionCalendar(coord);
-  const pointInterval = (
-    coord: PositionConstraint["x"]
-  ): Interval.Interval | undefined => {
-    if (!isValue(coord)) return undefined;
-    const n = getValue(coord as MaybeValue<number>);
-    return Interval.interval(n, n);
-  };
-  const unionIv = (
-    acc: Interval.Interval | undefined,
-    iv: Interval.Interval | undefined
-  ) => (iv === undefined ? acc : acc ? Interval.unionAll(acc, iv) : iv);
-  // A point datum's measure; literals carry none. An interval's `[min,max]`
-  // endpoints unify their two measures the same way (mixed units are a conflict).
-  const coordMeasure = (
-    coord: PositionConstraint["x"] | undefined,
-    axis: 0 | 1
-  ): Measure | undefined => {
-    if (coord === undefined) return undefined;
-    return isPositionInterval(coord)
-      ? mergeMeasures(getMeasure(coord[0]), getMeasure(coord[1]), {
-          axis,
-          where: "at the two ends of a position range",
-        })
-      : getMeasure(coord);
-  };
-  const coordInterval = (
-    coord: PositionConstraint["x"] | undefined
-  ): Interval.Interval | undefined =>
-    coord === undefined
-      ? undefined
-      : isPositionInterval(coord)
-        ? spanDatumInterval(coord)
-        : pointInterval(coord);
+  const axes = [newAxisDomain(), newAxisDomain()] as const;
   for (const c of constraints) {
     if (c.type !== "position") continue;
-    x = unionIv(x, coordInterval(c.x));
-    y = unionIv(y, coordInterval(c.y));
-    xMeasure = mergeMeasures(xMeasure, coordMeasure(c.x, 0), {
-      axis: 0,
-      where: "across position constraints",
-    });
-    yMeasure = mergeMeasures(yMeasure, coordMeasure(c.y, 1), {
-      axis: 1,
-      where: "across position constraints",
-    });
-    xCalendar = mergeCalendars([xCalendar, coordCalendar(c.x)]);
-    yCalendar = mergeCalendars([yCalendar, coordCalendar(c.y)]);
+    for (const axis of [0, 1] as const) {
+      const acc = axes[axis];
+      const point = axis === 0 ? c.x : c.y;
+      if (point !== undefined) {
+        foldCoordinate(acc, point, axis);
+        acc.cells = undefined;
+      }
+      const span = c.region?.spans[axis];
+      if (span !== undefined) {
+        foldCoordinate(acc, span, axis);
+        const cell = c.region!.cell;
+        if (cell instanceof Cell) acc.cells?.push([cell]);
+        else acc.cells = undefined;
+      }
+    }
   }
-  return { x, y, xMeasure, yMeasure, xCalendar, yCalendar };
+  const [x, y] = axes;
+  return {
+    x: x.domain,
+    y: y.domain,
+    xMeasure: x.measure,
+    yMeasure: y.measure,
+    xCells: x.cells && mergeCells(x.cells),
+    yCells: y.cells && mergeCells(y.cells),
+  };
+}
+
+/** What {@link collectPositionDomains} folds on one axis. */
+type AxisDomain = {
+  domain: Interval.Interval | undefined;
+  /** The units of the datums, with their calendar when they are times
+   *  ({@link UnitRecord}); literals carry none. */
+  measure: UnitRecord | undefined;
+  /** The cells the coordinates place on this axis, while every one so far
+   *  is a region's cell of a line placed along this axis alone; undefined
+   *  once a point, an interval, or a cell of the plane (a hexagon: no cell
+   *  of this axis alone) is seen. */
+  cells: (readonly Cell[])[] | undefined;
+};
+
+const newAxisDomain = (): AxisDomain => ({
+  domain: undefined,
+  measure: undefined,
+  cells: [],
+});
+
+/** Fold one coordinate into `acc`: an interval reads as its two edges, a
+ *  point as itself. Literal (pixel) coordinates carry no domain or units. An
+ *  interval's two endpoints join their units the same way as two
+ *  coordinates do (mixed units are a conflict). */
+function foldCoordinate(
+  acc: AxisDomain,
+  coord: PositionCoordinate,
+  axis: 0 | 1
+): void {
+  let iv: Interval.Interval | undefined;
+  let measure: UnitRecord | undefined;
+  if (isPositionInterval(coord)) {
+    iv = spanDatumInterval(coord);
+    measure = joinUnits(valueUnits(coord[0]), valueUnits(coord[1]), true, {
+      axis,
+      where: "at the two ends of a position range",
+    });
+  } else {
+    if (isValue(coord)) {
+      const n = getValue(coord as MaybeValue<number>);
+      iv = Interval.interval(n, n);
+    }
+    measure = valueUnits(coord);
+  }
+  if (iv !== undefined)
+    acc.domain = acc.domain ? Interval.unionAll(acc.domain, iv) : iv;
+  acc.measure = joinUnits(acc.measure, measure, true, {
+    axis,
+    where: "across position constraints",
+  });
 }
 
 /**

@@ -62,7 +62,8 @@ chart(data, { color: Color.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes: tr
 
 ## Notes
 
-- Data insertion order determines column and row ordering. Sort your data first if you need a specific order.
+- Each of `by.x` and `by.y` takes what [`spread`](/js/api/operators/spread)'s `by` takes: a field name or a `field(...)` key, sorted or binned. A binned key's columns (or rows) are its cells, in order, empty ones included, and its axis labels them as `spread`'s does: `table({ by: { x: field("date").bin(Calendar.week), y: field("date").bin(Calendar.weekday) } })` is a calendar heatmap, one column per week and one row per day of the week.
+- A plain field name's columns and rows come in order of first appearance, or in the order of its levels when the chart's `schema` declares the column ordered. Sort your data first if you need a specific order.
 - Unlike nested `spread` calls, `table` correctly exposes ordinal axes on both dimensions so axis labels render on both x and y.
 - Pair with `Color.gradient()` on the chart color option and `fill: "fieldName"` on the mark for heatmap coloring.
 

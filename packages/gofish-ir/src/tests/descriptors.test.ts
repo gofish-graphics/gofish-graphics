@@ -31,6 +31,9 @@ import type {
   AxisInterval,
   FieldPredicateIR,
   AxisOptions,
+  AxisLabelOptions,
+  BinIR,
+  CalendarPartitionIR,
   CurveIR,
   ShapeIR,
   LabelSpecIR,
@@ -66,7 +69,7 @@ const BASE_FIELDS = ["type", "translate", "origin", "meta", "debug"] as const;
  * runtime.
  */
 const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
-  derive: ["lambdaId", "provenance", "schema"],
+  derive: ["lambdaId", "schema"],
   resolve: ["cols", "from", "key"],
   join: ["on", "right"],
   filter: ["predicate"],
@@ -75,7 +78,6 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "dir",
     "spacing",
     "alignment",
-    "sharedScale",
     "anchor",
     "reverse",
     "glue",
@@ -92,7 +94,6 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "spacing",
     "glue",
     "alignment",
-    "sharedScale",
     "anchor",
     "reverse",
     "axes",
@@ -135,6 +136,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "size",
   ],
   pack: ["by"],
+  partition: ["by", "dir", "alignment", "axes"],
 };
 
 console.log("\n# Descriptor fields agree with schema.ts operator interfaces");
@@ -181,9 +183,14 @@ const SCHEMA_OPTION_TYPE_KEYS: Record<string, Record<string, true>> = {
   AxisOptions: {
     title: true,
     side: true,
-    labelAngle: true,
-    rows: true,
+    label: true,
+    levels: true,
+    divider: true,
   } satisfies Record<keyof Exclude<AxisOptions, boolean>, true>,
+  AxisLabelOptions: {
+    angle: true,
+    align: true,
+  } satisfies Record<keyof AxisLabelOptions, true>,
   AxesOptions: {
     x: true,
     y: true,
@@ -289,6 +296,23 @@ const SCHEMA_STRATEGY_KEYS: Record<
       straights: true,
     },
   } satisfies StrategyKeys<CurveIR>,
+  Bin: {
+    step: { size: true },
+    thresholds: { thresholds: true },
+    hex: { radius: true },
+    voronoi: { seeds: true },
+  } satisfies StrategyKeys<BinIR>,
+  Calendar: {
+    second: { every: true },
+    minute: { every: true },
+    hour: { every: true },
+    day: { every: true },
+    weekday: { start: true },
+    week: { every: true, start: true },
+    month: { every: true },
+    quarter: { every: true },
+    year: { every: true },
+  } satisfies StrategyKeys<CalendarPartitionIR>,
   Shape: {
     box: { rx: true, ry: true },
     blob: {
@@ -303,7 +327,7 @@ const SCHEMA_STRATEGY_KEYS: Record<
 };
 
 console.log(
-  "\n# STRATEGIES agree with schema.ts TileIR / OverlapIR / CurveIR / ShapeIR"
+  "\n# STRATEGIES agree with schema.ts TileIR / OverlapIR / CurveIR / BinIR / CalendarPartitionIR / ShapeIR"
 );
 for (const [family, kinds] of Object.entries(SCHEMA_STRATEGY_KEYS)) {
   const table = STRATEGIES[family as keyof typeof STRATEGIES].kinds as Record<

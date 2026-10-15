@@ -86,7 +86,7 @@ def _epoch_ms(date):
 
 def story_stacked_area():
     return (
-        chart(QUARTERLY_SALES, schema={"date": Schema.time()}, axes=True)
+        chart(QUARTERLY_SALES, schema={"date": Schema.time()})
         .flow(scatter(by="date", x="date"), stack(by="category", dir="y"))
         .mark(ribbon(h="sales", fill="category", curve=Curve.linear())),
         {"w": 520, "h": 330},
@@ -124,7 +124,6 @@ def story_surplus_deficit_line():
         chart(
             area,
             schema=schema,
-            axes=True,
             color=Color.palette({"Surplus": "#2a9d8f", "Deficit": "#e76f51"}),
         )
         .flow(group(by="side"), scatter(by="date", x="date"))

@@ -26,14 +26,14 @@ case.
 
 ## Parameters
 
-| Parameter | Type                   | Default | Description                                                                                                                          |
-| --------- | ---------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `w`       | `int`                  | `800`   | Width in pixels                                                                                                                      |
-| `h`       | `int`                  | `600`   | Height in pixels                                                                                                                     |
-| `axes`    | `bool \| dict \| None` | `None`  | Auto-generate axes, labels, and legends; same shape as `chart(axes=...)`. Unset, the chart's own `axes` option decides.              |
-| `legend`  | `bool \| None`         | `None`  | Whether to draw the color-scale legend. Unset, the default (`True`) applies. A `chart()` option of the same name wins over this one. |
-| `padding` | `float \| None`        | `None`  | Extra pixels between the drawing and the SVG edge. Unset, the chart's own `padding` option (or the default) applies.                 |
-| `debug`   | `bool`                 | `False` | Whether to enable debug rendering                                                                                                    |
+| Parameter | Type                   | Default | Description                                                                                                                                                          |
+| --------- | ---------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `w`       | `int`                  | `800`   | Width in pixels                                                                                                                                                      |
+| `h`       | `int`                  | `600`   | Height in pixels                                                                                                                                                     |
+| `axes`    | `bool \| dict \| None` | `None`  | Auto-generate axes, labels, and legends; same shape as `chart(axes=...)`. Overrides the outermost chart's `axes` only. Unset, the chart's own `axes` option decides. |
+| `legend`  | `bool \| None`         | `None`  | Whether to draw the color-scale legend. Unset, the default (`True`) applies. A `chart()` option of the same name wins over this one.                                 |
+| `padding` | `float \| None`        | `None`  | Extra pixels between the drawing and the SVG edge. Unset, the chart's own `padding` option (or the default) applies.                                                 |
+| `debug`   | `bool`                 | `False` | Whether to enable debug rendering                                                                                                                                    |
 
 Returns a `GoFishChartWidget`.
 

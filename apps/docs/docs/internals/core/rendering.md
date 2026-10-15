@@ -73,9 +73,13 @@ meets the canvas (see
 
 **Root placement.** The canvas is a frame `[0, final]` on each axis, and the root's
 axis order starts at the frame's start edge: the top for a y that reads top-down, the
-bottom for a continuous y. A given dimension seats the root's baseline in that frame
-(a free root's baseline at the scope's `originPx`, `descent·σ` from the start edge,
-#773; a pinned root at 0, its map carrying `originPx`); a shrink-to-fit dimension
+bottom for a continuous y. A given dimension is a fixed slot, and the root's box
+sits at its top-left (#1032): the root's axis order starts at the start edge of the
+root's own frame, which is the slot when the root scope solves σ against it, or the
+root's own box when it has a size of its own (a chart's literal `w`/`h`). In that
+frame the root's baseline is seated by `seatInScope` (a free root's baseline at the
+scope's `originPx`, `descent·σ` from the start edge, #773; a pinned root at 0, its
+map carrying `originPx`). A shrink-to-fit dimension
 pins the root's start edge to the frame's start, which already includes any descent,
 so adding it would count it twice (#574). See
 [Underlying Space](/internals/core/underlying-space).
@@ -104,7 +108,13 @@ and the y title is simply rotated `-90°`.
 
 `toPixel` is a translate, so a straight path stays straight: a shape with a curved
 path maps each of its control points through `toPixel` and re-serializes
-(`pathToPixelSVG` in `lowerHelpers.ts`), with no resampling.
+(`pathToPixelSVG` in `lowerHelpers.ts`), with no resampling. `toPixel` never
+resamples. A coordinate transform does: a closed ring of layout points (a
+`polygon`, or a `region` with an outline) is lowered by `ringItem`
+(`lowerHelpers.ts`), which draws the ring straight under a linear coordinate space
+and, under any other, maps it through the space with adaptive resampling
+(`transformPath(..., { resample: true })`), so a straight edge in data space draws as
+the curve the space makes of it. Only then does it go through `toPixel`.
 
 ## The lower pass
 
@@ -133,8 +143,11 @@ labels), so by the time `bake`/`INTERNAL_lower` see the tree, a label is just an
 ordinary sibling shape with its own `_lower` fragment.
 
 The display list is the **concatenation of every node's fragment**. A node with no
-`_lower` throws — the migration is complete, so every shipping shape/operator supplies
-one.
+`_lower` draws only its children, which `bake` lowers directly, so it reaches
+`INTERNAL_lower` only when it has none: then it draws nothing (an operator over a
+group with no rows, such as an empty cell's `pack` or `treemap`). A node with
+children and no `_lower` throws: the migration is complete, so every shipping shape
+and every bake boundary supplies one.
 
 A shape's `_lower` switches on the per-axis **`embedded`** flag to decide
 point (0 embedded axes — drawn at pixel size at the transformed center) /
@@ -143,8 +156,8 @@ area (2 — both axes sweep into a wedge). That flag is authored before layout b
 the `resolveEmbedding` pass (wired into the pipeline in `gofish.tsx`; see
 [Layout & Render Passes](/internals/layout/passes) and
 [Underlying Space](/internals/core/underlying-space)): a value-sized dim embeds
-only when its measure matches the axis it sits in, so a foreign-measure size (a
-scatter bubble's area) stays a flat point even under a coord.
+only when it is the same quantity as the position it sits at, so a size of a
+foreign quantity (a scatter bubble's area) stays a flat point even under a coord.
 
 ### Boundaries re-walk their own subtree
 
@@ -230,7 +243,9 @@ primitive was elaborated from, the hit-testing / accessibility target) and `role
 (`"node"` for a data-bearing mark, `"overlay"` for chrome such as a label, axis, or
 glyph detail). `role` is a **projection of `datum`-presence**: a `lower` body
 derives it via `roleFor(node.datum)` (`lowerHelpers.ts`) — `"node"` exactly when the
-item carries a datum, `"overlay"` otherwise — so the two fields can never disagree
+item carries a datum (even an empty one, a group a filter emptied), `"overlay"`
+otherwise (a mark resolved at a root has no rows, `NO_ROWS`, so it has no datum) —
+so the two fields can never disagree
 and a host can split data from chrome on `role` alone. (Generated chrome carries no
 datum, so axes/legends/value-labels classify as `"overlay"` automatically; before
 this projection they were hard-coded `"node"` and mis-classified as data.) What is
@@ -326,7 +341,9 @@ signal during resolve), three things change; when it is absent — the common ca
 - **The `View` handle.** `gofish()` returns a `View` for the chart it mounted:
   `{ container, unmount() }`. Every public `render` returns one, synchronously
   for a node and as a `Promise<View>` wherever a resolve comes first (a chart
-  builder, a mark or combinator surface, a component thunk). `unmount()` runs
+  builder, a mark or combinator surface, a component thunk; `gofish()` reifies
+  a function child, thunk or mark, through `resolveMarkResult`, which calls it
+  with `NO_ROWS`). `unmount()` runs
   the full teardown, `disposeChart(container)`, but only while the container's
   state is still the object the view was made with. That identity check is
   what makes `unmount()` idempotent (the first call clears the state) and
@@ -349,11 +366,11 @@ The mechanism is: `data-gf-id` is the hit-test hook; the side table + JSX
 attribute calls are the paint reactivity; the runtime carries neither — it owns
 scheduling, event dispatch, and hit-testing only.
 
-## Laying out more than once: `labelAngle: "auto"`
+## Laying out more than once: `label.angle: "auto"`
 
 Every render path reaches layout through `runLayout`, which normally runs the
 pipeline once (`layoutOnce`). The one exception is an axis with
-`labelAngle: "auto"`: `runLayout` then hands off to
+`label.angle: "auto"`: `runLayout` then hands off to
 `layoutWithAutoLabelAngles` (`axes/autoLabelAngle.ts`), which builds and lays out
 the chart once per candidate angle, scores the finished label geometry per label
 row, and returns the winning `LayoutData` (laying out once more when the rows
@@ -362,7 +379,7 @@ legend shows) lets it warn when a hidden category row is left unnamed. Paint
 then proceeds from that data
 exactly as above. Because layout writes each node's box once, each run needs a
 fresh tree, which comes from the root's `rebuild` (set by the surface that built
-it). See [Axes](/internals/frontend/axes#automatic-label-angle-labelangle-auto).
+it). See [Axes](/internals/frontend/axes#automatic-label-angle-label-angle-auto).
 
 ## `toDisplayList`: stopping at the IR
 

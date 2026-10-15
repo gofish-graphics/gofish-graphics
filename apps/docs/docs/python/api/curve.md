@@ -23,20 +23,26 @@ from gofish import chart, circle, line, scatter, Curve
 ## Signature
 
 ```python
-Curve.linear()
-Curve.step()
-Curve.monotone()
-Curve.smooth()
-Curve.catmull_rom()
-Curve.bezier()
-Curve.orthogonal(bend=None)
-Curve.arc(direction=None)
-Curve.perfect_arrows(bow=None, stretch=None, stretch_min=None, stretch_max=None,
-                     pad_start=None, pad_end=None, flip=None, straights=None)
+Curve.linear
+Curve.step
+Curve.monotone
+Curve.smooth
+Curve.catmull_rom
+Curve.bezier
+Curve.orthogonal  # or Curve.orthogonal(bend=None)
+Curve.arc  # or Curve.arc(direction=None)
+Curve.perfect_arrows  # or Curve.perfect_arrows(bow=None, stretch=None, stretch_min=None,
+                      #     stretch_max=None, pad_start=None, pad_end=None, flip=None, straights=None)
 ```
 
-Every member is a function call, including the ones that take no options. Each
-returns a plain dict, `{"kind": ..., **params}`, with snake_case param keys,
+No curve has a required option, so each member is a curve as it is, and
+calling it sets options: `Curve.monotone` and `Curve.monotone()` are the same
+curve, and `Curve.arc(direction="down")` sets the arc's direction. This holds
+in every strategy family: a kind with no required option is a value, and a
+kind with one is a call only, like `Bin.step(size)`.
+([#1145](https://github.com/gofish-graphics/gofish-graphics/issues/1145)
+moves the examples to the bare spelling.) A curve is a plain dict,
+`{"kind": ..., **params}`, with snake_case param keys,
 for example `{"kind": "perfectArrows", "pad_end": 4}`. The `curve` option
 renames the keys, so the chart carries the same value the JavaScript `Curve`
 family makes, `{"kind": "perfectArrows", "padEnd": 4}`.

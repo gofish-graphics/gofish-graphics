@@ -42,7 +42,7 @@ export const Default: StoryObj<Args> = {
       { origin: "USA", cylinders: "8", count: 108 },
     ];
 
-    chart(data, { axes: true })
+    chart(data)
       .flow(
         // Column widths ∝ each region's total (marginal): `size: "count"`
         // sizes each column by its raw Σcount. Stacked segments fill the

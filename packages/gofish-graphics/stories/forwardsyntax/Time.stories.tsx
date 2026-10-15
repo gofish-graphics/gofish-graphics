@@ -6,7 +6,6 @@ import {
   line,
   circle,
   rect,
-  field,
   derive,
   spread,
   Schema,
@@ -63,7 +62,7 @@ export const DailyLine: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(prices, { schema: { date: Schema.time() }, axes: true })
+    chart(prices, { schema: { date: Schema.time() } })
       .flow(scatter({ by: "date", x: "date", y: "price" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
       .render(container, { w: args.w, h: args.h });
@@ -99,7 +98,7 @@ export const HourlyLine: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(readings, { axes: true })
+    chart(readings)
       .flow(scatter({ by: "time", x: "time", y: "temp" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
       .render(container, { w: args.w, h: args.h });
@@ -125,7 +124,6 @@ export const DaylightSavingZone: StoryObj<Args> = {
     const container = initializeContainer();
     chart(newYork, {
       schema: { time: Schema.time({ zone: "America/New_York" }) },
-      axes: true,
     })
       .flow(scatter({ by: "time", x: "time", y: "load" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
@@ -165,7 +163,7 @@ export const EventTimeline: StoryObj<Args> = {
   },
 };
 
-// Daily counts over ten weeks, with a week row over a month row: rows are
+// Daily counts over ten weeks, with a week row over a month row: the rows are
 // independent partitions of the time line, so they need not nest.
 const visits = (() => {
   const start = Date.UTC(2024, 0, 22);
@@ -183,7 +181,7 @@ export const WeekOverMonthRows: StoryObj<Args> = {
     const container = initializeContainer();
     chart(visits, {
       schema: { day: Schema.time() },
-      axes: { x: { rows: [Calendar.week, Calendar.month] }, y: true },
+      axes: { x: { levels: [Calendar.week, Calendar.month] }, y: true },
     })
       .flow(scatter({ by: "day", x: "day", y: "visits" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
@@ -193,7 +191,8 @@ export const WeekOverMonthRows: StoryObj<Args> = {
 };
 
 // Revenue per calendar quarter, each bar spanning its quarter, with one
-// Tableau-style label row whose labels come from a format function.
+// Tableau-style label row whose labels come from a format function (the
+// inferred year row is hidden).
 const revenue = [
   ["2023-10-01", "2024-01-01", 342],
   ["2024-01-01", "2024-04-01", 325],
@@ -215,25 +214,21 @@ export const QuarterlyBars: StoryObj<Args> = {
       axes: {
         x: {
           title: false,
-          rows: [
-            Calendar.quarter.format(
-              (cell) =>
-                `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`
+          levels: [
+            Calendar.quarter.format((cell) =>
+              cell.kind === "cell"
+                ? `Q${cell.quarter} '${String(cell.year % 100).padStart(2, "0")}`
+                : `Q${cell.quarter}`
             ),
+            false,
           ],
         },
         y: true,
       },
     })
-      // The two ends are one kind of quantity (dates), so they share a
-      // measure.
-      .flow(
-        scatter({
-          by: "start",
-          xMin: field("start", "date"),
-          xMax: field("end", "date"),
-        })
-      )
+      // The two ends are times, whose unit is an instant, so they share
+      // the x axis.
+      .flow(scatter({ by: "start", xMin: "start", xMax: "end" }))
       .mark(rect({ h: "amount" }))
       .render(container, { w: args.w, h: args.h });
     return container;
@@ -246,7 +241,7 @@ export const VerticalDailyDots: StoryObj<Args> = {
   args: { w: 300, h: 480 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(prices, { schema: { date: Schema.time() }, axes: true })
+    chart(prices, { schema: { date: Schema.time() } })
       .flow(scatter({ by: "date", x: "price", y: "date" }))
       .mark(circle({ r: 1.5, fill: "steelblue" }))
       .render(container, { w: args.w, h: args.h });
@@ -276,10 +271,7 @@ export const MonthlyHighs: StoryObj<Args> = {
   args: { w: 480, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(
-      prices.filter((p) => p.date.startsWith("2024")),
-      { axes: true }
-    )
+    chart(prices.filter((p) => p.date.startsWith("2024")))
       .flow(
         derive(
           (rows: { date: string; price: number }[]) => {

@@ -10,6 +10,7 @@ import {
   text,
   layer,
   Constraint,
+  Schema,
 } from "../../src/lib";
 import { ribbon } from "../../src/lib";
 
@@ -108,7 +109,10 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(ridgelineData, { axes: { x: true, y: false } })
+    chart(ridgelineData, {
+      axes: { x: true, y: false },
+      schema: { temp_max: Schema.quantity("Max temperature").unit("°C") },
+    })
       .flow(
         spread({
           by: field("month").sort(monthNames),
@@ -116,12 +120,10 @@ export const Default: StoryObj<Args> = {
           anchor: "baseline",
           spacing: rowPitch,
           h: args.h,
-          axes: { x: true, y: false },
         }),
         scatter({
           x: "temp_max",
           w: args.w,
-          axes: { x: true, y: false },
         })
       )
       .mark(

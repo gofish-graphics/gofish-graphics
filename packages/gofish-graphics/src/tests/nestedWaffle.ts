@@ -40,7 +40,7 @@ const classColor = {
 
 export const testNestedWaffle = () =>
   stackY(
-    { spacing: 8, alignment: "middle", sharedScale: true },
+    { spacing: 8, alignment: "middle" },
     _(titanic)
       .groupBy("class")
       .map((cls) =>

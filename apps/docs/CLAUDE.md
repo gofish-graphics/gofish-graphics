@@ -151,7 +151,7 @@ single source the generated Python factory layer
   built table, so `pnpm --filter gofish-ir build` runs first in CI. Constructs
   with no user-facing factory (`mark-fn`, `over`) are allowlisted in the script.
 - A descriptor field marked `wireOnly: true` (a Python bridge handle, such as
-  `derive`'s `lambdaId` and `provenance`) is on the wire but is not an option a
+  `derive`'s `lambdaId`) is on the wire but is not an option a
   user passes, so the generated table leaves it out. A positional argument the
   descriptor does not model (`derive`'s `fn`) is described in prose above the
   block.

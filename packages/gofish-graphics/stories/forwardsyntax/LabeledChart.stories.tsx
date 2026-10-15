@@ -43,7 +43,7 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(nodes)
+    chart(nodes, { axes: false })
       .flow(scatter({ by: "id", x: "grp", y: "grp" }))
       .mark(circle({ r: 16, fill: "#59a14f" }).name("nodes"))
       .layer(

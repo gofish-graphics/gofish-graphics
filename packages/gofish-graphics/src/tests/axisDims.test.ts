@@ -16,6 +16,7 @@
 
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
+import { check, items, report } from "./testHelpers";
 
 const {
   chart,
@@ -33,18 +34,6 @@ const {
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
-
-let passed = 0;
-let failed = 0;
-function check(name: string, ok: boolean, detail?: string): void {
-  if (ok) {
-    passed += 1;
-    console.log(`  ok  ${name}`);
-  } else {
-    failed += 1;
-    console.error(`  FAIL ${name}${detail ? ` — ${detail}` : ""}`);
-  }
-}
 
 /** Run `build` and return the thrown error's message, or undefined. */
 async function errorOf(build: () => Promise<unknown>): Promise<string> {
@@ -363,9 +352,10 @@ async function main() {
       { k: "b", angle: 2, lo: 2, hi: 4, name: "q" },
       { k: "c", angle: 3, lo: 3, hi: 5, name: "r" },
     ];
-    // The two ends of a span share one measure.
-    const lo = field("lo", "span");
-    const hi = field("hi", "span");
+    // The two ends of a span: two columns with no declared unit, which
+    // unify on one axis.
+    const lo = field("lo");
+    const hi = field("hi");
     const dots = async (opts: any, coord?: any) =>
       (
         await chart(rows, coord ? { coord } : {})
@@ -465,8 +455,97 @@ async function main() {
     );
   }
 
-  console.log(`\n${passed} passed, ${failed} failed`);
-  if (failed > 0) process.exit(1);
+  console.log(
+    "\n# a constant or empty domain renders with the default axes (#1107)"
+  );
+  {
+    // One row: each position axis has a one-value domain, so no σ fits it to
+    // the box. Its value maps to the middle of the box (as d3 and Vega-Lite
+    // map a zero-width linear domain), and its axis has one tick there. With
+    // a padding wider than the axis gutters, the 300 x 300 box starts at the
+    // padding, so its middle is at PAD + 150 on each axis.
+    const PAD = 60;
+    const mid = (n: number) => PAD + n / 2;
+    const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+    const labels = (all: any[], label: string) =>
+      all.filter((it) => it.kind === "text" && it.text === label);
+    // An x tick is a 1 x 4 px rect, a y tick a 4 x 1 px rect.
+    const xTicks = (all: any[]) =>
+      all.filter((it) => it.kind === "rect" && it.w === 1 && it.h === 4);
+    const yTicks = (all: any[]) =>
+      all.filter((it) => it.kind === "rect" && it.w === 4 && it.h === 1);
+    let onePoint: any[] = [];
+    const onePointErr = await errorOf(async () => {
+      onePoint = items(
+        await chart([{ id: 0, a: 1, b: 2 }])
+          .flow(scatter({ by: "id", x: "a", y: "b" }))
+          .mark(circle({ r: 3 }))
+          .toDisplayList({ ...SIZE, padding: PAD })
+      );
+    });
+    check(
+      "a one-point chart renders with axes",
+      onePointErr === "",
+      onePointErr
+    );
+    const dot = onePoint.filter((it) => it.kind === "ellipse");
+    check(
+      "the one point is at the middle of the box",
+      dot.length === 1 &&
+        near(dot[0].cx, mid(SIZE.w)) &&
+        near(dot[0].cy, mid(SIZE.h)),
+      JSON.stringify(dot)
+    );
+    const [xTick] = xTicks(onePoint);
+    const [yTick] = yTicks(onePoint);
+    check(
+      "each axis has one tick, at the point",
+      labels(onePoint, "1").length === 1 &&
+        labels(onePoint, "2").length === 1 &&
+        xTicks(onePoint).length === 1 &&
+        yTicks(onePoint).length === 1 &&
+        near(xTick.x + 0.5, mid(SIZE.w)) &&
+        near(yTick.y + 0.5, mid(SIZE.h)),
+      JSON.stringify({ xTick, yTick })
+    );
+
+    // A constant datum position across several rows.
+    let constant: any[] = [];
+    const constErr = await errorOf(async () => {
+      constant = items(
+        await chart([
+          { k: "a", v: 1 },
+          { k: "b", v: 2 },
+        ])
+          .flow(scatter({ by: "k", x: datum(5), y: "v" }))
+          .mark(circle({ r: 3 }))
+          .toDisplayList({ ...SIZE, padding: PAD })
+      );
+    });
+    check("a constant datum x renders with axes", constErr === "", constErr);
+    const dots = constant.filter((it) => it.kind === "ellipse");
+    const fives = xTicks(constant);
+    check(
+      "the constant x is at the middle of the box, with one tick there",
+      dots.length === 2 &&
+        dots.every((d) => near(d.cx, mid(SIZE.w))) &&
+        labels(constant, "5").length === 1 &&
+        fives.length === 1 &&
+        near(fives[0].x + 0.5, mid(SIZE.w)),
+      JSON.stringify({ dots, fives })
+    );
+
+    // No rows at all.
+    const emptyErr = await errorOf(() =>
+      chart([])
+        .flow(spread({ by: "c", dir: "x" }))
+        .mark(rect({ w: 10, h: "v" }))
+        .toDisplayList(SIZE)
+    );
+    check("an empty chart renders with axes", emptyErr === "", emptyErr);
+  }
+
+  report();
 }
 
 main().catch((e) => {

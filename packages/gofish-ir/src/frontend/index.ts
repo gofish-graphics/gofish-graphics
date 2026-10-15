@@ -2,6 +2,9 @@ export * from "./schema.js";
 export {
   validate,
   checkStrategy,
+  checkOption,
+  checkStructBin,
+  checkPartition,
   AXIS_INTERVAL_KEYS,
   isAxisInterval,
   type ValidationResult,
@@ -34,6 +37,7 @@ export {
   COORDS,
   OPTION_TYPES,
   STRATEGIES,
+  BIN_KINDS,
   CHART_OPTIONS,
   MARK_BASE_FIELDS,
   OPERATOR_BASE_FIELDS,

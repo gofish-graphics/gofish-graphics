@@ -7,7 +7,8 @@ order: 65
 
 Places its children so that their enclosing circles touch and do not overlap.
 This is circle packing. With a `by`, `pack` makes one child per group. Without a
-`by`, it makes one child per row. Two `pack` operators in a row give a nested
+`by`, it makes one child per row, from the one-row group `[row]` (see
+[spread](./spread#without-by)). Two `pack` operators in a row give a nested
 packing.
 
 ::: gofish

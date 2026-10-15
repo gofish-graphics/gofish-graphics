@@ -109,13 +109,13 @@ def story_image_cut_with_labels():
                 font_size=18,
                 font_weight="bold",
                 fill="#1c5e20",
-                text=d.datum["category"],
+                text=d.datum[0]["category"],
             ).name("label")
             amount_label = text(
                 font_size=36,
                 font_family="Impact",
                 fill="#1c5e20",
-                text=str(d.datum["amount"]),
+                text=str(d.datum[0]["amount"]),
             ).name("amount")
 
             def _relate(slice, label, amount):

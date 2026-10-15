@@ -94,7 +94,7 @@ VISITS = _visits()
 
 def story_daily_line():
     return (
-        chart(PRICES, schema={"date": Schema.time()}, axes=True)
+        chart(PRICES, schema={"date": Schema.time()})
         .flow(scatter(by="date", x="date", y="price"))
         .mark(line(stroke="steelblue", stroke_width=2)),
         {"w": 560, "h": 200},
@@ -103,7 +103,7 @@ def story_daily_line():
 
 def story_hourly_line():
     return (
-        chart(READINGS, axes=True)
+        chart(READINGS)
         .flow(scatter(by="time", x="time", y="temp"))
         .mark(line(stroke="steelblue", stroke_width=2)),
         {"w": 560, "h": 200},
@@ -115,7 +115,6 @@ def story_daylight_saving_zone():
         chart(
             NEW_YORK,
             schema={"time": Schema.time(zone="America/New_York")},
-            axes=True,
         )
         .flow(scatter(by="time", x="time", y="load"))
         .mark(line(stroke="steelblue", stroke_width=2)),
@@ -137,7 +136,7 @@ def story_week_over_month_rows():
         chart(
             VISITS,
             schema={"day": Schema.time()},
-            axes={"x": {"rows": [Calendar.week, Calendar.month]}, "y": True},
+            axes={"x": {"levels": [Calendar.week, Calendar.month]}, "y": True},
         )
         .flow(scatter(by="day", x="day", y="visits"))
         .mark(line(stroke="steelblue", stroke_width=2)),
@@ -147,7 +146,7 @@ def story_week_over_month_rows():
 
 def story_vertical_daily_dots():
     return (
-        chart(PRICES, schema={"date": Schema.time()}, axes=True)
+        chart(PRICES, schema={"date": Schema.time()})
         .flow(scatter(by="date", x="price", y="date"))
         .mark(circle(r=1.5, fill="steelblue")),
         {"w": 300, "h": 480},
@@ -169,7 +168,7 @@ def _monthly_highs(rows):
 
 def story_monthly_highs():
     return (
-        chart([p for p in PRICES if p["date"].startswith("2024")], axes=True)
+        chart([p for p in PRICES if p["date"].startswith("2024")])
         .flow(
             derive(_monthly_highs, schema={"month": Schema.ordered(MONTHS)}),
             spread(by="month", dir="x"),

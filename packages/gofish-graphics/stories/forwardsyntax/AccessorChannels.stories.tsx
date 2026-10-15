@@ -22,7 +22,7 @@ export const BarHeight: StoryObj<Args> = {
   args: { w: 400, h: 300 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(seafood, { axes: true })
+    chart(seafood)
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: (d: { count: number }) => d.count }))
       .render(container, { w: args.w, h: args.h });

@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from gofish import chart, circle, derive, spread, Color
+from gofish import chart, chunk, circle, derive, spread, Color
 
 
 def story_default():
@@ -13,9 +13,6 @@ def story_default():
     def order_by_survived(rows):
         return sorted(rows, key=lambda row: row["survived"], reverse=True)
 
-    def chunk_rows(rows):
-        size = 14
-        return [rows[i : i + size] for i in range(0, len(rows), size)]
 
     return (
         chart(
@@ -32,9 +29,8 @@ def story_default():
             chart()
             .flow(
                 derive(order_by_survived),
-                derive(chunk_rows),
                 # Reverse the rows so the ragged partial row lands at the top.
-                spread(spacing=2, dir="y", reverse=True),
+                spread(by=chunk(14), spacing=2, dir="y", reverse=True),
                 spread(spacing=2, dir="x"),
             )
             .mark(circle(r=4, fill="survived"))

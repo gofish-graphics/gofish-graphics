@@ -11,6 +11,7 @@ covers:
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
+  - packages/gofish-graphics/src/ast/geometry/region.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/pack.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/overlap.ts
   - packages/gofish-graphics/src/ast/constraints/overlap.ts
@@ -310,17 +311,22 @@ if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
 
 **Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/axes/elaborate.tsx`
 
-If the chart-level `axes` option enables a dimension, `resolveAxes` walks the
-tree top-down flagging which node _owns_ an axis on each dimension. Ownership
-records a **signature** per claimed dim: a continuous axis claims it opaquely
-(single-owner — the root-most one wins, descendants defer to the chart-level
-scale), but ordinal axes **nest** — a node claims its own ordinal axis even
+`resolveAxes` walks the tree top-down flagging which node _owns_ an axis on
+each dimension, and draws it where the nearest chart's `axes` option turns
+that dimension on (the render's `axes` at the root, each chart's own below
+it). Ownership records a **signature** per claimed dim: a continuous axis
+claims it opaquely (single-owner — the root-most one wins, descendants defer to
+the chart-level scale), and only at a `chart()` boundary or the render root
+([Axes](/internals/frontend/axes#axes-are-drawn-at-chart-boundaries)). An
+axis whose chart turns it off is still owned, so it is hidden rather than
+drawn lower down. Ordinal axes **nest** — a node claims its own ordinal axis even
 under an ancestor ordinal axis, as long as it is a _different_ grouping (a finer
 level). So a grouped or faceted chart renders one ordinal axis per grouping
 level (per facet) — e.g. a `spread(lake)`+`stack(species)` bar gets an outer
 `lake` axis and a per-lake `species` axis. Wherever it sets an owning flag,
 `resolveAxes` also leaves a persistent `axisDemand` stamp — the axis's ticks
-(`AxisTicks`: a count, and a time axis's rows), which later gate and
+(`AxisTicks`: a count; a time axis adds its rows when it is elaborated,
+since they depend on the levels below it), which later gate and
 shape per-scope domain nicing at the σ-scope solves (issue #659), since
 `resolveNiceDomains`'s old per-node tree walk is gone; nicing is now demand-
 driven at each scope's own solve (below). Then
@@ -333,8 +339,10 @@ Because the rewrite inserts new nodes and moves keys onto wrappers, the name,
 alias, and underlying space passes rerun on the new tree. The color scale does
 not: it was final before the pass, and chrome adds no data colors. Label
 elaboration follows and reruns the same passes. Domain nicing is not a tree pass at
-all: each σ-scope nices its own POSITION domain at its solve, if some node in
-its space-flow region renders that dim's axis.
+all: each sized node nices its keyed domain at its solve, if some node draws
+an axis over that domain (`KeyedDomains`, built once after the first type walk,
+before chrome, so chrome only reads the domains; the nodes a rewrite adds read
+the seat of the content they wrap).
 
 See [Axes](/internals/frontend/axes) for the full elaboration story (the
 two-tier structure, origin pins, negative-space gutters, and the
@@ -345,10 +353,11 @@ The chart's options describe the chrome of the chart root. `layout()` passes
 
 - **Axis titles.** The root titles each axis it owns that the `axes` option
   turns on. The title text is the option's `title`, or else the axis's
-  `measure` (a continuous axis names itself by its unit, an ordinal axis by its
-  grouping field). A space with no measure has no title. The measure is read
-  off the root's space before elaboration re-resolves it, so the title names
-  the OUTERMOST grouping (`lake`, not the inner `species`).
+  title (`spaceTitle`: a continuous axis names itself by its quantity names,
+  joined with `", "`, never by its unit; an ordinal axis by its grouping
+  field). A space with no measure has no title. The title is read off the
+  root's space before elaboration re-resolves it, so it names the OUTERMOST
+  grouping (`lake`, not the inner `species`).
 - **The legend.** The color scale is resolved once, from the root, so the root
   carries the legend whenever the scale has something to show and the `legend`
   option is not `false`.
@@ -378,7 +387,10 @@ For every continuous root axis, `solveScope` solves σ from the axis's size
 claim against the canvas (`claim.width(σ) = canvas`), so pixel overhead such
 as spacing keeps its pixels, and, when the axis has an origin, the pixel of
 data 0 (`originPx`). A pinned axis hands its content the map
-`px(d) = σ·d + originPx`; a free root is placed at `originPx`.
+`px(d) = σ·d + originPx`; a free root is placed at `originPx`. A one-value
+domain (a one-point chart) has no width for σ to scale, so its value maps to
+the middle of the canvas, as in d3 and Vega-Lite: σ is 0 and the claim is
+centered.
 
 ### Pass 8.5: Embedding Resolution
 
@@ -393,13 +405,16 @@ captured render closure observes it. Explicit `emX`/`emY` (and `connect`'s
 `embed()`) lock the flag to `true` and are never recomputed.
 
 A dim embeds iff its size is a data value or unsized (`baseEmbedded`, `data.ts`)
-AND — the **Route B** measure gate, only inside a coordinate space — its size's
-measure matches the dim's own _position_ measure (`min`/`center`/`max`). A size
-in a measure _foreign_ to where the mark sits (a scatter bubble's area ≠ its
-position units) stays ink: a flat point at the mapped center, not a swept wedge.
-The discriminator is mark-local because a polar coord forgets its axis measure;
-a positioned mark's own position measure is the axis measure it sits on. This
-consumes the measure provenance #534 carried to mark channels. The revocation is
+AND — the **Route B** unit gate, only inside a coordinate space — its size
+is in the same unit as the dim's own _position_ (`min`/`center`/`max`;
+`sameValueUnit` reads both through the render's union-find, which
+`resolveEmbedding` installs as the type walk does, so two unknowns
+are one unit only when they are one column or met on a shared axis). A size
+in a unit _foreign_ to where the mark sits (a scatter bubble's area ≠ its
+position) stays ink: a flat point at the mapped center, not a swept wedge.
+The discriminator is mark-local because a polar coord forgets its axis
+measure; a positioned mark's own position unit is the axis unit it sits on. This consumes the quantity provenance #534
+carried to mark channels. The revocation is
 coord-scoped, so Cartesian behavior matches the former construction-time
 inference. (Route A — relational, measure-free embedding — is not yet
 implemented; tracked under #618.)
@@ -448,8 +463,7 @@ treat it as they treat a rect. The glyphs' own anchor (the point on the baseline
 `textAnchor` and `rotate` refer to) sits inside that box; the text lowers it from
 the origin by `glyphDy`, the box's top in pixels less the glyphs' top.
 
-It is read off the node's own resolved underlying space (for a node that roots its
-own σ-scope, the space it keeps for itself, `selfScaledSpace`), so it is local: an
+It is read off the node's own resolved underlying space, so it is local: an
 ordinal spread inside a bar chart reads top-down inside, and a bar chart inside an
 ordinal spread grows upward inside its row. A `coord` and everything inside it is
 `-1`, because a coordinate transform is math-handed; the `coord` reflects y where its
@@ -517,24 +531,35 @@ omitted dimension is resolved per axis from the root's size claim on it:
 - An axis with a **claim** (a scatter axis, bar heights `= value`, or bar
   widths `= value` laid side by side, whose spread is ordinal but whose room is
   σ-dependent) has data to scale into pixels, so it falls back to a concrete
-  canvas (`DEFAULT_CANVAS_SIZE = 400`).
+  canvas (`DEFAULT_CANVAS_SIZE = 400`). The exception is a keyed domain that
+  nodes with a literal size below the root already solve, all at one σ
+  (`ScopeRegistry.keyedSigma`): the root is not a sized node on an axis the
+  render does not size, so it maps the domain at that σ, and its size there
+  is its claim at that σ (`rootSizes` in `gofish.tsx`; see
+  [sized nodes](/internals/core/underlying-space#sized-nodes-and-measure-keyed-domains)).
+  A claim that is only pixels lays out unsized, like an axis with no claim.
 - An axis with **no claim** (a bar chart's category axis, or a bare
   fixed-size shape) has nothing to scale, so it lays out _unsized_: marks keep
   their default sizes (a mark treats a non-finite size as "use my default" via its
   `Number.isFinite` guards) and the operator shrinks to fit.
 
-`layout()` therefore distinguishes the concrete `canvasW`/`canvasH` (used to build
-the position scales and root scale factors) from the `layoutW`/`layoutH` it hands
-to `child.layout` (where a shrink-to-fit axis is left unsized). **Shared-measure
+`layout()` therefore computes the root's scope and size once per axis
+(`rootSizes`: its σ, and its claim at that σ), which the root scale factors,
+the equal-measure recentering and the root's frame in Pass 10 all read, and
+distinguishes it from the `layoutW`/`layoutH` it hands to `child.layout`
+(where a shrink-to-fit axis is left unsized). **Shared-measure
 equal scale** (#582) adds one reconciliation step here, after the per-axis scales
-are built and before `child.layout`: when `spaceMeasure(x) === spaceMeasure(y)`
-(the two axes are the same unit), each axis's pixels-per-data-unit — a POSITION
+are built and before `child.layout`: when `spaceUnit(x).unit` and
+`spaceUnit(y).unit` are the same DECLARED unit (two unknowns that unified
+through overlays do not count), each axis's pixels-per-data-unit — a POSITION
 domain's `canvas / range` or a baseline-magnitude σ — is equated to the binding
 `min(...)` so one data unit measures the same on both axes (circles stay circular,
 maps stay undistorted); the binding axis fills, the other gets a recentered
 posScale. Stage 6c makes this a named `recenterEqualMeasure` operation _on_ the
 scope registry rather than an inline rewrite, so it is the one post-solve σ
 adjustment on the registry's books and `GOFISH_DUMP_SCOPES` records the final σ.
+(After the scope dump, `GOFISH_DUMP_SHARING` prints each layer's sharing sets,
+see [Underlying Space](/internals/core/underlying-space). It only reads the tree.)
 It is type equality, not a knob, and a single-coordinate-space coupling
 — it does not reach sizes solved in separate nested operator scopes. After layout it
 reads the chart's _final_ extent back off the root via `child.dims[i].size`, so an
@@ -618,6 +643,38 @@ For a bar chart rectangle, the layout function:
    ```
 
 The `intrinsicDims` represent the element's box in its local coordinate system (with min typically at 0, or at the negative endpoint of a negative bar), while `transform.translate` positions it in the parent's coordinate system. The node's `dims` compose the two exactly once (`combineDims`: `min = local min + translate`), so a layout must never fold its translate into `intrinsicDims.min` as well; doing so counts the offset twice (#755).
+
+#### The region a parent hands a child
+
+A parent can hand a child a **region** with its size proposal:
+`child.layout(size, scales, region)` (#1059, `src/ast/geometry/region.ts`).
+It is the top-down twin of the geometry queries below: a span `[min, max]`
+per axis, either of which may be missing, plus an optional closed outline,
+measured from the parent's origin as a `translate` is.
+
+- `GoFishNode.layout` reads the region into the node's own axis order
+  (reflecting y when the node and its parent run opposite ways) and passes
+  it to the node's `_layout` as a sixth argument.
+- After `_layout`, on each axis where the region has a span and the node did
+  not place itself, `GoFishNode.layout` centers the node in the span. The
+  parent proposed the span's length as the node's size, so a node with no
+  size of its own there (a `rect` with no `w`) fills the span, and any other
+  node keeps its size and sits in the middle.
+- A `region` mark places itself by the region (it is its spans) and draws the
+  outline as a path when there is one, else its box.
+- A `layer` builds its children's regions from the regions its `position`
+  constraints give them (`PositionRegion`) and from the region it was itself
+  handed (`buildChildProposals`). A child with no region of its own gets the
+  layer's region, outline and all, unless the layer's constraints place it,
+  so `layer([region(...), text(...)])` in a hexagon gives the hexagon to
+  both. It passes its own region on in its own frame, each span starting at
+  0 (`rebaseRegion`), and `GoFishNode.layout` centers the layer in the
+  region it was given, as it centers any node.
+
+Today only `partition` makes regions (see
+[Underlying Space](/internals/core/underlying-space#partition-each-group-in-its-cell)).
+A region over a binned struct (`struct({ x, y }).bin(Bin.hex(...))`) also has
+an outline, the cell's polygon; every other region is a box.
 
 #### Shape geometry after layout
 
@@ -705,12 +762,24 @@ non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 **Location**: `src/ast/gofish.tsx`
 
 ```typescript
-// The root's axis order starts at the canvas frame's start edge: the top, or the
+// The root's axis order starts at a frame's start edge: the top, or the
 // bottom for a continuous y (`direction` −1).
-const atFrameStart = (p) => (direction === 1 ? p : frame - p);
+const fromFrameStart = (p, size, direction) => (direction === 1 ? p : size - p);
+// A shrink-to-fit root pins its edge in the canvas frame. A given size seats
+// the root in its own frame, its size (`rootSizes`): its claim at its σ,
+// which is the slot when fitted and its own box for a fixed size; the slot
+// when there is no claim.
 shrinkToFit
-  ? child.pinAnchor(axis, atFrameStart(offset), direction === 1 ? "min" : "max")
-  : child.place(axis, atFrameStart(offset + seatPx), "baseline");
+  ? child.pinAnchor(
+      axis,
+      fromFrameStart(offset, final, direction),
+      direction === 1 ? "min" : "max"
+    )
+  : child.place(
+      axis,
+      fromFrameStart(offset + seatPx, rootSizes[axis].px, direction),
+      "baseline"
+    );
 ```
 
 **Implementation**: `src/ast/_node.ts`
@@ -721,9 +790,13 @@ root's axis order starts at the frame's start edge (the bottom for a continuous 
 _Which_ anchor depends on whether the axis is sized:
 
 - **Given dimension** → pin the **baseline** (local `0`) at the scope's seat from the
-  start edge. The canvas box is `[0, given]`, and any content seated outside it (axis
-  labels past the start edge, ticks past the end) is reserved as the per-side
-  overhangs in the render pass.
+  start edge of the root's own frame. The canvas box is `[0, given]`, a fixed slot. A
+  root the slot sizes fills it, so its frame is the slot. A root with a size of its
+  own (a chart's literal `w`/`h`, a claim with no σ in it) has its own box as its
+  frame, and that box sits at the slot's top-left in canvas order (#1032), not at the
+  bottom where a continuous y's axis order starts. Any content seated outside the
+  slot (axis labels past the start edge, ticks past the end) is reserved as the
+  per-side overhangs in the render pass.
 - **Shrink-to-fit dimension** (`w`/`h` omitted, so `finalH = size`) → pin the
   content's **start edge** to the frame's start. The canvas box _is_ the content's
   full extent, so the content fills `[0, size]` exactly and the overhang formulas
@@ -1004,7 +1077,11 @@ coordinate space lowers to a warped `path` item (its points mapped through both 
 coordinate transform and `toPixel`); text lowers to a `text` item; and so on. The
 "draw-rect vs draw-path" decision a rect used to make at render time is decided once,
 during lowering. Shared helpers live in `src/ast/displayList/lowerHelpers.ts`
-(`pathToPixelSVG`, `rectItemFromBox`, `lowerStyle`).
+(`pathToPixelSVG`, `rectItemFromBox`, `lowerStyle`). A rect's `inset` is applied
+here too: on an axis where the rect fills the space it was given (no size or
+span of its own), the drawn box moves in by `inset` pixels at each end. Layout
+never sees it, so the rect's box, which refs and constraints read, stays the
+space it was given.
 
 A single backend then paints each item. `paintSVG`
 (`src/ast/displayList/paintSVG.tsx`) emits SolidJS JSX for the live path; its

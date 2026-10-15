@@ -4,17 +4,28 @@
 
 import { type Size } from "../dims";
 import { isValue } from "../data";
-import { type AxisTicks, type UnderlyingSpace } from "../underlyingSpace";
-import { niceScope, type Extent } from "../extent";
+import { isPositionInterval, type PositionRegion } from "./position";
+import { compilePlacementCoordinate } from "./placementLowering";
+import {
+  hasSpan,
+  rebaseRegion,
+  type Point,
+  type Region,
+  type Span,
+} from "../geometry";
+import { originIs, type UnderlyingSpace } from "../underlyingSpace";
+import { mapsDomain, type Extent } from "../extent";
+import type { AxisMap } from "../domain";
 import { sliceExtent } from "./folds";
 import {
   frameOf,
   scopeFrame,
   seatInScope,
+  type FixedSolve,
   type ScopeRegistry,
-  type ScopeSolution,
 } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
+import type { AlignConstraint } from "./align";
 import type { GridConstraint } from "./grid";
 import type { ConstraintPosScales } from "./shared";
 import { buildNestPlan, type NestPlan, type NestPlanChild } from "./nestPlan";
@@ -128,6 +139,157 @@ export function buildDistributeSliceMap(
   return out.size === 0 ? undefined : out;
 }
 
+/** What a layer's `position` constraints hand its children top-down
+ *  ({@link buildChildProposals}). */
+export type ChildProposals = {
+  /** Per child, per axis, the pixel length of the interval that pins it
+   *  there (undefined where no interval constrains the child). */
+  spanByName: Map<string, Size<number | undefined>> | undefined;
+  /** The region of each child a `position` constraint gives a `region`. */
+  regionByName: Map<string, Region>;
+  /** The region every other child gets unless the layer's constraints place
+   *  it: the one the layer was given, in its own frame. */
+  passedOn: Region | undefined;
+};
+
+/**
+ * What a layer's `position` constraints hand each child before it is laid
+ * out, in one walk of the constraints: the length of each interval that pins
+ * it, and its region (#1059, `geometry/region.ts`). `posScales` are the
+ * scales the layer resolves its position constraints against; a datum edge
+ * with no scale gives nothing.
+ *
+ * **Spans.** An interval coordinate `[min, max]` pins both edges of its
+ * target, so it DETERMINES the target's extent on that axis
+ * (`lowerPositionPlacement`). This is the top-down side of that pin: the
+ * target is laid out in the span it will be pinned across, so its content
+ * fills the span (a scatter's range), rather than being laid out in the
+ * whole layer and then stretched or shrunk by the pins.
+ *
+ * **Regions.** A region is not a pin: the layer hands it to the child in the
+ * layout call. A child the layer's `position` constraints give a `region` (a
+ * {@link PositionRegion}: a `partition`'s cell) gets, on each axis, the
+ * cell's span there, mapped to pixels. On an axis where it has no cell, it
+ * gets the region the layer itself was given there, if any, in the layer's
+ * own frame (`rebaseRegion`; `GoFishNode.layout` then places the layer in
+ * the region it was given): a cell on x is the whole of the layer's space on
+ * y, so a partition inside another partition's cell gives its children both
+ * cells. That is the intersection of the two regions, since each one bounds
+ * a different axis.
+ *
+ * Every other child gets the region the layer was given, in the layer's
+ * frame, outline and all (`passedOn`), unless the layer's constraints place
+ * it: a `layer([region(...), text(...)])` in a hexagon gives the hexagon to
+ * both, and a stack's children are placed by its distribute and align.
+ *
+ * The outline is the cell's (`PositionRegion.outline`), mapped through both
+ * scales (a cell of the plane: `struct({ x, y }).bin(b)`). TODO(#1059): a
+ * child whose cell has no outline does not get the outline of the region
+ * the layer was given (a 1D partition inside a hexagon gets the hexagon's
+ * box, cut down to its cell), which needs that outline clipped to the cell.
+ * No story needs it yet, and the clip opens a design question: whether a
+ * child of a hexagon is cut to the hexagon or to its box.
+ */
+export function buildChildProposals(
+  constraints: readonly ConstraintSpec[],
+  posScales: ConstraintPosScales,
+  received: Region | undefined
+): ChildProposals {
+  const local = hasSpan(received) ? rebaseRegion(received) : undefined;
+  const spanByName = new Map<string, Size<number | undefined>>();
+  const regionByName = new Map<string, Region>();
+  for (const c of constraints) {
+    if (c.type !== "position") continue;
+    for (const axis of [0, 1] as const) {
+      const coord = axis === 0 ? c.x : c.y;
+      if (!isPositionInterval(coord)) continue;
+      const a = compilePlacementCoordinate(coord[0], posScales[axis]);
+      const b = compilePlacementCoordinate(coord[1], posScales[axis]);
+      if (a === undefined || b === undefined) continue;
+      for (const ref of c.children) {
+        if (!ref) continue;
+        const cur = spanByName.get(ref.name) ?? [undefined, undefined];
+        cur[axis] = Math.abs(b - a);
+        spanByName.set(ref.name, cur);
+      }
+    }
+    if (c.region === undefined) continue;
+    const region = cellRegion(c.region, posScales, local);
+    for (const ref of c.children) if (ref) regionByName.set(ref.name, region);
+  }
+  return {
+    spanByName: spanByName.size === 0 ? undefined : spanByName,
+    regionByName,
+    passedOn: local,
+  };
+}
+
+/** A cell's region in pixels ({@link buildChildProposals}): its span on each
+ *  axis it has one, else `local`'s, and its outline when every corner maps. */
+function cellRegion(
+  cell: PositionRegion,
+  posScales: ConstraintPosScales,
+  local: Region | undefined
+): Region {
+  const span = (axis: 0 | 1): Span | undefined => {
+    const edges = cell.spans[axis];
+    if (edges === undefined) return local?.spans[axis];
+    const a = compilePlacementCoordinate(edges[0], posScales[axis]);
+    const b = compilePlacementCoordinate(edges[1], posScales[axis]);
+    if (a === undefined || b === undefined) return undefined;
+    return [Math.min(a, b), Math.max(a, b)];
+  };
+  let outline: Point[] | undefined;
+  if (cell.outline !== undefined) {
+    const points: Point[] = [];
+    for (const [vx, vy] of cell.outline) {
+      const x = compilePlacementCoordinate(vx, posScales[0]);
+      const y = compilePlacementCoordinate(vy, posScales[1]);
+      if (x === undefined || y === undefined) break;
+      points.push([x, y]);
+    }
+    if (points.length === cell.outline.length) outline = points;
+  }
+  return { spans: [span(0), span(1)], outline };
+}
+
+/**
+ * The layer's constraints as its placement solve sees them, once its
+ * children are laid out in their regions ({@link buildChildProposals}). The
+ * regions have done their work (the domains, the axis cells, and the
+ * children's regions), so a `position` loses its `region`, and goes when it
+ * has no `x` or `y` left. An `align` loses each axis on which every one of
+ * its operands has a span in its region, since the region placed them there,
+ * and goes when it has no axis left. A partition inside another partition's
+ * cell is such a case: the cell spans the inner partition's cross axis, so
+ * its `alignment` (the fallback for an axis with no span) has nothing to do
+ * there.
+ */
+export function placementConstraints(
+  constraints: ConstraintSpec[],
+  regions: Map<string, Region>
+): ConstraintSpec[] {
+  const spanned = (c: AlignConstraint, axis: 0 | 1) =>
+    c.children.every((ref) => regions.get(ref.name)?.spans[axis] !== undefined);
+  const out: ConstraintSpec[] = [];
+  for (const c of constraints) {
+    if (c.type === "position" && c.region !== undefined) {
+      if (c.x !== undefined || c.y !== undefined)
+        out.push({ ...c, region: undefined });
+      continue;
+    }
+    if (c.type !== "align") {
+      out.push(c);
+      continue;
+    }
+    const x = c.x !== undefined && spanned(c, 0) ? undefined : c.x;
+    const y = c.y !== undefined && spanned(c, 1) ? undefined : c.y;
+    if (x === c.x && y === c.y) out.push(c);
+    else if (x !== undefined || y !== undefined) out.push({ ...c, x, y });
+  }
+  return out;
+}
+
 /** Choose the concrete size proposed to one child in a layer.
  *
  * Priority is explicit and single-owner:
@@ -136,160 +298,168 @@ export function buildDistributeSliceMap(
  *   2. distribute: owns only the named child axes it sliced;
  *   3. default layer box: unconstrained/fill proposal is the full layer size.
  *
+ * An interval position (`spanByName`) then owns the axes it spans: the pins
+ * set the child's extent there, whatever else proposed one. So does the
+ * region the child is handed (`region`, {@link buildChildProposals}): the child
+ * is laid out in the length of each span it has.
+ *
  * Nest proposals apply after this, because they derive a child from an already
  * laid-out source and therefore override only the derived axes. */
 export function childLayoutSizeProposal(
   childName: string | undefined,
   layerSize: Size,
   gridCellByName: Map<string, Size> | undefined,
-  sliceByName: Map<string, Size> | undefined
+  sliceByName: Map<string, Size> | undefined,
+  spanByName?: Map<string, Size<number | undefined>>,
+  region?: Region
 ): Size {
+  let proposal: Size = layerSize;
   if (
     gridCellByName !== undefined &&
     childName !== undefined &&
     gridCellByName.has(childName)
   ) {
-    return gridCellByName.get(childName)!;
-  }
-  if (
-    sliceByName === undefined ||
-    childName === undefined ||
-    !sliceByName.has(childName)
+    proposal = gridCellByName.get(childName)!;
+  } else if (
+    sliceByName !== undefined &&
+    childName !== undefined &&
+    sliceByName.has(childName)
   ) {
-    return layerSize;
+    proposal = sliceByName.get(childName)!;
   }
-  return sliceByName.get(childName)!;
+  const span = childName !== undefined ? spanByName?.get(childName) : undefined;
+  if (span !== undefined)
+    proposal = [span[0] ?? proposal[0], span[1] ?? proposal[1]];
+  if (region === undefined) return proposal;
+  const length = (axis: 0 | 1) => {
+    const s = region.spans[axis];
+    return s === undefined ? proposal[axis] : s[1] - s[0];
+  };
+  return [length(0), length(1)];
 }
 
-export type ChildScalePlan = {
+export type LayerScales = {
   /** Per axis: the layer's frame, the map its children sit in
-   *  (`seatInScope`). */
-  basePosScales: ConstraintPosScales;
-  childScaleFactors: Size<number | undefined>;
-  budgetFailures: { axis: 0 | 1; budget: number }[];
-  sharedScaleChecks: {
+   *  (`seatInScope`) and its datum positions resolve against. */
+  frames: ConstraintPosScales;
+  /** Per axis: the σ the layer hands its children. */
+  sigmas: Size<number | undefined>;
+  /** Axes whose solve was attempted and failed (a claim with no σ in it). */
+  failedAxes: (0 | 1)[];
+  /** Every solve, for the solver shadow hook. */
+  checks: {
     axis: 0 | 1;
     extent: Extent | undefined;
     sigma: number | undefined;
   }[];
 };
 
-/** Build the scales a layer hands to child layout.
+/**
+ * The scales a layer hands its children, under the one rule of #1114: a
+ * SIZED node solves σ, and every other node inherits it. A layer is sized on
+ * an axis when its size there is given to it rather than computed from σ:
  *
- * Inherited scales are copied into fresh child arrays, then each axis has at
- * most one σ-scope root here, solved once (`solveScope`) from one type and
- * claim, niced at the solve when the scope renders an axis (issue #659):
- *   - an explicit size (a self-scaled stash) roots a scope over the stashed
- *     composed type and claim: σ, and the layer's own frame when the stash
- *     has an origin;
- *   - otherwise, when no ancestor owns σ on the axis, a layer whose
- *     constraint plan covers the axis (a composed budget) or that is a
- *     shared-scale scope roots one over its own type and claim.
- * Every other axis inherits ("not a root → inherit"), and the layer's frame
- * follows from its own type ({@link frameOf}).
+ *   - it has a size of its own (`ownSize`): a literal `w`/`h`, or a
+ *     data-valued one, whose box its parent's σ sizes and whose content it
+ *     maps into that box;
+ *   - or it holds pinned data in a slot its parent nests it in (`inSlot`: a
+ *     spread, grid or treemap slot, a facet panel). Its box is that slot;
+ *   - or nothing above it solved a σ to hand it (`handedSigmas` is
+ *     undefined): it is the top of its space, and its box is the size it is
+ *     given.
  *
- * Diagnostics stay with the caller: budget failures are reported so `layer`
- * can warn with context, and every root solve is returned for the solver
- * shadow hook. */
-export function buildChildScalePlan(
-  selfScaledSpaces: Size<UnderlyingSpace | undefined>,
-  selfScaledExtents: Size<Extent | undefined>,
-  layerSpace: Size<UnderlyingSpace> | undefined,
-  layerExtent: Size<Extent | undefined> | undefined,
+ * A child its parent places at a datum is not sized: its position is a
+ * value in its parent's frame, so it inherits its parent's σ, as a scatter's
+ * glyphs do. So is a spread of magnitudes along its direction: its parts are
+ * parts of one chain claim, solved by the sized node above it.
+ *
+ * A sized node maps its keyed domain (the domain of its content's unit in its
+ * space, see `keyedDomains.ts`) into its size: `scope` widens its claim to
+ * the domain and nices it when an axis is drawn over it
+ * (`KeyedDomains.scope`), and the result is solved once through the registry
+ * (`solveScope`). Its frame is the solved
+ * scope's. Every other axis inherits σ, and its frame follows from its type
+ * ({@link frameOf}).
+ */
+export function solveLayerScales(
+  ownSize: Size<boolean>,
+  // The layer's content: the types its children compose to and their claim.
+  // For a data-valued size this is the content inside the box, not the
+  // magnitude the layer reports.
+  contentSpaces: Size<UnderlyingSpace> | undefined,
+  contentExtents: Size<Extent | undefined>,
+  // What the layer reports upward, whose frame it has when it inherits.
+  reported: Size<UnderlyingSpace> | undefined,
+  // Per axis: its parent nests it in a slot of its own (`inSlot`). Read
+  // last, only when the other conditions leave it to decide.
+  inSlot: (axis: 0 | 1) => boolean,
   layerSize: Size,
-  inheritedScaleFactors: Size<number | undefined> | undefined,
-  inheritedPosScales: ConstraintPosScales,
-  // Per axis: the layer's constraint plan covers it (a composed budget).
-  budgetCovers: Size<boolean>,
-  shared: Size<boolean>,
-  // Demand-driven nicing (issue #659): per-dim, the ticks of the axis some
-  // node in this scope renders, or undefined for none
-  // (`GoFishNode.scopeAxisTicks`). A scope this plan roots nices its anchored
-  // POSITION domain to them iff the dim has an axis — nicing is a
-  // presentation adjustment whose demand comes from axis views, so axis-less
-  // content stays at the honest raw scale.
-  axisDemand: (axis: 0 | 1) => AxisTicks | undefined,
-  // The ONE σ-solve site. Every scale this plan roots is derived
-  // through the registry (so `GOFISH_DUMP_SCOPES` sees it and the numbers have a
-  // single source); `rootKey` labels the owning layer node in the dump.
+  handedSigmas: Size<number | undefined>,
+  handedMaps: ConstraintPosScales,
+  scope: (
+    axis: 0 | 1,
+    space: UnderlyingSpace | undefined,
+    claim: Extent
+  ) => [UnderlyingSpace | undefined, Extent | undefined],
   scopes: ScopeRegistry,
-  rootKey: string
-): ChildScalePlan {
-  const stashScopes: Size<ScopeSolution | undefined> = [undefined, undefined];
-  const childScaleFactors: Size<number | undefined> = [
-    inheritedScaleFactors?.[0],
-    inheritedScaleFactors?.[1],
+  rootKey: string,
+  // Per axis: the scope a literal size solved in the claim walk.
+  fixed: Size<FixedSolve | undefined> = [undefined, undefined]
+): LayerScales {
+  const frames: [AxisMap | undefined, AxisMap | undefined] = [
+    undefined,
+    undefined,
   ];
-  const budgetFailures: ChildScalePlan["budgetFailures"] = [];
-  const sharedScaleChecks: ChildScalePlan["sharedScaleChecks"] = [];
+  const sigmas: Size<number | undefined> = [handedSigmas[0], handedSigmas[1]];
+  const failedAxes: (0 | 1)[] = [];
+  const checks: LayerScales["checks"] = [];
 
   for (const axis of [0, 1] as const) {
-    if (!Number.isFinite(layerSize[axis])) continue;
-    const stashed = selfScaledSpaces[axis] !== undefined;
-    // Structural σ-scope rule: ONLY A SCOPE ROOT SOLVES. A stash always roots
-    // a scope (the layer's box is a pixel scope of its own). A budget or a
-    // shared-scale node roots one only when no ancestor scope owns σ on the
-    // axis: under an inherited σ it is an intermediate, so it inherits
-    // rather than re-deriving σ against its locally allocated size (which
-    // diverges for an equal-slice budget under a coord, where the
-    // distribute axis IS the σ-scaled axis).
-    const rootsScope =
-      stashed ||
-      (inheritedScaleFactors?.[axis] === undefined &&
-        (budgetCovers[axis] || shared[axis]));
-    if (!rootsScope) continue;
-    const [space, claim] = niceScope(
-      stashed ? selfScaledSpaces[axis] : layerSpace?.[axis],
-      stashed ? selfScaledExtents[axis] : layerExtent?.[axis],
-      axisDemand(axis)
-    );
-    if (claim === undefined) continue;
-    const scope = scopes.solveScope(
-      {
-        kind: stashed
-          ? "self-scaled"
-          : budgetCovers[axis]
-            ? "constraint-budget"
-            : "shared",
-        rootKey,
-        axis,
-      },
-      space,
-      claim,
-      layerSize[axis]
-    );
-    sharedScaleChecks.push({ axis, extent: claim, sigma: scope?.sigma });
-    if (scope === undefined) {
-      // A claim that cannot determine σ keeps the inherited factor; a
-      // composed budget reports it, since its content would otherwise vanish.
-      if (budgetCovers[axis])
-        budgetFailures.push({ axis, budget: layerSize[axis] });
-      continue;
+    const content = contentSpaces?.[axis];
+    const sized =
+      ownSize[axis] ||
+      (handedMaps[axis] === undefined &&
+        (handedSigmas[axis] === undefined ||
+          (originIs(content, "pinned") && inSlot(axis))));
+    const claim = contentExtents[axis];
+    // A claim that maps no domain (content that is only fixed boxes) has
+    // nothing to solve: the layer inherits.
+    if (
+      sized &&
+      Number.isFinite(layerSize[axis]) &&
+      mapsDomain(content, claim)
+    ) {
+      // A literal size was solved once in the claim walk (`solveFixed`);
+      // any other sized node solves here, against the size it is given.
+      const solve = (): FixedSolve | undefined => {
+        const [space, nicedClaim] = scope(axis, content, claim);
+        const solution = scopes.solveScope(
+          { kind: "sized", rootKey, axis },
+          space,
+          nicedClaim,
+          layerSize[axis]
+        );
+        return (
+          solution &&
+          nicedClaim && { key: undefined, solution, claim: nicedClaim }
+        );
+      };
+      const s = fixed[axis] ?? solve();
+      const solved = s?.solution;
+      checks.push({ axis, extent: s?.claim, sigma: solved?.sigma });
+      if (solved !== undefined) {
+        sigmas[axis] = solved.sigma;
+        frames[axis] = scopeFrame(solved);
+        continue;
+      }
+      failedAxes.push(axis);
     }
-    childScaleFactors[axis] = scope.sigma;
-    // The stash's scope replaces the inherited one on this axis, never the
-    // ancestor's map, whose σ is another scope's.
-    if (stashed) stashScopes[axis] = scope;
+    frames[axis] = frameOf(reported?.[axis], {
+      sigma: sigmas[axis],
+      map: handedMaps[axis],
+    });
   }
-
-  // The layer's frame: a solved stash's scope, or else the frame its own
-  // type gives it from the scale it was handed (a free layer's frame has its
-  // baseline, data 0, at local 0).
-  const basePosScales = ([0, 1] as const).map((axis) =>
-    stashScopes[axis] !== undefined
-      ? scopeFrame(stashScopes[axis])
-      : frameOf(layerSpace?.[axis], {
-          sigma: childScaleFactors[axis],
-          map: inheritedPosScales[axis],
-        })
-  ) as ConstraintPosScales;
-
-  return {
-    basePosScales,
-    childScaleFactors,
-    budgetFailures,
-    sharedScaleChecks,
-  };
+  return { frames, sigmas, failedAxes, checks };
 }
 
 /** Select the layer's single grid constraint, if any.
@@ -341,74 +511,20 @@ export function buildPositionTargetDims(
   );
 }
 
-export type PositionScalePlan = {
-  ownsAxis: [boolean, boolean];
-  effectivePosScales: ConstraintPosScales;
-};
-
-/** Decide the scales used by this layer's datum-valued position constraints.
- *
- * If the layer owns no datum-position axis, the effective scales are just the
- * inherited/self-scaled base. Once it owns any axis, each axis gets the base
- * scale when one exists, otherwise a local scale the registry solves from the
- * layer's resolved POSITION space, its size claim, and its pixel size. This mirrors the runtime rule that
- * `applyConstraints` consumes a layer-local scale while child forwarding is
- * handled separately by `childPosScalesFor`. */
-export function buildPositionScalePlan(
-  ownsAxis: [boolean, boolean],
-  layerSpace: Size<UnderlyingSpace> | undefined,
-  layerExtent: Size<Extent | undefined> | undefined,
-  layerSize: Size,
-  basePosScales: ConstraintPosScales,
-  // Demand-driven nicing (issue #659): nice the local domain only when the
-  // scope renders an axis on that dim, so datum positions land on the same
-  // rounded scale as the ticks — and stay at the honest raw scale otherwise.
-  axisDemand: (axis: 0 | 1) => AxisTicks | undefined,
-  scopes: ScopeRegistry,
-  rootKey: string
-): PositionScalePlan {
-  const ownsPositionAxis = ownsAxis[0] || ownsAxis[1];
-  // A layer that owns a datum-position axis roots a local POSITION scope for
-  // it; the domain is niced at this solve iff the dim has axis demand.
-  const localMap = (axis: 0 | 1) => {
-    const [space, extent] = niceScope(
-      layerSpace?.[axis],
-      layerExtent?.[axis],
-      axisDemand(axis)
-    );
-    const scope = scopes.solveScope(
-      { kind: "datum-position", rootKey, axis },
-      space,
-      extent,
-      layerSize[axis]
-    );
-    return scopeFrame(scope);
-  };
-  return {
-    ownsAxis,
-    effectivePosScales: ownsPositionAxis
-      ? [basePosScales[0] ?? localMap(0), basePosScales[1] ?? localMap(1)]
-      : [basePosScales[0], basePosScales[1]],
-  };
-}
-
 /** Decide which data→pixel scales a child receives from an enclosing layer:
  * the map the one seating rule hands it in the layer's frame
- * (`seatInScope`). The frame is the layer's base frame, or on an axis the
- * layer owns through a datum position, the frame those positions resolve
- * against. A child whose placement a datum-valued position constraint owns
- * gets none, so a constrained tick never sees the scale that placed it. */
+ * (`seatInScope`). A child whose placement a datum-valued position
+ * constraint owns gets none, so a constrained tick never sees the scale that
+ * placed it. */
 export function childPosScalesFor(
   childSpace: Size<UnderlyingSpace> | undefined,
   targetDims: Set<0 | 1> | undefined,
   ownsAxis: readonly [boolean, boolean],
-  basePosScales: ConstraintPosScales,
-  effectivePosScales: ConstraintPosScales
+  frames: ConstraintPosScales
 ): ConstraintPosScales {
   const pick = (dim: 0 | 1) => {
     if (ownsAxis[dim] && targetDims?.has(dim)) return undefined;
-    const frame = ownsAxis[dim] ? effectivePosScales[dim] : basePosScales[dim];
-    return seatInScope(frame, childSpace?.[dim]).childMap;
+    return seatInScope(frames[dim], childSpace?.[dim]).childMap;
   };
   return [pick(0), pick(1)];
 }

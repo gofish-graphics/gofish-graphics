@@ -3,8 +3,10 @@
 // </gofish-wiki>
 
 /**
- * Calendar partitions (#256, #1057): `Calendar.month`, `Calendar.hour.every(6)`,
- * `Calendar.week({ start: "sunday" })`, ...
+ * Calendar partitions (#256, #1057): `Calendar.month`,
+ * `Calendar.hour({ every: 6 })`, `Calendar.week({ start: "sunday" })`,
+ * `Calendar.weekday`, ... The values themselves are the `Calendar` family,
+ * `families/calendar.ts`; this module is their cells and labels.
  *
  * A Calendar value is a PARTITION of the time line into cells: each cell is a
  * half-open interval `[start, end)` of instants (epoch milliseconds, UTC), and
@@ -19,16 +21,16 @@
  * time axis reads its rows off it (axes/timeRows.ts); the 1D `partition`
  * layout operator (#1058) is meant to read its cells off the same interface.
  *
- * Steps (`.every(n)`) are aligned to the next level up, the way calendars
- * count: `Calendar.month.every(3)` starts its cells in January, April, July
- * and October; `Calendar.hour.every(6)` at 0, 6, 12 and 18 o'clock;
- * `Calendar.day.every(2)` on days 1, 3, 5, ... of each month (so the last
- * cell of a 31-day month is one day long); `Calendar.year.every(5)` on years
- * divisible by 5. Weeks count from a fixed week (the one holding 1970-01-01),
+ * Steps (`{ every: n }`) are aligned to the next level up, the way calendars
+ * count: `Calendar.month({ every: 3 })` starts its cells in January, April,
+ * July and October; `Calendar.hour({ every: 6 })` at 0, 6, 12 and 18
+ * o'clock; `Calendar.day({ every: 2 })` on days 1, 3, 5, ... of each month
+ * (so the last cell of a 31-day month is one day long);
+ * `Calendar.year({ every: 5 })` on years divisible by 5. Weeks count from a fixed week (the one holding 1970-01-01),
  * since weeks do not nest in months.
  */
 import type { Temporal as TemporalNS } from "temporal-polyfill";
-import type { Frontend } from "gofish-ir";
+import { Frontend } from "gofish-ir";
 
 // ── Temporal ──────────────────────────────────────────────────────────────
 
@@ -61,7 +63,7 @@ export function temporal(): TemporalApi {
 }
 
 /** Instant `t` (epoch ms) on the calendar of `zone`. */
-const zoned = (t: number, zone: string): TemporalNS.ZonedDateTime =>
+export const zoned = (t: number, zone: string): TemporalNS.ZonedDateTime =>
   temporal().Instant.fromEpochMilliseconds(t).toZonedDateTimeISO(zone);
 
 let _epochDay: TemporalNS.PlainDate | undefined;
@@ -72,28 +74,19 @@ const epochDay = (): TemporalNS.PlainDate =>
 // ── Units ─────────────────────────────────────────────────────────────────
 
 /** The wire form of a Calendar value (what Python sends, and what
- *  `toJSON` writes): the IR's `CalendarPartitionIR`. `start` is only for
- *  weeks. */
+ *  `toJSON` writes): the IR's `CalendarPartitionIR`, `{ kind, every?,
+ *  start? }`, one kind per level. `start` is only for weeks and weekdays,
+ *  and a weekday has no `step`. */
 export type CalendarJSON = Frontend.CalendarPartitionIR;
 
-/** The calendar levels. */
-export type CalendarUnit = CalendarJSON["unit"];
+/** The calendar levels: the kinds of the Calendar family. */
+export type CalendarUnit = CalendarJSON["kind"];
 
-/** The day a week starts on. Monday is the ISO 8601 default (as in polars and
- *  pandas). */
-export type WeekStart = NonNullable<CalendarJSON["start"]>;
-
-/** The calendar levels, finest first. */
-const CALENDAR_UNITS: readonly CalendarUnit[] = [
-  "second",
-  "minute",
-  "hour",
-  "day",
-  "week",
-  "month",
-  "quarter",
-  "year",
-];
+/** The day a week starts on, for a week or a day of the week. Monday is the
+ *  ISO 8601 default (as in polars and pandas). */
+export type WeekStart = NonNullable<
+  Extract<CalendarJSON, { kind: "week" }>["start"]
+>;
 
 /** The level whose cells hold this level's cells: the outer row of a time
  *  axis. A week's parent is the month its start falls in (weeks do not nest
@@ -104,10 +97,77 @@ const PARENT: Record<CalendarUnit, CalendarUnit | undefined> = {
   minute: "hour",
   hour: "day",
   day: "month",
+  weekday: "week",
   week: "month",
   month: "year",
   quarter: "year",
   year: undefined,
+};
+
+/** The unit a bin of each unit, alone, reads it as a part of (#256): a month
+ *  binned alone is a month of the year, so all Junes are one cell, and a
+ *  weekday is a day of the week, so all Mondays are one cell. A week is a
+ *  part of no larger unit (weeks do not nest in months or years), and
+ *  nothing contains a year, so a bin of either alone stays on the time line.
+ *  See {@link CalendarPartition.cycle}. */
+const CYCLE: Record<CalendarUnit, CalendarUnit | undefined> = {
+  second: "minute",
+  minute: "hour",
+  hour: "day",
+  day: "month",
+  weekday: "week",
+  week: undefined,
+  month: "year",
+  quarter: "year",
+  year: undefined,
+};
+
+/** One cell of each cycle unit, as UTC instants, that the parts of a cycle
+ *  are read off (`cycleCells` in cells.ts): the leap year 2000 (so
+ *  February 29 is a part of the year), its January (31 days, so day 31 is a
+ *  part of the month), and its first day, hour and minute. A week's depends
+ *  on its first day: see {@link REFERENCE_WEEK}. */
+const REFERENCE: Partial<Record<CalendarUnit, [string, string]>> = {
+  year: ["2000-01-01T00:00:00Z", "2001-01-01T00:00:00Z"],
+  month: ["2000-01-01T00:00:00Z", "2000-02-01T00:00:00Z"],
+  day: ["2000-01-01T00:00:00Z", "2000-01-02T00:00:00Z"],
+  hour: ["2000-01-01T00:00:00Z", "2000-01-01T01:00:00Z"],
+  minute: ["2000-01-01T00:00:00Z", "2000-01-01T00:01:00Z"],
+};
+
+/** The reference week, by its first day: the first week of 2000 that starts
+ *  on that day (Monday January 3, Sunday January 2), so its days are in
+ *  order from the week's start. */
+const REFERENCE_WEEK: Record<WeekStart, [string, string]> = {
+  monday: ["2000-01-03T00:00:00Z", "2000-01-10T00:00:00Z"],
+  sunday: ["2000-01-02T00:00:00Z", "2000-01-09T00:00:00Z"],
+};
+
+/** The `[start, end)` (epoch ms, UTC) of the reference cell of the cycle
+ *  unit `unit` (see {@link REFERENCE}); for a week, the one that starts on
+ *  `start`. */
+export function referencePeriod(
+  unit: CalendarUnit,
+  start: WeekStart = "monday"
+): [number, number] {
+  const [lo, hi] = unit === "week" ? REFERENCE_WEEK[start] : REFERENCE[unit]!;
+  return [Date.parse(lo), Date.parse(hi)];
+}
+
+/** The `Intl.DateTimeFormat` field each part of a label is written with,
+ *  when a cell is labeled by several levels at once (a product's "Jun
+ *  2015") or a part of a cycle is labeled alone ("Jun"). Quarter has no Intl
+ *  field ("Q2"). A week is never a part; in a product it is written as its
+ *  first day ("Mon, Jan 5" for a weekday of a week). */
+const PART_FORMAT: Partial<Record<CalendarUnit, Intl.DateTimeFormatOptions>> = {
+  second: { second: "2-digit" },
+  minute: { minute: "2-digit" },
+  hour: { hour: "numeric" },
+  day: { day: "numeric" },
+  weekday: { weekday: "short" },
+  week: { month: "short", day: "numeric" },
+  month: { month: "short" },
+  year: { year: "numeric" },
 };
 
 /** `Intl.DateTimeFormat` options for each level's default label. Quarter has
@@ -120,6 +180,7 @@ const LABEL_FORMAT: Record<
   minute: { hour: "numeric", minute: "2-digit" },
   hour: { hour: "numeric" },
   day: { month: "short", day: "numeric" },
+  weekday: { weekday: "short" },
   week: { month: "short", day: "numeric" },
   month: { month: "short" },
   year: { year: "numeric" },
@@ -132,29 +193,37 @@ const LABEL_FORMAT: Record<
 const LABEL_LOCALE = "en-US";
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
+
+/** The `Intl.DateTimeFormat` in en-US ({@link LABEL_LOCALE}) with `options`
+ *  in `zone`, made once per `name` (which names the options) and zone. */
 function formatter(
-  unit: Exclude<CalendarUnit, "quarter">,
+  name: string,
+  options: Intl.DateTimeFormatOptions,
   zone: string
 ): Intl.DateTimeFormat {
-  const key = `${unit}|${zone}`;
+  const key = `${name}|${zone}`;
   let f = formatters.get(key);
   if (f === undefined) {
-    f = new Intl.DateTimeFormat(LABEL_LOCALE, {
-      ...LABEL_FORMAT[unit],
-      timeZone: zone,
-    });
+    f = new Intl.DateTimeFormat(LABEL_LOCALE, { ...options, timeZone: zone });
     formatters.set(key, f);
   }
   return f;
 }
 
-/** One cell of a partition: the instants `[start, end)` (epoch ms, UTC), the
- *  level it belongs to (`unit`), and the calendar fields of its start in the
- *  axis's zone, as plain numbers named like pandas' and polars' `dt.*`:
- *  `year`, `quarter` (1 to 4), `month` (1 to 12), `week` (the ISO week
- *  number), `day` (of the month), `hour`, `minute` and `second`. A custom
- *  label (`.format(fn)`) is a function of this. */
+/** The quarter (1 to 4) that the month `month` (1 to 12) is in. */
+const quarterOf = (month: number): number => Math.floor((month - 1) / 3) + 1;
+
+/** One cell of a partition on the time line (`kind: "cell"`): the instants
+ *  `[start, end)` (epoch ms, UTC), the level it belongs to (`unit`), and the
+ *  calendar fields of its start in the axis's zone, as plain numbers named
+ *  like pandas' and polars' `dt.*`: `year`, `quarter` (1 to 4), `month` (1
+ *  to 12), `week` (the ISO week number), `day` (of the month), `weekday`
+ *  (the ISO day of the week, 1 for Monday to 7 for Sunday, whatever day a
+ *  week starts on, as in polars' `dt.weekday()` and Temporal's
+ *  `dayOfWeek`), `hour`, `minute` and `second`. A custom label
+ *  (`.format(fn)`) is a function of this or of a {@link CalendarPart}. */
 export type CalendarCell = {
+  kind: "cell";
   start: number;
   end: number;
   unit: CalendarUnit;
@@ -163,26 +232,175 @@ export type CalendarCell = {
   month: number;
   week: number;
   day: number;
+  weekday: number;
   hour: number;
   minute: number;
   second: number;
 };
 
-/** A custom label for a partition's cells (`Calendar.<unit>.format(fn)`). */
-export type CellFormat = (cell: CalendarCell) => string;
+/** One part of a cycle (`kind: "part"`): what a Calendar level binned alone
+ *  gives when it is a part of a larger unit (`Calendar.month`, the month of
+ *  the year; `Calendar.weekday`, the day of the week). It has no one place
+ *  on the time line, so it has no `start`, `end` or `week`, and no field of
+ *  its cycle's unit or above (no `year` for a month of the year). It has the
+ *  fields below its cycle, those of its first instant in the reference
+ *  cycle (`day` 1 for a month): `quarter`, `month`, `day`, `hour`, `minute`
+ *  and `second` for a part of a year, and for a part of a week, which holds
+ *  days, `weekday`, `hour`, `minute` and `second`. */
+export type CalendarPart = {
+  kind: "part";
+  unit: CalendarUnit;
+  quarter?: number;
+  month?: number;
+  day?: number;
+  weekday?: number;
+  hour?: number;
+  minute?: number;
+  second?: number;
+};
+
+/** A custom label for a partition's cells (`Calendar.<unit>.format(fn)`).
+ *  A Calendar level gives parts of a cycle when it is binned alone (or
+ *  first) and is a part of a larger unit, and cells of the time line after
+ *  a coarser level in a chain, or on an axis's `levels`, so the label is a
+ *  function of either: `kind` tells them apart. */
+export type CellFormat = (cell: CalendarCell | CalendarPart) => string;
+
+/** `fn`, checked to be a function of the cell, for `partition.format(fn)`:
+ *  one check for every partition with a `.format` (a Calendar value, and
+ *  `Bin.step` and `Bin.thresholds`, cells.ts). */
+export function checkFormat<F>(partition: object, fn: unknown): F {
+  if (typeof fn !== "function")
+    throw new Error(
+      `${String(partition)}.format: expected a function of the cell, ` +
+        `(cell) => string.`
+    );
+  return fn as F;
+}
+
+/** The loud error for the wire form of a partition with a `.format(fn)`,
+ *  which has none: `key` is the index `JSON.stringify` passes for an entry
+ *  of a list (an axis's `levels`), named in the message. */
+export function noWireForm(partition: object, key?: string): Error {
+  const row = key !== undefined && key !== "" ? `[${key}]: ` : "";
+  return new Error(
+    `${row}${String(partition)} has no wire form: its format is a JS ` +
+      `function, which cannot be serialized (to Python or the IR). Drop the ` +
+      `.format(...) to use the default labels.`
+  );
+}
 
 const ISO_DOW: Record<WeekStart, number> = { monday: 1, sunday: 7 };
+
+/** The calendar fields of the cell of level `unit` that starts at `s` and
+ *  ends at `end` (epoch ms). */
+export function fieldsOf(
+  s: TemporalNS.ZonedDateTime,
+  end: number,
+  unit: CalendarUnit
+): CalendarCell {
+  return {
+    kind: "cell",
+    start: s.epochMilliseconds,
+    end,
+    unit,
+    year: s.year,
+    quarter: quarterOf(s.month),
+    month: s.month,
+    week: s.weekOfYear!,
+    day: s.day,
+    weekday: s.dayOfWeek,
+    hour: s.hour,
+    minute: s.minute,
+    second: s.second,
+  };
+}
+
+/** The units a part of a cycle may name, coarsest first: each but the
+ *  year is also the name of the part's field for it. */
+const PART_UNITS = [
+  "year",
+  "quarter",
+  "month",
+  "day",
+  "hour",
+  "minute",
+  "second",
+] as const;
+
+/** The fields of a part of a cycle of `cycle` (a month of the year): the
+ *  fields below `cycle` of its first instant `t` in the reference cycle
+ *  (UTC), since the part has no one place on the time line (see
+ *  {@link CalendarPart}). A week holds days, so a part of a week has the
+ *  fields below a day, and only a part of a week has its `weekday`. */
+export function cycleFields(
+  t: number,
+  unit: CalendarUnit,
+  cycle: CalendarUnit
+): CalendarPart {
+  const all = fieldsOf(zoned(t, "UTC"), NaN, unit);
+  const part: CalendarPart = { kind: "part", unit };
+  if (cycle === "week") part.weekday = all.weekday;
+  const below = PART_UNITS.indexOf(
+    (cycle === "week" ? "day" : cycle) as (typeof PART_UNITS)[number]
+  );
+  for (const k of PART_UNITS.slice(below + 1) as Exclude<
+    (typeof PART_UNITS)[number],
+    "year"
+  >[]) {
+    part[k] = all[k];
+  }
+  return part;
+}
+
+/**
+ * The labels of cells named by several levels at once, the instant `t` read
+ * in `zone`: each level writes its own field (`PART_FORMAT`), and
+ * `Intl.DateTimeFormat` in en-US puts them in order, so a product of a year
+ * and a month reads "Jun 2015", and of a month and a day "Jun 15". A
+ * quarter has no Intl field: it comes first, "Q2 2015". One level alone is
+ * a part of its cycle: "Jun", "15", "12 AM", "05". The formatter is
+ * resolved once, for every cell labeled after.
+ */
+export function productLabeler(
+  levels: readonly CalendarPartition[],
+  zone: string
+): (t: number) => string {
+  const units = levels.map((p) => p.unit);
+  const intlUnits = units.filter((u) => u !== "quarter");
+  const options: Intl.DateTimeFormatOptions = {};
+  for (const u of intlUnits) Object.assign(options, PART_FORMAT[u]);
+  const f =
+    intlUnits.length > 0
+      ? formatter(`parts:${intlUnits.join(",")}`, options, zone)
+      : undefined;
+  // Intl writes a minute or a second alone without its leading zero.
+  const pad =
+    intlUnits.length === 1 && (units[0] === "minute" || units[0] === "second");
+  const quarter = units.includes("quarter");
+  return (t) => {
+    let text = f === undefined ? "" : f.format(t);
+    if (pad) text = text.padStart(2, "0");
+    if (quarter) {
+      const q = `Q${quarterOf(zoned(t, zone).month)}`;
+      text = text === "" ? q : `${q} ${text}`;
+    }
+    return text;
+  };
+}
 
 // ── Partitions ────────────────────────────────────────────────────────────
 
 /** A partition of the time line into calendar cells: a level (`unit`) at a
- *  step, with an optional label `format`. See the module comment. */
-export class CalendarPartition {
-  /** The first day of a week, for weeks only (Monday unless given). */
+ *  step (the `every` option), with an optional label `format`. See the
+ *  module comment. */
+export class CalendarPartition<U extends CalendarUnit = CalendarUnit> {
+  /** The first day of a week, for weeks and weekdays only (Monday unless
+   *  given). */
   readonly start: WeekStart | undefined;
 
   constructor(
-    readonly unit: CalendarUnit,
+    readonly unit: U,
     readonly step: number = 1,
     start?: WeekStart,
     /** The cells' custom label, if any (`.format(fn)`); else the level's
@@ -190,47 +408,130 @@ export class CalendarPartition {
      *  form. */
     readonly formatCell?: CellFormat
   ) {
-    if (!Number.isInteger(step) || step < 1) {
-      throw new Error(
-        `Calendar.${unit}.every(${String(step)}): the step must be a whole ` +
-          `number of ${unit}s, 1 or more.`
-      );
-    }
-    this.start = unit === "week" ? (start ?? "monday") : undefined;
+    // The kinds and their options are checked where a Calendar value is
+    // made (`calendarPartition`, against `STRATEGIES`).
+    this.start = hasStart(unit) ? (start ?? "monday") : undefined;
   }
 
-  /** The same level, `n` units per cell (`Calendar.month.every(3)`). */
-  every(n: number): CalendarPartition {
-    return new CalendarPartition(this.unit, n, this.start, this.formatCell);
+  /** Removed (#1133): the step is an option of the kind,
+   *  `Calendar.month({ every: 3 })`. A loud error naming that spelling.
+   *  @deprecated Use `Calendar.<unit>({ every: n })`. */
+  every(n: number): never {
+    throw new Error(
+      `[gofish] ${String(this)}.every(${String(n)}): .every is removed. The ` +
+        `step is an option of the kind: Calendar.${this.unit}({ every: ` +
+        `${String(n)} }).`
+    );
   }
 
   /** The same cells, labeled by `fn`, a function of the cell
-   *  ({@link CalendarCell}): `Calendar.month.every(3).format((c) =>
+   *  ({@link CalendarCell}): `Calendar.month({ every: 3 }).format((c) =>
    *  String(c.year))`. JS only: a function cannot cross to Python, so a
    *  partition with a format has no wire form. */
-  format(fn: CellFormat): CalendarPartition {
-    if (typeof fn !== "function") {
-      throw new Error(
-        `${String(this)}.format: expected a function of the cell, ` +
-          `(cell) => string.`
-      );
-    }
-    return new CalendarPartition(this.unit, this.step, this.start, fn);
+  format(fn: CellFormat): CalendarPartition<U> {
+    return new CalendarPartition(
+      this.unit,
+      this.step,
+      this.start,
+      checkFormat<CellFormat>(this, fn)
+    );
+  }
+
+  /** Whether `other` cuts the time line into the same cells: the same
+   *  level, step, and week start. The labels may differ. */
+  sameCells(other: CalendarPartition | undefined): boolean {
+    return (
+      other !== undefined &&
+      other.unit === this.unit &&
+      other.step === this.step &&
+      other.start === this.start
+    );
   }
 
   /** The level one up (the outer row of a time axis), or undefined for
    *  year. */
   get parent(): CalendarPartition | undefined {
     const p = PARENT[this.unit];
-    return p === undefined ? undefined : new CalendarPartition(p);
+    if (p === undefined) return undefined;
+    // A weekday's week starts on the weekday's first day.
+    return new CalendarPartition(p, 1, p === "week" ? this.start : undefined);
   }
 
-  /** The level and step the cell math runs on: a quarter is 3 months, so
-   *  "quarter" matters only to labels. */
-  private get span(): [Exclude<CalendarUnit, "quarter">, number] {
-    return this.unit === "quarter"
-      ? ["month", 3 * this.step]
-      : [this.unit, this.step];
+  /** The unit this level is a part of when it is binned alone
+   *  (`field(x).bin(Calendar.month)` is the month of the year), or undefined
+   *  for a level that is a part of nothing (week, year): binned alone, its
+   *  cells stay on the time line. See {@link CYCLE}. */
+  get cycle(): CalendarUnit | undefined {
+    return CYCLE[this.unit];
+  }
+
+  /** Why `next` is not a part of one cell of this level, or undefined
+   *  when it is, so it can follow this level in a product, in a chain over a
+   *  cycle, or as an axis level over parts of this level's cycle. It is a
+   *  part when its cycle is this level's unit (a month is a part of a year;
+   *  a weekday is a day, so its parts are a day's: an hour of a weekday), a
+   *  weekday is a part of a week only when both start on the same day, and
+   *  this level's cells are one unit each, so the parts of one cell are one
+   *  interval. */
+  whyNotAPart(next: CalendarPartition): string | undefined {
+    const unit = this.unit === "weekday" ? "day" : this.unit;
+    if (next.cycle === undefined)
+      return (
+        `${String(next)} is a part of no larger level (weeks do not nest ` +
+        `in months or years, and nothing holds a year)`
+      );
+    if (next.cycle !== unit)
+      return `${String(next)} is a part of a ${next.cycle}, not of a ${unit}`;
+    if (unit === "week" && next.start !== this.start)
+      return (
+        `${String(next)} is a part of a week that starts on ${next.start}, ` +
+        `and ${String(this)} starts on ${this.start}: give both the same ` +
+        `start`
+      );
+    if (this.step !== 1)
+      return (
+        `${String(this)} has ${this.step} ${this.unit}s in a cell, so the ` +
+        `${next.unit}s of one cell are not one interval`
+      );
+    return undefined;
+  }
+
+  /** The part of its cycle unit that the instant `z` falls in: its level's
+   *  field at the start of the cell that holds `z` (6 for any instant in
+   *  June; 4 for May under `Calendar.month({ every: 3 })`, whose cell starts in
+   *  April; 1 to 4 for a quarter; the ISO day of the week, 1 for Monday to 7
+   *  for Sunday, for a weekday). */
+  part(z: TemporalNS.ZonedDateTime): number {
+    return this.partAt(this.floor(z));
+  }
+
+  /** The part of its cycle unit that the cell starting at `s` is (see
+   *  {@link part}): `s` is already a cell start. */
+  partAt(s: TemporalNS.ZonedDateTime): number {
+    if (this.unit === "quarter") return quarterOf(s.month);
+    if (this.unit === "weekday") return s.dayOfWeek;
+    return s[
+      this.unit as Exclude<CalendarUnit, "quarter" | "week" | "weekday">
+    ];
+  }
+
+  /** The default label of a part of this level's cycle (`Calendar.month`
+   *  alone): "Jan" for a month, "Q1" for a quarter, "1" for a day of the
+   *  month, "Mon" for a day of the week, "12 AM" for an hour of the day, "05" for a minute of the hour
+   *  or a second of the minute. `t` is the part's first instant in the
+   *  reference cycle (UTC, {@link referencePeriod}). */
+  partLabel(cell: CalendarPart, t: number): string {
+    if (this.formatCell !== undefined) return this.formatCell(cell);
+    return productLabeler([this], "UTC")(t);
+  }
+
+  /** The level and step the cell math runs on: a quarter is 3 months and
+   *  a weekday is a day, so "quarter" and "weekday" matter only to labels
+   *  and parts. */
+  private get span(): [Exclude<CalendarUnit, "quarter" | "weekday">, number] {
+    if (this.unit === "quarter") return ["month", 3 * this.step];
+    if (this.unit === "weekday") return ["day", this.step];
+    return [this.unit, this.step];
   }
 
   /** The start of the cell that holds `z` (in `z`'s zone). */
@@ -289,19 +590,7 @@ export class CalendarPartition {
     let s = this.floor(zoned(lo, zone));
     while (s.epochMilliseconds <= hi) {
       const e = this.next(s);
-      out.push({
-        start: s.epochMilliseconds,
-        end: e.epochMilliseconds,
-        unit: this.unit,
-        year: s.year,
-        quarter: Math.floor((s.month - 1) / 3) + 1,
-        month: s.month,
-        week: s.weekOfYear!,
-        day: s.day,
-        hour: s.hour,
-        minute: s.minute,
-        second: s.second,
-      });
+      out.push(fieldsOf(s, e.epochMilliseconds, this.unit));
       s = e;
     }
     return out;
@@ -310,82 +599,62 @@ export class CalendarPartition {
   /** A cell's label: the partition's `.format(fn)`, if it has one. Else
    *  the default: its level's field in `zone` (the zone its cells were read
    *  in), formatted by `Intl.DateTimeFormat` in en-US ({@link LABEL_LOCALE}:
-   *  "Jan", "12 AM", "Feb 29", "2024"), or "Q1" to "Q4" for a quarter. */
+   *  "Jan", "12 AM", "Feb 29", "Mon", "2024"), or "Q1" to "Q4" for a
+   *  quarter. */
   label(cell: CalendarCell, zone: string): string {
     if (this.formatCell !== undefined) return this.formatCell(cell);
     if (this.unit === "quarter") return `Q${cell.quarter}`;
-    return formatter(this.unit, zone).format(cell.start);
+    return formatter(
+      this.unit,
+      LABEL_FORMAT[this.unit as Exclude<CalendarUnit, "quarter">],
+      zone
+    ).format(cell.start);
   }
 
   /** The wire form. A partition with a `.format(fn)` has none (a loud
    *  error): `key` is the index `JSON.stringify` passes for an entry of a
-   *  `rows` list. */
+   *  list (an axis's `levels`). */
   toJSON(key?: string): CalendarJSON {
-    if (this.formatCell !== undefined) {
-      const row = key !== undefined && key !== "" ? `rows[${key}]: ` : "";
-      throw new Error(
-        `${row}${String(this)} has no wire form: its format is a JS ` +
-          `function, which cannot be serialized (to Python or the IR). ` +
-          `Drop the .format(...) to use the default labels.`
-      );
-    }
+    if (this.formatCell !== undefined) throw noWireForm(this, key);
     return {
-      unit: this.unit,
-      step: this.step,
+      kind: this.unit,
+      // A weekday has no steps, so no `every` on the wire.
+      ...(this.unit !== "weekday" ? { every: this.step } : {}),
       ...(this.start !== undefined ? { start: this.start } : {}),
-    };
+    } as CalendarJSON;
   }
 
   toString(): string {
+    const opts = [
+      ...(this.step !== 1 ? [`every: ${this.step}`] : []),
+      ...(this.start !== undefined ? [`start: "${this.start}"`] : []),
+    ];
     const base =
-      this.start !== undefined
-        ? `Calendar.week({ start: "${this.start}" })`
+      opts.length > 0
+        ? `Calendar.${this.unit}({ ${opts.join(", ")} })`
         : `Calendar.${this.unit}`;
-    const stepped = this.step === 1 ? base : `${base}.every(${this.step})`;
-    return this.formatCell === undefined ? stepped : `${stepped}.format(...)`;
+    return this.formatCell === undefined ? base : `${base}.format(...)`;
   }
 }
 
-/** `Calendar.week`: the Monday-start week partition, also callable as
- *  `Calendar.week({ start: "sunday" })` for another first day. */
-export type WeekPartition = CalendarPartition &
-  ((opts?: { start?: WeekStart }) => CalendarPartition);
+/** The levels that take a first day of the week, `start`. */
+type StartUnit = "week" | "weekday";
 
-function weekPartition(): WeekPartition {
-  const make = ({ start }: { start?: WeekStart } = {}) =>
-    calendarPartition({ unit: "week", step: 1, start }, "Calendar.week");
-  // A function that is also the default partition: same prototype, same
-  // fields, so `Calendar.week` works as a value and as a call.
-  const fn = make as unknown as WeekPartition;
-  const week = make();
-  Object.setPrototypeOf(fn, CalendarPartition.prototype);
-  Object.defineProperties(fn, {
-    unit: { value: week.unit, enumerable: true },
-    step: { value: week.step, enumerable: true },
-    start: { value: week.start, enumerable: true },
-  });
-  return fn;
-}
+const hasStart = (unit: CalendarUnit): unit is StartUnit =>
+  unit === "week" || unit === "weekday";
 
-/** The calendar partitions, used in `axes: { x: { rows: [...] } }`. */
-export const Calendar = {
-  second: new CalendarPartition("second"),
-  minute: new CalendarPartition("minute"),
-  hour: new CalendarPartition("hour"),
-  day: new CalendarPartition("day"),
-  week: weekPartition(),
-  month: new CalendarPartition("month"),
-  quarter: new CalendarPartition("quarter"),
-  year: new CalendarPartition("year"),
-};
-
-/** `value` as an error message shows it. A partition shows as its builder
- *  spelling, and nothing calls `toJSON` (a partition with a format has no
+/** `value` as an error message shows it. A partition (a Calendar value, or
+ *  `Bin.step(...)`, cells.ts) shows as its builder spelling, its own
+ *  `toString`, and nothing calls `toJSON` (a partition with a format has no
  *  wire form, and its `toJSON` throws). */
-function describe(value: unknown): string {
-  if (value instanceof CalendarPartition) return String(value);
+export function describe(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(describe).join(", ")}]`;
   if (value !== null && typeof value === "object") {
+    if (
+      typeof value.toString === "function" &&
+      value.toString !== Object.prototype.toString
+    )
+      return String(value);
     const fields = Object.entries(value).map(
       ([k, v]) => `${k}: ${describe(v)}`
     );
@@ -396,33 +665,27 @@ function describe(value: unknown): string {
 }
 
 /** A Calendar value from a builder value or its wire form (Python sends the
- *  wire form). An unknown unit, or a `start` that is not "monday" or
- *  "sunday" or is given for a level other than weeks, is a loud error. */
+ *  wire form), checked against the Calendar family
+ *  (`Frontend.checkStrategy`): an unknown kind, an `every` that is not a
+ *  whole number of at least 1 (or any `every` on a weekday), or a `start`
+ *  that is not "monday" or "sunday" or is given for a level other than
+ *  weeks and weekdays, is a loud error. */
 export function calendarPartition(
   value: CalendarPartition | CalendarJSON,
   where: string
 ): CalendarPartition {
   if (value instanceof CalendarPartition) return value;
-  const v = value as Partial<CalendarJSON> | null;
-  if (
-    v === null ||
-    typeof v !== "object" ||
-    !(CALENDAR_UNITS as readonly string[]).includes(v.unit as string)
-  ) {
-    throw new Error(
-      `${where}: expected a Calendar value (Calendar.month, ` +
-        `Calendar.hour.every(6), ...), got ${describe(value)}.`
-    );
-  }
-  if (v.start !== undefined && v.unit !== "week") {
-    throw new Error(`${where}: only Calendar.week takes a start day.`);
-  }
-  if (v.start !== undefined && v.start !== "monday" && v.start !== "sunday") {
-    throw new Error(
-      `${where}: start must be "monday" or "sunday", not ${describe(v.start)}.`
-    );
-  }
-  return new CalendarPartition(v.unit as CalendarUnit, v.step ?? 1, v.start);
+  Frontend.checkStrategy("Calendar", value, where);
+  return fromWire(value);
+}
+
+/** A Calendar value from its wire form, already checked. */
+export function fromWire(v: CalendarJSON): CalendarPartition {
+  return new CalendarPartition(
+    v.kind,
+    "every" in v ? (v.every ?? 1) : 1,
+    "start" in v ? v.start : undefined
+  );
 }
 
 // ── Ticks ─────────────────────────────────────────────────────────────────
@@ -440,12 +703,13 @@ const AUTO_STEPS: [CalendarUnit, number[]][] = [
 ];
 
 /** About how long one cell of `unit` × `step` lasts. */
-function nominalMs(unit: CalendarUnit, step: number): number {
+export function nominalMs(unit: CalendarUnit, step: number): number {
   const ms: Record<CalendarUnit, number> = {
     second: 1e3,
     minute: 6e4,
     hour: 36e5,
     day: 864e5,
+    weekday: 864e5,
     week: 6048e5,
     month: 2628e6,
     quarter: 7884e6,
@@ -467,7 +731,7 @@ export function tickPartition(
   hi: number,
   count: number
 ): CalendarPartition {
-  if (hi === lo) return Calendar.day;
+  if (hi === lo) return new CalendarPartition("day");
   const target = (hi - lo) / count;
   let best: CalendarPartition | undefined;
   let bestRatio = Infinity;

@@ -1,6 +1,7 @@
 """AST classes for building GoFish chart specifications."""
 
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+import datetime
 import decimal
 import inspect
 import json
@@ -100,7 +101,6 @@ class DeriveOperator(Operator):
     def __init__(
         self,
         fn: Callable,
-        provenance: Optional[dict] = None,
         schema: Optional[dict] = None,
     ):
         super().__init__("derive")
@@ -110,12 +110,6 @@ class DeriveOperator(Operator):
         # the wire form of a chart's ``schema``; JS applies them to the rows
         # the callback returns.
         self.schema = schema
-        # Measure provenance a data transform (e.g. `bin`) declares for its
-        # output columns. It can't ride the data rows across the derive RPC
-        # bridge, so it travels in the operator IR and is re-applied JS-side via
-        # `setMeasureProvenance` — mirroring the JS bin's array-symbol
-        # provenance so a histogram's edges unify on the source field's axis.
-        self.provenance = provenance
 
     def translate(
         self,
@@ -124,7 +118,7 @@ class DeriveOperator(Operator):
         y: Optional[float] = None,
     ) -> "DeriveOperator":
         """Translate a derived operator while preserving its lambda handle."""
-        new_op = DeriveOperator(self.fn, self.provenance, self.schema)
+        new_op = DeriveOperator(self.fn, self.schema)
         new_op.lambda_id = self.lambda_id
         new_op._labels = list(self._labels)
         new_op._translate = {
@@ -145,10 +139,8 @@ class DeriveOperator(Operator):
         )
 
     def to_dict(self) -> dict:
-        """Convert to dict - return lambda ID (+ measure provenance, if any)."""
+        """Convert to dict - return lambda ID (+ the result's schema, if any)."""
         out = {"type": "derive", "lambdaId": self.lambda_id}
-        if self.provenance:
-            out["provenance"] = self.provenance
         if self.schema is not None:
             out["schema"] = self.schema
         if self._translate:
@@ -785,6 +777,7 @@ from ._generated import (  # noqa: E402
     image,
     polygon,
     blank,
+    region,
     over,
     intersect,
     exclude,
@@ -803,6 +796,7 @@ from ._generated import (  # noqa: E402
     _spread_combinator_opts,
     _stack_combinator_opts,
     _pack_opts,
+    _partition_opts,
     _line_opts,
     _ribbon_opts,
     _enclose_opts,
@@ -1914,7 +1908,9 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
     Derive operator - apply a Python function to transform data.
 
     Args:
-        fn: Function that takes data and returns transformed data
+        fn: Function that takes the list of rows and returns the new list of
+            rows (a list of dicts, ``None``, or a dataframe). It returns a
+            list even for one row: ``lambda d: [d[0]]``, not ``d[0]``.
         schema: Column types of the result, keyed by column name, as in
             ``chart(data, schema={...})``: ``Schema.ordered(levels)`` or
             ``Schema.time(zone=...)``. Without it, a result column keeps the
@@ -1925,15 +1921,8 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
 
     Returns:
         DeriveOperator object
-
-    A transform may declare measure provenance for its output columns by
-    setting `_gofish_measure_provenance` on the callable (e.g. `bin`); it is
-    carried into the operator IR so the JS side can re-tag the rows after the
-    RPC. This is what lets `derive(bin("X"))` produce `start`/`end` edges that
-    unify on X's axis without an explicit `field(name, measure=...)`.
     """
-    provenance = getattr(fn, "_gofish_measure_provenance", None)
-    return DeriveOperator(fn, provenance, schema)
+    return DeriveOperator(fn, schema)
 
 
 def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
@@ -1949,6 +1938,121 @@ def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
     """
     options["by"] = by
     return Operator("group", **_group_opts(**options))
+
+
+def partition(
+    *,
+    by: Union["FieldAccessor", Dict[str, "FieldAccessor"], "StructAccessor"],
+    dir: Optional[str] = None,
+    **options: Any,
+) -> Union[Operator, Composed]:
+    """
+    Partition operator: divide the space into the cells of a binned key, one
+    group per cell, and give each group its cell. Each cell sits at its true
+    place on one continuous scale, so a cell's width follows its width in data
+    (a 29-day February is narrower than a 31-day March), and an empty cell
+    keeps its place. A mark with no size of its own fills its cell, and a mark
+    with a size of its own is centered in it.
+
+        chart(daily, schema={"date": Schema.time()}).flow(
+            partition(by=field("date").bin(Calendar.month), dir="x")
+        ).mark(rect(h=field("value").sum()))
+
+    With one binned key per axis it divides both axes into rectangles. This is
+    the partition on x, then the partition on y, and it returns those two
+    partitions as one flow fragment (``compose``):
+
+        chart(movies).flow(
+            partition(by={
+                "x": field("IMDB Rating").bin(Bin.step(0.5)),
+                "y": field("Rotten Tomatoes Rating").bin(Bin.step(5)),
+            })
+        ).mark(region(fill=field("IMDB Rating").count()))
+
+    With two fields binned together, ``struct(x=..., y=...).bin(...)``, it
+    divides the plane into the polygon cells of a ``Bin`` call, hexagons or
+    Voronoi cells:
+
+        chart(airports).flow(
+            partition(by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=1)))
+        ).mark(region(fill=field("longitude").count()))
+
+    Args:
+        by: A key that has a region: a binned field, ``field(x).bin(...)``,
+            a dict of one per axis, ``{"x": ..., "y": ...}``, or a binned
+            struct, ``struct(x=..., y=...).bin(...)``. A plain field, or a
+            struct with no bin, has no region and is an error.
+        dir: The axis to divide: ``"x"``, ``"y"``, or an axis name the
+            enclosing coordinate space declares. Required with a single key,
+            and not allowed with a key per axis.
+        **options: The generated ``_partition_opts`` core's options; see
+            the docs options table.
+
+    Returns:
+        Operator object, or for a key per axis the fragment of two
+    """
+
+    def check_key(key: Any) -> None:
+        if not (
+            isinstance(key, FieldAccessor)
+            and any(op.get("op") == "bin" for op in key.get("ops", []))
+        ):
+            name = key["name"] if isinstance(key, FieldAccessor) else key
+            raise ValueError(
+                f"partition: `by` must be a key that has a region, such as "
+                f'field("{name}").bin(Calendar.month) or '
+                f'field("{name}").bin(Bin.step(1)). Each group is placed in its '
+                f"cell, so the key must say what the cells are. To give each "
+                f"value an equal slot instead, use spread(by=..., dir=...)."
+            )
+
+    if isinstance(by, StructAccessor):
+        if not by.get("ops"):
+            fields = by["fields"]
+            raise ValueError(
+                f"partition: `by` must be a key that has a region, and "
+                f'struct(x="{fields["x"]}", y="{fields["y"]}") has none until '
+                f"it is binned: add .bin(Bin.hex(radius=...)) or "
+                f".bin(Bin.voronoi(seeds=...)), so each group is placed in its "
+                f"cell."
+            )
+        if dir is not None or "alignment" in options:
+            raise ValueError(
+                "partition: a struct key divides both axes at once, so `dir` "
+                "and `alignment` do not apply. Each child is placed in its "
+                "cell."
+            )
+    elif isinstance(by, dict) and not isinstance(by, FieldAccessor):
+        if sorted(by) != ["x", "y"]:
+            raise ValueError(
+                f"partition: a `by` keyed by axis takes exactly the keys x "
+                f"and y, got {', '.join(by) or 'none'}. To divide one axis, "
+                f"pass partition(by=field(f).bin(...), dir=...)."
+            )
+        if dir is not None or "alignment" in options:
+            raise ValueError(
+                "partition: a `by` keyed by axis divides both axes, so `dir` "
+                "and `alignment` do not apply. Each child is placed in its "
+                "cell."
+            )
+        check_key(by["x"])
+        check_key(by["y"])
+        return compose(
+            partition(by=by["x"], dir="x", **options),
+            partition(by=by["y"], dir="y", **options),
+        )
+    else:
+        check_key(by)
+        if dir is None:
+            raise ValueError(
+                'partition: `dir` names the axis to divide, e.g. '
+                'partition(by=..., dir="x"). To divide both axes, key `by` '
+                'by axis: partition(by={"x": ..., "y": ...}).'
+            )
+    options["by"] = by
+    if dir is not None:
+        options["dir"] = dir
+    return Operator("partition", **_partition_opts(**options))
 
 
 def resolve(cols: List[str], *, from_: Any, key: Optional[str] = None) -> Operator:
@@ -2162,15 +2266,18 @@ def pack(
 
 def table(
     *,
-    by: Optional[Dict[str, str]] = None,
+    by: Optional[Dict[str, Union[str, "FieldAccessor"]]] = None,
     **options: Any,
 ) -> Operator:
     """
-    Table operator — cross-product over two fields, lay out as a 2D grid.
+    Table operator — cross-product over two keys, lay out as a 2D grid.
 
     Args:
-        by: Dict with `x` and `y` keys naming the two fields, e.g.
-            ``table(by={"x": "model", "y": "year"})``.
+        by: Dict with `x` (the column key) and `y` (the row key). Each
+            takes what ``spread``'s ``by`` takes: a field name or a
+            ``field(...)`` key, e.g. ``table(by={"x": "model", "y": "year"})``
+            or ``table(by={"x": field("date").bin(Calendar.week),
+            "y": field("date").bin(Calendar.weekday)})``.
         **options: The generated ``_table_opts`` core's options; see the
             docs options table.
 
@@ -2206,8 +2313,13 @@ class ColumnSchema(dict):
     column has, keyed by class name (the wire form JS reads as is).
 
     Mirrors JS ``ColumnSchema``. Build one with ``Schema.ordered(levels)``;
-    each method adds one class.
+    each method adds one class. Constructing one checks that an order's
+    levels fit the column's other classes (``_check_levels_fit``).
     """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        _check_levels_fit("schema: the column", self)
 
     def diverging(self, midpoint: Optional[float] = None) -> "ColumnSchema":
         """Give the column a midpoint (``HasMidpoint``) along its order.
@@ -2232,12 +2344,7 @@ class ColumnSchema(dict):
         # word for word.
         order = (
             "the edges of the order ["
-            + ", ".join(
-                json.dumps(level, ensure_ascii=False)
-                if isinstance(level, str)
-                else _js_number(level)
-                for level in levels
-            )
+            + ", ".join(_show_level(level) for level in levels)
             + "]"
         )
         if (
@@ -2254,6 +2361,79 @@ class ColumnSchema(dict):
                 f"diverging: midpoint {_js_number(at)} is outside 0..{n}, {order}."
             )
         return ColumnSchema({**self, "HasMidpoint": {"at": at}})
+
+    def quantity(self, name: str) -> "ColumnSchema":
+        """Say what the column's values are amounts of (``HasQuantity``): the
+        quantity ``name``, which titles the axis in place of the column's
+        name."""
+        return ColumnSchema(
+            {**self, "HasQuantity": {"name": _require_str(name, "name")}}
+        )
+
+    def unit(self, unit: str) -> "ColumnSchema":
+        """Say what unit the column's values are in (``HasUnit``): the unit
+        ``unit``, whose symbol follows the quantity in the axis title,
+        "Pay (USD)". A column has one unit, so ``.unit`` on a column that has
+        one (``Schema.time()`` writes the instant) raises a TypeError, with
+        the message of JS ``checkNoUnit`` in schema.ts."""
+        if "HasUnit" in self:
+            raise TypeError(
+                ".unit: the column already has the unit "
+                f"{json.dumps(self['HasUnit']['unit'], ensure_ascii=False)}."
+            )
+        name = _require_str(unit, "unit")
+        return ColumnSchema({**self, "HasUnit": {"unit": name, "symbol": name}})
+
+
+def _require_str(value: Any, what: str) -> str:
+    """``value``, checked to be a string; ``what`` names it in the message."""
+    if not isinstance(value, str):
+        raise TypeError(f"{what} must be a string, got {value!r}")
+    return value
+
+
+# The unit of a time column, which ``Schema.time()`` writes beside
+# ``HasCalendar``: JS ``INSTANT`` in measure.ts.
+_INSTANT = {"unit": "instant"}
+
+
+def _is_number(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+# Which values each class accepts, given the class's own record: JS
+# ``ACCEPTS`` in schema.ts. A datetime is an instant.
+_ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
+    "HasCalendar": lambda v, c: v is None
+    or (_is_number(v) and math.isfinite(v))
+    or isinstance(v, datetime.date),
+    "HasOrder": lambda v, c: v is None or isinstance(v, str) or _is_number(v),
+    "HasMidpoint": lambda v, c: True,
+    "HasUnit": lambda v, c: v is None
+    or _is_number(v)
+    or (c.get("unit") == _INSTANT["unit"] and isinstance(v, datetime.date)),
+    "HasQuantity": lambda v, c: True,
+}
+
+
+def _check_levels_fit(who: str, column_type: Dict[str, Any]) -> None:
+    """Raise when one of an order's levels is not a value one of the
+    column's classes accepts, with the message of JS ``checkLevelsFit`` in
+    schema.ts, which explains the rule."""
+    for level in column_type.get("HasOrder", {}).get("levels", []):
+        for cls, accepts in _ACCEPTS.items():
+            if cls in column_type and not accepts(level, column_type[cls]):
+                raise TypeError(
+                    f"{who} has the level {_show_level(level)}, which is not "
+                    f"a value {cls} accepts."
+                )
+
+
+def _show_level(level: Any) -> str:
+    """``level`` as JS ``showLevel`` in schema.ts writes it."""
+    if isinstance(level, str):
+        return json.dumps(level, ensure_ascii=False)
+    return _js_number(level) if _is_number(level) else repr(level)
 
 
 def _js_number(x: Union[int, float]) -> str:
@@ -2287,8 +2467,9 @@ class Schema:
 
     @staticmethod
     def time(zone: str = "UTC") -> ColumnSchema:
-        """A column whose values are instants (``HasCalendar``), read on the
-        calendar of ``zone``, an IANA time zone (``"UTC"`` by default).
+        """A column whose values are instants (``HasCalendar``) in the
+        instant unit (``HasUnit``), read on the calendar of ``zone``, an IANA
+        time zone (``"UTC"`` by default).
 
         A value may be an ISO 8601 string (``"2024-03-05"`` is the start of
         that day in ``zone``; a string without an offset is a wall-clock time
@@ -2300,85 +2481,30 @@ class Schema:
             raise TypeError(
                 f"Schema.time: zone must be an IANA time zone name, got {zone!r}"
             )
-        return ColumnSchema({"HasCalendar": {"zone": zone}})
+        return ColumnSchema(
+            {"HasCalendar": {"zone": zone}, "HasUnit": dict(_INSTANT)}
+        )
 
+    @staticmethod
+    def unit(unit: str) -> ColumnSchema:
+        """A column whose values are amounts in the unit ``unit``
+        (``HasUnit``), an opaque name such as ``"USD"`` or ``"mm"``.
 
-# Calendar partitions
+        Columns in the same unit may share an axis; two different units on
+        one axis are an error. A column with no unit declared may share an
+        axis with any other. An axis title shows the unit after its
+        quantity: "Pay (USD)".
+        """
+        return ColumnSchema({}).unit(unit)
 
-_CALENDAR_UNITS = (
-    "second",
-    "minute",
-    "hour",
-    "day",
-    "week",
-    "month",
-    "quarter",
-    "year",
-)
-
-
-class CalendarPartition(dict):
-    """A partition of the time line into calendar cells: a level (``unit``)
-    at a step. The dict is the wire form JS reads (``{"unit": "month",
-    "step": 3}``). Mirrors JS ``CalendarPartition``; build one from
-    ``Calendar``. Used in ``axes={"x": {"rows": [...]}}``.
-    """
-
-    def __init__(self, unit: str, step: int = 1, start: Optional[str] = None):
-        if unit not in _CALENDAR_UNITS:
-            raise ValueError(
-                f"Calendar: unknown unit {unit!r}; expected one of "
-                + ", ".join(_CALENDAR_UNITS)
-            )
-        if isinstance(step, bool) or not isinstance(step, int) or step < 1:
-            raise ValueError(
-                f"Calendar.{unit}.every({step!r}): the step must be a whole "
-                f"number of {unit}s, 1 or more."
-            )
-        wire: dict = {"unit": unit, "step": step}
-        if start is not None:
-            wire["start"] = start
-        super().__init__(wire)
-
-    def every(self, n: int) -> "CalendarPartition":
-        """The same level, ``n`` units per cell (``Calendar.month.every(3)``).
-        Steps align to the level above: months in steps of 3 start in
-        January, April, July and October."""
-        return CalendarPartition(self["unit"], n, self.get("start"))
-
-
-class _WeekPartition(CalendarPartition):
-    """``Calendar.week``: Monday-start weeks, also callable as
-    ``Calendar.week(start="sunday")``."""
-
-    def __call__(self, start: str = "monday") -> CalendarPartition:
-        if start not in ("monday", "sunday"):
-            raise ValueError(
-                f'Calendar.week: start must be "monday" or "sunday", not {start!r}.'
-            )
-        return CalendarPartition("week", 1, start)
-
-
-class Calendar:
-    """The calendar partitions, used in ``axes={"x": {"rows": [...]}}``.
-
-    Mirrors JS ``Calendar``::
-
-        chart(data, axes={"x": {"rows": [Calendar.month, Calendar.year]}})
-        Calendar.hour.every(6)
-        Calendar.week(start="sunday")
-
-    A custom ``format`` for a row's labels is JS-only for now.
-    """
-
-    second = CalendarPartition("second")
-    minute = CalendarPartition("minute")
-    hour = CalendarPartition("hour")
-    day = CalendarPartition("day")
-    week = _WeekPartition("week", 1, "monday")
-    month = CalendarPartition("month")
-    quarter = CalendarPartition("quarter")
-    year = CalendarPartition("year")
+    @staticmethod
+    def quantity(name: str) -> ColumnSchema:
+        """A column whose values are amounts of the quantity ``name``
+        (``HasQuantity``), e.g. ``"Pay"``. The quantity titles the axis in
+        place of the column's name, and columns of one quantity share one
+        unit.
+        """
+        return ColumnSchema({}).quantity(name)
 
 
 # Color helpers (the scales themselves are the `Color` family, color.py)
@@ -2652,7 +2778,7 @@ def datum(value: Any) -> DatumValue:
 
 class FieldAccessor(dict):
     """
-    The `{type: "field", name, measure?, ops?}` wire shape, as a dict
+    The `{type: "field", name, ops?}` wire shape, as a dict
     subclass so `field(name)` supports the same chainable pipeline syntax as
     JS's `FieldExpr` (`ast/fieldExpr.ts`) — a Polars-column-expression-style
     builder where each method returns a NEW accessor with one more op
@@ -2709,13 +2835,53 @@ class FieldAccessor(dict):
         return self._with_op({"op": "reverse"})
 
     def bin(
-        self, thresholds: Optional[Union[int, float, List[float]]] = None
+        self,
+        partition: Optional[
+            Union[Dict[str, Any], List[Dict[str, Any]]]
+        ] = None,
     ) -> "FieldAccessor":
-        """Bin this (numeric) field into groups, REPLACING the base
-        grouping. Valid only in a `by` (domain) slot."""
+        """Map each value to its CELL. ``partition`` is:
+
+        - a Calendar value. A level that is a part of a larger one gives its
+          parts: ``field("date").bin(Calendar.month)`` is the month of the
+          year, so all Junes are one cell, and every month is a cell. A level
+          that is a part of nothing (``Calendar.year``, ``Calendar.week``)
+          gives cells of the time line.
+        - a product of Calendar values, a list:
+          ``.bin([Calendar.year, Calendar.month])``, one cell where one cell
+          of each level meet, each level a part of the one before it (the
+          June of 2015, labeled "Jun 2015").
+        - cells of one width (``.bin(Bin.step(0.5))``), or
+          ``Bin.thresholds(...)``, a cell count or a list of edges
+          (``.bin(Bin.thresholds(20))``). About 10 cells when none is given.
+
+        A second ``.bin(...)`` splits each cell of the first, a chain:
+        ``.bin(Calendar.year).bin(Calendar.month)`` gives the months of each
+        year, and an axis over it shows a month level and a year level. The
+        groups are the cells, in order, over the column's whole domain in the
+        chart's data, so every group of a split sees the same cells, and
+        empty cells are kept. Valid only in a `by` (domain) slot. Emits the
+        wire op ``{"op": "bin", "partition": ...}``, one per ``.bin``."""
         op: dict = {"op": "bin"}
-        if thresholds is not None:
-            op["thresholds"] = thresholds
+        if isinstance(partition, (list, tuple)):
+            from ._generated import _OPTION_TYPES, _to_wire
+
+            calendar = _OPTION_TYPES["Calendar"]
+            if len(partition) < 2 or not all(
+                isinstance(p, dict) and p.get("kind") in calendar[2]
+                for p in partition
+            ):
+                raise TypeError(
+                    "field(...).bin: a product of bins is a list of two or more "
+                    "Calendar values, e.g. [Calendar.year, Calendar.month]; got "
+                    f"{partition!r}."
+                )
+            op["partition"] = [
+                _to_wire(calendar, p, f"field(...).bin[{i}]")
+                for i, p in enumerate(partition)
+            ]
+        elif partition is not None:
+            op["partition"] = _check_bin("field", partition, "field(...).bin")
         return self._with_op(op)
 
     def drop_nulls(self) -> "FieldAccessor":
@@ -2803,57 +2969,163 @@ def filter(
     if isinstance(predicate, FieldPredicate):
         return Operator("filter", predicate=dict(predicate))
     if callable(predicate):
-        # Data that is not a list (a single row) passes through unchanged,
-        # as in JS: there is nothing to filter.
-        return derive(
-            lambda rows: [row for row in rows if predicate(row)]
-            if isinstance(rows, list)
-            else rows
-        )
+        # Data always flows as a list, so the filter keeps a sublist.
+        return derive(lambda rows: [row for row in rows if predicate(row)])
     raise TypeError(
         "filter(...) expects field(name).between(lo, hi) or a function of one "
         f"row, got {type(predicate).__name__}"
     )
 
 
-def field(name: str, measure: Optional[str] = None) -> FieldAccessor:
+def field(name: str) -> FieldAccessor:
     """
     Explicit field-accessor wrapper. Mirrors the JS `field(...)` constructor
     in `packages/gofish-graphics/src/ast/data.ts` (the field/datum/literal
-    trichotomy). Equivalent to passing a bare field-name string, plus an
-    optional **measure annotation** — a unit-of-measure type claim for the
-    channel (see the underlying-space measure system).
+    trichotomy). Equivalent to passing a bare field-name string. Use it when
+    a field name could be read as a literal, or to chain a pipeline.
 
-    Use the measure annotation when YOUR OWN derive transform has renamed
-    fields so the weak field-name default would mis-tag the channel — e.g. a
-    lambda that renames a length column to "lo"/"hi":
+    A column's unit is declared in the chart's schema
+    (``Schema.unit("USD")``), not here. A column with no declared unit may
+    share an axis with any other.
 
-        scatter(
-            x_min=field("lo", measure="Beak Length (mm)"),
-            x_max=field("hi", measure="Beak Length (mm)"),
-        )
-
-    Built-in transforms like `bin()` declare their output provenance, which now
-    travels in the derive operator's IR (see DeriveOperator), so a binned
-    histogram's `start`/`end` edges auto-tag with the source field's units — no
-    explicit annotation needed.
-
-    The returned `FieldAccessor` is also chainable, mirroring JS's
+    The returned `FieldAccessor` is chainable, mirroring JS's
     `field(...)` pipeline syntax — `field("site").sort("yield")` as an
     operator's `by`, or `field("count").normalize()` as a `spread`/`stack`
     `size` channel (see `FieldAccessor` for the full method list).
 
-    Emits the canonical `{type: "field", name, measure?, ops?}` wire shape; an
-    annotation that contradicts known provenance is a type error.
+    Emits the canonical `{type: "field", name, ops?}` wire shape.
 
     Args:
         name: The field name to read from each row.
-        measure: Optional unit-of-measure annotation for the channel.
     """
-    out = FieldAccessor({"type": "field", "name": name})
-    if measure is not None:
-        out["measure"] = measure
-    return out
+    return FieldAccessor({"type": "field", "name": name})
+
+
+class ChunkKey(dict):
+    """The ``{type: "chunk", size}`` wire shape of a ``chunk(size)`` grouping
+    key. It is data, so a ``by=chunk(size)`` crosses to JS with no
+    callback."""
+
+
+def chunk(size: int) -> ChunkKey:
+    """
+    A ``by`` key that groups consecutive rows: row ``i`` goes to group
+    ``i // size``. It is a bin of width ``size`` over row position, so
+    ``spread(by=chunk(5), dir="y")`` lays the rows out five to a group (the
+    rows of a waffle chart). Like ``itertools.batched``, lodash ``_.chunk``
+    and Rust ``chunks(n)``. The key names no field, so its groups draw no
+    axis or labels. Mirrors the JS ``chunk(size)`` in
+    ``packages/gofish-graphics/src/ast/data.ts``.
+
+    Args:
+        size: How many consecutive rows go in each group (a positive integer).
+    """
+    if isinstance(size, bool) or not isinstance(size, int) or size < 1:
+        raise ValueError(f"chunk(size): size must be a positive integer, got {size!r}")
+    return ChunkKey({"type": "chunk", "size": size})
+
+
+def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
+    """The cells a key is binned into, in their wire form, on the key that
+    takes them: ``"field"`` for ``field(x).bin(...)``, which takes a Calendar
+    value, ``Bin.step`` and ``Bin.thresholds``, and ``"struct"`` for
+    ``struct(x=..., y=...).bin(...)``, which takes ``Bin.hex`` and
+    ``Bin.voronoi``. A kind of the other key is a TypeError naming the key
+    that takes it. The kinds of each key are the ``Partition`` and
+    ``StructBin`` option types, each one tagged union (gofish-ir
+    ``BIN_KINDS``). Mirrors JS ``Frontend.checkPartition`` and
+    ``Frontend.checkStructBin``."""
+    from ._generated import _OPTION_TYPES, _to_wire
+
+    own, other = ("Partition", "StructBin") if key == "field" else ("StructBin", "Partition")
+    kind = value.get("kind") if isinstance(value, dict) else None
+    # A Calendar value bins one field only: on a struct it is no other
+    # key's kind, just not one of the struct's.
+    if kind in _OPTION_TYPES[other][2] and kind not in _OPTION_TYPES["Calendar"][2]:
+        if key == "field":
+            raise TypeError(
+                f"{where}: Bin.{kind} bins two fields together into cells of "
+                f"the plane. Bin them with struct(x=..., y=...).bin(Bin.{kind}(...)); "
+                "field(x).bin takes Bin.step(size), Bin.thresholds(count_or_edges), "
+                "or a Calendar value."
+            )
+        raise TypeError(
+            f"{where}: Bin.{kind} bins one field. Bin each field with "
+            f"field(x).bin(Bin.{kind}(...)); struct(x=..., y=...).bin takes "
+            "Bin.hex(radius=...) or Bin.voronoi(seeds=...)."
+        )
+    if kind not in _OPTION_TYPES[own][2]:
+        expected = (
+            "a Calendar value (Calendar.month, ...), Bin.step(size), or "
+            "Bin.thresholds(count_or_edges)"
+            if key == "field"
+            else "a call in the Bin family, Bin.hex(radius=...) or "
+            "Bin.voronoi(seeds=...)"
+        )
+        raise TypeError(f"{where}: expected {expected}, got {value!r}")
+    return _to_wire(_OPTION_TYPES[own], value, where)
+
+
+class StructAccessor(dict):
+    """
+    The ``{type: "struct", fields: {x, y}, ops?}`` wire shape: a key that
+    reads two fields at once, built by :func:`struct`. Mirrors JS's
+    ``StructExpr`` (``ast/structExpr.ts``). Its one op is ``bin``, which takes
+    a call in the ``Bin`` family; the JS side bins the rows.
+    """
+
+    def bin(self, cells: Dict[str, Any]) -> "StructAccessor":
+        """Map each row's point ``(x, y)`` to its cell in ``cells``, a call
+        in the ``Bin`` family: ``Bin.hex(radius=...)`` or
+        ``Bin.voronoi(seeds=...)``. The groups are the cells over the two
+        columns' domain in the chart's data, so every group of a split sees
+        the same cells, and empty cells are kept. Emits the wire op
+        ``{"op": "bin", "partition": ...}``."""
+        if self.get("ops"):
+            raise ValueError(
+                "struct(...).bin(...) is already binned: a struct takes one bin."
+            )
+        wire = _check_bin("struct", cells, "struct(...).bin")
+        if wire.get("kind") == "voronoi" and isinstance(wire.get("seeds"), list):
+            # A seed is read only at the struct's two fields, so the wire
+            # carries those and not every column of the seed rows.
+            fields = self["fields"]
+            wire = {
+                **wire,
+                "seeds": [
+                    {f: row.get(f) for f in (fields["x"], fields["y"])}
+                    if isinstance(row, dict)
+                    else row
+                    for row in wire["seeds"]
+                ],
+            }
+        out = StructAccessor(self)
+        out["ops"] = [{"op": "bin", "partition": wire}]
+        return out
+
+
+def struct(*, x: str, y: str) -> StructAccessor:
+    """
+    A key that reads two fields at once, named after polars' ``pl.struct``:
+    ``struct(x="lon", y="lat")``. ``x`` and ``y`` name the column read on each
+    axis. Bin it with ``.bin(...)``, a call in the ``Bin`` family, to give
+    each group its cell of the plane:
+
+        chart(airports).flow(
+            partition(by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=1)))
+        ).mark(region(fill=field("longitude").count()))
+
+    Mirrors JS ``struct({ x, y })``. A struct is a key only once it is binned.
+
+    Args:
+        x: The column read on the x axis.
+        y: The column read on the y axis.
+    """
+    if not isinstance(x, str) or not isinstance(y, str):
+        raise TypeError(
+            f"struct(x=..., y=...): each is a field name, got x={x!r}, y={y!r}"
+        )
+    return StructAccessor({"type": "struct", "fields": {"x": x, "y": y}})
 
 
 # Data utilities (for use inside derive() callbacks)
@@ -3133,7 +3405,8 @@ def chart(
         axes=False                     # no axes
         axes={"x": True, "y": False}   # per-dimension on/off
         axes={"x": {"title": "Year"}}  # custom title (title=False suppresses it)
-        axes={"x": {"label_angle": 45}}  # rotate x labels (also "side")
+        axes={"x": {"label": {"angle": 45}}}  # rotate x labels (also "side")
+        axes={"x": {"label": {"align": ["center", "start"]}}}  # per-level label alignment
 
         chart(data, axes=True)
         chart(data, axes={"x": {"title": "Year"}, "y": True})
@@ -3148,8 +3421,8 @@ def chart(
         chart(survey, schema={"response": Schema.ordered(LEVELS).diverging()})
 
     Keys inside the per-axis dict are snake_case like every kwarg; an
-    unknown key (or a camelCase one such as ``"labelAngle"``) raises
-    TypeError.
+    unknown key (such as the old flat ``"label_angle"``) raises TypeError
+    naming the keys it takes.
 
     Args:
         data: Input data, or `ref(name)` / `select_all(name)` for cross-chart

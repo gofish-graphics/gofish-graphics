@@ -6,8 +6,10 @@
  * nesting of distributes sits below. So the per-leaf angular allocation must NOT
  * depend on how the children are GROUPED — a flat distribute of N data-driven
  * wedges must produce the same leaf sizes as any nested grouping of the same N
- * wedges. (This is the confluence the scale-root scoping gate in
- * `buildChildScalePlan` buys; without it a nested group silently re-derives a
+ * wedges. (This is the confluence the one sized-node rule of #1114 buys
+ * (`solveLayerScales`): a nested group has no size of its own and holds a
+ * chain of magnitudes, not pinned data, so even in a distribute's slot it is
+ * not sized and inherits the coord's σ. If it solved, it would re-derive a
  * smaller σ against its equal-slice budget.)
  *
  * Run via `tsx`.

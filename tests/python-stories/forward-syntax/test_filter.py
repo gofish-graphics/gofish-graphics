@@ -6,7 +6,7 @@ from python_stories.data import PENGUINS
 
 def story_field_between():
     return (
-        chart(PENGUINS, axes=True)
+        chart(PENGUINS)
         .flow(
             filter(field("Body Mass (g)").between(3500, 4500, closed="left")),
             scatter(x="Flipper Length (mm)", y="Beak Length (mm)"),

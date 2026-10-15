@@ -119,7 +119,7 @@ export const StackedArea: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(quarterlySales, { schema: { date: Schema.time() }, axes: true })
+    chart(quarterlySales, { schema: { date: Schema.time() } })
       .flow(
         scatter({ by: "date", x: "date" }),
         stack({ by: "category", dir: "y" })
@@ -150,7 +150,7 @@ export const CircleTimeline: StoryObj<Args> = {
     }));
     // A data-driven `r` would be a size in data units, scaled with the axes,
     // so each circle gets a literal pixel `r`.
-    chart(rows, { schema: { date: Schema.time() }, axes: true })
+    chart(rows, { schema: { date: Schema.time() } })
       .flow(
         spread({ by: "category", dir: "y", spacing: 60 }),
         scatter({ by: "date", x: "date", alignment: "middle" })
@@ -199,7 +199,6 @@ export const SurplusDeficitLine: StoryObj<Args> = {
     const schema = { date: Schema.time() };
     chart(area, {
       schema,
-      axes: true,
       color: Color.palette({ Surplus: "#2a9d8f", Deficit: "#e76f51" }),
     })
       .flow(group({ by: "side" }), scatter({ by: "date", x: "date" }))

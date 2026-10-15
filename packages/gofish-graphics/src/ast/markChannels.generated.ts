@@ -91,6 +91,10 @@ export const MARK_CHANNELS = {
     h: "size",
     fill: "color",
   },
+  region: {
+    fill: "color",
+    stroke: "color",
+  },
   line: {
     fill: "color",
     stroke: "color",

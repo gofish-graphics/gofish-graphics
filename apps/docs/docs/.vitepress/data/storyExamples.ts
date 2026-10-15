@@ -20,6 +20,12 @@
  * (`getStoryTitle`), which the markdown plugin uses as the alt text of a
  * `::: gofish story:<id> image` picture.
  *
+ * `loadStorySpecs` runs the same transform over EVERY story, tagged or not,
+ * for the visual review pages (tests/scripts/story-specs.ts). A story the
+ * transform can't take (not an object literal with a block-bodied `render`)
+ * gets its own source instead, and local helper modules a story imports are
+ * appended after its code.
+ *
  * This module is imported at build time by the VitePress data loader
  * (`storyExamples.data.js`) and may also be consumed by markdown-it plugins, so
  * it is synchronous and depends only on `node:fs` / `node:path` / `typescript`
@@ -404,6 +410,17 @@ function findMetaTitle(sourceFile: ts.SourceFile): string | undefined {
 // Per-story transform
 // ---------------------------------------------------------------------------
 
+/** One exported story binding of a story file, gallery-tagged or not. */
+interface StoryExport {
+  exportName: string;
+  /** The whole `export const X = …` statement. */
+  stmt: ts.VariableStatement;
+  /** The story object, when the export is an object literal. */
+  storyObj?: ts.ObjectLiteralExpression;
+  /** `parameters.gallery`, when the story is tagged `gallery`. */
+  gallery?: { title: string; description: string };
+}
+
 interface GalleryExport {
   exportName: string;
   galleryTitle: string;
@@ -411,8 +428,9 @@ interface GalleryExport {
   storyObj: ts.ObjectLiteralExpression;
 }
 
-function findGalleryExports(parsed: ParsedFile): GalleryExport[] {
-  const out: GalleryExport[] = [];
+/** Every exported `const` of a story file (non-story exports included). */
+function findStoryExports(parsed: ParsedFile): StoryExport[] {
+  const out: StoryExport[] = [];
   for (const stmt of parsed.sourceFile.statements) {
     if (!ts.isVariableStatement(stmt)) continue;
     const isExported = stmt.modifiers?.some(
@@ -421,32 +439,58 @@ function findGalleryExports(parsed: ParsedFile): GalleryExport[] {
     if (!isExported) continue;
     for (const decl of stmt.declarationList.declarations) {
       if (!ts.isIdentifier(decl.name)) continue;
-      if (!decl.initializer || !ts.isObjectLiteralExpression(decl.initializer))
-        continue;
-      const obj = decl.initializer;
-      const tags = getProp(obj, "tags");
-      if (!tags || !ts.isArrayLiteralExpression(tags)) continue;
-      const isGallery = tags.elements.some(
-        (e) => ts.isStringLiteral(e) && e.text === "gallery"
-      );
-      if (!isGallery) continue;
-      const parameters = getProp(obj, "parameters");
-      if (!parameters || !ts.isObjectLiteralExpression(parameters)) continue;
-      const gallery = getProp(parameters, "gallery");
-      if (!gallery || !ts.isObjectLiteralExpression(gallery)) continue;
-      const titleNode = getProp(gallery, "title");
-      const descNode = getProp(gallery, "description");
-      if (!titleNode || !ts.isStringLiteral(titleNode)) continue;
+      const obj =
+        decl.initializer && ts.isObjectLiteralExpression(decl.initializer)
+          ? decl.initializer
+          : undefined;
       out.push({
         exportName: decl.name.text,
-        galleryTitle: titleNode.text,
-        galleryDescription:
-          descNode && ts.isStringLiteral(descNode) ? descNode.text : "",
+        stmt,
         storyObj: obj,
+        gallery: obj && galleryInfo(obj),
       });
     }
   }
   return out;
+}
+
+/** `parameters.gallery.{title,description}` of a story tagged `gallery`. */
+function galleryInfo(
+  obj: ts.ObjectLiteralExpression
+): { title: string; description: string } | undefined {
+  const tags = getProp(obj, "tags");
+  if (!tags || !ts.isArrayLiteralExpression(tags)) return undefined;
+  const isGallery = tags.elements.some(
+    (e) => ts.isStringLiteral(e) && e.text === "gallery"
+  );
+  if (!isGallery) return undefined;
+  const parameters = getProp(obj, "parameters");
+  if (!parameters || !ts.isObjectLiteralExpression(parameters))
+    return undefined;
+  const gallery = getProp(parameters, "gallery");
+  if (!gallery || !ts.isObjectLiteralExpression(gallery)) return undefined;
+  const titleNode = getProp(gallery, "title");
+  const descNode = getProp(gallery, "description");
+  if (!titleNode || !ts.isStringLiteral(titleNode)) return undefined;
+  return {
+    title: titleNode.text,
+    description: descNode && ts.isStringLiteral(descNode) ? descNode.text : "",
+  };
+}
+
+function findGalleryExports(parsed: ParsedFile): GalleryExport[] {
+  return findStoryExports(parsed).flatMap((ex) =>
+    ex.gallery && ex.storyObj
+      ? [
+          {
+            exportName: ex.exportName,
+            galleryTitle: ex.gallery.title,
+            galleryDescription: ex.gallery.description,
+            storyObj: ex.storyObj,
+          },
+        ]
+      : []
+  );
 }
 
 /** Resolve `args` (object literal or identifier reference) → map prop → value text. */
@@ -509,16 +553,23 @@ function findConstObject(
 }
 
 interface TransformResult {
+  /**
+   * The snippet. A local helper import stays an import from its relative
+   * path, so this is standalone only when `fallbackCode` is undefined.
+   */
   code: string;
-  datasetCode?: string;
-  datasetPreview?: string;
-  isFallback: boolean;
+  /** The docs' clearly-marked fallback, when the story uses local modules. */
+  fallbackCode?: string;
+  /** The `src/data` modules the snippet imports from `./dataset`. */
+  datasetModules: string[];
+  /** Local helper modules (absolute paths) the story imports and uses. */
+  localModules: string[];
 }
 
 function transformStory(
   storyFile: string,
   parsed: ParsedFile,
-  ex: GalleryExport
+  ex: { exportName: string; storyObj: ts.ObjectLiteralExpression }
 ): TransformResult {
   const sourceFile = parsed.sourceFile;
   const renderExpr = getProp(ex.storyObj, "render");
@@ -596,7 +647,7 @@ function transformStory(
   const keepLines: string[] = [];
   const seenKeep = new Set<string>();
   let forcedFallback = false;
-  const fallbackReasons: string[] = [];
+  const localModules = new Set<string>();
 
   // group keep imports by module to merge named bindings
   const keepNamed = new Map<string, Set<string>>();
@@ -636,7 +687,17 @@ function transformStory(
       }
       case "local":
         forcedFallback = true;
-        fallbackReasons.push(`unresolvable local import "${imp.module}"`);
+        localModules.add(
+          resolveModuleFile(resolve(dirname(storyFile), imp.module))
+        );
+        if (imp.form === "named") {
+          if (!keepNamed.has(imp.module)) keepNamed.set(imp.module, new Set());
+          keepNamed.get(imp.module)!.add(imp.imported ?? imp.name);
+        } else if (imp.form === "default") {
+          keepDefault.set(imp.module, imp.name);
+        } else {
+          keepNamespace.set(imp.module, imp.name);
+        }
         break;
     }
   }
@@ -707,23 +768,14 @@ function transformStory(
   parts.push(codeBody);
   const code = parts.join("\n\n") + "\n";
 
-  const datasetCode = datasetModules.size
-    ? buildDatasetCode([...datasetModules], false)
-    : undefined;
-  const datasetPreview = datasetModules.size
-    ? buildDatasetCode([...datasetModules], true)
-    : undefined;
-
-  if (forcedFallback) {
-    return {
-      code: buildFallback(storyFile, parsed, block, argsName, argsMap),
-      datasetCode,
-      datasetPreview,
-      isFallback: true,
-    };
-  }
-
-  return { code, datasetCode, datasetPreview, isFallback: false };
+  return {
+    code,
+    fallbackCode: forcedFallback
+      ? buildFallback(storyFile, parsed, block, argsName, argsMap)
+      : undefined,
+    datasetModules: [...datasetModules],
+    localModules: [...localModules].sort(),
+  };
 }
 
 /**
@@ -1101,6 +1153,9 @@ export function loadStoryExamples(): StoryExample[] {
         );
       }
 
+      const datasetCode = result.datasetModules.length
+        ? buildDatasetCode(result.datasetModules, false)
+        : undefined;
       examples.push({
         id,
         title: ex.galleryTitle,
@@ -1108,11 +1163,16 @@ export function loadStoryExamples(): StoryExample[] {
         storyFile: relative(REPO_ROOT, storyFile),
         exportName: ex.exportName,
         storyId: harnessStoryId(parsed.metaTitle, ex.exportName),
-        code: result.code,
-        datasetCode: result.datasetCode,
-        datasetPreview: result.datasetPreview,
-        npmDeps: computeNpmDeps(result.code, result.datasetCode),
-        isFallback: result.isFallback,
+        code: result.fallbackCode ?? result.code,
+        datasetCode,
+        datasetPreview: result.datasetModules.length
+          ? buildDatasetCode(result.datasetModules, true)
+          : undefined,
+        npmDeps: computeNpmDeps(
+          result.fallbackCode ?? result.code,
+          datasetCode
+        ),
+        isFallback: result.fallbackCode !== undefined,
         // gofish-gotree isn't on npm yet → the in-browser editor can't resolve it.
         noLiveEditor: storyFile.startsWith(GOTREE_STORIES_DIR),
       });
@@ -1123,6 +1183,160 @@ export function loadStoryExamples(): StoryExample[] {
   cache = examples;
   storyTitles = titles;
   return examples;
+}
+
+// ---------------------------------------------------------------------------
+// Specs for every story (review tooling)
+// ---------------------------------------------------------------------------
+
+/**
+ * The code behind one story, for the visual review pages. Unlike
+ * `StoryExample`, this covers EVERY story, tagged or not.
+ */
+export interface StorySpec {
+  /** path relative to repo root */
+  storyFile: string;
+  /** the Storybook `meta.title` */
+  metaTitle: string;
+  /** the story export, e.g. "Default" */
+  exportName: string;
+  /**
+   * - `snippet`: the standalone snippet the docs would show.
+   * - `adapted`: the same snippet, but it imports local helper modules by
+   *   their relative paths (so the docs show a fallback instead); their
+   *   source follows it.
+   * - `source`: the story is not an object literal with a block-bodied
+   *   `render` (a factory call, a spread, a render function defined
+   *   elsewhere), so this is its export statement and the top-level
+   *   declarations it uses, verbatim, followed by any local helper modules.
+   */
+  kind: "snippet" | "adapted" | "source";
+  code: string;
+}
+
+/** A local helper module's source, under a header naming it. */
+function localModuleSource(storyFile: string, modulePath: string): string {
+  let text: string;
+  try {
+    text = readFileSync(modulePath, "utf-8").trim();
+  } catch {
+    return "";
+  }
+  return `// ---- ${relative(dirname(storyFile), modulePath)} ----\n\n${text}\n`;
+}
+
+/** The local helper modules (absolute paths) a set of names imports. */
+function localImports(
+  storyFile: string,
+  parsed: ParsedFile,
+  names: Set<string>
+): string[] {
+  const out = new Set<string>();
+  for (const imp of parsed.imports) {
+    if (imp.isTypeOnly || !names.has(imp.name)) continue;
+    if (classifyModule(imp.module, storyFile).kind === "local")
+      out.add(resolveModuleFile(resolve(dirname(storyFile), imp.module)));
+  }
+  return [...out].sort();
+}
+
+/**
+ * The verbatim source of one story export: the top-level declarations it
+ * reaches (in source order), then the export itself.
+ */
+function storySource(
+  storyFile: string,
+  parsed: ParsedFile,
+  ex: StoryExport
+): { code: string; localModules: string[] } {
+  const referenced = new Set<string>();
+  const roots = new Set<string>();
+  collectIdentifiers(ex.stmt, roots);
+  const worklist = [...roots];
+  while (worklist.length) {
+    const name = worklist.pop()!;
+    if (referenced.has(name)) continue;
+    referenced.add(name);
+    const decl = parsed.topDecls.get(name);
+    if (!decl) continue;
+    const inner = new Set<string>();
+    collectIdentifiers(decl.node, inner);
+    for (const i of inner) if (!referenced.has(i)) worklist.push(i);
+  }
+  // The Storybook meta object (`export default meta`) is not part of a spec.
+  const metaNames = new Set(
+    parsed.sourceFile.statements
+      .filter(ts.isExportAssignment)
+      .map((s) => s.expression)
+      .filter(ts.isIdentifier)
+      .map((e) => e.text)
+  );
+  const parts: string[] = [];
+  const emitted = new Set<ts.Node>();
+  for (const decl of [...parsed.topDecls.values()].sort(
+    (a, b) => a.node.pos - b.node.pos
+  )) {
+    if (!referenced.has(decl.name) || metaNames.has(decl.name)) continue;
+    if (emitted.has(decl.node)) continue;
+    emitted.add(decl.node);
+    parts.push(decl.text);
+  }
+  parts.push(ex.stmt.getText(parsed.sourceFile));
+  return {
+    code: parts.join("\n\n") + "\n",
+    localModules: localImports(storyFile, parsed, referenced),
+  };
+}
+
+/**
+ * The spec of every exported binding of every titled story file (a non-story
+ * export gets one too; nothing looks it up). Never throws for one story: a
+ * story the snippet transform can't handle falls back to its source.
+ */
+export function loadStorySpecs(): StorySpec[] {
+  const files = [...walk(STORIES_DIR), ...walk(GOTREE_STORIES_DIR)].sort();
+  const specs: StorySpec[] = [];
+  for (const storyFile of files) {
+    const parsed = parseFile(storyFile);
+    if (!parsed.metaTitle) continue;
+    for (const ex of findStoryExports(parsed)) {
+      const render = ex.storyObj && getProp(ex.storyObj, "render");
+      let transformed: TransformResult | undefined;
+      if (
+        ex.storyObj &&
+        render &&
+        (ts.isArrowFunction(render) || ts.isFunctionExpression(render)) &&
+        ts.isBlock(render.body)
+      ) {
+        try {
+          transformed = transformStory(storyFile, parsed, {
+            exportName: ex.exportName,
+            storyObj: ex.storyObj,
+          });
+        } catch {
+          transformed = undefined;
+        }
+      }
+      const { code, localModules } =
+        transformed ?? storySource(storyFile, parsed, ex);
+      const kind: StorySpec["kind"] = !transformed
+        ? "source"
+        : transformed.fallbackCode !== undefined
+          ? "adapted"
+          : "snippet";
+      const helpers = localModules
+        .map((m) => localModuleSource(storyFile, m))
+        .filter(Boolean);
+      specs.push({
+        storyFile: relative(REPO_ROOT, storyFile),
+        metaTitle: parsed.metaTitle,
+        exportName: ex.exportName,
+        kind,
+        code: [code, ...helpers].join("\n"),
+      });
+    }
+  }
+  return specs;
 }
 
 export function getStoryExampleById(id: string): StoryExample | undefined {

@@ -34,7 +34,7 @@ filter(predicate);
 it from a field expression with
 [`field(name).between(lo, hi, { closed })`](/js/api/operators/spread#field-expression-pipeline).
 Its bounds are plain numbers, and it throws if the expression carries pipeline
-ops (`field("x").bin(10).between(...)`), which would otherwise test the raw
+ops (`field("x").bin(Bin.step(10)).between(...)`), which would otherwise test the raw
 field: a predicate is not a value slot.
 
 A field predicate also carries its own description, so a `filter` over one
@@ -88,7 +88,7 @@ extent and nothing else. Two ways to hold the scales still:
   data extent entirely, so filtering cannot move the map — which is why the bird
   migration examples stay put.
 - Keep the full data in the chart and vary something paint-only instead, e.g.
-  `opacity: live((d) => (d.day === day() ? 1 : 0))`.
+  `opacity: live((d) => (d[0].day === day() ? 1 : 0))`.
 
 ## Python
 

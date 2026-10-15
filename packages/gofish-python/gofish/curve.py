@@ -3,11 +3,14 @@
 """
 The ``Curve`` family. How a path runs through its points: the value of the `curve` option of `line` and `ribbon`. `linear`, `step`, `monotone` and `smooth` are read over the parameter of the run, from the least to the most smooth; `catmullRom` is a shape on screen; `bezier`, `orthogonal`, `arc` and `perfectArrows` route each pair of neighboring points.
 
-The package binds this module as ``Curve``, so ``Curve.linear()`` and
-``from gofish.curve import linear`` reach the same function. A strategy is a
+The package binds this module as ``Curve``, so ``Curve.linear`` and
+``from gofish.curve import linear`` reach the same member. A strategy is a
 plain dict, ``{"kind": ..., **params}``, with snake_case param keys; the option it
 is passed to renames them to the camelCase wire keys. Mirrors JS
 ``gofish-graphics/curve``.
+
+A kind with no required option is a value as it is, and calling it sets
+options: ``Curve.linear`` is ``Curve.linear()`` (#1133).
 """
 
 from __future__ import annotations
@@ -15,39 +18,48 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, Literal, Optional
 
+from ._strategy import bare_kind
+
 __all__ = ["linear", "step", "monotone", "smooth", "catmull_rom", "bezier", "orthogonal", "arc", "perfect_arrows"]
 
 
+@bare_kind("Curve")
 def linear() -> Dict[str, Any]:
     """Straight segments from each point to the next."""
     return {"kind": "linear"}
 
 
+@bare_kind("Curve")
 def step() -> Dict[str, Any]:
     """Hold every value that depends on the ordering field until the next point, then jump: a staircase when the ordering field is an axis."""
     return {"kind": "step"}
 
 
+@bare_kind("Curve")
 def monotone() -> Dict[str, Any]:
     """Piecewise monotone cubic: between two neighboring points each coordinate only rises or only falls (d3 `curveMonotoneX`)."""
     return {"kind": "monotone"}
 
 
+@bare_kind("Curve")
 def smooth() -> Dict[str, Any]:
     """A rounder cubic over the same parameter as `monotone`; it can go a little past a point, but keeps a run of equal values flat."""
     return {"kind": "smooth"}
 
 
+@bare_kind("Curve")
 def catmull_rom() -> Dict[str, Any]:
     """A centripetal Catmull-Rom through the points on screen."""
     return {"kind": "catmullRom"}
 
 
+@bare_kind("Curve")
 def bezier() -> Dict[str, Any]:
     """Cubic bezier between each pair of points (the d3 `linkVertical`/`linkHorizontal` convention)."""
     return {"kind": "bezier"}
 
 
+@bare_kind("Curve")
 def orthogonal(*, bend: Optional[str] = None) -> Dict[str, Any]:
     """Right-angle elbow bending at the main-axis midpoint (GoTree orthogonal).
 
@@ -68,6 +80,7 @@ def orthogonal(*, bend: Optional[str] = None) -> Dict[str, Any]:
     return out
 
 
+@bare_kind("Curve")
 def arc(*, direction: Optional[str] = None) -> Dict[str, Any]:
     """Semicircular arc through both endpoints (GoTree arccurve).
 
@@ -88,6 +101,7 @@ def arc(*, direction: Optional[str] = None) -> Dict[str, Any]:
     return out
 
 
+@bare_kind("Curve")
 def perfect_arrows(*, bow: Optional[float] = None, stretch: Optional[float] = None, stretch_min: Optional[float] = None, stretch_max: Optional[float] = None, pad_start: Optional[float] = None, pad_end: Optional[float] = None, flip: Optional[bool] = None, straights: Optional[bool] = None) -> Dict[str, Any]:
     """Box-to-box arc from the perfect-arrows library.
 

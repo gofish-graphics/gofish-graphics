@@ -11,7 +11,6 @@ export const stackXTemplate = (
     name?: string;
     spacing?: number;
     alignment?: "start" | "middle" | "end";
-    sharedScale?: boolean;
     anchor?: "edge" | "start" | "middle" | "end" | "baseline";
     reverse?: boolean;
   } & FancyDims & { groupBy?: { field: string; sort?: string[] } },

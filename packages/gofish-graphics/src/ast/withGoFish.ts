@@ -2,6 +2,7 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
+import { getColumnTypes, setColumnTypes } from "./schema";
 import type { JSX } from "solid-js";
 import { GoFishAST } from "./_ast";
 import { GoFishNode } from "./_node";
@@ -12,9 +13,10 @@ import { ChartBuilder, LayerBuilder } from "./marks/chart";
 import type { LayerContext } from "./marks/chart";
 // From markResult, which imports neither chartBuilder nor createOperator, so
 // the dependency between those modules keeps running one way.
-import { resolveMarkResult } from "./marks/markResult";
+import { datumOfInput, resolveMarkResult } from "./marks/markResult";
 import {
   CHANNEL_INFER,
+  hasNoValue,
   resolveChannelAccessors,
   ChannelAnnotations,
   ChannelType,
@@ -38,6 +40,8 @@ import type { MarkTransition } from "../animation/transition";
 import { attachTerminals } from "./marks/terminals";
 import { withWire } from "./wire";
 import { isThenable } from "../util";
+import { breadthFirst } from "./elaborationUtils";
+import { withKindValues } from "./strategyKind";
 
 export interface RenderOptions {
   w?: number;
@@ -105,7 +109,6 @@ export interface PromiseWithRender<T> extends Promise<T> {
   name(name: string | Token): PromiseWithRender<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): PromiseWithRender<T>;
   setKey(key: string): PromiseWithRender<T>;
-  setShared(shared: [boolean, boolean]): PromiseWithRender<T>;
   relate(fn: RelateFn): PromiseWithRender<T>;
   zOrder(value: number): PromiseWithRender<T>;
   scope(): PromiseWithRender<T>;
@@ -122,9 +125,8 @@ function hasRenderMethod(value: any): value is GoFishNode {
  * Reify one operator child into a node. A child is a thunk/mark, a chart BUILDER
  * (a single-tier `chart(...).mark(...)` or a layered `....layer(...)`), a
  * thenable, or an already-built node; `resolveMarkResult` is the one place that
- * knows all four, so both child loops below go through here. A thunk is called
- * with just the datum slot (`undefined`), as it always has been, and whatever
- * it returns is reified in turn.
+ * knows all four, so both child loops below go through here. It calls a thunk
+ * with `NO_ROWS` (a root has no rows) and reifies whatever it returns.
  *
  * `null`/`undefined` (a thunk that opted out) comes back as `undefined` and is
  * dropped by the caller.
@@ -133,13 +135,8 @@ async function reifyChild(
   child: unknown,
   layerContext: LayerContext
 ): Promise<GoFishAST | undefined> {
-  if (typeof child === "function") {
-    const result = await (child as any)(undefined);
-    if (result == null) return undefined;
-    return resolveMarkResult(result, layerContext);
-  }
   if (child == null) return undefined;
-  return resolveMarkResult(child as any, layerContext);
+  return (await resolveMarkResult(child as any, layerContext)) ?? undefined;
 }
 
 /** The GoFishNode methods `addRenderMethod` republishes on a promise: each one
@@ -149,7 +146,6 @@ const CHAINABLE_NODE_METHODS = [
   "scope",
   "label",
   "setKey",
-  "setShared",
   "relate",
   "zOrder",
 ] as const;
@@ -441,7 +437,7 @@ export function createMark<
   cfg?: { kind?: MarkKind }
 ): <T extends Record<string, any>>(
   opts: DeriveMarkProps<ShapeProps, C, T>
-) => NameableMark<T | T[] | { item: T | T[]; key: number | string }>;
+) => NameableMark<T[]>;
 export function createMark(
   shapeFn: any,
   channels: Record<string, any> = {},
@@ -449,8 +445,15 @@ export function createMark(
   cfg?: { kind?: MarkKind }
 ): any {
   const kind: MarkKind = cfg?.kind ?? "per-item";
+  // A strategy kind used bare is read as its value from here on.
   return (markOpts: Record<string, any>) =>
-    buildCreatedMark(shapeFn, channels, serialize, kind, markOpts);
+    buildCreatedMark(
+      shapeFn,
+      channels,
+      serialize,
+      kind,
+      withKindValues(markOpts)
+    );
 }
 
 /**
@@ -462,8 +465,8 @@ export function createMark(
  * `ref("name")` lookups. Shared by `createMark` and the deserializer's
  * `wrapWithScope` (the Python `@mark` decorator), so both build the same node.
  */
-export function sealComponent(node: GoFishNode, datum: unknown): GoFishNode {
-  node.datum = datum;
+export function sealComponent(node: GoFishNode, datum: unknown[]): GoFishNode {
+  node.datum = datumOfInput(datum);
   node.scope();
   node._isComponent = true;
   return node;
@@ -477,28 +480,16 @@ function buildCreatedMark(
   markOpts: Record<string, any>
 ): any {
   const baseMark: Mark<any> = async (
-    input,
-    keyParam?: string | number,
+    d: unknown[],
+    key?: string | number,
     _layerContext?: LayerContext
   ) => {
-    // Unwrap input: handles T, T[], or { item, key } patterns
-    let d: any, key: number | string | undefined;
-    if (typeof input === "object" && input !== null && "item" in input) {
-      d = (input as any).item;
-      key = (input as any).key;
-    } else {
-      d = input;
-      key = keyParam;
-    }
-
     if (markOpts.debug) {
       console.log("mark", key, d);
     }
 
-    const data = Array.isArray(d) ? d : [d];
-
     // Build shape props by encoding each channel. The plain string spec
-    // ("size"/"pos"/"color"/"raw") aggregates over `data` and produces a
+    // ("size"/"pos"/"color"/"raw") aggregates over the rows `d` and produces a
     // single value. The object form `{type, entry: true}` produces a
     // per-row array — used by expand-kind marks. Unannotated props (which
     // is everything when channels is omitted/empty) pass through.
@@ -513,8 +504,15 @@ function buildCreatedMark(
       markOpts,
       d
     );
-    const pending = resolveChannelAccessors(staticOpts, channels, () => data);
+    const pending = resolveChannelAccessors(staticOpts, channels, () => d);
     const resolvedOpts = isThenable(pending) ? await pending : pending;
+    // A data channel the mark is given that has no value over its rows (the
+    // mean of no rows, a field of no first row) leaves the mark nothing to
+    // draw it with, whichever channel it is (a size, a position, a color, a
+    // text, a slot of a `dims` bag: `hasNoValue`), so the mark is not drawn
+    // (Vega-Lite's default `invalid: "filter"`). It keeps its place in the
+    // layout. A sum or a count of no rows is 0, a value, and draws.
+    let noValue = false;
     for (const propName of Object.keys(resolvedOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
@@ -529,9 +527,14 @@ function buildCreatedMark(
         // Already a Value wrapper (e.g. v(...)) — pass through directly
         shapeProps[propName] = markValue;
       } else if (isEntry && channelType === "size") {
-        shapeProps[propName] = inferEntrySize(markValue, data);
+        shapeProps[propName] = inferEntrySize(markValue, d);
       } else if (channelType !== undefined) {
-        shapeProps[propName] = CHANNEL_INFER[channelType](markValue, data);
+        shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);
+        if (
+          markValue !== undefined &&
+          hasNoValue(channelType, shapeProps[propName])
+        )
+          noValue = true;
       } else {
         shapeProps[propName] = markValue;
       }
@@ -542,21 +545,33 @@ function buildCreatedMark(
     // A component body may return anything a combinator child may be (a
     // built node, or a mark such as `layer([...])`), so it is reified through
     // the same `resolveMarkResult` path. The name context is fresh: the
-    // component is a naming boundary. An expand mark's array of slice nodes
-    // passes through as-is.
-    const raw = await shapeFn(shapeProps, kind === "expand" ? data : undefined);
-    const result = Array.isArray(raw) ? raw : await resolveMarkResult(raw, {});
-    if (Array.isArray(result)) {
-      // Expand path: stamp each slice with its own datum.
+    // component is a naming boundary. An expand mark (its kind, declared at
+    // `createMark`) returns its array of slice nodes, which pass through as-is.
+    const raw = await shapeFn(shapeProps, kind === "expand" ? d : undefined);
+    if (kind === "expand") {
+      const result = raw as GoFishNode[];
+      const types = getColumnTypes(d);
+      // Expand path: stamp each slice with its own datum, a one-row group
+      // `[row]` tagged with the column types like any split leaf. A slice
+      // past the last row (a `size` array longer than the data) has no row of
+      // its own and keeps the whole group.
       for (let i = 0; i < result.length; i++) {
         const node = result[i];
-        node.datum = data[i] ?? d;
+        node.datum =
+          i >= d.length
+            ? datumOfInput(d)
+            : types
+              ? setColumnTypes([d[i]], types)
+              : [d[i]];
         if (liveChannels) node.__gfLive = liveChannels;
       }
       return result as unknown as GoFishNode;
     }
-    const node = result as GoFishNode;
+    const node = await resolveMarkResult(raw, {});
     if (liveChannels) node.__gfLive = liveChannels;
+    // Its whole drawing, not only its own lowering: a component's children
+    // lower on their own.
+    if (noValue) for (const n of breadthFirst(node)) n.INTERNAL_emitNothing();
     return sealComponent(node, d);
   };
   withMarkKind(baseMark, kind);

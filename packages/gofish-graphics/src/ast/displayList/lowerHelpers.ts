@@ -12,7 +12,13 @@ import type { DisplayList } from "gofish-ir";
 import type { GoFishNode, ToPixel } from "../_node";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { displayTranslate, type Transform } from "../dims";
-import { type Path, type Point, pathToSVGPath } from "../../path";
+import {
+  path,
+  transformPath,
+  type Path,
+  type Point,
+  pathToSVGPath,
+} from "../../path";
 import { orderChildrenForPaint } from "../paintOrder";
 
 /**
@@ -24,8 +30,11 @@ import { orderChildrenForPaint } from "../paintOrder";
  * disagreeing, so a host can trust `role` alone to split data from chrome
  * without also inspecting `datum`. Shape `lower` bodies call this instead of
  * hard-coding `role: "node"`, which previously mis-tagged datum-less chrome.
+ * An empty datum (a group a filter emptied) is still data.
  */
-export const roleFor = (datum: unknown): DisplayList.DisplayItem["role"] =>
+export const roleFor = (
+  datum: readonly unknown[] | undefined
+): DisplayList.DisplayItem["role"] =>
   datum !== undefined ? "node" : "overlay";
 
 /** Map every point of a path through `toPixel`, then serialize to an SVG `d`.
@@ -50,6 +59,31 @@ export const pathToPixelSVG = (path: Path, toPixel: ToPixel): string =>
           }
     )
   );
+
+/** A closed ring of layout points as a path item, drawn straight under a
+ *  linear coordinate space and adaptively resampled under any other, so a
+ *  straight edge in data space draws as the curve the space makes of it.
+ *  Shared by the polygon and region lower bodies. */
+export const ringItem = (
+  points: Point[],
+  coordinateTransform: CoordinateTransform | undefined,
+  toPixel: ToPixel,
+  datum: Record<string, unknown>[] | undefined,
+  style: DisplayList.Style
+): DisplayList.PathItem => {
+  const ring = path(points, { closed: true });
+  const drawn =
+    coordinateTransform === undefined || coordinateTransform.type === "linear"
+      ? ring
+      : transformPath(ring, coordinateTransform, { resample: true });
+  return {
+    kind: "path",
+    d: pathToPixelSVG(drawn, toPixel),
+    datum,
+    role: roleFor(datum),
+    style,
+  };
+};
 
 /** Map the two diagonal corners of an axis-aligned box through `toPixel` and
  *  return the SVG rect: top-left = component-wise min, w/h = abs of the mapped

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { chart, spread, rect, v, field } from "../../../src/lib";
+import { chart, spread, rect, v } from "../../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/bar_grouped_repeated.html
@@ -24,15 +24,15 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(context.loaded.movies as any[], {
-      // TODO(#1017): remove once labelAngle "auto" is the default.
-      axes: { x: { labelAngle: "auto" }, y: { title: "Total Gross" } },
+      // TODO(#1017): remove once label angle "auto" is the default.
+      axes: { x: { label: { angle: "auto" } }, y: { title: "Total Gross" } },
     })
       .flow(spread({ by: "Major Genre",  dir: "x" }))
       .mark(
         spread({ dir: "x", spacing: 0 }, [
-          // Both columns are dollars, so they share one measure and one value axis.
-          rect({ h: field("Worldwide Gross", "dollars"), fill: v("Worldwide Gross") }),
-          rect({ h: field("US Gross", "dollars"), fill: v("US Gross") }),
+          // Neither column declares a unit, so they share one value axis.
+          rect({ h: "Worldwide Gross", fill: v("Worldwide Gross") }),
+          rect({ h: "US Gross", fill: v("US Gross") }),
         ])
       )
       .render(container, { w: args.w, h: args.h });

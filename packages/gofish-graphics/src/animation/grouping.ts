@@ -12,28 +12,44 @@
  * splitting all of those rows (which is what lets a `sort` sum a field over
  * each group's rows), and each child's key is the value its own rows agree on.
  */
-import { splitEntries, splitKeyFn, type SplitBy } from "../ast/datumProjection";
+import {
+  splitEntries,
+  splitKeyFn,
+  type SplitBy,
+  type SplitKey,
+} from "../ast/datumProjection";
+import { isChunk } from "../ast/data";
+import { copyColumnTypes } from "../ast/schema";
 
 export function groupEntries<C>(
   children: C[],
   rowsOf: (child: C) => unknown[],
   by: SplitBy | undefined
-): Map<string | number, C[]> {
-  if (by === undefined) {
-    return new Map(children.map((child, i) => [i, [child]]));
-  }
+): Map<SplitKey, C[]> {
+  // No `by` (row identity, `chunk(1)`) or a `chunk(size)` key reads only
+  // position, so it groups the children themselves, `size` at a time.
+  if (by === undefined || isChunk(by))
+    return splitEntries(by, children as Record<string, unknown>[]) as Map<
+      SplitKey,
+      C[]
+    >;
   const rows = children.map(rowsOf);
-  const allRows = rows.flat() as Record<string, unknown>[];
-  const groups = new Map<string | number, C[]>(
+  // All of the rows, with the column types each child's rows carry (a binned
+  // key reads its column's domain off them).
+  const allRows = rows.reduce<Record<string, unknown>[]>(
+    (all, r) => copyColumnTypes(all, r),
+    rows.flat() as Record<string, unknown>[]
+  );
+  const groups = new Map<SplitKey, C[]>(
     [...splitEntries(by, allRows).keys()].map((k) => [k, []])
   );
   // A child's key is the value its rows agree on: for a field, the same
   // projection with homogeneity collapse `by` uses on a bag of rows; for a
   // key function, its one value over the rows.
-  const rowKey = splitKeyFn(by);
-  const keyOf = (rows: unknown[]): string | number | undefined => {
-    if (typeof by !== "function") return rowKey(rows);
-    const keys = new Set(rows.map(rowKey));
+  const rowKey = splitKeyFn(by, allRows);
+  const keyOf = (rows: unknown[]): SplitKey | undefined => {
+    if (typeof by !== "function") return rowKey(rows, 0);
+    const keys = new Set(rows.map((row, i) => rowKey(row, i)));
     return keys.size === 1 ? [...keys][0] : undefined;
   };
   children.forEach((child, i) => {
@@ -54,11 +70,11 @@ export function groupEntries<C>(
   return groups;
 }
 
-/** A node's or a ref's rows: its datum as a bag, or, for an operator node
- *  that carries none of its own, the rows of everything under it. */
+/** A node's or a ref's rows: its datum (always a list), or, for an operator
+ *  node that carries none of its own, the rows of everything under it. */
 export function rowsOf(child: unknown): unknown[] {
-  const datum = (child as { datum?: unknown }).datum;
-  if (datum !== undefined) return Array.isArray(datum) ? datum : [datum];
+  const datum = (child as { datum?: unknown[] }).datum;
+  if (datum !== undefined) return datum;
   const children = (child as { children?: unknown[] }).children;
-  return Array.isArray(children) ? children.flatMap(rowsOf) : [];
+  return (children ?? []).flatMap(rowsOf);
 }

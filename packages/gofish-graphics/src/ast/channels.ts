@@ -3,8 +3,6 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-import meanBy from "lodash/meanBy";
-import sumBy from "lodash/sumBy";
 import {
   MaybeValue,
   Value,
@@ -14,15 +12,22 @@ import {
   fieldNameOf,
   isLiteral,
   isValue,
-  getMeasureProvenance,
   type FieldAccessor,
   type LiteralValue,
-  type Measure,
 } from "./data";
+import { columnQuantity, type Quantity } from "./measure";
 import { Frontend } from "gofish-ir";
-import { evalFieldValues, type FieldExpr } from "./fieldExpr";
+import {
+  evalFieldValues,
+  getFieldOps,
+  isMissing,
+  meanOf,
+  sumOf,
+  type FieldExpr,
+} from "./fieldExpr";
 import { columnType, type ColumnType } from "./schema";
 import {
+  isAxisInterval,
   mapAxisDims,
   type AxisDims,
   type AxisDimsForm,
@@ -80,7 +85,9 @@ export type ChannelAnnotations<T, C extends ChannelType = ChannelType> = {
  *   instead of `MaybeValue<number>` — a `field(...)` pipeline (e.g.
  *   `field("age").count()`) is evaluated the same way a bare field-name
  *   accessor is (see `evalFieldValues` in fieldExpr.ts).
- * - "color" channels: mark accepts `string | keyof T | Value<string>` instead of `MaybeValue<string>`
+ * - "color" channels: mark accepts `string | keyof T | Value<string> | FieldExpr`
+ *   instead of `MaybeValue<string>`; "raw" channels likewise take a `FieldExpr`.
+ *   One with an aggregate folds the group's rows first, as a size channel does.
  * - unannotated props: passed through with the same type
  */
 export type DeriveMarkProps<
@@ -115,6 +122,7 @@ export type DeriveMarkProps<
                 | (keyof T & string)
                 | ((d: T) => string)
                 | Value<string>
+                | FieldExpr
                 // `live(...)` reactive color (paint patch; returns a literal
                 // color — see src/interaction/live.ts).
                 | LiveValue
@@ -126,6 +134,7 @@ export type DeriveMarkProps<
                   | (keyof T & string)
                   | ((d: T) => string | number)
                   | Value<string | number>
+                  | FieldExpr
                   // `live(...)` reactive content (paint patch; the pipeline
                   // measures the resolve-time value).
                   | LiveValue
@@ -144,89 +153,38 @@ export type DeriveMarkProps<
     : ShapeProps[K];
 } & { debug?: boolean };
 
-/**
- * Resolve a channel's {@link Measure} from its three sources, treating measures
- * as TYPES (the field/datum/literal trichotomy). The three sources, in checking
- * order:
- *   1. Explicit annotation — `field(name, measure)`. A real type claim.
- *   2. Inferred provenance — the {@link getMeasureProvenance} map a transform
- *      like `bin()` attached to the data array. Also a real type claim.
- *   3. Field-name default — a bare string accessor's field name. A WEAK default
- *      binding, not a claim.
- *
- * Checking rule:
- *   - annotation AND provenance both present and disagree → THROW immediately
- *     here (before any space union runs), naming the field and both measures;
- *   - annotation present (no conflict) → annotation (refines the weak default);
- *   - no annotation → provenance ?? field-name default.
- *
- * `provenanceData` is the provenance-bearing array (the operator's whole input,
- * which retains the symbol across `derive`); when omitted it falls back to the
- * value array. Function accessors and literals have no field identity → no
- * measure.
- */
-export const resolveMeasure = <T>(
-  provenanceData: T | T[],
-  accessor:
-    | string
-    | number
-    | ((d: T) => unknown)
-    | FieldAccessor
-    | LiteralValue
-    | undefined
-): Measure | undefined => {
-  let fieldName: string | undefined;
-  let annotation: Measure | undefined;
-  if (isField(accessor)) {
-    fieldName = accessor.name;
-    annotation = accessor.measure;
-  } else if (typeof accessor === "string") {
-    fieldName = accessor;
-  } else {
-    return undefined; // function / number / literal: no field identity
-  }
-  // Only an array can carry the provenance symbol (a transform tags the array,
-  // not each row), so skip the lookup for a single datum.
-  const provenance = Array.isArray(provenanceData)
-    ? getMeasureProvenance(provenanceData)?.[fieldName]
-    : undefined;
-  if (
-    annotation !== undefined &&
-    provenance !== undefined &&
-    annotation !== provenance
-  ) {
-    throw new Error(
-      `Measure conflict on field "${fieldName}": annotated as "${annotation}" ` +
-        `via field(name, measure) but its provenance (e.g. bin()) says ` +
-        `"${provenance}". These are contradictory type claims — drop the ` +
-        `annotation or fix the upstream transform.`
-    );
-  }
-  if (annotation !== undefined) return annotation;
-  return provenance ?? fieldName;
-};
+/** What a channel's column says about its values: its {@link Quantity}
+ *  (`columnQuantity` in measure.ts) and its type in the chart's schema
+ *  (schema.ts). */
+export type ColumnInfo = { quantity?: Quantity; type?: ColumnType };
 
-/** What a channel's column says about its values: its {@link Measure} and
- *  its type in the chart's schema (schema.ts). */
-export type ColumnInfo = { measure?: Measure; type?: ColumnType };
+/** `v` as a datum read from the column `name`: it carries what the column
+ *  says about its values ({@link ColumnInfo}: its quantity, and its schema
+ *  type, such as a time column's calendar), and, when the column has a type,
+ *  the column's name. */
+export const columnValue = (
+  v: number,
+  column: ColumnInfo,
+  name: string | undefined
+): DatumValueImpl =>
+  new DatumValueImpl(
+    v,
+    column.quantity,
+    undefined,
+    undefined,
+    column.type === undefined ? undefined : name,
+    column.type
+  );
 
-/** The {@link ColumnInfo} of `accessor`'s column, read off
- *  `provenanceData` (see {@link resolveMeasure}). An accessor that names no
- *  column (a function, a literal, a value) has neither. */
-export const resolveColumn = (
-  provenanceData: unknown,
-  accessor: unknown
-): ColumnInfo => {
+/** The {@link ColumnInfo} of `accessor`'s column, read off `data`: the array
+ *  carrying the column types (the operator's whole input, which retains them
+ *  across `derive`). An accessor that names no column (a function, a
+ *  literal, a value) has neither. */
+export const resolveColumn = (data: unknown, accessor: unknown): ColumnInfo => {
   const field = fieldNameOf(accessor);
-  return field === undefined
-    ? {}
-    : {
-        measure: resolveMeasure(
-          provenanceData,
-          accessor as string | FieldAccessor
-        ),
-        type: columnType(provenanceData, field),
-      };
+  if (field === undefined) return {};
+  const type = columnType(data, field);
+  return { quantity: columnQuantity(field, type), type };
 };
 
 /**
@@ -256,8 +214,10 @@ export const inferEntrySize = <T>(
 
 /**
  * Shared core of {@link inferSize} / {@link inferPos}: they differ only in the
- * lodash aggregation (`sumBy` vs `meanBy`). Resolves a numeric value from a
- * field name, field expression, function accessor, or literal number:
+ * aggregation ({@link sumOf} vs {@link meanOf}), which both skip missing
+ * values. An aggregation with no value (the mean of no rows, the sum of only
+ * missing values) is no value: the channel is undefined. Resolves a numeric
+ * value from a field name, field expression, function accessor, or literal number:
  * - number / literal: passed through as a literal.
  * - `datum(...)`: already a data value, passed through as-is.
  * - string / function / field expression: evaluated per-row via
@@ -265,16 +225,16 @@ export const inferEntrySize = <T>(
  *   the rows there — then aggregated across whatever that evaluation produced.
  *
  * Field/string accessors are tagged with what their column says
- * ({@link resolveColumn}): a resolved {@link Measure}, so the
- * underlying-space layer can unify per measure, and the column's type from
+ * ({@link resolveColumn}): its {@link Quantity}, so the underlying-space
+ * layer can unify units and title axes, and the column's type from
  * the chart's schema, when it has one, so a position over a time column
  * (`HasCalendar`) builds a time space. A value with a column type also
  * records the field it was read from. The caller may pass the column
- * (createOperator resolves it once per channel from the provenance-bearing
- * array); when omitted it is resolved locally from `d`.
+ * (createOperator resolves it once per channel from the array carrying the
+ * column types); when omitted it is resolved locally from `d`.
  */
 const inferNumeric =
-  (agg: typeof sumBy) =>
+  (agg: (values: any[]) => number | undefined) =>
   <T>(
     accessor:
       | string
@@ -284,42 +244,45 @@ const inferNumeric =
       | LiteralValue
       | Value<number>
       | undefined,
-    d: T | T[],
-    column: ColumnInfo = resolveColumn(d, accessor)
+    data: T[],
+    column: ColumnInfo = resolveColumn(data, accessor)
   ): MaybeValue<number> | undefined => {
     if (accessor === undefined) return undefined;
     if (typeof accessor === "number") return accessor;
     if (isLiteral(accessor)) return accessor.value as number;
     if (isValue(accessor)) return accessor as MaybeValue<number>;
-    const data = Array.isArray(d) ? d : [d];
     // Expression evaluation is orthogonal to this channel: the pipeline maps
     // the rows to values, and an aggregate op (`.mean()`, `.count()`, ...)
     // folds them to a singleton. The channel then applies its default
     // aggregation exactly as it always did — over a folded singleton, sum and
     // mean are both the identity, so neither side knows about the other.
-    const { values, measure: pipelineMeasure } = evalFieldValues(
+    const { values, quantity: pipelineQuantity } = evalFieldValues(
       accessor,
       data
     );
-    return new DatumValueImpl(
-      agg(values as any[]),
-      pipelineMeasure ?? column.measure,
-      undefined,
-      undefined,
-      column.type === undefined ? undefined : fieldNameOf(accessor),
-      column.type
+    const folded = agg(values as any[]);
+    if (folded === undefined) return undefined;
+    return columnValue(
+      folded,
+      { quantity: pipelineQuantity ?? column.quantity, type: column.type },
+      fieldNameOf(accessor)
     );
   };
 
-/** Infer a size value (sums the field/function across the data array). */
-export const inferSize = inferNumeric(sumBy);
+/** Infer a size value (sums the field/function across the data array,
+ *  missing values aside; see {@link sumOf}). */
+export const inferSize = inferNumeric(sumOf);
 
-/** Infer a position value (averages the field/function across the data array). */
-export const inferPos = inferNumeric(meanBy);
+/** Infer a position value (averages the field/function across the data
+ *  array, missing values aside). Over no rows, or only missing values, it
+ *  has no value: undefined (see {@link meanOf}). */
+export const inferPos = inferNumeric(meanOf);
 
 /**
  * Shared core of the non-aggregating channels ({@link inferColor} /
- * {@link inferRaw}): resolve an accessor against the FIRST row of `data`.
+ * {@link inferRaw}): resolve an accessor against the FIRST row of `data`,
+ * or, for a field expression with an aggregate (`field(x).count()`), against
+ * the fold of all of `data`.
  * - "literal": pass the accessor's value through unchanged — a `literal(...)`
  *   wrapper, or a string that names no field on the row (e.g. a CSS color).
  * - "row": the value read off the row, with the `field` it was read from when
@@ -335,6 +298,17 @@ function firstRowValue<T extends Record<string, any>>(
   | { kind: "row"; value: unknown; field?: string }
   | { kind: "none" } {
   if (isLiteral(accessor)) return { kind: "literal", value: accessor.value };
+  if (isField(accessor) && getFieldOps(accessor).length > 0) {
+    // An expression pipeline folds the group's rows itself, as for a size
+    // channel (`evalFieldValues`): `.count()` is the number of rows, even
+    // when there are none. The value is the fold's, not a value of the
+    // field, so it records no field. A fold that has no value (the mean
+    // of nothing) is no value here either.
+    const [folded] = evalFieldValues(accessor, data).values;
+    return isMissing(folded)
+      ? { kind: "none" }
+      : { kind: "row", value: folded };
+  }
   const row = data.length > 0 && data[0] != null ? data[0] : undefined;
   if (isField(accessor)) {
     return row === undefined
@@ -510,9 +484,9 @@ export function resolveChannelAccessors<O extends Record<string, any>>(
  * (`buildCreatedMark` in withGoFish.ts) and the operator factory
  * (`applyChannels` in marks/createOperator.ts).
  *
- * `measure` is the channel's resolved {@link Measure}, computed once per
- * channel from the whole input array (which carries the measure-provenance
- * symbol even when `data` is a per-entry slice that does not) and passed down
+ * `column` is the channel's resolved {@link ColumnInfo}, computed once per
+ * channel from the whole input array (which carries the column types even
+ * when `data` is a per-entry slice that does not) and passed down
  * so `inferSize`/`inferPos` don't recompute it per split entry. Only they
  * consume it.
  */
@@ -524,8 +498,28 @@ export const CHANNEL_INFER: Record<
   pos: (val, data, column) => inferPos(val, data, column),
   color: (val, data) => inferColor(val, data),
   raw: (val, data) => inferRaw(val, data),
-  // Each slot resolves its own measure from `data`: the slots are separate
+  // Each slot resolves its own column from `data`: the slots are separate
   // channels that happen to share one option.
   dims: (val: AxisDims<any>, data) =>
     mapAxisDims(val, (v, slot) => CHANNEL_INFER[axisSlotKind(slot)](v, data)),
 };
+
+/**
+ * Whether a channel that was given a value has no value once inferred (the
+ * mean of no rows, a field of no first row), by its kind: the one rule the
+ * mark factory's no-value-not-drawn rule reads (`buildCreatedMark` in
+ * withGoFish.ts). A channel of one value has none when it is undefined. The
+ * slots of a `dims` bag are channels of their own, so a bag has none when
+ * any slot it was given has none (its inference keeps the slot, undefined).
+ */
+export function hasNoValue(type: ChannelType, inferred: unknown): boolean {
+  if (inferred === undefined) return true;
+  if (type !== "dims") return false;
+  return Object.values(inferred as AxisDims<unknown>).some((entry) =>
+    isAxisInterval(entry)
+      ? Object.entries(entry).some(
+          ([key, v]) => key !== "embedded" && v === undefined
+        )
+      : entry === undefined
+  );
+}

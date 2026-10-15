@@ -3,11 +3,14 @@
 """
 The ``Shape`` family. The outline `enclose` draws around its members: the value of its `shape` option. `padding` and the paint stay on `enclose`.
 
-The package binds this module as ``Shape``, so ``Shape.box()`` and
-``from gofish.shape import box`` reach the same function. A strategy is a
+The package binds this module as ``Shape``, so ``Shape.box`` and
+``from gofish.shape import box`` reach the same member. A strategy is a
 plain dict, ``{"kind": ..., **params}``, with snake_case param keys; the option it
 is passed to renames them to the camelCase wire keys. Mirrors JS
 ``gofish-graphics/shape``.
+
+A kind with no required option is a value as it is, and calling it sets
+options: ``Shape.box`` is ``Shape.box()`` (#1133).
 """
 
 from __future__ import annotations
@@ -15,9 +18,12 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, Literal, Optional
 
+from ._strategy import bare_kind
+
 __all__ = ["box", "blob", "hull", "spine"]
 
 
+@bare_kind("Shape")
 def box(*, rx: Optional[float] = None, ry: Optional[float] = None) -> Dict[str, Any]:
     """The members' bounding box, grown by `padding`, with rounded corners.
 
@@ -49,6 +55,7 @@ def box(*, rx: Optional[float] = None, ry: Optional[float] = None) -> Dict[str, 
     return out
 
 
+@bare_kind("Shape")
 def blob(*, convexity: Optional[float] = None, holes: Optional[bool] = None, roundness: Optional[float] = None, neck: Optional[float] = None, avoiding: Optional[Any] = None, clearance: Optional[float] = None) -> Dict[str, Any]:
     """A smooth region around the members: each member grown by `padding`, the links of a spanning tree between them (routed around avoided nodes, so the set stays in one piece), and the Delaunay triangles of their points, filled smallest gaps first up to `convexity` of their convex hull. The outline is rounded so its curvature never jumps.
 
@@ -105,6 +112,7 @@ def blob(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
     return out
 
 
+@bare_kind("Shape")
 def hull(*, convexity: Optional[float] = None, holes: Optional[bool] = None, roundness: Optional[float] = None, neck: Optional[float] = None, avoiding: Optional[Any] = None, clearance: Optional[float] = None) -> Dict[str, Any]:
     """The padded convex hull, rounded: blob with convexity 1 and neck 1. Any option overrides the preset.
 
@@ -161,6 +169,7 @@ def hull(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
     return out
 
 
+@bare_kind("Shape")
 def spine(*, convexity: Optional[float] = None, holes: Optional[bool] = None, roundness: Optional[float] = None, neck: Optional[float] = None, avoiding: Optional[Any] = None, clearance: Optional[float] = None) -> Dict[str, Any]:
     """The routed spanning tree of tubes and nothing else: blob with convexity 0. Any option overrides the preset.
 

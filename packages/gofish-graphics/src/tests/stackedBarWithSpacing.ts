@@ -20,7 +20,7 @@ const data = [
 export const testStackedBarWithSpacing = (size: { width: number; height: number }) =>
   gofish(
     { width: size.width, height: size.height },
-    spread({ dir: 0, spacing: 8, alignment: "end", sharedScale: true },
+    spread({ dir: 0, spacing: 8, alignment: "end" },
       // TODO: I could probably make the width be uniform flexible basically
       Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
         spread({ dir: 1, spacing: 4, alignment: "middle" },

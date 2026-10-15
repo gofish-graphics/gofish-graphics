@@ -107,12 +107,11 @@ export const buildIn = createNodeOperator(
     const node = new GoFishNode(
       {
         type: "buildIn",
-        shared: [false, false],
         resolveUnderlyingSpace: (
           _children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => [UNDEFINED, UNDEFINED],
-        layout: (_shared, size, scales, kids) => {
+        layout: (size, scales, kids) => {
           const boxes = kids.map((child) => {
             const [x, y] = child.layout(size, [
               axisScale(scales?.[0]?.sigma, undefined),

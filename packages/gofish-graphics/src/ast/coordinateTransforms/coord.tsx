@@ -29,7 +29,7 @@ import {
   isUNDEFINED,
   continuousInterval,
   CONTINUOUS,
-  spaceMeasure,
+  spaceTitle,
 } from "../underlyingSpace";
 import { impliedExtent } from "../extent";
 import {
@@ -203,7 +203,7 @@ export const coord = createNodeOperator(
           spaceRef.current = [axisSpace(0), axisSpace(1)];
           return [UNDEFINED, UNDEFINED];
         },
-        layout: (shared, size, scales, children, node) => {
+        layout: (size, scales, children, node) => {
           // Stage 6b: a coord boundary is a σ-scope root — it re-roots σ for its
           // subtree. Derive through the render's one registry, shared with the
           // render root and every layer scope.
@@ -837,7 +837,7 @@ export const coord = createNodeOperator(
               // the ray past its outer end, reading along the ray, so it never
               // sits on top of the data. It names
               // the axis from the `axes` option's title, else the radial
-              // space's measure, else the coordinate space's own name for the
+              // space's title, else the coordinate space's own name for the
               // axis (`r`) (#621).
               //
               // Deliberately no angular (theta) title by default: the ring's
@@ -845,7 +845,7 @@ export const coord = createNodeOperator(
               // natural single place on a circle.
               const title = axisTitle(
                 typeof axes === "object" && axes !== null ? axes.y : undefined,
-                spaceMeasure(ySpace) ?? effectiveTransform.aliases?.y ?? "r"
+                spaceTitle(ySpace) ?? effectiveTransform.aliases?.y ?? "r"
               );
               if (title !== undefined) {
                 const [ix, iy] = planeToPixel([x0 - H_GAP, y0]);

@@ -6,58 +6,36 @@ set -e
 # prompt.md and writes summary.md (plain Markdown, reusable for Discord,
 # release notes, the website, etc.).
 #
-# Expects prs.txt to exist in the current directory.
-# Writes:
-# - prompt.md: the full prompt for Claude
-# - contributors.tsv: one line per contributor (author, first PR number, URL,
-#   title), which check-summary.sh uses to guarantee contributor coverage.
-#   Only PRs with an Author line count; the workflow omits that line for the
-#   maintainer and for bots, so only outside contributors get a shout-out.
+# Expects prs.json in the current directory: the `gh pr list` output with
+# each PR's screenshots added (see prs.jq). MAINTAINER names the maintainer,
+# whose PRs (like bots') get no Author line and no shout-out.
+# Writes, deriving the first three from prs.json with prs.jq:
+# - prs.txt: the PR list as the prompt shows it.
+# - contributors.tsv: one line per outside contributor (author, first PR
+#   number, URL, title), which check-summary.sh uses to guarantee contributor
+#   coverage.
+# - images.txt: one image URL per line, every screenshot a PR listed.
+#   check-summary.sh drops any image the summary shows that is not on this
+#   list, so Claude cannot post an image the PRs did not ship.
+# - prompt.md: the full prompt for Claude.
 
 # Check if required file exists
-if [ ! -f prs.txt ]; then
-  echo "ERROR: prs.txt must exist in the current directory"
+if [ ! -f prs.json ]; then
+  echo "ERROR: prs.json must exist in the current directory"
   echo "This file should be created by previous workflow steps"
   exit 1
 fi
+: "${MAINTAINER:?MAINTAINER must name the maintainer}"
 
-# Collect each contributor's first PR from the PR data.
-# Expected PR blocks look like:
-# - "### PR #123: Title"
-# - "- **Author:** username"
-# - "- **URL:** https://..."
-awk '
-  /^### PR #[0-9]+:/ {
-    line = $0
-    sub(/^### PR #/, "", line)
-    split(line, parts, ": ")
-    pr = parts[1]
-    title = substr(line, length(pr) + 3)
-  }
-  /^- \*\*Author:\*\* / {
-    author = $0
-    sub(/^- \*\*Author:\*\* /, "", author)
-  }
-  /^- \*\*URL:\*\* / {
-    url = $0
-    sub(/^- \*\*URL:\*\* /, "", url)
-    if (author != "" && !(author in seen)) {
-      seen[author] = 1
-      firstPr[author] = pr
-      firstTitle[author] = title
-      firstUrl[author] = url
-    }
-    author = ""
-    pr = ""
-    title = ""
-    url = ""
-  }
-  END {
-    for (a in seen) {
-      print a "\t" firstPr[a] "\t" firstUrl[a] "\t" firstTitle[a]
-    }
-  }
-' prs.txt | sort > contributors.tsv
+# Runs one prs.jq view over prs.json. prs.jq reads IMAGE_URL.
+# shellcheck source=image-line.sh
+source "$(dirname "${BASH_SOURCE[0]}")/image-line.sh"
+prs() {
+  jq -r -L "$(dirname "${BASH_SOURCE[0]}")" "include \"prs\"; $1" prs.json
+}
+prs prompt_view > prs.txt
+prs contributors | sort > contributors.tsv
+prs image_urls > images.txt
 
 # Build contributor callout guidance.
 CONTRIBUTOR_CALLOUTS=$(
@@ -89,6 +67,14 @@ Write a concise weekly summary in standard Markdown:
 - Do not state how many PRs landed this week.
 - Do not add a title line above the first section; one is added when the summary is posted.
 
+Screenshots (optional):
+- Some PRs above list **Images**: screenshots from the PR description. You may show a few of them to illustrate new charts or new user-visible capabilities.
+- To show one, put a line containing only `![short caption](URL)` directly under the bullet it illustrates. Write your own short caption (a few words saying what the image shows); do not put the image inside the bullet text.
+- Use only URLs listed under Images above, copied exactly. Never invent, edit, or guess a URL.
+- Use at most about 4 images in total.
+- When a PR shows before and after images, pick the after one. Prefer charts and visualizations over screenshots of internal tooling (CI, review sites, dev workflow).
+- If nothing visual shipped this week, use no images.
+
 Structure your response as these sections, in this order:
 1. `## Highlights` - 2-3 sentence overview of the main thrust of work this week
 2. `## What changed` - Group related changes by theme (e.g., "API improvements", "Bug fixes", "Documentation"). Use bullet points, keep each brief.
@@ -103,8 +89,16 @@ ENDPROMPT
 # Read data from file (avoids escaping issues with GitHub Actions outputs)
 PRS_DATA=$(cat prs.txt)
 
-PROMPT="${PROMPT_TEMPLATE//PRS_PLACEHOLDER/$PRS_DATA}"
-PROMPT="${PROMPT//CONTRIBUTOR_CALLOUTS_PLACEHOLDER/$CONTRIBUTOR_CALLOUTS}"
+# Prints $1 with its one placeholder $2 replaced by $3, inserted literally.
+# It cuts $1 at the placeholder rather than using ${1//$2/$3}, whose
+# replacement cannot be written to be literal on every bash: unquoted, bash
+# 5.2 (ubuntu-latest) turns each & in it into the placeholder, and quoted,
+# bash 3.2 (macOS) keeps the quotes in.
+fill() {
+  printf '%s%s%s' "${1%%"$2"*}" "$3" "${1#*"$2"}"
+}
+PROMPT=$(fill "$PROMPT_TEMPLATE" PRS_PLACEHOLDER "$PRS_DATA")
+PROMPT=$(fill "$PROMPT" CONTRIBUTOR_CALLOUTS_PLACEHOLDER "$CONTRIBUTOR_CALLOUTS")
 
 printf '%s\n' "$PROMPT" > prompt.md
 

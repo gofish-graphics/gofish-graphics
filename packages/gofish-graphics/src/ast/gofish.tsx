@@ -20,17 +20,20 @@ import { lowerToDisplayList } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
 import type { InteractionRuntime } from "../interaction/runtime";
 import { renderWithInteraction } from "../interaction/renderTerminal";
+import { resolveMarkResult } from "./marks/markResult";
+import { resolveUnit, sameUnitVar } from "./measure";
 import type { ToPixel } from "./_node";
 import type { Size } from "./dims";
 import {
   continuousInterval,
   isCONTINUOUS,
-  spaceMeasure,
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
-import { niceScope, type Extent } from "./extent";
+import { mapsDomain } from "./extent";
+import * as Monotonic from "../util/monotonic";
+import { KeyedDomains } from "./keyedDomains";
 import {
   fromFrameStart,
   orientScales,
@@ -51,8 +54,16 @@ import {
   type LabelRowSettings,
 } from "./axes/elaborate";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
-import { timeRowsFromOption, type TimeRowOption } from "./axes/timeRows";
-import { axisName } from "./constraints/shared";
+import { dumpKeyedDomains, dumpSharing } from "./debug/dump";
+import {
+  levelOptionsError,
+  levelsFromOption,
+  type LabelAlign,
+  type LevelOption,
+  type LevelOptions,
+  type PerLevel,
+} from "./axes/levels";
+import { Frontend } from "gofish-ir";
 import {
   getScopeRegistry,
   scopeFrame,
@@ -132,118 +143,196 @@ export type AxisOptions =
   | {
       title?: string | false;
       side?: "start" | "end";
-      /** Rotate tick/category labels by this many degrees, clockwise on screen
-       *  — matches Vega-Lite's `labelAngle` (e.g. `45` slants a label down to
-       *  the right, `90` reads top-to-bottom).
+      /** How the axis's labels are drawn: their `angle` and `align`, each
+       *  per level (see `AxisLabelOptions`). */
+      label?: AxisLabelOptions;
+      /** The levels of the axis: its bands of labels, by depth, nearest the
+       *  plot first. Every axis on the dim has levels, nested ones counted
+       *  from the inside out: a numeric axis has one (its ticks), a time
+       *  axis two (the level-and-step its domain picks for about 10 ticks,
+       *  and that level's parent: months, then years), and an ordinal axis
+       *  one per split, plus one per `.bin(...)` of a chained key before the
+       *  last (`.bin(Calendar.year).bin(Calendar.month)` gives a month level
+       *  and a year level). Each entry sets the level at its depth:
        *
-       *  **`"auto"`** picks the angle for you, separately for each label row
-       *  (each tier of a nested ordinal axis): the first of 0°, 45°, 90° at
-       *  which no two labels in that row collide (at least 2px apart). A
-       *  category row that collides at every angle is hidden and takes no
-       *  space; a continuous tick row cannot be hidden and keeps the angle
-       *  with the least overlap. So a grouped bar chart's crowded inner row
-       *  can slant (or disappear) while its roomy outer row stays upright.
-       *  Collisions are counted across the whole chart. The chart is
-       *  laid out once per angle tried, so it must be rebuildable: a chart
-       *  builder or a component thunk, not a prebuilt node (see
-       *  axes/autoLabelAngle.ts). "auto" cannot be an entry of a per-tier
-       *  array.
+       *  - `true` keeps the level as inferred.
+       *  - `false` hides it: its labels (and a time row's ticks) are not
+       *    drawn and take no space.
+       *  - a Calendar value names its cells: a time row's partition
+       *    (`Calendar.week`), or, on an ordinal axis over cells of time, the
+       *    cells that group its slots (`Calendar.year` over month slots):
+       *    each slot falls in the cell that holds its start, so
+       *    `Calendar.month` over week slots puts each week in the month it
+       *    starts in. A Calendar value with `.format(fn)` relabels the
+       *    level.
        *
-       *  A plain **number** applies to every tier of a nested ordinal axis
-       *  (e.g. both the city and year rows of a grouped bar chart). An
-       *  **array** is per-tier, indexed from the INNERMOST tier outward —
-       *  `[45]` rotates only the innermost category row (e.g. the year row
-       *  directly under grouped bars) and leaves outer tiers (e.g. the city
-       *  row) unrotated; `[45, 0]` is the explicit two-tier form. An index
-       *  beyond the array's length means unrotated/undefined. A continuous
-       *  axis has a single tier: it uses the number, or `array[0]` for the
-       *  array form. */
-      labelAngle?: number | number[] | "auto";
-      /** The label rows of a time axis (an axis over a `Schema.time()`
-       *  column), inner row first: each a Calendar value, e.g.
-       *  `[Calendar.month, Calendar.year]` or `[Calendar.hour.every(6),
-       *  Calendar.day]`. A row's labels are its partition's: the level's
-       *  default, or a function of the cell given with `.format(fn)`
-       *  (`Calendar.quarter.format((cell) => ...)`). Each row is one
-       *  partition of the time line: its ticks are its cells' starts, and
-       *  each label is centered on its cell's start tick. The axis's domain
-       *  is niced outward to the cells of the inner row. Rows need not nest.
-       *  Omitted, the axis has two rows: the level-and-step the domain picks
-       *  for about 10 ticks, and its parent level.
+       *  Depths the list does not reach stay as inferred. On the outermost
+       *  axis of the dim, Calendar entries past its inferred levels add
+       *  levels. An entry that cannot apply (a Calendar value over slots
+       *  that are not times or finer than the slots, `false` on a numeric
+       *  axis, an entry past the last level) is an error that lists the
+       *  axis's levels. The other per-level options, `label.angle`,
+       *  `label.align` and `divider`, use the same depths and the same
+       *  rule: a plain value applies to every level where it can, and a
+       *  list entry that cannot apply at its depth, or one past the last
+       *  level, is this error. */
+      levels?: LevelOption[];
+      /** Whether each level of an ordinal axis draws dividers: a line in
+       *  each gap where its runs break, through every level whose runs
+       *  also break there. By default a level draws them when it partitions
+       *  the value of the level inside it, that is, both bin the same
+       *  column: the year level over a month level of one date
+       *  (`field("date").bin(Calendar.year).bin(Calendar.month)`, or nested
+       *  splits that bin `"date"`), a coarser `Calendar` entry of `levels`,
+       *  numeric bins inside bins. Categories nested in other categories (a
+       *  lake over its species) draw none, nor does the innermost level.
        *
-       *  The rows reach every axis on the dim, but only a time axis reads
-       *  them: in a faceted chart, the time axes inside the facets read
-       *  them and the facets' category axis on the same dim does not. A
-       *  chart with rows and no time axis on the dim is an error, raised
-       *  once the whole chart is elaborated. `labelAngle` does not rotate
-       *  a time axis's labels yet. */
-      rows?: TimeRowOption[];
+       *  `true` turns a level's dividers on, `false` off. A continuous
+       *  axis's level has ticks, not regions, so a plain value applies to
+       *  every ordinal level of the axis and skips the continuous ones. An
+       *  **array** is per level, by the depths of `levels`, nearest the
+       *  plot first, with a depth past its end left as inferred
+       *  (`[false, true]` divides only the second level); `true` at a
+       *  continuous level's depth, or an entry past the last level, is an
+       *  error (see `levels`). */
+      divider?: boolean | boolean[];
     };
 
-/** Read one `AxisOptions` field per dim, AS AUTHORED — `undefined` wherever the
- *  caller did not specify it, so an elaboration can tell an explicit value apart
- *  from the default (e.g. an explicit `side: "start"` vs. a continuous x-axis
- *  defaulting to the bottom). */
-function perDimAxisOption<K extends keyof Extract<AxisOptions, object>>(
-  axes: AxesOptions | undefined,
-  key: K
-): [Extract<AxisOptions, object>[K], Extract<AxisOptions, object>[K]] {
-  const read = (o: AxisOptions | undefined) =>
-    o && typeof o === "object" ? o[key] : undefined;
-  if (axes && typeof axes === "object") return [read(axes.x), read(axes.y)];
-  return [undefined, undefined];
-}
-
-export const resolveAxisSides = (
-  axes: AxesOptions | undefined
-): ["start" | "end" | undefined, "start" | "end" | undefined] =>
-  perDimAxisOption(axes, "side");
-
-type LabelAngleOption = number | number[] | "auto" | undefined;
-
-/** Reject a malformed `labelAngle` (see `AxisOptions.labelAngle`). The type
- *  already forbids these; this catches untyped callers (Python, plain JS). */
-function checkLabelAngle(v: unknown, axis: "x" | "y"): LabelAngleOption {
-  if (v === undefined || v === "auto" || typeof v === "number") return v;
-  if (Array.isArray(v)) {
-    if (v.includes("auto"))
-      throw new Error(
-        `axes.${axis}.labelAngle: "auto" applies to the whole axis, so it ` +
-          `cannot be one entry of a per-tier array; use labelAngle: "auto".`
-      );
-    if (v.every((a) => typeof a === "number")) return v as number[];
-  }
-  throw new Error(
-    `axes.${axis}.labelAngle: unknown value ${JSON.stringify(v)} ` +
-      `(expected a number, an array of numbers, or "auto").`
-  );
-}
-
-/** A `number` applies to every tier; a `number[]` is per-tier, innermost first;
- *  `"auto"` is chosen per axis by `runLayout` (see `AxisOptions.labelAngle`). */
-export const resolveAxisLabelAngles = (
-  axes: AxesOptions | undefined
-): [LabelAngleOption, LabelAngleOption] => {
-  const [x, y] = perDimAxisOption(axes, "labelAngle");
-  return [checkLabelAngle(x, "x"), checkLabelAngle(y, "y")];
+/** How one axis's labels are drawn (`axes.x.label`). */
+export type AxisLabelOptions = {
+  /** Rotate tick/category labels by this many degrees, clockwise on screen
+   *  — matches Vega-Lite's `labelAngle` (e.g. `45` slants a label down to
+   *  the right, `90` reads top-to-bottom).
+   *
+   *  **`"auto"`** picks the angle for you, separately for each label row
+   *  (each level of the axis): the first of 0°, 45°, 90° at
+   *  which no two labels in that row collide (at least 2px apart). A
+   *  category row that collides at every angle is hidden and takes no
+   *  space; a continuous tick row cannot be hidden and keeps the angle
+   *  with the least overlap. So a grouped bar chart's crowded inner row
+   *  can slant (or disappear) while its roomy outer row stays upright.
+   *  Collisions are counted across the whole chart. The chart is
+   *  laid out once per angle tried, so it must be rebuildable: a chart
+   *  builder or a component thunk, not a prebuilt node (see
+   *  axes/autoLabelAngle.ts). "auto" cannot be an entry of a per-level
+   *  array.
+   *
+   *  A plain **number** applies to every level of the axis (e.g. both
+   *  the city and year rows of a grouped bar chart). An **array** is per
+   *  level, by the depths of `levels`, nearest the plot first — `[45]`
+   *  rotates only the innermost level (e.g. the year row directly under
+   *  grouped bars) and leaves outer levels (e.g. the city row)
+   *  unrotated; `[45, 0]` is the explicit two-level form. A depth the
+   *  array does not reach is unrotated, and an entry past the last level
+   *  is an error (see `levels`). A numeric axis is one level, so in a
+   *  faceted chart its ticks take the first entry and the facets' labels
+   *  the next. A time axis does not rotate its labels yet, so a plain
+   *  number skips its rows, and a nonzero entry at one of their depths is
+   *  an error. */
+  angle?: number | number[] | "auto";
+  /** Where each level's labels sit along the axis: `"center"` centers a
+   *  label under what it names, `"start"` puts it at the start of its
+   *  run, just past the divider before it (the axis's first run starts
+   *  at the axis start). By default an ordinal axis's outer level over
+   *  ordered groups (cells of time, numeric bins, or a column the
+   *  `schema` declares ordered) starts its runs, since each label marks
+   *  where a run of ordered values begins, as a calendar's month labels
+   *  do; an outer level over unordered categories centers, since its
+   *  label collects the groups beneath it; and the innermost level, one
+   *  label per slot, centers. A continuous axis's labels name points,
+   *  so they center on their ticks.
+   *
+   *  A plain value applies to every level of the axis where it can: a
+   *  plain `"start"` skips a continuous axis's levels. An **array** is
+   *  per level, by the depths of `levels`, nearest the plot first, like
+   *  `angle`'s; `true`, or a depth past the array's end, keeps the
+   *  level's inferred alignment (`[true, "center"]` centers only the
+   *  second level). `"start"` at a continuous level's depth, or an entry
+   *  past the last level, is an error (see `levels`). */
+  align?: LabelAlign | (LabelAlign | true)[];
 };
 
-/** The label-row settings a manual `labelAngle` describes. "auto" has none of
+/** One axis's options as read (see {@link readAxisOptions}). */
+export type AxisRead = {
+  side: "start" | "end" | undefined;
+  /** `label.angle` as authored: a manual angle, or `"auto"`. */
+  angle: PerLevel<number> | "auto";
+  /** The per-level options; a `label.angle` of `"auto"` has no entry. */
+  perLevel: LevelOptions;
+};
+
+/**
+ * Each dim's axis options, AS AUTHORED: `undefined` wherever the caller did
+ * not specify a field, so an elaboration can tell an explicit value apart
+ * from the default (an explicit `side: "start"` vs. a continuous x-axis
+ * defaulting to the bottom). Each options object is checked once, against
+ * the IR's declared `AxisOptions` (`Frontend.checkOption`), so a JS caller
+ * and a Python one get the same errors. The `levels` entries are read by
+ * `levelsFromOption` instead: a JS entry may be a Calendar value with a
+ * `.format(fn)`, which has no IR form.
+ */
+export function readAxisOptions(
+  axes: AxesOptions | undefined
+): [AxisRead, AxisRead] {
+  const read = (o: AxisOptions | undefined, axis: "x" | "y"): AxisRead => {
+    if (!o || typeof o !== "object")
+      return { side: undefined, angle: undefined, perLevel: {} };
+    const { levels, ...rest } = o;
+    Frontend.checkOption("AxisOptions", rest, `axes.${axis}`);
+    const angle = o.label?.angle;
+    return {
+      side: o.side,
+      angle,
+      perLevel: {
+        levels: levels && levelsFromOption(levels, axis),
+        "label.angle": angle === "auto" ? undefined : angle,
+        "label.align": o.label?.align,
+        divider: o.divider,
+      },
+    };
+  };
+  if (axes && typeof axes === "object")
+    return [read(axes.x, "x"), read(axes.y, "y")];
+  return [read(undefined, "x"), read(undefined, "y")];
+}
+
+/** The label-row settings a manual `label.angle` describes. "auto" has none of
  *  its own: `runLayout` chooses them and hands them to `layout()` directly. */
 function manualLabelRowSettings(
-  axes: AxesOptions | undefined
+  read: readonly [AxisRead, AxisRead]
 ): LabelRowSettings {
-  const angles = resolveAxisLabelAngles(axes);
-  if (angles[0] === "auto" || angles[1] === "auto") {
+  if (read[0].angle === "auto" || read[1].angle === "auto") {
     throw new Error(
-      'labelAngle: "auto" must be resolved before layout(); render through ' +
+      'label.angle: "auto" must be resolved before layout(); render through ' +
         "gofish(), a chart builder, or runLayout()."
     );
   }
-  return labelRowSettingsFromAngles(
-    angles as [number | number[] | undefined, number | number[] | undefined]
-  );
+  return labelRowSettingsFromAngles([
+    read[0].perLevel["label.angle"],
+    read[1].perLevel["label.angle"],
+  ]);
 }
+
+/**
+ * The dims a chart's `axes` option draws, each with what its axis ticks at
+ * ({@link AxisTicks}). `true` draws both and `false` (or no option, as for a
+ * bare render) neither. For an `{ x?, y? }` object a dim is drawn unless it is
+ * explicitly `false`: specifying one axis does not turn the other off. Each
+ * drawn dim ticks at about 10 ticks. A time axis adds its rows when it is
+ * elaborated (`elaborationsFor`), since its levels depend on the axes inside
+ * it.
+ */
+export const axesEnabled = (
+  axes: AxesOptions | undefined
+): Map<0 | 1, AxisTicks> => {
+  const enabled = new Map<0 | 1, AxisTicks>();
+  if (!axes) return enabled;
+  for (const dim of [0, 1] as const) {
+    const on = axes === true || (dim === 0 ? axes.x : axes.y) !== false;
+    if (on) enabled.set(dim, DEFAULT_AXIS_TICKS);
+  }
+  return enabled;
+};
 
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
 // which needs a concrete canvas to scale data into (see the per-axis comment in
@@ -271,11 +360,11 @@ export async function layout(
     axes?: AxesOptions;
     legend?: boolean;
     /** Internal: how each axis label row is drawn, as chosen by
-     *  `labelAngle: "auto"` (see `runLayout`). Overrides the angles in `axes`. */
+     *  `label.angle: "auto"` (see `runLayout`). Overrides the angles in `axes`. */
     labelRowSettings?: LabelRowSettings;
   },
   child: GoFishNode | Promise<GoFishNode>,
-  contexts?: {
+  contexts: {
     session: RenderSession;
   }
 ): Promise<{
@@ -293,9 +382,7 @@ export async function layout(
   legendFields: ReadonlySet<string>;
 }> {
   child = await child;
-  if (contexts?.session) {
-    child.setRenderSession(contexts.session);
-  }
+  child.setRenderSession(contexts.session);
   // Note: callers must await `document.fonts.ready` before invoking
   // `layout()`. The public `gofish()` entry handles this; standalone
   // callers of `layout()` are responsible for the wait themselves.
@@ -323,7 +410,7 @@ export async function layout(
   // color scale is NOT re-resolved: it was final before chrome was elaborated
   // (the legend shows it), and chrome adds no data colors.
   const reresolve = async (n: GoFishNode) => {
-    if (contexts?.session) n.setRenderSession(contexts.session);
+    n.setRenderSession(contexts.session);
     n.resolveNames();
     // The inserted chrome is built from operators (Spread) whose constraints
     // install in this pass; nodes resolved before are consumed and untouched.
@@ -331,34 +418,32 @@ export async function layout(
     n.clearUnderlyingSpace();
     n.resolveUnderlyingSpace();
   };
+  // The measure-keyed domains (#1114): after the type walk, per space root,
+  // axis and unit, the domain every sized node of that unit maps into its
+  // size. Decided once, here, before chrome and labels are elaborated:
+  // chrome only reads them. Axis ownership reads which keyed domain each
+  // axis is over, and the demand half (an axis drawn over a domain is what
+  // nices it) is refreshed once the axes are assigned.
+  const keyedDomains = (contexts.session.keyedDomains =
+    KeyedDomains.build(child));
 
   const __tAxes = perfNow();
-  // Axis ownership: which node draws each axis (`resolveAxes`). Which dims
-  // the chart-level `axes` option enables: `true` → both. For an `{ x?, y? }`
-  // object, a dim is enabled unless it is explicitly `false` — an unspecified
-  // (undefined) dim still shows (specifying one axis doesn't disable the
-  // other); only `false` suppresses. Each enabled dim carries what its axis
-  // ticks at: about 10 ticks, or the rows of a time axis (`rows`, parsed
-  // here, once), whose inner row its scope's domain is niced to. The axis is
-  // drawn from the same stamp. A dim with rows is always enabled: a disabled
-  // dim (`false`) has no options to hold them.
-  const rows = perDimAxisOption(axes, "rows");
-  if (axes) {
-    const ticksOf = (dim: 0 | 1): AxisTicks => {
-      const r = rows[dim];
-      return r === undefined
-        ? DEFAULT_AXIS_TICKS
-        : { ...DEFAULT_AXIS_TICKS, rows: timeRowsFromOption(r, axisName(dim)) };
-    };
-    const enabled = new Map<0 | 1, AxisTicks>();
-    for (const dim of [0, 1] as const) {
-      const on =
-        axes === true ||
-        (typeof axes === "object" && (dim === 0 ? axes.x : axes.y) !== false);
-      if (on) enabled.set(dim, ticksOf(dim));
-    }
-    child.resolveAxes(new Map(), enabled);
-  }
+  // Axis ownership: which node draws each axis (`resolveAxes`). The render
+  // root is the outermost chart, and the render's `axes` (the outermost
+  // chart's own option, unless the render gives one) applies there; every
+  // chart below it applies its own (`GoFishNode._chartAxes`). Each drawn dim
+  // ticks at about 10 ticks; a time axis stamps its rows on it when it is
+  // elaborated (its levels, which depend on the axes inside it), before any
+  // solve nices its domain to its inner row. The per-level options
+  // (`levels`, `label`, `divider`) and `side` are read from the render's
+  // `axes` only.
+  const read = readAxisOptions(axes);
+  const perLevel: [LevelOptions, LevelOptions] = [
+    read[0].perLevel,
+    read[1].perLevel,
+  ];
+  child.resolveAxes(new Map(), axesEnabled(axes));
+  keyedDomains.refreshDemand();
 
   // Chrome elaboration (src/ast/axes/elaborate.tsx): every node that owns
   // chrome wraps itself in it, as ordinary shapes + constraints — its axes,
@@ -369,7 +454,7 @@ export async function layout(
   // the whole render. The legend is built here, from the root as it is laid
   // out, before any chrome wraps the nodes inside it. `legend: false` drops
   // the legend; the color scale still paints the marks.
-  const unitScale = contexts?.session.scaleContext.unit;
+  const unitScale = contexts.session.scaleContext.unit;
   const hasLegend =
     legend !== false &&
     ((isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
@@ -383,21 +468,28 @@ export async function layout(
         )
       : undefined,
   };
+  // A root chart with a size of its own draws its axes around its content,
+  // its frame's one child (`isAxisBoundary`), so the content carries the
+  // request for their titles; each node titles only the axes it draws.
+  const rootContent = child.children[0];
+  if (
+    child._chartBox?.some((sized) => sized) &&
+    rootContent instanceof GoFishNode
+  )
+    rootContent._chromeRequest = { axes };
   const elaborated = await elaborateChrome(child, {
-    sides: resolveAxisSides(axes),
-    labelSettings: labelRowSettings ?? manualLabelRowSettings(axes),
+    sides: [read[0].side, read[1].side],
+    labelSettings: labelRowSettings ?? manualLabelRowSettings(read),
+    perLevel,
   });
-  // Rows that no time axis read are an error (see `AxisOptions.rows`).
-  rows.forEach((r, dim) => {
-    if (r !== undefined && !elaborated.timeAxes[dim]) {
-      throw new Error(
-        `axes.${axisName(dim as 0 | 1)}.rows: rows of calendar cells need a ` +
-          `time axis, but no ${axisName(dim as 0 | 1)} axis of this chart is ` +
-          `over a time column. Declare the column with Schema.time() in the ` +
-          `chart's schema.`
-      );
-    }
-  });
+  // Per-level entries that no level took are an error (see
+  // `AxisOptions.levels`).
+  const levelsErr = levelOptionsError(
+    perLevel,
+    [elaborated.fold.dims[0].names, elaborated.fold.dims[1].names],
+    elaborated.fold.issues
+  );
+  if (levelsErr !== undefined) throw levelsErr;
   if (elaborated.changed) {
     child = elaborated.node;
     await reresolve(child);
@@ -414,84 +506,101 @@ export async function layout(
   }
   perfAdd("axes", perfNow() - __tAxes);
 
-  // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,
-  // applied AT the scope's solve (there is no pre-layout tree walk), and it is
-  // DEMAND-DRIVEN — the root scope nices a POSITION domain iff some node in it
-  // renders that dim's axis (`scopeAxisTicks` reads the persistent stamps
-  // `resolveAxes` left; with axes off no stamp exists, so axis-less content
-  // stays at the honest raw scale). When an axis IS drawn, every root consumer
-  // below — the posScale, the baseline-magnitude size solve, the equal-measure
-  // recentering, `needsCanvas` — reads this one niced domain, the same domain
-  // the tick elaboration niced, so content and ticks agree by construction.
-  // Each nested scope root (self-scaled region, shared-scale scope) applies the
-  // same rule at its own solve; a coord scope never nices.
-  const rootAxisDemand = [child.scopeAxisTicks(0), child.scopeAxisTicks(1)];
-  // The root's types and their size claims, niced together (a niced pinned
-  // domain implies its claim).
+  // The render's σ-scope registry: the ONE place σ / posScale is derived
+  // (Stage 6b). The root's claim walk below is where every node with a
+  // literal size solves its scope (`solveFixed`); the root and every other
+  // sized node (a slot, a coord boundary) solve through the same registry.
+  // Reset so a re-run layout pass starts with a clean dump.
+  const scopes = getScopeRegistry(contexts.session);
+  scopes.reset();
+
+  // The render root maps the keyed domain of its types (#1114). Its types
+  // and claims are widened to their keyed domains, then niced together
+  // (#659) when some chart draws an axis over the domain (with axes off no
+  // axis is drawn, so axis-less content stays at the honest raw scale).
+  // Every root consumer below — the posScale, the baseline-magnitude size
+  // solve, the equal-measure recentering, the root's size — reads this one
+  // niced domain, the same domain the tick elaboration niced
+  // (`KeyedDomains.scope`), so content and ticks agree by construction. A
+  // claim that is only pixels (content of literal sizes) is left as it is.
   const rootExtent = child.resolveExtent();
-  const [niceUnderlyingSpaceX, niceExtentX] = niceScope(
-    child._underlyingSpace![0],
-    rootExtent[0],
-    rootAxisDemand[0]
-  );
-  const [niceUnderlyingSpaceY, niceExtentY] = niceScope(
-    child._underlyingSpace![1],
-    rootExtent[1],
-    rootAxisDemand[1]
-  );
+  const rootScope = (axis: 0 | 1) => {
+    const space = child._underlyingSpace![axis];
+    return keyedDomains.scope(child, axis, space, rootExtent[axis]);
+  };
+  const [niceUnderlyingSpaceX, niceExtentX] = rootScope(0);
+  const [niceUnderlyingSpaceY, niceExtentY] = rootScope(1);
 
   if (debug) {
     console.log("🌳 Underlying Space Tree:");
     debugUnderlyingSpaceTree(child);
   }
 
-  // An omitted overall dimension is resolved per axis from the root's size
-  // claim:
-  //  - a claim (a scatter axis, bar heights = value, bar widths = value laid
-  //    side by side): there's data to scale into pixels, so fall back to a
-  //    concrete canvas (DEFAULT_CANVAS_SIZE).
-  //  - no claim (a bar chart's category axis, or a bare fixed-size shape):
-  //    nothing to scale, so lay out *unsized* — marks keep their default
-  //    sizes and the operator shrinks to fit. The natural extent is recovered by
-  //    the `finalDim` readback below, so the SVG is still sized concretely.
-  // Unsized axes are handed `UNSIZED` (NaN); marks treat a non-finite size as
-  // "use my default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
-  // guards, the same path the layout engine already relies on.
-  const UNSIZED = NaN;
-  const needsCanvas = (claim: Extent | undefined) => claim !== undefined;
-  // Concrete canvas for scaling a claimed axis (always a real number).
-  const canvasW = w ?? DEFAULT_CANVAS_SIZE;
-  const canvasH = h ?? DEFAULT_CANVAS_SIZE;
-  // Size handed to `child.layout`: a shrink-to-fit axis is left unsized.
-  const layoutW = w ?? (needsCanvas(niceExtentX) ? canvasW : UNSIZED);
-  const layoutH = h ?? (needsCanvas(niceExtentY) ? canvasH : UNSIZED);
-
-  // The render's σ-scope registry: the ONE place σ / posScale is derived
-  // (Stage 6b). The root is the first scope root; every other scope (self-scaled
-  // axis, constraint budget, shared, coord boundary) solves through the same
-  // registry. Reset so a re-run layout pass starts clean.
-  const scopes = getScopeRegistry(contexts?.session);
-  scopes.reset();
-
-  // The root σ-scope on each continuous axis, solved by the registry from the
-  // root's type and size claim against the canvas: σ, and the pixel of data 0
-  // when the axis has an origin. Equal-measure recentering may replace both.
+  // The root's scope and size on each axis, computed once. Its σ is solved
+  // against the render's size on an axis the render gives one (the root is
+  // then a sized node, #1114). On an axis with no render size the root
+  // shrink-wraps its content: when the nodes with a literal size below map
+  // its keyed domain, all at one σ (`ScopeRegistry.keyedSigma`), the root
+  // maps it at that σ too, so the axis it draws agrees with the marks. Only
+  // when none does (the common `chart(...).render(el, {})`), or they map it
+  // at different σs (an over-constrained layout), is σ solved against the
+  // default canvas. The root's size is its claim at its σ: the slot for a
+  // root fitted to it, its own box for a claim that is only pixels (which is
+  // the same at any σ, so 0 stands in). With no claim (a bar chart's
+  // category axis, a bare fixed-size shape) it is the render's size, or the
+  // default canvas.
   const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;
   const rootClaims = [niceExtentX, niceExtentY] as const;
-  const canvas = [canvasW, canvasH] as const;
+  const rootSizes = ([0, 1] as const).map((axis) => {
+    const given = axis === 0 ? w : h;
+    const space = rootSpaces[axis];
+    const claim = rootClaims[axis];
+    const meta = { kind: "root", rootKey: "root", axis } as const;
+    const key =
+      given === undefined && mapsDomain(space, claim)
+        ? keyedDomains.axisKey(child, axis, child._underlyingSpace![axis])
+        : undefined;
+    const below = key === undefined ? undefined : scopes.keyedSigma(key, axis);
+    const allocated = given ?? DEFAULT_CANVAS_SIZE;
+    const scope =
+      below === undefined
+        ? scopes.solveScope(meta, space, claim, allocated)
+        : scopes.scopeAt(meta, space, claim, below);
+    // A scope solved against the box fills it (a one-value domain's claim is
+    // centered in it); one at a σ from below is its claim at that σ.
+    const px =
+      claim === undefined
+        ? undefined
+        : scope !== undefined
+          ? below === undefined
+            ? allocated
+            : claim.width.run(scope.sigma)
+          : Monotonic.isConstant(claim.width)
+            ? claim.width.run(0)
+            : undefined;
+    return {
+      scope,
+      px:
+        px !== undefined && Number.isFinite(px) && px > 0
+          ? px
+          : (given ?? DEFAULT_CANVAS_SIZE),
+    };
+  });
+  // The size handed to `child.layout`: a claim that maps a domain
+  // (`mapsDomain`) is data to scale into the root's size. Any other axis is laid out *unsized*: a box of
+  // literal size keeps its pixels, marks keep their default sizes, and the
+  // operator shrinks to fit. Unsized axes are handed `UNSIZED` (NaN); marks
+  // treat a non-finite size as "use my default" (e.g. rect's
+  // DEFAULT_RECT_SIZE) via their `Number.isFinite` guards.
+  const UNSIZED = NaN;
+  const canvas = [w ?? rootSizes[0].px, h ?? rootSizes[1].px] as const;
+  const layoutW =
+    w ?? (mapsDomain(niceUnderlyingSpaceX, niceExtentX) ? canvas[0] : UNSIZED);
+  const layoutH =
+    h ?? (mapsDomain(niceUnderlyingSpaceY, niceExtentY) ? canvas[1] : UNSIZED);
   let rootScopes: Size<ScopeSolution | undefined> = [
-    scopes.solveScope(
-      { kind: "root", rootKey: "root", axis: 0 },
-      rootSpaces[0],
-      rootClaims[0],
-      canvas[0]
-    ),
-    scopes.solveScope(
-      { kind: "root", rootKey: "root", axis: 1 },
-      rootSpaces[1],
-      rootClaims[1],
-      canvas[1]
-    ),
+    rootSizes[0].scope,
+    rootSizes[1].scope,
   ];
 
   if (debug) {
@@ -508,9 +617,22 @@ export async function layout(
   // registry (Stage 6c: the ONE post-solve σ adjustment, so every slope stays
   // registry-sourced and the dump shows the FINAL σ). Silently skipped when an
   // axis has no solved scope to equate.
-  const measureX = spaceMeasure(niceUnderlyingSpaceX);
-  const measureY = spaceMeasure(niceUnderlyingSpaceY);
-  if (measureX !== undefined && measureX === measureY) {
+  //
+  // Only a DECLARED unit counts: two unknowns that unify through overlays
+  // are one domain, not a claim that a data unit is the same length on x
+  // and y.
+  const unitX = isCONTINUOUS(niceUnderlyingSpaceX)
+    ? niceUnderlyingSpaceX.measure?.unit
+    : undefined;
+  const unitY = isCONTINUOUS(niceUnderlyingSpaceY)
+    ? niceUnderlyingSpaceY.measure?.unit
+    : undefined;
+  if (
+    unitX !== undefined &&
+    unitY !== undefined &&
+    resolveUnit(unitX).kind === "declared" &&
+    sameUnitVar(unitX, unitY)
+  ) {
     const axisInfo = ([0, 1] as const).map(
       (axis): EqualMeasureAxis | undefined => {
         const space = rootSpaces[axis];
@@ -535,8 +657,8 @@ export async function layout(
   // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
   // content(σ)=canvas the whole chart resolves against. No-op unless
   // GOFISH_SOLVER_CHECK is set.
-  shadowCheckScaleRoot(niceExtentX, canvasW, rootScaleFactors[0], 0);
-  shadowCheckScaleRoot(niceExtentY, canvasH, rootScaleFactors[1], 1);
+  shadowCheckScaleRoot(niceExtentX, canvas[0], rootScaleFactors[0], 0);
+  shadowCheckScaleRoot(niceExtentY, canvas[1], rootScaleFactors[1], 1);
 
   // The root content sits in the root scope's frame by the one seating rule
   // (`seatInScope`): a pinned content shares the frame and places its data
@@ -600,6 +722,10 @@ export async function layout(
   // Scope dump (#39 Stage 6b): every σ-scope solved during the layout pass just
   // above, as printable frame equations. No-op unless GOFISH_DUMP_SCOPES is set.
   scopes.dump();
+  dumpKeyedDomains(keyedDomains);
+  // Sharing dump (#1114 step 3): every layer's sharing sets, from its
+  // constraints and children. No-op unless GOFISH_DUMP_SHARING is set.
+  dumpSharing(child);
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the
   // canvas default when the content didn't report one. Read off the root's
@@ -617,16 +743,21 @@ export async function layout(
   // Root placement. The canvas is a frame `[0, final]` on each axis, and the
   // root's axis order starts at the frame's start edge: the left on x, the top
   // for a y that reads top-down, and the BOTTOM for a continuous y, which grows
-  // upward from there (`atFrameStart`). A position `p` along the root's axis
+  // upward from there (`fromFrameStart`). A position `p` along the root's axis
   // order is the pixel `p` from that edge, inward.
   //
-  // A GIVEN dimension seats the root's baseline in that frame; content seated
-  // outside it (axis labels past the frame, ticks beyond it) is reserved as the
-  // per-side overhangs below. A free (baseline-magnitude) root's local 0 is its
-  // baseline, so it is placed at the scope's `originPx` (#773: `descent·σ` from
-  // the frame's start edge, plus any overhead); a pinned root shares the frame
-  // (its map carries `originPx`), and an origin-less root has none: both sit at
-  // 0 (`seatInScope`).
+  // A GIVEN dimension is a fixed slot, and the root's box sits at its start
+  // edge in canvas order, the left on x and the top on y, for either y
+  // direction (#1032): the root's axis order starts at the start edge of the
+  // root's own frame, its size (`rootSizes`), so a root smaller than the slot
+  // sits at the slot's top-left rather than at its bottom. A lone root has no
+  // baseline to line up with siblings, so the slot's start edge is its
+  // reference. In its frame the root is seated by the one seating rule
+  // (`seatInScope`): a free (baseline-magnitude) root's baseline at the
+  // scope's `originPx` (#773: `descent·σ` from the frame's start edge, plus
+  // any overhead), and a pinned or origin-less root at 0. Content seated
+  // outside the slot (axis gutters, titles, a legend) is reserved as the
+  // per-side overhangs below.
   //
   // A SHRINK-TO-FIT dimension makes the canvas box the content's full extent,
   // so pin the box's start edge to the frame's start — content then fills the
@@ -640,16 +771,23 @@ export async function layout(
     const name = axis === 0 ? "x" : "y";
     const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
     const direction = axis === 0 ? 1 : rootYDirection;
-    const frame = axis === 0 ? finalW : finalH;
-    const atFrameStart = (p: number) => fromFrameStart(p, frame, direction);
-    if ((axis === 0 ? w : h) === undefined)
-      child.pinAnchor(name, atFrameStart(offset), orientSide("min", direction));
-    else
-      child.place(
+    if ((axis === 0 ? w : h) === undefined) {
+      child.pinAnchor(
         name,
-        atFrameStart(offset + rootSeats[axis].seatPx),
-        "baseline"
+        fromFrameStart(offset, axis === 0 ? finalW : finalH, direction),
+        orientSide("min", direction)
       );
+      return;
+    }
+    child.place(
+      name,
+      fromFrameStart(
+        offset + rootSeats[axis].seatPx,
+        rootSizes[axis].px,
+        direction
+      ),
+      "baseline"
+    );
   };
   placeRoot(0);
   placeRoot(1);
@@ -759,7 +897,7 @@ type LayoutData = {
  * measured layout data. The single place the pipeline is driven — shared by
  * the live `gofish()` render path and the `gofishToSVG*` export paths.
  *
- * An axis with `labelAngle: "auto"` is the one case that lays out more than
+ * An axis with `label.angle: "auto"` is the one case that lays out more than
  * once: the chart is rebuilt and laid out once per candidate angle, and the
  * winning run's layout is returned as is (see axes/autoLabelAngle.ts). A chart
  * without "auto" takes the single `layoutOnce` below, unchanged.
@@ -768,10 +906,10 @@ export async function runLayout(
   options: GoFishRenderOptions,
   child: GoFishNode | Promise<GoFishNode>
 ): Promise<LayoutData> {
-  const angles = resolveAxisLabelAngles(options.axes);
-  if (angles[0] !== "auto" && angles[1] !== "auto")
+  const read = readAxisOptions(options.axes);
+  if (read[0].angle !== "auto" && read[1].angle !== "auto")
     return layoutOnce(options, child);
-  return layoutWithAutoLabelAngles(options, child, angles, layoutOnce);
+  return layoutWithAutoLabelAngles(options, child, read, layoutOnce);
 }
 
 /** One pass of the pipeline over `child`, which it lays out in place. */
@@ -984,13 +1122,18 @@ export function gofish(
   // the runtime only if something registered. A PLAIN node keeps today's exact
   // static behavior below (a `live()` channel on a plain node still patches at
   // paint — that's runtime-independent — it just gets no runtime/hit-testing).
+  //
+  // A function child is a thunk or a mark (`layer([...])` is one), and both
+  // reify the way a combinator child does: `resolveMarkResult` calls it with
+  // the empty list `[]` (a root has no rows; a thunk ignores it) and reifies
+  // whatever it returns.
   if (typeof child === "function") {
-    const thunk = child;
+    const build = () => resolveMarkResult(child as any);
     return renderWithInteraction(async () => {
-      const node = await thunk();
-      // A thunk can build the chart again, which `labelAngle: "auto"` needs
+      const node = await build();
+      // A thunk can build the chart again, which `label.angle: "auto"` needs
       // (see `GoFishNode.rebuild`).
-      node.rebuild = async () => thunk();
+      node.rebuild = build;
       return { node, options: { ...options } };
     }, container);
   }

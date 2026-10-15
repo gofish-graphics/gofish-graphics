@@ -37,7 +37,7 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
     const moviesRaw = context.loaded.movies as Movie[];
 
-    chart(moviesRaw)
+    chart(moviesRaw, { axes: false })
       .flow(
         treemap({
           by: field("Major Genre").dropNulls(),

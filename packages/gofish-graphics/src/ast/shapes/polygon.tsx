@@ -1,6 +1,8 @@
+import { getColumnTypes, setColumnTypes } from "../schema";
+import { datumOfInput } from "../marks/markResult";
 import { packEnclose } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
-import { boxOfDims } from "../geometry";
+import { boxOfDims, ringExtent } from "../geometry";
 import { GoFishAST } from "../_ast";
 import { Size } from "../dims";
 import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
@@ -10,39 +12,13 @@ import { layer as Layer } from "../graphicalOperators/layer";
 import { getValue, isValue, MaybeValue, value } from "../data";
 import { posFn } from "../domain";
 import { interval } from "../../util/interval";
-import { path, transformPath } from "../../path";
 import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
-import {
-  lowerStyle,
-  pathToPixelSVG,
-  roleFor,
-} from "../displayList/lowerHelpers";
+import { lowerStyle, ringItem } from "../displayList/lowerHelpers";
 import { withWire } from "../wire";
 import { MARK_CHANNELS } from "../markChannels.generated";
 
 export type Ring = [number, number][];
-
-/**
- * A ring's axis-aligned extent, in one pass. (`Math.min(...ring.map(...))` reads
- * nicely but allocates two arrays per axis and blows the argument limit on a
- * detailed coastline.)
- */
-const ringExtent = (
-  ring: Ring
-): { minX: number; maxX: number; minY: number; maxY: number } => {
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const [x, y] of ring) {
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  }
-  return { minX, maxX, minY, maxY };
-};
 
 export type PolygonProps = {
   fill?: MaybeValue<string>;
@@ -112,7 +88,7 @@ export const Polygon = ({
               CONTINUOUS(interval(minY, maxY), "pinned"),
             ]
           : [UNDEFINED, UNDEFINED],
-      layout: (_shared, _size, scales) => {
+      layout: (_size, scales) => {
         if (!dataBound) {
           return {
             intrinsicDims: [
@@ -159,34 +135,23 @@ export const Polygon = ({
         _children,
         node
       ): DisplayList.DisplayItem[] => {
-        const displayPoints: Ring = localRef.current.map((p) => local(p));
-        const nonlinear =
-          coordinateTransform !== undefined &&
-          coordinateTransform.type !== "linear";
-        const poly = nonlinear
-          ? transformPath(
-              path(displayPoints, { closed: true }),
-              coordinateTransform,
-              { resample: true }
-            )
-          : path(displayPoints, { closed: true });
         const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke =
           resolveColorChannel(stroke, unitScale) ?? resolvedFill ?? "black";
         return [
-          {
-            kind: "path",
-            d: pathToPixelSVG(poly, toPixel),
-            datum: node.datum,
-            role: roleFor(node.datum),
-            style: lowerStyle({
+          ringItem(
+            localRef.current.map((p) => local(p)),
+            coordinateTransform,
+            toPixel,
+            node.datum,
+            lowerStyle({
               fill: resolvedFill,
               stroke: resolvedStroke,
               strokeWidth: strokeWidth ?? 0,
               opacity,
-            }),
-          },
+            })
+          ),
         ];
       },
       // The smallest circle through the ring's vertices (Welzl, via d3's
@@ -234,32 +199,35 @@ export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
     return basePolygon(opts as any);
   }
   const field = opts.points;
-  const mark = async (d: any) => {
-    const rows: any[] = Array.isArray(d) ? d : [d];
+  const mark = async (rows: any[]) => {
+    const types = getColumnTypes(rows);
     const nodes = await Promise.all(
       rows.map(async (row) => {
         const ring = row?.[field];
+        // Validates the ring COLUMN's value type (a field-bound `points`
+        // column holds coordinate arrays), not the shape of the data.
         if (!Array.isArray(ring)) {
           throw new Error(
             `polygon({ points: "${field}" }): row has no array in field ` +
               `"${field}" — a field-bound \`points\` reads one ring per row.`
           );
         }
-        // Each row is one ordinary `polygon` mark over that row: the mark factory
-        // resolves `fill`/`stroke` against the row exactly as it does for a
-        // literal ring (and as `rect` does), and the `value(...)` ring passes
-        // through as the data-bound reading.
+        // Each row is one ordinary `polygon` mark over that row's one-row
+        // group `[row]`, tagged with the column types like a split leaf: the
+        // mark factory resolves `fill`/`stroke` against
+        // the row exactly as it does for a literal ring (and as `rect` does),
+        // and the `value(...)` ring passes through as the data-bound reading.
         const node = (await basePolygon({
           ...opts,
           points: value(ring as Ring),
-        } as any)(row)) as GoFishNode;
+        } as any)(types ? setColumnTypes([row], types) : [row])) as GoFishNode;
         node.name("");
         return node;
       })
     );
     if (nodes.length === 1) return nodes[0];
     const group = (await Layer({}, nodes)) as GoFishNode;
-    group.datum = d;
+    group.datum = datumOfInput(rows);
     return group;
   };
   const result = nameableMark(mark);

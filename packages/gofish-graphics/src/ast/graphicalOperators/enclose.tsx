@@ -158,13 +158,12 @@ function Enclose(
   return new GoFishNode(
     {
       type: "enclose",
-      shared: [false, false],
       color: isValue(fill) ? fill : stroke,
       resolveUnderlyingSpace: (): [UnderlyingSpace, UnderlyingSpace] => [
         UNDEFINED,
         UNDEFINED,
       ],
-      layout: (_shared, size, scales, children) => {
+      layout: (size, scales, children) => {
         // Child placement mirrors `layer`'s own rule (`placeUnplacedChild`):
         // a FRESH child reports an undefined translate until placed, so it
         // gets `layer`'s baseline-origin placement. An already-placed operand
