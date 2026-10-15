@@ -257,7 +257,7 @@ keyed by `type`. Each entry gets the spec without its `type` and calls the
 `Coord` factory: an options-object factory takes it whole
 (`Coord.polar(opts)`), so a parameterized polar/clock (donut hole, partial fan,
 start angle) round-trips without per-option plumbing, and a factory that takes
-its option positionally reads it off the spec (`Coord.bipolar(opts.fociDistance)`).
+its option positionally reads it off the spec (`Coord.geo(opts.projection, ...)`).
 An unknown `type` throws. The serialize test checks that `COORD_FACTORIES` and
 `COORDS` name the same transforms.
 
@@ -790,10 +790,10 @@ It emits:
   `ast.py`, calling into these generated cores.
 - The **Coord family** module, `gofish/coord.py`, bound in `__init__.py` as
   `Coord`: one factory per `COORDS` entry, named by `pyKwarg`
-  (`Coord.arc_length_polar`). Each returns `{"type": ..., **options}` with the
+  (`Coord.polar`). Each returns `{"type": ..., **options}` with the
   camelCase wire keys and only the options that were set, so the defaults stay
   on the JS side. Its params are positional-or-keyword, so a transform that JS
-  calls with a positional option reads the same in Python (`Coord.bipolar(120)`).
+  calls with a positional option reads the same in Python (`Coord.geo("mercator")`).
 - One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
   `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
   `gofish/calendar.py`), bound in `__init__.py` under the family name

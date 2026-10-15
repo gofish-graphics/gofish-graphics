@@ -13,12 +13,9 @@ import type { CoordinateTransform } from "../ast/coordinateTransforms/coord";
 /** A coordinate transform: what a `coord` option takes. */
 export type Coord = CoordinateTransform;
 
-export { linear } from "../ast/coordinateTransforms/linear";
 export { polar } from "../ast/coordinateTransforms/polar";
 export type { PolarOptions } from "../ast/coordinateTransforms/polar";
 export { clock } from "../ast/coordinateTransforms/clock";
-export { arcLengthPolar } from "../ast/coordinateTransforms/arcLengthPolar";
-export { bipolar } from "../ast/coordinateTransforms/bipolar";
 export { wavy } from "../ast/coordinateTransforms/wavy";
 export { geo } from "../ast/coordinateTransforms/geo";
 export type { Projection, GeoOptions } from "../ast/coordinateTransforms/geo";

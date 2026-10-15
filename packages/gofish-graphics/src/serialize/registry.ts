@@ -72,9 +72,6 @@ import { applySchema } from "../ast/schema";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { clock } from "../ast/coordinateTransforms/clock";
 import { wavy } from "../ast/coordinateTransforms/wavy";
-import { bipolar } from "../ast/coordinateTransforms/bipolar";
-import { arcLengthPolar } from "../ast/coordinateTransforms/arcLengthPolar";
-import { linear } from "../ast/coordinateTransforms/linear";
 import { geo } from "../ast/coordinateTransforms/geo";
 import type { CoordinateTransform } from "../ast/coordinateTransforms/coord";
 import { Frontend } from "gofish-ir";
@@ -183,7 +180,7 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
  * object of functions, so the wire carries only its tag and options, and the
  * factory makes the transform again from them. The options are the config
  * without its `type`; a factory that takes its option positionally in JS
- * (`bipolar(fociDistance)`) reads it off them here.
+ * (`geo(projection)`) reads it off them here.
  *
  * The serialize test fails when a coord descriptor has no entry here, or an
  * entry has no descriptor.
@@ -195,9 +192,6 @@ export const COORD_FACTORIES: Record<
   polar: (opts) => polar(opts),
   clock: (opts) => clock(opts),
   wavy: () => wavy(),
-  bipolar: (opts) => bipolar(opts.fociDistance),
-  arcLengthPolar: () => arcLengthPolar(),
-  linear: () => linear(),
   geo: (opts) => geo(opts.projection, { lon: opts.lon, lat: opts.lat }),
 };
 

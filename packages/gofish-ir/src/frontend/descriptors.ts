@@ -2123,24 +2123,6 @@ export const COORDS: Record<string, ConstructDescriptor> = {
     doc: "A sinusoidal warp of the plane. No options.",
     fields: {},
   }),
-  bipolar: coordTransform("bipolar", {
-    doc: "Bipolar coordinates from two foci. Takes `fociDistance` positionally, not as an options object.",
-    fields: {
-      fociDistance: {
-        type: t.number,
-        default: 100,
-        doc: "Distance in pixels between the two foci.",
-      },
-    },
-  }),
-  arcLengthPolar: coordTransform("arcLengthPolar", {
-    doc: "Polar-like transform parameterized by arc length. No options.",
-    fields: {},
-  }),
-  linear: coordTransform("linear", {
-    doc: "Identity/Cartesian transform. No options.",
-    fields: {},
-  }),
   geo: coordTransform("geo", {
     doc: "Geographic coordinates: children lay out in degrees, longitude on x (or the declared name lon) and latitude on y (or lat), and the projection fits that window into the box with one scale factor, so the map keeps its shape. Takes `projection` positionally, then the window options.",
     fields: {

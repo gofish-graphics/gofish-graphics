@@ -11,7 +11,7 @@ from gofish import Bin, Calendar, Coord, Curve, Overlap, Tile, field, line, ribb
 
 FAMILIES = {
     "Color": ("color", ["palette", "gradient"]),
-    "Coord": ("coord", ["polar", "clock", "wavy", "bipolar", "arc_length_polar", "linear", "geo"]),
+    "Coord": ("coord", ["polar", "clock", "wavy", "geo"]),
     "Curve": (
         "curve",
         [
@@ -56,12 +56,9 @@ def test_member_import_from_the_family_module():
 
 
 def test_coords_are_type_tagged_configs_on_the_wire():
-    assert Coord.linear() == {"type": "linear"}
-    assert Coord.arc_length_polar() == {"type": "arcLengthPolar"}
-    assert Coord.bipolar() == {"type": "bipolar"}
-    # The option is positional, as in JS `bipolar(fociDistance)`, or a kwarg.
-    assert Coord.bipolar(120) == {"type": "bipolar", "fociDistance": 120}
-    assert Coord.bipolar(foci_distance=120) == {"type": "bipolar", "fociDistance": 120}
+    assert Coord.wavy() == {"type": "wavy"}
+    # The projection is positional, as in JS `geo(projection)`, or a kwarg.
+    assert Coord.geo(projection="mercator") == {"type": "geo", "projection": "mercator"}
     assert Coord.geo("equalEarth", lon=(-170, -30), lat=(-60, 75)) == {
         "type": "geo",
         "projection": "equalEarth",

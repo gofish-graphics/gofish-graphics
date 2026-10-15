@@ -1272,17 +1272,6 @@ async function main() {
       coordOrphans.length === 0,
       coordOrphans.join(", ")
     );
-    // A positional option is read off the wire config (`bipolar(fociDistance)`).
-    const rebuilt = Serialize.COORD_FACTORIES.bipolar({ fociDistance: 120 });
-    const sample: [number, number] = [0.5, 1];
-    check(
-      "a bipolar wire config rebuilds Coord.bipolar(fociDistance)",
-      rebuilt.type === "bipolar" &&
-        JSON.stringify(rebuilt.transform(sample)) ===
-          JSON.stringify(GoFish.Coord.bipolar(120).transform(sample)) &&
-        JSON.stringify(rebuilt.transform(sample)) !==
-          JSON.stringify(GoFish.Coord.bipolar().transform(sample))
-    );
     // geo takes its projection positionally and its window as options.
     const geoRebuilt = Serialize.COORD_FACTORIES.geo({
       projection: "mercator",

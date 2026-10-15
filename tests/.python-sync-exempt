@@ -23,7 +23,7 @@ packages/gofish-graphics/stories/lowlevel/NestedMosaicChart.stories.tsx
 # Per-export exemption — PolarText constructs a raw custom coordinate
 # transform inline ({ type, transform: ([r, theta]) => ..., domain }), an
 # arbitrary JS closure rather than one of the IR's named coord transforms
-# (polar/clock/wavy/bipolar/arcLengthPolar/linear), so it cannot cross the
+# (polar/clock/wavy/geo), so it cannot cross the
 # bridge. The other TextMarks exports are ported.
 packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx::PolarText
 

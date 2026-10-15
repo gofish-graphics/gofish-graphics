@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Literal, Optional
 
-__all__ = ["polar", "clock", "wavy", "bipolar", "arc_length_polar", "linear", "geo"]
+__all__ = ["polar", "clock", "wavy", "geo"]
 
 
 def polar(inner_radius: Optional[float] = None, central_angle: Optional[float] = None, start_angle: Optional[float] = None, direction: Optional[float] = None, center: Optional[tuple] = None) -> Dict[str, Any]:
@@ -66,31 +66,6 @@ def clock(inner_radius: Optional[float] = None, central_angle: Optional[float] =
 def wavy() -> Dict[str, Any]:
     """A sinusoidal warp of the plane. No options."""
     return {"type": "wavy"}
-
-
-def bipolar(foci_distance: Optional[float] = None) -> Dict[str, Any]:
-    """Bipolar coordinates from two foci. Takes `fociDistance` positionally, not as an options object.
-
-    Args:
-        foci_distance: Distance in pixels between the two foci. Default 100.
-    """
-    out: Dict[str, Any] = {"type": "bipolar"}
-    for _k, _v in [
-        ("fociDistance", foci_distance),
-    ]:
-        if _v is not None:
-            out[_k] = list(_v) if isinstance(_v, tuple) else _v
-    return out
-
-
-def arc_length_polar() -> Dict[str, Any]:
-    """Polar-like transform parameterized by arc length. No options."""
-    return {"type": "arcLengthPolar"}
-
-
-def linear() -> Dict[str, Any]:
-    """Identity/Cartesian transform. No options."""
-    return {"type": "linear"}
 
 
 def geo(projection: str, lon: Optional[tuple] = None, lat: Optional[tuple] = None) -> Dict[str, Any]:

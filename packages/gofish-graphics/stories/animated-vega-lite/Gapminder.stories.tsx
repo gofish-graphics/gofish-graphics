@@ -43,9 +43,10 @@ import {
   time,
   timer,
   Animation,
-  Coord,
   Curve,
 } from "../../src/lib";
+// The identity transform is internal (not a public `Coord`); see `sparkRow`.
+import { linear } from "../../src/ast/coordinateTransforms/linear";
 import { SMOOTH_CURVES, channelSpline } from "../../src/spline";
 import { pausedClock } from "./pausedClock";
 import data from "vega-datasets";
@@ -595,7 +596,12 @@ const sparkRow = (samples: Sample[], clock: any, w: number) =>
   // at any node, not only at a chart, until #1115), and an `axes: false` on
   // the operators only silences the operator that carries it. A coordinate
   // frame owns its space, so no Cartesian axis is drawn inside one.
-  frame({ w, h: SPARK_H_PX, coord: Coord.linear(), padding: 0 }, [
+  // The coord frame also makes each row its own space, so the rows keep
+  // separate y domains though they plot one `value` column (#1122).
+  // TODO(#1115, #1122): this borrows the internal identity transform, which
+  // has no public `Coord` since #1156; the frame needs no coord once an
+  // ordinal axis is claimed only at a chart and a unit can come from a key.
+  frame({ w, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
     frame({ w, h: SPARK_H_PX }, [
       sparkSamples(samples)
         // `curve: "linear"` is not a default worth leaning on here, it is

@@ -998,7 +998,7 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
  *  `{"type": ..., **options}` with camelCase wire keys. Only the options set
  *  are emitted, so the defaults stay on the JS side. Its params are
  *  positional-or-keyword, so a transform JS calls with a positional option
- *  (`bipolar(120)`, `geo("equalEarth", ...)`) reads the same in Python. A
+ *  (`geo("equalEarth", ...)`) reads the same in Python. A
  *  tuple value goes on the wire as a list. */
 function renderCoordFactory(type: string, d: ConstructDescriptor): string {
   const name = pyKwarg(d.pyName ?? type);

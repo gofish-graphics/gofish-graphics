@@ -1233,7 +1233,7 @@ export class GoFishNode {
     // axes still happen via explicit operator `axes:` overrides, which the
     // override branch honors regardless.
 
-    // Coordinate-transform nodes (polar, clock, bipolar, etc.) manage their
+    // Coordinate-transform nodes (polar, clock, wavy, geo, etc.) manage their
     // own coordinate space; Cartesian axes make no sense for them or their
     // children. Collect directional axis overrides from the subtree so the
     // coord's render function can honour per-operator axis: true/false.
