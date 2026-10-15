@@ -37,9 +37,13 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 # Discord caps a message at 10 files and, without a server boost, a webhook
 # upload at 10 MiB. A file over the size cap fails its download (curl
-# --max-filesize) and is skipped like any other broken image.
+# --max-filesize) and is skipped like any other broken image. A webhook
+# request is capped at 25 MiB in all, so a message's files are capped at
+# 20 MiB together, leaving headroom for the form itself; an image that would
+# pass that cap is skipped too.
 MAX_FILES=10
 MAX_FILE_BYTES=10485760
+MAX_MESSAGE_BYTES=20971520
 
 # Split the summary into messages. First cut it into segments at each image
 # line: a segment is the text up to an image (or a run of images) plus those
@@ -149,6 +153,7 @@ while IFS= read -r MESSAGE; do
   FORM=(-F "payload_json=<$WORK_DIR/payload.json;type=application/json")
   ATTACHMENTS='[]'
   n=0
+  BYTES=0
   while IFS=$'\t' read -r URL ALT; do
     if [ "$n" -ge "$MAX_FILES" ]; then
       echo "::warning::Skipped an image past Discord's $MAX_FILES-file limit: $URL" >&2
@@ -158,6 +163,12 @@ while IFS= read -r MESSAGE; do
     if [ -z "$FILE" ]; then
       continue
     fi
+    SIZE=$(wc -c < "$WORK_DIR/image-$i-$n" | tr -d ' ')
+    if [ $((BYTES + SIZE)) -gt "$MAX_MESSAGE_BYTES" ]; then
+      echo "::warning::Skipped an image past the $MAX_MESSAGE_BYTES-byte upload cap per message: $URL" >&2
+      continue
+    fi
+    BYTES=$((BYTES + SIZE))
     IFS=$'\t' read -r NAME TYPE <<< "$FILE"
     FORM+=(-F "files[$n]=@$WORK_DIR/image-$i-$n;filename=$NAME;type=$TYPE")
     ATTACHMENTS=$(jq -c --argjson id "$n" --arg filename "$NAME" --arg description "$ALT" \

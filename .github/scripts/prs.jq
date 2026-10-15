@@ -3,25 +3,49 @@
 # each PR's screenshots added as an images list (with_images), as prs.json.
 # build-summary-prompt.sh derives everything else from that one file.
 #
-# Load it with `jq -L .github/scripts 'include "prs"; ...'`.
+# Load it with `source .github/scripts/image-line.sh` (for IMAGE_URL) and
+# `jq -L .github/scripts 'include "prs"; ...'`.
 
 # Bodies embed screenshots as Markdown (![alt](url), maybe with a title) or as
-# HTML (<img src="...">, which GitHub's uploader writes).
-def markdown_image: "!\\[(?<alt>[^\\]]*)\\]\\((?<url>[^)\\s]+)(?:\\s+\"[^\"]*\")?\\)";
+# HTML (<img src="...">, which GitHub's uploader writes). A Markdown URL with
+# "(" in it is not matched: Markdown allows only balanced parentheses there,
+# so stopping at the first ")" would cut such a URL short.
+def markdown_image: "!\\[(?<alt>[^\\]]*)\\]\\((?<url>[^()\\s]+)(?:\\s+\"[^\"]*\")?\\)";
 def html_image: "<img\\b[^>]*>";
 
-# The screenshots a PR body embeds, as [{alt, url}]: each http(s) image once,
-# in body order (an image embedded twice keeps its first place).
+# The body as GitHub shows it, for finding images: HTML comments and fenced
+# code blocks are removed, so commented-out or example images are not
+# offered. An unclosed comment or fence runs to the end of the body, as it
+# does on GitHub.
+def shown:
+  gsub("<!--(?s:.*?)(?:-->|\\z)"; "")
+  | gsub("(?m)^ {0,3}(?<f>(?<c>[`~])\\k<c>{2,})[^\\n]*(?s:.*?)(?:^ {0,3}\\k<f>\\k<c>*[ \\t]*$|\\z)"; "");
+
+# An attribute value as written in HTML, decoded.
+def html_decode:
+  gsub("&(?<e>amp|quot|apos|#39|lt|gt);";
+       {amp: "&", quot: "\"", apos: "'", "#39": "'", lt: "<", gt: ">"}[.e]);
+
+# The URLs a screenshot line can carry: IMAGE_URL from image-line.sh, which
+# also builds IMAGE_LINE from it, so the two cannot drift apart.
+def image_url:
+  "^(?:\($ENV.IMAGE_URL
+         // error("IMAGE_URL is not set: source image-line.sh before running prs.jq")))$";
+
+# The screenshots a PR body embeds, as [{alt, url}]: each image once, in body
+# order (an image embedded twice keeps its first place), keeping only URLs a
+# screenshot line can carry.
 def images:
-  [ (match(markdown_image; "g")
+  shown
+  | [ (match(markdown_image; "g")
       | {offset, alt: .captures[0].string, url: .captures[1].string}),
     (match(html_image; "gi")
       | .offset as $o | .string as $tag
       | {offset: $o,
-         url: ($tag | capture("\\bsrc\\s*=\\s*[\"'](?<u>[^\"']+)[\"']"; "i").u),
-         alt: ([$tag | capture("\\balt\\s*=\\s*[\"'](?<a>[^\"']*)[\"']"; "i").a] | first // "")})
+         url: ($tag | capture("\\bsrc\\s*=\\s*[\"'](?<u>[^\"']+)[\"']"; "i").u | html_decode),
+         alt: ([$tag | capture("\\balt\\s*=\\s*[\"'](?<a>[^\"']*)[\"']"; "i").a | html_decode] | first // "")})
   ]
-  | map(select(.url | test("^https?://")))
+  | map(select(.url | test(image_url)))
   | group_by(.url) | map(min_by(.offset))
   | sort_by(.offset)
   | map({alt, url});

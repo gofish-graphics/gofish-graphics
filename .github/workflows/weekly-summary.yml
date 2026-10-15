@@ -66,6 +66,7 @@ jobs:
           # with the screenshots each PR body embeds added as an images list
           # (see prs.jq), so the summary can show new charts.
           set -o pipefail
+          source .github/scripts/image-line.sh
           gh pr list \
             --state merged \
             --limit 200 \

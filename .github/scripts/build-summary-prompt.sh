@@ -27,7 +27,9 @@ if [ ! -f prs.json ]; then
 fi
 : "${MAINTAINER:?MAINTAINER must name the maintainer}"
 
-# Runs one prs.jq view over prs.json.
+# Runs one prs.jq view over prs.json. prs.jq reads IMAGE_URL.
+# shellcheck source=image-line.sh
+source "$(dirname "${BASH_SOURCE[0]}")/image-line.sh"
 prs() {
   jq -r -L "$(dirname "${BASH_SOURCE[0]}")" "include \"prs\"; $1" prs.json
 }
@@ -87,8 +89,16 @@ ENDPROMPT
 # Read data from file (avoids escaping issues with GitHub Actions outputs)
 PRS_DATA=$(cat prs.txt)
 
-PROMPT="${PROMPT_TEMPLATE//PRS_PLACEHOLDER/$PRS_DATA}"
-PROMPT="${PROMPT//CONTRIBUTOR_CALLOUTS_PLACEHOLDER/$CONTRIBUTOR_CALLOUTS}"
+# Prints $1 with its one placeholder $2 replaced by $3, inserted literally.
+# It cuts $1 at the placeholder rather than using ${1//$2/$3}, whose
+# replacement cannot be written to be literal on every bash: unquoted, bash
+# 5.2 (ubuntu-latest) turns each & in it into the placeholder, and quoted,
+# bash 3.2 (macOS) keeps the quotes in.
+fill() {
+  printf '%s%s%s' "${1%%"$2"*}" "$3" "${1#*"$2"}"
+}
+PROMPT=$(fill "$PROMPT_TEMPLATE" PRS_PLACEHOLDER "$PRS_DATA")
+PROMPT=$(fill "$PROMPT" CONTRIBUTOR_CALLOUTS_PLACEHOLDER "$CONTRIBUTOR_CALLOUTS")
 
 printf '%s\n' "$PROMPT" > prompt.md
 
