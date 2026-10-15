@@ -1,16 +1,223 @@
 # Background and hull: an API proposal for `enclose` with `Shape.box/blob/hull/spine`
 
-**Summary.**
-This proposal turns `enclose` into one relational mark that draws an outline around a set of nodes, chosen with `shape: Shape.box() | Shape.blob() | Shape.hull() | Shape.spine()`, and deletes the `background` alias.
-It is a design PR: the proposal, its surveys and pictures, and throwaway prototype stories that render the pictures. It makes no library change.
-Review page: https://claude.ai/artifact/2esKYS7PvWVMdoyVny6uLP. Slider playground: https://claude.ai/artifact/AscJNscgnnnSRZReMhTetF. Both are private claude.ai artifacts.
+This proposes one relational mark, `enclose`, that outlines a set of nodes with `shape: Shape.box() | Shape.hull() | Shape.blob() | Shape.spine()`, and deletes the `background` alias.
+It is a design PR: a proposal plus throwaway prototype stories that render the pictures. It makes no library change.
+Private claude.ai pages: [review page](https://claude.ai/artifact/2esKYS7PvWVMdoyVny6uLP) and [slider playground](https://claude.ai/artifact/AscJNscgnnnSRZReMhTetF).
 
-The full text is `proposals/background-hull/proposal.md`. Every picture below is a real render of a prototype story. `Shape` does not exist yet, so those stories place their members at fixed pixel positions, compute each outline with story-local code, and draw it with `polygon`. The code beside each picture is the proposed spelling, not the story's code.
+![penguins: box, hull, blob and spine](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/penguins-four-shapes-v2.png)
 
-## Recommended syntax
+**Box**
 
 ```js
-// one hull per species: group the points in a second layer
+enclose({ shape: Shape.box(), padding: 6 }, species);
+```
+
+**Hull**
+
+```js
+enclose({ shape: Shape.hull(), padding: 6 }, species);
+```
+
+**Blob**
+
+```js
+enclose({ shape: Shape.blob({ convexity: 0.75 }), padding: 6 }, species);
+```
+
+**Spine**
+
+```js
+enclose({ shape: Shape.spine(), padding: 6 }, species);
+```
+
+The penguins sit in the usual `chart(penguins).flow(scatter(...))` chart. The enclosure is a second layer, grouped by species:
+
+```js
+chart(selectAll("points"))
+  .flow(group({ by: "Species" }))
+  .mark(enclose({ shape: Shape.hull(), padding: 6, fill: "Species" }));
+```
+
+Every picture is a real render of a prototype story. `Shape` does not exist yet, so the stories compute each outline in story-local code and draw it with `polygon`. The code under each picture is the proposed spelling, not the story's code. The full text is `proposals/background-hull/proposal.md`.
+
+## Examples
+
+### The U: non-members inside
+
+Columns are `convexity` (0 to 1) and rows are `roundness`; the teal frame marks the defaults.
+
+![U cloud: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-u.png)
+
+```js
+enclose(
+  { shape: Shape.blob({ convexity, roundness, avoiding: others }), padding: 8 },
+  members
+);
+```
+
+### Penguins
+
+![penguins: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-penguins.png)
+
+```js
+enclose({
+  shape: Shape.blob({ convexity, roundness }),
+  padding: 6,
+  fill: "Species",
+});
+```
+
+### Munkres' three-point topology
+
+The {a, c} set wraps a and c and passes under b; the other three sets are ellipses.
+
+![Munkres panel](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/topology-munkres-panel-smooth.png)
+
+**{a, c}, avoiding b**
+
+```js
+enclose(
+  {
+    shape: Shape.spine({ avoiding: [b], neck: 0.85, clearance: 6 }),
+    padding: 22,
+  },
+  [a, c]
+);
+```
+
+**The whole set**
+
+```js
+enclose({ shape: oval, padding: 30 }, [a, b, c]);
+```
+
+**The pairs**
+
+```js
+enclose({ shape: oval, padding: 16 }, [a, b]);
+enclose({ shape: oval, padding: 16 }, [b, c]);
+```
+
+All four sit in `layer([a, b, c]).relate(({ a, b, c }) => [ ... ])`. `oval` is a custom-shape function (#1101).
+
+The {a, c} set again, with `neck` across and `roundness` down.
+
+![Munkres panel: neck by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-munkres.png)
+
+```js
+enclose(
+  {
+    shape: Shape.spine({ avoiding: [b], neck, roundness, clearance: 6 }),
+    padding: 22,
+  },
+  [a, c]
+);
+```
+
+### Hyperedges over a node-link graph
+
+Each set encloses its nodes and the edges among them as members.
+
+![hyperedges with edges as members: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-hyperedges-members-v2.png)
+
+**The enclosure** (`members` is new, decision 9)
+
+```js
+enclose({
+  members: "member",
+  shape: Shape.spine({ avoiding: selectAll("nodes") }),
+  padding: 6,
+  fill: "set",
+});
+```
+
+**The flow before it** (`resolve` taking a list is new)
+
+```js
+chart(setMembers).flow(
+  resolve(["member"], { from: [selectAll("nodes"), selectAll("edges")] }),
+  group({ by: "set" })
+);
+```
+
+### ChartAccent: Sub-Saharan Africa
+
+A replica of ChartAccent's example 5 (Ren et al., PacificVis 2017), on its own sample data.
+
+![ChartAccent replica](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/chartaccent-replica-v2.png)
+
+```js
+enclose({
+  shape: Shape.blob({ convexity: 0.25, neck: 0.6 }),
+  padding: 6,
+  fill: "#47b8a0",
+});
+```
+
+The layer filters `selectAll("countries")` to `Region === "Sub-Saharan Africa"` first.
+
+### Holes on and off
+
+Hyperedges at `convexity: 0.35` and penguins at 0.25.
+
+![holes on and off](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/holes-hyperedges-penguins-v2.png)
+
+**Off** (the default: every hole without an avoided node is filled)
+
+```js
+Shape.blob({ convexity: 0.35, avoiding: selectAll("nodes") });
+```
+
+**On**
+
+```js
+Shape.blob({ convexity: 0.35, holes: true, avoiding: selectAll("nodes") });
+```
+
+## Parameters
+
+| Parameter        | On           | Meaning                                                               | Default   |
+| ---------------- | ------------ | --------------------------------------------------------------------- | --------- |
+| `padding`        | `enclose`    | Bulge around each member, from its own outline.                       | as today  |
+| `fill`, `stroke` | `enclose`    | Paint, shared by every member of the family.                          | as today  |
+| `rx`, `ry`       | `Shape.box`  | Corner rounding, as on `rect`.                                        | 0         |
+| `convexity`      | `Shape.blob` | How much space between members fills: 0 is a spanning tree, 1 a hull. | 0.5       |
+| `holes`          | `Shape.blob` | Keep holes that hold no avoided node (as `allow_holes` in PostGIS).   | `false`   |
+| `roundness`      | `Shape.blob` | Corner rounding in pixels. Never changes pieces or holes.             | `padding` |
+| `neck`           | `Shape.blob` | Pull-in between members, 0 to 1. Never changes pieces or holes.       | 1         |
+| `avoiding`       | `Shape.blob` | Nodes to keep out. Members in the list are ignored.                   | none      |
+| `clearance`      | `Shape.blob` | Gap in pixels from each avoided node.                                 | 4         |
+
+## Presets
+
+`Shape.hull(opts)` is `Shape.blob({ convexity: 1, neck: 1, ...opts })`. `Shape.spine(opts)` is `Shape.blob({ convexity: 0, ...opts })`.
+`Shape.box({ rx, ry })` is its own member and the default. Presets work like `sina()` and `jitter()` over `noise()` (#1018): any option overrides them.
+
+## Open decisions
+
+1. Keep `enclose` as the one name and delete `background`? (Or keep `background`, or rename to `hull`.)
+2. Make `enclose` a relational mark now, and defer a `.background()` modifier?
+3. Name the general member `blob` (or `kelp`, `bubble`), with shortcuts `hull` and `spine`?
+4. Spell it `shape: Shape.*` or `outline: Outline.*`?
+5. Defaults: `convexity` 0.5, `roundness` = `padding`, `neck` 1, `clearance` 4 px?
+6. `avoiding` on `Shape.blob()` and so on both shortcuts; `Shape.hull({ avoiding })` cuts each other node out as a round hole?
+7. Draw ellipses through the #1101 custom-shape function, and add `Shape.ellipse()` only when examples call for it?
+8. Move `rx`/`ry` from `enclose` into `Shape.box({ rx, ry })`?
+9. Name the ref column with a `members` option, like `line({ from, to })`? The hyperedges also need `resolve` to take a list of selections.
+10. In a chart, should a spine stay inside the plot area by rule, or should the user list the axis in `avoiding` (History v9)?
+11. Confirm `holes` (default `false`), following PostGIS, Shapely and JTS, with `convexity` as the silhouette only.
+12. Keep all rounding inside `Shape.blob()`, with no `curve` key on `enclose`? (History v4: a curve cannot keep `padding` or `clearance`.)
+13. Confirm: graph edges are enclosed as members, read through #974's `boundary` query, with no separate edge parameter (History v5).
+14. Let `roundness` go past the smallest circle in the region? Then `padding` and `clearance` become approximate there.
+15. Decided: `Shape.spine()` keeps `holes: false`, so a spine over a cycle is filled. A ring is `Shape.spine({ holes: true })`.
+16. Open question, not for now: should segment members thin like links, and get their own padding? For now each edge keeps its band, as a declared shortcut (History v10).
+17. Recalibrate `convexity` to fill the smallest triangles first, up to c of the hull's area? Penguins at 0.5 go from 0 to 5 percent of the way to the hull to 25 to 40 percent. Weak spots: ChartAccent fills fast, and the U shows a sliver hole at 0.75. See `proposals/background-hull/img/convexity-calibration-old-vs-new.png`.
+
+<details><summary>Full syntax (JS and Python)</summary>
+
+**One hull per species (JS)**
+
+```js
 chart(penguins)
   .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
   .mark(circle({ r: 3, fill: "Species" }).name("points"))
@@ -26,24 +233,47 @@ chart(penguins)
         })
       )
   );
+```
 
-// a set that contains a and c but not b (combinator form over refs)
+**One hull per species (Python)**
+
+```python
+(chart(penguins)
+   .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
+   .mark(circle(r=3, fill="Species").name("points"))
+   .layer(
+       chart(select_all("points"))
+         .flow(group(by="Species"))
+         .mark(enclose(shape=Shape.hull(), padding=6, fill="Species", opacity=0.2))))
+```
+
+**A set with a and c but not b (JS)**
+
+```js
 layer([a, b, c]).relate(({ a, b, c }) => [
   enclose(
     {
-      shape: Shape.spine({
-        avoiding: [b],
-        neck: 0.85,
-        clearance: 6,
-      }),
+      shape: Shape.spine({ avoiding: [b], neck: 0.85, clearance: 6 }),
       padding: 22,
       fill: "#ff2400",
     },
     [a, c]
   ),
 ]);
+```
 
-// the component case: fresh children
+**A set with a and c but not b (Python)**
+
+```python
+layer([a, b, c]).relate(lambda a, b, c: [
+    enclose([a, c], shape=Shape.spine(avoiding=[b], neck=0.85, clearance=6),
+            padding=22, fill="#ff2400"),
+])
+```
+
+**Fresh children, the component case (JS)**
+
+```js
 enclose(
   {
     padding: 20,
@@ -60,243 +290,45 @@ enclose(
 );
 ```
 
+**Fresh children, the component case (Python)**
+
 ```python
-(chart(penguins)
-   .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
-   .mark(circle(r=3, fill="Species").name("points"))
-   .layer(
-       chart(select_all("points"))
-         .flow(group(by="Species"))
-         .mark(enclose(shape=Shape.hull(), padding=6, fill="Species", opacity=0.2))))
-
-layer([a, b, c]).relate(lambda a, b, c: [
-    enclose([a, c], shape=Shape.spine(avoiding=[b], neck=0.85, clearance=6),
-            padding=22, fill="#ff2400"),
-])
-
 enclose([spread([circle(**d) for d in planets], dir="x", spacing=50, alignment="middle")],
         padding=20, fill="#252150", stroke="none", shape=Shape.box(rx=16, ry=16))
 ```
 
-## Presets
-
-| Value               | Is exactly                                       | Draws                                                             |
-| ------------------- | ------------------------------------------------ | ----------------------------------------------------------------- |
-| `Shape.box(opts)`   | its own member; options `rx`, `ry`               | the padded bounding box with rounded corners; the default `shape` |
-| `Shape.blob(opts)`  | the general region                               | discs, links and filled triangles, rounded                        |
-| `Shape.hull(opts)`  | `Shape.blob({ convexity: 1, neck: 1, ...opts })` | the convex hull grown by `padding`, rounded                       |
-| `Shape.spine(opts)` | `Shape.blob({ convexity: 0, ...opts })`          | the routed spanning tree of tubes and nothing else, rounded       |
-
-A shortcut makes the same object as the general call, the way `sina()` and `jitter()` are presets of `noise()` (#1018), and any option overrides the preset.
-
-## Parameters
-
-| Parameter             | On           | Meaning                                                                                                                                                             | Default           |
-| --------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `padding`             | `enclose`    | The bulge around each member, from the member's own outline. Exact for a member on its own.                                                                         | as today          |
-| `fill`, `stroke`, ... | `enclose`    | Paint, shared by every member of the family.                                                                                                                        | as today          |
-| `rx`, `ry`            | `Shape.box`  | Corner rounding, as on `rect`.                                                                                                                                      | 0                 |
-| `convexity`           | `Shape.blob` | The silhouette: how much of the space between members is filled, from 0 (a spanning tree of links) to 1 (every Delaunay triangle, so the convex hull).              | 0.5               |
-| `holes`               | `Shape.blob` | Whether a hole inside the silhouette that holds no avoided node stays a hole. As `allow_holes` in PostGIS and Shapely, and `isHolesAllowed` in JTS.                 | `false`           |
-| `roundness`           | `Shape.blob` | How far the outline's corners are rounded, in pixels. It changes curvature only: the pieces and holes stay the same.                                                | same as `padding` |
-| `neck`                | `Shape.blob` | How far the outline is pulled in between members, from 0 to 1. A lone link becomes a tube `neck` times the bulge. It changes shape only, never the pieces or holes. | 1                 |
-| `avoiding`            | `Shape.blob` | Nodes to keep out. Each listed node that is not a member is avoided.                                                                                                | none              |
-| `clearance`           | `Shape.blob` | Gap in pixels kept from each avoided node.                                                                                                                          | 4                 |
-
-## Open decisions
-
-1. Keep `enclose` as the one name and delete the `background` alias? (Alternatives: keep `background` and delete `enclose`; or rename to `hull`.)
-2. Make `enclose` a relational mark now, and defer any `.background()` modifier?
-3. One general member with two shortcuts: name it `blob` (or `kelp`, `bubble`), and keep the shortcut names `hull` and `spine`?
-4. Option key and family `shape: Shape.*`, or `outline: Outline.*`?
-5. The blob's parameters and defaults: `convexity` 0.5, `roundness` equal to `padding`, `neck` 1, `clearance` 4 px (the teal cells in section 3)?
-6. `avoiding` on `Shape.blob()`, so also on both shortcuts, with "avoid each listed node that is not a member", and `Shape.hull({ avoiding })` drawing the hull with each other node inside it cut out as a round hole?
-7. Draw ellipses through the #1101 custom-shape function first, and add `Shape.ellipse()` only when examples call for it?
-8. Move `rx`/`ry` from `enclose` into `Shape.box({ rx, ry })`?
-9. For rows that carry refs (the hyperedge example), name the ref column with a `members` option, by analogy with `line({ from, to })`? The same example also needs `resolve` to take a list of selections (dataset (d)).
-10. In a chart, should a spine stay inside the plot area by rule, or should the user list the axis in `avoiding` (the trout example, History v9)?
-11. Confirm `holes` (default `false`), following PostGIS, Shapely and JTS, with `convexity` as the silhouette only.
-12. Keep all rounding inside `Shape.blob()` (the outline rounding of step 6), and add no `curve` key to `enclose`? (History, v4, shows why a curve through the outline cannot keep `padding` or `clearance`.)
-13. Confirm: a graph's edges are enclosed as members (dataset (d)), with no separate edge parameter (History, v5). Box and hull contain line members too, since members are just shapes, and the blob reads their geometry through #974's `boundary` query.
-14. Should `roundness` go past the smallest circle in the region, so a hull's corners can round more than the members' grown radius? The cost is that `padding` and `clearance` become approximate near those circles.
-15. Decided: `Shape.spine()` keeps the one default `holes: false`, so a spine over a cycle of edges is filled. (Josh confirmed. In the data, the holes a spine leaves are mostly small gaps between touching dots, five per penguin species; a ring is `Shape.spine({ holes: true })`.)
-16. An open question, not a decision to make now. Members versus links: a graph edge is both a contained member and the enclosure's own link. Should segment members be drawn like links (thinned by `neck`), and should different member kinds get their own padding? Revisit once more member kinds exist (labels, areas, nested enclosures). For now each edge keeps its padding band, as a declared shortcut (History, v10).
-17. Recalibrate `convexity`? Today alpha = m·c/(1−c), and on dense data almost nothing fills until about 0.6 (penguins move 0 to 5 percent of the way from spine to hull at 0.5). A prototype fills the smallest triangles first until they hold c of the hull's triangle area, which spreads the change evenly (penguins 25 to 40 percent at 0.5). It keeps both ends exact. Weak spots: ChartAccent fills fast, and the U shows a sliver hole at 0.75. Comparison: `proposals/background-hull/img/convexity-calibration-old-vs-new.png`.
-
-## Pictures
-
-### The discrete choice: box, hull, blob and spine
-
-![penguins: box, hull, blob and spine](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/penguins-four-shapes-v2.png)
-
-```js
-chart(penguins)
-  .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
-  .mark(circle({ r: 2.5, fill: "Species" }).name("points"))
-  .layer(
-    chart(selectAll("points"))
-      .flow(group({ by: "Species" }))
-      .mark(enclose({ shape, padding: 6, fill: "Species", opacity: 0.15 }))
-  );
-// shape: Shape.box(), Shape.hull(), Shape.blob({ convexity: 0.75 }) or Shape.spine()
-```
-
-### Dataset explorer: the U with non-members inside
-
-Columns are `convexity` (0, 0.25, 0.5, 0.75, 1) and rows are `roundness`. Down a column the pieces and holes never change. The teal frame marks the defaults.
-
-![U cloud: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-u.png)
-
-```js
-enclose(
-  { shape: Shape.blob({ convexity, roundness, avoiding: others }), padding: 8 },
-  members
-);
-```
-
-### Dataset explorer: penguins
-
-![penguins: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-penguins.png)
-
-```js
-.layer(enclose({ shape: Shape.blob({ convexity, roundness }), padding: 6, fill: "Species", opacity: 0.15 }))
-```
-
-### Munkres' three-point topology
-
-The recommended spelling (`neck: 0.85`, `padding: 22`, `roundness` at its default), then the panel with `neck` across and `roundness` down. The pairs and the whole set are ellipses drawn through the custom-shape function.
-
-![Munkres panel](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/topology-munkres-panel-smooth.png)
-
-```js
-layer([a, b, c]).relate(({ a, b, c }) => [
-  enclose({ shape: oval, padding: 30 }, [a, b, c]),
-  enclose({ shape: oval, padding: 16 }, [a, b]),
-  enclose({ shape: oval, padding: 16 }, [b, c]),
-  enclose(
-    {
-      shape: Shape.spine({ avoiding: [b], neck: 0.85, clearance: 6 }),
-      padding: 22,
-    },
-    [a, c]
-  ),
-]);
-```
-
-![Munkres panel: neck by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-munkres.png)
-
-```js
-// the {a, c} set from above, with neck across and roundness down
-enclose(
-  {
-    shape: Shape.spine({ avoiding: [b], neck, roundness, clearance: 6 }),
-    padding: 22,
-  },
-  [a, c]
-);
-```
-
-### Hyperedges over a node-link graph, with the edges as members
-
-![hyperedges with edges as members: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-hyperedges-members-v2.png)
-
-```js
-layer([
-  graph, // nodes named "nodes" (keyed by id), edges named "edges" (keyed by id)
-  chart(setMembers) // rows { set, member }: the set's nodes, then the edges among them
-    .flow(
-      resolve(["member"], { from: [selectAll("nodes"), selectAll("edges")] }), // new: a list
-      group({ by: "set" })
-    )
-    .mark(
-      enclose({
-        members: "member", // new (decision 9): the column whose refs are the operands
-        shape: Shape.spine({ avoiding: selectAll("nodes") }),
-        padding: 6,
-        fill: "set",
-        opacity: 0.25,
-      })
-    ),
-]);
-```
-
-### ChartAccent: Sub-Saharan Africa on fertility against life expectancy
-
-A replica of ChartAccent's example 5 (Ren et al., PacificVis 2017), on its own sample data.
-
-![ChartAccent replica](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/chartaccent-replica-v2.png)
-
-```js
-chart(countries)
-  .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
-  .mark(circle({ area: "Population", fill: "Region" }).name("countries"))
-  .layer(
-    chart(selectAll("countries"))
-      .flow(filter((d) => d.Region === "Sub-Saharan Africa"))
-      .mark(
-        enclose({
-          shape: Shape.blob({ convexity: 0.25, neck: 0.6 }),
-          padding: 6,
-          fill: "#47b8a0",
-          opacity: 0.3,
-        })
-      )
-  );
-```
-
-### Holes on and off
-
-Hyperedges at `convexity: 0.35` and penguins at 0.25. The default, `holes: false`, fills every hole that holds no avoided node.
-
-![holes on and off](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/holes-hyperedges-penguins-v2.png)
-
-```js
-enclose(
-  {
-    shape: Shape.blob({
-      convexity: 0.35,
-      holes: true,
-      avoiding: selectAll("nodes"),
-    }),
-    padding: 6,
-  },
-  setNodesAndEdges
-);
-```
+</details>
 
 ## Why delaunator
 
-The prototype uses Delaunator to compute the Delaunay triangulation of a set's member points, which is the first step of the blob construction. A Delaunay triangulation connects the points into triangles so that no point lies inside the circle through any triangle's three corners. This links each point to its natural neighbors and avoids long thin triangles.
+The prototype uses Delaunator for the Delaunay triangulation of a set's member points, the first step of the blob. It has two uses.
 
-It has two uses.
+- **Convexity.** The filled triangles are those whose circumradius is below the alpha that `convexity` sets, which is an alpha shape. At 1 every triangle fills, giving the convex hull.
+- **The spanning tree.** The minimum spanning tree always lies in the triangulation, so it checks about 3n edges instead of n² pairs. That keeps the penguins near 11 ms per slider step.
 
-- **Convexity.** The filled triangles are the Delaunay triangles whose circumradius is below the alpha that `convexity` sets. This is the definition of an alpha shape. At `convexity: 1` every triangle fills, and their union is the convex hull.
-- **The spanning tree.** The Euclidean minimum spanning tree that keeps a set in one piece always lies within the Delaunay triangulation. So the tree only considers the triangulation's edges, about 3n of them, instead of all n² pairs of points. That is part of why the penguins take about 11 ms per slider step.
+Delaunator is the standard library for this (Mapbox; `d3-delaunay` is built on it) and was already in the lockfile. This PR makes it a direct devDependency of `gofish-graphics`, pinned to `5.1.0`, used only by the prototype stories and the playground build. The library does not import it.
 
-Delaunator is the standard library for this. It comes from Mapbox, and `d3-delaunay` is built on it. It was already in the lockfile as a transitive dependency, through `d3-delaunay`. This PR makes `delaunator` a direct devDependency of `gofish-graphics`, pinned to exactly `5.1.0`, used only by the prototype stories and the playground build. Nothing in the library's source or runtime imports it.
+## What CI skips
 
-## What CI skips and why
-
-- **Python parity.** The prototype stories file is listed in `tests/.python-sync-exempt`, the existing mechanism for stories with nothing for a Python story to match. These stories compute their outlines in story-local JS.
-- **Gallery and docs examples.** Only stories tagged `gallery` are published to the docs. The prototype stories have no tag, so nothing reaches the docs site.
-- **Lint and format.** `packages/gofish-graphics/stories/**` is already ignored by ESLint and Prettier. The playground sources under `proposals/` are linted (warnings only, for unused helpers copied from the stories) and were formatted by lint-staged.
-- **Typecheck.** No tsconfig includes `stories/` or `proposals/`, so neither CI typecheck job reads them.
-- **Not skipped: Visual Tests and Storybook.** The JS capture renders every story under `stories/`, and there is no existing way to leave one out. The 52 prototype stories render, so Visual Tests will report them as new stories without baselines until they are accepted on the review site. Chromatic will also publish them under "Proposals/Background Hull".
+- **Python parity.** The prototype stories file is in `tests/.python-sync-exempt`, since the outlines are story-local JS.
+- **Gallery and docs.** The stories have no `gallery` tag, so nothing reaches the docs site.
+- **Lint and format.** `stories/**` is already ignored. The playground under `proposals/` is linted (warnings only) and formatted.
+- **Typecheck.** No tsconfig includes `stories/` or `proposals/`.
+- **Not skipped: Visual Tests and Storybook.** The 52 prototype stories render, so Visual Tests reports them as new until accepted, and Chromatic publishes them under "Proposals/Background Hull".
 
 ## Related issues
 
-- Advances #717 (enclose as a relation: concave hulls for `enclose`, and Josh's one-`enclose`-with-a-`shape` sketch)
+- Advances #717 (concave hulls for `enclose`, and the one-`enclose`-with-a-`shape` sketch)
 - Advances #397 (bring back a bubble-set enclosure)
-- Advances #974 (a `boundary` geometry query; hull enclosures and edges as members are its first users)
-- Advances #47 (stacked and divided ribbons, where a `by` option on relational marks may come back)
-- Related: #877 (a `selectAll` plus `group({ by })` before a relational mark is ignored; the penguin spelling depends on its fix)
-- Advances #957 (screen-space curves; whether its candidates work for closed curves such as enclosures)
-- Advances #1101 (custom strategies; the ellipse is drawn through its function hatch)
+- Advances #974 (a `boundary` geometry query; hulls and edges as members are its first users)
+- Advances #47 (stacked and divided ribbons, where `by` on relational marks may return)
+- Advances #957 (screen-space curves, for closed curves such as enclosures)
+- Advances #1101 (custom strategies; the ellipse goes through its function hatch)
+- Related: #877 (`selectAll` plus `group({ by })` before a relational mark is ignored; the penguin spelling needs its fix)
 
 ## Also in this branch
 
-A small edit to the `api-proposal` skill (`.claude/skills/api-proposal/SKILL.md`): it now asks the proposal to survey nearby GoFish API decisions for consistency. It is unrelated to this proposal's content.
-
-A one-sentence tightening of the "Attach screenshots to visual PRs" directive in `CLAUDE.md`: each example's code goes immediately under its own screenshot, never after a stack of screenshots or in a separate table.
+- The `api-proposal` skill now asks a proposal to survey nearby GoFish API decisions for consistency.
+- `CLAUDE.md`: each example's code goes immediately under its own screenshot.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
