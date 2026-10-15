@@ -1123,6 +1123,14 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton =>
           .map((k) => (onMember(members[k], p) ? Rm[k] : 0))
       );
     for (const [key, [i, j]] of cand) {
+      // an edge between a segment member's two ends is that member: it adds no link (the member is
+      // its own link, at its own width), and its ends' members touch through it (step below)
+      if (
+        owner[i].some(
+          (k) => members[k].kind === "segment" && owner[j].includes(k)
+        )
+      )
+        continue;
       if (faceEdges.has(key)) {
         links.push({ route: [P[i], P[j]], h: hw(i, j) });
         // the edge carries the spanning tree only when no hole will be cut across it
@@ -2363,6 +2371,81 @@ const ontoBulge = (b: Prim, p: Pt): { p: Pt; c: Pt; r: number } => {
     d = Math.hypot(dx, dy) || 1;
   return { p: [qx + (dx * b.r) / d, qy + (dy * b.r) / d], c: [qx, qy], r };
 };
+/** The point of a disc's, capsule's or box's core (its center, segment or rectangle) nearest p. */
+const coreNear = (b: Prim, p: Pt): Pt | null => {
+  if (b.k === 0) return [b.x1, b.y1];
+  if (b.k === 1) return nearestOnSeg(p, [b.x1, b.y1], [b.x2, b.y2]);
+  if (b.k === 2)
+    return [
+      Math.max(b.x1, Math.min(b.x2, p[0])),
+      Math.max(b.y1, Math.min(b.y2, p[1])),
+    ];
+  return null;
+};
+/** Where the path from p to q first enters primitive b, as a fraction of the way (0 when p is
+ *  already inside), or -1 when it never does. A disc or a capsule is exact: the first place the
+ *  path meets its edge (a circle, or a capsule's end circles and straight sides). Another primitive
+ *  is convex, so its signed distance along the path is convex: its least value is found by ternary
+ *  search, the entry by bisection before it. */
+const entryInto = (b: Prim, p: Pt, q: Pt): number => {
+  const vx = q[0] - p[0],
+    vy = q[1] - p[1];
+  const f = (t: number) => primD(b, p[0] + t * vx, p[1] + t * vy, false);
+  if (f(0) < 0) return 0;
+  if (b.k === 0 || b.k === 1) {
+    let best = Infinity;
+    const vv = vx * vx + vy * vy;
+    if (vv < 1e-18) return -1;
+    const circle = (cx: number, cy: number) => {
+      const fx = p[0] - cx,
+        fy = p[1] - cy,
+        B = fx * vx + fy * vy,
+        C = fx * fx + fy * fy - b.r * b.r,
+        D = B * B - vv * C;
+      if (D < 0) return;
+      for (const t of [(-B - Math.sqrt(D)) / vv, (-B + Math.sqrt(D)) / vv])
+        if (t >= 0 && t <= 1 && t < best && Math.abs(f(t)) < 1e-6) best = t;
+    };
+    circle(b.x1, b.y1);
+    if (b.k === 1) {
+      circle(b.x2, b.y2);
+      // the straight sides: the lines at distance r either side of the core
+      const ex = b.x2 - b.x1,
+        ey = b.y2 - b.y1,
+        L = Math.hypot(ex, ey);
+      if (L > 0) {
+        const nx = -ey / L,
+          ny = ex / L,
+          s0 = (p[0] - b.x1) * nx + (p[1] - b.y1) * ny,
+          sv = vx * nx + vy * ny;
+        if (Math.abs(sv) > 1e-12)
+          for (const side of [-b.r, b.r]) {
+            const t = (side - s0) / sv;
+            if (t >= 0 && t <= 1 && t < best && Math.abs(f(t)) < 1e-6) best = t;
+          }
+      }
+    }
+    return best === Infinity ? -1 : best;
+  }
+  let lo = 0,
+    hi = 1;
+  for (let it = 0; it < 40 && hi - lo > 1e-6; it++) {
+    const m1 = lo + (hi - lo) / 3,
+      m2 = hi - (hi - lo) / 3;
+    if (f(m1) < f(m2)) hi = m2;
+    else lo = m1;
+  }
+  const tm = (lo + hi) / 2;
+  if (f(tm) >= 0) return -1;
+  lo = 0;
+  hi = tm;
+  for (let it = 0; it < 40 && hi - lo > 1e-7; it++) {
+    const m = (lo + hi) / 2;
+    if (f(m) < 0) hi = m;
+    else lo = m;
+  }
+  return hi;
+};
 /** Step 3, `neck`: pull the outline in. Every outline point not on a member's bulge moves inward
  *  along its own piece's normal (toward a link's spine; where two pieces meet in a corner the moved
  *  sides are carried on until they meet, so the pull never rounds a corner) by `pull` (1 - neck) times
@@ -2635,18 +2718,77 @@ const neckOutline = (
       A[4 * e + 3] = 0;
       if (A[4 * e + 2] > 0)
         A[4 * e + 2] = Math.hypot(q[0] - A[4 * e], q[1] - A[4 * e + 1]);
-      // a bulge stays whole: a point pulled into one stops on its edge
-      let deepest = 0,
-        hit = -1;
-      for (const k of bgrid.query(q[0], q[1], q[0], q[1])) {
+      // A bulge stays whole: a point pulled into the bulges stops on the edge of their union, at the
+      // edge point nearest where the pull took it (as the thinner tube's side meets that bulge). A
+      // point pulled across a bulge's core (a node's center, a line member's line) is taken back to
+      // the side it came from (mirrored through the core) first. Where bulges overlap so that no
+      // edge is near, it stops where its path first entered a bulge, which is on the union's edge.
+      const o0 = pts[i];
+      let cross = Infinity,
+        ck = -1,
+        deepest = 0,
+        inside = -1;
+      const near = bgrid.query(
+        Math.min(o0[0], q[0]),
+        Math.min(o0[1], q[1]),
+        Math.max(o0[0], q[0]),
+        Math.max(o0[1], q[1])
+      );
+      for (const k of near) {
         const d = primD(bulges[k], q[0], q[1], false);
         if (d < deepest) {
           deepest = d;
-          hit = k;
+          inside = k;
+        }
+        const c = coreNear(bulges[k], q);
+        if (
+          !c ||
+          (o0[0] - c[0]) * (q[0] - c[0]) + (o0[1] - c[1]) * (q[1] - c[1]) >= 0
+        )
+          continue;
+        const t = entryInto(bulges[k], o0, q);
+        if (t >= 0 && t < cross) {
+          cross = t;
+          ck = k;
         }
       }
-      if (hit >= 0) {
-        const e2 = ontoBulge(bulges[hit], q);
+      /** where the path first entered a bulge (on the union's edge) */
+      const entry = () => {
+        let first = Infinity,
+          fk = -1;
+        for (const k of near) {
+          const t = entryInto(bulges[k], o0, q);
+          if (t >= 0 && t < first) {
+            first = t;
+            fk = k;
+          }
+        }
+        return fk < 0
+          ? null
+          : ontoBulge(bulges[fk], [
+              o0[0] + first * (q[0] - o0[0]),
+              o0[1] + first * (q[1] - o0[1]),
+            ]);
+      };
+      if (ck >= 0 || inside >= 0) {
+        let e2: { p: Pt; c: Pt; r: number };
+        if (ck >= 0) {
+          const c = coreNear(bulges[ck], q)!;
+          e2 = ontoBulge(bulges[ck], [2 * c[0] - q[0], 2 * c[1] - q[1]]);
+        } else e2 = ontoBulge(bulges[inside], q);
+        for (let it = 0; it < 4; it++) {
+          let dd = -1e-6,
+            kk = -1;
+          for (const k of bgrid.query(e2.p[0], e2.p[1], e2.p[0], e2.p[1])) {
+            const d = primD(bulges[k], e2.p[0], e2.p[1], false);
+            if (d < dd) {
+              dd = d;
+              kk = k;
+            }
+          }
+          if (kk < 0) break;
+          e2 = (it < 3 ? null : entry()) ?? ontoBulge(bulges[kk], e2.p);
+        }
         // where a keep-out zone cuts the bulge, its edge is the zone's: the point stays where it was
         let cut = false;
         region.zoneGrid.each(e2.p[0], e2.p[1], e2.p[0], e2.p[1], (z) => {

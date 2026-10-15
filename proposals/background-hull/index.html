@@ -784,9 +784,10 @@ enclose([spread([circle(**d) for d in planets],
           <code>roundness</code> rounds. It changes shape only: the pieces and
           holes are those of <code>neck: 1</code>, at every value. With line
           members (graph edges), each edge keeps its padding band, so
-          <code>neck</code> has little effect along member edges at low
-          <code>convexity</code>; this is a declared shortcut (decision 16,
-          History v10).
+          <code>neck</code> never thins a member edge, at any
+          <code>convexity</code>: a filled triangle's side along a member edge
+          is that edge's band, and only the enclosure's own links thin. This is
+          a declared shortcut (decision 16, History v10).
         </td>
         <td>
           0 to 1. Bigger is fuller; 1 does not pull in. Above 1 is an error: the
@@ -1562,7 +1563,7 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
         scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
   .mark(circle({ r: 2.5, fill: "Species" }))
   .layer(enclose({ shape, padding: 6, fill: "Species", opacity: 0.15 }))
-// shape: Shape.box(), Shape.hull(), Shape.blob() or Shape.spine()</code></pre>
+// shape: Shape.box(), Shape.hull(), Shape.blob({ convexity: 0.75 }) or Shape.spine()</code></pre>
     <figure>
       <div class="shot">
         <img
@@ -1573,11 +1574,13 @@ enclose({ shape: oval, padding: 30 }, [a, b]);</code></pre>
       <figcaption>
         The boxes overlap so much that the species blur together. The hulls
         separate them well and are easy to read, with a sliver of overlap
-        between each pair. The blob and the spine follow the points closely and
-        show where each species is dense; on data this dense they look almost
-        the same, because the discs already touch and there is little space left
-        for <code>convexity: 0.5</code> to fill. Box and hull are reasonable
-        choices here; blob and spine trade a calm outline for a closer fit.
+        between each pair. The spine follows the points closely and shows where
+        each species is dense. The blob, at <code>convexity: 0.75</code>, fills
+        the wider gaps and keeps the deep notches. The panel uses 0.75 because
+        at the default 0.5 the blob looks almost the same as the spine on data
+        this dense: the triangles that fill at 0.5 lie where the discs already
+        touch. Box and hull are reasonable choices here; blob and spine trade a
+        calm outline for a closer fit.
       </figcaption>
     </figure>
     <p>
