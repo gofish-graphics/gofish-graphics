@@ -253,6 +253,11 @@ function resolveCoordConfig(coordSpec: Record<string, any>): any {
   return coordSpec;
 }
 
+/** A `SelectRefIR` as the ref it stands for: `mode` "all" is
+ *  `selectAll(layer)` (every node), "one" or absent is `ref(layer)` (one). */
+export const refOfSelect = (spec: { layer: string; mode?: string }) =>
+  spec.mode === "all" ? selectAll(spec.layer) : ref(spec.layer);
+
 /**
  * Nodes named inside an option (`Frontend.NodeSelectionIR`, a blob's
  * `avoiding`), rebuilt as the refs they stand for, at any depth: a
@@ -267,12 +272,8 @@ export function resolveNodeRefs(value: any, resolveToken: TokenResolver): any {
   if (Object.getPrototypeOf(value) !== Object.prototype) return value;
   if (value.type === "ref" && value.selection !== undefined)
     return ref(resolveRefSelection(value.selection, resolveToken));
-  if (
-    value.type === "select" &&
-    value.mode === "all" &&
-    typeof value.layer === "string"
-  )
-    return selectAll(value.layer);
+  if (value.type === "select" && typeof value.layer === "string")
+    return refOfSelect(value);
   const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(value))
     out[k] = resolveNodeRefs(v, resolveToken);
@@ -741,12 +742,7 @@ function chartFromIR(
   const dataField = (chartSpec as any).data;
   if (dataField && typeof dataField === "object") {
     if (dataField.type === "select") {
-      // `mode` discriminates the plural selectAll() (array of refs) from the
-      // singular ref() (a single ref). Missing/"one" → ref(layer).
-      chartData =
-        dataField.mode === "all"
-          ? selectAll(dataField.layer)
-          : ref(dataField.layer);
+      chartData = refOfSelect(dataField);
     } else if (dataField.type === "inline" && Array.isArray(dataField.rows)) {
       chartData = dataField.rows;
     } else if (dataField.type === "previous-tier") {

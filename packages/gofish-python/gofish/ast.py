@@ -304,13 +304,32 @@ def _wire_options(options: Dict[str, Any], accessors: Dict[str, list]) -> Dict[s
     }
 
 
+def _select_ref(proxy: "_RefProxy") -> Dict[str, Any]:
+    """A ref by a layer name (`ref(name)`, `select_all(name)`) as its wire
+    form, `SelectRefIR`: `{"type": "select", "layer": name, "mode": "one" |
+    "all"}`, "one" for a singular `ref(name)`, "all" for `select_all(name)`.
+    Chart data takes it, and so does an option that names nodes."""
+    selection = proxy._sel()
+    if len(selection) != 1 or not isinstance(selection[0], str):
+        raise ValueError(
+            "a ref used as a layer selection must be a flat single-name "
+            "selection (e.g. `ref(\"bars\")` / `select_all(\"bars\")`); "
+            "token/path refs cannot serialize as one"
+        )
+    return {
+        "type": "select",
+        "layer": selection[0],
+        "mode": proxy.multiplicity or "one",
+    }
+
+
 def _mark_in_option(m: "Mark") -> Any:
     """A mark named inside an option (a blob's `avoiding`), as the wire names
-    it (`NodeSelectionIR`): `select_all(name)` is every node of the layer
-    `{"type": "select", "layer": name, "mode": "all"}`, the form chart data
-    takes; any other mark (a `ref(...)`, a `.relate()` operand) is its IR."""
+    it (`NodeSelectionIR`): `select_all(name)` is every node of the layer, the
+    `SelectRefIR` chart data takes; any other mark (a `ref(...)`, a
+    `.relate()` operand) is its IR."""
     if getattr(m, "multiplicity", None) == "all":
-        return {"type": "select", "layer": m.kwargs["selection"][0], "mode": "all"}
+        return _select_ref(m)
     return m.to_dict()
 
 
@@ -1456,26 +1475,11 @@ class ChartBuilder:
         # inside a `.layer(...)` chain becomes `{"type": "previous-tier"}` (JS's
         # `LayerBuilder.wireTiers()` derives the auto-name/selectAll wiring from
         # this marker — see `_PREVIOUS_LAYER_MARKS`); otherwise None. The select
-        # wire shape is `{"type": "select", "layer": <name>, "mode": "one"|"all"}`
-        # — "one" for a singular `ref(name)`, "all" for `select_all(name)`.
+        # wire shape is `SelectRefIR` (`_select_ref`).
         if self._uses_previous_marks():
             data_ir: Any = {"type": "previous-tier"}
         elif isinstance(self.data, _RefProxy):
-            selection = self.data._sel()
-            if (
-                len(selection) != 1
-                or not isinstance(selection[0], str)
-            ):
-                raise ValueError(
-                    "a ref used as chart data must be a flat single-name "
-                    "selection (e.g. `ref(\"bars\")` / `select_all(\"bars\")`); "
-                    "token/path refs cannot serialize as chart data"
-                )
-            data_ir = {
-                "type": "select",
-                "layer": selection[0],
-                "mode": self.data.multiplicity or "one",
-            }
+            data_ir = _select_ref(self.data)
         else:
             data_ir = None
 
@@ -1707,8 +1711,6 @@ def layer(
     return RelatableMark(
         "layer", _children=list(children), **_layer_opts(**options)
     )
-
-
 
 
 # Attribute names reserved on `_RefProxy` so they pass through normal

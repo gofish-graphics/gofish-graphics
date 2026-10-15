@@ -249,15 +249,7 @@ function walkData(node: unknown, path: string, ctx: Context): void {
       rejectUnknown(node, ["type", "rows"], path, ctx);
       return;
     case "select":
-      expectField(node, "layer", path, ctx, expectString);
-      optionalField(node, "mode", path, ctx, (v, p) => {
-        if (v !== "one" && v !== "all")
-          ctx.errors.push({
-            path: p,
-            message: `mode must be "one" | "all", got ${JSON.stringify(v)}`,
-          });
-      });
-      rejectUnknown(node, ["type", "layer", "mode"], path, ctx);
+      walkSelectRef(node, path, ctx);
       return;
     case "external":
       optionalField(node, "id", path, ctx, expectString);
@@ -755,6 +747,24 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
   );
 }
 
+/** `SelectRefIR`: `{ type: "select", layer, mode? }`, the nodes of a named
+ *  layer, as chart data and inside an option. */
+function walkSelectRef(
+  node: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  expectField(node, "layer", path, ctx, expectString);
+  optionalField(node, "mode", path, ctx, (v, p) => {
+    if (v !== "one" && v !== "all")
+      ctx.errors.push({
+        path: p,
+        message: `mode must be "one" | "all", got ${JSON.stringify(v)}`,
+      });
+  });
+  rejectUnknown(node, ["type", "layer", "mode"], path, ctx);
+}
+
 /** `NodeSelectionIR`: a list of `ref` marks, or a `select` of every node of
  *  a named layer (`selectAll(name)`). */
 function walkNodeSelection(value: unknown, path: string, ctx: Context): void {
@@ -769,13 +779,15 @@ function walkNodeSelection(value: unknown, path: string, ctx: Context): void {
     });
     return;
   }
-  if (
-    isObject(value) &&
-    value.type === "select" &&
-    typeof value.layer === "string" &&
-    value.mode === "all"
-  )
+  if (isObject(value) && value.type === "select") {
+    walkSelectRef(value, path, ctx);
+    if (value.mode !== "all")
+      ctx.errors.push({
+        path: `${path}.mode`,
+        message: `a selection of nodes takes every node of its layer: mode must be "all", got ${JSON.stringify(value.mode)}`,
+      });
     return;
+  }
   ctx.errors.push({
     path,
     message:

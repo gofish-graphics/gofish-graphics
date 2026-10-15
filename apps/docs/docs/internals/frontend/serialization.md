@@ -144,8 +144,10 @@ is not a curve. So does `enclose`'s `shape` (the `Shape` family:
 `{ "kind": "blob", "convexity": 0, "avoiding": [...] }`). A blob's `avoiding`
 names nodes, so on the wire it is a `NodeSelectionIR`: a list of
 `{ "type": "ref", "selection": "b" }` refs, or every node of a named layer as
-`{ "type": "select", "layer": "nodes", "mode": "all" }`, the form chart data
-takes for `selectAll`. The emitter writes any ref or `selectAll` it finds
+`{ "type": "select", "layer": "nodes", "mode": "all" }`, the `SelectRefIR`
+chart data takes for `selectAll` (one shape in `schema.ts` and the JSON
+Schema, written by `selectRefIR` in `toJSON.ts` and read by `refOfSelect` in
+`fromJSON.ts`, and by `_select_ref` in Python, for both uses). The emitter writes any ref or `selectAll` it finds
 inside an option this way (`nodeRefsToIR` in `toJSON.ts`), and the reader
 turns each back into a live ref (`resolveNodeRefs` in `fromJSON.ts`). The families are namespaces in the two surfaces only; the
 wire carries the plain objects. Their kinds and params are declared once, in

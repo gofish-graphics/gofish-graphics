@@ -90,19 +90,7 @@ for the API.
           }
         },
         {
-          "type": "object",
-          "required": ["type", "layer"],
-          "properties": {
-            "type": {
-              "const": "select"
-            },
-            "layer": {
-              "type": "string"
-            },
-            "mode": {
-              "enum": ["one", "all"]
-            }
-          }
+          "$ref": "#/$defs/SelectRefIR"
         },
         {
           "type": "object",
@@ -773,22 +761,38 @@ for the API.
           }
         },
         {
-          "type": "object",
-          "required": ["type", "layer", "mode"],
-          "additionalProperties": false,
-          "properties": {
-            "type": {
-              "const": "select"
+          "allOf": [
+            {
+              "$ref": "#/$defs/SelectRefIR"
             },
-            "layer": {
-              "type": "string"
-            },
-            "mode": {
-              "const": "all"
+            {
+              "required": ["mode"],
+              "properties": {
+                "mode": {
+                  "const": "all"
+                }
+              }
             }
-          }
+          ]
         }
       ]
+    },
+    "SelectRefIR": {
+      "description": "A reference to the nodes of a named layer: ref(name) (mode \"one\" or absent) or selectAll(name) (mode \"all\").",
+      "type": "object",
+      "required": ["type", "layer"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "select"
+        },
+        "layer": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": ["one", "all"]
+        }
+      }
     },
     "RelateClauseIR": {
       "description": "One clause of a .relate() callback: a constraint over names (carries refs), or a mark that draws, whose children may reference the layer's names.",

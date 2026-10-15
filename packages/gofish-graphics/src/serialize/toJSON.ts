@@ -99,31 +99,31 @@ function nodeRefsToIR(value: unknown): unknown {
       throw new Error(
         "Cannot serialize a node-backed ref in an option; name the node and ref the name."
       );
-    if (value.multiplicity === "all") {
-      if (typeof value.selection !== "string")
-        throw new Error("selectAll requires a string layer name");
-      return { type: "select", layer: value.selection, mode: "all" };
-    }
+    if (value.multiplicity === "all") return selectRefIR(value);
     return { type: "ref", selection: value.selection };
   }
-  if (Array.isArray(value)) {
-    const mapped = value.map(nodeRefsToIR);
-    return mapped.some((v, i) => v !== value[i]) ? mapped : value;
-  }
+  if (Array.isArray(value)) return value.map(nodeRefsToIR);
   if (
     value !== null &&
     typeof value === "object" &&
     Object.getPrototypeOf(value) === Object.prototype
-  ) {
-    let changed = false;
-    const out: AnyObject = {};
-    for (const [k, v] of Object.entries(value)) {
-      out[k] = nodeRefsToIR(v);
-      if (out[k] !== v) changed = true;
-    }
-    return changed ? out : value;
-  }
+  )
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, nodeRefsToIR(v)])
+    );
   return value;
+}
+
+/** A ref by a layer name (`ref(name)`, `selectAll(name)`) as its wire form,
+ *  `SelectRefIR`: `multiplicity` becomes `mode`, emitted always so JS and
+ *  Python IR agree. Only a string-layer ref has one. */
+function selectRefIR(r: GoFishRef): Frontend.SelectRefIR {
+  if (typeof r.selection !== "string")
+    throw new Error(
+      "Cannot serialize a token/path/node-backed ref as a layer selection; " +
+        "only a string-layer ref (ref(name) / selectAll(name)) is serializable."
+    );
+  return { type: "select", layer: r.selection, mode: r.multiplicity ?? "one" };
 }
 
 function readTag(value: unknown): SerializeTag | undefined {
@@ -255,19 +255,7 @@ function dataToIR(data: unknown): Frontend.DataIR | null {
   // A `GoFishRef` used as chart data (from `ref(name)` or `selectAll(name)`).
   // Only string-layer references serialize; `multiplicity` ("one" | "all")
   // becomes the wire `mode` (emitted unconditionally so JS and Python IR agree).
-  if (data instanceof GoFishRef) {
-    if (typeof data.selection === "string") {
-      return {
-        type: "select",
-        layer: data.selection,
-        mode: data.multiplicity ?? "one",
-      };
-    }
-    throw new Error(
-      "Cannot serialize a token/path/node-backed ref as chart data; only a " +
-        "string-layer ref (ref(name) / selectAll(name)) is serializable."
-    );
-  }
+  if (data instanceof GoFishRef) return selectRefIR(data);
   if (Array.isArray(data)) {
     return { type: "inline", rows: data as AnyObject[] };
   }
