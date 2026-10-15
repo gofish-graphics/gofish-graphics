@@ -1,12 +1,14 @@
 #!/bin/bash
 set -e
 
-# Checks the summary Claude wrote to summary.md and guarantees that every
-# contributor appears by name at least once, appending a fallback shout-out
-# for anyone the summary missed.
+# Checks the summary Claude wrote to summary.md. It drops any screenshot whose
+# URL the PRs did not list, and it guarantees that every contributor appears
+# by name at least once, appending a fallback shout-out for anyone the summary
+# missed.
 #
-# Expects summary.md (from the "Summarize with Claude" step) and
-# contributors.tsv (from build-summary-prompt.sh) in the current directory.
+# Expects summary.md (from the "Summarize with Claude" step), plus
+# contributors.tsv and images.txt (from build-summary-prompt.sh), in the
+# current directory.
 
 if [ ! -s summary.md ]; then
   echo "::error::Claude did not write a summary to summary.md (missing or empty)."
@@ -19,7 +21,28 @@ if [ ! -f contributors.tsv ]; then
   exit 1
 fi
 
-SUMMARY=$(cat summary.md)
+if [ ! -f images.txt ]; then
+  echo "ERROR: images.txt must exist in the current directory"
+  echo "This file is created by build-summary-prompt.sh"
+  exit 1
+fi
+
+# A screenshot is a line holding only ![caption](url), the shape the prompt
+# asks for and post-to-discord.sh turns into an attachment. Keep it only when
+# its URL is one a PR listed, so a made-up or mistyped URL never gets posted.
+IMAGE_LINE='^[[:space:]]*!\[[^]]*\]\(([^)[:space:]]+)\)[[:space:]]*$'
+SUMMARY=$(
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [[ "$line" =~ $IMAGE_LINE ]]; then
+      url="${BASH_REMATCH[1]}"
+      if ! grep -Fxq -- "$url" images.txt; then
+        echo "::warning::Dropped an image the PRs did not list: $url" >&2
+        continue
+      fi
+    fi
+    printf '%s\n' "$line"
+  done < summary.md
+)
 
 MISSING_CALLOUTS=$(
   while IFS=$'\t' read -r author pr url title; do

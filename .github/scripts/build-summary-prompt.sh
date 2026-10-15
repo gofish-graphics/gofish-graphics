@@ -13,6 +13,9 @@ set -e
 #   title), which check-summary.sh uses to guarantee contributor coverage.
 #   Only PRs with an Author line count; the workflow omits that line for the
 #   maintainer and for bots, so only outside contributors get a shout-out.
+# - images.txt: one image URL per line, every screenshot listed under a PR's
+#   Images line. check-summary.sh drops any image the summary shows that is
+#   not on this list, so Claude cannot post an image the PRs did not ship.
 
 # Check if required file exists
 if [ ! -f prs.txt ]; then
@@ -70,6 +73,12 @@ if [ -z "$CONTRIBUTOR_CALLOUTS" ]; then
   CONTRIBUTOR_CALLOUTS="(None this week.)"
 fi
 
+# Collect the image allowlist. The workflow lists each PR's images as
+# "  - ![alt](url)" lines under "- **Images:**".
+{ grep -E '^  - !\[[^]]*\]\([^)[:space:]]+\)$' prs.txt || true; } \
+  | sed -E 's/^  - !\[[^]]*\]\(([^)]+)\)$/\1/' \
+  | sort -u > images.txt
+
 # Build the prompt template
 read -r -d '' PROMPT_TEMPLATE <<'ENDPROMPT' || true
 You are summarizing a week of development on GoFish, a charting library for data visualization. Create a short weekly update in plain Markdown (it will be posted to Discord and may be reused for release notes).
@@ -88,6 +97,14 @@ Write a concise weekly summary in standard Markdown:
 - Credit only the contributors listed above: each must be called out by name with at least one specific contribution. Do not name or credit anyone else.
 - Do not state how many PRs landed this week.
 - Do not add a title line above the first section; one is added when the summary is posted.
+
+Screenshots (optional):
+- Some PRs above list **Images**: screenshots from the PR description. You may show a few of them to illustrate new charts or new user-visible capabilities.
+- To show one, put a line containing only `![short caption](URL)` directly under the bullet it illustrates. Write your own short caption (a few words saying what the image shows); do not put the image inside the bullet text.
+- Use only URLs listed under Images above, copied exactly. Never invent, edit, or guess a URL.
+- Use at most about 4 images in total.
+- When a PR shows before and after images, pick the after one. Prefer charts and visualizations over screenshots of internal tooling (CI, review sites, dev workflow).
+- If nothing visual shipped this week, use no images.
 
 Structure your response as these sections, in this order:
 1. `## Highlights` - 2-3 sentence overview of the main thrust of work this week
