@@ -882,7 +882,9 @@ type to the public factory that rebuilds it, and
 the kind decides the call. An operator, a leaf mark or a coord transform is
 `factory(opts)`; a combinator mark is `factory(opts, children)`. A
 descriptor's `positional` field is taken out of the options and passed first
-(`geo(projection, { lon, lat })`). A dual-form construct such as
+(`geo(projection, { lon, lat })`); when that field is required and missing,
+`rebuild` throws and names it (`coord geo: missing required field
+"projection"`). A dual-form construct such as
 `spread` or `line` therefore has one entry for both forms, and the compositing
 wire types map to their renamed factories (`inside` to `intersect`, and so on).
 The coord transforms (`polar`, `clock`, `wavy`, `geo`) are entries of the same

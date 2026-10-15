@@ -254,7 +254,8 @@ export const OPERATOR_BUILDERS: Record<
  * dual-form factory reads a second argument as the combinator form's
  * children, so an operator must not get one. A descriptor's `positional`
  * field goes first, before the rest of the options
- * (`geo(projection, { lon, lat })`). Only an {@link OPERATOR_BUILDERS} entry
+ * (`geo(projection, { lon, lat })`); a required one that is missing
+ * throws, naming it. Only an {@link OPERATOR_BUILDERS} entry
  * sees the bridge.
  */
 export function rebuild(
@@ -274,6 +275,14 @@ export function rebuild(
   let args: unknown[] = [opts];
   if (positional !== undefined) {
     const { [positional]: first, ...rest } = opts;
+    if (
+      first === undefined &&
+      Frontend.resolveFields(table[type])[positional]?.required
+    ) {
+      throw new Error(
+        `${kind} ${type}: missing required field ${JSON.stringify(positional)}`
+      );
+    }
     args = [first, rest];
   }
   return kind === "combinator-mark"

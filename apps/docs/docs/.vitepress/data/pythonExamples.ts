@@ -52,12 +52,24 @@ const __dirname = dirname(__filename);
 const REPO_ROOT = resolve(__dirname, "../../../../..");
 const TESTS_DIR = join(REPO_ROOT, "tests");
 const PYTHON_STORIES_DIR = join(TESTS_DIR, "python-stories");
-/** The `tests/python-stories` modules that hold datasets, by module name. A
- *  story's import from one becomes an import from the snippet's standalone
- *  `dataset` module. `data` holds the shared datasets; a large dataset that
- *  only a few stories read sits in a module of its own (`bird_data`), so
- *  importing `data` does not parse it. */
-const DATASET_MODULES = new Set(["data", "bird_data"]);
+/** A `tests/python-stories` module holds datasets when it imports the shared
+ *  JSON loader (`load_json` from `_json_data.py`). A story's import from one
+ *  becomes an import from the snippet's standalone `dataset` module, so a new
+ *  dataset module needs no registration here. */
+const DATASET_LOADER_IMPORT =
+  /^from\s+python_stories\._json_data\s+import\s+load_json\b/m;
+const datasetModuleCache = new Map<string, boolean>();
+function isDatasetModule(module: string): boolean {
+  let found = datasetModuleCache.get(module);
+  if (found === undefined) {
+    const path = join(PYTHON_STORIES_DIR, `${module}.py`);
+    found =
+      existsSync(path) &&
+      DATASET_LOADER_IMPORT.test(readFileSync(path, "utf-8"));
+    datasetModuleCache.set(module, found);
+  }
+  return found;
+}
 const LOWLEVEL_DATA_DIR = join(PYTHON_STORIES_DIR, "_lowlevel_data");
 const EXEMPT_FILE = join(TESTS_DIR, ".python-sync-exempt");
 
@@ -438,9 +450,9 @@ function pyRepr(value: unknown, indent = 0): string {
   return "{\n" + items.join(",\n") + ",\n" + pad + "}";
 }
 
-/** Resolve a `_load_json("name")` RHS to inlined JSON data, or null. */
+/** Resolve a `load_json("name")` RHS to inlined JSON data, or null. */
 function jsonLoadName(block: PyBlock): string | null {
-  const m = /=\s*_load_json\(\s*["']([^"']+)["']\s*\)/.exec(block.text);
+  const m = /=\s*load_json\(\s*["']([^"']+)["']\s*\)/.exec(block.text);
   return m ? m[1] : null;
 }
 
@@ -718,7 +730,7 @@ function transformPythonStory(
       continue;
     }
     const siblingMatch = /^python_stories\.(\w+)$/.exec(module);
-    if (siblingMatch && DATASET_MODULES.has(siblingMatch[1])) {
+    if (siblingMatch && isDatasetModule(siblingMatch[1])) {
       const leaf = siblingMatch[1];
       const set = datasetNames.get(leaf) ?? new Set<string>();
       for (const n of names) set.add(n);

@@ -1274,6 +1274,17 @@ async function main() {
       JSON.stringify(geoRebuilt.transform([-100, 40])) ===
         JSON.stringify(geoDirect.transform([-100, 40]))
     );
+    let missingProjection = "";
+    try {
+      Serialize.rebuild("coord", "geo", geoWindow);
+    } catch (e) {
+      missingProjection = (e as Error).message;
+    }
+    check(
+      "a missing required positional field throws, naming it",
+      missingProjection === 'coord geo: missing required field "projection"',
+      missingProjection
+    );
     check(
       "rebuild is kind-checked (no operator `layer`)",
       Serialize.rebuild("operator", "layer", {}) === undefined
