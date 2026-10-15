@@ -224,6 +224,4 @@ the details.
 - The spec's fields are keyword arguments of `tree()`, after `data`:
   `tree(data, node=..., parent_child=...)` for JS `tree({ node, parentChild }, data)`.
 - Option names are snake_case: `parent_child`, `per_depth`, `stroke_width`.
-- `mode` and `sortBy` are not arguments. The JavaScript `tree()` does not use
-  them either.
 - A combiner's growth axis is its `growth_dir` attribute.

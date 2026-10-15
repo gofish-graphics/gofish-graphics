@@ -1,8 +1,4 @@
-"""Equivalent of gofish-gotree/stories/gallery/Cheops.stories.tsx.
-
-The JS spec also sets `mode: "bottomUp"`, which `tree()` does not read; the
-Python `tree()` has no `mode`.
-"""
+"""Equivalent of gofish-gotree/stories/gallery/Cheops.stories.tsx."""
 
 from gofish import rect
 from gofish.gotree import combine, tree

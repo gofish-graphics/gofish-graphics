@@ -1,8 +1,4 @@
-"""Equivalent of gofish-gotree/stories/gallery/HVDrawing.stories.tsx.
-
-The JS spec also sets `mode: "bottomUp"`, which `tree()` does not read; the
-Python `tree()` has no `mode`.
-"""
+"""Equivalent of gofish-gotree/stories/gallery/HVDrawing.stories.tsx."""
 
 from gofish import Curve, circle
 from gofish.gotree import alternate, combine, tree
