@@ -150,37 +150,19 @@ const penguinShapes = (shape: Shape.Shape) =>
         )
     );
 
-export const PenguinBoxes: StoryObj = {
+/** A story of the penguins with one `shape` per species. */
+const penguinStory = (shape: Shape.Shape): StoryObj => ({
   render: () => {
     const container = initializeContainer();
-    penguinShapes(Shape.box()).render(container, { w: 420, h: 320 });
+    penguinShapes(shape).render(container, { w: 420, h: 320 });
     return container;
   },
-};
+});
 
-export const PenguinHulls: StoryObj = {
-  render: () => {
-    const container = initializeContainer();
-    penguinShapes(Shape.hull()).render(container, { w: 420, h: 320 });
-    return container;
-  },
-};
-
-export const PenguinBlobs: StoryObj = {
-  render: () => {
-    const container = initializeContainer();
-    penguinShapes(Shape.blob()).render(container, { w: 420, h: 320 });
-    return container;
-  },
-};
-
-export const PenguinSpines: StoryObj = {
-  render: () => {
-    const container = initializeContainer();
-    penguinShapes(Shape.spine()).render(container, { w: 420, h: 320 });
-    return container;
-  },
-};
+export const PenguinBoxes = penguinStory(Shape.box());
+export const PenguinHulls = penguinStory(Shape.hull());
+export const PenguinBlobs = penguinStory(Shape.blob());
+export const PenguinSpines = penguinStory(Shape.spine());
 
 // The four shapes on the same points: pick one from the menu, then tune it.
 export const PenguinsFourShapes: StoryObj = {
