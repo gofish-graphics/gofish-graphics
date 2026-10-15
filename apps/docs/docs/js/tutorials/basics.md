@@ -142,8 +142,13 @@ const data = [
   { name: "mars", r: 21, fill: "#F4BC80", stroke: "#E0954C" },
 ];
 
-gf.background(
-  { padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 },
+gf.enclose(
+  {
+    padding: 20,
+    fill: "#252150",
+    stroke: "none",
+    shape: gf.Shape.box({ rx: 16, ry: 16 }),
+  },
   [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
