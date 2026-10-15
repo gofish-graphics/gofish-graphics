@@ -421,7 +421,7 @@ const chartaccent: Dataset = {
   over: caOver,
   call: "subSaharan",
   shapeArgs: 'avoiding: selectAll("countries")',
-  note: "ChartAccent's bubble set around the Sub-Saharan countries (PacificVis 2017), on its own data: 191 countries in one year, bubble area by population. Its look is about convexity 0.25 and neck 0.6. Like the original, the outline may cover the pale bubbles of other regions; the checkbox avoids them.",
+  note: "ChartAccent's bubble set around the Sub-Saharan countries (PacificVis 2017), on its own data: 191 countries in one year, bubble area by population. Its look is about convexity 0.1 and neck 0.6. Like the original, the outline may cover the pale bubbles of other regions; the checkbox avoids them.",
   avoidToggle: "Avoid other regions",
 };
 

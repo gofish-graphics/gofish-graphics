@@ -1398,15 +1398,19 @@ export const BlobTroutBars: StoryObj = {
 // alpha's fuller (more convex) look back, and a less shrink-wrapped Topology.
 //
 // Construction ("smoothed union"), for one set:
-//  1. Skeleton = alpha complex of the member centers + spanning tree.
-//     alpha = m * convexity / (1 - convexity), where m is the median link of the
-//     members' Euclidean minimum spanning tree (so the rule is unchanged by a
-//     resize). A Delaunay triangle is filled when its circumradius <= alpha and no
-//     avoided node's keep-out zone touches it. Links: the filled triangles' edges,
-//     Delaunay edges with half-length <= alpha that no avoided node blocks, the
-//     minimum spanning tree over links routed around avoided nodes (always, so the
-//     set stays one piece). convexity 0 = the tree, 1 = every face. (Line members,
-//     such as a graph's edges, replaced v5's `via` edges.)
+//  1. Skeleton = filled Delaunay triangles of the member centers + spanning tree.
+//     convexity c is the share of the centers' convex hull that is filled, smallest
+//     gaps first: the triangles are taken in order of circumradius (the radius of
+//     their empty circle) until they hold c of the hull's area. A triangle counts
+//     when the midpoint of its area is within c, and triangles with the same
+//     circumradius count together. A filled triangle is filled whatever it holds: an
+//     avoided node inside becomes a hole, so avoiding never changes which triangles
+//     fill. Links: the filled triangles' edges, and the minimum spanning tree over
+//     links routed around avoided nodes (always, so the set stays one piece).
+//     convexity 0 = the tree, 1 = every triangle. (v1 to v10 used alpha =
+//     m * c / (1 - c), m the median spanning-tree link, and also took every Delaunay
+//     edge with half-length <= alpha.) (Line members, such as a graph's edges,
+//     replaced v5's `via` edges.)
 //  2. Pieces: members grown by padding, links as tubes, filled faces; their union
 //     minus the avoided nodes' keep-out zones is the region (no closing).
 //  3. Exact outline (v7): every piece and zone has a closed-form distance, and the
@@ -1580,8 +1584,8 @@ const snapRoute = (route: Pt[], pivotOf: (v: Pt) => { c: Pt; r: number }): { rou
   }
   return { route, parts: route.slice(1).map((q, i) => ({ a: route[i], b: q })), len: polyLen(route) };
 };
-type Skeleton = { P: Pt[]; R: number[]; links: SkLink[]; faces: Pt[][]; alpha: number };
-/** A member's sites, the points the alpha complex is built on: a node's center, a segment's two ends. */
+type Skeleton = { P: Pt[]; R: number[]; links: SkLink[]; faces: Pt[][] };
+/** A member's sites, the points the triangles are built on: a node's center, a segment's two ends. */
 const sitesOf = (m: Member): Pt[] => (m.kind === "segment" ? [m.a, m.b] : [centerOf(m)]);
 const nearestOnSeg = (p: Pt, a: Pt, b: Pt): Pt => {
   const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy || 1;
@@ -1605,9 +1609,8 @@ const closestPair = (m1: Member, m2: Member): [Pt, Pt] => {
   ];
   return opts.reduce((x, y) => (dist(x[0], x[1]) <= dist(y[0], y[1]) ? x : y));
 };
-/** The members' sites (merged where two members share one), their Delaunay triangles and edges,
- *  and the scale m (the median link of the sites' minimum spanning tree). Depends on the members alone. */
-const sitesMemo = stageMemo<{ P: Pt[]; owner: number[][]; tri: [number, number, number][]; cand: Map<string, [number, number]>; m: number; memberGrid: ReturnType<typeof boxGrid> }>();
+/** The members' sites (merged where two members share one) and their Delaunay triangles and edges. Depends on the members alone. */
+const sitesMemo = stageMemo<{ P: Pt[]; owner: number[][]; tri: [number, number, number][]; cand: Map<string, [number, number]>; memberGrid: ReturnType<typeof boxGrid> }>();
 const sitesOfMembers = (members: Member[]) => sitesMemo([members], [], () => {
   const P: Pt[] = [], owner: number[][] = [];
   members.forEach((mm, k) => sitesOf(mm).forEach((q) => {
@@ -1628,15 +1631,9 @@ const sitesOfMembers = (members: Member[]) => sitesMemo([members], [], () => {
     }
   }
   if (tri.length === 0) for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) cand.set(ek(i, j), [i, j]);
-  const root = P.map((_, k) => k);
-  const find = (k: number): number => (root[k] === k ? k : (root[k] = find(root[k])));
-  const mst: number[] = [];
-  for (const [i, j] of [...cand.values()].sort((a, b) => dist(P[a[0]], P[a[1]]) - dist(P[b[0]], P[b[1]])))
-    if (find(i) !== find(j)) { root[find(i)] = find(j); mst.push(dist(P[i], P[j])); }
-  mst.sort((a, b) => a - b);
   // where each member's geometry is (a node's center, a line's box), to find the members holding a point
   const memberGrid = boxGrid(members.map((mm) => (mm.kind === "segment" ? [Math.min(mm.a[0], mm.b[0]), Math.min(mm.a[1], mm.b[1]), Math.max(mm.a[0], mm.b[0]), Math.max(mm.a[1], mm.b[1])] : [...centerOf(mm), ...centerOf(mm)])));
-  return { P, owner, tri, cand, m: mst.length ? mst[Math.floor(mst.length / 2)] : 0, memberGrid };
+  return { P, owner, tri, cand, memberGrid };
 });
 /** The avoided nodes indexed by where their keep-out zones are, with each node's keep-out
  *  polygon for a tube half-width h built when first asked for (a circle as a 32-gon around it). */
@@ -1660,7 +1657,7 @@ const avoidIndex = (others: Member[], clearance: number) => avoidMemo([others], 
 /** Routes around the avoided nodes, remembered per set of avoided nodes and clearance. */
 const routeMemo = stageMemo<Map<string, { route: Pt[]; parts: Part[]; len: number } | null>>();
 const skelMemo = stageMemo<Skeleton>();
-/** Step 1: the alpha complex of the members' sites plus the routed spanning tree over members.
+/** Step 1: the filled Delaunay triangles of the members' sites plus the routed spanning tree over members.
  *  Each member is its own geometry: a segment member is already a link between its ends, and a
  *  spanning-tree link runs between the closest points of two members' geometries. Every link is
  *  chosen and routed at its full width (the bulge at its ends), so `neck`, which only thins the
@@ -1669,21 +1666,33 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton =>
   skelMemo([members, o.avoiding], [o.pad, o.convexity, o.clearance], () => {
   const clearance = o.clearance ?? 4, others = o.avoiding ?? [];
   const Cm = members.map(centerOf), Rm = members.map((m) => memberRadius(m) + o.pad), nm = members.length;
-  const { P, owner, tri, cand, m, memberGrid } = sitesOfMembers(members);
+  const { P, owner, tri, cand, memberGrid } = sitesOfMembers(members);
   const R = owner.map((ks) => Math.max(...ks.map((k) => Rm[k])));
   const ek = (i: number, j: number) => (i < j ? `${i},${j}` : `${j},${i}`);
   const c = Math.max(0, Math.min(1, o.convexity));
-  const alpha = c >= 1 ? Infinity : (m * c) / (1 - c);
   const hw = (i: number, j: number) => Math.min(R[i], R[j]);
+  // convexity c fills the smallest gaps first until they hold c of the hull's area: the triangles
+  // in order of circumradius, each counted when the midpoint of its area is within c (triangles
+  // with the same circumradius count together). 0 fills none, 1 fills every triangle.
+  const gap = tri.map(([i, j, l]) => circumR(P[i], P[j], P[l]));
+  const area = tri.map(([i, j, l]) => Math.abs(cross(P[i], P[j], P[l])) / 2);
+  const order = tri.map((_, k) => k).sort((x, y) => gap[x] - gap[y]);
+  const total = area.reduce((s, a) => s + a, 0), filled = new Set<number>();
+  for (let k = 0, sum = 0; k < order.length; ) {
+    let e = k, a = 0;
+    while (e < order.length && gap[order[e]] <= gap[order[k]] * (1 + 1e-9)) a += area[order[e++]];
+    if (c < 1 && sum + a / 2 >= c * total) break;
+    for (; k < e; k++) filled.add(order[k]);
+    sum += a;
+  }
   const faces: Pt[][] = [], faceEdges = new Set<string>();
-  for (const [i, j, l] of tri) {
-    const q = [P[i], P[j], P[l]];
+  tri.forEach(([i, j, l], k) => {
     // A face is filled whatever it holds: an avoided node inside it becomes a hole, cut
     // later as exactly its clearance zone (step 2). Only links route around avoided nodes.
-    if (circumR(q[0], q[1], q[2]) > alpha) continue;
-    faces.push(q);
+    if (!filled.has(k)) return;
+    faces.push([P[i], P[j], P[l]]);
     [ek(i, j), ek(j, l), ek(l, i)].forEach((e) => faceEdges.add(e));
-  }
+  });
   const avoid = avoidIndex(others, clearance);
   /** The keep-out polygons (each avoided node grown by the tube half-width h) whose boxes come
    *  within mg of the box around p and q, holding neither p nor q, in the avoided nodes' order. */
@@ -1735,16 +1744,11 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton =>
   for (const [key, [i, j]] of cand) {
     // an edge between a segment member's two ends is that member: it adds no link (the member is
     // its own link, at its own width), and its ends' members touch through it (step below)
-    if (owner[i].some((k) => members[k].kind === "segment" && owner[j].includes(k))) continue;
-    if (faceEdges.has(key)) {
-      links.push({ route: [P[i], P[j]], h: hw(i, j) });
-      // the edge carries the spanning tree only when no hole will be cut across it
-      if (clear(P[i], P[j], hw(i, j)))
-        for (const a of owner[i]) for (const b of owner[j]) if (a !== b && !routed.has(mk(a, b))) routed.set(mk(a, b), { a, b, route: [P[i], P[j]], len: dist(P[i], P[j]) });
-      continue;
-    }
-    // a short candidate joins as drawn when nothing blocks it (it is never rerouted)
-    if (dist(P[i], P[j]) / 2 <= alpha && clear(P[i], P[j], hw(i, j))) links.push({ route: [P[i], P[j]], h: hw(i, j) });
+    if (!faceEdges.has(key) || owner[i].some((k) => members[k].kind === "segment" && owner[j].includes(k))) continue;
+    links.push({ route: [P[i], P[j]], h: hw(i, j) });
+    // the edge carries the spanning tree only when no hole will be cut across it
+    if (clear(P[i], P[j], hw(i, j)))
+      for (const a of owner[i]) for (const b of owner[j]) if (a !== b && !routed.has(mk(a, b))) routed.set(mk(a, b), { a, b, route: [P[i], P[j]], len: dist(P[i], P[j]) });
   }
   const pairs = new Set<number>();
   for (const [i, j] of cand.values()) for (const a of owner[i]) for (const b of owner[j]) if (a !== b) pairs.add(mk(a, b));
@@ -1781,7 +1785,7 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton =>
     r2[f2(e.a)] = f2(e.b);
     if (e.len > 0) links.push({ route: e.route!, h: e.h ?? hm(e.a, e.b), ...(e.parts && e.parts.length > 1 ? { parts: e.parts } : {}) });
   }
-  return { P: Cm, R: Rm, links, faces, alpha };
+  return { P: Cm, R: Rm, links, faces };
 });
 
 // ── step 2: the region, exactly ─────────────────────────────────────────────
@@ -2591,21 +2595,37 @@ type SmoothOpts = SkelOpts & { neck?: number; roundness?: number; holes?: boolea
 type Smooth = { loops: Pt[][]; skel: Skeleton; sigma: number; signals: Loop[] };
 const regionMemo = stageMemo<Region>();
 const neckMemo = stageMemo<Loop[]>();
-/** `holes: false` (the default): every hole of the traced region that holds no avoided node is
- *  filled, by dropping its loop (and any piece inside it). A hole holds an avoided node when part
- *  of its edge is a keep-out zone's or a zone's center lies in it, so a clearance circle stays
- *  exactly as cut, and so does a cycle that has an avoided node inside. Holes are only ever
- *  dropped, never made, so this keeps the pieces as traced. */
-const fillHoles = (region: Region, zones: Prim[]): Region => {
+/** `holes: false` (the default): every hole of the traced region is filled, by dropping its loop
+ *  (and any piece inside it), and the keep-out zones it held are cut back out, so an avoided node
+ *  inside the set is always exactly its clearance zone. A hole whose whole edge is keep-out zones
+ *  is that already, and stays. The zones a hole held cannot reach past it (they would join it to
+ *  the outside or to another hole), so they are traced on their own, as holes in a disc around
+ *  them. Filling never joins or splits pieces. */
+const fillHoles = (region: Region, zones: Prim[], res: number): Region => {
   const loops = region.loops;
   if (loops.length < 2) return region;
   const areas = loops.map((l) => signedArea(l.pts));
   const outer = Math.sign(areas.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0));
+  const filled = loops.filter((l, i) => Math.sign(areas[i]) !== outer && !l.kind!.every((k) => k === 1));
+  if (!filled.length) return region;
+  const keep = loops.filter((l) => !filled.includes(l) && !filled.some((h) => Math.abs(signedArea(h.pts)) > Math.abs(signedArea(l.pts)) && inPolyFast(l.pts[0], h.pts)));
+  // the zones a filled hole held: its edge runs along them, or their center lies in it
   const centers: Pt[] = zones.map((z) => (z.k === 2 ? [(z.x1 + z.x2) / 2, (z.y1 + z.y2) / 2] : [z.x1, z.y1]));
-  const empty = loops.filter((l, i) => Math.sign(areas[i]) !== outer && !l.kind!.some((k) => k === 1) && !centers.some((c) => inPolyFast(c, l.pts)));
-  if (!empty.length) return region;
-  const keep = loops.filter((l) => !empty.includes(l) && !empty.some((h) => Math.abs(signedArea(h.pts)) > Math.abs(signedArea(l.pts)) && inPolyFast(l.pts[0], h.pts)));
-  return { ...region, loops: keep };
+  const held = zones.filter((z, j) => filled.some((h) => inPolyFast(centers[j], h.pts) || h.pts.some((p, i) => h.kind![i] === 1 && Math.abs(primD(z, p[0], p[1], false)) < 0.05)));
+  if (!held.length) return { ...region, loops: keep };
+  const bb = held.reduce((r, z) => [Math.min(r[0], z.bb[0]), Math.min(r[1], z.bb[1]), Math.max(r[2], z.bb[2]), Math.max(r[3], z.bb[3])], [Infinity, Infinity, -Infinity, -Infinity]);
+  // (a disc around them, whose outline crosses the grid at no special place)
+  const around = discPrim((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2, Math.hypot(bb[2] - bb[0], bb[3] - bb[1]) / 2 + 2);
+  const cut = traceRegion([around], held, res, Math.min(1, res));
+  const disc = cut.loops.reduce((a, b) => (Math.abs(signedArea(b.pts)) > Math.abs(signedArea(a.pts)) ? b : a));
+  // every point of these holes is on a zone's edge, also where two zones meet (a resampled point
+  // there cuts the corner, so the trace alone would not call it a zone's)
+  const zoneHoles = cut.loops.filter((l) => l !== disc).map((l) => {
+    const arcs = l.arcs.slice();
+    for (let i = 3; i < arcs.length; i += 4) arcs[i] = 1;
+    return { ...l, arcs, kind: new Uint8Array(l.pts.length).fill(1) };
+  });
+  return { ...region, loops: [...keep, ...zoneHoles], radii: [...new Set([...region.radii, ...cut.radii.filter((r) => r !== around.r)])] };
 };
 /** Steps 2-3: the region traced exactly, then rounded along its outline. */
 const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
@@ -2647,7 +2667,7 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
     for (const [key, h] of widest) if (sides.get(key) !== 2) pieces.push(capsulePrim(pts[Math.floor(key / 1048576)], pts[key % 1048576], h));
     const zones = (o.avoiding ?? []).map((m) => grownPrim(m, clearance));
     const traced = traceRegion(pieces, zones, res, Math.min(1, res));
-    return o.holes ? traced : fillHoles(traced, zones);
+    return o.holes ? traced : fillHoles(traced, zones, res);
   });
   // Like rounding, pulling in never changes the topology: should two parts of the outline still
   // cross (where the half-width is misjudged at a sharp tip), the pull is halved near each
@@ -3173,9 +3193,8 @@ export const PenguinShapes: StoryObj = {
     return titledGrid([
       ["Shape.box()", panel(penCell((ms) => [boxOutline(ms, PEN_PAD)]))],
       ["Shape.hull()", panel(penCell(sm({ convexity: 1, avoiding: [] })))],
-      // at the default 0.5 the blob is all but the spine on data this dense (the triangles that fill
-      // lie where the discs already touch): 0.75 is where it sits visibly between spine and hull
-      ["Shape.blob({ convexity: 0.75 })", panel(penCell(sm({ convexity: 0.75, avoiding: [] })))],
+      // the default 0.5 fills half of each species' hull, smallest gaps first
+      ["Shape.blob()", panel(penCell(sm({ avoiding: [] })))],
       ["Shape.spine()", panel(penCell(sm({ convexity: 0, avoiding: [] })))],
     ], { w: PCW + 14, h: PCH + 6, cols: 2 });
   },
@@ -3365,8 +3384,8 @@ const CA_ROWS = (CA_DATA as [string, number, number, number, number][]).map(([na
 }));
 const CA_SSA = CA_ROWS.filter((d) => d.region === 5).map((d) => d.m);
 const CA_OTHERS = CA_ROWS.filter((d) => d.region !== 5).map((d) => d.m);
-/** The proposal's spelling for this example: convexity 0.25, neck 0.6, padding 6. */
-const CA_OPTS: SmoothOpts = { pad: 6, convexity: 0.25, neck: 0.6, roundness: 6, clearance: 3 };
+/** The proposal's spelling for this example: convexity 0.1, neck 0.6, padding 6. */
+const CA_OPTS: SmoothOpts = { pad: 6, convexity: 0.1, neck: 0.6, roundness: 6, clearance: 3 };
 const caScene = (loops: Pt[][], o: { legend?: boolean } = {}) => layer([
   position({ x: CAL, y: CAH }, [rect({ w: CAW, h: 1, fill: "#333" })]),
   position({ x: CAL - 1, y: 0 }, [rect({ w: 1, h: CAH, fill: "#333" })]),
@@ -3408,7 +3427,7 @@ export const GridChartAccent: StoryObj = {
     cell: (convexity, roundness) => [position({ x: 2, y: 4 }, [caScene(smoothBlob(CA_SSA, { ...CA_OPTS, convexity, roundness }).loops)])],
   }),
 };
-// Neck at convexity 0.25, without and with avoiding the other regions.
+// Neck at convexity 0.1, without and with avoiding the other regions.
 export const NeckChartAccent: StoryObj = {
   render: () => paramGrid({
     cols: { name: "neck", vals: [0.4, 0.6, 0.8, 1], def: 0.6 }, rows: { name: "avoiding", vals: [0, 1], fmt: (v) => (v ? "other regions" : "nothing"), def: 0 },
@@ -3418,19 +3437,21 @@ export const NeckChartAccent: StoryObj = {
 };
 
 // ── (k) holes: off by default, as PostGIS, Shapely and JTS do ────────────────────────────
-// With `holes: false` (the default) every hole that holds no avoided node is filled; with
-// `holes: true` it stays. Convexity decides the silhouette in both.
+// With `holes: false` (the default) every hole is filled and the avoided nodes it held are cut
+// back out as their clearance circles; with `holes: true` it stays. Convexity decides the
+// silhouette in both.
 export const HolesCompare: StoryObj = {
   render: () => {
     const pen = (holes: boolean) => position({ x: 0, y: 2 }, [layer([
       polygon({ points: [[0, 0], [PCW, 0], [PCW, PCH], [0, PCH]], fill: "none", stroke: "#e3e3e3", strokeWidth: 1 }),
-      ...penCell((ms) => smoothBlob(ms, { pad: PEN_PAD, convexity: 0.25, neck: 1, roundness: PEN_PAD, holes }).loops),
+      ...penCell((ms) => smoothBlob(ms, { pad: PEN_PAD, convexity: 0.05, neck: 1, roundness: PEN_PAD, holes }).loops),
     ])]);
+    const u = (holes: boolean) => position({ x: 2, y: 2 }, [uPanel(blobInk(smoothBlob(U, { avoiding: NON, pad: 8, convexity: 0.75, neck: 1, roundness: 8, holes }).loops, BLUE))]);
     return titledGrid([
-      ["hyperedges, convexity 0.35, holes: true", hyperCell(SETS, { convexity: 0.35, holes: true })],
-      ["hyperedges, convexity 0.35 (holes: false, the default)", hyperCell(SETS, { convexity: 0.35 })],
-      ["penguins, convexity 0.25, holes: true", pen(true)],
-      ["penguins, convexity 0.25 (holes: false, the default)", pen(false)],
+      ["U, convexity 0.75, holes: true", u(true)],
+      ["U, convexity 0.75 (holes: false, the default)", u(false)],
+      ["penguins, convexity 0.05, holes: true", pen(true)],
+      ["penguins, convexity 0.05 (holes: false, the default)", pen(false)],
     ], { w: PCW + 20, h: PCH + 8, cols: 2 });
   },
 };

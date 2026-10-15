@@ -347,10 +347,19 @@
           <label for="convexity"
             >convexity <output id="convexity-out" for="convexity"></output
           ></label>
-          <input type="range" id="convexity" min="0" max="1" step="0.01" />
+          <input
+            type="range"
+            id="convexity"
+            min="0"
+            max="1"
+            step="0.01"
+            title="share of the hull filled"
+          />
           <div class="hint">
-            The silhouette: 0 is a spanning tree of links; 1 fills every
-            triangle (the hull). The only knob that fills gaps between members.
+            The share of the hull filled, smallest gaps first: 0.5 fills the
+            smallest triangles that hold half the hull's area. 0 is a spanning
+            tree of links; 1 is the hull. The only knob that fills gaps between
+            members.
           </div>
         </div>
         <div class="field">
@@ -379,9 +388,9 @@
             ><input type="checkbox" id="holes" /> holes</label
           >
           <div class="hint">
-            Off (the default): every hole is filled, except the clearance
-            circles of avoided nodes. On: a cycle left open by a low convexity
-            stays a hole.
+            Off (the default): every hole is filled, and an avoided node inside
+            is cut back out as its clearance circle. On: a gap left open inside
+            the silhouette stays a hole.
           </div>
         </div>
       </section>
