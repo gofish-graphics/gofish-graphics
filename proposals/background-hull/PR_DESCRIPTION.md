@@ -4,7 +4,7 @@ This proposes one relational mark, `enclose`, that outlines a set of nodes with 
 It is a design PR: a proposal plus throwaway prototype stories that render the pictures. It makes no library change.
 Private claude.ai pages: [review page](https://claude.ai/artifact/2esKYS7PvWVMdoyVny6uLP) and [slider playground](https://claude.ai/artifact/AscJNscgnnnSRZReMhTetF).
 
-![penguins: box, hull, blob and spine](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/penguins-four-shapes-v2.png)
+![penguins: box, hull, blob and spine](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/penguins-four-shapes-v3.png)
 
 **Box**
 
@@ -21,7 +21,7 @@ enclose({ shape: Shape.hull(), padding: 6 }, species);
 **Blob**
 
 ```js
-enclose({ shape: Shape.blob({ convexity: 0.75 }), padding: 6 }, species);
+enclose({ shape: Shape.blob(), padding: 6 }, species);
 ```
 
 **Spine**
@@ -46,7 +46,7 @@ Every picture is a real render of a prototype story. `Shape` does not exist yet,
 
 Columns are `convexity` (0 to 1) and rows are `roundness`; the teal frame marks the defaults.
 
-![U cloud: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-u.png)
+![U cloud: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-u-v3.png)
 
 ```js
 enclose(
@@ -57,7 +57,7 @@ enclose(
 
 ### Penguins
 
-![penguins: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-penguins.png)
+![penguins: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-penguins-v3.png)
 
 ```js
 enclose({
@@ -118,7 +118,7 @@ enclose(
 
 Each set encloses its nodes and the edges among them as members.
 
-![hyperedges with edges as members: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-hyperedges-members-v2.png)
+![hyperedges with edges as members: convexity by roundness](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/explore-round-hyperedges-members-v3.png)
 
 **The enclosure** (`members` is new, decision 9)
 
@@ -144,11 +144,11 @@ chart(setMembers).flow(
 
 A replica of ChartAccent's example 5 (Ren et al., PacificVis 2017), on its own sample data.
 
-![ChartAccent replica](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/chartaccent-replica-v2.png)
+![ChartAccent replica](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/chartaccent-replica-v3.png)
 
 ```js
 enclose({
-  shape: Shape.blob({ convexity: 0.25, neck: 0.6 }),
+  shape: Shape.blob({ convexity: 0.1, neck: 0.6 }),
   padding: 6,
   fill: "#47b8a0",
 });
@@ -158,35 +158,35 @@ The layer filters `selectAll("countries")` to `Region === "Sub-Saharan Africa"` 
 
 ### Holes on and off
 
-Hyperedges at `convexity: 0.35` and penguins at 0.25.
+The U at `convexity: 0.75` (the gray dots are avoided) and penguins at 0.05.
 
-![holes on and off](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/holes-hyperedges-penguins-v2.png)
+![holes on and off](https://raw.githubusercontent.com/gofish-graphics/gofish-graphics/pr-assets/pr-1152/holes-hyperedges-penguins-v3.png)
 
-**Off** (the default: every hole without an avoided node is filled)
+**Off** (the default: every hole is filled, then each avoided node is cut back out as its round clearance hole)
 
 ```js
-Shape.blob({ convexity: 0.35, avoiding: selectAll("nodes") });
+Shape.blob({ convexity: 0.75, avoiding: grayDots });
 ```
 
 **On**
 
 ```js
-Shape.blob({ convexity: 0.35, holes: true, avoiding: selectAll("nodes") });
+Shape.blob({ convexity: 0.75, holes: true, avoiding: grayDots });
 ```
 
 ## Parameters
 
-| Parameter        | On           | Meaning                                                               | Default   |
-| ---------------- | ------------ | --------------------------------------------------------------------- | --------- |
-| `padding`        | `enclose`    | Bulge around each member, from its own outline.                       | as today  |
-| `fill`, `stroke` | `enclose`    | Paint, shared by every member of the family.                          | as today  |
-| `rx`, `ry`       | `Shape.box`  | Corner rounding, as on `rect`.                                        | 0         |
-| `convexity`      | `Shape.blob` | How much space between members fills: 0 is a spanning tree, 1 a hull. | 0.5       |
-| `holes`          | `Shape.blob` | Keep holes that hold no avoided node (as `allow_holes` in PostGIS).   | `false`   |
-| `roundness`      | `Shape.blob` | Corner rounding in pixels. Never changes pieces or holes.             | `padding` |
-| `neck`           | `Shape.blob` | Pull-in between members, 0 to 1. Never changes pieces or holes.       | 1         |
-| `avoiding`       | `Shape.blob` | Nodes to keep out. Members in the list are ignored.                   | none      |
-| `clearance`      | `Shape.blob` | Gap in pixels from each avoided node.                                 | 4         |
+| Parameter        | On           | Meaning                                                                                 | Default   |
+| ---------------- | ------------ | --------------------------------------------------------------------------------------- | --------- |
+| `padding`        | `enclose`    | Bulge around each member, from its own outline.                                         | as today  |
+| `fill`, `stroke` | `enclose`    | Paint, shared by every member of the family.                                            | as today  |
+| `rx`, `ry`       | `Shape.box`  | Corner rounding, as on `rect`.                                                          | 0         |
+| `convexity`      | `Shape.blob` | Share of the convex hull filled, smallest gaps first: 0 is a spanning tree, 1 the hull. | 0.5       |
+| `holes`          | `Shape.blob` | Keep holes that hold no avoided node (as `allow_holes` in PostGIS).                     | `false`   |
+| `roundness`      | `Shape.blob` | Corner rounding in pixels. Never changes pieces or holes.                               | `padding` |
+| `neck`           | `Shape.blob` | Pull-in between members, 0 to 1. Never changes pieces or holes.                         | 1         |
+| `avoiding`       | `Shape.blob` | Nodes to keep out. Members in the list are ignored.                                     | none      |
+| `clearance`      | `Shape.blob` | Gap in pixels from each avoided node.                                                   | 4         |
 
 ## Presets
 
@@ -211,7 +211,8 @@ Shape.blob({ convexity: 0.35, holes: true, avoiding: selectAll("nodes") });
 14. Let `roundness` go past the smallest circle in the region? Then `padding` and `clearance` become approximate there.
 15. Decided: `Shape.spine()` keeps `holes: false`, so a spine over a cycle is filled. A ring is `Shape.spine({ holes: true })`.
 16. Open question, not for now: should segment members thin like links, and get their own padding? For now each edge keeps its band, as a declared shortcut (History v10).
-17. Recalibrate `convexity` to fill the smallest triangles first, up to c of the hull's area? Penguins at 0.5 go from 0 to 5 percent of the way to the hull to 25 to 40 percent. Weak spots: ChartAccent fills fast, and the U shows a sliver hole at 0.75. See `proposals/background-hull/img/convexity-calibration-old-vs-new.png`.
+17. Decided: `convexity` c fills the smallest Delaunay triangles first until they hold c of the convex hull's area, so 0.5 fills about half the hull (History, v11). Josh: the old scale was not interpretable.
+18. Confirm the new `holes: false` rule: fill every hole, then cut each avoided node back out as its round clearance hole. Before, a hole that held an avoided node stayed whole, which left a sliver on the U at 0.75. `holes: true` keeps every hole.
 
 <details><summary>Full syntax (JS and Python)</summary>
 
