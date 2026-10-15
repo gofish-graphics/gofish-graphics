@@ -251,10 +251,13 @@ serialized as a field, so it composes with any explicit `.zOrder(...)` or
 
 A chart's **coordinate transform** rides the IR as a small spec the deserializer
 maps back to the JS factory by `type` — e.g. `{ type: "polar", innerRadius,
-centralAngle, startAngle, direction, center }`. `fromJSON.ts` reconstructs it by
-calling `Coord.polar(coordSpec)` / `Coord.clock(coordSpec)` and passing the whole spec
-through (the factory ignores the `type` key), so a parameterized polar/clock —
-donut hole, partial fan, start angle — round-trips without per-option plumbing.
+centralAngle, startAngle, direction, center }`. `fromJSON.ts` rebuilds it
+with `rebuild("coord", type, opts)`, the same call that rebuilds an operator
+or a mark (§ Modularity), from the spec without its `type`. An options-object
+factory takes the options whole (`Coord.polar(opts)`), so a parameterized
+polar/clock (donut hole, partial fan, start angle) round-trips without
+per-option plumbing, and the descriptor's `positional` field goes first
+(`Coord.geo(opts.projection, rest)`). An unknown `type` throws.
 
 Channel values (`h`, `w`, `fill`, …) accept bare primitives (the
 shorthand path) or one of three explicit tagged objects:
@@ -450,10 +453,11 @@ kind with some params already set, such as `Overlap.sina()`, which is
 `noise` with `smoothing: "silverman"`. Each family derives its
 `OPTION_TYPES` entry, a union of one object per kind with a literal `kind`,
 so the strategy options are `t.ref("Tile")`, `t.ref("Overlap")` and
-`t.ref("Curve")`. A kind may take its one param by position
-(`positional: true`): `Bin.step(0.5)` in JS, `Bin.step(0.5)` with a
+`t.ref("Curve")`. A kind may take a param by position
+(`positional: "size"`): `Bin.step(0.5)` in JS, `Bin.step(0.5)` with a
 positional-only parameter in Python, and `{ kind: "step", size: 0.5 }` on
-the wire either way. The `Bin` kinds bin one of two keys (`BIN_KINDS`):
+the wire either way. A construct descriptor has the same field: `COORDS.geo`
+takes `projection` by position (`Coord.geo("mercator", { lon })`). The `Bin` kinds bin one of two keys (`BIN_KINDS`):
 `step` and `thresholds` cut the line of one field, and `hex` and `voronoi`
 divide the plane of two. `OPTION_TYPES.StructBin` is the kinds of the plane,
 derived from the one `Bin` entry, so a struct's bin op takes a `StructBin`,
@@ -703,9 +707,10 @@ its JSON Schema enum, matching what `descriptors.ts` already modeled.
 [`packages/gofish-python/scripts/generate.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-python/scripts/generate.ts)
 imports the same `descriptors.ts` table (via the `gofish-ir/frontend`
 package export, so it needs `pnpm --filter gofish-ir build` to have run
-first) and emits `gofish/_generated.py` and the strategy family modules
-`gofish/tile.py`, `gofish/overlap.py` and `gofish/curve.py` (from
-`STRATEGIES`) — checked into the repo, with a
+first) and emits `gofish/_generated.py` and the family modules
+`gofish/tile.py`, `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`
+and `gofish/calendar.py` (from `STRATEGIES`) and `gofish/coord.py` (from
+`COORDS`) — checked into the repo, with a
 CI freshness check (`pnpm --filter gofish-python gen` then `git diff
 --exit-code`) rather than a build-time step, matching the "commit the
 generated Python" norm Altair and Plotly.py both follow.
@@ -776,7 +781,7 @@ It emits:
   killing four previously hand-copied wire-name tables.
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
-  `layer`, `pack`, the polar coord family), with separate combinator-form
+  `layer`, `pack`), with separate combinator-form
   cores for `spread`, `stack`, and `treemap` (their combinator entries add
   `key`; `spread` and `stack` also include the whole `boxDims` group, since
   JS `Spread` spreads its `FancyDims` into its box), and `_chart_opts` for
@@ -810,12 +815,24 @@ It emits:
   goes on the wire as dict rows. These are the same constraints
   `checkStrategy` checks on the JS side, read from the same table, so Python
   users see the error at the line that made it.
+- The **Coord family** module, `gofish/coord.py`, bound in `__init__.py` as
+  `Coord`, written by the same family-module writer (`writeFamilyModule`)
+  with one factory per `COORDS` entry (`Coord.polar`). Three things differ,
+  each a parameter of the writer. A coord dict is tagged by `type`, not
+  `kind`. It carries the camelCase wire keys itself, since a `coord` option
+  is typed `any` and `_to_wire` does not route it. And no coord is a bare
+  kind, as no JS coord is. Each factory checks its params at the call as a
+  strategy factory does (`Coord.geo("robinson")` raises a `ValueError`), takes
+  the descriptor's `positional` field as a positional-only parameter and
+  every other option as keyword-only, as JS does
+  (`Coord.geo("mercator", lon=(-170, -30))`, `Coord.polar(inner_radius=0.5)`),
+  and puts a tuple on the wire as a list.
 
 `derive`/`resolve`/`join`/`filter` (real RPC-bridge/ref-shape/DataFrame/
 predicate logic) and
 `field`/`datum`/`normalize`/`repeat`/`ref`/`select_all`
 (not in the descriptor table at all) stay fully hand-written in `ast.py`, as
-do the `Color` and `Coord` family modules (`color.py`, `coord.py`),
+does the `Color` family module (`color.py`),
 alongside the builder chain, `_RefProxy`, `DatumValue` arithmetic, and the
 widget/RPC layer — see
 [Design space: generating the Python wrapper](/internals/design/python-wrapper-codegen)
@@ -862,11 +879,16 @@ The way back is one table. `FACTORIES` in `registry.ts` maps each wire
 type to the public factory that rebuilds it, and
 `rebuild(kind, type, opts, { children, bridge })` calls it: it returns
 `undefined` unless the descriptor table declares that type for that kind, and
-the kind decides the call. An operator or a leaf mark is `factory(opts)`; a
-combinator mark is `factory(opts, children)`. A dual-form construct such as
+the kind decides the call. An operator, a leaf mark or a coord transform is
+`factory(opts)`; a combinator mark is `factory(opts, children)`. A
+descriptor's `positional` field is taken out of the options and passed first
+(`geo(projection, { lon, lat })`); when that field is required and missing,
+`rebuild` throws and names it (`coord geo: missing required field
+"projection"`). A dual-form construct such as
 `spread` or `line` therefore has one entry for both forms, and the compositing
 wire types map to their renamed factories (`inside` to `intersect`, and so on).
-Only an `OPERATOR_BUILDERS` entry sees the bridge.
+The coord transforms (`polar`, `clock`, `wavy`, `geo`) are entries of the same
+table. Only an `OPERATOR_BUILDERS` entry sees the bridge.
 
 Five operators keep a hand-written builder in `OPERATOR_BUILDERS`, because
 their IR is not their factory's options object: `derive` (it calls a Python

@@ -595,7 +595,7 @@ const sparkSamples = (samples: Sample[]) =>
     .mark(circle({ r: 2.5, opacity: 0 }));
 
 const sparkRow = (samples, clock, w) =>
-  frame({ w, h: SPARK_H_PX, coord: Coord.linear(), padding: 0 }, [
+  frame({ w, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
     frame({ w, h: SPARK_H_PX }, [sparkSamples(samples).layer(line({ ... }))]),
     frame({ w, h: SPARK_H_PX }, [sparkSamples(samples).layer(time.transition({ ... }))]),
   ]);
@@ -603,12 +603,16 @@ const sparkRow = (samples, clock, w) =>
 
 Every row plots the same column, `"value"`, whether it holds position, velocity
 or acceleration. The rows are not separated by their columns. Each `sparkRow` is
-a `frame` with `coord: Coord.linear()`, which is a coordinate transform, so each
-row is its own space. The step column is a separate `sparkRow`, so it is its own
+a `frame` with `coord: linear()`, which is a coordinate transform, so each
+row is its own space. The public `Coord.linear` was removed
+([#1158](https://github.com/gofish-graphics/gofish-graphics/issues/1158) tracks
+bringing it back), so the story borrows the internal identity transform `linear` until
+[#1115](https://github.com/gofish-graphics/gofish-graphics/issues/1115) and
+[#1122](https://github.com/gofish-graphics/gofish-graphics/issues/1122). The step column is a separate `sparkRow`, so it is its own
 space too. Inside a row the two overlaid frames share both axes and read the
 same rows, so they get one domain.
 
-Expected result: unchanged. Without the `Coord.linear()` frame the decided rules
+Expected result: unchanged. Without the `linear()` frame the decided rules
 would share the rows. The rows are a spread on y of charts with the same column,
 so their keys are equal, and the step column sits beside the others on the
 shared cross axis.
@@ -661,13 +665,16 @@ under question 1. Each decision is marked **Decided**. The others stay open.
 1. **Opting out of a shared domain.** Two charts with the same column now share
    a domain wherever they sit, e.g. two count histograms placed apart with
    `position`. Is there syntax to keep them independent? A `frame` with
-   `coord: Coord.linear()` already does it, because it starts a new space, and
-   the Gapminder kinematics rows rely on that. Is that the opt-out, or is a
+   `coord: linear()` already does it, because it starts a new space, and
+   the Gapminder kinematics rows rely on that. `linear` is internal now: the
+   public `Coord.linear` was removed, and
+   [#1158](https://github.com/gofish-graphics/gofish-graphics/issues/1158)
+   tracks bringing it back. Is that the opt-out, or is a
    named one needed?
 
    **Decided** for long-format data: the Gapminder kinematics rows plot one
    `value` column for several quantities, and they keep the
-   `frame({ coord: Coord.linear() })` for now. A unit that comes from a key
+   `frame({ coord: linear() })` for now, with the internal identity transform. A unit that comes from a key
    column is
    [#1122](https://github.com/gofish-graphics/gofish-graphics/issues/1122).
 

@@ -2,10 +2,12 @@
  * The running example of *Animated Vega-Lite* (Zong, Pollock, Wootton,
  * Satyanarayan, IEEE VIS 2022), one story per panel of the paper's Figure 1.
  *
- * Panel A is the static picture the ornithologist starts from; panel B adds
- * hover; panel C plays the year through with `timer()` and `filter()`; panel D
- * adds trails with `time.history`; panel E adds the play/scrub controls — a `slider` and a `button`
- * as ordinary low-level marks, laid out under the map with `spreadY`/`spreadX`,
+ * Panel A, the static picture the ornithologist starts from, is a pure spec
+ * and lives in BirdMigrationStatic.stories.tsx, where it has a Python parity
+ * port. This file holds the interactive panels: panel B adds hover; panel C
+ * plays the year through with `timer()` and `filter()`; panel D adds trails
+ * with `time.history`; panel E adds the play/scrub controls — a `slider` and a
+ * `button` as ordinary low-level marks, laid out under the map with `spreadY`/`spreadX`,
  * with the `timer()` as the single source of truth (the slider displays it one
  * way and writes it the other, and a scrub pauses it). See the plan note at
  * `apps/docs/docs/internals/design/bird-migration.md`.
@@ -49,7 +51,8 @@ export default meta;
 type Args = { w: number; h: number };
 
 /**
- * The Americas under Equal Earth — the basemap every panel shares.
+ * The Americas under Equal Earth — the basemap every panel shares (panel A
+ * spells it out inline in BirdMigrationStatic.stories.tsx).
  *
  * `legend: false`: the bird layers color by species, and a 72-entry swatch
  * column would take more of the canvas than the map. The colors still come
@@ -61,34 +64,6 @@ const basemap = (options: { padding?: number } = {}) =>
     legend: false,
     ...options,
   }).mark(polygon({ points: "ring", fill: "#f7f7f7", stroke: "#aaa" }));
-
-export const A_StaticLines: StoryObj<Args> = {
-  args: { w: 600, h: 600 },
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "Bird Migration A: Static",
-      description:
-        "A static visualization of 72 bird species' yearly migrations, each species' daily positions threaded into one path over a map of the Americas.",
-    },
-  },
-  render: (args: Args) => {
-    const container = initializeContainer();
-
-    basemap()
-      .layer(
-        chart(birds)
-          .flow(
-            group({ by: "species" }),
-            scatter({ by: "day", x: "lon", y: "lat" })
-          )
-          .mark(line({ stroke: "species", strokeWidth: 1, opacity: 0.5 }))
-      )
-      .render(container, { w: args.w, h: args.h });
-
-    return container;
-  },
-};
 
 export const B_HoverHighlight: StoryObj<Args> = {
   args: { w: 600, h: 600 },

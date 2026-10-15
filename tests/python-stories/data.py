@@ -1,39 +1,26 @@
 """Shared datasets mirroring packages/gofish-graphics/src/data/catch.ts."""
 
-import json as _json
-from pathlib import Path as _Path
+from python_stories._json_data import load_json
 
-# Datasets for the low-level stories are mirrored byte-for-byte from the JS
-# sources in packages/gofish-graphics/src/data/*.ts (and the runtime-computed
-# color palettes from src/color.ts). They are *generated*, not hand-edited —
-# regenerate with the tsx dump used when these ports were added.
-_LOWLEVEL_DATA_DIR = _Path(__file__).parent / "_lowlevel_data"
-
-
-def _load_json(name: str):
-    with open(_LOWLEVEL_DATA_DIR / f"{name}.json") as f:
-        return _json.load(f)
-
-
-TITANIC = _load_json("titanic")
-PENGUINS = _load_json("penguins")
+TITANIC = load_json("titanic")
+PENGUINS = load_json("penguins")
 # ~1000 synthetic masses in three groups — mirrors
 # packages/gofish-graphics/src/data/denseMasses.ts (dumped from it).
-DENSE_MASSES = _load_json("dense_masses")
-CALTRAIN = _load_json("caltrain")
-CALTRAIN_STOP_ORDER = _load_json("caltrain_stop_order")
-GENDER_PAY_GAP = _load_json("gender_pay_gap")
-PAY_GRADE = _load_json("pay_grade")
-CATCH_LOCATIONS = _load_json("catch_locations")  # {lake: {"x", "y"}}
+DENSE_MASSES = load_json("dense_masses")
+CALTRAIN = load_json("caltrain")
+CALTRAIN_STOP_ORDER = load_json("caltrain_stop_order")
+GENDER_PAY_GAP = load_json("gender_pay_gap")
+PAY_GRADE = load_json("pay_grade")
+CATCH_LOCATIONS = load_json("catch_locations")  # {lake: {"x", "y"}}
 
 # Seattle daily weather 2012-2015 (date, precipitation, temp_max, temp_min,
 # wind, weather) — mirrors packages/gofish-graphics/src/data/seatle-weather.ts.
-SEATTLE_WEATHER = _load_json("seatle_weather")
+SEATTLE_WEATHER = load_json("seatle_weather")
 
 # Resolved color values (color6 palette, gray/neutral, and the spectral.js
 # mix() results the stories compute at runtime — precomputed so Python emits
 # byte-identical fills).
-COLORS = _load_json("colors")
+COLORS = load_json("colors")
 
 SEAFOOD = [
     {"lake": "Lake A", "species": "Bass", "count": 23},

@@ -205,8 +205,8 @@ own `dims` runs the layer's dims hook first, then its own.
 `resolveAliases` is a top-down pass (run before underlying space, which reads the
 dims and the constraints) that carries the **axis scope**, whose `names` map each name to an axis,
 starting at `{ x: 0, y: 1 }`. Every `coord` replaces the scope for its subtree with
-`x`, `y`, and the names its transform declares. Most transforms (`linear`, `wavy`,
-`bipolar`, `arcLengthPolar`) declare none, so inside them only `x`/`y` are visible:
+`x`, `y`, and the names its transform declares. Most transforms (`linear`, `wavy`)
+declare none, so inside them only `x`/`y` are visible:
 a name has a meaning only inside the space that declares it, and the innermost coord
 wins. A coord declares its space on its node (`_space`: the transform's `aliases`
 and `type`). The scope also carries `warpedBy`, the type of the nearest enclosing
