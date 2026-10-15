@@ -39,10 +39,11 @@ import { gofish, gofishToSVGElement, gofishToSVG, gofishSave } from "./gofish";
 import type { GoFishExportOptions, GoFishRenderOptions } from "./gofish";
 import { toDisplayList } from "./displayList/toDisplayList";
 import type { DisplayList } from "gofish-ir";
-import { setLiveSlots } from "../interaction/liveSlots";
+import { getLiveSlots, setLiveSlots } from "../interaction/liveSlots";
 import { readLive, sharedDecision } from "../interaction/live";
 import type { LiveValue } from "../interaction/live";
 import type { AnimationRule } from "../animation/paint";
+import { isTimeline } from "../animation/scene";
 import { GoFishRef } from "./_ref";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
@@ -1994,8 +1995,13 @@ export class GoFishNode {
       const showing = readLive(visible);
       for (const item of items) {
         const own = item.style?.opacity ?? 1;
+        // An opacity that already moves (a build-in's fade, PROTOTYPE
+        // animation grammar: a timeline scene's) keeps moving while shown.
+        const moving = getLiveSlots(item)?.opacity;
         if (!showing) item.style = { ...item.style, opacity: 0 };
-        setLiveSlots(item, { opacity: () => (visible() ? own : 0) });
+        setLiveSlots(item, {
+          opacity: () => (visible() ? (moving ? moving() : own) : 0),
+        });
       }
     }
     return items;
@@ -2130,15 +2136,36 @@ export class GoFishNode {
       fn(env),
       env
     );
+    // PROTOTYPE (animation grammar): a `layer` holds the parts of one
+    // picture and takes spatial clauses; a `timeline` holds scenes and takes
+    // temporal clauses only. Each refuses the other's.
+    const timeline = isTimeline(this);
+    if (!timeline && temporal.length > 0) {
+      throw new Error(
+        `[gofish] layer([...]).relate(): a time clause (time.after, ` +
+          `time.align, time.transition(a, b)) places SCENES, the children ` +
+          `of a timeline. A layer's children are parts of one picture, there ` +
+          `together. Use timeline([...]).relate(...) for scenes, or ` +
+          `.transition({ enter }) for a part that builds in.`
+      );
+    }
+    if (timeline && (constraints.length > 0 || nodes.length > 0)) {
+      throw new Error(
+        `[gofish] timeline([...]).relate(): only time clauses (time.after, ` +
+          `time.align, time.transition(a, b)) place a timeline's scenes. A ` +
+          `spatial clause (a Constraint, an arrow) relates the parts of one ` +
+          `picture: put it on a layer([...]) inside the scene.`
+      );
+    }
     this.constraints = constraints;
     for (const node of nodes) {
       node.parent = this;
       this.children.push(node);
     }
-    // PROTOTYPE (animation grammar): time clauses lower to lifetimes on this
-    // layer's children and to moving marks, which are drawing clauses like an
-    // arrow (laid out after the spatial solve).
-    if (temporal.length > 0) {
+    // PROTOTYPE (animation grammar): a timeline's clauses lower to intervals
+    // on its scenes and to moving marks, which are drawing clauses like an
+    // arrow (laid out after the scenes).
+    if (timeline) {
       const moving = await installTimelineOf(this, temporal);
       moving.forEach((node, i) => {
         node._relateClause = nodes.length + i + 1;

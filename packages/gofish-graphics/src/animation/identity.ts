@@ -1,66 +1,43 @@
 /**
- * IDENTITY across keyframes: which mark in one keyframe IS which mark in the
- * next, so a transition can move it instead of fading one out and another in.
+ * IDENTITY across states: which mark in one state IS which mark in the next,
+ * so a transition can move it instead of fading one out and another in.
  *
- * PROTOTYPE (animation grammar proposal). One rule for charts and hand-built
- * diagrams alike:
+ * PROTOTYPE (animation grammar proposal). The rule is the key join of
+ * Animated Vega-Lite and D3:
  *
- *   A node's identity is its PATH from the keyframe's root: the components of
- *   the nodes on the way down, where a node's component is its data key (the
- *   value of the field an operator split it by) or, when it has none, the
- *   name it was given with `.name(...)`. Nodes with neither add nothing.
- *   Leaves that share a path are told apart by their order in the tree.
+ *   A mark is matched by the ROWS it draws, compared by `key`.
  *
- * So a bar in `spread lake | stack species` and the same bar in `spread lake
- * | spread species` are both `Lake A/Bass`, whatever the two layouts do with
- * them; a diagram's `rect(...).name("A")` is `A` in every state it appears in;
- * and the circle and the label inside `layer([...]).name("A")` are `A#0` and
- * `A#1`. This is Figma Smart Animate's and Motion's `layoutId` rule (match by
- * name), with a chart's data key standing in for a name it never had to write.
+ * The default key is row identity: two marks are the same mark when they
+ * draw the same row objects, wherever each state's layout put them and
+ * whatever operators they sit under (a home is one dot in a scatterplot, in
+ * a bin of a histogram and in a pile of a split). An explicit `key` (a field
+ * name, or a function of a row) compares rows by that value instead, as JSON,
+ * so two years of gapminder, which are different rows, match by country.
  *
- * PROTOTYPE SHORTCUT: identities are read off the resolved tree, so chrome a
- * later pass adds (axes, legends) has none: it stays with its keyframe and
- * switches at the keyframe's band edge instead of moving.
+ * A mark here is the outermost node that draws exactly the rows its leaves
+ * draw: a dot, a bar, or a composite of a bar and its label (whose parts the
+ * tween pairs by position, as the flow form does). Two marks of one state
+ * with the same key is an error: the key does not say which is which.
+ *
+ * Marks that draw NO rows (a hand-built diagram, a threshold rule placed with
+ * `datum(...)`) have nothing to join on, so they match by their `.name()`
+ * path from the state's root, with the leaf's index among the leaves of the
+ * same path telling unnamed parts apart. This is the one branch, and it is a
+ * domain case, not a heuristic: there are no rows to key.
  *
  * Names the library generates for itself (`__spread#31`) are not names a
- * person wrote, so they are not identities.
+ * person wrote, so they are not part of a path.
  *
- * LEAF MATCHING (the R2D3 segue, `matchRuns` below). An ordered path is too
- * strict for a chart: the same home is `id=5` in a scatterplot, `bin=0/id=5`
- * in a histogram of it and `side=below/id=5` in the split, so the paths never
- * agree although each mark draws the same one row. So a leaf's data-key
- * components are read as an ASSIGNMENT of fields (`{ bin: 0, id: 5 }`), its
- * names as a path, and two leaves in different keyframes are the same mark
- * when their name paths and ordinals agree and either
- *
- *   - their assignments are equal (in any order: `lake/species` and
- *     `species/lake` are one bar), or
- *   - each one's assignment HOLDS OF THE OTHER'S ROWS: every row the other
- *     leaf draws has the values this one was split by. `{ id: 5 }` holds of
- *     the histogram dot's row, and `{ bin: 0, id: 5 }` of the scatter dot's.
- *
- * The first is the path rule with the order dropped; it is what matches
- * gapminder's countries across years (different rows, one key). The second
- * is D3's key join read off the splits: a mark's key is the conjunction of
- * the fields it was split by. A leaf matches at most one leaf per keyframe;
- * an ambiguous candidate is no match (it fades).
- *
- * PROTOTYPE SHORTCUT: values are compared as strings (`node.key` is one), and
- * a split by a field EXPRESSION (`field("x").bin()`) records the field name
- * but keys by the bin, so its assignment does not hold of rows and such a
- * leaf matches only by equal assignments.
+ * PROTOTYPE SHORTCUT: identities are read off the resolved tree, so chrome a
+ * later pass adds (axes, legends) has none: it stays with its state.
  */
 import { GoFishNode } from "../ast/_node";
 import { GoFishRef } from "../ast/_ref";
 import { rowsOf } from "./grouping";
 
-/** What one node adds to the path: its data key, else its own name. */
-function componentOf(node: GoFishNode): string | undefined {
-  if (node.key !== undefined && node.key !== null) return String(node.key);
-  const name = node._name;
-  if (typeof name === "string" && !name.startsWith("__")) return name;
-  return undefined;
-}
+/** What a transition compares rows by: a field name or a function of a row.
+ *  Omitted, the row itself (object identity). */
+export type Key = string | ((row: any) => unknown);
 
 /** A RELATIONAL node draws between other nodes it only refers to (an arrow,
  *  a connector, a tween): its children are all refs. Its geometry is derived
@@ -69,228 +46,159 @@ export const isRelational = (node: GoFishNode): boolean =>
   node.children.length > 0 &&
   node.children.every((child) => child instanceof GoFishRef);
 
-export type Identities = {
-  /** The leaves (nodes that draw and have no children), by identity. */
-  leaves: Map<string, GoFishNode>;
-  /** Every node that adds a component to the path, by its path. These are
-   *  what a relational mark's operands are matched by. */
-  named: Map<string, GoFishNode>;
-  /** The relational nodes under the root, in tree order. */
-  relational: GoFishNode[];
-  /** The path of each node in `named`, the other way round. */
-  pathOf: Map<GoFishNode, string>;
+const kidsOf = (node: GoFishNode): GoFishNode[] =>
+  node.children.filter((c): c is GoFishNode => c instanceof GoFishNode);
+
+/** A user-written name, or undefined. */
+const userName = (node: GoFishNode): string | undefined => {
+  const name = node._name;
+  return typeof name === "string" && !name.startsWith("__") ? name : undefined;
 };
 
-/** The identities of everything under `root` (see the header). */
-export function identities(root: GoFishNode): Identities {
-  const out: Identities = {
-    leaves: new Map(),
-    named: new Map(),
-    relational: [],
-    pathOf: new Map(),
-  };
+/** Object identity for rows, as a string: a counter per row object. */
+const rowIds = new WeakMap<object, number>();
+let nextRowId = 0;
+const rowIdentity = (row: unknown): string => {
+  if (typeof row !== "object" || row === null) return JSON.stringify(row);
+  let id = rowIds.get(row);
+  if (id === undefined) rowIds.set(row, (id = nextRowId++));
+  return `#${id}`;
+};
+
+/** The key of a bag of rows: its distinct values of `key`, sorted. */
+function keyOfRows(rows: unknown[], key: Key | undefined): string {
+  const values = rows.map((row) => {
+    if (key === undefined) return rowIdentity(row);
+    const v =
+      typeof key === "function"
+        ? key(row)
+        : (row as Record<string, unknown> | null)?.[key];
+    return JSON.stringify(v) ?? "undefined";
+  });
+  return [...new Set(values)].sort().join("|");
+}
+
+/** Whether two bags hold the same row objects. */
+const sameRows = (a: unknown[], b: unknown[]): boolean => {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((r) => set.has(r));
+};
+
+/**
+ * The marks of one state by identity (see the header). `where` names the
+ * construct for the duplicate-key error.
+ */
+export function markIdentities(
+  root: GoFishNode,
+  key: Key | undefined,
+  where: string
+): Map<string, GoFishNode> {
+  const out = new Map<string, GoFishNode>();
   const ordinals = new Map<string, number>();
-  const walk = (node: GoFishNode, path: string): void => {
-    if (isRelational(node)) {
-      out.relational.push(node);
+  const walk = (node: GoFishNode, names: string): void => {
+    if (isRelational(node)) return;
+    const name = node === root ? undefined : userName(node);
+    const path =
+      name === undefined ? names : names === "" ? name : `${names}/${name}`;
+    const kids = kidsOf(node);
+    if (kids.length > 0 || node === root) {
+      for (const kid of kids) walk(kid, path);
       return;
     }
-    const component = node === root ? undefined : componentOf(node);
-    const here =
-      component === undefined
-        ? path
-        : path === ""
-          ? component
-          : `${path}/${component}`;
-    if (component !== undefined && !out.named.has(here)) {
-      out.named.set(here, node);
-      out.pathOf.set(node, here);
-    }
-    const kids = node.children.filter(
-      (c): c is GoFishNode => c instanceof GoFishNode
-    );
-    if (kids.length === 0 && node !== root) {
-      const n = ordinals.get(here) ?? 0;
-      ordinals.set(here, n + 1);
-      const id = `${here}#${n}`;
-      out.leaves.set(id, node);
+    const rows = rowsOf(node);
+    if (rows.length === 0) {
+      // No rows to key (see the header): the name path.
+      const n = ordinals.get(path) ?? 0;
+      ordinals.set(path, n + 1);
+      out.set(`name:${path}#${n}`, node);
       return;
     }
-    for (const kid of kids) walk(kid, here);
+    // The mark: the outermost node below the root that draws these rows.
+    let mark = node;
+    while (
+      mark.parent instanceof GoFishNode &&
+      mark.parent !== root &&
+      sameRows(rowsOf(mark.parent), rows)
+    ) {
+      mark = mark.parent;
+    }
+    const id = `rows:${keyOfRows(rows, key)}`;
+    const seen = out.get(id);
+    if (seen === mark) return; // another leaf of the same composite mark
+    if (seen !== undefined) {
+      throw new Error(
+        `[gofish] ${where}: two marks of one state have the same key ` +
+          `(${id.slice(5)}${key === undefined ? ", the same rows" : ""}), so ` +
+          `the key does not say which mark is which. ` +
+          (key === undefined
+            ? `Draw each row once, or give a key: { key: "id" }.`
+            : `Give a key that is unique per mark.`)
+      );
+    }
+    out.set(id, mark);
   };
   walk(root, "");
   return out;
 }
 
-/* ---- Leaf matching across keyframes (see the header) ---- */
-
-/** A leaf of one keyframe, read for matching. */
-export type LeafKey = {
-  node: GoFishNode;
-  /** The name components on its path, in order. */
-  names: string;
-  /** The data-key components on its path, as field -> value. */
-  keys: Map<string, string>;
-  /** Its index among the keyframe's leaves with the same names and keys. */
-  ordinal: number;
-  rows: unknown[];
-};
-
-const canon = (keys: Map<string, string>): string =>
-  [...keys]
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([f, v]) => `${f}=${v}`)
-    .join("&");
-
-/** The field a data-key component was split by, when the split named one. */
-const splitFieldOf = (node: GoFishNode): string | undefined =>
-  node.key !== undefined && node.key !== null && node._syntheticKey !== true
-    ? (node as unknown as { __splitBy?: string }).__splitBy
-    : undefined;
-
-/** The leaves of `root` with their name paths and key assignments. */
-export function leafKeys(root: GoFishNode): LeafKey[] {
-  const out: LeafKey[] = [];
-  const ordinals = new Map<string, number>();
-  const walk = (
-    node: GoFishNode,
-    names: string,
-    keys: Map<string, string>
-  ): void => {
-    if (isRelational(node)) return;
-    if (node !== root) {
-      const field = splitFieldOf(node);
-      if (field !== undefined) {
-        keys = new Map(keys).set(field, String(node.key));
-      } else {
-        const c = componentOf(node);
-        if (c !== undefined) names = names === "" ? c : `${names}/${c}`;
-      }
-    }
-    const kids = node.children.filter(
-      (c): c is GoFishNode => c instanceof GoFishNode
-    );
-    if (kids.length === 0 && node !== root) {
-      const id = `${names}|${canon(keys)}`;
-      const ordinal = ordinals.get(id) ?? 0;
-      ordinals.set(id, ordinal + 1);
-      out.push({ node, names, keys, ordinal, rows: rowsOf(node) });
-      return;
-    }
-    for (const kid of kids) walk(kid, names, keys);
-  };
-  walk(root, "", new Map());
-  return out;
-}
-
-const valueOf = (row: unknown, field: string): string | undefined =>
-  typeof row === "object" && row !== null
-    ? String((row as Record<string, unknown>)[field])
-    : undefined;
-
-/** `keys` holds of `rows`: every row has every value. */
-function holds(keys: Map<string, string>, rows: unknown[]): boolean {
-  if (keys.size === 0 || rows.length === 0) return false;
-  return rows.every((r) => [...keys].every(([f, v]) => valueOf(r, f) === v));
-}
-
-/** The values `rows` agree on for `fields`, joined; undefined if they don't. */
-function project(fields: string[], rows: unknown[]): string | undefined {
-  if (rows.length === 0) return undefined;
-  const values: string[] = [];
-  for (const f of fields) {
-    const vs = new Set(rows.map((r) => valueOf(r, f)));
-    const [v] = [...vs];
-    if (vs.size !== 1 || v === undefined) return undefined;
-    values.push(v);
-  }
-  return values.join("&");
-}
-
-/** The pairs of leaves of `a` and `b` that are the same mark. */
-function matchPair(a: LeafKey[], b: LeafKey[]): [number, number][] {
-  // b's leaves by exact assignment; and by name path, then the fields of
-  // their assignment, then its values.
-  const exact = new Map<string, number>();
-  const byFields = new Map<string, Map<string, Map<string, number[]>>>();
-  b.forEach((m, j) => {
-    exact.set(`${m.names}|${canon(m.keys)}#${m.ordinal}`, j);
-    if (m.keys.size === 0) return;
-    const fields = [...m.keys.keys()].sort();
-    let perNames = byFields.get(m.names);
-    if (perNames === undefined) byFields.set(m.names, (perNames = new Map()));
-    const sig = fields.join("&");
-    let perFields = perNames.get(sig);
-    if (perFields === undefined) perNames.set(sig, (perFields = new Map()));
-    const values = fields.map((f) => m.keys.get(f)!).join("&");
-    let list = perFields.get(values);
-    if (list === undefined) perFields.set(values, (list = []));
-    list.push(j);
-  });
-  const pairs: [number, number][] = [];
-  a.forEach((l, i) => {
-    const same = exact.get(`${l.names}|${canon(l.keys)}#${l.ordinal}`);
-    if (same !== undefined) {
-      pairs.push([i, same]);
-      return;
-    }
-    if (l.keys.size === 0) return;
-    const found = new Set<number>();
-    for (const [sig, perFields] of byFields.get(l.names) ?? []) {
-      const values = project(sig.split("&"), l.rows);
-      if (values === undefined) continue;
-      for (const j of perFields.get(values) ?? []) {
-        if (b[j].ordinal === l.ordinal && holds(l.keys, b[j].rows)) {
-          found.add(j);
-        }
-      }
-    }
-    if (found.size === 1) pairs.push([i, [...found][0]]);
-  });
-  return pairs;
-}
-
 /**
- * The runs of matched leaves over `keyframes`: each run is one mark, at most
- * one leaf per keyframe, in keyframe order; runs in first-seen order. Every
- * pair of keyframes is matched (not only neighbors), so a mark absent from
- * the middle keyframe is still one mark at both ends.
+ * The runs of matched marks over `states`: each run is one mark, at most one
+ * node per state, in state order; runs in first-seen order. `absent[k]`
+ * lists nodes of state `k` that are not there to match (a mark of a scene
+ * that has not been built in yet), each a mark or a leaf inside one.
  */
 export function matchRuns(
-  keyframes: GoFishNode[]
+  states: GoFishNode[],
+  key: Key | undefined,
+  where: string,
+  absent: Set<GoFishNode>[] = []
 ): { k: number; node: GoFishNode }[][] {
-  const leaves = keyframes.map(leafKeys);
-  const base: number[] = [];
-  let total = 0;
-  for (const ls of leaves) {
-    base.push(total);
-    total += ls.length;
-  }
-  const parent = Array.from({ length: total }, (_, n) => n);
-  const frames = leaves.flatMap((ls, k) => ls.map(() => new Set([k])));
-  const find = (n: number): number =>
-    parent[n] === n ? n : (parent[n] = find(parent[n]));
-  for (let p = 0; p < leaves.length; p++) {
-    for (let q = p + 1; q < leaves.length; q++) {
-      for (const [i, j] of matchPair(leaves[p], leaves[q])) {
-        const [x, y] = [find(base[p] + i), find(base[q] + j)];
-        if (x === y) continue;
-        // One leaf per keyframe in a run: a union that would put two leaves
-        // of one keyframe in one mark is ambiguous, so it is not made.
-        if ([...frames[y]].some((k) => frames[x].has(k))) continue;
-        parent[y] = x;
-        frames[y].forEach((k) => frames[x].add(k));
+  const runs = new Map<string, { k: number; node: GoFishNode }[]>();
+  states.forEach((state, k) => {
+    for (const [id, node] of markIdentities(state, key, where)) {
+      const gone = absent[k];
+      if (gone !== undefined && leavesOf(node).some((l) => gone.has(l))) {
+        continue;
       }
+      let run = runs.get(id);
+      if (run === undefined) runs.set(id, (run = []));
+      run.push({ k, node });
     }
-  }
-  const runs = new Map<number, { k: number; node: GoFishNode }[]>();
-  leaves.forEach((ls, k) =>
-    ls.forEach((leaf, i) => {
-      const root = find(base[k] + i);
-      let run = runs.get(root);
-      if (run === undefined) runs.set(root, (run = []));
-      run.push({ k, node: leaf.node });
-    })
-  );
+  });
   return [...runs.values()];
+}
+
+const leavesOf = (node: GoFishNode): GoFishNode[] => {
+  const kids = kidsOf(node);
+  return kids.length === 0 ? [node] : kids.flatMap(leavesOf);
+};
+
+/** The name path of every named node under `root` (names only), and the
+ *  relational nodes in tree order: what an arrow's operands are matched by.
+ *  An arrow's operands are named nodes of a hand-built diagram. */
+export function namedPaths(root: GoFishNode): {
+  pathOf: Map<GoFishNode, string>;
+  byPath: Map<string, GoFishNode>;
+  relational: GoFishNode[];
+} {
+  const pathOf = new Map<GoFishNode, string>();
+  const byPath = new Map<string, GoFishNode>();
+  const relational: GoFishNode[] = [];
+  const walk = (node: GoFishNode, path: string): void => {
+    if (isRelational(node)) {
+      relational.push(node);
+      return;
+    }
+    const name = node === root ? undefined : userName(node);
+    const here =
+      name === undefined ? path : path === "" ? name : `${path}/${name}`;
+    if (name !== undefined && !byPath.has(here)) {
+      byPath.set(here, node);
+      pathOf.set(node, here);
+    }
+    for (const kid of kidsOf(node)) walk(kid, here);
+  };
+  walk(root, "");
+  return { pathOf, byPath, relational };
 }

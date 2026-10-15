@@ -75,6 +75,7 @@ import {
 } from "../../animation/effects";
 import { checkSequencePhases, markDataTime } from "../../animation/transition";
 import { morph } from "../../animation/morph";
+import type { Key } from "../../animation/identity";
 import {
   after,
   align,
@@ -683,6 +684,15 @@ export type SequenceOverOptions = {
    *  last child's band runs up to `t = n` (the flow form's `cyclic`, with a
    *  period of one child per unit). */
   cyclic?: boolean;
+  /** Milliseconds each child rests before it moves on into the next. The
+   *  rest is taken out of the child's share of `duration`. Default 0: the
+   *  children are instants and the marks are always moving. PROTOTYPE. */
+  hold?: number;
+  /** What marks are matched by across the children: a field name or a
+   *  function of a row. Default: the row itself (`identity.ts`). Two
+   *  gapminder years are different rows, so they match by
+   *  `key: "country"`. PROTOTYPE. */
+  key?: Key;
 };
 
 /** What `time.sequence(opts, children)` returns: a mark whose
@@ -705,6 +715,22 @@ export type SequenceMark = Mark<any> & {
  * children: their marks are matched by identity (`src/animation/identity.ts`)
  * and each matched mark moves, morphs or cross-fades (`src/animation/morph.ts`),
  * the way the flow form's chained `update` moves the marks of one key.
+ *
+ * SUGAR. `time.sequence({ duration, hold }, [k0, k1, ..., kn])` is the
+ * timeline
+ *
+ *   timeline([k0.hold(h), k1.hold(h), ..., kn.hold(h)]).relate((ks) => [
+ *     time.after(k0, k1, { gap: band - h }), time.transition(k0, k1),
+ *     ...
+ *   ])
+ *
+ * with `band` = `duration` / (n − 1) (one more band when `cyclic`) and
+ * `h` = `hold` (default 0): each child rests for its hold, and a transition
+ * fills every gap. PROTOTYPE SHORTCUT: it is not literally lowered to a
+ * timeline. It keeps its own clock, in child-index units, and its cyclic
+ * wrap from the last child into the first, which a timeline does not have;
+ * the right fix is to lower it to `timeline` once a timeline can loop its
+ * last scene into its first.
  */
 function sequenceOver(
   opts: SequenceOverOptions,
@@ -750,16 +776,31 @@ function sequenceOver(
     }
     // A keyframe's key is its time, which is what `keyframeOf` reads.
     keyframes.forEach((k, i) => k.setKey(String(i)));
+    // With a hold, each child stands at two knots, `i` and `i + rest`, so
+    // the marks hold it still in between and then move.
+    const msPerUnit = () => clock.duration / span;
+    const rest = (opts.hold ?? 0) / msPerUnit();
+    if (!(rest >= 0 && rest < 1)) {
+      throw new Error(
+        `[gofish] time.sequence({ hold: ${opts.hold} }): a child rests for ` +
+          `its hold and then moves within its share of the duration ` +
+          `(${msPerUnit()} ms), so the hold must be less than that.`
+      );
+    }
+    const stands = rest > 0 ? keyframes.flatMap((k) => [k, k]) : keyframes;
+    const standKnots = rest > 0 ? knots.flatMap((t) => [t, t + rest]) : knots;
     const moving =
       update === undefined
         ? []
-        : await morph(keyframes, {
-            knots,
+        : await morph(stands, {
+            knots: standKnots,
             at: playhead,
             method: update.curve,
             ease: update.ease,
-            msPerUnit: () => clock.duration / span,
+            msPerUnit,
             cycle,
+            key: opts.key,
+            where: "time.sequence(opts, children)",
           });
     const frame = await Frame({}, [...keyframes, ...moving]);
     const shown = sequenceWindow(

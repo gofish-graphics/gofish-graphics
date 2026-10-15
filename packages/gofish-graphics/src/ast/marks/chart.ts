@@ -49,6 +49,7 @@ import {
   labelModifier,
   zOrderModifier,
   transitionModifier,
+  holdModifier,
   LayerContext,
 } from "./createOperator";
 import type { ModifierConfig, ZOrderValue } from "./createOperator";
@@ -57,6 +58,7 @@ import type {
   OperatorTransition,
 } from "../../animation/transition";
 import { layer as Layer } from "../graphicalOperators/layer";
+import { markTimeline } from "../../animation/scene";
 import {
   // `over` stays internal (not re-exported from lib) — it backs the
   // deserializer's `"over"` wire type only; user code should use `layer`.
@@ -1053,6 +1055,9 @@ export type RelatableMark<T> = Mark<T> & {
   zOrder(value: ZOrderValue<T>): RelatableMark<T>;
   relate(fn: RelateFn): RelatableMark<T>;
   transition(spec: MarkTransition | OperatorTransition): RelatableMark<T>;
+  /** PROTOTYPE (animation grammar): how long it is on screen as a scene of
+   *  a `timeline`. */
+  hold(ms: number): RelatableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
     options: Parameters<GoFishNode["render"]>[1]
@@ -1089,7 +1094,32 @@ function makeRelatableMark<T>(base: Mark<T>): RelatableMark<T> {
     // PROTOTYPE (gun-deaths): `layer([...]).transition({ enter:
     // time.stagger(...) })` arranges the layer's children in time.
     transitionModifier,
+    holdModifier,
   ]) as unknown as RelatableMark<T>;
+}
+
+/**
+ * `timeline([...])` — PROTOTYPE (animation grammar): SCENES, different
+ * pictures over time, placed by temporal clauses in `.relate()`
+ * (`time.after`, `time.align`, `time.transition(a, b)`). Spatially it is a
+ * `layer`: the scenes share one frame, so they share scales, and each is
+ * drawn only over its own interval (`src/animation/timeline.ts`). A
+ * `layer`'s children are the parts of one picture instead, all there
+ * together.
+ */
+export function timeline<T>(scenes: MarkChild[]): RelatableMark<T> {
+  const parts = layer<T>(scenes);
+  const base: Mark<T> = async (d, key, layerContext) => {
+    const node = (await resolveMarkResult(
+      parts(d, key, layerContext),
+      layerContext
+    )) as GoFishNode;
+    markTimeline(node);
+    // A timeline with no clauses: every scene at 0 for its own length.
+    await node.relate(() => []);
+    return node;
+  };
+  return makeRelatableMark(base);
 }
 
 /**

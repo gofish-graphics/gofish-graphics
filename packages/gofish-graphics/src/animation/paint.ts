@@ -30,6 +30,7 @@ import {
 } from "../interaction/liveSlots";
 import {
   channelsOf,
+  effectProgress,
   paintHost,
   paintRider,
   type TimedEffect,
@@ -74,7 +75,16 @@ export function makeRule(
   start: number,
   effects: TimedEffect[]
 ): AnimationRule {
-  const end = start + Math.max(0, ...effects.map((e) => e.duration));
+  const end = start + Math.max(0, ...effects.map((e) => e.delay + e.duration));
+  /** The masks of the mark this rule animates (see MASKS below). */
+  const masks: {
+    box?: DisplayList.RectItem;
+    rects: {
+      rect: DisplayList.RectItem;
+      rectAt: (t: number) => DisplayList.RectItem[];
+    }[];
+    wrappers: DisplayList.MaskItem[];
+  } = { rects: [], wrappers: [] };
   // The playhead as the effects see it: before the start every one of them
   // is at 0 and from the end on at 1, so those stretches read as one key
   // each, and a mark that is waiting or done is not rebuilt per frame.
@@ -123,6 +133,101 @@ export function makeRule(
         }
       });
       setLiveItems(items, channels, key, stateAt, first);
+
+      // MASKS (PROTOTYPE, animation grammar): an effect that cannot reshape
+      // an item (a side wipe of a path or a composite) draws it under a mask
+      // of the part of the MARK's box that shows (`Look.mask`). The box is
+      // the union of the boxes of every node the rule animates (the parts of
+      // one mark, which lower one after another), so a mark wipes as one; a
+      // mask already lowered is brought up to date as each later part
+      // widens the box. The items move into one mask item in their place;
+      // the mask's rect is what the clock patches.
+      if (role !== "host") return;
+      const own = pixelBoxOf(node, transform, toPixel);
+      if (own === undefined) return;
+      masks.box = masks.box === undefined ? own : unionBox(masks.box, own);
+      for (const timed of effects) {
+        const { mask } = timed.effect;
+        if (mask === undefined) continue;
+        const inside = items
+          .map((item, j) => ({ item, j }))
+          .filter(({ item }) => mask(item.kind, own, 1) !== undefined);
+        if (inside.length === 0) continue;
+        const kind = inside[0].item.kind;
+        const rectAt = (t: number): DisplayList.RectItem[] => [
+          {
+            ...mask(kind, masks.box!, effectProgress(timed, t - start))!,
+            style: { fill: "white" },
+          },
+        ];
+        const m0 = readLive(key);
+        const rect = rectAt(m0)[0];
+        setLiveItems([rect], [["x", "y", "w", "h"]], key, rectAt, {
+          key: Number.NaN,
+          items: [rect],
+        });
+        masks.rects.push({ rect, rectAt });
+        const wrapper: DisplayList.DisplayItem = {
+          kind: "mask",
+          bbox: { ...own },
+          mask: [rect],
+          content: inside.map(({ item }) => item),
+        };
+        masks.wrappers.push(wrapper as DisplayList.MaskItem);
+        // The wrapper takes the first masked item's place; the others leave
+        // the list (they are inside it).
+        const drop = new Set(inside.slice(1).map(({ j }) => j));
+        items[inside[0].j] = wrapper;
+        for (let j = items.length - 1; j >= 0; j--) {
+          if (drop.has(j)) items.splice(j, 1);
+        }
+      }
+      // Bring every mask of the mark up to the widened box.
+      const kNow = readLive(key);
+      for (const { rect, rectAt } of masks.rects) {
+        const now = rectAt(kNow)[0];
+        for (const c of ["x", "y", "w", "h"] as const) rect[c] = now[c];
+      }
+      for (const w of masks.wrappers) w.bbox = { ...masks.box };
     },
+  };
+}
+
+const unionBox = (
+  a: DisplayList.RectItem,
+  b: DisplayList.RectItem
+): DisplayList.RectItem => {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return {
+    kind: "rect",
+    x,
+    y,
+    w: Math.max(a.x + a.w, b.x + b.w) - x,
+    h: Math.max(a.y + a.h, b.y + b.h) - y,
+  };
+};
+
+/** A node's laid-out box in pixels, as a rect item (no style). */
+function pixelBoxOf(
+  node: GoFishNode,
+  transform: Transform | undefined,
+  toPixel: ToPixel
+): DisplayList.RectItem | undefined {
+  const dims = node.intrinsicDims;
+  const [x, y] = [dims?.[0], dims?.[1]];
+  if (x?.min === undefined || y?.min === undefined) return undefined;
+  const xMax = x.max ?? x.min + (x.size ?? 0);
+  const yMax = y.max ?? y.min + (y.size ?? 0);
+  const [tx, ty] = displayTranslate(transform);
+  const direction = node.yFrame.direction;
+  const a = toPixel([x.min + tx, direction * y.min + ty]);
+  const b = toPixel([xMax + tx, direction * yMax + ty]);
+  return {
+    kind: "rect",
+    x: Math.min(a[0], b[0]),
+    y: Math.min(a[1], b[1]),
+    w: Math.abs(b[0] - a[0]),
+    h: Math.abs(b[1] - a[1]),
   };
 }

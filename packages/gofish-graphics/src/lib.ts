@@ -204,6 +204,8 @@ export {
   repeat,
   log,
   layer,
+  // PROTOTYPE (animation grammar): scenes over time.
+  timeline,
   paint,
   intersect,
   exclude,

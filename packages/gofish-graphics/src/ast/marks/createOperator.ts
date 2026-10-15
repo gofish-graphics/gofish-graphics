@@ -71,6 +71,7 @@ import {
 } from "../graphicalOperators/positionNode";
 import { attachBuilderTerminals } from "./terminals";
 import { installBuildIn } from "../../animation/install";
+import { setHold } from "../../animation/scene";
 import {
   recordMarkTransition,
   recordOperatorTransition,
@@ -469,6 +470,21 @@ export const transitionModifier = {
 } satisfies ModifierConfig<[spec: MarkTransition]>;
 
 /**
+ * `.hold(ms)` — PROTOTYPE (animation grammar): how long the node is on
+ * screen as a scene of a `timeline` (`src/animation/timeline.ts`). JS-only,
+ * like the rest of the animation surface.
+ */
+export const holdModifier = {
+  name: "hold",
+  apply: (node, _layerContext, _datum, ms) => {
+    setHold(node, ms);
+  },
+  tag: (wrapped, base) => {
+    propagateSerialize(base, wrapped, () => {});
+  },
+} satisfies ModifierConfig<[ms: number]>;
+
+/**
  * Attach chainable .name(), .label(), and .zOrder() to a mark, registering it
  * into the layer context when named so that ref(...)/selectAll(...) can find
  * it back.
@@ -479,6 +495,7 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
     labelModifier,
     zOrderModifier,
     transitionModifier,
+    holdModifier,
   ]) as NameableMark<T>;
 }
 

@@ -169,16 +169,19 @@ export const playsDataTime = (node: GoFishNode): boolean => dataTime.has(node);
  * nothing updates or leaves after that. Under one, marks enter, move and
  * leave with the data, one stretch at a time: an operator can arrange only
  * its children's moves (`update`), and a mark enters and leaves only by the
- * tween's fade in place (`checkSequencePhases`).
+ * tween's fade in place (`checkSequencePhases`). In a SCENE of a timeline
+ * (PROTOTYPE, animation grammar) marks enter as in a build-in, on the
+ * scene's clock, and an `update` is how they move in the transitions
+ * between scenes (R2D3's histogram staggers the dots that arrive in it).
  */
 export function checkPhases(
   record: NodeTransition,
-  underSequence: boolean
+  clock: "build" | "sequence" | "scene"
 ): void {
-  if (!underSequence) {
-    const phases = (["update", "exit"] as const).filter(
-      (phase) => record[phase] !== undefined
-    );
+  if (clock !== "sequence") {
+    const phases = (
+      clock === "scene" ? (["exit"] as const) : (["update", "exit"] as const)
+    ).filter((phase) => record[phase] !== undefined);
     if (phases.length > 0) {
       throw new Error(
         `[gofish] .transition({ ${phases.join(", ")} }): in a chart with no ` +

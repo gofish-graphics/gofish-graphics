@@ -532,7 +532,7 @@ export type CurveIR =
   | { kind: "catmullRom" }
   | { kind: "bezier" }
   | { kind: "orthogonal"; bend?: "auto" }
-  | { kind: "arc"; direction?: "up" | "down" }
+  | { kind: "arc"; direction?: "up" | "down"; height?: number }
   | {
       kind: "perfectArrows";
       bow?: number;

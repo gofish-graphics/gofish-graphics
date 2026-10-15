@@ -570,12 +570,17 @@ export const STRATEGIES = {
         },
       },
       arc: {
-        doc: "Semicircular arc through both endpoints (GoTree arccurve).",
+        doc: "Semicircular (or, with height, half-elliptical) arc through both endpoints (GoTree arccurve).",
         params: {
           direction: {
             type: t.enum("up", "down"),
             default: "up",
             doc: "Which side the arc bulges toward.",
+          },
+          height: {
+            type: t.number,
+            default: 1,
+            doc: "The arc's height as a share of a semicircle's (half the chord): 1 is a semicircle, 0.5 a half ellipse half as tall.",
           },
         },
       },

@@ -16,15 +16,6 @@
 import type { DisplayList } from "gofish-ir";
 import { fadeItem } from "../ast/displayList/lowerHelpers";
 import type { InterpolationMethod } from "../interpolate";
-import {
-  curve,
-  evenStep,
-  pathToSVGPath,
-  segment,
-  type Path,
-  type Point,
-} from "../path";
-import { windowPath } from "../timeWindow";
 
 /** A time warp `u -> u'` on [0, 1], or the name of a standard one. */
 export type Ease =
@@ -73,6 +64,11 @@ export type EffectOptions = {
   /** Default slow-in / slow-out (`"cubicInOut"`), which Dragicevic et al.
    *  (2011) found easier to follow than constant speed. */
   ease?: Ease;
+  /** Milliseconds from the mark's start to the effect's start: the mark
+   *  waits, in its enter state, and its slot in the timeline lasts the delay
+   *  plus the duration. Default 0. PROTOTYPE (animation grammar): R2D3's
+   *  threshold enters 600 ms into its scene. */
+  delay?: number;
 };
 
 type WipeSide = "bottom" | "top" | "left" | "right";
@@ -84,14 +80,7 @@ export type WipeOptions = EffectOptions & {
   shape?: "circle";
 };
 
-type EffectKind =
-  | "grow"
-  | "shrink"
-  | "fadeIn"
-  | "fadeOut"
-  | "appear"
-  | "wipe"
-  | "draw";
+type EffectKind = "grow" | "shrink" | "fadeIn" | "fadeOut" | "appear" | "wipe";
 
 /** What an effect does to a mark at a progress `p` in [0, 1]. */
 type Look = {
@@ -111,6 +100,15 @@ type Look = {
    *  rect in polar coordinates lowers to a path), so a mismatch fails before
    *  anything paints. */
   fits(kind: DisplayList.DisplayItem["kind"]): void;
+  /** For an item `host` cannot reshape (a path, a composite): the part of
+   *  the mark's pixel box that shows at `p`, as a rect. The paint tier then
+   *  draws the item under a MASK of that rect (`paint.ts`). PROTOTYPE
+   *  (animation grammar): only the side wipe has one. */
+  mask?(
+    kind: DisplayList.DisplayItem["kind"],
+    box: DisplayList.RectItem,
+    p: number
+  ): DisplayList.RectItem | undefined;
 };
 
 /** One effect: what it does, and its timing options as written (validated
@@ -131,6 +129,8 @@ export type TimedEffect = {
   effect: Effect;
   duration: number;
   ease: (u: number) => number;
+  /** Ms from the mark's start to the effect's (`EffectOptions.delay`). */
+  delay: number;
 };
 
 /** `Animation.tween(...)`: how a mark MOVES between two keyframes of a
@@ -178,7 +178,13 @@ function effect(
   look: Look,
   progress: Effect["progress"] = ramp
 ): Effect {
-  const { duration, ease } = opts;
+  const { duration, ease, delay } = opts;
+  if (delay !== undefined && !(Number.isFinite(delay) && delay >= 0)) {
+    throw new Error(
+      `[gofish] Animation.${kind}({ delay: ${String(delay)} }): a delay is ` +
+        `a number of milliseconds, 0 or more.`
+    );
+  }
   if (typeof duration !== "string") {
     const ms = duration ?? DEFAULT_DURATION;
     if (!(Number.isFinite(ms) && ms >= 0)) {
@@ -190,7 +196,7 @@ function effect(
   }
   // An unknown ease name fails here, where it was written.
   resolveEase(ease);
-  return { __effect: true, kind, duration, ease, progress, ...look };
+  return { __effect: true, kind, duration, ease, delay, progress, ...look };
 }
 
 /** `look` played backward: at progress `p` it shows what `look` shows at
@@ -250,20 +256,24 @@ const revealing = (
   rider: waits,
   channels: boxFieldsOf,
   fits: (item) => {
-    const circle = shape === "circle";
-    if (item === (circle ? "ellipse" : "rect")) return;
+    // A side wipe reveals any mark: a rect by clipping its own box, anything
+    // else under a mask (`mask` below).
+    if (shape !== "circle" || item === "ellipse") return;
     throw new Error(
-      `[gofish] Animation.wipe(${
-        circle ? `{ shape: "circle" }` : `{ from: "${from}" }`
-      }): ` +
-        (circle
-          ? `a circular reveal is built for circles (it grows the radius)`
-          : `a side wipe is built for rects (it clips the box)`) +
-        `, and this mark ${drawnAs(item)}. Use Animation.fadeIn() or ` +
-        `Animation.appear() for it. A general clip needs a clip item in the ` +
-        `display list, which this prototype does not have.`
+      `[gofish] Animation.wipe({ shape: "circle" }): a circular reveal is ` +
+        `built for circles (it grows the radius), and this mark ` +
+        `${drawnAs(item)}. Use a side wipe (\`from\`), Animation.fadeIn() or ` +
+        `Animation.appear() for it.`
     );
   },
+  // PROTOTYPE (animation grammar, gun deaths): the minimal clip item for
+  // marks a side wipe cannot reshape (a path, a composite): the revealed
+  // part of the mark's box, which the paint tier draws as the mask over the
+  // mark's items.
+  mask: (kind, box, p) =>
+    shape === "circle" || kind === "rect"
+      ? undefined
+      : (reveal(box, p, from, undefined) as DisplayList.RectItem),
 });
 
 /** Collapse the mark's SIZE axes toward its baseline, then let it grow to its
@@ -298,77 +308,6 @@ export const wipe = (opts: WipeOptions = {}): Effect =>
       opts.shape
     )
   );
-
-/**
- * Draw the mark's stroke from its start to its end: at progress `p` the path
- * is cut at the parameter `p` of its run (each segment taking an even share
- * of it, and a cubic cut by de Casteljau, `windowPath` in `timeWindow.ts`).
- * So the pen moves along the curve's own PARAMETER, not its arc length, which
- * is how the Periscopic arcs are drawn: one cubic, split where x is the age
- * at death, each part drawn linearly in its parameter. PROTOTYPE
- * (gun-deaths): for path items only (a `bezier` or a `line`).
- */
-export const draw = (opts?: EffectOptions): Effect =>
-  effect("draw", opts, drawing);
-
-const drawing: Look = {
-  host: (item, p) => {
-    if (p === 1 || item.kind !== "path") return item;
-    return { ...item, d: pathToSVGPath(cutPath(parsePathData(item.d), p)) };
-  },
-  rider: waits,
-  channels: (item) => (item.kind === "path" ? ["d"] : []),
-  fits: (item) => {
-    if (item === "path") return;
-    throw new Error(
-      `[gofish] Animation.draw(): draws a stroke along its path, and this ` +
-        `mark ${drawnAs(item)}. Use Animation.wipe() or Animation.fadeIn() ` +
-        `for it.`
-    );
-  },
-};
-
-/** The part of `path` from its start to parameter `p` of its whole run. */
-const cutPath = (path: Path, p: number): Path =>
-  p <= 0 ? [] : windowPath([evenStep(path)], [0, 1], { from: 0, to: p });
-
-/**
- * Path data back to segments, for the absolute `M` / `L` / `C` commands that
- * GoFish lowers paths to (`pathToSVGPath`).
- * PROTOTYPE SHORTCUT: the effect sees only the lowered display item, so it
- * re-reads the `d` string it was given. Any other command (an arc, a
- * relative command, a close) throws rather than draw something else. A real
- * version would keep the lowered segments on the item, or lower the cut.
- */
-function parsePathData(d: string): Path {
-  const tokens = d.match(/[A-Za-z]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/g) ?? [];
-  const out: Path = [];
-  let at: Point | undefined;
-  let i = 0;
-  const num = () => Number(tokens[i++]);
-  const pt = (): Point => [num(), num()];
-  while (i < tokens.length) {
-    const cmd = tokens[i++];
-    if (cmd === "M") at = pt();
-    else if (cmd === "L" && at) {
-      const q = pt();
-      out.push(segment(at, q));
-      at = q;
-    } else if (cmd === "C" && at) {
-      const c1 = pt();
-      const c2 = pt();
-      const q = pt();
-      out.push(curve(at, c1, c2, q));
-      at = q;
-    } else {
-      throw new Error(
-        `[gofish] Animation.draw(): cannot read path command "${cmd}" ` +
-          `(this prototype reads the absolute M / L / C paths GoFish draws).`
-      );
-    }
-  }
-  return out;
-}
 
 const isEffect = (v: unknown): v is Effect =>
   typeof v === "object" && v !== null && (v as Effect).__effect === true;
@@ -497,8 +436,14 @@ function reveal(
 }
 
 /** Where a timed effect is at local time `t` (ms since the mark's start). */
-const progressOf = ({ effect, duration, ease }: TimedEffect, t: number) =>
-  effect.progress(t, duration, ease);
+const progressOf = (
+  { effect, duration, ease, delay }: TimedEffect,
+  t: number
+) => effect.progress(t - delay, duration, ease);
+
+/** Where a timed effect is at local time `t`, exported for the paint tier's
+ *  masks (`paint.ts`). */
+export const effectProgress = progressOf;
 
 /**
  * One of the mark's own items at local time `t`. Effects compose in order:

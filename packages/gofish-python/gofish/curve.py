@@ -68,20 +68,27 @@ def orthogonal(*, bend: Optional[str] = None) -> Dict[str, Any]:
     return out
 
 
-def arc(*, direction: Optional[str] = None) -> Dict[str, Any]:
-    """Semicircular arc through both endpoints (GoTree arccurve).
+def arc(*, direction: Optional[str] = None, height: Optional[float] = None) -> Dict[str, Any]:
+    """Semicircular (or, with height, half-elliptical) arc through both endpoints (GoTree arccurve).
 
     Args:
         direction: Which side the arc bulges toward. Default "up".
+        height: The arc's height as a share of a semicircle's (half the chord): 1 is a semicircle, 0.5 a half ellipse half as tall. Default 1.
     """
     if direction is not None:
         if not isinstance(direction, str):
             raise TypeError(f"Curve.arc(direction=...) must be one of \"up\", \"down\", got {type(direction).__name__}")
         if direction not in ("up", "down"):
             raise ValueError(f"Curve.arc(direction=...) must be one of \"up\", \"down\", got {direction!r}")
+    if height is not None:
+        if not (isinstance(height, (int, float)) and not isinstance(height, bool)):
+            raise TypeError(f"Curve.arc(height=...) must be a number, got {type(height).__name__}")
+        if math.isnan(height):
+            raise ValueError(f"Curve.arc(height=...) must not be NaN, got {height!r}")
     out: Dict[str, Any] = {"kind": "arc"}
     for _k, _v in [
         ("direction", direction),
+        ("height", height),
     ]:
         if _v is not None:
             out[_k] = _v

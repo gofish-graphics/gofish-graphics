@@ -141,6 +141,12 @@ export type TweenOptions = {
    *  the reading "the transition's curve is the connector's curve": a lane of
    *  a `ribbon` and a particle moving down it trace one bezier. */
   route?: { router: Router; options: Record<string, any>; dir: 0 | 1 };
+  /** PROTOTYPE (animation grammar, timeline): the operands keep drawing
+   *  themselves. A timeline's transition is a mark BETWEEN two scenes, drawn
+   *  only in the gap between them, and each scene draws itself over its own
+   *  interval; a sequence's keyframes are instants, so its tween takes their
+   *  drawing over (the default). */
+  operandsDraw?: boolean;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -335,6 +341,7 @@ export const tween = createNodeOperator(
       msPerUnit,
       moves,
       route,
+      operandsDraw,
       fill,
       stroke,
       strokeWidth,
@@ -483,7 +490,9 @@ export const tween = createNodeOperator(
             // moving mark is its drawing. Each lends that drawing to the
             // moving mark at lowering: a rigid leaf's is placed where the
             // playhead is, and a box leaf's gives the moving mark its paint.
-            leaves.forEach((leaf) => leaf.INTERNAL_emitNothing());
+            if (!operandsDraw) {
+              leaves.forEach((leaf) => leaf.INTERNAL_emitNothing());
+            }
             const origins = stands.map((s) => displayTranslate(s.transform));
             // A row of box shapes is interpolated as a box, morphing between
             // a rect and an ellipse where its shape changes. Any other row

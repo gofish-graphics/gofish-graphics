@@ -72,7 +72,7 @@ for (const [flowAt, childAt] of [
       .flow(scatter(SCATTER))
       .mark(circle({ r: 4, fill: "country" }));
   const combinator = await time
-    .sequence({ duration: 5000, playing: false, at: childAt }, [
+    .sequence({ duration: 5000, playing: false, at: childAt, key: "country" }, [
       keyframe(1955),
       keyframe(1960),
     ])

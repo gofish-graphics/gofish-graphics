@@ -5,28 +5,30 @@
  * lower here:
  *
  *   time.sequence({...}, [k0, k1, k2]).transition({ update: Animation.tween() })
- *   layer([a, b]).relate(({ a, b }) => [time.after(a, b), time.transition(a, b)])
+ *   timeline([a, b]).relate(({ a, b }) => [time.after(a, b, { gap }),
+ *                                          time.transition(a, b)])
  *
  * The keyframes are whole nodes (a chart, a diagram), each at a time on one
- * axis (`knots`): a child index for the sequence, milliseconds for a relate
- * timeline. Their leaves are matched across the keyframes by identity
- * (`identity.ts`), and each identity becomes ONE `tween` over the leaves that
- * have it, the same node `time.transition()` builds for the flow form, read
- * with the same enter / update / exit rule over the keyframes: a leaf in two
+ * axis (`knots`): a child index for the sequence, milliseconds for a
+ * timeline. Their marks are matched across the keyframes by identity
+ * (`identity.ts`: the rows they draw, compared by `key`; by name where they
+ * draw none), and each identity becomes ONE `tween` over the marks that have
+ * it, the same node `time.transition()` builds for the flow form, read with
+ * the same enter / update / exit rule over the keyframes: a mark in two
  * neighboring keyframes moves (a rect and an ellipse morph, a changed text
- * cross-fades, fill and stroke mix), a leaf in only one of them fades in
+ * cross-fades, fill and stroke mix), a mark in only one of them fades in
  * place.
  *
  * Relational marks (arrows) are not interpolated: they are DRAWN AGAIN every
  * frame from their operands' moving boxes (`relationTween.tsx`), matched by
- * their operands' identities, so an arrow stays attached while the boxes it
+ * their operands' name paths, so an arrow stays attached while the boxes it
  * joins move.
  */
 import { GoFishNode } from "../ast/_node";
 import { GoFishRef } from "../ast/_ref";
 import { tween } from "../ast/graphicalOperators/tween";
 import type { InterpolationMethod } from "../interpolate";
-import { identities, matchRuns, type Identities } from "./identity";
+import { matchRuns, namedPaths, type Key } from "./identity";
 import { relationTween } from "./relationTween";
 import { arrowPropsOf } from "../ast/graphicalOperators/arrow";
 import { foldTime, unrollOrder, unrollRun, type Cycle } from "../timeWindow";
@@ -44,6 +46,18 @@ export type MorphOptions = {
    *  keyframe moves on into the first, read on the run unrolled one cycle
    *  each way, as the flow form's cyclic sequence does. */
   cycle?: Cycle;
+  /** What marks are matched by (`identity.ts`); omitted, row identity. */
+  key?: Key;
+  /** Per keyframe, the leaves that are not there to match: a scene's marks
+   *  that have not been built in yet at the scene's start. */
+  absent?: Set<GoFishNode>[];
+  /** The keyframes keep drawing themselves: a timeline's scenes are drawn
+   *  over their own intervals and the morph only in the gaps between them.
+   *  Omitted, the moving marks replace the keyframe marks they move (a
+   *  sequence, whose keyframes are instants). */
+  keyframesDraw?: boolean;
+  /** Names the construct, for errors. */
+  where?: string;
 };
 
 /** One keyframe entry of an identity's run. */
@@ -62,12 +76,14 @@ function runsOf(maps: Map<string, GoFishNode>[]): Map<string, Entry[]> {
   return runs;
 }
 
+type Paths = ReturnType<typeof namedPaths>;
+
 /** The node an arrow's operand ref points at, found by name inside the
  *  keyframe (a relate operand is a name). */
 // PROTOTYPE SHORTCUT: before layout a relate operand is a string ref, so it
 // is found by name (the first node with that name in the keyframe) rather
 // than by the ref's own scoped lookup.
-function operandOf(ref: GoFishRef, ids: Identities): GoFishNode | undefined {
+function operandOf(ref: GoFishRef, ids: Paths): GoFishNode | undefined {
   if (ref.targetNode !== undefined) return ref.targetNode;
   const name = ref.selection;
   if (typeof name !== "string") return undefined;
@@ -76,17 +92,17 @@ function operandOf(ref: GoFishRef, ids: Identities): GoFishNode | undefined {
 }
 
 /**
- * The moving marks over `keyframes`: one `tween` per leaf identity and one
- * `relationTween` per arrow identity. The keyframe leaves and arrows they
- * take over draw nothing of their own from then on (the tweens silence them
- * at layout, as `time.transition()` does), so the caller places these nodes
- * beside the keyframes, in the same frame.
+ * The moving marks over `keyframes`: one `tween` per mark identity and one
+ * `relationTween` per arrow identity. Unless `keyframesDraw`, the keyframe
+ * marks and arrows they take over draw nothing of their own from then on
+ * (the tweens silence them at layout, as `time.transition()` does). The
+ * caller places these nodes beside the keyframes, in the same frame.
  */
 export async function morph(
   keyframes: GoFishNode[],
   o: MorphOptions
 ): Promise<GoFishNode[]> {
-  const ids = keyframes.map(identities);
+  const ids = keyframes.map(namedPaths);
   const moving: GoFishNode[] = [];
   const { cycle } = o;
   const at = () => foldTime(o.at(), cycle);
@@ -99,9 +115,10 @@ export async function morph(
     );
     return { knots: u.knots, operand: u.operand };
   };
-  // Leaves are matched by `matchRuns` (identity.ts): equal key assignments,
-  // or each assignment holding of the other leaf's rows.
-  for (const run of matchRuns(keyframes)) {
+  // Marks are matched by the rows they draw, compared by `key`, or by name
+  // path where they draw no rows (`identity.ts`).
+  const where = o.where ?? "time.transition()";
+  for (const run of matchRuns(keyframes, o.key, where, o.absent)) {
     moving.push(
       await tween(
         {
@@ -111,13 +128,14 @@ export async function morph(
           method: o.method,
           ease: o.ease,
           msPerUnit: o.msPerUnit,
+          operandsDraw: o.keyframesDraw,
         },
         run.map((e) => new GoFishRef({ node: e.node }))
       )
     );
   }
 
-  // Arrows, by the identities of what they join.
+  // Arrows, by the name paths of what they join.
   // PROTOTYPE SHORTCUT: only `arrow` is drawn again from moving operands.
   // Other relational marks (line, background/enclose, connect) stay with
   // their keyframe and switch at its band edge; the general fix is one
@@ -137,7 +155,7 @@ export async function morph(
     }
     return map;
   });
-  const named = runsOf(ids.map((i) => i.named));
+  const named = runsOf(ids.map((i) => i.byPath));
   for (const [id, run] of runsOf(arrowMaps)) {
     const [pf, pt] = id.split("->");
     const operand = (path: string) => {
@@ -146,7 +164,7 @@ export async function morph(
       return u.knots.map((t, j) => ({ t, node: entries[u.operand[j]].node }));
     };
     // Each keyframe arrow is drawn by the moving arrow from now on.
-    for (const e of run) e.node.INTERNAL_emitNothing();
+    if (!o.keyframesDraw) for (const e of run) e.node.INTERNAL_emitNothing();
     moving.push(
       await relationTween({
         at,

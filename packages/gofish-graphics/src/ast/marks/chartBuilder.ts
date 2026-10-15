@@ -35,6 +35,7 @@ import {
   type LayerContext,
 } from "./markResult";
 import { markDataTime, chainedUpdates } from "../../animation/transition";
+import { setHold } from "../../animation/scene";
 import {
   installBuildIn,
   type BuildClockOptions,
@@ -604,6 +605,8 @@ type ChartBuilderState<TInput, TOutput> = {
   layerContext: LayerContext;
   nodeZOrder?: number;
   nodeName?: string;
+  /** PROTOTYPE (animation grammar): `.hold(ms)`, see `hold`. */
+  nodeHold?: number;
 };
 
 export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
@@ -1041,6 +1044,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     if (this.state.nodeZOrder !== undefined) {
       result.zOrder(this.state.nodeZOrder);
     }
+    if (this.state.nodeHold !== undefined) setHold(result, this.state.nodeHold);
 
     // A user-chained `.name(...)` names the resolved node so it's a valid
     // `.relate(...)` target on an enclosing layer (looked up by `_name`)
@@ -1071,6 +1075,12 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
 
   zOrder(value: number): ChartBuilder<TInput, TOutput> {
     return this.with({ nodeZOrder: value });
+  }
+
+  /** PROTOTYPE (animation grammar): how long this chart is on screen as a
+   *  scene of a `timeline` (`src/animation/timeline.ts`). */
+  hold(ms: number): ChartBuilder<TInput, TOutput> {
+    return this.with({ nodeHold: ms });
   }
 }
 

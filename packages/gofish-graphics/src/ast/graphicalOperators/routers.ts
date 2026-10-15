@@ -233,7 +233,8 @@ const arcBezier = (
  * Semicircular arc whose diameter is the chord between the two centers —
  * GoTree's `arccurve` link (`re`): center = midpoint, radius = half the chord,
  * so it passes through both endpoints. `direction` ("up"|"down") flips which
- * side it bulges. Split into two 90° beziers for accuracy.
+ * side it bulges, and `height` (default 1) scales the bulge, a half ellipse.
+ * Split into two 90° beziers for accuracy.
  */
 const arcRouter: Router = (b0, b1, { opts }) => {
   const c0 = centerPoint(b0);
@@ -247,7 +248,30 @@ const arcRouter: Router = (b0, b1, { opts }) => {
   const sweep = sign * Math.PI;
   const aMid = a0 + sweep / 2;
   const a1 = a0 + sweep;
-  return [arcBezier(M, r, a0, aMid), arcBezier(M, r, aMid, a1)];
+  const halves = [arcBezier(M, r, a0, aMid), arcBezier(M, r, aMid, a1)];
+  // `height` squashes the semicircle across the chord into a half ellipse:
+  // an affine map, so each bezier maps exactly by its control points.
+  const height = opts?.height ?? 1;
+  if (height === 1) return halves;
+  const along: Point = [(c1[0] - c0[0]) / (2 * r), (c1[1] - c0[1]) / (2 * r)];
+  const squash = (p: Point): Point => {
+    const d: Point = [p[0] - M[0], p[1] - M[1]];
+    const u = d[0] * along[0] + d[1] * along[1];
+    const v = -d[0] * along[1] + d[1] * along[0];
+    const hv = height * v;
+    return [
+      M[0] + u * along[0] - hv * along[1],
+      M[1] + u * along[1] + hv * along[0],
+    ];
+  };
+  return halves.map((c) =>
+    curve(
+      squash(c.start),
+      squash(c.control1),
+      squash(c.control2),
+      squash(c.end)
+    )
+  );
 };
 
 /**

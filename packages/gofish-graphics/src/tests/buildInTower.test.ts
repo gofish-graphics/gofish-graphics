@@ -21,6 +21,7 @@ import "./interactionDomSetup";
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import { categoryBrands, everyYearBrands } from "../data/categoryBrands";
+import { items } from "./animationTestHelpers";
 
 const {
   chart,
@@ -534,7 +535,7 @@ console.log("# the race: chained .transition() vs .layer(time.transition())");
   );
 }
 
-console.log("# a grow or a wipe on a pie wedge fails loudly");
+console.log("# a grow on a pie wedge fails loudly; a side wipe masks it");
 {
   // A rect in polar coordinates is drawn as a path, which a grow or a wipe
   // cannot reshape; it must not silently pop in.
@@ -546,7 +547,7 @@ console.log("# a grow or a wipe on a pie wedge fails loudly");
   for (const [name, effect] of [
     ["grow", Animation.grow()],
     ["shrink", Animation.shrink()],
-    ["wipe", Animation.wipe({ from: "left" })],
+    ["circular wipe", Animation.wipe({ shape: "circle" })],
   ] as const) {
     let message = "";
     try {
@@ -567,6 +568,26 @@ console.log("# a grow or a wipe on a pie wedge fails loudly");
     fadeError = e;
   }
   ok("fadeIn on a wedge draws", fadeError === undefined, String(fadeError));
+  // PROTOTYPE (animation grammar): a side wipe of a path draws it under a
+  // mask of the revealed part of the mark's box.
+  const half = items(
+    await chart(alphabet.slice(0, 4), { coord: Coord.clock() })
+      .flow(stack({ by: "letter", dir: "x" }))
+      .mark(
+        rect({ w: "frequency", fill: "letter" }).transition({
+          enter: Animation.wipe({ from: "left", duration: 1000, ease: "linear" }),
+        })
+      )
+      .toDisplayList({ w: 200, h: 200, playing: false, at: 500 })
+  ).filter((n: any) => n.kind === "mask");
+  ok(
+    "a side wipe on a wedge masks it, the mask rect half its box at p = 0.5",
+    half.length === 4 &&
+      half.every(
+        (m: any) => Math.abs(m.mask[0].w - m.bbox.w / 2) < 1e-6 && m.content[0].kind === "path"
+      ),
+    JSON.stringify(half.map((m: any) => [m.mask[0].w, m.bbox.w]))
+  );
 }
 
 console.log("# a bare mark plays its own enter transition");

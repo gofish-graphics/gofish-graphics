@@ -47,7 +47,13 @@ import { groupEntries, rowsOf } from "./grouping";
 import { projectPath } from "../ast/datumProjection";
 import { makeRule } from "./paint";
 import { installTimelines } from "./timeline";
-import { solveSchedule, type Arrangement, type Clip } from "./schedule";
+import {
+  solveSchedule,
+  type Arrangement,
+  type Clip,
+  type Schedule,
+} from "./schedule";
+import { isTimeline } from "./scene";
 import {
   checkPhases,
   nodeTransition,
@@ -104,7 +110,7 @@ function installBuild(
   root: GoFishNode,
   options: BuildClockOptions
 ): (() => void) | undefined {
-  const draft = clipOf(root, false);
+  const draft = clipOf(root, false, "build");
   if (draft === undefined) return undefined;
   const schedule = solveSchedule(timeLeaves(draft));
   const { total } = schedule;
@@ -115,23 +121,69 @@ function installBuild(
     playing: options.playing ?? true,
   });
   if (options.at !== undefined) clock.set(options.at);
+  animate(schedule, clock, 0, true);
+  return clock.pause;
+}
+
+/** Give every animated mark of `schedule` its paint-time rule, on `playhead`
+ *  with every start shifted by `offset`. A mark animated twice by one
+ *  schedule is an error, and so, with `once`, is a mark that already has a
+ *  rule (a scene's rules are installed again when its timeline is related
+ *  again, and replace the earlier ones). */
+function animate(
+  schedule: Schedule<Leaf>,
+  playhead: () => number,
+  offset: number,
+  once: boolean
+): void {
+  const seen = new Set<GoFishNode>();
   for (const { start, payload } of schedule.items) {
-    // The marks read the clock per frame, at paint.
-    const rule = makeRule(clock, start, payload.effects);
     for (const target of payload.targets) {
+      // The marks read the clock per frame, at paint. One rule per mark: a
+      // mark's parts share it (a wipe masks the mark's whole box).
+      const rule = makeRule(playhead, offset + start, payload.effects);
       for (const leaf of leavesOf(target)) {
-        if (leaf.__gfAnimate !== undefined) {
+        if (seen.has(leaf) || (once && leaf.__gfAnimate !== undefined)) {
           throw new Error(
             `[gofish] build-in: a "${leaf.type}" mark is animated twice, ` +
               `e.g. by its own .transition({ enter }) and by a ` +
               `time.transition({ enter }) that selects it. Give it one.`
           );
         }
+        seen.add(leaf);
         leaf.INTERNAL_animate(rule);
       }
     }
   }
-  return clock.pause;
+}
+
+/** A scene's own build-in (PROTOTYPE, animation grammar): what enters inside
+ *  one scene of a `timeline`, played on the timeline's clock from the
+ *  scene's start. `total` is the scene's intrinsic length, and `entering`
+ *  every mark that enters (so is not there yet at the scene's start). */
+export type SceneBuild = {
+  total: number;
+  entering: Set<GoFishNode>;
+  install(playhead: () => number, start: number): void;
+};
+
+/** The build-in of one scene (see `SceneBuild`); undefined when nothing in
+ *  it enters. */
+export function sceneBuild(scene: GoFishNode): SceneBuild | undefined {
+  const draft = clipOf(scene, false, "scene");
+  if (draft === undefined) return undefined;
+  const schedule = solveSchedule(timeLeaves(draft));
+  const entering = new Set<GoFishNode>();
+  for (const { payload } of schedule.items) {
+    for (const target of payload.targets) {
+      for (const leaf of leavesOf(target)) entering.add(leaf);
+    }
+  }
+  return {
+    total: schedule.total,
+    entering,
+    install: (playhead, start) => animate(schedule, playhead, start, false),
+  };
 }
 
 /** The longest value a field-valued duration reaches, which the shortcut
@@ -140,9 +192,9 @@ const FIELD_DURATION_MAX_MS = 1000;
 
 /**
  * Time every leaf of `draft`: each effect gets its duration in ms and its
- * warp, and the leaf lasts as long as its longest effect. A FIELD-valued
- * duration is the marks' value of the field, on a linear scale whose largest
- * value (over every mark the effect animates) is 1000 ms.
+ * warp, and the leaf lasts as long as its longest effect (with its delay). A
+ * FIELD-valued duration is the marks' value of the field, on a linear scale
+ * whose largest value (over every mark the effect animates) is 1000 ms.
  */
 function timeLeaves(draft: Draft): Clip<Leaf> {
   // Each leaf's values of the field-valued durations it plays (in effect
@@ -176,11 +228,16 @@ function timeLeaves(draft: Draft): Clip<Leaf> {
           : top > 0
             ? (FIELD_DURATION_MAX_MS * vs[i]) / top
             : 0;
-      return { effect, duration, ease: resolveEase(effect.ease) };
+      return {
+        effect,
+        duration,
+        ease: resolveEase(effect.ease),
+        delay: effect.delay ?? 0,
+      };
     });
     return {
       kind: "leaf",
-      duration: Math.max(0, ...effects.map((e) => e.duration)),
+      duration: Math.max(0, ...effects.map((e) => e.delay + e.duration)),
       payload: { effects, targets: d.found.targets },
     };
   };
@@ -200,34 +257,51 @@ function fieldValue(targets: GoFishNode[], field: string): number {
   return value;
 }
 
-/** The marks that draw: a mark with no children draws itself; a composite
- *  mark is animated leaf by leaf, each from its own baseline (DECLARED
- *  PROTOTYPE BEHAVIOR). */
+/** The region compositors (`intersect`, `exclude`, masks): a node that
+ *  draws its two children as ONE composite item. PROTOTYPE (animation
+ *  grammar, gun deaths). */
+const COMPOSITES = new Set(["over", "atop", "in", "out", "xor", "mask"]);
+
+/** The marks that draw: a mark with no children draws itself, and so does a
+ *  compositor (one composite item over its children); a composite mark is
+ *  animated leaf by leaf, each from its own baseline (DECLARED PROTOTYPE
+ *  BEHAVIOR). */
 function leavesOf(node: GoFishNode): GoFishNode[] {
   const kids = node.children.filter(
     (c): c is GoFishNode => c instanceof GoFishNode
   );
-  return kids.length === 0 ? [node] : kids.flatMap(leavesOf);
+  return kids.length === 0 || COMPOSITES.has(node.type)
+    ? [node]
+    : kids.flatMap(leavesOf);
 }
 
 /**
  * The timeline under `node`. `underArrangement` says an operator above has an
  * enter arrangement: a mark under one with no effect of its own enters with
  * `Animation.fadeIn()`, the default #892 gives an entering mark. Every record
- * the walk meets is checked against the clock that plays it (`checkPhases`).
+ * the walk meets is checked against the clock that plays it (`checkPhases`):
+ * the chart's build clock, or a timeline scene's (`mode`).
+ *
+ * A `timeline` plays its own scenes (`timeline.ts`), so the walk leaves it
+ * alone.
  *
  * The walk runs on every render, animated or not, so a node with no record
  * allocates nothing unless something under it enters.
  */
-function clipOf(node: GoFishAST, underArrangement: boolean): Draft | undefined {
+function clipOf(
+  node: GoFishAST,
+  underArrangement: boolean,
+  mode: "build" | "scene"
+): Draft | undefined {
   if (!(node instanceof GoFishNode)) return undefined;
+  if (isTimeline(node)) return undefined;
   if (playsDataTime(node)) {
     checkDataTime(node);
     return undefined;
   }
   const record = nodeTransition(node);
   if (record !== undefined) {
-    checkPhases(record, false);
+    checkPhases(record, mode);
     if (record.kind === "mark" && record.enter !== undefined) {
       return {
         kind: "leaf",
@@ -235,7 +309,7 @@ function clipOf(node: GoFishAST, underArrangement: boolean): Draft | undefined {
       };
     }
     if (record.kind === "operator" && record.enter !== undefined) {
-      return arranged(node, record.enter);
+      return arranged(node, record.enter, mode);
     }
   }
   // Anything else is `parallel` over the clips under it.
@@ -244,7 +318,7 @@ function clipOf(node: GoFishAST, underArrangement: boolean): Draft | undefined {
   for (const kid of node.children) {
     if (!(kid instanceof GoFishNode)) continue;
     drawsItself = false;
-    const clip = clipOf(kid, underArrangement);
+    const clip = clipOf(kid, underArrangement, mode);
     if (clip !== undefined) (clips ??= []).push(clip);
   }
   if (drawsItself && underArrangement) {
@@ -261,12 +335,16 @@ function clipOf(node: GoFishAST, underArrangement: boolean): Draft | undefined {
 
 /** An operator's enter arrangement over the clips of its children, which the
  *  stagger's own `by` groups. */
-function arranged(node: GoFishNode, spec: ArrangementSpec): Draft {
+function arranged(
+  node: GoFishNode,
+  spec: ArrangementSpec,
+  mode: "build" | "scene"
+): Draft {
   const { by, ...arrangement } = spec;
   const children: { kid: GoFishNode; clip: Draft }[] = [];
   for (const kid of node.children) {
     if (!(kid instanceof GoFishNode)) continue;
-    const clip = clipOf(kid, true);
+    const clip = clipOf(kid, true, mode);
     if (clip !== undefined) children.push({ kid, clip });
   }
   const groups = groupEntries(children, (c) => rowsOf(c.kid), by);
@@ -282,6 +360,6 @@ function arranged(node: GoFishNode, spec: ArrangementSpec): Draft {
 function checkDataTime(node: GoFishAST): void {
   if (!(node instanceof GoFishNode)) return;
   const record = nodeTransition(node);
-  if (record !== undefined) checkPhases(record, true);
+  if (record !== undefined) checkPhases(record, "sequence");
   for (const child of node.children) checkDataTime(child);
 }
