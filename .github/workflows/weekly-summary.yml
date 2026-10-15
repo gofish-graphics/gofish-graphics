@@ -74,6 +74,7 @@ jobs:
           # build-summary-prompt.sh turns these lines into the URL allowlist.
           PRS=$(gh pr list \
             --state merged \
+            --limit 200 \
             --search "merged:>=${{ steps.dates.outputs.lower }} merged:<${{ steps.dates.outputs.upper }}" \
             --json number,title,body,author,mergedAt,url \
             --jq '
