@@ -15,6 +15,7 @@ import { join, dirname } from "path";
 import { diffLines } from "diff";
 import DMP from "diff-match-patch";
 import { storyToPath } from "./path-mapping.js";
+import { parityView } from "./normalize-dom.js";
 
 /**
  * Character-level diff backed by Google's diff-match-patch with a per-pair
@@ -217,7 +218,11 @@ export function collectParityDiffs(): DiffEntry[] {
   for (const file of listHtmlFiles(PYTHON_DIR)) {
     const jsContent = readOptional(join(JS_DIR, file));
     const pythonContent = readFileSync(join(PYTHON_DIR, file), "utf-8");
-    if (pythonContent === jsContent) continue;
+    if (
+      jsContent !== null &&
+      parityView(pythonContent) === parityView(jsContent)
+    )
+      continue;
 
     const pngFile = file.replace(/\.html$/, ".png");
     const beforePng = join(JS_DIR, pngFile);

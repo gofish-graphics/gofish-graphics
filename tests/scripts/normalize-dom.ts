@@ -330,3 +330,55 @@ export function normalizeDom(
 
   return s;
 }
+
+// ---------------------------------------------------------------------------
+// 7. Parity view: the chart, without the story's display scaffolding
+// ---------------------------------------------------------------------------
+
+/** Root `<svg>` attributes that say how the drawing is shown, not what it is. */
+const DISPLAY_ATTRS = /\s(?:width|height|viewBox|preserveAspectRatio)="[^"]*"/g;
+
+/**
+ * Remove a `<div style="...">` that wraps all of `html`, and return its
+ * content; return `html` unchanged when there is none.
+ */
+function unwrapStyledDiv(html: string): string {
+  const open = /^<div\s+style="[^"]*">/.exec(html);
+  if (!open) return html;
+  // Find the `</div>` that closes the opening tag; it must end the string.
+  const tags = /<div\b[^>]*>|<\/div>/g;
+  tags.lastIndex = open[0].length;
+  let depth = 1;
+  for (let m = tags.exec(html); m; m = tags.exec(html)) {
+    depth += m[0] === "</div>" ? -1 : 1;
+    if (depth === 0) {
+      return tags.lastIndex === html.length
+        ? html.slice(open[0].length, m.index).trim()
+        : html;
+    }
+  }
+  return html;
+}
+
+/**
+ * The part of a normalized DOM that Python↔JS parity compares: the chart a
+ * spec draws, without what the story around it adds for display. A story
+ * may wrap the chart in styled divs and refit the root `<svg>` to its
+ * content after it renders (the gofish-gotree stories' `initializeContainer`
+ * and `fitToContent` do both), and a Python port renders the spec alone. So
+ * this drops every styled div that wraps the whole DOM, and the root svg's
+ * `width`, `height`, `viewBox` and `preserveAspectRatio`. Every shape keeps
+ * its coordinates, which is where a difference in layout shows. The
+ * regression check against baselines compares the whole DOM.
+ */
+export function parityView(html: string): string {
+  let s = html.trim();
+  for (
+    let inner = unwrapStyledDiv(s);
+    inner !== s;
+    inner = unwrapStyledDiv(s)
+  ) {
+    s = inner;
+  }
+  return s.replace(/^<svg\b[^>]*>/, (tag) => tag.replace(DISPLAY_ATTRS, ""));
+}
