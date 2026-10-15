@@ -57,8 +57,7 @@ def test_member_import_from_the_family_module():
 
 def test_coords_are_type_tagged_configs_on_the_wire():
     assert Coord.wavy() == {"type": "wavy"}
-    # The projection is positional, as in JS `geo(projection)`, or a kwarg.
-    assert Coord.geo(projection="mercator") == {"type": "geo", "projection": "mercator"}
+    # The projection is positional, as in JS `geo(projection, opts)`.
     assert Coord.geo("equalEarth", lon=(-170, -30), lat=(-60, 75)) == {
         "type": "geo",
         "projection": "equalEarth",
@@ -71,6 +70,17 @@ def test_coords_are_type_tagged_configs_on_the_wire():
         "innerRadius": 0.5,
         "center": [1, 2],
     }
+
+
+def test_coord_params_are_positional_or_keyword_as_in_js():
+    # JS `geo(projection, opts)` and `polar(opts)`: the projection is
+    # positional-only, every other option keyword-only.
+    with pytest.raises(TypeError, match="positional-only"):
+        Coord.geo(projection="mercator")
+    with pytest.raises(TypeError, match="positional argument"):
+        Coord.geo("mercator", (-170, -30))
+    with pytest.raises(TypeError, match="positional argument"):
+        Coord.polar(0.5)
 
 
 def test_curves_are_calls_on_the_wire():
@@ -97,9 +107,9 @@ def test_curves_are_calls_on_the_wire():
 
 
 def test_strategy_modules_are_generated():
-    # gofish/<family>.py for the strategy families is written by
-    # scripts/generate.ts from the gofish-ir STRATEGIES table.
-    for module_name in ("tile", "overlap", "curve", "bin", "calendar"):
+    # gofish/<family>.py for the strategy families and Coord is written by
+    # scripts/generate.ts from the gofish-ir STRATEGIES and COORDS tables.
+    for module_name in ("tile", "overlap", "curve", "bin", "calendar", "coord"):
         module = importlib.import_module(f"gofish.{module_name}")
         with open(module.__file__) as f:
             assert f.readline().startswith("# GENERATED")
@@ -126,6 +136,9 @@ BAD_VALUES = [
     (lambda: Curve.perfect_arrows(bow=float("nan")), "Curve.perfect_arrows(bow=...)"),
     (lambda: Bin.thresholds(0), "Bin.thresholds(thresholds) must be >= 1, got 0"),
     (lambda: Bin.thresholds([]), "Bin.thresholds(thresholds) must have at least 1 item, got []"),
+    (lambda: Coord.geo("robinson"), 'Coord.geo(projection) must be one of "equalEarth", "mercator"'),
+    (lambda: Coord.polar(center=(1, 2, 3)), "Coord.polar(center=...) must have 2 items"),
+    (lambda: Coord.geo("mercator", lat=(0, float("nan"))), "Coord.geo(lat=...)[1] must not be NaN"),
 ]
 
 WRONG_TYPES = [
@@ -143,6 +156,9 @@ WRONG_TYPES = [
     (lambda: Bin.thresholds(None), "Bin.thresholds(thresholds) must be a whole number >= 1"),
     (lambda: Bin.hex(radius=None), "Bin.hex(radius=...) must be a finite number > 0 or a dict"),
     (lambda: Bin.voronoi(seeds=None), "Bin.voronoi(seeds=...) must be a table"),
+    (lambda: Coord.geo(None), "Coord.geo(projection) must be one of"),
+    (lambda: Coord.polar(inner_radius="0.5"), "Coord.polar(inner_radius=...) must be a number, got str"),
+    (lambda: Coord.geo("mercator", lon="-170"), "Coord.geo(lon=...) must be a list or tuple of 2 items"),
 ]
 
 UNKNOWN_KWARGS = [

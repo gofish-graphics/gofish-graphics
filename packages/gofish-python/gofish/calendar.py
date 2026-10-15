@@ -4,18 +4,17 @@
 The ``Calendar`` family. Partitions of the time line into calendar cells, one kind per level: the value of `field(x).bin(...)` over a time column, and an entry of an axis's `levels`.
 
 The package binds this module as ``Calendar``, so ``Calendar.second`` and
-``from gofish.calendar import second`` reach the same member. A strategy is a
-plain dict, ``{"kind": ..., **params}``, with snake_case param keys; the option it
-is passed to renames them to the camelCase wire keys. Mirrors JS
-``gofish-graphics/calendar``.
+``from gofish.calendar import second`` reach the same member. Each member
+returns a plain dict, ``{"kind": ..., **params}``, with
+snake_case param keys; the option it is passed to renames them to the
+camelCase wire keys.
+Mirrors JS ``gofish-graphics/calendar``.
 
 A kind with no required option is a value as it is, and calling it sets
 options: ``Calendar.second`` is ``Calendar.second()`` (#1133).
 """
 
-from __future__ import annotations
-
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Optional
 
 from ._strategy import bare_kind
 

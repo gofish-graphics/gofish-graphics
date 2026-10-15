@@ -22,6 +22,7 @@ chart(seafood, coord=Coord.polar()) \
 
 ```python
 Coord.polar(
+    *,
     inner_radius: float | None = None,   # donut hole, fraction [0,1) of outer radius
     central_angle: float | None = None,  # total sweep in radians (default 2π)
     start_angle: float | None = None,    # angle (radians) of θ=0 (default π/2)

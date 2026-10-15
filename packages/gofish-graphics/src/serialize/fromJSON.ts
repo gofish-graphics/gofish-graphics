@@ -32,7 +32,6 @@ import { Frontend } from "gofish-ir";
 import { RESOLVE_ROWS } from "../ast/channels";
 import {
   applyLambdaTyped,
-  COORD_FACTORIES,
   rebuild,
   cutSlices,
   cutMark,
@@ -243,13 +242,11 @@ function resolveColorConfig(colorSpec: Record<string, any>): any {
 
 function resolveCoordConfig(coordSpec: Record<string, any>): any {
   const { type, ...opts } = coordSpec;
-  if (!Object.hasOwn(COORD_FACTORIES, type)) {
-    throw new Error(
-      `unknown coordinate transform type ${JSON.stringify(type)}; ` +
-        `expected one of ${Object.keys(COORD_FACTORIES).join(", ")}`
-    );
+  const coord = rebuild("coord", type, opts);
+  if (coord === undefined) {
+    throw new Error(`Unknown coord type: ${String(type)}`);
   }
-  return COORD_FACTORIES[type](opts);
+  return coord;
 }
 
 export function resolveOptions(raw: Record<string, any>): Record<string, any> {

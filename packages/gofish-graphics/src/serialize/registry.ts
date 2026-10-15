@@ -73,7 +73,6 @@ import { polar } from "../ast/coordinateTransforms/polar";
 import { clock } from "../ast/coordinateTransforms/clock";
 import { wavy } from "../ast/coordinateTransforms/wavy";
 import { geo } from "../ast/coordinateTransforms/geo";
-import type { CoordinateTransform } from "../ast/coordinateTransforms/coord";
 import { Frontend } from "gofish-ir";
 
 export type { ChartBuilder, Mark, Operator };
@@ -124,11 +123,12 @@ export async function applyLambdaTyped(
 
 /**
  * The public factory that rebuilds each wire type, keyed by the descriptor
- * table's `type` (gofish-ir's `OPERATORS`, `LEAF_MARKS`, `COMBINATOR_MARKS`).
- * The descriptor's kind decides the call (see {@link rebuild}): an
- * operator or a leaf mark is `factory(opts)`, a combinator mark is
- * `factory(opts, children)`. So a dual-form construct (`spread`, `line`, …)
- * has one entry for both of its forms.
+ * table's `type` (gofish-ir's `OPERATORS`, `LEAF_MARKS`, `COMBINATOR_MARKS`,
+ * `COORDS`). The descriptor's kind decides the call (see {@link rebuild}):
+ * an operator, a leaf mark or a coord is `factory(opts)`, a combinator mark
+ * is `factory(opts, children)`. So a dual-form construct (`spread`, `line`,
+ * …) has one entry for both of its forms. The types are one namespace
+ * across the kinds, apart from those dual forms.
  *
  * The serialize test fails when a descriptor has no entry here (or in
  * {@link OPERATOR_BUILDERS}), or when an entry has no descriptor.
@@ -172,27 +172,13 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   out: subtract,
   atop: paint,
   mask,
-};
-
-/**
- * The `Coord` factory that rebuilds each coordinate transform, keyed by the
- * `type` tag of its wire config (gofish-ir's `COORDS`). A transform is a JS
- * object of functions, so the wire carries only its tag and options, and the
- * factory makes the transform again from them. The options are the config
- * without its `type`; a factory that takes its option positionally in JS
- * (`geo(projection)`) reads it off them here.
- *
- * The serialize test fails when a coord descriptor has no entry here, or an
- * entry has no descriptor.
- */
-export const COORD_FACTORIES: Record<
-  string,
-  (opts: Record<string, any>) => CoordinateTransform
-> = {
-  polar: (opts) => polar(opts),
-  clock: (opts) => clock(opts),
-  wavy: () => wavy(),
-  geo: (opts) => geo(opts.projection, { lon: opts.lon, lat: opts.lat }),
+  // Coordinate transforms. A transform is a JS object of functions, so the
+  // wire carries only its `type` tag and options, and the factory makes it
+  // again from them.
+  polar,
+  clock,
+  wavy,
+  geo,
 };
 
 /**
@@ -263,24 +249,36 @@ export const OPERATOR_BUILDERS: Record<
  * that kind and type (an operator `{type: "layer"}` has none, though the
  * combinator `layer` does).
  *
- * The kind decides the call. An operator or a leaf mark is `factory(opts)`,
- * and a combinator mark is `factory(opts, children)`: a dual-form factory
- * reads a second argument as the combinator form's children, so an operator
- * must not get one. Only an {@link OPERATOR_BUILDERS} entry sees the bridge.
+ * The kind decides the call. An operator, a leaf mark or a coord is
+ * `factory(opts)`, and a combinator mark is `factory(opts, children)`: a
+ * dual-form factory reads a second argument as the combinator form's
+ * children, so an operator must not get one. A descriptor's `positional`
+ * field goes first, before the rest of the options
+ * (`geo(projection, { lon, lat })`). Only an {@link OPERATOR_BUILDERS} entry
+ * sees the bridge.
  */
 export function rebuild(
-  kind: Frontend.NodeKind,
+  kind: Frontend.ConstructKind,
   type: string,
   opts: Record<string, any>,
   { children, bridge }: { children?: unknown[]; bridge?: DeriveBridge } = {}
 ): any {
-  if (!Object.hasOwn(Frontend.DESCRIPTOR_TABLES[kind], type)) return undefined;
+  const table = Frontend.DESCRIPTOR_TABLES[kind];
+  if (!Object.hasOwn(table, type)) return undefined;
   if (kind === "operator" && Object.hasOwn(OPERATOR_BUILDERS, type)) {
     return OPERATOR_BUILDERS[type](opts, bridge);
   }
   const factory = FACTORIES[type];
   if (factory === undefined) return undefined;
-  return kind === "combinator-mark" ? factory(opts, children) : factory(opts);
+  const { positional } = table[type];
+  let args: unknown[] = [opts];
+  if (positional !== undefined) {
+    const { [positional]: first, ...rest } = opts;
+    args = [first, rest];
+  }
+  return kind === "combinator-mark"
+    ? factory(...args, children)
+    : factory(...args);
 }
 
 // Re-export Frontend namespace for convenience.

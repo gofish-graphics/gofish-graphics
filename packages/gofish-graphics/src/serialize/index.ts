@@ -8,7 +8,6 @@
 
 export {
   FACTORIES,
-  COORD_FACTORIES,
   OPERATOR_BUILDERS,
   rebuild,
   type DeriveBridge,

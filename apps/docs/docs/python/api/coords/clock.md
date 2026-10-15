@@ -22,6 +22,7 @@ chart(seafood, coord=Coord.clock()) \
 
 ```python
 Coord.clock(
+    *,
     inner_radius: float | None = None,
     central_angle: float | None = None,
     start_angle: float | None = None,

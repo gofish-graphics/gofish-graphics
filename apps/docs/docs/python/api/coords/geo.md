@@ -19,6 +19,8 @@ chart(world110m, coord=Coord.geo("equalEarth", lon=(-170, -30), lat=(-60, 75))) 
 ```python
 Coord.geo(
     projection: str,                         # "equalEarth" or "mercator"
+    /,
+    *,
     lon: tuple[float, float] | None = None,  # longitude window in degrees
     lat: tuple[float, float] | None = None,  # latitude window in degrees
 ) -> Coord

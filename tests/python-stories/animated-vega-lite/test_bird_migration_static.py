@@ -5,7 +5,7 @@ positions threaded into one path over a map of the Americas.
 """
 
 from gofish import chart, group, line, polygon, scatter, Coord
-from python_stories.data import BIRDS, WORLD_110M
+from python_stories.bird_data import BIRDS, WORLD_110M
 
 
 def story_a_static_lines():

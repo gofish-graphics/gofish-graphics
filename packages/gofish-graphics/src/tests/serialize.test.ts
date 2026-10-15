@@ -1216,11 +1216,9 @@ async function main() {
     // Wire types the descriptor table declares that `mapMark` rebuilds
     // structurally rather than through a factory.
     const STRUCTURAL = new Set(["mark-fn"]);
-    const kinds: Frontend.NodeKind[] = [
-      "operator",
-      "leaf-mark",
-      "combinator-mark",
-    ];
+    const kinds = Object.keys(
+      Frontend.DESCRIPTOR_TABLES
+    ) as Frontend.ConstructKind[];
     const tables = kinds.map((kind) => Frontend.DESCRIPTOR_TABLES[kind]);
     const missing: string[] = [];
     for (const kind of kinds) {
@@ -1256,42 +1254,25 @@ async function main() {
       orphanBuilders.length === 0,
       orphanBuilders.join(", ")
     );
-    const coordMissing = Object.keys(Frontend.COORDS).filter(
-      (type) => typeof Serialize.COORD_FACTORIES[type] !== "function"
-    );
-    check(
-      "every coord descriptor has a coord factory",
-      coordMissing.length === 0,
-      coordMissing.join(", ")
-    );
-    const coordOrphans = Object.keys(Serialize.COORD_FACTORIES).filter(
-      (type) => !Object.hasOwn(Frontend.COORDS, type)
-    );
-    check(
-      "every coord factory has a coord descriptor",
-      coordOrphans.length === 0,
-      coordOrphans.join(", ")
-    );
-    // geo takes its projection positionally and its window as options.
-    const geoRebuilt = Serialize.COORD_FACTORIES.geo({
+    // geo takes its projection positionally and the rest as options.
+    const geoWindow: { lon: [number, number]; lat: [number, number] } = {
+      lon: [-170, -30],
+      lat: [-60, 75],
+    };
+    const geoRebuilt = Serialize.rebuild("coord", "geo", {
       projection: "mercator",
-      lon: [-170, -30],
-      lat: [-60, 75],
+      ...geoWindow,
     });
-    const geoDirect = GoFish.Coord.geo("mercator", {
-      lon: [-170, -30],
-      lat: [-60, 75],
-    });
-    const lonLat: [number, number] = [-100, 40];
+    const geoDirect = GoFish.Coord.geo("mercator", geoWindow);
     check(
-      "a geo wire config rebuilds Coord.geo(projection, { lon, lat })",
-      geoRebuilt.type === "geo" &&
-        JSON.stringify(geoRebuilt.dataWindow) ===
-          JSON.stringify(geoDirect.dataWindow) &&
-        JSON.stringify(geoRebuilt.transform(lonLat)) ===
-          JSON.stringify(geoDirect.transform(lonLat)) &&
-        JSON.stringify(geoRebuilt.transform(lonLat)) !==
-          JSON.stringify(GoFish.Coord.geo("equalEarth").transform(lonLat))
+      "a rebuilt geo keeps its lon/lat window",
+      JSON.stringify(geoRebuilt.dataWindow) ===
+        JSON.stringify(geoDirect.dataWindow)
+    );
+    check(
+      "a rebuilt geo projects with its projection",
+      JSON.stringify(geoRebuilt.transform([-100, 40])) ===
+        JSON.stringify(geoDirect.transform([-100, 40]))
     );
     check(
       "rebuild is kind-checked (no operator `layer`)",

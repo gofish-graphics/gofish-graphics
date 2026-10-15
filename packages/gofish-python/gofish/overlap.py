@@ -4,19 +4,18 @@
 The ``Overlap`` family. How `scatter` keeps its children clear of each other on the axis no field places: the value of its `overlap` option. Both kinds grow from the `alignment` line and move only that free axis.
 
 The package binds this module as ``Overlap``, so ``Overlap.separate`` and
-``from gofish.overlap import separate`` reach the same member. A strategy is a
-plain dict, ``{"kind": ..., **params}``, with snake_case param keys; the option it
-is passed to renames them to the camelCase wire keys. Mirrors JS
-``gofish-graphics/overlap``.
+``from gofish.overlap import separate`` reach the same member. Each member
+returns a plain dict, ``{"kind": ..., **params}``, with
+snake_case param keys; the option it is passed to renames them to the
+camelCase wire keys.
+Mirrors JS ``gofish-graphics/overlap``.
 
 A kind with no required option is a value as it is, and calling it sets
 options: ``Overlap.separate`` is ``Overlap.separate()`` (#1133).
 """
 
-from __future__ import annotations
-
 import math
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Optional
 
 from ._strategy import bare_kind
 
