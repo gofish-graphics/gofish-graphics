@@ -23,7 +23,7 @@ beaks = [d for d in penguins if d["Beak Depth (mm)"] is not None]
     .layer(
         chart(select_all("points"))
         .flow(group(by="Species"))
-        .mark(enclose(shape=Shape.hull(), padding=6, fill="Species", opacity=0.2))
+        .mark(enclose(shape=Shape.hull(), padding=6, fill="Species", fill_opacity=0.2))
     )
     .render(w=420, h=320)
 )
@@ -34,7 +34,7 @@ beaks = [d for d in penguins if d["Beak Depth (mm)"] is not None]
 ```python
 # Combinator form: around the given children.
 enclose(children, *, padding=None, shape=None, fill=None, stroke=None,
-        stroke_width=None, stroke_dasharray=None, opacity=None) -> Mark
+        stroke_width=None, stroke_dasharray=None, opacity=None, fill_opacity=None) -> Mark
 
 # Bag form: around the refs a chart's data holds.
 chart(select_all(name)).mark(enclose(**options))

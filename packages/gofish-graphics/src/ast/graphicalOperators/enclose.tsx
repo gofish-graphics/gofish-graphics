@@ -49,6 +49,8 @@ export type EncloseOptions = {
   strokeWidth?: number | LiveValue;
   strokeDasharray?: string;
   opacity?: number | LiveValue;
+  /** Opacity of the fill alone; the stroke keeps `opacity`. */
+  fillOpacity?: number | LiveValue;
 };
 
 /** The resolved options the node is built from (live values already read). */
@@ -60,6 +62,7 @@ export type Resolved = {
   strokeWidth?: number;
   strokeDasharray?: string;
   opacity?: number;
+  fillOpacity?: number;
 };
 
 /** The shape, checked against the `Shape` family. A blob's `avoiding` holds
@@ -153,7 +156,7 @@ function Enclose(
   const padding = o.padding ?? 2;
   const shape = checkedShape(o.shape);
   const { fill = "none", stroke = gray, strokeWidth = 1 } = o;
-  const { strokeDasharray, opacity = 1 } = o;
+  const { strokeDasharray, opacity = 1, fillOpacity } = o;
   const memberCount = members.length;
   return new GoFishNode(
     {
@@ -253,6 +256,7 @@ function Enclose(
           strokeWidth,
           strokeDasharray,
           opacity,
+          fillOpacity,
         });
         const loops = renderData?.loops as Pt[][] | undefined;
         if (loops !== undefined) {

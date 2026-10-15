@@ -1905,7 +1905,15 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         type: t.string,
         doc: 'Raw SVG stroke-dasharray (e.g. "4 2") for a dashed outline.',
       },
-      opacity: { type: t.number, default: 1, doc: "Opacity, 0 to 1." },
+      opacity: {
+        type: t.number,
+        default: 1,
+        doc: "Opacity of the whole outline, fill and stroke, 0 to 1.",
+      },
+      fillOpacity: {
+        type: t.number,
+        doc: "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`, so a tinted region can keep a full-strength outline.",
+      },
     },
   }),
 

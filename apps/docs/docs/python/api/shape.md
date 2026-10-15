@@ -30,7 +30,7 @@ from gofish import Shape, circle, enclose, layer, spread
             shape=Shape.spine(avoiding=[b], clearance=6),
             padding=22,
             fill="#ff2400",
-            opacity=0.3,
+            fill_opacity=0.3,
         )
     ])
     .render(w=380, h=150)

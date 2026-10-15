@@ -1121,7 +1121,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
             opts[_k] = _v
     return opts
 
-def _enclose_opts(*, padding: Optional[float] = None, shape: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _enclose_opts(*, padding: Optional[float] = None, shape: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default) or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs.
 
     Args:
@@ -1131,7 +1131,8 @@ def _enclose_opts(*, padding: Optional[float] = None, shape: Optional[dict] = No
         stroke: Stroke color of the outline, or a field name or accessor for a color scale (constant within the enclosed group). Default a light gray.
         stroke_width: Stroke width in pixels. Default 1.
         stroke_dasharray: Raw SVG stroke-dasharray (e.g. "4 2") for a dashed outline.
-        opacity: Opacity, 0 to 1. Default 1.
+        opacity: Opacity of the whole outline, fill and stroke, 0 to 1. Default 1.
+        fill_opacity: Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`, so a tinted region can keep a full-strength outline.
         debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
     opts: Dict[str, Any] = {}
@@ -1143,6 +1144,7 @@ def _enclose_opts(*, padding: Optional[float] = None, shape: Optional[dict] = No
         ("strokeWidth", stroke_width),
         ("strokeDasharray", stroke_dasharray),
         ("opacity", opacity),
+        ("fillOpacity", fill_opacity),
         ("debug", debug),
     ]:
         if _v is not None:

@@ -85,7 +85,7 @@ export const MunkresSpine: StoryObj = {
             shape: Shape.spine({ avoiding: [b], clearance: 6 }),
             padding: 22,
             fill: "#ff2400",
-            opacity: 0.3,
+            fillOpacity: 0.3,
             stroke: "#ff2400",
           },
           [a, c]
@@ -113,7 +113,7 @@ export const RefHull: StoryObj = {
             shape: Shape.hull(),
             padding: 10,
             fill: "#4c78a8",
-            opacity: 0.2,
+            fillOpacity: 0.2,
             stroke: "#4c78a8",
           },
           [ref("p"), ref("q"), ref("s")]
@@ -144,7 +144,7 @@ const penguinShapes = (shape: Shape.Shape) =>
             padding: 6,
             fill: "Species",
             stroke: "Species",
-            opacity: 0.2,
+            fillOpacity: 0.2,
           })
         )
     );
@@ -258,7 +258,7 @@ export const ChartAccentSubSaharanAfrica: StoryObj = {
               padding: 6,
               fill: "#47b8a0",
               stroke: "#47b8a0",
-              opacity: 0.3,
+              fillOpacity: 0.3,
             })
           )
       )
@@ -321,7 +321,7 @@ const uBlob = (holes: boolean) =>
         padding: 8,
         fill: "#3366aa",
         stroke: "#3366aa",
-        opacity: 0.25,
+        fillOpacity: 0.25,
       },
       U.map((_, i) => names[`u${i}`])
     ),
@@ -423,7 +423,7 @@ export const Hyperedges: StoryObj = {
               padding: 6,
               fill: set.color,
               stroke: set.color,
-              opacity: 0.3,
+              fillOpacity: 0.3,
             },
             [
               ...set.nodes.map((id) => n[id]),

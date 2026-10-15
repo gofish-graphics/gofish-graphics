@@ -2756,8 +2756,12 @@ for the API.
         },
         "opacity": {
           "$ref": "#/$defs/Number",
-          "description": "Opacity, 0 to 1.",
+          "description": "Opacity of the whole outline, fill and stroke, 0 to 1.",
           "default": 1
+        },
+        "fillOpacity": {
+          "$ref": "#/$defs/Number",
+          "description": "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`, so a tinted region can keep a full-strength outline."
         },
         "name": {
           "type": "string"

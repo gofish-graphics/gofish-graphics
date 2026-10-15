@@ -81,7 +81,7 @@ def story_munkres_spine():
                 shape=Shape.spine(avoiding=[b], clearance=6),
                 padding=22,
                 fill="#ff2400",
-                opacity=0.3,
+                fill_opacity=0.3,
                 stroke="#ff2400",
             )
         ]),
@@ -104,7 +104,7 @@ def story_ref_hull():
                 shape=Shape.hull(),
                 padding=10,
                 fill="#4c78a8",
-                opacity=0.2,
+                fill_opacity=0.2,
                 stroke="#4c78a8",
             )
         ]),
@@ -135,7 +135,7 @@ def _penguin_shapes(shape):
                     padding=6,
                     fill="Species",
                     stroke="Species",
-                    opacity=0.2,
+                    fill_opacity=0.2,
                 )
             )
         )
@@ -203,7 +203,7 @@ def _u_blob(holes):
             padding=8,
             fill="#3366aa",
             stroke="#3366aa",
-            opacity=0.25,
+            fill_opacity=0.25,
         )
     ])
 
@@ -280,7 +280,7 @@ def story_hyperedges():
                 padding=6,
                 fill=s["color"],
                 stroke=s["color"],
-                opacity=0.3,
+                fill_opacity=0.3,
             )
             for s in SETS
         ]),

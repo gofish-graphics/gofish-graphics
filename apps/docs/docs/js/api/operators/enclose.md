@@ -28,7 +28,7 @@ gf.chart(beaks, { axes: true })
           shape: gf.Shape.hull(),
           padding: 6,
           fill: "Species",
-          opacity: 0.2,
+          fillOpacity: 0.2,
         })
       )
   )

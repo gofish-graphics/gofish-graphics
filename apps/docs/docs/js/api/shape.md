@@ -24,7 +24,7 @@ gf.layer([
         shape: gf.Shape.spine({ avoiding: [b], clearance: 6 }),
         padding: 22,
         fill: "#ff2400",
-        opacity: 0.3,
+        fillOpacity: 0.3,
       },
       [a, c]
     ),
