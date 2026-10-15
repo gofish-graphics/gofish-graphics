@@ -731,9 +731,9 @@ const sitesOfMembers = (members: Member[]) => {
 };
 /** The avoided nodes indexed by where their keep-out zones are, with each node's keep-out
  *  polygon for a tube half-width h built when first asked for (a circle as a 32-gon around it). */
-const avoidIndex = (others: Member[], clearance: number) => {
+const avoidIndex = (others: Member[], clearance: number, zones: Prim[]) => {
   const keep = (mm: Member) => memberRadius(mm) + clearance;
-  const grid = boxGrid(others.map((mm) => grownPrim(mm, clearance).bb));
+  const grid = boxGrid(zones.map((z) => z.bb));
   const polys = new Map<string, Poly>();
   return {
     near: (p: Pt, q: Pt, m: number) =>
@@ -770,7 +770,8 @@ const avoidIndex = (others: Member[], clearance: number) => {
  *  spanning-tree link runs between the closest points of two members' geometries. Every link is
  *  chosen and routed at its full width (the bulge at its ends), so `neck`, which only thins the
  *  drawn tubes (step 2), never changes which links there are or where they run. */
-const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
+/** `zones` are the avoided nodes grown by the clearance, one per avoided node. */
+const skeleton = (members: Member[], o: SkelOpts, zones: Prim[]): Skeleton => {
   const clearance = o.clearance ?? 4,
     others = o.avoiding ?? [];
   const Cm = members.map(centerOf),
@@ -806,7 +807,7 @@ const skeleton = (members: Member[], o: SkelOpts): Skeleton => {
     faces.push([P[i], P[j], P[l]]);
     [ek(i, j), ek(j, l), ek(l, i)].forEach((e) => faceEdges.add(e));
   });
-  const avoid = avoidIndex(others, clearance);
+  const avoid = avoidIndex(others, clearance, zones);
   /** The keep-out polygons (each avoided node grown by the tube half-width h) whose boxes come
    *  within mg of the box around p and q, holding neither p nor q, in the avoided nodes' order. */
   const obstaclesNear = (p: Pt, q: Pt, h: number, mg: number) => {
@@ -1538,6 +1539,20 @@ const scratch = {
   nStamp: new Int32Array(0),
   seen: new Int32Array(0),
 };
+/** The most grid cells the scratch keeps between traces (about 4M cells,
+ *  a few hundred MB of typed arrays at most). */
+const SCRATCH_CAP = 4_000_000;
+const releaseScratch = () =>
+  Object.assign(scratch, {
+    size: 0,
+    V: new Float64Array(0),
+    vStamp: new Int32Array(0),
+    cellOf: new Int32Array(0),
+    cStamp: new Int32Array(0),
+    next: new Int32Array(0),
+    nStamp: new Int32Array(0),
+    seen: new Int32Array(0),
+  });
 const traceRegion = (
   pieces: Prim[],
   zones: Prim[],
@@ -1867,6 +1882,9 @@ const traceRegion = (
     }
     loops.push({ pts, arcs, hw, kind });
   }
+  // One huge enclosure must not pin its grids: past the cap they are let go,
+  // and the next trace allocates what it needs.
+  if (scratch.size > SCRATCH_CAP) releaseScratch();
   return {
     loops,
     radii: [...radii],
@@ -2865,10 +2883,13 @@ const fillHoles = (region: Region, zones: Prim[], res: number): Region => {
 };
 /** Steps 2-3: the region traced exactly, then rounded along its outline. */
 const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
-  const sk = skeleton(members, o);
   const clearance = o.clearance ?? 4,
     res = o.res ?? 1,
     neck = Math.max(0.05, Math.min(1, o.neck ?? 1));
+  // each member's bulge and each avoided node's keep-out zone, built once
+  const bulges = members.map((m) => ({ ...grownPrim(m, o.pad), bulge: true }));
+  const zones = (o.avoiding ?? []).map((m) => grownPrim(m, clearance));
+  const sk = skeleton(members, o, zones);
   const region = (() => {
     // faces first: they cover the most area, so a place deep inside the region is settled soonest
     // Pieces that lie inside other pieces add nothing to the union, and only cost time, so they are
@@ -2948,15 +2969,12 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
           );
         });
       }
-    members.forEach((m) =>
-      pieces.push({ ...grownPrim(m, o.pad), bulge: true })
-    );
+    pieces.push(...bulges);
     for (const [key, [ra, rb]] of widest)
       if (sides.get(key) !== 2)
         pieces.push(
           taperPrim(pts[Math.floor(key / 1048576)], pts[key % 1048576], ra, rb)
         );
-    const zones = (o.avoiding ?? []).map((m) => grownPrim(m, clearance));
     const traced = traceRegion(pieces, zones, res, Math.min(1, res));
     return o.holes ? traced : fillHoles(traced, zones, res);
   })();
@@ -2965,8 +2983,7 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
   // crossing (within two link widths of it) until none is left, and dropped there on the last
   // pass. Only the places that cross give way: the rest of the outline keeps the asked neck.
   const necked = (() => {
-    const bulges = members.map((m) => grownPrim(m, o.pad)),
-      pull = 1 - neck;
+    const pull = 1 - neck;
     if (pull <= 0) return region.loops;
     const scale = region.loops.map((l) =>
       new Float64Array(l.pts.length).fill(1)
@@ -3038,14 +3055,19 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Smooth => {
     loops = roundAll(sigma);
   if (sigma > 0 && loopsCross(loops)) {
     let lo = 0,
-      hi = sigma;
+      hi = sigma,
+      best: Pt[][] | undefined;
     for (let it = 0; it < 6; it++) {
-      const mid = (lo + hi) / 2;
-      if (loopsCross(roundAll(mid))) hi = mid;
-      else lo = mid;
+      const mid = (lo + hi) / 2,
+        tried = roundAll(mid);
+      if (loopsCross(tried)) hi = mid;
+      else {
+        lo = mid;
+        best = tried;
+      }
     }
     sigma = lo;
-    loops = roundAll(sigma);
+    loops = best ?? roundAll(0);
   }
   return { loops, skel: sk, sigma, signals: necked };
 };
