@@ -699,11 +699,12 @@ export default defineConfig({
               collapsed: true,
               items: [{ text: "Bin", link: "/python/api/bin" }],
             },
+            {
+              text: "GoTree",
+              collapsed: true,
+              items: [{ text: "tree", link: "/python/gotree" }],
+            },
           ],
-        },
-        {
-          text: "GoTree",
-          items: [{ text: "tree (separate package)", link: "/python/gotree" }],
         },
       ],
       "/internals/": collectInternalsSidebar(),
