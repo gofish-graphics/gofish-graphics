@@ -11,7 +11,6 @@ from .ast import (
     LayerBuilder,
     layer,
     enclose,
-    background,
     position,
     Constraint,
     Schema,
@@ -69,6 +68,7 @@ from . import color as Color
 from . import coord as Coord
 from . import curve as Curve
 from . import overlap as Overlap
+from . import shape as Shape
 from . import tile as Tile
 
 __all__ = [
@@ -80,7 +80,6 @@ __all__ = [
     "LayerBuilder",
     "layer",
     "enclose",
-    "background",
     "position",
     "Constraint",
     "Schema",
@@ -133,6 +132,7 @@ __all__ = [
     "Coord",
     "Curve",
     "Overlap",
+    "Shape",
     "Tile",
 ]
 

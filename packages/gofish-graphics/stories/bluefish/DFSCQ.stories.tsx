@@ -11,6 +11,7 @@ import {
   ref,
   spread,
   enclose,
+  Shape,
 } from "../../src/lib";
 
 // Ported from Bluefish's example-gallery DFSCQ-log-figure.tsx (#436): a
@@ -121,7 +122,7 @@ const withMinWidth = (width: number, content: ReturnType<typeof spread>) =>
 // top-left corner within the shared 15px padding). Sharp corners, thin black
 // stroke, white fill — matching the ground-truth diagram's plain box style.
 const TitledBackground = (title: string, content: ReturnType<typeof spread>) =>
-  enclose({ padding: 15, fill: "white", stroke: "black", strokeWidth: 3, rx: 0, ry: 0 }, [
+  enclose({ padding: 15, fill: "white", stroke: "black", strokeWidth: 3, shape: Shape.box({ rx: 0, ry: 0 }) }, [
     spread({ dir: "y", spacing: 4, alignment: "start" }, [
       text({ text: title, fontFamily: "serif", fontWeight: 300, fontSize: 20 }),
       withMinWidth(CONTENT_WIDTH, content),

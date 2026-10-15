@@ -31,6 +31,10 @@
       "types": "./dist/families/overlap.d.ts",
       "import": "./dist/overlap.js"
     },
+    "./shape": {
+      "types": "./dist/families/shape.d.ts",
+      "import": "./dist/shape.js"
+    },
     "./tile": {
       "types": "./dist/families/tile.d.ts",
       "import": "./dist/tile.js"

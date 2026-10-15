@@ -32,6 +32,7 @@ import type {
   FieldPredicateIR,
   AxisOptions,
   CurveIR,
+  ShapeIR,
   LabelSpecIR,
   OverlapIR,
   TileIR,
@@ -288,9 +289,22 @@ const SCHEMA_STRATEGY_KEYS: Record<
       straights: true,
     },
   } satisfies StrategyKeys<CurveIR>,
+  Shape: {
+    box: { rx: true, ry: true },
+    blob: {
+      convexity: true,
+      holes: true,
+      roundness: true,
+      neck: true,
+      avoiding: true,
+      clearance: true,
+    },
+  } satisfies StrategyKeys<ShapeIR>,
 };
 
-console.log("\n# STRATEGIES agree with schema.ts TileIR / OverlapIR / CurveIR");
+console.log(
+  "\n# STRATEGIES agree with schema.ts TileIR / OverlapIR / CurveIR / ShapeIR"
+);
 for (const [family, kinds] of Object.entries(SCHEMA_STRATEGY_KEYS)) {
   const table = STRATEGIES[family as keyof typeof STRATEGIES].kinds as Record<
     string,

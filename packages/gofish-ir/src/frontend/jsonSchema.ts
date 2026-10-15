@@ -634,6 +634,23 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         },
       ],
     },
+    NodeSelectionIR: {
+      description:
+        "Nodes named inside an option (a blob's `avoiding`): a list of refs, or every node of a named layer (selectAll).",
+      oneOf: [
+        { type: "array", items: { $ref: "#/$defs/RefMarkIR" } },
+        {
+          type: "object",
+          required: ["type", "layer", "mode"],
+          additionalProperties: false,
+          properties: {
+            type: { const: "select" },
+            layer: { type: "string" },
+            mode: { const: "all" },
+          },
+        },
+      ],
+    },
     RelateClauseIR: {
       description:
         "One clause of a .relate() callback: a constraint over names (carries refs), or a mark that draws, whose children may reference the layer's names.",

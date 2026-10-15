@@ -2107,7 +2107,7 @@ export class GoFishNode {
    * (`relateEnv`: one operand per name inside the layer) and returns a list of
    * clauses. A clause is either a constraint (`Constraint.align`, ...), which
    * places its operands, or a term that draws: an operator or mark such as
-   * `arrow(opts, [a, b])` or `background(opts, [a, b])`, whose children may
+   * `arrow(opts, [a, b])` or `enclose(opts, [a, b])`, whose children may
    * mix operands from the environment with fresh marks. A drawing clause
    * becomes a child of this layer (flagged `_relateClause`), and the layer
    * lays it out after the clauses that write the positions it reads (see

@@ -20,6 +20,7 @@
 // dependency graph acyclic.
 import {
   ribbon,
+  enclose,
   paint,
   blank,
   circle,
@@ -51,7 +52,6 @@ import { scatter } from "../ast/graphicalOperators/scatter";
 import { group } from "../ast/graphicalOperators/group";
 import { table } from "../ast/graphicalOperators/table";
 import { arrow } from "../ast/graphicalOperators/arrow";
-import { enclose } from "../ast/graphicalOperators/enclose";
 import { position } from "../ast/graphicalOperators/position";
 import { treemap } from "../ast/graphicalOperators/treemap";
 import { pack } from "../ast/graphicalOperators/pack";
@@ -151,6 +151,7 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   // explicit children.
   line,
   ribbon,
+  enclose,
   // Dual-form operators: an operator in `.flow(...)`, a combinator over
   // explicit children.
   spread,
@@ -162,7 +163,6 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   pack,
   // Combinator-only marks.
   layer,
-  enclose,
   position,
   arrow,
   // The compositing wire types keep their original names; the factories were

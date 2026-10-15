@@ -713,6 +713,33 @@ for the API.
         }
       ]
     },
+    "NodeSelectionIR": {
+      "description": "Nodes named inside an option (a blob's `avoiding`): a list of refs, or every node of a named layer (selectAll).",
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RefMarkIR"
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "layer", "mode"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "select"
+            },
+            "layer": {
+              "type": "string"
+            },
+            "mode": {
+              "const": "all"
+            }
+          }
+        }
+      ]
+    },
     "RelateClauseIR": {
       "description": "One clause of a .relate() callback: a constraint over names (carries refs), or a mark that draws, whose children may reference the layer's names.",
       "oneOf": [
@@ -2513,6 +2540,69 @@ for the API.
         }
       }
     },
+    "EncloseMark": {
+      "description": "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default) or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "enclose"
+        },
+        "padding": {
+          "$ref": "#/$defs/Number",
+          "description": "Pixels between the members and the outline. For a blob, the distance from each member's own outline (around a line's whole length).",
+          "default": 2
+        },
+        "shape": {
+          "$ref": "#/$defs/Shape",
+          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset."
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color of the outline, or a field name or accessor for a color scale (constant within the enclosed group)."
+        },
+        "stroke": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Stroke color of the outline, or a field name or accessor for a color scale (constant within the enclosed group). Default a light gray."
+        },
+        "strokeWidth": {
+          "$ref": "#/$defs/Number",
+          "description": "Stroke width in pixels.",
+          "default": 1
+        },
+        "strokeDasharray": {
+          "type": "string",
+          "description": "Raw SVG stroke-dasharray (e.g. \"4 2\") for a dashed outline."
+        },
+        "opacity": {
+          "$ref": "#/$defs/Number",
+          "description": "Opacity, 0 to 1.",
+          "default": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "relate": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateClauseIR"
+          }
+        },
+        "zOrder": {
+          "$ref": "#/$defs/Number"
+        },
+        "debug": {
+          "type": "boolean"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
     "MarkFnMark": {
       "description": "Python-bridge: a registered `(data) -> ChartBuilder` lambda, resolved via the bridge.",
       "type": "object",
@@ -2579,6 +2669,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/RibbonMark"
+        },
+        {
+          "$ref": "#/$defs/EncloseMark"
         },
         {
           "$ref": "#/$defs/MarkFnMark"
@@ -3038,6 +3131,73 @@ for the API.
         }
       ],
       "description": "How a path runs through its points: the value of the `curve` option of `line` and `ribbon`. `linear`, `step`, `monotone` and `smooth` are read over the parameter of the run, from the least to the most smooth; `catmullRom` is a shape on screen; `bezier`, `orthogonal`, `arc` and `perfectArrows` route each pair of neighboring points."
+    },
+    "Shape": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "box"
+            },
+            "rx": {
+              "$ref": "#/$defs/Number",
+              "minimum": 0,
+              "description": "Corner radius in pixels, x.",
+              "default": 2
+            },
+            "ry": {
+              "$ref": "#/$defs/Number",
+              "minimum": 0,
+              "description": "Corner radius in pixels, y.",
+              "default": 2
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "blob"
+            },
+            "convexity": {
+              "$ref": "#/$defs/Number",
+              "minimum": 0,
+              "description": "The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area.",
+              "default": 0.5
+            },
+            "holes": {
+              "type": "boolean",
+              "description": "Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled and each avoided node it held is cut back out as its clearance circle, as `allow_holes` in PostGIS and Shapely.",
+              "default": false
+            },
+            "roundness": {
+              "type": "number",
+              "minimum": 0,
+              "description": "How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`."
+            },
+            "neck": {
+              "$ref": "#/$defs/Number",
+              "minimum": 0,
+              "description": "How far the outline is NOT pulled in between members, 0 to 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. It never changes the pieces or holes.",
+              "default": 1
+            },
+            "avoiding": {
+              "$ref": "#/$defs/NodeSelectionIR",
+              "description": "Nodes to keep out: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. Each avoided node inside the region becomes a round hole, and links route around the others."
+            },
+            "clearance": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Pixels kept between the outline and each avoided node.",
+              "default": 4
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "The outline `enclose` draws around its members: the value of its `shape` option. `padding` and the paint stay on `enclose`."
     }
   }
 }

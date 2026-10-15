@@ -14,7 +14,7 @@ import { spreadX } from "../ast/graphicalOperators/spreadX";
 import { frame } from "../ast/graphicalOperators/frame";
 import { ref } from "../ast/shapes/ref";
 import { mix } from "spectral.js";
-import { enclose } from "../ast/graphicalOperators/enclose";
+import { enclose } from "../lib";
 const fishColors = {
   Bass: color.blue[5],
   Trout: color.red[5],

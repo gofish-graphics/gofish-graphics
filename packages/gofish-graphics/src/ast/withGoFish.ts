@@ -281,27 +281,35 @@ export function createNodeOperator<T extends Record<string, any>, R>(
         args,
         "createNodeOperator"
       );
-      const flattened = await flattenAndAwaitPromises<
-        | GoFishAST
-        | Promise<GoFishAST>
-        | ChartBuilder<any, any>
-        | LayerBuilder
-        | Mark<any>
-      >(children);
-      const layerContext: LayerContext = {};
-      // Resolve marks (functions) and ChartBuilder instances; a mark is called
-      // with undefined data to produce its node.
-      const resolvedAll = await Promise.all(
-        flattened.map((child) => reifyChild(child, layerContext))
-      );
-      const flatChildren = resolvedAll.filter(
-        (child): child is GoFishAST =>
-          child != null && !(child instanceof Promise)
-      ) as GoFishAST[];
-      return func(opts, flatChildren);
+      return func(opts, await reifyChildren(children ?? null));
     })();
     return addRenderMethod(promise) as PromiseWithRender<Awaited<R>>;
   };
+}
+
+/**
+ * The nodes a combinator's child list stands for: nested arrays and promises
+ * flattened, each mark (a function) called with undefined data to produce its
+ * node, and each ChartBuilder resolved. Shared by every combinator form, so
+ * a child list means the same thing to all of them.
+ */
+export async function reifyChildren(
+  children: GoFishChildrenInput
+): Promise<GoFishAST[]> {
+  const flattened = await flattenAndAwaitPromises<
+    | GoFishAST
+    | Promise<GoFishAST>
+    | ChartBuilder<any, any>
+    | LayerBuilder
+    | Mark<any>
+  >(children);
+  const layerContext: LayerContext = {};
+  const resolvedAll = await Promise.all(
+    flattened.map((child) => reifyChild(child, layerContext))
+  );
+  return resolvedAll.filter(
+    (child): child is GoFishAST => child != null && !(child instanceof Promise)
+  ) as GoFishAST[];
 }
 
 /**

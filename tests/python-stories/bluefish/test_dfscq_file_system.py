@@ -12,6 +12,7 @@ reaching one level of nested plain layers deep — do not collapse them.
 
 from gofish import (
     Constraint,
+    Shape,
     arrow,
     create_name,
     enclose,
@@ -101,8 +102,7 @@ def _titled_background(title, content):
         fill="white",
         stroke="black",
         stroke_width=3,
-        rx=0,
-        ry=0,
+        shape=Shape.box(rx=0, ry=0),
     )
 
 

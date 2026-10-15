@@ -38,6 +38,7 @@ _OPTION_TYPES: Dict[str, Any] = {
     "Tile": ("tagged", "kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "sliceDice": ("object", {"kind": ("kind", None)})}),
     "Overlap": ("tagged", "kind", {"separate": ("object", {"kind": ("kind", None), "padding": ("padding", None)}), "noise": ("object", {"kind": ("kind", None), "randomness": ("randomness", None), "smoothing": ("smoothing", None), "padding": ("padding", None), "seed": ("seed", None)})}),
     "Curve": ("tagged", "kind", {"linear": ("object", {"kind": ("kind", None)}), "step": ("object", {"kind": ("kind", None)}), "monotone": ("object", {"kind": ("kind", None)}), "smooth": ("object", {"kind": ("kind", None)}), "catmullRom": ("object", {"kind": ("kind", None)}), "bezier": ("object", {"kind": ("kind", None)}), "orthogonal": ("object", {"kind": ("kind", None), "bend": ("bend", None)}), "arc": ("object", {"kind": ("kind", None), "direction": ("direction", None)}), "perfectArrows": ("object", {"kind": ("kind", None), "bow": ("bow", None), "stretch": ("stretch", None), "stretch_min": ("stretchMin", None), "stretch_max": ("stretchMax", None), "pad_start": ("padStart", None), "pad_end": ("padEnd", None), "flip": ("flip", None), "straights": ("straights", None)})}),
+    "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "holes": ("holes", None), "roundness": ("roundness", None), "neck": ("neck", None), "avoiding": ("avoiding", None), "clearance": ("clearance", None)})}),
 }
 
 
@@ -539,34 +540,6 @@ def mask(children: List["Mark"]) -> Mark:
     """Use A's region as a clip and paint B inside it without drawing A itself: B ∩ A, reporting A's bounds. Binary only. No options.
     """
     return Mark("mask", _children=list(children))
-
-def enclose(children: List["Mark"], *, padding: Optional[float] = None, rx: Optional[float] = None, ry: Optional[float] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None) -> Mark:
-    """Draw a rounded-rect enclosure around the union of the children's bboxes, padded by `padding`.
-
-    Args:
-        padding: Pixels of slack between the children's bbox union and the drawn enclosure. Default 2.
-        rx: Corner radius, x. Default 2.
-        ry: Corner radius, y. Default 2.
-        fill: Fill color of the enclosure. Default "none".
-        stroke: Stroke color of the enclosure. Default "#D1D9E2".
-        stroke_width: Stroke width in pixels. Default 1.
-        stroke_dasharray: Raw SVG stroke-dasharray (e.g. "4 2") for a dashed enclosure.
-        opacity: Opacity, 0 to 1. Default 1.
-    """
-    kwargs: Dict[str, Any] = {}
-    for _k, _v in [
-        ("padding", padding),
-        ("rx", rx),
-        ("ry", ry),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", stroke_width),
-        ("strokeDasharray", stroke_dasharray),
-        ("opacity", opacity),
-    ]:
-        if _v is not None:
-            kwargs[_k] = _v
-    return Mark("enclose", _children=list(children), **kwargs)
 
 def position(children: List["Mark"], *, key: Optional[str] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None) -> Mark:
     """Set a single child's min-corner (x, y) in parent coordinates — an absolute-offset placement primitive, NOT center-anchored. Unlike `enclose`'s convex-hull styling, `position` draws nothing of its own; it exists for cases (e.g. the Topology story's combinator trees) that need to place one child precisely without `enclose`'s fill/stroke/hull limits.
@@ -1098,6 +1071,34 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         ("emY", em_y),
         ("w", _channel(w)),
         ("h", _channel(h)),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _enclose_opts(*, padding: Optional[float] = None, shape: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default) or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs.
+
+    Args:
+        padding: Pixels between the members and the outline. For a blob, the distance from each member's own outline (around a line's whole length). Default 2.
+        shape: The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset.
+        fill: Fill color of the outline, or a field name or accessor for a color scale (constant within the enclosed group).
+        stroke: Stroke color of the outline, or a field name or accessor for a color scale (constant within the enclosed group). Default a light gray.
+        stroke_width: Stroke width in pixels. Default 1.
+        stroke_dasharray: Raw SVG stroke-dasharray (e.g. "4 2") for a dashed outline.
+        opacity: Opacity, 0 to 1. Default 1.
+        debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("padding", padding),
+        ("shape", _to_wire(("ref", "Shape"), shape, "shape")),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("strokeDasharray", stroke_dasharray),
+        ("opacity", opacity),
         ("debug", debug),
     ]:
         if _v is not None:

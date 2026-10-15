@@ -103,4 +103,8 @@ export const MARK_CHANNELS = {
     w: "size",
     h: "size",
   },
+  enclose: {
+    fill: "color",
+    stroke: "color",
+  },
 } as const;

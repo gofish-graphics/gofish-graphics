@@ -626,6 +626,71 @@ export const STRATEGIES = {
       },
     },
   },
+  Shape: {
+    doc: "The outline `enclose` draws around its members: the value of its `shape` option. `padding` and the paint stay on `enclose`.",
+    kinds: {
+      box: {
+        doc: "The members' bounding box, grown by `padding`, with rounded corners.",
+        params: {
+          rx: {
+            type: t.num({ min: 0 }),
+            default: 2,
+            doc: "Corner radius in pixels, x.",
+          },
+          ry: {
+            type: t.num({ min: 0 }),
+            default: 2,
+            doc: "Corner radius in pixels, y.",
+          },
+        },
+      },
+      blob: {
+        doc: "A smooth region around the members: each member grown by `padding`, the links of a spanning tree between them (routed around avoided nodes, so the set stays in one piece), and the Delaunay triangles of their points, filled smallest gaps first up to `convexity` of their convex hull. The outline is rounded so its curvature never jumps.",
+        params: {
+          convexity: {
+            type: t.num({ min: 0 }),
+            default: 0.5,
+            doc: "The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area.",
+          },
+          holes: {
+            type: t.boolean,
+            default: false,
+            doc: "Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled and each avoided node it held is cut back out as its clearance circle, as `allow_holes` in PostGIS and Shapely.",
+          },
+          roundness: {
+            type: t.num({ min: 0, finite: true }),
+            doc: "How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`.",
+          },
+          neck: {
+            type: t.num({ min: 0 }),
+            default: 1,
+            doc: "How far the outline is NOT pulled in between members, 0 to 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. It never changes the pieces or holes.",
+          },
+          avoiding: {
+            type: t.ref("NodeSelectionIR"),
+            doc: "Nodes to keep out: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. Each avoided node inside the region becomes a round hole, and links route around the others.",
+          },
+          clearance: {
+            type: t.num({ min: 0, finite: true }),
+            default: 4,
+            doc: "Pixels kept between the outline and each avoided node.",
+          },
+        },
+      },
+    },
+    presets: {
+      hull: {
+        kind: "blob",
+        values: { convexity: 1, neck: 1 },
+        doc: "The padded convex hull, rounded: blob with convexity 1 and neck 1. Any option overrides the preset.",
+      },
+      spine: {
+        kind: "blob",
+        values: { convexity: 0 },
+        doc: "The routed spanning tree of tubes and nothing else: blob with convexity 0. Any option overrides the preset.",
+      },
+    },
+  },
 } satisfies Record<string, StrategyFamily>;
 
 /** The name of a strategy family: `"Tile"`, `"Overlap"` or `"Curve"`. */
@@ -784,11 +849,17 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
 /** The refs a field may name that are not `OPTION_TYPES` entries: shapes
  *  authored by hand in schema.ts / jsonSchema.ts and walked by their own
  *  validator walkers. `pyClass` names the Python class that builds a value. */
-export const AUTHORED_REFS: Readonly<Record<string, { pyClass?: string }>> = {
+export const AUTHORED_REFS: Readonly<
+  Record<string, { pyClass?: string; pyNodes?: true }>
+> = {
   FieldAccessor: { pyClass: "FieldAccessor" },
   LabelIR: {},
   TranslateIR: {},
   RelateClauseIR: {},
+  // `pyNodes`: a Python value of this type holds marks (`ref(...)`,
+  // `select_all(...)`, a `.relate()` operand). It passes through the option
+  // walks unchanged, and `Mark.to_dict` writes each mark in it as its IR.
+  NodeSelectionIR: { pyNodes: true },
 };
 
 /** The Python class for a named type, if it has one. */
@@ -1600,6 +1671,37 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     },
   }),
 
+  enclose: leafMark("enclose", {
+    doc: "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default) or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs.",
+    fields: {
+      padding: {
+        type: t.number,
+        default: 2,
+        doc: "Pixels between the members and the outline. For a blob, the distance from each member's own outline (around a line's whole length).",
+      },
+      shape: {
+        type: t.ref("Shape"),
+        doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset.",
+      },
+      fill: ch.color(
+        "Fill color of the outline, or a field name or accessor for a color scale (constant within the enclosed group)."
+      ),
+      stroke: ch.color(
+        "Stroke color of the outline, or a field name or accessor for a color scale (constant within the enclosed group). Default a light gray."
+      ),
+      strokeWidth: {
+        type: t.number,
+        default: 1,
+        doc: "Stroke width in pixels.",
+      },
+      strokeDasharray: {
+        type: t.string,
+        doc: 'Raw SVG stroke-dasharray (e.g. "4 2") for a dashed outline.',
+      },
+      opacity: { type: t.number, default: 1, doc: "Opacity, 0 to 1." },
+    },
+  }),
+
   "mark-fn": leafMark("mark-fn", {
     doc: "Python-bridge: a registered `(data) -> ChartBuilder` lambda, resolved via the bridge.",
     fields: {
@@ -1680,36 +1782,8 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   enclose: combinatorMark("enclose", {
-    doc: "Draw a rounded-rect enclosure around the union of the children's bboxes, padded by `padding`.",
-    fields: {
-      padding: {
-        type: t.number,
-        default: 2,
-        doc: "Pixels of slack between the children's bbox union and the drawn enclosure.",
-      },
-      rx: { type: t.number, default: 2, doc: "Corner radius, x." },
-      ry: { type: t.number, default: 2, doc: "Corner radius, y." },
-      fill: {
-        type: t.string,
-        default: "none",
-        doc: "Fill color of the enclosure.",
-      },
-      stroke: {
-        type: t.string,
-        default: "#D1D9E2",
-        doc: "Stroke color of the enclosure.",
-      },
-      strokeWidth: {
-        type: t.number,
-        default: 1,
-        doc: "Stroke width in pixels.",
-      },
-      strokeDasharray: {
-        type: t.string,
-        doc: 'Raw SVG stroke-dasharray (e.g. "4 2") for a dashed enclosure.',
-      },
-      opacity: { type: t.number, default: 1, doc: "Opacity, 0 to 1." },
-    },
+    doc: "Low-level combinator form of `enclose`: the outline around the given children. Same fields as the bag form (LEAF_MARKS.enclose).",
+    fields: resolveFields(LEAF_MARKS.enclose),
   }),
 
   position: combinatorMark("position", {

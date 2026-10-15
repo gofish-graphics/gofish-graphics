@@ -8,7 +8,7 @@ import {
   position,
   polygon,
   enclose,
-  background,
+  Shape,
   spread,
   circle,
 } from "../../src/lib";
@@ -345,7 +345,7 @@ export const StrategyBox: StoryObj = {
     ])
       .relate((names: any) => [
         enclose(
-          { padding: 8, rx: 8, ry: 8, fill: "rgba(51,102,170,0.18)", stroke: BLUE, strokeWidth: 1.5 },
+          { padding: 8, shape: Shape.box({ rx: 8, ry: 8 }), fill: "rgba(51,102,170,0.18)", stroke: BLUE, strokeWidth: 1.5 },
           U.map((_, i) => names[`m${i}`])
         ),
       ])
@@ -568,7 +568,7 @@ export const PlanetsBox: StoryObj = {
       { r: 38, fill: "#179DD7", stroke: "#1280B0" },
       { r: 21, fill: "#F4BC80", stroke: "#E0954C" },
     ];
-    background({ padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 }, [
+    enclose({ padding: 20, fill: "#252150", stroke: "none", shape: Shape.box({ rx: 16, ry: 16 }) }, [
       spread(
         { dir: "x", spacing: 50, alignment: "middle" },
         data.map((d) => circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 }))
