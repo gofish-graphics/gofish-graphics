@@ -12,10 +12,10 @@ set -e
 #   posting. The images are still downloaded, so a dry run shows which ones
 #   would be skipped. It needs no webhook.
 #
-# The summary marks a screenshot as a line holding only ![caption](url) (the
-# shape check-summary.sh vets). Such a line is never posted as text. Instead
-# the image is uploaded as a file on the message that ends with the bullet
-# above it, so each image shows right after the bullet it illustrates. The
+# The summary marks a screenshot as a line holding only ![caption](url) (see
+# image-line.sh). Such a line is never posted as text. Instead the image is
+# uploaded as a file on the message that ends with the bullet above it, so
+# each image shows right after the bullet it illustrates. The
 # messages set SUPPRESS_EMBEDS so PR links do not unfurl into preview cards;
 # that also hides embedded images, but uploaded files still show.
 
@@ -28,6 +28,9 @@ if [ "$DRY_RUN" != "1" ] && [ -z "$DISCORD_WEBHOOK_URL" ]; then
   echo "⚠️  DISCORD_WEBHOOK_URL secret not set. Skipping Discord post."
   exit 0
 fi
+
+# shellcheck source=image-line.sh
+source "$(dirname "${BASH_SOURCE[0]}")/image-line.sh"
 
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -50,6 +53,7 @@ jq -n \
   --arg title "$TITLE" \
   --rawfile summary summary.md \
   --argjson max 1900 \
+  --arg image_line "$IMAGE_LINE" \
   '
     def chunk($limit):
       reduce (./"\n")[] as $line ({chunks: [], cur: ""};
@@ -69,7 +73,8 @@ jq -n \
             end))
       | .chunks + (if (.cur | length) > 0 then [.cur] else [] end);
     def image_line:
-      [capture("^\\s*!\\[(?<alt>[^\\]]*)\\]\\((?<url>[^)\\s]+)\\)\\s*$")] | first;
+      [match($image_line) | .captures | {alt: .[0].string, url: .[1].string}]
+      | first;
     def blank: test("^\\s*$");
     # Blank lines between an image and the next text are dropped: the
     # message break already separates them.
@@ -83,16 +88,16 @@ jq -n \
           end)
     | map(
         (.lines | until(length == 0 or (.[-1] | blank | not); .[:-1]) | join("\n")) as $text
-        | ($text | if length > 0 then chunk($max) else [""] end) as $chunks
+        | ($text | chunk($max)) as $chunks
         | .images as $images
         | ($chunks[:-1] | map({content: ., images: []}))
           + [{content: $chunks[-1], images: $images}])
     | add
   ' > "$WORK_DIR/messages.json"
 
-# Download one image into $WORK_DIR, following redirects (GitHub's
+# Download one image to the given path, following redirects (GitHub's
 # user-attachments URLs redirect to signed storage). Prints
-# "<path>\t<filename>\t<content type>" on success. On failure it prints a
+# "<filename>\t<content type>" on success. On failure it prints a
 # warning and nothing else, so a broken image is skipped and never fails the
 # post. The filename comes from the URL, with the extension taken from the
 # content type, since user-attachments URLs have none and Discord only shows
@@ -119,7 +124,7 @@ download_image() {
   stem="${stem##*/}"
   stem="${stem%.*}"
   stem=$(printf '%s' "$stem" | tr -c 'A-Za-z0-9._-' '_')
-  printf '%s\t%s\t%s\n' "$dest" "${stem:-image}.$ext" "$type"
+  printf '%s\t%s\n' "${stem:-image}.$ext" "$type"
 }
 
 # Post one message per entry, in order. Each is sent as multipart/form-data:
@@ -133,61 +138,50 @@ download_image() {
 # clickable but Discord does not unfurl them into GitHub preview cards that
 # bury the summary.
 COUNT=$(jq 'length' "$WORK_DIR/messages.json")
-POSTED=0
-for ((i = 0; i < COUNT; i++)); do
-  jq -r --argjson i "$i" '.[$i].content' "$WORK_DIR/messages.json" > "$WORK_DIR/content.txt"
+i=0
+while IFS= read -r MESSAGE; do
+  i=$((i + 1))
 
-  # Download this message's images, keeping the ones that arrive.
-  : > "$WORK_DIR/files.tsv"
-  IMAGE_COUNT=$(jq --argjson i "$i" '.[$i].images | length' "$WORK_DIR/messages.json")
-  for ((j = 0; j < IMAGE_COUNT; j++)); do
-    URL=$(jq -r --argjson i "$i" --argjson j "$j" '.[$i].images[$j].url' "$WORK_DIR/messages.json")
-    ALT=$(jq -r --argjson i "$i" --argjson j "$j" '.[$i].images[$j].alt' "$WORK_DIR/messages.json")
-    if [ "$(wc -l < "$WORK_DIR/files.tsv")" -ge "$MAX_FILES" ]; then
+  # Download this message's images, keeping the ones that arrive. Attachment
+  # n is both files[n] in the form and {id: n, filename, description} in
+  # payload_json, where the description is the image's caption (Discord's alt
+  # text).
+  FORM=(-F "payload_json=<$WORK_DIR/payload.json;type=application/json")
+  ATTACHMENTS='[]'
+  n=0
+  while IFS=$'\t' read -r URL ALT; do
+    if [ "$n" -ge "$MAX_FILES" ]; then
       echo "::warning::Skipped an image past Discord's $MAX_FILES-file limit: $URL" >&2
       continue
     fi
-    FILE=$(download_image "$URL" "$WORK_DIR/image-$i-$j")
-    if [ -n "$FILE" ]; then
-      printf '%s\t%s\t%s\n' "$FILE" "$ALT" "$URL" >> "$WORK_DIR/files.tsv"
+    FILE=$(download_image "$URL" "$WORK_DIR/image-$i-$n")
+    if [ -z "$FILE" ]; then
+      continue
     fi
-  done
+    IFS=$'\t' read -r NAME TYPE <<< "$FILE"
+    FORM+=(-F "files[$n]=@$WORK_DIR/image-$i-$n;filename=$NAME;type=$TYPE")
+    ATTACHMENTS=$(jq -c --argjson id "$n" --arg filename "$NAME" --arg description "$ALT" \
+      '. + [{id: $id, filename: $filename, description: $description}]' <<< "$ATTACHMENTS")
+    n=$((n + 1))
+  done < <(jq -r '.images[] | [.url, .alt] | @tsv' <<< "$MESSAGE")
 
-  # A message whose text is empty and whose images all failed has nothing
-  # left to post, and Discord would reject it.
-  if [ ! -s "$WORK_DIR/files.tsv" ] && ! grep -q '[^[:space:]]' "$WORK_DIR/content.txt"; then
-    echo "Skipping message $((i + 1))/$COUNT: nothing left to post."
-    continue
-  fi
-
-  # payload_json lists attachment n as {id: n, filename, description}, where
-  # the description is the image's caption (Discord's alt text).
   jq -n \
-    --rawfile content "$WORK_DIR/content.txt" \
-    --rawfile files "$WORK_DIR/files.tsv" \
+    --argjson message "$MESSAGE" \
+    --argjson attachments "$ATTACHMENTS" \
     '{
-      content: ($content | rtrimstr("\n")),
+      content: $message.content,
       allowed_mentions: {parse: []},
       flags: 4,
-      attachments: [
-        $files | split("\n")[] | select(length > 0) | split("\t")
-      ] | to_entries | map({id: .key, filename: .value[1], description: .value[3]})
+      attachments: $attachments
     }' > "$WORK_DIR/payload.json"
 
-  FORM=(-F "payload_json=<$WORK_DIR/payload.json;type=application/json")
-  n=0
-  while IFS=$'\t' read -r path name type alt url; do
-    FORM+=(-F "files[$n]=@$path;filename=$name;type=$type")
-    n=$((n + 1))
-  done < "$WORK_DIR/files.tsv"
-
   if [ "$DRY_RUN" = "1" ]; then
-    echo "===== Message $((i + 1))/$COUNT ($(jq '.content | length' "$WORK_DIR/payload.json") chars, $n attachment(s)) ====="
+    echo "===== Message $i/$COUNT ($(jq '.content | length' "$WORK_DIR/payload.json") chars, $n attachment(s)) ====="
     jq -r '.content' "$WORK_DIR/payload.json"
-    while IFS=$'\t' read -r path name type alt url; do
-      echo "----- attachment: $name ($type, $(wc -c < "$path" | tr -d ' ') bytes) caption: \"$alt\" from $url"
-    done < "$WORK_DIR/files.tsv"
-    POSTED=$((POSTED + 1))
+    jq -r '.attachments[] | [.id, .filename, .description] | @tsv' "$WORK_DIR/payload.json" \
+      | while IFS=$'\t' read -r id name alt; do
+          echo "----- attachment $id: $name ($(wc -c < "$WORK_DIR/image-$i-$id" | tr -d ' ') bytes) caption: \"$alt\""
+        done
     continue
   fi
 
@@ -195,21 +189,20 @@ for ((i = 0; i < COUNT; i++)); do
     "${FORM[@]}" \
     -w "%{http_code}" -o "$WORK_DIR/discord_response.txt")
   RESPONSE=$(cat "$WORK_DIR/discord_response.txt")
-  echo "Discord responded HTTP $HTTP_CODE for message $((i + 1))/$COUNT ($n attachment(s))"
+  echo "Discord responded HTTP $HTTP_CODE for message $i/$COUNT ($n attachment(s))"
 
   if [ "${HTTP_CODE:0:1}" != "2" ]; then
     echo "::error::Discord rejected the weekly summary (HTTP $HTTP_CODE): $RESPONSE"
     exit 1
   fi
-  POSTED=$((POSTED + 1))
   # Stay clear of the webhook rate limit between messages.
-  if [ "$i" -lt $((COUNT - 1)) ]; then
+  if [ "$i" -lt "$COUNT" ]; then
     sleep 1
   fi
-done
+done < <(jq -c '.[]' "$WORK_DIR/messages.json")
 
 if [ "$DRY_RUN" = "1" ]; then
-  echo "✅ Dry run: $POSTED message(s) would be posted to Discord."
+  echo "✅ Dry run: $COUNT message(s) would be posted to Discord."
 else
-  echo "✅ Weekly summary posted to Discord ($POSTED message(s))."
+  echo "✅ Weekly summary posted to Discord ($COUNT message(s))."
 fi

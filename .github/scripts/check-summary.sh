@@ -15,26 +15,22 @@ if [ ! -s summary.md ]; then
   exit 1
 fi
 
-if [ ! -f contributors.tsv ]; then
-  echo "ERROR: contributors.tsv must exist in the current directory"
-  echo "This file is created by build-summary-prompt.sh"
-  exit 1
-fi
+for file in contributors.tsv images.txt; do
+  if [ ! -f "$file" ]; then
+    echo "ERROR: $file must exist in the current directory"
+    echo "This file is created by build-summary-prompt.sh"
+    exit 1
+  fi
+done
 
-if [ ! -f images.txt ]; then
-  echo "ERROR: images.txt must exist in the current directory"
-  echo "This file is created by build-summary-prompt.sh"
-  exit 1
-fi
-
-# A screenshot is a line holding only ![caption](url), the shape the prompt
-# asks for and post-to-discord.sh turns into an attachment. Keep it only when
-# its URL is one a PR listed, so a made-up or mistyped URL never gets posted.
-IMAGE_LINE='^[[:space:]]*!\[[^]]*\]\(([^)[:space:]]+)\)[[:space:]]*$'
+# Keep a screenshot line (see image-line.sh) only when its URL is one a PR
+# listed, so a made-up or mistyped URL never gets posted.
+# shellcheck source=image-line.sh
+source "$(dirname "${BASH_SOURCE[0]}")/image-line.sh"
 SUMMARY=$(
   while IFS= read -r line || [ -n "$line" ]; do
     if [[ "$line" =~ $IMAGE_LINE ]]; then
-      url="${BASH_REMATCH[1]}"
+      url="${BASH_REMATCH[2]}"
       if ! grep -Fxq -- "$url" images.txt; then
         echo "::warning::Dropped an image the PRs did not list: $url" >&2
         continue

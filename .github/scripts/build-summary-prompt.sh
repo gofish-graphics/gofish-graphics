@@ -6,61 +6,34 @@ set -e
 # prompt.md and writes summary.md (plain Markdown, reusable for Discord,
 # release notes, the website, etc.).
 #
-# Expects prs.txt to exist in the current directory.
-# Writes:
-# - prompt.md: the full prompt for Claude
-# - contributors.tsv: one line per contributor (author, first PR number, URL,
-#   title), which check-summary.sh uses to guarantee contributor coverage.
-#   Only PRs with an Author line count; the workflow omits that line for the
-#   maintainer and for bots, so only outside contributors get a shout-out.
-# - images.txt: one image URL per line, every screenshot listed under a PR's
-#   Images line. check-summary.sh drops any image the summary shows that is
-#   not on this list, so Claude cannot post an image the PRs did not ship.
+# Expects prs.json in the current directory: the `gh pr list` output with
+# each PR's screenshots added (see prs.jq). MAINTAINER names the maintainer,
+# whose PRs (like bots') get no Author line and no shout-out.
+# Writes, deriving the first three from prs.json with prs.jq:
+# - prs.txt: the PR list as the prompt shows it.
+# - contributors.tsv: one line per outside contributor (author, first PR
+#   number, URL, title), which check-summary.sh uses to guarantee contributor
+#   coverage.
+# - images.txt: one image URL per line, every screenshot a PR listed.
+#   check-summary.sh drops any image the summary shows that is not on this
+#   list, so Claude cannot post an image the PRs did not ship.
+# - prompt.md: the full prompt for Claude.
 
 # Check if required file exists
-if [ ! -f prs.txt ]; then
-  echo "ERROR: prs.txt must exist in the current directory"
+if [ ! -f prs.json ]; then
+  echo "ERROR: prs.json must exist in the current directory"
   echo "This file should be created by previous workflow steps"
   exit 1
 fi
+: "${MAINTAINER:?MAINTAINER must name the maintainer}"
 
-# Collect each contributor's first PR from the PR data.
-# Expected PR blocks look like:
-# - "### PR #123: Title"
-# - "- **Author:** username"
-# - "- **URL:** https://..."
-awk '
-  /^### PR #[0-9]+:/ {
-    line = $0
-    sub(/^### PR #/, "", line)
-    split(line, parts, ": ")
-    pr = parts[1]
-    title = substr(line, length(pr) + 3)
-  }
-  /^- \*\*Author:\*\* / {
-    author = $0
-    sub(/^- \*\*Author:\*\* /, "", author)
-  }
-  /^- \*\*URL:\*\* / {
-    url = $0
-    sub(/^- \*\*URL:\*\* /, "", url)
-    if (author != "" && !(author in seen)) {
-      seen[author] = 1
-      firstPr[author] = pr
-      firstTitle[author] = title
-      firstUrl[author] = url
-    }
-    author = ""
-    pr = ""
-    title = ""
-    url = ""
-  }
-  END {
-    for (a in seen) {
-      print a "\t" firstPr[a] "\t" firstUrl[a] "\t" firstTitle[a]
-    }
-  }
-' prs.txt | sort > contributors.tsv
+# Runs one prs.jq view over prs.json.
+prs() {
+  jq -r -L "$(dirname "${BASH_SOURCE[0]}")" "include \"prs\"; $1" prs.json
+}
+prs prompt_view > prs.txt
+prs contributors | sort > contributors.tsv
+prs image_urls > images.txt
 
 # Build contributor callout guidance.
 CONTRIBUTOR_CALLOUTS=$(
@@ -72,12 +45,6 @@ CONTRIBUTOR_CALLOUTS=$(
 if [ -z "$CONTRIBUTOR_CALLOUTS" ]; then
   CONTRIBUTOR_CALLOUTS="(None this week.)"
 fi
-
-# Collect the image allowlist. The workflow lists each PR's images as
-# "  - ![alt](url)" lines under "- **Images:**".
-{ grep -E '^  - !\[[^]]*\]\([^)[:space:]]+\)$' prs.txt || true; } \
-  | sed -E 's/^  - !\[[^]]*\]\(([^)]+)\)$/\1/' \
-  | sort -u > images.txt
 
 # Build the prompt template
 read -r -d '' PROMPT_TEMPLATE <<'ENDPROMPT' || true

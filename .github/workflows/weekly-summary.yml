@@ -5,7 +5,7 @@ on:
   workflow_dispatch: # Allow manual triggers
     inputs:
       dry_run:
-        description: "Dry run mode (skip Discord posting and the archive PR, output to logs)"
+        description: "Dry run mode (print the Discord messages to the logs instead of posting them, and skip the archive PR)"
         required: false
         default: "false"
         type: choice
@@ -56,51 +56,28 @@ jobs:
           echo "upper_label=$(date -u -d "$UPPER_TS" +%Y-%m-%d)" >> $GITHUB_OUTPUT
 
       - name: Get merged PRs for the window
-        id: prs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOWER: ${{ steps.dates.outputs.lower }}
+          UPPER: ${{ steps.dates.outputs.upper }}
+        run: |
+          # Half-open interval [lower, upper): a PR merged exactly on a boundary
+          # belongs to one window only, never both. Saved once as prs.json,
+          # with the screenshots each PR body embeds added as an images list
+          # (see prs.jq), so the summary can show new charts.
+          set -o pipefail
+          gh pr list \
+            --state merged \
+            --limit 200 \
+            --search "merged:>=${LOWER} merged:<${UPPER}" \
+            --json number,title,body,author,mergedAt,url \
+            | jq -L .github/scripts 'include "prs"; with_images' > prs.json
+
+      - name: Build summary prompt
+        env:
           # The maintainer's PRs (and bots') carry no Author line, so the
           # summary only credits outside contributors.
           MAINTAINER: joshpoll
-        run: |
-          # Half-open interval [lower, upper): a PR merged exactly on a boundary
-          # belongs to one window only, never both.
-          #
-          # The description is cut to 300 chars, but the screenshots a PR body
-          # embeds are pulled from the full body first, so the summary can show
-          # new charts. Bodies embed them as Markdown (![alt](url)) or as HTML
-          # (<img src="...">, which GitHub's uploader writes). Each image is
-          # listed once, in body order, as a ready-to-copy ![alt](url) line;
-          # build-summary-prompt.sh turns these lines into the URL allowlist.
-          PRS=$(gh pr list \
-            --state merged \
-            --limit 200 \
-            --search "merged:>=${{ steps.dates.outputs.lower }} merged:<${{ steps.dates.outputs.upper }}" \
-            --json number,title,body,author,mergedAt,url \
-            --jq '
-              def images:
-                [ (match("!\\[(?<alt>[^\\]]*)\\]\\((?<url>[^)\\s]+)(?:\\s+\"[^\"]*\")?\\)"; "g")
-                    | {offset, alt: .captures[0].string, url: .captures[1].string}),
-                  (match("<img\\b[^>]*>"; "gi")
-                    | .offset as $o | .string as $tag
-                    | {offset: $o,
-                       url: ($tag | capture("\\bsrc\\s*=\\s*[\"'\''](?<u>[^\"'\'']+)[\"'\'']"; "i").u),
-                       alt: ([$tag | capture("\\balt\\s*=\\s*[\"'\''](?<a>[^\"'\'']*)[\"'\'']"; "i").a] | first // "")})
-                ]
-                | sort_by(.offset)
-                | reduce .[] as $img ([]; if any(.[]; .url == $img.url) then . else . + [$img] end)
-                | map(select(.url | test("^https?://")));
-              .[]
-              | ((.body // "") | images) as $images
-              | "### PR #\(.number): \(.title)\(if .author.is_bot or .author.login == env.MAINTAINER then "" else "\n- **Author:** \(.author.login)" end)\n- **Merged:** \(.mergedAt[:10])\n- **URL:** \(.url)\n- **Description:** \(.body // "No description" | split("\n")[0:3] | join(" ") | .[0:300])\(if ($images | length) > 0 then "\n- **Images:**" + ($images | map("\n  - ![\(.alt | gsub("[\\[\\]\\r\\n]"; " "))](\(.url))") | join("")) else "" end)\n"
-            ')
-          if [ -z "$PRS" ]; then
-            PRS="No PRs merged this week."
-          fi
-          # Store in file to avoid escaping issues
-          echo "$PRS" > prs.txt
-
-      - name: Build summary prompt
         run: |
           bash .github/scripts/build-summary-prompt.sh
 
@@ -136,13 +113,16 @@ jobs:
           echo "=========================================="
 
       - name: Post to Discord
-        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.dry_run != 'true') }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           TITLE: "# 🐟 GoFish Weekly Update (${{ steps.dates.outputs.lower_label }} → ${{ steps.dates.outputs.upper_label }})"
+          # A scheduled run has no inputs, so it posts for real.
+          DRY_RUN: ${{ inputs.dry_run == 'true' && '1' || '' }}
         # Chunks the summary under Discord's message limit and uploads its
         # screenshots as files, each right after the bullet it illustrates.
-        # Run it locally with DRY_RUN=1 to see the messages without posting.
+        # In a dry run (here, or locally with DRY_RUN=1) it still splits the
+        # summary and downloads the images, but prints the messages instead of
+        # posting them.
         run: |
           bash .github/scripts/post-to-discord.sh
 
@@ -230,5 +210,5 @@ jobs:
       - name: Dry run notice
         if: ${{ inputs.dry_run == 'true' }}
         run: |
-          echo "✅ DRY RUN MODE: Summary generated but NOT posted to Discord and NOT archived (no archive PR opened)"
+          echo "✅ DRY RUN MODE: Summary generated and its Discord messages printed above, but NOT posted to Discord and NOT archived (no archive PR opened)"
           echo "To post to Discord and open the archive PR, run the workflow with dry_run set to 'false'"
