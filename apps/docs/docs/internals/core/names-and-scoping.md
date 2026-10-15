@@ -254,7 +254,10 @@ resolved when the clause is attached, so the default names them:
 `GoFishNode.relate` runs the same pass `layer` runs for its children
 (`applyRelationalZBelowDefaults`), which adds `zBelow(clause, name)` for
 each string-ref operand (see [The Mark Factory](/internals/frontend/mark-factory)). An explicit
-`.zOrder(...)` on the clause wins.
+`.zOrder(...)` on the clause wins. `.relate()` replaces the constraints of
+an earlier `.relate()`, but not the defaults `layer` gave its own
+relational-mark children (`_paintDefaults`), so a `line` or `enclose` among
+the layer's children still paints under the nodes it reads.
 
 ## History
 

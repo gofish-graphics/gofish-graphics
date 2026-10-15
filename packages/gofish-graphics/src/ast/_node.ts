@@ -480,6 +480,10 @@ export class GoFishNode {
    *  `ref` is legal only inside such a clause, and the layer schedules the
    *  clause after the clauses that place what it reads. */
   public _relateClause?: number;
+  /** The paint-order defaults `layer` installed for its relational-mark
+   *  children (`applyRelationalZBelowDefaults`): `.relate()` replaces the
+   *  author's constraints, and keeps these. */
+  public _paintDefaults: ConstraintSpec[] = [];
   /** Set by `.relate()`: whether it added drawing clauses to this layer, so
    *  a layer without any skips looking for them in `resolveNames`. */
   public _hasRelateClauses: boolean = false;
@@ -2157,7 +2161,9 @@ export class GoFishNode {
     this.children = this.children.filter((c) => !isRelateClause(c));
     const env = relateEnv(this);
     const { constraints, nodes } = await resolveRelateClauses(fn(env), env);
-    this.constraints = constraints;
+    // The relate's constraints replace an earlier relate's, and the layer's
+    // paint-order defaults for its own relational-mark children stay.
+    this.constraints = [...this._paintDefaults, ...constraints];
     for (const node of nodes) {
       node.parent = this;
       this.children.push(node);

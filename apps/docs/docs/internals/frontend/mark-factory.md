@@ -538,6 +538,9 @@ pass over its children, and `GoFishNode.relate` over its drawing clauses. A
 clause's operands are string refs with no target yet, and the pass names
 such a ref's node by its string, with no scope check, since the name is the
 relating layer's (see [Names and Scoping](/internals/core/names-and-scoping)).
+The defaults `layer` installs for its children are kept apart, as
+`_paintDefaults`: a later `.relate()` on the layer replaces the author's
+constraints with its own and keeps them.
 
 ### Blank-fusion: `.mark(R(opts))` sugar
 

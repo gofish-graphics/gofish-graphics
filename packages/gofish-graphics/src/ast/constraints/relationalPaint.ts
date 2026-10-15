@@ -11,7 +11,7 @@
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
 import { GoFishRef, findPathToRoot } from "../_ref";
-import { Constraint } from "./index";
+import { Constraint, type ConstraintSpec } from "./index";
 import { internalName } from "./shared";
 
 /** Find every relational-mark connector node (tagged `__relationalOperands`
@@ -63,20 +63,20 @@ function ensureConstraintName(node: GoFishNode): string {
  * both live several `.layer()` tiers up) is left tagged so an OUTER `layer()`
  * call gets a chance to resolve it — the tag is only cleared once consumed.
  *
- * Returns the auto-derived zBelow constraints (merged with any that already
- * existed on `node` — there are none for a freshly built layer, but this
- * stays defensive) to install via `node.relate(...)`-equivalent direct
- * assignment (this runs before any user `.relate()` chain, which replaces
- * `constraints` wholesale and so always wins over the default, matching the
- * "explicit override" rule).
+ * The defaults are appended to `node.constraints` and returned. `layer`
+ * keeps the ones it installs for its children as `node._paintDefaults`, so a
+ * later `.relate()` on that layer, which replaces the author's constraints
+ * with its own, keeps them: it rebuilds `constraints` as the layer's defaults
+ * plus its clauses' constraints, then runs this pass over its drawing
+ * clauses. A connector's own `.zOrder(...)` or `.relate(...)` still wins.
  */
 export function applyRelationalZBelowDefaults(
   node: GoFishNode,
   children: GoFishAST[]
-): void {
+): ConstraintSpec[] {
   const connectors: GoFishNode[] = [];
   for (const child of children) findUnclaimedConnectors(child, connectors);
-  if (connectors.length === 0) return;
+  if (connectors.length === 0) return [];
 
   const pairs: [string, string][] = [];
   for (const connector of connectors) {
@@ -133,7 +133,7 @@ export function applyRelationalZBelowDefaults(
     // than the sibling-tier case this covers.
     if (claimedAny) delete (connector as any).__relationalOperands;
   }
-  if (pairs.length === 0) return;
+  if (pairs.length === 0) return [];
   const refs: Record<string, { name: string }> = {};
   for (const [a, b] of pairs) {
     refs[a] ??= { name: a };
@@ -143,4 +143,5 @@ export function applyRelationalZBelowDefaults(
     Constraint.zBelow(refs[a], refs[b])
   );
   node.constraints = [...node.constraints, ...zBelowConstraints];
+  return zBelowConstraints;
 }

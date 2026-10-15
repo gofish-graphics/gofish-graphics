@@ -910,8 +910,9 @@ export const layer = createNodeOperatorSequential(
     // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
     node._elaborateInAxisScope = deferAxisDims(options, dims);
     // Default zBelow(connector, operand) for relational marks (line/ribbon/…)
-    // found anywhere in this layer's subtree — see the doc comment above.
-    applyRelationalZBelowDefaults(node, children);
+    // found anywhere in this layer's subtree, kept apart so a later
+    // `.relate()` keeps them (see `applyRelationalZBelowDefaults`).
+    node._paintDefaults = applyRelationalZBelowDefaults(node, children);
     return node;
   }
 );
