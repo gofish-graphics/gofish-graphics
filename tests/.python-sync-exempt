@@ -226,3 +226,10 @@ packages/gofish-graphics/stories/forwardsyntax/Time.stories.tsx::QuarterlyBars
 # (a literal pixel radius per row), which cannot cross the bridge. StackedArea
 # and SurplusDeficitLine are ported. Port: #1105.
 packages/gofish-graphics/stories/forwardsyntax/TimeBenchmarkPorts.stories.tsx::CircleTimeline
+
+# Enclose shapes: PenguinsFourShapes lays four charts out in a DOM grid (one
+# story renders four containers), and ChartAccentSubSaharanAfrica filters a
+# selectAll bag with a JS lambda over refs (project(ref, "Region")), which
+# cannot cross the derive bridge. The other Enclose/Shapes stories are ported.
+packages/gofish-graphics/stories/EncloseShapes.stories.tsx::PenguinsFourShapes
+packages/gofish-graphics/stories/EncloseShapes.stories.tsx::ChartAccentSubSaharanAfrica

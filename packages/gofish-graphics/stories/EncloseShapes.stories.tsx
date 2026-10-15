@@ -329,7 +329,7 @@ const uBlob = (holes: boolean) =>
 
 // holes off (the default): the gap the blob closes is filled, and each gray
 // point inside it is cut back out as its clearance circle.
-export const UHolesFilled: StoryObj = {
+export const HolesFilled: StoryObj = {
   render: () => {
     const container = initializeContainer();
     uBlob(false).render(container, { w: 240, h: 190 });
@@ -338,7 +338,7 @@ export const UHolesFilled: StoryObj = {
 };
 
 // holes on: the gap stays open as it is.
-export const UHolesKept: StoryObj = {
+export const HolesKept: StoryObj = {
   render: () => {
     const container = initializeContainer();
     uBlob(true).render(container, { w: 240, h: 190 });
