@@ -226,9 +226,3 @@ packages/gofish-graphics/stories/forwardsyntax/Time.stories.tsx::QuarterlyBars
 # (a literal pixel radius per row), which cannot cross the bridge. StackedArea
 # and SurplusDeficitLine are ported. Port: #1105.
 packages/gofish-graphics/stories/forwardsyntax/TimeBenchmarkPorts.stories.tsx::CircleTimeline
-
-# Throwaway API-proposal prototype (proposals/background-hull/). The stories
-# render the proposal's pictures with story-local geometry code (outlines
-# computed in JS, members placed at fixed pixels), not a spec the library
-# can express yet, so there is nothing for a Python story to byte-match.
-packages/gofish-graphics/stories/_proposals/BackgroundHull.stories.tsx

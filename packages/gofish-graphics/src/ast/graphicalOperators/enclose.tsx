@@ -223,20 +223,15 @@ function Enclose(
             h: maxY - minY,
           },
           transform: { translate: [undefined, undefined] },
-          renderData: { loops },
+          // The outline in the frame the children were read in, which is
+          // the frame `local` maps from in `lower`.
+          renderData: { loops, box: [minX, minY, maxX, maxY] },
         };
       },
       // The outline paints FIRST (under the content), then the children
       // under the node's translate on top.
       lower: (
-        {
-          intrinsicDims,
-          transform,
-          coordinateTransform,
-          renderData,
-          toPixel,
-          local,
-        },
+        { transform, coordinateTransform, renderData, toPixel, local },
         _children,
         node
       ): DisplayList.DisplayItem[] => {
@@ -267,14 +262,11 @@ function Enclose(
           };
           return [path, ...childItems];
         }
-        const x0 = intrinsicDims?.[0]?.min ?? -padding;
-        const y0 = intrinsicDims?.[1]?.min ?? -padding;
-        const w = intrinsicDims?.[0]?.size ?? 0;
-        const h = intrinsicDims?.[1]?.size ?? 0;
+        const [x0, y0, x1, y1] = renderData.box as number[];
         const corners: { rx?: number; ry?: number } =
           shape.kind === "box" ? shape : {};
         const [ax, ay] = local([x0, y0]);
-        const [bx, by] = local([x0 + w, y0 + h]);
+        const [bx, by] = local([x1, y1]);
         const rect = rectItemFromBox(
           Math.min(ax, bx),
           Math.max(ax, bx),

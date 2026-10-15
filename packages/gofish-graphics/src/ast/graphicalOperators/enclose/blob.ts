@@ -6,8 +6,7 @@
  * way and the holes the other, so the loops drawn as one path with the
  * nonzero fill rule fill the region and leave the holes open.
  *
- * The construction, for one set (proposals/background-hull/proposal.md, "How
- * the blob is built"):
+ * The construction, for one set:
  *  1. Skeleton: the Delaunay triangles of the members' sites, filled smallest
  *     circumradius first until they hold `convexity` of the hull's area, plus
  *     the minimum spanning tree over the members, routed around the avoided
@@ -25,8 +24,8 @@
  *     circle in, so circles and straight sides stay exact and only corners
  *     round. The pieces and holes never change.
  *
- * Ported from the prototype `smoothBlob` in
- * `stories/_proposals/BackgroundHull.stories.tsx`.
+ * Ported from the prototype of PR #1152 (`smoothBlob`); the design and its
+ * history are in the PR's `proposals/background-hull/`, in git history.
  */
 import Delaunator from "delaunator";
 
