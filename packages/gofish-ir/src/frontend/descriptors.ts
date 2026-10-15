@@ -2141,6 +2141,24 @@ export const COORDS: Record<string, ConstructDescriptor> = {
     doc: "Identity/Cartesian transform. No options.",
     fields: {},
   }),
+  geo: coordTransform("geo", {
+    doc: "Geographic coordinates: children lay out in degrees, longitude on x (or the declared name lon) and latitude on y (or lat), and the projection fits that window into the box with one scale factor, so the map keeps its shape. Takes `projection` positionally, then the window options.",
+    fields: {
+      projection: {
+        type: t.enum("equalEarth", "mercator"),
+        required: true,
+        doc: 'The map projection, by name: "equalEarth" or "mercator" (latitude clamped to ±85°). In JS it may also be a function [lon, lat] => [x, y], such as a d3-geo projection, which cannot cross the wire.',
+      },
+      lon: {
+        type: t.tuple(t.number, t.number),
+        doc: "Longitude window in degrees. Omitted, the extent of the data in scope.",
+      },
+      lat: {
+        type: t.tuple(t.number, t.number),
+        doc: "Latitude window in degrees. Omitted, the extent of the data in scope.",
+      },
+    },
+  }),
 };
 
 // ---------------------------------------------------------------------------

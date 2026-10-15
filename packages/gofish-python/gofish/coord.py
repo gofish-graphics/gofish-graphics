@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Literal, Optional
 
-__all__ = ["polar", "clock", "wavy", "bipolar", "arc_length_polar", "linear"]
+__all__ = ["polar", "clock", "wavy", "bipolar", "arc_length_polar", "linear", "geo"]
 
 
 def polar(inner_radius: Optional[float] = None, central_angle: Optional[float] = None, start_angle: Optional[float] = None, direction: Optional[float] = None, center: Optional[tuple] = None) -> Dict[str, Any]:
@@ -91,3 +91,22 @@ def arc_length_polar() -> Dict[str, Any]:
 def linear() -> Dict[str, Any]:
     """Identity/Cartesian transform. No options."""
     return {"type": "linear"}
+
+
+def geo(projection: str, lon: Optional[tuple] = None, lat: Optional[tuple] = None) -> Dict[str, Any]:
+    """Geographic coordinates: children lay out in degrees, longitude on x (or the declared name lon) and latitude on y (or lat), and the projection fits that window into the box with one scale factor, so the map keeps its shape. Takes `projection` positionally, then the window options.
+
+    Args:
+        projection: The map projection, by name: "equalEarth" or "mercator" (latitude clamped to ±85°). In JS it may also be a function [lon, lat] => [x, y], such as a d3-geo projection, which cannot cross the wire.
+        lon: Longitude window in degrees. Omitted, the extent of the data in scope.
+        lat: Latitude window in degrees. Omitted, the extent of the data in scope.
+    """
+    out: Dict[str, Any] = {"type": "geo"}
+    for _k, _v in [
+        ("projection", projection),
+        ("lon", lon),
+        ("lat", lat),
+    ]:
+        if _v is not None:
+            out[_k] = list(_v) if isinstance(_v, tuple) else _v
+    return out

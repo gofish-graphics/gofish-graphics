@@ -1283,6 +1283,27 @@ async function main() {
         JSON.stringify(rebuilt.transform(sample)) !==
           JSON.stringify(GoFish.Coord.bipolar().transform(sample))
     );
+    // geo takes its projection positionally and its window as options.
+    const geoRebuilt = Serialize.COORD_FACTORIES.geo({
+      projection: "mercator",
+      lon: [-170, -30],
+      lat: [-60, 75],
+    });
+    const geoDirect = GoFish.Coord.geo("mercator", {
+      lon: [-170, -30],
+      lat: [-60, 75],
+    });
+    const lonLat: [number, number] = [-100, 40];
+    check(
+      "a geo wire config rebuilds Coord.geo(projection, { lon, lat })",
+      geoRebuilt.type === "geo" &&
+        JSON.stringify(geoRebuilt.dataWindow) ===
+          JSON.stringify(geoDirect.dataWindow) &&
+        JSON.stringify(geoRebuilt.transform(lonLat)) ===
+          JSON.stringify(geoDirect.transform(lonLat)) &&
+        JSON.stringify(geoRebuilt.transform(lonLat)) !==
+          JSON.stringify(GoFish.Coord.geo("equalEarth").transform(lonLat))
+    );
     check(
       "rebuild is kind-checked (no operator `layer`)",
       Serialize.rebuild("operator", "layer", {}) === undefined

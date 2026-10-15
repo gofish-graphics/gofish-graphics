@@ -11,7 +11,7 @@ from gofish import Bin, Calendar, Coord, Curve, Overlap, Tile, field, line, ribb
 
 FAMILIES = {
     "Color": ("color", ["palette", "gradient"]),
-    "Coord": ("coord", ["polar", "clock", "wavy", "bipolar", "arc_length_polar", "linear"]),
+    "Coord": ("coord", ["polar", "clock", "wavy", "bipolar", "arc_length_polar", "linear", "geo"]),
     "Curve": (
         "curve",
         [
@@ -62,6 +62,13 @@ def test_coords_are_type_tagged_configs_on_the_wire():
     # The option is positional, as in JS `bipolar(fociDistance)`, or a kwarg.
     assert Coord.bipolar(120) == {"type": "bipolar", "fociDistance": 120}
     assert Coord.bipolar(foci_distance=120) == {"type": "bipolar", "fociDistance": 120}
+    assert Coord.geo("equalEarth", lon=(-170, -30), lat=(-60, 75)) == {
+        "type": "geo",
+        "projection": "equalEarth",
+        "lon": [-170, -30],
+        "lat": [-60, 75],
+    }
+    assert Coord.geo("mercator") == {"type": "geo", "projection": "mercator"}
     assert Coord.polar(inner_radius=0.5, center=(1, 2)) == {
         "type": "polar",
         "innerRadius": 0.5,
