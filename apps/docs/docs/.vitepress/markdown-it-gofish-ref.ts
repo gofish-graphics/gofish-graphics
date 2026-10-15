@@ -20,7 +20,10 @@
  *
  * A name may also be an object option type (`OPTION_TYPES` in
  * descriptors.ts): `::: gofish-ref ChartOptions` renders the chart-level
- * options as one table.
+ * options as one table. Or it may name one member of a strategy family
+ * (`STRATEGIES`), as `Family.member`: `::: gofish-ref Shape.blob` renders that
+ * kind's params, and a preset (`Shape.hull`) renders its kind's params with
+ * the preset's values as their defaults.
  * A field marked `wireOnly` (a Python bridge handle such as `derive`'s
  * `lambdaId`) is left out: it is on the wire, not an option a user passes.
  *
@@ -46,6 +49,7 @@ import {
   OPERATORS,
   OPTION_TYPES,
   SHARED_FIELD_GROUPS,
+  STRATEGIES,
   pyKwarg,
   pyType,
   resolveFields,
@@ -263,6 +267,27 @@ function renderDescriptor(
   return parts.join("\n");
 }
 
+/** The params of a strategy family member named `Family.member` (a kind, or
+ *  a preset with its values as the defaults), or undefined for any other
+ *  name. */
+function strategyParams(name: string): FieldGroup | undefined {
+  const [family, member, ...rest] = name.split(".");
+  if (member === undefined || rest.length > 0) return undefined;
+  const spec = (STRATEGIES as Record<string, any>)[family];
+  if (spec === undefined) return undefined;
+  const kind = spec.kinds[member];
+  if (kind !== undefined) return kind.params;
+  const preset = spec.presets?.[member];
+  if (preset === undefined) return undefined;
+  const params: FieldGroup = spec.kinds[preset.kind].params;
+  return Object.fromEntries(
+    Object.entries(params).map(([field, f]) => [
+      field,
+      field in preset.values ? { ...f, default: preset.values[field] } : f,
+    ])
+  );
+}
+
 /** Distinct by resolved field set: the dual-form constructs (spread, stack,
  *  line, ...) carry the same fields in both tables and render once; `treemap`,
  *  whose combinator form adds `key`, renders one labeled table per form. */
@@ -270,6 +295,11 @@ function renderName(
   name: string,
   opts: { lang: Lang; md: { render(src: string): string }; titled: boolean }
 ): string {
+  const strategy = strategyParams(name);
+  if (strategy !== undefined) {
+    const heading = opts.titled ? opts.md.render(`### \`${name}()\``) : "";
+    return heading + optionsTable(Object.entries(strategy), opts.lang, opts.md);
+  }
   const optionType = OPTION_TYPES[name];
   if (optionType !== undefined) {
     if (optionType.type.kind !== "object") {

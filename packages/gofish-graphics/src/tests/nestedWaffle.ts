@@ -16,7 +16,7 @@ import { titanic } from "../data/titanic";
 import { mix } from "spectral.js";
 import { seafood } from "../data/catch";
 import { ellipse } from "../ast/shapes/ellipse";
-import { enclose } from "../ast/graphicalOperators/enclose";
+import { enclose } from "../lib";
 import { stackX, stackY } from "../lib";
 
 const data = [

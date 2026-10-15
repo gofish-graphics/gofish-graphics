@@ -608,6 +608,28 @@ export type StructBinIR =
   | { kind: "hex"; radius: number | { x: number; y: number } }
   | { kind: "voronoi"; seeds: Record<string, unknown>[] };
 
+/** Nodes named on the wire inside an option (a blob's `avoiding`): a list of
+ *  by-name references (`ref(...)` / a `.relate()` operand), or every node of
+ *  a named layer (`selectAll(name)`, the plural form a chart's data takes). */
+export type NodeSelectionIR =
+  | RefMarkIR[]
+  | { type: "select"; layer: string; mode: "all" };
+
+/** The outline `enclose` draws, made by a call in the `Shape` family
+ *  (`Shape.box()`, `Shape.blob()`; `Shape.hull()` and `Shape.spine()` make
+ *  kind `"blob"` with other params preset). */
+export type ShapeIR =
+  | { kind: "box"; rx?: number; ry?: number }
+  | {
+      kind: "blob";
+      convexity?: number;
+      holes?: boolean;
+      roundness?: number;
+      neck?: number;
+      avoiding?: NodeSelectionIR;
+      clearance?: number;
+    };
+
 // ---------------------------------------------------------------------------
 // Marks
 // ---------------------------------------------------------------------------
@@ -624,6 +646,7 @@ export type LeafMarkType =
   | "circle"
   | "line"
   | "ribbon"
+  | "enclose"
   | "blank"
   | "region"
   | "ellipse"
@@ -1033,6 +1056,7 @@ export const LEAF_MARK_TYPES: readonly LeafMarkType[] = [
   "circle",
   "line",
   "ribbon",
+  "enclose",
   "blank",
   "region",
   "ellipse",

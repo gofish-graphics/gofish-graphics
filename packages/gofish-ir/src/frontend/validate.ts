@@ -670,6 +670,9 @@ function walkRefType(
     case "RelateClauseIR":
       walkRelateClause(value, path, ctx);
       return;
+    case "NodeSelectionIR":
+      walkNodeSelection(value, path, ctx);
+      return;
     case "FieldAccessor":
       if (!isObject(value)) {
         ctx.errors.push({
@@ -743,6 +746,34 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
     acceptedFields("operator", node.type) ?? {},
     ["type", "origin", "meta"]
   );
+}
+
+/** `NodeSelectionIR`: a list of `ref` marks, or a `select` of every node of
+ *  a named layer (`selectAll(name)`). */
+function walkNodeSelection(value: unknown, path: string, ctx: Context): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, i) => {
+      const at = `${path}[${i}]`;
+      if (!isObject(item) || item.type !== "ref") {
+        ctx.errors.push({ path: at, message: "expected a ref" });
+        return;
+      }
+      walkRefMark(item, at, ctx);
+    });
+    return;
+  }
+  if (
+    isObject(value) &&
+    value.type === "select" &&
+    typeof value.layer === "string" &&
+    value.mode === "all"
+  )
+    return;
+  ctx.errors.push({
+    path,
+    message:
+      'expected a list of refs or a selectAll selection ({ type: "select", layer, mode: "all" })',
+  });
 }
 
 function walkTranslate(node: unknown, path: string, ctx: Context): void {

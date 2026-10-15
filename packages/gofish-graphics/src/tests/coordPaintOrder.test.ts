@@ -18,7 +18,7 @@ import { flattenLayout } from "../ast/coordinateTransforms/bake";
 import { Rect } from "../ast/shapes/rect";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
-import { enclose } from "../ast/graphicalOperators/enclose";
+import { enclose } from "../lib";
 import { intersect } from "../ast/graphicalOperators/porterDuff";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
 

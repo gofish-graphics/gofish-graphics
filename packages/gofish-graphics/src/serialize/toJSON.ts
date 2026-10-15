@@ -80,10 +80,50 @@ function wireOpts(
   const out: AnyObject = {};
   for (const [key, value] of Object.entries(opts)) {
     if (Object.hasOwn(accepted, key) && typeof value !== "function") {
-      out[key] = value;
+      out[key] = nodeRefsToIR(value);
     }
   }
   return out;
+}
+
+/**
+ * Nodes named inside an option (a blob's `avoiding`), written as their IR
+ * (`Frontend.NodeSelectionIR`), at any depth: a ref becomes
+ * `{ type: "ref", selection }`, and a `selectAll(name)` becomes
+ * `{ type: "select", layer: name, mode: "all" }`, the form chart data
+ * takes. A ref to a node (not a name) has no wire form.
+ */
+function nodeRefsToIR(value: unknown): unknown {
+  if (value instanceof GoFishRef) {
+    if (value.selection === undefined)
+      throw new Error(
+        "Cannot serialize a node-backed ref in an option; name the node and ref the name."
+      );
+    if (value.multiplicity === "all") {
+      if (typeof value.selection !== "string")
+        throw new Error("selectAll requires a string layer name");
+      return { type: "select", layer: value.selection, mode: "all" };
+    }
+    return { type: "ref", selection: value.selection };
+  }
+  if (Array.isArray(value)) {
+    const mapped = value.map(nodeRefsToIR);
+    return mapped.some((v, i) => v !== value[i]) ? mapped : value;
+  }
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
+    let changed = false;
+    const out: AnyObject = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = nodeRefsToIR(v);
+      if (out[k] !== v) changed = true;
+    }
+    return changed ? out : value;
+  }
+  return value;
 }
 
 function readTag(value: unknown): SerializeTag | undefined {

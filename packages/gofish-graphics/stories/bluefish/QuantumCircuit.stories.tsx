@@ -12,6 +12,7 @@ import {
   ref,
   spread,
   enclose,
+  Shape,
 } from "../../src/lib";
 
 // Ported from Bluefish's example-gallery qc-text.tsx. A quantum-circuit
@@ -173,8 +174,7 @@ export const QuantumCircuit: StoryObj<Args> = {
     // yellow, same corner rounding, and Background's default padding of 10.
     const highlight = {
       padding: 10,
-      rx: 10,
-      ry: 10,
+      shape: Shape.box({ rx: 10, ry: 10 }),
       fill: "rgba(255,200,0,0.333)",
       stroke: "none",
     } as const;

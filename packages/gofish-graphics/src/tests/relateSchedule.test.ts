@@ -11,7 +11,7 @@
 import { layer } from "../ast/graphicalOperators/layer";
 import { Rect as rect } from "../ast/shapes/rect";
 import { ref } from "../ast/shapes/ref";
-import { enclose } from "../ast/graphicalOperators/enclose";
+import { enclose } from "../lib";
 import {
   Constraint,
   resolveConstraintOperands,

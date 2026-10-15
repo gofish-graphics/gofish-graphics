@@ -896,7 +896,15 @@ export const connect = createNodeOperator(
             // The box above is the WHOLE run's, cut or not: the room a line
             // uses over its run, the way a transition claims its whole
             // trajectory, so the window moving changes nothing above it.
-            renderData: { paths: mergedPaths, defaultColor, timeRun },
+            // `centerline`: the paths are a stroked line (center mode) of
+            // this width, not a band's outline. `enclose` reads a line
+            // operand as its segments by it.
+            renderData: {
+              paths: mergedPaths,
+              defaultColor,
+              timeRun,
+              centerline: mode === "center" ? (strokeWidth ?? 1) : undefined,
+            },
           };
         },
         // IR lowering — mirror of `render`. Each connector path is offset by the

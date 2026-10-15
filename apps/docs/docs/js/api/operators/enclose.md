@@ -4,18 +4,35 @@ order: 75
 
 # enclose
 
-Draws a rounded rectangle around the union of its children's bounding boxes,
-padded by `padding`. Use it to group elements of a diagram visually.
+Draws an outline around a set of nodes, under them. The outline is a member of
+the [`Shape`](/js/api/shape) family: the padded bounding box
+(`Shape.box()`, the default) or a smooth region (`Shape.blob()`,
+`Shape.hull()`, `Shape.spine()`). Like [`line`](/js/api/marks/line) and
+[`ribbon`](/js/api/marks/ribbon), it reads geometry from nodes that are already
+placed, and it has a combinator form and a bag form.
 
 ::: gofish
 
 ```js
-gf.enclose({ padding: 10, stroke: gf.color.blue[4] }, [
-  gf.stack({ dir: "x" }, [
-    gf.rect({ w: 40, h: 40, fill: gf.color.blue[2] }),
-    gf.rect({ w: 40, h: 60, fill: gf.color.red[2] }),
-  ]),
-]).render(root, { w: 160, h: 120 });
+const beaks = penguins.filter((d) => d["Beak Depth (mm)"] != null);
+
+gf.chart(beaks, { axes: true })
+  .flow(gf.scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+  .mark(gf.circle({ r: 2.5, fill: "Species" }).name("points"))
+  .layer(
+    gf
+      .chart(gf.selectAll("points"))
+      .flow(gf.group({ by: "Species" }))
+      .mark(
+        gf.enclose({
+          shape: gf.Shape.hull(),
+          padding: 6,
+          fill: "Species",
+          fillOpacity: 0.2,
+        })
+      )
+  )
+  .render(root, { w: 420, h: 320 });
 ```
 
 :::
@@ -23,16 +40,56 @@ gf.enclose({ padding: 10, stroke: gf.color.blue[4] }, [
 ## Signature
 
 ```ts
-enclose(options?, [child1, child2, ...]);
+// Combinator form: around the given children.
+enclose(options, [child1, child2, ...]);
+
+// Bag form: around the refs a chart's data holds.
+chart(selectAll(name)).mark(enclose(options));
 ```
 
-`background` is an alias for the same factory: it takes the same options and
-produces the same node. The enclosure is
-the children's bbox union grown by `padding`, so it draws nothing of its own
-beyond that box — reach for [`position`](/js/api/operators/position) when one
-child needs a precise absolute offset with its own styling instead.
+In the combinator form, a fresh child (a mark or an operator) is laid out the
+way [`layer`](/js/api/operators/layer) lays out its children, and the outline is
+drawn around it. A `ref(...)` child, or an operand of a
+[`.relate()`](/js/api/constraints/relate) callback, is enclosed where it
+already is, without being moved.
+
+In the bag form, the members are the refs of the chart's data. A
+`flow(group({ by }))` before the mark draws one outline per group, and `fill`
+or `stroke` may name a field that is constant within each group.
+
+```ts
+// Fresh children: the box is laid out with them.
+enclose(
+  {
+    padding: 20,
+    fill: "#252150",
+    stroke: "none",
+    shape: Shape.box({ rx: 16, ry: 16 }),
+  },
+  [
+    spread(
+      { dir: "x", spacing: 50, alignment: "middle" },
+      planets.map((d) => circle(d))
+    ),
+  ]
+);
+
+// Operands of .relate(): a set that holds a and c but not b.
+layer([a, b, c]).relate(({ a, b, c }) => [
+  enclose(
+    { shape: Shape.spine({ avoiding: [b], clearance: 6 }), padding: 22 },
+    [a, c]
+  ),
+]);
+```
+
+A member is read by its shape: a circle is a disc, a `line` is its segments at
+its stroke width, and any other node is its bounding box. The outline paints
+under the members.
 
 ## Parameters
 
 ::: gofish-ref enclose
 :::
+
+`shape` takes a member of the [`Shape`](/js/api/shape) family.

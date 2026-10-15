@@ -13,6 +13,7 @@ import {
   spreadX,
   spreadY,
   text,
+  Shape,
 } from "../../src/lib";
 
 // Ported from Bluefish's example-gallery insertion-sort.tsx (#435). Bluefish's
@@ -167,8 +168,7 @@ export const InsertionSort: StoryObj = {
         enclose(
           {
             padding: OUTLINE_PADDING,
-            rx: 8,
-            ry: 8,
+            shape: Shape.box({ rx: 8, ry: 8 }),
             fill: "none",
             stroke: "black",
             strokeWidth: 2,
@@ -214,8 +214,7 @@ export const InsertionSort: StoryObj = {
               enclose(
                 {
                   padding: DASH_OVERHANG,
-                  rx: 12,
-                  ry: 12,
+                  shape: Shape.box({ rx: 12, ry: 12 }),
                   fill: "none",
                   stroke: "teal",
                   strokeWidth: 4,

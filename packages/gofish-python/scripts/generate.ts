@@ -207,8 +207,10 @@ function wireShape(type: FieldType, where: string): string | null {
           : `("ref", ${pyStr(type.name)})`;
       }
       // A value of a type with a Python class (`field(...)` builds a
-      // FieldAccessor) already carries the wire keys, so it passes through.
+      // FieldAccessor) already carries the wire keys, so it passes through,
+      // as does a value that holds marks (`Mark.to_dict` writes them).
       if (refPyClass(type.name) !== undefined) return null;
+      if (AUTHORED_REFS[type.name]?.pyNodes) return null;
       throw new Error(
         `${where}: t.ref("${type.name}") is neither a named option type ` +
           `(OPTION_TYPES in descriptors.ts) nor a known pass-through ref ` +
@@ -538,7 +540,6 @@ const COMBINATOR_ONLY = [
   "out",
   "atop",
   "mask",
-  "enclose",
   "position",
   "arrow",
 ];
@@ -601,8 +602,8 @@ parts.push(
   ) + "\n"
 );
 
-// line/ribbon: same field list for bag/pairwise/combinator forms.
-for (const name of ["line", "ribbon"]) {
+// line/ribbon/enclose: same field list for bag/pairwise/combinator forms.
+for (const name of ["line", "ribbon", "enclose"]) {
   const d = LEAF_MARKS[name];
   parts.push(
     renderOptsCore(
@@ -841,6 +842,9 @@ function pyValueChecks(
  *  `checkStrategy`, which reads the same STRATEGIES table. The branches of a
  *  union are told apart by Python type. */
 function pyParamChecks(type: FieldType, v: string, label: string): string[] {
+  // A param that holds marks (a blob's `avoiding`) is checked where JS
+  // reads it: its marks have no Python type test.
+  if (type.kind === "ref" && AUTHORED_REFS[type.name]?.pyNodes) return [];
   const branches = type.kind === "union" ? [...type.options] : [type];
   const tests = branches.map((b) => pyTypeTest(b, v));
   if (new Set(tests).size !== tests.length)
@@ -934,9 +938,12 @@ function renderStrategyFactory(opts: {
             `        ${py} = to_records(${py})`,
           ]
         : []),
-      ...(spec.required
-        ? lines.map((l) => `    ${l}`)
-        : [`    if ${py} is not None:`, ...lines.map((l) => `        ${l}`)]),
+      // A param with no Python check (one that holds marks) adds no lines.
+      ...(lines.length === 0
+        ? []
+        : spec.required
+          ? lines.map((l) => `    ${l}`)
+          : [`    if ${py} is not None:`, ...lines.map((l) => `        ${l}`)]),
     ];
   });
   const body = [
