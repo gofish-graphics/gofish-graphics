@@ -28,8 +28,8 @@ def box(*, rx: Optional[float] = None, ry: Optional[float] = None) -> Dict[str, 
     """The members' bounding box, grown by `padding`, with rounded corners.
 
     Args:
-        rx: Corner radius in pixels, x. Default 2.
-        ry: Corner radius in pixels, y. Default 2.
+        rx: Corner radius in pixels, x. Default: `ry`, or 2 when neither is given.
+        ry: Corner radius in pixels, y. Default: `rx`, or 2 when neither is given.
     """
     if rx is not None:
         if not (isinstance(rx, (int, float)) and not isinstance(rx, bool)):

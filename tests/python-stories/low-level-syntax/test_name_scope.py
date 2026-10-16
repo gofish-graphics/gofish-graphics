@@ -38,7 +38,7 @@ def story_nested_operand():
                 padding=20,
                 fill="#252150",
                 stroke="none",
-                shape=Shape.box(rx=16, ry=16),
+                shape=Shape.box(rx=16),
             ).name("planets"),
             text(text="Mercury", fill="#E94560", font_size=14).name("label"),
         ]).relate(lambda mercury, planets, label: [

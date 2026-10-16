@@ -168,7 +168,7 @@ export const InsertionSort: StoryObj = {
         enclose(
           {
             padding: OUTLINE_PADDING,
-            shape: Shape.box({ rx: 8, ry: 8 }),
+            shape: Shape.box({ rx: 8 }),
             fill: "none",
             stroke: "black",
             strokeWidth: 2,
@@ -214,7 +214,7 @@ export const InsertionSort: StoryObj = {
               enclose(
                 {
                   padding: DASH_OVERHANG,
-                  shape: Shape.box({ rx: 12, ry: 12 }),
+                  shape: Shape.box({ rx: 12 }),
                   fill: "none",
                   stroke: "teal",
                   strokeWidth: 4,

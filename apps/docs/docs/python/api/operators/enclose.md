@@ -55,7 +55,7 @@ or `stroke` may name a field that is constant within each group.
 # Fresh children: the box is laid out with them.
 enclose(
     [spread([circle(**d) for d in planets], dir="x", spacing=50, alignment="middle")],
-    padding=20, fill="#252150", stroke="none", shape=Shape.box(rx=16, ry=16),
+    padding=20, fill="#252150", stroke="none", shape=Shape.box(rx=16),
 )
 
 # Operands of .relate(): a set that holds a and c but not b.

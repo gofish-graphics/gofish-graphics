@@ -278,8 +278,9 @@ function Enclose(
           Math.max(ay, by),
           toPixel,
           {
-            rx: corners.rx ?? 2,
-            ry: corners.ry ?? 2,
+            // as in SVG: one radius given is both; neither is 2
+            rx: corners.rx ?? corners.ry ?? 2,
+            ry: corners.ry ?? corners.rx ?? 2,
             role: "overlay",
             style,
           }

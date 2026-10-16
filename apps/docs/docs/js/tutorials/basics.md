@@ -147,7 +147,7 @@ gf.enclose(
     padding: 20,
     fill: "#252150",
     stroke: "none",
-    shape: gf.Shape.box({ rx: 16, ry: 16 }),
+    shape: gf.Shape.box({ rx: 16 }),
   },
   [
     gf.spread(

@@ -38,7 +38,7 @@ const data = [
   { name: "mars", r: 21, fill: "#F4BC80", stroke: "#E0954C" },
 ];
 
-gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16, ry: 16 }) }, [
+gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16 }) }, [
   gf.spread(
     { dir: "x", spacing: 50, alignment: "middle" },
     data.map((d) =>
@@ -76,7 +76,7 @@ const data = [
 ];
 
 gf.layer([
-  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16, ry: 16 }) }, [
+  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16 }) }, [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
       data.map((d) =>
@@ -121,7 +121,7 @@ const data = [
 ];
 
 gf.layer([
-  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16, ry: 16 }) }, [
+  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16 }) }, [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
       data.map((d) =>
@@ -134,7 +134,7 @@ gf.layer([
 ])
   .relate(({ mercury }) => [
     gf.enclose(
-      { padding: 10, stroke: "#E94560", strokeWidth: 3, shape: gf.Shape.box({ rx: 12, ry: 12 }) },
+      { padding: 10, stroke: "#E94560", strokeWidth: 3, shape: gf.Shape.box({ rx: 12 }) },
       [
         gf.spread({ dir: "y", spacing: 20, alignment: "middle" }, [
           gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }),
@@ -166,7 +166,7 @@ const data = [
 ];
 
 gf.layer([
-  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16, ry: 16 }) }, [
+  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16 }) }, [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
       data.map((d) =>
@@ -179,7 +179,7 @@ gf.layer([
 ])
   .relate(({ mercury }) => [
     gf.enclose(
-      { padding: 10, stroke: "#E94560", strokeWidth: 3, shape: gf.Shape.box({ rx: 12, ry: 12 }) },
+      { padding: 10, stroke: "#E94560", strokeWidth: 3, shape: gf.Shape.box({ rx: 12 }) },
       [
         gf.spread({ dir: "y", spacing: 20, alignment: "middle" }, [
           mercury,
@@ -212,7 +212,7 @@ const data = [
 ];
 
 gf.layer([
-  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16, ry: 16 }) }, [
+  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16 }) }, [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
       data.map((d) =>
@@ -229,7 +229,7 @@ gf.layer([
       gf.text({ text: "Mercury", fill: "#E94560", fontSize: 14 }).name("label"),
     ]),
     gf.enclose(
-      { padding: 10, stroke: "#E94560", strokeWidth: 3, shape: gf.Shape.box({ rx: 12, ry: 12 }) },
+      { padding: 10, stroke: "#E94560", strokeWidth: 3, shape: gf.Shape.box({ rx: 12 }) },
       [mercury, gf.ref("label")]
     ),
   ])
@@ -258,7 +258,7 @@ const data = [
 ];
 
 gf.layer([
-  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16, ry: 16 }) }, [
+  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16 }) }, [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
       data.map((d) =>
@@ -308,7 +308,7 @@ const data = [
 ];
 
 gf.layer([
-  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16, ry: 16 }) }, [
+  gf.enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16 }) }, [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
       data.map((d) =>
@@ -357,7 +357,7 @@ const data = [
 
 gf.layer([
   gf
-    .enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16, ry: 16 }) }, [
+    .enclose({ padding: 20, fill: "#252150", stroke: "none", shape: gf.Shape.box({ rx: 16 }) }, [
       gf.spread(
         { dir: "x", spacing: 50, alignment: "middle" },
         data.map((d) =>

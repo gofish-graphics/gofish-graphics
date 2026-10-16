@@ -46,7 +46,7 @@ export const Diagrams: StoryObj = {
           padding: 20,
           fill: "#252150",
           stroke: "none",
-          shape: Shape.box({ rx: 16, ry: 16 }),
+          shape: Shape.box({ rx: 16 }),
         },
         [
           spread(

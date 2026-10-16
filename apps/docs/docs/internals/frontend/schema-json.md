@@ -1766,13 +1766,11 @@ for the API.
         },
         "rx": {
           "$ref": "#/$defs/Number",
-          "description": "Corner radius, x.",
-          "default": 0
+          "description": "Corner radius, x. Default: `ry`, or 0 when neither is given."
         },
         "ry": {
           "$ref": "#/$defs/Number",
-          "description": "Corner radius, y.",
-          "default": 0
+          "description": "Corner radius, y. Default: `rx`, or 0 when neither is given."
         },
         "aspectRatio": {
           "$ref": "#/$defs/Number",
@@ -3836,14 +3834,12 @@ for the API.
             "rx": {
               "$ref": "#/$defs/Number",
               "minimum": 0,
-              "description": "Corner radius in pixels, x.",
-              "default": 2
+              "description": "Corner radius in pixels, x. Default: `ry`, or 2 when neither is given."
             },
             "ry": {
               "$ref": "#/$defs/Number",
               "minimum": 0,
-              "description": "Corner radius in pixels, y.",
-              "default": 2
+              "description": "Corner radius in pixels, y. Default: `rx`, or 2 when neither is given."
             }
           },
           "required": ["kind"]

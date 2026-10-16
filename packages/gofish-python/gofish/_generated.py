@@ -142,8 +142,8 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         opacity: Opacity, 0 to 1. Default 1.
         filter: Raw SVG filter attribute.
         key: Internal per-node key override.
-        rx: Corner radius, x. Default 0.
-        ry: Corner radius, y. Default 0.
+        rx: Corner radius, x. Default: `ry`, or 0 when neither is given.
+        ry: Corner radius, y. Default: `rx`, or 0 when neither is given.
         aspect_ratio: w/h ratio to enforce; the constraining axis wins when both are data-driven.
         inset: Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given. Default 0.
     """

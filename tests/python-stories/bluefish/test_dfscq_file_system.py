@@ -102,7 +102,7 @@ def _titled_background(title, content):
         fill="white",
         stroke="black",
         stroke_width=3,
-        shape=Shape.box(rx=0, ry=0),
+        shape=Shape.box(rx=0),
     )
 
 

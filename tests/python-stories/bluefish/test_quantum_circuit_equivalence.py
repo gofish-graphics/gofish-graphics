@@ -138,7 +138,7 @@ def story_quantum_circuit():
     # wrapping their owned content at the point that content is constructed.
     highlight = {
         "padding": 10,
-        "shape": Shape.box(rx=10, ry=10),
+        "shape": Shape.box(rx=10),
         "fill": "rgba(255,200,0,0.333)",
         "stroke": "none",
     }

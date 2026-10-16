@@ -53,8 +53,10 @@ export type BlobOptions = Omit<BlobShape, "kind">;
  * The members' bounding box, grown by `enclose`'s `padding`, with rounded
  * corners. The default shape.
  *
- * @param rx Corner radius in pixels, x. Default 2.
- * @param ry Corner radius in pixels, y. Default 2.
+ * @param rx Corner radius in pixels, x. Default: `ry`, or 2 when neither
+ *   is given.
+ * @param ry Corner radius in pixels, y. Default: `rx`, or 2 when neither
+ *   is given.
  */
 export const box = bareKind(
   "Shape.box",

@@ -53,7 +53,7 @@ def story_planets_box():
             padding=20,
             fill="#252150",
             stroke="none",
-            shape=Shape.box(rx=16, ry=16),
+            shape=Shape.box(rx=16),
         ),
         {"w": 410, "h": 116},
     )

@@ -799,13 +799,11 @@ export const STRATEGIES = {
         params: {
           rx: {
             type: t.num({ min: 0 }),
-            default: 2,
-            doc: "Corner radius in pixels, x.",
+            doc: "Corner radius in pixels, x. Default: `ry`, or 2 when neither is given.",
           },
           ry: {
             type: t.num({ min: 0 }),
-            default: 2,
-            doc: "Corner radius in pixels, y.",
+            doc: "Corner radius in pixels, y. Default: `rx`, or 2 when neither is given.",
           },
         },
       },
@@ -1539,8 +1537,14 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     include: [boxDims, paint],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
-      rx: { type: t.number, default: 0, doc: "Corner radius, x." },
-      ry: { type: t.number, default: 0, doc: "Corner radius, y." },
+      rx: {
+        type: t.number,
+        doc: "Corner radius, x. Default: `ry`, or 0 when neither is given.",
+      },
+      ry: {
+        type: t.number,
+        doc: "Corner radius, y. Default: `rx`, or 0 when neither is given.",
+      },
       aspectRatio: {
         type: t.number,
         doc: "w/h ratio to enforce; the constraining axis wins when both are data-driven.",
