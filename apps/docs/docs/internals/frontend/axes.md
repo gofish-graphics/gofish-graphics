@@ -78,10 +78,13 @@ Chrome sits outside its chart and takes room: every chrome shape claims its
 size (a text is measured when the claims are resolved), each ring claims the
 hull of what it wraps and of its shapes where its constraints place them
 (`placeByClaims`), and the outermost ring hands its content what its gutters
-leave of its slot. A category label is centered on its slot's ref, which only
-layout places, so it is ink along its axis: it labels one band, and one wider
-than its band overdraws its neighbors (#1115) instead of taking room or
-widening its ring's box on that axis. The boxes a category label is centered
+leave of its slot. A category label is centered on its slot's ref. On a data
+axis (time or number bins) the claim walk knows where the slot lands
+(`placementIn`), so the label takes room there, and only its overhang past
+the ends of the axis reaches past the ring's hull; on a category axis the
+slot is a share of the slot it is given, so the label is ink there. Either
+way one wider than its band overdraws its neighbors (#1115) instead of
+widening the bands. The boxes a category label is centered
 on (`axisSpan`, `runStartBox`) read their place along the axis from refs
 (`GoFishNode.inkOn`), so they are ink there too; one without a line has no
 depth across the axis and is not seated there, so it is ink across it as well.

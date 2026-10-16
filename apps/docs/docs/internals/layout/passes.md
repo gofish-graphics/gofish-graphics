@@ -8,6 +8,7 @@ covers:
   - packages/gofish-graphics/src/ast/gofish.tsx
   - packages/gofish-graphics/src/ast/chromeGutters.ts
   - packages/gofish-graphics/src/ast/constraints/claimPlacement.ts
+  - packages/gofish-graphics/src/ast/placementClaims.ts
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/axisDirection.ts
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
@@ -701,15 +702,31 @@ report their size).
   the hull is their envelope; otherwise the hull is solved at each σ it is
   read at. A ring is such a layer, so its claim holds its axis, titles or
   legend around what it wraps, and so does a scatter's around its marks.
-- **Ink.** A child placed from where layout puts a node inside another child
-  (a `ref` stand-in, an operand nested in a child, a node that reads its
-  place from refs, `GoFishNode.inkOn`), or tied to one, is ink on that axis:
-  the claim walk cannot know where it lands, so it takes no room in the
-  claim or in its layer's box. A category label is centered on its slot's
-  ref, so it is ink along its axis and overdraws its neighbors when wider
-  than its band (#1115); across the axis it is seated past the content and
-  takes room. A `.label()` text is placed from its target's ref, so it is
-  ink on both axes.
+- **Placement claims.** A `ref` stand-in, or an operand nested in a child,
+  stands where its node lands in the layer's frame. The claim walk knows
+  that (`placementIn` in `placementClaims.ts`): it takes the node's box and
+  moves it by each ancestor's place in the next, where each layer places its
+  children by the same solve (`GoFishNode._childBoxes`). The step into the
+  node the two share reads only where that node seats its child (its origin,
+  or a literal pin), since its own claim may be the one being computed. So a
+  `.label()` text beside its bar, or a text in a spread beside a `ref`,
+  takes room where it draws, and σ is solved with it, while the mark it
+  describes stays where its own layout puts it. A layer that places such a
+  stand-in claims the hull of its solve, not the fold that starts its
+  children at its origin. A region (a `partition` cell) places its child
+  across its datum span, as an interval does.
+- **Ink.** Where the claim walk does not know where a node lands, whatever a
+  constraint ties to it is ink on that axis: it takes no room in the claim
+  or in its layer's box. That is a node whose place is a share of a category
+  axis (a band of a spread with no data size), one in a coordinate space or
+  under a node with a size of its own, one under a node that reads y the
+  other way, and a node that reads its place from refs (`GoFishNode.inkOn`:
+  an ordinal axis's label span). A category label is centered on its slot's
+  ref: on a data axis (time or number bins) the claim walk places it, and on
+  a category axis it is ink. Either way it overdraws its neighbors when wider
+  than its band (#1115), since only its overhang past the ends of the axis
+  reaches past the hull; across the axis it is seated past the content and
+  takes room.
 - **Nicing holds the domain.** A claim is the hull of what the content draws,
   so widening it to a keyed or niced domain (`widenTo`) takes the farther of
   the claim and the domain's end on each side. A tick label past the last
@@ -748,12 +765,11 @@ than the canvas, a literal position past it, an inner size equal to the
 render size) still overflows and is clipped.
 
 DECLARED SHORTCUT (#493): on an axis the render gives a size, the ink is not
-fitted inside it, so a value label above the tallest bar or a category label
-wider than the first band overflows the canvas. Where ink lands depends on
-where layout puts the node it is placed from, and on a category axis that
-band is a share of the slot, not a claim. Fitting it in one layout needs the
-claim walk to know where a node lands inside its parent as a function of σ,
-and a category band's share to be a claim (#493's piece 3).
+fitted inside it, and it overflows the canvas. The ink left is what is placed
+from a band of a category axis: a label below the last bar of a vertical
+spread, a category label wider than the axis's first or last band. A band is
+a share of its spread's slot, not a claim, so fitting it needs that share to
+be a claim too (#493's piece 3).
 
 #### Shape geometry after layout
 
