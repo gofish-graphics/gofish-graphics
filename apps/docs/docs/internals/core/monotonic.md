@@ -101,7 +101,8 @@ function is monotonic, but iterative. The search runs to a tolerance far below
 any σ, since a σ can be far below 1 (a domain of millions of units).
 
 `rising(f)` is the part of a claim that grows with σ: the envelope of its pieces with a
-positive slope. The render root solves it when no σ fits its whole claim to the canvas,
+positive slope. An `Unknown` has no pieces, so its rising part is the line it tends to as
+σ grows, read off two far points. The render root solves it when no σ fits its whole claim to the canvas,
 so the data fills the canvas and the pixels that do not scale overflow (see
 [Layout and Render Passes](/internals/layout/passes)).
 

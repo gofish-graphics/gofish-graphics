@@ -250,11 +250,20 @@ export const envelope = (ms: Monotonic[]): Monotonic => {
 };
 
 /** The part of a claim that grows with σ: the envelope of its pieces with a
- *  positive slope, or undefined when it has none, or is an `unknown` closure
- *  (which has no pieces to tell apart). */
+ *  positive slope, or undefined when it has none. An `unknown` closure has
+ *  no pieces to tell apart, so its rising part is the line it tends to as σ
+ *  grows (its last piece, for a closure over lines), read off two far
+ *  points. */
 export const rising = (x: Monotonic): Monotonic | undefined => {
-  const ps = piecesOf(x)?.filter((p) => p.slope > 0);
-  return ps === undefined || ps.length === 0 ? undefined : piecewise(ps);
+  const ps = piecesOf(x);
+  if (ps === undefined) {
+    const far = 1e6;
+    const slope = (x.run(2 * far) - x.run(far)) / far;
+    if (!(slope > 0) || !Number.isFinite(slope)) return undefined;
+    return linear(slope, x.run(far) - slope * far);
+  }
+  const up = ps.filter((p) => p.slope > 0);
+  return up.length === 0 ? undefined : piecewise(up);
 };
 
 /** The max of claims, ignoring zero claims: the {@link envelope} of the

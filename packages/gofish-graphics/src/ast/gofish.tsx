@@ -624,13 +624,18 @@ export async function layout(
       // a literal position past the slot's end): the data fills the slot,
       // at the σ where the parts of the claim that grow with σ reach it,
       // and the pixels overflow.
+      // Fixed parts larger than the slot: no σ ≥ 0 fits (a numeric solve
+      // of a claim with no pieces would settle at σ = 0), and the layout
+      // warns (`layoutWarnings.ts`).
+      const overfull =
+        given[axis] !== undefined &&
+        claim !== undefined &&
+        claim.width.run(0) > allocated + 0.5;
+      if (overfull) warnLayout(root, fixedOverflow(root, axis, allocated));
       const fitted =
-        given[axis] === undefined && keyed !== undefined
+        overfull || (given[axis] === undefined && keyed !== undefined)
           ? undefined
           : scopes.solveScope(meta, space, claim, allocated);
-      // Fixed parts larger than the slot: warn (`layoutWarnings.ts`).
-      if (given[axis] !== undefined && claim !== undefined)
-        warnLayout(root, fixedOverflow(root, axis, given[axis]!));
       const grows =
         claim === undefined ? undefined : Monotonic.rising(claim.width);
       const below =
