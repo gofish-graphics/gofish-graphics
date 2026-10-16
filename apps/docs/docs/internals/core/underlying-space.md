@@ -1497,7 +1497,14 @@ Values with no unit (literals) are keyed by their set. So two facet panels
 that plot one column share one domain, and a count histogram placed beside a
 scatter of millimeters keeps its own. Chrome never decides a domain, it only
 reads one: a ring or a label wrapper added later reads the seat of the content
-it wraps. The axes drawn over each domain are recorded once `resolveAxes` has
+it wraps. Chrome does take room, as pixels: a layer that wears chrome grows its
+claim by its chrome's gutters (`growExtent` in `extent.ts`), the start gutter on
+its descent and the end gutter on its ascent, and hands its content its slot
+less them, and a chart with a size of its own solves σ against that size plus
+its content's gutters (#1032; see
+[Chrome gutters](/internals/layout/passes#chrome-gutters)). A child that is ink
+on an axis (`GoFishNode.inkOn`, a category label along its axis) is left out of
+its layer's box there. The axes drawn over each domain are recorded once `resolveAxes` has
 assigned them (`refreshDemand`, which `layout()` calls once, after the axes
 are stamped: nothing reads the demand before then). A time axis adds its rows
 to its stamp when it is elaborated, since its levels depend on the axes below

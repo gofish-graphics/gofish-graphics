@@ -18,13 +18,14 @@ gofish(container, options, () => node): Promise<View>  // a component thunk reso
 
 ## Parameters
 
-| Parameter        | Type          | Description                                                                                                                                                      |
-| ---------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `container`      | `HTMLElement` | The DOM element to render into                                                                                                                                   |
-| `options.w`      | `number?`     | Width in pixels. Optional — see [Inferred size](#inferred-size).                                                                                                 |
-| `options.h`      | `number?`     | Height in pixels. Optional — see [Inferred size](#inferred-size).                                                                                                |
-| `options.axes`   | `AxesOptions` | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                |
-| `options.legend` | `boolean?`    | Whether to draw the color-scale legend. Default `true`; see [chart › Legend](/js/api/core/chart#legend). A `chart()` option of the same name wins over this one. |
+| Parameter         | Type          | Description                                                                                                                                                      |
+| ----------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `container`       | `HTMLElement` | The DOM element to render into                                                                                                                                   |
+| `options.w`       | `number?`     | Width of the whole graphic in pixels, axes, titles and legend included. Optional — see [Inferred size](#inferred-size).                                          |
+| `options.h`       | `number?`     | Height of the whole graphic in pixels, axes, titles and legend included. Optional — see [Inferred size](#inferred-size).                                         |
+| `options.padding` | `number?`     | Pixels kept clear on each side, inside `w`/`h`. Default `0`.                                                                                                     |
+| `options.axes`    | `AxesOptions` | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                |
+| `options.legend`  | `boolean?`    | Whether to draw the color-scale legend. Default `true`; see [chart › Legend](/js/api/core/chart#legend). A `chart()` option of the same name wins over this one. |
 
 ## Returns
 
@@ -74,7 +75,10 @@ layout, per axis, from what the axis encodes:
 So a bar chart rendered with no `w` gets default-width bars and a graphic only as
 wide as it needs to be, while bar heights still scale to the 400px default if `h`
 is also omitted. A bare fixed-size shape (or a `layer` of them) shrinks to its own
-bounding box. A supplied `w`/`h` is always used as-is.
+bounding box. A supplied `w`/`h` is always used as-is, and it is the size of the
+whole graphic: the SVG is exactly `w` × `h`, and the plot gets what the axes,
+titles and legend leave of it. Content of a fixed size that does not fit
+overflows and is clipped.
 
 ```ts
 // Width inferred (default-width bars, shrink-to-fit); height = 300.
@@ -88,7 +92,8 @@ chart(data)
 
 When you give a (sub)chart an explicit `w`/`h` on a dimension, its scale on that
 dimension resolves against that pixel box rather than against any larger layout it
-is composed into. The axis becomes self-contained: a chart sized this way can be
+is composed into. That box is the chart's plot: the chart's axes, titles and legend
+add around it. The axis becomes self-contained: a chart sized this way can be
 dropped into a bigger graphic without sharing — or polluting — the surrounding
 axes with its own units.
 

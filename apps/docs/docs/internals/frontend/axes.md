@@ -63,12 +63,23 @@ ring also records the boxes inside it as `GoFishNode.chrome`:
 - `chrome.content` is the node without chrome.
 - `chrome.withAxes` is the content with its axis gutters and category label
   rows. Titles and the legend are seated around this box, and the render root
-  uses it as its frame on the canvas (see
-  [Layout & Render Passes](/internals/layout/passes)).
+  reads its axis direction off it.
+- `chrome.rings` lists the rings, innermost first. A ring's first child is the
+  ring inside it (or the content); its other children are its chrome.
+- `chrome.plot` and `chrome.gutters` are what the chrome takes room by (#1032):
+  the span of the plot in the node's frame, recorded by its layout, and how far
+  the chrome reaches past it on each side. See
+  [Chrome gutters](/internals/layout/passes#chrome-gutters).
 - The outermost ring itself is the box with all chrome.
 
 Tick and category labels are chrome, so they lie outside `chrome.content`.
 Code that needs a node's box without its axes reads `chrome.content`.
+
+Chrome sits outside its chart and takes room: the outermost ring claims its
+content plus its gutters, and hands its content what the gutters leave of its
+slot. A category label is ink along its axis (`GoFishNode.inkOn`): it labels
+one band, and one wider than its band overdraws its neighbors (#1115) instead
+of taking room or widening its ring's box on that axis.
 
 The **inner tier** holds the constraint-pinned axes (continuous/difference); the
 **outer tier** holds the ordinal label rows, which need the inner tier fully laid
@@ -95,7 +106,8 @@ literal-pixel pin there would put the baseline at the frame's 0, the niced
 domain's low end.)
 
 Everything else then seats around the stationary content in **negative gutter
-space** (into the SVG padding): the axis line distributes off the content's
+space** (the ring's box reaches past its origin, and the ring claims that room,
+see above): the axis line distributes off the content's
 near edge, tick marks align flush with the line, labels hang outward. Keeping
 the content at its origin — rather than letting the gutter chain push it, as
 the single-axis hand-drawn story does — is what keeps _two_ continuous axes on
@@ -404,7 +416,8 @@ difference axis), never off the size claim:
   interval; an axis line
   (a 1px `rect` auto-spanning the domain via `datum` endpoints), and a
   `spread([text, tickMark])` per tick pinned with
-  `Constraint.position({ [axis]: datum(v) })`. The gutter is negative space;
+  `Constraint.position({ [axis]: datum(v) })`. The gutter is negative space,
+  which the ring claims;
   the line seats one of two ways. When the **other** dim is position-like
   (whether this node or an ancestor draws its axis), the line is pinned just
   outside that dim's scale floor —

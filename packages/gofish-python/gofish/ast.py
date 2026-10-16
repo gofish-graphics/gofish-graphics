@@ -1493,15 +1493,15 @@ class ChartBuilder:
         The options are the JS ``.render(container, options)`` options.
 
         Args:
-            w: Chart width in pixels
-            h: Chart height in pixels
+            w: Width of the whole graphic in pixels, axes and legend included
+            h: Height of the whole graphic in pixels, axes and legend included
             axes: Draw axes (the JS render option ``axes``). Leave unset to
                 use the chart's own ``axes`` option.
             legend: Draw the color legend (the JS render option ``legend``).
                 Leave unset for the default; a ``chart()`` ``legend`` option
                 wins over this one.
-            padding: Extra pixels between the drawing and the SVG edge (the JS
-                render option ``padding``). Leave unset for the default.
+            padding: Pixels kept clear on each side, inside ``w`` and ``h``
+                (the JS render option ``padding``). Leave unset for the default.
             debug: Whether to enable debug mode
 
         Returns:
@@ -3513,15 +3513,15 @@ class LayerBuilder:
         The options are the JS ``.render(container, options)`` options.
 
         Args:
-            w: Chart width in pixels
-            h: Chart height in pixels
+            w: Width of the whole graphic in pixels, axes and legend included
+            h: Height of the whole graphic in pixels, axes and legend included
             axes: Draw axes (the JS render option ``axes``). Leave unset to
                 use the root tier's own ``axes`` option.
             legend: Draw the color legend (the JS render option ``legend``).
                 Leave unset for the default; a ``chart()`` ``legend`` option
                 wins over this one.
-            padding: Extra pixels between the drawing and the SVG edge (the JS
-                render option ``padding``). Leave unset for the default.
+            padding: Pixels kept clear on each side, inside ``w`` and ``h``
+                (the JS render option ``padding``). Leave unset for the default.
             debug: Whether to enable debug mode
 
         Returns:

@@ -124,25 +124,15 @@ UNDEFINED on both axes (fixed-pixel shapes, no data-driven extent), so the
 ring's space is the content's space. See
 [Underlying Space](/internals/core/underlying-space).
 
-## Sizing: measured overhang, not a margin
+## Sizing: the legend takes room
 
-The fixed 120px `LEGEND_MARGIN` is gone. The canvas size and the legend
-reservation are read off two different boxes:
-
-- `finalW`/`finalH` (the canvas, when `w`/`h` are omitted) are read off the
-  root's box with axes, `chrome.withAxes`. A title or a legend never inflates
-  the inferred canvas.
-- The right overhang is read off the outermost ring (`child`), whose box
-  includes the legend column: `child.dims[0].max - finalW`.
-
-The render pass reserves the right overhang of a chart with a legend as the
-overhang plus a full `pad`, and that of a chart without one through `reserve()`
-like the other gutters. The two overlap in size (a single-row legend can
-overhang as little as a wide x tick label), so `layout()` tells them apart by
-whether the root carries a legend, not by size. The title gutters (left for the
-rotated y title, bottom for the x title) are reserved as `leftOverhang` and
-`bottomOverhang`, measured off the outermost ring. See
-[Layout & Render Passes](/internals/layout/passes).
+The fixed 120px `LEGEND_MARGIN` is gone, and so is the measured right overhang
+that replaced it. The legend is a ring of the root's chrome, so it takes room
+like the axes do (#1032): the root claims its content plus its chrome's gutters,
+the legend column's width among them, and the content gets what the gutters
+leave of the canvas. The render's `w`/`h` is the whole graphic, legend included,
+and when they are omitted the canvas is the root's whole box. See
+[Layout & Render Passes](/internals/layout/passes#chrome-gutters).
 
 ## Interplay with axis titles
 

@@ -49,11 +49,12 @@ paints — is the whole architecture of this pass.
 Layout produces a tree of boxes in **final y-down pixels**: SVG-native, top-left
 origin. There is no mirror anywhere between layout and paint. The lower pass maps
 each box's coordinates to canvas pixels through `toPixel`, installed on the render
-session (`RenderSession.toPixel` in `_node.ts`) before the baked entries lower. It
-only adds the gutter offset:
+session (`RenderSession.toPixel` in `_node.ts`) before the baked entries lower.
+Layout already placed the graphic on the canvas, chrome included (the render's
+`w`/`h` is the whole graphic, #493), so the map is the identity:
 
 ```ts
-toPixel: ([gx, gy]) => [gx + left, gy + top], // svgFrame in gofish.tsx
+export const canvasToPixel: ToPixel = (p) => p; // gofish.tsx
 ```
 
 So a continuous y axis growing upward is not something paint does. Layout places it
@@ -278,13 +279,13 @@ mask-and-blend-mode graphs and assigning their deterministic def ids.
 
 ## How the live `render()` wires it together
 
-The orchestrator `render()` in `gofish.tsx` is now small. It computes the gutter
-reserves from the measured overhangs (`layout()` reads them straight off the root's
-pixel box: a negative min is top overhang, a max past the canvas is bottom
-overhang), builds `toPixel`, and paints the lowered list into an `<svg>`:
+The orchestrator `render()` in `gofish.tsx` is now small. `layout()` has already
+fitted the graphic, chrome included, to the render's size and placed it on the
+canvas, so `render()` reserves no margins: it lowers the tree through the identity
+`toPixel` and paints the list into an `<svg>` of the layout's size:
 
 ```ts
-toPixel: ([gx, gy]) => [gx + left, gy + top], // svgFrame in gofish.tsx
+const toPixel = canvasToPixel; // the identity
 const paintBaked = () => lowerToDisplayList(child, toPixel).map(paintSVG);
 return (
   <svg width={…} height={…} xmlns="http://www.w3.org/2000/svg">

@@ -95,11 +95,14 @@ known gap tracked by #984.
 
 ## 2. Chrome and size
 
-**Built** today: a node's `w`/`h` and the render `w`/`h` both mean the plot. Chrome
-hangs outside the plot, and the SVG grows to fit it (see "Chrome Reservation" in
-[Layout and Render Passes](/internals/layout/passes)).
-
-**Decided** in the design review of #1032, not built yet: the split below.
+**Built** (#1032, #493): the split below. Each chart measures its chrome's
+gutters and claims them around its content, so a parent lays out the whole
+graphic, and the SVG is exactly the render's `w`/`h` (see "Chrome gutters" in
+[Layout and Render Passes](/internals/layout/passes#chrome-gutters)). The
+gutters are measured by laying the chart out once more, a declared shortcut:
+the right fix folds constant chrome sizes in the claim walk. Case 2 below
+(only the plot's size given) works for a chart with a size of its own; a root
+with no size anywhere still falls back to the default canvas (#494).
 
 The question is what `w` and `h` mean when a node has chrome. There are two boxes. The
 **plot** is the area the data is drawn in. The **whole graphic** is the plot plus its

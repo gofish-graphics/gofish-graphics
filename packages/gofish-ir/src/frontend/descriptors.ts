@@ -839,8 +839,14 @@ function strategyType(
  *  options table (`::: gofish-ref ChartOptions`) read it as the named option
  *  type `ChartOptions` (`OPTION_TYPES`). */
 export const CHART_OPTIONS: FieldGroup = group({
-  w: { type: t.number, doc: "Chart width in pixels." },
-  h: { type: t.number, doc: "Chart height in pixels." },
+  w: {
+    type: t.number,
+    doc: "Width of the chart's plot in pixels. Its axes, titles and legend add around it.",
+  },
+  h: {
+    type: t.number,
+    doc: "Height of the chart's plot in pixels. Its axes, titles and legend add around it.",
+  },
   coord: {
     type: t.any,
     doc: "Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ...",

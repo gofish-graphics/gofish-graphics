@@ -44,8 +44,8 @@ GoFishChartWidget.svg               # markup or None
 | Parameter | Type  | Default | Description                                               |
 | --------- | ----- | ------- | --------------------------------------------------------- |
 | `path`    | `str` | —       | Output path. Format inferred from the extension (`.svg`). |
-| `w`       | `int` | `800`   | Chart width in pixels                                     |
-| `h`       | `int` | `600`   | Chart height in pixels                                    |
+| `w`       | `int` | `800`   | Width of the whole graphic in pixels                      |
+| `h`       | `int` | `600`   | Height of the whole graphic in pixels                     |
 
 The other options (`axes`, `legend`, `padding`, `debug`) are the
 [`render`](/python/api/core/render) options.

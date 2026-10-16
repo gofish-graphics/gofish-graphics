@@ -365,12 +365,11 @@ The chart's options describe the chrome of the chart root. `layout()` passes
 Each title is a ring seated past the root's axes and centered on the axis line
 it describes. The legend is the ring outside that, so it is seated past the
 titles. The outermost ring records the boxes inside it as `GoFishNode.chrome`:
-`content` (the root without chrome) and `withAxes` (the root with its axis
-gutters and category label rows). `layout()` uses `withAxes` as the root's
-frame: its size is the inferred canvas when `w`/`h` are omitted, and its axis
-direction is the root's. So a long title or a tall legend never inflates the
-inferred canvas, and their extents past it are reserved as measured gutters.
-See [Axes](/internals/frontend/axes) and [Legends](/internals/frontend/legends).
+`content` (the root without chrome), `withAxes` (the root with its axis
+gutters and category label rows) and its `rings`. `layout()` reads the root's
+axis direction off `withAxes`. The chrome takes room: its gutters are measured
+and claimed (see [Chrome gutters](#chrome-gutters) under Pass 9). See
+[Axes](/internals/frontend/axes) and [Legends](/internals/frontend/legends).
 
 ### Pass 8: Position Scale Computation
 
@@ -385,8 +384,13 @@ let rootScopes = [
 
 For every continuous root axis, `solveScope` solves σ from the axis's size
 claim against the canvas (`claim.width(σ) = canvas`), so pixel overhead such
-as spacing keeps its pixels, and, when the axis has an origin, the pixel of
-data 0 (`originPx`). A pinned axis hands its content the map
+as spacing, and the chrome's gutters, keeps its pixels, and, when the axis has
+an origin, the pixel of data 0 (`originPx`). The canvas is the render's `w`/`h`
+less its `padding` on each side: the render size is the whole graphic (#493).
+When no σ fits (nodes with a literal size and their chrome are larger than the
+canvas), the root maps its domain at the σ those nodes solved
+(`ScopeRegistry.keyedSigma`) and overflows the canvas, like any other fixed
+size. A pinned axis hands its content the map
 `px(d) = σ·d + originPx`; a free root is placed at `originPx`. A one-value
 domain (a one-point chart) has no width for σ to scale, so its value maps to
 the middle of the canvas, as in d3 and Vega-Lite: σ is 0 and the claim is
@@ -566,20 +570,12 @@ reads the chart's _final_ extent back off the root via `child.dims[i].size`, so 
 unsized axis still yields a concrete SVG size (e.g. a no-width bar chart gets
 default-width bars and a width of `n·barWidth + spacing`). A user-supplied
 dimension is always authoritative. This computed extent — not the raw option — is
-what the render pass uses to size the SVG. The legend is now part of the laid-out
-tree (it is elaborated into the node tree during layout, see Pass 7), so it is
-included in this computed extent when `w`/`h` are omitted. (When a dimension is
-shrink-to-fit, Pass 10 pins the content's `min` edge to `0` so it fills `[0, size]`
-exactly; the per-side overhangs below then measure `0` on that axis — there is no
-gutter to reserve because the canvas already _is_ the content extent.) When a
-dimension _is_ given, `layout()` additionally measures how far the laid-out tree
-extends past the authoritative extent on each of the four sides — including content a constraint
-seated _beyond_ the canvas, e.g. a marginal histogram's bands above and to the
-right of a scatter — and the render pass reserves exactly that, replacing the
-former fixed `LEGEND_MARGIN` constant. With the right overhang it reports
-whether the root carries a legend (`hasLegend`), which decides how the right side
-is reserved — see Render Pass 1 below for why. See
-[Legends](/internals/frontend/legends).
+what the render pass uses to size the SVG. The chrome (axes, titles, the
+legend) is part of the laid-out tree (Pass 7), so it is included in this
+computed extent when `w`/`h` are omitted. When a dimension is given, the SVG is
+exactly that size: the root, its chrome included, was fitted to it, and
+anything that does not fit (a fixed size larger than the canvas) is clipped.
+See [Legends](/internals/frontend/legends).
 
 > Literal pixel sizes are invisible to the underlying-space tree (a fixed-size
 > shape resolves to `UNDEFINED`, not `SIZE`), which is why the unsized path relies
@@ -676,6 +672,50 @@ Today only `partition` makes regions (see
 A region over a binned struct (`struct({ x, y }).bin(Bin.hex(...))`) also has
 an outline, the cell's polygon; every other region is a box.
 
+#### Chrome gutters
+
+Chrome sits outside its chart (#1032). A chart's own `w`/`h` is its plot, and
+the slot a parent gives it (a spread slice, a grid cell, or the canvas at the
+root) is its whole graphic, its chrome included. So each node that wears
+chrome claims its content plus its chrome's **gutters**: constant pixels on
+each side, `chrome.gutters`, per axis `[start, end]` in its axis order.
+
+- **The claim.** A layer with chrome grows its composed claim by its gutters
+  (`growExtent` in `extent.ts`): the start gutter on the descent, the end
+  gutter on the ascent. A scope solved against a slot therefore gives the
+  content what the gutters leave, and its `originPx` includes the start
+  gutter, so the data sits past the chrome before it.
+- **The layout.** A layer with chrome hands its content (its first child)
+  its slot less its gutters, so content with no σ (a bar chart's category
+  axis) also gets the remainder. The chrome is seated around the content as
+  before, and the layer's box is the content's box plus the chrome.
+- **A chart with a size of its own.** Its chrome dresses its content inside
+  the chart's frame (`frameChart`), so the frame's literal size applies to
+  the content: the frame solves σ against its size plus its content's gutters,
+  and claims that total.
+
+The gutters do not depend on the size of the plot: ticks come from the domain,
+category labels from the keys, and text is measured. So `layout()` lays the
+tree out once with no gutters, measures them (`measureChromeGutters`), and,
+when any chrome takes room, forgets the layout (`GoFishNode.resetLayout`) and
+lays it out again with the gutters claimed. Each chart's gutter on a side is
+how far its own chrome shapes (every child of its rings but the ring inside)
+reach past its plot. The plot is the span its layout recorded
+(`chrome.plot`: the keyed domain as its frame maps it), widened by what the
+charts nested in its content claim (their plots plus their gutters, measured
+first). So a facet label row seated under the panels' axes is measured past
+those axes, and the panels' axes are counted once, by the panels. Content ink
+past the plot (a circle on the domain's edge) is not chrome. A shape that is
+ink on an axis (`GoFishNode.inkOn`) takes no room there: a category label is
+ink along its axis, since how far it reaches past its band depends on the
+band's width; one wider than its band overdraws its neighbors (#1115), and it
+does not count in its parent layer's box on that axis either.
+
+DECLARED SHORTCUT: the measuring layout costs one more layout pass for a
+chart with chrome. The right fix measures the gutters in the claim walk, with
+every chrome shape reporting its constant size (#493's "fixed-size nodes
+report their size") and each ring folding them.
+
 #### Shape geometry after layout
 
 Once a node is laid out, `node.geometry()` describes its shape in the same
@@ -765,52 +805,47 @@ non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 // The root's axis order starts at a frame's start edge: the top, or the
 // bottom for a continuous y (`direction` −1).
 const fromFrameStart = (p, size, direction) => (direction === 1 ? p : size - p);
-// A shrink-to-fit root pins its edge in the canvas frame. A given size seats
-// the root in its own frame, its size (`rootSizes`): its claim at its σ,
-// which is the slot when fitted and its own box for a fixed size; the slot
-// when there is no claim.
-shrinkToFit
-  ? child.pinAnchor(
+// A scope solved against the render's slot seats the root's baseline in its
+// own frame (its size, `rootSizes`). Anywhere else the root's box is placed,
+// its start edge at the frame's start.
+given && scoped
+  ? root.place(
       axis,
-      fromFrameStart(offset, final, direction),
-      direction === 1 ? "min" : "max"
-    )
-  : child.place(
-      axis,
-      fromFrameStart(offset + seatPx, rootSizes[axis].px, direction),
+      pad + fromFrameStart(offset + seatPx, rootSizes[axis].px, direction),
       "baseline"
+    )
+  : root.pinAnchor(
+      axis,
+      pad + fromFrameStart(offset, root.dims[axis].size, direction),
+      orientSide("min", direction)
     );
 ```
 
 **Implementation**: `src/ast/_node.ts`
 
 Pins the whole chart into the container by landing one anchor of the root's bbox
-at a target coordinate. The canvas is a frame `[0, final]` on each axis, and the
-root's axis order starts at the frame's start edge (the bottom for a continuous y).
-_Which_ anchor depends on whether the axis is sized:
+at a target coordinate. The canvas is a frame `[pad, size − pad]` on each axis, and
+the root's axis order starts at the frame's start edge (the bottom for a continuous
+y). _Which_ anchor depends on whether data places the root:
 
-- **Given dimension** → pin the **baseline** (local `0`) at the scope's seat from the
-  start edge of the root's own frame. The canvas box is `[0, given]`, a fixed slot. A
-  root the slot sizes fills it, so its frame is the slot. A root with a size of its
-  own (a chart's literal `w`/`h`, a claim with no σ in it) has its own box as its
-  frame, and that box sits at the slot's top-left in canvas order (#1032), not at the
-  bottom where a continuous y's axis order starts. Any content seated outside the
-  slot (axis labels past the start edge, ticks past the end) is reserved as the
-  per-side overhangs in the render pass.
-- **Shrink-to-fit dimension** (`w`/`h` omitted, so `finalH = size`) → pin the
-  content's **start edge** to the frame's start. The canvas box _is_ the content's
-  full extent, so the content fills `[0, size]` exactly and the overhang formulas
-  (`-min`, `max - finalH`) compute `0` for that axis with no special-casing.
+- **A scope solved against the render's slot** (a given dimension that maps a
+  domain) → pin the **baseline** (local `0`) at the scope's seat from the start edge
+  of the root's own frame. The root fills the slot, so its frame is the slot, and
+  the scope's `originPx` already counts the chrome's start gutter, so the root's
+  box, chrome included, starts at the frame's start.
+- **Anywhere else** (a shrink-to-fit dimension, or a given dimension the root maps
+  no domain into: a category axis, a chart with a size of its own) → pin the
+  root's **box** start edge to the frame's start, at the top-left for either y
+  direction (#1032). The box is the whole graphic, chrome included, so a
+  shrink-to-fit canvas is exactly the box, and a root smaller than its slot sits
+  at the slot's top-left.
 
-  Leaving `min` off origin in this case is the
-  [#574](https://github.com/gofish-graphics/gofish-graphics/issues/574) double-count:
-  a _negative_ `min` (content below/left of baseline) makes `bottomOverhang = -min`
-  re-reserve a phantom band ~equal to the offset, so the canvas comes out ~2× the
-  content; a _positive_ `min` (a self-placed diagram seated at, say, `(20, 20)`) both
-  gaps the near side and overhangs the far side. Pinning `min` to 0 collapses both,
-  and it keeps the overhang reservation purely a _given-dimension_ concern.
+  Pinning the box rather than the baseline is what keeps a box with a negative
+  `min` (content below/left of its baseline, a chrome gutter) or a positive one (a
+  self-placed diagram seated at, say, `(20, 20)`) inside the canvas, with no phantom
+  band ([#574](https://github.com/gofish-graphics/gofish-graphics/issues/574)).
 
-  The min-pin uses **`pinAnchor`**, not the write-once `place()`: a chart whose root
+  The box pin uses **`pinAnchor`**, not the write-once `place()`: a chart whose root
   carries its own transform (a hand-built diagram like the pulley) has already
   self-placed that axis, and `place()` short-circuits on a placed axis. `pinAnchor` is
   the authoritative override — it rebuilds the axis ledger so the pin lands regardless
@@ -867,115 +902,58 @@ The render function is called from `gofish()` after layout data is available:
 
 ```tsx
 return render(
-  {
-    width: data.width,
-    height: data.height,
-    svgPadding,
-    defs,
-    rightOverhang: data.rightOverhang,
-    topOverhang: data.topOverhang,
-    leftOverhang: data.leftOverhang,
-    bottomOverhang: data.bottomOverhang,
-    hasLegend: data.hasLegend,
-  },
+  { width: data.width, height: data.height, defs, interaction },
   data.child
 );
 ```
 
-`render()` no longer takes `axes`/`axisFields` or the scale/space context — all
-the chrome is in the laid-out tree by now, so render only needs the computed
-extent and the measured per-side overhangs to size the SVG. It computes the SVG's
-size and the `toPixel` coordinate map (below) with `svgFrame`, lowers the baked tree,
-and paints each item into an `<svg>`. `toDisplayList` sizes its viewport with the
-same `svgFrame`.
+`render()` takes no `axes`/`axisFields` or scale/space context — all the chrome
+is in the laid-out tree by now — and no margins: `layout()` placed the graphic
+on the canvas, chrome included, so render only needs the SVG's size. It lowers
+the baked tree and paints each item into an `<svg>`. `toDisplayList` uses the
+same size as its viewport.
 
-### Render Pass 1: Chrome Reservation
-
-**Location**: `src/ast/gofish.tsx` (`svgFrame()`)
+### Render Pass 1: No Chrome, No Reserves
 
 `render()` draws **no chart chrome of its own** — no axis lines, tick marks, tick
 labels, ordinal category labels, _or titles_, and no legend swatches. All of it
-was elaborated into ordinary nodes during layout (see Pass 7: Chrome Elaboration) and renders as part of the
-node tree like any other shape. The former bespoke render-time path (hand-written
-`<text>` title elements behind fixed `Y_TITLE_MARGIN` / `X_TITLE_MARGIN` gutters)
-has been deleted, so `render()` has zero chart-chrome special cases left.
+was elaborated into ordinary nodes during layout (see Pass 7: Chrome Elaboration)
+and renders as part of the node tree like any other shape.
 
-What `render()` _does_ do is size the SVG around the measured extent of that
-chrome, on all four sides. `layout()` hands it four gutter measurements:
-`leftOverhang`, `bottomOverhang`, and `topOverhang` (negative-space gutters and
-top overflow off the outermost wrapper: tick/label rows, the seated y-title and
-x-title, and any content a constraint seated above the canvas), and
-`rightOverhang` (a legend column, or content displaced past the right edge), plus
-`hasLegend`. `svgFrame` reserves exactly enough on each side:
-
-```typescript
-const EDGE_GAP = 8; // breathing room between gutter content and the SVG edge
-const reserve = (o: number) =>
-  o > 0 ? Math.ceil(Math.max(pad, o + EDGE_GAP)) : pad;
-const left = reserve(leftOverhang);
-const top = reserve(topOverhang);
-const bottom = reserve(bottomOverhang);
-// the right side: a legend column keeps a full `pad` beyond it
-width = hasLegend
-  ? left + width + rightOverhang + reserve(0)
-  : left + width + reserve(rightOverhang);
-```
-
-The `o > 0` guard keeps a chart with `padding: 0` and no chrome at zero reserve
-(don't invent `EDGE_GAP` px on an empty gutter). Because a gutter that fits
-within the existing `pad` is absorbed by it, an untitled chart with a small
-gutter stays byte-identical to the pre-chrome output. The measured-overhang
-policy also fixes a latent bug: the old fixed 40px margins silently _clipped_ any
-gutter wider than themselves (long y tick labels, **or content a constraint
-seated past the canvas — marginal histogram bands, wide diagram nodes**), whereas
-`reserve()` grows to fit whatever the laid-out content actually needs.
-
-**Why the right side is special.** Left, bottom, and top each have a single kind
-of overhang (chrome or displaced content) and run through `reserve()` uniformly.
-The right side carries _two_ kinds that must be reserved _differently_: a chart
-with a legend column historically reserves its overhang plus `pad`, while displaced content
-(like a marginal band) should run through `reserve()` like the other gutters. The
-two cannot be unified by magnitude — a single-row legend overhangs by roughly the
-same few pixels as a wide rightmost x-tick label, yet the legend must be _added_
-to the width while the tick spill must be _absorbed_ into `pad`. Only whether
-the root carries a legend can tell them apart, so `layout()` reports `hasLegend`
-with the one right overhang, and `svgFrame` adds it plus `pad` beside a legend and
-runs it through `reserve()` otherwise. This is the one place a chart-chrome flag still influences
-sizing — kept deliberately, because the distinction is semantic, not geometric.
+It reserves no room either. The render's `w`/`h` is the whole graphic (#493): the
+root's chrome takes room inside it (see [Chrome gutters](#chrome-gutters)), so
+there is nothing left to reserve around it. The former per-side overhang
+measurements and the `PADDING`/`EDGE_GAP` reserves of `svgFrame` are deleted. The
+render's `padding` option is an inset inside `w`/`h`, 0 by default.
 
 ### Render Pass 2: SVG Container Creation
 
 **Location**: `src/ast/gofish.tsx` (`render()`)
 
 ```typescript
-<svg
-  width={frame.width}
-  height={frame.height}
-  xmlns="http://www.w3.org/2000/svg"
->
+<svg width={width} height={height} xmlns="http://www.w3.org/2000/svg">
 ```
 
-The SVG container is sized to the content (`width`/`height`, read off the
-pre-chrome content node in layout) plus the measured reserves on each side. There is
-**no inner flip `<g>`**: layout is already in y-down pixels, so the display-list items
-paint directly under the `<svg>`.
+The SVG is the render's `w`/`h` exactly, or, on a dimension the render does not
+give, the root's laid-out box plus the padding. There is **no inner flip `<g>`**:
+layout is already in y-down pixels, so the display-list items paint directly under
+the `<svg>`.
 
 ### Render Pass 3: The Coordinate Fold (`toPixel`)
 
-**Location**: `src/ast/gofish.tsx` (`render()`)
+**Location**: `src/ast/gofish.tsx` (`canvasToPixel`)
 
 SVG is **y-down** (top-left origin), and so is layout: a continuous y grows upward
-because layout placed it that way (see [Axis direction](#axis-direction)). So the map
-on the render session only adds the gutter offset:
+because layout placed it that way (see [Axis direction](#axis-direction)), and the
+root is placed on the canvas by layout (Pass 10). So the map on the render session
+is the identity:
 
 ```typescript
-toPixel: ([gx, gy]) => [gx + left, gy + top], // in svgFrame
+export const canvasToPixel: ToPixel = (p) => p;
 ```
 
 The lower pass produces items already in **final absolute pixels**: no flip group, no
-per-shape transform. `toPixel` is a translate, so straight paths stay straight (a
-warped path just maps each control point through it). See
-[Rendering](/internals/core/rendering).
+per-shape transform. See [Rendering](/internals/core/rendering).
 
 ### Render Pass 4: Lowering the Baked Tree
 
