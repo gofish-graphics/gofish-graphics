@@ -8,7 +8,7 @@ import type { UnderlyingSpace } from "../underlyingSpace";
 import * as Monotonic from "../../util/monotonic";
 import { solvePlacementCells } from "./placementSolver";
 import type { PlacementConstraint } from "./placementLowering";
-import { axisIndex, axisName, type Axis } from "./shared";
+import { axisIndex, axisName, isPointAlign, type Axis } from "./shared";
 import type { ConstraintSpec } from ".";
 
 /**
@@ -77,7 +77,8 @@ const actsOn = (c: ConstraintSpec, axis: 0 | 1): boolean => {
     case "position":
       return c[name] !== undefined;
     case "align":
-      return c[name] !== undefined;
+      // A "span" or "size" align sets a size layout measures, not a place.
+      return isPointAlign(c[name]);
     case "distribute":
       return axisIndex(c.dir) === axis;
     case "nest":
@@ -183,7 +184,9 @@ export function placeByClaims(
     .map((c) =>
       c.type === "position" && c[other] !== undefined
         ? { ...c, [other]: undefined, region: undefined }
-        : c
+        : c.type === "align" && c[other] !== undefined
+          ? { ...c, [other]: undefined }
+          : c
     );
 
   // The operands whose place only layout knows: a node nested in a child, a

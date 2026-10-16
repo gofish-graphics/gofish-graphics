@@ -245,6 +245,14 @@ export const envelope = (ms: Monotonic[]): Monotonic => {
   return unknown((x: number) => Math.max(...ms.map((m) => m.run(x))));
 };
 
+/** The part of a claim that grows with σ: the envelope of its pieces with a
+ *  positive slope, or undefined when it has none, or is an `unknown` closure
+ *  (which has no pieces to tell apart). */
+export const rising = (x: Monotonic): Monotonic | undefined => {
+  const ps = piecesOf(x)?.filter((p) => p.slope > 0);
+  return ps === undefined || ps.length === 0 ? undefined : piecewise(ps);
+};
+
 /** The max of claims, ignoring zero claims: the {@link envelope} of the
  *  non-zero arguments, or the zero claim when none remain. */
 export const max = (...args: Monotonic[]): Monotonic => {

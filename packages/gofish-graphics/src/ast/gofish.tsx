@@ -609,12 +609,19 @@ export async function layout(
       // A root given a slot fits its claim to it. When no σ does, the
       // nodes with a literal size and their chrome are larger than the slot
       // (over-constrained, #1032): the root maps its domain at their σ, and
-      // overflows the slot like any other fixed size.
+      // overflows the slot like any other fixed size. With no such nodes,
+      // what is larger than the slot is pixels that do not scale (a text at
+      // a literal position past the slot's end): the data fills the slot,
+      // at the σ where the parts of the claim that grow with σ reach it,
+      // and the pixels overflow.
       const fitted =
         given[axis] === undefined && keyed !== undefined
           ? undefined
           : scopes.solveScope(meta, space, claim, allocated);
-      const below = fitted === undefined ? keyed : undefined;
+      const grows =
+        claim === undefined ? undefined : Monotonic.rising(claim.width);
+      const below =
+        fitted !== undefined ? undefined : (keyed ?? grows?.inverse(allocated));
       const scope =
         below === undefined
           ? fitted
