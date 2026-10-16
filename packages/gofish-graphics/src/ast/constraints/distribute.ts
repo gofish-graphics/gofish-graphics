@@ -604,8 +604,10 @@ export function distributeExtentFold(
       reaches
     );
   }
+  // A stack whose parts are not all continuous with an origin is a spread
+  // (see `distributeSpaceFold`), with no spacing: bands with no size of
+  // their own, each a share (`GoFishNode.sharesRoom`), lie end to end.
   if (
-    opts.glue ||
     targetSpaces.length === 0 ||
     !targetSpaces.every(
       (s, i) =>
