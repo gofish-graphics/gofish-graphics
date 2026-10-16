@@ -669,10 +669,23 @@ const closestPair = (m1: Member, m2: Member): [Pt, Pt] => {
 const sitesOfMembers = (members: Member[]) => {
   const P: Pt[] = [],
     owner: number[][] = [];
+  // sites within half a pixel are one site: the earliest such site, found in a hash of
+  // half-pixel cells (any site within 0.5 of q is in q's cell or one of its 8 neighbors)
+  const bucket = new Map<string, number[]>();
+  const cellOf = (v: number) => Math.floor(v / 0.5);
   members.forEach((mm, k) =>
     sitesOf(mm).forEach((q) => {
-      let i = P.findIndex((p) => dist(p, q) < 0.5);
+      const cx = cellOf(q[0]),
+        cy = cellOf(q[1]);
+      let i = -1;
+      for (let dx = -1; dx <= 1; dx++)
+        for (let dy = -1; dy <= 1; dy++)
+          for (const s of bucket.get(`${cx + dx},${cy + dy}`) ?? [])
+            if ((i < 0 || s < i) && dist(P[s], q) < 0.5) i = s;
       if (i < 0) {
+        const key = `${cx},${cy}`;
+        if (!bucket.has(key)) bucket.set(key, []);
+        bucket.get(key)!.push(P.length);
         i = P.length;
         P.push(q);
         owner.push([]);
@@ -920,9 +933,13 @@ const skeleton = (members: Member[], o: SkelOpts, zones: Prim[]): Skeleton => {
       })
     )
   );
+  // A segment member is a candidate with every other member too, since its closest point to
+  // another member may lie anywhere along it. Those pairs join the queue by distance, a band at
+  // a time (below), and each keeps the place in the order it would have had in a list of all of
+  // them: after the pairs above, by the first segment member of the pair, then the other member.
+  const segs: number[] = [];
   members.forEach((mm, a) => {
-    if (mm.kind === "segment")
-      for (let b = 0; b < nm; b++) if (b !== a) pairs.add(mk(a, b));
+    if (mm.kind === "segment") segs.push(a);
   });
   // A pair's link is routed only when the spanning tree reaches it: until then its straight
   // length stands in, a lower bound on the routed length (lazy Kruskal; ties keep their order).
@@ -941,34 +958,97 @@ const skeleton = (members: Member[], o: SkelOpts, zones: Prim[]): Skeleton => {
     ...e,
     order,
   }));
-  for (const key of pairs) {
-    if (routed.has(key)) continue;
+  const linkOf = (key: number, order: number, pq?: [Pt, Pt]): Link => {
     const a = Math.floor(key / nm),
       b = key % nm,
-      [p, q] = closestPair(members[a], members[b]),
-      order = queue.length;
+      [p, q] = pq ?? closestPair(members[a], members[b]);
     // members that touch join at no cost, with no link drawn
-    if (dist(p, q) < 0.5)
-      queue.push({ a, b, route: [p, q], len: 0, order, h: 0, h2: 0 });
-    else
-      queue.push({
-        a,
-        b,
-        len: dist(p, q),
-        order,
-        ends: [p, q],
-        h: radiusAt(p),
-        h2: radiusAt(q),
-      });
+    return dist(p, q) < 0.5
+      ? { a, b, route: [p, q], len: 0, order, h: 0, h2: 0 }
+      : {
+          a,
+          b,
+          len: dist(p, q),
+          order,
+          ends: [p, q],
+          h: radiusAt(p),
+          h2: radiusAt(q),
+        };
+  };
+  for (const key of pairs)
+    if (!routed.has(key)) queue.push(linkOf(key, queue.length));
+  const byLen = (x: Link, y: Link) => x.len - y.len || x.order - y.order;
+  const before = (x: Link, y: Link) => byLen(x, y) < 0;
+  queue.sort(byLen);
+  /** The segment members' remaining pairs whose queued length is in (lo, hi], found through
+   *  the member grid; each pair once, from its first segment member. A pair already in one
+   *  piece is left out: pieces only merge, so the tree would skip it anyway. */
+  const segOrder = queue.length;
+  const segPairs = (lo: number, hi: number): Link[] => {
+    const out: Link[] = [];
+    for (const a of segs) {
+      const mm = members[a] as Extract<Member, { kind: "segment" }>;
+      for (const b of memberGrid.query(
+        Math.min(mm.a[0], mm.b[0]) - hi,
+        Math.min(mm.a[1], mm.b[1]) - hi,
+        Math.max(mm.a[0], mm.b[0]) + hi,
+        Math.max(mm.a[1], mm.b[1]) + hi
+      )) {
+        if (b === a || (b < a && members[b].kind === "segment")) continue;
+        const key = mk(a, b);
+        if (pairs.has(key) || routed.has(key) || f2(a) === f2(b)) continue;
+        const pq = closestPair(
+          members[Math.min(a, b)],
+          members[Math.max(a, b)]
+        );
+        const d = dist(pq[0], pq[1]),
+          len = d < 0.5 ? 0 : d;
+        if (len > lo && len <= hi)
+          out.push(linkOf(key, segOrder + a * nm + b, pq));
+      }
+    }
+    return out;
+  };
+  // the members' extent: no two members are farther apart than its diagonal
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
+  for (const p of P) {
+    x0 = Math.min(x0, p[0]);
+    y0 = Math.min(y0, p[1]);
+    x1 = Math.max(x1, p[0]);
+    y1 = Math.max(y1, p[1]);
   }
-  const before = (x: Link, y: Link) =>
-    x.len < y.len || (x.len === y.len && x.order < y.order);
-  queue.sort((x, y) => x.len - y.len || x.order - y.order);
+  const reach = Math.hypot(x1 - x0, y1 - y0) + 1;
   // the spanning tree over routed links keeps the set in one piece (members that touch join for free)
   const r2 = members.map((_, k) => k);
   const f2 = (k: number): number => (r2[k] === k ? k : (r2[k] = f2(r2[k])));
-  let head = 0;
-  while (head < queue.length) {
+  let pieces = nm,
+    band = -1,
+    head = 0;
+  for (;;) {
+    // every pair no longer than `band` is queued, so the queue is in order up to there; past it,
+    // while the set is in more than one piece, queue the next band of segment pairs
+    if (
+      segs.length > 0 &&
+      band < reach &&
+      pieces > 1 &&
+      (head >= queue.length || queue[head].len > band)
+    ) {
+      // the touching pairs first, which join each line into one piece, then doubling bands
+      const next = band < 0 ? 0 : band === 0 ? 16 : band * 2;
+      const more = segPairs(band, next);
+      band = next;
+      if (more.length) {
+        const rest = queue.slice(head).concat(more).sort(byLen);
+        queue.length = 0;
+        for (const l of rest) queue.push(l);
+        head = 0;
+      }
+      continue;
+    }
+    if (head >= queue.length) break;
     const e = queue[head++];
     if (f2(e.a) === f2(e.b)) continue;
     if (e.ends) {
@@ -990,6 +1070,7 @@ const skeleton = (members: Member[], o: SkelOpts, zones: Prim[]): Skeleton => {
       continue;
     }
     r2[f2(e.a)] = f2(e.b);
+    pieces--;
     if (e.len > 0)
       links.push({
         route: e.route!,
@@ -3011,11 +3092,11 @@ const smoothBlob = (members: Member[], o: SmoothOpts): Pt[][] => {
   // `roundness` is the smoothing's reach: a Gaussian of width sigma = roundness / 2 along the
   // outline. It stops at the smallest circle in the region (a member's bulge, a link's
   // half-width, a box corner, a keep-out zone): rounding further would bend that circle.
-  const thinnest = Math.min(
-    ...sk.R,
-    ...sk.links.map((e) => neck * Math.min(e.h, e.h2)),
-    ...region.radii
-  );
+  let thinnest = Infinity;
+  for (const r of sk.R) thinnest = Math.min(thinnest, r);
+  for (const e of sk.links)
+    thinnest = Math.min(thinnest, neck * Math.min(e.h, e.h2));
+  for (const r of region.radii) thinnest = Math.min(thinnest, r);
   const asked = Math.max(0, Math.min(o.roundness ?? o.pad, thinnest)) / 2;
   // Rounding never changes the topology: it moves each loop on its own, so pieces and holes stay
   // as traced unless two loops (or two parts of one) would cross; then sigma is narrowed until they do not.

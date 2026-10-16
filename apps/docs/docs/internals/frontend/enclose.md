@@ -90,7 +90,14 @@ under any coordinate transform.
    graph over their keep-out polygons, searched with A\*, then snapped onto
    the keep-out circles, so a route is straight lines tangent to the circles
    and arcs of them. Every link is chosen at full width, so `neck` never
-   changes which links there are.
+   changes which links there are. The tree's candidates are the Delaunay
+   edges, plus, for a segment member, every other member, since its closest
+   point may lie anywhere along it. Those pairs join the queue a distance
+   band at a time (touching pairs, then 16 px, doubling), found through a
+   grid over the members, and only while the set is in more than one piece,
+   so a 1,000-point line does not pair every segment with every member. Each
+   keeps the place in the order it would have had in the full list, so the
+   tree is the same.
 4. **Region.** The pieces are each member grown by `padding`, each link as a
    tube that tapers from the bulge at one end to the bulge at the other (the
    convex hull of the two end discs, a tapered capsule with a closed-form

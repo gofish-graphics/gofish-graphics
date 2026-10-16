@@ -10,6 +10,8 @@
  *    padded convex hull.
  *  - With `holes: false` (the default) the only holes are the avoided nodes'
  *    clearance circles; with `holes: true` an open gap stays a hole.
+ *  - A 1,000-point line and 300 dots outline well under a second (no step is
+ *    quadratic in the members).
  *
  * Run: `tsx src/tests/enclose.test.ts` (wired as `pnpm test:enclose`).
  */
@@ -338,6 +340,29 @@ for (const [name, members, base] of [
 }
 
 check("an empty member list has no outline", blobOutline([], { padding: 4 }).length === 0);
+
+console.log("# a 1,000-point line and 300 dots");
+{
+  const rand = seeded(3);
+  const members: BlobMember[] = [];
+  let at: Pt = [50, 300];
+  for (let i = 1; i < 1000; i++) {
+    const next: Pt = [at[0] + 0.7 + rand() * 0.2, at[1] + (rand() - 0.5) * 6];
+    members.push({ kind: "segment", a: at, b: next, w: 1.5 });
+    at = next;
+  }
+  for (let i = 0; i < 300; i++) members.push(C(50 + rand() * 800, 100 + rand() * 400, 3));
+  for (const convexity of [0, 0.5]) {
+    const t0 = performance.now();
+    const t = topology(blobOutline(members, { padding: 4, convexity }));
+    const ms = performance.now() - t0;
+    check(
+      `convexity ${convexity}: one piece, in under a second`,
+      t.pieces === 1 && ms < 1000,
+      `${show(t)}, ${ms.toFixed(0)} ms`
+    );
+  }
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
