@@ -2,8 +2,8 @@
 //
 // Each victim is one arch over an age axis, from birth to the age they might
 // have lived to. The orange part is the life they lived (the arch where the
-// age is under their age at death), the grey part the years stolen. Each life
-// is wiped in from the left at one pen speed, so the orange is drawn first
+// age is under their age at death), the grey part the years stolen. Each
+// arch is drawn along its path at one pen speed, so the orange is drawn first
 // and the grey goes on from the moment of death. One life plays alone, then a
 // few, then the lives come faster and faster until a thousand overlap.
 //
@@ -35,6 +35,12 @@ const N = gunDeaths2013.length;
 /** Taller than any arch, in pixels: the cut that keeps the ages lived
  *  reaches over the whole arch. */
 const TALL = 260;
+/** How far the arch's control points are lifted off its chord, as a share
+ *  of the chord's length. A cubic's middle rises 3/4 of that, so the arch
+ *  peaks at 0.28 of its span. PROTOTYPE SHORTCUT: one height for every life;
+ *  Periscopic's heights vary per life, and a strategy's params cannot read
+ *  a field. */
+const LIFT = 0.37;
 
 /** Each victim with the years their death took. */
 const victims = gunDeaths2013.map((d) => ({ ...d, stolen: d.potential - d.age }));
@@ -43,8 +49,10 @@ const victims = gunDeaths2013.map((d) => ({ ...d, stolen: d.potential - d.age })
  *  axis share one age scale. */
 const years = (name: string) => field(name, "years");
 
-/** The arch of one life: a line from age 0 to `potential`, routed as a low
- *  half ellipse. Its ends are two points a `potential` apart. */
+/** The arch of one life: a line from age 0 to `potential`, routed as
+ *  Periscopic's curve, a cubic whose control points sit a quarter and three
+ *  quarters of the way along, lifted. Its ends are two points a `potential`
+ *  apart. */
 const arch = (stroke: string) =>
   layer([
     stack({ dir: "x", spacing: 0 }, [
@@ -54,7 +62,17 @@ const arch = (stroke: string) =>
     ]),
   ]).relate(({ birth, end }) => [
     line(
-      { stroke, strokeWidth: 1, opacity: 0.5, curve: Curve.arc({ height: 0.55 }) },
+      {
+        stroke,
+        strokeWidth: 1,
+        opacity: 0.5,
+        curve: Curve.bezier({
+          controls: [
+            [0.25, LIFT],
+            [0.75, LIFT],
+          ],
+        }),
+      },
       [birth, end]
     ),
   ]);
@@ -70,13 +88,14 @@ const stolen = () =>
   stack({ dir: "x", spacing: 0 }, [blank({ w: years("age"), h: 0 }), band("stolen")]);
 
 /** One life: the arch inside the ages lived (orange) and inside the years
- *  stolen (grey), wiped in from the left, the wipe lasting in proportion to
- *  the years the arch spans (one pen speed for every life). */
+ *  stolen (grey), drawn along its path, the draw lasting in proportion to
+ *  the years the arch spans (one pen speed for every life). The two copies
+ *  of the arch are one mark's strokes, so they are drawn as one pen. */
 const life = layer([
   mask([stolen(), arch(GREY)]),
   mask([lived(), arch(ORANGE)]),
 ]).transition({
-  enter: Animation.wipe({ from: "left", duration: "potential", ease: "linear" }),
+  enter: Animation.draw({ duration: "potential", ease: "linear" }),
 });
 
 /** The lives `from` to `to` (in order of death), one after another as
