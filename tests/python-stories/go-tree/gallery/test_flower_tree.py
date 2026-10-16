@@ -10,7 +10,7 @@ from python_stories.gotree_data import SAMPLE_TREE, by_depth
 # Node size grows with the number of leaves under it.
 def node(d):
     return circle(
-        r=6 + math.sqrt(d["width"]) * 6,
+        r=35 + math.sqrt(d["width"]) * 35,
         fill=by_depth()(d),
         stroke="white",
         stroke_width=2,

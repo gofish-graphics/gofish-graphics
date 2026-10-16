@@ -6,7 +6,7 @@ from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
 
 def node(d):
-    return circle(r=8, fill=by_depth()(d), stroke="#08306b", stroke_width=1)
+    return circle(r=14, fill=by_depth()(d), stroke="#08306b", stroke_width=1)
 
 
 def story_readable_tree_layout():
@@ -17,10 +17,10 @@ def story_readable_tree_layout():
             link={"curve": Curve.orthogonal(), "stroke": "#555555", "stroke_width": 2},
             parent_child=combine(
                 x={"kind": "align", "alignment": "middle"},
-                y={"kind": "distribute", "spacing": 60},
+                y={"kind": "distribute", "spacing": 102},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": 18},
+                x={"kind": "distribute", "spacing": 31},
                 y={"kind": "align", "alignment": "middle"},
             ),
         ),

@@ -6,7 +6,7 @@ from python_stories.gotree_data import by_depth
 
 
 def node(d):
-    return circle(r=7, fill=by_depth()(d))
+    return circle(r=15, fill=by_depth()(d))
 
 
 # A balanced binary tree, 4 levels deep.
@@ -21,7 +21,7 @@ def make(depth, prefix="r"):
 
 BALANCED_TREE = make(4)
 
-S = 64
+S = 140
 H = combine(
     x={"kind": "distribute", "spacing": S},
     y={"kind": "align", "alignment": "middle"},

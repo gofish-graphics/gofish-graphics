@@ -6,7 +6,7 @@ from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
 ICICLE_BLUES = ["#2171b5", "#6baed6", "#9ecae1", "#c6dbef", "#deebf7"]
 
-BAND_HEIGHT = 46  # radial thickness of one depth ring
+BAND_HEIGHT = 72  # radial thickness of one depth ring
 
 
 # Leaves carry a unit angular weight; internal nodes leave theta unsized so

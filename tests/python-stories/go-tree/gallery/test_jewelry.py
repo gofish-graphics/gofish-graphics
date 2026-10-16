@@ -13,10 +13,10 @@ def node(d):
     if d["height"] == 0:
         value = d["data"].get("value")
         return circle(
-            r=7 + (value if value is not None else 1) * 2,
+            r=15 + (value if value is not None else 1) * 4,
             fill=by_depth(STONE_BLUES)(d),
         )
-    return rect(h=30, rx=15, fill="#c6dbef", stroke="#6baed6", stroke_width=1)
+    return rect(h=63, rx=32, fill="#c6dbef", stroke="#6baed6", stroke_width=1)
 
 
 def story_jewelry():
@@ -26,11 +26,11 @@ def story_jewelry():
             node=node,
             link={"curve": Curve.linear(), "stroke": "#6baed6", "stroke_width": 2},
             parent_child=combine(
-                x={"kind": "nest", "pad": 6},
+                x={"kind": "nest", "pad": 13},
                 y={"kind": "align", "alignment": "middle"},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": 4},
+                x={"kind": "distribute", "spacing": 8},
                 y={"kind": "align", "alignment": "middle"},
             ),
         ),

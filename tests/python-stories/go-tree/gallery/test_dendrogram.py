@@ -61,10 +61,10 @@ def story_dendrogram():
             },
             parent_child=combine(
                 x={"kind": "nest", "pad": 0},
-                y={"kind": "distribute", "spacing": 70},
+                y={"kind": "distribute", "spacing": 154},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": 22},
+                x={"kind": "distribute", "spacing": 48},
                 # "bottom" alignment: siblings share their start edge.
                 y={"kind": "align", "alignment": "start"},
             ),

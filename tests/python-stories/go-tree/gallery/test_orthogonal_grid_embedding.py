@@ -21,7 +21,7 @@ def story_orthogonal_grid_embedding():
                 x={"kind": "align", "alignment": "middle"},
                 y={
                     "kind": "distribute",
-                    "spacing": 70,
+                    "spacing": 138,
                     "anchor": "middle",
                     "alignment": "middle",
                 },

@@ -95,7 +95,7 @@ export default meta;
 // (inner), matching the reference. Color = depth.
 const tyreBlues = ["#08306b", "#2171b5", "#6baed6", "#c6dbef", "#deebf7"];
 
-const band = 34; // radial thickness of one inclusion band
+const band = 56; // radial thickness of one inclusion band
 
 // θ auto-fit (#618): leaves carry a unit angular weight; internal nodes leave θ
 // unsized so nest-θ grows each to its children's combined arc (no double-count —

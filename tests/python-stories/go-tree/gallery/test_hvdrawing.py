@@ -6,10 +6,10 @@ from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
 
 def node(d):
-    return circle(r=7, fill=by_depth()(d), stroke="#08306b", stroke_width=1)
+    return circle(r=16, fill=by_depth()(d), stroke="#08306b", stroke_width=1)
 
 
-S = 34
+S = 78
 H = combine(
     x={"kind": "distribute", "spacing": S},
     y={"kind": "align", "alignment": "middle"},

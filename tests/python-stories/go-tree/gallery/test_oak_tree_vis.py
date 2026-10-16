@@ -21,7 +21,7 @@ def story_oak_tree_vis():
                 x={"kind": "align", "alignment": "middle"},
                 y={
                     "kind": "distribute",
-                    "spacing": 60,
+                    "spacing": 121,
                     "anchor": "middle",
                     "alignment": "middle",
                 },
@@ -32,7 +32,7 @@ def story_oak_tree_vis():
                     "spacing": (2 * math.pi) / 6,
                     "anchor": "middle",
                 },
-                y={"kind": "distribute", "spacing": 30, "anchor": "middle"},
+                y={"kind": "distribute", "spacing": 61, "anchor": "middle"},
             ),
             coord=Coord.polar(),
         ),

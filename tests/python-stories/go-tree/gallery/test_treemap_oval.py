@@ -10,15 +10,15 @@ from python_stories.gotree_data import SAMPLE_TREE, by_depth
 def node(d):
     if d["height"] == 0:
         return ellipse(
-            w=22 + d["data"]["value"] * 14,
-            h=22 + d["data"]["value"] * 14,
+            w=37 + d["data"]["value"] * 24,
+            h=37 + d["data"]["value"] * 24,
             fill=by_depth()(d),
         )
     return ellipse(fill=by_depth()(d), stroke="#08306b", stroke_width=1)
 
 
-P = 10
-G = 8
+P = 17
+G = 14
 
 dice = combine(
     x={"kind": "align", "alignment": "middle"},

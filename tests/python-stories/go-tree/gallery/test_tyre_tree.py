@@ -19,7 +19,7 @@ SAMPLE_TREE = make(3)
 
 TYRE_BLUES = ["#08306b", "#2171b5", "#6baed6", "#c6dbef", "#deebf7"]
 
-BAND = 34  # radial thickness of one inclusion band
+BAND = 56  # radial thickness of one inclusion band
 
 
 # A node's ring is as thick as the levels below it, so every ring starts at

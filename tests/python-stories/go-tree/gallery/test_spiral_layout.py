@@ -26,7 +26,7 @@ def story_spiral_layout():
                 },
                 y={
                     "kind": "distribute",
-                    "spacing": 50,
+                    "spacing": 118,
                     "anchor": "middle",
                     "alignment": "middle",
                 },
@@ -40,7 +40,7 @@ def story_spiral_layout():
                 },
                 y={
                     "kind": "distribute",
-                    "spacing": 26,
+                    "spacing": 62,
                     "anchor": "middle",
                     "alignment": "middle",
                 },

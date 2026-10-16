@@ -11,15 +11,15 @@ def node(d):
     if d["height"] == 0:
         value = d["data"].get("value")
         return rect(
-            w=40,
-            h=(value if value is not None else d["width"]) * 16,
+            w=92,
+            h=(value if value is not None else d["width"]) * 37,
             fill=by_depth()(d),
         )
     return rect(fill=by_depth()(d), stroke="#08306b", stroke_width=1)
 
 
-P = 6  # nest padding (Root include pad)
-G = 8  # sibling distribute spacing (Subtree flatten margin)
+P = 14  # nest padding (Root include pad)
+G = 18  # sibling distribute spacing (Subtree flatten margin)
 
 dice = combine(
     x={"kind": "align", "alignment": "middle"},

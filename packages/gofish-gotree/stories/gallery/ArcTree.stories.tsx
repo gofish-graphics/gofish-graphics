@@ -16,7 +16,7 @@ const meta: Meta = { title: "GoTree / Gallery / arc-tree" };
 export default meta;
 
 const node = (d: any) =>
-  circle({ r: 6, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
+  circle({ r: 11, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
 
 export const ArcTree: StoryObj = {
   render: () =>
@@ -24,11 +24,11 @@ export const ArcTree: StoryObj = {
       node,
       link: { curve: Curve.arc(), stroke: "#90a4ae", strokeWidth: 1.5 },
       parentChild: combine({
-        x: { kind: "distribute", spacing: 14 },
+        x: { kind: "distribute", spacing: 27 },
         y: { kind: "align", alignment: "middle" },
       }),
       sibling: combine({
-        x: { kind: "distribute", spacing: 14 },
+        x: { kind: "distribute", spacing: 27 },
         y: { kind: "align", alignment: "middle" },
       }),
     }),

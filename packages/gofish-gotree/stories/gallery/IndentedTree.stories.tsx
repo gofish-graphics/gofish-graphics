@@ -31,14 +31,14 @@ export default meta;
 const maxDepth = 3;
 const node = (d: any) =>
   rect({
-    w: 16 + (maxDepth - d.depth) * 26,
-    h: 16,
+    w: 26 + (maxDepth - d.depth) * 43,
+    h: 26,
     fill: byDepth()(d),
   });
 
 const layout = combine({
   x: { kind: "align", alignment: "start" },
-  y: { kind: "distribute", spacing: 4 },
+  y: { kind: "distribute", spacing: 7 },
 });
 
 export const IndentedTree: StoryObj = {

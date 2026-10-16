@@ -5,7 +5,7 @@ from gofish.gotree import combine, tree
 from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
 TH = 0.13  # fixed angular width per node (radians, via em_x): thin slivers
-LEAF_H = 12  # leaf radial thickness (r units, via em_y)
+LEAF_H = 59  # leaf radial thickness (r units, via em_y)
 
 
 # Internal nodes leave r unsized so the r nest grows them over their subtree.
@@ -38,11 +38,11 @@ def story_tornado_tree():
             link="none",
             parent_child=combine(
                 x={"kind": "distribute", "spacing": 0.55, "anchor": "middle"},
-                y={"kind": "nest", "pad": 9},
+                y={"kind": "nest", "pad": 44},
             ),
             sibling=combine(
                 x={"kind": "distribute", "spacing": 0.42, "anchor": "middle"},
-                y={"kind": "distribute", "spacing": 9, "anchor": "middle"},
+                y={"kind": "distribute", "spacing": 44, "anchor": "middle"},
             ),
             coord=Coord.polar(),
         ),

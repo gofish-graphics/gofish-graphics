@@ -34,7 +34,7 @@ def story_deep_tree():
                 x={"kind": "nest", "pad": 0},
                 y={
                     "kind": "distribute",
-                    "spacing": 72,
+                    "spacing": 151,
                     "anchor": "middle",
                     "alignment": "middle",
                 },

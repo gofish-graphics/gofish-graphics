@@ -25,7 +25,7 @@ SECTOR_TREE = {
     ],
 }
 
-BAND_HEIGHT = 56  # radial thickness of one ring
+BAND_HEIGHT = 90  # radial thickness of one ring
 
 
 # Leaves carry a unit angular weight; internal nodes leave theta unsized so

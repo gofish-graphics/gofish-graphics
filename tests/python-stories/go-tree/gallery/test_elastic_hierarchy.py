@@ -11,8 +11,8 @@ def node(d):
     if d["height"] == 0:
         value = d["data"].get("value")
         return rect(
-            w=26,
-            h=24 + (value if value is not None else 1) * 12,
+            w=46,
+            h=42 + (value if value is not None else 1) * 21,
             fill=by_depth()(d),
             stroke="#08306b",
             stroke_width=1,
@@ -27,11 +27,11 @@ def story_elastic_hierarchy():
             node=node,
             link="none",
             parent_child=combine(
-                x={"kind": "nest", "pad": 8},
-                y={"kind": "nest", "pad": 22},
+                x={"kind": "nest", "pad": 14},
+                y={"kind": "nest", "pad": 38},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": 8},
+                x={"kind": "distribute", "spacing": 14},
                 y={"kind": "align", "alignment": "middle"},
             ),
         ),

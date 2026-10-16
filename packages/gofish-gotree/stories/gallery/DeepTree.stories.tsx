@@ -82,7 +82,7 @@ export const DeepTree: StoryObj = {
           // r: one ring per depth (center mode → spacing in r-units).
           y: {
             kind: "distribute",
-            spacing: 72,
+            spacing: 151,
             anchor: "middle",
             alignment: "middle",
           },

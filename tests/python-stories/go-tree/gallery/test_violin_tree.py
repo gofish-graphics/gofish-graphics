@@ -7,7 +7,7 @@ from gofish.gotree import combine, tree
 from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
 LEAF_THETA = (2 * math.pi) / 9  # fixed theta-width per node (~9 slots)
-VALUE_R = 14  # r-units per unit of value (violin thickness)
+VALUE_R = 42  # r-units per unit of value (violin thickness)
 
 
 # A leaf's radial thickness is proportional to its value; internal nodes
@@ -41,7 +41,7 @@ def story_violin_tree():
             link="none",
             parent_child=combine(
                 x={"kind": "distribute", "spacing": 0, "anchor": "middle"},
-                y={"kind": "nest", "pad": 6},
+                y={"kind": "nest", "pad": 18},
             ),
             sibling=combine(
                 x={"kind": "distribute", "spacing": LEAF_THETA, "anchor": "middle"},

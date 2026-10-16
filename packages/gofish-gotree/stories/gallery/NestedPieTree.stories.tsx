@@ -33,14 +33,14 @@ export default meta;
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        w: 40,
-        h: (d.data.value ?? d.width ?? 1) * 16,
+        w: 92,
+        h: (d.data.value ?? d.width ?? 1) * 37,
         fill: byDepth()(d),
       })
     : rect({ fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
 
-const P = 6; // nest padding (Root include pad)
-const G = 8; // sibling distribute spacing (Subtree flatten margin)
+const P = 14; // nest padding (Root include pad)
+const G = 18; // sibling distribute spacing (Subtree flatten margin)
 
 // dice: siblings stack vertically (distribute y), sharing an x-center.
 const dice = combine({

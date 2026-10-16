@@ -11,8 +11,8 @@ GRAYS = ["#070707", "#3b3e41", "#6c6f72", "#929598", "#b6b9bc"]
 # y nest grows them to wrap their subtree.
 def node(d):
     if d["height"] == 0:
-        return rect(w=12, h=80, fill=by_depth(GRAYS)(d))
-    return rect(w=12, fill=by_depth(GRAYS)(d))
+        return rect(w=36, h=240, fill=by_depth(GRAYS)(d))
+    return rect(w=36, fill=by_depth(GRAYS)(d))
 
 
 def story_barcode_tree():
@@ -22,11 +22,11 @@ def story_barcode_tree():
             node=node,
             link="none",
             parent_child=combine(
-                x={"kind": "distribute", "spacing": 4},
-                y={"kind": "nest", "pad": 6},
+                x={"kind": "distribute", "spacing": 12},
+                y={"kind": "nest", "pad": 18},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": 4},
+                x={"kind": "distribute", "spacing": 12},
                 y={"kind": "align", "alignment": "middle"},
             ),
         ),

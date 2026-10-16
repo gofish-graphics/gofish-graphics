@@ -27,8 +27,8 @@ def make(depth, prefix=""):
 
 DEEP_BALANCED_TREE = make(6)
 
-RING_THICKNESS = 3  # thin radial band (approximates StaticThickness 2)
-RING_GAP = 13  # radial gap between consecutive rings
+RING_THICKNESS = 8  # thin radial band (approximates StaticThickness 2)
+RING_GAP = 35  # radial gap between consecutive rings
 
 
 # Leaves carry a unit angular weight; internal nodes leave theta unsized so

@@ -19,7 +19,7 @@ DEEP_TREE = make(4, "r")
 
 
 def node(d):
-    return circle(r=6, fill=by_depth()(d), stroke="#08306b", stroke_width=1)
+    return circle(r=8, fill=by_depth()(d), stroke="#08306b", stroke_width=1)
 
 
 def story_cartesian_deep_tree():
@@ -30,10 +30,10 @@ def story_cartesian_deep_tree():
             link={"curve": Curve.linear(), "stroke": "#5f6b7a", "stroke_width": 1.5},
             parent_child=combine(
                 x={"kind": "nest", "pad": 0},
-                y={"kind": "distribute", "spacing": 80, "order": "reverse"},
+                y={"kind": "distribute", "spacing": 104, "order": "reverse"},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": 22},
+                x={"kind": "distribute", "spacing": 29},
                 y={"kind": "align", "alignment": "start"},
             ),
         ),

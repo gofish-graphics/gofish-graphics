@@ -10,7 +10,7 @@ from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
 
 def node(d):
-    return circle(r=6, fill=by_depth()(d), stroke="#08306b", stroke_width=1)
+    return circle(r=11, fill=by_depth()(d), stroke="#08306b", stroke_width=1)
 
 
 def story_arc_tree():
@@ -20,11 +20,11 @@ def story_arc_tree():
             node=node,
             link={"curve": Curve.arc(), "stroke": "#90a4ae", "stroke_width": 1.5},
             parent_child=combine(
-                x={"kind": "distribute", "spacing": 14},
+                x={"kind": "distribute", "spacing": 27},
                 y={"kind": "align", "alignment": "middle"},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": 14},
+                x={"kind": "distribute", "spacing": 27},
                 y={"kind": "align", "alignment": "middle"},
             ),
         ),

@@ -18,7 +18,7 @@ import { initializeContainer } from "../helper";
 // matching the reference (root at top, leaves at bottom). Links use the
 // `orthogonal` route (elbow connectors), matching the dsl's orthogonal links.
 const node = (d: any) =>
-  circle({ r: 8, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
+  circle({ r: 14, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
 
 export const ReadableTreeLayout: StoryObj = {
   tags: ["gallery"],
@@ -37,10 +37,10 @@ export const ReadableTreeLayout: StoryObj = {
         link: { curve: Curve.orthogonal(), stroke: "#555555", strokeWidth: 2 },
         parentChild: combine({
           x: { kind: "align", alignment: "middle" },
-          y: { kind: "distribute", spacing: 60 },
+          y: { kind: "distribute", spacing: 102 },
         }),
         sibling: combine({
-          x: { kind: "distribute", spacing: 18 },
+          x: { kind: "distribute", spacing: 31 },
           y: { kind: "align", alignment: "middle" },
         }),
       },

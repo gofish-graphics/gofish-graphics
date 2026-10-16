@@ -98,10 +98,10 @@ export const Dendrogram: StoryObj = {
         }),
         parentChild: combine({
           x: { kind: "nest", pad: 0 },
-          y: { kind: "distribute", spacing: 70 },
+          y: { kind: "distribute", spacing: 154 },
         }),
         sibling: combine({
-          x: { kind: "distribute", spacing: 22 },
+          x: { kind: "distribute", spacing: 48 },
           // "bottom" alignment: y-up → screen bottom is low y → "start".
           y: { kind: "align", alignment: "start" },
         }),

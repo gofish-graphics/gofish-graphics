@@ -54,7 +54,7 @@ export default meta;
 const icicleBlues = ["#2171b5", "#6baed6", "#9ecae1", "#c6dbef", "#deebf7"];
 
 // sampleTree: A(3) + B(B1, B2a, B2b = 3) + C(2) = 8 leaves.
-const bandHeight = 46; // radial thickness of one depth ring
+const bandHeight = 72; // radial thickness of one depth ring
 
 // θ auto-fit (#618): leaves carry a unit angular weight; internal nodes leave θ
 // unsized so nest-θ grows each to its children's combined arc. The coord fits the

@@ -17,11 +17,11 @@ def story_side_tree():
             link={"curve": Curve.linear(), "stroke": "#607d8b", "stroke_width": 1.5},
             parent_child=combine(
                 x={"kind": "distribute", "spacing": 0.5, "anchor": "middle"},
-                y={"kind": "distribute", "spacing": 70, "anchor": "middle"},
+                y={"kind": "distribute", "spacing": 84, "anchor": "middle"},
             ),
             sibling=combine(
                 x={"kind": "align", "alignment": "middle"},
-                y={"kind": "distribute", "spacing": 90, "anchor": "middle"},
+                y={"kind": "distribute", "spacing": 109, "anchor": "middle"},
             ),
             coord=Coord.polar(),
         ),

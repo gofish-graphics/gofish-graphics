@@ -9,12 +9,12 @@ MAX_DEPTH = 3
 
 # Deeper rows are narrower, so their shared start edge reads as an indent.
 def node(d):
-    return rect(w=16 + (MAX_DEPTH - d["depth"]) * 26, h=16, fill=by_depth()(d))
+    return rect(w=26 + (MAX_DEPTH - d["depth"]) * 43, h=26, fill=by_depth()(d))
 
 
 layout = combine(
     x={"kind": "align", "alignment": "start"},
-    y={"kind": "distribute", "spacing": 4},
+    y={"kind": "distribute", "spacing": 7},
 )
 
 

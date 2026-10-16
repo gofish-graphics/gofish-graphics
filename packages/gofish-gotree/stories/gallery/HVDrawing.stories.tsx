@@ -16,9 +16,9 @@ const meta: Meta = {
 export default meta;
 
 const node = (d: any) =>
-  circle({ r: 7, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
+  circle({ r: 16, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
 
-const S = 34;
+const S = 78;
 // H: parent left of subtree, children in a row (spread x, centered y).
 const H = combine({
   x: { kind: "distribute", spacing: S },

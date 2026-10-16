@@ -10,8 +10,8 @@ from python_stories.gotree_data import SAMPLE_TREE, by_depth
 def node(d):
     if d["height"] == 0:
         return rect(
-            w=18 + d["data"]["value"] * 10,
-            h=18 + d["data"]["value"] * 10,
+            w=41 + d["data"]["value"] * 23,
+            h=41 + d["data"]["value"] * 23,
             fill=by_depth()(d),
             stroke="#08306b",
             stroke_width=1,
@@ -19,8 +19,8 @@ def node(d):
     return rect(fill=by_depth()(d), stroke="#08306b", stroke_width=1)
 
 
-P = 6  # small nest pad -> visible cascade inset border per level
-G = 8  # sibling spacing
+P = 14  # small nest pad -> visible cascade inset border per level
+G = 18  # sibling spacing
 
 dice = combine(
     x={"kind": "distribute", "spacing": G},

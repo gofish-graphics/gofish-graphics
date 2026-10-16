@@ -27,8 +27,8 @@ const grays = ["#070707", "#3b3e41", "#6c6f72", "#929598", "#b6b9bc"];
 // y (the nest axis) so the parent box grows to wrap its subtree vertically.
 const node = (d: any) =>
   d.height === 0
-    ? rect({ w: 12, h: 80, fill: byDepth(grays)(d) })
-    : rect({ w: 12, fill: byDepth(grays)(d) });
+    ? rect({ w: 36, h: 240, fill: byDepth(grays)(d) })
+    : rect({ w: 36, fill: byDepth(grays)(d) });
 
 export const BarcodeTree: StoryObj = {
   tags: ["gallery"],
@@ -46,11 +46,11 @@ export const BarcodeTree: StoryObj = {
         node,
         link: "none",
         parentChild: combine({
-          x: { kind: "distribute", spacing: 4 },
-          y: { kind: "nest", pad: 6 },
+          x: { kind: "distribute", spacing: 12 },
+          y: { kind: "nest", pad: 18 },
         }),
         sibling: combine({
-          x: { kind: "distribute", spacing: 4 },
+          x: { kind: "distribute", spacing: 12 },
           y: { kind: "align", alignment: "middle" },
         }),
       },

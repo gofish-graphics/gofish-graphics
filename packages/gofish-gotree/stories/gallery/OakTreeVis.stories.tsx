@@ -80,7 +80,7 @@ export const OakTreeVis: StoryObj = {
           //    (parent inner, children outward) — see GAP 1. mode center → r-units.
           y: {
             kind: "distribute",
-            spacing: 60,
+            spacing: 121,
             anchor: "middle",
             alignment: "middle",
           },
@@ -93,7 +93,7 @@ export const OakTreeVis: StoryObj = {
             anchor: "middle",
           },
           // r: stagger siblings radially — the spiral/oak stagger (dsl flatten).
-          y: { kind: "distribute", spacing: 30, anchor: "middle" },
+          y: { kind: "distribute", spacing: 61, anchor: "middle" },
         }),
         coord: Coord.polar(),
       },
