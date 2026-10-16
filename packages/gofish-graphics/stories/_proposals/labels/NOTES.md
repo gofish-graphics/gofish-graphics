@@ -68,3 +68,46 @@ and draw the labels on top.
   prices.
 - **Zoom.** Each story's container has CSS `zoom` (1.15 to 2) so the PNG is
   sharp. Zoom does not change SVG user units or text metrics.
+
+## Sides and boundaries (`side.ts`, `Sides.stories.tsx`, `Boundary.stories.tsx`)
+
+Stories: `path-sides`, `edge-sides`, `side-candidates`, `along-grid`,
+`boundary-vocabulary`, `boundary-donut`, `boundary-region`. Same pipeline as
+above (real render, geometry read from the SVG, raw `<text>` overlay).
+
+- **Side rule.** `left`/`right` are the normals of the direction of travel
+  (path point order). `above`/`below` pick the normal whose y points up or
+  down; on a stretch steeper than about 75 degrees neither does, and the
+  candidate is dropped. `inset`/`outset` need a closed path: the ring's
+  signed area says whether outside is left or right of travel.
+- **Sloped** labels use the chord across the label's width (as `along()`),
+  moved `offset + h/2` along the normal, plus how far the path bulges toward
+  the label inside the span (skipped past one text height).
+- **Curved** labels follow the path offset by `offset + h/2`. The tangent for
+  each normal is averaged over plus or minus the offset distance, so a sharp
+  vertex of a sampled outline sweeps instead of jumping or folding. A window
+  is rejected if the offset path folds back, or if it turns more than 70
+  degrees under the text (`MAX_TURN`). Drawn with `<textPath>`, centered,
+  reversed when the path runs leftward so glyphs stay upright. Collision
+  geometry is a chain of small boxes along the curve.
+- **`at: "start"` / `"end"`** put the label's start (end) at the path's start
+  (end), not its center.
+- **Side lists** are tried position-major: at each slide position, every side
+  in order, then the next position.
+- **Compass points** (`compassPoint`) are the outline points extreme in that
+  direction, within 0.75px; ties along a flat edge take the middle of the
+  run. Ties across separate runs (the C's two arm tips for `right`) take the
+  run nearest the middle of the bounding box's side, then the first found.
+- **Donut "top" edge.** The prototype finds a slice's outer arc as the run of
+  outline points at the largest distance from the ring's center, and keeps
+  the label inside that run. A real implementation would take the rect's top
+  edge before the coordinate transform and map it. The donut renders with
+  `axes: false` and no legend; the proposed panels map slices to species by
+  DOM order (data order), checked against the legend colors.
+- **Region hulls** are convex hulls of each cluster's points padded by a
+  0.45-unit circle, computed in data units and drawn with a `polygon` mark in
+  a layered chart. Dots and other regions' outlines are obstacles; labels
+  slide 4px at a time along the outline, up to 30 steps each way.
+- **Edge diagram** uses `arrow()` with `bow: 0, stretch: 0` for the ring and
+  `bow: 0.3` for the opposite pair (perfect-arrows bows the two directions to
+  opposite sides). No collision avoidance in that story.

@@ -992,6 +992,86 @@
     font-weight: 600;
   }
 
+  /* review round 1 */
+  .revised {
+    max-width: 80ch;
+    margin: 0 0 18px;
+    padding: 12px 16px;
+    border: 1px solid var(--chip-new-rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    background: var(--accent-soft);
+    font-size: 14.5px;
+    color: var(--ink);
+  }
+  .revised .k {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin-bottom: 4px;
+  }
+  .revised p {
+    margin: 0;
+  }
+  .revised-line {
+    font-size: 14px;
+    color: var(--ink-2);
+    font-style: italic;
+    max-width: 76ch;
+    margin: 0 0 14px;
+  }
+  .fig-wide {
+    margin: 10px 0 20px;
+  }
+  .fig-narrow {
+    margin: 10px 0 20px;
+    max-width: 720px;
+  }
+  .vocab {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    margin: 10px 0 18px;
+  }
+  @media (min-width: 720px) {
+    .vocab {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+  }
+  .vocab > div {
+    min-width: 0;
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--accent);
+    border-radius: 0 0 6px 6px;
+    background: var(--surface);
+    padding: 14px 16px;
+    font-size: 14.5px;
+  }
+  .vocab > div.dir {
+    border-top-color: var(--ink-3);
+  }
+  .vocab h4 {
+    margin: 0 0 2px;
+  }
+  .vocab .who {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 8px;
+  }
+  .vocab ul {
+    margin: 0;
+  }
+  .vocab p:last-child {
+    margin-bottom: 0;
+  }
+
   footer {
     margin-top: 64px;
     font-size: 13px;
@@ -1017,21 +1097,24 @@
           <a href="#place"><span class="n">04</span>The Place family</a>
         </li>
         <li>
+          <a href="#sides"><span class="n">05</span>Sides and boundaries</a>
+        </li>
+        <li>
           <a href="#prototypes"
-            ><span class="n">05</span>What prototypes taught</a
+            ><span class="n">06</span>What prototypes taught</a
           >
         </li>
         <li>
-          <a href="#approaches"><span class="n">06</span>Approaches A, B, C</a>
+          <a href="#approaches"><span class="n">07</span>Approaches A, B, C</a>
         </li>
         <li>
-          <a href="#geometry"><span class="n">07</span>Geometry queries</a>
+          <a href="#geometry"><span class="n">08</span>Geometry queries</a>
         </li>
         <li>
-          <a href="#recommendation"><span class="n">08</span>Recommendation</a>
+          <a href="#recommendation"><span class="n">09</span>Recommendation</a>
         </li>
         <li>
-          <a href="#decisions"><span class="n">09</span>Decisions for Josh</a>
+          <a href="#decisions"><span class="n">10</span>Decisions for Josh</a>
         </li>
       </ol>
     </nav>
@@ -1042,6 +1125,18 @@
         <h1>Labels for Points, Lines and Areas</h1>
         <div class="status">
           Proposal, not implemented; syntax awaiting sign-off
+        </div>
+
+        <div class="revised">
+          <div class="k">Revised after review round 1</div>
+          <p>
+            <code>Place.along</code> now covers open paths and region
+            boundaries, with a <code>side</code> option, and today's position
+            strings are <code>along</code> on a rect's parts.
+            <code>Place.around</code> reads screen directions, and one geometry
+            query, <code>Outline</code>, serves both. See
+            <a href="#sides">section 05, Sides and boundaries</a>.
+          </p>
         </div>
 
         <div class="summary">
@@ -1064,10 +1159,10 @@
               <code>.label(accessor, { position: Place.end(), avoiding })</code
               >. Each <code>Place</code> member is defined by a rewrite into
               today's elaborated shape (<code>layer([ref(target), text])</code>
-              plus a placement), so the core grows by two geometry queries
-              (#974's <code>boundary</code> and a new <code>path</code>) and one
-              search step, the same kind of step as scatter's
-              <code>overlap</code>. The runner-up is a public
+              plus a placement), so the core grows by one geometry query
+              (<code>outline</code>, #974's <code>boundary</code> extended to
+              open paths and named parts) and one search step, the same kind of
+              step as scatter's <code>overlap</code>. The runner-up is a public
               <code>label(...)</code> tier for <code>.layer()</code>/<code
                 >.relate()</code
               >
@@ -1784,7 +1879,7 @@ Plot.centroid</code></pre>
             </div>
             <p class="fit">
               <b>Fits:</b> Mapbox uses it for polygon labels. <b>Doesn't:</b> it
-              finds the largest circle, and text is wide (see section 05).
+              finds the largest circle, and text is wide (see section 06).
             </p>
             <p class="src">
               Source:
@@ -2050,7 +2145,7 @@ encourage near(label, point)</code></pre>
                     />
                   </div>
                   <pre><code>.label(<span class="s">"symbol"</span>, {
-  position: <span class="fam">Place</span>.along({ at: <span class="nm">0.6</span>, sloped: <span class="nm">true</span> }) })</code></pre>
+  position: <span class="fam">Place</span>.along({ at: <span class="nm">0.6</span>, orient: <span class="s">"sloped"</span> }) })</code></pre>
                 </figure>
               </div>
             </div>
@@ -2117,7 +2212,7 @@ encourage near(label, point)</code></pre>
               <pre><code>.label(<span class="s">"name"</span>, { position: <span class="s">"center"</span> })</code></pre>
               <p class="note">
                 The C and L labels are drawn white on the white background (see
-                section 05).
+                section 06).
               </p>
             </div>
             <div class="col prop">
@@ -2188,7 +2283,7 @@ encourage near(label, point)</code></pre>
           <pre><code>chart(stocks).flow(group(by=<span class="s">"symbol"</span>)).mark(
     line(x=<span class="s">"date"</span>, y=<span class="s">"price"</span>, stroke=<span class="s">"symbol"</span>).label(<span class="s">"symbol"</span>, position=<span class="fam">Place</span>.end())
 )
-line(...).label(<span class="s">"symbol"</span>, position=<span class="fam">Place</span>.along(at=<span class="nm">0.6</span>, sloped=<span class="nm">True</span>))
+line(...).label(<span class="s">"symbol"</span>, position=<span class="fam">Place</span>.along(at=<span class="nm">0.6</span>, orient=<span class="s">"sloped"</span>))
 circle(r=<span class="nm">3</span>).label(<span class="s">"name"</span>, position=<span class="fam">Place</span>.around(), avoiding=select_all(<span class="s">"trend"</span>))</code></pre>
         </div>
       </section>
@@ -2201,7 +2296,9 @@ circle(r=<span class="nm">3</span>).label(<span class="s">"name"</span>, positio
             Each member turns one geometry kind into ordered candidates. A
             member that needs geometry the target does not have is a loud error
             naming the missing capability, for example
-            <code>Place.along needs a path; rect has none</code>.
+            <code
+              >Place.interior needs a closed outline; line has an open one</code
+            >.
           </p>
         </div>
 
@@ -2222,6 +2319,13 @@ circle(r=<span class="nm">3</span>).label(<span class="s">"name"</span>, positio
           </figcaption>
         </figure>
 
+        <p class="revised-line">
+          Revised after review round 1 (<a href="#sides">section 05</a>):
+          <code>along</code> now covers both open paths and region boundaries,
+          with a <code>side</code> option; today's strings are shorthand for
+          <code>along</code> on a rect's parts.
+        </p>
+
         <div class="table-scroll">
           <table>
             <thead>
@@ -2233,25 +2337,46 @@ circle(r=<span class="nm">3</span>).label(<span class="s">"name"</span>, positio
               </tr>
             </thead>
             <tbody>
+              <tr class="hl">
+                <td><code>Place.along({ at, side, orient, offset })</code></td>
+                <td>
+                  <span class="chip new">outline</span>
+                  <span class="muted small"
+                    >an open path or a region's boundary</span
+                  >
+                </td>
+                <td>
+                  the spot at <code>at</code>, then nearby spots along the
+                  outline; at each, the sides listed in <code>side</code>
+                </td>
+                <td>
+                  TikZ <code>pos</code>/<code>sloped</code>/<code>auto</code>,
+                  geomtextpath <code>hjust</code>/<code>vjust</code>, QGIS
+                  Parallel / Curved / Using Perimeter, Mapbox
+                  <code>symbol-placement: line</code>
+                </td>
+              </tr>
               <tr>
                 <td>
-                  <code>"outset-top"</code>, <code>"center"</code>, …
+                  <code>"outset-top"</code>, <code>"inset-top-start"</code>, …
                   <span class="muted small">(today's strings)</span>
                 </td>
-                <td><span class="chip">box</span></td>
-                <td>one</td>
+                <td><span class="chip">a rect's parts</span></td>
+                <td>
+                  one: <code>"outset-top"</code> is
+                  <code>Place.along({ at: "top", side: "outset" })</code>
+                </td>
                 <td>today; Vega anchors</td>
               </tr>
               <tr>
                 <td><code>Place.around({ candidates? })</code></td>
                 <td>
-                  <span class="chip">point</span>
-                  <span class="muted small">(enclosing circle)</span> or
-                  <span class="chip">box</span>
+                  <span class="chip">outline</span>
+                  <span class="muted small">by screen direction</span>
                 </td>
                 <td>
-                  8 compass spots, upper right first; or a given list, e.g.
-                  <code>["outset-top", "inset-top"]</code> for bars
+                  the outline's extreme point in each of 8 compass directions,
+                  upper right first, outside; or a given list
                 </td>
                 <td>
                   Imhof, Christensen et al., Vega-Lite defaults, CSS fallbacks
@@ -2259,27 +2384,14 @@ circle(r=<span class="nm">3</span>).label(<span class="s">"name"</span>, positio
               </tr>
               <tr>
                 <td><code>Place.start()</code>, <code>Place.end()</code></td>
-                <td><span class="chip new">path</span></td>
+                <td><span class="chip new">open path</span></td>
                 <td>
-                  the path's first or last point, sliding along y to clear
-                  neighbors
+                  past the path's first or last point, horizontal, sliding along
+                  y to clear neighbors
                 </td>
                 <td>
                   directlabels <code>first.qp</code>/<code>last.qp</code>, Plot
                   <code>selectLast</code>, Vega <code>lineAnchor</code>
-                </td>
-              </tr>
-              <tr>
-                <td><code>Place.along({ at, sloped })</code></td>
-                <td><span class="chip new">path</span></td>
-                <td>
-                  the point at fraction <code>at</code> of the arc length, then
-                  nearby fractions; rotated to the tangent if
-                  <code>sloped</code>
-                </td>
-                <td>
-                  TikZ <code>pos</code>/<code>sloped</code>, geomtextpath
-                  <code>hjust</code>, Mapbox <code>symbol-placement: line</code>
                 </td>
               </tr>
               <tr>
@@ -2308,9 +2420,305 @@ circle(r=<span class="nm">3</span>).label(<span class="s">"name"</span>, positio
         </div>
       </section>
 
+      <!-- 5. SIDES AND BOUNDARIES (review round 1) -->
+      <section id="sides">
+        <h2>
+          <span class="secnum">05</span>Sides of a path, and a path that is a
+          boundary
+        </h2>
+        <p class="eyebrow">New in review round 1</p>
+        <div class="prose">
+          <p>
+            Josh asked: what about labels above or below a path, and what about
+            a path that is the boundary of a shape? Both fit
+            <code>along</code>, and the second one folds today's box vocabulary
+            into it.
+          </p>
+        </div>
+
+        <h3>Sides of an open path</h3>
+        <div class="prose">
+          <p>
+            Precedent has two frames for "side". The screen frame is TikZ
+            <code>above</code>/<code>below</code> and QGIS "above line / below
+            line". The path's own frame is TikZ <code>auto=left|right</code> and
+            QGIS "line orientation dependent": left or right of the direction of
+            travel. <code>side</code> takes both, and <code>"on"</code>:
+          </p>
+        </div>
+        <div class="codeblock">
+          <pre><code>line({ stroke: <span class="s">"symbol"</span> }).label(<span class="s">"symbol"</span>, {
+  position: <span class="fam">Place</span>.along({ at: <span class="nm">0.6</span>, side: <span class="s">"above"</span>, orient: <span class="s">"sloped"</span> }),
+})
+arrow({}, [ref(A), ref(B)]).label(<span class="s">"submit"</span>, {
+  position: <span class="fam">Place</span>.along({ at: <span class="nm">0.5</span>, side: <span class="s">"left"</span>, orient: <span class="s">"sloped"</span> }),
+})</code></pre>
+        </div>
+        <div class="pair">
+          <figure>
+            <div class="paper">
+              <img
+                src="img/path-sides.png"
+                alt="Three stock charts with labels at 60 percent of each line: above, on with a halo, and below"
+                width="1003"
+                height="1503"
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              Sides on a line chart: <code>above</code>, <code>on</code> (halo),
+              <code>below</code>.
+            </figcaption>
+          </figure>
+          <figure>
+            <div class="paper">
+              <img
+                src="img/edge-sides.png"
+                alt="A four-node cycle diagram labeled with side above, where the vertical edges lose their labels, and with side left, where every label sits outside the cycle"
+                width="1028"
+                height="1124"
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              Screen frame (<code>side: "above"</code>) vs path frame (<code
+                >side: "left"</code
+              >) on a diagram.
+            </figcaption>
+          </figure>
+        </div>
+        <div class="prose">
+          <p>
+            The two frames are not redundant. On a diagram the path frame is the
+            one that works: with <code>side: "left"</code> every label of a
+            clockwise cycle lands outside it, and the two labels of a pair of
+            opposite edges separate. With <code>side: "above"</code>, the labels
+            on the two vertical edges are hidden, because a vertical stretch has
+            no "above". That is inherent to the screen frame, not a prototype
+            bug: <code>above</code> is partial, defined only where the path is
+            not near vertical, and it flips abruptly as the path passes
+            vertical. On a dense line chart, <code>above</code> and
+            <code>below</code> can also leave a label between two lines, equally
+            close to both (<code>below</code>, AAPL); only <code>on</code> with
+            a halo is never ambiguous. So the default side is <code>"on"</code>.
+          </p>
+        </div>
+
+        <h3><code>side</code> as a candidate list</h3>
+        <div class="prose">
+          <p>
+            Because the chooser already takes candidates, <code>side</code> may
+            be a list, tried in order, like QGIS's multi-select position flags:
+          </p>
+        </div>
+        <div class="pair">
+          <figure>
+            <div class="paper">
+              <img
+                src="img/side-candidates.png"
+                alt="Two line charts: with side above the Actual label is hidden; with side above then below it flips below its line"
+                width="1206"
+                height="585"
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              <code>side: "above"</code> hides Actual;
+              <code>side: ["above", "below"]</code> flips it below.
+            </figcaption>
+          </figure>
+          <figure>
+            <div class="paper">
+              <img
+                src="img/along-grid.png"
+                alt="Nine panels of one wave-shaped path, labeled at start, 0.5 and end, above, on and below"
+                width="1244"
+                height="846"
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              <code>at</code> × <code>side</code> on one path.
+            </figcaption>
+          </figure>
+        </div>
+
+        <h3>A path that is a boundary</h3>
+        <div class="prose">
+          <p>
+            A region's boundary is a closed path with a known inside. On it,
+            <code>side</code> is <code>inset</code>, <code>outset</code> or
+            <code>on</code>, and <code>at</code> may name one of the mark's
+            parts. Today's strings are exactly this on a rect:
+            <code>"outset-top"</code> is
+            <code>Place.along({ at: "top", side: "outset" })</code>. So the box
+            vocabulary is not a separate geometry kind; it is
+            <code>along</code> on a rect's boundary.
+          </p>
+        </div>
+        <figure class="fig-wide">
+          <div class="paper">
+            <img
+              src="img/boundary-vocabulary.png"
+              alt="A rect, a circle and a C-shaped polygon, each with named spots on its outline, outset in the top row and inset in the bottom row"
+              width="1220"
+              height="1035"
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            Today's box words as spots on an outline, outset and inset. The
+            prototype found these spots by screen direction; the rule below
+            ("Two vocabularies for top") reads a rect's spots from its parts
+            instead. On a Cartesian rect the two agree.
+          </figcaption>
+        </figure>
+        <div class="prose">
+          <p>
+            This pays off where a rect is not drawn as a box. In polar
+            coordinates a rect's <code>top</code> part is the slice's outer arc,
+            so a donut is labeled along its arcs with the same words. Today both
+            <code>.label("species")</code> and
+            <code>position: "outset-top"</code> on a donut put every label at
+            one spot above the ring (#952):
+          </p>
+        </div>
+        <div class="codeblock">
+          <pre><code>rect({ w: <span class="s">"count"</span>, fill: <span class="s">"species"</span> }).label(<span class="s">"species"</span>, {
+  position: <span class="fam">Place</span>.along({ at: <span class="s">"top"</span>, side: <span class="s">"outset"</span>, orient: <span class="s">"curved"</span> }),
+})</code></pre>
+        </div>
+        <figure class="fig-narrow">
+          <div class="paper">
+            <img
+              src="img/boundary-donut.png"
+              alt="Four donuts: today's two spellings stack every label above the ring; along top outset and inset curve each label along its slice's outer arc"
+              width="1039"
+              height="1312"
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            Top row: today, every label piles up at one spot. Bottom row:
+            <code>at: "top"</code> with <code>side: "outset"</code> and
+            <code>side: "inset"</code>, curved along each slice's outer arc.
+          </figcaption>
+        </figure>
+        <div class="prose">
+          <p>
+            A boundary with no named parts takes a fraction of its length or a
+            starting direction, and the label slides along the outline until it
+            is clear. Here each cluster's hull is labeled along its own outline,
+            outside, then inside (where Sparrows is hidden because its dots fill
+            the edge):
+          </p>
+        </div>
+        <div class="codeblock">
+          <pre><code>polygon({ points: <span class="s">"ring"</span>, fill: <span class="s">"group"</span>, opacity: <span class="nm">0.18</span> }).label(<span class="s">"group"</span>, {
+  position: <span class="fam">Place</span>.along({ at: <span class="s">"top"</span>, side: <span class="s">"outset"</span>, orient: <span class="s">"curved"</span> }),
+})</code></pre>
+        </div>
+        <figure class="fig-wide">
+          <div class="paper">
+            <img
+              src="img/boundary-region.png"
+              alt="Three cluster hulls labeled along their outlines, outset on the left and inset on the right, where Sparrows is hidden"
+              width="1221"
+              height="727"
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            Hull labels along the outline: <code>side: "outset"</code> (left),
+            <code>side: "inset"</code> (right).
+          </figcaption>
+        </figure>
+
+        <h3>Two vocabularies for "top"</h3>
+        <div class="prose">
+          <p>
+            The prototype first treated <code>at: "top"</code> as "the outline
+            point farthest up the screen". That is wrong for a polar rect, whose
+            top is its outer arc, not the top of the screen. The two meanings
+            are different concepts, and both are needed:
+          </p>
+        </div>
+        <div class="vocab">
+          <div>
+            <h4>Parts</h4>
+            <p class="who">belong to the mark · read by <code>along</code></p>
+            <ul>
+              <li>
+                A rect declares <code>top</code>, <code>right</code>,
+                <code>bottom</code>, <code>left</code> and its corners in its
+                own frame, and the coordinate transform carries them.
+              </li>
+              <li>
+                A part is a stretch of the outline with a length, so a label
+                that does not fit along it is hidden.
+              </li>
+              <li>
+                In polar coordinates, a rect's <code>top</code> is the outer
+                arc.
+              </li>
+            </ul>
+          </div>
+          <div class="dir">
+            <h4>Directions</h4>
+            <p class="who">
+              belong to the screen · read by <code>around</code>
+            </p>
+            <ul>
+              <li>
+                "The outline's extreme point toward the upper right" is a
+                direction, with no length and no frame.
+              </li>
+              <li>
+                This is why <code>around</code> works on dots, polygons and
+                hulls.
+              </li>
+              <li>
+                On a non-convex outline a direction can have several extreme
+                runs (the C's <code>right</code> touches both arm tips); the
+                rule takes the run nearest the middle of that side of the
+                bounding box.
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="prose">
+          <p>
+            On a Cartesian rect the two agree, which is why today's strings
+            never had to choose.
+          </p>
+        </div>
+
+        <h3>Rules the renders needed that the first draft did not state</h3>
+        <ul class="args">
+          <li>
+            <code>orient: "curved"</code> needs a true offset curve (the normal
+            is averaged over a short stretch so an inset label does not fold at
+            a sharp vertex) and a bend limit (a spot where the outline turns
+            more than about 70° under the text is rejected), the same role the
+            straightness check plays for <code>"sloped"</code>.
+          </li>
+          <li>
+            A numeric <code>at</code> centers the label on that point (TikZ
+            <code>pos=0</code> also centers). <code>at: "start"</code> and
+            <code>at: "end"</code> instead align the label's start or end with
+            the path's end, so the label stays on the path.
+          </li>
+          <li>
+            With a list of sides, the chooser tries every side at one spot
+            before sliding along the path, which keeps the label near
+            <code>at</code>. The other order is decision 12.
+          </li>
+        </ul>
+      </section>
+
       <!-- 5. PROTOTYPES -->
       <section id="prototypes">
-        <h2><span class="secnum">05</span>What the prototypes taught</h2>
+        <h2><span class="secnum">06</span>What the prototypes taught</h2>
 
         <div class="lesson-block">
           <h3>One interior rule, not polylabel</h3>
@@ -2440,13 +2848,13 @@ circle(r=<span class="nm">3</span>).label(<span class="s">"name"</span>, positio
 
       <!-- 6. APPROACHES -->
       <section id="approaches">
-        <h2><span class="secnum">06</span>Approaches A, B, C</h2>
+        <h2><span class="secnum">07</span>Approaches A, B, C</h2>
         <div class="prose">
           <p>
             Three approaches differ in <b>where the user writes a label</b>. Two
             choices are shared by all three and are presented once, as separate
             axes: the <code>Place</code> strategy values (section 04) and the
-            geometry queries (section 07).
+            geometry queries (section 08).
           </p>
         </div>
 
@@ -2476,7 +2884,7 @@ chart(stocks)
 
 <span class="c">// Inline labels along the line</span>
   .mark(line({ x: <span class="s">"date"</span>, y: <span class="s">"price"</span>, stroke: <span class="s">"symbol"</span> })
-    .label(<span class="s">"symbol"</span>, { position: <span class="fam">Place</span>.along({ at: <span class="nm">0.6</span>, sloped: <span class="nm">true</span> }) }))
+    .label(<span class="s">"symbol"</span>, { position: <span class="fam">Place</span>.along({ at: <span class="nm">0.6</span>, orient: <span class="s">"sloped"</span> }) }))
 
 <span class="c">// Streamgraph band labels</span>
 chart(streams)
@@ -2753,60 +3161,58 @@ chart(selectAll(<span class="s">"hubs"</span>)).mark(label(<span class="s">"name
 
       <!-- 7. GEOMETRY -->
       <section id="geometry">
-        <h2><span class="secnum">07</span>Shared axis: geometry queries</h2>
+        <h2><span class="secnum">08</span>Shared axis: geometry queries</h2>
+        <p class="revised-line">
+          Revised after review round 1 (<a href="#sides">section 05</a>): one
+          <code>Outline</code> query replaces the separate
+          <code>boundary</code> and <code>path</code> queries.
+        </p>
         <div class="prose">
           <p>
-            The strategies need two queries beyond <code>enclosingCircle</code>,
-            each added with its first consumer as
-            <code>shape-geometry.md</code> decided:
+            The strategies need one query beyond <code>enclosingCircle</code>,
+            added with its first consumer as
+            <code>shape-geometry.md</code> decided. Open paths and region
+            boundaries are one type, so they are one query:
           </p>
         </div>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>query</th>
-                <th>returns</th>
-                <th>read by</th>
-                <th>implemented by</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>
-                  <code>boundary</code> <span class="muted small">(#974)</span>
-                </td>
-                <td>the closed outline of a region, sampled</td>
-                <td>
-                  <code>Place.interior()</code>; the chooser, for obstacles
-                </td>
-                <td>
-                  regions; <code>enclose</code>'s private member reader becomes
-                  this query (#1167)
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  <code>path</code>
-                  <span class="muted small">(new, <code>HasPath</code>)</span>
-                </td>
-                <td>
-                  an open polyline with arc length and tangent, in the node's
-                  local frame
-                </td>
-                <td>
-                  <code>start</code>, <code>end</code>, <code>along</code>
-                </td>
-                <td>
-                  <code>line</code>, <code>arrow</code> and edges;
-                  <code>ribbon</code> and <code>area</code> implement both
-                  (<code>boundary</code> for the band, <code>path</code> for the
-                  centerline)
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="codeblock">
+          <pre><code>interface Outline {
+  points: Point[];          <span class="c">// sampled, in screen space after the coordinate transform</span>
+  closed: boolean;          <span class="c">// a region's boundary (inside known by winding) or an open path</span>
+  parts?: { name: string; from: number; to: number }[]; <span class="c">// named arc-length ranges</span>
+}
+interface HasOutline { outline?: (tolerance: number) =&gt; Outline[] }</code></pre>
         </div>
+        <ul class="args">
+          <li>
+            <code>closed</code> decides the side vocabulary:
+            <code>inset</code>/<code>outset</code> on a boundary,
+            <code>left</code>/<code>right</code> on an open path.
+          </li>
+          <li>
+            <code>parts</code> are the mark's own named pieces, built in the
+            mark's frame and carried through the coordinate transform: a rect
+            names <code>top</code>, <code>right</code>, <code>bottom</code>,
+            <code>left</code> and its four corners. In polar coordinates a
+            rect's <code>top</code> part is a slice's outer arc. Shapes with no
+            natural parts (circles, polygons, hulls) leave it empty.
+          </li>
+          <li>
+            A <code>line</code>, <code>arrow</code> or edge gives one open
+            outline. An <code>area</code> or <code>ribbon</code> gives its
+            closed band (read by <code>interior</code>) and its centerline as an
+            open outline (read by <code>along</code>). This is #974's
+            <code>boundary</code> with <code>closed</code>,
+            <code>parts</code> and open paths added; <code>enclose</code>'s
+            private member reader becomes it (#1167).
+          </li>
+          <li>
+            It must be read <b>after</b> the coordinate transform, because
+            labels are screen-space text. Today the transform runs only at
+            lowering, so this query moves path transformation into layout for
+            nodes whose outline is asked for (open question 1).
+          </li>
+        </ul>
         <div class="prose">
           <p>
             The chooser tests a label's box against obstacle geometry: discs for
@@ -2818,7 +3224,7 @@ chart(selectAll(<span class="s">"hubs"</span>)).mark(label(<span class="s">"name
 
       <!-- 8. RECOMMENDATION -->
       <section id="recommendation">
-        <h2><span class="secnum">08</span>Recommendation</h2>
+        <h2><span class="secnum">09</span>Recommendation</h2>
         <p class="prose" style="font-size: 18px; font-weight: 600">
           Approach A, defined by rewrite into C, with B's anchors kept internal.
         </p>
@@ -2875,7 +3281,7 @@ chart(selectAll(<span class="s">"hubs"</span>)).mark(label(<span class="s">"name
 
       <!-- 9. DECISIONS -->
       <section id="decisions">
-        <h2><span class="secnum">09</span>Decisions for Josh</h2>
+        <h2><span class="secnum">10</span>Decisions for Josh</h2>
         <ol class="decisions">
           <li>
             <div>
@@ -2888,21 +3294,25 @@ chart(selectAll(<span class="s">"hubs"</span>)).mark(label(<span class="s">"name
           </li>
           <li>
             <div>
-              <p class="q">Do today's position strings stay as strings?</p>
+              <p class="q">
+                Do today's position strings stay as shorthand for
+                <code>along</code> on a rect's parts?
+                <span class="chip new">revised in round 1</span>
+              </p>
               <p class="d">
-                They stay as the one-candidate members (<code
-                  >position: "outset-top"</code
-                >), or move into the family
-                (<code>Place.box("outset-top")</code>). I recommend they stay: a
-                closed enum may be a string under the family rules.
+                <code>"outset-top"</code> =
+                <code>Place.along({ at: "top", side: "outset" })</code>. I
+                recommend they stay: a closed enum may be a string under the
+                family rules, and they now have a definition.
               </p>
             </div>
           </li>
           <li>
             <div>
               <p class="q">
-                Is <code>around</code> the right name for the candidate-list
-                member?
+                Is <code>around</code> the right name for the member that reads
+                screen directions?
+                <span class="chip new">revised in round 1</span>
               </p>
               <p class="d">
                 Including the bar case
@@ -2962,6 +3372,78 @@ chart(selectAll(<span class="s">"hubs"</span>)).mark(label(<span class="s">"name
                 <code>geom_label</code>). Nesting suggests
                 <code>background: { fill, padding }</code> and
                 <code>halo: { color, width }</code> as label options.
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="q">
+                Does <code>side</code> take both frames?
+                <span class="chip new">new in round 1</span>
+              </p>
+              <p class="d">
+                <code>above</code>/<code>below</code> (screen) and
+                <code>left</code>/<code>right</code> (direction of travel), plus
+                <code>on</code>, and <code>inset</code>/<code>outset</code> on a
+                boundary. <code>above</code> on a vertical stretch is no
+                candidate, so the label falls to the next side in the list or is
+                hidden. Default <code>"on"</code>. OK?
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="q">
+                Keep parts and directions as two vocabularies?
+                <span class="chip new">new in round 1</span>
+              </p>
+              <p class="d">
+                <code>at</code> names the mark's own <b>parts</b> (a rect's
+                <code>top</code> is a slice's outer arc in polar), while
+                <code>around</code> uses screen <b>directions</b>. Keep the two
+                vocabularies separate as proposed?
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="q">
+                Is <code>orient</code> spelled
+                <code>"horizontal" | "sloped" | "curved"</code>?
+                <span class="chip new">new in round 1</span>
+              </p>
+              <p class="d">
+                It replaces the boolean <code>sloped</code>. Note it sits beside
+                today's <code>rotate</code> (a fixed angle): does
+                <code>rotate</code> stay as a fixed-angle override?
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="q">
+                With <code>side</code> as a list, which order does the chooser
+                try?
+                <span class="chip new">new in round 1</span>
+              </p>
+              <p class="d">
+                Every side at one spot before sliding along the path (proposed),
+                or slide along one side first?
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="q">
+                Do <code>at: "start"</code>/<code>"end"</code> align while a
+                numeric <code>at</code> centers?
+                <span class="chip new">new in round 1</span>
+              </p>
+              <p class="d">
+                <code>at: "start"</code>/<code>"end"</code> align the label's
+                start or end with the path's end, while numeric
+                <code>at</code> centers it. OK, or one rule plus a separate
+                <code>align</code> option?
               </p>
             </div>
           </li>

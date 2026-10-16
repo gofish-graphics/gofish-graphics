@@ -200,7 +200,7 @@ chart(stocks)
   // Inline labels along the line
   .mark(
     line({ x: "date", y: "price", stroke: "symbol" }).label("symbol", {
-      position: Place.along({ at: 0.6, sloped: true }),
+      position: Place.along({ at: 0.6, orient: "sloped" }),
     })
   );
 
@@ -230,19 +230,19 @@ chart(streams)
 chart(stocks).flow(group(by="symbol")).mark(
     line(x="date", y="price", stroke="symbol").label("symbol", position=Place.end())
 )
-line(...).label("symbol", position=Place.along(at=0.6, sloped=True))
+line(...).label("symbol", position=Place.along(at=0.6, orient="sloped"))
 circle(r=3).label("name", position=Place.around(), avoiding=select_all("trend"))
 ```
 
 Pictures, today's real render first, then the proposed placement:
 
-|         | today                                                            | proposed                                                                                             |
-| ------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| points  | ![](img/point-today.png) `.label("country")`                     | ![](img/point-around.png) `Place.around()`                                                           |
-| lines   | ![](img/line-today.png) `.label("symbol")` reads the line's box  | ![](img/line-end.png) `Place.end()` ![](img/line-along.png) `Place.along({ at: 0.6, sloped: true })` |
-| areas   | ![](img/area-today.png) `.label("species")` reads the band's box | ![](img/area-interior.png) `Place.interior()`                                                        |
-| regions | ![](img/polygon-today.png) `position: "center"`                  | ![](img/polygon-interior-box.png) `Place.interior()`                                                 |
-| avoid   | ![](img/avoid-marks-off.png)                                     | ![](img/avoid-marks-on.png) `avoiding: selectAll("trend")`                                           |
+|         | today                                                            | proposed                                                                                                 |
+| ------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| points  | ![](img/point-today.png) `.label("country")`                     | ![](img/point-around.png) `Place.around()`                                                               |
+| lines   | ![](img/line-today.png) `.label("symbol")` reads the line's box  | ![](img/line-end.png) `Place.end()` ![](img/line-along.png) `Place.along({ at: 0.6, orient: "sloped" })` |
+| areas   | ![](img/area-today.png) `.label("species")` reads the band's box | ![](img/area-interior.png) `Place.interior()`                                                            |
+| regions | ![](img/polygon-today.png) `position: "center"`                  | ![](img/polygon-interior-box.png) `Place.interior()`                                                     |
+| avoid   | ![](img/avoid-marks-off.png)                                     | ![](img/avoid-marks-on.png) `avoiding: selectAll("trend")`                                               |
 
 _How the proposed pictures were made:_ the real chart is drawn by GoFish; a prototype
 (`packages/gofish-graphics/stories/_proposals/labels/place.ts`) reads the drawn geometry from
@@ -335,15 +335,18 @@ cannot drift.
 
 Each member turns one geometry kind into ordered candidates. A member that needs geometry the
 target does not have is a loud error naming the missing capability, for example
-`Place.along needs a path; rect has none`.
+`Place.interior needs a closed outline; line has an open one`.
 
-| member                                          | reads                           | candidates                                                                                              | precedent                                                                  |
-| ----------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `"outset-top"`, `"center"`, … (today's strings) | box                             | one                                                                                                     | today; Vega anchors                                                        |
-| `Place.around({ candidates? })`                 | point (enclosing circle) or box | 8 compass spots, upper right first; or a given list, e.g. `["outset-top", "inset-top"]` for bars        | Imhof, Christensen et al., Vega-Lite defaults, CSS fallbacks               |
-| `Place.start()`, `Place.end()`                  | path                            | the path's first or last point, sliding along y to clear neighbors                                      | directlabels `first.qp`/`last.qp`, Plot `selectLast`, Vega `lineAnchor`    |
-| `Place.along({ at, sloped })`                   | path                            | the point at fraction `at` of the arc length, then nearby fractions; rotated to the tangent if `sloped` | TikZ `pos`/`sloped`, geomtextpath `hjust`, Mapbox `symbol-placement: line` |
-| `Place.interior()`                              | region                          | the spot where the label's own box can grow largest; hide if it does not fit                            | d3-area-label, Vega `reduced-search`; not polylabel (below)                |
+_Revised after review round 1 (§5.6): `along` now covers both open paths and region
+boundaries, with a `side` option; today's strings are shorthand for `along` on a rect's parts._
+
+| member                                                   | reads                                           | candidates                                                                                               | precedent                                                                                                                           |
+| -------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `Place.along({ at, side, orient, offset })`              | an outline: an open path or a region's boundary | the spot at `at`, then nearby spots along the outline; at each, the sides listed in `side`               | TikZ `pos`/`sloped`/`auto`, geomtextpath `hjust`/`vjust`, QGIS Parallel / Curved / Using Perimeter, Mapbox `symbol-placement: line` |
+| `"outset-top"`, `"inset-top-start"`, … (today's strings) | a rect's parts                                  | one: `"outset-top"` is `Place.along({ at: "top", side: "outset" })`                                      | today; Vega anchors                                                                                                                 |
+| `Place.around({ candidates? })`                          | an outline, by screen direction                 | the outline's extreme point in each of 8 compass directions, upper right first, outside; or a given list | Imhof, Christensen et al., Vega-Lite defaults, CSS fallbacks                                                                        |
+| `Place.start()`, `Place.end()`                           | an open path                                    | past the path's first or last point, horizontal, sliding along y to clear neighbors                      | directlabels `first.qp`/`last.qp`, Plot `selectLast`, Vega `lineAnchor`                                                             |
+| `Place.interior()`                                       | a region                                        | the spot where the label's own box can grow largest; hide if it does not fit                             | d3-area-label, Vega `reduced-search`; not polylabel (below)                                                                         |
 
 Defaults come from the geometry kind, so the meaning lives on the target's type: box marks keep
 `"outset"`, dot marks get `Place.around()`, paths get `Place.end()`, regions get
@@ -379,18 +382,138 @@ spelled `position: "outset-top"`, as today.)
 
 ### 5.5 Shared axis: geometry queries
 
-The strategies need two queries beyond `enclosingCircle`, each added with its first consumer
-as `shape-geometry.md` decided:
+_Revised after review round 1 (§5.6)._ The strategies need one query beyond
+`enclosingCircle`, added with its first consumer as `shape-geometry.md` decided. Open paths
+and region boundaries are one type, so they are one query:
 
-- **`boundary`** (#974): the closed outline of a region, sampled. Read by `Place.interior()`
-  and by the chooser for obstacles. `enclose`'s private member reader becomes this query
-  (#1167).
-- **`path`** (new, `HasPath`): an open polyline with arc length and tangent, in the node's
-  local frame. Read by `start`, `end` and `along`. `line`, `arrow` and edges implement it;
-  `ribbon` and `area` implement both (`boundary` for the band, `path` for the centerline).
+```ts
+interface Outline {
+  points: Point[]; // sampled, in screen space after the coordinate transform
+  closed: boolean; // a region's boundary (inside known by winding) or an open path
+  parts?: { name: string; from: number; to: number }[]; // named arc-length ranges
+}
+interface HasOutline {
+  outline?: (tolerance: number) => Outline[];
+}
+```
+
+- `closed` decides the side vocabulary: `inset`/`outset` on a boundary, `left`/`right` on an
+  open path.
+- `parts` are the mark's own named pieces, built in the mark's frame and carried through the
+  coordinate transform: a rect names `top`, `right`, `bottom`, `left` and its four corners. In
+  polar coordinates a rect's `top` part is a slice's outer arc. Shapes with no natural parts
+  (circles, polygons, hulls) leave it empty.
+- A `line`, `arrow` or edge gives one open outline. An `area` or `ribbon` gives its closed band
+  (read by `interior`) and its centerline as an open outline (read by `along`). This is #974's
+  `boundary` with `closed`, `parts` and open paths added; `enclose`'s private member reader
+  becomes it (#1167).
+- It must be read **after** the coordinate transform, because labels are screen-space text.
+  Today the transform runs only at lowering, so this query moves path transformation into
+  layout for nodes whose outline is asked for (open question 1).
 
 The chooser tests a label's box against obstacle geometry: discs for circles, segments for
 paths, outlines for regions, boxes for the rest, through a uniform grid like `overlap`'s.
+
+### 5.6 Sides of a path, and a path that is a boundary (review round 1)
+
+Josh asked: what about labels above or below a path, and what about a path that is the
+boundary of a shape? Both fit `along`, and the second one folds today's box vocabulary into it.
+
+**Sides of an open path.** Precedent has two frames for "side". The screen frame is TikZ
+`above`/`below` and QGIS "above line / below line". The path's own frame is TikZ
+`auto=left|right` and QGIS "line orientation dependent": left or right of the direction of
+travel. `side` takes both, and `"on"`:
+
+```js
+line({ stroke: "symbol" }).label("symbol", {
+  position: Place.along({ at: 0.6, side: "above", orient: "sloped" }),
+});
+arrow({}, [ref(A), ref(B)]).label("submit", {
+  position: Place.along({ at: 0.5, side: "left", orient: "sloped" }),
+});
+```
+
+| sides on a line chart: `above`, `on` (halo), `below` | screen frame vs path frame on a diagram |
+| ---------------------------------------------------- | --------------------------------------- |
+| ![](img/path-sides.png)                              | ![](img/edge-sides.png)                 |
+
+The two frames are not redundant. On a diagram the path frame is the one that works: with
+`side: "left"` every label of a clockwise cycle lands outside it, and the two labels of a
+pair of opposite edges separate. With `side: "above"`, the labels on the two vertical edges are
+hidden, because a vertical stretch has no "above". That is inherent to the screen frame, not a
+prototype bug: `above` is partial, defined only where the path is not near vertical, and it
+flips abruptly as the path passes vertical. On a dense line chart, `above` and `below` can
+also leave a label between two lines, equally close to both (`below`, AAPL); only `on` with a
+halo is never ambiguous. So the default side is `"on"`.
+
+**`side` as a candidate list.** Because the chooser already takes candidates, `side` may be a
+list, tried in order, like QGIS's multi-select position flags:
+
+| `side: "above"` hides Actual; `side: ["above", "below"]` flips it below | `at` × `side` on one path |
+| ----------------------------------------------------------------------- | ------------------------- |
+| ![](img/side-candidates.png)                                            | ![](img/along-grid.png)   |
+
+**A path that is a boundary.** A region's boundary is a closed path with a known inside. On
+it, `side` is `inset`, `outset` or `on`, and `at` may name one of the mark's parts. Today's
+strings are exactly this on a rect: `"outset-top"` is
+`Place.along({ at: "top", side: "outset" })`. So the box vocabulary is not a separate
+geometry kind; it is `along` on a rect's boundary.
+
+![](img/boundary-vocabulary.png)
+
+This pays off where a rect is not drawn as a box. In polar coordinates a rect's `top` part is
+the slice's outer arc, so a donut is labeled along its arcs with the same words. Today both
+`.label("species")` and `position: "outset-top"` on a donut put every label at one spot
+above the ring (#952):
+
+```js
+rect({ w: "count", fill: "species" }).label("species", {
+  position: Place.along({ at: "top", side: "outset", orient: "curved" }),
+});
+```
+
+![](img/boundary-donut.png)
+
+A boundary with no named parts takes a fraction of its length or a starting direction, and the
+label slides along the outline until it is clear. Here each cluster's hull is labeled along
+its own outline, outside, then inside (where Sparrows is hidden because its dots fill the
+edge):
+
+```js
+polygon({ points: "ring", fill: "group", opacity: 0.18 }).label("group", {
+  position: Place.along({ at: "top", side: "outset", orient: "curved" }),
+});
+```
+
+![](img/boundary-region.png)
+
+**Two vocabularies for "top".** The prototype first treated `at: "top"` as "the outline point
+farthest up the screen". That is wrong for a polar rect, whose top is its outer arc, not the
+top of the screen. The two meanings are different concepts, and both are needed:
+
+- **Parts** belong to the mark. A rect declares `top`, `right`, `bottom`, `left` and its
+  corners in its own frame, and the coordinate transform carries them. A part is a stretch of
+  the outline with a length, so a label that does not fit along it is hidden. `along` reads
+  parts.
+- **Directions** belong to the screen. "The outline's extreme point toward the upper right" is
+  a direction, with no length and no frame. `around` reads directions, which is why it works on
+  dots, polygons and hulls. On a non-convex outline a direction can have several extreme runs
+  (the C's `right` touches both arm tips); the rule takes the run nearest the middle of that
+  side of the bounding box.
+
+On a Cartesian rect the two agree, which is why today's strings never had to choose.
+
+**Rules the renders needed that the first draft did not state.**
+
+- `orient: "curved"` needs a true offset curve (the normal is averaged over a short stretch so
+  an inset label does not fold at a sharp vertex) and a bend limit (a spot where the outline
+  turns more than about 70° under the text is rejected), the same role the straightness check
+  plays for `"sloped"`.
+- A numeric `at` centers the label on that point (TikZ `pos=0` also centers). `at: "start"`
+  and `at: "end"` instead align the label's start or end with the path's end, so the label
+  stays on the path.
+- With a list of sides, the chooser tries every side at one spot before sliding along the
+  path, which keeps the label near `at`. The other order is decision 12.
 
 ## 6. Recommendation
 
@@ -422,11 +545,11 @@ fit a region.
 ## 7. Decisions for Josh
 
 1. Is the family name `Place` (`Place.end()`), or something else (`Placement`, `Label`)?
-2. Do today's position strings stay as the one-candidate members (`position: "outset-top"`),
-   or move into the family (`Place.box("outset-top")`)? I recommend they stay: a closed enum
-   may be a string under the family rules.
-3. Is `around` the right name for the candidate-list member, including the bar case
-   `Place.around({ candidates: ["outset-top", "inset-top"] })`?
+2. Do today's position strings stay as shorthand for `along` on a rect's parts
+   (`"outset-top"` = `Place.along({ at: "top", side: "outset" })`)? I recommend they stay: a
+   closed enum may be a string under the family rules, and they now have a definition.
+3. Is `around` the right name for the member that reads screen directions, including the bar
+   case `Place.around({ candidates: ["outset-top", "inset-top"] })`?
 4. Defaults by geometry kind: dots → `Place.around()`, paths → `Place.end()`, regions →
    `Place.interior()`, boxes → `"outset"` as today. This changes scatter renders that use
    `.label()` today. OK?
@@ -438,6 +561,20 @@ fit a region.
 8. How is a label's backdrop spelled: a halo (ggrepel `bg.color`, labellines `outline_color`)
    and a filled box (ggplot `geom_label`)? Nesting suggests `background: { fill, padding }` and
    `halo: { color, width }` as label options.
+
+Added in review round 1 (§5.6):
+
+9. `side` takes both frames, `above`/`below` (screen) and `left`/`right` (direction of
+   travel), plus `on`, and `inset`/`outset` on a boundary. `above` on a vertical stretch is no
+   candidate, so the label falls to the next side in the list or is hidden. Default `"on"`. OK?
+10. `at` names the mark's own **parts** (a rect's `top` is a slice's outer arc in polar), while
+    `around` uses screen **directions**. Keep the two vocabularies separate as proposed?
+11. `orient: "horizontal" | "sloped" | "curved"`, replacing the boolean `sloped`. Note it sits
+    beside today's `rotate` (a fixed angle): does `rotate` stay as a fixed-angle override?
+12. With `side` as a list, does the chooser try every side at one spot before sliding along the
+    path (proposed), or slide along one side first?
+13. `at: "start"`/`"end"` align the label's start or end with the path's end, while numeric
+    `at` centers it. OK, or one rule plus a separate `align` option?
 
 **Open questions (not for sign-off):**
 
