@@ -31,7 +31,7 @@ import {
   type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
-import { mapsDomain } from "./extent";
+import { mapsDomain, type Extent } from "./extent";
 import * as Monotonic from "../util/monotonic";
 import { KeyedDomains } from "./keyedDomains";
 import {
@@ -588,8 +588,16 @@ export async function layout(
     // category axis, a bare fixed-size shape) it is the render's slot, or the
     // default canvas.
     const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;
-    const rootClaims = [niceExtentX, niceExtentY] as const;
     const given = [w, h] as const;
+    // A share (#493 piece 3: `sharesRoom`) is a part of a slot, so on an
+    // axis the render gives no size there is none to share: the root lays
+    // that axis out unsized, and a node with no size of its own keeps its
+    // default size, as it does where nothing claims.
+    const rootClaims = ([0, 1] as const).map((axis) =>
+      given[axis] === undefined && root.sharesRoom(axis)
+        ? undefined
+        : [niceExtentX, niceExtentY][axis]
+    ) as [Extent | undefined, Extent | undefined];
     const rootSizes = ([0, 1] as const).map((axis) => {
       const space = rootSpaces[axis];
       const claim = rootClaims[axis];
@@ -654,10 +662,10 @@ export async function layout(
     ] as const;
     const layoutW =
       given[0] ??
-      (mapsDomain(niceUnderlyingSpaceX, niceExtentX) ? canvas[0] : UNSIZED);
+      (mapsDomain(niceUnderlyingSpaceX, rootClaims[0]) ? canvas[0] : UNSIZED);
     const layoutH =
       given[1] ??
-      (mapsDomain(niceUnderlyingSpaceY, niceExtentY) ? canvas[1] : UNSIZED);
+      (mapsDomain(niceUnderlyingSpaceY, rootClaims[1]) ? canvas[1] : UNSIZED);
     let rootScopes: Size<ScopeSolution | undefined> = [
       rootSizes[0].scope,
       rootSizes[1].scope,
@@ -717,8 +725,8 @@ export async function layout(
     // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
     // content(σ)=canvas the whole chart resolves against. No-op unless
     // GOFISH_SOLVER_CHECK is set.
-    shadowCheckScaleRoot(niceExtentX, canvas[0], rootScaleFactors[0], 0);
-    shadowCheckScaleRoot(niceExtentY, canvas[1], rootScaleFactors[1], 1);
+    shadowCheckScaleRoot(rootClaims[0], canvas[0], rootScaleFactors[0], 0);
+    shadowCheckScaleRoot(rootClaims[1], canvas[1], rootScaleFactors[1], 1);
 
     // The root content sits in the root scope's frame by the one seating
     // rule (`seatInScope`): a pinned content shares the frame and places its
@@ -784,16 +792,21 @@ export async function layout(
     // Anywhere else no data places the root, so its box is placed: its start
     // edge at the frame's start, at the top-left for either y direction
     // (#1032). That is a shrink-to-fit dimension, whose box is the canvas,
-    // and a given dimension the root does not map a domain into (a category
-    // axis, a chart with a size of its own), whose box sits at the slot's
-    // top-left. The box is the whole graphic, its chrome included. The pin
+    // a given dimension whose σ is a share (`sharesRoom`, a category axis
+    // whose bands the slot sizes), and a given dimension the root does not
+    // map a domain into (a chart with a size of its own), whose box sits at
+    // the slot's top-left. The box is the whole graphic, its chrome included. The pin
     // uses `pinAnchor`, not the write-once `place()`, so it lands even when
     // the root self-placed (a diagram with its own root transform).
     const placeRoot = (axis: 0 | 1, edge: number) => {
       const name = axis === 0 ? "x" : "y";
       const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
       const direction = axis === 0 ? 1 : rootYDirection;
-      if (given[axis] !== undefined && rootScopes[axis] !== undefined) {
+      if (
+        given[axis] !== undefined &&
+        rootScopes[axis] !== undefined &&
+        !root.sharesRoom(axis)
+      ) {
         root.place(
           name,
           edge +
@@ -822,15 +835,14 @@ export async function layout(
     // the root's box plus its ink, and the box sits past
     // the ink before it.
     //
-    // DECLARED SHORTCUT (#493): on an axis the render gives a size, the ink
-    // is not fitted inside it, and it overflows the canvas. A label placed
-    // beside a node takes room where the claim walk knows where the node
-    // lands (`placementIn`), so the ink left is what is placed from a band
-    // of a category axis: a label below the last bar of a vertical spread,
-    // a category label wider than the axis's first or last band. A band is
-    // a share of its spread's slot, not a claim, so fitting it needs that
-    // share to be a claim too (#493 piece 3). TODO(#493): fit the ink placed
-    // from a category band.
+    // On an axis the render gives a size, the ink is not fitted inside it,
+    // and it overflows the canvas. A label placed beside a node takes room
+    // wherever the claim walk knows where the node lands (`placementIn`),
+    // bands of a category axis included (#493 piece 3: `sharesRoom`), so
+    // the ink left is what the claim walk cannot place: inside a coordinate
+    // space, under a node with a size of its own or one that reads y the
+    // other way, a label centered on a run of several slots, and a band in
+    // a scope that mixes data and bands.
     ink = drawnOverflow(root);
     for (const axis of [0, 1] as const)
       if (given[axis] === undefined) placeRoot(axis, ink[axis][0]);

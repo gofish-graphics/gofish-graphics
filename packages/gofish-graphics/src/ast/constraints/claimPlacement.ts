@@ -37,15 +37,18 @@ import type { ConstraintSpec } from ".";
  * lands in this layer's frame, which the claim walk knows through the
  * layers between them (a placement claim, `placementIn`): a value label
  * beside its bar takes room where it draws, while the bar stays where its
- * own layout puts it. Where the claim walk does not know (the node's place
- * is a share of a category axis, or it sits in a coordinate space), or for
- * a node that reads its place from refs (`GoFishNode.inkOn`), whatever a
- * constraint ties to it is ink on that axis: it takes no room, neither in
- * the claim nor in the box. A category label centered on its band is a
- * child the claim walk places on a data axis and leaves as ink on a
- * category axis; either way it draws over its neighbors instead of pushing
- * the bands apart (#1115), and only its overhang at the ends of the axis
- * takes room. The render keeps ink on the canvas (`layout` in gofish.tsx).
+ * own layout puts it. A band of a category axis is a share, which is a
+ * claim too (`GoFishNode.sharesRoom`), so a label beside a band is placed
+ * the same way. Where the claim walk does not know (the node sits in a
+ * coordinate space, or its band is in a scope that mixes data and bands),
+ * or for a node that reads its place from refs (`GoFishNode.inkOn`),
+ * whatever a constraint ties to it is ink on that axis: it takes no room,
+ * neither in the claim nor in the box. A category label centered on its band
+ * draws over its neighbors instead of pushing the bands apart (#1115): the
+ * claim is the hull of the labels, so only the overhang at the ends of the
+ * axis takes room, and a label in a ring that a spread along its axis
+ * holds is ink there (`layer`'s `claimChildren`). Ink overflows the canvas
+ * (`layout` in gofish.tsx).
  */
 
 /** A box's two edges along one axis, `[lo, hi]`, each a function of σ: where
@@ -399,8 +402,13 @@ export function placeByClaims(
       );
     }
     const map = { sigma, originPx: 0 };
+    // A relation with an operand the solve leaves out (ink) places nothing
+    // here.
+    const solvable = onAxis.filter((c) =>
+      c.children.every((r) => r === undefined || targets.has(r.name))
+    );
     const cells = solvePlacementCells(
-      onAxis as PlacementConstraint[],
+      solvable as PlacementConstraint[],
       targets,
       [NaN, NaN],
       axis === 0 ? [map, undefined] : [undefined, map],

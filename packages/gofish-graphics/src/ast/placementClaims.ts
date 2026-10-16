@@ -30,8 +30,8 @@ import {
  * child without solving it (its own claim may be the one being computed): a
  * child no constraint acts on sits at its origin, and one a literal
  * position pins sits at that pixel. Anywhere else (a coordinate space, a
- * treemap tile, a share of a category axis), the claim walk does not know,
- * and the node stays ink.
+ * treemap tile, a band in a scope that mixes data and bands), the claim
+ * walk does not know, and the node stays ink.
  */
 
 /** Where `parent` seats `child`'s origin on `axis` without solving: 0 for a

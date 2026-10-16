@@ -1185,11 +1185,14 @@ function elaborateOrdinalAxis(
     // LABEL at its own rotation pivot (`"baseline"`) while what it tracks
     // stays "middle"-anchored, via `Constraint.align`'s anchor-array form.
     // A start-aligned label's box is its own rotated box, so it centers its
-    // bbox on it at any angle. What a label centers on is placed by its
-    // slots' refs, which only layout places, so the label is ink along the
-    // axis (`placeByClaims`): one wider than its band overdraws its
-    // neighbors (#1115) instead of pushing the bands apart. Across the axis
-    // it is seated past the content, and takes room there.
+    // bbox on it at any angle. A label centered on one slot is placed where
+    // the claim walk places its slot's ref (a band is a share, #493 piece
+    // 3), and a ring's claim is the hull of its labels, so one wider than its
+    // band overdraws its neighbors (#1115) instead of pushing the bands
+    // apart, and only its overhang past the ends of the axis takes room. A
+    // span over several slots reads them only at layout, so a label centered
+    // on it is ink along the axis. Across the axis a label is seated past the
+    // content, and takes room there.
     for (const { label, on, k } of pairs) {
       const anchors: AlignAnchor[] =
         aligns[k] === "center" &&

@@ -193,13 +193,17 @@ export const add = (...args: Monotonic[]): Monotonic => {
   // (max_i aᵢ) + (max_j bⱼ) = max_{i,j}(aᵢ + bⱼ). Still convex PWL.
   const allPieces = args.map(piecesOf);
   if (allPieces.every((p): p is Piece[] => p !== undefined)) {
+    // Pruned after each operand, so a sum of many envelopes stays about as
+    // small as its distinct slopes, not the product of its piece counts.
     let acc: Piece[] = [{ slope: 0, intercept: 0 }];
     for (const ps of allPieces) {
-      acc = acc.flatMap((e) =>
-        ps.map((p) => ({
-          slope: e.slope + p.slope,
-          intercept: e.intercept + p.intercept,
-        }))
+      acc = pruneDominated(
+        acc.flatMap((e) =>
+          ps.map((p) => ({
+            slope: e.slope + p.slope,
+            intercept: e.intercept + p.intercept,
+          }))
+        )
       );
     }
     return piecewise(acc);

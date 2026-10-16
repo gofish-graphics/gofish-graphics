@@ -715,18 +715,34 @@ report their size).
   stand-in claims the hull of its solve, not the fold that starts its
   children at its origin. A region (a `partition` cell) places its child
   across its datum span, as an interval does.
+- **Bands are shares, and a share is a claim (#493 piece 3).** On an axis
+  where nothing in a scope is sized or placed by data
+  (`GoFishNode.carriesData`), σ has no data unit to be the pixels of, so it
+  is the room a node with no size of its own takes (`GoFishNode.sharesRoom`):
+  such a leaf claims one σ. A spread of `n` bands with spacing `g` claims
+  `n·σ + (n − 1)·g`, so the claim walk knows where each band lands, and a
+  value label beside a band, or the half of a category label past the last
+  band, takes room. Solving the scope against its slot narrows the bands to
+  make it. In a share scope a layer lays each child out at its claim at σ,
+  so the bands are the σ the scope solved. On an axis the render gives no
+  size there is no slot to share, and the bands keep their default size. A
+  scope that mixes data and bands of no size on one axis keeps the bands as
+  they were: they claim nothing and share what the data leaves, and what
+  hangs off them is ink.
+- **Category labels overdraw their neighbors (#1115).** A category label is
+  centered on its slot's ref, and only its overhang past the ends of its
+  axis takes room: the claim of a ring is the hull of its labels, so labels
+  between neighbors overlap rather than push the bands apart. A label in a
+  ring a spread along that axis holds (the labels of one group of a grouped
+  bar chart) is ink there, since its overhang would widen the gap between
+  groups. Across the axis it is seated past the content and takes room.
 - **Ink.** Where the claim walk does not know where a node lands, whatever a
   constraint ties to it is ink on that axis: it takes no room in the claim
-  or in its layer's box. That is a node whose place is a share of a category
-  axis (a band of a spread with no data size), one in a coordinate space or
-  under a node with a size of its own, one under a node that reads y the
-  other way, and a node that reads its place from refs (`GoFishNode.inkOn`:
-  an ordinal axis's label span). A category label is centered on its slot's
-  ref: on a data axis (time or number bins) the claim walk places it, and on
-  a category axis it is ink. Either way it overdraws its neighbors when wider
-  than its band (#1115), since only its overhang past the ends of the axis
-  reaches past the hull; across the axis it is seated past the content and
-  takes room.
+  or in its layer's box. That is a node in a coordinate space or under a node
+  with a size of its own, one under a node that reads y the other way, a node
+  that reads its place from refs (`GoFishNode.inkOn`: the span a label over
+  a run of several slots is centered on), and a band in a scope that mixes
+  data and bands.
 - **Nicing holds the domain.** A claim is the hull of what the content draws,
   so widening it to a keyed or niced domain (`widenTo`) takes the farther of
   the claim and the domain's end on each side. A tick label past the last
@@ -764,12 +780,8 @@ Content larger than the canvas whatever it is handed (fixed spacing wider
 than the canvas, a literal position past it, an inner size equal to the
 render size) still overflows and is clipped.
 
-DECLARED SHORTCUT (#493): on an axis the render gives a size, the ink is not
-fitted inside it, and it overflows the canvas. The ink left is what is placed
-from a band of a category axis: a label below the last bar of a vertical
-spread, a category label wider than the axis's first or last band. A band is
-a share of its spread's slot, not a claim, so fitting it needs that share to
-be a claim too (#493's piece 3).
+On an axis the render gives a size, the ink is not fitted inside it, and it
+overflows the canvas.
 
 #### Shape geometry after layout
 

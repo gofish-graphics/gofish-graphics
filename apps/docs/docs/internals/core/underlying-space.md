@@ -516,6 +516,15 @@ each inherent to what the origin states are:
   ordinal or undefined type; a spread of pinned frames (facet panels) claims
   nothing, and each panel roots its own scope in its slice. A marimekko is a
   stack, so its widths still add up to one axis.
+- **A share is a claim** (#493 piece 3): on an axis where nothing in a scope
+  is sized or placed by data (`GoFishNode.carriesData`), σ has no data unit,
+  and it is the room a node with no size of its own takes
+  (`GoFishNode.sharesRoom`). Such a leaf claims one σ, so a spread of `n`
+  bands with spacing `g` claims `n·σ + (n − 1)·g`, and whatever hangs off a
+  band (a value label, the half of a category label past the last band)
+  takes room in the same claim, which narrows the bands. A scope whose axis
+  mixes data with bands of no size keeps them as before: the bands claim
+  nothing and share what the data leaves.
 - **Alignment establishes a baseline; it does not pin**: aligning or
   overlaying free children gives a free result with one shared baseline
   (`overlayOrigin`: pinned only when a child is pinned, none when a child has
@@ -736,7 +745,9 @@ which child. The covered-axis type fold — UNDEFINED included — is what
 `composePlanExtents` reads those operands back (it does not fold the types
 again) and reports their claim and the layout budget. At layout time the layer then **solves the budget**:
 a fold-produced claim (of any origin) is inverted against the layer's allotted size to
-derive a local scale factor, and distribute-covered fill children are
+derive a local scale factor. In a share scope each child is proposed its
+claim at that σ (a band is one σ, `childLayoutSizeProposal`'s `own`);
+elsewhere distribute-covered fill children are
 proposed slices from the shared proposal plan (`buildDistributeSliceMap`,
 `constraints/proposalPlan.ts`, using `sliceExtent` from
 `constraints/folds.ts`). When distribute segments overlap on the same child
@@ -1512,9 +1523,10 @@ content its slot less its gutters, read off those claims, and a chart with a
 size of its own adds the gutters its claims give around a plot of that size
 (#1032; see [Chrome gutters](/internals/layout/passes#chrome-gutters)). A child
 placed beside a node inside another child (a label on its mark's ref) takes
-room where the claim walk knows that node lands (`placementIn`), and is ink
-where it does not (a band of a category axis): left out of its layer's claim
-and box. A pinned child a layer pins at a literal pixel (a chart's
+room where the claim walk knows that node lands (`placementIn`), a band of
+a category axis included (a share is a claim), and is ink where it does not
+(inside a coordinate space, or beside a band in a scope that mixes data and
+bands): left out of its layer's claim and box. A pinned child a layer pins at a literal pixel (a chart's
 content, seated past its chrome's start gutter) shares the layer's frame from
 that pixel (`childPosScalesFor`): its map's `originPx` is the frame's less
 the pin. The axes drawn over each domain are recorded once `resolveAxes` has

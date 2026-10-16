@@ -50,6 +50,7 @@ import {
 } from "../constraints";
 import { GoFishRef, findPathToRoot } from "../_ref";
 import {
+  axisIndex,
   childNameKey,
   internalName,
   type ConstraintPosScales,
@@ -331,11 +332,29 @@ export const layer = createNodeOperatorSequential(
           space,
           standIn: c instanceof GoFishRef,
           placed: target && placementIn(target, node, axis),
-          inkOn: (c as GoFishNode).inkOn?.[axis] === true,
+          inkOn:
+            (c as GoFishNode).inkOn?.[axis] === true ||
+            (heldInChain(axis) && alongOwnAxis(c, axis)),
           dataPositioned:
             sets[i] === 0 && isCONTINUOUS(space) && space.origin !== "free",
         };
       });
+    };
+    // A category label along its own axis takes room only past the ends
+    // of its axis (#1115): between neighbors it overdraws them rather than
+    // pushing them apart. So in a layer a chain along that axis holds (the
+    // labels of one group of a grouped bar chart, inside the spread of
+    // groups), it is ink: its overhang would widen the gap between groups.
+    const alongOwnAxis = (c: GoFishAST, axis: 0 | 1): boolean =>
+      c instanceof GoFishNode &&
+      c.axisLabel?.kind === "ordinal" &&
+      c.axisLabel.dim === axis;
+    const heldInChain = (axis: 0 | 1): boolean => {
+      for (let p = node.parent; p !== undefined; p = p.parent) {
+        if (p.axisDir === axis) return true;
+        if (p._ownScope?.[axis] === true) return false;
+      }
+      return false;
     };
     // Where an operand nested in a child lands in this layer's frame.
     const nestedPlacement = (axis: 0 | 1) => (name: string) => {
@@ -937,6 +956,22 @@ export const layer = createNodeOperatorSequential(
                 ? proposals.regionByName.get(childName)
                 : undefined) ??
               (constrainedChildren.has(i) ? undefined : proposals.passedOn);
+            // In a share scope (`sharesRoom`) a child is laid out at its
+            // claim at σ: a band is one σ, and a node that holds bands is
+            // what its claim says at the σ the scope solved.
+            const own = ([0, 1] as const).map((axis) => {
+              const sigma = childScaleFactors[axis];
+              const claim =
+                child instanceof GoFishNode
+                  ? child.resolveExtent()[axis]
+                  : undefined;
+              return claim !== undefined &&
+                sigma !== undefined &&
+                Number.isFinite(sigma) &&
+                node.sharesRoom(axis)
+                ? claim.width.run(sigma)
+                : undefined;
+            }) as Size<number | undefined>;
             const proposed = applyNestLayoutProposal(
               childLayoutSizeProposal(
                 childName,
@@ -944,18 +979,20 @@ export const layer = createNodeOperatorSequential(
                 gridCellByName,
                 sliceByName,
                 proposals.spanByName,
-                childRegion
+                childRegion,
+                own
               ),
               layoutPlan.nestPlan?.byDerived.get(i),
               childPlaceables
             );
             // A node dressed in chrome hands its content (its first child)
-            // what the chrome's gutters leave of its slot (#1032).
+            // what the chrome's gutters leave of its slot (#1032), or its
+            // own room in a share scope.
             const layoutSize: Size =
               i === 0 && node.chrome !== undefined
                 ? [
-                    proposed[0] - sum(node.chromeGutters(0)),
-                    proposed[1] - sum(node.chromeGutters(1)),
+                    own[0] ?? proposed[0] - sum(node.chromeGutters(0)),
+                    own[1] ?? proposed[1] - sum(node.chromeGutters(1)),
                   ]
                 : proposed;
             // Recombine the two forwarding decisions into the single carrier: σ

@@ -130,8 +130,11 @@ that sits wholly above its baseline (see
 **unions the pieces**. `max` drops zero claims first; `envelope` keeps them, along with
 lines of negative slope, which the lower reach of a union needs. `add` stays closed because the sum of two envelopes is again an
 envelope — `(max_i aᵢ) + (max_j bⱼ) = max_{i,j}(aᵢ + bⱼ)` — i.e. the pairwise sums of the
-pieces. (When every argument is a single line, both fall back to the plain `Linear` fast
-path; the all-linear `add` is one slope-sum and one intercept-sum.)
+pieces. A sum of many arguments prunes dominated pieces after each one, so it stays
+about as small as its distinct slopes rather than growing as the product of the piece
+counts (a chain of 19 labeled bands summed 2^38 pieces before). (When every argument is
+a single line, both fall back to the plain `Linear` fast path; the all-linear `add` is
+one slope-sum and one intercept-sum.)
 
 Because the structure is preserved, a composed claim can be **printed as the equation it
 represents** — `print` renders `40σ + 16`, or `max(160σ + 16, 90)` for an envelope —

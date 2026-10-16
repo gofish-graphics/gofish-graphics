@@ -295,8 +295,12 @@ export function placementConstraints(
  * Priority is explicit and single-owner:
  *   1. grid: each cell is proposed ITS (column, row) track's extent (resolved by
  *      the unified max rule in `resolveGridTracks`), keyed by name;
- *   2. distribute: owns only the named child axes it sliced;
- *   3. default layer box: unconstrained/fill proposal is the full layer size.
+ *   2. the child's own room in a share scope (`own`, where defined): its
+ *      claim at the layer's σ, when σ is the size of a share
+ *      (`GoFishNode.sharesRoom`), so a band is one σ and what hangs off it
+ *      keeps the room the scope solved for it;
+ *   3. distribute: owns only the named child axes it sliced;
+ *   4. default layer box: unconstrained/fill proposal is the full layer size.
  *
  * An interval position (`spanByName`) then owns the axes it spans: the pins
  * set the child's extent there, whatever else proposed one. So does the
@@ -311,7 +315,8 @@ export function childLayoutSizeProposal(
   gridCellByName: Map<string, Size> | undefined,
   sliceByName: Map<string, Size> | undefined,
   spanByName?: Map<string, Size<number | undefined>>,
-  region?: Region
+  region?: Region,
+  own: Size<number | undefined> = [undefined, undefined]
 ): Size {
   let proposal: Size = layerSize;
   if (
@@ -320,12 +325,15 @@ export function childLayoutSizeProposal(
     gridCellByName.has(childName)
   ) {
     proposal = gridCellByName.get(childName)!;
-  } else if (
-    sliceByName !== undefined &&
-    childName !== undefined &&
-    sliceByName.has(childName)
-  ) {
-    proposal = sliceByName.get(childName)!;
+  } else {
+    if (
+      sliceByName !== undefined &&
+      childName !== undefined &&
+      sliceByName.has(childName)
+    )
+      proposal = sliceByName.get(childName)!;
+    if (own[0] !== undefined || own[1] !== undefined)
+      proposal = [own[0] ?? proposal[0], own[1] ?? proposal[1]];
   }
   const span = childName !== undefined ? spanByName?.get(childName) : undefined;
   if (span !== undefined)

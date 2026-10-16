@@ -76,7 +76,8 @@ import {
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
 } from "./underlyingSpace";
-import { impliedExtents, type Extent } from "./extent";
+import { impliedExtents, Extent } from "./extent";
+import * as Monotonic from "../util/monotonic";
 import type { BoxForm, ClaimPlacement } from "./constraints/claimPlacement";
 import { toJSON } from "../util/interval";
 import type { AxisScale } from "./domain";
@@ -510,6 +511,10 @@ export class GoFishNode {
   private _resolveExtent: ResolveExtent;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   public _extent?: Size<Extent | undefined> = undefined;
+  /** Memo of {@link carriesData} and {@link sharesRoom}, cleared with the
+   *  claims. */
+  private _carriesData?: [boolean | undefined, boolean | undefined];
+  private _sharesRoom?: [boolean | undefined, boolean | undefined];
   private _layout: Layout;
   /** Per-primitive IR lowering (see {@link Lower}) — the node's sole draw
    *  description. Absent on operators that never lower themselves (their
@@ -1091,6 +1096,16 @@ export class GoFishNode {
       this.children,
       this.constraints
     );
+    // A node with no size of its own fills the room it is given. Where the
+    // room is a share (`sharesRoom`), that room is one σ (#493 piece 3).
+    if (this.children.length === 0)
+      for (const dim of [0, 1] as const)
+        if (
+          extent[dim] === undefined &&
+          this.inkOn?.[dim] !== true &&
+          this.sharesRoom(dim)
+        )
+          extent[dim] = Extent(Monotonic.linear(1, 0));
     for (const dim of [0, 1] as const) {
       if (isCONTINUOUS(spaces[dim]) && extent[dim] === undefined)
         throw new Error(
@@ -1100,6 +1115,55 @@ export class GoFishNode {
     }
     this._extent = extent;
     return extent;
+  }
+
+  /**
+   * Whether something data sizes or places on `axis` composes into this
+   * node's claim: its type there is continuous, or a child's is, short of a
+   * child with a size of its own (a σ-scope of its own, which claims its
+   * pixels). Read from the types alone, which the claim walk resolves
+   * first.
+   */
+  public carriesData(axis: 0 | 1): boolean {
+    const memo = (this._carriesData ??= [undefined, undefined]);
+    if (memo[axis] !== undefined) return memo[axis]!;
+    const result =
+      this._underlyingSpace?.[axis]?.kind === "continuous" ||
+      this.children.some(
+        (c) =>
+          c instanceof GoFishNode &&
+          c._ownScope?.[axis] !== true &&
+          c.carriesData(axis)
+      );
+    memo[axis] = result;
+    return result;
+  }
+
+  /**
+   * Whether this node's σ on `axis` is the size of a share (#493 piece 3).
+   * σ is the one free variable of the scope this node is in (the nearest
+   * node with a size of its own, or the root). When nothing in the scope is
+   * sized or placed by data there (`carriesData`), σ has no data unit to be
+   * the pixels of, and it is the room a node with no size of its own takes:
+   * a band of a category axis is one σ, and a spread of `n` bands with
+   * spacing `g` claims `n·σ + (n − 1)·g`. So what hangs off a band (a label
+   * beside it, a category label past the last band) takes room, and the
+   * bands narrow to make it. Inside a coordinate space the room is the
+   * space's own coordinates, which the space fits itself, so σ is never a
+   * share there.
+   */
+  public sharesRoom(axis: 0 | 1): boolean {
+    const memo = (this._sharesRoom ??= [undefined, undefined]);
+    if (memo[axis] !== undefined) return memo[axis]!;
+    let scope: GoFishNode = this;
+    while (scope.parent !== undefined && scope._ownScope?.[axis] !== true)
+      scope = scope.parent;
+    let inCoord = false;
+    for (let n: GoFishNode | undefined = this; n; n = n.parent)
+      if (n.type === "coord") inCoord = true;
+    const result = !inCoord && !scope.carriesData(axis);
+    memo[axis] = result;
+    return result;
   }
 
   /** The pixels this node's chrome reaches past its content on `axis`,
@@ -1120,6 +1184,8 @@ export class GoFishNode {
     this._underlyingSpace = undefined;
     this._yFrame = undefined;
     this._extent = undefined;
+    this._carriesData = undefined;
+    this._sharesRoom = undefined;
     this._sharing = undefined;
     this.children.forEach((c) => {
       if (c instanceof GoFishNode) c.clearUnderlyingSpace();
