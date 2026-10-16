@@ -291,6 +291,22 @@ export const layer = createNodeOperatorSequential(
     // the ones the union leaves out (`placed`), and, on an axis no
     // constraint fold composes, every child a constraint places there.
     const claimPlaced: [Set<number>, Set<number>] = [new Set(), new Set()];
+    // The constraints' operands, resolved once for the constraints they
+    // were resolved from: the claim walk and layout both read them.
+    let operandsMemo:
+      | { of: ConstraintSpec[]; operands: Map<string, ResolvedOperand> }
+      | undefined;
+    const constraintOperands = (): Map<string, ResolvedOperand> => {
+      if (operandsMemo?.of !== node.constraints)
+        operandsMemo = {
+          of: node.constraints,
+          operands:
+            node.constraints.length > 0
+              ? resolveConstraintOperands(node)
+              : new Map<string, ResolvedOperand>(),
+        };
+      return operandsMemo.operands;
+    };
     // Per axis, the children that are ink there (`placeByClaims`): they
     // draw, but take no room in the claim, nor in the box.
     const inkChildren: [Set<number>, Set<number>] = [new Set(), new Set()];
@@ -501,10 +517,7 @@ export const layer = createNodeOperatorSequential(
             options.transform?.scale?.x ?? 1,
             options.transform?.scale?.y ?? 1,
           ];
-          const operands =
-            node.constraints.length > 0
-              ? resolveConstraintOperands(node)
-              : new Map<string, ResolvedOperand>();
+          const operands = constraintOperands();
           for (const axis of [0, 1] as const) {
             const folded =
               t.composed?.fragments[axis] !== undefined &&
@@ -849,10 +862,7 @@ export const layer = createNodeOperatorSequential(
           // Every placement operand resolved to a node inside this layer, by
           // name from this layer outward (like `ref`). Throws on a missing,
           // ambiguous, or out-of-layer operand (#819).
-          const operands =
-            node.constraints.length > 0
-              ? resolveConstraintOperands(node)
-              : new Map<string, ResolvedOperand>();
+          const operands = constraintOperands();
           // A child skips phase-1 baseline placement only when a positioning
           // operand names the child itself. A nested operand does not: it is
           // a fixed reference into its container, which stays where its own
@@ -1193,7 +1203,7 @@ export const layer = createNodeOperatorSequential(
         axis,
         claimChildren(axis, extents),
         node.constraints,
-        resolveConstraintOperands(node),
+        constraintOperands(),
         claimPlaced[axis]
       );
     // Defer the axis-name-keyed `dims` option to the resolveAliases pass.

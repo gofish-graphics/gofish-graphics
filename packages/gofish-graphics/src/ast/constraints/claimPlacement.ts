@@ -92,19 +92,20 @@ const actsOn = (c: ConstraintSpec, axis: 0 | 1): boolean => {
 const relates = (c: ConstraintSpec): boolean =>
   c.type === "align" || c.type === "distribute" || c.type === "nest";
 
-/** The literal pixel a position pins `name`'s origin at on `axis`. */
-const literalSeat = (
+/** The literal pixel a position pins each operand's origin at on `axis`,
+ *  by operand name. */
+const literalSeats = (
   constraints: ConstraintSpec[],
-  name: string,
   axis: 0 | 1
-): number | undefined => {
+): Map<string, number> => {
+  const seats = new Map<string, number>();
   for (const c of constraints) {
     if (c.type !== "position" || c.anchor !== "baseline") continue;
-    if (!c.children.some((r) => r.name === name)) continue;
     const v = c[axisName(axis)];
-    if (typeof v === "number") return v;
+    if (typeof v !== "number") continue;
+    for (const r of c.children) if (!seats.has(r.name)) seats.set(r.name, v);
   }
-  return undefined;
+  return seats;
 };
 
 /** One child's box on the axis at σ: `[lo, hi]` about its origin. */
@@ -174,7 +175,16 @@ export function placeByClaims(
   candidates: Set<number>
 ): ClaimPlacement {
   const ink = new Set<number>();
-  const onAxis = constraints.filter((c) => actsOn(c, axis));
+  // The constraints that act on this axis, each as it acts on this axis
+  // alone (a position's other coordinate places nothing here).
+  const other = axisName((1 - axis) as 0 | 1);
+  const onAxis = constraints
+    .filter((c) => actsOn(c, axis))
+    .map((c) =>
+      c.type === "position" && c[other] !== undefined
+        ? { ...c, [other]: undefined, region: undefined }
+        : c
+    );
 
   // The operands whose place only layout knows: a node nested in a child, a
   // stand-in, a node that reads its place from refs.
@@ -262,18 +272,20 @@ export function placeByClaims(
   // Each child's box, `[lo, hi]`, where the solve places it at σ, with the
   // curved claims' sides `sides` (`[ascent, descent]`, 0 when not given): a
   // box sits about its origin, or across the span an interval pins.
+  const seats = literalSeats(constraints, axis);
+  const isCurved = new Set(curved);
   const solve = (sigma: number, sides: Map<number, Box>): Map<number, Box> => {
     const boxOf = (i: number): [number, number] => {
       const side = sides.get(i);
       if (side !== undefined) return [-side[1], side[0]];
-      return curved.includes(i) ? [0, 0] : boxAt(children[i].extent, sigma);
+      return isCurved.has(i) ? [0, 0] : boxAt(children[i].extent, sigma);
     };
     const at = new Map<number, Box>();
     const targets = new Map<string, Placeable>();
     const indexOf = new Map<string, number>();
     children.forEach((c, i) => {
       if (out(i) || c.name === undefined) return;
-      const seat = literalSeat(constraints, c.name, axis);
+      const seat = seats.get(c.name);
       const preset =
         !constrained.has(i) || c.dataPositioned
           ? 0
