@@ -195,7 +195,7 @@ export const DivergingStack: StoryObj<Args> = {
 // Regression (#773): a waterfall column. Each change starts where the last
 // one ended, so the column rises to 100, steps back and forth, and ends at 50.
 export const WaterfallColumn: StoryObj<Args> = {
-  args: { w: 200, h: 400 },
+  args: { h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
     chart(
@@ -209,7 +209,7 @@ export const WaterfallColumn: StoryObj<Args> = {
     )
       .flow(stack({ by: "step", dir: "y" }))
       .mark(rect({ w: 40, h: "change", fill: "step" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container, { h: args.h });
     return container;
   },
 };

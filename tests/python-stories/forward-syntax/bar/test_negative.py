@@ -121,5 +121,5 @@ def story_waterfall_column():
         chart(data)
         .flow(stack(by="step", dir="y"))
         .mark(rect(w=40, h="change", fill="step")),
-        {"w": 200, "h": 400},
+        {"h": 400},
     )
