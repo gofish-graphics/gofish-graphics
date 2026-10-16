@@ -2162,20 +2162,33 @@ export class GoFishNode {
       node.parent = this;
       this.children.push(node);
     }
-    // PROTOTYPE (animation grammar): a timeline's clauses lower to intervals
-    // on its scenes and to moving marks, which are drawing clauses like an
-    // arrow (laid out after the scenes).
-    if (timeline) {
-      const moving = await installTimelineOf(this, temporal);
-      moving.forEach((node, i) => {
-        node._relateClause = nodes.length + i + 1;
-        node.parent = this;
-        this.children.push(node);
-      });
-      nodes.push(...moving);
-    }
+    // PROTOTYPE (animation grammar): a timeline's clauses are lowered once
+    // every modifier has run (`INTERNAL_installTimeline`), since they read
+    // the timeline's own `.duration()`.
+    if (timeline) this._timelineClauses = temporal;
     this._hasRelateClauses = nodes.length > 0;
     return this;
+  }
+
+  /** PROTOTYPE (animation grammar): a timeline's temporal clauses, from
+   *  its last `.relate()`. */
+  private _timelineClauses?: unknown[];
+
+  /** PROTOTYPE (animation grammar): lower a timeline's clauses to intervals
+   *  on its scenes and to moving marks, which are drawing clauses like an
+   *  arrow (laid out after the scenes). Run from the timeline's axis-scope
+   *  hook, after every modifier (`.relate()`, `.duration()`) has run and
+   *  before layout, so their order does not matter. */
+  public async INTERNAL_installTimeline(): Promise<void> {
+    const moving = await installTimelineOf(this, this._timelineClauses ?? []);
+    moving.forEach((node, i) => {
+      node._relateClause = i + 1;
+      node.parent = this;
+      this.children.push(node);
+      // The name pass ran before this one; resolve the moving marks' refs.
+      node.resolveNames();
+    });
+    if (moving.length > 0) this._hasRelateClauses = true;
   }
 
   public zOrder(value: number): this {

@@ -54,6 +54,7 @@ export const tween = (opts: TweenOptions = {}): TweenEffect => {
   const effect: TweenEffect = {
     __tween: true,
     curve,
+    curveSpec: opts.curve,
     ease,
     layer: () => time.transition({ curve: opts.curve, ease, moves: effect }),
   };

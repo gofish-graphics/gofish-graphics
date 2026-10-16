@@ -35,7 +35,7 @@ import {
   type LayerContext,
 } from "./markResult";
 import { markDataTime, chainedUpdates } from "../../animation/transition";
-import { setHold } from "../../animation/scene";
+import { setDuration, type SceneDuration } from "../../animation/scene";
 import {
   installBuildIn,
   type BuildClockOptions,
@@ -605,8 +605,8 @@ type ChartBuilderState<TInput, TOutput> = {
   layerContext: LayerContext;
   nodeZOrder?: number;
   nodeName?: string;
-  /** PROTOTYPE (animation grammar): `.hold(ms)`, see `hold`. */
-  nodeHold?: number;
+  /** PROTOTYPE (animation grammar): `.duration(d)`, see `duration`. */
+  nodeDuration?: SceneDuration;
 };
 
 export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
@@ -1044,7 +1044,8 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     if (this.state.nodeZOrder !== undefined) {
       result.zOrder(this.state.nodeZOrder);
     }
-    if (this.state.nodeHold !== undefined) setHold(result, this.state.nodeHold);
+    if (this.state.nodeDuration !== undefined)
+      setDuration(result, this.state.nodeDuration);
 
     // A user-chained `.name(...)` names the resolved node so it's a valid
     // `.relate(...)` target on an enclosing layer (looked up by `_name`)
@@ -1078,9 +1079,10 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   }
 
   /** PROTOTYPE (animation grammar): how long this chart is on screen as a
-   *  scene of a `timeline` (`src/animation/timeline.ts`). */
-  hold(ms: number): ChartBuilder<TInput, TOutput> {
-    return this.with({ nodeHold: ms });
+   *  scene of a `timeline` (`src/animation/timeline.ts`): ms, or
+   *  `datum(v)`, a data amount the timeline scales. */
+  duration(d: SceneDuration): ChartBuilder<TInput, TOutput> {
+    return this.with({ nodeDuration: d });
   }
 }
 

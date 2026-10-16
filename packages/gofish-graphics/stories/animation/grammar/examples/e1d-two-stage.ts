@@ -42,7 +42,7 @@ const grouped = chart(withBelow)
 
 export default (container: HTMLElement, clock?: SequenceClock) =>
   time
-    .sequence({ duration: 6000, cyclic: true, ...clock }, [
+    .sequence({ gap: 1500, cyclic: true, ...clock }, [
       stacked,
       xFirst,
       grouped,

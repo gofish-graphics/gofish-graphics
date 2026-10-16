@@ -5,7 +5,7 @@
  *     clause places starts at 0, a scene is drawn only over its interval);
  *   - a transition spans exactly the gap between two scenes;
  *   - the loud errors: a time clause on a layer, a spatial clause on a
- *     timeline, a hold shorter than the scene's build-in, a transition whose
+ *     timeline, a duration shorter than the scene's build-in, a transition whose
  *     scenes overlap, over-constrained clauses, a cycle of afters,
  *     `duration` on a transition;
  *   - identity is the key join: rows by identity (default), by an explicit
@@ -79,7 +79,7 @@ const drawn = async (mark: any, at: number) =>
     .sort((p: any, q: any) => String(p.fill).localeCompare(q.fill) || p.x - q.x);
 
 const two = (gap: number, opts: Record<string, unknown> = {}) =>
-  timeline([stacked().name("s").hold(1000), grouped().name("g").hold(1000)]).relate(
+  timeline([stacked().name("s").duration(1000), grouped().name("g").duration(1000)]).relate(
     ({ s, g }: any) => [
       time.after(s, g, { gap }),
       time.transition(s, g, { ease: "linear", ...opts }),
@@ -122,7 +122,7 @@ console.log("# a zero gap is a cut");
 {
   const cut = (t: number) =>
     drawn(
-      timeline([stacked().name("s").hold(1000), grouped().name("g").hold(1000)]).relate(
+      timeline([stacked().name("s").duration(1000), grouped().name("g").duration(1000)]).relate(
         ({ s, g }: any) => [time.after(s, g), time.transition(s, g)]
       ),
       t
@@ -138,14 +138,14 @@ console.log("# a scene no clause places starts at 0; align");
   const tl = (t: number) =>
     drawn(
       timeline([
-        stacked().name("s").hold(1000),
-        grouped().name("g").hold(400),
+        stacked().name("s").duration(1000),
+        grouped().name("g").duration(400),
       ]).relate(({ s, g }: any) => [time.align({ t: "end" }, [s, g])]),
       t
     );
   ok("align end: g starts at 600, not before", (await tl(500)).length === 3);
   ok("both drawn at 700", (await tl(700)).length === 6);
-  const free = timeline([stacked().name("s").hold(1000), grouped().name("g").hold(1000)]);
+  const free = timeline([stacked().name("s").duration(1000), grouped().name("g").duration(1000)]);
   ok("no clauses: both at 0", (await drawn(free, 10)).length === 6);
 }
 
@@ -154,7 +154,7 @@ console.log("# a scene's build-in plays on the timeline's clock from its start")
   const black = async (t: number) =>
     items(
       await timeline([
-        stacked().name("s").hold(1000),
+        stacked().name("s").duration(1000),
         layer([
           grouped(),
           rect({ w: 10, h: 10, fill: "black" }).transition({
@@ -162,7 +162,7 @@ console.log("# a scene's build-in plays on the timeline's clock from its start")
           }),
         ])
           .name("g")
-          .hold(1000),
+          .duration(1000),
       ])
         .relate(({ s, g }: any) => [time.after(s, g, { gap: 500 }), time.transition(s, g)])
         .toDisplayList({ ...OPTS, playing: false, at: t })
@@ -203,16 +203,16 @@ console.log("# loud errors");
       ))
   );
   ok(
-    "a hold shorter than the build-in",
+    "a duration shorter than the build-in",
     "" ===
       (await throws(
         () =>
           timeline([
             layer([rect({ w: 5, h: 5 }).transition({ enter: Animation.fadeIn({ duration: 800 }) })])
               .name("s")
-              .hold(300),
+              .duration(300),
           ]).toDisplayList(OPTS),
-        ".hold(300)",
+        ".duration(300)",
         "800"
       ))
   );
@@ -221,7 +221,7 @@ console.log("# loud errors");
     "" ===
       (await throws(
         () =>
-          timeline([stacked().name("s").hold(1000), grouped().name("g").hold(1000)])
+          timeline([stacked().name("s").duration(1000), grouped().name("g").duration(1000)])
             .relate(({ s, g }: any) => [time.transition(s, g)])
             .toDisplayList(OPTS),
         "before",
@@ -233,7 +233,7 @@ console.log("# loud errors");
     "" ===
       (await throws(
         () =>
-          timeline([stacked().name("s").hold(1000), grouped().name("g").hold(1000)])
+          timeline([stacked().name("s").duration(1000), grouped().name("g").duration(1000)])
             .relate(({ s, g }: any) => [time.after(s, g), time.align({ t: "start" }, [s, g])])
             .toDisplayList(OPTS),
         "over-constrained"
@@ -248,6 +248,48 @@ console.log("# loud errors");
             .relate(({ s, g }: any) => [time.after(s, g), time.after(g, s)])
             .toDisplayList(OPTS),
         "cycle"
+      ))
+  );
+  ok(
+    "a cycle of afters names the cyclic option",
+    "" ===
+      (await throws(
+        () =>
+          timeline([stacked().name("s"), grouped().name("g")])
+            .relate(({ s, g }: any) => [time.after(s, g), time.after(g, s)])
+            .toDisplayList(OPTS),
+        "cyclic: true"
+      ))
+  );
+  ok(
+    "a cyclic timeline with no clause closing the loop",
+    "" ===
+      (await throws(
+        () =>
+          timeline({ cyclic: true }, [stacked().name("s"), grouped().name("g")])
+            .relate(({ s, g }: any) => [time.after(s, g)])
+            .toDisplayList(OPTS),
+        "close the loop"
+      ))
+  );
+  ok(
+    "a cyclic timeline loops once",
+    "" ===
+      (await throws(
+        () =>
+          timeline({ cyclic: true }, [
+            stacked().name("s"),
+            grouped().name("g"),
+            stacked().name("h"),
+          ])
+            .relate(({ s, g, h }: any) => [
+              time.after(s, g),
+              time.after(g, s),
+              time.after(g, h),
+              time.after(h, g),
+            ])
+            .toDisplayList(OPTS),
+        "loops once"
       ))
   );
   ok(
@@ -274,7 +316,7 @@ console.log("# identity: the key join");
       .mark(rect({ h: "v", fill: "id" }));
   const mid = async (opts: Record<string, unknown>) =>
     items(
-      await timeline([stacked().name("s").hold(100), other().name("g").hold(100)])
+      await timeline([stacked().name("s").duration(100), other().name("g").duration(100)])
         .relate(({ s, g }: any) => [
           time.after(s, g, { gap: 100 }),
           time.transition(s, g, { ease: "linear", ...opts }),
@@ -312,7 +354,7 @@ console.log("# identity: the key join");
     ]);
   const boxAt = async (t: number) =>
     items(
-      await timeline([diagram(10).name("a").hold(100), diagram(110).name("b").hold(100)])
+      await timeline([diagram(10).name("a").duration(100), diagram(110).name("b").duration(100)])
         .relate(({ a, b }: any) => [
           time.after(a, b, { gap: 100 }),
           time.transition(a, b, { ease: "linear" }),

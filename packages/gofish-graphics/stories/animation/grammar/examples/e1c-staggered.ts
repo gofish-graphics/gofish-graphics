@@ -27,6 +27,6 @@ const grouped = chart(seafood)
 
 export default (container: HTMLElement, clock?: SequenceClock) =>
   time
-    .sequence({ duration: 4000, cyclic: true, ...clock }, [stacked, grouped])
+    .sequence({ gap: 2000, cyclic: true, ...clock }, [stacked, grouped])
     .transition({ update: Animation.tween({ ease: "cubicInOut" }) })
     .render(container, { w: 480, h: 280 });

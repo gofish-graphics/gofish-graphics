@@ -16,6 +16,7 @@
 import type { DisplayList } from "gofish-ir";
 import { fadeItem } from "../ast/displayList/lowerHelpers";
 import type { InterpolationMethod } from "../interpolate";
+import type { Curve } from "../families/curve";
 
 /** A time warp `u -> u'` on [0, 1], or the name of a standard one. */
 export type Ease =
@@ -146,6 +147,9 @@ export type TweenEffect = {
    *  resolved (`resolveMethod`) to its name, so an unset curve is
    *  `"monotone"` here. */
   readonly curve: InterpolationMethod;
+  /** The curve as written, for a `time.sequence(opts, [...])` to hand to
+   *  each `time.transition(a, b, { curve })` it lowers to. */
+  readonly curveSpec?: Curve;
   /** A time warp inside each keyframe interval, resolved. */
   readonly ease?: (u: number) => number;
   layer: () => unknown;

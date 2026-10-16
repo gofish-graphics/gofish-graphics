@@ -4,9 +4,9 @@
  * exist so the spellings can be judged against real renders.
  *
  * Each example has a live story and a FILMSTRIP story: the same example held
- * still at several playheads. A sequence holds through its own options
- * (`playing: false, at` in child-index units); a `.relate()` timeline through
- * the render options (`at` in ms). The `gif frames` stories hold one loop at
+ * still at several playheads (ms). A sequence holds through its own options
+ * (`playing: false, at`); a `.relate()` timeline through the render
+ * options. The `gif frames` stories hold one loop at
  * up to 60 playheads in a grid, which the GIF recorder cuts into frames.
  *
  * Not gallery-tagged: a prototype for review, not a docs example.
@@ -23,10 +23,9 @@ const modules = import.meta.glob<{ default: Run }>("./examples/e*.ts", {
 type Example = {
   title: string;
   file: string;
-  /** Held playheads for the filmstrip. */
+  /** Held playheads for the filmstrip, in ms. */
   frames: number[];
-  unit: "step" | "ms";
-  /** One loop, for the GIF recorder: [start, end] in `unit`. */
+  /** One loop, for the GIF recorder: [start, end] in ms. */
   loop: [number, number];
   /** One loop in wall-clock ms, and the size of a GIF frame. */
   loopMs: number;
@@ -37,9 +36,8 @@ export const EXAMPLES: Record<string, Example> = {
   e1a: {
     title: "E1a · stacked ↔ grouped, time.sequence",
     file: "e1a-sequence",
-    frames: [0, 0.2, 0.4, 0.6, 0.8, 1, 1.5],
-    unit: "step",
-    loop: [0, 2],
+    frames: [0, 800, 1100, 1400, 1700, 2000, 3000],
+    loop: [0, 4000],
     loopMs: 4000,
     cell: [620, 340],
   },
@@ -47,7 +45,6 @@ export const EXAMPLES: Record<string, Example> = {
     title: "E1b · stacked ↔ grouped, timeline + relate",
     file: "e1b-relate",
     frames: [0, 1800, 2100, 2300, 2500, 2800, 4400, 5000],
-    unit: "ms",
     loop: [0, 5600],
     loopMs: 5600,
     cell: [620, 340],
@@ -55,27 +52,32 @@ export const EXAMPLES: Record<string, Example> = {
   e1c: {
     title: "E1c · staggered by lake",
     file: "e1c-staggered",
-    frames: [0, 0.2, 0.4, 0.6, 0.8, 1],
-    unit: "step",
-    loop: [0, 2],
+    frames: [0, 400, 800, 1200, 1600, 2000],
+    loop: [0, 4000],
     loopMs: 4000,
     cell: [620, 340],
   },
   e1d: {
     title: "E1d · two-stage (x, then y)",
     file: "e1d-two-stage",
-    frames: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5],
-    unit: "step",
-    loop: [0, 4],
+    frames: [0, 750, 1500, 2250, 3000, 3750, 4500, 5250],
+    loop: [0, 6000],
+    loopMs: 6000,
+    cell: [620, 340],
+  },
+  e3: {
+    title: "E3 · fixed total, data-valued scene durations",
+    file: "e3-fit",
+    frames: [0, 1199, 1800, 2400, 4799, 5400],
+    loop: [0, 6000],
     loopMs: 6000,
     cell: [620, 340],
   },
   e2: {
     title: "E2 · linked-list insertion (magic move)",
     file: "e2-linked-list",
-    frames: [0, 0.3, 0.6, 1, 1.3, 1.6, 2, 2.5],
-    unit: "step",
-    loop: [0, 3],
+    frames: [0, 600, 1200, 2000, 2600, 3200, 4000, 5000],
+    loop: [0, 6000],
     loopMs: 6000,
     cell: [540, 130],
   },
@@ -121,7 +123,7 @@ const filmstrip = (key: string): StoryObj => ({
       const cell = document.createElement("div");
       const label = document.createElement("div");
       label.textContent =
-        example.unit === "ms" ? `t = ${at} ms` : `t = ${at} (child index)`;
+        `t = ${at} ms`;
       Object.assign(label.style, { fontSize: "12px", color: "#555" });
       cell.appendChild(label);
       const box = document.createElement("div");
@@ -142,6 +144,8 @@ export const E1cLive = live("e1c");
 export const E1cFilmstrip = filmstrip("e1c");
 export const E1dLive = live("e1d");
 export const E1dFilmstrip = filmstrip("e1d");
+export const E3Live = live("e3");
+export const E3Filmstrip = filmstrip("e3");
 export const E2Live = live("e2");
 export const E2Filmstrip = filmstrip("e2");
 

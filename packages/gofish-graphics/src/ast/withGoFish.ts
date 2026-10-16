@@ -364,8 +364,8 @@ export type NameableMark<T> = Mark<T> & {
    *  `Animation.fadeIn()`, … (see `src/animation/`). */
   transition(spec: MarkTransition | OperatorTransition): NameableMark<T>;
   /** PROTOTYPE (animation grammar): how long the mark is on screen as a
-   *  scene of a `timeline`. */
-  hold(ms: number): NameableMark<T>;
+   *  scene of a `timeline`: ms, or `datum(v)`, a data amount. */
+  duration(d: import("../animation/scene").SceneDuration): NameableMark<T>;
   translate(opts: TranslateModifierOptions): NameableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],

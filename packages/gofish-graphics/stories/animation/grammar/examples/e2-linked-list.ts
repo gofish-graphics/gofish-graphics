@@ -73,6 +73,6 @@ const s3 = list(
 
 export default (container: HTMLElement, clock?: SequenceClock) =>
   time
-    .sequence({ duration: 6000, cyclic: true, ...clock }, [s1, s2, s3])
+    .sequence({ gap: 2000, cyclic: true, ...clock }, [s1, s2, s3])
     .transition({ update: Animation.tween({ ease: "cubicInOut" }) })
     .render(container, { w: 520, h: 120 });

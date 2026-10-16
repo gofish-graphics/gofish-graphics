@@ -29,7 +29,7 @@
  * note and are not built.
  */
 import { createOperator } from "./createOperator";
-import { createRelationalMark } from "./chart";
+import { createRelationalMark, timeline } from "./chart";
 import { Frame } from "../graphicalOperators/frame";
 import { tween } from "../graphicalOperators/tween";
 import { GoFishAST } from "../_ast";
@@ -84,6 +84,8 @@ import {
   type TemporalTransitionOptions,
 } from "../../animation/timeline";
 import { RelateOperand } from "../constraints/relate";
+import { ensureChildNames } from "../constraints/shared";
+import { setDuration } from "../../animation/scene";
 import {
   attachModifiers,
   nameModifier,
@@ -98,7 +100,11 @@ export type SequenceOptions = {
    *  playhead moves through the field's own units, so the field has to be
    *  something a playhead can be between. */
   by: string;
-  /** Wall-clock milliseconds one pass through the whole field takes. */
+  /** Wall-clock milliseconds one pass through the whole field takes: the
+   *  total the keyframes' time scale fits, as a spread's `w` is the width
+   *  its data-sized children fit. Default 5000. (The combinator form's
+   *  `duration` is the same total, but optional: its scenes have fixed
+   *  lengths of their own, so the total can be inferred from them.) */
   duration?: number;
   /** Start over at the beginning when the end is reached. Default true. */
   loop?: boolean;
@@ -669,68 +675,93 @@ function knotOf(child: GoFishAST, by: string): number {
 /* ---- PROTOTYPE (animation grammar proposal): temporal composition ---- */
 
 export type SequenceOverOptions = {
-  /** Wall-clock ms one pass through every child takes, as for the flow
-   *  form. Default 5000. */
-  duration?: number;
-  /** Start over at the first child after the last. Default true. */
-  loop?: boolean;
-  /** Start the clock. Default true. */
-  playing?: boolean;
-  /** Where the playhead starts, in CHILD INDEX units, the combinator's
-   *  counterpart of the flow form's field units: child `i` is the keyframe at
-   *  `t = i`, so `at: 1.5` is halfway from the second child to the third. */
-  at?: number;
-  /** The children are a cycle: the last one moves on into the first, and the
-   *  last child's band runs up to `t = n` (the flow form's `cyclic`, with a
-   *  period of one child per unit). */
+  /** Milliseconds between one scene's end and the next one's start: the
+   *  span of the transition that fills it, the spacing of the chain. One
+   *  number for every gap, or one per gap: n − 1 of them for n scenes, or n
+   *  with `cyclic`, the last being the wrap from the last scene back to the
+   *  first. Default 1000 ms. PROTOTYPE: the default is a pick, not a
+   *  measured convention. */
+  gap?: number | number[];
+  /** The scenes loop: the last one moves on into the first after the last
+   *  gap, and the clock loops. Default false: it plays once and holds the
+   *  last scene. */
   cyclic?: boolean;
-  /** Milliseconds each child rests before it moves on into the next. The
-   *  rest is taken out of the child's share of `duration`. Default 0: the
-   *  children are instants and the marks are always moving. PROTOTYPE. */
-  hold?: number;
-  /** What marks are matched by across the children: a field name or a
+  /** The sequence's total in ms, as a spread's `w` is its width. Omitted,
+   *  it is inferred: the scenes' durations plus the gaps, as a spread's
+   *  width is its children plus its spacing. Given, it is the frame equation
+   *  the scenes' data-valued durations (`.duration(datum(v))`) are scaled to
+   *  satisfy; fixed durations and gaps never flex (`fitLengths` in
+   *  `src/animation/timeline.ts`). */
+  duration?: number;
+  /** What marks are matched by across the scenes: a field name or a
    *  function of a row. Default: the row itself (`identity.ts`). Two
    *  gapminder years are different rows, so they match by
-   *  `key: "country"`. PROTOTYPE. */
+   *  `key: "country"`. */
   key?: Key;
+  /** Start the clock. Default: the render option, else true. */
+  playing?: boolean;
+  /** Where the playhead starts, in ms. */
+  at?: number;
 };
 
-/** What `time.sequence(opts, children)` returns: a mark whose
- *  `.transition({ update })` moves the matched marks between the children. */
+/** What `time.sequence(opts, children)` returns: a timeline mark whose
+ *  `.transition({ update })` sets how every transition of the chain moves. */
 export type SequenceMark = Mark<any> & {
   transition(spec: { update?: TweenEffect }): SequenceMark;
   name(name: string): SequenceMark;
   render(container: HTMLElement, options?: Record<string, unknown>): unknown;
 };
 
+/** The default gap between two scenes of a sequence, in ms. */
+const DEFAULT_GAP = 1000;
+
+/** One gap per pair of neighboring scenes (and the wrap, when cyclic). */
+function gapsOf(
+  gap: number | number[] | undefined,
+  n: number,
+  cyclic: boolean
+) {
+  const count = cyclic ? n : n - 1;
+  if (!Array.isArray(gap)) return Array(count).fill(gap ?? DEFAULT_GAP);
+  if (gap.length !== count) {
+    throw new Error(
+      `[gofish] time.sequence({ gap: [${gap.join(", ")}] }, [...${n} ` +
+        `scenes]): one gap goes between each two neighboring scenes, ` +
+        (cyclic
+          ? `and one more from the last back to the first (cyclic), so ` +
+            `${n} scenes need exactly ${count} gaps`
+          : `so ${n} scenes need exactly ${count} gaps (${n} with ` +
+            `\`cyclic: true\`, the last being the wrap)`) +
+        `, not ${gap.length}. Or give one number for every gap.`
+    );
+  }
+  return gap;
+}
+
 /**
- * `time.sequence(opts, [k0, k1, ...])` — the COMBINATOR form: each child is a
- * keyframe, and child `i` owns the band `[i, i + 1)` of the playhead, exactly
- * as the flow form's keyframe groups own the bands of their field's values
- * (and through the same machinery: one Frame over the keyframes, their
- * visibility held per band by `sequenceWindow`). The children replace each
- * other (Rhombus pict's `switch`).
+ * `time.sequence(opts, [s0, s1, ...])` — the COMBINATOR form: the scenes
+ * one after another. It is the timeline chain, literally:
  *
- * `.transition({ update: Animation.tween() })` threads a tween through the
- * children: their marks are matched by identity (`src/animation/identity.ts`)
- * and each matched mark moves, morphs or cross-fades (`src/animation/morph.ts`),
- * the way the flow form's chained `update` moves the marks of one key.
+ *   timeline({ cyclic, playing, at }, [s0, s1, ..., sn])
+ *     .relate(() => [
+ *       time.after(s0, s1, { gap: gap[0] }), time.transition(s0, s1, tw),
+ *       ...
+ *       time.after(sn-1, sn, { gap: gap[n-1] }), time.transition(sn-1, sn, tw),
+ *       // with `cyclic`, the wrap:
+ *       time.after(sn, s0, { gap: gap[n] }), time.transition(sn, s0, tw),
+ *     ])
+ *     .duration(duration)        // when a total is given
  *
- * SUGAR. `time.sequence({ duration, hold }, [k0, k1, ..., kn])` is the
- * timeline
+ * where `tw` is `{ ease, curve, key }` from `.transition({ update:
+ * Animation.tween({ ease, curve }) })` and the sequence's `key`. Each
+ * scene is on screen for its own `.duration()`; a scene needs no `.name()`,
+ * since the sequence names its unnamed scenes itself (`ensureChildNames`).
  *
- *   timeline([k0.hold(h), k1.hold(h), ..., kn.hold(h)]).relate((ks) => [
- *     time.after(k0, k1, { gap: band - h }), time.transition(k0, k1),
- *     ...
- *   ])
- *
- * with `band` = `duration` / (n − 1) (one more band when `cyclic`) and
- * `h` = `hold` (default 0): each child rests for its hold, and a transition
- * fills every gap. PROTOTYPE SHORTCUT: it is not literally lowered to a
- * timeline. It keeps its own clock, in child-index units, and its cyclic
- * wrap from the last child into the first, which a timeline does not have;
- * the right fix is to lower it to `timeline` once a timeline can loop its
- * last scene into its first.
+ * The FLOW form `time.sequence({ by, duration })` places its keyframes by
+ * data value on a time scale: every keyframe is data-positioned, so its
+ * `duration` (default 5000) is the total that scale fits. The combinator
+ * chains scenes, which are mostly fixed lengths, so its total is inferred
+ * unless given, the way a spread's width is.
  */
 function sequenceOver(
   opts: SequenceOverOptions,
@@ -741,79 +772,48 @@ function sequenceOver(
   if (n < 2) {
     throw new Error(
       `[gofish] time.sequence(opts, children): a sequence plays from one ` +
-        `child to the next, so it needs at least two children (got ${n}).`
+        `scene to the next, so it needs at least two scenes (got ${n}).`
     );
   }
-  const knots = children.map((_, i) => i);
-  const cycle: Cycle | undefined = opts.cyclic
-    ? { origin: 0, period: n }
-    : undefined;
-  const span = cycle === undefined ? n - 1 : n;
-  const clock = timer<number>({
-    domain: [0, span],
-    duration: opts.duration ?? 5000,
-    loop: opts.loop ?? true,
-    playing: opts.playing ?? true,
-  });
-  if (opts.at !== undefined) clock.set(opts.at);
-  const playhead = () => clock();
-  const base: Mark<any> = async (d, key) => {
-    // Registers the clock with the chart's interaction runtime, as the flow
-    // form's first read does.
-    readLive(playhead);
-    // Each child resolves in a name context of its own: the children are
-    // alternatives, not siblings, so a name in one never sees another's.
-    const keyframes: GoFishNode[] = [];
-    for (const child of children) {
-      const context: LayerContext = {};
-      const result =
-        typeof child === "function"
-          ? (child as Mark<any>)(d, key, context)
-          : child;
-      keyframes.push(
-        (await resolveMarkResult(result as any, context)) as GoFishNode
-      );
-    }
-    // A keyframe's key is its time, which is what `keyframeOf` reads.
-    keyframes.forEach((k, i) => k.setKey(String(i)));
-    // With a hold, each child stands at two knots, `i` and `i + rest`, so
-    // the marks hold it still in between and then move.
-    const msPerUnit = () => clock.duration / span;
-    const rest = (opts.hold ?? 0) / msPerUnit();
-    if (!(rest >= 0 && rest < 1)) {
+  for (const k of ["hold", "loop"] as const) {
+    if ((opts as Record<string, unknown>)[k] !== undefined) {
       throw new Error(
-        `[gofish] time.sequence({ hold: ${opts.hold} }): a child rests for ` +
-          `its hold and then moves within its share of the duration ` +
-          `(${msPerUnit()} ms), so the hold must be less than that.`
+        `[gofish] time.sequence({ ${k} }, [...]): ` +
+          (k === "hold"
+            ? `each scene is on screen for its own .duration(ms).`
+            : `use \`cyclic: true\` for a sequence that loops.`)
       );
     }
-    const stands = rest > 0 ? keyframes.flatMap((k) => [k, k]) : keyframes;
-    const standKnots = rest > 0 ? knots.flatMap((t) => [t, t + rest]) : knots;
-    const moving =
-      update === undefined
-        ? []
-        : await morph(stands, {
-            knots: standKnots,
-            at: playhead,
-            method: update.curve,
-            ease: update.ease,
-            msPerUnit,
-            cycle,
-            key: opts.key,
-            where: "time.sequence(opts, children)",
-          });
-    const frame = await Frame({}, [...keyframes, ...moving]);
-    const shown = sequenceWindow(
-      () => knots,
-      playhead,
-      () => cycle
+  }
+  const cyclic = opts.cyclic ?? false;
+  const gaps = gapsOf(opts.gap, n, cyclic);
+  const tw: TemporalTransitionOptions = {
+    ease: update?.ease,
+    curve: update?.curveSpec,
+    key: opts.key,
+  };
+  const scenes = timeline(
+    { cyclic, playing: opts.playing, at: opts.at },
+    children
+  );
+  const base: Mark<any> = async (d, key, layerContext) => {
+    const node = (await resolveMarkResult(
+      scenes(d, key, layerContext),
+      layerContext
+    )) as GoFishNode;
+    const sceneNodes = node.children.filter(
+      (c): c is GoFishNode => c instanceof GoFishNode && !c._relateClause
     );
-    markSequence(frame, shown);
-    hold(keyframes, shown);
-    // Data time: the build-in leaves its marks alone.
-    markDataTime(frame);
-    (frame as any).datum = d;
-    return frame;
+    const names = ensureChildNames(sceneNodes, "scene");
+    if (opts.duration !== undefined) setDuration(node, opts.duration);
+    await node.relate((env) => {
+      const s = names.map((name) => env[name]);
+      return gaps.flatMap((gap, i) => {
+        const [a, b] = [s[i], s[(i + 1) % n]];
+        return [after(a, b, { gap }), temporalTransition(a, b, tw)];
+      });
+    });
+    return node;
   };
   // PROTOTYPE SHORTCUT: `.transition` is set on this one mark, so it must
   // come before `.name()` / `.zOrder()` (which re-decorate without it).
@@ -825,7 +825,7 @@ function sequenceOver(
 
 /** `time.sequence` in both forms: in the flow (`time.sequence({ by })`), one
  *  keyframe per value of a field; over explicit children
- *  (`time.sequence(opts, [a, b])`), one keyframe per child. */
+ *  (`time.sequence(opts, [a, b])`), a chain of scenes on a timeline. */
 export function sequence(
   opts: SequenceOptions
 ): ReturnType<typeof sequenceFlow>;

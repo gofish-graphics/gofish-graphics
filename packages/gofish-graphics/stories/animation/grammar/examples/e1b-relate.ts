@@ -21,8 +21,8 @@ const grouped = () =>
 
 export default (container: HTMLElement, clock?: TimelineClock) =>
   timeline([
-    stacked().name("stacked").hold(1800),
-    grouped().name("grouped").hold(1800),
+    stacked().name("stacked").duration(1800),
+    grouped().name("grouped").duration(1800),
     stacked().name("back"),
   ])
     .relate(({ stacked, grouped, back }) => [

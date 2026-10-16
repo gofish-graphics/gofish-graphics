@@ -49,7 +49,7 @@ import {
   labelModifier,
   zOrderModifier,
   transitionModifier,
-  holdModifier,
+  durationModifier,
   LayerContext,
 } from "./createOperator";
 import type { ModifierConfig, ZOrderValue } from "./createOperator";
@@ -58,7 +58,11 @@ import type {
   OperatorTransition,
 } from "../../animation/transition";
 import { layer as Layer } from "../graphicalOperators/layer";
-import { markTimeline } from "../../animation/scene";
+import {
+  markTimeline,
+  type SceneDuration,
+  type TimelineOptions,
+} from "../../animation/scene";
 import {
   // `over` stays internal (not re-exported from lib) — it backs the
   // deserializer's `"over"` wire type only; user code should use `layer`.
@@ -1055,9 +1059,10 @@ export type RelatableMark<T> = Mark<T> & {
   zOrder(value: ZOrderValue<T>): RelatableMark<T>;
   relate(fn: RelateFn): RelatableMark<T>;
   transition(spec: MarkTransition | OperatorTransition): RelatableMark<T>;
-  /** PROTOTYPE (animation grammar): how long it is on screen as a scene of
-   *  a `timeline`. */
-  hold(ms: number): RelatableMark<T>;
+  /** PROTOTYPE (animation grammar): its size on t: how long it is on screen
+   *  as a scene of a `timeline` (ms, or `datum(v)`), or, on a timeline, its
+   *  total. */
+  duration(d: SceneDuration): RelatableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
     options: Parameters<GoFishNode["render"]>[1]
@@ -1094,7 +1099,7 @@ function makeRelatableMark<T>(base: Mark<T>): RelatableMark<T> {
     // PROTOTYPE (gun-deaths): `layer([...]).transition({ enter:
     // time.stagger(...) })` arranges the layer's children in time.
     transitionModifier,
-    holdModifier,
+    durationModifier,
   ]) as unknown as RelatableMark<T>;
 }
 
@@ -1103,20 +1108,40 @@ function makeRelatableMark<T>(base: Mark<T>): RelatableMark<T> {
  * pictures over time, placed by temporal clauses in `.relate()`
  * (`time.after`, `time.align`, `time.transition(a, b)`). Spatially it is a
  * `layer`: the scenes share one frame, so they share scales, and each is
- * drawn only over its own interval (`src/animation/timeline.ts`). A
+ * drawn only over its own interval (`src/animation/timeline.ts`). Its
+ * options: `cyclic` (the scenes loop, and one `time.after` closes the loop),
+ * and the clock's `playing` and `at` (ms), which win over the render
+ * options. A
  * `layer`'s children are the parts of one picture instead, all there
  * together.
  */
-export function timeline<T>(scenes: MarkChild[]): RelatableMark<T> {
+export function timeline<T>(scenes: MarkChild[]): RelatableMark<T>;
+export function timeline<T>(
+  opts: TimelineOptions,
+  scenes: MarkChild[]
+): RelatableMark<T>;
+export function timeline<T>(
+  optsOrScenes: TimelineOptions | MarkChild[],
+  maybeScenes?: MarkChild[]
+): RelatableMark<T> {
+  const [opts, scenes] = Array.isArray(optsOrScenes)
+    ? [{}, optsOrScenes]
+    : [optsOrScenes, maybeScenes!];
   const parts = layer<T>(scenes);
   const base: Mark<T> = async (d, key, layerContext) => {
     const node = (await resolveMarkResult(
       parts(d, key, layerContext),
       layerContext
     )) as GoFishNode;
-    markTimeline(node);
-    // A timeline with no clauses: every scene at 0 for its own length.
-    await node.relate(() => []);
+    markTimeline(node, opts);
+    // Its clauses are lowered in the axis-scope pass, once every modifier
+    // has run (a timeline with no `.relate()` has none: every scene at 0
+    // for its own length).
+    const prev = node._elaborateInAxisScope;
+    node._elaborateInAxisScope = async (outer, inner) => {
+      await prev?.(outer, inner);
+      await node.INTERNAL_installTimeline();
+    };
     return node;
   };
   return makeRelatableMark(base);

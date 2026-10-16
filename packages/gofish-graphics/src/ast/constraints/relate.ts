@@ -45,6 +45,8 @@ export type RelateClause =
   | ((...args: any[]) => unknown)
   | ChartBuilder<any, any>
   | LayerBuilder
+  // PROTOTYPE (animation grammar): a timeline's temporal clauses.
+  | import("../../animation/timeline").TemporalClause
   | RelateClause[]
   | null
   | undefined
