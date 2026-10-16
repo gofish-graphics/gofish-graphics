@@ -26,6 +26,7 @@ import type { ToPixel } from "./_node";
 import type { Size } from "./dims";
 import {
   continuousInterval,
+  originIs,
   isCONTINUOUS,
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
@@ -74,6 +75,7 @@ import {
 import { legendRing } from "./legends/elaborate";
 import { elaborateLabels } from "./labels/elaborate";
 import { breadthFirst } from "./elaborationUtils";
+import { childNameKey } from "./constraints/shared";
 
 export type CategoricalScale = {
   color: Map<any, string>;
@@ -1044,8 +1046,37 @@ function measureChromeGutters(root: GoFishNode): {
       if (g[0] > 0 || g[1] > 0) takesRoom = true;
       return g;
     }) as [[number, number], [number, number]];
+    seatPastGutters(chart);
   }
   return { takesRoom, plots };
+}
+
+/**
+ * Seat a chart's content past its chrome's start gutters (#1032): the
+ * outermost ring pins the ring inside it at a literal pixel (`wrapRing`),
+ * and that pixel becomes the start gutter, in the ring's axis order. The
+ * layer hands a child it pins at a literal pixel the frame from there
+ * (`childPosScalesFor`), so the content's frame starts where its plot does,
+ * and whatever it places with no data (an empty cell) sits in the plot, not
+ * in the gutter. A seat at a datum, or none (free content its frame seats),
+ * already sits where the frame maps it, and so does free content's literal
+ * seat at 0, its baseline.
+ */
+function seatPastGutters(chart: GoFishNode): void {
+  const inner = chart.children[0] as GoFishNode;
+  const name = childNameKey(inner);
+  // A free content's origin is its baseline, which its parent places: the
+  // start gutter is part of its claim's descent, below that baseline.
+  const seat = (axis: 0 | 1) =>
+    originIs(inner._underlyingSpace?.[axis], "free")
+      ? 0
+      : chart.chromeGutters(axis)[0];
+  for (const c of chart.constraints) {
+    if (c.type !== "position" || c.anchor !== "baseline") continue;
+    if (!c.children.some((r) => r.name === name)) continue;
+    if (typeof c.x === "number") c.x = seat(0);
+    if (typeof c.y === "number") c.y = seat(1);
+  }
 }
 
 /**

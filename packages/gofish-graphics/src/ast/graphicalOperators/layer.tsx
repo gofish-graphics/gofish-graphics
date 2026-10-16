@@ -78,6 +78,7 @@ import {
   placementConstraints,
   childLayoutSizeProposal,
   childPosScalesFor,
+  literalSeats,
   selectGridConstraint,
   solveLayerScales,
 } from "../constraints/proposalPlan";
@@ -837,11 +838,13 @@ export const layer = createNodeOperatorSequential(
             // forwards uniformly (childScaleFactors), the anchored map forwards
             // per child (childPosScalesFor — stripped where a constraint consumed
             // the scale). A stripped map keeps the child's σ.
+            const seats = literalSeats(node.constraints, childName);
             const childMaps = childPosScalesFor(
               (children[i] as GoFishNode)._underlyingSpace,
               targetDims,
               ownsAxis,
-              effectivePosScales
+              effectivePosScales,
+              seats
             );
             childFrames[i] = layoutSize[1];
             const childPlaceable = child.layout(
@@ -856,6 +859,14 @@ export const layer = createNodeOperatorSequential(
               const [bx, by] = baselineFor(childPlaceable, i);
               childPlaceable.place("x", bx, "baseline");
               childPlaceable.place("y", by, "baseline");
+            } else {
+              // A literal pin of its origin depends on nothing else, so it
+              // places the child now: the children laid out after it (a
+              // `ref` into it) read it where it ends up.
+              if (seats[0] !== undefined)
+                childPlaceable.place("x", seats[0], "baseline");
+              if (seats[1] !== undefined)
+                childPlaceable.place("y", seats[1], "baseline");
             }
             childPlaceables[i] = childPlaceable;
           };

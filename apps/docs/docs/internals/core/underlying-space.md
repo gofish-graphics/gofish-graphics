@@ -1504,7 +1504,10 @@ less them, and a chart with a size of its own solves σ against that size plus
 its content's gutters (#1032; see
 [Chrome gutters](/internals/layout/passes#chrome-gutters)). A child that is ink
 on an axis (`GoFishNode.inkOn`, a category label along its axis) is left out of
-its layer's box there. The axes drawn over each domain are recorded once `resolveAxes` has
+its layer's box there. A pinned child a layer pins at a literal pixel (a chart's
+content, seated past its chrome's start gutter) shares the layer's frame from
+that pixel (`childPosScalesFor`): its map's `originPx` is the frame's less
+the pin. The axes drawn over each domain are recorded once `resolveAxes` has
 assigned them (`refreshDemand`, which `layout()` calls once, after the axes
 are stamped: nothing reads the demand before then). A time axis adds its rows
 to its stamp when it is elaborated, since its levels depend on the axes below

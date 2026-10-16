@@ -520,11 +520,42 @@ export function childPosScalesFor(
   childSpace: Size<UnderlyingSpace> | undefined,
   targetDims: Set<0 | 1> | undefined,
   ownsAxis: readonly [boolean, boolean],
-  frames: ConstraintPosScales
+  frames: ConstraintPosScales,
+  seats: readonly [number | undefined, number | undefined] = [
+    undefined,
+    undefined,
+  ]
 ): ConstraintPosScales {
   const pick = (dim: 0 | 1) => {
     if (ownsAxis[dim] && targetDims?.has(dim)) return undefined;
-    return seatInScope(frames[dim], childSpace?.[dim]).childMap;
+    const map = seatInScope(frames[dim], childSpace?.[dim]).childMap;
+    // A child whose origin the layer pins at a literal pixel shares the
+    // frame from there: its own 0 is that pixel.
+    const seat = seats[dim];
+    return map === undefined || seat === undefined || seat === 0
+      ? map
+      : { ...map, originPx: map.originPx - seat };
   };
   return [pick(0), pick(1)];
+}
+
+/** Per axis, the literal pixel a `position` constraint pins the origin of
+ *  the child named `name` at (point form, `anchor: "baseline"`), or
+ *  undefined. */
+export function literalSeats(
+  constraints: readonly ConstraintSpec[],
+  name: string | undefined
+): [number | undefined, number | undefined] {
+  const seats: [number | undefined, number | undefined] = [
+    undefined,
+    undefined,
+  ];
+  if (name === undefined) return seats;
+  for (const c of constraints) {
+    if (c.type !== "position" || c.anchor !== "baseline") continue;
+    if (!c.children.some((r) => r.name === name)) continue;
+    if (typeof c.x === "number") seats[0] = c.x;
+    if (typeof c.y === "number") seats[1] = c.y;
+  }
+  return seats;
 }

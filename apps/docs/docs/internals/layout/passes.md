@@ -687,8 +687,18 @@ each side, `chrome.gutters`, per axis `[start, end]` in its axis order.
   gutter, so the data sits past the chrome before it.
 - **The layout.** A layer with chrome hands its content (its first child)
   its slot less its gutters, so content with no σ (a bar chart's category
-  axis) also gets the remainder. The chrome is seated around the content as
-  before, and the layer's box is the content's box plus the chrome.
+  axis) also gets the remainder, and seats it past its start gutters: the
+  ring pins the ring inside it at a literal pixel (`wrapRing`), and that
+  pixel becomes the start gutter once measured (`seatPastGutters`), except
+  on an axis where the content is free (its baseline is its origin, and the
+  start gutter is part of its claim's descent). A layer hands a child it
+  pins at a literal pixel the frame from there (`childPosScalesFor`), so the
+  content's frame starts where its plot does, and what it places with no
+  data (an empty cell) lands in the plot, not in the gutter. A literal pin of
+  a child's origin places it as soon as it is laid out, so a `ref` into it
+  laid out later reads it where it ends up. The chrome is seated around the
+  content as before, and the layer's box is the content's box plus the
+  chrome.
 - **A chart with a size of its own.** Its chrome dresses its content inside
   the chart's frame (`frameChart`), so the frame's literal size applies to
   the content: the frame solves σ against its size plus its content's gutters,

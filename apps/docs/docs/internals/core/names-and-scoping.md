@@ -201,11 +201,14 @@ A nested operand and a `ref` both share their target's local frame, so each one
 returns its target's `geometry()` (the shape queries described under
 [Layout Calculation](/internals/layout/passes)).
 
-A `ref`'s layout places it where its target is: its translate is the walk from
-the target up to their common ancestor, less the walk from the ref's parent up
-to it. Like a node's, its `place()` is write-once, so the parent's default
-placement of an unconstrained child does not move it off its target; only an
-authoritative pin (`pinAnchor`) does.
+A laid-out `ref` stands where its target is. Its translate is read off the
+target each time, not copied at layout: the walk from the target up to their
+common ancestor, less the walk from the ref's parent up to it. So a node on
+those walks that is placed after the ref is laid out (a layer places a
+constrained child in its solve) moves the ref with it. Like a node's, its
+`place()` is write-once, so the parent's default placement of an
+unconstrained child does not move it off its target; only an authoritative
+pin (`pinAnchor`) does.
 
 ## Drawing clauses and their order
 
