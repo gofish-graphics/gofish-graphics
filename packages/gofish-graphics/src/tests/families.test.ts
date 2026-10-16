@@ -87,7 +87,12 @@ for (const f of families) {
       Object.keys(ns ?? {}).length === names.length,
     `module ${names.join(", ")}; namespace ${Object.keys(ns ?? {}).join(", ")}`
   );
-  const flat = names.filter((n) => n in GoFish);
+  // The same strategy is never also a top-level export (#1013). A top-level
+  // export that only shares a member's name is a different construct
+  // (the mark `ellipse` beside `Shape.ellipse`), not a second spelling.
+  const flat = names.filter(
+    (n) => n in GoFish && (GoFish as Record<string, any>)[n] === mod[n]
+  );
   check(
     `${capitalize(f)}'s members are not also top-level exports`,
     flat.length === 0,

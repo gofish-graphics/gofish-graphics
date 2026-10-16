@@ -12,6 +12,11 @@
  *    clearance circles; with `holes: true` an open gap stays a hole.
  *  - A 1,000-point line and 300 dots outline well under a second (no step is
  *    quadratic in the members).
+ *  - `Shape.ellipse()` (`enclose/ellipse.ts`): every padded member lies
+ *    inside the ellipse and its drawn outline, for dots, boxes and segments
+ *    of mixed sizes; it tilts to follow a diagonal; one member gives a
+ *    circle; members on a line give a thin ellipse; it is fast on the
+ *    penguins.
  *
  * Run: `tsx src/tests/enclose.test.ts` (wired as `pnpm test:enclose`).
  */
@@ -21,6 +26,13 @@ import {
   type BlobOutlineOptions,
   type Pt,
 } from "../ast/graphicalOperators/enclose/blob";
+import {
+  ellipseLoop,
+  ellipseOutline,
+  ellipseValue,
+  enclosingEllipse,
+  type Ellipse,
+} from "../ast/graphicalOperators/enclose/ellipse";
 import { penguins } from "../data/penguins";
 
 declare const process: { exit(code: number): never };
@@ -361,6 +373,127 @@ console.log("# a 1,000-point line and 300 dots");
       t.pieces === 1 && ms < 1000,
       `${show(t)}, ${ms.toFixed(0)} ms`
     );
+  }
+}
+
+console.log("# Shape.ellipse(): the minimum-area enclosing ellipse");
+{
+  /** The circles whose hull is the member grown by pad, sampled densely. */
+  const boundary = (m: BlobMember, pad: number): Pt[] => {
+    const circles: [number, number, number][] =
+      m.kind === "disc"
+        ? [[m.cx, m.cy, m.r + pad]]
+        : m.kind === "box"
+          ? [
+              [m.x, m.y, pad],
+              [m.x + m.w, m.y, pad],
+              [m.x, m.y + m.h, pad],
+              [m.x + m.w, m.y + m.h, pad],
+            ]
+          : [
+              [m.a[0], m.a[1], m.w / 2 + pad],
+              [m.b[0], m.b[1], m.w / 2 + pad],
+            ];
+    return circles.flatMap(([cx, cy, r]) =>
+      Array.from({ length: 720 }, (_, i): Pt => [
+        cx + r * Math.cos((i / 720) * 2 * Math.PI),
+        cy + r * Math.sin((i / 720) * 2 * Math.PI),
+      ])
+    );
+  };
+  const inLoop = (p: Pt, loop: Pt[]) => {
+    let inside = false;
+    for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+      const [xi, yi] = loop[i],
+        [xj, yj] = loop[j];
+      if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi)
+        inside = !inside;
+    }
+    return inside;
+  };
+  /** The semi-axes, larger first, and the larger one's angle in degrees. */
+  const axes = (e: Ellipse) => {
+    const mid = (e.a + e.d) / 2,
+      half = Math.hypot((e.a - e.d) / 2, e.b);
+    // the long axis is along A's smaller eigenvalue
+    const angle = (0.5 * Math.atan2(2 * e.b, e.a - e.d) * 180) / Math.PI + 90;
+    return {
+      long: 1 / Math.sqrt(mid - half),
+      short: 1 / Math.sqrt(mid + half),
+      angle: ((angle % 180) + 180) % 180,
+    };
+  };
+  const rand = seeded(11);
+  const mixed: BlobMember[] = [
+    ...Array.from({ length: 12 }, () => C(rand() * 300, rand() * 160, 1 + rand() * 12)),
+    { kind: "box", x: 40, y: 170, w: 60, h: 24 },
+    { kind: "box", x: 250, y: -30, w: 18, h: 50 },
+    { kind: "segment", a: [-40, 60], b: [10, 120], w: 3 },
+    { kind: "segment", a: [320, 40], b: [360, 150], w: 8 },
+  ];
+  for (const pad of [0, 6, 20]) {
+    const e = enclosingEllipse(mixed, pad)!;
+    const loop = ellipseLoop(e);
+    let worst = -Infinity,
+      outsideLoop = 0;
+    for (const m of mixed)
+      for (const q of boundary(m, pad)) {
+        worst = Math.max(worst, ellipseValue(e, q));
+        if (!inLoop(q, loop)) outsideLoop++;
+      }
+    check(
+      `padding ${pad}: every padded dot, box and segment is inside the ellipse and its outline`,
+      worst <= 1 + 1e-9 && outsideLoop === 0,
+      `largest (p - c)ᵀA(p - c) ${worst.toFixed(6)}, ${outsideLoop} samples outside the loop`
+    );
+  }
+  {
+    const diagonal = Array.from({ length: 9 }, (_, i) => C(20 * i, 20 * i + (i % 2) * 6, 4));
+    const { angle, long, short } = axes(enclosingEllipse(diagonal, 6)!);
+    check(
+      "points along a diagonal tilt the ellipse to it",
+      Math.abs(angle - 45) < 3 && long > 2 * short,
+      `long axis at ${angle.toFixed(1)}°, semi-axes ${long.toFixed(1)} and ${short.toFixed(1)}`
+    );
+  }
+  {
+    const e = enclosingEllipse([C(50, 40, 7)], 5)!;
+    const { long, short } = axes(e);
+    const R = 12 / Math.cos(Math.PI / 24);
+    check(
+      "a single member gives a circle around it",
+      Math.abs(long - short) < 1e-3 * R && Math.abs(long - R) < 1e-2 * R && dist(e.c, [50, 40]) < 1e-6,
+      `semi-axes ${long.toFixed(4)} and ${short.toFixed(4)}, circle ${R.toFixed(4)}`
+    );
+  }
+  {
+    const row = [C(0, 0, 3), C(50, 0, 3), C(100, 0, 3), C(160, 0, 3)];
+    const loops = ellipseOutline(row, 0);
+    const { long, short } = axes(enclosingEllipse(row, 0)!);
+    const finite = loops.flat().every(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+    check(
+      "members on a line give a thin ellipse, with no NaN",
+      finite && short >= 3 && short < 10 && long > 80,
+      `semi-axes ${long.toFixed(2)} and ${short.toFixed(2)}`
+    );
+    const flat = ellipseOutline([C(0, 0, 0), C(40, 0, 0), C(90, 0, 0)], 0);
+    check(
+      "points with no size and no padding give their segment, with no NaN",
+      flat.length === 1 &&
+        flat[0].every(([x, y]) => Number.isFinite(x) && y === 0) &&
+        Math.max(...flat[0].map((p) => p[0])) === 90,
+      JSON.stringify(flat)
+    );
+    check("no members give no outline", ellipseOutline([], 6).length === 0);
+  }
+  {
+    const species = ["Adelie", "Chinstrap", "Gentoo"].map((s) =>
+      pen.filter((d) => d.Species === s).map(penDisc)
+    );
+    const t0 = performance.now();
+    for (const members of species) ellipseOutline(members, 6);
+    const ms = performance.now() - t0;
+    check("the three penguin species take under 100 ms", ms < 100, `${ms.toFixed(1)} ms`);
   }
 }
 

@@ -6,7 +6,8 @@ order: 75
 
 Draws an outline around a set of nodes, under them. The outline is a member of
 the [`Shape`](/python/api/shape) family: the padded bounding box
-(`Shape.box()`, the default) or a smooth region (`Shape.blob()`,
+(`Shape.box()`, the default), the smallest ellipse around them
+(`Shape.ellipse()`), or a smooth region (`Shape.blob()`,
 `Shape.hull()`, `Shape.spine()`). Like [`line`](/python/api/marks/line) and
 [`ribbon`](/python/api/marks/ribbon), it reads geometry from nodes that are
 already placed, and it has a combinator form and a bag form.

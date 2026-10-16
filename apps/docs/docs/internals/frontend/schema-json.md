@@ -2724,7 +2724,7 @@ for the API.
       }
     },
     "EncloseMark": {
-      "description": "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default) or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs.",
+      "description": "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.ellipse()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -2739,7 +2739,7 @@ for the API.
         },
         "shape": {
           "$ref": "#/$defs/Shape",
-          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset."
+          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.ellipse() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -3844,6 +3844,15 @@ for the API.
               "minimum": 0,
               "description": "Corner radius in pixels, y.",
               "default": 2
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "ellipse"
             }
           },
           "required": ["kind"]

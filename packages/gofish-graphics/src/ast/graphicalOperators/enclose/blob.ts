@@ -78,7 +78,7 @@ const cross = (o: Pt, a: Pt, b: Pt) =>
   (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
 
 /** Andrew's monotone chain. */
-const convexHull = (pts: Pt[]): Pt[] => {
+export const convexHull = (pts: Pt[]): Pt[] => {
   const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const lower: Pt[] = [];
   for (const q of p) {
@@ -130,7 +130,7 @@ const centerOf = (m: Member): Pt =>
     : m.kind === "segment"
       ? [(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2]
       : [m.x + m.w / 2, m.y + m.h / 2];
-const discPoly = (c: Pt, R: number, n = 28): Poly =>
+export const discPoly = (c: Pt, R: number, n = 28): Poly =>
   Array.from(
     { length: n },
     (_, i) =>

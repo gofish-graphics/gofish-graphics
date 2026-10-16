@@ -6,6 +6,7 @@ status: stable
 covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/blob.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/ellipse.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/members.ts
   - packages/gofish-graphics/src/families/shape.ts
 ---
@@ -13,10 +14,11 @@ covers:
 # `enclose` and the `Shape` family
 
 `enclose` draws an outline around a set of nodes, under them. The outline is a
-value of the `Shape` strategy family: the padded bounding box (`Shape.box()`)
-or a smooth region (`Shape.blob()` and its two presets, `Shape.hull()` and
-`Shape.spine()`). This essay explains how the node is built, how a blob's
-outline is computed, and which decisions and shortcuts the design rests on.
+value of the `Shape` strategy family: the padded bounding box (`Shape.box()`),
+the minimum-area enclosing ellipse (`Shape.ellipse()`), or a smooth region
+(`Shape.blob()` and its two presets, `Shape.hull()` and `Shape.spine()`). This
+essay explains how the node is built, how an ellipse's and a blob's outlines
+are computed, and which decisions and shortcuts the design rests on.
 The user-facing reference is [`enclose`](/js/api/operators/enclose) and
 [`Shape`](/js/api/shape).
 
@@ -41,9 +43,9 @@ the enclosure's own box.
 
 Layout places a fresh member the way `layer` places a child
 (`placeUnplacedChild`), and leaves a ref where its target is. The box shape
-uses the union of the members' boxes grown by `padding`. A blob computes its
-outline in the same pass, in the frame the children's boxes were read in, and
-the node's box is the outline's box. Both are kept in `renderData`, and
+uses the union of the members' boxes grown by `padding`. An ellipse or a
+blob computes its outline in the same pass, in the frame the children's boxes
+were read in, and the node's box is the outline's box. Both are kept in `renderData`, and
 `lower` maps them through `local` (the node's translate and y direction) and
 `toPixel`. A blob is one SVG `path` over all its loops. Its outer loops and
 its holes wind opposite ways, so the default nonzero fill rule leaves the
@@ -66,6 +68,45 @@ the same default installed by name (see
 
 This reader is internal. There is no `members` option and no public geometry
 protocol for it yet.
+
+## How an ellipse is built
+
+`ellipse.ts` is pure geometry too: `ellipseOutline(members, padding)` returns
+one loop.
+
+1. **Discs.** Each member grown by `padding` is the convex hull of a few
+   discs: a disc grown by `padding`; a box's four corners, each a disc of
+   radius `padding`; a segment's two ends, each a disc of half its width plus
+   `padding`. An ellipse is convex, so it holds a member exactly when it
+   holds these discs.
+2. **Samples.** Each disc is sampled as the 24-gon drawn around it (its
+   vertices at `r / cos(π / 24)`), so the samples' convex hull holds every
+   padded member. Only that hull goes on.
+3. **Khachiyan's algorithm.** It finds the minimum-area ellipse around the
+   hull's points to a tolerance of 1e-4, after moving the points to their
+   mean so the 3 × 3 system stays well conditioned. Its answer can leave a
+   point outside by up to the tolerance, so the ellipse is scaled about its
+   center until every point is inside.
+4. **Outline.** The loop is the 128-gon drawn around the ellipse (the image
+   of the 128-gon around the unit circle), so the path holds the ellipse
+   too. The ellipse may be rotated, and the loop is drawn like a blob's: one
+   path, through `local` and `toPixel`, so it is right in a y-up frame.
+
+If every sample lies on one line (members with no size and no padding),
+there is no ellipse of positive area; the outline is then the samples' hull,
+a segment, and nothing for a single point. `src/tests/enclose.test.ts` checks
+that every padded dot, box and segment of a mixed set is inside the ellipse
+and its loop, that points along a diagonal tilt it to 45°, that one member
+gives a circle, that members on a line give a thin ellipse with no NaN, and
+that the three penguin species take well under 100 ms.
+
+The ellipse is computed from the members, not fit to their bounding box.
+Fitting was prototyped while the shape was being designed: an ellipse
+inscribed in the padded box clips the members near its corners, and one
+circumscribed through the corners (TikZ's `fit`) is √2 times the box on each
+axis, so it balloons well past the members and over a chart's axes. Only the
+minimum-area ellipse both holds the members and stays close to them. Using
+any mark as the outline is left to #1167.
 
 ## How a blob is built
 
@@ -147,7 +188,9 @@ preset is within half a pixel of the true padded convex hull.
 ## The `Shape` family
 
 `families/shape.ts` is a strategy family like `Curve` or `Overlap`. Each
-member returns a plain object, `{ kind, ...params }`. `Shape.hull()` and
+member returns a plain object, `{ kind, ...params }`. `Shape.ellipse()` has
+no params: the minimum-area ellipse is one fixed construction, and `padding`
+and the paint are already on `enclose`. `Shape.hull()` and
 `Shape.spine()` are presets of `Shape.blob()`, declared in the `STRATEGIES`
 table the way `sina()` and `jitter()` are presets of `noise()`, so they make
 kind `"blob"`. The wire form is the same object, except a blob's `avoiding`,
@@ -162,7 +205,8 @@ Settled:
   corner radii moved from `enclose` to `Shape.box({ rx, ry })`.
 - `padding` and the paint stay on `enclose`; the shape's own options stay on
   the shape.
-- No `Shape.ellipse`, no `curve` option, no plot-area rule.
+- `Shape.ellipse()` is the minimum-area enclosing ellipse, not a mark drawn
+  in the bounding box (see above). No `curve` option, no plot-area rule.
 - `avoiding` takes a list of nodes or refs, or one `selectAll(name)` as the
   whole value, in JS as on the wire (`NodeSelectionIR`): a single ref and a
   `selectAll` inside a list are errors. A listed node that is also a member

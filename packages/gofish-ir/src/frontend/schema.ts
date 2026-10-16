@@ -623,10 +623,11 @@ export type SelectRefIR = {
 export type NodeSelectionIR = RefMarkIR[] | (SelectRefIR & { mode: "all" });
 
 /** The outline `enclose` draws, made by a call in the `Shape` family
- *  (`Shape.box()`, `Shape.blob()`; `Shape.hull()` and `Shape.spine()` make
- *  kind `"blob"` with other params preset). */
+ *  (`Shape.box()`, `Shape.ellipse()`, `Shape.blob()`; `Shape.hull()` and
+ *  `Shape.spine()` make kind `"blob"` with other params preset). */
 export type ShapeIR =
   | { kind: "box"; rx?: number; ry?: number }
+  | { kind: "ellipse" }
   | {
       kind: "blob";
       convexity?: number;

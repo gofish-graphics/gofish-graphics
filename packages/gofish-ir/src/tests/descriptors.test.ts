@@ -315,6 +315,7 @@ const SCHEMA_STRATEGY_KEYS: Record<
   } satisfies StrategyKeys<CalendarPartitionIR>,
   Shape: {
     box: { rx: true, ry: true },
+    ellipse: {},
     blob: {
       convexity: true,
       holes: true,

@@ -20,7 +20,7 @@ from typing import Any, Dict, Literal, Optional
 
 from ._strategy import bare_kind
 
-__all__ = ["box", "blob", "hull", "spine"]
+__all__ = ["box", "ellipse", "blob", "hull", "spine"]
 
 
 @bare_kind("Shape")
@@ -53,6 +53,12 @@ def box(*, rx: Optional[float] = None, ry: Optional[float] = None) -> Dict[str, 
         if _v is not None:
             out[_k] = _v
     return out
+
+
+@bare_kind("Shape")
+def ellipse() -> Dict[str, Any]:
+    """The smallest-area ellipse that holds every member grown by `padding`. It may be rotated: it follows the members, not the axes."""
+    return {"kind": "ellipse"}
 
 
 @bare_kind("Shape")
