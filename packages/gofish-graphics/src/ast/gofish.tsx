@@ -542,8 +542,18 @@ export async function layout(
   // content gets the slot less its chrome's gutters, as every node does
   // with the slot its parent gives it.
   const pad = padding ?? 0;
-  const slot = (given: number | undefined) =>
-    given === undefined ? undefined : Math.max(0, given - 2 * pad);
+  // How far the root reaches past its slot beyond what its chrome claims,
+  // in pixels before and after it on each axis no scope maps (see
+  // `measureCanvasInk`): the canvas keeps it clear, inside `w`/`h`. 0 until
+  // measured.
+  let ink: [Span, Span] = [
+    [0, 0],
+    [0, 0],
+  ];
+  const slot = (axis: 0 | 1, given: number | undefined) =>
+    given === undefined
+      ? undefined
+      : Math.max(0, given - 2 * pad - ink[axis][0] - ink[axis][1]);
   const root = child;
 
   // One layout of the root at the render's slot: solve its scopes, lay it
@@ -586,7 +596,7 @@ export async function layout(
     // default canvas.
     const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;
     const rootClaims = [niceExtentX, niceExtentY] as const;
-    const given = [slot(w), slot(h)] as const;
+    const given = [slot(0, w), slot(1, h)] as const;
     const rootSizes = ([0, 1] as const).map((axis) => {
       const space = rootSpaces[axis];
       const claim = rootClaims[axis];
@@ -781,10 +791,12 @@ export async function layout(
       const name = axis === 0 ? "x" : "y";
       const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
       const direction = axis === 0 ? 1 : rootYDirection;
+      // The slot's pixel edge: past the padding and the ink kept clear.
+      const edge = pad + ink[axis][0];
       if (given[axis] !== undefined && rootScopes[axis] !== undefined) {
         root.place(
           name,
-          pad +
+          edge +
             fromFrameStart(
               offset + rootSeats[axis].seatPx,
               rootSizes[axis].px,
@@ -796,7 +808,7 @@ export async function layout(
       }
       root.pinAnchor(
         name,
-        pad + fromFrameStart(offset, root.dims[axis].size ?? 0, direction),
+        edge + fromFrameStart(offset, root.dims[axis].size ?? 0, direction),
         orientSide("min", direction)
       );
     };
@@ -815,9 +827,17 @@ export async function layout(
     }) as PixelPosScales;
 
     return {
-      underlyingSpaceX: niceUnderlyingSpaceX,
-      underlyingSpaceY: niceUnderlyingSpaceY,
-      posScales,
+      placed: {
+        underlyingSpaceX: niceUnderlyingSpaceX,
+        underlyingSpaceY: niceUnderlyingSpaceY,
+        posScales,
+      },
+      // Per axis, the slot the root was fitted to, where the render gives
+      // one, and whether a scope solved against it maps the root's domain.
+      slots: given,
+      scoped: [0, 1].map(
+        (axis) => given[axis] !== undefined && rootScopes[axis] !== undefined
+      ) as [boolean, boolean],
     };
   };
 
@@ -826,17 +846,23 @@ export async function layout(
   // one layout measures them: chrome is laid out around its content, and
   // each chart's gutters are read off the result (`measureChromeGutters`).
   // If the chrome takes room, the tree is laid out again, with each chart
-  // claiming its gutters around its content.
+  // claiming its gutters around its content. The same layout measures how
+  // far content with no σ reaches past its slot (`measureCanvasInk`), which
+  // the canvas then keeps clear.
   //
   // DECLARED SHORTCUT (#1032): the gutters are measured by laying the chart
   // out once more. The right fix measures them in the claim walk, with every
   // chrome shape reporting its constant size (#493's "fixed-size nodes
   // report their size") and each ring folding its shapes' sizes, so that one
   // layout suffices.
-  let placed = layoutRoot();
-  if (measureChromeGutters(root)) {
+  const first = layoutRoot();
+  let placed = first.placed;
+  const measured = measureChromeGutters(root);
+  const takesRoom = measured.takesRoom;
+  ink = measureCanvasInk(root, measured.plots, first.slots, first.scoped);
+  if (takesRoom || ink.some(([a, b]) => a > 0 || b > 0)) {
     root.resetLayout();
-    placed = layoutRoot();
+    placed = layoutRoot().placed;
   }
 
   // The SVG is the render's size, exactly (#493): the root, its chrome
@@ -909,10 +935,15 @@ const hullOf = (spans: (Span | undefined)[]): Span | undefined =>
  *   not chrome, and takes no room.
  *
  * Charts are measured innermost first, so a chart's nested charts already
- * have their gutters.
+ * have their gutters. Also returns, per chart, what its plot spans for the
+ * canvas's ink (`measureCanvasInk`).
  */
-function measureChromeGutters(root: GoFishNode): boolean {
+function measureChromeGutters(root: GoFishNode): {
+  takesRoom: boolean;
+  plots: Map<GoFishNode, [Span | undefined, Span | undefined]>;
+} {
   let takesRoom = false;
+  const plots = new Map<GoFishNode, [Span | undefined, Span | undefined]>();
   const charts = [...breadthFirst(root)].filter((n) => n.chrome).reverse();
   for (const chart of charts) {
     const chrome = chart.chrome!;
@@ -975,13 +1006,31 @@ function measureChromeGutters(root: GoFishNode): boolean {
       return [local[0] + offset, local[1] + offset];
     };
 
+    // For the canvas: the plot as the slot the content was handed, from the
+    // content's start, where it has no map; widened by the nested charts'
+    // claims. Content past it is ink, not plot.
+    const slotted: [Span | undefined, Span | undefined] = [
+      undefined,
+      undefined,
+    ];
+    plots.set(chart, slotted);
     chrome.gutters = ([0, 1] as const).map((axis): [number, number] => {
       const chromeSpan = hullOf(reach[axis]);
       const own = chrome.plot?.[axis];
+      const content = boxOf(chrome.content, axis);
+      const given = chrome.slot?.[axis];
       // The recorded span is in axis order; every other span in pixels.
-      const plotSpan =
-        own === undefined ? boxOf(chrome.content, axis) : inOrder(axis, own);
-      const inner = hullOf([plotSpan, ...nested.map((n) => claimed(n, axis))]);
+      const plotSpan = own === undefined ? content : inOrder(axis, own);
+      const nestedSpans = nested.map((n) => claimed(n, axis));
+      slotted[axis] = hullOf([
+        own !== undefined
+          ? plotSpan
+          : content !== undefined && given !== undefined
+            ? [content[0], content[0] + given]
+            : content,
+        ...nestedSpans,
+      ]);
+      const inner = hullOf([plotSpan, ...nestedSpans]);
       if (chromeSpan === undefined || inner === undefined) return [0, 0];
       const [cLo, cHi] = inOrder(axis, chromeSpan);
       const [iLo, iHi] = inOrder(axis, inner);
@@ -991,7 +1040,48 @@ function measureChromeGutters(root: GoFishNode): boolean {
       return g;
     }) as [[number, number], [number, number]];
   }
-  return takesRoom;
+  return { takesRoom, plots };
+}
+
+/**
+ * How far the laid-out root reaches past the slot it was handed, beyond what
+ * its chrome claims, in pixels before and after it on each axis the render
+ * gives a size and maps no domain into (#493). Content with no σ there (rows
+ * of a category axis) is laid out in the size it is handed, but constant
+ * pixels it adds (a label row under each bar, fixed spacing) can make it
+ * larger than that. Those pixels do not depend on the slot, so the canvas
+ * keeps them clear and the content gets the rest. On an axis a scope maps,
+ * the plot is the mapped domain, and a mark that reaches past it (a circle on
+ * the domain's edge) is ink: it takes no room. The slot is the plot of the
+ * root as a chart (`plots`, from `measureChromeGutters`, which widens it by
+ * the nested charts' claims), or the root's box from its start for a root
+ * with no chrome. The root's own gutters are taken off, since it claims them
+ * itself.
+ */
+function measureCanvasInk(
+  root: GoFishNode,
+  plots: Map<GoFishNode, [Span | undefined, Span | undefined]>,
+  slots: readonly [number | undefined, number | undefined],
+  scoped: [boolean, boolean]
+): [Span, Span] {
+  return ([0, 1] as const).map((axis): Span => {
+    const own = root.intrinsicDims?.[axis];
+    const slot = slots[axis];
+    if (slot === undefined || scoped[axis] || own?.min === undefined)
+      return [0, 0];
+    const box: Span = [own.min, own.min + (own.size ?? 0)];
+    const plot = root.chrome
+      ? plots.get(root)?.[axis]
+      : ([box[0], box[0] + slot] as Span);
+    if (plot === undefined) return [0, 0];
+    // The root's gutters in pixels: a y that grows upward starts at the
+    // bottom.
+    const [g0, g1] = root.chromeGutters(axis);
+    const [before, after] =
+      axis === 1 && yDirection(root) === -1 ? [g1, g0] : [g0, g1];
+    const room = (px: number) => (Number.isFinite(px) ? Math.max(0, px) : 0);
+    return [room(plot[0] - box[0] - before), room(box[1] - plot[1] - after)];
+  }) as [Span, Span];
 }
 
 /* top-level pass handler */

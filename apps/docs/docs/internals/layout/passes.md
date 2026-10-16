@@ -711,6 +711,17 @@ ink along its axis, since how far it reaches past its band depends on the
 band's width; one wider than its band overdraws its neighbors (#1115), and it
 does not count in its parent layer's box on that axis either.
 
+The same layout measures one more thing at the root (`measureCanvasInk`). On
+an axis the render gives a size and no scope maps (a category axis), the
+content is laid out in the size it is handed, but constant pixels it adds (a
+label row under each bar, fixed spacing) can make it larger than that. The
+root measures how far it reaches past its slot, beyond its own gutters, and
+the canvas keeps that clear too, so the content gets the rest. On an axis a
+scope maps, a mark that reaches past the plot (a circle on the domain's edge)
+is ink and takes no room. Content that is larger than the canvas whatever it
+is handed (fixed spacing wider than the canvas, a literal position past it)
+still overflows and is clipped.
+
 DECLARED SHORTCUT: the measuring layout costs one more layout pass for a
 chart with chrome. The right fix measures the gutters in the claim walk, with
 every chrome shape reporting its constant size (#493's "fixed-size nodes

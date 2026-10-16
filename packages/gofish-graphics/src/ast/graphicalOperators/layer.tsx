@@ -630,7 +630,8 @@ export const layer = createNodeOperatorSequential(
           // A node dressed in chrome records the span of its plot in its own
           // frame, which its chrome's gutters are measured from (#1032): the
           // keyed domain of its content as its frame maps it. On an axis with
-          // no map the plot is the content's box.
+          // no map the plot is the content's box. It also records the size it
+          // hands its content (`chrome.slot`).
           if (node.chrome !== undefined) {
             node.chrome.plot = ([0, 1] as const).map((axis) => {
               const frame = layerScales.frames[axis];
@@ -652,6 +653,10 @@ export const layer = createNodeOperatorSequential(
               }
               return undefined;
             }) as NonNullable<GoFishNode["chrome"]>["plot"];
+            node.chrome.slot = ([0, 1] as const).map((axis) => {
+              const given = size[axis] - sum(node.chromeGutters(axis));
+              return Number.isFinite(given) ? given : undefined;
+            }) as NonNullable<GoFishNode["chrome"]>["slot"];
           }
           for (const axis of layerScales.failedAxes) {
             // A non-invertible fold-produced Monotonic would otherwise silently

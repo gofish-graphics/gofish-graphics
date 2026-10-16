@@ -623,6 +623,9 @@ export class GoFishNode {
      *  content as its frame maps it. Undefined on an axis with no map, where
      *  the plot is the content's box. The gutters are measured from it. */
     plot?: [[number, number] | undefined, [number, number] | undefined];
+    /** Per axis, the size this node's layout handed its content: its slot
+     *  less its gutters; undefined on an unsized axis. */
+    slot?: [number | undefined, number | undefined];
   };
   /**
    * The chrome this node is asked to carry beyond the axes `resolveAxes`
