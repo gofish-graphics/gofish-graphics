@@ -14,7 +14,7 @@ def story_penguin_mass():
             scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.noise()),
         )
         .mark(circle(r=3, fill="Species")),
-        {"w": 560, "h": 320},
+        {"w": 560},
     )
 
 
@@ -26,7 +26,7 @@ def story_penguin_mass_sina():
             scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.sina()),
         )
         .mark(circle(r=3, fill="Species")),
-        {"w": 560, "h": 320},
+        {"w": 560},
     )
 
 
@@ -38,7 +38,7 @@ def story_penguin_mass_jitter():
             scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.jitter()),
         )
         .mark(circle(r=3, fill="Species")),
-        {"w": 560, "h": 320},
+        {"w": 560},
     )
 
 
@@ -50,7 +50,7 @@ def _dense(overlap):
             scatter(x="mass", alignment="middle", overlap=overlap),
         )
         .mark(circle(r=2, fill="group")),
-        {"w": 640, "h": 420},
+        {"w": 640},
     )
 
 

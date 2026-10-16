@@ -34,7 +34,7 @@ export const PenguinMass: StoryObj = {
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
-      .render(container, { w: 560, h: 320 });
+      .render(container, { w: 560 });
 
     return container;
   },
