@@ -1,0 +1,3137 @@
+<title>GoFish Label Placement</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link
+  rel="preconnect"
+  href="https://fonts.gstatic.com"
+  crossorigin="anonymous"
+/>
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&amp;family=IBM+Plex+Sans+Condensed:wght@500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"
+/>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --ink: #15171c;
+    --ink-2: #474d59;
+    --ink-3: #6f7684;
+    --rule: #dfe2e8;
+    --rule-strong: #c3c8d1;
+    --accent: #1d5bcc;
+    --accent-soft: #e5edfc;
+    --accent-ink: #1a4aa6;
+    --code-bg: #eef0f4;
+    --code-ink: #1d2230;
+    --code-str: #0a7148;
+    --code-com: #737a88;
+    --code-num: #a3460b;
+    --paper: #ffffff;
+    --paper-rule: #e3e6eb;
+    --chip-bg: #eceef2;
+    --chip-ink: #3a404c;
+    --chip-new-bg: #dfe9fd;
+    --chip-new-ink: #1a4aa6;
+    --chip-new-rule: #a9c2f2;
+    --mark: #b23a2e;
+    --font-sans:
+      "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+    --font-cond:
+      "IBM Plex Sans Condensed", "Arial Narrow", "IBM Plex Sans", Arial,
+      sans-serif;
+    --font-mono:
+      "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono",
+      monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101217;
+      --surface: #171a21;
+      --ink: #e6e8ed;
+      --ink-2: #b3b9c4;
+      --ink-3: #8a919e;
+      --rule: #272c36;
+      --rule-strong: #394050;
+      --accent: #79a6ff;
+      --accent-soft: #1b2741;
+      --accent-ink: #a9c4ff;
+      --code-bg: #1b1f27;
+      --code-ink: #dde1e8;
+      --code-str: #7fd1a6;
+      --code-com: #7e8696;
+      --code-num: #efa76a;
+      --paper: #fafbfc;
+      --paper-rule: #394050;
+      --chip-bg: #232833;
+      --chip-ink: #c4cad4;
+      --chip-new-bg: #1c2a47;
+      --chip-new-ink: #b3cbff;
+      --chip-new-rule: #34518a;
+      --mark: #ff8a7a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101217;
+    --surface: #171a21;
+    --ink: #e6e8ed;
+    --ink-2: #b3b9c4;
+    --ink-3: #8a919e;
+    --rule: #272c36;
+    --rule-strong: #394050;
+    --accent: #79a6ff;
+    --accent-soft: #1b2741;
+    --accent-ink: #a9c4ff;
+    --code-bg: #1b1f27;
+    --code-ink: #dde1e8;
+    --code-str: #7fd1a6;
+    --code-com: #7e8696;
+    --code-num: #efa76a;
+    --paper: #fafbfc;
+    --paper-rule: #394050;
+    --chip-bg: #232833;
+    --chip-ink: #c4cad4;
+    --chip-new-bg: #1c2a47;
+    --chip-new-ink: #b3cbff;
+    --chip-new-rule: #34518a;
+    --mark: #ff8a7a;
+    color-scheme: dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  a {
+    color: var(--accent);
+    text-underline-offset: 2px;
+  }
+  a:hover {
+    text-decoration-thickness: 2px;
+  }
+  code,
+  pre,
+  kbd {
+    font-family: var(--font-mono);
+  }
+  :not(pre) > code {
+    font-size: 0.86em;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 0.08em 0.32em;
+    border-radius: 3px;
+    overflow-wrap: anywhere;
+  }
+  img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+
+  .page {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 40px 96px;
+  }
+  .layout {
+    max-width: 1240px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+  }
+  @media (min-width: 1120px) {
+    .layout {
+      grid-template-columns: 200px minmax(0, 1fr);
+    }
+  }
+  main {
+    min-width: 0;
+    max-width: 980px;
+  }
+
+  /* table of contents */
+  .toc {
+    display: none;
+  }
+  @media (min-width: 1120px) {
+    .toc {
+      display: block;
+      position: sticky;
+      top: 24px;
+      align-self: start;
+      font-size: 13.5px;
+      line-height: 1.4;
+    }
+  }
+  .toc-title {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+  .toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-left: 1px solid var(--rule);
+  }
+  .toc li {
+    margin: 0;
+  }
+  .toc a {
+    display: block;
+    padding: 5px 0 5px 12px;
+    color: var(--ink-2);
+    text-decoration: none;
+    margin-left: -1px;
+    border-left: 2px solid transparent;
+  }
+  .toc a:hover {
+    color: var(--accent);
+    border-left-color: var(--accent);
+  }
+  .toc .n {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-right: 6px;
+  }
+
+  /* type */
+  .prose {
+    max-width: 70ch;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    line-height: 1.2;
+    margin: 0;
+    color: var(--ink);
+  }
+  h1 {
+    font-size: clamp(30px, 5vw, 44px);
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+  h2 {
+    font-size: clamp(22px, 3vw, 28px);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 16px;
+  }
+  h3 {
+    font-size: 19px;
+    font-weight: 600;
+    margin: 32px 0 10px;
+  }
+  h4 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 20px 0 6px;
+  }
+  p {
+    margin: 0 0 14px;
+  }
+  ul,
+  ol {
+    margin: 0 0 14px;
+    padding-left: 1.3em;
+  }
+  li {
+    margin: 4px 0;
+  }
+  .eyebrow {
+    font-family: var(--font-cond);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 8px;
+  }
+  .muted {
+    color: var(--ink-3);
+  }
+  .small {
+    font-size: 14px;
+  }
+
+  section {
+    padding-top: 56px;
+    margin-top: 56px;
+    border-top: 1px solid var(--rule);
+    scroll-margin-top: 16px;
+  }
+  .secnum {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink-3);
+    margin-right: 10px;
+  }
+
+  /* header */
+  header.top {
+    padding-bottom: 8px;
+  }
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 18px 0 26px;
+    padding: 5px 10px;
+    border: 1px solid var(--rule-strong);
+    border-radius: 4px;
+    font-size: 13.5px;
+    color: var(--ink-2);
+    background: var(--surface);
+  }
+  .status::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex: none;
+  }
+  .summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    border-radius: 6px;
+    max-width: 80ch;
+  }
+  .summary > div {
+    padding: 16px 20px;
+    min-width: 0;
+  }
+  .summary > div + div {
+    border-top: 1px solid var(--rule);
+  }
+  .summary .k {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 4px;
+  }
+  .summary .rec {
+    border-left: 3px solid var(--accent);
+  }
+  .summary p {
+    margin: 0;
+  }
+
+  /* code */
+  pre {
+    margin: 0;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    font-size: 13px;
+    line-height: 1.55;
+    padding: 12px 14px;
+    border-radius: 4px;
+    overflow-x: auto;
+    tab-size: 2;
+  }
+  pre code {
+    white-space: pre;
+  }
+  .codeblock {
+    margin: 0 0 16px;
+    min-width: 0;
+  }
+  .codeblock .lang {
+    font-family: var(--font-cond);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 4px;
+  }
+  .s {
+    color: var(--code-str);
+  }
+  .c {
+    color: var(--code-com);
+    font-style: italic;
+  }
+  .nm {
+    color: var(--code-num);
+  }
+  .fam {
+    color: var(--accent-ink);
+    font-weight: 500;
+  }
+
+  /* tables */
+  .table-scroll {
+    overflow-x: auto;
+    margin: 0 0 18px;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--surface);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--rule);
+  }
+  tr:last-child td {
+    border-bottom: 0;
+  }
+  th {
+    font-family: var(--font-cond);
+    font-weight: 600;
+    font-size: 12.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    background: var(--bg);
+    white-space: nowrap;
+  }
+  td code {
+    white-space: nowrap;
+  }
+  tr.hl td {
+    background: var(--accent-soft);
+  }
+  tr.hl td:first-child {
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .facts td {
+    white-space: nowrap;
+  }
+  .facts td:first-child {
+    white-space: normal;
+    min-width: 180px;
+  }
+
+  .chip {
+    display: inline-block;
+    font-family: var(--font-cond);
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.3;
+    padding: 2px 7px;
+    margin: 1px 2px 1px 0;
+    border-radius: 3px;
+    background: var(--chip-bg);
+    color: var(--chip-ink);
+    border: 1px solid transparent;
+  }
+  .chip.new {
+    background: var(--chip-new-bg);
+    color: var(--chip-new-ink);
+    border-color: var(--chip-new-rule);
+  }
+  .chip.none {
+    background: transparent;
+    color: var(--ink-3);
+    border: 1px dashed var(--rule-strong);
+  }
+  .legend-line {
+    font-size: 13.5px;
+    color: var(--ink-2);
+    margin: -6px 0 18px;
+  }
+
+  /* figures */
+  .paper {
+    background: var(--paper);
+    border: 1px solid var(--paper-rule);
+    border-radius: 4px;
+    padding: 8px;
+  }
+  figure {
+    margin: 0;
+    min-width: 0;
+  }
+  figcaption {
+    font-size: 13.5px;
+    color: var(--ink-2);
+    margin-top: 8px;
+  }
+  figcaption code {
+    font-size: 0.9em;
+  }
+
+  /* diagram */
+  .diagram {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+    align-items: center;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 18px;
+    margin: 8px 0 28px;
+  }
+  @media (min-width: 760px) {
+    .diagram {
+      grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+    }
+  }
+  .diagram svg {
+    width: 100%;
+    height: auto;
+    max-width: 420px;
+  }
+  .diagram .key {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 14px;
+  }
+  .diagram .key li {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 8px;
+    margin: 8px 0;
+  }
+  .sw {
+    width: 18px;
+    height: 14px;
+    margin-top: 4px;
+    border-radius: 2px;
+  }
+  .sw.target {
+    border: 1.5px dashed var(--ink-3);
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+  }
+  .sw.cand {
+    border: 1.5px dashed var(--ink-3);
+  }
+  .sw.chosen {
+    background: var(--accent-soft);
+    border: 1.5px solid var(--accent);
+  }
+  .sw.obst {
+    height: 2px;
+    margin-top: 11px;
+    background: var(--ink-2);
+  }
+  .d-ink {
+    fill: var(--ink-2);
+  }
+  .d-ink3 {
+    fill: var(--ink-3);
+  }
+  .d-cand {
+    fill: none;
+    stroke: var(--ink-3);
+    stroke-width: 1.2;
+    stroke-dasharray: 3 3;
+  }
+  .d-ring {
+    fill: none;
+    stroke: var(--ink-3);
+    stroke-width: 1.2;
+    stroke-dasharray: 2 3;
+  }
+  .d-chosen {
+    fill: var(--accent-soft);
+    stroke: var(--accent);
+    stroke-width: 1.6;
+  }
+  .d-obst {
+    stroke: var(--ink-2);
+    stroke-width: 2.2;
+    fill: none;
+  }
+  .d-x {
+    stroke: var(--mark);
+    stroke-width: 1.8;
+    fill: none;
+  }
+  .d-num {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    fill: var(--ink-3);
+  }
+  .d-label {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 600;
+    fill: var(--accent-ink);
+  }
+  .d-note {
+    font-family: var(--font-cond);
+    font-size: 11px;
+    fill: var(--ink-3);
+  }
+
+  /* precedent grid */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+    gap: 16px;
+    margin: 8px 0 28px;
+  }
+  .card {
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+  .card h3 {
+    font-size: 16px;
+    margin: 0;
+  }
+  .card .model {
+    font-size: 14px;
+    color: var(--ink-2);
+    margin: 0;
+  }
+  .card pre {
+    font-size: 12px;
+    padding: 9px 10px;
+  }
+  .card .thumb {
+    aspect-ratio: 16 / 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .card .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .card .fit {
+    font-size: 13px;
+    margin: 0;
+    color: var(--ink-2);
+  }
+  .card .fit b {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .card .src {
+    font-size: 12.5px;
+    margin-top: auto;
+    color: var(--ink-3);
+    overflow-wrap: anywhere;
+  }
+  .cards.textonly .card {
+    gap: 8px;
+  }
+
+  .lessons {
+    counter-reset: lesson;
+    list-style: none;
+    padding: 0;
+    margin: 0 0 8px;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  }
+  .lessons li {
+    counter-increment: lesson;
+    margin: 0;
+    padding: 14px 16px 14px 16px;
+    border-top: 3px solid var(--accent);
+    background: var(--surface);
+    border-radius: 0 0 6px 6px;
+    font-size: 14.5px;
+    min-width: 0;
+  }
+  .lessons li::before {
+    content: counter(lesson);
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  /* compare rows */
+  .compare {
+    margin: 0 0 36px;
+  }
+  .compare-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 0 0 10px;
+  }
+  .compare-head h3 {
+    margin: 0;
+  }
+  .compare-head .muted {
+    font-size: 14px;
+  }
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+  @media (min-width: 720px) {
+    .cols {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+  }
+  .col {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .col-tag {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .col.prop .col-tag {
+    color: var(--accent);
+  }
+  .col.prop .paper {
+    border-color: var(--chip-new-rule);
+  }
+  .col .note {
+    font-size: 13.5px;
+    color: var(--ink-2);
+    margin: 0;
+  }
+  .stack-figs {
+    display: grid;
+    gap: 8px;
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    margin: 10px 0 18px;
+  }
+  @media (min-width: 720px) {
+    .pair {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+  }
+
+  .lesson-block {
+    margin: 0 0 30px;
+  }
+  .lesson-block h3 {
+    margin-top: 24px;
+  }
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+  @media (min-width: 820px) {
+    .split {
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    }
+  }
+  .split > * {
+    min-width: 0;
+  }
+
+  /* approaches */
+  .approach {
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--surface);
+    padding: 20px;
+    margin: 0 0 22px;
+  }
+  .approach.rec {
+    border-color: var(--accent);
+    box-shadow: inset 4px 0 0 var(--accent);
+  }
+  .approach-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .approach-head h3 {
+    margin: 0;
+  }
+  .badge {
+    font-family: var(--font-cond);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 3px;
+    border: 1px solid var(--rule-strong);
+    color: var(--ink-2);
+  }
+  .badge.rec {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--surface);
+  }
+  .thumbs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+    gap: 10px;
+    margin: 6px 0 16px;
+  }
+  .kv {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    margin: 4px 0 0;
+    border-top: 1px solid var(--rule);
+  }
+  .kv > div {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--rule);
+    min-width: 0;
+  }
+  .kv > div:last-child {
+    border-bottom: 0;
+  }
+  @media (min-width: 720px) {
+    .kv > div {
+      display: grid;
+      grid-template-columns: 130px minmax(0, 1fr);
+      gap: 16px;
+    }
+  }
+  .kv .k {
+    font-family: var(--font-cond);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding-top: 2px;
+  }
+  .kv p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* terms */
+  .terms {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    margin: 0 0 24px;
+    border-top: 1px solid var(--rule);
+    max-width: 80ch;
+  }
+  .terms > div {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: 14.5px;
+    min-width: 0;
+  }
+  @media (min-width: 640px) {
+    .terms > div {
+      display: grid;
+      grid-template-columns: 120px minmax(0, 1fr);
+      gap: 14px;
+    }
+  }
+  .terms dt {
+    font-weight: 600;
+  }
+  .terms dd {
+    margin: 0;
+    color: var(--ink-2);
+  }
+
+  /* decisions */
+  .decisions {
+    list-style: none;
+    counter-reset: dec;
+    padding: 0;
+    margin: 0 0 28px;
+    max-width: 80ch;
+  }
+  .decisions > li {
+    counter-increment: dec;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 10px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--rule);
+    margin: 0;
+  }
+  .decisions > li::before {
+    content: counter(dec);
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--accent);
+    width: 26px;
+    height: 26px;
+    border: 1.5px solid var(--accent);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .decisions .q {
+    font-weight: 600;
+    margin: 2px 0 4px;
+  }
+  .decisions .d {
+    font-size: 14.5px;
+    color: var(--ink-2);
+    margin: 0;
+  }
+
+  details {
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--surface);
+    max-width: 80ch;
+  }
+  summary {
+    cursor: pointer;
+    padding: 12px 16px;
+    font-weight: 600;
+  }
+  details[open] summary {
+    border-bottom: 1px solid var(--rule);
+  }
+  .issues {
+    list-style: none;
+    padding: 6px 16px 12px;
+    margin: 0;
+    font-size: 14.5px;
+  }
+  .issues li {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--rule);
+    margin: 0;
+  }
+  .issues li:last-child {
+    border-bottom: 0;
+  }
+  .issues .num {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--accent-ink);
+  }
+
+  .callout {
+    border-left: 3px solid var(--rule-strong);
+    padding: 4px 0 4px 14px;
+    color: var(--ink-2);
+    font-size: 14.5px;
+    max-width: 76ch;
+    margin: 0 0 18px;
+  }
+  .args {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 20px;
+    max-width: 80ch;
+  }
+  .args li {
+    padding: 10px 0 10px 18px;
+    border-bottom: 1px solid var(--rule);
+    margin: 0;
+    position: relative;
+  }
+  .args li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 19px;
+    width: 8px;
+    height: 2px;
+    background: var(--accent);
+  }
+  .args b {
+    font-weight: 600;
+  }
+
+  footer {
+    margin-top: 64px;
+    font-size: 13px;
+    color: var(--ink-3);
+  }
+</style>
+
+<div class="page">
+  <div class="layout">
+    <nav class="toc" aria-label="Contents">
+      <p class="toc-title">Contents</p>
+      <ol>
+        <li>
+          <a href="#fit"><span class="n">01</span>Where labels fit</a>
+        </li>
+        <li>
+          <a href="#precedent"><span class="n">02</span>Precedent</a>
+        </li>
+        <li>
+          <a href="#compare"><span class="n">03</span>Today vs proposed</a>
+        </li>
+        <li>
+          <a href="#place"><span class="n">04</span>The Place family</a>
+        </li>
+        <li>
+          <a href="#prototypes"
+            ><span class="n">05</span>What prototypes taught</a
+          >
+        </li>
+        <li>
+          <a href="#approaches"><span class="n">06</span>Approaches A, B, C</a>
+        </li>
+        <li>
+          <a href="#geometry"><span class="n">07</span>Geometry queries</a>
+        </li>
+        <li>
+          <a href="#recommendation"><span class="n">08</span>Recommendation</a>
+        </li>
+        <li>
+          <a href="#decisions"><span class="n">09</span>Decisions for Josh</a>
+        </li>
+      </ol>
+    </nav>
+
+    <main>
+      <header class="top">
+        <p class="eyebrow">GoFish API proposal</p>
+        <h1>Labels for Points, Lines and Areas</h1>
+        <div class="status">
+          Proposal, not implemented; syntax awaiting sign-off
+        </div>
+
+        <div class="summary">
+          <div>
+            <div class="k">Summary</div>
+            <p>
+              Keep one <code>.label()</code>. Give its
+              <code>position</code> option a strategy family,
+              <code>Place</code>, whose members read the labeled mark's geometry
+              (a point, a path, or a region) and propose candidate spots. One
+              shared step then picks, for each label, the first spot that is
+              free of other labels and of anything listed in
+              <code>avoiding</code>.
+            </p>
+          </div>
+          <div class="rec">
+            <div class="k">Recommendation</div>
+            <p>
+              Approach A:
+              <code>.label(accessor, { position: Place.end(), avoiding })</code
+              >. Each <code>Place</code> member is defined by a rewrite into
+              today's elaborated shape (<code>layer([ref(target), text])</code>
+              plus a placement), so the core grows by two geometry queries
+              (#974's <code>boundary</code> and a new <code>path</code>) and one
+              search step, the same kind of step as scatter's
+              <code>overlap</code>. The runner-up is a public
+              <code>label(...)</code> tier for <code>.layer()</code>/<code
+                >.relate()</code
+              >
+              (Approach C), which A desugars into anyway.
+            </p>
+          </div>
+          <div>
+            <div class="k">Taxonomy answer</div>
+            <p>
+              A label is not a fifth kind of construct. It is the "mixed row" of
+              the operand-kind table in <em>Operators over placed nodes</em>: it
+              reads a placed operand (the target) and places a fresh one (the
+              text). Marks, relational marks, constraints and labels are
+              clusters of three per-operand facts, plus one fact about how
+              coordinates get written.
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <!-- 1. WHERE LABELS FIT -->
+      <section id="fit">
+        <h2><span class="secnum">01</span>Where labels fit</h2>
+
+        <dl class="terms">
+          <div>
+            <dt>Target</dt>
+            <dd>
+              The mark a label describes. It is already placed when the label is
+              placed.
+            </dd>
+          </div>
+          <div>
+            <dt>Label</dt>
+            <dd>A fresh mark, usually text, placed relative to the target.</dd>
+          </div>
+          <div>
+            <dt>Geometry kind</dt>
+            <dd>
+              What shape the target offers for labeling: a <b>point</b> (a dot,
+              or any mark read as its box or enclosing circle), a
+              <b>path</b> (an open curve with a start, an end and a direction: a
+              line, an edge, an arrow), or a <b>region</b> (a closed area: an
+              area band, a polygon, a treemap cell). Cartography uses the same
+              three: point, line and polygon features.
+            </dd>
+          </div>
+          <div>
+            <dt>Candidate</dt>
+            <dd>One possible spot for a label, in priority order.</dd>
+          </div>
+          <div>
+            <dt>Placement strategy</dt>
+            <dd>
+              A rule that turns a target's geometry into candidates. These form
+              the <code>Place</code> family.
+            </dd>
+          </div>
+          <div>
+            <dt>Obstacle</dt>
+            <dd>
+              Something a label must not cover: other labels, the targets, or
+              marks named in <code>avoiding</code>.
+            </dd>
+          </div>
+          <div>
+            <dt>Chooser</dt>
+            <dd>
+              The shared step that takes each label's candidates in order and
+              keeps the first one that does not hit an obstacle. A label with no
+              free candidate is hidden. This is the greedy first-fit rule of
+              Imhof's cartographic placement, Mapbox's
+              <code>text-variable-anchor</code>, CSS
+              <code>position-try-fallbacks</code>, and Vega's
+              <code>label</code> transform.
+            </dd>
+          </div>
+        </dl>
+
+        <div class="prose">
+          <p>
+            Josh asked whether a label is a new kind of thing beside marks,
+            relational marks, relations and constraints, or whether those
+            categories come from something more basic. The internals essay
+            <em>Operators over placed nodes</em> (#707) already answers half of
+            this. Its table indexes arrangements by <b>operand kind</b>:
+          </p>
+        </div>
+
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>operands</th>
+                <th>today's name</th>
+                <th>places whom</th>
+                <th>reports upward</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>all fresh</td>
+                <td>operator (<code>spread</code>)</td>
+                <td>all children</td>
+                <td>the children</td>
+              </tr>
+              <tr class="hl">
+                <td>mixed refs + fresh</td>
+                <td><em>(unnamed idiom)</em> = the label</td>
+                <td>fresh children only</td>
+                <td>fresh only</td>
+              </tr>
+              <tr>
+                <td>all refs, no ink</td>
+                <td>constraint (<code>align</code>)</td>
+                <td>pins or moves refs</td>
+                <td>nothing</td>
+              </tr>
+              <tr>
+                <td>all refs + drawn ink</td>
+                <td>connector (<code>line</code>)</td>
+                <td>nothing, reads</td>
+                <td>the drawn ink</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="prose">
+          <p>
+            The unnamed row is the label. <code>BarWithLabels</code> writes it
+            by hand as <code>spread({ dir: "y" }, [d[0], text(...)])</code>, and
+            #766 made <code>.label()</code> elaborate into exactly that shape:
+            <code>Layer[ref(target), Text]</code> plus align and distribute
+            constraints. Josh's
+            <code>labelLayout([ref(labeledMark), labelText])</code> is the same
+            picture.
+          </p>
+        </div>
+
+        <div class="diagram">
+          <svg viewBox="0 0 300 200" role="img" aria-labelledby="dg-title">
+            <title id="dg-title">
+              A label is ref(target) plus fresh text, placed at the first
+              candidate that misses the obstacles
+            </title>
+            <!-- candidates, illustrative Imhof-like order -->
+            <rect
+              class="d-cand"
+              x="80"
+              y="138"
+              width="56"
+              height="18"
+              rx="2"
+            ></rect>
+            <text class="d-num" x="84" y="150">5</text>
+            <rect
+              class="d-cand"
+              x="122"
+              y="144"
+              width="56"
+              height="18"
+              rx="2"
+            ></rect>
+            <text class="d-num" x="126" y="156">6</text>
+            <rect
+              class="d-cand"
+              x="164"
+              y="138"
+              width="56"
+              height="18"
+              rx="2"
+            ></rect>
+            <text class="d-num" x="168" y="150">7</text>
+            <rect
+              class="d-cand"
+              x="76"
+              y="111"
+              width="56"
+              height="18"
+              rx="2"
+            ></rect>
+            <text class="d-num" x="80" y="123">4</text>
+            <rect
+              class="d-cand"
+              x="168"
+              y="111"
+              width="56"
+              height="18"
+              rx="2"
+            ></rect>
+            <text class="d-num" x="214" y="123">8</text>
+            <rect
+              class="d-cand"
+              x="80"
+              y="84"
+              width="56"
+              height="18"
+              rx="2"
+            ></rect>
+            <text class="d-num" x="84" y="96">3</text>
+            <rect
+              class="d-cand"
+              x="164"
+              y="84"
+              width="56"
+              height="18"
+              rx="2"
+            ></rect>
+            <text class="d-num" x="210" y="96">1</text>
+            <!-- obstacle: a trend line -->
+            <line class="d-obst" x1="118" y1="181" x2="262" y2="8"></line>
+            <text class="d-note" x="192" y="22">avoiding</text>
+            <!-- candidate 1 rejected -->
+            <path class="d-x" d="M170 88 L182 99 M182 88 L170 99"></path>
+            <!-- chosen candidate 2 -->
+            <rect
+              class="d-chosen"
+              x="122"
+              y="76"
+              width="56"
+              height="18"
+              rx="2"
+            ></rect>
+            <text class="d-label" x="133" y="89">Japan</text>
+            <text class="d-num" x="126" y="72">2</text>
+            <!-- target -->
+            <circle class="d-ring" cx="150" cy="120" r="13"></circle>
+            <circle class="d-ink" cx="150" cy="120" r="6"></circle>
+            <text class="d-note" x="16" y="196">ref(target): placed, read</text>
+          </svg>
+          <ul class="key">
+            <li>
+              <span class="sw target"></span
+              ><span
+                ><b>ref(target)</b>: placed operand, read only. Its geometry
+                (here a point) produces the candidates.</span
+              >
+            </li>
+            <li>
+              <span class="sw cand"></span
+              ><span
+                ><b>candidates</b>: <code>Place.around()</code>'s eight compass
+                spots, upper right first (the order drawn is
+                illustrative).</span
+              >
+            </li>
+            <li>
+              <span class="sw obst"></span
+              ><span
+                ><b>obstacle</b>: read, neither placed nor drawn by the label.
+                Spot 1 crosses it.</span
+              >
+            </li>
+            <li>
+              <span class="sw chosen"></span
+              ><span
+                ><b>fresh text</b>: the only thing the label places. The chooser
+                keeps spot 2, the first free one.</span
+              >
+            </li>
+          </ul>
+        </div>
+
+        <div class="prose">
+          <p>
+            The categories fall out of three facts about each operand, plus one
+            about how positions are written:
+          </p>
+          <ol>
+            <li>
+              <b>Binding.</b> Does the construct place this operand (fresh), or
+              only read it (placed, a ref)?
+            </li>
+            <li>
+              <b>Ink.</b> Does the construct draw, and if so is the ink's shape
+              its own (text has an intrinsic size) or derived from the operands
+              (a line's path, an enclosure's outline)?
+            </li>
+            <li>
+              <b>Reads.</b> Which geometry does it read from placed operands: a
+              box, a point, a path, a region outline?
+            </li>
+            <li>
+              <b>Writer.</b> Are positions written by equations (align and
+              distribute, the difference constraints the solver handles) or by a
+              search over candidates (scatter's
+              <code>overlap: Overlap.separate()</code>, the
+              <code>choose</code> operator from #486, and labels that avoid
+              things)?
+            </li>
+          </ol>
+        </div>
+
+        <div class="table-scroll">
+          <table class="facts">
+            <thead>
+              <tr>
+                <th>construct</th>
+                <th>operands</th>
+                <th>ink</th>
+                <th>reads</th>
+                <th>writer</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>mark (<code>rect</code>)</td>
+                <td><span class="chip none">none</span></td>
+                <td><span class="chip">own</span></td>
+                <td><span class="chip none">none</span></td>
+                <td><span class="chip">parent</span></td>
+              </tr>
+              <tr>
+                <td>operator (<code>spread</code>)</td>
+                <td><span class="chip">fresh</span></td>
+                <td><span class="chip none">none</span></td>
+                <td><span class="chip">boxes</span></td>
+                <td><span class="chip">equations</span></td>
+              </tr>
+              <tr>
+                <td>constraint (<code>align</code>)</td>
+                <td>
+                  <span class="chip">fresh</span> or
+                  <span class="chip">placed</span>
+                </td>
+                <td><span class="chip none">none</span></td>
+                <td><span class="chip">boxes</span></td>
+                <td><span class="chip">equations</span></td>
+              </tr>
+              <tr>
+                <td>
+                  relational mark (<code>line</code>, <code>ribbon</code>,
+                  <code>enclose</code>)
+                </td>
+                <td><span class="chip">placed</span></td>
+                <td><span class="chip">derived</span></td>
+                <td>
+                  <span class="chip">boxes</span>
+                  <span class="muted small">(paths later)</span>
+                </td>
+                <td>
+                  <span class="chip none">none</span>
+                  <span class="muted small">(nothing moves)</span>
+                </td>
+              </tr>
+              <tr>
+                <td>label, fixed spot (today)</td>
+                <td>
+                  <span class="chip">placed target</span>
+                  <span class="chip">fresh text</span>
+                </td>
+                <td><span class="chip">own</span></td>
+                <td><span class="chip">box</span></td>
+                <td><span class="chip">equations</span></td>
+              </tr>
+              <tr class="hl">
+                <td>label, with candidates</td>
+                <td>
+                  <span class="chip">placed target</span>
+                  <span class="chip">fresh text</span>
+                  <span class="chip new">placed obstacles</span>
+                </td>
+                <td><span class="chip">own</span></td>
+                <td>
+                  <span class="chip">point</span>
+                  <span class="chip new">path</span>
+                  <span class="chip new">region</span>
+                </td>
+                <td><span class="chip new">search</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <code>enclose({ shape: Shape.blob({ avoiding }) })</code>
+                </td>
+                <td>
+                  <span class="chip">placed members</span>
+                  <span class="chip">placed obstacles</span>
+                </td>
+                <td><span class="chip">derived</span></td>
+                <td>
+                  <span class="chip">discs</span>
+                  <span class="chip">segments</span>
+                  <span class="chip">boxes</span>
+                </td>
+                <td><span class="chip none">none</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="legend-line">
+          <span class="chip new">blue</span> marks the answers this proposal
+          adds for labels. <span class="chip none">dashed</span> means the fact
+          does not apply.
+        </p>
+
+        <div class="prose">
+          <p>
+            So the difference Josh felt between a label and the relational marks
+            is fact 2. A relational mark's ink is computed from its operands (a
+            line is the path through them), while a label's ink has its own
+            shape and only its position comes from the target. Avoidance adds a
+            third operand role, the <b>obstacle</b>, which is read but neither
+            placed nor drawn. <code>enclose</code>'s <code>avoiding</code> in
+            #1152 already has this role. A label with several candidates also
+            changes fact 4: "pick a spot that misses everything" is not a
+            difference constraint, so it is a search step that runs after the
+            solve that places its targets, as <code>overlap</code> does today
+            (<code>constraints/overlap.ts</code>).
+          </p>
+          <p>
+            The categories are clusters in this four-fact space, not a list to
+            extend. That is why they "are not exactly perfectly orthogonal": a
+            relational mark and a label differ in one fact, and a constraint and
+            an operator differ in one fact. Nothing in this proposal needs a
+            fifth category. It needs two more answers to fact 3 (path and
+            region) and one more answer to fact 4 (search) for labels.
+          </p>
+        </div>
+      </section>
+
+      <!-- 2. PRECEDENT -->
+      <section id="precedent">
+        <h2><span class="secnum">02</span>Precedent</h2>
+        <div class="prose">
+          <p>
+            One card per system: how it is spelled, the model in one line, and
+            what fits GoFish. The full survey with sources is in
+            <code>research/prior-work.md</code>.
+          </p>
+        </div>
+
+        <div class="cards">
+          <article class="card">
+            <h3>
+              Vega <code>label</code> transform; Vega-Lite
+              <code>encoding.label</code>
+            </h3>
+            <pre><code>{anchor: [...], offset, avoidMarks: [<span class="s">"trend"</span>],
+ lineAnchor: <span class="s">"end"</span>, method: <span class="s">"reduced-search"</span>}</code></pre>
+            <p class="model">
+              Ordered candidates by base-mark geometry; greedy first fit against
+              a bitmap; hide on failure.
+            </p>
+            <div class="paper thumb">
+              <img
+                src="img/precedent/vega-labeled-scatter.png"
+                alt="Vega labeled scatter plot with a trend line; labels avoid the line and each other"
+                width="360"
+                height="260"
+                loading="lazy"
+              />
+            </div>
+            <p class="fit">
+              <b>Fits:</b> one construct for point, bar, line, area; avoid set
+              named by mark or by scope (<code>{ancestor: n}</code>).
+              <b>Doesn't:</b> no along-path text; strings for methods. The
+              Vega-Lite channel is unreleased (PR #7378).
+            </p>
+            <p class="src">
+              Source:
+              <a
+                href="https://vega.github.io/vega/examples/labeled-scatter-plot/"
+                >vega.github.io labeled scatter</a
+              >
+            </p>
+          </article>
+
+          <article class="card">
+            <h3>ggrepel</h3>
+            <pre><code>geom_text_repel(box.padding, direction = <span class="s">"y"</span>,
+                max.overlaps)</code></pre>
+            <p class="model">
+              Force simulation pushes labels apart and pulls them back to their
+              points; leader lines.
+            </p>
+            <div class="paper thumb">
+              <img
+                src="img/precedent/ggrepel.png"
+                alt="geom_text versus geom_text_repel on the same scatter"
+                width="1200"
+                height="533"
+                loading="lazy"
+              />
+            </div>
+            <p class="fit">
+              <b>Fits:</b> leaders, one-axis movement, drop if hopeless.
+              <b>Doesn't:</b> random without <code>seed</code>.
+            </p>
+            <p class="src">
+              Source:
+              <a href="https://ggrepel.slowkow.com/articles/examples.html"
+                >ggrepel examples</a
+              >
+            </p>
+          </article>
+
+          <article class="card">
+            <h3>directlabels</h3>
+            <pre><code>direct.label(p, <span class="s">"last.qp"</span>)</code></pre>
+            <p class="model">
+              A method is a list of steps: pick a spot on the series, then
+              resolve collisions.
+            </p>
+            <div class="paper thumb">
+              <img
+                src="img/precedent/directlabels-angled-boxes.png"
+                alt="directlabels angled.boxes method on a line plot"
+                width="480"
+                height="480"
+                loading="lazy"
+              />
+            </div>
+            <p class="fit">
+              <b>Fits:</b> two-part strategy: where on the series, how
+              collisions resolve. <b>Doesn't:</b> string method names mixing
+              both parts.
+            </p>
+            <p class="src">
+              Source:
+              <a
+                href="https://tdhock.github.io/directlabels/docs/lineplot/posfuns/angled.boxes.html"
+                >directlabels angled.boxes</a
+              >
+            </p>
+          </article>
+
+          <article class="card">
+            <h3>geomtextpath</h3>
+            <pre><code>geom_textline(hjust = <span class="nm">0.5</span>, vjust = <span class="nm">-0.5</span>)</code></pre>
+            <p class="model">Text along the path at an arc-length fraction.</p>
+            <div class="paper thumb">
+              <img
+                src="img/precedent/geomtextpath.png"
+                alt="geomtextpath label curving along a line"
+                width="924"
+                height="660"
+                loading="lazy"
+              />
+            </div>
+            <p class="fit">
+              <b>Fits:</b> <code>hjust</code> as arc-length fraction,
+              <code>vjust</code> across the path. <b>Doesn't:</b> fused into the
+              line geom.
+            </p>
+            <p class="src">
+              Source:
+              <a href="https://allancameron.github.io/geomtextpath/"
+                >geomtextpath</a
+              >
+            </p>
+          </article>
+
+          <article class="card">
+            <h3>ggforce <code>geom_mark_*</code></h3>
+            <pre><code>geom_mark_hull(aes(fill = Species, label = Species,
+                   description = desc))</code></pre>
+            <p class="model">
+              Encloses a group and labels it from outside, in free space, with a
+              connector.
+            </p>
+            <div class="paper thumb">
+              <img
+                src="img/precedent/ggforce-mark-hull.png"
+                alt="ggforce hull enclosures around two iris species"
+                width="1200"
+                height="742"
+                loading="lazy"
+              />
+            </div>
+            <p class="fit">
+              <b>Fits:</b> "label a region from outside, with a leader line",
+              and the <code>con.*</code> connector words. <b>Doesn't:</b> the
+              enclosure and its annotation are fused into one geom.
+            </p>
+            <p class="src">
+              Source:
+              <a
+                href="https://ggforce.data-imaginist.com/reference/geom_mark_hull.html"
+                >ggforce geom_mark_hull</a
+              >
+            </p>
+          </article>
+
+          <article class="card">
+            <h3>d3fc-label-layout</h3>
+            <pre><code>layoutLabel(layoutRemoveOverlaps(layoutGreedy()))</code></pre>
+            <p class="model">Strategy objects that wrap strategies.</p>
+            <div class="paper thumb">
+              <img
+                src="img/precedent/d3fc-label-layout.png"
+                alt="d3fc label layout on a map and a scatter"
+                width="1200"
+                height="482"
+                loading="lazy"
+              />
+            </div>
+            <p class="fit">
+              <b>Fits:</b> strategy family with combinators. <b>Doesn't:</b> DOM
+              measurement.
+            </p>
+            <p class="src">
+              Source:
+              <a
+                href="https://github.com/d3fc/d3fc/tree/master/packages/d3fc-label-layout"
+                >d3fc-label-layout</a
+              >
+            </p>
+          </article>
+
+          <article class="card">
+            <h3>d3-area-label</h3>
+            <pre><code>d3.areaLabel(area)</code></pre>
+            <p class="model">
+              Largest label-shaped rectangle in a band, found by bisection.
+            </p>
+            <div class="paper thumb">
+              <img
+                src="img/precedent/d3-area-label.png"
+                alt="streamgraph with labels sized to fit each band"
+                width="955"
+                height="495"
+                loading="lazy"
+              />
+            </div>
+            <p class="fit">
+              <b>Fits:</b> consumes the area's own shape. <b>Doesn't:</b> areas
+              only.
+            </p>
+            <p class="src">
+              Source:
+              <a href="https://github.com/curran/d3-area-label"
+                >curran/d3-area-label</a
+              >
+            </p>
+          </article>
+
+          <article class="card">
+            <h3>matplotlib-label-lines</h3>
+            <pre><code>labelLines(ax.get_lines(), align=<span class="nm">False</span>,
+           xvals=[<span class="nm">0.8</span>, <span class="nm">0.55</span>, ...])</code></pre>
+            <p class="model">
+              Inline labels sit on the line, aligned to its slope, with a halo
+              instead of a gap.
+            </p>
+            <div class="paper thumb">
+              <img
+                src="img/precedent/labellines.png"
+                alt="six panels of curves with inline labels"
+                width="800"
+                height="800"
+                loading="lazy"
+              />
+            </div>
+            <p class="fit">
+              <b>Fits:</b> <code>align</code> to follow the slope;
+              <code>outline_color</code> halo. <b>Doesn't:</b> lines only.
+            </p>
+            <p class="src">
+              Source:
+              <a href="https://github.com/cphyc/matplotlib-label-lines"
+                >cphyc/matplotlib-label-lines</a
+              >
+            </p>
+          </article>
+
+          <article class="card">
+            <h3>Observable Plot</h3>
+            <pre><code>Plot.text(d, Plot.selectLast({z, text}))
+Plot.centroid</code></pre>
+            <p class="model">
+              A label is a text mark plus a selection transform.
+            </p>
+            <div class="paper thumb">
+              <img
+                src="img/precedent/plot-occlusion.jpg"
+                alt="Fil's occlusion prototype on the iris scatter"
+                width="640"
+                height="400"
+                loading="lazy"
+              />
+            </div>
+            <p class="fit">
+              <b>Fits:</b> compositional, close to GoFish. <b>Doesn't:</b> no
+              avoidance (issue #27 open since 2020). The image is Fil's
+              occlusion prototype, not core Plot.
+            </p>
+            <p class="src">
+              Source:
+              <a href="https://observablehq.com/@observablehq/plot-occlusion-27"
+                >plot-occlusion-27</a
+              >,
+              <a href="https://github.com/observablehq/plot/issues/27"
+                >Plot #27</a
+              >
+            </p>
+          </article>
+
+          <article class="card">
+            <h3>polylabel</h3>
+            <pre><code>polylabel(polygon, <span class="nm">1.0</span>)  <span class="c">// [x, y] + .distance</span></code></pre>
+            <p class="model">
+              Pole of inaccessibility: the interior point farthest from the
+              outline, by grid refinement.
+            </p>
+            <div class="paper thumb">
+              <img
+                src="img/precedent/polylabel.png"
+                alt="polylabel grid refinement finding the pole of inaccessibility"
+                width="1200"
+                height="593"
+                loading="lazy"
+              />
+            </div>
+            <p class="fit">
+              <b>Fits:</b> Mapbox uses it for polygon labels. <b>Doesn't:</b> it
+              finds the largest circle, and text is wide (see section 05).
+            </p>
+            <p class="src">
+              Source:
+              <a href="https://github.com/mapbox/polylabel">mapbox/polylabel</a>
+            </p>
+          </article>
+        </div>
+
+        <h3>Systems without a picture</h3>
+        <div class="cards textonly">
+          <article class="card">
+            <h3>Mapbox / MapLibre, QGIS</h3>
+            <pre><code>symbol-placement: point | line | line-center
+text-variable-anchor</code></pre>
+            <p class="model">
+              One layer for all three geometries; polygon goes to the pole of
+              inaccessibility. QGIS: Cartographic / Parallel / Curved /
+              Horizontal-in-polygon; the mode list depends on geometry type.
+            </p>
+            <p class="fit">
+              <b>Fits:</b> candidate list; along-line placement; the most
+              complete point/line/area taxonomy. <b>Doesn't:</b> style-spec
+              strings; QGIS is GUI only.
+            </p>
+            <p class="src">
+              Source:
+              <a
+                href="https://github.com/maplibre/maplibre-style-spec/blob/main/src/reference/v8.json"
+                >MapLibre style spec</a
+              >,
+              <a
+                href="https://docs.qgis.org/latest/en/docs/user_manual/style_library/label_settings.html"
+                >QGIS label settings</a
+              >
+            </p>
+          </article>
+          <article class="card">
+            <h3>TikZ</h3>
+            <pre><code>node[pos=0.5, sloped, above]
+label=above right:q
+pin=</code></pre>
+            <p class="model">A fixed spot on a path or around a node.</p>
+            <p class="fit">
+              <b>Fits:</b> <code>pos</code>, <code>sloped</code>,
+              <code>auto</code>: the best line-label words. <b>Doesn't:</b> no
+              avoidance.
+            </p>
+            <p class="src">
+              Source:
+              <a href="https://tikz.dev/tikz-shapes#sec-17.8">tikz.dev 17.8</a>
+            </p>
+          </article>
+          <article class="card">
+            <h3>Bluefish</h3>
+            <pre><code>&lt;StackV&gt;&lt;Text/&gt;&lt;Ref select="mercury"/&gt;&lt;/StackV&gt;</code></pre>
+            <p class="model">Label = text + ref + relation.</p>
+            <p class="fit">
+              <b>Fits:</b> same model as GoFish. <b>Doesn't:</b> avoidance and
+              curves are open in its paper.
+            </p>
+            <p class="src">
+              Source:
+              <a href="https://arxiv.org/html/2307.00146v4">Bluefish paper</a>
+            </p>
+          </article>
+          <article class="card">
+            <h3>Penrose</h3>
+            <pre><code>ensure disjoint(label, shape)
+encourage near(label, point)</code></pre>
+            <p class="model">Constraints plus objectives, numeric solver.</p>
+            <p class="fit">
+              <b>Fits:</b> hard vs soft. <b>Doesn't:</b> slow, nondeterministic.
+            </p>
+            <p class="src">
+              Source:
+              <a
+                href="https://github.com/penrose/penrose/blob/main/packages/core/src/lib/Constraints.ts"
+                >Penrose constraints</a
+              >
+            </p>
+          </article>
+          <article class="card">
+            <h3>CSS anchor positioning, Floating UI</h3>
+            <pre><code>position-try-fallbacks: flip-block;
+[offset(), flip(), shift(), hide()]</code></pre>
+            <p class="model">Ordered fallbacks; a pipeline of steps.</p>
+            <p class="fit">
+              <b>Fits:</b> candidate list in UI vocabulary.
+              <b>Doesn't:</b> avoids only the container.
+            </p>
+            <p class="src">
+              Source:
+              <a
+                href="https://developer.mozilla.org/en-US/docs/Web/CSS/position-try-fallbacks"
+                >MDN</a
+              >,
+              <a href="https://floating-ui.com/docs/middleware"
+                >Floating UI middleware</a
+              >
+            </p>
+          </article>
+        </div>
+
+        <h3>Three things recur</h3>
+        <ol class="lessons">
+          <li>
+            The target's geometry decides how candidates are made, and the
+            collision test is shared. Vega's thesis says the chart types "only
+            differ in (1) the marks to be avoided and (2) the candidate
+            positions".
+          </li>
+          <li>The strategy is a family, often with combinators.</li>
+          <li>
+            The avoid set is named, by reference or by scope, and labels avoid
+            each other by default.
+          </li>
+        </ol>
+      </section>
+
+      <!-- 3. TODAY VS PROPOSED -->
+      <section id="compare">
+        <h2><span class="secnum">03</span>Today vs proposed</h2>
+        <div class="prose">
+          <p>What exists today:</p>
+          <ul>
+            <li>
+              <b><code>.label(accessor, options)</code></b> on marks and on
+              operators (#750, #766). Options:
+              <code>position</code> (<code>"center"</code>,
+              <code>"outset"</code>, <code>"outset-top"</code>,
+              <code>"inset-top-start"</code>, …), <code>offset</code>,
+              <code>fontSize</code>, <code>color</code>, <code>rotate</code>,
+              <code>fontFamily</code>, <code>fontWeight</code>,
+              <code>fontStyle</code>. It elaborates into
+              <code>Layer[content, ref(target), Text]</code> with align and
+              distribute constraints, at the target's parent, so labels never
+              push marks apart. Only boxes are read.
+            </li>
+            <li>
+              <b>Relational marks</b> (<code>line</code>, <code>ribbon</code>)
+              accept <code>.label()</code> but read the connector's box, so a
+              line label lands at the box's top edge, not on the line.
+            </li>
+            <li>
+              <b>Geometry.</b> <code>node.geometry()</code> exists (#968) with
+              one query, <code>enclosingCircle</code>. The line and area paths
+              exist in <code>connect</code>'s <code>renderData.paths</code>, and
+              a polygon's ring exists in a closure, but nothing exposes them.
+              #974 proposes the <code>boundary</code> query and names labels as
+              one of its two first users.
+            </li>
+            <li>
+              <b>Avoidance precedent.</b> #1152 (draft) gives
+              <code>Shape.blob</code> an <code>avoiding</code> option that takes
+              a list of refs or one <code>selectAll(...)</code>, sent over the
+              wire as <code>NodeSelectionIR</code>, and reads each obstacle
+              through a private reader (circle → disc, line → segments, else
+              box) that it calls "the first private step toward #974".
+            </li>
+            <li>
+              <b>Search precedent.</b> <code>scatter</code>'s
+              <code>overlap: Overlap.separate()</code> is a placement step after
+              the constraint solve that reads <code>geometry()</code> and moves
+              children (#969).
+            </li>
+          </ul>
+        </div>
+
+        <p class="callout">
+          How the proposed pictures were made: the real chart is drawn by
+          GoFish; a prototype
+          (<code>packages/gofish-graphics/stories/_proposals/labels/place.ts</code>)
+          reads the drawn geometry from the SVG, runs the strategy and the
+          chooser, and adds the labels on top. Approximations are in that
+          folder's <code>NOTES.md</code>.
+        </p>
+
+        <!-- points -->
+        <div class="compare">
+          <div class="compare-head">
+            <h3>Points</h3>
+            <span class="muted">dot marks read as an enclosing circle</span>
+          </div>
+          <div class="cols">
+            <div class="col">
+              <span class="col-tag">Today (real render)</span>
+              <div class="paper">
+                <img
+                  src="img/point-today.png"
+                  alt="Scatter with every label above its dot; dense cluster labels overlap"
+                  width="1157"
+                  height="817"
+                  loading="lazy"
+                />
+              </div>
+              <pre><code>.mark(circle({ r: <span class="nm">3</span> }).label(<span class="s">"country"</span>))</code></pre>
+            </div>
+            <div class="col prop">
+              <span class="col-tag">Proposed</span>
+              <div class="paper">
+                <img
+                  src="img/point-around.png"
+                  alt="Same scatter; labels try eight spots and skip ones that collide"
+                  width="1157"
+                  height="817"
+                  loading="lazy"
+                />
+              </div>
+              <pre><code>.mark(circle({ r: <span class="nm">3</span> })
+  .label(<span class="s">"country"</span>, { position: <span class="fam">Place</span>.around() }))</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- lines -->
+        <div class="compare">
+          <div class="compare-head">
+            <h3>Lines</h3>
+            <span class="muted">paths</span>
+          </div>
+          <div class="cols">
+            <div class="col">
+              <span class="col-tag">Today (real render)</span>
+              <div class="paper">
+                <img
+                  src="img/line-today.png"
+                  alt="Multi-series stock chart; labels sit at the top of each line's bounding box and overlap"
+                  width="1201"
+                  height="683"
+                  loading="lazy"
+                />
+              </div>
+              <pre><code>.mark(line({ x: <span class="s">"date"</span>, y: <span class="s">"price"</span>, stroke: <span class="s">"symbol"</span> })
+  .label(<span class="s">"symbol"</span>))</code></pre>
+              <p class="note">
+                Reads the line's box, so labels land far from the lines and on
+                top of each other.
+              </p>
+            </div>
+            <div class="col prop">
+              <span class="col-tag">Proposed</span>
+              <div class="stack-figs">
+                <figure>
+                  <div class="paper">
+                    <img
+                      src="img/line-end.png"
+                      alt="Each label at its line's end, nudged in y to clear neighbors"
+                      width="1094"
+                      height="659"
+                      loading="lazy"
+                    />
+                  </div>
+                  <pre><code>.label(<span class="s">"symbol"</span>, { position: <span class="fam">Place</span>.end() })</code></pre>
+                </figure>
+                <figure>
+                  <div class="paper">
+                    <img
+                      src="img/line-along.png"
+                      alt="Labels sit on each line at 60 percent of its length, rotated to the tangent"
+                      width="1088"
+                      height="659"
+                      loading="lazy"
+                    />
+                  </div>
+                  <pre><code>.label(<span class="s">"symbol"</span>, {
+  position: <span class="fam">Place</span>.along({ at: <span class="nm">0.6</span>, sloped: <span class="nm">true</span> }) })</code></pre>
+                </figure>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- areas -->
+        <div class="compare">
+          <div class="compare-head">
+            <h3>Areas</h3>
+            <span class="muted">bands of a streamgraph</span>
+          </div>
+          <div class="cols">
+            <div class="col">
+              <span class="col-tag">Today (real render)</span>
+              <div class="paper">
+                <img
+                  src="img/area-today.png"
+                  alt="Streamgraph; all labels stacked in one column near the middle, several on the wrong band"
+                  width="1127"
+                  height="778"
+                  loading="lazy"
+                />
+              </div>
+              <pre><code>.layer(ribbon({ by: <span class="s">"species"</span>, fill: <span class="s">"species"</span> })
+  .label(<span class="s">"species"</span>))</code></pre>
+              <p class="note">Reads the band's box.</p>
+            </div>
+            <div class="col prop">
+              <span class="col-tag">Proposed</span>
+              <div class="paper">
+                <img
+                  src="img/area-interior.png"
+                  alt="Each label inside the widest part of its own band"
+                  width="1001"
+                  height="753"
+                  loading="lazy"
+                />
+              </div>
+              <pre><code>.layer(ribbon({ by: <span class="s">"species"</span>, fill: <span class="s">"species"</span> })
+  .label(<span class="s">"species"</span>, { position: <span class="fam">Place</span>.interior() }))</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- regions -->
+        <div class="compare">
+          <div class="compare-head">
+            <h3>Regions</h3>
+            <span class="muted">polygons</span>
+          </div>
+          <div class="cols">
+            <div class="col">
+              <span class="col-tag">Today (real render)</span>
+              <div class="paper">
+                <img
+                  src="img/polygon-today.png"
+                  alt="C, U, L and V polygons; the C and L labels are missing because the box center is outside the shape"
+                  width="1143"
+                  height="262"
+                  loading="lazy"
+                />
+              </div>
+              <pre><code>.label(<span class="s">"name"</span>, { position: <span class="s">"center"</span> })</code></pre>
+              <p class="note">
+                The C and L labels are drawn white on the white background (see
+                section 05).
+              </p>
+            </div>
+            <div class="col prop">
+              <span class="col-tag">Proposed</span>
+              <div class="paper">
+                <img
+                  src="img/polygon-interior-box.png"
+                  alt="Each label in the middle of an arm of its shape"
+                  width="1044"
+                  height="262"
+                  loading="lazy"
+                />
+              </div>
+              <pre><code>.label(<span class="s">"name"</span>, { position: <span class="fam">Place</span>.interior() })</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- avoid -->
+        <div class="compare">
+          <div class="compare-head">
+            <h3>Avoidance</h3>
+            <span class="muted">labels that stay off a trend line</span>
+          </div>
+          <div class="cols">
+            <div class="col">
+              <span class="col-tag">Without <code>avoiding</code></span>
+              <div class="paper">
+                <img
+                  src="img/avoid-marks-off.png"
+                  alt="Scatter with trend line; some labels sit on the line"
+                  width="1095"
+                  height="763"
+                  loading="lazy"
+                />
+              </div>
+              <pre><code>.mark(circle({ r: <span class="nm">3</span> })
+  .label(<span class="s">"name"</span>, { position: <span class="fam">Place</span>.around() }))</code></pre>
+              <p class="note">
+                Labels avoid each other but not the line (Brazil, Egypt,
+                Pakistan).
+              </p>
+            </div>
+            <div class="col prop">
+              <span class="col-tag">Proposed</span>
+              <div class="paper">
+                <img
+                  src="img/avoid-marks-on.png"
+                  alt="Same scatter; labels that crossed the trend line moved to free spots"
+                  width="1095"
+                  height="763"
+                  loading="lazy"
+                />
+              </div>
+              <pre><code>.mark(circle({ r: <span class="nm">3</span> })
+  .label(<span class="s">"name"</span>, { position: <span class="fam">Place</span>.around(),
+                   avoiding: selectAll(<span class="s">"trend"</span>) }))</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>Python</h3>
+        <div class="codeblock">
+          <p class="lang">
+            Python, same shape; <code>Place</code> is a family module like
+            <code>Curve</code>
+          </p>
+          <pre><code>chart(stocks).flow(group(by=<span class="s">"symbol"</span>)).mark(
+    line(x=<span class="s">"date"</span>, y=<span class="s">"price"</span>, stroke=<span class="s">"symbol"</span>).label(<span class="s">"symbol"</span>, position=<span class="fam">Place</span>.end())
+)
+line(...).label(<span class="s">"symbol"</span>, position=<span class="fam">Place</span>.along(at=<span class="nm">0.6</span>, sloped=<span class="nm">True</span>))
+circle(r=<span class="nm">3</span>).label(<span class="s">"name"</span>, position=<span class="fam">Place</span>.around(), avoiding=select_all(<span class="s">"trend"</span>))</code></pre>
+        </div>
+      </section>
+
+      <!-- 4. PLACE FAMILY -->
+      <section id="place">
+        <h2><span class="secnum">04</span>The <code>Place</code> family</h2>
+        <div class="prose">
+          <p>
+            Each member turns one geometry kind into ordered candidates. A
+            member that needs geometry the target does not have is a loud error
+            naming the missing capability, for example
+            <code>Place.along needs a path; rect has none</code>.
+          </p>
+        </div>
+
+        <figure style="margin: 8px 0 22px">
+          <div class="paper">
+            <img
+              src="img/strategy-grid.png"
+              alt="Eight panels: box outset-top, around, start, end, along, along sloped, interior on a band, interior on a polygon"
+              width="1239"
+              height="534"
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            The first panel is titled <code>Place.box("outset-top")</code>;
+            under decision 2's recommendation it is spelled
+            <code>position: "outset-top"</code>, as today.
+          </figcaption>
+        </figure>
+
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>member</th>
+                <th>reads</th>
+                <th>candidates</th>
+                <th>precedent</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <code>"outset-top"</code>, <code>"center"</code>, …
+                  <span class="muted small">(today's strings)</span>
+                </td>
+                <td><span class="chip">box</span></td>
+                <td>one</td>
+                <td>today; Vega anchors</td>
+              </tr>
+              <tr>
+                <td><code>Place.around({ candidates? })</code></td>
+                <td>
+                  <span class="chip">point</span>
+                  <span class="muted small">(enclosing circle)</span> or
+                  <span class="chip">box</span>
+                </td>
+                <td>
+                  8 compass spots, upper right first; or a given list, e.g.
+                  <code>["outset-top", "inset-top"]</code> for bars
+                </td>
+                <td>
+                  Imhof, Christensen et al., Vega-Lite defaults, CSS fallbacks
+                </td>
+              </tr>
+              <tr>
+                <td><code>Place.start()</code>, <code>Place.end()</code></td>
+                <td><span class="chip new">path</span></td>
+                <td>
+                  the path's first or last point, sliding along y to clear
+                  neighbors
+                </td>
+                <td>
+                  directlabels <code>first.qp</code>/<code>last.qp</code>, Plot
+                  <code>selectLast</code>, Vega <code>lineAnchor</code>
+                </td>
+              </tr>
+              <tr>
+                <td><code>Place.along({ at, sloped })</code></td>
+                <td><span class="chip new">path</span></td>
+                <td>
+                  the point at fraction <code>at</code> of the arc length, then
+                  nearby fractions; rotated to the tangent if
+                  <code>sloped</code>
+                </td>
+                <td>
+                  TikZ <code>pos</code>/<code>sloped</code>, geomtextpath
+                  <code>hjust</code>, Mapbox <code>symbol-placement: line</code>
+                </td>
+              </tr>
+              <tr>
+                <td><code>Place.interior()</code></td>
+                <td><span class="chip new">region</span></td>
+                <td>
+                  the spot where the label's own box can grow largest; hide if
+                  it does not fit
+                </td>
+                <td>
+                  d3-area-label, Vega <code>reduced-search</code>; not polylabel
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="prose">
+          <p>
+            Defaults come from the geometry kind, so the meaning lives on the
+            target's type: box marks keep <code>"outset"</code>, dot marks get
+            <code>Place.around()</code>, paths get <code>Place.end()</code>,
+            regions get <code>Place.interior()</code>. Custom strategies use
+            #1101's function hatch: a function from geometry to candidates.
+          </p>
+        </div>
+      </section>
+
+      <!-- 5. PROTOTYPES -->
+      <section id="prototypes">
+        <h2><span class="secnum">05</span>What the prototypes taught</h2>
+
+        <div class="lesson-block">
+          <h3>One interior rule, not polylabel</h3>
+          <div class="prose">
+            <p>
+              Polylabel finds the point farthest from every edge, which is the
+              center of the largest <em>circle</em>. Text is wide, so in C, U
+              and L shapes it sends labels into the corner where two arms meet.
+              Searching for the spot where the label's own box grows largest
+              puts them in the middle of an arm, and it is the same rule
+              d3-area-label uses for streamgraph bands. So
+              <code>interior()</code> is one rule for bands and polygons.
+            </p>
+          </div>
+          <div class="pair">
+            <figure>
+              <div class="paper">
+                <img
+                  src="img/polygon-interior.png"
+                  alt="Polylabel puts labels in the corners where arms meet"
+                  width="1044"
+                  height="262"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>
+                Polylabel (largest circle): labels pushed into corners.
+              </figcaption>
+            </figure>
+            <figure>
+              <div class="paper">
+                <img
+                  src="img/polygon-interior-box.png"
+                  alt="Label-box rule puts labels mid-arm"
+                  width="1044"
+                  height="262"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>
+                Largest label box: labels in the middle of an arm.
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+
+        <div class="lesson-block">
+          <h3>Sloped inline labels need a smooth line</h3>
+          <div class="split">
+            <div class="paper">
+              <img
+                src="img/line-along-monthly.png"
+                alt="Raw monthly prices; GOOG label crammed vertically into a steep stretch, AMZN has no label"
+                width="1088"
+                height="659"
+                loading="lazy"
+              />
+            </div>
+            <div class="prose">
+              <p>
+                On raw monthly stock prices, the only stretches straight enough
+                for a sloped label are the steep ones, and one label has nowhere
+                to go. On smoothed data it works well. The member's docs should
+                say so; <code>Place.end()</code> is the safer default for lines.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="lesson-block">
+          <h3>Along-line labels need a background</h3>
+          <div class="split">
+            <div class="paper">
+              <img
+                src="img/diagram-edge-labels.png"
+                alt="State diagram with sloped edge labels on small filled boxes"
+                width="1120"
+                height="504"
+                loading="lazy"
+              />
+            </div>
+            <div class="prose">
+              <p>
+                A halo works on charts; a small filled box reads better on
+                diagram edges. This is a styling option of the label, decision
+                8.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="lesson-block">
+          <h3>Today's <code>"center"</code> can make a label vanish</h3>
+          <div class="split">
+            <div class="paper">
+              <img
+                src="img/polygon-today.png"
+                alt="C and L shapes show no label; U and V do"
+                width="1143"
+                height="262"
+                loading="lazy"
+              />
+            </div>
+            <div class="prose">
+              <p>
+                When a shape's box center falls outside the shape (the C and the
+                L), the label is colored for the inside (white) but drawn on the
+                white background. This is a bug today, independent of this
+                proposal.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="lesson-block">
+          <h3>Today's line and area labels read the box</h3>
+          <div class="prose">
+            <p>
+              <code>.label()</code> on a <code>line</code> or
+              <code>ribbon</code> runs, but every label sits on its connector's
+              bounding box, far from the line and overlapping. The "today"
+              renders for lines and areas in section 03 show it.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. APPROACHES -->
+      <section id="approaches">
+        <h2><span class="secnum">06</span>Approaches A, B, C</h2>
+        <div class="prose">
+          <p>
+            Three approaches differ in <b>where the user writes a label</b>. Two
+            choices are shared by all three and are presented once, as separate
+            axes: the <code>Place</code> strategy values (section 04) and the
+            geometry queries (section 07).
+          </p>
+        </div>
+
+        <!-- A -->
+        <article class="approach rec">
+          <div class="approach-head">
+            <h3>A. <code>.label()</code> with a <code>Place</code> strategy</h3>
+            <span class="badge rec">Recommended</span>
+          </div>
+          <div class="prose">
+            <p>
+              The label stays a modifier on the mark (or operator) it describes.
+              <code>position</code> takes a <code>Place</code> strategy, and an
+              <code>avoiding</code> option names extra obstacles.
+            </p>
+          </div>
+          <div class="codeblock">
+            <pre><code><span class="c">// Point labels on a scatter</span>
+chart(countries)
+  .flow(scatter({ x: <span class="s">"gdp"</span>, y: <span class="s">"lifeExpectancy"</span> }))
+  .mark(circle({ r: <span class="nm">3</span> }).label(<span class="s">"name"</span>, { position: <span class="fam">Place</span>.around() }))
+
+<span class="c">// End-of-line labels on a multi-series line chart</span>
+chart(stocks)
+  .flow(group({ by: <span class="s">"symbol"</span> }))
+  .mark(line({ x: <span class="s">"date"</span>, y: <span class="s">"price"</span>, stroke: <span class="s">"symbol"</span> }).label(<span class="s">"symbol"</span>, { position: <span class="fam">Place</span>.end() }))
+
+<span class="c">// Inline labels along the line</span>
+  .mark(line({ x: <span class="s">"date"</span>, y: <span class="s">"price"</span>, stroke: <span class="s">"symbol"</span> })
+    .label(<span class="s">"symbol"</span>, { position: <span class="fam">Place</span>.along({ at: <span class="nm">0.6</span>, sloped: <span class="nm">true</span> }) }))
+
+<span class="c">// Streamgraph band labels</span>
+chart(streams)
+  .flow(spread({ by: <span class="s">"x"</span>, dir: <span class="s">"x"</span> }), stack({ by: <span class="s">"series"</span>, dir: <span class="s">"y"</span>, alignment: <span class="s">"middle"</span> }))
+  .mark(blank({ h: <span class="s">"value"</span> }))
+  .layer(ribbon({ by: <span class="s">"series"</span>, fill: <span class="s">"series"</span> }).label(<span class="s">"series"</span>, { position: <span class="fam">Place</span>.interior() }))
+
+<span class="c">// Labels that also stay off a trend line</span>
+  .mark(circle({ r: <span class="nm">3</span> }).label(<span class="s">"name"</span>, { position: <span class="fam">Place</span>.around(), avoiding: selectAll(<span class="s">"trend"</span>) }))</code></pre>
+          </div>
+          <div class="thumbs">
+            <figure>
+              <div class="paper">
+                <img
+                  src="img/point-around.png"
+                  alt="Place.around on a scatter"
+                  width="1157"
+                  height="817"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption><code>Place.around()</code></figcaption>
+            </figure>
+            <figure>
+              <div class="paper">
+                <img
+                  src="img/line-end.png"
+                  alt="Place.end on a line chart"
+                  width="1094"
+                  height="659"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption><code>Place.end()</code></figcaption>
+            </figure>
+            <figure>
+              <div class="paper">
+                <img
+                  src="img/area-interior.png"
+                  alt="Place.interior on a streamgraph"
+                  width="1001"
+                  height="753"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption><code>Place.interior()</code></figcaption>
+            </figure>
+          </div>
+          <div class="kv">
+            <div>
+              <span class="k">Desugars into</span>
+              <div>
+                <p>
+                  For each target <code>t</code>,
+                  <code>.label(acc, { position: P, avoiding: O })</code>
+                  elaborates, as today, at <code>t</code>'s parent into
+                  <code>layer([ref(t), text(acc(t))])</code>. What changes is
+                  who writes the text's position. A one-candidate strategy
+                  writes it with today's align and distribute constraints, so
+                  every existing <code>position</code> string means what it
+                  means now. A strategy with several candidates hands all labels
+                  from one <code>.label()</code> call to the chooser, which runs
+                  after the solve that places the targets and reads the targets,
+                  the labels placed so far and <code>O</code> as obstacles. The
+                  labels' boxes join the parent's box, as #707's box equation
+                  requires, and never touch a scale's domain.
+                </p>
+              </div>
+            </div>
+            <div>
+              <span class="k">Composes with</span>
+              <div>
+                <p>
+                  Operators: an operator <code>.label()</code> labels each
+                  group, as today. Coordinate transforms: a label is
+                  screen-space text (a label is not warped), so a path or region
+                  strategy must read the target's geometry after the coordinate
+                  transform; today that geometry only exists at lowering (open
+                  question 1). Animation: the label is attached to its target as
+                  today, so it tweens; a chooser that flips a label to another
+                  candidate between frames would jump, which is open question 3.
+                  Python: the same shape, with <code>Place</code> a family
+                  module like <code>Curve</code>.
+                </p>
+              </div>
+            </div>
+            <div>
+              <span class="k">Overlap</span>
+              <div>
+                <p>
+                  Defined as fusion into C, so the two cannot drift. B's anchors
+                  are the mechanism under its one-candidate strategies.
+                </p>
+              </div>
+            </div>
+            <div>
+              <span class="k">Trade-offs</span>
+              <div>
+                <p>
+                  Easy: the common case is one word on the mark you already
+                  wrote; defaults per geometry kind make
+                  <code>.label("symbol")</code> on a line do the right thing.
+                  Awkward: labeling marks of <em>another</em> chart, or a subset
+                  of a layer, still needs the hand-written tier. New terms:
+                  <code>Place</code>, <code>avoiding</code> (shared with #1152),
+                  and the member names.
+                </p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- B -->
+        <article class="approach">
+          <div class="approach-head">
+            <h3>B. Geometric anchors on refs, labels are plain constraints</h3>
+          </div>
+          <div class="prose">
+            <p>
+              No new labeling construct. Refs gain anchors computed from
+              geometry, and a label is a text aligned to an anchor with the
+              existing constraints. This is the TikZ and Bluefish model.
+            </p>
+          </div>
+          <div class="codeblock">
+            <pre><code>layer([graph]).relate(({ edges }) =&gt;
+  edges.each((e) =&gt;
+    <span class="fam">Constraint</span>.align({ x: <span class="s">"middle"</span>, y: <span class="s">"middle"</span>, rotate: <span class="s">"tangent"</span> },
+      [e.at(<span class="fam">Anchor</span>.along(<span class="nm">0.5</span>)), text({ text: e.datum(<span class="s">"weight"</span>) })])))
+
+layer([lines]).relate(({ lines }) =&gt;
+  lines.each((l) =&gt;
+    <span class="fam">Constraint</span>.distribute({ dir: <span class="s">"x"</span>, spacing: <span class="nm">4</span> }, [l.at(<span class="fam">Anchor</span>.end()), text({ text: l.datum(<span class="s">"symbol"</span>) })])))</code></pre>
+          </div>
+          <figure style="margin: 0 0 16px; max-width: 620px">
+            <div class="paper">
+              <img
+                src="img/diagram-edge-labels.png"
+                alt="State diagram with labels centered on each edge"
+                width="1120"
+                height="504"
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              Edge labels at the middle of each edge, rotated to the tangent.
+            </figcaption>
+          </figure>
+          <div class="kv">
+            <div>
+              <span class="k">Desugars into</span>
+              <div>
+                <p>
+                  Align and distribute, with anchors as new readable points on a
+                  ref.
+                </p>
+              </div>
+            </div>
+            <div>
+              <span class="k">Strength</span>
+              <div>
+                <p>
+                  Exact and general for diagrams; every anchor is reusable by
+                  arrows and connectors (#975 wants a ray-hit anchor for the
+                  same reason).
+                </p>
+              </div>
+            </div>
+            <div>
+              <span class="k">Weakness</span>
+              <div>
+                <p>
+                  No avoidance: choosing among spots is a search, and
+                  constraints are equations. It needs <code>.each()</code>,
+                  which is still open (#929). It is verbose for charts, where
+                  <code>.label("symbol")</code> is the whole intent.
+                </p>
+              </div>
+            </div>
+            <div>
+              <span class="k">Overlap</span>
+              <div>
+                <p>
+                  It is the mechanism under A's one-candidate strategies, so A
+                  can expose these anchors later without conflict.
+                </p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- C -->
+        <article class="approach">
+          <div class="approach-head">
+            <h3>C. A <code>label</code> tier</h3>
+            <span class="badge">Runner-up</span>
+          </div>
+          <div class="prose">
+            <p>
+              A label is its own relational construct in
+              <code>.layer()</code> or <code>.relate()</code>, reading the
+              previous tier's marks the way <code>line</code> and
+              <code>ribbon</code> do. This is Vega's
+              <code>label</code> transform on a text mark and Josh's
+              <code>labelLayout([ref(mark), text])</code>.
+              <code>.label()</code> becomes sugar for it, as
+              <code>.mark(line())</code> is sugar for
+              <code>.mark(blank()).layer(line())</code> (#748).
+            </p>
+          </div>
+          <div class="codeblock">
+            <pre><code>chart(stocks)
+  .flow(group({ by: <span class="s">"symbol"</span> }))
+  .mark(line({ x: <span class="s">"date"</span>, y: <span class="s">"price"</span>, stroke: <span class="s">"symbol"</span> }))
+  .layer(label(<span class="s">"symbol"</span>, { position: <span class="fam">Place</span>.end() }))
+
+<span class="c">// Label marks of another chart</span>
+chart(selectAll(<span class="s">"hubs"</span>)).mark(label(<span class="s">"name"</span>, { position: <span class="fam">Place</span>.around(), avoiding: selectAll(<span class="s">"routes"</span>) }))</code></pre>
+          </div>
+          <figure style="margin: 0 0 16px; max-width: 620px">
+            <div class="paper">
+              <img
+                src="img/line-end.png"
+                alt="End-of-line labels"
+                width="1094"
+                height="659"
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              Same output as A's <code>Place.end()</code>; only the spelling
+              moves.
+            </figcaption>
+          </figure>
+          <div class="kv">
+            <div>
+              <span class="k">Desugars into</span>
+              <div>
+                <p>The same elaboration as A; A is defined as fusion into C.</p>
+              </div>
+            </div>
+            <div>
+              <span class="k">Strength</span>
+              <div>
+                <p>
+                  The joint placement is visible: one tier owns a set of labels
+                  that avoid each other, and it can label marks from anywhere by
+                  name, which #803 asks for.
+                </p>
+              </div>
+            </div>
+            <div>
+              <span class="k">Weakness</span>
+              <div>
+                <p>
+                  A second spelling of the same idea, and its ink paints
+                  <em>above</em> its operands while every other relational mark
+                  paints below (#745's default), so it is the one relational
+                  construct that needs the opposite paint rule.
+                </p>
+              </div>
+            </div>
+            <div>
+              <span class="k">Overlap</span>
+              <div>
+                <p>
+                  Exact: A is defined as fusion into C, so the two cannot drift.
+                </p>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <!-- 7. GEOMETRY -->
+      <section id="geometry">
+        <h2><span class="secnum">07</span>Shared axis: geometry queries</h2>
+        <div class="prose">
+          <p>
+            The strategies need two queries beyond <code>enclosingCircle</code>,
+            each added with its first consumer as
+            <code>shape-geometry.md</code> decided:
+          </p>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>query</th>
+                <th>returns</th>
+                <th>read by</th>
+                <th>implemented by</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <code>boundary</code> <span class="muted small">(#974)</span>
+                </td>
+                <td>the closed outline of a region, sampled</td>
+                <td>
+                  <code>Place.interior()</code>; the chooser, for obstacles
+                </td>
+                <td>
+                  regions; <code>enclose</code>'s private member reader becomes
+                  this query (#1167)
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>path</code>
+                  <span class="muted small">(new, <code>HasPath</code>)</span>
+                </td>
+                <td>
+                  an open polyline with arc length and tangent, in the node's
+                  local frame
+                </td>
+                <td>
+                  <code>start</code>, <code>end</code>, <code>along</code>
+                </td>
+                <td>
+                  <code>line</code>, <code>arrow</code> and edges;
+                  <code>ribbon</code> and <code>area</code> implement both
+                  (<code>boundary</code> for the band, <code>path</code> for the
+                  centerline)
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>
+            The chooser tests a label's box against obstacle geometry: discs for
+            circles, segments for paths, outlines for regions, boxes for the
+            rest, through a uniform grid like <code>overlap</code>'s.
+          </p>
+        </div>
+      </section>
+
+      <!-- 8. RECOMMENDATION -->
+      <section id="recommendation">
+        <h2><span class="secnum">08</span>Recommendation</h2>
+        <p class="prose" style="font-size: 18px; font-weight: 600">
+          Approach A, defined by rewrite into C, with B's anchors kept internal.
+        </p>
+        <ul class="args">
+          <li>
+            <b>It desugars into the core.</b> A one-candidate label is today's
+            elaboration unchanged; a many-candidate label adds one search step
+            of a kind the engine already has (<code>overlap</code>). The new
+            surface is one strategy family and one option. (Principles: why keep
+            the core small.)
+          </li>
+          <li>
+            <b>One concept is one operator.</b> The <code>api-design</code> page
+            records that the earlier label design dropped a separate
+            <code>annotate()</code> for options on <code>label</code>. Point,
+            line and area labels are one concept to the user, and every
+            precedent that unifies them (Vega, Mapbox, QGIS, Highcharts) does it
+            with one construct and a geometry-driven strategy.
+          </li>
+          <li>
+            <b>Meaning lives on the type.</b> The default placement comes from
+            the target's geometry kind, and a mismatch is a loud capability
+            error, as <code>api-design</code> asks for data types.
+          </li>
+          <li>
+            <b>A closed family plus a function hatch</b>, like
+            <code>Curve</code>, <code>Overlap</code> and <code>Shape</code>,
+            spelled the same in JS and Python.
+          </li>
+          <li>
+            <b>Overlaps are degenerate or exact.</b> Today's strings are the
+            one-candidate case. <code>avoiding</code> is #1152's option with the
+            same value type. The chooser and
+            <code>Overlap.separate()</code> share the obstacle reader and the
+            grid, through #974.
+          </li>
+        </ul>
+        <div class="prose">
+          <p>
+            <b>Runner-up: C.</b> If labeling marks from another chart, or a
+            selected subset of a layer (<code>label-syntax.md</code>'s last
+            section, #803), turns out to be common, expose the
+            <code>label</code> tier publicly. Nothing in A blocks that, since A
+            is defined as fusion into it.
+          </p>
+          <p class="muted">
+            <b>Out of scope here:</b> leader lines and force-based repel (a
+            later <code>Place.repel()</code> member that draws an
+            <code>arrow</code>), labels outside a region with a connector
+            (ggforce), and font size chosen to fit a region.
+          </p>
+        </div>
+      </section>
+
+      <!-- 9. DECISIONS -->
+      <section id="decisions">
+        <h2><span class="secnum">09</span>Decisions for Josh</h2>
+        <ol class="decisions">
+          <li>
+            <div>
+              <p class="q">Is the family named <code>Place</code>?</p>
+              <p class="d">
+                As in <code>Place.end()</code>, or something else
+                (<code>Placement</code>, <code>Label</code>)?
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="q">Do today's position strings stay as strings?</p>
+              <p class="d">
+                They stay as the one-candidate members (<code
+                  >position: "outset-top"</code
+                >), or move into the family
+                (<code>Place.box("outset-top")</code>). I recommend they stay: a
+                closed enum may be a string under the family rules.
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="q">
+                Is <code>around</code> the right name for the candidate-list
+                member?
+              </p>
+              <p class="d">
+                Including the bar case
+                <code
+                  >Place.around({ candidates: ["outset-top", "inset-top"]
+                  })</code
+                >.
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="q">Are the defaults by geometry kind OK?</p>
+              <p class="d">
+                Dots → <code>Place.around()</code>, paths →
+                <code>Place.end()</code>, regions →
+                <code>Place.interior()</code>, boxes → <code>"outset"</code> as
+                today. This changes scatter renders that use
+                <code>.label()</code> today.
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="q">How is a label with no free spot hidden?</p>
+              <p class="d">Silently, with a console note, or an error?</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="q">
+                Is <code>avoiding</code> shared with #1152, and do labels always
+                avoid each other?
+              </p>
+              <p class="d">
+                <code>avoiding</code> is the same option name and value as
+                #1152's (a list of refs or one <code>selectAll</code>), and
+                labels from one <code>.label()</code> call always avoid each
+                other and their own targets.
+              </p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="q">
+                Is the <code>label</code> tier (Approach C) public now?
+              </p>
+              <p class="d">Or does it wait for a real example?</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <p class="q">How is a label's backdrop spelled?</p>
+              <p class="d">
+                A halo (ggrepel <code>bg.color</code>, labellines
+                <code>outline_color</code>) and a filled box (ggplot
+                <code>geom_label</code>). Nesting suggests
+                <code>background: { fill, padding }</code> and
+                <code>halo: { color, width }</code> as label options.
+              </p>
+            </div>
+          </li>
+        </ol>
+
+        <h3>Open questions (not for sign-off)</h3>
+        <ol class="prose">
+          <li>
+            Path and region strategies in polar or other coordinates need
+            geometry after the coordinate transform, which today exists only at
+            lowering (#952, #817). Do they read screen-space geometry, or move
+            the transform earlier?
+          </li>
+          <li>
+            Should the chooser use per-label greedy first-fit, or the
+            <code>choose</code> operator's cost search (#486), and does axis
+            tick-label avoidance (#1063) share it?
+          </li>
+          <li>
+            Animation: should a label keep its candidate across frames to avoid
+            jumps?
+          </li>
+          <li>
+            Priority order: data order for now, with a later
+            <code>priority</code> option (Mapbox <code>symbol-sort-key</code>,
+            Vega <code>sort</code>)?
+          </li>
+        </ol>
+
+        <details style="margin-top: 28px">
+          <summary>Related issues and PRs</summary>
+          <ul class="issues">
+            <li>
+              <span class="num">#43</span
+              ><span
+                >Stronger labeling support: point, line and area labels,
+                state-of-the-art algorithms.</span
+              >
+            </li>
+            <li>
+              <span class="num">#409</span
+              ><span
+                >Labeling strategies: one per shape kind, defaulting from the
+                mark, with overrides.</span
+              >
+            </li>
+            <li>
+              <span class="num">#204</span
+              ><span>Area and ribbon labeling: d3-area-label, polylabel.</span>
+            </li>
+            <li>
+              <span class="num">#405</span
+              ><span
+                >(draft PR, May 2026) Labels and annotation design note plus
+                prototype. It split each strategy into anchor, candidate
+                generator and acceptor, and had five strategies (box, point,
+                area, ribbon, path). It was built on the overlay renderer #766
+                deleted. This proposal keeps its split and moves it onto the
+                elaboration path.</span
+              >
+            </li>
+            <li>
+              <span class="num">#136</span
+              ><span
+                >Bar chart with labels on every bar, as a two-layer chart.</span
+              >
+            </li>
+            <li>
+              <span class="num">#707</span
+              ><span>Operators over placed nodes: the operand-kind table.</span>
+            </li>
+            <li>
+              <span class="num">#803</span
+              ><span
+                >Lower <code>.label()</code> onto the public
+                <code>selectAll</code> path so it has a printable
+                expansion.</span
+              >
+            </li>
+            <li>
+              <span class="num">#974</span
+              ><span
+                >Geometry: a <code>boundary</code> query, for hull enclosures
+                and labels that avoid marks.</span
+              >
+            </li>
+            <li>
+              <span class="num">#975</span
+              ><span
+                >Geometry: a ray-hit query, so connectors end on outlines.</span
+              >
+            </li>
+            <li>
+              <span class="num">#1167</span
+              ><span
+                >Extensible enclosure shapes on #974, shared with labels.</span
+              >
+            </li>
+            <li>
+              <span class="num">#1152</span
+              ><span
+                >(draft PR) <code>enclose</code> with <code>Shape.*</code> and
+                <code>avoiding</code>.</span
+              >
+            </li>
+            <li>
+              <span class="num">#1101</span
+              ><span
+                >One extensibility model for strategy families, with a custom
+                function.</span
+              >
+            </li>
+            <li>
+              <span class="num">#486</span
+              ><span
+                >Choice operator with cost-based layout; its first use is the
+                auto label angle (#961).</span
+              >
+            </li>
+            <li>
+              <span class="num">#1063</span
+              ><span
+                >Axis ticks that account for their labels and avoid
+                overlap.</span
+              >
+            </li>
+            <li>
+              <span class="num">#952, #817</span
+              ><span
+                >Labels and text ignore polar coordinates;
+                <code>.label()</code> inside a polar boundary throws.</span
+              >
+            </li>
+            <li>
+              <span class="num">#801</span
+              ><span
+                ><code>.label()</code> on a mosaic throws a measure error.</span
+              >
+            </li>
+            <li>
+              <span class="num">#920 …</span
+              ><span>#920, #887, #893, #894, #909: label animation snags.</span>
+            </li>
+            <li>
+              <span class="num">#947</span
+              ><span
+                ><code>label: false</code> on an operator is a silent
+                no-op.</span
+              >
+            </li>
+            <li>
+              <span class="num">#796</span
+              ><span>Group callouts anchored to data extremes.</span>
+            </li>
+            <li>
+              <span class="num">#1109</span
+              ><span
+                >Tutorial on annotating visualizations; depends on all of the
+                above.</span
+              >
+            </li>
+          </ul>
+        </details>
+
+        <footer>
+          Source: <code>proposals/labels/proposal.md</code>; prior work in
+          <code>proposals/labels/research/prior-work.md</code>. Proposed renders
+          are prototype overlays on real GoFish output.
+        </footer>
+      </section>
+    </main>
+  </div>
+</div>
