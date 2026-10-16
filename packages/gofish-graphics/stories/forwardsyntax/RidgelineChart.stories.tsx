@@ -7,9 +7,7 @@ import {
   scatter,
   field,
   rect,
-  text,
-  layer,
-  Constraint,
+  datum,
   Schema,
 } from "../../src/lib";
 import { ribbon } from "../../src/lib";
@@ -78,23 +76,12 @@ const ridgelineData = monthNames.flatMap((month) =>
   }))
 );
 
-// Fixed row-to-row pitch shared by the ridge spread and the label spread
-// below, so a month's rule+label always sit at the same baseline as its
+// Fixed row-to-row pitch shared by the ridge spread and the rule spread
+// below, so a month's rule and label sit at the same baseline as its
 // silhouette. Both tiers chain their rows with `anchor: "baseline"` at this
 // pitch, and both rows put their semantic baseline at local 0 (the ribbon's
 // zero-count line; the rule), so the two chains solve to identical lines.
 const rowPitch = 24;
-
-// Right-aligning the month labels (issue #757: `text` has no textAnchor —
-// it always anchors "start") is done with a constraint instead of a
-// hardcoded per-string pixel-width table: each row gets a zero-size
-// invisible anchor rect at the fixed x just left of the plot edge, and
-// `Constraint.align({ x: "end" }, [label, anchor])` pins the label's END
-// (using the text mark's own LAYOUT-TIME measured width) to the anchor's
-// end — which, for a zero-width box, is just its `x`. This is the
-// bottle-chart pattern (`stories/piccl/Bottle.stories.tsx`); it uses real
-// measured glyph widths so JS and Python need no shared precomputed table.
-const labelMarginX = -6;
 
 export const Default: StoryObj<Args> = {
   args: { w: 500, h: 330 },
@@ -119,12 +106,8 @@ export const Default: StoryObj<Args> = {
           dir: "y",
           anchor: "baseline",
           spacing: rowPitch,
-          h: args.h,
         }),
-        scatter({
-          x: "temp_max",
-          w: args.w,
-        })
+        scatter({ x: "temp_max" })
       )
       .mark(
         ribbon({
@@ -137,27 +120,14 @@ export const Default: StoryObj<Args> = {
         })
       )
       // Per-row baseline labeling, in the style of a ggridges ridgeline: a
-      // thin rule along each month's baseline with the month name sticking
-      // out to the LEFT of the plot (tick-label style), instead of a standard
-      // y axis that can't line up with 12 overlapping, unevenly-tall
-      // silhouettes. Two extra tiers:
-      //
-      //  - RULES: the same fixed-pitch baseline spread as the ridges, marking
-      //    a bare rect per month. The rect sits at its row's baseline anchor,
-      //    so it registers exactly on the ribbon's zero line. `.zOrder(-1)`
-      //    on the tier paints the rules BEHIND the ribbons — visible only
-      //    outside the silhouettes, the classic look.
-      //  - LABELS: a datumless annotation overlay (a bare mark tier — no
-      //    flow), one text per month at literal frame coordinates. This is
-      //    deliberate: a spread-laid row normalizes away any extent above or
-      //    left of its baseline anchor, so a label can never overhang its own
-      //    row — but a bare tier shares the frame origin and CAN reach into
-      //    the canvas margin (the render's overhang reserve), exactly like
-      //    the ridge peaks reach above the first baseline. Each label's END
-      //    is constraint-aligned to a same-row invisible anchor rect fixed at
-      //    `labelMarginX` (6px left of the plot edge) — see `labelMarginX`'s
-      //    comment — and its bottom edge to the anchor, which sits on the
-      //    rule at y = k·pitch, so the label stands on its rule.
+      // thin rule along each month's baseline with the month name to the
+      // LEFT of the plot (tick-label style), instead of a standard y axis
+      // that can't line up with 12 overlapping, unevenly-tall silhouettes.
+      // The rules are the same fixed-pitch baseline spread as the ridges, a
+      // bare rect per month, so each registers exactly on its ribbon's zero
+      // line. Each rule carries its month as a label outside its left end,
+      // standing on the rule. `.zOrder(-1)` paints the rules BEHIND the
+      // ribbons, visible only outside the silhouettes, the classic look.
       .layer(
         chart(monthNames.map((month) => ({ month })))
           .flow(
@@ -166,32 +136,21 @@ export const Default: StoryObj<Args> = {
               dir: "y",
               anchor: "baseline",
               spacing: rowPitch,
-              h: args.h,
             })
           )
-          .mark(rect({ h: 1, w: args.w, fill: "#999" }))
-          .zOrder(-1)
-      )
-      .layer(
-        layer(
-          monthNames.flatMap((month, k) => [
-            rect({ w: 0, h: 0, x: labelMarginX, y: rowPitch * k }).name(
-              `anchor${k}`
-            ),
-            text({
-              text: month,
+          .mark(
+            rect({
+              x: datum(minTemp),
+              w: datum(maxTemp - minTemp),
+              h: 1,
+              fill: "#999",
+            }).label("month", {
+              position: "outset-left-end",
               fontSize: 11,
-              fill: "#666",
-            }).name(`label${k}`),
-          ])
-        ).relate((g) =>
-          monthNames.map((_, k) =>
-            Constraint.align({ x: "end", y: "end" }, [
-              g[`label${k}`],
-              g[`anchor${k}`],
-            ])
+              color: "#666",
+            })
           )
-        )
+          .zOrder(-1)
       )
       .render(container, {
         w: args.w,
