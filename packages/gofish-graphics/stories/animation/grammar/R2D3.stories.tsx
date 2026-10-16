@@ -75,8 +75,8 @@ export const Frame: StoryObj<{ at: number }> = {
 
 /** One loop at 60 playheads, in a 1-wide grid of 840 x 490 cells (the chart
  *  is 825 x 480: its longest histogram row runs past `w`). */
-export const GIF_CELL: [number, number] = [840, 490];
-export const GIF_FRAMES = 60;
+const GIF_CELL: [number, number] = [840, 490];
+const GIF_FRAMES = 60;
 export const GifFrames: StoryObj = {
   render: () => {
     const [w, h] = GIF_CELL;
