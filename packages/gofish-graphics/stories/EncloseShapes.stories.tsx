@@ -82,9 +82,9 @@ export const MunkresFigure: StoryObj = {
       ]),
     ])
       .relate(({ a, b, c }: any) => [
-        enclose({ shape: Shape.ellipse(), padding: 30, ...outline }, [a, b, c]),
-        enclose({ shape: Shape.ellipse(), padding: 16, ...outline }, [a, b]),
-        enclose({ shape: Shape.ellipse(), padding: 16, ...outline }, [b, c]),
+        enclose({ shape: Shape.oval(), padding: 30, ...outline }, [a, b, c]),
+        enclose({ shape: Shape.oval(), padding: 16, ...outline }, [a, b]),
+        enclose({ shape: Shape.oval(), padding: 16, ...outline }, [b, c]),
         enclose(
           {
             shape: Shape.spine({ avoiding: [b], clearance: 6 }),
@@ -166,7 +166,7 @@ export const PenguinBoxes = penguinStory(Shape.box());
 export const PenguinHulls = penguinStory(Shape.hull());
 export const PenguinBlobs = penguinStory(Shape.blob());
 export const PenguinSpines = penguinStory(Shape.spine());
-export const PenguinEllipses = penguinStory(Shape.ellipse());
+export const PenguinOvals = penguinStory(Shape.oval());
 
 // The four shapes on the same points: pick one from the menu, then tune it.
 export const PenguinsFourShapes: StoryObj = {

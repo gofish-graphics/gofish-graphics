@@ -12,7 +12,7 @@
  *    clearance circles; with `holes: true` an open gap stays a hole.
  *  - A 1,000-point line and 300 dots outline well under a second (no step is
  *    quadratic in the members).
- *  - `Shape.ellipse()` (`enclose/ellipse.ts`): every padded member lies
+ *  - `Shape.oval()` (`enclose/oval.ts`): every padded member lies
  *    inside the ellipse and its drawn outline, for dots, boxes and segments
  *    of mixed sizes; it tilts to follow a diagonal; one member gives a
  *    circle; members on a line give a thin ellipse; it is fast on the
@@ -28,11 +28,11 @@ import {
 } from "../ast/graphicalOperators/enclose/blob";
 import {
   ellipseLoop,
-  ellipseOutline,
+  ovalOutline,
   ellipseValue,
   enclosingEllipse,
   type Ellipse,
-} from "../ast/graphicalOperators/enclose/ellipse";
+} from "../ast/graphicalOperators/enclose/oval";
 import { penguins } from "../data/penguins";
 
 declare const process: { exit(code: number): never };
@@ -376,7 +376,7 @@ console.log("# a 1,000-point line and 300 dots");
   }
 }
 
-console.log("# Shape.ellipse(): the minimum-area enclosing ellipse");
+console.log("# Shape.oval(): the minimum-area enclosing ellipse");
 {
   /** The circles whose hull is the member grown by pad, sampled densely. */
   const boundary = (m: BlobMember, pad: number): Pt[] => {
@@ -468,7 +468,7 @@ console.log("# Shape.ellipse(): the minimum-area enclosing ellipse");
   }
   {
     const row = [C(0, 0, 3), C(50, 0, 3), C(100, 0, 3), C(160, 0, 3)];
-    const loops = ellipseOutline(row, 0);
+    const loops = ovalOutline(row, 0);
     const { long, short } = axes(enclosingEllipse(row, 0)!);
     const finite = loops.flat().every(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
     check(
@@ -476,7 +476,7 @@ console.log("# Shape.ellipse(): the minimum-area enclosing ellipse");
       finite && short >= 3 && short < 10 && long > 80,
       `semi-axes ${long.toFixed(2)} and ${short.toFixed(2)}`
     );
-    const flat = ellipseOutline([C(0, 0, 0), C(40, 0, 0), C(90, 0, 0)], 0);
+    const flat = ovalOutline([C(0, 0, 0), C(40, 0, 0), C(90, 0, 0)], 0);
     check(
       "points with no size and no padding give their segment, with no NaN",
       flat.length === 1 &&
@@ -484,14 +484,14 @@ console.log("# Shape.ellipse(): the minimum-area enclosing ellipse");
         Math.max(...flat[0].map((p) => p[0])) === 90,
       JSON.stringify(flat)
     );
-    check("no members give no outline", ellipseOutline([], 6).length === 0);
+    check("no members give no outline", ovalOutline([], 6).length === 0);
   }
   {
     const species = ["Adelie", "Chinstrap", "Gentoo"].map((s) =>
       pen.filter((d) => d.Species === s).map(penDisc)
     );
     const t0 = performance.now();
-    for (const members of species) ellipseOutline(members, 6);
+    for (const members of species) ovalOutline(members, 6);
     const ms = performance.now() - t0;
     check("the three penguin species take under 100 ms", ms < 100, `${ms.toFixed(1)} ms`);
   }

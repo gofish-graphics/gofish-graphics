@@ -6,7 +6,7 @@
  * `enclose`: an outline drawn around a set of nodes, under them. The outline
  * is a value of the `Shape` family (`families/shape.ts`): the padded bounding
  * box (`Shape.box()`, the default), the minimum-area enclosing ellipse
- * (`Shape.ellipse()`; `enclose/ellipse.ts`), or a smooth region
+ * (`Shape.oval()`; `enclose/oval.ts`), or a smooth region
  * (`Shape.blob()` and its presets `Shape.hull()`, `Shape.spine()`; the
  * geometry is in `enclose/blob.ts`).
  *
@@ -38,7 +38,7 @@ import { resolveRefData } from "../marks/chartBuilder";
 import { box, type Nodes, type Shape } from "../../families/shape";
 import { blobOutline, type BlobMember, type Pt } from "./enclose/blob";
 import { membersOf } from "./enclose/members";
-import { ellipseOutline } from "./enclose/ellipse";
+import { ovalOutline } from "./enclose/oval";
 import { targetOf } from "../constraints/relationalPaint";
 import { ringExtent } from "../geometry/box";
 import { RelateOperand } from "../constraints/relate";
@@ -208,8 +208,8 @@ function Enclose(
             padding,
             avoiding: geometry(memberCount, children.length),
           });
-        } else if (shape.kind === "ellipse")
-          loops = ellipseOutline(
+        } else if (shape.kind === "oval")
+          loops = ovalOutline(
             placed
               .slice(0, memberCount)
               .flatMap((p, i) => membersOf(children[i], p.dims)),

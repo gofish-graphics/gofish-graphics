@@ -7,7 +7,7 @@ order: 75
 Draws an outline around a set of nodes, under them. The outline is a member of
 the [`Shape`](/js/api/shape) family: the padded bounding box
 (`Shape.box()`, the default), the smallest ellipse around them
-(`Shape.ellipse()`), or a smooth region (`Shape.blob()`,
+(`Shape.oval()`), or a smooth region (`Shape.blob()`,
 `Shape.hull()`, `Shape.spine()`). Like [`line`](/js/api/marks/line) and
 [`ribbon`](/js/api/marks/ribbon), it reads geometry from nodes that are already
 placed, and it has a combinator form and a bag form.

@@ -3,7 +3,7 @@
 // </gofish-wiki>
 
 /**
- * The outline of `Shape.ellipse()`: the minimum-area ellipse that holds every
+ * The outline of `Shape.oval()`: the minimum-area ellipse that holds every
  * member grown by `padding`. Pure geometry, no GoFish nodes.
  *
  * 1. Each padded member is a union of discs: a disc grown by `padding`; a
@@ -190,9 +190,9 @@ export const enclosingEllipse = (
   return hull.length >= 3 ? minEllipse(hull) : undefined;
 };
 
-/** The outline `Shape.ellipse()` draws: one loop, the ellipse's, or the
+/** The outline `Shape.oval()` draws: one loop, the ellipse's, or the
  *  hull of degenerate members (a segment); none for a single point or no members. */
-export const ellipseOutline = (members: BlobMember[], pad: number): Pt[][] => {
+export const ovalOutline = (members: BlobMember[], pad: number): Pt[][] => {
   const e = enclosingEllipse(members, pad);
   if (e) return [ellipseLoop(e)];
   const hull = convexHull(samplesOf(members, pad));

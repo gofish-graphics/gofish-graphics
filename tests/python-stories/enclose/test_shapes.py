@@ -77,9 +77,9 @@ def story_munkres_figure():
                 alignment="middle",
             )
         ]).relate(lambda a, b, c: [
-            enclose([a, b, c], shape=Shape.ellipse(), padding=30, **outline),
-            enclose([a, b], shape=Shape.ellipse(), padding=16, **outline),
-            enclose([b, c], shape=Shape.ellipse(), padding=16, **outline),
+            enclose([a, b, c], shape=Shape.oval(), padding=30, **outline),
+            enclose([a, b], shape=Shape.oval(), padding=16, **outline),
+            enclose([b, c], shape=Shape.oval(), padding=16, **outline),
             enclose(
                 [a, c],
                 shape=Shape.spine(avoiding=[b], clearance=6),
@@ -161,8 +161,8 @@ def story_penguin_spines():
     return (_penguin_shapes(Shape.spine()), {"w": 420, "h": 320})
 
 
-def story_penguin_ellipses():
-    return (_penguin_shapes(Shape.ellipse()), {"w": 420, "h": 320})
+def story_penguin_ovals():
+    return (_penguin_shapes(Shape.oval()), {"w": 420, "h": 320})
 
 
 # ── 6. avoiding and holes ───────────────────────────────────────────────────

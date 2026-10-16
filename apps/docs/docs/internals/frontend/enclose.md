@@ -6,7 +6,7 @@ status: stable
 covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/blob.ts
-  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/ellipse.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/oval.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/members.ts
   - packages/gofish-graphics/src/families/shape.ts
 ---
@@ -15,9 +15,9 @@ covers:
 
 `enclose` draws an outline around a set of nodes, under them. The outline is a
 value of the `Shape` strategy family: the padded bounding box (`Shape.box()`),
-the minimum-area enclosing ellipse (`Shape.ellipse()`), or a smooth region
+the minimum-area enclosing ellipse (`Shape.oval()`), or a smooth region
 (`Shape.blob()` and its two presets, `Shape.hull()` and `Shape.spine()`). This
-essay explains how the node is built, how an ellipse's and a blob's outlines
+essay explains how the node is built, how an oval's and a blob's outlines
 are computed, and which decisions and shortcuts the design rests on.
 The user-facing reference is [`enclose`](/js/api/operators/enclose) and
 [`Shape`](/js/api/shape).
@@ -43,7 +43,7 @@ the enclosure's own box.
 
 Layout places a fresh member the way `layer` places a child
 (`placeUnplacedChild`), and leaves a ref where its target is. The box shape
-uses the union of the members' boxes grown by `padding`. An ellipse or a
+uses the union of the members' boxes grown by `padding`. An oval or a
 blob computes its outline in the same pass, in the frame the children's boxes
 were read in, and the node's box is the outline's box. Both are kept in `renderData`, and
 `lower` maps them through `local` (the node's translate and y direction) and
@@ -69,9 +69,9 @@ the same default installed by name (see
 This reader is internal. There is no `members` option and no public geometry
 protocol for it yet.
 
-## How an ellipse is built
+## How an oval is built
 
-`ellipse.ts` is pure geometry too: `ellipseOutline(members, padding)` returns
+`oval.ts` is pure geometry too: `ovalOutline(members, padding)` returns
 one loop.
 
 1. **Discs.** Each member grown by `padding` is the convex hull of a few
@@ -188,7 +188,7 @@ preset is within half a pixel of the true padded convex hull.
 ## The `Shape` family
 
 `families/shape.ts` is a strategy family like `Curve` or `Overlap`. Each
-member returns a plain object, `{ kind, ...params }`. `Shape.ellipse()` has
+member returns a plain object, `{ kind, ...params }`. `Shape.oval()` has
 no params: the minimum-area ellipse is one fixed construction, and `padding`
 and the paint are already on `enclose`. `Shape.hull()` and
 `Shape.spine()` are presets of `Shape.blob()`, declared in the `STRATEGIES`
@@ -205,7 +205,7 @@ Settled:
   corner radii moved from `enclose` to `Shape.box({ rx, ry })`.
 - `padding` and the paint stay on `enclose`; the shape's own options stay on
   the shape.
-- `Shape.ellipse()` is the minimum-area enclosing ellipse, not a mark drawn
+- `Shape.oval()` is the minimum-area enclosing ellipse, not a mark drawn
   in the bounding box (see above). No `curve` option, no plot-area rule.
 - `avoiding` takes a list of nodes or refs, or one `selectAll(name)` as the
   whole value, in JS as on the wire (`NodeSelectionIR`): a single ref and a

@@ -40,11 +40,11 @@ export type BoxShape = Extract<Frontend.ShapeIR, { kind: "box" }>;
  *  this same object with other params preset. */
 export type BlobShape = Omit<BlobIR, "avoiding"> & { avoiding?: Nodes };
 
-/** `ellipse()`: the minimum-area enclosing ellipse. See {@link ellipse}. */
-export type EllipseShape = Extract<Frontend.ShapeIR, { kind: "ellipse" }>;
+/** `oval()`: the minimum-area enclosing ellipse. See {@link oval}. */
+export type OvalShape = Extract<Frontend.ShapeIR, { kind: "oval" }>;
 
 /** Every built-in outline: the value of `enclose`'s `shape`. */
-export type Shape = BoxShape | EllipseShape | BlobShape;
+export type Shape = BoxShape | OvalShape | BlobShape;
 
 /** The options `blob()`, `hull()` and `spine()` share. */
 export type BlobOptions = Omit<BlobShape, "kind">;
@@ -68,10 +68,7 @@ export const box = bareKind(
  * The smallest-area ellipse that holds every member grown by `enclose`'s
  * `padding`. It may be rotated: it follows the members, not the axes.
  */
-export const ellipse = bareKind(
-  "Shape.ellipse",
-  (): EllipseShape => ({ kind: "ellipse" })
-);
+export const oval = bareKind("Shape.oval", (): OvalShape => ({ kind: "oval" }));
 
 /**
  * A smooth region around the members: each member grown by `enclose`'s

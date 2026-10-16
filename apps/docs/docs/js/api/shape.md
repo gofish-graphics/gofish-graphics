@@ -38,7 +38,7 @@ gf.layer([
 
 ```ts
 Shape.box({ rx?, ry? });
-Shape.ellipse();
+Shape.oval();
 Shape.blob({ convexity?, holes?, roundness?, neck?, avoiding?, clearance? });
 Shape.hull({ convexity?, holes?, roundness?, neck?, avoiding?, clearance? });
 Shape.spine({ convexity?, holes?, roundness?, neck?, avoiding?, clearance? });
@@ -62,13 +62,13 @@ import { hull } from "gofish-graphics/shape"; // the same function as Shape.hull
 
 ## Members
 
-| Member            | Is exactly                                       | What it draws                                                   |
-| ----------------- | ------------------------------------------------ | --------------------------------------------------------------- |
-| `Shape.box()`     | its own kind                                     | The members' bounding box, grown by `padding`, rounded corners. |
-| `Shape.ellipse()` | its own kind                                     | The smallest-area ellipse around the padded members.            |
-| `Shape.blob()`    | the general region                               | Members, links between them and filled gaps, rounded.           |
-| `Shape.hull()`    | `Shape.blob({ convexity: 1, neck: 1, ...opts })` | The padded convex hull, rounded.                                |
-| `Shape.spine()`   | `Shape.blob({ convexity: 0, ...opts })`          | A tree of tubes that links the members, and nothing else.       |
+| Member          | Is exactly                                       | What it draws                                                   |
+| --------------- | ------------------------------------------------ | --------------------------------------------------------------- |
+| `Shape.box()`   | its own kind                                     | The members' bounding box, grown by `padding`, rounded corners. |
+| `Shape.oval()`  | its own kind                                     | The smallest-area ellipse around the padded members.            |
+| `Shape.blob()`  | the general region                               | Members, links between them and filled gaps, rounded.           |
+| `Shape.hull()`  | `Shape.blob({ convexity: 1, neck: 1, ...opts })` | The padded convex hull, rounded.                                |
+| `Shape.spine()` | `Shape.blob({ convexity: 0, ...opts })`          | A tree of tubes that links the members, and nothing else.       |
 
 `Shape.box()` is the default. A blob is a union of discs, tubes and triangles,
 so no blob setting draws a box.
@@ -78,9 +78,9 @@ so no blob setting draws a box.
 ::: gofish-ref Shape.box
 :::
 
-## `Shape.ellipse()`
+## `Shape.oval()`
 
-::: gofish-ref Shape.ellipse
+::: gofish-ref Shape.oval
 :::
 
 The ellipse holds every member grown by `padding` (a circle is a disc, a
@@ -94,7 +94,7 @@ single member gives a circle.
 ```js
 gf.enclose(
   {
-    shape: gf.Shape.ellipse(),
+    shape: gf.Shape.oval(),
     padding: 10,
     fill: "#4c78a8",
     fillOpacity: 0.15,
