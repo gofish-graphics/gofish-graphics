@@ -59,7 +59,7 @@ export const OrthogonalGridEmbedding: StoryObj = {
           // in r-units).
           y: {
             kind: "distribute",
-            spacing: 70,
+            spacing: 138,
             anchor: "middle",
             alignment: "middle",
           },

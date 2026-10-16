@@ -26,10 +26,10 @@ const stoneBlues = ["#08306b", "#08519c", "#2171b5", "#4292c6", "#6baed6"];
 
 const node = (d: any) =>
   d.height === 0
-    ? circle({ r: 7 + (d.data.value ?? 1) * 2, fill: byDepth(stoneBlues)(d) })
+    ? circle({ r: 15 + (d.data.value ?? 1) * 4, fill: byDepth(stoneBlues)(d) })
     : rect({
-        h: 30,
-        rx: 15,
+        h: 63,
+        rx: 32,
         fill: "#c6dbef",
         stroke: "#6baed6",
         strokeWidth: 1,
@@ -41,11 +41,11 @@ export const Jewelry: StoryObj = {
       node,
       link: { curve: Curve.linear(), stroke: "#6baed6", strokeWidth: 2 },
       parentChild: combine({
-        x: { kind: "nest", pad: 6 },
+        x: { kind: "nest", pad: 13 },
         y: { kind: "align", alignment: "middle" },
       }),
       sibling: combine({
-        x: { kind: "distribute", spacing: 4 },
+        x: { kind: "distribute", spacing: 8 },
         y: { kind: "align", alignment: "middle" },
       }),
     }),

@@ -90,7 +90,7 @@ const sectorTree = {
   ],
 };
 
-const bandHeight = 56; // radial thickness of one ring
+const bandHeight = 90; // radial thickness of one ring
 
 // Wedge node: width in θ-units (emX) sweeps an arc; height in r-units (emY) is
 // the ring thickness. Leaves carry the explicit θ-share; internal nodes leave
@@ -125,7 +125,7 @@ export const HierarchicalSectorChart: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 560, h: 560 });
+    const container = initializeContainer();
     tree(
       {
         node,

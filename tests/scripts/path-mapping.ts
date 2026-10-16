@@ -26,9 +26,14 @@ const ROOT_DIR = dirname(TESTS_DIR);
  * A digit before a capitalized word is a word break too (`Inner45Outer0` →
  * `inner45-outer0`), matching the export → Python name rule in
  * check-python-sync.ts (`story_…_inner45_outer0`). A digit before an acronym
- * stays joined, so the title `1D Strip Plot` is still `1d-strip-plot`. */
+ * stays joined, so the title `1D Strip Plot` is still `1d-strip-plot`.
+ *
+ * Whitespace around a segment is dropped first: a title written with spaces
+ * around its slashes (`"GoTree / Gallery / arc-tree"`) has the same segments
+ * as one written without them (`go-tree/gallery/arc-tree`). */
 export const toKebab = (s: string) =>
   s
+    .trim()
     .replace(/([a-z])([A-Z])/g, "$1-$2")
     .replace(/([0-9])([A-Z][a-z])/g, "$1-$2")
     .replace(/[\s_]+/g, "-")
@@ -69,7 +74,13 @@ export function mapJsToPython(jsFile: string): string {
   let title: string | null = null;
   try {
     const content = readFileSync(absPath, "utf-8");
-    const m = content.match(/title:\s*["'](.+?)["']/);
+    // The Storybook title is the one on the `Meta` object; a gallery story
+    // also has a `parameters.gallery.title` (its card caption), which must
+    // not be read instead.
+    const metaIdx = content.search(/:\s*Meta\b/);
+    const m = content
+      .slice(Math.max(metaIdx, 0))
+      .match(/title:\s*["'](.+?)["']/);
     if (m) title = m[1];
   } catch {
     /* file unreadable — fall through to path-based fallback */
@@ -83,7 +94,10 @@ export function mapJsToPython(jsFile: string): string {
   }
 
   // Fallback: derive from file path (CamelCase → snake_case, flatten one level)
-  let rel = jsFile.replace(/^packages\/gofish-graphics\/stories\//, "");
+  let rel = jsFile.replace(
+    /^packages\/(gofish-graphics|gofish-gotree)\/stories\//,
+    ""
+  );
   rel = rel.replace(/\.stories\.tsx$/, "");
   const lastSlash = rel.lastIndexOf("/");
   const dirPart = lastSlash >= 0 ? rel.slice(0, lastSlash) : ".";

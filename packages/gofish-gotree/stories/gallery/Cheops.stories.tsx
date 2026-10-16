@@ -47,7 +47,6 @@ export const Cheops: StoryObj = {
     mount({
       node,
       link: "none",
-      mode: "bottomUp",
       parentChild: combine({
         x: { kind: "nest", pad: 0 },
         y: { kind: "distribute", spacing: 2 },

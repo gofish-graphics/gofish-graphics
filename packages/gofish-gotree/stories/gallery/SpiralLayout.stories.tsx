@@ -54,7 +54,7 @@ export const SpiralLayout: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 520, h: 520 });
+    const container = initializeContainer();
     tree(
       {
         node,
@@ -69,7 +69,7 @@ export const SpiralLayout: StoryObj = {
           },
           y: {
             kind: "distribute",
-            spacing: 50,
+            spacing: 118,
             anchor: "middle",
             alignment: "middle",
           },
@@ -84,7 +84,7 @@ export const SpiralLayout: StoryObj = {
           },
           y: {
             kind: "distribute",
-            spacing: 26,
+            spacing: 62,
             anchor: "middle",
             alignment: "middle",
           },

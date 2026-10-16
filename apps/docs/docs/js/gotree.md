@@ -84,8 +84,6 @@ type GoTreeSpec = {
   link?: "none" | LinkOptions | ((s, t) => LinkOptions);
   parentChild?: CombinerSpec;
   sibling?: CombinerSpec;
-  mode?: "topDown" | "bottomUp";
-  sortBy?: (d: HierarchyDatum) => number;
   coord?: CoordTransform;
 };
 

@@ -89,8 +89,8 @@ const deepBalancedTree = (() => {
   return make(6);
 })();
 
-const RING_THICKNESS = 3; // thin radial band (approximates StaticThickness 2)
-const RING_GAP = 13; // radial gap between consecutive rings
+const RING_THICKNESS = 8; // thin radial band (approximates StaticThickness 2)
+const RING_GAP = 35; // radial gap between consecutive rings
 
 // Wedge node (θ auto-fit, #618): leaves carry a unit angular weight; internal
 // nodes leave θ unsized so nest-θ grows each to its children's combined arc. The

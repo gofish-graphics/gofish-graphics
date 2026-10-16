@@ -78,10 +78,12 @@ const EXEMPT_FILE = join(TESTS_DIR, ".python-sync-exempt");
 // Kept in lockstep by hand — both are small and rarely change together.
 // ---------------------------------------------------------------------------
 
-/** CamelCase / spaced / underscored → kebab-case. */
+/** CamelCase / spaced / underscored → kebab-case, each segment trimmed. */
 function toKebab(s: string): string {
   return s
+    .trim()
     .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .replace(/([0-9])([A-Z][a-z])/g, "$1-$2")
     .replace(/[\s_]+/g, "-")
     .toLowerCase();
 }
@@ -101,7 +103,11 @@ function computeMapJsToPython(jsFileRelToRepo: string): string {
   let title: string | null = null;
   try {
     const content = readFileSync(absPath, "utf-8");
-    const m = content.match(/title:\s*["'](.+?)["']/);
+    // The title on the `Meta` object, not a `parameters.gallery.title`.
+    const metaIdx = content.search(/:\s*Meta\b/);
+    const m = content
+      .slice(Math.max(metaIdx, 0))
+      .match(/title:\s*["'](.+?)["']/);
     if (m) title = m[1];
   } catch {
     /* unreadable — fall through to path-based fallback */
@@ -116,7 +122,7 @@ function computeMapJsToPython(jsFileRelToRepo: string): string {
 
   // Fallback: derive from file path (CamelCase → snake_case, flatten one level)
   let rel = jsFileRelToRepo.replace(
-    /^packages\/gofish-graphics\/stories\//,
+    /^packages\/(gofish-graphics|gofish-gotree)\/stories\//,
     ""
   );
   rel = rel.replace(/\.stories\.tsx$/, "");

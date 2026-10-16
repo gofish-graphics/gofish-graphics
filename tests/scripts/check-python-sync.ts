@@ -596,11 +596,16 @@ function mergeBaseOf(baseRef: string): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// Walk all JS stories under packages/gofish-graphics/stories/.
+// Walk all JS stories under packages/gofish-graphics/stories/ and
+// packages/gofish-gotree/stories/ (the tree-DSL package — see #792).
 // ---------------------------------------------------------------------------
 
+const JS_STORY_ROOTS = [
+  "packages/gofish-graphics/stories",
+  "packages/gofish-gotree/stories",
+];
+
 function walkJsStories(): string[] {
-  const root = join(ROOT_DIR, "packages/gofish-graphics/stories");
   const out: string[] = [];
   function walk(dir: string) {
     if (!existsSync(dir)) return;
@@ -612,7 +617,7 @@ function walkJsStories(): string[] {
       }
     }
   }
-  walk(root);
+  for (const root of JS_STORY_ROOTS) walk(join(ROOT_DIR, root));
   return out.sort();
 }
 
@@ -814,15 +819,14 @@ const mergeBase = mergeBaseOf(baseRef);
 
 const exemptSet = loadExemptSet();
 
-const addedJs = gitDiff("A", baseRef).filter((f) =>
-  f.match(/^packages\/gofish-graphics\/stories\/.*\.stories\.tsx$/)
+const jsStoryPathRe = new RegExp(
+  `^(${JS_STORY_ROOTS.map((r) => r.replace(/\//g, "\\/")).join(
+    "|"
+  )})\\/.*\\.stories\\.tsx$`
 );
-const deletedJs = gitDiff("D", baseRef).filter((f) =>
-  f.match(/^packages\/gofish-graphics\/stories\/.*\.stories\.tsx$/)
-);
-const modifiedJs = gitDiff("M", baseRef).filter((f) =>
-  f.match(/^packages\/gofish-graphics\/stories\/.*\.stories\.tsx$/)
-);
+const addedJs = gitDiff("A", baseRef).filter((f) => f.match(jsStoryPathRe));
+const deletedJs = gitDiff("D", baseRef).filter((f) => f.match(jsStoryPathRe));
+const modifiedJs = gitDiff("M", baseRef).filter((f) => f.match(jsStoryPathRe));
 const allChangedFiles = new Set(gitDiff("ACDMRT", baseRef));
 
 const results: SyncResult[] = [];

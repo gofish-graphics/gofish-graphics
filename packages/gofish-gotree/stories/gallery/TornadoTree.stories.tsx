@@ -48,7 +48,7 @@ const meta: Meta = { title: "GoTree / Gallery / TornadoTree" };
 export default meta;
 
 const TH = 0.13; // fixed angular width per node (radians, via emX) — thin slivers
-const LEAF_H = 12; // leaf radial thickness (r units, via emY)
+const LEAF_H = 59; // leaf radial thickness (r units, via emY)
 
 const node = (d: any) =>
   d.height === 0
@@ -81,13 +81,13 @@ export const TornadoTree: StoryObj = {
           // θ: offset parent from its subtree → the spiral twist (winds the arm).
           x: { kind: "distribute", spacing: 0.55, anchor: "middle" },
           // r: parent's band ENCLOSES the subtree (dsl Root "include").
-          y: { kind: "nest", pad: 9 },
+          y: { kind: "nest", pad: 44 },
         }),
         sibling: combine({
           // θ: step siblings angularly (tight → packs the curl).
           x: { kind: "distribute", spacing: 0.42, anchor: "middle" },
           // r: step siblings radially too → fans the level outward (tornado).
-          y: { kind: "distribute", spacing: 9, anchor: "middle" },
+          y: { kind: "distribute", spacing: 44, anchor: "middle" },
         }),
         coord: Coord.polar(),
       },
