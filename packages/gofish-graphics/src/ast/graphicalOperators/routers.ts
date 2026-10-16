@@ -166,14 +166,48 @@ const linearRouter: Router = (b0, b1) => [
 ];
 
 /**
- * Cubic bezier with both control points at the main-axis midpoint — the
- * d3.linkVertical/linkHorizontal convention, and GoTree's `curve` link (`se`).
- * This is the correct center-mode bezier (the old inline center-mode bezier
- * degraded to a straight line).
+ * Cubic bezier. With no `controls`, both control points sit at the main-axis
+ * midpoint — the d3.linkVertical/linkHorizontal convention, and GoTree's
+ * `curve` link (`se`). This is the correct center-mode bezier (the old inline
+ * center-mode bezier degraded to a straight line).
+ *
+ * With `controls: [[t0, h0], [t1, h1]]`, each control point is the point a
+ * fraction `t` of the way along the chord c0 → c1, moved `h` chord lengths
+ * across it, to the left of the direction of travel as drawn on screen. The
+ * router's frame is the screen's (y grows down, as `arcRouter`'s "up" bulge
+ * toward -y shows), so the left normal of a unit direction (dx, dy) is
+ * (dy, -dx): up for a chord running left to right.
  */
-const bezierRouter: Router = (b0, b1, { dir }) => {
+const bezierRouter: Router = (b0, b1, { dir, opts }) => {
   const c0 = centerPoint(b0);
   const c1 = centerPoint(b1);
+  const controls = opts?.controls as [number, number][] | undefined;
+  if (controls !== undefined) {
+    if (
+      !Array.isArray(controls) ||
+      controls.length !== 2 ||
+      !controls.every(
+        (c) =>
+          Array.isArray(c) &&
+          c.length === 2 &&
+          c.every((v) => typeof v === "number" && Number.isFinite(v))
+      )
+    ) {
+      throw new Error(
+        `[gofish] Curve.bezier({ controls }): a cubic bezier has exactly two ` +
+          `control points, each [t, h] (t along the chord, h across it), got ` +
+          `${JSON.stringify(controls)}.`
+      );
+    }
+    const [dx, dy] = [c1[0] - c0[0], c1[1] - c0[1]];
+    // (dy, -dx) is the left normal scaled by the chord's length, so h is in
+    // chord lengths with no division.
+    const at = ([t, h]: [number, number]): Point => [
+      c0[0] + t * dx + h * dy,
+      c0[1] + t * dy - h * dx,
+    ];
+    return [curve(c0, at(controls[0]), at(controls[1]), c1)];
+  }
   const mid = (c0[dir] + c1[dir]) / 2;
   const control1 = byAxis(dir, mid, c0[1 - dir]);
   const control2 = byAxis(dir, mid, c1[1 - dir]);

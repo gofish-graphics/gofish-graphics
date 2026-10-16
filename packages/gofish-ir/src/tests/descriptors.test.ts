@@ -274,9 +274,9 @@ const SCHEMA_STRATEGY_KEYS: Record<
     monotone: {},
     smooth: {},
     catmullRom: {},
-    bezier: {},
+    bezier: { controls: true },
     orthogonal: { bend: true },
-    arc: { direction: true },
+    arc: { direction: true, height: true },
     perfectArrows: {
       bow: true,
       stretch: true,

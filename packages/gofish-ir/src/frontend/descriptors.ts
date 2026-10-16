@@ -557,8 +557,16 @@ export const STRATEGIES = {
         params: {},
       },
       bezier: {
-        doc: "Cubic bezier between each pair of points (the d3 `linkVertical`/`linkHorizontal` convention).",
-        params: {},
+        doc: "Cubic bezier between each pair of points. Omitted `controls`, both control points sit at the main-axis midpoint (the d3 `linkVertical`/`linkHorizontal` convention).",
+        params: {
+          controls: {
+            type: t.tuple(
+              t.tuple(t.number, t.number),
+              t.tuple(t.number, t.number)
+            ),
+            doc: "The two control points, each `[t, h]` relative to the chord from the source point to the target point: `t` is the fraction of the way along the chord, and `h` the offset across it as a fraction of the chord's length, positive to the left of the direction of travel on screen (up, for a chord running left to right: the side `Curve.arc()` bulges toward by default). `[[0.25, 0.5], [0.75, 0.5]]` lifts both control points half a chord length above the points a quarter and three quarters of the way along.",
+          },
+        },
       },
       orthogonal: {
         doc: "Right-angle elbow bending at the main-axis midpoint (GoTree orthogonal).",

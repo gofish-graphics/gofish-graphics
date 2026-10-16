@@ -46,8 +46,20 @@ export const smooth = (): Curve => ({ kind: "smooth" });
 /** A centripetal Catmull-Rom through the points on screen. */
 export const catmullRom = (): Curve => ({ kind: "catmullRom" });
 
-/** Cubic bezier (d3.linkVertical/horizontal convention). */
-export const bezier = (): Curve => ({ kind: "bezier" });
+/**
+ * Cubic bezier between each pair of points. Omitted `controls`, both control
+ * points sit at the main-axis midpoint (d3.linkVertical/horizontal
+ * convention). `controls: [[t0, h0], [t1, h1]]` places them relative to the
+ * chord from the source to the target point: `t` along the chord (0 at the
+ * source, 1 at the target), `h` across it, as a fraction of the chord's
+ * length, positive to the LEFT of the direction of travel on screen (up for
+ * a chord running left to right, the side `Curve.arc()` bulges toward by
+ * default). Exactly two control points: it is a cubic.
+ */
+export const bezier = (params: Params<"bezier"> = {}): Curve => ({
+  kind: "bezier",
+  ...params,
+});
 
 /**
  * Right-angle elbow bending at the main-axis midpoint (GoTree orthogonal). The

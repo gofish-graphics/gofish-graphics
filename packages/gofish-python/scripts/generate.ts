@@ -701,6 +701,8 @@ function describeType(type: FieldType): string {
         : `one of ${type.values.map((v) => JSON.stringify(v)).join(", ")}`;
     case "union":
       return type.options.map(describeType).join(" or ");
+    case "tuple":
+      return `a list of ${type.items.length} [${type.items.map(describeType).join(", ")}]`;
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }
@@ -717,6 +719,12 @@ function pyTypeTest(type: FieldType, v: string): string {
       return `isinstance(${v}, str)`;
     case "boolean":
       return `isinstance(${v}, bool)`;
+    case "tuple":
+      return [
+        `isinstance(${v}, (list, tuple))`,
+        `len(${v}) == ${type.items.length}`,
+        ...type.items.map((item, i) => `(${pyTypeTest(item, `${v}[${i}]`)})`),
+      ].join(" and ");
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }
@@ -749,6 +757,12 @@ function pyValueChecks(
       return fail(
         `${v} not in (${type.values.map((s) => JSON.stringify(s)).join(", ")}${type.values.length === 1 ? "," : ""})`,
         `must be ${describeType(whole)}`
+      );
+    case "tuple":
+      // The element types are checked already (`pyTypeTest`); their own
+      // bounds are checked here, element by element.
+      return type.items.flatMap((item, i) =>
+        pyValueChecks(item, item, `${v}[${i}]`, label)
       );
     default:
       return [];

@@ -30,9 +30,9 @@ Curve.step();
 Curve.monotone();
 Curve.smooth();
 Curve.catmullRom();
-Curve.bezier();
+Curve.bezier({ controls?: [[t, h], [t, h]] });
 Curve.orthogonal({ bend?: "auto" });
-Curve.arc({ direction?: "up" | "down" });
+Curve.arc({ direction?: "up" | "down", height? });
 Curve.perfectArrows({ bow?, stretch?, stretchMin?, stretchMax?, padStart?, padEnd?, flip?, straights? });
 ```
 
@@ -50,17 +50,17 @@ import { monotone } from "gofish-graphics/curve"; // the same function as Curve.
 
 ## Members
 
-| Member                  | What it draws                                                           | Read over time |
-| ----------------------- | ----------------------------------------------------------------------- | -------------- |
-| `Curve.step()`          | Each value holds until the next point, and then jumps.                  | yes            |
-| `Curve.linear()`        | Straight segments from point to point.                                  | yes            |
-| `Curve.monotone()`      | A smooth curve that turns exactly on the points.                        | yes            |
-| `Curve.smooth()`        | Rounder peaks that can pass a little beyond their points.               | yes            |
-| `Curve.catmullRom()`    | A centripetal Catmull-Rom spline through the points on the screen.      | no             |
-| `Curve.bezier()`        | A cubic bezier between each pair of points (d3's `linkVertical`).       | no             |
-| `Curve.orthogonal()`    | A right-angle elbow that bends at the midpoint of the connector's axis. | no             |
-| `Curve.arc()`           | A half circle through both points.                                      | no             |
-| `Curve.perfectArrows()` | The arc between two boxes that the perfect-arrows library draws.        | no             |
+| Member                  | What it draws                                                                                                           | Read over time |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `Curve.step()`          | Each value holds until the next point, and then jumps.                                                                  | yes            |
+| `Curve.linear()`        | Straight segments from point to point.                                                                                  | yes            |
+| `Curve.monotone()`      | A smooth curve that turns exactly on the points.                                                                        | yes            |
+| `Curve.smooth()`        | Rounder peaks that can pass a little beyond their points.                                                               | yes            |
+| `Curve.catmullRom()`    | A centripetal Catmull-Rom spline through the points on the screen.                                                      | no             |
+| `Curve.bezier()`        | A cubic bezier between each pair of points (d3's `linkVertical`), or with `controls` placed along and across the chord. | no             |
+| `Curve.orthogonal()`    | A right-angle elbow that bends at the midpoint of the connector's axis.                                                 | no             |
+| `Curve.arc()`           | A half circle through both points.                                                                                      | no             |
+| `Curve.perfectArrows()` | The arc between two boxes that the perfect-arrows library draws.                                                        | no             |
 
 A curve that is read over time can also move a mark: `time.transition()`,
 `Animation.tween()` and `interpolate()` take only those four.

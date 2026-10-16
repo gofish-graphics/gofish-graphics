@@ -43,9 +43,30 @@ def catmull_rom() -> Dict[str, Any]:
     return {"kind": "catmullRom"}
 
 
-def bezier() -> Dict[str, Any]:
-    """Cubic bezier between each pair of points (the d3 `linkVertical`/`linkHorizontal` convention)."""
-    return {"kind": "bezier"}
+def bezier(*, controls: Optional[tuple] = None) -> Dict[str, Any]:
+    """Cubic bezier between each pair of points. Omitted `controls`, both control points sit at the main-axis midpoint (the d3 `linkVertical`/`linkHorizontal` convention).
+
+    Args:
+        controls: The two control points, each `[t, h]` relative to the chord from the source point to the target point: `t` is the fraction of the way along the chord, and `h` the offset across it as a fraction of the chord's length, positive to the left of the direction of travel on screen (up, for a chord running left to right: the side `Curve.arc()` bulges toward by default). `[[0.25, 0.5], [0.75, 0.5]]` lifts both control points half a chord length above the points a quarter and three quarters of the way along.
+    """
+    if controls is not None:
+        if not (isinstance(controls, (list, tuple)) and len(controls) == 2 and (isinstance(controls[0], (list, tuple)) and len(controls[0]) == 2 and (isinstance(controls[0][0], (int, float)) and not isinstance(controls[0][0], bool)) and (isinstance(controls[0][1], (int, float)) and not isinstance(controls[0][1], bool))) and (isinstance(controls[1], (list, tuple)) and len(controls[1]) == 2 and (isinstance(controls[1][0], (int, float)) and not isinstance(controls[1][0], bool)) and (isinstance(controls[1][1], (int, float)) and not isinstance(controls[1][1], bool)))):
+            raise TypeError(f"Curve.bezier(controls=...) must be a list of 2 [a list of 2 [a number, a number], a list of 2 [a number, a number]], got {type(controls).__name__}")
+        if math.isnan(controls[0][0]):
+            raise ValueError(f"Curve.bezier(controls=...) must not be NaN, got {controls[0][0]!r}")
+        if math.isnan(controls[0][1]):
+            raise ValueError(f"Curve.bezier(controls=...) must not be NaN, got {controls[0][1]!r}")
+        if math.isnan(controls[1][0]):
+            raise ValueError(f"Curve.bezier(controls=...) must not be NaN, got {controls[1][0]!r}")
+        if math.isnan(controls[1][1]):
+            raise ValueError(f"Curve.bezier(controls=...) must not be NaN, got {controls[1][1]!r}")
+    out: Dict[str, Any] = {"kind": "bezier"}
+    for _k, _v in [
+        ("controls", controls),
+    ]:
+        if _v is not None:
+            out[_k] = _v
+    return out
 
 
 def orthogonal(*, bend: Optional[str] = None) -> Dict[str, Any]:

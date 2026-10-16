@@ -530,7 +530,10 @@ export type CurveIR =
   | { kind: "monotone" }
   | { kind: "smooth" }
   | { kind: "catmullRom" }
-  | { kind: "bezier" }
+  | {
+      kind: "bezier";
+      controls?: [[number, number], [number, number]];
+    }
   | { kind: "orthogonal"; bend?: "auto" }
   | { kind: "arc"; direction?: "up" | "down"; height?: number }
   | {
