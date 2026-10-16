@@ -769,6 +769,23 @@ report their size).
   the chart's frame (`frameChart`), so the frame's literal size is the plot:
   the frame adds the gutters its content's claims give around a plot of that
   size (`guttersAroundPlot`), and claims that total.
+- **The plot leaves out dressing.** Dressing is what is placed beside a node
+  the claim walk places elsewhere: a value label beside its bar's `ref`, a
+  tier of texts seated beside the bars of another tier, and a ring's axes,
+  seated beside the stand-in for its content. Each node has a plot claim
+  next to its claim (`GoFishNode.resolvePlotExtent`): a layer composes its
+  children's plot claims the way it composes their claims, its hull of what
+  its constraints place leaves out the dressing (`placeByClaims`' plot
+  hull), and a chain with a stand-in is laid by every part but reaches only
+  as far as its stand-ins (`chainFold`'s `reaches`). A chain's other parts
+  count whole, so a label that hangs off one part of a chain takes room
+  between the parts and is part of the plot. A child that reads y the other
+  way has its plot read reflected within its box. The gutters of a chart
+  are its claim past the plot claim of its content (`claims` in
+  `chromeGutters.ts`), so a chart with a size of its own maps that plot into
+  its size, and its labels, like its chrome, add around it (#1032). A node
+  with a size of its own is a part of its parent's plot, chrome and labels
+  included.
 
 At the root, `layout()` measures what the root draws past its box after its
 one layout (`drawnOverflow`): its ink. A node's box holds what it draws,

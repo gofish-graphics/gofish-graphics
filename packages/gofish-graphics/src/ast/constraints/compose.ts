@@ -700,7 +700,12 @@ export function composePlanExtents(
   plan: ComposePlan,
   composed: ComposedSpaces,
   childExtents: Size<Extent | undefined>[],
-  childSpaces: Size<UnderlyingSpace>[]
+  childSpaces: Size<UnderlyingSpace>[],
+  // The plot's claim instead (`GoFishNode.resolvePlotExtent`): each child's
+  // plot claim, and which children are stand-ins. A chain with a stand-in
+  // is laid by every part and reaches only as far as its stand-ins: its
+  // other parts are dressing laid beside them.
+  plot?: { extents: Size<Extent | undefined>[]; standIn: boolean[] }
 ): {
   covered: [boolean, boolean];
   extents: [Extent | undefined, Extent | undefined];
@@ -716,22 +721,28 @@ export function composePlanExtents(
     const space = composed.spaces[axis];
     if (fragments === undefined || space === undefined) continue;
     covered[axis] = true;
+    const reached = plot?.extents ?? childExtents;
+    const reaches = (idx: number[]) =>
+      plot !== undefined && idx.some((i) => plot.standIn[i])
+        ? idx.map((i) => plot.standIn[i])
+        : undefined;
     const fragmentExtent = (f: Fragment): Extent | undefined =>
       f.kind === "distribute"
         ? distributeExtentFold(
             f.seg.idx.map((i) => childExtents[i][axis]),
             f.seg.idx.map((i) => childSpaces[i][axis]),
             f.space,
-            foldOptions(f.seg)
+            foldOptions(f.seg),
+            reaches(f.seg.idx)
           )
         : f.kind === "align"
           ? resolveAlignmentExtent(
-              f.al.idx.map((i) => childExtents[i][axis]),
+              f.al.idx.map((i) => reached[i][axis]),
               f.al.idx.map((i) => childSpaces[i][axis]),
               f.al.anchor,
               f.space
             )
-          : childExtents[f.index][axis];
+          : reached[f.index][axis];
     const extent = unionChildExtents(
       fragments.map((f) => axisSize(fragmentExtent(f), axis, undefined)),
       fragments.map((f) => axisSize(f.space, axis, UNDEFINED)),

@@ -91,9 +91,12 @@ import {
 } from "../constraints/proposalPlan";
 import {
   constrainedOn,
+  negate,
+  plus,
   placeByClaims,
   type BoxForm,
   type ClaimChild,
+  type ClaimPlacement,
 } from "../constraints/claimPlacement";
 import { placementIn } from "../placementClaims";
 import {
@@ -226,6 +229,24 @@ function applyRelationalZBelowDefaults(
 }
 
 const sum = ([a, b]: [number, number]) => a + b;
+
+/** `child`'s plot claim (`GoFishNode.resolvePlotExtent`) in `parent`'s axis
+ *  order. A child that reads y the other way is read reflected: its box is
+ *  the same, and its plot lies at the other end of it. */
+const plotIn = (
+  child: GoFishNode,
+  parent: GoFishNode
+): Size<Extent | undefined> => {
+  const plot = child.resolvePlotExtent();
+  const full = child.resolveExtent();
+  if (plot === full || child.yFrame.direction === parent.yFrame.direction)
+    return plot;
+  const [f, p] = [full[1], plot[1]];
+  if (f === undefined || p === undefined || f === p) return plot;
+  // Reflected about the box `[−d, a]`: x ↦ (a − d) − x.
+  const span = plus(f.ascent, negate(f.descent));
+  return [plot[0], Extent(plus(span, p.descent), plus(negate(span), p.ascent))];
+};
 
 /** The pixels a chart's chrome adds around its plot on `axis`, for a chart
  *  with a size of its own `px` there. A chart's own `w`/`h` is its plot
@@ -633,6 +654,10 @@ export const layer = createNodeOperatorSequential(
           // scope solved at or above the layer leaves them room. An axis a
           // constraint fold already composed (or a grid's track axis) has
           // every child in it.
+          const placements: [
+            ClaimPlacement | undefined,
+            ClaimPlacement | undefined,
+          ] = [undefined, undefined];
           for (const axis of [0, 1] as const) {
             inkChildren[axis] = new Set();
             if (covered[axis]) continue;
@@ -640,6 +665,7 @@ export const layer = createNodeOperatorSequential(
               continue;
             if (claimPlaced[axis].size === 0) continue;
             const p = node._placeChildren!(axis, effectiveExtents);
+            placements[axis] = p;
             inkChildren[axis] = p.ink;
             if (p.ascent === undefined || p.descent === undefined) continue;
             const own = resolved[axis];
@@ -652,6 +678,71 @@ export const layer = createNodeOperatorSequential(
             // the layer fill it too: it claims no fixed room.
             else if (!ownSetFills(axis, effectiveExtents))
               resolved[axis] = Extent(p.ascent, p.descent);
+          }
+          // The plot's claim (`GoFishNode.resolvePlotExtent`): the same
+          // steps over the children's plot claims, with the hull of what
+          // the constraints place leaving out the dressing, and a chain with
+          // a stand-in reaching only as far as its stand-ins. A chain's
+          // other parts count whole: what hangs off a part inside a chain
+          // takes room between the parts, so it is part of the plot.
+          const childPlots = applyNestExtentPlan(
+            node.children.map((c) =>
+              c instanceof GoFishNode ? plotIn(c, node) : c.resolveExtent()
+            ),
+            t.effectiveChildren,
+            t.nestPlan
+          );
+          const plot: [Extent | undefined, Extent | undefined] = [
+            resolveLayerAxisExtent(
+              childPlots,
+              t.effectiveChildren,
+              0,
+              scale[0],
+              t.posDomains.x,
+              t.base.union[0],
+              t.base.spaces[0],
+              claimPlaced[0]
+            ),
+            resolveLayerAxisExtent(
+              childPlots,
+              t.effectiveChildren,
+              1,
+              scale[1],
+              t.posDomains.y,
+              t.base.union[1],
+              t.base.spaces[1],
+              claimPlaced[1]
+            ),
+          ];
+          for (const axis of [0, 1] as const) {
+            if (covered[axis]) {
+              plot[axis] = composePlanExtents(
+                t.plan!,
+                t.composed!,
+                effectiveExtents,
+                t.effectiveChildren,
+                {
+                  extents: childPlots,
+                  standIn: node.children.map((c) => c instanceof GoFishRef),
+                }
+              ).extents[axis];
+              continue;
+            }
+            if (t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis])) {
+              plot[axis] = undefined;
+              continue;
+            }
+            const p = placements[axis];
+            if (p?.plotAscent === undefined || p.plotDescent === undefined)
+              continue;
+            const own = plot[axis];
+            if (own !== undefined)
+              plot[axis] = Extent(
+                Monotonic.envelope([own.ascent, p.plotAscent]),
+                Monotonic.envelope([own.descent, p.plotDescent])
+              );
+            else if (!ownSetFills(axis, effectiveExtents))
+              plot[axis] = Extent(p.plotAscent, p.plotDescent);
           }
           // The content's claim, which `layout` solves against the layer's box
           // when the layer is sized. A data-valued size reports the claim of
@@ -707,7 +798,7 @@ export const layer = createNodeOperatorSequential(
                   Monotonic.adds(claim.descent, -min)
                 );
           };
-          return ([0, 1] as const).map((axis) => {
+          const claims = ([0, 1] as const).map((axis) => {
             const size = dims[axis].size;
             if (isValue(size)) return impliedExtent(spaces[axis]);
             if (typeof size === "number")
@@ -717,6 +808,12 @@ export const layer = createNodeOperatorSequential(
               );
             return at(axis, resolved[axis]);
           }) as [Extent | undefined, Extent | undefined];
+          // A node with a size of its own is a part of its parent's plot,
+          // chrome and dressing included.
+          node._plotExtent = ([0, 1] as const).map((axis) =>
+            dims[axis].size !== undefined ? claims[axis] : at(axis, plot[axis])
+          ) as [Extent | undefined, Extent | undefined];
+          return claims;
         },
         layout: (size, scales, children, node, region) => {
           // This layer's y direction: its children and constraints are read

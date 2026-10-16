@@ -1196,8 +1196,8 @@ def _chart_opts(*, w: Optional[float] = None, h: Optional[float] = None, coord: 
     """Chart-level options for chart(data, **options).
 
     Args:
-        w: Width of the chart's plot in pixels. Its axes, titles and legend add around it.
-        h: Height of the chart's plot in pixels. Its axes, titles and legend add around it.
+        w: Width of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it.
+        h: Height of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it.
         coord: Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ...
         color: Color scale for every mark, made by a call in the Color family: Color.palette(...) or Color.gradient(...).
         axes: Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead. Default true.

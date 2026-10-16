@@ -841,11 +841,11 @@ function strategyType(
 export const CHART_OPTIONS: FieldGroup = group({
   w: {
     type: t.number,
-    doc: "Width of the chart's plot in pixels. Its axes, titles and legend add around it.",
+    doc: "Width of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it.",
   },
   h: {
     type: t.number,
-    doc: "Height of the chart's plot in pixels. Its axes, titles and legend add around it.",
+    doc: "Height of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it.",
   },
   coord: {
     type: t.any,

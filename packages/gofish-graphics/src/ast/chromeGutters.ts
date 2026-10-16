@@ -21,8 +21,10 @@ import { originIs } from "./underlyingSpace";
  * the chrome its room, and the layout reads the gutters off the claims at
  * the size it lays the chart out at, with no second layout.
  *
- * On an axis where the plot has a claim, the gutters are the chart's claim
- * past the plot's, both widened to the keyed domain the chart maps, at the
+ * The plot is the chart's content without its dressing
+ * (`GoFishNode.resolvePlotExtent`): a label placed beside a mark adds
+ * around the plot, as chrome does. On an axis where the plot has a claim,
+ * the gutters are the chart's claim past the plot's, both widened to the keyed domain the chart maps, at the
  * σ the chart is laid out at. Where the plot fills the room it is given (a
  * category axis), the rings' claims are built around a plot of size X
  * (`ringsAround`), and the plot's size is the X at which they fill the
@@ -59,7 +61,9 @@ function claims(
   axis: 0 | 1
 ): { chart: Extent; plot: Extent } | undefined {
   const chartClaim = chart.resolveExtent()[axis];
-  const plotClaim = chart.chrome!.content.resolveExtent()[axis];
+  // The plot is the content without its dressing (a value label beside
+  // its bar): like chrome, dressing adds around the plot (#1032).
+  const plotClaim = chart.chrome!.content.resolvePlotExtent()[axis];
   if (chartClaim === undefined || plotClaim === undefined) return undefined;
   const keyed = chart.tryGetRenderSession()?.keyedDomains;
   const space = chart._underlyingSpace?.[axis];

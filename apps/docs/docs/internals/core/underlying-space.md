@@ -525,6 +525,13 @@ each inherent to what the origin states are:
   takes room in the same claim, which narrows the bands. A scope whose axis
   mixes data with bands of no size keeps them as before: the bands claim
   nothing and share what the data leaves.
+- **A plot claim beside the claim**: the claim folds also compute the
+  claim of the plot, which leaves out dressing (a label placed beside a
+  `ref` stand-in for its mark). A chain with a stand-in is laid by every
+  part but reaches only as far as its stand-ins (`chainFold`'s `reaches`,
+  `composePlanExtents`' `plot`). A chart with a size of its own maps its plot
+  into that size (see
+  [Chrome gutters](/internals/layout/passes#chrome-gutters)).
 - **Alignment establishes a baseline; it does not pin**: aligning or
   overlaying free children gives a free result with one shared baseline
   (`overlayOrigin`: pinned only when a child is pinned, none when a child has

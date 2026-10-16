@@ -527,6 +527,9 @@ export class GoFishNode {
   private _resolveExtent: ResolveExtent;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   public _extent?: Size<Extent | undefined> = undefined;
+  /** Set by a node's claim hook when its plot claim differs from its claim
+   *  (see {@link resolvePlotExtent}); cleared with the claims. */
+  public _plotExtent?: Size<Extent | undefined> = undefined;
   /** Memo of {@link carriesData} and {@link sharesRoom}, cleared with the
    *  claims. */
   private _carriesData?: [boolean | undefined, boolean | undefined];
@@ -1134,6 +1137,19 @@ export class GoFishNode {
   }
 
   /**
+   * The claim of this node's plot: its claim without its dressing, what is
+   * placed beside a node the claim walk places elsewhere (a value label
+   * beside its bar's ref, an axis beside the content it dresses). A node
+   * with a size of its own maps its plot into that size, and its dressing,
+   * like its chrome, adds around it (#1032). A layer computes it with its
+   * claim (`placeByClaims`' plot hull); any other node's plot is its claim.
+   */
+  public resolvePlotExtent(): Size<Extent | undefined> {
+    const extent = this.resolveExtent();
+    return this._plotExtent ?? extent;
+  }
+
+  /**
    * Whether something data sizes or places on `axis` composes into this
    * node's claim: its type there is continuous, or a child's is, short of a
    * child with a size of its own (a σ-scope of its own, which claims its
@@ -1200,6 +1216,7 @@ export class GoFishNode {
     this._underlyingSpace = undefined;
     this._yFrame = undefined;
     this._extent = undefined;
+    this._plotExtent = undefined;
     this._carriesData = undefined;
     this._sharesRoom = undefined;
     this._sharing = undefined;

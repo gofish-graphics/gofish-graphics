@@ -87,6 +87,10 @@ export type ClaimPlacement = {
    *  when none takes room. */
   ascent?: Monotonic.Monotonic;
   descent?: Monotonic.Monotonic;
+  /** The hull of the placed children that are not dressing (see
+   *  {@link placeByClaims}), or undefined when every one is. */
+  plotAscent?: Monotonic.Monotonic;
+  plotDescent?: Monotonic.Monotonic;
   /** The children that draw on the axis but are ink there: they take no
    *  room. (A stand-in draws nothing, so it is not among them.) */
   ink: Set<number>;
@@ -322,6 +326,26 @@ export function placeByClaims(
     if (c.extent === undefined && !c.standIn && !spanned.has(i))
       unplaced.add(i);
   });
+  // Dressing: what is placed beside a node the claim walk places elsewhere
+  // (a value label beside its bar's ref). It takes room, but it is not part
+  // of the plot: a node with a size of its own maps its plot into that
+  // size, and its dressing, like its chrome, adds around it (#1032). The
+  // stand-in itself is the node it stands for, a part of the plot.
+  const placedName = (name: string): boolean => {
+    const op = operands.get(name);
+    if (op === undefined) return false;
+    if (!op.direct) return nestedPlaced.has(name);
+    return presetOf(op.child) !== undefined;
+  };
+  const dressingRoots = new Set(
+    [...parent.keys()].filter(placedName).map(find)
+  );
+  const dressing = new Set<number>();
+  for (const n of parent.keys()) {
+    const op = operands.get(n);
+    if (op === undefined || !op.direct || children[op.child].standIn) continue;
+    if (dressingRoots.has(find(n))) dressing.add(op.child);
+  }
   // What the solve leaves out: the ink, and the stand-ins it cannot place.
   const out = (i: number) =>
     ink.has(i) || (children[i].standIn && children[i].placed === undefined);
@@ -496,11 +520,18 @@ export function placeByClaims(
     if (!unplaced.has(i))
       boxes.set(i, { lo: edge(i, 0, 1), hi: edge(i, 1, 1) });
   if (hullOf.length === 0) return { ink, boxes };
+  const plotOf = hullOf.filter((i) => !dressing.has(i));
   return {
     ink,
     boxes,
     ascent: Monotonic.envelope(hullOf.map((i) => edge(i, 1, 1))),
     descent: Monotonic.envelope(hullOf.map((i) => edge(i, 0, -1))),
+    ...(plotOf.length === 0
+      ? {}
+      : {
+          plotAscent: Monotonic.envelope(plotOf.map((i) => edge(i, 1, 1))),
+          plotDescent: Monotonic.envelope(plotOf.map((i) => edge(i, 0, -1))),
+        }),
   };
 }
 

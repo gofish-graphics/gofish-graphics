@@ -484,26 +484,35 @@ const spreadRule = (anchor: AlignAnchor | "edge"): ChainRule => ({
  * It runs in numbers (a data extent, or a claim at one σ) or in Monotonics
  * (a claim as a function of σ, exact and invertible while the parts are
  * linear or piecewise).
+ *
+ * With `reaches`, the chain is laid by every part but reaches only as far
+ * as the parts `reaches` marks: the plot of a chain whose other parts are
+ * dressing (a label laid beside a stand-in for its bar; see
+ * `GoFishNode.resolvePlotExtent`).
  */
 function chainFold<T>(
   A: Arith<T>,
   parts: Sides<T>[],
   rule: ChainRule,
   spacing: number,
-  origin: StackOrigin<number> = { part: 0, fraction: 0, mirrored: false }
+  origin: StackOrigin<number> = { part: 0, fraction: 0, mirrored: false },
+  reaches?: boolean[]
 ): Sides<T> {
-  const up: T[] = [A.zero];
-  const down: T[] = [A.zero];
+  const up: T[] = reaches === undefined ? [A.zero] : [];
+  const down: T[] = reaches === undefined ? [A.zero] : [];
   let at = A.zero;
   let zero = A.zero;
   parts.forEach((part, k) => {
     const seat = rule.seat(A, part);
     const step = rule.step(A, part, spacing);
-    up.push(A.add(at, seat.ascent));
-    down.push(A.add(seat.descent, A.scale(-1, at)));
+    if (reaches === undefined || reaches[k]) {
+      up.push(A.add(at, seat.ascent));
+      down.push(A.add(seat.descent, A.scale(-1, at)));
+    }
     if (k === origin.part) zero = A.add(at, A.scale(origin.fraction, step));
     at = A.add(at, step);
   });
+  if (up.length === 0) return { ascent: A.zero, descent: A.zero };
   return {
     ascent: A.add(A.max(up), A.scale(-1, zero)),
     descent: A.add(A.max(down), zero),
@@ -517,7 +526,8 @@ function chainClaim(
   parts: Extent[],
   rule: ChainRule,
   spacing: number,
-  origin?: StackOrigin<number>
+  origin?: StackOrigin<number>,
+  reaches?: boolean[]
 ): Extent {
   if (
     parts.every(
@@ -529,7 +539,8 @@ function chainClaim(
       parts,
       rule,
       spacing,
-      origin
+      origin,
+      reaches
     );
     return Extent(ascent, descent);
   }
@@ -542,7 +553,8 @@ function chainClaim(
       })),
       rule,
       spacing,
-      origin
+      origin,
+      reaches
     );
   return Extent(
     Monotonic.unknown((sigma) => at(sigma).ascent),
@@ -576,7 +588,10 @@ export function distributeExtentFold(
   targetExtents: (Extent | undefined)[],
   targetSpaces: UnderlyingSpace[],
   space: UnderlyingSpace,
-  opts: DistributeFoldOptions
+  opts: DistributeFoldOptions,
+  // The plot of the chain instead (`chainFold`'s `reaches`): only the
+  // marked parts reach.
+  reaches?: boolean[]
 ): Extent | undefined {
   if (isCONTINUOUS(space)) {
     if (opts.size !== undefined && isValue(opts.size))
@@ -585,7 +600,8 @@ export function distributeExtentFold(
       targetExtents.map((e, i) => tailClaim(targetSpaces[i], e!)),
       STACK,
       0,
-      opts.origin
+      opts.origin,
+      reaches
     );
   }
   if (
@@ -598,9 +614,15 @@ export function distributeExtentFold(
     )
   )
     return undefined;
-  // The chain's type has no data coordinates, so its claim is a box.
-  return Extent(
-    chainClaim(targetExtents as Extent[], spreadRule(opts.anchor), opts.spacing)
-      .width
+  // The chain's type has no data coordinates, so its claim is a box from
+  // its start (its plot, a part of that box, is measured from there too).
+  const chain = chainClaim(
+    targetExtents as Extent[],
+    spreadRule(opts.anchor),
+    opts.spacing,
+    undefined,
+    reaches
   );
+  if (reaches !== undefined) return chain;
+  return Extent(chain.width);
 }

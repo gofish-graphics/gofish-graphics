@@ -93,7 +93,8 @@ chart(data)
 
 When you give a (sub)chart an explicit `w`/`h` on a dimension, its scale on that
 dimension resolves against that pixel box rather than against any larger layout it
-is composed into. That box is the chart's plot: the chart's axes, titles and legend
+is composed into. That box is the chart's plot: the chart's axes, titles and legend,
+and labels placed beside its marks (`.label()`, a tier of texts beside its bars),
 add around it. The axis becomes self-contained: a chart sized this way can be
 dropped into a bigger graphic without sharing — or polluting — the surrounding
 axes with its own units.

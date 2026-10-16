@@ -2953,11 +2953,11 @@ for the API.
       "properties": {
         "w": {
           "$ref": "#/$defs/Number",
-          "description": "Width of the chart's plot in pixels. Its axes, titles and legend add around it."
+          "description": "Width of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it."
         },
         "h": {
           "$ref": "#/$defs/Number",
-          "description": "Height of the chart's plot in pixels. Its axes, titles and legend add around it."
+          "description": "Height of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it."
         },
         "coord": {
           "description": "Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ..."
