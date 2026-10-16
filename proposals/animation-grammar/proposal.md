@@ -3,10 +3,10 @@
 **Summary.**
 
 1. Two containers with one job each. `layer([...])` holds the parts of one picture, which are all present once it is built. `timeline([...])` holds scenes, which are different pictures over time. Spatial clauses go in `layer(...).relate()`, temporal clauses go in `timeline(...).relate()`, and putting one in the other is a loud error.
-2. Every scene has a real interval, the way a mark has a size. `.hold(ms)` sets how long it is on screen. `time.after(a, b, { gap })` places scenes, and `time.transition(a, b)` is a temporal relational mark that fills exactly the gap between them, the way an `arrow` spans the space between two shapes. It takes no duration.
+2. Every scene has a real interval, the way a mark has a size. `.duration(ms)` sets how long it is on screen. `time.after(a, b, { gap })` places scenes, and `time.transition(a, b)` is a temporal relational mark that fills exactly the gap between them, the way an `arrow` spans the space between two shapes. It takes no duration.
 3. A working prototype draws five hard examples in this spelling: stacked ↔ grouped bars, a diagram magic move, R2D3's segue, Periscopic's gun deaths, and a ribbon chart with particles.
 
-**Status.** Version 2, after Josh's review on 2026-10-15. Decided in that review: the separate `timeline` container, duration-free transitions, scene intervals, the hold as a modifier, and arcs drawn with `Curve.arc()`. Five questions remain at the end.
+**Status.** Version 3 (2026-10-15). Decided in Josh's reviews: the separate `timeline` container, transitions with no duration of their own, scene intervals, a scene's length as a `.duration(ms)` modifier, every time size named `duration`, a `time.sequence` whose `duration` works like `spread`'s `w`, `gap` arrays, `Curve.bezier({ controls })`, and `Animation.draw` as the entry for paths. Five questions remain at the end.
 
 Prototype branch: `worktree-animation-grammar-proposal` (Storybook: "Animation/Grammar Prototype/…"). It is throwaway quality, and its shortcuts are listed in the last section.
 
@@ -16,7 +16,8 @@ Prototype branch: `worktree-animation-grammar-proposal` (Storybook: "Animation/G
 
 - **Scene.** One whole picture that is on screen for an interval: the stacked chart, the R2D3 histogram, the year 1975.
 - **Interval.** The time a scene is on screen, from its start to its end. It is the time version of a bounding box. Rhombus pict calls it a "time box".
-- **Hold.** How long a scene stays on screen (`.hold(ms)`). It plays the role of pict's `sustain` and gganimate's `state_length`.
+- **Duration.** Any node's size on the time axis. A scene's duration (`.duration(ms)`) is how long it stays on screen, the role of pict's `sustain` and gganimate's `state_length`. An effect's `duration` is how long it plays, and a sequence's `duration` is its total.
+- **Gap.** The time between two scenes, which a transition fills. It is the time version of `spread`'s spacing.
 - **Transition.** The in-between frames from one scene to the next. It is a relational mark on time: it spans the gap between two scenes the way an `arrow` spans the space between two shapes.
 - **Magic move.** A transition that finds the same object in both scenes and moves it. The name comes from Keynote. Rhombus pict uses `magic_move`, and Motion uses `layoutId`.
 - **Identity.** What makes a mark in one scene "the same" as a mark in another.
@@ -39,14 +40,21 @@ Prototype branch: `worktree-animation-grammar-proposal` (Storybook: "Animation/G
 
 The interval rules:
 
-- A scene's interval is from its start to its start plus its length. The length is `.hold(ms)`, or else the length of the scene's own build-in (0 for a static scene). A hold shorter than the build-in is a loud error.
+- A scene's interval is from its start to its start plus its length. The length is `.duration(ms)`, or else the length of the scene's own build-in (0 for a static scene). A duration shorter than the build-in is a loud error.
 - A scene is drawn only during its own interval. There is no other rule about what stays on screen.
 - `time.after(a, b, { gap })` means b starts `gap` ms after a ends. `time.align({ t: "start" | "end" }, [...])` makes scenes start or end together. A scene no clause places starts at 0. Conflicting clauses and cycles are loud errors.
 - `time.transition(a, b)` spans exactly from a's end to b's start, and neither scene is drawn during it. A zero gap is a cut. A transition between overlapping scenes is a loud error.
 
 Identity is the key join. **A mark is matched by the rows it draws, compared by `key`.** The default key is row identity, which covers a change of encoding over the same data. An explicit `key` (a field name or a function) is needed when the rows differ, as when gapminder's years are separate scenes. `time.sequence({ by })` defaults it to the remaining split fields. Marks that draw no rows, such as the boxes of a hand-built diagram, match by their `.name()` path. That is the one branch, and it exists because those marks have no rows.
 
-`time.sequence(opts, [children])` stays as shorthand. It equals a timeline whose children are joined by `time.after` with a transition in every gap, with an optional `hold` per child.
+`time.sequence(opts, [children])` is the shorthand for the common case, a chain. It lowers literally to a timeline: child i and child i + 1 are joined by `time.after(…, { gap: gap_i })` and a `time.transition`, and `.transition({ update: Animation.tween({ ease, curve }) })` sets every transition's ease and curve. Its options:
+
+- `gap`: one number for every gap, or an array of exactly n − 1 gaps for n scenes (n with `cyclic`, where the last gap is the wrap back to the first scene). Any other length is a loud error that names the expected count. Short arrays are not recycled.
+- `cyclic`: time on a circle. The last scene transitions back into the first.
+- `duration`: works like `spread`'s `w`. Left out, the total is inferred from the scenes' durations plus the gaps. Given, it fixes the total, and the same size solve that fits a `spread` to a fixed `w` decides what flexes: only data-valued scene durations (`.duration(datum(v))`, the twin of `w: datum(…)`). Fixed durations, build-in lengths and gaps never flex, just as `spread` never derives spacing (`chainClaim` in `constraints/distribute.ts`, solved by `claim.width.inverse` in `solver/scopes.ts`).
+- `key`, `playing`, `at` (ms).
+
+The flow form `time.sequence({ by, duration })` is unchanged. Both forms' `duration` is the same thing, the total. The flow form places keyframes by data value, so its total cannot be inferred and defaults to 5000 ms.
 
 ## The five examples
 
@@ -70,8 +78,8 @@ const grouped = () =>
     .mark(rect({ h: "count", fill: "species" }));
 
 timeline([
-  stacked().name("stacked").hold(1800),
-  grouped().name("grouped").hold(1800),
+  stacked().name("stacked").duration(1800),
+  grouped().name("grouped").duration(1800),
   stacked().name("back"),
 ]).relate(({ stacked, grouped, back }) => [
   time.after(stacked, grouped, { gap: 1000 }),
@@ -83,8 +91,8 @@ timeline([
 
 ```python
 timeline([
-    stacked().name("stacked").hold(1800),
-    grouped().name("grouped").hold(1800),
+    stacked().name("stacked").duration(1800),
+    grouped().name("grouped").duration(1800),
     stacked().name("back"),
 ]).relate(lambda: [
     time.after(ref("stacked"), ref("grouped"), gap=1000),
@@ -94,7 +102,7 @@ timeline([
 ])
 ```
 
-The shorthand: `time.sequence({ duration: 4000, hold: 800, cyclic: true }, [stacked(), grouped()]).transition({ update: Animation.tween() })` (`img/e1a.gif`). Bostock's per-lake delay is the existing operator stagger, `spread({ by: "lake", dir: "x" }).transition({ update: time.stagger({ lag: 150 }) })` (`img/e1c.gif`). Heer and Robertson's two stages (x first, then y) are one extra scene in the middle (`img/e1d.gif`).
+The shorthand: `time.sequence({ gap: 1200, cyclic: true }, [stacked().duration(800), grouped().duration(800)]).transition({ update: Animation.tween({ ease: "cubicInOut" }) })` (`img/e1a.gif`). With a fixed total, `time.sequence({ duration: 6000, gap: 1200, cyclic: true }, [stacked().duration(datum(1)), grouped().duration(datum(2))])` solves the scale to 1200 ms per unit, so the scenes stay 1.2 s and 2.4 s (`img/e3-filmstrip.png`). Bostock's per-lake delay is the existing operator stagger, `spread({ by: "lake", dir: "x" }).transition({ update: time.stagger({ lag: 150 }) })` (`img/e1c.gif`). Heer and Robertson's two stages (x first, then y) are one extra scene in the middle (`img/e1d.gif`).
 
 ### 2. Magic move on a hand-built diagram (linked-list insertion)
 
@@ -125,7 +133,7 @@ const list = (nodes, ids) =>
   });
 
 time
-  .sequence({ duration: 6000, cyclic: true }, [s1, s2, s3]) // s1..s3 built with list(...)
+  .sequence({ gap: 2000, cyclic: true }, [s1, s2, s3]) // s1..s3 built with list(...)
   .transition({ update: Animation.tween({ ease: "cubicInOut" }) });
 ```
 
@@ -138,29 +146,21 @@ The Animated Vega-Lite paper (§6.1.1) says "the authors of Data Animator and Ge
 ![r2d3](img/r2d3.gif)
 
 ```js
-timeline([
-  scatterplot().name("scatter").hold(3000),
-  layer([
-    histogram(),
-    threshold().transition({ enter: Animation.fadeIn({ delay: 600 }) }), // a build-in inside the scene
+time
+  .sequence({ gap: [2000, 1400, 1400], cyclic: true }, [
+    scatterplot().duration(3000),
+    layer([
+      histogram(),
+      threshold().transition({ enter: Animation.fadeIn({ delay: 600 }) }), // a build-in inside the scene
+    ]).duration(3000),
+    layer([split(), threshold()]).duration(3000),
   ])
-    .name("histogram")
-    .hold(3000),
-  layer([split(), threshold()]).name("split").hold(3000),
-  scatterplot().name("again"),
-]).relate(({ scatter, histogram, split, again }) => [
-  time.after(scatter, histogram, { gap: 2000 }),
-  time.transition(scatter, histogram),
-  time.after(histogram, split, { gap: 1400 }),
-  time.transition(histogram, split),
-  time.after(split, again, { gap: 1400 }),
-  time.transition(split, again),
-]);
+  .transition({ update: Animation.tween({ ease: "cubicInOut" }) });
 // histogram()'s scatter-by-bin operator carries
 // .transition({ update: time.stagger({ by: field("elevation").sort(), dwell: 0.6 }) })
 ```
 
-The threshold line is a part of the histogram picture, not a scene, so it enters as a build-in. It matches by name into the split scene and stays still. The dots change parents in every scene (scatter, then bin, then pile), and the key join still matches each home.
+R2D3 is a chain, so it is a sequence. The third gap is the wrap from the split back to the scatterplot. Version 2 wrote the same animation as a `timeline` with six clauses and a repeated scatterplot scene. A `timeline` is for timing that is not a chain: scenes that overlap, scenes aligned on their ends, branches. The threshold line is a part of the histogram picture, not a scene, so it enters as a build-in. It matches by name into the split scene and stays still. The dots change parents in every scene (scatter, then bin, then pile), and the key join still matches each home.
 
 ### 4. Periscopic's U.S. Gun Deaths (2013)
 
@@ -191,7 +191,13 @@ const arch = (stroke) =>
         stroke,
         strokeWidth: 1,
         opacity: 0.5,
-        curve: Curve.arc({ height: 0.55 }),
+        // Periscopic's curve: controls at 25% and 75% of the chord, lifted
+        curve: Curve.bezier({
+          controls: [
+            [0.25, LIFT],
+            [0.75, LIFT],
+          ],
+        }),
       },
       [birth, end]
     ),
@@ -209,11 +215,7 @@ const life = layer([
   ]),
   mask([band("age"), arch(ORANGE)]),
 ]).transition({
-  enter: Animation.wipe({
-    from: "left",
-    duration: "potential",
-    ease: "linear",
-  }),
+  enter: Animation.draw({ duration: "potential", ease: "linear" }), // one pen over both copies
 });
 
 const lives = (from, to, arrangement) =>
@@ -234,9 +236,9 @@ layer([
 ]);
 ```
 
-"Life, then stolen years" is no longer two parts in series. It is one left-to-right wipe over the whole arch, which crosses the age of death on its own. The three opening acts are three filtered charts. The acceleration is a named ease on the stagger instead of a formula. That ease is close to the original but not exact: start times differ by up to 19% of the span.
+"Life, then stolen years" is no longer two parts in series. It is one `Animation.draw` along the whole arch, which reaches the age of death on its own. `draw` reveals a stroke along its path by length, using the renderer's own measure (`pathLength`), so it works on any curve. It reveals the orange and grey copies as one pen. The arch is Periscopic's own curve: a cubic with controls at 25% and 75% of the chord. The three opening acts are three filtered charts. The acceleration is a named ease on the stagger instead of a formula. That ease is close to the original but not exact: start times differ by up to 19% of the span.
 
-This rewrite hit four walls, listed under "What the prototype taught".
+Drawing the arc is an entry animation. The orange and grey split is part of the finished picture, a separate, static question. It is still done with masks over age bands, which is a stopgap (see "What the prototype taught").
 
 ### 5. Ribbon chart with particles flowing along the ribbons (Meeks, "Sankey Particles")
 
@@ -271,34 +273,34 @@ This example has not been moved to the timeline. Each particle is an endless loo
 
 Mostly yes. "Exact" means the temporal construct is the spatial one with the time axis substituted, and the same solver math applies. With the timeline split, the analogs below sit in `timeline` when they relate scenes, and in build-ins when they order the parts of one picture.
 
-| Spatial construct             | Temporal analog                                          | Verdict                                             | Precedent                                                                       |
-| ----------------------------- | -------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------- |
-| bounding box                  | scene interval                                           | exact                                               | pict: "a time box's duration is analogous to a bounding box's width or height"  |
-| `w` / `h`                     | `.hold(ms)`                                              | exact in meaning, different in spelling (see below) | gganimate `state_length`, pict `sustain`                                        |
-| fit to a size                 | fit to a total duration                                  | exact                                               | Manim `AnimationGroup`, Gemini `totalDuration`, Firefly glue                    |
-| `layer`                       | `timeline` (scenes share one frame)                      | exact                                               | pict `overlay`/`concurrent`, SMIL `<par>`                                       |
-| `stack`                       | one scene after another                                  | exact                                               | pict `switch`, Gemini `concat`, SMIL `<seq>`, Manim `Succession`                |
-| `spread({ by })`              | `time.stagger({ by })`                                   | exact                                               | Gemini `staggering`, Canis `grouping`, GSAP/Motion `stagger`                    |
-| `scatter` (position by value) | `time.sequence({ by: "year" })` on a time scale          | exact                                               | AVL `time` encoding, gganimate `transition_time`                                |
-| `Constraint.align`            | `time.align({ t: "start" \| "end" })`                    | exact                                               | Allen _starts_/_finishes_, Gemini `sync` anchor                                 |
-| `Constraint.distribute`       | `time.after(a, b, { gap })`                              | exact                                               | SMIL `begin="a.end+1s"`, Madeus `BEFORE`/`MEETS`                                |
-| `Constraint.position`         | start at an absolute time                                | exact                                               | GSAP numeric position, Remotion `from`                                          |
-| `Constraint.nest`, `enclose`  | _during_: live as long as a group                        | exact                                               | Allen _during_, Madeus `DURING`, CAST nesting                                   |
-| `ref` / `selectAll`           | the same objects, with anchors on t (start, middle, end) | exact                                               | SMIL syncbase `a.end`, GSAP labels, pict `Find`                                 |
-| `.name()`                     | identity of data-less marks across scenes                | exact                                               | pict identity, Figma layer names, CSS `view-transition-name`, Motion `layoutId` |
-| `arrow`, `line({ along })`    | `time.transition(a, b)`; its length is the gap           | exact                                               | pict `magic_move`, Remotion `TransitionSeries.Transition`, GoFish paper §8      |
-| connector `curve`             | the path through the in-between frames                   | exact for smoothing, partial for routes             | AE motion paths, SMIL `animateMotion`                                           |
-| `ribbon`                      | split and merge transitions (1:n, n:1)                   | partial                                             | Data Animator, flubber `separate`/`combine`                                     |
-| coordinate transform          | time warp: easing, acceleration, `cyclic`                | partial (must stay monotone)                        | pict `bend`, AE time remapping                                                  |
-| scale                         | time scale, `timer()`                                    | exact (on main)                                     | AVL `time.scale`                                                                |
-| axis                          | scrubber with scene ticks                                | exact in the model, unbuilt                         | player UIs                                                                      |
-| clip, `mask`                  | `time.history({ last })` window                          | exact (on main)                                     | gganimate `shadow_wake`                                                         |
-| `filter`                      | filter by data time                                      | exact (on main)                                     | AVL predicate                                                                   |
-| `label`                       | captions that ride a mark's lifetime                     | partial (#887, #920)                                | Canis                                                                           |
-| z-order                       | none: paint order does not change with time              | none                                                |                                                                                 |
-| `Overlap.separate()`          | none: "no overlap in time" is just `stack`               | none                                                |                                                                                 |
+| Spatial construct             | Temporal analog                                          | Verdict                                                        | Precedent                                                                       |
+| ----------------------------- | -------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| bounding box                  | scene interval                                           | exact                                                          | pict: "a time box's duration is analogous to a bounding box's width or height"  |
+| `w` / `h`                     | `.duration(ms)`                                          | exact in meaning; a modifier rather than an option (see below) | gganimate `state_length`, pict `sustain`                                        |
+| fit to a size                 | fit to a total duration                                  | exact                                                          | Manim `AnimationGroup`, Gemini `totalDuration`, Firefly glue                    |
+| `layer`                       | `timeline` (scenes share one frame)                      | exact                                                          | pict `overlay`/`concurrent`, SMIL `<par>`                                       |
+| `stack`                       | one scene after another                                  | exact                                                          | pict `switch`, Gemini `concat`, SMIL `<seq>`, Manim `Succession`                |
+| `spread({ by })`              | `time.stagger({ by })`                                   | exact                                                          | Gemini `staggering`, Canis `grouping`, GSAP/Motion `stagger`                    |
+| `scatter` (position by value) | `time.sequence({ by: "year" })` on a time scale          | exact                                                          | AVL `time` encoding, gganimate `transition_time`                                |
+| `Constraint.align`            | `time.align({ t: "start" \| "end" })`                    | exact                                                          | Allen _starts_/_finishes_, Gemini `sync` anchor                                 |
+| `Constraint.distribute`       | `time.after(a, b, { gap })`                              | exact                                                          | SMIL `begin="a.end+1s"`, Madeus `BEFORE`/`MEETS`                                |
+| `Constraint.position`         | start at an absolute time                                | exact                                                          | GSAP numeric position, Remotion `from`                                          |
+| `Constraint.nest`, `enclose`  | _during_: live as long as a group                        | exact                                                          | Allen _during_, Madeus `DURING`, CAST nesting                                   |
+| `ref` / `selectAll`           | the same objects, with anchors on t (start, middle, end) | exact                                                          | SMIL syncbase `a.end`, GSAP labels, pict `Find`                                 |
+| `.name()`                     | identity of data-less marks across scenes                | exact                                                          | pict identity, Figma layer names, CSS `view-transition-name`, Motion `layoutId` |
+| `arrow`, `line({ along })`    | `time.transition(a, b)`; its length is the gap           | exact                                                          | pict `magic_move`, Remotion `TransitionSeries.Transition`, GoFish paper §8      |
+| connector `curve`             | the path through the in-between frames                   | exact for smoothing, partial for routes                        | AE motion paths, SMIL `animateMotion`                                           |
+| `ribbon`                      | split and merge transitions (1:n, n:1)                   | partial                                                        | Data Animator, flubber `separate`/`combine`                                     |
+| coordinate transform          | time warp: easing, acceleration, `cyclic`                | partial (must stay monotone)                                   | pict `bend`, AE time remapping                                                  |
+| scale                         | time scale, `timer()`                                    | exact (on main)                                                | AVL `time.scale`                                                                |
+| axis                          | scrubber with scene ticks                                | exact in the model, unbuilt                                    | player UIs                                                                      |
+| clip, `mask`                  | `time.history({ last })` window                          | exact (on main)                                                | gganimate `shadow_wake`                                                         |
+| `filter`                      | filter by data time                                      | exact (on main)                                                | AVL predicate                                                                   |
+| `label`                       | captions that ride a mark's lifetime                     | partial (#887, #920)                                           | Canis                                                                           |
+| z-order                       | none: paint order does not change with time              | none                                                           |                                                                                 |
+| `Overlap.separate()`          | none: "no overlap in time" is just `stack`               | none                                                           |                                                                                 |
 
-**Why the hold is a modifier and not an option like `w`.** A mark's `w` and `h` are options because a mark's shape is its own business. A chart or a layer has no size option either: its size comes from its contents, and an outer operator may fit it. A scene's hold is closer to that. Its intrinsic length is its build-in, and the timeline places it. `.hold(ms)` then says "stay longer than your contents need", which reads like `.name()`, a fact the container uses. The tension is real: the strict spatial twin would be a size claim on the scene. If more cases appear where a container must fit scenes into a total time, a fit operator on the timeline may be the better home.
+**Why a scene's duration is a modifier and not an option like `w`.** A mark's `w` is an option because a mark's shape is its own business. A chart or a layer has no size option either: its size comes from its contents, and an outer operator may fit it. A scene is similar. Its intrinsic length is its build-in, and the timeline places it. `.duration(ms)` says "stay this long", which reads like `.name()`, a fact the container uses. The name is the same as everywhere else on the time axis. And like `w: datum(…)`, `.duration(datum(v))` can flex when a sequence fixes its total.
 
 **Precedent for the two-container split.** Madeus (1998) put Allen relations and spatial align in one constraint system, and found it workable. SMIL kept them apart: `<par>`/`<seq>` for time, layout regions for space. None of the five examples needed a spatial and a temporal clause in the same `.relate()`, and the linked list shows how they combine when needed: spatial clauses inside each scene, temporal clauses outside.
 
@@ -311,12 +313,12 @@ Mostly yes. "Exact" means the temporal construct is the spatial one with the tim
 | Canis / CAST                    | `grouping { groupBy, delay, sort }`, `reference: "start after previous"`                | effects on a dSVG                      | nested grouping = nested spread on t; selector-based                   |
 | Data Animator                   | storyboards of keyframe charts                                                          | matching by data scope (1:1, 1:n, n:1) | matching by rows is the key join                                       |
 | Heer & Robertson 2007 / DynaVis | parallel and sequential composition, split by visual variable, staggering               |                                        | staging = an inserted scene                                            |
-| gganimate                       | `transition_states(state_length, transition_length)`, `enter_grow`, `shadow_wake`       | tweening by `group`                    | `state_length` = hold, `transition_length` = gap                       |
+| gganimate                       | `transition_states(state_length, transition_length)`, `enter_grow`, `shadow_wake`       | tweening by `group`                    | `state_length` = duration, `transition_length` = gap                   |
 | d3-transition                   | `.transition().delay((d, i) => …)`, chained `.transition()`                             |                                        | stacked-to-grouped is two chained stages                               |
 | Motion                          | `animate(sequence)` with `at: "<"`, `stagger()`, `layoutId`                             | FLIP between layouts                   | `layoutId` = name identity                                             |
 | GSAP                            | `tl.to(…, "<+=0.5")`, labels, nested timelines                                          |                                        | cursor strings instead of relations                                    |
 | Rhombus pict                    | `switch`, `concurrent`, `magic_move`, `sustain`/`pad`, `Find`, `bend`                   | time boxes compose like bounding boxes | the closest model                                                      |
-| SMIL                            | `<seq>`, `<par>`, `begin="a.end+1s"`, `dur`, `fill="freeze"`                            |                                        | syncbase = `time.after`, `dur` = hold                                  |
+| SMIL                            | `<seq>`, `<par>`, `begin="a.end+1s"`, `dur`, `fill="freeze"`                            |                                        | syncbase = `time.after`, `dur` = duration                              |
 | CSS View Transitions            | `view-transition-name`                                                                  | the browser moves matched boxes        | name identity                                                          |
 | Remotion                        | `<Series>`, `<Sequence durationInFrames>`, `<TransitionSeries.Transition>`              |                                        | a transition is an element between two sequences                       |
 | Manim                           | `Succession`, `AnimationGroup(lag_ratio)`, `TransformMatchingShapes`                    | point alignment                        | `lag_ratio` = stagger                                                  |
@@ -349,33 +351,36 @@ The foil. It restates the structure in selectors and strings and has no data-dri
 
 ## What the prototype taught
 
-1. **Matching by path is wrong; matching by rows is right.** R2D3's dots and the particles change parents between scenes. The key join covers every example with one rule (built in version 2).
+1. **Matching by path is wrong; matching by rows is right.** R2D3's dots and the particles change parents between scenes. The key join covers every example with one rule.
 2. **A transition's curve is either a smoothing or a route** (#950).
-3. **`intersect` and `subtract` cannot clip a stroke.** They are color compositors. `subtract([arch, rect])` drew the rect minus the arch, the opposite of its doc comment ("A − B"). That looks like a library bug and needs its own issue. Gun deaths uses `mask`, a true alpha clip.
-4. **A mark cannot be placed at a data x without a scale.** Gun deaths places each arch's ends as zero-size blanks in an x-stack, `potential` years apart, instead of writing `x: 0` and `x2: "potential"`. The orange band likewise needs a data-side `stolen = potential - age` column, and a pixel-tall `TALL` rect because the picture has no y scale.
-5. **Every arch now has the same shape.** `Curve.arc({ height })` takes one ratio, so the original's height variation is lost. A data-driven `height` would restore it.
+3. **The orange and grey split in gun deaths is a static question, and the masks are a stopgap.** `intersect` and `subtract` are color compositors and cannot clip a stroke. `subtract([arch, rect])` also drew the rect minus the arch, the opposite of its doc comment ("A − B"), which looks like a library bug that needs its own issue. Candidates for the real answer: one stroke with a color change at a point on the curve, or the `cut` operator (#404).
+4. **A mark cannot be placed at a data x without a scale.** Gun deaths places each arch's ends as zero-size blanks in an x-stack, `potential` years apart, instead of writing `x: 0` and `x2: "potential"`. The bands need a data-side `stolen = potential - age` column and a pixel-tall `TALL` rect.
+5. **Strategy parameters cannot read a field.** Every arch uses one `LIFT`, so the original's height variation (which depends on age) is lost. `Curve.bezier({ controls: [[0.25, "lift"], …] })` would need data-valued strategy parameters, which no family has. #1101 (extensible strategy families) is the other route.
 6. **The acceleration is approximate.** A named ease on the stagger replaces the formula, at up to 19% error in start times.
-7. **Per-group arrangements and counters.** Filtered charts replace the per-group arrangement wall. A "PEOPLE KILLED" counter still needs the clock as a dataset (#830).
-8. **Staggering a segue per mark** sits on the destination scene's operator ("arriving here"), which reads oddly.
-9. **Scenes share scales,** so per-scene rescale is the open #854.
+7. **A fixed total is stricter in time than in space.** With a fixed `w`, `spread` silently leaves slack when nothing flexes and silently overflows when the fixed parts are too long. The prototype's sequence throws in both cases ("nothing in it flexes", "over-constrained"). Either `spread` should throw too (loud errors over broken pictures), or the two should match some other way. They should not differ.
+8. **Counters.** A "PEOPLE KILLED" counter still needs the clock as a dataset (#830).
+9. **Staggering a segue per mark** sits on the destination scene's operator ("arriving here"), which reads oddly.
+10. **Scenes share scales,** so per-scene rescale is the open #854.
 
 ## Open questions for Josh
 
-1. **Hold spelling.** `.hold(ms)` as a modifier (built), or `.duration(ms)`? Or should a timeline-level fit (`timeline([...], { total })`) come first?
-2. **Explicit key.** On `time.transition` (built) and `time.sequence` (built), or also on `timeline` as a default for all its transitions?
-3. **Curve versus route.** One `curve` key whose family decides, or two keys (`curve` for smoothing, `route` for paths)?
-4. **Segue stagger.** Keep it on the destination operator, or move it to `time.transition(a, b, { stagger })`?
-5. **Placing marks at data positions** in gun deaths (wall 4). Is `blank` in an x-stack acceptable, or should a bare mark accept `x: datum(…)` without a chart scale?
+1. **Explicit key.** On `time.transition` and `time.sequence` (built), or also on `timeline` as a default for all its transitions?
+2. **Curve versus route.** One `curve` key whose family decides, or two keys (`curve` for smoothing, `route` for paths)?
+3. **Segue stagger.** Keep it on the destination operator, or move it to `time.transition(a, b, { stagger })`?
+4. **Placing marks at data positions** (wall 4). Is `blank` in an x-stack acceptable, or should a bare mark accept `x: datum(…)` without a chart scale?
+5. **Fixed totals** (wall 7). Should `spread` also throw when nothing can flex or the fixed parts overflow, so space and time agree?
 
 ## Syntax changes to review
 
-- New: `timeline([...]).relate(...)` with `time.after`, `time.align` and `time.transition(a, b)` as clauses.
-- New: `.hold(ms)` on any mark, `layer`, `timeline` or chart.
-- New: `time.sequence(opts, [children])` and `time.stagger(opts, [children])` combinator forms, and `hold` and `key` options on `time.sequence`.
-- New: `delay` on every `Animation.*` effect. `Animation.wipe` from a side now works on any mark, including paths.
-- New: `Curve.arc({ height })` (descriptor, schema and Python wrapper updated).
+- New: `timeline({ cyclic?, playing?, at? }, [...]).relate(...)` with `time.after`, `time.align` and `time.transition(a, b)` as clauses.
+- New: `.duration(ms)` (or `.duration(datum(v))`, which can flex) on any mark, `layer`, `timeline` or chart.
+- Changed: `time.sequence(opts, [children])` combinator: `gap` (number or exact-length array), `duration` (total, inferred or fixed like `spread`'s `w`), `cyclic`, `key`, `at` in ms. The old `hold` and `loop` options are errors. The flow form is unchanged.
+- New: `time.stagger(opts, [children])` combinator form.
+- New: `Animation.draw({ duration, ease, delay })`, which reveals a stroke along its path by length. New `delay` on every `Animation.*` effect. `Animation.wipe` from a side now works on any mark.
+- New: `Curve.bezier({ controls: [[t, h], [t, h]] })`: `t` is the fraction along the chord, `h` the offset across it in chord lengths, positive to the left of travel (up for a left-to-right chord). No `controls` is exactly the old curve. `Curve.arc({ height })`. Both cross to Python.
+- New IR: optional `PathItem.pathLength` and a `pathLength` live channel, used by `draw`.
 - Changed: `time.transition` takes `key` and no `duration`. It accepts a screen route (`Curve.bezier()` and the other routers) as well as data-space curves.
-- Errors: a time clause in `layer(...).relate()`, a spatial clause in `timeline(...).relate()`, a hold shorter than the build-in, a transition between overlapping scenes, conflicting or cyclic time clauses.
+- Errors: a time clause in `layer(...).relate()`, a spatial clause in `timeline(...).relate()`, a duration shorter than the build-in, a transition between overlapping scenes, conflicting or cyclic time clauses, a `gap` array of the wrong length, a fixed total that nothing can meet.
 - Python: a `time` namespace shadows the standard library's `time` module. `from gofish import time` still works, but it may deserve a note (#1022).
 
 ## Related issues
@@ -385,6 +390,7 @@ The foil. It restates the structure in selectors and strings and has no data-dri
 - #831 `.update` is `.connect` on time; named it `transition`.
 - #54 spread in time and interpolation marks.
 - #211 early `motion()` / `tween` sketch.
+- #404 the `cut` operator; a candidate for the gun-deaths color split.
 - #673 stable identity from spec position and data key; the key join refines it.
 - #674 incremental layout; transitions here run at paint time and avoid it.
 - #830 inputs are datasets; counters.
@@ -394,18 +400,20 @@ The foil. It restates the structure in selectors and strings and has no data-dri
 - #914–#921 build-in bugs.
 - #950 screen-space curves vs data-space interpolation.
 - #1022 a serializable form for animation (Python).
+- #1101 one extensibility model for strategy families (custom curves).
 - #769 barley slope → heatmap morph, a future segue target.
 - #1138 roadmap item "unified animation language".
 
 ## Prototype shortcuts (all marked `PROTOTYPE` in code)
 
-- `time.sequence` over children is not literally lowered to `timeline`. It keeps its child-index clock and cyclic wrap, because a timeline cannot loop its last scene into its first.
+- A cyclic timeline closes exactly one loop, and a transition across the seam must end at the seam.
+- The duration fit handles only the affine case. Data-valued durations accept only `datum(v)`, not a field name. The default gap of 1000 ms is a pick.
 - The timeline clock is separate from the build-in clock. The tween and morph take options for whether the scenes or the morph draw the keyframes.
 - Only `arrow` is redrawn from moving operands. Axes and legends are not matched.
 - Non-box shapes cross-fade and move rigidly. There is no general path morph (flubber-style resampling would be the follow-up).
-- Wipes on paths draw under a mask rect patched each frame. A mask counts as one drawn part for build-ins.
-- Gun deaths uses the `TALL` band and blanks for arch ends (walls 4 and 5). The gun-deaths filmstrip times out in `capture-one` (thousands of masks), so its frames come from a Storybook recorder.
+- `draw` replaces a stroke's own dash pattern and leaves `pathLength = 1` after it finishes. `draw` plus a side wipe on one mark is an error.
+- Gun deaths uses masks over pixel-tall bands, blanks for arch ends and one `LIFT` (walls 3 to 5). Its filmstrip times out in `capture-one` (thousands of masks), so its frames come from a Storybook recorder.
 - R2D3 has no axes (axes inside scenes do not draw), and its pile spacing is picked by eye.
 - The particles bind rows to combinator children by hand and write the loop wrap into the data.
-- `.layer(...)` chains (`LayerBuilder`) have no `.hold`.
-- The internals wiki essays for touched source files are not updated.
+- `.layer(...)` chains (`LayerBuilder`) have no `.duration`.
+- The internals wiki essays for `timeline.ts` and `time.ts` are not updated.
