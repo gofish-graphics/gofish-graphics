@@ -519,12 +519,14 @@ each inherent to what the origin states are:
 - **A share is a claim** (#493 piece 3): on an axis where nothing in a scope
   is sized or placed by data (`GoFishNode.carriesData`), σ has no data unit,
   and it is the room a node with no size of its own takes
-  (`GoFishNode.sharesRoom`). Such a leaf claims one σ, so a spread of `n`
+  (`GoFishNode.sharesRoom`). Such a leaf in a slot, or inside a node in a
+  slot, claims one σ, so a spread of `n`
   bands with spacing `g` claims `n·σ + (n − 1)·g`, and whatever hangs off a
   band (a value label, the half of a category label past the last band)
   takes room in the same claim, which narrows the bands. A scope whose axis
   mixes data with bands of no size keeps them as before: the bands claim
-  nothing and share what the data leaves.
+  nothing and share what the data leaves. A leaf in no slot (a rule laid
+  over a bar chart) claims nothing, and fills the room of what holds it.
 - **A plot claim beside the claim**: the claim folds also compute the
   claim of the plot, which leaves out dressing (a label placed beside a
   `ref` stand-in for its mark). A chain with a stand-in is laid by every

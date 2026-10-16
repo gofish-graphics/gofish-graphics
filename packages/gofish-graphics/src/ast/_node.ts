@@ -1136,7 +1136,8 @@ export class GoFishNode {
         if (
           extent[dim] === undefined &&
           this.inkOn?.[dim] !== true &&
-          this.sharesRoom(dim)
+          this.sharesRoom(dim) &&
+          this.inShare(dim)
         )
           extent[dim] = Extent(Monotonic.linear(1, 0));
     for (const dim of [0, 1] as const) {
@@ -1148,6 +1149,20 @@ export class GoFishNode {
     }
     this._extent = extent;
     return extent;
+  }
+
+  /** Whether the room this node is given on `axis` is a share: it is in a
+   *  slot (a spread, grid or treemap slot), or inside a node that is, short
+   *  of a node with a size of its own. A node in no slot (a rule laid over a
+   *  bar chart) is given the whole room of what holds it. */
+  private inShare(axis: 0 | 1): boolean {
+    for (
+      let n: GoFishNode | undefined = this;
+      n !== undefined && n._ownScope?.[axis] !== true;
+      n = n.parent
+    )
+      if (n.inSlot(axis)) return true;
+    return false;
   }
 
   /** Whether this node fills the room it is given on `axis`: a leaf with

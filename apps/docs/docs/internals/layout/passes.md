@@ -720,7 +720,9 @@ report their size).
   where nothing in a scope is sized or placed by data
   (`GoFishNode.carriesData`), σ has no data unit to be the pixels of, so it
   is the room a node with no size of its own takes (`GoFishNode.sharesRoom`):
-  such a leaf claims one σ. A spread of `n` bands with spacing `g` claims
+  such a leaf in a slot, or inside a node in a slot, claims one σ. A leaf in
+  no slot (a rule laid over a bar chart) claims nothing, and fills the room
+  of what holds it. A spread of `n` bands with spacing `g` claims
   `n·σ + (n − 1)·g`, so the claim walk knows where each band lands, and a
   value label beside a band, or the half of a category label past the last
   band, takes room. Solving the scope against its slot narrows the bands to
