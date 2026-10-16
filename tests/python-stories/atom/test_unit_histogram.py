@@ -69,5 +69,5 @@ def story_default():
             )
             .mark(circle(r=3, fill="survived"))
         ),
-        {"w": 900, "h": 560},
+        {},
     )

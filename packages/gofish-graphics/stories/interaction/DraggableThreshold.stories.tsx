@@ -91,12 +91,11 @@ export const Default: StoryObj<Args> = {
       // The threshold rule: a component-level annotation tier (a bare rect)
       // whose y reads cut() during resolve (regime 2 → full re-run per drag
       // frame). y is a data-space count value, so it aligns with the bars' count
-      // scale; w spans the plot in pixels.
+      // scale. With no w it fills the plot.
       .layer(
         rect({
           y: () => cut(),
           h: 3,
-          w: args.w,
           fill: "#333",
         })
       )
