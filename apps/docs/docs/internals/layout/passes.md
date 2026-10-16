@@ -393,7 +393,10 @@ less its `padding` on each side: the render size is the whole graphic (#493).
 When no σ fits (nodes with a literal size and their chrome are larger than the
 canvas), the root maps its domain at the σ those nodes solved
 (`ScopeRegistry.keyedSigma`) and overflows the canvas, like any other fixed
-size. A pinned axis hands its content the map
+size. With no such nodes, what is larger than the canvas is pixels that do
+not scale (a text at a literal position past its end): σ is solved from the
+part of the claim that grows with σ (`Monotonic.rising`), so the data fills
+the canvas and the pixels overflow. A pinned axis hands its content the map
 `px(d) = σ·d + originPx`; a free root is placed at `originPx`. A one-value
 domain (a one-point chart) has no width for σ to scale, so its value maps to
 the middle of the canvas, as in d3 and Vega-Lite: σ is 0 and the claim is
