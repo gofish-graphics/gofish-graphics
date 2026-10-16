@@ -34,7 +34,7 @@ chart(seafood, axes=True).flow(
     stack(by=field("species").sort("count"), dir="y"),
 ).mark(
     ribbon(h="count", fill="species", opacity=0.8)
-).render(w=400, h=320)
+).render(h=320)
 ```
 
 No split option on the ribbon: it's fused directly over this chart's own
@@ -113,7 +113,7 @@ chart(seafood, axes=True).flow(
     stack(by=field("species").sort("count"), dir="y"),
 ).mark(rect(h="count", fill="species")).layer(
     ribbon(opacity=0.8)
-).render(w=400, h=320)
+).render(h=320)
 ```
 
 ### Desugaring

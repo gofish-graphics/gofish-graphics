@@ -35,7 +35,7 @@ gf.chart(seafood, { axes: true })
     gf.stack({ by: gf.field("species").sort("count"), dir: "y" })
   )
   .mark(gf.ribbon({ h: "count", fill: "species", opacity: 0.8 }))
-  .render(root, { w: 400, h: 320 });
+  .render(root, { h: 320 });
 ```
 
 :::
@@ -118,7 +118,7 @@ gf.chart(seafood, { axes: true })
   )
   .mark(gf.rect({ h: "count", fill: "species" }))
   .layer(gf.ribbon({ opacity: 0.8 }))
-  .render(root, { w: 400, h: 320 });
+  .render(root, { h: 320 });
 ```
 
 :::

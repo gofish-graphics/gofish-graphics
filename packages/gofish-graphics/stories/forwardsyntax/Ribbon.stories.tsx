@@ -30,7 +30,7 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Basic: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
+  args: { h: 400 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -49,10 +49,7 @@ export const Basic: StoryObj<Args> = {
       )
       .mark(rect({ h: "count", fill: "species" }))
       .layer(ribbon({ opacity: 0.8 }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container, { h: args.h });
 
     return container;
   },
