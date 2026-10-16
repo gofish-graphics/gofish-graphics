@@ -79,7 +79,10 @@ Chrome sits outside its chart and takes room: the outermost ring claims its
 content plus its gutters, and hands its content what the gutters leave of its
 slot. A category label is ink along its axis (`GoFishNode.inkOn`): it labels
 one band, and one wider than its band overdraws its neighbors (#1115) instead
-of taking room or widening its ring's box on that axis.
+of taking room or widening its ring's box on that axis. The boxes a category
+label is centered on (`axisSpan` without a line, `runStartBox`) have no depth
+across the axis and are not seated there, so they take no room across it
+either.
 
 The **inner tier** holds the constraint-pinned axes (continuous/difference); the
 **outer tier** holds the ordinal label rows, which need the inner tier fully laid

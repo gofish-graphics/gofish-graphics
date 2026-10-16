@@ -37,7 +37,7 @@ export function axisSpan(opts: {
 }): GoFishNode {
   const { dim, from, to, cross, line } = opts;
   const refs = [ref(from.node), ref(to.node)] as unknown as GoFishAST[];
-  return new GoFishNode(
+  const node = new GoFishNode(
     {
       type: "axisSpan",
       resolveUnderlyingSpace: (): Size<UnderlyingSpace> => [
@@ -89,7 +89,16 @@ export function axisSpan(opts: {
     },
     refs
   );
+  // Without a line it is only a box to center a label on along the axis:
+  // across it, it is wherever its layout left it, and it takes no room
+  // there (`GoFishNode.inkOn`), so it never widens the ring's box.
+  if (line === undefined) node.inkOn = acrossOnly(dim);
+  return node;
 }
+
+/** Per axis, true only across axis `dim`. */
+const acrossOnly = (dim: 0 | 1): [boolean, boolean] =>
+  dim === 0 ? [false, true] : [true, false];
 
 /**
  * The box a start-aligned label of an ordinal axis is centered on, along
@@ -116,7 +125,7 @@ export function runStartBox(opts: {
   const { dim, axisFirst, axisLast, first, prev, width, pad } = opts;
   const nodes = [axisFirst, axisLast, first, ...(prev ? [prev] : [])];
   const refs = nodes.map((n) => ref(n)) as unknown as GoFishAST[];
-  return new GoFishNode(
+  const node = new GoFishNode(
     {
       type: "axisSpan",
       resolveUnderlyingSpace: (): Size<UnderlyingSpace> => [
@@ -150,4 +159,8 @@ export function runStartBox(opts: {
     },
     refs
   );
+  // It takes no room across the axis, where it has no depth and is
+  // wherever its layout left it (`GoFishNode.inkOn`).
+  node.inkOn = acrossOnly(dim);
+  return node;
 }
