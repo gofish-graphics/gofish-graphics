@@ -896,29 +896,37 @@ type Span = [number, number];
 
 /**
  * How far what `root` draws reaches past its box, in pixels before and after
- * it on each axis, in the canvas's pixel order: the hull of every node's box
- * below it (a coordinate space's own box stands for what it draws), against
- * the root's. The boxes of the layers in between leave out their ink
- * children (`placeByClaims`); the hull does not.
+ * it on each axis, in the canvas's pixel order. A node's box holds what it
+ * draws, except a layer's ink children (`placeByClaims`), which its box
+ * leaves out: the drawing is the hull of the root's box and of the box of
+ * every ink child below it, on the axes it is ink on. A coordinate space's
+ * interior is in its own coordinates, and its box stands for it.
  */
 function drawnOverflow(root: GoFishNode): [Span, Span] {
   const lo = [Infinity, Infinity];
   const hi = [-Infinity, -Infinity];
+  const add = (n: GoFishNode, axis: 0 | 1, offset: number) => {
+    const { min, max } = n.dims[axis];
+    if (min === undefined || max === undefined) return;
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+    lo[axis] = Math.min(lo[axis], min + offset);
+    hi[axis] = Math.max(hi[axis], max + offset);
+  };
   const visit = (n: GoFishNode, offset: [number, number]) => {
-    for (const axis of [0, 1] as const) {
-      const { min, max } = n.dims[axis];
-      if (min === undefined || max === undefined) continue;
-      if (!Number.isFinite(min) || !Number.isFinite(max)) continue;
-      lo[axis] = Math.min(lo[axis], min + offset[axis]);
-      hi[axis] = Math.max(hi[axis], max + offset[axis]);
-    }
     if (n.type === "coord") return;
     const inner: [number, number] = [
       offset[0] + (n.projectedTranslate(0) ?? 0),
       offset[1] + (n.projectedTranslate(1) ?? 0),
     ];
-    for (const c of n.children) if (c instanceof GoFishNode) visit(c, inner);
+    n.children.forEach((c, i) => {
+      if (!(c instanceof GoFishNode)) return;
+      for (const axis of [0, 1] as const)
+        if (n._inkChildren?.[axis].has(i)) add(c, axis, inner[axis]);
+      visit(c, inner);
+    });
   };
+  add(root, 0, 0);
+  add(root, 1, 0);
   visit(root, [0, 0]);
   return ([0, 1] as const).map((axis): Span => {
     const { min, max } = root.dims[axis];

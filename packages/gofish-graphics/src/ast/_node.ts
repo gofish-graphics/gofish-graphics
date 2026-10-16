@@ -646,6 +646,9 @@ export class GoFishNode {
    *  Layout size is separate from drawn size (#493), as a CSS box's ink
    *  overflow or a Typst box's `outset` is. */
   public inkOn?: [boolean, boolean];
+  /** Set on a layer by `layer`: per axis, the indices of its children that
+   *  are ink there (`placeByClaims`), which its claim and box leave out. */
+  public _inkChildren?: [Set<number>, Set<number>];
   /** Set on a layer by `layer`: where its constraints place its children in
    *  the claim walk, for the children's claims `extents` on `axis` (see
    *  `placeByClaims`). A chart reads its rings' through it, around a plot

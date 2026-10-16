@@ -646,12 +646,27 @@ export const layer = createNodeOperatorSequential(
               Monotonic.linear(0, wide.descent.run(solved.sigma))
             );
           };
+          // A literal start places the layer that many pixels from its
+          // parent's origin (`translate` in `layout`), so its claim moves
+          // with it.
+          const at = (axis: 0 | 1, claim: Extent | undefined) => {
+            const min = dims[axis].min;
+            return claim === undefined || typeof min !== "number" || min === 0
+              ? claim
+              : Extent(
+                  Monotonic.adds(claim.ascent, min),
+                  Monotonic.adds(claim.descent, -min)
+                );
+          };
           return ([0, 1] as const).map((axis) => {
             const size = dims[axis].size;
             if (isValue(size)) return impliedExtent(spaces[axis]);
             if (typeof size === "number")
-              return fixedClaim(axis, size + chartChrome(node, axis, size));
-            return resolved[axis];
+              return at(
+                axis,
+                fixedClaim(axis, size + chartChrome(node, axis, size))
+              );
+            return at(axis, resolved[axis]);
           }) as [Extent | undefined, Extent | undefined];
         },
         layout: (size, scales, children, node, region) => {
@@ -1198,6 +1213,7 @@ export const layer = createNodeOperatorSequential(
       },
       children
     );
+    node._inkChildren = inkChildren;
     node._placeChildren = (axis, extents) =>
       placeByClaims(
         axis,
