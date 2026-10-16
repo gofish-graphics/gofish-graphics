@@ -2977,7 +2977,8 @@ for the API.
         },
         "padding": {
           "$ref": "#/$defs/Number",
-          "description": "Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels)."
+          "description": "Room in pixels between a non-linear coordinate space's drawing (a polar disc, a map) and the edge of the chart's box. It has no effect on a chart in linear coordinates.",
+          "default": 30
         },
         "schema": {
           "type": "object",

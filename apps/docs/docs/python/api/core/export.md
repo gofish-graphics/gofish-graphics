@@ -32,7 +32,7 @@ synchronous, headless export (works in plain `.py` scripts / CI) is tracked in
 ## Signature
 
 ```python
-ChartBuilder.save(path, w=800, h=600, axes=None, legend=None, padding=None, debug=False)   # returns a widget
+ChartBuilder.save(path, w=800, h=600, axes=None, legend=None, debug=False)   # returns a widget
 
 GoFishChartWidget.save(path)        # write now (or defer until rendered)
 GoFishChartWidget.to_svg() -> str   # markup; errors if not yet rendered
@@ -47,7 +47,7 @@ GoFishChartWidget.svg               # markup or None
 | `w`       | `int` | `800`   | Width of the whole graphic in pixels                      |
 | `h`       | `int` | `600`   | Height of the whole graphic in pixels                     |
 
-The other options (`axes`, `legend`, `padding`, `debug`) are the
+The other options (`axes`, `legend`, `debug`) are the
 [`render`](/python/api/core/render) options.
 
 ## Working with the widget directly

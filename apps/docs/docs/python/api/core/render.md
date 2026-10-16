@@ -17,7 +17,7 @@ chart(seafood, axes=True).flow(spread(by="lake", dir="x")).mark(
 ## Signature
 
 ```python
-ChartBuilder.render(w=800, h=600, axes=None, legend=None, padding=None, debug=False)
+ChartBuilder.render(w=800, h=600, axes=None, legend=None, debug=False)
 ```
 
 `layer(...)` and `.layer(...)` chains (`LayerBuilder`) and bare marks take the
@@ -32,13 +32,12 @@ case.
 | `h`       | `int`                  | `600`   | Height of the whole graphic in pixels, axes, titles and legend included                                                                                              |
 | `axes`    | `bool \| dict \| None` | `None`  | Auto-generate axes, labels, and legends; same shape as `chart(axes=...)`. Overrides the outermost chart's `axes` only. Unset, the chart's own `axes` option decides. |
 | `legend`  | `bool \| None`         | `None`  | Whether to draw the color-scale legend. Unset, the default (`True`) applies. A `chart()` option of the same name wins over this one.                                 |
-| `padding` | `float \| None`        | `None`  | Pixels kept clear on each side, inside `w` and `h`. Unset, the chart's own `padding` option (or the default) applies.                                                |
 | `debug`   | `bool`                 | `False` | Whether to enable debug rendering                                                                                                                                    |
 
 Returns a `GoFishChartWidget`.
 
 ::: tip Axes on the chart or on render
-`axes` (and `padding`) can be passed to [`chart`](/python/api/core/chart) or to
+`axes` can be passed to [`chart`](/python/api/core/chart) or to
 `render`, as in JS (`chart(data, { axes: true })` or
 `.render(container, { axes: true })`). See [chart](/python/api/core/chart) for the full `axes` shape.
 :::

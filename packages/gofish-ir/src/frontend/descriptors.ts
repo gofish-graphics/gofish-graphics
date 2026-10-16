@@ -867,7 +867,8 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
   padding: {
     type: t.number,
-    doc: "Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels).",
+    default: 30,
+    doc: "Room in pixels between a non-linear coordinate space's drawing (a polar disc, a map) and the edge of the chart's box. It has no effect on a chart in linear coordinates.",
   },
   schema: {
     type: t.record(t.any),

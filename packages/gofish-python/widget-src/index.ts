@@ -35,7 +35,6 @@ interface WidgetModel {
   get(key: "height"): number;
   get(key: "axes"): Serialize.RenderIROptions["axes"] | null;
   get(key: "legend"): boolean | null;
-  get(key: "padding"): number | null;
   get(key: "debug"): boolean;
   get(key: "container_id"): string;
   get(
@@ -253,7 +252,6 @@ function renderChart(
     // own option (or the default) decides.
     axes: model.get("axes") ?? undefined,
     legend: model.get("legend") ?? undefined,
-    padding: model.get("padding") ?? undefined,
     debug,
   };
   log("Rendering with options:", renderOptions);

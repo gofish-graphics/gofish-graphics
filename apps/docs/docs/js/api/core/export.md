@@ -38,7 +38,7 @@ See [Display list](#display-list) below.
 ## Options
 
 `options` accepts everything [`render`](/js/api/core/render) accepts (`w`, `h`,
-`axes`, `padding`, …) plus:
+`axes`, …) plus:
 
 | Option       | Type             | Description                                                      |
 | ------------ | ---------------- | ---------------------------------------------------------------- |
@@ -70,7 +70,7 @@ doc.items; // [{ kind: "rect", x, y, w, h, style, … }, …]
 ```
 
 It takes the same options as [`render`](/js/api/core/render) (`w`, `h`, `axes`,
-`padding`, …) and is available on a chart builder, a mark, a layer, and a
+…) and is available on a chart builder, a mark, a layer, and a
 combinator root (`layer([chartA, chartB])`, `frame(...)` — every multi-chart
 composition) — the post-layout, positioned-output analogue of
 [`toJSON`](/internals/frontend/serialization-api), which serializes the _pre-layout_

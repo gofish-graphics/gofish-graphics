@@ -349,7 +349,6 @@ export async function layout(
     debug = false,
     axes = false,
     legend = true,
-    padding,
     labelRowSettings,
   }: {
     w?: number;
@@ -360,8 +359,6 @@ export async function layout(
     debug?: boolean;
     axes?: AxesOptions;
     legend?: boolean;
-    /** Pixels kept clear on each side of the canvas, inside `w`/`h`. */
-    padding?: number;
     /** Internal: how each axis label row is drawn, as chosen by
      *  `label.angle: "auto"` (see `runLayout`). Overrides the angles in `axes`. */
     labelRowSettings?: LabelRowSettings;
@@ -536,15 +533,12 @@ export async function layout(
   }
 
   // `render({ w, h })` is the whole graphic (#493, #1032): the canvas is the
-  // slot the root is given, its chrome included, less the render's
-  // `padding` on each side. Chrome sits outside its chart, so the root's
+  // slot the root is given, its chrome included. Chrome sits outside its
+  // chart, so the root's
   // content gets the slot less its chrome's gutters, as every node does
   // with the slot its parent gives it. Every chrome shape claims its size,
   // so the root's claim already holds its chrome (`placeByClaims`), and one
   // layout fits it to the slot.
-  const pad = padding ?? 0;
-  const slot = (given: number | undefined) =>
-    given === undefined ? undefined : Math.max(0, given - 2 * pad);
   const root = child;
   // What the root draws past its box (see `drawnOverflow` below).
   let ink: [Span, Span] = [
@@ -595,7 +589,7 @@ export async function layout(
     // default canvas.
     const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;
     const rootClaims = [niceExtentX, niceExtentY] as const;
-    const given = [slot(w), slot(h)] as const;
+    const given = [w, h] as const;
     const rootSizes = ([0, 1] as const).map((axis) => {
       const space = rootSpaces[axis];
       const claim = rootClaims[axis];
@@ -771,8 +765,8 @@ export async function layout(
     dumpSharing(root);
 
     // Root placement. The canvas is a frame on each axis whose start edge is
-    // `edge` pixels in: the padding, and on an axis the render gives no
-    // size, the root's ink before its box as well (see below). The root's
+    // `edge` pixels in: 0, or on an axis the render gives no size, the
+    // root's ink before its box (see below). The root's
     // axis order starts at the frame's start edge: the left on
     // x, the top for a y that reads top-down, and the BOTTOM for a continuous
     // y, which grows upward from there (`fromFrameStart`). A position `p`
@@ -818,14 +812,14 @@ export async function layout(
         orientSide("min", direction)
       );
     };
-    placeRoot(0, pad);
-    placeRoot(1, pad);
+    placeRoot(0, 0);
+    placeRoot(1, 0);
 
     // What the root draws past its box (#493: layout size is separate from
     // drawn size), in pixels before and after it on each axis: the shapes
     // that are ink (`placeByClaims`), whose place only layout knows. On an
     // axis the render gives no size, the canvas grows to hold it: the SVG is
-    // the root's box plus its ink plus the padding, and the box sits past
+    // the root's box plus its ink, and the box sits past
     // the ink before it.
     //
     // DECLARED SHORTCUT (#493): on an axis the render gives a size, the ink
@@ -839,7 +833,7 @@ export async function layout(
     // from a category band.
     ink = drawnOverflow(root);
     for (const axis of [0, 1] as const)
-      if (given[axis] === undefined) placeRoot(axis, pad + ink[axis][0]);
+      if (given[axis] === undefined) placeRoot(axis, ink[axis][0]);
 
     // The root data → layout-pixel maps the interaction layer converts
     // through: a position along the root's axis order, from the root's
@@ -861,15 +855,14 @@ export async function layout(
 
   // The SVG is the render's size, exactly (#493): the root, its chrome
   // included, was fitted to it. A dimension the render does not give is the
-  // root's whole box, its chrome included, plus its ink and the padding.
+  // root's whole box, its chrome included, plus its ink.
   const svgDim = (axis: 0 | 1, given: number | undefined): number => {
     if (given !== undefined) return given;
     const s = root.dims[axis]?.size;
     return (
       (s !== undefined && Number.isFinite(s) ? s : DEFAULT_CANVAS_SIZE) +
       ink[axis][0] +
-      ink[axis][1] +
-      2 * pad
+      ink[axis][1]
     );
   };
 
@@ -954,7 +947,6 @@ export type GoFishRenderOptions = {
    *  Default true; `false` suppresses it. See `ChartOptions.legend`. */
   legend?: boolean;
   colorConfig?: ColorConfig;
-  padding?: number;
   /**
    * Interaction runtime (see src/interaction/). When present, the render pass
    * publishes each lowered frame to it, emits `data-gf-id` hit-test hooks, and
@@ -1019,7 +1011,6 @@ async function layoutOnce(
     axes = false,
     legend = true,
     colorConfig,
-    padding,
   } = options;
   // Seed the unit color scale by config kind. A gradient is a continuous
   // color scale (its `scaleFn`/`domain` are finalized in resolveColorScale
@@ -1071,7 +1062,6 @@ async function layoutOnce(
         debug,
         axes,
         legend,
-        padding,
         labelRowSettings,
       },
       child,

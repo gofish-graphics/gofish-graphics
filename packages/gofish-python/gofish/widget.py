@@ -34,7 +34,6 @@ class GoFishChartWidget(anywidget.AnyWidget):
     # is a boolean or per-axis options (wire spelling), so it is untyped here.
     axes = traitlets.Any(None, allow_none=True).tag(sync=True)
     legend = traitlets.Bool(None, allow_none=True).tag(sync=True)
-    padding = traitlets.Float(None, allow_none=True).tag(sync=True)
     debug = traitlets.Bool(False).tag(sync=True)
     container_id = traitlets.Unicode().tag(sync=True)
 
@@ -63,7 +62,6 @@ class GoFishChartWidget(anywidget.AnyWidget):
         height: int = 600,
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
-        padding: Optional[float] = None,
         debug: bool = False,
         **kwargs,
     ):
@@ -92,7 +90,6 @@ class GoFishChartWidget(anywidget.AnyWidget):
             # wire, renamed (and checked) as `chart(axes=...)` does.
             axes=_to_wire(("ref", "AxesOptions"), axes, "axes"),
             legend=legend,
-            padding=padding,
             debug=debug,
             container_id=container_id,
             derive_functions=derive_functions or {},

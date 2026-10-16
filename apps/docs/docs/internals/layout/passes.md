@@ -389,8 +389,8 @@ let rootScopes = [
 For every continuous root axis, `solveScope` solves σ from the axis's size
 claim against the canvas (`claim.width(σ) = canvas`), so pixel overhead such
 as spacing, and the chrome's gutters, keeps its pixels, and, when the axis has
-an origin, the pixel of data 0 (`originPx`). The canvas is the render's `w`/`h`
-less its `padding` on each side: the render size is the whole graphic (#493).
+an origin, the pixel of data 0 (`originPx`). The canvas is the render's `w`/`h`:
+the render size is the whole graphic (#493).
 When no σ fits (nodes with a literal size and their chrome are larger than the
 canvas), the root maps its domain at the σ those nodes solved
 (`ScopeRegistry.keyedSigma`) and overflows the canvas, like any other fixed
@@ -759,7 +759,7 @@ except a layer's ink children, which its box leaves out, so the drawing is
 the hull of the root's box and of every ink child's box. A literal start or
 pixel offset (`spread({ y: 50 })`, `.translate()`) moves a box, and its claim
 moves with it, so it is no ink. On an axis the render gives no size, the SVG is the root's box
-plus its ink plus the padding, and the box sits past the ink before it.
+plus its ink, and the box sits past the ink before it.
 Content larger than the canvas whatever it is handed (fixed spacing wider
 than the canvas, a literal position past it, an inner size equal to the
 render size) still overflows and is clipped.
@@ -978,8 +978,8 @@ and renders as part of the node tree like any other shape.
 It reserves no room either. The render's `w`/`h` is the whole graphic (#493): the
 root's chrome takes room inside it (see [Chrome gutters](#chrome-gutters)), so
 there is nothing left to reserve around it. The former per-side overhang
-measurements and the `PADDING`/`EDGE_GAP` reserves of `svgFrame` are deleted. The
-render's `padding` option is an inset inside `w`/`h`, 0 by default.
+measurements and the `PADDING`/`EDGE_GAP` reserves of `svgFrame` are deleted, and so is the
+render's `padding` option.
 
 ### Render Pass 2: SVG Container Creation
 
@@ -990,7 +990,7 @@ render's `padding` option is an inset inside `w`/`h`, 0 by default.
 ```
 
 The SVG is the render's `w`/`h` exactly, or, on a dimension the render does not
-give, the root's laid-out box plus the padding. There is **no inner flip `<g>`**:
+give, the root's laid-out box plus its ink. There is **no inner flip `<g>`**:
 layout is already in y-down pixels, so the display-list items paint directly under
 the `<svg>`.
 
