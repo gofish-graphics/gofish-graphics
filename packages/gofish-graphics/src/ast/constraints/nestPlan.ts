@@ -138,7 +138,11 @@ export function applyNestSpacePlan(
 export function applyNestExtentPlan(
   childExtents: readonly Size<Extent | undefined>[],
   effectiveSpaces: readonly Size<UnderlyingSpace>[],
-  nestPlan: NestPlan | undefined
+  nestPlan: NestPlan | undefined,
+  // Whether child `i` fills the room it is given on `axis`
+  // (`GoFishNode.fillsRoom`): the nest that derives it sizes it, whatever
+  // share its own claim would take.
+  fills: (i: number, axis: 0 | 1) => boolean = () => false
 ): Size<Extent | undefined>[] {
   if (nestPlan === undefined) return [...childExtents];
   const effective = childExtents.map(
@@ -148,16 +152,19 @@ export function applyNestExtentPlan(
     for (const e of nestPlan.byDerived.get(i) ?? []) {
       if (e.dir !== "in") continue;
       const src = e.sourceIdx;
+      // A derived node that fills takes the size the nest gives it.
+      const own = (axis: 0 | 1) =>
+        fills(i, axis) ? undefined : effective[i][axis];
       if (e.padX !== undefined)
         effective[i][0] = nestedExtent(
-          effective[i][0],
+          own(0),
           effectiveSpaces[src][0],
           effective[src][0],
           e.padX
         );
       if (e.padY !== undefined)
         effective[i][1] = nestedExtent(
-          effective[i][1],
+          own(1),
           effectiveSpaces[src][1],
           effective[src][1],
           e.padY

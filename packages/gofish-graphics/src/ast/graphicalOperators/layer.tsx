@@ -576,10 +576,15 @@ export const layer = createNodeOperatorSequential(
           const t = layerTypes;
           if (t === undefined)
             throw new Error("[gofish] layer: claim resolved before its type");
+          const fillsRoom = (i: number, axis: 0 | 1) => {
+            const c = node.children[i];
+            return c instanceof GoFishNode && c.fillsRoom(axis);
+          };
           const effectiveExtents = applyNestExtentPlan(
             childExtents,
             t.effectiveChildren,
-            t.nestPlan
+            t.nestPlan,
+            fillsRoom
           );
           const scale = [
             options.transform?.scale?.x ?? 1,
@@ -690,7 +695,8 @@ export const layer = createNodeOperatorSequential(
               c instanceof GoFishNode ? plotIn(c, node) : c.resolveExtent()
             ),
             t.effectiveChildren,
-            t.nestPlan
+            t.nestPlan,
+            fillsRoom
           );
           const plot: [Extent | undefined, Extent | undefined] = [
             resolveLayerAxisExtent(

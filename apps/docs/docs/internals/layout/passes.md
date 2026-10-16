@@ -727,6 +727,9 @@ report their size).
   make it. In a share scope a layer lays each child out at its claim at σ,
   so the bands are the σ the scope solved. On an axis the render gives no
   size there is no slot to share, and the bands keep their default size. A
+  node that fills (`GoFishNode.fillsRoom`: a leaf with no size of its own, or
+  a node with no size of its own whose children all fill) and that a `nest`
+  derives takes the inner's size plus the padding, not a share. A
   scope that mixes data and bands of no size on one axis keeps the bands as
   they were: they claim nothing and share what the data leaves, and what
   hangs off them is ink.

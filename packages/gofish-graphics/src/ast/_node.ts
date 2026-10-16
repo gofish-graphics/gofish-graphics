@@ -533,6 +533,9 @@ export class GoFishNode {
   /** Memo of {@link carriesData} and {@link sharesRoom}, cleared with the
    *  claims. */
   private _carriesData?: [boolean | undefined, boolean | undefined];
+  /** Per axis, whether this node fills the room it is given (see
+   *  {@link fillsRoom}); set by the claim walk. */
+  private _fills?: [boolean, boolean];
   private _sharesRoom?: [boolean | undefined, boolean | undefined];
   private _layout: Layout;
   /** Per-primitive IR lowering (see {@link Lower}) — the node's sole draw
@@ -1117,6 +1120,17 @@ export class GoFishNode {
     );
     // A node with no size of its own fills the room it is given. Where the
     // room is a share (`sharesRoom`), that room is one σ (#493 piece 3).
+    // A node fills the room it is given when it has no size of its own: a
+    // leaf with no claim, or a node with no size of its own whose children
+    // all fill.
+    this._fills = ([0, 1] as const).map((dim) =>
+      this.children.length === 0
+        ? extent[dim] === undefined && this.inkOn?.[dim] !== true
+        : this._ownScope?.[dim] !== true &&
+          this.children.every(
+            (c) => c instanceof GoFishNode && c._fills?.[dim] === true
+          )
+    ) as [boolean, boolean];
     if (this.children.length === 0)
       for (const dim of [0, 1] as const)
         if (
@@ -1134,6 +1148,16 @@ export class GoFishNode {
     }
     this._extent = extent;
     return extent;
+  }
+
+  /** Whether this node fills the room it is given on `axis`: a leaf with
+   *  no size of its own, or a node with no size of its own whose children
+   *  all fill. A share scope gives such a node one σ
+   *  (`sharesRoom`), but a `nest` that derives it gives it its inner's size
+   *  plus the padding instead. */
+  public fillsRoom(axis: 0 | 1): boolean {
+    this.resolveExtent();
+    return this._fills?.[axis] === true;
   }
 
   /**
@@ -1219,6 +1243,7 @@ export class GoFishNode {
     this._plotExtent = undefined;
     this._carriesData = undefined;
     this._sharesRoom = undefined;
+    this._fills = undefined;
     this._sharing = undefined;
     this.children.forEach((c) => {
       if (c instanceof GoFishNode) c.clearUnderlyingSpace();
