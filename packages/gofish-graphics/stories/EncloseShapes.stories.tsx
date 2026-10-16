@@ -59,19 +59,21 @@ export const PlanetsBox: StoryObj = {
 
 // ── 2. Combinator form over `.relate()` operands ────────────────────────────
 
-// Munkres' three points (Topology, Figure 12.1): a set that holds a and c but
-// not b. The spine routes under b and keeps 6 px from it.
-export const MunkresSpine: StoryObj = {
+// Munkres' three points (Topology, Figure 12.1): the sets {a, b, c}, {a, b}
+// and {b, c} as ellipses, and {a, c}, which does not hold b, as a spine that
+// routes under b and keeps 6 px from it.
+export const MunkresFigure: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
-      title: "Munkres Spine",
+      title: "Munkres Three Point Sets",
       description:
-        "Three points in a row with an outline that holds the outer two and routes under the middle one, keeping a fixed gap from it.",
+        "Three points in a row with four of their subsets drawn as outlines: ellipses around all three and around each neighboring pair, and a spine that holds the outer two while routing under the middle one.",
     },
   },
   render: () => {
     const container = initializeContainer();
+    const outline = { fill: "none", stroke: "#111", strokeWidth: 1.5 };
     layer([
       spread({ dir: "x", spacing: 95, alignment: "middle" }, [
         circle({ r: 5, fill: "#111" }).name("a"),
@@ -80,18 +82,19 @@ export const MunkresSpine: StoryObj = {
       ]),
     ])
       .relate(({ a, b, c }: any) => [
+        enclose({ shape: Shape.ellipse(), padding: 30, ...outline }, [a, b, c]),
+        enclose({ shape: Shape.ellipse(), padding: 16, ...outline }, [a, b]),
+        enclose({ shape: Shape.ellipse(), padding: 16, ...outline }, [b, c]),
         enclose(
           {
             shape: Shape.spine({ avoiding: [b], clearance: 6 }),
-            padding: 22,
-            fill: "#ff2400",
-            fillOpacity: 0.3,
-            stroke: "#ff2400",
+            padding: 12,
+            ...outline,
           },
           [a, c]
         ),
       ])
-      .render(container, { w: 380, h: 150 });
+      .render(container, { w: 400, h: 150 });
     return container;
   },
 };
@@ -163,6 +166,7 @@ export const PenguinBoxes = penguinStory(Shape.box());
 export const PenguinHulls = penguinStory(Shape.hull());
 export const PenguinBlobs = penguinStory(Shape.blob());
 export const PenguinSpines = penguinStory(Shape.spine());
+export const PenguinEllipses = penguinStory(Shape.ellipse());
 
 // The four shapes on the same points: pick one from the menu, then tune it.
 export const PenguinsFourShapes: StoryObj = {

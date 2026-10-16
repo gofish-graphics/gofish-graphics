@@ -62,7 +62,8 @@ def story_planets_box():
 # ── 2. Combinator form over `.relate()` operands ────────────────────────────
 
 
-def story_munkres_spine():
+def story_munkres_figure():
+    outline = {"fill": "none", "stroke": "#111", "stroke_width": 1.5}
     return (
         layer([
             spread(
@@ -76,16 +77,17 @@ def story_munkres_spine():
                 alignment="middle",
             )
         ]).relate(lambda a, b, c: [
+            enclose([a, b, c], shape=Shape.ellipse(), padding=30, **outline),
+            enclose([a, b], shape=Shape.ellipse(), padding=16, **outline),
+            enclose([b, c], shape=Shape.ellipse(), padding=16, **outline),
             enclose(
                 [a, c],
                 shape=Shape.spine(avoiding=[b], clearance=6),
-                padding=22,
-                fill="#ff2400",
-                fill_opacity=0.3,
-                stroke="#ff2400",
-            )
+                padding=12,
+                **outline,
+            ),
         ]),
-        {"w": 380, "h": 150},
+        {"w": 400, "h": 150},
     )
 
 
@@ -157,6 +159,10 @@ def story_penguin_blobs():
 
 def story_penguin_spines():
     return (_penguin_shapes(Shape.spine()), {"w": 420, "h": 320})
+
+
+def story_penguin_ellipses():
+    return (_penguin_shapes(Shape.ellipse()), {"w": 420, "h": 320})
 
 
 # ── 6. avoiding and holes ───────────────────────────────────────────────────
