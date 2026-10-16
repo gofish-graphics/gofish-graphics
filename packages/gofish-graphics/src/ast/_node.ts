@@ -77,7 +77,7 @@ import {
   type AxisTicks,
 } from "./underlyingSpace";
 import { impliedExtents, type Extent } from "./extent";
-import type { ClaimPlacement } from "./constraints/claimPlacement";
+import type { BoxForm, ClaimPlacement } from "./constraints/claimPlacement";
 import { toJSON } from "../util/interval";
 import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
@@ -649,6 +649,21 @@ export class GoFishNode {
   /** Set on a layer by `layer`: per axis, the indices of its children that
    *  are ink there (`placeByClaims`), which its claim and box leave out. */
   public _inkChildren?: [Set<number>, Set<number>];
+  /** Set on a layer by `layer`: per axis, where the claim walk places each
+   *  of its children in its frame (`placeByClaims`), for a node deep inside
+   *  it that a ref or a label reads (`placementIn`). */
+  public _childBoxes?: (axis: 0 | 1) => Map<number, BoxForm> | undefined;
+  /** Set on a layer by `layer`: its constraints' operands, resolved. */
+  public _constraintOperands?: () => Map<
+    string,
+    { node: GoFishAST; child: number; direct: boolean }
+  >;
+  /** Set on a layer by `layer`: per axis, the literal pixel its own start
+   *  places it at in its parent (0 for none). */
+  public _literalStart?: [number, number];
+  /** Set on a layer by `layer`: per axis, whether it has a size of its own
+   *  there, which makes it a σ-scope of its own. */
+  public _ownScope?: [boolean, boolean];
   /** Set on a layer by `layer`: where its constraints place its children in
    *  the claim walk, for the children's claims `extents` on `axis` (see
    *  `placeByClaims`). A chart reads its rings' through it, around a plot

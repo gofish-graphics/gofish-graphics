@@ -85,8 +85,10 @@ import {
 import {
   constrainedOn,
   placeByClaims,
+  type BoxForm,
   type ClaimChild,
 } from "../constraints/claimPlacement";
+import { placementIn } from "../placementClaims";
 import {
   guttersAroundPlot,
   guttersInSlot,
@@ -311,9 +313,10 @@ export const layer = createNodeOperatorSequential(
     // draw, but take no room in the claim, nor in the box.
     const inkChildren: [Set<number>, Set<number>] = [new Set(), new Set()];
     // What the claim walk knows of each child on `axis`, for
-    // `placeByClaims`: its claim (`extents`), its type, whether only layout
-    // knows where it lands (a `ref` stand-in, or a node that reads its place
-    // from refs), and whether its own data places it in this layer's frame.
+    // `placeByClaims`: its claim (`extents`), its type, whether it is a `ref`
+    // stand-in and where its target lands here (`placementIn`), whether it
+    // reads its place from refs, and whether its own data places it in this
+    // layer's frame.
     const claimChildren = (
       axis: 0 | 1,
       extents: Size<Extent | undefined>[]
@@ -321,17 +324,36 @@ export const layer = createNodeOperatorSequential(
       const sets = node.sharing().sets[axis];
       return node.children.map((c, i) => {
         const space = c.resolveUnderlyingSpace()[axis];
+        const target = c instanceof GoFishRef ? c.targetNode : undefined;
         return {
           name: childNameKey(c),
           extent: extents[i]?.[axis],
           space,
           standIn: c instanceof GoFishRef,
+          placed: target && placementIn(target, node, axis),
           inkOn: (c as GoFishNode).inkOn?.[axis] === true,
           dataPositioned:
             sets[i] === 0 && isCONTINUOUS(space) && space.origin !== "free",
         };
       });
     };
+    // Where an operand nested in a child lands in this layer's frame.
+    const nestedPlacement = (axis: 0 | 1) => (name: string) => {
+      const op = constraintOperands().get(name);
+      return op !== undefined && op.node instanceof GoFishNode
+        ? placementIn(op.node, node, axis)
+        : undefined;
+    };
+    // Whether a child is a stand-in the claim walk places on `axis`: the
+    // constraints seat what is related to it where its target lands, so a
+    // fold that starts its children at the layer's origin does not hold.
+    const placesStandIn = (axis: 0 | 1) =>
+      node.children.some(
+        (c) =>
+          c instanceof GoFishRef &&
+          c.targetNode !== undefined &&
+          placementIn(c.targetNode, node, axis) !== undefined
+      );
     // Whether a child of this layer's own set takes whatever room the layer
     // is given on `axis` (it claims none, as a rect with no size does).
     const ownSetFills = (
@@ -518,10 +540,12 @@ export const layer = createNodeOperatorSequential(
             options.transform?.scale?.y ?? 1,
           ];
           const operands = constraintOperands();
+          const standIns = [placesStandIn(0), placesStandIn(1)];
           for (const axis of [0, 1] as const) {
             const folded =
               t.composed?.fragments[axis] !== undefined &&
-              t.composed.spaces[axis] !== undefined;
+              t.composed.spaces[axis] !== undefined &&
+              !standIns[axis];
             const grid =
               t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis]);
             claimPlaced[axis] =
@@ -565,7 +589,7 @@ export const layer = createNodeOperatorSequential(
             );
             constraintBudget = c.budget;
             for (const axis of [0, 1] as const)
-              if (c.covered[axis]) {
+              if (c.covered[axis] && !standIns[axis]) {
                 resolved[axis] = c.extents[axis];
                 covered[axis] = true;
               }
@@ -1214,14 +1238,47 @@ export const layer = createNodeOperatorSequential(
       children
     );
     node._inkChildren = inkChildren;
+    node._constraintOperands = constraintOperands;
+    node._literalStart = [0, 1].map((axis) => {
+      const min = dims[axis].min;
+      return typeof min === "number" ? min : 0;
+    }) as [number, number];
+    node._ownScope = [dims[0].size !== undefined, dims[1].size !== undefined];
     node._placeChildren = (axis, extents) =>
       placeByClaims(
         axis,
         claimChildren(axis, extents),
         node.constraints,
         constraintOperands(),
-        claimPlaced[axis]
+        claimPlaced[axis],
+        nestedPlacement(axis)
       );
+    // Where the claim walk places each child, memoized with the claims it
+    // reads; undefined while it is being computed (a ref inside the layer
+    // that reads the layer itself).
+    const boxesMemo: [
+      Map<number, BoxForm> | undefined | "busy",
+      Map<number, BoxForm> | undefined | "busy",
+    ] = [undefined, undefined];
+    node._childBoxes = (axis) => {
+      const memo = boxesMemo[axis];
+      if (memo === "busy") return undefined;
+      if (memo !== undefined) return memo;
+      boxesMemo[axis] = "busy";
+      const boxes = placeByClaims(
+        axis,
+        claimChildren(
+          axis,
+          node.children.map((c) => c.resolveExtent())
+        ),
+        node.constraints,
+        constraintOperands(),
+        new Set(),
+        nestedPlacement(axis)
+      ).boxes;
+      boxesMemo[axis] = boxes;
+      return boxes;
+    };
     // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
     node._elaborateInAxisScope = deferAxisDims(options, dims);
     // Default zBelow(connector, operand) for relational marks (line/ribbon/…)

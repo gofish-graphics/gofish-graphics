@@ -829,13 +829,14 @@ export async function layout(
     // the ink before it.
     //
     // DECLARED SHORTCUT (#493): on an axis the render gives a size, the ink
-    // is not fitted inside it, and it overflows the canvas. Where ink lands
-    // depends on where layout puts the node it is placed from (a category
-    // label on its band, a value label on its bar), and on a category axis
-    // that band is a share of the slot, not a claim. Fitting it with one
-    // layout needs the claim walk to know where a node lands inside its
-    // parent as a function of σ, and a category band's share to be a claim
-    // (#493 piece 3). TODO(#493): fit ink on a sized axis.
+    // is not fitted inside it, and it overflows the canvas. A label placed
+    // beside a node takes room where the claim walk knows where the node
+    // lands (`placementIn`), so the ink left is what is placed from a band
+    // of a category axis: a label below the last bar of a vertical spread,
+    // a category label wider than the axis's first or last band. A band is
+    // a share of its spread's slot, not a claim, so fitting it needs that
+    // share to be a claim too (#493 piece 3). TODO(#493): fit the ink placed
+    // from a category band.
     ink = drawnOverflow(root);
     for (const axis of [0, 1] as const)
       if (given[axis] === undefined) placeRoot(axis, pad + ink[axis][0]);
