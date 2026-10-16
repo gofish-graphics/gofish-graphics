@@ -14,5 +14,5 @@ def story_default():
         chart(weather, axes={"x": True, "y": False})
         .flow(scatter(by="date", x="precipitation"))
         .mark(rect(w=1, h=10, fill="rgb(31, 119, 180)", opacity=0.7)),
-        {"w": 300, "h": 50},
+        {"w": 300},
     )

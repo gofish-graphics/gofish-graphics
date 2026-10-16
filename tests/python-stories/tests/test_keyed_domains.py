@@ -33,8 +33,9 @@ _GROUP_B = [d for d in _VALUES if d["group"] == "B"]
 
 def story_grouped_bars_inner_height():
     # Every inner group is 150px tall. The groups share the y domain, 0 to
-    # 1.1, so 1.1 maps to 150px in every group. The chart is 150px tall too,
-    # so its y axis lines up with the groups.
+    # 1.1, so 1.1 maps to 150px in every group. The render gives no size, so
+    # the canvas holds the groups and their chrome, and the y axis lines up
+    # with the groups.
     return (
         chart(_VALUES)
         .flow(
@@ -42,7 +43,7 @@ def story_grouped_bars_inner_height():
             stack(by="item", dir="x", h=150),
         )
         .mark(rect(w=20, h="value", fill="item")),
-        {"w": 300, "h": 150},
+        {},
     )
 
 
