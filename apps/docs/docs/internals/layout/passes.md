@@ -737,8 +737,11 @@ report their size).
   size (`guttersAroundPlot`), and claims that total.
 
 At the root, `layout()` measures what the root draws past its box after its
-one layout (`drawnOverflow`): its ink, the hull of every node's box against
-the root's. On an axis the render gives no size, the SVG is the root's box
+one layout (`drawnOverflow`): its ink. A node's box holds what it draws,
+except a layer's ink children, which its box leaves out, so the drawing is
+the hull of the root's box and of every ink child's box. A literal start or
+pixel offset (`spread({ y: 50 })`, `.translate()`) moves a box, and its claim
+moves with it, so it is no ink. On an axis the render gives no size, the SVG is the root's box
 plus its ink plus the padding, and the box sits past the ink before it.
 Content larger than the canvas whatever it is handed (fixed spacing wider
 than the canvas, a literal position past it, an inner size equal to the
