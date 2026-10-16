@@ -12,6 +12,7 @@ import {
   debugNodeTree,
   debugUnderlyingSpaceTree,
   GoFishNode,
+  warnLayout,
   type RenderSession,
 } from "./_node";
 import type { GoFishAST } from "./_ast";
@@ -32,6 +33,12 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { mapsDomain, type Extent } from "./extent";
+import {
+  fixedOverflow,
+  inkOverflow,
+  reportLayoutWarnings,
+  type LayoutWarning,
+} from "./layoutWarnings";
 import * as Monotonic from "../util/monotonic";
 import { KeyedDomains } from "./keyedDomains";
 import {
@@ -375,6 +382,7 @@ export async function layout(
   width: number;
   height: number;
   legendFields: ReadonlySet<string>;
+  warnings: LayoutWarning[];
 }> {
   child = await child;
   child.setRenderSession(contexts.session);
@@ -620,6 +628,9 @@ export async function layout(
         given[axis] === undefined && keyed !== undefined
           ? undefined
           : scopes.solveScope(meta, space, claim, allocated);
+      // Fixed parts larger than the slot: warn (`layoutWarnings.ts`).
+      if (given[axis] !== undefined && claim !== undefined)
+        warnLayout(root, fixedOverflow(root, axis, given[axis]!));
       const grows =
         claim === undefined ? undefined : Monotonic.rising(claim.width);
       const below =
@@ -843,9 +854,34 @@ export async function layout(
     // space, under a node with a size of its own or one that reads y the
     // other way, a label centered on a run of several slots, and a band in
     // a scope that mixes data and bands.
-    ink = drawnOverflow(root);
+    const drawn = drawnOverflow(root);
+    ink = drawn.ink;
     for (const axis of [0, 1] as const)
       if (given[axis] === undefined) placeRoot(axis, ink[axis][0]);
+    // What the graphic draws past a canvas the render gives a size, for any
+    // reason but fixed parts larger than their slot (warned above): warn.
+    for (const axis of [0, 1] as const) {
+      const size = given[axis];
+      const { min, max } = root.dims[axis];
+      if (size === undefined || min === undefined || max === undefined)
+        continue;
+      const name = axis === 0 ? "x" : "y";
+      const fixed = contexts.session.warnings?.some(
+        (w) => w.kind === "fixed-overflow" && w.axis === name
+      );
+      if (fixed) continue;
+      const lo = min - ink[axis][0];
+      const hi = max + ink[axis][1];
+      warnLayout(
+        root,
+        inkOverflow(
+          axis,
+          [lo, hi],
+          size,
+          -lo >= hi - size ? drawn.farthest[axis][0] : drawn.farthest[axis][1]
+        )
+      );
+    }
 
     // The root data → layout-pixel maps the interaction layer converts
     // through: a position along the root's axis order, from the root's
@@ -895,6 +931,7 @@ export async function layout(
           (unitScale as { fields?: Set<string> } | undefined)?.fields ?? []
         )
       : new Set<string>(),
+    warnings: contexts.session.warnings ?? [],
   };
 }
 
@@ -908,13 +945,29 @@ type Span = [number, number];
  * every ink child below it, on the axes it is ink on. A coordinate space's
  * interior is in its own coordinates, and its box stands for it.
  */
-function drawnOverflow(root: GoFishNode): [Span, Span] {
+function drawnOverflow(root: GoFishNode): {
+  ink: [Span, Span];
+  /** Per axis, the ink child that reaches farthest before and after. */
+  farthest: [
+    [GoFishNode | undefined, GoFishNode | undefined],
+    [GoFishNode | undefined, GoFishNode | undefined],
+  ];
+} {
   const lo = [Infinity, Infinity];
   const hi = [-Infinity, -Infinity];
+  const farthest: [
+    [GoFishNode | undefined, GoFishNode | undefined],
+    [GoFishNode | undefined, GoFishNode | undefined],
+  ] = [
+    [undefined, undefined],
+    [undefined, undefined],
+  ];
   const add = (n: GoFishNode, axis: 0 | 1, offset: number) => {
     const { min, max } = n.dims[axis];
     if (min === undefined || max === undefined) return;
     if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+    if (min + offset < lo[axis]) farthest[axis][0] = n;
+    if (max + offset > hi[axis]) farthest[axis][1] = n;
     lo[axis] = Math.min(lo[axis], min + offset);
     hi[axis] = Math.max(hi[axis], max + offset);
   };
@@ -933,14 +986,17 @@ function drawnOverflow(root: GoFishNode): [Span, Span] {
   };
   add(root, 0, 0);
   add(root, 1, 0);
+  farthest[0] = [undefined, undefined];
+  farthest[1] = [undefined, undefined];
   visit(root, [0, 0]);
-  return ([0, 1] as const).map((axis): Span => {
+  const ink = ([0, 1] as const).map((axis): Span => {
     const { min, max } = root.dims[axis];
     if (min === undefined || max === undefined || !(lo[axis] <= hi[axis]))
       return [0, 0];
     const room = (px: number) => (Number.isFinite(px) ? Math.max(0, px) : 0);
     return [room(min - lo[axis]), room(hi[axis] - max)];
   }) as [Span, Span];
+  return { ink, farthest };
 }
 
 /* top-level pass handler */
@@ -985,6 +1041,8 @@ type LayoutData = {
   height: number;
   /** The data fields the rendered legend shows (empty without a legend). */
   legendFields: ReadonlySet<string>;
+  /** What layout found and drew through anyway (`layoutWarnings.ts`). */
+  warnings: LayoutWarning[];
 };
 
 /**
@@ -1129,6 +1187,10 @@ function renderLayout(
 type ChartState = {
   disposeRoot: () => void;
   runtime?: InteractionRuntime;
+  /** The latest layout's warnings, and every one printed so far, so a
+   *  re-render prints each problem once. */
+  warnings: LayoutWarning[];
+  warned: Set<string>;
 };
 type ChartHost = HTMLElement & { __gofishState?: ChartState };
 
@@ -1142,6 +1204,14 @@ type ChartHost = HTMLElement & { __gofishState?: ChartState };
 export interface View {
   /** The element the chart was rendered into. */
   readonly container: HTMLElement;
+  /**
+   * What the latest layout of the chart found and drew through anyway
+   * (#493): fixed parts larger than their slot, a drawing past the canvas.
+   * Each is also printed once with `console.warn`, prefixed
+   * `[gofish:layout]`. Empty until the chart is laid out, and replaced on
+   * each re-render.
+   */
+  readonly warnings: readonly LayoutWarning[];
   /** Tear the chart down: its DOM, its Solid root, its interaction runtime. */
   unmount(): void;
 }
@@ -1164,6 +1234,9 @@ export function disposeChart(container: HTMLElement): void {
  *  that chart still owns `container`: a newer chart there has its own state. */
 const viewOf = (container: HTMLElement, state: ChartState): View => ({
   container,
+  get warnings() {
+    return state.warnings;
+  },
   unmount() {
     if ((container as ChartHost).__gofishState === state)
       disposeChart(container);
@@ -1245,10 +1318,21 @@ export function gofish(
     state = prev;
   } else {
     disposeChart(container);
-    state = { disposeRoot: () => {}, runtime: options.interaction };
+    state = {
+      disposeRoot: () => {},
+      runtime: options.interaction,
+      warnings: [],
+      warned: new Set(),
+    };
   }
 
-  const [layoutData] = createResource(() => runLayout(options, child));
+  const [layoutData] = createResource(() =>
+    runLayout(options, child).then((data) => {
+      state.warnings = data.warnings;
+      reportLayoutWarnings(data.warnings, state.warned);
+      return data;
+    })
+  );
 
   const dispose = solidRender(() => {
     // Suspense covers the async layout resource (derived data resolves in it).
@@ -1331,6 +1415,7 @@ export async function gofishToSVGElement(
     );
   }
   const data = await runLayout(options, child);
+  reportLayoutWarnings(data.warnings);
   const root = document.createElement("div");
   // Layout is already awaited, so the SVG mounts synchronously — no Suspense.
   const dispose = solidRender(() => renderLayout(data, options.defs), root);

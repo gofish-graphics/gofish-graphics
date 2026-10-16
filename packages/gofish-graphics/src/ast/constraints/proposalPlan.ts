@@ -124,11 +124,12 @@ export function buildDistributeSliceMap(
 
   for (const segment of segments) {
     if (ambiguousAxes.has(segment.dAxis)) continue;
-    const slice = sliceExtent(
-      size[segment.dAxis],
-      segment.spacing,
-      segment.order.length
-    );
+    // Spacing larger than the budget leaves no room: the parts are then
+    // sliced as if it took none, so they stay visible and the chain
+    // overflows (the layer warns, `spacingOverflow`).
+    const n = segment.order.length;
+    const fitted = sliceExtent(size[segment.dAxis], segment.spacing, n);
+    const slice = fitted >= 0 ? fitted : size[segment.dAxis] / n;
     for (const name of segment.order) {
       const cur = out.get(name) ?? ([size[0], size[1]] as Size);
       cur[segment.dAxis] = slice;

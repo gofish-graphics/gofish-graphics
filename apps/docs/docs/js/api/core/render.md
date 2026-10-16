@@ -30,10 +30,11 @@ gofish(container, options, () => node): Promise<View>  // a component thunk reso
 
 A `View`, the handle to the chart now mounted in `container`:
 
-| Member      | Type          | Description                                                                                            |
-| ----------- | ------------- | ------------------------------------------------------------------------------------------------------ |
-| `container` | `HTMLElement` | The element the chart was rendered into.                                                               |
-| `unmount()` | `() => void`  | Removes the chart's DOM and detaches it from every input it read. See [Unmounting](#unmounting) below. |
+| Member      | Type                       | Description                                                                                                                   |
+| ----------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `container` | `HTMLElement`              | The element the chart was rendered into.                                                                                      |
+| `unmount()` | `() => void`               | Removes the chart's DOM and detaches it from every input it read. See [Unmounting](#unmounting) below.                        |
+| `warnings`  | `readonly LayoutWarning[]` | What the latest layout drew through anyway. Empty until the chart is laid out. See [Layout warnings](#layout-warnings) below. |
 
 `.render()` on a chart, a mark, or a combinator returns a `Promise<View>`, which
 settles once the chart's first resolve is done.
@@ -77,7 +78,8 @@ is also omitted. A bare fixed-size shape (or a `layer` of them) shrinks to its o
 bounding box. A supplied `w`/`h` is always used as-is, and it is the size of the
 whole graphic: the SVG is exactly `w` × `h`, and the plot gets what the axes,
 titles and legend leave of it. Content of a fixed size that does not fit
-overflows and is clipped.
+overflows and is clipped, and the render warns (see
+[Layout warnings](#layout-warnings)).
 
 ```ts
 // Width inferred (default-width bars, shrink-to-fit); height = 300.
@@ -101,6 +103,35 @@ histograms are sized to a fixed pixel band (`chart(data, { h: 80 })` /
 `chart(data, { w: 80 })`) and laid out alongside a center scatter; because each
 histogram absorbs its own count scale, only the scatter's data units drive the
 shared x/y axes.
+
+## Layout warnings
+
+When a chart cannot fit its canvas, the render keeps its size, draws the
+chart anyway, and warns. Each warning is a `LayoutWarning`:
+
+| Field       | Type                                 | Description                                                                                                                                         |
+| ----------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`      | `"fixed-overflow" \| "ink-overflow"` | `fixed-overflow`: the fixed parts of a node need more pixels than its slot. `ink-overflow`: the drawing reaches past the canvas for another reason. |
+| `node`      | `string`                             | The node, as its operator or mark and key, e.g. `spread(by: "site")`.                                                                               |
+| `axis`      | `"x" \| "y"`                         | The axis.                                                                                                                                           |
+| `needed`    | `number`                             | Pixels the fixed parts need, or the length of the drawing.                                                                                          |
+| `available` | `number`                             | Pixels the node's slot has, or the canvas's length.                                                                                                 |
+| `parts`     | `{ part: string; px: number }[]`     | The fixed parts and their pixels, largest first: the spacing of each spread, and the other fixed sizes.                                             |
+| `overflow`  | `[number, number]?`                  | For `ink-overflow`, the pixels drawn past the canvas before and after it.                                                                           |
+| `message`   | `string`                             | The whole warning as one line.                                                                                                                      |
+
+A node's fixed parts are what does not scale with the data: literal spacing,
+literal sizes and positions, text, and axes and legends. When they need more
+than the slot, no scale fits, so the parts that scale are drawn as if the
+fixed parts took no room, and the graphic overflows. Each warning is also
+printed once with `console.warn`, prefixed `[gofish:layout]`:
+
+```text
+[gofish:layout] spread(by: "site") on x: its fixed parts need 766 px, but its slot has 533.4 px. Fixed parts: spread(by: "site"): spacing 110 × 5 = 550 px; spread(by: "year"): spacing 36 × 1, ×6 = 216 px. The parts that scale are drawn as if the fixed parts took no room, and the graphic overflows on x.
+```
+
+`view.warnings` holds the latest layout's warnings and is replaced on each
+re-render. The export terminals (`toSVG`, `toDisplayList`, …) print them too.
 
 ## Axes
 

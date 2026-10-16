@@ -306,13 +306,17 @@ function waitForSVG(
 async function captureSVG(
   model: WidgetModel,
   container: HTMLElement,
-  log: (...args: any[]) => void
+  log: (...args: any[]) => void,
+  view: Promise<{ warnings: readonly unknown[] }>
 ): Promise<void> {
   try {
     const svg = await waitForSVG(container);
     if (!svg) return;
     const markup = serializeSVG(svg);
     model.set("svg_result", { value: markup });
+    // The layout's warnings (fixed parts larger than their slot, a drawing
+    // past the canvas), for Python's `widget.warnings`.
+    model.set("layout_warnings", [...(await view).warnings]);
     model.save_changes();
     log("Reported svg_result to kernel");
   } catch (e) {
@@ -370,7 +374,7 @@ export default {
       // Report the rendered SVG to the kernel for Python-side export (#571).
       // Fire-and-forget: it waits for the async mount, independent of the
       // synchronous render_result above.
-      void captureSVG(model, container, log);
+      void captureSVG(model, container, log, view);
       // anywidget calls the function `render` returns when the cell's view is
       // removed (the output cleared, the cell re-run): the chart goes with it,
       // detaching it from every input it read.

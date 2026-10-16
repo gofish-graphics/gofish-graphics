@@ -153,6 +153,10 @@ export interface CaptureResult {
 
 /** Wall-clock instant the fake clock is installed at. Any fixed value works;
  *  what matters is that it is the same on every run and every machine. */
+/** The prefix of a layout warning's console line (`LAYOUT_WARNING_PREFIX`
+ *  in gofish-graphics' `layoutWarnings.ts`). */
+const LAYOUT_WARNING_PREFIX = "[gofish:layout]";
+
 const CLOCK_EPOCH = Date.UTC(2024, 0, 1, 0, 0, 0);
 /** Where the clock is parked once the page and the story's module have loaded.
  *  They load with time running normally (a clock paused across module init
@@ -343,8 +347,8 @@ export type RunnerPage = { context: BrowserContext; page: Page };
  * navigation inside one renderer (rendering + screenshot of certain stories
  * flipped `300 18px monospace` metrics for every later story in the run — see
  * header comment). Context startup is ~tens of ms, same order as the
- * navigation itself. Browser console errors go to `log`, so a story's errors
- * print with that story. `contextOptions` override the context defaults
+ * navigation itself. Browser console errors and layout warnings go to `log`,
+ * so a story's errors and warnings print with that story. `contextOptions` override the context defaults
  * (capture-docs-images asks for `deviceScaleFactor: 2`).
  */
 async function openRunnerPage(
@@ -366,6 +370,10 @@ async function openRunnerPage(
   page.on("console", (msg) => {
     if (msg.type() === "error")
       log({ err: true, text: `[browser] ${msg.text()}` });
+    // A layout warning (fixed parts larger than their slot, a drawing past
+    // the canvas) prints with its story, so a render loop sees it.
+    else if (msg.text().startsWith(LAYOUT_WARNING_PREFIX))
+      log({ err: false, text: `    ${msg.text()}` });
     else if (process.env.DEBUG)
       log({ err: false, text: `[browser:${msg.type()}] ${msg.text()}` });
   });

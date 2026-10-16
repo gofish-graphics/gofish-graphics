@@ -2,7 +2,13 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { GoFishNode, placeUnplacedChild, type ToPixel } from "../_node";
+import {
+  GoFishNode,
+  placeUnplacedChild,
+  warnLayout,
+  type ToPixel,
+} from "../_node";
+import { fixedOverflowInside, spacingOverflow } from "../layoutWarnings";
 import type { DisplayList } from "gofish-ir";
 import { shadowCheckScaleRoot } from "../solver/shadow";
 import { getScopeRegistry, seatInScope } from "../solver/scopes";
@@ -805,18 +811,11 @@ export const layer = createNodeOperatorSequential(
             ];
             seatPastGutters(node);
           }
-          for (const axis of layerScales.failedAxes) {
-            // A non-invertible fold-produced Monotonic would otherwise silently
-            // vanish the content (spread's `?? 0`); name the axis and budget so
-            // the failure is visible, then keep the inherited factor.
-            if (!constraintBudget?.covered[axis]) continue;
-            console.warn(
-              `layer: could not invert distribute SIZE claim on ${
-                axis === 0 ? "x" : "y"
-              } axis for budget ${size[axis]}px; keeping inherited scale factor.`,
-              constraintBudget
-            );
-          }
+          // No σ fits the size this layer has: its fixed parts need more.
+          // It keeps the inherited σ, and the layout warns
+          // (`layoutWarnings.ts`).
+          for (const axis of layerScales.failedAxes)
+            warnLayout(node, fixedOverflowInside(node, axis, size[axis]));
           for (const check of layerScales.checks) {
             // Solver shadow (#39): assert the frame equation content(σ)=allocated
             // closes for this σ-scope. No-op unless GOFISH_SOLVER_CHECK is set.
@@ -837,6 +836,17 @@ export const layer = createNodeOperatorSequential(
           const sliceByName = constraintBudget
             ? buildDistributeSliceMap(constraintBudget.segments, size)
             : undefined;
+          // A spread whose parts claim nothing (they share what is left):
+          // spacing alone larger than its size. A spread with a claim is
+          // warned about where its scope is solved.
+          if (
+            node.axisDir !== undefined &&
+            node.resolveExtent()[node.axisDir] === undefined
+          )
+            warnLayout(
+              node,
+              spacingOverflow(node, node.axisDir, size[node.axisDir])
+            );
 
           // `position` constraints with a datum coordinate contribute a data
           // domain on their axis (see collectPositionDomains), and resolve

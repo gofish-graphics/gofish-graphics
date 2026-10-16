@@ -69,6 +69,28 @@ rendering — useful for debugging or testing:
 chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count")).to_ir()
 ```
 
+## Layout warnings
+
+When a chart cannot fit its canvas, the render keeps its size, draws the
+chart anyway, and warns, as in JS (see
+[render › Layout warnings](/js/api/core/render#layout-warnings)). Once the
+widget has rendered, `widget.warnings` is a list with one dict per warning,
+with the keys `kind`, `node`, `axis`, `needed`, `available`, `parts` and
+`message`. The browser console also prints each one, prefixed
+`[gofish:layout]`.
+
+```python
+w = chart(barley).flow(
+    spread(by="site", dir="x", spacing=110),
+    spread(by="year", dir="x", spacing=36),
+    scatter(by="variety", y="yield"),
+).mark(line(stroke="variety")).render(w=700, h=350)   # display this cell
+
+# In a later cell, after it has rendered:
+for warning in w.warnings:
+    print(warning["message"])
+```
+
 ## Notes
 
 - Rendering requires a notebook kernel — `render()` produces a widget. To get

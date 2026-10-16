@@ -9,6 +9,7 @@ covers:
   - packages/gofish-graphics/src/ast/chromeGutters.ts
   - packages/gofish-graphics/src/ast/constraints/claimPlacement.ts
   - packages/gofish-graphics/src/ast/placementClaims.ts
+  - packages/gofish-graphics/src/ast/layoutWarnings.ts
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/axisDirection.ts
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
@@ -782,6 +783,37 @@ render size) still overflows and is clipped.
 
 On an axis the render gives a size, the ink is not fitted inside it, and it
 overflows the canvas.
+
+#### Layout warnings
+
+Layout never draws nothing and never grows the canvas past the render's
+`w`/`h`. Where it cannot fit, it draws anyway and records a `LayoutWarning`
+on the render session (`warnLayout` in `_node.ts`, the builders in
+`layoutWarnings.ts`). `layout()` returns them, `gofish()` puts the latest on
+`view.warnings` and prints each one once per chart (a re-render does not
+print it again), and the export terminals print them too, each as one
+`console.warn` prefixed `[gofish:layout]`. The story capture scripts forward
+those lines, so `pnpm capture-one` prints them under the story.
+
+- **Fixed parts larger than their slot (`fixed-overflow`).** A claim's fixed
+  pixels are its width at σ = 0: literal spacing, literal sizes and
+  positions, text, chrome, and what hangs off bands. Where they exceed the
+  slot no σ ≥ 0 fits. The root checks each axis the render sizes, a layer
+  with a size of its own checks the axes its solve fails on
+  (`solveLayerScales`' `failedAxes`), and a spread whose parts claim nothing
+  checks its spacing against its size (`spacingOverflow`, and its slices
+  then ignore the spacing so the parts stay visible). The warning names the
+  node that holds the fixed parts: down from where the check failed through
+  each node whose fixed pixels are mostly one child's (rings, label
+  wrappers), taking off what each adds, to the first spread, sized node or
+  leaf. It lists the spacing of each spread below it (spreads of one
+  description summed, with their count) and the rest of the fixed pixels.
+  The root then maps its data at the σ where the parts that grow with σ
+  fill the slot, as if the fixed parts took no room.
+- **A drawing past the canvas (`ink-overflow`).** After placement, on each
+  axis the render sizes and no fixed-overflow was found, the hull of the
+  root's box and its ink is checked against the canvas, naming the ink node
+  that reaches farthest.
 
 #### Shape geometry after layout
 

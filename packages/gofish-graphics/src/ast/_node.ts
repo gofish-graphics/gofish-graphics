@@ -100,6 +100,7 @@ import { isToken, Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
 import { childRole, type SharingPlan } from "./constraints/compose";
 import type { KeyedDomains } from "./keyedDomains";
+import type { LayoutWarning } from "./layoutWarnings";
 import { relateEnv, resolveConstraintOperands } from "./constraints";
 import {
   computeRelateSchedule,
@@ -157,6 +158,21 @@ export type RenderSession = {
    *  elaborated; the rewrites read it and never rebuild it. Its demand half
    *  is refreshed once the axes are assigned. */
   keyedDomains?: KeyedDomains;
+  /** What layout found and drew through anyway (`layoutWarnings.ts`):
+   *  fixed parts larger than their slot, a drawing past the canvas. */
+  warnings?: LayoutWarning[];
+};
+
+/** Record `warning` (if any) on the render of `node`. */
+export const warnLayout = (
+  node: GoFishNode,
+  warning: LayoutWarning | undefined
+): void => {
+  if (warning === undefined) return;
+  const session = node.tryGetRenderSession();
+  if (session === undefined) return;
+  const list = (session.warnings ??= []);
+  if (!list.some((w) => w.message === warning.message)) list.push(warning);
 };
 
 export type Placeable = {

@@ -27,6 +27,7 @@ import type { DisplayList } from "gofish-ir";
 import { canvasToPixel, runLayout, type GoFishRenderOptions } from "../gofish";
 import { GoFishNode } from "../_node";
 import { lowerToDisplayList } from "./lower";
+import { reportLayoutWarnings } from "../layoutWarnings";
 
 /**
  * Run layout + bake at `{w, h}` and emit the display list. Async because the
@@ -37,6 +38,7 @@ export async function toDisplayList(
   options: GoFishRenderOptions
 ): Promise<DisplayList.DisplayListDocument> {
   const data = await runLayout(options, child);
+  reportLayoutWarnings(data.warnings);
   return {
     irVersion: 0,
     ir: "gofish-display-list",

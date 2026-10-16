@@ -340,7 +340,10 @@ signal during resolve), three things change; when it is absent — the common ca
   container over, the old chart is torn down entirely: its root and its
   runtime, which detaches its listeners and drops it from every input it read.
 - **The `View` handle.** `gofish()` returns a `View` for the chart it mounted:
-  `{ container, unmount() }`. Every public `render` returns one, synchronously
+  `{ container, warnings, unmount() }`. `warnings` reads the chart state's
+  latest layout warnings, which each layout replaces (see
+  [Layout warnings](/internals/layout/passes#layout-warnings)); the state
+  also keeps the warnings it has printed, so a re-render prints none twice. Every public `render` returns one, synchronously
   for a node and as a `Promise<View>` wherever a resolve comes first (a chart
   builder, a mark or combinator surface, a component thunk; `gofish()` reifies
   a function child, thunk or mark, through `resolveMarkResult`, which calls it

@@ -50,6 +50,11 @@ class GoFishChartWidget(anywidget.AnyWidget):
     # {value: "<svg…>"}. Powers .svg / .to_svg() / .save(). See #571.
     svg_result = traitlets.Dict(allow_none=True, default_value=None).tag(sync=True)
 
+    # What the layout found and drew through anyway, reported by JS once the
+    # chart mounts: one dict per warning (`view.warnings` in JS). Powers
+    # `.warnings`.
+    layout_warnings = traitlets.List(traitlets.Dict()).tag(sync=True)
+
     # Python-only registry: lambda_id -> callable. Never synced.
     derive_functions = traitlets.Dict().tag(sync=False)
 
@@ -214,6 +219,15 @@ class GoFishChartWidget(anywidget.AnyWidget):
             self._write_svg(path)
         else:
             self._pending_saves.append(path)
+
+    @property
+    def warnings(self) -> List[Dict[str, Any]]:
+        """The layout's warnings once the chart has rendered: fixed parts
+        larger than their slot, or a drawing past the canvas. Each is a dict
+        with ``kind``, ``node``, ``axis``, ``needed``, ``available``,
+        ``parts`` and ``message`` (the JS ``view.warnings``). The browser
+        console also prints each one, prefixed ``[gofish:layout]``."""
+        return list(self.layout_warnings)
 
     @property
     def result(self) -> bool:
