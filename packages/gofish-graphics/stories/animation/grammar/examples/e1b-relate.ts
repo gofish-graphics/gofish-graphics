@@ -1,7 +1,7 @@
 // E1b. Stacked <-> grouped bars, as a timeline of scenes placed in time by
-// .relate() clauses. Each chart is on screen for its hold, and a transition
+// .relate() clauses. Each chart is on screen for its .duration(), and a transition
 // fills the gap after it. The third scene is the stacked chart again, with
-// no hold, so a looping clock wraps onto an identical frame.
+// no duration, so a looping clock wraps onto an identical frame.
 import { chart, rect, spread, stack, time, timeline } from "../../../../src/lib";
 import { seafood } from "../../../../src/data/catch";
 import type { TimelineClock } from "./clock";
