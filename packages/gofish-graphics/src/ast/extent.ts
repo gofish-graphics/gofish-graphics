@@ -109,6 +109,20 @@ export const padExtent = (extent: Extent, padding: number): Extent =>
     Monotonic.adds(extent.descent, padding)
   );
 
+/** A claim grown by constant pixels on each side, `[start, end]`: `start`
+ *  below data 0 (its descent), `end` above (its ascent). The chrome around a
+ *  chart claims its gutters this way (#1032). */
+export const growExtent = (
+  extent: Extent,
+  [start, end]: [number, number]
+): Extent =>
+  start === 0 && end === 0
+    ? extent
+    : Extent(
+        Monotonic.adds(extent.ascent, end),
+        Monotonic.adds(extent.descent, start)
+      );
+
 /** Nice a σ-scope root's type and its claim together (issue #659). Nicing is
  *  a type operation ({@link niceContinuous}) that widens only the data part:
  *  the niced claim is the claim plus `σ·(nicedWidth − dataWidth)`, both widths

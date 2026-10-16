@@ -602,8 +602,28 @@ export class GoFishNode {
    * `withAxes` is the content with its axis gutters and category label rows,
    * the box its titles and legend are seated around. Tick and category labels
    * are chrome, not ink of the content: they sit outside `content`.
+   *
+   * `gutters` is how far the chrome reaches past `content` on each side, in
+   * pixels, per axis `[start, end]` in this node's axis order (#1032). Chrome
+   * sits outside its chart, so this node's box is its content's box plus
+   * these: its size claim adds them, and it hands its content what is left
+   * of its slot. They are measured once from a laid-out tree (see `layout`
+   * in gofish.tsx); until then they are 0.
    */
-  public chrome?: { content: GoFishNode; withAxes: GoFishNode };
+  public chrome?: {
+    content: GoFishNode;
+    withAxes: GoFishNode;
+    /** The rings, innermost first; the last is this node. Each ring's first
+     *  child is the ring inside it (or the content), and its other children
+     *  are its chrome. */
+    rings: GoFishNode[];
+    gutters?: [[number, number], [number, number]];
+    /** Per axis, the span `[lo, hi]` of the plot in this node's own frame
+     *  and axis order, recorded by its layout: the keyed domain of its
+     *  content as its frame maps it. Undefined on an axis with no map, where
+     *  the plot is the content's box. The gutters are measured from it. */
+    plot?: [[number, number] | undefined, [number, number] | undefined];
+  };
   /**
    * The chrome this node is asked to carry beyond the axes `resolveAxes`
    * assigned it: a title on each axis it draws (from the `axes` options) and
@@ -622,6 +642,13 @@ export class GoFishNode {
    *  `label.angle: "auto"` reads these tags after layout to score label
    *  collisions per row across the whole chart (see axes/autoLabelAngle.ts). */
   public axisLabel?: LabelRow & { field?: string };
+  /** Per axis, whether this node is ink there: it draws its box, but takes
+   *  no room in its parent's box or in its chart's gutters. Layout size is
+   *  separate from drawn size (#493), as a CSS box's ink overflow or a Typst
+   *  box's `outset` is. A category label is ink along its axis: it labels
+   *  one band, and one wider than its band overdraws its neighbors (#1115),
+   *  instead of pushing the bands apart. */
+  public inkOn?: [boolean, boolean];
   /** Set on a ROOT node by the surface that built it (a chart builder or a
    *  component thunk): builds a fresh, unlaid-out copy of the same chart.
    *  Layout writes each node's box once, so a choice that must lay the chart
@@ -1050,6 +1077,32 @@ export class GoFishNode {
     }
     this._extent = extent;
     return extent;
+  }
+
+  /** The pixels this node's chrome reaches past its content on `axis`,
+   *  `[start, end]` in its axis order (see {@link chrome}); `[0, 0]` for a
+   *  node with no chrome, or before the chrome is measured. */
+  public chromeGutters(axis: 0 | 1): [number, number] {
+    return this.chrome?.gutters?.[axis] ?? [0, 0];
+  }
+
+  /**
+   * Forget this subtree's layout — its boxes, placements, geometry and size
+   * claims — so it can be laid out again from scratch. Layout writes each
+   * box once (the per-axis ledger keeps the first placement), so a second
+   * layout at other sizes needs this first. Types are kept: they do not
+   * depend on layout. A `ref` recomputes its own placement on every layout.
+   */
+  public resetLayout(): void {
+    this.intrinsicDims = undefined;
+    this.transform = undefined;
+    this.renderData = undefined;
+    this._geometry = undefined;
+    this._bbox = undefined;
+    this._extent = undefined;
+    this.children.forEach((c) => {
+      if (c instanceof GoFishNode) c.resetLayout();
+    });
   }
 
   /**

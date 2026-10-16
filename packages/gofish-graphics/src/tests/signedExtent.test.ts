@@ -78,8 +78,8 @@ async function main() {
       const [up, down, up2] = rectsOf(await bars(size));
       const label = size.h === undefined ? "shrink-to-fit" : "given h";
       check(
-        `${label}: content starts at the top margin`,
-        Math.min(up.y, down.y, up2.y) === 40,
+        `${label}: content starts at the top edge`,
+        Math.min(up.y, down.y, up2.y) === 0,
         JSON.stringify([up, down, up2])
       );
       check(

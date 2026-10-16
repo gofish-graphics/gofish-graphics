@@ -73,6 +73,7 @@ import {
 } from "./solver/scopes";
 import { legendRing } from "./legends/elaborate";
 import { elaborateLabels } from "./labels/elaborate";
+import { breadthFirst } from "./elaborationUtils";
 
 export type CategoricalScale = {
   color: Map<any, string>;
@@ -349,6 +350,7 @@ export async function layout(
     debug = false,
     axes = false,
     legend = true,
+    padding,
     labelRowSettings,
   }: {
     w?: number;
@@ -359,6 +361,8 @@ export async function layout(
     debug?: boolean;
     axes?: AxesOptions;
     legend?: boolean;
+    /** Pixels kept clear on each side of the canvas, inside `w`/`h`. */
+    padding?: number;
     /** Internal: how each axis label row is drawn, as chosen by
      *  `label.angle: "auto"` (see `runLayout`). Overrides the angles in `axes`. */
     labelRowSettings?: LabelRowSettings;
@@ -374,11 +378,6 @@ export async function layout(
   child: GoFishNode;
   width: number;
   height: number;
-  rightOverhang: number;
-  topOverhang: number;
-  leftOverhang: number;
-  bottomOverhang: number;
-  hasLegend: boolean;
   legendFields: ReadonlySet<string>;
 }> {
   child = await child;
@@ -510,170 +509,12 @@ export async function layout(
   // (Stage 6b). The root's claim walk below is where every node with a
   // literal size solves its scope (`solveFixed`); the root and every other
   // sized node (a slot, a coord boundary) solve through the same registry.
-  // Reset so a re-run layout pass starts with a clean dump.
   const scopes = getScopeRegistry(contexts.session);
-  scopes.reset();
-
-  // The render root maps the keyed domain of its types (#1114). Its types
-  // and claims are widened to their keyed domains, then niced together
-  // (#659) when some chart draws an axis over the domain (with axes off no
-  // axis is drawn, so axis-less content stays at the honest raw scale).
-  // Every root consumer below — the posScale, the baseline-magnitude size
-  // solve, the equal-measure recentering, the root's size — reads this one
-  // niced domain, the same domain the tick elaboration niced
-  // (`KeyedDomains.scope`), so content and ticks agree by construction. A
-  // claim that is only pixels (content of literal sizes) is left as it is.
-  const rootExtent = child.resolveExtent();
-  const rootScope = (axis: 0 | 1) => {
-    const space = child._underlyingSpace![axis];
-    return keyedDomains.scope(child, axis, space, rootExtent[axis]);
-  };
-  const [niceUnderlyingSpaceX, niceExtentX] = rootScope(0);
-  const [niceUnderlyingSpaceY, niceExtentY] = rootScope(1);
 
   if (debug) {
     console.log("🌳 Underlying Space Tree:");
     debugUnderlyingSpaceTree(child);
   }
-
-  // The root's scope and size on each axis, computed once. Its σ is solved
-  // against the render's size on an axis the render gives one (the root is
-  // then a sized node, #1114). On an axis with no render size the root
-  // shrink-wraps its content: when the nodes with a literal size below map
-  // its keyed domain, all at one σ (`ScopeRegistry.keyedSigma`), the root
-  // maps it at that σ too, so the axis it draws agrees with the marks. Only
-  // when none does (the common `chart(...).render(el, {})`), or they map it
-  // at different σs (an over-constrained layout), is σ solved against the
-  // default canvas. The root's size is its claim at its σ: the slot for a
-  // root fitted to it, its own box for a claim that is only pixels (which is
-  // the same at any σ, so 0 stands in). With no claim (a bar chart's
-  // category axis, a bare fixed-size shape) it is the render's size, or the
-  // default canvas.
-  const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;
-  const rootClaims = [niceExtentX, niceExtentY] as const;
-  const rootSizes = ([0, 1] as const).map((axis) => {
-    const given = axis === 0 ? w : h;
-    const space = rootSpaces[axis];
-    const claim = rootClaims[axis];
-    const meta = { kind: "root", rootKey: "root", axis } as const;
-    const key =
-      given === undefined && mapsDomain(space, claim)
-        ? keyedDomains.axisKey(child, axis, child._underlyingSpace![axis])
-        : undefined;
-    const below = key === undefined ? undefined : scopes.keyedSigma(key, axis);
-    const allocated = given ?? DEFAULT_CANVAS_SIZE;
-    const scope =
-      below === undefined
-        ? scopes.solveScope(meta, space, claim, allocated)
-        : scopes.scopeAt(meta, space, claim, below);
-    // A scope solved against the box fills it (a one-value domain's claim is
-    // centered in it); one at a σ from below is its claim at that σ.
-    const px =
-      claim === undefined
-        ? undefined
-        : scope !== undefined
-          ? below === undefined
-            ? allocated
-            : claim.width.run(scope.sigma)
-          : Monotonic.isConstant(claim.width)
-            ? claim.width.run(0)
-            : undefined;
-    return {
-      scope,
-      px:
-        px !== undefined && Number.isFinite(px) && px > 0
-          ? px
-          : (given ?? DEFAULT_CANVAS_SIZE),
-    };
-  });
-  // The size handed to `child.layout`: a claim that maps a domain
-  // (`mapsDomain`) is data to scale into the root's size. Any other axis is laid out *unsized*: a box of
-  // literal size keeps its pixels, marks keep their default sizes, and the
-  // operator shrinks to fit. Unsized axes are handed `UNSIZED` (NaN); marks
-  // treat a non-finite size as "use my default" (e.g. rect's
-  // DEFAULT_RECT_SIZE) via their `Number.isFinite` guards.
-  const UNSIZED = NaN;
-  const canvas = [w ?? rootSizes[0].px, h ?? rootSizes[1].px] as const;
-  const layoutW =
-    w ?? (mapsDomain(niceUnderlyingSpaceX, niceExtentX) ? canvas[0] : UNSIZED);
-  const layoutH =
-    h ?? (mapsDomain(niceUnderlyingSpaceY, niceExtentY) ? canvas[1] : UNSIZED);
-  let rootScopes: Size<ScopeSolution | undefined> = [
-    rootSizes[0].scope,
-    rootSizes[1].scope,
-  ];
-
-  if (debug) {
-    console.log("width and height constraints:", layoutW, layoutH);
-  }
-
-  // Shared-measure scale equality (#582): when x and y carry the SAME unit of
-  // measure, "1 unit on x" and "1 unit on y" are the same quantity, so their
-  // data→pixel scales must be equal — a circle stays circular, a 45° line looks
-  // 45°. This is type equality, not an opt-in knob: it follows from the measures
-  // matching, the same way `circle({ r })` lowers to a `w`/`h` that share a
-  // measure and so cannot render as an ellipse. The scope-level operation —
-  // take the binding (smaller) σ and equate both axes' scopes — lives on the
-  // registry (Stage 6c: the ONE post-solve σ adjustment, so every slope stays
-  // registry-sourced and the dump shows the FINAL σ). Silently skipped when an
-  // axis has no solved scope to equate.
-  //
-  // Only a DECLARED unit counts: two unknowns that unify through overlays
-  // are one domain, not a claim that a data unit is the same length on x
-  // and y.
-  const unitX = isCONTINUOUS(niceUnderlyingSpaceX)
-    ? niceUnderlyingSpaceX.measure?.unit
-    : undefined;
-  const unitY = isCONTINUOUS(niceUnderlyingSpaceY)
-    ? niceUnderlyingSpaceY.measure?.unit
-    : undefined;
-  if (
-    unitX !== undefined &&
-    unitY !== undefined &&
-    resolveUnit(unitX).kind === "declared" &&
-    sameUnitVar(unitX, unitY)
-  ) {
-    const axisInfo = ([0, 1] as const).map(
-      (axis): EqualMeasureAxis | undefined => {
-        const space = rootSpaces[axis];
-        const scope = rootScopes[axis];
-        return scope !== undefined && isCONTINUOUS(space)
-          ? {
-              space,
-              claim: rootClaims[axis]!,
-              canvas: canvas[axis],
-              unitPx: scope.sigma,
-            }
-          : undefined;
-      }
-    ) as [EqualMeasureAxis | undefined, EqualMeasureAxis | undefined];
-    rootScopes = scopes.recenterEqualMeasure("root", axisInfo) ?? rootScopes;
-  }
-  const rootScaleFactors: Size<number | undefined> = [
-    rootScopes[0]?.sigma,
-    rootScopes[1]?.sigma,
-  ];
-
-  // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
-  // content(σ)=canvas the whole chart resolves against. No-op unless
-  // GOFISH_SOLVER_CHECK is set.
-  shadowCheckScaleRoot(niceExtentX, canvas[0], rootScaleFactors[0], 0);
-  shadowCheckScaleRoot(niceExtentY, canvas[1], rootScaleFactors[1], 1);
-
-  // The root content sits in the root scope's frame by the one seating rule
-  // (`seatInScope`): a pinned content shares the frame and places its data
-  // through its map; a free content's baseline is placed at `originPx`
-  // below (`placeRoot`) and it gets a frame of its own whose 0 is that
-  // baseline. Who applies the pixel of data 0 is inherent to the two origin
-  // states: a pinned extent's position is fixed by its data, a free
-  // extent's is set by its parent.
-  const rootSeats = ([0, 1] as const).map((axis) =>
-    seatInScope(scopeFrame(rootScopes[axis]), rootSpaces[axis])
-  );
-  const rootMaps: Size<AxisMap | undefined> = [
-    rootSeats[0].childMap,
-    rootSeats[1].childMap,
-  ];
 
   // Author each dim's `embedded` flag (point/line/area) now that underlying
   // space has resolved each coord axis's measure — Route B reads it to keep a
@@ -695,142 +536,331 @@ export async function layout(
     perfSetCount("nodes", countNodes(child));
   }
 
-  // Merge the two half-channels into the single per-axis scale carrier handed
-  // to layout: σ (size slope) from `rootScaleFactors`, the anchored map from
-  // `rootMaps`.
-  const rootScales: Size<AxisScale | undefined> = [
-    axisScale(rootScaleFactors[0], rootMaps[0]),
-    axisScale(rootScaleFactors[1], rootMaps[1]),
-  ];
+  // `render({ w, h })` is the whole graphic (#493, #1032): the canvas is the
+  // slot the root is given, its chrome included, less the render's
+  // `padding` on each side. Chrome sits outside its chart, so the root's
+  // content gets the slot less its chrome's gutters, as every node does
+  // with the slot its parent gives it.
+  const pad = padding ?? 0;
+  const slot = (given: number | undefined) =>
+    given === undefined ? undefined : Math.max(0, given - 2 * pad);
+  const root = child;
 
-  // The root's frame on the canvas is its box with axes: the root content
-  // with its axis gutters and category label rows, without the titles and
-  // legend seated around them (see `GoFishNode.chrome`). Its extent sizes a
-  // shrink-to-fit canvas, so a long title or a tall legend column never
-  // inflates the canvas; whatever lies outside the canvas is reserved as a
-  // measured overhang below.
-  const plot = child.chrome?.withAxes ?? child;
-  // The root scales are solved in the root's own axis order; the canvas hands
-  // them down in pixels, so a root whose y grows upward receives them reflected
-  // (and `layout()` reads them back in its own order). The root's order is its
-  // frame's: the chrome rings seat what they wrap at their own origin and only
-  // add chrome around it.
-  const rootYDirection = yDirection(plot);
-  const __tSolve = perfNow();
-  child.layout([layoutW, layoutH], orientScales(rootScales, 1, rootYDirection));
-  perfAdd("solve", perfNow() - __tSolve);
-  // Scope dump (#39 Stage 6b): every σ-scope solved during the layout pass just
-  // above, as printable frame equations. No-op unless GOFISH_DUMP_SCOPES is set.
-  scopes.dump();
-  dumpKeyedDomains(keyedDomains);
-  // Sharing dump (#1114 step 3): every layer's sharing sets, from its
-  // constraints and children. No-op unless GOFISH_DUMP_SHARING is set.
-  dumpSharing(child);
-  // Final extent: a user-given dimension is authoritative; otherwise prefer the
-  // content's laid-out intrinsic size (shrink-to-fit), falling back to the
-  // canvas default when the content didn't report one. Read off the root's
-  // frame (`plot`), so title and legend extents are reserved separately as
-  // measured gutters below. Sizes do not depend on placement, so this is
-  // known before the root is placed.
-  const finalDim = (i: 0 | 1, given: number | undefined): number => {
-    if (given !== undefined) return given;
-    const s = plot.dims[i]?.size;
-    return s !== undefined && Number.isFinite(s) ? s : DEFAULT_CANVAS_SIZE;
-  };
-  const finalW = finalDim(0, w);
-  const finalH = finalDim(1, h);
+  // One layout of the root at the render's slot: solve its scopes, lay it
+  // out, and place it on the canvas.
+  const layoutRoot = () => {
+    // Reset so a re-run layout pass starts with a clean dump.
+    scopes.reset();
 
-  // Root placement. The canvas is a frame `[0, final]` on each axis, and the
-  // root's axis order starts at the frame's start edge: the left on x, the top
-  // for a y that reads top-down, and the BOTTOM for a continuous y, which grows
-  // upward from there (`fromFrameStart`). A position `p` along the root's axis
-  // order is the pixel `p` from that edge, inward.
-  //
-  // A GIVEN dimension is a fixed slot, and the root's box sits at its start
-  // edge in canvas order, the left on x and the top on y, for either y
-  // direction (#1032): the root's axis order starts at the start edge of the
-  // root's own frame, its size (`rootSizes`), so a root smaller than the slot
-  // sits at the slot's top-left rather than at its bottom. A lone root has no
-  // baseline to line up with siblings, so the slot's start edge is its
-  // reference. In its frame the root is seated by the one seating rule
-  // (`seatInScope`): a free (baseline-magnitude) root's baseline at the
-  // scope's `originPx` (#773: `descent·σ` from the frame's start edge, plus
-  // any overhead), and a pinned or origin-less root at 0. Content seated
-  // outside the slot (axis gutters, titles, a legend) is reserved as the
-  // per-side overhangs below.
-  //
-  // A SHRINK-TO-FIT dimension makes the canvas box the content's full extent,
-  // so pin the box's start edge to the frame's start — content then fills the
-  // frame and every overhang formula computes 0 for that axis. Leaving it off
-  // origin is the #574 double-count: the overhangs re-reserve it as a phantom
-  // band (e.g. the pulley diagram). Shrink-to-fit pins the edge, which already
-  // includes any descent: adding `descent·σ` there would count it twice
-  // (#574). The pin uses `pinAnchor`, not the write-once `place()`, so it lands
-  // even when the root self-placed (a diagram with its own root transform).
-  const placeRoot = (axis: 0 | 1) => {
-    const name = axis === 0 ? "x" : "y";
-    const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
-    const direction = axis === 0 ? 1 : rootYDirection;
-    if ((axis === 0 ? w : h) === undefined) {
-      child.pinAnchor(
+    // The render root maps the keyed domain of its types (#1114). Its types
+    // and claims are widened to their keyed domains, then niced together
+    // (#659) when some chart draws an axis over the domain (with axes off no
+    // axis is drawn, so axis-less content stays at the honest raw scale).
+    // Every root consumer below — the posScale, the baseline-magnitude size
+    // solve, the equal-measure recentering, the root's size — reads this one
+    // niced domain, the same domain the tick elaboration niced
+    // (`KeyedDomains.scope`), so content and ticks agree by construction. A
+    // claim that is only pixels (content of literal sizes) is left as it is.
+    // The root's claim includes its chrome's gutters (`growExtent` in the
+    // layer's claim), so a scope solved against the slot leaves them room.
+    const rootExtent = root.resolveExtent();
+    const rootScope = (axis: 0 | 1) => {
+      const space = root._underlyingSpace![axis];
+      return keyedDomains.scope(root, axis, space, rootExtent[axis]);
+    };
+    const [niceUnderlyingSpaceX, niceExtentX] = rootScope(0);
+    const [niceUnderlyingSpaceY, niceExtentY] = rootScope(1);
+
+    // The root's scope and size on each axis, computed once. Its σ is solved
+    // against the render's slot on an axis the render gives one (the root is
+    // then a sized node, #1114). On an axis with no render size the root
+    // shrink-wraps its content: when the nodes with a literal size below map
+    // its keyed domain, all at one σ (`ScopeRegistry.keyedSigma`), the root
+    // maps it at that σ too, so the axis it draws agrees with the marks. Only
+    // when none does (the common `chart(...).render(el, {})`), or they map it
+    // at different σs (an over-constrained layout), is σ solved against the
+    // default canvas. The root's size is its claim at its σ: the slot for a
+    // root fitted to it, its own box for a claim that is only pixels (which is
+    // the same at any σ, so 0 stands in). With no claim (a bar chart's
+    // category axis, a bare fixed-size shape) it is the render's slot, or the
+    // default canvas.
+    const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;
+    const rootClaims = [niceExtentX, niceExtentY] as const;
+    const given = [slot(w), slot(h)] as const;
+    const rootSizes = ([0, 1] as const).map((axis) => {
+      const space = rootSpaces[axis];
+      const claim = rootClaims[axis];
+      const meta = { kind: "root", rootKey: "root", axis } as const;
+      const key = mapsDomain(space, claim)
+        ? keyedDomains.axisKey(root, axis, root._underlyingSpace![axis])
+        : undefined;
+      const keyed =
+        key === undefined ? undefined : scopes.keyedSigma(key, axis);
+      const allocated = given[axis] ?? DEFAULT_CANVAS_SIZE;
+      // A root given a slot fits its claim to it. When no σ does, the
+      // nodes with a literal size and their chrome are larger than the slot
+      // (over-constrained, #1032): the root maps its domain at their σ, and
+      // overflows the slot like any other fixed size.
+      const fitted =
+        given[axis] === undefined && keyed !== undefined
+          ? undefined
+          : scopes.solveScope(meta, space, claim, allocated);
+      const below = fitted === undefined ? keyed : undefined;
+      const scope =
+        below === undefined
+          ? fitted
+          : scopes.scopeAt(meta, space, claim, below);
+      // A scope solved against the box fills it (a one-value domain's claim
+      // is centered in it); one at a σ from below is its claim at that σ.
+      const px =
+        claim === undefined
+          ? undefined
+          : scope !== undefined
+            ? below === undefined
+              ? allocated
+              : claim.width.run(scope.sigma)
+            : Monotonic.isConstant(claim.width)
+              ? claim.width.run(0)
+              : undefined;
+      return {
+        scope,
+        px:
+          px !== undefined && Number.isFinite(px) && px > 0
+            ? px
+            : (given[axis] ?? DEFAULT_CANVAS_SIZE),
+      };
+    });
+    // The size handed to `root.layout`: a claim that maps a domain
+    // (`mapsDomain`) is data to scale into the root's size. Any other axis is
+    // laid out *unsized*: a box of literal size keeps its pixels, marks keep
+    // their default sizes, and the operator shrinks to fit. Unsized axes are
+    // handed `UNSIZED` (NaN); marks treat a non-finite size as "use my
+    // default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
+    // guards.
+    const UNSIZED = NaN;
+    const canvas = [
+      given[0] ?? rootSizes[0].px,
+      given[1] ?? rootSizes[1].px,
+    ] as const;
+    const layoutW =
+      given[0] ??
+      (mapsDomain(niceUnderlyingSpaceX, niceExtentX) ? canvas[0] : UNSIZED);
+    const layoutH =
+      given[1] ??
+      (mapsDomain(niceUnderlyingSpaceY, niceExtentY) ? canvas[1] : UNSIZED);
+    let rootScopes: Size<ScopeSolution | undefined> = [
+      rootSizes[0].scope,
+      rootSizes[1].scope,
+    ];
+
+    if (debug) {
+      console.log("width and height constraints:", layoutW, layoutH);
+    }
+
+    // Shared-measure scale equality (#582): when x and y carry the SAME unit
+    // of measure, "1 unit on x" and "1 unit on y" are the same quantity, so
+    // their data→pixel scales must be equal — a circle stays circular, a 45°
+    // line looks 45°. This is type equality, not an opt-in knob: it follows
+    // from the measures matching, the same way `circle({ r })` lowers to a
+    // `w`/`h` that share a measure and so cannot render as an ellipse. The
+    // scope-level operation — take the binding (smaller) σ and equate both
+    // axes' scopes — lives on the registry (Stage 6c: the ONE post-solve σ
+    // adjustment, so every slope stays registry-sourced and the dump shows the
+    // FINAL σ). Silently skipped when an axis has no solved scope to equate.
+    //
+    // Only a DECLARED unit counts: two unknowns that unify through overlays
+    // are one domain, not a claim that a data unit is the same length on x
+    // and y.
+    const unitX = isCONTINUOUS(niceUnderlyingSpaceX)
+      ? niceUnderlyingSpaceX.measure?.unit
+      : undefined;
+    const unitY = isCONTINUOUS(niceUnderlyingSpaceY)
+      ? niceUnderlyingSpaceY.measure?.unit
+      : undefined;
+    if (
+      unitX !== undefined &&
+      unitY !== undefined &&
+      resolveUnit(unitX).kind === "declared" &&
+      sameUnitVar(unitX, unitY)
+    ) {
+      const axisInfo = ([0, 1] as const).map(
+        (axis): EqualMeasureAxis | undefined => {
+          const space = rootSpaces[axis];
+          const scope = rootScopes[axis];
+          return scope !== undefined && isCONTINUOUS(space)
+            ? {
+                space,
+                claim: rootClaims[axis]!,
+                canvas: canvas[axis],
+                unitPx: scope.sigma,
+              }
+            : undefined;
+        }
+      ) as [EqualMeasureAxis | undefined, EqualMeasureAxis | undefined];
+      rootScopes = scopes.recenterEqualMeasure("root", axisInfo) ?? rootScopes;
+    }
+    const rootScaleFactors: Size<number | undefined> = [
+      rootScopes[0]?.sigma,
+      rootScopes[1]?.sigma,
+    ];
+
+    // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
+    // content(σ)=canvas the whole chart resolves against. No-op unless
+    // GOFISH_SOLVER_CHECK is set.
+    shadowCheckScaleRoot(niceExtentX, canvas[0], rootScaleFactors[0], 0);
+    shadowCheckScaleRoot(niceExtentY, canvas[1], rootScaleFactors[1], 1);
+
+    // The root content sits in the root scope's frame by the one seating
+    // rule (`seatInScope`): a pinned content shares the frame and places its
+    // data through its map; a free content's baseline is placed at
+    // `originPx` below (`placeRoot`) and it gets a frame of its own whose 0
+    // is that baseline. Who applies the pixel of data 0 is inherent to the
+    // two origin states: a pinned extent's position is fixed by its data, a
+    // free extent's is set by its parent.
+    const rootSeats = ([0, 1] as const).map((axis) =>
+      seatInScope(scopeFrame(rootScopes[axis]), rootSpaces[axis])
+    );
+    const rootMaps: Size<AxisMap | undefined> = [
+      rootSeats[0].childMap,
+      rootSeats[1].childMap,
+    ];
+
+    // Merge the two half-channels into the single per-axis scale carrier
+    // handed to layout: σ (size slope) from `rootScaleFactors`, the anchored
+    // map from `rootMaps`.
+    const rootScales: Size<AxisScale | undefined> = [
+      axisScale(rootScaleFactors[0], rootMaps[0]),
+      axisScale(rootScaleFactors[1], rootMaps[1]),
+    ];
+
+    // The root scales are solved in the root's own axis order; the canvas
+    // hands them down in pixels, so a root whose y grows upward receives them
+    // reflected (and `layout()` reads them back in its own order). The root's
+    // order is its frame's: the chrome rings seat what they wrap at their own
+    // origin and only add chrome around it.
+    const rootYDirection = yDirection(root.chrome?.withAxes ?? root);
+    const __tSolve = perfNow();
+    root.layout(
+      [layoutW, layoutH],
+      orientScales(rootScales, 1, rootYDirection)
+    );
+    perfAdd("solve", perfNow() - __tSolve);
+    // Scope dump (#39 Stage 6b): every σ-scope solved during the layout pass
+    // just above, as printable frame equations. No-op unless
+    // GOFISH_DUMP_SCOPES is set.
+    scopes.dump();
+    dumpKeyedDomains(keyedDomains);
+    // Sharing dump (#1114 step 3): every layer's sharing sets, from its
+    // constraints and children. No-op unless GOFISH_DUMP_SHARING is set.
+    dumpSharing(root);
+
+    // Root placement. The canvas is a frame `[pad, size − pad]` on each axis,
+    // and the root's axis order starts at the frame's start edge: the left on
+    // x, the top for a y that reads top-down, and the BOTTOM for a continuous
+    // y, which grows upward from there (`fromFrameStart`). A position `p`
+    // along the root's axis order is the pixel `p` from that edge, inward.
+    //
+    // Where a scope solved against the render's slot places the root's data
+    // (a given dimension that maps a domain), the root is seated by the one
+    // seating rule (`seatInScope`): a free (baseline-magnitude) root's
+    // baseline at the scope's `originPx` (#773: `descent·σ` from the frame's
+    // start edge, plus any overhead, the chrome's start gutter included), and
+    // a pinned or origin-less root at 0. The frame is the root's own size
+    // (`rootSizes`), so a root that does not fill the slot sits at its
+    // top-left rather than at its bottom.
+    //
+    // Anywhere else no data places the root, so its box is placed: its start
+    // edge at the frame's start, at the top-left for either y direction
+    // (#1032). That is a shrink-to-fit dimension, whose box is the canvas,
+    // and a given dimension the root does not map a domain into (a category
+    // axis, a chart with a size of its own), whose box sits at the slot's
+    // top-left. The box is the whole graphic, its chrome included. The pin
+    // uses `pinAnchor`, not the write-once `place()`, so it lands even when
+    // the root self-placed (a diagram with its own root transform).
+    const placeRoot = (axis: 0 | 1) => {
+      const name = axis === 0 ? "x" : "y";
+      const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
+      const direction = axis === 0 ? 1 : rootYDirection;
+      if (given[axis] !== undefined && rootScopes[axis] !== undefined) {
+        root.place(
+          name,
+          pad +
+            fromFrameStart(
+              offset + rootSeats[axis].seatPx,
+              rootSizes[axis].px,
+              direction
+            ),
+          "baseline"
+        );
+        return;
+      }
+      root.pinAnchor(
         name,
-        fromFrameStart(offset, axis === 0 ? finalW : finalH, direction),
+        pad + fromFrameStart(offset, root.dims[axis].size ?? 0, direction),
         orientSide("min", direction)
       );
-      return;
-    }
-    child.place(
-      name,
-      fromFrameStart(
-        offset + rootSeats[axis].seatPx,
-        rootSizes[axis].px,
-        direction
-      ),
-      "baseline"
+    };
+    placeRoot(0);
+    placeRoot(1);
+
+    // The root data → layout-pixel maps the interaction layer converts
+    // through: a position along the root's axis order, from the root's
+    // placed origin.
+    const posScales = [0, 1].map((axis) => {
+      const map = rootScales[axis]?.map;
+      if (map === undefined) return undefined;
+      const origin = root.projectedTranslate(axis as 0 | 1) ?? 0;
+      const direction = axis === 0 ? 1 : rootYDirection;
+      return (v: number) => origin + direction * pxOf(map, v);
+    }) as PixelPosScales;
+
+    return {
+      underlyingSpaceX: niceUnderlyingSpaceX,
+      underlyingSpaceY: niceUnderlyingSpaceY,
+      posScales,
+    };
+  };
+
+  // The gutters are pixels that do not depend on the size of the plot (ticks
+  // come from the domain, labels from the keys, and text is measured), so
+  // one layout measures them: chrome is laid out around its content, and
+  // each chart's gutters are read off the result (`measureChromeGutters`).
+  // If the chrome takes room, the tree is laid out again, with each chart
+  // claiming its gutters around its content.
+  //
+  // DECLARED SHORTCUT (#1032): the gutters are measured by laying the chart
+  // out once more. The right fix measures them in the claim walk, with every
+  // chrome shape reporting its constant size (#493's "fixed-size nodes
+  // report their size") and each ring folding its shapes' sizes, so that one
+  // layout suffices.
+  let placed = layoutRoot();
+  if (measureChromeGutters(root)) {
+    root.resetLayout();
+    placed = layoutRoot();
+  }
+
+  // The SVG is the render's size, exactly (#493): the root, its chrome
+  // included, was fitted to it. A dimension the render does not give is the
+  // root's whole box, its chrome included, plus the padding.
+  const svgDim = (axis: 0 | 1, given: number | undefined): number => {
+    if (given !== undefined) return given;
+    const s = root.dims[axis]?.size;
+    return (
+      (s !== undefined && Number.isFinite(s) ? s : DEFAULT_CANVAS_SIZE) +
+      2 * pad
     );
   };
-  placeRoot(0);
-  placeRoot(1);
-
-  // The root data → layout-pixel maps the interaction layer converts through:
-  // a position along the root's axis order, from the root's placed origin.
-  const posScales = [0, 1].map((axis) => {
-    const map = rootScales[axis]?.map;
-    if (map === undefined) return undefined;
-    const origin = child.projectedTranslate(axis as 0 | 1) ?? 0;
-    const direction = axis === 0 ? 1 : rootYDirection;
-    return (v: number) => origin + direction * pxOf(map, v);
-  }) as PixelPosScales;
-
-  // Measured overhangs off the OUTERMOST wrapper (`child`), from its laid-out
-  // extent. Anything seated beyond the content box is reserved by its placed
-  // extent minus the content box; `render()` then sizes the SVG around them.
-  // `max!` / `min!` discipline (never a silent `?? 0`): the wrapper always emits
-  // a placed extent here — a silent 0 would clip the overhang and mask a layout
-  // bug, so assert it's present. Whether the root carries a legend goes with
-  // them: it decides how the right side is reserved (see `svgFrame`).
-  const rightOverhang = Math.max(0, child.dims[0].max! - finalW);
-  const topOverhang = Math.max(0, -child.dims[1].min!);
-  const bottomOverhang = Math.max(0, child.dims[1].max! - finalH);
-  const leftOverhang = Math.max(0, -child.dims[0].min!);
 
   if (debug) {
     console.log("🌳 Node Tree:");
-    debugNodeTree(child);
+    debugNodeTree(root);
   }
 
   return {
-    underlyingSpaceX: niceUnderlyingSpaceX,
-    underlyingSpaceY: niceUnderlyingSpaceY,
-    posScales,
-    child,
-    width: finalW,
-    height: finalH,
-    rightOverhang,
-    topOverhang,
-    leftOverhang,
-    bottomOverhang,
-    hasLegend,
+    ...placed,
+    child: root,
+    width: svgDim(0, w),
+    height: svgDim(1, h),
     // The fields a rendered legend shows: the color scale's fields when the
     // legend was drawn, none when it was suppressed or had nothing to show.
     legendFields: hasLegend
@@ -839,6 +869,129 @@ export async function layout(
         )
       : new Set<string>(),
   };
+}
+
+type Span = [number, number];
+
+/** The hull of some spans, ignoring undefined ones. */
+const hullOf = (spans: (Span | undefined)[]): Span | undefined =>
+  spans.reduce<Span | undefined>(
+    (acc, s) =>
+      s === undefined
+        ? acc
+        : acc === undefined
+          ? s
+          : [Math.min(acc[0], s[0]), Math.max(acc[1], s[1])],
+    undefined
+  );
+
+/**
+ * Measure each chart's chrome gutters (#1032) off a laid-out tree: how far
+ * the chrome of each node that wears some (`GoFishNode.chrome`) reaches past
+ * its plot on each side, in that node's own frame and axis order. Records
+ * them on the node (`chrome.gutters`) and returns whether any takes room,
+ * i.e. whether the tree must be laid out again for the gutters to count.
+ *
+ * - The chrome is the shapes of the node's rings (`chrome.rings`): every
+ *   child of a ring but the ring inside it.
+ * - The plot is the span the node's layout recorded (`chrome.plot`), or the
+ *   content's box on an axis with none (an unsized axis with no map). The
+ *   charts nested in the content claim their own chrome, so the plot is
+ *   widened by what each of them claims, its plot and its gutters. Chrome
+ *   seated past a nested chart's chrome (a facet label row under the panels'
+ *   axes) is measured past it, and nothing is counted twice.
+ * - A shape that is ink on an axis (`GoFishNode.inkOn`) takes no room
+ *   there. A category label is ink along its axis: how far it reaches past
+ *   its band depends on the band's width, and one wider than its band
+ *   overdraws its neighbors (#1115). Every other chrome shape takes room on
+ *   both axes, the ends of a numeric axis's labels included (#493).
+ * - The content's own ink past the plot (a circle on the domain's edge) is
+ *   not chrome, and takes no room.
+ *
+ * Charts are measured innermost first, so a chart's nested charts already
+ * have their gutters.
+ */
+function measureChromeGutters(root: GoFishNode): boolean {
+  let takesRoom = false;
+  const charts = [...breadthFirst(root)].filter((n) => n.chrome).reverse();
+  for (const chart of charts) {
+    const chrome = chart.chrome!;
+    // A point of `n`'s parent's frame moved into the chart's frame, by every
+    // node between them.
+    const offsetFrom = (n: GoFishAST, axis: 0 | 1): number => {
+      let offset = 0;
+      for (let a = n.parent; a !== undefined && a !== chart; a = a.parent)
+        offset += a.projectedTranslate(axis) ?? 0;
+      return offset;
+    };
+    // A span in pixels of the chart's frame, in the chart's axis order (a y
+    // that grows upward reads the other way).
+    const flip = yDirection(chart) === -1;
+    const inOrder = (axis: 0 | 1, [lo, hi]: Span): Span =>
+      axis === 1 && flip ? [-hi, -lo] : [lo, hi];
+    // `n`'s box in the chart's frame, in pixels.
+    const boxOf = (n: GoFishAST, axis: 0 | 1): Span | undefined => {
+      const { min, max } = n.dims[axis];
+      if (min === undefined || max === undefined) return undefined;
+      const offset = offsetFrom(n, axis);
+      return [min + offset, max + offset];
+    };
+
+    // The chrome's reach, per axis, in pixels.
+    const reach: [Span[], Span[]] = [[], []];
+    const addShape = (n: GoFishAST) => {
+      if (!(n instanceof GoFishNode)) return; // a stand-in draws nothing
+      const kids = n.children.filter((c) => c instanceof GoFishNode);
+      if (kids.length > 0 && n.inkOn === undefined) {
+        kids.forEach(addShape);
+        return;
+      }
+      for (const axis of [0, 1] as const) {
+        if (n.inkOn?.[axis]) continue;
+        const box = boxOf(n, axis);
+        if (box !== undefined) reach[axis].push(box);
+      }
+    };
+    for (const ring of chrome.rings) ring.children.slice(1).forEach(addShape);
+
+    // What the nested charts claim: their plots and gutters, in pixels of
+    // this chart's frame.
+    const nested: GoFishNode[] = [];
+    const collect = (n: GoFishNode) => {
+      if (n.chrome !== undefined) nested.push(n);
+      else for (const c of n.children) if (c instanceof GoFishNode) collect(c);
+    };
+    collect(chrome.content);
+    const claimed = (n: GoFishNode, axis: 0 | 1): Span | undefined => {
+      const plot = n.chrome!.plot?.[axis];
+      if (plot === undefined) return boxOf(n, axis);
+      const [g0, g1] = n.chromeGutters(axis);
+      // In `n`'s axis order, then in pixels of its own frame, then of ours.
+      const lo = plot[0] - g0;
+      const hi = plot[1] + g1;
+      const local: Span =
+        axis === 1 && yDirection(n) === -1 ? [-hi, -lo] : [lo, hi];
+      const offset = (n.projectedTranslate(axis) ?? 0) + offsetFrom(n, axis);
+      return [local[0] + offset, local[1] + offset];
+    };
+
+    chrome.gutters = ([0, 1] as const).map((axis): [number, number] => {
+      const chromeSpan = hullOf(reach[axis]);
+      const own = chrome.plot?.[axis];
+      // The recorded span is in axis order; every other span in pixels.
+      const plotSpan =
+        own === undefined ? boxOf(chrome.content, axis) : inOrder(axis, own);
+      const inner = hullOf([plotSpan, ...nested.map((n) => claimed(n, axis))]);
+      if (chromeSpan === undefined || inner === undefined) return [0, 0];
+      const [cLo, cHi] = inOrder(axis, chromeSpan);
+      const [iLo, iHi] = inOrder(axis, inner);
+      const room = (px: number) => (Number.isFinite(px) ? Math.max(0, px) : 0);
+      const g: [number, number] = [room(iLo - cLo), room(cHi - iHi)];
+      if (g[0] > 0 || g[1] > 0) takesRoom = true;
+      return g;
+    }) as [[number, number], [number, number]];
+  }
+  return takesRoom;
 }
 
 /* top-level pass handler */
@@ -879,15 +1032,9 @@ type LayoutData = {
   /** Root data → layout-pixel maps (see `PixelPosScales`). */
   posScales: PixelPosScales;
   child: GoFishNode;
+  /** The SVG's size: the render's `w`/`h`, or the laid-out graphic's. */
   width: number;
   height: number;
-  rightOverhang: number;
-  topOverhang: number;
-  leftOverhang: number;
-  bottomOverhang: number;
-  /** Whether the root carries a legend (its right overhang is the legend's;
-   *  see {@link svgFrame}). */
-  hasLegend: boolean;
   /** The data fields the rendered legend shows (empty without a legend). */
   legendFields: ReadonlySet<string>;
 };
@@ -928,6 +1075,7 @@ async function layoutOnce(
     axes = false,
     legend = true,
     colorConfig,
+    padding,
   } = options;
   // Seed the unit color scale by config kind. A gradient is a continuous
   // color scale (its `scaleFn`/`domain` are finalized in resolveColorScale
@@ -979,6 +1127,7 @@ async function layoutOnce(
         debug,
         axes,
         legend,
+        padding,
         labelRowSettings,
       },
       child,
@@ -1005,7 +1154,6 @@ const continuousDomain = (
 /** Build the `<svg>` JSX element from already-computed layout data. */
 function renderLayout(
   data: LayoutData,
-  svgPadding: number,
   defs?: JSX.Element[],
   interaction?: InteractionRuntime
 ): JSX.Element {
@@ -1013,13 +1161,7 @@ function renderLayout(
     {
       width: data.width,
       height: data.height,
-      svgPadding,
       defs,
-      rightOverhang: data.rightOverhang,
-      topOverhang: data.topOverhang,
-      leftOverhang: data.leftOverhang,
-      bottomOverhang: data.bottomOverhang,
-      hasLegend: data.hasLegend,
       interaction,
       // Root data → layout-pixel maps for the interaction layer's data↔px
       // conversions (frameConversions).
@@ -1138,8 +1280,6 @@ export function gofish(
     }, container);
   }
 
-  const svgPadding = options.padding ?? PADDING;
-
   const stateHost = container as ChartHost;
 
   // Re-rendering into the same container must always dispose the previous Solid
@@ -1171,12 +1311,7 @@ export function gofish(
         {(() => {
           const data = layoutData();
           if (!data) return null;
-          return renderLayout(
-            data,
-            svgPadding,
-            options.defs,
-            options.interaction
-          );
+          return renderLayout(data, options.defs, options.interaction);
         })()}
       </Suspense>
     );
@@ -1250,13 +1385,9 @@ export async function gofishToSVGElement(
     );
   }
   const data = await runLayout(options, child);
-  const svgPadding = options.padding ?? PADDING;
   const root = document.createElement("div");
   // Layout is already awaited, so the SVG mounts synchronously — no Suspense.
-  const dispose = solidRender(
-    () => renderLayout(data, svgPadding, options.defs),
-    root
-  );
+  const dispose = solidRender(() => renderLayout(data, options.defs), root);
   const svg = root.querySelector("svg");
   if (!svg) {
     dispose();
@@ -1330,70 +1461,13 @@ export async function gofishSave(
   await saveSVGString(await gofishToSVG(options, child), filename);
 }
 
-const PADDING = 40;
-
-/** Breathing room between gutter content and the SVG edge. */
-const EDGE_GAP = 8;
-
 /**
- * The SVG around a laid-out chart: its size, with a gutter on each side of
- * the `width` × `height` canvas, and the layout-pixel → screen map the
- * gutters make. Shared by the live `render()` and `toDisplayList`.
- *
- * Chrome (axis tick/label rows, titles, the legend column) is elaborated into
- * ordinary shapes that live in the node tree, so the SVG is only sized around
- * their measured extent. Content seated beyond the canvas by a constraint
- * (e.g. marginal histogram bands above/right of a scatter) is measured the
- * same way, via the per-side overhangs.
- *
- * Each gutter reserves enough to clear its measured overhang plus a little
- * breathing room from the SVG edge. The `o > 0` guard keeps a chart with
- * `padding: 0` and no chrome at zero reserve (don't invent `EDGE_GAP` px on an
- * empty gutter); and because gutters ≤ `pad - EDGE_GAP` are absorbed by the
- * existing `pad`, an untitled chart stays byte-identical to the pre-chrome
- * output. Ceil: the reserve becomes the root translate, and a fractional
- * translate (measured overhangs are routinely fractional — text widths)
- * shifts every shape off the pixel grid: adjacent area/bar segments grow
- * hairline antialiasing seams and text rasterizes fuzzy.
- *
- * The RIGHT side is reserved one of two ways, and the two overlap in
- * magnitude, so whether the root carries a legend — not the size — tells
- * them apart. Beside a legend column the overhang reserves itself plus a full
- * `pad` (a single-row legend can overhang as little as ~6px, the same as a
- * wide rightmost x-tick label). Otherwise it is reserved like the other three
- * gutters: a small x-tick spill is absorbed into `pad` and a large band
- * reserves its full extent. The right gutter bears no translate, so it
- * needn't be pixel-snapped.
- *
- * Layout geometry is already SVG-native y-DOWN (see `axisDirection.ts`), so
- * the map only offsets by the gutter reserves.
+ * The layout-pixel → screen map. Layout geometry is already SVG-native y-DOWN
+ * pixels (see `axisDirection.ts`), placed on the canvas by `layout()`, so a
+ * layout point is its screen point. Shared by the live `render()` and
+ * `toDisplayList`.
  */
-export function svgFrame(
-  overhangs: {
-    leftOverhang: number;
-    topOverhang: number;
-    rightOverhang: number;
-    bottomOverhang: number;
-    hasLegend: boolean;
-  },
-  width: number,
-  height: number,
-  pad: number
-): { width: number; height: number; toPixel: ToPixel } {
-  const reserve = (o: number) =>
-    o > 0 ? Math.ceil(Math.max(pad, o + EDGE_GAP)) : pad;
-  const left = reserve(overhangs.leftOverhang);
-  const top = reserve(overhangs.topOverhang);
-  const bottom = reserve(overhangs.bottomOverhang);
-  const right = overhangs.rightOverhang;
-  return {
-    width: overhangs.hasLegend
-      ? left + width + right + reserve(0)
-      : left + width + reserve(right),
-    height: top + height + bottom,
-    toPixel: ([gx, gy]) => [gx + left, gy + top],
-  };
-}
+export const canvasToPixel: ToPixel = (p) => p;
 
 export const render = (
   {
@@ -1401,12 +1475,6 @@ export const render = (
     height,
     transform,
     defs,
-    rightOverhang = 0,
-    topOverhang = 0,
-    leftOverhang = 0,
-    bottomOverhang = 0,
-    hasLegend = false,
-    svgPadding,
     interaction,
     posScales,
     domains,
@@ -1415,27 +1483,13 @@ export const render = (
     height: number;
     transform?: string;
     defs?: JSX.Element[];
-    rightOverhang?: number;
-    topOverhang?: number;
-    leftOverhang?: number;
-    bottomOverhang?: number;
-    hasLegend?: boolean;
-    svgPadding?: number;
     interaction?: InteractionRuntime;
     posScales?: PixelPosScales;
     domains?: { x?: [number, number]; y?: [number, number] };
   },
   child: GoFishNode
 ): JSX.Element => {
-  const pad = svgPadding ?? PADDING;
-
-  const frame = svgFrame(
-    { leftOverhang, topOverhang, rightOverhang, bottomOverhang, hasLegend },
-    width,
-    height,
-    pad
-  );
-  const toPixel = frame.toPixel;
+  const toPixel = canvasToPixel;
   const interactive = interaction !== undefined;
   const paintBaked = () => {
     const __tLower = perfNow();
@@ -1459,8 +1513,8 @@ export const render = (
   return (
     <svg
       ref={(el: SVGSVGElement) => interaction?.attachSVG(el)}
-      width={frame.width}
-      height={frame.height}
+      width={width}
+      height={height}
       xmlns="http://www.w3.org/2000/svg"
     >
       <Show when={defs}>

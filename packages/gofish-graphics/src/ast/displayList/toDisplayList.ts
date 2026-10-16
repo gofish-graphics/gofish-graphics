@@ -13,23 +13,20 @@
  *
  * Coordinate model. Layout geometry is already SVG-native y-DOWN pixels (a
  * continuous y axis grows upward because its operators place it that way, see
- * `axisDirection.ts`), so a layout point `(gx, gy)` lands at
- * `(gx + leftReserve, gy + topReserve)`. The emitter bakes that offset
- * (`toPixel`) into every coordinate, so the display list needs no further
- * transform — the reference SVG backend (`DisplayList.displayListToSVG`) emits
- * it verbatim.
+ * `axisDirection.ts`), and layout places the graphic on the canvas, so a
+ * layout point `(gx, gy)` is its screen point (`canvasToPixel`). The display
+ * list needs no further transform — the reference SVG backend
+ * (`DisplayList.displayListToSVG`) emits it verbatim.
  *
  * Each primitive owns its lowering (`lower` on the factory → `INTERNAL_lower`);
- * this module only drives layout, computes the viewport + `toPixel`, and walks
+ * this module only drives layout, reads the viewport, and walks
  * the bake. See /internals/core/rendering.
  */
 
 import type { DisplayList } from "gofish-ir";
-import { runLayout, svgFrame, type GoFishRenderOptions } from "../gofish";
+import { canvasToPixel, runLayout, type GoFishRenderOptions } from "../gofish";
 import { GoFishNode } from "../_node";
 import { lowerToDisplayList } from "./lower";
-
-const PADDING = 40;
 
 /**
  * Run layout + bake at `{w, h}` and emit the display list. Async because the
@@ -39,15 +36,11 @@ export async function toDisplayList(
   child: GoFishNode | Promise<GoFishNode>,
   options: GoFishRenderOptions
 ): Promise<DisplayList.DisplayListDocument> {
-  const pad = options.padding ?? PADDING;
   const data = await runLayout(options, child);
-
-  const frame = svgFrame(data, data.width, data.height, pad);
-
   return {
     irVersion: 0,
     ir: "gofish-display-list",
-    viewport: { w: frame.width, h: frame.height },
-    items: lowerToDisplayList(data.child, frame.toPixel),
+    viewport: { w: data.width, h: data.height },
+    items: lowerToDisplayList(data.child, canvasToPixel),
   };
 }

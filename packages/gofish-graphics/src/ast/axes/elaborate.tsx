@@ -1123,6 +1123,8 @@ function elaborateOrdinalAxis(
         depth: depth0 + k,
         field: title,
       };
+      // Ink along the axis: it may overdraw the next band (#1115).
+      label.inkOn = dim === 0 ? [true, false] : [false, true];
       if (aligns[k] === "start") {
         nodes.push(label);
         nodes.push(
@@ -1767,6 +1769,7 @@ export async function elaborateChrome(
   }
 
   let withAxes: GoFishNode = node;
+  const rings: GoFishNode[] = [];
   const root = await wrapPreservingIdentity(node, async (content) => {
     let ring: GoFishNode = content;
 
@@ -1799,6 +1802,7 @@ export async function elaborateChrome(
         },
         { x: contentAt(0), y: contentAt(1) }
       );
+      rings.push(ring);
     }
 
     // Category label rows: ordinal labels track their keys via `ref(...)`, so
@@ -1812,6 +1816,7 @@ export async function elaborateChrome(
         nodes: refBased.flatMap((e) => e.nodes),
         constraints: (g) => refBased.flatMap((e) => e.constraints(g)),
       });
+      rings.push(ring);
     }
     withAxes = ring;
 
@@ -1826,15 +1831,17 @@ export async function elaborateChrome(
           sides
         )
       );
+      rings.push(ring);
     }
 
     // The legend, beside everything inside it, titles included.
     if (legend !== undefined) {
       ring = await wrapRing(ring, LEGEND_CONTENT_NAME, legend);
+      rings.push(ring);
     }
     return ring;
   });
-  root.chrome = { content: node, withAxes };
+  root.chrome = { content: node, withAxes, rings };
 
   return { node: root, changed: true, fold };
 }

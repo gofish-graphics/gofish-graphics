@@ -443,7 +443,9 @@ async function main() {
       { a: 2, b: 1 },
     ];
     const key = distStruct({ x: "a", y: "b" }).bin(DistBin.hex({ radius: 1 }));
-    const dl = await chart(rows, { axes: false })
+    // No legend: the circles below have none, and a legend takes room
+    // (#1032), so the two charts would map the plane differently.
+    const dl = await chart(rows, { axes: false, legend: false })
       .flow(partition({ by: key }))
       .mark(region({ fill: distField("a").count() }))
       .toDisplayList({ w: 300, h: 200 });

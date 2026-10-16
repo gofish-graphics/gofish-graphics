@@ -20,7 +20,7 @@ import {
   isUNDEFINED,
   magnitude,
 } from "../underlyingSpace";
-import { Extent, impliedExtent, mapsDomain } from "../extent";
+import { Extent, growExtent, impliedExtent, mapsDomain } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import type { KeyedDomains } from "../keyedDomains";
 import { isValue } from "../data";
@@ -205,6 +205,20 @@ function applyRelationalZBelowDefaults(
   node.constraints = [...node.constraints, ...zBelowConstraints];
 }
 
+const sum = ([a, b]: [number, number]) => a + b;
+
+/** The pixels a chart's chrome adds around its plot on `axis`. A chart's
+ *  own `w`/`h` is its plot without chrome (#1032), and its chrome dresses its
+ *  content, the chart frame's one child (`frameChart`), so a chart with a
+ *  size of its own is that size plus its content's gutters. 0 for any other
+ *  node. */
+const chartChrome = (node: GoFishNode, axis: 0 | 1): number => {
+  const content = node.children[0];
+  return node._chartBox?.[axis] === true && content instanceof GoFishNode
+    ? sum(content.chromeGutters(axis))
+    : 0;
+};
+
 export const layer = createNodeOperatorSequential(
   async (
     childrenOrOptions:
@@ -255,6 +269,12 @@ export const layer = createNodeOperatorSequential(
     // the box. `contentExtents` is the content's claim, written by
     // `resolveExtent` and solved against the box by `layout`.
     const contentExtents: [Extent | undefined, Extent | undefined] = [
+      undefined,
+      undefined,
+    ];
+    // The content's claim without the chrome's gutters, for a node dressed
+    // in chrome: what its plot spans (see `chrome.plot` below).
+    const plotExtents: [Extent | undefined, Extent | undefined] = [
       undefined,
       undefined,
     ];
@@ -373,7 +393,7 @@ export const layer = createNodeOperatorSequential(
     // claim hook runs, this is the composition behind the current types.
     let layerTypes: ReturnType<typeof composeLayerTypes> | undefined;
 
-    const node = new GoFishNode(
+    const node: GoFishNode = new GoFishNode(
       {
         type: options.box === true ? "box" : "layer",
         key: options.key,
@@ -467,6 +487,16 @@ export const layer = createNodeOperatorSequential(
             for (const axis of [0, 1] as const)
               if (!isUNDEFINED(t.gridAxes[axis])) resolved[axis] = undefined;
           }
+          // Chrome sits outside its chart (#1032): a node dressed in chrome
+          // (its axes, titles, legend) claims its content plus the chrome's
+          // gutters, constant pixels on each side, so a scope solved at or
+          // above it gives the content what the gutters leave of the slot.
+          for (const axis of [0, 1] as const) {
+            const claim = resolved[axis];
+            plotExtents[axis] = claim;
+            if (claim !== undefined)
+              resolved[axis] = growExtent(claim, node.chromeGutters(axis));
+          }
           // The content's claim, which `layout` solves against the layer's box
           // when the layer is sized. A data-valued size reports the claim of
           // its magnitude instead; the content's claim stays inside the box.
@@ -510,7 +540,8 @@ export const layer = createNodeOperatorSequential(
           return ([0, 1] as const).map((axis) => {
             const size = dims[axis].size;
             if (isValue(size)) return impliedExtent(spaces[axis]);
-            if (typeof size === "number") return fixedClaim(axis, size);
+            if (typeof size === "number")
+              return fixedClaim(axis, size + chartChrome(node, axis));
             return resolved[axis];
           }) as [Extent | undefined, Extent | undefined];
         },
@@ -530,13 +561,18 @@ export const layer = createNodeOperatorSequential(
             scales?.[0]?.map,
             scales?.[1]?.map,
           ];
-          // Compute size using dims (w and h) before passing to children
-          size = [
-            computeSize(dims[0].size, inheritedScaleFactors[0]!, size[0]) ??
-              size[0],
-            computeSize(dims[1].size, inheritedScaleFactors[1]!, size[1]) ??
-              size[1],
-          ];
+          // Compute size using dims (w and h) before passing to children. A
+          // chart's own size is its plot's: its chrome adds around it.
+          size = ([0, 1] as const).map((axis) => {
+            const own = computeSize(
+              dims[axis].size,
+              inheritedScaleFactors[axis]!,
+              size[axis]
+            );
+            return own === undefined
+              ? size[axis]
+              : own + chartChrome(node, axis);
+          }) as Size;
 
           // Grid budget (Stage 6e): resolve the tracks under the unified max rule
           // from the cells' pre-layout size claims — each track sizes to the max
@@ -591,6 +627,32 @@ export const layer = createNodeOperatorSequential(
             [scopes.fixedSolve(node, 0), scopes.fixedSolve(node, 1)]
           );
           const childScaleFactors = layerScales.sigmas;
+          // A node dressed in chrome records the span of its plot in its own
+          // frame, which its chrome's gutters are measured from (#1032): the
+          // keyed domain of its content as its frame maps it. On an axis with
+          // no map the plot is the content's box.
+          if (node.chrome !== undefined) {
+            node.chrome.plot = ([0, 1] as const).map((axis) => {
+              const frame = layerScales.frames[axis];
+              const sigma = childScaleFactors[axis];
+              const claim = plotExtents[axis];
+              if (frame !== undefined && sigma !== undefined && claim) {
+                const wide =
+                  keyed?.scope(
+                    node,
+                    axis,
+                    layerTypes?.resolved[axis],
+                    claim,
+                    viaSet(axis)
+                  )[1] ?? claim;
+                return [
+                  frame.originPx - wide.descent.run(sigma),
+                  frame.originPx + wide.ascent.run(sigma),
+                ];
+              }
+              return undefined;
+            }) as NonNullable<GoFishNode["chrome"]>["plot"];
+          }
           for (const axis of layerScales.failedAxes) {
             // A non-invertible fold-produced Monotonic would otherwise silently
             // vanish the content (spread's `?? 0`); name the axis and budget so
@@ -745,7 +807,7 @@ export const layer = createNodeOperatorSequential(
                 ? proposals.regionByName.get(childName)
                 : undefined) ??
               (constrainedChildren.has(i) ? undefined : proposals.passedOn);
-            const layoutSize = applyNestLayoutProposal(
+            const proposed = applyNestLayoutProposal(
               childLayoutSizeProposal(
                 childName,
                 size,
@@ -757,6 +819,15 @@ export const layer = createNodeOperatorSequential(
               layoutPlan.nestPlan?.byDerived.get(i),
               childPlaceables
             );
+            // A node dressed in chrome hands its content (its first child)
+            // what the chrome's gutters leave of its slot (#1032).
+            const layoutSize: Size =
+              i === 0 && node.chrome !== undefined
+                ? [
+                    proposed[0] - sum(node.chromeGutters(0)),
+                    proposed[1] - sum(node.chromeGutters(1)),
+                  ]
+                : proposed;
             // Recombine the two forwarding decisions into the single carrier: σ
             // forwards uniformly (childScaleFactors), the anchored map forwards
             // per child (childPosScalesFor — stripped where a constraint consumed
@@ -947,13 +1018,17 @@ export const layer = createNodeOperatorSequential(
             [],
             [],
           ];
-          for (const cp of childPlaceables) {
+          childPlaceables.forEach((cp, i) => {
             const d = cp.dims;
+            // A child that is ink on an axis draws there but takes no room
+            // in this box (`GoFishNode.inkOn`).
+            const ink = (children[i] as GoFishNode).inkOn;
             for (const axis of [0, 1] as const) {
+              if (ink?.[axis]) continue;
               mins[axis].push(d[axis].min);
               maxs[axis].push(d[axis].max);
             }
-          }
+          });
           const minX = foldFinite(mins[0], Math.min);
           const maxX = foldFinite(maxs[0], Math.max);
           const minY = foldFinite(mins[1], Math.min);
