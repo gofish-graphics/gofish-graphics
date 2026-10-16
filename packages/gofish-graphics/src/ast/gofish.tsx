@@ -542,10 +542,9 @@ export async function layout(
   // content gets the slot less its chrome's gutters, as every node does
   // with the slot its parent gives it.
   const pad = padding ?? 0;
-  // How far the root reaches past its slot beyond what its chrome claims,
-  // in pixels before and after it on each axis no scope maps (see
-  // `measureCanvasInk`): the canvas keeps it clear, inside `w`/`h`. 0 until
-  // measured.
+  // What the root draws past its plot that its chrome does not claim, in
+  // pixels before and after it on each axis (see `measureCanvasInk`): the
+  // canvas keeps it clear, inside `w`/`h`. 0 until measured.
   let ink: [Span, Span] = [
     [0, 0],
     [0, 0],
@@ -833,11 +832,17 @@ export async function layout(
         posScales,
       },
       // Per axis, the slot the root was fitted to, where the render gives
-      // one, and whether a scope solved against it maps the root's domain.
+      // one, and, where a scope solved against it maps the root's domain,
+      // the root's plot in its own frame, in pixels: the slot, from the
+      // root's seat.
       slots: given,
-      scoped: [0, 1].map(
-        (axis) => given[axis] !== undefined && rootScopes[axis] !== undefined
-      ) as [boolean, boolean],
+      scoped: ([0, 1] as const).map((axis): Span | undefined => {
+        if (given[axis] === undefined || rootScopes[axis] === undefined)
+          return undefined;
+        const seat = rootSeats[axis].seatPx;
+        const [lo, hi] = [-seat, rootSizes[axis].px - seat];
+        return axis === 1 && rootYDirection === -1 ? [-hi, -lo] : [lo, hi];
+      }) as [Span | undefined, Span | undefined],
     };
   };
 
@@ -846,9 +851,9 @@ export async function layout(
   // one layout measures them: chrome is laid out around its content, and
   // each chart's gutters are read off the result (`measureChromeGutters`).
   // If the chrome takes room, the tree is laid out again, with each chart
-  // claiming its gutters around its content. The same layout measures how
-  // far content with no σ reaches past its slot (`measureCanvasInk`), which
-  // the canvas then keeps clear.
+  // claiming its gutters around its content. The same layout measures what
+  // the root draws past its plot besides its chrome (`measureCanvasInk`),
+  // which the canvas then keeps clear.
   //
   // DECLARED SHORTCUT (#1032): the gutters are measured by laying the chart
   // out once more. The right fix measures them in the claim walk, with every
@@ -1044,35 +1049,38 @@ function measureChromeGutters(root: GoFishNode): {
 }
 
 /**
- * How far the laid-out root reaches past the slot it was handed, beyond what
- * its chrome claims, in pixels before and after it on each axis the render
- * gives a size and maps no domain into (#493). Content with no σ there (rows
- * of a category axis) is laid out in the size it is handed, but constant
- * pixels it adds (a label row under each bar, fixed spacing) can make it
- * larger than that. Those pixels do not depend on the slot, so the canvas
- * keeps them clear and the content gets the rest. On an axis a scope maps,
- * the plot is the mapped domain, and a mark that reaches past it (a circle on
- * the domain's edge) is ink: it takes no room. The slot is the plot of the
- * root as a chart (`plots`, from `measureChromeGutters`, which widens it by
- * the nested charts' claims), or the root's box from its start for a root
- * with no chrome. The root's own gutters are taken off, since it claims them
- * itself.
+ * What the laid-out root draws past its plot that its chrome does not claim,
+ * in pixels before and after it on each axis the render gives a size (#493:
+ * layout size is separate from drawn size, and the root measures the drawn
+ * overflow once, so the SVG holds everything drawn). That is content a
+ * constraint seats past the plot, a value label above the tallest bar, a
+ * circle on the domain's edge, and, on an axis no scope maps, constant
+ * pixels the content adds beyond the size it is handed (a label row under
+ * each bar, fixed spacing). None of it depends on the plot's size, so the
+ * canvas keeps it clear and the plot gets the rest. (Ink scaled by σ, a bar
+ * whose data width overhangs its datum, is measured at the first layout's
+ * σ, which only overestimates it.)
+ *
+ * The plot is the root's plot as a chart (`plots`, from
+ * `measureChromeGutters`, which widens it by the nested charts' claims), or,
+ * for a root with no chrome, its slot as its scope maps it (`scoped`) or
+ * from the root's start. The root's own gutters are taken off, since it
+ * claims them itself.
  */
 function measureCanvasInk(
   root: GoFishNode,
   plots: Map<GoFishNode, [Span | undefined, Span | undefined]>,
   slots: readonly [number | undefined, number | undefined],
-  scoped: [boolean, boolean]
+  scoped: [Span | undefined, Span | undefined]
 ): [Span, Span] {
   return ([0, 1] as const).map((axis): Span => {
     const own = root.intrinsicDims?.[axis];
     const slot = slots[axis];
-    if (slot === undefined || scoped[axis] || own?.min === undefined)
-      return [0, 0];
+    if (slot === undefined || own?.min === undefined) return [0, 0];
     const box: Span = [own.min, own.min + (own.size ?? 0)];
     const plot = root.chrome
       ? plots.get(root)?.[axis]
-      : ([box[0], box[0] + slot] as Span);
+      : (scoped[axis] ?? ([box[0], box[0] + slot] as Span));
     if (plot === undefined) return [0, 0];
     // The root's gutters in pixels: a y that grows upward starts at the
     // bottom.

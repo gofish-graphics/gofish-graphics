@@ -711,16 +711,19 @@ ink along its axis, since how far it reaches past its band depends on the
 band's width; one wider than its band overdraws its neighbors (#1115), and it
 does not count in its parent layer's box on that axis either.
 
-The same layout measures one more thing at the root (`measureCanvasInk`). On
-an axis the render gives a size and no scope maps (a category axis), the
-content is laid out in the size it is handed, but constant pixels it adds (a
-label row under each bar, fixed spacing) can make it larger than that. The
-root measures how far it reaches past its slot, beyond its own gutters, and
-the canvas keeps that clear too, so the content gets the rest. On an axis a
-scope maps, a mark that reaches past the plot (a circle on the domain's edge)
-is ink and takes no room. Content that is larger than the canvas whatever it
-is handed (fixed spacing wider than the canvas, a literal position past it)
-still overflows and is clipped.
+The same layout measures one more thing at the root (`measureCanvasInk`):
+what the root draws past its plot that its chrome does not claim. That is a
+value label above the tallest bar, a circle on the domain's edge, content a
+constraint seats past the plot, and, on an axis no scope maps (a category
+axis), constant pixels the content adds beyond the size it is handed (a label
+row under each bar, fixed spacing). Layout size is separate from drawn size
+(#493): this ink takes no room inside the chart, but the root measures it
+once and the canvas keeps it clear, so the plot gets the rest and the SVG
+holds everything drawn. Ink scaled by σ (a bar whose data width overhangs its
+datum) is measured at the first layout's σ, which only overestimates it.
+Content larger than the canvas whatever it is handed (fixed spacing wider
+than the canvas, a literal position past it, an inner size equal to the
+render size) still overflows and is clipped.
 
 DECLARED SHORTCUT: the measuring layout costs one more layout pass for a
 chart with chrome. The right fix measures the gutters in the claim walk, with
