@@ -704,7 +704,10 @@ export function composePlanExtents(
   // The plot's claim instead (`GoFishNode.resolvePlotExtent`): each child's
   // plot claim, and which children are stand-ins. A chain with a stand-in
   // is laid by every part and reaches only as far as its stand-ins: its
-  // other parts are dressing laid beside them.
+  // other parts are dressing laid beside them. An align places its
+  // children by their whole boxes, so they count whole there, as a chain's
+  // other parts do; a child no fold covers sits at its origin, and counts
+  // its plot.
   plot?: { extents: Size<Extent | undefined>[]; standIn: boolean[] }
 ): {
   covered: [boolean, boolean];
@@ -737,7 +740,7 @@ export function composePlanExtents(
           )
         : f.kind === "align"
           ? resolveAlignmentExtent(
-              f.al.idx.map((i) => reached[i][axis]),
+              f.al.idx.map((i) => childExtents[i][axis]),
               f.al.idx.map((i) => childSpaces[i][axis]),
               f.al.anchor,
               f.space
