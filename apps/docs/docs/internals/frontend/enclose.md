@@ -156,9 +156,14 @@ Settled:
 - `padding` and the paint stay on `enclose`; the shape's own options stay on
   the shape.
 - No `Shape.ellipse`, no `curve` option, no plot-area rule.
-- `avoiding` takes nodes or a `selectAll(name)` selection, and a listed node
-  that is also a member is ignored, so the user never computes a set
-  difference.
+- `avoiding` takes a list of nodes or refs, or one `selectAll(name)` as the
+  whole value, in JS as on the wire (`NodeSelectionIR`): a single ref and a
+  `selectAll` inside a list are errors. A listed node that is also a member
+  is ignored, so the user never computes a set difference.
+- `neck` is above 0 and at most 1. At 0 a link would have no width: its two
+  pulled-in sides meet, the crossing check gives the pull back, and the
+  outline comes out fuller than at a small `neck`. Any value above 0 is
+  honored as asked (there is no hidden floor).
 
 Shortcuts, each a known approximation:
 

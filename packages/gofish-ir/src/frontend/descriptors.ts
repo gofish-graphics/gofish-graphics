@@ -827,9 +827,9 @@ export const STRATEGIES = {
             doc: "How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`.",
           },
           neck: {
-            type: t.num({ min: 0, max: 1 }),
+            type: t.num({ exclusiveMin: 0, max: 1 }),
             default: 1,
-            doc: "How far the outline is NOT pulled in between members, 0 to 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. It never changes the pieces or holes.",
+            doc: "How far the outline is NOT pulled in between members, above 0 and at most 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. 0 is not allowed: a link `neck` times the bulge would have no width, and its two sides would meet. It never changes the pieces or holes.",
           },
           avoiding: {
             type: t.ref("NodeSelectionIR"),

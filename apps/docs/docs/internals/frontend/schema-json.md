@@ -3873,9 +3873,9 @@ for the API.
             },
             "neck": {
               "$ref": "#/$defs/Number",
-              "minimum": 0,
+              "exclusiveMinimum": 0,
               "maximum": 1,
-              "description": "How far the outline is NOT pulled in between members, 0 to 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. It never changes the pieces or holes.",
+              "description": "How far the outline is NOT pulled in between members, above 0 and at most 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. 0 is not allowed: a link `neck` times the bulge would have no width, and its two sides would meet. It never changes the pieces or holes.",
               "default": 1
             },
             "avoiding": {

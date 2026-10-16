@@ -75,7 +75,8 @@ export const box = bareKind(
  *   back out as its clearance circle.
  * @param roundness How far corners are rounded, in pixels. It never fills a
  *   gap, opens a hole or joins two pieces. Default: `padding`.
- * @param neck How far the outline is not pulled in between members, 0 to 1.
+ * @param neck How far the outline is not pulled in between members, above 0
+ *   and at most 1 (at 0 a link would have no width).
  *   Default 1 (not pulled in).
  * @param avoiding Nodes to keep out: a list of nodes or refs, or a
  *   `selectAll(name)` selection. A listed member is ignored.

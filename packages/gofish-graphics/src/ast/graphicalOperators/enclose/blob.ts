@@ -2868,7 +2868,7 @@ const fillHoles = (region: Region, zones: Prim[], res: number): Region => {
 const smoothBlob = (members: Member[], o: SmoothOpts): Pt[][] => {
   const clearance = o.clearance ?? 4,
     res = o.res ?? 1,
-    neck = Math.max(0.05, Math.min(1, o.neck ?? 1));
+    neck = o.neck ?? 1;
   // each member's bulge and each avoided node's keep-out zone, built once
   const bulges = members.map((m) => ({ ...grownPrim(m, o.pad), bulge: true }));
   const zones = (o.avoiding ?? []).map((m) => grownPrim(m, clearance));
@@ -3066,7 +3066,8 @@ export type BlobOutlineOptions = {
   holes?: boolean;
   /** How far corners are rounded, in pixels. Default: `padding`. */
   roundness?: number;
-  /** How far the outline is NOT pulled in between members, 0 to 1. Default 1. */
+  /** How far the outline is NOT pulled in between members, above 0 and at
+   *  most 1. Default 1. */
   neck?: number;
   /** Nodes kept out of the region. */
   avoiding?: BlobMember[];

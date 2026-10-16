@@ -63,13 +63,13 @@ def blob(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
         convexity: The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area. Default 0.5.
         holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled and each avoided node it held is cut back out as its clearance circle, as `allow_holes` in PostGIS and Shapely. Default false.
         roundness: How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`.
-        neck: How far the outline is NOT pulled in between members, 0 to 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. It never changes the pieces or holes. Default 1.
+        neck: How far the outline is NOT pulled in between members, above 0 and at most 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. 0 is not allowed: a link `neck` times the bulge would have no width, and its two sides would meet. It never changes the pieces or holes. Default 1.
         avoiding: Nodes to keep out: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. Each avoided node inside the region becomes a round hole, and links route around the others.
         clearance: Pixels kept between the outline and each avoided node. Default 4.
     """
     if convexity is not None:
         if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):
-            raise TypeError(f"Shape.blob(convexity=...) must be a number >= 0 <= 1, got {type(convexity).__name__}")
+            raise TypeError(f"Shape.blob(convexity=...) must be a number >= 0 and <= 1, got {type(convexity).__name__}")
         if math.isnan(convexity):
             raise ValueError(f"Shape.blob(convexity=...) must not be NaN, got {convexity!r}")
         if convexity < 0:
@@ -88,11 +88,11 @@ def blob(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
             raise ValueError(f"Shape.blob(roundness=...) must be >= 0, got {roundness!r}")
     if neck is not None:
         if not (isinstance(neck, (int, float)) and not isinstance(neck, bool)):
-            raise TypeError(f"Shape.blob(neck=...) must be a number >= 0 <= 1, got {type(neck).__name__}")
+            raise TypeError(f"Shape.blob(neck=...) must be a number > 0 and <= 1, got {type(neck).__name__}")
         if math.isnan(neck):
             raise ValueError(f"Shape.blob(neck=...) must not be NaN, got {neck!r}")
-        if neck < 0:
-            raise ValueError(f"Shape.blob(neck=...) must be >= 0, got {neck!r}")
+        if neck <= 0:
+            raise ValueError(f"Shape.blob(neck=...) must be > 0, got {neck!r}")
         if neck > 1:
             raise ValueError(f"Shape.blob(neck=...) must be <= 1, got {neck!r}")
     if clearance is not None:
@@ -124,13 +124,13 @@ def hull(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
         convexity: The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area. Default 1.
         holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled and each avoided node it held is cut back out as its clearance circle, as `allow_holes` in PostGIS and Shapely. Default false.
         roundness: How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`.
-        neck: How far the outline is NOT pulled in between members, 0 to 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. It never changes the pieces or holes. Default 1.
+        neck: How far the outline is NOT pulled in between members, above 0 and at most 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. 0 is not allowed: a link `neck` times the bulge would have no width, and its two sides would meet. It never changes the pieces or holes. Default 1.
         avoiding: Nodes to keep out: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. Each avoided node inside the region becomes a round hole, and links route around the others.
         clearance: Pixels kept between the outline and each avoided node. Default 4.
     """
     if convexity is not None:
         if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):
-            raise TypeError(f"Shape.hull(convexity=...) must be a number >= 0 <= 1, got {type(convexity).__name__}")
+            raise TypeError(f"Shape.hull(convexity=...) must be a number >= 0 and <= 1, got {type(convexity).__name__}")
         if math.isnan(convexity):
             raise ValueError(f"Shape.hull(convexity=...) must not be NaN, got {convexity!r}")
         if convexity < 0:
@@ -149,11 +149,11 @@ def hull(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
             raise ValueError(f"Shape.hull(roundness=...) must be >= 0, got {roundness!r}")
     if neck is not None:
         if not (isinstance(neck, (int, float)) and not isinstance(neck, bool)):
-            raise TypeError(f"Shape.hull(neck=...) must be a number >= 0 <= 1, got {type(neck).__name__}")
+            raise TypeError(f"Shape.hull(neck=...) must be a number > 0 and <= 1, got {type(neck).__name__}")
         if math.isnan(neck):
             raise ValueError(f"Shape.hull(neck=...) must not be NaN, got {neck!r}")
-        if neck < 0:
-            raise ValueError(f"Shape.hull(neck=...) must be >= 0, got {neck!r}")
+        if neck <= 0:
+            raise ValueError(f"Shape.hull(neck=...) must be > 0, got {neck!r}")
         if neck > 1:
             raise ValueError(f"Shape.hull(neck=...) must be <= 1, got {neck!r}")
     if clearance is not None:
@@ -185,13 +185,13 @@ def spine(*, convexity: Optional[float] = None, holes: Optional[bool] = None, ro
         convexity: The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area. Default 0.
         holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled and each avoided node it held is cut back out as its clearance circle, as `allow_holes` in PostGIS and Shapely. Default false.
         roundness: How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`.
-        neck: How far the outline is NOT pulled in between members, 0 to 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. It never changes the pieces or holes. Default 1.
+        neck: How far the outline is NOT pulled in between members, above 0 and at most 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. 0 is not allowed: a link `neck` times the bulge would have no width, and its two sides would meet. It never changes the pieces or holes. Default 1.
         avoiding: Nodes to keep out: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. Each avoided node inside the region becomes a round hole, and links route around the others.
         clearance: Pixels kept between the outline and each avoided node. Default 4.
     """
     if convexity is not None:
         if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):
-            raise TypeError(f"Shape.spine(convexity=...) must be a number >= 0 <= 1, got {type(convexity).__name__}")
+            raise TypeError(f"Shape.spine(convexity=...) must be a number >= 0 and <= 1, got {type(convexity).__name__}")
         if math.isnan(convexity):
             raise ValueError(f"Shape.spine(convexity=...) must not be NaN, got {convexity!r}")
         if convexity < 0:
@@ -210,11 +210,11 @@ def spine(*, convexity: Optional[float] = None, holes: Optional[bool] = None, ro
             raise ValueError(f"Shape.spine(roundness=...) must be >= 0, got {roundness!r}")
     if neck is not None:
         if not (isinstance(neck, (int, float)) and not isinstance(neck, bool)):
-            raise TypeError(f"Shape.spine(neck=...) must be a number >= 0 <= 1, got {type(neck).__name__}")
+            raise TypeError(f"Shape.spine(neck=...) must be a number > 0 and <= 1, got {type(neck).__name__}")
         if math.isnan(neck):
             raise ValueError(f"Shape.spine(neck=...) must not be NaN, got {neck!r}")
-        if neck < 0:
-            raise ValueError(f"Shape.spine(neck=...) must be >= 0, got {neck!r}")
+        if neck <= 0:
+            raise ValueError(f"Shape.spine(neck=...) must be > 0, got {neck!r}")
         if neck > 1:
             raise ValueError(f"Shape.spine(neck=...) must be <= 1, got {neck!r}")
     if clearance is not None:

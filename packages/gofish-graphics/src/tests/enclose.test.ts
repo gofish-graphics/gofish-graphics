@@ -133,7 +133,7 @@ for (const [name, members, base] of sets) {
       `${show(t)}, want ${show(ref)}`
     );
   }
-  for (const neck of [0.5, 0.7, 0.85, 1]) {
+  for (const neck of [0.05, 0.1, 0.25, 0.5, 0.7, 0.85, 1]) {
     const t = topology(blobOutline(members, { ...base, neck }));
     check(
       `${name}: neck ${neck} keeps the topology`,
@@ -287,7 +287,7 @@ for (const [name, members, base] of [
       `${show(t)}, want ${show(ref)}`
     );
   }
-  for (const neck of [0.5, 0.7, 0.85, 1]) {
+  for (const neck of [0.05, 0.1, 0.25, 0.5, 0.7, 0.85, 1]) {
     const t = topology(blobOutline(members, { ...base, neck }));
     check(
       `${name}: neck ${neck} keeps the topology`,
