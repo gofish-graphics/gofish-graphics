@@ -43,7 +43,7 @@ export const PenguinMass: StoryObj = {
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
-      .render(container, { w: 560, h: 320 });
+      .render(container, { w: 560 });
 
     return container;
   },
@@ -71,7 +71,7 @@ export const PenguinMassSina: StoryObj = {
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
-      .render(container, { w: 560, h: 320 });
+      .render(container, { w: 560 });
 
     return container;
   },
@@ -92,7 +92,7 @@ export const PenguinMassJitter: StoryObj = {
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
-      .render(container, { w: 560, h: 320 });
+      .render(container, { w: 560 });
 
     return container;
   },
@@ -107,7 +107,7 @@ const denseStory = (overlap: Overlap.Overlap): StoryObj => ({
         scatter({ x: "mass", alignment: "middle", overlap })
       )
       .mark(circle({ r: 2, fill: "group" }))
-      .render(container, { w: 640, h: 420 });
+      .render(container, { w: 640 });
     return container;
   },
 });

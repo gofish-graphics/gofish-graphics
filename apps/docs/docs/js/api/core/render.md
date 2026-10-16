@@ -21,8 +21,8 @@ gofish(container, options, () => node): Promise<View>  // a component thunk reso
 | Parameter        | Type          | Description                                                                                                                                                      |
 | ---------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `container`      | `HTMLElement` | The DOM element to render into                                                                                                                                   |
-| `options.w`      | `number?`     | Width in pixels. Optional — see [Inferred size](#inferred-size).                                                                                                 |
-| `options.h`      | `number?`     | Height in pixels. Optional — see [Inferred size](#inferred-size).                                                                                                |
+| `options.w`      | `number?`     | Width of the whole graphic in pixels, axes, titles and legend included. Optional — see [Inferred size](#inferred-size).                                          |
+| `options.h`      | `number?`     | Height of the whole graphic in pixels, axes, titles and legend included. Optional — see [Inferred size](#inferred-size).                                         |
 | `options.axes`   | `AxesOptions` | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                |
 | `options.legend` | `boolean?`    | Whether to draw the color-scale legend. Default `true`; see [chart › Legend](/js/api/core/chart#legend). A `chart()` option of the same name wins over this one. |
 
@@ -30,10 +30,11 @@ gofish(container, options, () => node): Promise<View>  // a component thunk reso
 
 A `View`, the handle to the chart now mounted in `container`:
 
-| Member      | Type          | Description                                                                                            |
-| ----------- | ------------- | ------------------------------------------------------------------------------------------------------ |
-| `container` | `HTMLElement` | The element the chart was rendered into.                                                               |
-| `unmount()` | `() => void`  | Removes the chart's DOM and detaches it from every input it read. See [Unmounting](#unmounting) below. |
+| Member      | Type                       | Description                                                                                                                   |
+| ----------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `container` | `HTMLElement`              | The element the chart was rendered into.                                                                                      |
+| `unmount()` | `() => void`               | Removes the chart's DOM and detaches it from every input it read. See [Unmounting](#unmounting) below.                        |
+| `warnings`  | `readonly LayoutWarning[]` | What the latest layout drew through anyway. Empty until the chart is laid out. See [Layout warnings](#layout-warnings) below. |
 
 `.render()` on a chart, a mark, or a combinator returns a `Promise<View>`, which
 settles once the chart's first resolve is done.
@@ -74,7 +75,11 @@ layout, per axis, from what the axis encodes:
 So a bar chart rendered with no `w` gets default-width bars and a graphic only as
 wide as it needs to be, while bar heights still scale to the 400px default if `h`
 is also omitted. A bare fixed-size shape (or a `layer` of them) shrinks to its own
-bounding box. A supplied `w`/`h` is always used as-is.
+bounding box. A supplied `w`/`h` is always used as-is, and it is the size of the
+whole graphic: the SVG is exactly `w` × `h`, and the plot gets what the axes,
+titles and legend leave of it. Content of a fixed size that does not fit
+overflows and is clipped, and the render warns (see
+[Layout warnings](#layout-warnings)).
 
 ```ts
 // Width inferred (default-width bars, shrink-to-fit); height = 300.
@@ -88,7 +93,9 @@ chart(data)
 
 When you give a (sub)chart an explicit `w`/`h` on a dimension, its scale on that
 dimension resolves against that pixel box rather than against any larger layout it
-is composed into. The axis becomes self-contained: a chart sized this way can be
+is composed into. That box is the chart's plot: the chart's axes, titles and legend,
+and labels placed beside its marks (`.label()`, a tier of texts beside its bars),
+add around it. The axis becomes self-contained: a chart sized this way can be
 dropped into a bigger graphic without sharing — or polluting — the surrounding
 axes with its own units.
 
@@ -97,6 +104,35 @@ histograms are sized to a fixed pixel band (`chart(data, { h: 80 })` /
 `chart(data, { w: 80 })`) and laid out alongside a center scatter; because each
 histogram absorbs its own count scale, only the scatter's data units drive the
 shared x/y axes.
+
+## Layout warnings
+
+When a chart cannot fit its canvas, the render keeps its size, draws the
+chart anyway, and warns. Each warning is a `LayoutWarning`:
+
+| Field       | Type                                 | Description                                                                                                                                         |
+| ----------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`      | `"fixed-overflow" \| "ink-overflow"` | `fixed-overflow`: the fixed parts of a node need more pixels than its slot. `ink-overflow`: the drawing reaches past the canvas for another reason. |
+| `node`      | `string`                             | The node, as its operator or mark and key, e.g. `spread(by: "site")`.                                                                               |
+| `axis`      | `"x" \| "y"`                         | The axis.                                                                                                                                           |
+| `needed`    | `number`                             | Pixels the fixed parts need, or the length of the drawing.                                                                                          |
+| `available` | `number`                             | Pixels the node's slot has, or the canvas's length.                                                                                                 |
+| `parts`     | `{ part: string; px: number }[]`     | The fixed parts and their pixels, largest first: the spacing of each spread, and the other fixed sizes.                                             |
+| `overflow`  | `[number, number]?`                  | For `ink-overflow`, the pixels drawn past the canvas before and after it.                                                                           |
+| `message`   | `string`                             | The whole warning as one line.                                                                                                                      |
+
+A node's fixed parts are what does not scale with the data: literal spacing,
+literal sizes and positions, text, and axes and legends. When they need more
+than the slot, no scale fits, so the parts that scale are drawn as if the
+fixed parts took no room, and the graphic overflows. Each warning is also
+printed once with `console.warn`, prefixed `[gofish:layout]`:
+
+```text
+[gofish:layout] spread(by: "site") on x: its fixed parts need 766 px, but its slot has 533.4 px. Fixed parts: spread(by: "site"): spacing 110 × 5 = 550 px; spread(by: "year"): spacing 36 × 1, ×6 = 216 px. The parts that scale are drawn as if the fixed parts took no room, and the graphic overflows on x.
+```
+
+`view.warnings` holds the latest layout's warnings and is replaced on each
+re-render. The export terminals (`toSVG`, `toDisplayList`, …) print them too.
 
 ## Axes
 

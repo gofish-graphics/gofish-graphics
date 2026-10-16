@@ -21,8 +21,6 @@ from python_stories.data import PENGUINS
 
 
 def story_default():
-    w = 400
-    h = 400
     GAP = 10
 
     # Our penguins export uses "Beak ..." rather than seaborn's "bill ..." field names.
@@ -63,13 +61,13 @@ def story_default():
                 Constraint.position([scatter], x=0, y=0, anchor="baseline"),
                 Constraint.align([scatter, topHist], x="baseline"),
                 Constraint.align([scatter, rightHist], y="baseline"),
-                Constraint.position([topHist], y=h + GAP, anchor="start"),
-                Constraint.position([rightHist], x=w + GAP, anchor="start"),
+                Constraint.distribute([scatter, topHist], dir="y", spacing=GAP),
+                Constraint.distribute([scatter, rightHist], dir="x", spacing=GAP),
             ]
         ),
         {
-            "w": w,
-            "h": h,
+            "w": 400,
+            "h": 400,
             "axes": {
                 "x": {"title": "Beak Length (mm)"},
                 "y": {"title": "Beak Depth (mm)"},

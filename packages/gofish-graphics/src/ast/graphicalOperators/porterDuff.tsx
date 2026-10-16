@@ -3,6 +3,7 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import type { Placeable, ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
+import type { Extent } from "../extent";
 import { pixelBox } from "../displayList/lowerHelpers";
 import { UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
@@ -28,6 +29,22 @@ const maxChildBounds = (children: Placeable[]) => {
   return { minX, maxX, minY, maxY };
 };
 
+/**
+ * The claim of a composite clipped to its first child (`paint`, `mask`): the
+ * first child's claim, as the box it lays out to is the first child's box.
+ * The second child is drawn only inside the first, so it takes no room of
+ * its own (a cut slice is its window, not the whole source it shows a part
+ * of).
+ */
+const firstChildClaim = (
+  childExtents: Size<Extent | undefined>[],
+  childSpaces: Size<UnderlyingSpace>[],
+  spaces: Size<UnderlyingSpace>
+): Size<Extent | undefined> => [
+  unionChildExtents([childExtents[0]], [childSpaces[0]], 0, spaces[0]),
+  unionChildExtents([childExtents[0]], [childSpaces[0]], 1, spaces[1]),
+];
+
 const createCompositeRelation = (type: string, operator: CompositeOperator) =>
   createNodeOperator(
     (
@@ -52,10 +69,13 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             children: Size<UnderlyingSpace>[],
             _childNodes: GoFishAST[]
           ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
-          resolveExtent: (childExtents, childSpaces, spaces) => [
-            unionChildExtents(childExtents, childSpaces, 0, spaces[0]),
-            unionChildExtents(childExtents, childSpaces, 1, spaces[1]),
-          ],
+          resolveExtent: (childExtents, childSpaces, spaces) =>
+            isAtop
+              ? firstChildClaim(childExtents, childSpaces, spaces)
+              : [
+                  unionChildExtents(childExtents, childSpaces, 0, spaces[0]),
+                  unionChildExtents(childExtents, childSpaces, 1, spaces[1]),
+                ],
           layout: (size, scales, layoutChildren) => {
             requireTwoChildren(layoutChildren);
 
@@ -229,10 +249,7 @@ export const mask = createNodeOperator(
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
-        resolveExtent: (childExtents, childSpaces, spaces) => [
-          unionChildExtents(childExtents, childSpaces, 0, spaces[0]),
-          unionChildExtents(childExtents, childSpaces, 1, spaces[1]),
-        ],
+        resolveExtent: firstChildClaim,
         layout: (size, scales, layoutChildren) => {
           requireTwoChildren(layoutChildren);
 

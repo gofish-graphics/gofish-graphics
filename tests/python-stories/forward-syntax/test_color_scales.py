@@ -182,5 +182,5 @@ def story_ribbon_highlight():
         )
         .mark(rect(h="count", fill="species"))
         .layer(ribbon(opacity=0.6)),
-        {"w": 400, "h": 400},
+        {"h": 400},
     )

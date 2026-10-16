@@ -97,7 +97,14 @@ so only genuinely bent envelopes carry `kind: "piecewise"`.
 
 An `Unknown` only has the numeric function. It can still be inverted, but inversion
 falls back to numeric root-finding (`findTargetMonotonic`) — correct, because the
-function is monotonic, but iterative.
+function is monotonic, but iterative. The search runs to a tolerance far below
+any σ, since a σ can be far below 1 (a domain of millions of units).
+
+`rising(f)` is the part of a claim that grows with σ: the envelope of its pieces with a
+positive slope. An `Unknown` has no pieces, so its rising part is the line it tends to as
+σ grows, read off two far points. The render root solves it when no σ fits its whole claim to the canvas,
+so the data fills the canvas and the pixels that do not scale overflow (see
+[Layout and Render Passes](/internals/layout/passes)).
 
 ## The algebra
 
@@ -124,8 +131,11 @@ that sits wholly above its baseline (see
 **unions the pieces**. `max` drops zero claims first; `envelope` keeps them, along with
 lines of negative slope, which the lower reach of a union needs. `add` stays closed because the sum of two envelopes is again an
 envelope — `(max_i aᵢ) + (max_j bⱼ) = max_{i,j}(aᵢ + bⱼ)` — i.e. the pairwise sums of the
-pieces. (When every argument is a single line, both fall back to the plain `Linear` fast
-path; the all-linear `add` is one slope-sum and one intercept-sum.)
+pieces. A sum of many arguments prunes dominated pieces after each one, so it stays
+about as small as its distinct slopes rather than growing as the product of the piece
+counts (a chain of 19 labeled bands summed 2^38 pieces before). (When every argument is
+a single line, both fall back to the plain `Linear` fast path; the all-linear `add` is
+one slope-sum and one intercept-sum.)
 
 Because the structure is preserved, a composed claim can be **printed as the equation it
 represents** — `print` renders `40σ + 16`, or `max(160σ + 16, 90)` for an envelope —

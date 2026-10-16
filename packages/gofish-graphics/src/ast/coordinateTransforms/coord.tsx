@@ -31,7 +31,8 @@ import {
   CONTINUOUS,
   spaceTitle,
 } from "../underlyingSpace";
-import { impliedExtent } from "../extent";
+import { boxExtent, impliedExtent } from "../extent";
+import * as Monotonic from "../../util/monotonic";
 import {
   unionChildExtents,
   unionChildSpaces,
@@ -202,6 +203,45 @@ export const coord = createNodeOperator(
           // to its parent it is a pixel box.
           spaceRef.current = [axisSpace(0), axisSpace(1)];
           return [UNDEFINED, UNDEFINED];
+        },
+        // To its parent a coord is a pixel box. When nothing in it scales with
+        // the box it is given (a polar glyph of literal radius, no axes, no
+        // size of its own), the box has a size of its own (#493): its content
+        // transformed, which it claims. Otherwise it fills what it is given.
+        resolveExtent: (childExtents, childSpaces) => {
+          const resolved = spaceRef.current;
+          if (
+            resolved === null ||
+            framesOwnWindow ||
+            axes ||
+            dims[0].size !== undefined ||
+            dims[1].size !== undefined ||
+            (coordTransform.innerRadius ?? 0) > 0
+          )
+            return [undefined, undefined];
+          const claim = (axis: 0 | 1) =>
+            unionChildExtents(childExtents, childSpaces, axis, resolved[axis]);
+          const r = claim(1);
+          const theta = claim(0);
+          if (r === undefined || !Monotonic.isConstant(r.width) || !theta)
+            return [undefined, undefined];
+          // The angle fills the angular budget, as `layout` fits it.
+          const budget = coordTransform.domain[0].size ?? 2 * Math.PI;
+          const sigma = Monotonic.isConstant(theta.width)
+            ? 0
+            : theta.width.inverse(budget);
+          if (sigma === undefined) return [undefined, undefined];
+          const box = computeTransformedBoundingBox(
+            -theta.descent.run(sigma),
+            theta.ascent.run(sigma),
+            -r.descent.run(0),
+            r.ascent.run(0),
+            coordTransform
+          );
+          return [
+            boxExtent(UNDEFINED, 0, box.maxX - box.minX),
+            boxExtent(UNDEFINED, 0, box.maxY - box.minY),
+          ];
         },
         layout: (size, scales, children, node) => {
           // Stage 6b: a coord boundary is a σ-scope root — it re-roots σ for its

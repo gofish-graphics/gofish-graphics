@@ -368,7 +368,8 @@ console.log("end to end");
     narrowIn.length === 1 && narrowIn[0] !== 0 && narrowOut.join() === "0",
     `${narrowIn}|${narrowOut}`
   );
-  const [tinyIn, tinyOut] = await rowAngles(90);
+  // 130 px is the whole graphic, its y axis included (#1032).
+  const [tinyIn, tinyOut] = await rowAngles(130);
   ok(
     "a tiny chart hides the colliding inner row and keeps the outer row upright",
     tinyIn.length === 0 && tinyOut.join() === "0",

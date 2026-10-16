@@ -131,7 +131,7 @@ export const StackedArea: StoryObj<Args> = {
 };
 
 export const CircleTimeline: StoryObj<Args> = {
-  args: { w: 440, h: 240 },
+  args: { w: 640 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -158,7 +158,7 @@ export const CircleTimeline: StoryObj<Args> = {
       .mark((d: any) =>
         circle({ r: d[0].radius, fill: "category", opacity: 0.8 })(d)
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container, { w: args.w });
     return container;
   },
 };

@@ -21,5 +21,5 @@ def story_default():
             scatter(by="variety", y="yield"),
         )
         .mark(line(stroke="variety", stroke_width=2)),
-        {"w": 700, "h": 350},
+        {"h": 350},
     )

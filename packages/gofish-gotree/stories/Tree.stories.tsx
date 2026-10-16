@@ -133,9 +133,8 @@ const labeledNode = (d: any) =>
     Constraint.align({ x: "middle", y: "middle" }, [box, label]),
   ]);
 
-export const LabeledFileTree: StoryObj<Args> = {
-  args: { w: 760, h: 460 },
-  render: (args: Args) => {
+export const LabeledFileTree: StoryObj = {
+  render: () => {
     const container = initContainer();
     tree(
       {
@@ -151,7 +150,7 @@ export const LabeledFileTree: StoryObj<Args> = {
         sibling: distribute({ dir: "x", spacing: 12, alignment: "end" }),
       },
       fileTreeData
-    ).render(container, { w: args.w, h: args.h });
+    ).render(container);
     return container;
   },
 };

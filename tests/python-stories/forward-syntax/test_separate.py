@@ -18,7 +18,7 @@ def story_penguin_mass():
             ),
         )
         .mark(circle(r=3, fill="Species")),
-        {"w": 560, "h": 320},
+        {"w": 560},
     )
 
 

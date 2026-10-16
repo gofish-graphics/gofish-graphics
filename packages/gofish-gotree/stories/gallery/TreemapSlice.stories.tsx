@@ -68,7 +68,7 @@ export const TreemapSlice: StoryObj = {
         }),
       },
       sampleTree
-    ).render(container, { w: 900, h: 360 });
+    ).render(container);
     return container;
   },
 };

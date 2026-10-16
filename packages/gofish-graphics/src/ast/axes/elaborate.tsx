@@ -1185,7 +1185,14 @@ function elaborateOrdinalAxis(
     // LABEL at its own rotation pivot (`"baseline"`) while what it tracks
     // stays "middle"-anchored, via `Constraint.align`'s anchor-array form.
     // A start-aligned label's box is its own rotated box, so it centers its
-    // bbox on it at any angle.
+    // bbox on it at any angle. A label centered on one slot is placed where
+    // the claim walk places its slot's ref (a band is a share, #493 piece
+    // 3), and a ring's claim is the hull of its labels, so one wider than its
+    // band overdraws its neighbors (#1115) instead of pushing the bands
+    // apart, and only its overhang past the ends of the axis takes room. A
+    // span over several slots reads them only at layout, so a label centered
+    // on it is ink along the axis. Across the axis a label is seated past the
+    // content, and takes room there.
     for (const { label, on, k } of pairs) {
       const anchors: AlignAnchor[] =
         aligns[k] === "center" &&
@@ -1767,6 +1774,7 @@ export async function elaborateChrome(
   }
 
   let withAxes: GoFishNode = node;
+  const rings: GoFishNode[] = [];
   const root = await wrapPreservingIdentity(node, async (content) => {
     let ring: GoFishNode = content;
 
@@ -1799,6 +1807,7 @@ export async function elaborateChrome(
         },
         { x: contentAt(0), y: contentAt(1) }
       );
+      rings.push(ring);
     }
 
     // Category label rows: ordinal labels track their keys via `ref(...)`, so
@@ -1812,6 +1821,7 @@ export async function elaborateChrome(
         nodes: refBased.flatMap((e) => e.nodes),
         constraints: (g) => refBased.flatMap((e) => e.constraints(g)),
       });
+      rings.push(ring);
     }
     withAxes = ring;
 
@@ -1826,15 +1836,17 @@ export async function elaborateChrome(
           sides
         )
       );
+      rings.push(ring);
     }
 
     // The legend, beside everything inside it, titles included.
     if (legend !== undefined) {
       ring = await wrapRing(ring, LEGEND_CONTENT_NAME, legend);
+      rings.push(ring);
     }
     return ring;
   });
-  root.chrome = { content: node, withAxes };
+  root.chrome = { content: node, withAxes, rings };
 
   return { node: root, changed: true, fold };
 }

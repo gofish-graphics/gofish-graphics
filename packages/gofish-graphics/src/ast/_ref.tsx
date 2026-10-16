@@ -50,10 +50,37 @@ export class GoFishRef {
   public readonly multiplicity?: "one" | "all";
 
   private intrinsicDims?: Dimensions;
+  /** The common ancestor of this ref and its target, set by `layout`: the
+   *  ref stands where its target is, read through it (see `transform`). */
+  private lca?: GoFishAST;
+  /** Per axis, a translate an authoritative pin (`pinAnchor`) set, which
+   *  replaces the one read off the target. */
+  private pinned: [number | undefined, number | undefined] = [
+    undefined,
+    undefined,
+  ];
   /** @internal Layout-pass state. Public to match GoFishNode.transform so
    *  `(node as GoFishAST).transform` resolves on the union; external callers
-   *  should not rely on this field. */
-  public transform?: Transform;
+   *  should not rely on this field.
+   *
+   *  A laid-out ref's translate is read off its target each time, not
+   *  copied once at layout: the walk from the target up to their common
+   *  ancestor, less the walk from the ref's parent up to it. A node on
+   *  those walks may be placed after the ref is laid out (a layer places a
+   *  constrained child in its solve, after laying out its other children),
+   *  and the ref follows it. */
+  public get transform(): Transform | undefined {
+    if (this.lca === undefined || !this.selectedNode) return undefined;
+    const walk = (from: GoFishAST | undefined, dir: Direction): number => {
+      let sum = 0;
+      for (let n = from; n && n !== this.lca; n = n.parent)
+        sum += n.projectedTranslate(dir) ?? 0;
+      return sum;
+    };
+    const at = (dir: Direction) =>
+      this.pinned[dir] ?? walk(this.selectedNode, dir) - walk(this.parent, dir);
+    return { translate: [at(0), at(1)] };
+  }
   public readonly selection?: string | Token | (Token | string | number)[];
   private directNode?: GoFishNode;
   private selectedNode?: GoFishNode;
@@ -273,43 +300,11 @@ export class GoFishRef {
       throw new Error("Selected node not found");
     }
 
-    // Find the least common ancestor between this ref and the selected node
-    const lca = findLeastCommonAncestor(this, this.selectedNode);
-
-    // Accumulate the LEDGER-DERIVED translate. `projectedTranslate` is
-    // polymorphic across the union: a node returns its ledger projection, a ref
-    // (which has no ledger) its computed transform.
-    const translateOf = (n: GoFishAST, dir: Direction): number =>
-      n.projectedTranslate(dir) ?? 0;
-
-    // Compute transform from selected node up to LCA
-    const upwardTranslate: [number, number] = [0, 0];
-    let current: GoFishAST | undefined = this.selectedNode;
-    while (current && current !== lca) {
-      upwardTranslate[0] += translateOf(current, 0);
-      upwardTranslate[1] += translateOf(current, 1);
-      current = current.parent;
-    }
-
-    // Compute transform from LCA down to this ref's parent. The ref's own
-    // translate is what this method sets, so it must not be read here:
-    // including the value from a previous layout would make a second layout
-    // subtract the first result and land at 0 (#928).
-    const downwardTranslate: [number, number] = [0, 0];
-    current = this.parent;
-    while (current && current !== lca) {
-      downwardTranslate[0] += translateOf(current, 0);
-      downwardTranslate[1] += translateOf(current, 1);
-      current = current.parent;
-    }
-
-    // Combine transforms
-    this.transform = {
-      translate: [
-        upwardTranslate[0] - downwardTranslate[0],
-        upwardTranslate[1] - downwardTranslate[1],
-      ],
-    };
+    // The common ancestor its translate is read through (see `transform`).
+    // The ref's own translate is never part of the walks, so a second
+    // layout reads the same place (#928).
+    this.lca = findLeastCommonAncestor(this, this.selectedNode);
+    this.pinned = [undefined, undefined];
 
     this.intrinsicDims = this.selectedNode.intrinsicDims;
 
@@ -362,20 +357,18 @@ export class GoFishRef {
       if (anchor === "min") this.intrinsicDims![dir].min = value;
       return;
     }
-    this.transform!.translate![dir] = translateForAnchor(
-      intrinsic,
-      anchor,
-      value
-    );
+    // A laid-out ref is where its target is (`transform`), and `place()` is
+    // write-once, as on a node. Only an authoritative pin (`pinAnchor`)
+    // moves it.
+    if (this.transform !== undefined) return;
+    this.pinned[dir] = translateForAnchor(intrinsic, anchor, value);
   }
 
   /** Authoritative placement counterpart to `GoFishNode.pinAnchor`. A ref has no
    *  bbox ledger, so overriding means directly replacing its computed translate. */
   public pinAnchor(axis: FancyDirection, value: number, anchor: Anchor): void {
     const dir = elaborateDirection(axis);
-    this.transform ??= { translate: [undefined, undefined] };
-    this.transform.translate ??= [undefined, undefined];
-    this.transform.translate[dir] = translateForAnchor(
+    this.pinned[dir] = translateForAnchor(
       this.intrinsicDims?.[dir],
       anchor,
       value

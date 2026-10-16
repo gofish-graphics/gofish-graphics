@@ -217,7 +217,7 @@ export const GroupedLabelAngleAutoLongInner90Outer0: StoryObj<Args> = {
 // hidden and takes no space; the color legend still names each product. The
 // region names fit upright: inner hidden, outer 0°.
 export const GroupedLabelAngleAutoInnerHiddenOuter0: StoryObj<Args> = {
-  args: { w: 90, h: 210 },
+  args: { w: 230, h: 210 },
   render: (args: Args) => renderGroupedProducts(args, "auto"),
 };
 
@@ -225,7 +225,7 @@ export const GroupedLabelAngleAutoInnerHiddenOuter0: StoryObj<Args> = {
 // the products. Inner hidden, outer 0°, and it logs a console warning that
 // the "product" categories are not labeled.
 export const GroupedLabelAngleAutoInnerHiddenNoLegend: StoryObj<Args> = {
-  args: { w: 90, h: 210 },
+  args: { w: 190, h: 210 },
   render: (args: Args) => {
     const container = initializeContainer();
 

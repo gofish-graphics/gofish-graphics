@@ -104,7 +104,7 @@ weighed = [p for p in penguins if p["Body Mass (g)"] is not None]
 chart(weighed, axes=True).flow(
     spread(by="Species", dir="y", spacing=16),
     scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.separate(padding=1)),
-).mark(circle(r=3, fill="Species")).render(w=560, h=320)
+).mark(circle(r=3, fill="Species")).render(w=560)
 ```
 
 `separate` places the dots the same way as Observable Plot's `dodge`. It is
@@ -125,7 +125,7 @@ from gofish import chart, circle, scatter, spread, Overlap
 chart(weighed, axes=True).flow(
     spread(by="Species", dir="y", spacing=16),
     scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.noise()),
-).mark(circle(r=3, fill="Species")).render(w=560, h=320)
+).mark(circle(r=3, fill="Species")).render(w=560)
 ```
 
 And with `Overlap.sina()`, which gives each species a smooth violin outline:
@@ -139,7 +139,7 @@ from gofish import chart, circle, scatter, spread, Overlap
 chart(weighed, axes=True).flow(
     spread(by="Species", dir="y", spacing=16),
     scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.sina()),
-).mark(circle(r=3, fill="Species")).render(w=560, h=320)
+).mark(circle(r=3, fill="Species")).render(w=560)
 ```
 
 ### How the outline is made

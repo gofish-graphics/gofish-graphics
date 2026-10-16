@@ -9,18 +9,15 @@ const meta: Meta = {
   title: "Vega-Lite/1D Strip Plot",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
   },
 };
 
 export default meta;
 
-type Args = { w: number; h: number };
+type Args = { w: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 300, h: 50 },
+  args: { w: 300 },
   loaders: [async () => ({ weather: await data["seattle-weather.csv"]() })],
   tags: ["gallery"],
   parameters: {
@@ -38,7 +35,7 @@ export const Default: StoryObj<Args> = {
         opacity: 0.7,
       }))
 
-      .render(container, { w: args.w, h: args.h });
+      .render(container, { w: args.w });
 
     return container;
   },

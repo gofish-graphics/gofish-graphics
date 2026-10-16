@@ -1022,11 +1022,11 @@ renders it. What differs between the hosts is only transport:
   RPC, so the derive server inlines its rows in the IR as
   `{type: "inline", rows}`.
 - **Render options.** These are the JS `.render(container, options)` options:
-  `w`, `h`, `axes`, `padding`, `debug`. The widget reads them from its traits,
+  `w`, `h`, `axes`, `legend`, `debug`. The widget reads them from its traits,
   which the Python `.render(...)` call sets; the harness reads the story's
-  render-options dict. `axes` and `padding` stay unset unless the caller
-  passed them, so a chart's own `axes` option (or a layer chain's root
-  tier's) decides, and the default padding applies.
+  render-options dict. `axes` and `legend` stay unset unless the caller
+  passed them, so a chart's own option (or a layer chain's root tier's)
+  decides.
 
 The layer cases live in `renderIR` too: `builder: true` rebuilds the real
 `LayerBuilder`; otherwise the tiers go to the JS `layer(options, tiers)`

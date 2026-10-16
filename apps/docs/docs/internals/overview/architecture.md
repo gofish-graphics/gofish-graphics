@@ -98,11 +98,10 @@ already nests. Each axis names itself off its own space's **measure** (a
 continuous axis by its quantity names, never its unit; an ordinal axis by its
 grouping field), so an axis title is derived from the data model, not a
 syntactic hint. The orchestrator
-(`gofish.tsx`) then sizes the SVG off the
-laid-out tree's **measured extent on all four sides** — the legend's overhang
-past the content, the axis/title gutters past the origin, and any content a
-constraint seated beyond the canvas (a marginal histogram's bands above and to
-the right of a scatter); there are no fixed chrome margins. See
+(`gofish.tsx`) makes the chrome take room: each chart claims its
+content plus its chrome, whose shapes claim their sizes, so a parent lays out the whole
+graphic and the render's `w`/`h` is the whole graphic, chrome included (#493,
+#1032); there are no chrome margins around the SVG. See
 [Axes](/internals/frontend/axes) (which also covers axis titles) and
 [Legends](/internals/frontend/legends).
 

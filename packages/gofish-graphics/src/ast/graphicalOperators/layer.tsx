@@ -2,7 +2,13 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { GoFishNode, placeUnplacedChild, type ToPixel } from "../_node";
+import {
+  GoFishNode,
+  placeUnplacedChild,
+  warnLayout,
+  type ToPixel,
+} from "../_node";
+import { fixedOverflowInside, spacingOverflow } from "../layoutWarnings";
 import type { DisplayList } from "gofish-ir";
 import { shadowCheckScaleRoot } from "../solver/shadow";
 import { getScopeRegistry, seatInScope } from "../solver/scopes";
@@ -50,6 +56,7 @@ import {
 } from "../constraints";
 import { GoFishRef, findPathToRoot } from "../_ref";
 import {
+  axisIndex,
   childNameKey,
   internalName,
   type ConstraintPosScales,
@@ -78,9 +85,25 @@ import {
   placementConstraints,
   childLayoutSizeProposal,
   childPosScalesFor,
+  literalSeats,
   selectGridConstraint,
   solveLayerScales,
 } from "../constraints/proposalPlan";
+import {
+  constrainedOn,
+  negate,
+  plus,
+  placeByClaims,
+  type BoxForm,
+  type ClaimChild,
+  type ClaimPlacement,
+} from "../constraints/claimPlacement";
+import { placementIn } from "../placementClaims";
+import {
+  guttersAroundPlot,
+  guttersInSlot,
+  seatPastGutters,
+} from "../chromeGutters";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
 //
@@ -205,6 +228,41 @@ function applyRelationalZBelowDefaults(
   node.constraints = [...node.constraints, ...zBelowConstraints];
 }
 
+const sum = ([a, b]: [number, number]) => a + b;
+
+/** `child`'s plot claim (`GoFishNode.resolvePlotExtent`) in `parent`'s axis
+ *  order. A child that reads y the other way is read reflected: its box is
+ *  the same, and its plot lies at the other end of it. */
+const plotIn = (
+  child: GoFishNode,
+  parent: GoFishNode
+): Size<Extent | undefined> => {
+  const plot = child.resolvePlotExtent();
+  const full = child.resolveExtent();
+  if (plot === full || child.yFrame.direction === parent.yFrame.direction)
+    return plot;
+  const [f, p] = [full[1], plot[1]];
+  if (f === undefined || p === undefined || f === p) return plot;
+  // Reflected about the box `[−d, a]`: x ↦ (a − d) − x.
+  const span = plus(f.ascent, negate(f.descent));
+  return [plot[0], Extent(plus(span, p.descent), plus(negate(span), p.ascent))];
+};
+
+/** The pixels a chart's chrome adds around its plot on `axis`, for a chart
+ *  with a size of its own `px` there. A chart's own `w`/`h` is its plot
+ *  without chrome (#1032), and its chrome dresses its content, the chart
+ *  frame's one child (`frameChart`), so the chart is that size plus the
+ *  gutters its content's claims give around a plot of that size. 0 for any
+ *  other node. */
+const chartChrome = (node: GoFishNode, axis: 0 | 1, px: number): number => {
+  const content = node.children[0];
+  return node._chartBox?.[axis] === true &&
+    content instanceof GoFishNode &&
+    content.chrome !== undefined
+    ? sum(guttersAroundPlot(content, axis, px))
+    : 0;
+};
+
 export const layer = createNodeOperatorSequential(
   async (
     childrenOrOptions:
@@ -258,6 +316,106 @@ export const layer = createNodeOperatorSequential(
       undefined,
       undefined,
     ];
+    // Per axis, the children the claim walk places where the layer's
+    // constraints put them (`placeByClaims`), rather than in its own union:
+    // the ones the union leaves out (`placed`), and, on an axis no
+    // constraint fold composes, every child a constraint places there.
+    const claimPlaced: [Set<number>, Set<number>] = [new Set(), new Set()];
+    // The constraints' operands, resolved once for the constraints they
+    // were resolved from: the claim walk and layout both read them.
+    let operandsMemo:
+      | { of: ConstraintSpec[]; operands: Map<string, ResolvedOperand> }
+      | undefined;
+    const constraintOperands = (): Map<string, ResolvedOperand> => {
+      if (operandsMemo?.of !== node.constraints)
+        operandsMemo = {
+          of: node.constraints,
+          operands:
+            node.constraints.length > 0
+              ? resolveConstraintOperands(node)
+              : new Map<string, ResolvedOperand>(),
+        };
+      return operandsMemo.operands;
+    };
+    // Per axis, the children that are ink there (`placeByClaims`): they
+    // draw, but take no room in the claim, nor in the box.
+    const inkChildren: [Set<number>, Set<number>] = [new Set(), new Set()];
+    // What the claim walk knows of each child on `axis`, for
+    // `placeByClaims`: its claim (`extents`), its type, whether it is a `ref`
+    // stand-in and where its target lands here (`placementIn`), whether it
+    // reads its place from refs, and whether its own data places it in this
+    // layer's frame.
+    const claimChildren = (
+      axis: 0 | 1,
+      extents: Size<Extent | undefined>[]
+    ): ClaimChild[] => {
+      const sets = node.sharing().sets[axis];
+      return node.children.map((c, i) => {
+        const space = c.resolveUnderlyingSpace()[axis];
+        const target = c instanceof GoFishRef ? c.targetNode : undefined;
+        return {
+          name: childNameKey(c),
+          extent: extents[i]?.[axis],
+          space,
+          standIn: c instanceof GoFishRef,
+          placed: target && placementIn(target, node, axis),
+          inkOn:
+            (c as GoFishNode).inkOn?.[axis] === true ||
+            (heldInChain(axis) && alongOwnAxis(c, axis)),
+          dataPositioned:
+            sets[i] === 0 && isCONTINUOUS(space) && space.origin !== "free",
+        };
+      });
+    };
+    // A category label along its own axis takes room only past the ends
+    // of its axis (#1115): between neighbors it overdraws them rather than
+    // pushing them apart. So in a layer a chain along that axis holds (the
+    // labels of one group of a grouped bar chart, inside the spread of
+    // groups), it is ink: its overhang would widen the gap between groups.
+    const alongOwnAxis = (c: GoFishAST, axis: 0 | 1): boolean =>
+      c instanceof GoFishNode &&
+      c.axisLabel?.kind === "ordinal" &&
+      c.axisLabel.dim === axis;
+    const heldInChain = (axis: 0 | 1): boolean => {
+      for (let p = node.parent; p !== undefined; p = p.parent) {
+        if (p.axisDir === axis) return true;
+        if (p._ownScope?.[axis] === true) return false;
+      }
+      return false;
+    };
+    // Where an operand nested in a child lands in this layer's frame.
+    const nestedPlacement = (axis: 0 | 1) => (name: string) => {
+      const op = constraintOperands().get(name);
+      return op !== undefined && op.node instanceof GoFishNode
+        ? placementIn(op.node, node, axis)
+        : undefined;
+    };
+    // Whether a child is a stand-in the claim walk places on `axis`: the
+    // constraints seat what is related to it where its target lands, so a
+    // fold that starts its children at the layer's origin does not hold.
+    const placesStandIn = (axis: 0 | 1) =>
+      node.children.some(
+        (c) =>
+          c instanceof GoFishRef &&
+          c.targetNode !== undefined &&
+          placementIn(c.targetNode, node, axis) !== undefined
+      );
+    // Whether a child of this layer's own set takes whatever room the layer
+    // is given on `axis` (it claims none, as a rect with no size does).
+    const ownSetFills = (
+      axis: 0 | 1,
+      extents: Size<Extent | undefined>[]
+    ): boolean => {
+      const sharing = node.sharing() as LayerSharingPlan;
+      return node.children.some(
+        (c, i) =>
+          sharing.sets[axis][i] === 0 &&
+          !sharing.datumPlaced[axis].has(i) &&
+          extents[i]?.[axis] === undefined &&
+          c instanceof GoFishNode &&
+          c.inkOn?.[axis] !== true
+      );
+    };
 
     // Distribute budget descriptor from the recognized spread shape, stashed by
     // `resolveExtent` and consumed by `layout` to invert the composed SIZE
@@ -373,7 +531,7 @@ export const layer = createNodeOperatorSequential(
     // claim hook runs, this is the composition behind the current types.
     let layerTypes: ReturnType<typeof composeLayerTypes> | undefined;
 
-    const node = new GoFishNode(
+    const node: GoFishNode = new GoFishNode(
       {
         type: options.box === true ? "box" : "layer",
         key: options.key,
@@ -418,15 +576,37 @@ export const layer = createNodeOperatorSequential(
           const t = layerTypes;
           if (t === undefined)
             throw new Error("[gofish] layer: claim resolved before its type");
+          const fillsRoom = (i: number, axis: 0 | 1) => {
+            const c = node.children[i];
+            return c instanceof GoFishNode && c.fillsRoom(axis);
+          };
           const effectiveExtents = applyNestExtentPlan(
             childExtents,
             t.effectiveChildren,
-            t.nestPlan
+            t.nestPlan,
+            fillsRoom
           );
           const scale = [
             options.transform?.scale?.x ?? 1,
             options.transform?.scale?.y ?? 1,
           ];
+          const operands = constraintOperands();
+          const standIns = [placesStandIn(0), placesStandIn(1)];
+          for (const axis of [0, 1] as const) {
+            const folded =
+              t.composed?.fragments[axis] !== undefined &&
+              t.composed.spaces[axis] !== undefined &&
+              !standIns[axis];
+            const grid =
+              t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis]);
+            claimPlaced[axis] =
+              folded || grid
+                ? t.placed[axis]
+                : new Set([
+                    ...t.placed[axis],
+                    ...constrainedOn(axis, node.constraints, operands),
+                  ]);
+          }
           const resolved: [Extent | undefined, Extent | undefined] = [
             resolveLayerAxisExtent(
               effectiveExtents,
@@ -436,7 +616,7 @@ export const layer = createNodeOperatorSequential(
               t.posDomains.x,
               t.base.union[0],
               t.base.spaces[0],
-              t.placed[0]
+              claimPlaced[0]
             ),
             resolveLayerAxisExtent(
               effectiveExtents,
@@ -446,10 +626,11 @@ export const layer = createNodeOperatorSequential(
               t.posDomains.y,
               t.base.union[1],
               t.base.spaces[1],
-              t.placed[1]
+              claimPlaced[1]
             ),
           ];
           constraintBudget = undefined;
+          const covered: [boolean, boolean] = [false, false];
           if (t.plan !== undefined && t.composed !== undefined) {
             const c = composePlanExtents(
               t.plan,
@@ -459,13 +640,115 @@ export const layer = createNodeOperatorSequential(
             );
             constraintBudget = c.budget;
             for (const axis of [0, 1] as const)
-              if (c.covered[axis]) resolved[axis] = c.extents[axis];
+              if (c.covered[axis] && !standIns[axis]) {
+                resolved[axis] = c.extents[axis];
+                covered[axis] = true;
+              }
           }
           if (t.gridAxes !== undefined) {
             // A grid track axis is ordinal, so it claims nothing here (the
             // tracks size at layout time, in `resolveGridTracks`).
             for (const axis of [0, 1] as const)
               if (!isUNDEFINED(t.gridAxes[axis])) resolved[axis] = undefined;
+          }
+          // The children the claim walk places (`claimPlaced`) sit where
+          // the layer's constraints put them (`placeByClaims`): a ring's
+          // axis, titles and legend around the content it dresses (#1032),
+          // a scatter's marks at their data, a mark aligned on another's
+          // end. The claim is the hull of what they draw there too, so a
+          // scope solved at or above the layer leaves them room. An axis a
+          // constraint fold already composed (or a grid's track axis) has
+          // every child in it.
+          const placements: [
+            ClaimPlacement | undefined,
+            ClaimPlacement | undefined,
+          ] = [undefined, undefined];
+          for (const axis of [0, 1] as const) {
+            inkChildren[axis] = new Set();
+            if (covered[axis]) continue;
+            if (t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis]))
+              continue;
+            if (claimPlaced[axis].size === 0) continue;
+            const p = node._placeChildren!(axis, effectiveExtents);
+            placements[axis] = p;
+            inkChildren[axis] = p.ink;
+            if (p.ascent === undefined || p.descent === undefined) continue;
+            const own = resolved[axis];
+            if (own !== undefined)
+              resolved[axis] = Extent(
+                Monotonic.envelope([own.ascent, p.ascent]),
+                Monotonic.envelope([own.descent, p.descent])
+              );
+            // A child of the own set that fills the room it is given makes
+            // the layer fill it too: it claims no fixed room.
+            else if (!ownSetFills(axis, effectiveExtents))
+              resolved[axis] = Extent(p.ascent, p.descent);
+          }
+          // The plot's claim (`GoFishNode.resolvePlotExtent`): the same
+          // steps over the children's plot claims, with the hull of what
+          // the constraints place leaving out the dressing, and a chain with
+          // a stand-in reaching only as far as its stand-ins. A chain's
+          // other parts count whole: what hangs off a part inside a chain
+          // takes room between the parts, so it is part of the plot.
+          const childPlots = applyNestExtentPlan(
+            node.children.map((c) =>
+              c instanceof GoFishNode ? plotIn(c, node) : c.resolveExtent()
+            ),
+            t.effectiveChildren,
+            t.nestPlan,
+            fillsRoom
+          );
+          const plot: [Extent | undefined, Extent | undefined] = [
+            resolveLayerAxisExtent(
+              childPlots,
+              t.effectiveChildren,
+              0,
+              scale[0],
+              t.posDomains.x,
+              t.base.union[0],
+              t.base.spaces[0],
+              claimPlaced[0]
+            ),
+            resolveLayerAxisExtent(
+              childPlots,
+              t.effectiveChildren,
+              1,
+              scale[1],
+              t.posDomains.y,
+              t.base.union[1],
+              t.base.spaces[1],
+              claimPlaced[1]
+            ),
+          ];
+          for (const axis of [0, 1] as const) {
+            if (covered[axis]) {
+              plot[axis] = composePlanExtents(
+                t.plan!,
+                t.composed!,
+                effectiveExtents,
+                t.effectiveChildren,
+                {
+                  extents: childPlots,
+                  standIn: node.children.map((c) => c instanceof GoFishRef),
+                }
+              ).extents[axis];
+              continue;
+            }
+            if (t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis])) {
+              plot[axis] = undefined;
+              continue;
+            }
+            const p = placements[axis];
+            if (p?.plotAscent === undefined || p.plotDescent === undefined)
+              continue;
+            const own = plot[axis];
+            if (own !== undefined)
+              plot[axis] = Extent(
+                Monotonic.envelope([own.ascent, p.plotAscent]),
+                Monotonic.envelope([own.descent, p.plotDescent])
+              );
+            else if (!ownSetFills(axis, effectiveExtents))
+              plot[axis] = Extent(p.plotAscent, p.plotDescent);
           }
           // The content's claim, which `layout` solves against the layer's box
           // when the layer is sized. A data-valued size reports the claim of
@@ -480,13 +763,15 @@ export const layer = createNodeOperatorSequential(
           // box solves: its content widened to its keyed domain and niced,
           // solved once against the literal size through the registry
           // (`solveFixed`), whose solution `layout` reuses. So the box's 0
-          // sits where its content's does. A claim that maps no domain
-          // (`mapsDomain`) claims what it did.
+          // sits where its content's does. Content that maps no domain
+          // (`mapsDomain`) is laid out in the box, which claims its pixels
+          // from its start edge (#493: fixed-size nodes report their size).
           const session = node.tryGetRenderSession();
           const keyed: KeyedDomains | undefined = session?.keyedDomains;
           const fixedClaim = (axis: 0 | 1, px: number): Extent | undefined => {
             const claim = resolved[axis];
-            if (!mapsDomain(t.resolved[axis], claim)) return claim;
+            if (!mapsDomain(t.resolved[axis], claim))
+              return Extent(Monotonic.linear(0, px));
             const [space, wide] = keyed?.scope(
               node,
               axis,
@@ -507,12 +792,34 @@ export const layer = createNodeOperatorSequential(
               Monotonic.linear(0, wide.descent.run(solved.sigma))
             );
           };
-          return ([0, 1] as const).map((axis) => {
+          // A literal start places the layer that many pixels from its
+          // parent's origin (`translate` in `layout`), so its claim moves
+          // with it.
+          const at = (axis: 0 | 1, claim: Extent | undefined) => {
+            const min = dims[axis].min;
+            return claim === undefined || typeof min !== "number" || min === 0
+              ? claim
+              : Extent(
+                  Monotonic.adds(claim.ascent, min),
+                  Monotonic.adds(claim.descent, -min)
+                );
+          };
+          const claims = ([0, 1] as const).map((axis) => {
             const size = dims[axis].size;
             if (isValue(size)) return impliedExtent(spaces[axis]);
-            if (typeof size === "number") return fixedClaim(axis, size);
-            return resolved[axis];
+            if (typeof size === "number")
+              return at(
+                axis,
+                fixedClaim(axis, size + chartChrome(node, axis, size))
+              );
+            return at(axis, resolved[axis]);
           }) as [Extent | undefined, Extent | undefined];
+          // A node with a size of its own is a part of its parent's plot,
+          // chrome and dressing included.
+          node._plotExtent = ([0, 1] as const).map((axis) =>
+            dims[axis].size !== undefined ? claims[axis] : at(axis, plot[axis])
+          ) as [Extent | undefined, Extent | undefined];
+          return claims;
         },
         layout: (size, scales, children, node, region) => {
           // This layer's y direction: its children and constraints are read
@@ -530,13 +837,18 @@ export const layer = createNodeOperatorSequential(
             scales?.[0]?.map,
             scales?.[1]?.map,
           ];
-          // Compute size using dims (w and h) before passing to children
-          size = [
-            computeSize(dims[0].size, inheritedScaleFactors[0]!, size[0]) ??
-              size[0],
-            computeSize(dims[1].size, inheritedScaleFactors[1]!, size[1]) ??
-              size[1],
-          ];
+          // Compute size using dims (w and h) before passing to children. A
+          // chart's own size is its plot's: its chrome adds around it.
+          size = ([0, 1] as const).map((axis) => {
+            const own = computeSize(
+              dims[axis].size,
+              inheritedScaleFactors[axis]!,
+              size[axis]
+            );
+            return own === undefined
+              ? size[axis]
+              : own + chartChrome(node, axis, own);
+          }) as Size;
 
           // Grid budget (Stage 6e): resolve the tracks under the unified max rule
           // from the cells' pre-layout size claims — each track sizes to the max
@@ -591,18 +903,22 @@ export const layer = createNodeOperatorSequential(
             [scopes.fixedSolve(node, 0), scopes.fixedSolve(node, 1)]
           );
           const childScaleFactors = layerScales.sigmas;
-          for (const axis of layerScales.failedAxes) {
-            // A non-invertible fold-produced Monotonic would otherwise silently
-            // vanish the content (spread's `?? 0`); name the axis and budget so
-            // the failure is visible, then keep the inherited factor.
-            if (!constraintBudget?.covered[axis]) continue;
-            console.warn(
-              `layer: could not invert distribute SIZE claim on ${
-                axis === 0 ? "x" : "y"
-              } axis for budget ${size[axis]}px; keeping inherited scale factor.`,
-              constraintBudget
-            );
+          // A node dressed in chrome reads its gutters off the claims at the
+          // size it is laid out at (#1032): at its σ where its plot has a
+          // claim, else for its slot, which its plot fills. Then it seats
+          // its content past them.
+          if (node.chrome !== undefined) {
+            node.chrome.gutters = [
+              guttersInSlot(node, 0, childScaleFactors[0], size[0]),
+              guttersInSlot(node, 1, childScaleFactors[1], size[1]),
+            ];
+            seatPastGutters(node);
           }
+          // No σ fits the size this layer has: its fixed parts need more.
+          // It keeps the inherited σ, and the layout warns
+          // (`layoutWarnings.ts`).
+          for (const axis of layerScales.failedAxes)
+            warnLayout(node, fixedOverflowInside(node, axis, size[axis]));
           for (const check of layerScales.checks) {
             // Solver shadow (#39): assert the frame equation content(σ)=allocated
             // closes for this σ-scope. No-op unless GOFISH_SOLVER_CHECK is set.
@@ -623,6 +939,17 @@ export const layer = createNodeOperatorSequential(
           const sliceByName = constraintBudget
             ? buildDistributeSliceMap(constraintBudget.segments, size)
             : undefined;
+          // A spread whose parts claim nothing (they share what is left):
+          // spacing alone larger than its size. A spread with a claim is
+          // warned about where its scope is solved.
+          if (
+            node.axisDir !== undefined &&
+            node.resolveExtent()[node.axisDir] === undefined
+          )
+            warnLayout(
+              node,
+              spacingOverflow(node, node.axisDir, size[node.axisDir])
+            );
 
           // `position` constraints with a datum coordinate contribute a data
           // domain on their axis (see collectPositionDomains), and resolve
@@ -706,10 +1033,7 @@ export const layer = createNodeOperatorSequential(
           // Every placement operand resolved to a node inside this layer, by
           // name from this layer outward (like `ref`). Throws on a missing,
           // ambiguous, or out-of-layer operand (#819).
-          const operands =
-            node.constraints.length > 0
-              ? resolveConstraintOperands(node)
-              : new Map<string, ResolvedOperand>();
+          const operands = constraintOperands();
           // A child skips phase-1 baseline placement only when a positioning
           // operand names the child itself. A nested operand does not: it is
           // a fixed reference into its container, which stays where its own
@@ -745,27 +1069,56 @@ export const layer = createNodeOperatorSequential(
                 ? proposals.regionByName.get(childName)
                 : undefined) ??
               (constrainedChildren.has(i) ? undefined : proposals.passedOn);
-            const layoutSize = applyNestLayoutProposal(
+            // In a share scope (`sharesRoom`) a child is laid out at its
+            // claim at σ: a band is one σ, and a node that holds bands is
+            // what its claim says at the σ the scope solved.
+            const own = ([0, 1] as const).map((axis) => {
+              const sigma = childScaleFactors[axis];
+              const claim =
+                child instanceof GoFishNode
+                  ? child.resolveExtent()[axis]
+                  : undefined;
+              return claim !== undefined &&
+                sigma !== undefined &&
+                Number.isFinite(sigma) &&
+                node.sharesRoom(axis)
+                ? claim.width.run(sigma)
+                : undefined;
+            }) as Size<number | undefined>;
+            const proposed = applyNestLayoutProposal(
               childLayoutSizeProposal(
                 childName,
                 size,
                 gridCellByName,
                 sliceByName,
                 proposals.spanByName,
-                childRegion
+                childRegion,
+                own
               ),
               layoutPlan.nestPlan?.byDerived.get(i),
               childPlaceables
             );
+            // A node dressed in chrome hands its content (its first child)
+            // what the chrome's gutters leave of its slot (#1032), or its
+            // own room in a share scope.
+            const layoutSize: Size =
+              i === 0 && node.chrome !== undefined
+                ? [
+                    own[0] ?? proposed[0] - sum(node.chromeGutters(0)),
+                    own[1] ?? proposed[1] - sum(node.chromeGutters(1)),
+                  ]
+                : proposed;
             // Recombine the two forwarding decisions into the single carrier: σ
             // forwards uniformly (childScaleFactors), the anchored map forwards
             // per child (childPosScalesFor — stripped where a constraint consumed
             // the scale). A stripped map keeps the child's σ.
+            const seats = literalSeats(node.constraints, childName);
             const childMaps = childPosScalesFor(
               (children[i] as GoFishNode)._underlyingSpace,
               targetDims,
               ownsAxis,
-              effectivePosScales
+              effectivePosScales,
+              seats
             );
             childFrames[i] = layoutSize[1];
             const childPlaceable = child.layout(
@@ -780,6 +1133,14 @@ export const layer = createNodeOperatorSequential(
               const [bx, by] = baselineFor(childPlaceable, i);
               childPlaceable.place("x", bx, "baseline");
               childPlaceable.place("y", by, "baseline");
+            } else {
+              // A literal pin of its origin depends on nothing else, so it
+              // places the child now: the children laid out after it (a
+              // `ref` into it) read it where it ends up.
+              if (seats[0] !== undefined)
+                childPlaceable.place("x", seats[0], "baseline");
+              if (seats[1] !== undefined)
+                childPlaceable.place("y", seats[1], "baseline");
             }
             childPlaceables[i] = childPlaceable;
           };
@@ -947,13 +1308,16 @@ export const layer = createNodeOperatorSequential(
             [],
             [],
           ];
-          for (const cp of childPlaceables) {
+          childPlaceables.forEach((cp, i) => {
             const d = cp.dims;
+            // A child that is ink on an axis draws there but takes no room
+            // in this box, as it takes none in the claim (`placeByClaims`).
             for (const axis of [0, 1] as const) {
+              if (inkChildren[axis].has(i)) continue;
               mins[axis].push(d[axis].min);
               maxs[axis].push(d[axis].max);
             }
-          }
+          });
           const minX = foldFinite(mins[0], Math.min);
           const maxX = foldFinite(maxs[0], Math.max);
           const minY = foldFinite(mins[1], Math.min);
@@ -1023,6 +1387,48 @@ export const layer = createNodeOperatorSequential(
       },
       children
     );
+    node._inkChildren = inkChildren;
+    node._constraintOperands = constraintOperands;
+    node._literalStart = [0, 1].map((axis) => {
+      const min = dims[axis].min;
+      return typeof min === "number" ? min : 0;
+    }) as [number, number];
+    node._ownScope = [dims[0].size !== undefined, dims[1].size !== undefined];
+    node._placeChildren = (axis, extents) =>
+      placeByClaims(
+        axis,
+        claimChildren(axis, extents),
+        node.constraints,
+        constraintOperands(),
+        claimPlaced[axis],
+        nestedPlacement(axis)
+      );
+    // Where the claim walk places each child, memoized with the claims it
+    // reads; undefined while it is being computed (a ref inside the layer
+    // that reads the layer itself).
+    const boxesMemo: [
+      Map<number, BoxForm> | undefined | "busy",
+      Map<number, BoxForm> | undefined | "busy",
+    ] = [undefined, undefined];
+    node._childBoxes = (axis) => {
+      const memo = boxesMemo[axis];
+      if (memo === "busy") return undefined;
+      if (memo !== undefined) return memo;
+      boxesMemo[axis] = "busy";
+      const boxes = placeByClaims(
+        axis,
+        claimChildren(
+          axis,
+          node.children.map((c) => c.resolveExtent())
+        ),
+        node.constraints,
+        constraintOperands(),
+        new Set(),
+        nestedPlacement(axis)
+      ).boxes;
+      boxesMemo[axis] = boxes;
+      return boxes;
+    };
     // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
     node._elaborateInAxisScope = deferAxisDims(options, dims);
     // Default zBelow(connector, operand) for relational marks (line/ribbon/…)

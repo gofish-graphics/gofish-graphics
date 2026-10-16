@@ -162,7 +162,7 @@ def story_grouped_label_angle_auto_long_inner90_outer0():
 # The products collide at every angle: that row is hidden and the color legend
 # names them; the regions stay upright.
 def story_grouped_label_angle_auto_inner_hidden_outer0():
-    return _grouped_products(90)
+    return _grouped_products(230)
 
 
 # The same, colored by region, so no legend names the products (warns).
@@ -174,7 +174,7 @@ def story_grouped_label_angle_auto_inner_hidden_no_legend():
             spread(by="product", dir="x", spacing=0),
         )
         .mark(rect(h="sales", fill="region")),
-        {"w": 90, "h": 210},
+        {"w": 190, "h": 210},
     )
 
 

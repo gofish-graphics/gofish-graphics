@@ -245,7 +245,7 @@ export const SelectiveGroup: StoryObj<Args> = {
 // Ribbon — two highlighted species ribbons, others gray
 export const RibbonHighlight: StoryObj<Args> = {
   name: "Ribbon / Two Highlighted",
-  args: defaultArgs,
+  args: { h: 400 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -263,7 +263,7 @@ export const RibbonHighlight: StoryObj<Args> = {
       )
       .mark(rect({ h: "count", fill: "species" }))
       .layer(ribbon({ opacity: 0.6 }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container, { h: args.h });
 
     return container;
   },

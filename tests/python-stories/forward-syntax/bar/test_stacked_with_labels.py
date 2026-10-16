@@ -15,5 +15,5 @@ def story_default():
             stack(by="species", dir="y"),
         )
         .mark(mark),
-        {"w": 400, "h": 400},
+        {"w": 440, "h": 400},
     )

@@ -9,6 +9,7 @@ import { Rect } from "../ast/shapes/rect";
 import { Ellipse } from "../ast/shapes/ellipse";
 import { Polygon } from "../ast/shapes/polygon";
 import { Pack } from "../ast/graphicalOperators/pack";
+import { mask, paint } from "../ast/graphicalOperators/porterDuff";
 import { defaultGeometry, GoFishNode } from "../ast/_node";
 import { enclosingCircle, translateCircle, type Circle } from "../ast/geometry";
 
@@ -221,6 +222,34 @@ console.log("# pack: 0 and 1 children");
   const one = layOut((await Pack({}, [circle(6)])) as GoFishNode);
   checkPacked("one", one);
   ok("one child: R is its radius", near(one.intrinsicDims![0].size!, 12));
+}
+
+console.log("# composites clipped to their first child claim its room");
+{
+  // A cut slice is `mask([window, source])`: it shows a 100-px window of a
+  // 600-px source, so it claims 100 px, as it lays out to (#493).
+  for (const [name, op] of [
+    ["mask", mask],
+    ["paint", paint],
+  ] as const) {
+    const node = (await op({}, [
+      Rect({ w: 100, h: 80 }),
+      Rect({ w: 600, h: 120 }),
+    ])) as GoFishNode;
+    node.resolveUnderlyingSpace();
+    const [x, y] = node.resolveExtent();
+    ok(
+      `${name} claims its first child's width and height`,
+      near(x!.width.run(0), 100) && near(y!.width.run(0), 80),
+      `${x?.width.run(0)} × ${y?.width.run(0)}`
+    );
+    layOut(node);
+    ok(
+      `${name} lays out to the room it claims`,
+      near(node.intrinsicDims![0].size!, 100) &&
+        near(node.intrinsicDims![1].size!, 80)
+    );
+  }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

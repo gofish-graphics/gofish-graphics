@@ -326,7 +326,13 @@ function solveRank2Axis(
  *  child that contains it: `operand.min = container.min + gap` per axis. */
 export type RigidAttachment = { container: string; gap: [number, number] };
 
-export function solvePlacementConstraints(
+/**
+ * Solve the placement of `targets` under `constraints` into a box per (node,
+ * axis), without writing it back: the solve {@link solvePlacementConstraints}
+ * writes back, which the claim walk also reads to learn where a layer's
+ * constraints place its children (`claimPlacement.ts`).
+ */
+export function solvePlacementCells(
   constraints: PlacementConstraint[],
   targets: Map<string, Placeable>,
   sizes: [number, number],
@@ -335,7 +341,10 @@ export function solvePlacementConstraints(
   dataPositioned?: [Set<string>, Set<string>],
   rigid?: Map<string, RigidAttachment>,
   freeOrigin?: FreeOrigin
-): PlacementConflict[] {
+): readonly [
+  ReturnType<typeof solveRank2Axis>,
+  ReturnType<typeof solveRank2Axis>,
+] {
   const lowered = lowerPlacementConstraints(
     constraints,
     targets,
@@ -368,7 +377,7 @@ export function solvePlacementConstraints(
     });
   }
 
-  const solved = [
+  return [
     solveRank2Axis(
       "x",
       lowered.anchorProgram.axes[0],
@@ -382,6 +391,28 @@ export function solvePlacementConstraints(
       freeOrigin?.[1]
     ),
   ] as const;
+}
+
+export function solvePlacementConstraints(
+  constraints: PlacementConstraint[],
+  targets: Map<string, Placeable>,
+  sizes: [number, number],
+  posScales?: ConstraintPosScales,
+  gridTracks?: [TrackLayout, TrackLayout],
+  dataPositioned?: [Set<string>, Set<string>],
+  rigid?: Map<string, RigidAttachment>,
+  freeOrigin?: FreeOrigin
+): PlacementConflict[] {
+  const solved = solvePlacementCells(
+    constraints,
+    targets,
+    sizes,
+    posScales,
+    gridTracks,
+    dataPositioned,
+    rigid,
+    freeOrigin
+  );
   const conflicts = solved.flatMap((result) => result.conflicts);
   if (conflicts.length > 0) {
     const conflict = conflicts[0];
