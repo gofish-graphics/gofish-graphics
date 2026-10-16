@@ -11,7 +11,8 @@
 //      appears, then the dots fall into two piles, the homes above the line
 //      and the homes at or below it.
 //
-// The piece is a `timeline` of scenes placed in time by .relate() clauses.
+// The piece is a `time.sequence` of three scenes that loops: the combinator
+// for a timeline chain of scenes and gaps.
 //
 // PROTOTYPE (animation grammar proposal). Syntax not signed off. The dots
 // match from scene to scene by the row each one draws (the same home), though
@@ -31,7 +32,6 @@ import {
   stack,
   text,
   time,
-  timeline,
 } from "../../../src/lib";
 import { r2d3Homes } from "../../../src/data/r2d3Homes";
 
@@ -128,35 +128,27 @@ export const threshold = () =>
 
 export type Hold = { playing?: boolean; at?: number };
 
-// ---- The timeline -------------------------------------------------------------
+// ---- The sequence -------------------------------------------------------------
 
-/** One loop in ms: what the clauses add up to. */
+/** One loop in ms: the three scenes and the three gaps, the last of them the
+ *  wrap from the split back to the scatterplot. */
 export const LOOP = 3000 + 2000 + 3000 + 1400 + 3000 + 1400;
 
-/** Four scenes: the scatterplot, the histogram (its threshold built in 600
- *  ms into the scene), the split, and the scatterplot again, which a looping
- *  clock wraps onto the first. Each transition spans the gap between two
- *  scenes; the dots match by the row each one draws. */
+/** Three scenes: the scatterplot, the histogram (its threshold built in 600
+ *  ms into the scene), and the split, which wraps back into the
+ *  scatterplot. A transition spans each gap; the dots match by the row each
+ *  one draws. */
 export const r2d3 = (container: HTMLElement, hold?: Hold) =>
-  timeline([
-    scatterplot().name("scatter").hold(3000),
-    layer([
-      histogram(),
-      threshold().transition({ enter: Animation.fadeIn({ delay: 600 }) }),
+  time
+    .sequence({ gap: [2000, 1400, 1400], cyclic: true, ...hold }, [
+      scatterplot().duration(3000),
+      layer([
+        histogram(),
+        threshold().transition({ enter: Animation.fadeIn({ delay: 600 }) }),
+      ]).duration(3000),
+      layer([split(), threshold()]).duration(3000),
     ])
-      .name("histogram")
-      .hold(3000),
-    layer([split(), threshold()]).name("split").hold(3000),
-    scatterplot().name("again"),
-  ])
-    .relate(({ scatter, histogram, split, again }) => [
-      time.after(scatter, histogram, { gap: 2000 }),
-      time.transition(scatter, histogram),
-      time.after(histogram, split, { gap: 1400 }),
-      time.transition(histogram, split),
-      time.after(split, again, { gap: 1400 }),
-      time.transition(split, again),
-    ])
-    .render(container, { w: 560, h: 400, loop: true, ...hold } as any);
+    .transition({ update: Animation.tween({ ease: "cubicInOut" }) })
+    .render(container, { w: 560, h: 400 });
 
 export default r2d3;

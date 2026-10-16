@@ -3,7 +3,7 @@
  * Learning, Part 1" (2015), the segue Gemini and Data Animator start from:
  * the same homes as a scatterplot, a stacked-dot histogram (staggered by
  * elevation) and the decision tree's first split. The spec is `./r2d3.ts`, a
- * `timeline` of scenes placed in time by `.relate()` clauses.
+ * looping `time.sequence` of three scenes.
  *
  * The filmstrip holds it still at several playheads (ms). `GifFrames` holds
  * one loop at 60 playheads in a 1-wide grid of fixed-size cells, which the GIF
