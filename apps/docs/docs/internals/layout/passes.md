@@ -777,9 +777,10 @@ report their size).
   children's plot claims the way it composes their claims, its hull of what
   its constraints place leaves out the dressing (`placeByClaims`' plot
   hull), and a chain with a stand-in is laid by every part but reaches only
-  as far as its stand-ins (`chainFold`'s `reaches`). A chain's other parts
-  count whole, so a label that hangs off one part of a chain takes room
-  between the parts and is part of the plot. A child that reads y the other
+  as far as its stand-ins (`chainFold`'s `reaches`). A chain's other parts,
+  and the children of an align (which places them by their whole boxes),
+  count whole, so a label that hangs off one row of a spread takes room
+  between the rows and is part of the plot. A child that reads y the other
   way has its plot read reflected within its box. The gutters of a chart
   are its claim past the plot claim of its content (`claims` in
   `chromeGutters.ts`), so a chart with a size of its own maps that plot into
