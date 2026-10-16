@@ -416,17 +416,22 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
     one.sigma === 0 &&
       pxOf({ sigma: one.sigma, originPx: one.originPx! }, 5) === 200
   );
-  // Nicing widens only the data part.
+  // Nicing widens the claim to hold the niced domain: a claim is the hull
+  // of what the content draws, so each side reaches the farther of the
+  // claim and the domain's end. Content drawing 6 px past its top datum
+  // (a mark's size at it) needs those pixels while the niced top is closer
+  // than 6 px (σ = 2), and nothing more once it is farther (σ = 10).
   const [niced, nicedClaim] = niceScope(
     CONTINUOUS(interval(-3, 44), "pinned"),
-    Extent(M.linear(47, 100)),
+    Extent(M.linear(44, 6), M.linear(3, 0)),
     DEFAULT_AXIS_TICKS
   );
   ok(
-    "nicing widens the claim by σ·(nicedWidth − dataWidth)",
+    "nicing widens the claim to the hull of the claim and the niced domain",
     JSON.stringify(continuousInterval(niced!)) ===
       JSON.stringify(interval(-5, 45)) &&
-      nicedClaim!.width.run(2) === 2 * 50 + 100
+      nicedClaim!.width.run(2) === 2 * 44 + 6 + 2 * 5 &&
+      nicedClaim!.width.run(10) === 10 * 50
   );
   // A pinned child's claim reaches the union whole.
   const u = unionChildExtents(

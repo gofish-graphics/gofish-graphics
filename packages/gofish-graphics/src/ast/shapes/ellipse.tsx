@@ -25,6 +25,7 @@ import {
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import { boxOfDims } from "../geometry";
+import { literalBoxExtents } from "../extent";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
@@ -73,6 +74,9 @@ export const Ellipse = ({
         };
         return [axisSpace(0), axisSpace(1)];
       },
+      // A literal pixel size is the ellipse's own (#493), as a rect's is.
+      resolveExtent: (_ce, _cs, spaces) =>
+        literalBoxExtents(spaces, [dims[0], dims[1]], aspectRatio),
       layout: (size, scales, children) => {
         let w = isValue(dims[0].size)
           ? getValue(dims[0].size!) * scales[0]?.sigma!

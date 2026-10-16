@@ -20,7 +20,7 @@ import {
   isUNDEFINED,
   magnitude,
 } from "../underlyingSpace";
-import { Extent, growExtent, impliedExtent, mapsDomain } from "../extent";
+import { Extent, impliedExtent, mapsDomain } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import type { KeyedDomains } from "../keyedDomains";
 import { isValue } from "../data";
@@ -82,6 +82,16 @@ import {
   selectGridConstraint,
   solveLayerScales,
 } from "../constraints/proposalPlan";
+import {
+  constrainedOn,
+  placeByClaims,
+  type ClaimChild,
+} from "../constraints/claimPlacement";
+import {
+  guttersAroundPlot,
+  guttersInSlot,
+  seatPastGutters,
+} from "../chromeGutters";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
 //
@@ -208,15 +218,18 @@ function applyRelationalZBelowDefaults(
 
 const sum = ([a, b]: [number, number]) => a + b;
 
-/** The pixels a chart's chrome adds around its plot on `axis`. A chart's
- *  own `w`/`h` is its plot without chrome (#1032), and its chrome dresses its
- *  content, the chart frame's one child (`frameChart`), so a chart with a
- *  size of its own is that size plus its content's gutters. 0 for any other
- *  node. */
-const chartChrome = (node: GoFishNode, axis: 0 | 1): number => {
+/** The pixels a chart's chrome adds around its plot on `axis`, for a chart
+ *  with a size of its own `px` there. A chart's own `w`/`h` is its plot
+ *  without chrome (#1032), and its chrome dresses its content, the chart
+ *  frame's one child (`frameChart`), so the chart is that size plus the
+ *  gutters its content's claims give around a plot of that size. 0 for any
+ *  other node. */
+const chartChrome = (node: GoFishNode, axis: 0 | 1, px: number): number => {
   const content = node.children[0];
-  return node._chartBox?.[axis] === true && content instanceof GoFishNode
-    ? sum(content.chromeGutters(axis))
+  return node._chartBox?.[axis] === true &&
+    content instanceof GoFishNode &&
+    content.chrome !== undefined
+    ? sum(guttersAroundPlot(content, axis, px))
     : 0;
 };
 
@@ -273,12 +286,52 @@ export const layer = createNodeOperatorSequential(
       undefined,
       undefined,
     ];
-    // The content's claim without the chrome's gutters, for a node dressed
-    // in chrome: what its plot spans (see `chrome.plot` below).
-    const plotExtents: [Extent | undefined, Extent | undefined] = [
-      undefined,
-      undefined,
-    ];
+    // Per axis, the children the claim walk places where the layer's
+    // constraints put them (`placeByClaims`), rather than in its own union:
+    // the ones the union leaves out (`placed`), and, on an axis no
+    // constraint fold composes, every child a constraint places there.
+    const claimPlaced: [Set<number>, Set<number>] = [new Set(), new Set()];
+    // Per axis, the children that are ink there (`placeByClaims`): they
+    // draw, but take no room in the claim, nor in the box.
+    const inkChildren: [Set<number>, Set<number>] = [new Set(), new Set()];
+    // What the claim walk knows of each child on `axis`, for
+    // `placeByClaims`: its claim (`extents`), its type, whether only layout
+    // knows where it lands (a `ref` stand-in, or a node that reads its place
+    // from refs), and whether its own data places it in this layer's frame.
+    const claimChildren = (
+      axis: 0 | 1,
+      extents: Size<Extent | undefined>[]
+    ): ClaimChild[] => {
+      const sets = node.sharing().sets[axis];
+      return node.children.map((c, i) => {
+        const space = c.resolveUnderlyingSpace()[axis];
+        return {
+          name: childNameKey(c),
+          extent: extents[i]?.[axis],
+          space,
+          standIn: c instanceof GoFishRef,
+          inkOn: (c as GoFishNode).inkOn?.[axis] === true,
+          dataPositioned:
+            sets[i] === 0 && isCONTINUOUS(space) && space.origin !== "free",
+        };
+      });
+    };
+    // Whether a child of this layer's own set takes whatever room the layer
+    // is given on `axis` (it claims none, as a rect with no size does).
+    const ownSetFills = (
+      axis: 0 | 1,
+      extents: Size<Extent | undefined>[]
+    ): boolean => {
+      const sharing = node.sharing() as LayerSharingPlan;
+      return node.children.some(
+        (c, i) =>
+          sharing.sets[axis][i] === 0 &&
+          !sharing.datumPlaced[axis].has(i) &&
+          extents[i]?.[axis] === undefined &&
+          c instanceof GoFishNode &&
+          c.inkOn?.[axis] !== true
+      );
+    };
 
     // Distribute budget descriptor from the recognized spread shape, stashed by
     // `resolveExtent` and consumed by `layout` to invert the composed SIZE
@@ -448,6 +501,24 @@ export const layer = createNodeOperatorSequential(
             options.transform?.scale?.x ?? 1,
             options.transform?.scale?.y ?? 1,
           ];
+          const operands =
+            node.constraints.length > 0
+              ? resolveConstraintOperands(node)
+              : new Map<string, ResolvedOperand>();
+          for (const axis of [0, 1] as const) {
+            const folded =
+              t.composed?.fragments[axis] !== undefined &&
+              t.composed.spaces[axis] !== undefined;
+            const grid =
+              t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis]);
+            claimPlaced[axis] =
+              folded || grid
+                ? t.placed[axis]
+                : new Set([
+                    ...t.placed[axis],
+                    ...constrainedOn(axis, node.constraints, operands),
+                  ]);
+          }
           const resolved: [Extent | undefined, Extent | undefined] = [
             resolveLayerAxisExtent(
               effectiveExtents,
@@ -457,7 +528,7 @@ export const layer = createNodeOperatorSequential(
               t.posDomains.x,
               t.base.union[0],
               t.base.spaces[0],
-              t.placed[0]
+              claimPlaced[0]
             ),
             resolveLayerAxisExtent(
               effectiveExtents,
@@ -467,10 +538,11 @@ export const layer = createNodeOperatorSequential(
               t.posDomains.y,
               t.base.union[1],
               t.base.spaces[1],
-              t.placed[1]
+              claimPlaced[1]
             ),
           ];
           constraintBudget = undefined;
+          const covered: [boolean, boolean] = [false, false];
           if (t.plan !== undefined && t.composed !== undefined) {
             const c = composePlanExtents(
               t.plan,
@@ -480,7 +552,10 @@ export const layer = createNodeOperatorSequential(
             );
             constraintBudget = c.budget;
             for (const axis of [0, 1] as const)
-              if (c.covered[axis]) resolved[axis] = c.extents[axis];
+              if (c.covered[axis]) {
+                resolved[axis] = c.extents[axis];
+                covered[axis] = true;
+              }
           }
           if (t.gridAxes !== undefined) {
             // A grid track axis is ordinal, so it claims nothing here (the
@@ -488,15 +563,33 @@ export const layer = createNodeOperatorSequential(
             for (const axis of [0, 1] as const)
               if (!isUNDEFINED(t.gridAxes[axis])) resolved[axis] = undefined;
           }
-          // Chrome sits outside its chart (#1032): a node dressed in chrome
-          // (its axes, titles, legend) claims its content plus the chrome's
-          // gutters, constant pixels on each side, so a scope solved at or
-          // above it gives the content what the gutters leave of the slot.
+          // The children the claim walk places (`claimPlaced`) sit where
+          // the layer's constraints put them (`placeByClaims`): a ring's
+          // axis, titles and legend around the content it dresses (#1032),
+          // a scatter's marks at their data, a mark aligned on another's
+          // end. The claim is the hull of what they draw there too, so a
+          // scope solved at or above the layer leaves them room. An axis a
+          // constraint fold already composed (or a grid's track axis) has
+          // every child in it.
           for (const axis of [0, 1] as const) {
-            const claim = resolved[axis];
-            plotExtents[axis] = claim;
-            if (claim !== undefined)
-              resolved[axis] = growExtent(claim, node.chromeGutters(axis));
+            inkChildren[axis] = new Set();
+            if (covered[axis]) continue;
+            if (t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis]))
+              continue;
+            if (claimPlaced[axis].size === 0) continue;
+            const p = node._placeChildren!(axis, effectiveExtents);
+            inkChildren[axis] = p.ink;
+            if (p.ascent === undefined || p.descent === undefined) continue;
+            const own = resolved[axis];
+            if (own !== undefined)
+              resolved[axis] = Extent(
+                Monotonic.envelope([own.ascent, p.ascent]),
+                Monotonic.envelope([own.descent, p.descent])
+              );
+            // A child of the own set that fills the room it is given makes
+            // the layer fill it too: it claims no fixed room.
+            else if (!ownSetFills(axis, effectiveExtents))
+              resolved[axis] = Extent(p.ascent, p.descent);
           }
           // The content's claim, which `layout` solves against the layer's box
           // when the layer is sized. A data-valued size reports the claim of
@@ -511,13 +604,15 @@ export const layer = createNodeOperatorSequential(
           // box solves: its content widened to its keyed domain and niced,
           // solved once against the literal size through the registry
           // (`solveFixed`), whose solution `layout` reuses. So the box's 0
-          // sits where its content's does. A claim that maps no domain
-          // (`mapsDomain`) claims what it did.
+          // sits where its content's does. Content that maps no domain
+          // (`mapsDomain`) is laid out in the box, which claims its pixels
+          // from its start edge (#493: fixed-size nodes report their size).
           const session = node.tryGetRenderSession();
           const keyed: KeyedDomains | undefined = session?.keyedDomains;
           const fixedClaim = (axis: 0 | 1, px: number): Extent | undefined => {
             const claim = resolved[axis];
-            if (!mapsDomain(t.resolved[axis], claim)) return claim;
+            if (!mapsDomain(t.resolved[axis], claim))
+              return Extent(Monotonic.linear(0, px));
             const [space, wide] = keyed?.scope(
               node,
               axis,
@@ -542,7 +637,7 @@ export const layer = createNodeOperatorSequential(
             const size = dims[axis].size;
             if (isValue(size)) return impliedExtent(spaces[axis]);
             if (typeof size === "number")
-              return fixedClaim(axis, size + chartChrome(node, axis));
+              return fixedClaim(axis, size + chartChrome(node, axis, size));
             return resolved[axis];
           }) as [Extent | undefined, Extent | undefined];
         },
@@ -572,7 +667,7 @@ export const layer = createNodeOperatorSequential(
             );
             return own === undefined
               ? size[axis]
-              : own + chartChrome(node, axis);
+              : own + chartChrome(node, axis, own);
           }) as Size;
 
           // Grid budget (Stage 6e): resolve the tracks under the unified max rule
@@ -628,36 +723,16 @@ export const layer = createNodeOperatorSequential(
             [scopes.fixedSolve(node, 0), scopes.fixedSolve(node, 1)]
           );
           const childScaleFactors = layerScales.sigmas;
-          // A node dressed in chrome records the span of its plot in its own
-          // frame, which its chrome's gutters are measured from (#1032): the
-          // keyed domain of its content as its frame maps it. On an axis with
-          // no map the plot is the content's box. It also records the size it
-          // hands its content (`chrome.slot`).
+          // A node dressed in chrome reads its gutters off the claims at the
+          // size it is laid out at (#1032): at its σ where its plot has a
+          // claim, else for its slot, which its plot fills. Then it seats
+          // its content past them.
           if (node.chrome !== undefined) {
-            node.chrome.plot = ([0, 1] as const).map((axis) => {
-              const frame = layerScales.frames[axis];
-              const sigma = childScaleFactors[axis];
-              const claim = plotExtents[axis];
-              if (frame !== undefined && sigma !== undefined && claim) {
-                const wide =
-                  keyed?.scope(
-                    node,
-                    axis,
-                    layerTypes?.resolved[axis],
-                    claim,
-                    viaSet(axis)
-                  )[1] ?? claim;
-                return [
-                  frame.originPx - wide.descent.run(sigma),
-                  frame.originPx + wide.ascent.run(sigma),
-                ];
-              }
-              return undefined;
-            }) as NonNullable<GoFishNode["chrome"]>["plot"];
-            node.chrome.slot = ([0, 1] as const).map((axis) => {
-              const given = size[axis] - sum(node.chromeGutters(axis));
-              return Number.isFinite(given) ? given : undefined;
-            }) as NonNullable<GoFishNode["chrome"]>["slot"];
+            node.chrome.gutters = [
+              guttersInSlot(node, 0, childScaleFactors[0], size[0]),
+              guttersInSlot(node, 1, childScaleFactors[1], size[1]),
+            ];
+            seatPastGutters(node);
           }
           for (const axis of layerScales.failedAxes) {
             // A non-invertible fold-produced Monotonic would otherwise silently
@@ -1037,10 +1112,9 @@ export const layer = createNodeOperatorSequential(
           childPlaceables.forEach((cp, i) => {
             const d = cp.dims;
             // A child that is ink on an axis draws there but takes no room
-            // in this box (`GoFishNode.inkOn`).
-            const ink = (children[i] as GoFishNode).inkOn;
+            // in this box, as it takes none in the claim (`placeByClaims`).
             for (const axis of [0, 1] as const) {
-              if (ink?.[axis]) continue;
+              if (inkChildren[axis].has(i)) continue;
               mins[axis].push(d[axis].min);
               maxs[axis].push(d[axis].max);
             }
@@ -1114,6 +1188,14 @@ export const layer = createNodeOperatorSequential(
       },
       children
     );
+    node._placeChildren = (axis, extents) =>
+      placeByClaims(
+        axis,
+        claimChildren(axis, extents),
+        node.constraints,
+        resolveConstraintOperands(node),
+        claimPlaced[axis]
+      );
     // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
     node._elaborateInAxisScope = deferAxisDims(options, dims);
     // Default zBelow(connector, operand) for relational marks (line/ribbon/…)

@@ -1123,8 +1123,6 @@ function elaborateOrdinalAxis(
         depth: depth0 + k,
         field: title,
       };
-      // Ink along the axis: it may overdraw the next band (#1115).
-      label.inkOn = dim === 0 ? [true, false] : [false, true];
       if (aligns[k] === "start") {
         nodes.push(label);
         nodes.push(
@@ -1187,7 +1185,11 @@ function elaborateOrdinalAxis(
     // LABEL at its own rotation pivot (`"baseline"`) while what it tracks
     // stays "middle"-anchored, via `Constraint.align`'s anchor-array form.
     // A start-aligned label's box is its own rotated box, so it centers its
-    // bbox on it at any angle.
+    // bbox on it at any angle. What a label centers on is placed by its
+    // slots' refs, which only layout places, so the label is ink along the
+    // axis (`placeByClaims`): one wider than its band overdraws its
+    // neighbors (#1115) instead of pushing the bands apart. Across the axis
+    // it is seated past the content, and takes room there.
     for (const { label, on, k } of pairs) {
       const anchors: AlignAnchor[] =
         aligns[k] === "center" &&

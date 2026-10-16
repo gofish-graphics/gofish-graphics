@@ -28,6 +28,7 @@ import {
   positionOf,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
+import { literalBoxExtents } from "../extent";
 import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
 import { computeAesthetic, computeSize } from "../../util";
 import {
@@ -174,6 +175,10 @@ export const Rect = ({
 
         return [resolveAxis(0), resolveAxis(1)];
       },
+      // A literal pixel size is the rect's own (#493): it claims it, so
+      // whatever composes it leaves it room.
+      resolveExtent: (_ce, _cs, spaces) =>
+        literalBoxExtents(spaces, [dims[0], dims[1]], aspectRatio),
       layout: (size, scales, children) => {
         const pos = [posFn(scales?.[0]?.map), posFn(scales?.[1]?.map)];
         // The box's pixel size on one axis.

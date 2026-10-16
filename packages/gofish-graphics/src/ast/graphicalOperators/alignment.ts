@@ -196,16 +196,18 @@ export function resolveAlignmentSpace(
  * The claim of an {@link overlay} with result type `space`: the children's
  * claims seated as their types are. Every claim is measured from data 0, so a
  * child at its own data coordinates reaches its own ascent above the shared 0
- * and its own descent below it; any other child is its box, `[0, width]`.
- * So the pixel overhead the children carry (spacing, padding) stays in the
- * claim even though it is no part of the data interval. The result keeps the
- * larger reach on each side of 0, so a parent can σ-solve it with every
- * intercept intact.
+ * and its own descent below it; a continuous child placed elsewhere is its
+ * box, `[0, width]`; and a child with no data coordinates (a text, a box of
+ * literal size) sits at the overlay's origin, so it reaches its own ascent
+ * and descent about it. So the pixel overhead the children carry (spacing,
+ * padding) stays in the claim even though it is no part of the data
+ * interval. The result keeps the larger reach on each side of 0, so a parent
+ * can σ-solve it with every intercept intact.
  *
  * A result with no data coordinates (ordinal or undefined) still claims when
- * a child with no data coordinates does (a spread of magnitudes: its type is
- * a sequence of separate spaces, its room is σ-dependent): each such child is
- * its box, so the claim is the envelope of their widths. A continuous child
+ * a child with no data coordinates does (a spread of magnitudes, whose room is
+ * σ-dependent, or a box with a pixel size of its own): each such child sits at
+ * the origin, so the claim is the envelope of their reaches. A continuous child
  * of such a result is no part of it on this axis (the type folded no
  * continuous space from it), so neither is its claim. With no such child
  * there is no claim.
@@ -223,7 +225,10 @@ function overlayClaim(
     const boxes = claiming.filter((c) => !isCONTINUOUS(c.space));
     return boxes.length === 0
       ? undefined
-      : Extent(Monotonic.envelope(boxes.map((c) => c.extent.width)));
+      : Extent(
+          Monotonic.envelope(boxes.map((c) => c.extent.ascent)),
+          Monotonic.envelope(boxes.map((c) => c.extent.descent))
+        );
   }
   const above: Monotonic.Monotonic[] = [];
   const below: Monotonic.Monotonic[] = [];
@@ -231,9 +236,14 @@ function overlayClaim(
     if (isCONTINUOUS(s) && atOwnData(s, seat)) {
       above.push(extent.ascent);
       below.push(extent.descent);
-    } else {
+    } else if (isCONTINUOUS(s)) {
       above.push(extent.width);
       below.push(Monotonic.ZERO);
+    } else {
+      // A box with no data sits at the overlay's origin: it reaches its
+      // own ascent above it and its descent below.
+      above.push(extent.ascent);
+      below.push(extent.descent);
     }
   }
   return Extent(Monotonic.envelope(above), Monotonic.envelope(below));

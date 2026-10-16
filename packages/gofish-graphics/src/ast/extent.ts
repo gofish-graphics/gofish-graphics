@@ -14,6 +14,7 @@
 import * as Monotonic from "../util/monotonic";
 import { interval, union, width, type Interval } from "../util/interval";
 import type { Size } from "./dims";
+import { isValue, type MaybeValue } from "./data";
 import {
   isCONTINUOUS,
   niceContinuous,
@@ -33,9 +34,12 @@ import {
  * claims ascent 50σ and descent −30σ (its low edge lies 30σ above its 0), and
  * its width is 20σ. An origin-less extent's interval starts at 0, so its
  * descent is 0. Every continuous axis has exactly one claim. An ordinal or
- * undefined axis has one only when its content's room depends on σ (a spread
- * of magnitudes: separate spaces, one shared scale), measured as a box
- * (descent 0); otherwise it has none (`undefined`).
+ * undefined axis has one when its content's room depends on σ (a spread of
+ * magnitudes: separate spaces, one shared scale), measured as a box (descent
+ * 0), or when its content has a pixel size of its own (a text, a box of
+ * literal size: a claim with no σ in it, {@link boxExtent}); content that
+ * takes whatever room its parent gives it (a rect with no size) has none
+ * (`undefined`).
  */
 export type Extent = {
   /** The σ-affine reach above data 0. */
@@ -65,6 +69,92 @@ export const impliedExtent = (space: UnderlyingSpace): Extent | undefined => {
   if (!isCONTINUOUS(space)) return undefined;
   const { min, max } = space.dataInterval;
   return Extent(Monotonic.linear(max, 0), Monotonic.linear(-min, 0));
+};
+
+/**
+ * The claim of a box with a pixel size of its own (#493: fixed-size nodes
+ * report their size), on an axis of type `space`: it reaches `lo` pixels
+ * before its origin and `hi` past it, at any σ. A text, or a rect or ellipse
+ * of literal size, claims this, so whatever composes it leaves it room. On
+ * an undefined axis the box is all there is. On a pinned point (a glyph
+ * placed at a datum) the box sits around the datum's pixel, `lo` below it
+ * and `hi` above. Any other type claims what the type implies.
+ */
+export const boxExtent = (
+  space: UnderlyingSpace,
+  lo: number,
+  hi: number
+): Extent | undefined => {
+  if (space.kind === "undefined")
+    return Extent(Monotonic.linear(0, hi), Monotonic.linear(0, lo));
+  if (isOneValue(space) && space.origin === "pinned") {
+    const at = space.dataInterval.min;
+    return Extent(Monotonic.linear(at, hi), Monotonic.linear(-at, lo));
+  }
+  return impliedExtent(space);
+};
+
+/** The claim of a shape's axis `d` (a rect's, an ellipse's), of type
+ *  `space`, when the shape has a literal pixel size there ({@link
+ *  boxExtent}): a literal `size`, or two literal ends. The box is where the
+ *  shape's layout puts it: from a literal start or about a literal center
+ *  (the shape places itself there, in its parent's pixels), about a datum
+ *  center, or else from its origin. With no literal size (a box that fills
+ *  its parent's room, or one sized by data) the type's claim stands. */
+export const literalBoxExtent = (
+  space: UnderlyingSpace,
+  d: {
+    min?: MaybeValue<number>;
+    center?: MaybeValue<number>;
+    max?: MaybeValue<number>;
+    size?: MaybeValue<number>;
+  }
+): Extent | undefined => {
+  const size =
+    typeof d.size === "number"
+      ? d.size
+      : typeof d.min === "number" && typeof d.max === "number"
+        ? d.max - d.min
+        : undefined;
+  if (size === undefined || !Number.isFinite(size)) return impliedExtent(space);
+  const center = d.min === undefined ? d.center : undefined;
+  const start =
+    typeof center === "number"
+      ? center - Math.abs(size) / 2
+      : center !== undefined && isValue(center)
+        ? -Math.abs(size) / 2
+        : typeof d.min === "number"
+          ? d.min
+          : 0;
+  return boxExtent(
+    space,
+    -(start + Math.min(0, size)),
+    start + Math.max(0, size)
+  );
+};
+
+/** {@link literalBoxExtent} on both axes of a shape with dims `d`. An
+ *  aspect ratio (`w / h`) fits the box inside both literal sizes, as the
+ *  shape's layout does; with a size that is not literal it derives one size
+ *  from the other at layout, so the shape claims what its types imply. */
+export const literalBoxExtents = (
+  spaces: Size<UnderlyingSpace>,
+  d: Parameters<typeof literalBoxExtent>[1][],
+  aspectRatio: number | undefined
+): Size<Extent | undefined> => {
+  if (aspectRatio === undefined || !(aspectRatio > 0))
+    return [
+      literalBoxExtent(spaces[0], d[0]),
+      literalBoxExtent(spaces[1], d[1]),
+    ];
+  const [w, h] = [d[0].size, d[1].size];
+  if (typeof w !== "number" || typeof h !== "number")
+    return impliedExtents(spaces);
+  const fitW = Math.min(w, h * aspectRatio);
+  return [
+    literalBoxExtent(spaces[0], { ...d[0], size: fitW }),
+    literalBoxExtent(spaces[1], { ...d[1], size: fitW / aspectRatio }),
+  ];
 };
 
 /** Whether a claim has σ in it: data-scaled room a scope can solve σ
@@ -109,26 +199,12 @@ export const padExtent = (extent: Extent, padding: number): Extent =>
     Monotonic.adds(extent.descent, padding)
   );
 
-/** A claim grown by constant pixels on each side, `[start, end]`: `start`
- *  below data 0 (its descent), `end` above (its ascent). The chrome around a
- *  chart claims its gutters this way (#1032). */
-export const growExtent = (
-  extent: Extent,
-  [start, end]: [number, number]
-): Extent =>
-  start === 0 && end === 0
-    ? extent
-    : Extent(
-        Monotonic.adds(extent.ascent, end),
-        Monotonic.adds(extent.descent, start)
-      );
-
 /** Nice a σ-scope root's type and its claim together (issue #659). Nicing is
- *  a type operation ({@link niceContinuous}) that widens only the data part:
- *  the niced claim is the claim plus `σ·(nicedWidth − dataWidth)`, both widths
- *  in data units from the type, so any pixel overhead the claim carries is
- *  kept. The widths are lengths, so this holds for a signed domain too, and
- *  for a delta axis, whose width is niced from 0. Only a space that renders an
+ *  a type operation ({@link niceContinuous}), and the niced claim holds the
+ *  niced domain ({@link widenTo}): on an absolute axis each side reaches the
+ *  farther of the claim and the domain's end, so pixels the content draws
+ *  past its data take room only where the domain does not already reach
+ *  past them. A delta axis's width is niced from 0. Only a space that renders an
  *  axis over its interval ({@link axisOver}), or will once placed (a free
  *  magnitude, {@link placeBaseline}), is niced, and only when some node in
  *  the scope draws that axis: `ticks` are that axis's ticks, which the
@@ -149,8 +225,8 @@ export const niceScope = <S extends UnderlyingSpace | undefined>(
 /** Widen a sized node's type and claim to its keyed domain `domain` (#1114):
  *  the node maps the whole domain of its unit into its own size, not just
  *  the part of it its own data covers. It is the arithmetic {@link niceScope}
- *  uses: only the data part of the claim widens, so any pixel overhead it
- *  carries is kept. A domain the type already covers leaves both unchanged,
+ *  uses ({@link widenTo}): the claim widens to hold the domain. A domain the
+ *  type already covers leaves both unchanged,
  *  and so does a space with no axis over its interval (an ordinal, a spread
  *  of magnitudes). */
 export const widenScope = <S extends UnderlyingSpace | undefined>(
@@ -173,11 +249,14 @@ export const widenScope = <S extends UnderlyingSpace | undefined>(
   return widenTo(space, extent, to);
 };
 
-/** `space` with its data interval replaced by `to`, and its claim widened by
- *  the same data. A claim is measured from data 0, so each side of an
- *  absolute axis widens by its own end. A delta axis comes from centering
- *  (`middle` alignment), so the content sits centered in the wider width:
- *  half the widening on each side. */
+/** `space` with its data interval replaced by `to`, and its claim widened to
+ *  hold it. A claim is measured from data 0, and on an absolute axis it is
+ *  the hull of what the content draws, so each side reaches the farther of
+ *  the claim and its end of `to`: pixels the content draws past its data (a
+ *  mark's size at a datum, a tick label past the plot) need no more room
+ *  when the domain already reaches past them. A delta axis comes from
+ *  centering (`middle` alignment), so the content sits centered in the wider
+ *  width: half the widening on each side. */
 const widenTo = <S extends UnderlyingSpace | undefined>(
   space: S,
   extent: Extent | undefined,
@@ -187,16 +266,20 @@ const widenTo = <S extends UnderlyingSpace | undefined>(
   const widenedSpace = { ...s, dataInterval: to } as S;
   if (extent === undefined) return [widenedSpace, undefined];
   const iv = s.dataInterval;
-  const widened = width(to) - width(iv);
-  const [up, down] =
-    axisOver(placeBaseline(s)) === "delta"
-      ? [widened / 2, widened / 2]
-      : [to.max - iv.max, iv.min - to.min];
+  if (axisOver(placeBaseline(s)) !== "delta")
+    return [
+      widenedSpace,
+      Extent(
+        Monotonic.envelope([extent.ascent, Monotonic.linear(to.max, 0)]),
+        Monotonic.envelope([extent.descent, Monotonic.linear(-to.min, 0)])
+      ),
+    ];
+  const half = (width(to) - width(iv)) / 2;
   return [
     widenedSpace,
     Extent(
-      Monotonic.add(extent.ascent, Monotonic.linear(up, 0)),
-      Monotonic.add(extent.descent, Monotonic.linear(down, 0))
+      Monotonic.add(extent.ascent, Monotonic.linear(half, 0)),
+      Monotonic.add(extent.descent, Monotonic.linear(half, 0))
     ),
   ];
 };

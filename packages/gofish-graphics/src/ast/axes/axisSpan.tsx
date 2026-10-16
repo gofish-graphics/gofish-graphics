@@ -9,6 +9,7 @@ import type { DisplayList } from "gofish-ir";
 import { lowerStyle, rectItemFromBox } from "../displayList/lowerHelpers";
 import { UNDEFINED, type UnderlyingSpace } from "../underlyingSpace";
 import { ref } from "../shapes/ref";
+import { boxExtent } from "../extent";
 
 /** One end of an {@link axisSpan}: an edge of a laid-out node. */
 export type SpanEnd = { node: GoFishNode; edge: "start" | "end" };
@@ -44,6 +45,12 @@ export function axisSpan(opts: {
         UNDEFINED,
         UNDEFINED,
       ],
+      // Across the axis it is `cross` pixels deep, a size of its own (#493);
+      // along it, its length is where layout puts the slots it reads.
+      resolveExtent: (_ce, _cs, spaces) =>
+        dim === 0
+          ? [undefined, boxExtent(spaces[1], 0, cross)]
+          : [boxExtent(spaces[0], 0, cross), undefined],
       layout: (size, _scales, layoutChildren) => {
         const [a, b] = layoutChildren.map((c) =>
           c.layout(size, [undefined, undefined])
@@ -89,16 +96,17 @@ export function axisSpan(opts: {
     },
     refs
   );
-  // Without a line it is only a box to center a label on along the axis:
-  // across it, it is wherever its layout left it, and it takes no room
-  // there (`GoFishNode.inkOn`), so it never widens the ring's box.
-  if (line === undefined) node.inkOn = acrossOnly(dim);
+  // It reads its place along the axis from refs, so it is ink there
+  // (`GoFishNode.inkOn`). Without a line it is only a box to center a label
+  // on: across it, it has no depth and is wherever its layout left it, so
+  // it is ink there too.
+  node.inkOn = line === undefined ? [true, true] : alongOnly(dim);
   return node;
 }
 
-/** Per axis, true only across axis `dim`. */
-const acrossOnly = (dim: 0 | 1): [boolean, boolean] =>
-  dim === 0 ? [false, true] : [true, false];
+/** Per axis, true only along axis `dim`. */
+const alongOnly = (dim: 0 | 1): [boolean, boolean] =>
+  dim === 0 ? [true, false] : [false, true];
 
 /**
  * The box a start-aligned label of an ordinal axis is centered on, along
@@ -159,8 +167,9 @@ export function runStartBox(opts: {
     },
     refs
   );
-  // It takes no room across the axis, where it has no depth and is
-  // wherever its layout left it (`GoFishNode.inkOn`).
-  node.inkOn = acrossOnly(dim);
+  // It reads its place along the axis from refs, and across it has no
+  // depth and is wherever its layout left it: it is ink on both axes
+  // (`GoFishNode.inkOn`).
+  node.inkOn = [true, true];
   return node;
 }
