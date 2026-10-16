@@ -15,7 +15,7 @@
  *
  * A channel named "text" overrides the text CONTENT (the box keeps its
  * resolve-time measure); a channel named after one of the item's own geometry
- * fields (`x`, `y`, `w`, `h`, `cx`, `cy`, `rx`, `ry`, `d`) overrides that
+ * fields (`x`, `y`, `w`, `h`, `cx`, `cy`, `rx`, `ry`, `d`, `pathLength`) overrides that
  * field; every other channel is a `DisplayList.Style` key.
  */
 import type { DisplayList } from "gofish-ir";
@@ -48,6 +48,7 @@ export const GEOMETRY_CHANNELS = new Set([
   "rx",
   "ry",
   "d",
+  "pathLength",
 ]);
 
 const slots = new WeakMap<DisplayList.DisplayItem, LiveSlots>();

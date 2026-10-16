@@ -81,7 +81,14 @@ export type WipeOptions = EffectOptions & {
   shape?: "circle";
 };
 
-type EffectKind = "grow" | "shrink" | "fadeIn" | "fadeOut" | "appear" | "wipe";
+type EffectKind =
+  | "grow"
+  | "shrink"
+  | "fadeIn"
+  | "fadeOut"
+  | "appear"
+  | "wipe"
+  | "draw";
 
 /** What an effect does to a mark at a progress `p` in [0, 1]. */
 type Look = {
@@ -110,6 +117,12 @@ type Look = {
     box: DisplayList.RectItem,
     p: number
   ): DisplayList.RectItem | undefined;
+  /** The effect acts on the STROKES the mark draws: every path item inside
+   *  its items, wherever it sits (in a mask's content, a composite's
+   *  layers, a group), rather than on the items themselves (`paint.ts`,
+   *  `strokesIn`). A mask's clip region is not drawn, so it is not one.
+   *  Only `draw` has it. */
+  strokes?: boolean;
 };
 
 /** One effect: what it does, and its timing options as written (validated
@@ -312,6 +325,43 @@ export const wipe = (opts: WipeOptions = {}): Effect =>
       opts.shape
     )
   );
+
+/** Reveal each stroke along its own path, by LENGTH: at progress `p` the
+ *  first `p` of the stroke's length is drawn. It is the renderer's own
+ *  measure (SVG `pathLength = 1` and a dash `p` long), so it reads any path
+ *  the mark lowers to, whatever its curve or commands, with nothing
+ *  re-parsed. */
+const drawing: Look = {
+  host: (item, p) =>
+    item.kind === "path"
+      ? {
+          ...item,
+          pathLength: 1,
+          style: { ...item.style, strokeDasharray: `${p} 1` },
+        }
+      : item,
+  // A label waits for the stroke to be drawn.
+  rider: waits,
+  channels: (item) =>
+    item.kind === "path" ? ["pathLength", "strokeDasharray"] : [],
+  fits: (kind) => {
+    if (kind === "path") return;
+    throw new Error(
+      `[gofish] Animation.draw(): draws a stroke along its path, and this ` +
+        `mark ${drawnAs(kind)}. Use Animation.wipe() or Animation.fadeIn() ` +
+        `for it.`
+    );
+  },
+  strokes: true,
+};
+
+/** Draw the mark's strokes along their paths, from start to end, at one
+ *  speed along each stroke's length (see `drawing`). Every stroke of the mark
+ *  is drawn at once, so the strokes of a mark drawn in parts (the same line
+ *  under two masks) move as one pen. A dashed stroke loses its dashes while
+ *  it is drawn. */
+export const draw = (opts?: EffectOptions): Effect =>
+  effect("draw", opts, drawing);
 
 const isEffect = (v: unknown): v is Effect =>
   typeof v === "object" && v !== null && (v as Effect).__effect === true;

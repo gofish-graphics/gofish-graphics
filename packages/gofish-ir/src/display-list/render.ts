@@ -60,7 +60,9 @@ const itemToSVG = (item: DisplayItem): string => {
     case "ellipse":
       return `<ellipse cx="${item.cx}" cy="${item.cy}" rx="${item.rx}" ry="${item.ry}"${s}/>`;
     case "path":
-      return `<path d="${esc(item.d)}"${s}/>`;
+      return `<path d="${esc(item.d)}"${
+        item.pathLength !== undefined ? ` pathLength="${item.pathLength}"` : ""
+      }${s}/>`;
     case "text": {
       const fs =
         item.fontSize !== undefined ? ` font-size="${item.fontSize}px"` : "";

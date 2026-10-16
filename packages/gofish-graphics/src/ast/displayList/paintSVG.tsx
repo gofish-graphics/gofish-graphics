@@ -116,6 +116,7 @@ export function paintSVG(
       return (
         <path
           d={patched(live, "d", item.d)}
+          pathLength={patched(live, "pathLength", item.pathLength)}
           data-gf-id={gfId}
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
         />

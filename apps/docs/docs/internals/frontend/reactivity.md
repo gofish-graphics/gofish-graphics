@@ -191,7 +191,7 @@ _content_ (the box keeps its resolve-time measure). String/headless backends
 (`displayListToSVG`) snapshot a live value by calling the thunk once, untracked.
 
 A slot named after one of the item's own **geometry** fields (`x`, `y`, `w`,
-`h`, `cx`, `cy`, `rx`, `ry`, `d`) overrides that field instead of a style key,
+`h`, `cx`, `cy`, `rx`, `ry`, `d`, `pathLength`) overrides that field instead of a style key,
 through the same call-in-attribute-position path. Geometry is live for the same
 reason paint is — the value is a paint-time fact while the box it sits in is a
 layout-time one — and it carries the same obligation that live text does: the

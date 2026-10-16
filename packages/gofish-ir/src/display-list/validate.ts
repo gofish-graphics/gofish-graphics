@@ -139,6 +139,15 @@ function checkItem(
   }
 
   // Optional-field constraints, kept in agreement with the JSON Schema.
+  if (
+    kind === "path" &&
+    item.pathLength !== undefined &&
+    !isNum(item.pathLength)
+  )
+    errors.push({
+      path: `${path}.pathLength`,
+      message: "pathLength must be a number",
+    });
   if (kind === "text") {
     for (const f of ["fontSize", "rotate"] as const) {
       if (item[f] !== undefined && !isNum(item[f]))

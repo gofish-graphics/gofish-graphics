@@ -130,6 +130,7 @@ export const DISPLAY_LIST_JSON_SCHEMA = {
       properties: {
         kind: { const: "path" },
         d: { type: "string" },
+        pathLength: { type: "number" },
         ...BASE_PROPS,
       },
     },

@@ -90,6 +90,11 @@ export interface PathItem extends BaseDisplayItem {
   kind: "path";
   /** SVG path data, in absolute pixels (coordinate transform already applied). */
   d: string;
+  /** SVG `pathLength`: the length the path's dash pattern is measured
+   *  against, in place of its true length (`pathLength: 1` makes
+   *  `strokeDasharray: "0.3 1"` draw the first 30% of the stroke, whatever
+   *  the path's commands). */
+  pathLength?: number;
 }
 
 export interface TextItem extends BaseDisplayItem {

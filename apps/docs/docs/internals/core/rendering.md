@@ -202,7 +202,9 @@ A `DisplayListDocument` is:
 
 The item kinds are `rect`, `ellipse`, `path`, `text`, `image`, `group`, `composite`,
 and `mask`. The first five are leaf primitives in absolute pixels with resolved
-`style` (fill/stroke/opacity/…, already mapped through the color scales). The last
+`style` (fill/stroke/opacity/…, already mapped through the color scales); a `path`
+may also carry `pathLength`, the length its dash pattern is measured against
+(`Animation.draw()` sets it to 1 and grows a dash). The last
 three carry structure the flat-absolute fold cannot express on its own:
 
 - **`group`** — an affine transform group, for the rare `box`/`frame` `scale` a flat

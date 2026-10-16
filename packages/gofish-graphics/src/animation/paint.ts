@@ -93,8 +93,21 @@ export function makeRule(
     return t < start ? -Infinity : t >= end ? Infinity : t;
   };
   return {
-    paint(items, { transform, toPixel }, node, role) {
-      if (items.length === 0) return;
+    paint(lowered, { transform, toPixel }, node, role) {
+      if (lowered.length === 0) return;
+      // An effect on STROKES (`draw`) animates every path the mark draws,
+      // wherever it sits, rather than the items it lowered to. PROTOTYPE
+      // SHORTCUT: then every effect of the mark acts on its strokes.
+      const items =
+        role === "host" && effects.some((e) => e.effect.strokes)
+          ? strokesIn(lowered)
+          : lowered;
+      if (items.length === 0) {
+        throw new Error(
+          `[gofish] Animation.draw(): this "${node.type}" mark draws no ` +
+            `stroke (no path) to draw along.`
+        );
+      }
       // The effects are checked against the items the mark lowered to, which
       // lowering alone knows: a rect in polar coordinates is drawn as a path,
       // and a grow or a wipe cannot reshape one.
@@ -149,6 +162,12 @@ export function makeRule(
       for (const timed of effects) {
         const { mask } = timed.effect;
         if (mask === undefined) continue;
+        if (items !== lowered) {
+          throw new Error(
+            `[gofish] Animation.draw() and Animation.wipe() on one mark: ` +
+              `one draws its strokes, the other masks its box. Give it one.`
+          );
+        }
         const inside = items
           .map((item, j) => ({ item, j }))
           .filter(({ item }) => mask(item.kind, own, 1) !== undefined);
@@ -177,9 +196,9 @@ export function makeRule(
         // The wrapper takes the first masked item's place; the others leave
         // the list (they are inside it).
         const drop = new Set(inside.slice(1).map(({ j }) => j));
-        items[inside[0].j] = wrapper;
-        for (let j = items.length - 1; j >= 0; j--) {
-          if (drop.has(j)) items.splice(j, 1);
+        lowered[inside[0].j] = wrapper;
+        for (let j = lowered.length - 1; j >= 0; j--) {
+          if (drop.has(j)) lowered.splice(j, 1);
         }
       }
       // Bring every mask of the mark up to the widened box.
@@ -191,6 +210,24 @@ export function makeRule(
       for (const w of masks.wrappers) w.bbox = { ...masks.box };
     },
   };
+}
+
+/** Every stroke (path item) drawn inside `items`: in a group's children, a
+ *  composite's layers and a mask's content, but not a mask's clip region,
+ *  which is not drawn. */
+function strokesIn(
+  items: DisplayList.DisplayItem[],
+  out: DisplayList.DisplayItem[] = []
+): DisplayList.DisplayItem[] {
+  for (const item of items) {
+    if (item.kind === "path") out.push(item);
+    else if (item.kind === "group") strokesIn(item.children, out);
+    else if (item.kind === "composite") {
+      strokesIn(item.source, out);
+      strokesIn(item.dest, out);
+    } else if (item.kind === "mask") strokesIn(item.content, out);
+  }
+  return out;
 }
 
 const unionBox = (
