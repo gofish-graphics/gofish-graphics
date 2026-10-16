@@ -83,23 +83,30 @@ function avoidedRefs(
   layerContext: LayerContext | undefined
 ): GoFishRef[] {
   if (avoiding === undefined) return [];
-  if (!Array.isArray(avoiding) && !(avoiding instanceof GoFishRef))
+  // The same rule as the wire's (NodeSelectionIR): a list of nodes or refs,
+  // or one selectAll(name).
+  const isSelectAll =
+    avoiding instanceof GoFishRef && avoiding.multiplicity === "all";
+  if (!Array.isArray(avoiding) && !isSelectAll)
     throw new Error(
-      "[gofish] enclose({ shape }): avoiding is a list of nodes or refs, or a selectAll(name) selection."
+      "[gofish] enclose({ shape }): avoiding is a list of nodes or refs, or a selectAll(name) selection; put a single ref in a list: avoiding: [ref(...)]."
     );
   let items: unknown[];
-  if (avoiding instanceof GoFishRef) {
-    if (avoiding.multiplicity !== "all") items = [avoiding];
-    else if (layerContext === undefined)
+  if (isSelectAll) {
+    if (layerContext === undefined)
       throw new Error(
         "[gofish] enclose({ shape }): avoiding: selectAll(...) names a chart's layer, so it works where enclose is a chart's mark; in the combinator form, list the nodes."
       );
     else {
-      const resolved = resolveRefData(avoiding, layerContext);
+      const resolved = resolveRefData(avoiding as GoFishRef, layerContext);
       items = Array.isArray(resolved) ? resolved : [resolved];
     }
-  } else items = avoiding;
+  } else items = avoiding as unknown[];
   return items.map((item) => {
+    if (item instanceof GoFishRef && item.multiplicity === "all")
+      throw new Error(
+        "[gofish] enclose({ shape }): selectAll(name) names every node of a layer, so it is the whole avoiding value (avoiding: selectAll(name)), not an item of a list."
+      );
     if (item instanceof GoFishRef) {
       const target = item.targetNode;
       return target !== undefined

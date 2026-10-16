@@ -28,8 +28,10 @@ import type { GoFishRef } from "../ast/_ref";
 type BlobIR = Extract<Frontend.ShapeIR, { kind: "blob" }>;
 
 /** Nodes a blob keeps out: a list of nodes or refs (a `.relate()` operand,
- *  `ref(...)`), or a `selectAll(name)` selection. */
-export type Nodes = GoFishAST[] | GoFishRef;
+ *  `ref(...)`), or one `selectAll(name)` selection, the value as a whole. */
+export type Nodes =
+  | GoFishAST[]
+  | (GoFishRef & { readonly multiplicity: "all" });
 
 /** `box()`: the padded bounding box. See {@link box}. */
 export type BoxShape = Extract<Frontend.ShapeIR, { kind: "box" }>;
