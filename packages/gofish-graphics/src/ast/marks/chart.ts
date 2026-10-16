@@ -752,7 +752,9 @@ export function createRelationalMark<O extends Record<string, unknown>>(
       // tagging are read off the children too, so they have to await it as
       // well. The result stays a thenable carrying the node methods, which is
       // what this form already returned (`produce` is itself async).
-      return addRenderMethod(
+      // The combinator form carries its IR tag (`tagCombinator`), so a
+      // chart that holds it serializes it with its children.
+      const built = addRenderMethod(
         (async () => {
           // The same child list every combinator takes: marks, promises and
           // nested arrays reify to nodes (`reifyChildren`).
@@ -774,6 +776,12 @@ export function createRelationalMark<O extends Record<string, unknown>>(
             datum
           );
         })()
+      );
+      return tagCombinator(
+        built,
+        type,
+        opts,
+        children
       ) as unknown as GoFishNode;
     }
 

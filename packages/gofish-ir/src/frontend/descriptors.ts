@@ -2306,6 +2306,100 @@ export function acceptedFields(
   return fields;
 }
 
+/** Whether a value of this type may hold nodes at some depth: a ref whose
+ *  authored value holds nodes (`holdsNodes` in `AUTHORED_REFS`), or a union,
+ *  array, tuple, record, object or named option type containing one. */
+export function carriesNodes(type: FieldType): boolean {
+  switch (type.kind) {
+    case "union":
+      return type.options.some(carriesNodes);
+    case "array":
+      return carriesNodes(type.items);
+    case "tuple":
+      return type.items.some(carriesNodes);
+    case "record":
+      return carriesNodes(type.valueType);
+    case "object":
+      return Object.values(type.fields).some((f) => carriesNodes(f.type));
+    case "ref":
+      return (
+        AUTHORED_REFS[type.name]?.holdsNodes === true ||
+        (type.name in OPTION_TYPES &&
+          carriesNodes(OPTION_TYPES[type.name].type))
+      );
+    default:
+      return false;
+  }
+}
+
+/** The `kind` literal of an object branch of a tagged union, if it has one. */
+const branchKind = (type: FieldType): unknown =>
+  type.kind === "object" && type.fields.kind?.type.kind === "literal"
+    ? type.fields.kind.type.value
+    : undefined;
+
+/**
+ * `value`, read as a value of `type`, with each part whose type holds nodes
+ * (a `holdsNodes` ref, such as a blob's `avoiding`) replaced by `fn(part)`.
+ * The walk follows the declared type, not the value: object fields, array
+ * and tuple items, record values, named option types, and the branch of a
+ * union that the value's `kind` names (a strategy), or the one branch that
+ * holds nodes. A part whose type holds no nodes is returned as it is, so the
+ * serializers convert node references exactly where the table says they
+ * are.
+ */
+export function mapHeldNodes(
+  type: FieldType,
+  value: unknown,
+  fn: (nodes: unknown) => unknown
+): unknown {
+  if (value === undefined || value === null || !carriesNodes(type))
+    return value;
+  switch (type.kind) {
+    case "ref":
+      if (AUTHORED_REFS[type.name]?.holdsNodes) return fn(value);
+      return mapHeldNodes(OPTION_TYPES[type.name].type, value, fn);
+    case "union": {
+      const branches = type.options.filter(carriesNodes);
+      const kind = (value as { kind?: unknown }).kind;
+      const tagged = branches.find(
+        (b) =>
+          branchKind(
+            b.kind === "ref" && b.name in OPTION_TYPES
+              ? OPTION_TYPES[b.name].type
+              : b
+          ) === kind
+      );
+      const branch =
+        tagged ?? (branches.length === 1 ? branches[0] : undefined);
+      return branch === undefined ? value : mapHeldNodes(branch, value, fn);
+    }
+    case "array":
+      return Array.isArray(value)
+        ? value.map((v) => mapHeldNodes(type.items, v, fn))
+        : value;
+    case "tuple":
+      return Array.isArray(value)
+        ? value.map((v, i) =>
+            i < type.items.length ? mapHeldNodes(type.items[i], v, fn) : v
+          )
+        : value;
+    case "record":
+    case "object": {
+      if (typeof value !== "object" || Array.isArray(value)) return value;
+      const out: Record<string, unknown> = { ...(value as object) };
+      for (const [k, v] of Object.entries(out)) {
+        const sub =
+          type.kind === "record" ? type.valueType : type.fields[k]?.type;
+        if (sub !== undefined) out[k] = mapHeldNodes(sub, v, fn);
+      }
+      return out;
+    }
+    default:
+      return value;
+  }
+}
+
 /** Whether a value of this type may hold a channel at some depth: a channel,
  *  or a union, array, tuple, record, object or named option type containing
  *  one. A mark factory's channel map (`createMark` in gofish-graphics) names

@@ -147,9 +147,21 @@ names nodes, so on the wire it is a `NodeSelectionIR`: a list of
 `{ "type": "select", "layer": "nodes", "mode": "all" }`, the `SelectRefIR`
 chart data takes for `selectAll` (one shape in `schema.ts` and the JSON
 Schema, written by `selectRefIR` in `toJSON.ts` and read by `refOfSelect` in
-`fromJSON.ts`, and by `_select_ref` in Python, for both uses). The emitter writes any ref or `selectAll` it finds
-inside an option this way (`nodeRefsToIR` in `toJSON.ts`), and the reader
-turns each back into a live ref (`resolveNodeRefs` in `fromJSON.ts`). The families are namespaces in the two surfaces only; the
+`fromJSON.ts`, and by `_select_ref` in Python, for both uses). Only fields
+whose declared type holds nodes are converted, wherever the descriptor table
+puts them, including inside a strategy's params: `mapHeldNodes` in
+`descriptors.ts` walks a field's type beside its value (object fields, list
+items, the union branch the value's `kind` names) and hands each
+node-holding part to a converter. The emitter's converter (`nodesToIR` in
+`toJSON.ts`) writes a ref by a string name, a `.relate()` operand, or a node
+with a string name as a ref by that name, and one `selectAll` as its select;
+an unnamed node, a token or path ref, a single ref, and a `selectAll` inside
+a list have no wire form and throw, naming the fix. The reader's converter
+(`resolveNodeRefs` in `fromJSON.ts`) turns each back into a live ref. A
+relational mark's combinator form carries its IR tag (`tagCombinator`), and
+a ref child is written as a `RefMarkIR`, so an `enclose(opts, [ref("a")])`
+inside a chart serializes. JS does not serialize a `.relate()` callback (it
+is a closure), so a relate clause's IR comes from Python. The families are namespaces in the two surfaces only; the
 wire carries the plain objects. Their kinds and params are declared once, in
 the `STRATEGIES` table (below). Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips

@@ -259,24 +259,31 @@ export const refOfSelect = (spec: { layer: string; mode?: string }) =>
   spec.mode === "all" ? selectAll(spec.layer) : ref(spec.layer);
 
 /**
- * Nodes named inside an option (`Frontend.NodeSelectionIR`, a blob's
- * `avoiding`), rebuilt as the refs they stand for, at any depth: a
- * `{ type: "ref", selection }` becomes `ref(selection)`, and a
- * `{ type: "select", layer, mode: "all" }` becomes `selectAll(layer)`.
- * No other option value has either tag.
+ * The options of a construct with each field whose declared type names nodes
+ * (`Frontend.NodeSelectionIR`, a blob's `avoiding` inside `shape`) rebuilt as
+ * the refs it stands for: a list of `{ type: "ref", selection }` becomes a
+ * list of `ref(selection)`, and a `{ type: "select", layer, mode: "all" }`
+ * becomes `selectAll(layer)`. The walk follows the descriptor table
+ * (`Frontend.mapHeldNodes`); other fields are as given.
  */
-export function resolveNodeRefs(value: any, resolveToken: TokenResolver): any {
-  if (Array.isArray(value))
-    return value.map((v) => resolveNodeRefs(v, resolveToken));
-  if (value === null || typeof value !== "object") return value;
-  if (Object.getPrototypeOf(value) !== Object.prototype) return value;
-  if (value.type === "ref" && value.selection !== undefined)
-    return ref(resolveRefSelection(value.selection, resolveToken));
-  if (value.type === "select" && typeof value.layer === "string")
-    return refOfSelect(value);
-  const out: Record<string, any> = {};
-  for (const [k, v] of Object.entries(value))
-    out[k] = resolveNodeRefs(v, resolveToken);
+export function resolveNodeRefs(
+  kind: Frontend.NodeKind,
+  type: string,
+  opts: Record<string, any>,
+  resolveToken: TokenResolver
+): Record<string, any> {
+  const accepted = Frontend.acceptedFields(kind, type);
+  if (accepted === undefined) return opts;
+  const nodes = (v: any): any =>
+    Array.isArray(v)
+      ? v.map((r) => ref(resolveRefSelection(r.selection, resolveToken)))
+      : refOfSelect(v);
+  const out: Record<string, any> = { ...opts };
+  for (const [key, value] of Object.entries(opts)) {
+    const field = accepted[key];
+    if (field !== undefined && Frontend.carriesNodes(field.type))
+      out[key] = Frontend.mapHeldNodes(field.type, value, nodes);
+  }
   return out;
 }
 
@@ -579,6 +586,8 @@ export function mapMark(
     // Resolve color/coord configs (e.g. a `layer({coord: polar()})` carries
     // its coord transform in the combinator options, not chart options).
     const opts = resolveNodeRefs(
+      "combinator-mark",
+      spec.type,
       resolveOptions(unwrapOpts(spec.options ?? {}, bridge)),
       resolveToken
     );
@@ -634,7 +643,12 @@ export function mapMark(
   let mark = rebuild(
     "leaf-mark",
     type as string,
-    resolveNodeRefs(unwrapOpts(opts, bridge), resolveToken)
+    resolveNodeRefs(
+      "leaf-mark",
+      type as string,
+      unwrapOpts(opts, bridge),
+      resolveToken
+    )
   );
   if (mark === undefined) {
     throw new Error(`Unknown mark type: ${String(type)}`);
