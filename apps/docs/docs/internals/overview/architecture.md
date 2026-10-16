@@ -99,7 +99,7 @@ continuous axis by its quantity names, never its unit; an ordinal axis by its
 grouping field), so an axis title is derived from the data model, not a
 syntactic hint. The orchestrator
 (`gofish.tsx`) makes the chrome take room: each chart claims its
-content plus its chrome's measured gutters, so a parent lays out the whole
+content plus its chrome, whose shapes claim their sizes, so a parent lays out the whole
 graphic and the render's `w`/`h` is the whole graphic, chrome included (#493,
 #1032); there are no chrome margins around the SVG. See
 [Axes](/internals/frontend/axes) (which also covers axis titles) and

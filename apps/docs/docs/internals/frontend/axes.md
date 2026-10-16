@@ -66,23 +66,26 @@ ring also records the boxes inside it as `GoFishNode.chrome`:
   reads its axis direction off it.
 - `chrome.rings` lists the rings, innermost first. A ring's first child is the
   ring inside it (or the content); its other children are its chrome.
-- `chrome.plot` and `chrome.gutters` are what the chrome takes room by (#1032):
-  the span of the plot in the node's frame, recorded by its layout, and how far
-  the chrome reaches past it on each side. See
+- `chrome.gutters` is how far the chrome reaches past the plot on each side
+  (#1032), which the node's layout reads off the claims. See
   [Chrome gutters](/internals/layout/passes#chrome-gutters).
 - The outermost ring itself is the box with all chrome.
 
 Tick and category labels are chrome, so they lie outside `chrome.content`.
 Code that needs a node's box without its axes reads `chrome.content`.
 
-Chrome sits outside its chart and takes room: the outermost ring claims its
-content plus its gutters, and hands its content what the gutters leave of its
-slot. A category label is ink along its axis (`GoFishNode.inkOn`): it labels
-one band, and one wider than its band overdraws its neighbors (#1115) instead
-of taking room or widening its ring's box on that axis. The boxes a category
-label is centered on (`axisSpan` without a line, `runStartBox`) have no depth
-across the axis and are not seated there, so they take no room across it
-either.
+Chrome sits outside its chart and takes room: every chrome shape claims its
+size (a text is measured when the claims are resolved), each ring claims the
+hull of what it wraps and of its shapes where its constraints place them
+(`placeByClaims`), and the outermost ring hands its content what its gutters
+leave of its slot. A category label is centered on its slot's ref, which only
+layout places, so it is ink along its axis: it labels one band, and one wider
+than its band overdraws its neighbors (#1115) instead of taking room or
+widening its ring's box on that axis. The boxes a category label is centered
+on (`axisSpan`, `runStartBox`) read their place along the axis from refs
+(`GoFishNode.inkOn`), so they are ink there too; one without a line has no
+depth across the axis and is not seated there, so it is ink across it as well.
+A divider is `cross` pixels deep across the axis and claims that.
 
 The **inner tier** holds the constraint-pinned axes (continuous/difference); the
 **outer tier** holds the ordinal label rows, which need the inner tier fully laid

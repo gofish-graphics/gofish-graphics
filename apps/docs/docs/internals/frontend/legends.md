@@ -128,9 +128,9 @@ ring's space is the content's space. See
 
 The fixed 120px `LEGEND_MARGIN` is gone, and so is the measured right overhang
 that replaced it. The legend is a ring of the root's chrome, so it takes room
-like the axes do (#1032): the root claims its content plus its chrome's gutters,
-the legend column's width among them, and the content gets what the gutters
-leave of the canvas. The render's `w`/`h` is the whole graphic, legend included,
+like the axes do (#1032): its swatches and labels claim their sizes, its ring
+claims the hull of the box inside and the legend where it is seated, and the
+content gets what the gutters leave of the canvas. The render's `w`/`h` is the whole graphic, legend included,
 and when they are omitted the canvas is the root's whole box. See
 [Layout & Render Passes](/internals/layout/passes#chrome-gutters).
 

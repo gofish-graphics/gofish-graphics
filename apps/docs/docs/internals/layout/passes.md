@@ -6,6 +6,8 @@ group: Layout
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/gofish.tsx
+  - packages/gofish-graphics/src/ast/chromeGutters.ts
+  - packages/gofish-graphics/src/ast/constraints/claimPlacement.ts
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/axisDirection.ts
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
@@ -367,8 +369,9 @@ it describes. The legend is the ring outside that, so it is seated past the
 titles. The outermost ring records the boxes inside it as `GoFishNode.chrome`:
 `content` (the root without chrome), `withAxes` (the root with its axis
 gutters and category label rows) and its `rings`. `layout()` reads the root's
-axis direction off `withAxes`. The chrome takes room: its gutters are measured
-and claimed (see [Chrome gutters](#chrome-gutters) under Pass 9). See
+axis direction off `withAxes`. The chrome takes room: every chrome shape claims
+its size, and each ring claims it where it places it (see
+[Chrome gutters](#chrome-gutters) under Pass 9). See
 [Axes](/internals/frontend/axes) and [Legends](/internals/frontend/legends).
 
 ### Pass 8: Position Scale Computation
@@ -676,69 +679,75 @@ an outline, the cell's polygon; every other region is a box.
 
 Chrome sits outside its chart (#1032). A chart's own `w`/`h` is its plot, and
 the slot a parent gives it (a spread slice, a grid cell, or the canvas at the
-root) is its whole graphic, its chrome included. So each node that wears
-chrome claims its content plus its chrome's **gutters**: constant pixels on
-each side, `chrome.gutters`, per axis `[start, end]` in its axis order.
+root) is its whole graphic, its chrome included. The chrome's **gutters** are
+how far it reaches past the plot on each side, `chrome.gutters`, per axis
+`[start, end]` in the chart's axis order. They come from the claim walk, so
+one layout fits a chart and its chrome to its slot (#493: fixed-size nodes
+report their size).
 
-- **The claim.** A layer with chrome grows its composed claim by its gutters
-  (`growExtent` in `extent.ts`): the start gutter on the descent, the end
-  gutter on the ascent. A scope solved against a slot therefore gives the
-  content what the gutters leave, and its `originPx` includes the start
-  gutter, so the data sits past the chrome before it.
-- **The layout.** A layer with chrome hands its content (its first child)
-  its slot less its gutters, so content with no σ (a bar chart's category
-  axis) also gets the remainder, and seats it past its start gutters: the
-  ring pins the ring inside it at a literal pixel (`wrapRing`), and that
-  pixel becomes the start gutter once measured (`seatPastGutters`), except
-  on an axis where the content is free (its baseline is its origin, and the
-  start gutter is part of its claim's descent). A layer hands a child it
-  pins at a literal pixel the frame from there (`childPosScalesFor`), so the
-  content's frame starts where its plot does, and what it places with no
-  data (an empty cell) lands in the plot, not in the gutter. A literal pin of
-  a child's origin places it as soon as it is laid out, so a `ref` into it
-  laid out later reads it where it ends up. The chrome is seated around the
-  content as before, and the layer's box is the content's box plus the
-  chrome.
+- **Fixed-size nodes claim their size.** A text is measured when the claims
+  are resolved, and a rect or ellipse of literal size claims that size
+  (`boxExtent` in `extent.ts`). A tick label, a tick, a legend swatch and a
+  title all have a claim with no σ in it.
+- **A layer claims the hull of its children where its constraints place
+  them** (`placeByClaims` in `constraints/claimPlacement.ts`). The children
+  its own union leaves out (a literal pin, a datum pin, a seat beside a
+  sibling) are placed by the same placement solver layout runs, on boxes
+  that are their claims at σ, with data mapped through σ from data 0. When
+  every claim is a line in σ, two solves give each box's edges as lines, and
+  the hull is their envelope; otherwise the hull is solved at each σ it is
+  read at. A ring is such a layer, so its claim holds its axis, titles or
+  legend around what it wraps, and so does a scatter's around its marks.
+- **Ink.** A child placed from where layout puts a node inside another child
+  (a `ref` stand-in, an operand nested in a child, a node that reads its
+  place from refs, `GoFishNode.inkOn`), or tied to one, is ink on that axis:
+  the claim walk cannot know where it lands, so it takes no room in the
+  claim or in its layer's box. A category label is centered on its slot's
+  ref, so it is ink along its axis and overdraws its neighbors when wider
+  than its band (#1115); across the axis it is seated past the content and
+  takes room. A `.label()` text is placed from its target's ref, so it is
+  ink on both axes.
+- **Nicing holds the domain.** A claim is the hull of what the content draws,
+  so widening it to a keyed or niced domain (`widenTo`) takes the farther of
+  the claim and the domain's end on each side. A tick label past the last
+  tick, or a mark past its datum, takes room only where the domain does not
+  already reach past it.
+- **The layout.** A layer with chrome reads its gutters off the claims at the
+  size it is laid out at (`guttersInSlot` in `chromeGutters.ts`). Where its
+  plot has a claim, they are its claim past its plot's, both widened to the
+  keyed domain, at its σ. Where its plot fills the room it is given (a
+  category axis), its rings' claims are built around a plot of size X, and
+  the plot's size is the X at which they fill the slot. It hands its content
+  (its first child) its slot less its gutters, and seats it past its start
+  gutter: the ring pins the ring inside it at a literal pixel (`wrapRing`),
+  and that pixel becomes the start gutter (`seatPastGutters`), except on an
+  axis where the content is free (its baseline is its origin, and the start
+  gutter is part of its claim's descent). A layer hands a child it pins at a
+  literal pixel the frame from there (`childPosScalesFor`), so the content's
+  frame starts where its plot does, and what it places with no data (an
+  empty cell) lands in the plot, not in the gutter. A literal pin of a
+  child's origin places it as soon as it is laid out, so a `ref` into it laid
+  out later reads it where it ends up.
 - **A chart with a size of its own.** Its chrome dresses its content inside
-  the chart's frame (`frameChart`), so the frame's literal size applies to
-  the content: the frame solves σ against its size plus its content's gutters,
-  and claims that total.
+  the chart's frame (`frameChart`), so the frame's literal size is the plot:
+  the frame adds the gutters its content's claims give around a plot of that
+  size (`guttersAroundPlot`), and claims that total.
 
-The gutters do not depend on the size of the plot: ticks come from the domain,
-category labels from the keys, and text is measured. So `layout()` lays the
-tree out once with no gutters, measures them (`measureChromeGutters`), and,
-when any chrome takes room, forgets the layout (`GoFishNode.resetLayout`) and
-lays it out again with the gutters claimed. Each chart's gutter on a side is
-how far its own chrome shapes (every child of its rings but the ring inside)
-reach past its plot. The plot is the span its layout recorded
-(`chrome.plot`: the keyed domain as its frame maps it), widened by what the
-charts nested in its content claim (their plots plus their gutters, measured
-first). So a facet label row seated under the panels' axes is measured past
-those axes, and the panels' axes are counted once, by the panels. Content ink
-past the plot (a circle on the domain's edge) is not chrome. A shape that is
-ink on an axis (`GoFishNode.inkOn`) takes no room there: a category label is
-ink along its axis, since how far it reaches past its band depends on the
-band's width; one wider than its band overdraws its neighbors (#1115), and it
-does not count in its parent layer's box on that axis either.
-
-The same layout measures one more thing at the root (`measureCanvasInk`):
-what the root draws past its plot that its chrome does not claim. That is a
-value label above the tallest bar, a circle on the domain's edge, content a
-constraint seats past the plot, and, on an axis no scope maps (a category
-axis), constant pixels the content adds beyond the size it is handed (a label
-row under each bar, fixed spacing). Layout size is separate from drawn size
-(#493): this ink takes no room inside the chart, but the root measures it
-once and the canvas keeps it clear, so the plot gets the rest and the SVG
-holds everything drawn. Ink scaled by σ (a bar whose data width overhangs its
-datum) is measured at the first layout's σ, which only overestimates it.
+At the root, `layout()` measures what the root draws past its box after its
+one layout (`drawnOverflow`): its ink, the hull of every node's box against
+the root's. On an axis the render gives no size, the SVG is the root's box
+plus its ink plus the padding, and the box sits past the ink before it.
 Content larger than the canvas whatever it is handed (fixed spacing wider
 than the canvas, a literal position past it, an inner size equal to the
 render size) still overflows and is clipped.
 
-DECLARED SHORTCUT: the measuring layout costs one more layout pass for a
-chart with chrome. The right fix measures the gutters in the claim walk, with
-every chrome shape reporting its constant size (#493's "fixed-size nodes
-report their size") and each ring folding them.
+DECLARED SHORTCUT (#493): on an axis the render gives a size, the ink is not
+fitted inside it, so a value label above the tallest bar or a category label
+wider than the first band overflows the canvas. Where ink lands depends on
+where layout puts the node it is placed from, and on a category axis that
+band is a share of the slot, not a claim. Fitting it in one layout needs the
+claim walk to know where a node lands inside its parent as a function of σ,
+and a category band's share to be a claim (#493's piece 3).
 
 #### Shape geometry after layout
 
