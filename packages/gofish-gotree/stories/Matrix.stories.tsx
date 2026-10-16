@@ -204,7 +204,7 @@ const renderMatrix = () => {
             sibling: sib.sibling,
           },
           tinyTree
-        ).render(cellDiv, { w: CELL_W, h: CELL_H });
+        ).render(cellDiv);
         fitToContent(cellDiv);
       } catch (e) {
         cellDiv.textContent = `err: ${String(e).slice(0, 60)}`;

@@ -136,7 +136,7 @@ export const Sunburst: StoryObj = {
         coord: Coord.polar(),
       },
       deepBalancedTree
-    ).render(container, { w: 540, h: 540 });
+    ).render(container);
     return container;
   },
 };

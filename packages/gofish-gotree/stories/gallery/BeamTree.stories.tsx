@@ -78,7 +78,7 @@ export const BeamTree: StoryObj = {
         sibling,
       },
       sampleTree
-    ).render(container, { w: 640, h: 420 });
+    ).render(container);
     return container;
   },
 };
