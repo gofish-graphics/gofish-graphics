@@ -362,6 +362,10 @@ export class GoFishRef {
       if (anchor === "min") this.intrinsicDims![dir].min = value;
       return;
     }
+    // Already placed on this axis: a ref's layout places it where its target
+    // is (`layout`), and `place()` is write-once, as on a node. Only an
+    // authoritative pin (`pinAnchor`) moves it.
+    if (this.transform?.translate?.[dir] !== undefined) return;
     this.transform!.translate![dir] = translateForAnchor(
       intrinsic,
       anchor,

@@ -201,6 +201,12 @@ A nested operand and a `ref` both share their target's local frame, so each one
 returns its target's `geometry()` (the shape queries described under
 [Layout Calculation](/internals/layout/passes)).
 
+A `ref`'s layout places it where its target is: its translate is the walk from
+the target up to their common ancestor, less the walk from the ref's parent up
+to it. Like a node's, its `place()` is write-once, so the parent's default
+placement of an unconstrained child does not move it off its target; only an
+authoritative pin (`pinAnchor`) does.
+
 ## Drawing clauses and their order
 
 A clause that is not a constraint draws: an operator or mark such as `arrow`,
