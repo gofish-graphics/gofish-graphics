@@ -232,6 +232,51 @@ function chart(operators: any[], mark: any = { type: "rect" }) {
   } as unknown as FrontendIRDocument;
 }
 
+// A mark position may hold a whole chart or layer (#1180): as a chart's mark
+// and as a combinator child, by one rule.
+const nestedChart = {
+  type: "chart",
+  data: { type: "previous-tier" },
+  mark: { type: "petal", w: "count" },
+};
+const layerOfCharts = {
+  type: "layer",
+  charts: [
+    nestedChart,
+    {
+      type: "chart",
+      data: { type: "inline", rows: [] },
+      mark: { type: "rect" },
+    },
+  ],
+};
+check(
+  "a nested chart as a chart's mark accepts",
+  validate(chart([], nestedChart)).valid
+);
+check(
+  "a nested chart and a layer of charts as combinator children accept",
+  validate(
+    chart([], {
+      type: "layer",
+      __combinator: true,
+      children: [{ type: "rect" }, nestedChart, layerOfCharts],
+    })
+  ).valid
+);
+check(
+  "a layer of charts as a chart's mark accepts",
+  validate(chart([], layerOfCharts)).valid
+);
+check(
+  "a nested chart with no mark is rejected",
+  !validate(chart([], { type: "chart", data: null })).valid
+);
+check(
+  "a layer of charts whose tier is a bare mark is rejected",
+  !validate(chart([], { type: "layer", charts: [{ type: "rect" }] })).valid
+);
+
 check(
   "spread with valid dir accepts",
   validate(chart([{ type: "spread", by: "lake", dir: "x" }])).valid

@@ -124,7 +124,7 @@ for the API.
               "const": "previous-tier"
             }
           },
-          "description": "An empty chart() scope inside a .layer(...) chain: inherit the immediately preceding tier's marks. Only valid on a tier inside a builder:true LayerIR."
+          "description": "An empty chart() scope: inside a .layer(...) chain it inherits the immediately preceding tier's marks; in a mark position it inherits the rows of the partition it sits in."
         }
       ]
     },
@@ -459,8 +459,15 @@ for the API.
         },
         {
           "$ref": "#/$defs/CutMarkIR"
+        },
+        {
+          "$ref": "#/$defs/ChartIR"
+        },
+        {
+          "$ref": "#/$defs/LayerIR"
         }
-      ]
+      ],
+      "description": "What a mark position holds. Besides the mark kinds, a whole chart or layer may sit where a mark does, as in JS (.mark(chart(...)), layer([rect(...), chart(...)]))."
     },
     "OffsetMarkIR": {
       "description": "Shift a single child by (x, y) render-pixels without moving the bounds it advertises to its parent. Maps to the public `offset` operator.",

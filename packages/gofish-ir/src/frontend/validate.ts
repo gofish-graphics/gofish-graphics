@@ -1050,6 +1050,16 @@ function walkMark(node: unknown, path: string, ctx: Context): void {
     walkCombinatorMark(node, path, ctx);
     return;
   }
+  // A mark position may hold a whole chart or layer (see `MarkIR`). The
+  // `layer` combinator mark, which shares the type, is caught above.
+  if (t === "chart") {
+    walkChart(node, path, ctx);
+    return;
+  }
+  if (t === "layer") {
+    walkLayer(node, path, ctx);
+    return;
+  }
   if ((LEAF_MARK_TYPES as readonly string[]).includes(t)) {
     walkLeafMark(node, path, ctx);
     return;
