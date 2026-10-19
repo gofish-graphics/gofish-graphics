@@ -10,7 +10,8 @@
  * flattens + z-orders the tree into `{node, transform}` entries, and each node
  * lowers itself (and its boundary subtree) at its absolute transform via
  * {@link GoFishNode.INTERNAL_lower}. Layout geometry is already y-down pixels,
- * so `toPixel` only adds the gutter offset.
+ * placed on the canvas, so the root's `toPixel` is the identity (a coordinate
+ * space swaps in its own while it lowers its interior).
  */
 
 import type { DisplayList } from "gofish-ir";
@@ -21,7 +22,7 @@ import { bake } from "../coordinateTransforms/bake";
  *  every baked draw entry at its absolute transform. */
 export const lowerToDisplayList = (
   root: GoFishNode,
-  toPixel: ToPixel
+  toPixel: ToPixel = (p) => p
 ): DisplayList.DisplayItem[] => {
   const session = root.getRenderSession();
   session.toPixel = toPixel;

@@ -14,7 +14,7 @@
  * Coordinate model. Layout geometry is already SVG-native y-DOWN pixels (a
  * continuous y axis grows upward because its operators place it that way, see
  * `axisDirection.ts`), and layout places the graphic on the canvas, so a
- * layout point `(gx, gy)` is its screen point (`canvasToPixel`). The display
+ * layout point `(gx, gy)` is its screen point. The display
  * list needs no further transform — the reference SVG backend
  * (`DisplayList.displayListToSVG`) emits it verbatim.
  *
@@ -24,7 +24,7 @@
  */
 
 import type { DisplayList } from "gofish-ir";
-import { canvasToPixel, runLayout, type GoFishRenderOptions } from "../gofish";
+import { runLayout, type GoFishRenderOptions } from "../gofish";
 import { GoFishNode } from "../_node";
 import { lowerToDisplayList } from "./lower";
 import { reportLayoutWarnings } from "../layoutWarnings";
@@ -43,6 +43,6 @@ export async function toDisplayList(
     irVersion: 0,
     ir: "gofish-display-list",
     viewport: { w: data.width, h: data.height },
-    items: lowerToDisplayList(data.child, canvasToPixel),
+    items: lowerToDisplayList(data.child),
   };
 }

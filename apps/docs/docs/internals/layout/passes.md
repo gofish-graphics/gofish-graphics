@@ -1068,7 +1068,7 @@ the `<svg>`.
 
 ### Render Pass 3: The Coordinate Fold (`toPixel`)
 
-**Location**: `src/ast/gofish.tsx` (`canvasToPixel`)
+**Location**: `src/ast/displayList/lower.ts` (`lowerToDisplayList`)
 
 SVG is **y-down** (top-left origin), and so is layout: a continuous y grows upward
 because layout placed it that way (see [Axis direction](#axis-direction)), and the
@@ -1076,7 +1076,7 @@ root is placed on the canvas by layout (Pass 10). So the map on the render sessi
 is the identity:
 
 ```typescript
-export const canvasToPixel: ToPixel = (p) => p;
+export const lowerToDisplayList = (root, toPixel: ToPixel = (p) => p) => …
 ```
 
 The lower pass produces items already in **final absolute pixels**: no flip group, no

@@ -23,7 +23,6 @@ import type { InteractionRuntime } from "../interaction/runtime";
 import { renderWithInteraction } from "../interaction/renderTerminal";
 import { resolveMarkResult } from "./marks/markResult";
 import { resolveUnit, sameUnitVar } from "./measure";
-import type { ToPixel } from "./_node";
 import type { Size } from "./dims";
 import {
   continuousInterval,
@@ -1485,14 +1484,6 @@ export async function gofishSave(
   await saveSVGString(await gofishToSVG(options, child), filename);
 }
 
-/**
- * The layout-pixel → screen map. Layout geometry is already SVG-native y-DOWN
- * pixels (see `axisDirection.ts`), placed on the canvas by `layout()`, so a
- * layout point is its screen point. Shared by the live `render()` and
- * `toDisplayList`.
- */
-export const canvasToPixel: ToPixel = (p) => p;
-
 export const render = (
   {
     width,
@@ -1513,18 +1504,19 @@ export const render = (
   },
   child: GoFishNode
 ): JSX.Element => {
-  const toPixel = canvasToPixel;
   const interactive = interaction !== undefined;
   const paintBaked = () => {
     const __tLower = perfNow();
-    const items = lowerToDisplayList(child, toPixel);
+    const items = lowerToDisplayList(child);
     perfAdd("lower", perfNow() - __tLower);
     perfSetCount("displayItems", items.length);
     // Publish the frame (id-keyed hit-test map + data-space conversions) before
     // paint so the first hit-test / dataPos reads see the current frame.
+    // Layout geometry is already placed on the canvas, so a layout point is
+    // its screen point.
     interaction?.publishFrame({
       items,
-      toPixel,
+      toPixel: (p) => p,
       posScales,
       domains,
       size: { width, height },

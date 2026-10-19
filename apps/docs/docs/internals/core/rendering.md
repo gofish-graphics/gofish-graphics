@@ -54,7 +54,8 @@ Layout already placed the graphic on the canvas, chrome included (the render's
 `w`/`h` is the whole graphic, #493), so the map is the identity:
 
 ```ts
-export const canvasToPixel: ToPixel = (p) => p; // gofish.tsx
+// displayList/lower.ts: the root's map, unless a caller passes one
+export const lowerToDisplayList = (root, toPixel: ToPixel = (p) => p) => …
 ```
 
 So a continuous y axis growing upward is not something paint does. Layout places it
@@ -285,8 +286,7 @@ canvas, so `render()` reserves no margins: it lowers the tree through the identi
 `toPixel` and paints the list into an `<svg>` of the layout's size:
 
 ```ts
-const toPixel = canvasToPixel; // the identity
-const paintBaked = () => lowerToDisplayList(child, toPixel).map(paintSVG);
+const paintBaked = () => lowerToDisplayList(child).map(paintSVG); // identity toPixel
 return (
   <svg width={…} height={…} xmlns="http://www.w3.org/2000/svg">
     <Show when={defs}><defs>{defs}</defs></Show>
@@ -299,7 +299,7 @@ The SVG-export terminals (`toSVG`/`toSVGElement`/`save`) run the same lower→pa
 pipeline against a throwaway container and serialize the result.
 
 The real `paintBaked` brackets each half with the perf instrumentation
-(`src/ast/perf.ts`): it times `lowerToDisplayList(child, toPixel)`
+(`src/ast/perf.ts`): it times `lowerToDisplayList(child)`
 under the `lower` label, records the emitted `items.length` as the `displayItems`
 count, then times `items.map((item) => paintSVG(item, interactive))` under `paint`.
 Like the layout-pass hooks, this is zero-cost when instrumentation is off and
