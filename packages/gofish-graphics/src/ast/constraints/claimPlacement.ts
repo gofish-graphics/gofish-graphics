@@ -101,7 +101,7 @@ export type ClaimPlacement = {
 };
 
 /** Whether `c` acts on `axis` (for a position, at a point or over a span). */
-const actsOn = (c: ConstraintSpec, axis: 0 | 1): boolean => {
+export const actsOn = (c: ConstraintSpec, axis: 0 | 1): boolean => {
   const name = axisName(axis);
   switch (c.type) {
     case "position":
@@ -224,7 +224,8 @@ export function constrainedOn(
   operands: Map<string, { child: number; direct: boolean }>
 ): Set<number> {
   const out = new Set<number>();
-  for (const c of constraintsOn(constraints, axis)) {
+  for (const c of constraints) {
+    if (!actsOn(c, axis)) continue;
     for (const r of c.children) {
       const op = operands.get(r.name);
       if (op?.direct) out.add(op.child);
@@ -362,12 +363,7 @@ export function placeByClaims(
   // The children a constraint acts on along this axis; the others sit at
   // their own origin, which is the layer's (a free child's baseline is
   // seated at data 0, and a shared child's claim is measured from it).
-  const constrained = new Set<number>();
-  for (const c of onAxis)
-    for (const r of c.children) {
-      const op = operands.get(r.name);
-      if (op?.direct) constrained.add(op.child);
-    }
+  const constrained = constrainedOn(axis, constraints, operands);
 
   // The claims that are not lines in σ: the solve reads each of their two
   // sides as a value of its own. Placed operands are read at σ.

@@ -5,7 +5,7 @@
 import type { GoFishNode } from "./_node";
 import * as Monotonic from "../util/monotonic";
 import {
-  constraintsOn,
+  actsOn,
   literalSeats,
   type Placement,
 } from "./constraints/claimPlacement";
@@ -43,8 +43,10 @@ function seatIn(
   const operands = parent._constraintOperands?.();
   if (operands === undefined) return undefined;
   const i = parent.children.indexOf(child);
-  const acting = constraintsOn(parent.constraints, axis).filter((c) =>
-    c.children.some((r) => operands.get(r.name)?.child === i)
+  const acting = parent.constraints.filter(
+    (c) =>
+      actsOn(c, axis) &&
+      c.children.some((r) => operands.get(r.name)?.child === i)
   );
   const start = child._literalStart?.[axis] ?? 0;
   if (acting.length === 0) return start;
