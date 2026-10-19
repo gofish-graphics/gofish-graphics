@@ -97,10 +97,8 @@ so only genuinely bent envelopes carry `kind: "piecewise"`.
 
 An `Unknown` only has the numeric function. It can still be inverted, but inversion
 falls back to numeric root-finding (`findTargetMonotonic`) — correct, because the
-function is monotonic, but iterative. The search stops when the value is within
-1e-6 px of the target, or the bracket is within 1e-9 of its upper end. The second
-test is relative, so a σ far below 1 (a domain of millions of units) is found as
-precisely as one near it.
+function is monotonic, but iterative. The search runs to a tolerance far below
+any σ, since a σ can be far below 1 (a domain of millions of units).
 
 `rising(f)` is the part of a claim that grows with σ: the envelope of its pieces with a
 positive slope. An `Unknown` has no pieces, so its rising part is the line it tends to as
