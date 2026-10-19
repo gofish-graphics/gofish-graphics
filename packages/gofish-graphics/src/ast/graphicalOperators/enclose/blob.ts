@@ -989,7 +989,8 @@ const skeleton = (members: Member[], o: SkelOpts, zones: Prim[]): Skeleton => {
    *  the member grid; each pair once, from its first segment member. A pair already in one
    *  piece is left out: pieces only merge, so the tree would skip it anyway. */
   const segOrder = queue.length;
-  // each pair's closest points, measured once across the bands
+  // each pair's closest points, measured once across the bands until its link is queued (then
+  // dropped, so the map holds only the pairs still longer than the band)
   const measured = new Map<number, [Pt, Pt]>();
   const segPairs = (lo: number, hi: number): Link[] => {
     const out: Link[] = [];
@@ -1011,6 +1012,7 @@ const skeleton = (members: Member[], o: SkelOpts, zones: Prim[]): Skeleton => {
         }
         const d = dist(pq[0], pq[1]),
           len = d < 0.5 ? 0 : d;
+        if (len <= hi) measured.delete(key);
         if (len > lo && len <= hi)
           out.push(linkOf(key, segOrder + a * nm + b, pq));
       }
