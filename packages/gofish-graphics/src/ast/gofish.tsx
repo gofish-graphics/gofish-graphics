@@ -962,8 +962,21 @@ function drawnOverflow(root: GoFishNode): {
     [GoFishNode | undefined, GoFishNode | undefined],
   ];
 } {
+  const box = (n: GoFishNode, axis: 0 | 1): Span | undefined => {
+    const { min, max } = n.dims[axis];
+    return min !== undefined &&
+      max !== undefined &&
+      Number.isFinite(min) &&
+      Number.isFinite(max)
+      ? [min, max]
+      : undefined;
+  };
   const lo = [Infinity, Infinity];
   const hi = [-Infinity, -Infinity];
+  for (const axis of [0, 1] as const) {
+    const b = box(root, axis);
+    if (b !== undefined) [lo[axis], hi[axis]] = b;
+  }
   const farthest: [
     [GoFishNode | undefined, GoFishNode | undefined],
     [GoFishNode | undefined, GoFishNode | undefined],
@@ -972,13 +985,13 @@ function drawnOverflow(root: GoFishNode): {
     [undefined, undefined],
   ];
   const add = (n: GoFishNode, axis: 0 | 1, offset: number) => {
-    const { min, max } = n.dims[axis];
-    if (min === undefined || max === undefined) return;
-    if (!Number.isFinite(min) || !Number.isFinite(max)) return;
-    if (min + offset < lo[axis]) farthest[axis][0] = n;
-    if (max + offset > hi[axis]) farthest[axis][1] = n;
-    lo[axis] = Math.min(lo[axis], min + offset);
-    hi[axis] = Math.max(hi[axis], max + offset);
+    const b = box(n, axis);
+    if (b === undefined) return;
+    const [min, max] = [b[0] + offset, b[1] + offset];
+    if (min < lo[axis]) farthest[axis][0] = n;
+    if (max > hi[axis]) farthest[axis][1] = n;
+    lo[axis] = Math.min(lo[axis], min);
+    hi[axis] = Math.max(hi[axis], max);
   };
   const visit = (n: GoFishNode, offset: [number, number]) => {
     if (n.type === "coord") return;
@@ -993,10 +1006,6 @@ function drawnOverflow(root: GoFishNode): {
       visit(c, inner);
     });
   };
-  add(root, 0, 0);
-  add(root, 1, 0);
-  farthest[0] = [undefined, undefined];
-  farthest[1] = [undefined, undefined];
   visit(root, [0, 0]);
   const ink = ([0, 1] as const).map((axis): Span => {
     const { min, max } = root.dims[axis];
