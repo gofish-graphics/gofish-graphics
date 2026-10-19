@@ -2,13 +2,25 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode, type ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, withToPixel } from "../displayList/lowerHelpers";
+import {
+  lowerStyle,
+  pathToPixelSVG,
+  withToPixel,
+} from "../displayList/lowerHelpers";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { axisScale } from "../domain";
 import { createNodeOperator } from "../withGoFish";
 import { orderChildrenForPaint } from "../paintOrder";
-import { type ArrowOptions, getBoxToBoxArrow } from "perfect-arrows";
+import type { ArrowOptions } from "perfect-arrows";
 import { bbox, union } from "../../util/bbox";
+import {
+  type BezierCurve,
+  type Path,
+  type Point,
+  pathBounds,
+  segment,
+} from "../../path";
+import { perfectArrowsRouter } from "./routers";
 
 export type ArrowOpts = {
   stroke?: string;
@@ -79,53 +91,70 @@ export const arrow = createNodeOperator(
           const fromDims = childPlaceables[0].dims;
           const toDims = childPlaceables[1].dims;
 
-          const arrowTuple = getBoxToBoxArrow(
-            fromDims[0].min!,
-            fromDims[1].min!,
-            fromDims[0].size!,
-            fromDims[1].size!,
-            toDims[0].min!,
-            toDims[1].min!,
-            toDims[0].size!,
-            toDims[1].size!,
-            props
-          );
+          // The body is connect's perfect-arrows route; the head and the
+          // start dot are the arrow's own decoration on it.
+          const body = perfectArrowsRouter(fromDims, toDims, {
+            dir: 0,
+            opts: props,
+          });
+          const arc = body[0] as BezierCurve;
+          const [sx, sy] = arc.start;
+          const [ex, ey] = arc.end;
+          // The end angle: the arc's direction where it ends, from its last
+          // control point to its end.
+          const ae = Math.atan2(ey - arc.control2[1], ex - arc.control2[0]);
+          const sw = props.strokeWidth ?? 0;
+          // Arrowhead: the head triangle rotated by the end angle and moved
+          // to the end. SVG `rotate(θ)` = [[cosθ,-sinθ],[sinθ,cosθ]].
+          const cos = Math.cos(ae);
+          const sin = Math.sin(ae);
+          const head: Point[] = [
+            [0, -2],
+            [4, 0],
+            [0, 2],
+          ].map(([x, y]) => [
+            ex + (x * sw * cos - y * sw * sin),
+            ey + (x * sw * sin + y * sw * cos),
+          ]);
+          // The start dot's radius. `local` and `toPixel` only move and flip
+          // (no scale), so this length is the same in layout units and in
+          // the pixels `lower` draws it in.
+          const dot = props.start ? (4 / 3) * sw : 0;
 
-          const combinedBBox = union(
+          // The box holds the endpoint boxes and the geometry of what the
+          // arrow draws: the body bows off the line between its ends (#1166),
+          // and the head and start dot reach past the body's ends. The
+          // stroke's width past that geometry is not counted yet (#1173).
+          const box = [
             bbox(
               fromDims[0].min!,
               fromDims[0].max!,
               fromDims[1].min!,
               fromDims[1].max!
             ),
-            bbox(toDims[0].min!, toDims[0].max!, toDims[1].min!, toDims[1].max!)
-          );
+            bbox(
+              toDims[0].min!,
+              toDims[0].max!,
+              toDims[1].min!,
+              toDims[1].max!
+            ),
+            pathBounds([
+              ...body,
+              segment(head[0], head[1]),
+              segment(head[1], head[2]),
+            ]),
+            bbox(sx - dot, sx + dot, sy - dot, sy + dot),
+          ].reduce(union);
 
           // The arrow is computed and kept in the arrow's axis order; `lower`
           // places it through its `local` map.
           return {
             intrinsicDims: [
-              {
-                min: combinedBBox.minX,
-                size: combinedBBox.maxX - combinedBBox.minX,
-              },
-              {
-                min: combinedBBox.minY,
-                size: combinedBBox.maxY - combinedBBox.minY,
-              },
+              { min: box.minX, size: box.maxX - box.minX },
+              { min: box.minY, size: box.maxY - box.minY },
             ],
             transform: { translate: [0, 0] },
-            renderData: {
-              sx: arrowTuple[0],
-              sy: arrowTuple[1],
-              cx: arrowTuple[2],
-              cy: arrowTuple[3],
-              ex: arrowTuple[4],
-              ey: arrowTuple[5],
-              ae: arrowTuple[6],
-              as: arrowTuple[7],
-              ec: arrowTuple[8],
-            },
+            renderData: { body, head, dot },
           };
         },
         // IR lowering. The arrow's parts live under the node's translate, so
@@ -138,7 +167,6 @@ export const arrow = createNodeOperator(
         ): DisplayList.DisplayItem[] => {
           const data = renderData!;
           const sw = props.strokeWidth ?? 0;
-          const endAngle = data.ae; // radians
           const [tx, ty] = displayTranslate(transform);
           const session = node.getRenderSession();
           const outer = session.toPixel!;
@@ -151,42 +179,28 @@ export const arrow = createNodeOperator(
           const stroke = props.stroke;
           const items: DisplayList.DisplayItem[] = [];
 
+          const body: Path = data.body;
           if (props.start) {
-            const [cx, cy] = own([data.sx, data.sy]);
+            const [cx, cy] = own((body[0] as BezierCurve).start);
             items.push({
               kind: "ellipse",
               cx,
               cy,
-              rx: (4 / 3) * sw,
-              ry: (4 / 3) * sw,
+              rx: data.dot,
+              ry: data.dot,
               role: "overlay",
               style: lowerStyle({ fill: stroke }),
             });
           }
 
-          // Quadratic body M sx,sy Q cx,cy ex,ey.
           items.push({
             kind: "path",
-            d: `M${px(data.sx, data.sy)} Q${px(data.cx, data.cy)} ${px(data.ex, data.ey)}`,
+            d: pathToPixelSVG(body, own),
             role: "overlay",
             style: lowerStyle({ fill: "none", stroke, strokeWidth: sw }),
           });
 
-          // Arrowhead: rotate each head point by the end angle, translate to
-          // (ex, ey), then map. SVG `rotate(θ)` = [[cosθ,-sinθ],[sinθ,cosθ]].
-          const cos = Math.cos(endAngle);
-          const sin = Math.sin(endAngle);
-          const head = [
-            [0, -2],
-            [4, 0],
-            [0, 2],
-          ]
-            .map(([x, y]) => [x * sw, y * sw])
-            .map(([x, y]) => [
-              data.ex + (x * cos - y * sin),
-              data.ey + (x * sin + y * cos),
-            ])
-            .map(([x, y]) => px(x, y));
+          const head = data.head.map(([x, y]: Point) => px(x, y));
           items.push({
             kind: "path",
             d: `M${head[0]} L${head[1]} L${head[2]} Z`,
