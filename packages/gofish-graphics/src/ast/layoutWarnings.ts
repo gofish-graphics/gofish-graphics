@@ -300,14 +300,16 @@ export function inkOverflow(
   };
 }
 
-/** Print each warning not in `seen` once, and add it there. */
+/** Print each warning. A render's warnings are already one per problem
+ *  (`warnLayout`); a chart that renders again passes the messages it has
+ *  `printed`, so it prints each problem once. */
 export function reportLayoutWarnings(
   warnings: readonly LayoutWarning[],
-  seen: Set<string> = new Set()
+  printed?: Set<string>
 ): void {
   for (const w of warnings) {
-    if (seen.has(w.message)) continue;
-    seen.add(w.message);
+    if (printed?.has(w.message)) continue;
+    printed?.add(w.message);
     if (typeof console !== "undefined")
       console.warn(`${LAYOUT_WARNING_PREFIX} ${w.message}`);
   }
