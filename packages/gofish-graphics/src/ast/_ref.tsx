@@ -71,15 +71,18 @@ export class GoFishRef {
    *  and the ref follows it. */
   public get transform(): Transform | undefined {
     if (this.lca === undefined || !this.selectedNode) return undefined;
-    const walk = (from: GoFishAST | undefined, dir: Direction): number => {
+    return { translate: [this.translateOn(0), this.translateOn(1)] };
+  }
+  /** The ref's translate on one axis (see {@link transform}). */
+  private translateOn(dir: Direction): number | undefined {
+    if (this.lca === undefined || !this.selectedNode) return undefined;
+    const walk = (from: GoFishAST | undefined): number => {
       let sum = 0;
       for (let n = from; n && n !== this.lca; n = n.parent)
         sum += n.projectedTranslate(dir) ?? 0;
       return sum;
     };
-    const at = (dir: Direction) =>
-      this.pinned[dir] ?? walk(this.selectedNode, dir) - walk(this.parent, dir);
-    return { translate: [at(0), at(1)] };
+    return this.pinned[dir] ?? walk(this.selectedNode) - walk(this.parent);
   }
   public readonly selection?: string | Token | (Token | string | number)[];
   private directNode?: GoFishNode;
@@ -334,7 +337,7 @@ export class GoFishRef {
    *  baseline align) call `projectedTranslate` polymorphically across the
    *  `GoFishNode | GoFishRef` union instead of branching on `instanceof`. */
   public projectedTranslate(dir: Direction): number | undefined {
-    return this.transform?.translate?.[dir];
+    return this.translateOn(dir);
   }
 
   public localAnchor(axis: FancyDirection, anchor: Anchor): number | undefined {
