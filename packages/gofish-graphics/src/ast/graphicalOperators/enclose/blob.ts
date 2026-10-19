@@ -671,7 +671,8 @@ const sitesOfMembers = (members: Member[]) => {
     owner: number[][] = [];
   // sites within half a pixel are one site: the earliest such site, found in a hash of
   // half-pixel cells (any site within 0.5 of q is in q's cell or one of its 8 neighbors)
-  const bucket = new Map<string, number[]>();
+  // (cells by column, then row: numeric keys, any sign or size)
+  const bucket = new Map<number, Map<number, number[]>>();
   const cellOf = (v: number) => Math.floor(v / 0.5);
   members.forEach((mm, k) =>
     sitesOf(mm).forEach((q) => {
@@ -680,12 +681,14 @@ const sitesOfMembers = (members: Member[]) => {
       let i = -1;
       for (let dx = -1; dx <= 1; dx++)
         for (let dy = -1; dy <= 1; dy++)
-          for (const s of bucket.get(`${cx + dx},${cy + dy}`) ?? [])
+          for (const s of bucket.get(cx + dx)?.get(cy + dy) ?? [])
             if ((i < 0 || s < i) && dist(P[s], q) < 0.5) i = s;
       if (i < 0) {
-        const key = `${cx},${cy}`;
-        if (!bucket.has(key)) bucket.set(key, []);
-        bucket.get(key)!.push(P.length);
+        let column = bucket.get(cx);
+        if (column === undefined) bucket.set(cx, (column = new Map()));
+        let cell = column.get(cy);
+        if (cell === undefined) column.set(cy, (cell = []));
+        cell.push(P.length);
         i = P.length;
         P.push(q);
         owner.push([]);
@@ -984,6 +987,8 @@ const skeleton = (members: Member[], o: SkelOpts, zones: Prim[]): Skeleton => {
    *  the member grid; each pair once, from its first segment member. A pair already in one
    *  piece is left out: pieces only merge, so the tree would skip it anyway. */
   const segOrder = queue.length;
+  // each pair's closest points, measured once across the bands
+  const measured = new Map<number, [Pt, Pt]>();
   const segPairs = (lo: number, hi: number): Link[] => {
     const out: Link[] = [];
     for (const a of segs) {
@@ -997,10 +1002,11 @@ const skeleton = (members: Member[], o: SkelOpts, zones: Prim[]): Skeleton => {
         if (b === a || (b < a && members[b].kind === "segment")) continue;
         const key = mk(a, b);
         if (pairs.has(key) || routed.has(key) || f2(a) === f2(b)) continue;
-        const pq = closestPair(
-          members[Math.min(a, b)],
-          members[Math.max(a, b)]
-        );
+        let pq = measured.get(key);
+        if (pq === undefined) {
+          pq = closestPair(members[Math.min(a, b)], members[Math.max(a, b)]);
+          measured.set(key, pq);
+        }
         const d = dist(pq[0], pq[1]),
           len = d < 0.5 ? 0 : d;
         if (len > lo && len <= hi)
@@ -1010,17 +1016,9 @@ const skeleton = (members: Member[], o: SkelOpts, zones: Prim[]): Skeleton => {
     return out;
   };
   // the members' extent: no two members are farther apart than its diagonal
-  let x0 = Infinity,
-    y0 = Infinity,
-    x1 = -Infinity,
-    y1 = -Infinity;
-  for (const p of P) {
-    x0 = Math.min(x0, p[0]);
-    y0 = Math.min(y0, p[1]);
-    x1 = Math.max(x1, p[0]);
-    y1 = Math.max(y1, p[1]);
-  }
-  const reach = Math.hypot(x1 - x0, y1 - y0) + 1;
+  // (Infinity with no sites)
+  const ext = ringExtent(P);
+  const reach = Math.hypot(ext.maxX - ext.minX, ext.maxY - ext.minY) + 1;
   // the spanning tree over routed links keeps the set in one piece (members that touch join for free)
   const r2 = members.map((_, k) => k);
   const f2 = (k: number): number => (r2[k] === k ? k : (r2[k] = f2(r2[k])));
@@ -1041,10 +1039,20 @@ const skeleton = (members: Member[], o: SkelOpts, zones: Prim[]): Skeleton => {
       const more = segPairs(band, next);
       band = next;
       if (more.length) {
-        const rest = queue.slice(head).concat(more).sort(byLen);
+        // merge the sorted band into the sorted rest of the queue (byLen is a total
+        // order, since each order is unique, so this is the sorted sequence)
+        more.sort(byLen);
+        const rest = queue.slice(head);
         queue.length = 0;
-        for (const l of rest) queue.push(l);
         head = 0;
+        let i = 0,
+          j = 0;
+        while (i < rest.length || j < more.length)
+          queue.push(
+            j >= more.length || (i < rest.length && before(rest[i], more[j]))
+              ? rest[i++]
+              : more[j++]
+          );
       }
       continue;
     }
