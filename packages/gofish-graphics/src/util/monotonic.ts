@@ -167,14 +167,7 @@ export const unknown = (run: (x: number) => number): Unknown => {
         lowerBound?: number;
         upperBoundGuess?: number;
       }
-    ) =>
-      // A σ can be far below 1 (a domain of millions of units), so the
-      // search runs to a tolerance well below any σ, not a fixed 1e-4.
-      findTargetMonotonic(y, run, {
-        tolerance: 1e-12,
-        maxIterations: 200,
-        ...options,
-      }),
+    ) => findTargetMonotonic(y, run, options),
   };
 };
 

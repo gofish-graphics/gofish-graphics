@@ -33,25 +33,34 @@ export const room = (px: number): number =>
 export const mod = (a: number, n: number): number =>
   n === 0 ? 0 : ((a % n) + n) % n;
 
-// assumes function is monotonically increasing
-// lowerBound must be less than the target
+/**
+ * The x at which `fn` (never decreasing) reaches `targetValue`, by bisection
+ * from `lowerBound`. It stops when `fn` is within `valueTolerance` of the
+ * target, or the bracket is within `tolerance` of its upper end (relative,
+ * so an x far below 1 is found as precisely as one near it).
+ */
 export const findTargetMonotonic = (
   targetValue: number,
   fn: (x: number) => number,
   options?: {
     tolerance?: number;
+    valueTolerance?: number;
     maxIterations?: number;
     lowerBound?: number;
     upperBoundGuess?: number;
   }
 ): number => {
   const defaultOptions = {
-    tolerance: 0.0001,
-    maxIterations: 50,
+    tolerance: 1e-9,
+    valueTolerance: 1e-6,
+    maxIterations: 200,
     lowerBound: 0,
     upperBoundGuess: 10,
   };
-  const { tolerance, maxIterations } = { ...defaultOptions, ...options };
+  const { tolerance, valueTolerance, maxIterations } = {
+    ...defaultOptions,
+    ...options,
+  };
   let { lowerBound: low, upperBoundGuess: high } = {
     ...defaultOptions,
     ...options,
@@ -75,11 +84,14 @@ export const findTargetMonotonic = (
   // Now that we have a large enough upper bound, use binary search to find the target value
   let iterations = 0;
 
-  while (high - low > tolerance && iterations < maxIterations) {
+  while (
+    high - low > tolerance * Math.abs(high) &&
+    iterations < maxIterations
+  ) {
     const mid = (low + high) / 2;
     const currentValue = fn(mid);
 
-    if (Math.abs(currentValue - targetValue) < tolerance) {
+    if (Math.abs(currentValue - targetValue) < valueTolerance) {
       return mid;
     }
 
