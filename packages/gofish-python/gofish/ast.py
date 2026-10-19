@@ -188,25 +188,19 @@ class _MarkFn:
     """Sentinel wrapping a Python callable used as a *whole* mark.
 
     `ChartBuilder.mark(lambda data: chart(data[0]["collection"]).flow(...).mark(...))`
-    — the lambda receives the per-group data slice and returns a new
-    `ChartBuilder` for that slice. JS storybook calls this "mark-as-function"
-    (see `Scatter.stories.tsx::WithPieGlyphs`).
+    — the lambda receives the per-group data slice and returns a mark, a
+    chart or a layer for that slice. JS storybook calls this
+    "mark-as-function" (see `Scatter.stories.tsx::WithPieGlyphs`).
 
     The wire shape is `{type: "mark-fn", lambdaId: <uuid>}`. The harness
-    builds a JS Mark whose body fetches `/derive/<id>` per invocation,
-    receives a chart IR, and constructs a ChartBuilder JS-side — the same
-    object `resolveMarkResult` already accepts as a mark return value.
-
-    A nested chart crosses the same way (see `_as_mark`). `_name` is the name
-    of that chart, so a `.relate(...)` callback with a `**rest` catch-all
-    sees it (`_subtree_names`); on the wire the name travels inside the chart
-    IR the function returns.
+    builds a JS Mark whose body calls `/derive/<id>` per invocation and
+    receives the mark-position IR (`to_dict()`) of what the callback
+    returned, which JS rebuilds like any other mark position.
     """
 
-    def __init__(self, fn: Callable, name: Optional[Union[str, "Token"]] = None):
+    def __init__(self, fn: Callable):
         self.fn = fn
         self.lambda_id = str(uuid.uuid4())
-        self._name = name
 
     def to_dict(self) -> dict:
         return {"type": "mark-fn", "lambdaId": self.lambda_id}
@@ -214,21 +208,13 @@ class _MarkFn:
 
 def _as_mark(mark: Any) -> Any:
     """What a mark position holds: the chart's `.mark(...)` and each child of
-    a combinator (`layer([...])`, `spread([...])`, ...). A `Mark` stays as it
-    is. A nested `ChartBuilder` or a callable `(data) -> ChartBuilder | Mark`
-    becomes a `_MarkFn`: JS calls it with the rows of the partition it sits
-    in. An empty-scope nested chart (``chart()`` / ``chart(coord=...)``)
-    binds those rows as its data; a chart with its own data draws as it is.
+    a combinator (`layer([...])`, `spread([...])`, ...). A `Mark`, a nested
+    `ChartBuilder` and a `LayerBuilder` stay as they are: each serializes as
+    its own IR (`to_dict()`), and JS rebuilds the same object a JS author
+    writes there. A callable `(data) -> mark | chart` is arbitrary Python
+    code, so it becomes a `_MarkFn` that JS calls back per partition.
     """
-    if isinstance(mark, ChartBuilder):
-        chart = mark
-        return _MarkFn(
-            (lambda data: chart._with_data(data))
-            if chart._uses_previous_marks()
-            else (lambda data: chart),
-            name=chart._name,
-        )
-    if not isinstance(mark, (Mark, _MarkFn)) and callable(mark):
+    if not isinstance(mark, (Mark, _MarkFn, ChartBuilder, LayerBuilder)) and callable(mark):
         return _MarkFn(mark)
     return mark
 
@@ -349,7 +335,9 @@ def _lambda_pairs(accessors: Dict[str, list]) -> List[tuple]:
 def _mark_tree(mark: Any) -> List[Any]:
     """Every node of a mark position's tree, in order: the mark itself, its
     combinator `_children`, and the marks of its `.relate(...)` clauses, at
-    any depth. A `_MarkFn` is a leaf: what it draws is built per call."""
+    any depth. A `_MarkFn` is a leaf: what it draws is built per call. A
+    nested `ChartBuilder` or `LayerBuilder` is a leaf too: it is a document
+    of its own, with operators as well as marks."""
     nodes = [mark]
     if isinstance(mark, Mark):
         for child in mark._children or []:
@@ -370,14 +358,6 @@ def _collect_mark_lambdas(mark: Any) -> List[tuple]:
         if isinstance(node, Mark)
         for pair in _lambda_pairs(node._accessors)
     ]
-
-
-def _collect_mark_fns(mark: Any) -> List["_MarkFn"]:
-    """Every mark function in a mark tree (`_mark_tree`): a chart's own
-    `.mark(fn)` and each nested chart or callable among combinator children.
-    Its reply is an IR, not rows, so a host registers it apart from the
-    accessors."""
-    return [node for node in _mark_tree(mark) if isinstance(node, _MarkFn)]
 
 
 def _collect_operator_lambdas(ops: List["Operator"]) -> List[tuple]:
@@ -461,7 +441,7 @@ class Mark:
         # `__combinator: true` payload the harness/widget reconstructs by
         # calling the JS-side combinator overload.
         # A child may be anything a mark position holds (see `_as_mark`),
-        # including a nested chart.
+        # including a nested chart or layer.
         self._children: Optional[List[Any]] = (
             None if _children is None else [_as_mark(c) for c in _children]
         )
@@ -1343,14 +1323,16 @@ class ChartBuilder:
         Set the mark for the chart.
 
         Args:
-            mark: A `Mark` (rect/circle/line/...), a nested `ChartBuilder`, or a
-                callable `(data) -> ChartBuilder`. A nested ChartBuilder is the
+            mark: A `Mark` (rect/circle/line/...), a nested `ChartBuilder`, a
+                `LayerBuilder` (``layer([chart(...), chart(...)])``), or a
+                callable `(data) -> ChartBuilder`. A nested chart is the
                 preferred spelling for a per-group sub-chart (issue #243): an
                 empty-scope child (``chart()`` / ``chart(coord=...)``) inherits
                 the incoming partition datum, replacing the
                 ``.mark(lambda data: chart(data, ...).flow(...).mark(...))``
-                callback. A callable receives the per-group data slice and
-                returns a ChartBuilder for that slice (the older spelling).
+                callback. A nested chart or layer crosses as its own IR; a
+                callable receives the per-group data slice and returns a
+                ChartBuilder for that slice, calling back into Python.
 
         Returns:
             New ChartBuilder with mark set
@@ -1380,17 +1362,6 @@ class ChartBuilder:
     def _uses_previous_marks(self) -> bool:
         """True for an empty ``chart()`` scope (data defers to the prev tier)."""
         return self.data is _PREVIOUS_LAYER_MARKS
-
-    def _with_data(self, data: Any) -> "ChartBuilder":
-        """Copy of this builder with its data replaced (used by ``.mark()``'s
-        nested-``ChartBuilder`` form to bind an empty scope to the incoming
-        partition datum — see ``ChartBuilder.mark``)."""
-        nb = ChartBuilder(
-            data, self.options, self.operators, z_order=self._z_order
-        )
-        nb._mark = self._mark
-        nb._name = self._name
-        return nb
 
     def name(self, name_or_token: Union[str, "Token"]) -> "ChartBuilder":
         """Tag this chart with a name so a `layer([...]).relate(...)` callback
@@ -1454,9 +1425,25 @@ class ChartBuilder:
         """
         return encode_non_finite(self._ir())
 
+    def to_dict(self) -> dict:
+        """The chart's IR in a mark position (``.mark(chart(...))``, a
+        ``layer([...])`` child): its own ``ChartIR``, inline in the mark tree.
+        An empty ``chart()`` scope crosses as ``previous-tier`` data, which JS
+        binds to the rows of the partition the chart sits in. A chart with rows
+        of its own has no tier beside the IR to ship them in, so they ride
+        inline."""
+        from .arrow_utils import to_records
+
+        ir = self._ir()
+        if ir["data"] is None and self.data is not None:
+            # TODO(#1088): inline rows cross as JSON, not as the widget's Arrow.
+            ir["data"] = {"type": "inline", "rows": to_records(self.data)}
+        return ir
+
     def _ir(self) -> dict:
         """``to_ir()`` before its non-finite numbers are encoded (see
-        ``Mark._ir``)."""
+        ``Mark._ir``). The chart's own rows are not in it: a host ships them
+        beside the IR (``tiers_arrow_bytes``)."""
         if self._mark is None:
             raise ValueError("Chart must have a mark before converting to IR")
 
@@ -3518,12 +3505,27 @@ class LayerBuilder:
         """
         return encode_non_finite(self._ir())
 
+    def to_dict(self) -> dict:
+        """The layer's IR in a mark position (``.mark(layer([chart(...),
+        chart(...)]))``): its own ``LayerIR``, inline in the mark tree, with
+        each chart tier in its mark-position form (``ChartBuilder.to_dict``)."""
+        return self._layer_ir(
+            [
+                child.to_dict() if isinstance(child, ChartBuilder) else child._ir()
+                for child in self.children
+            ]
+        )
+
     def _ir(self) -> dict:
         """``to_ir()`` before its non-finite numbers are encoded (see
-        ``Mark._ir``)."""
+        ``Mark._ir``). Each chart tier's rows ship beside the IR
+        (``tiers_arrow_bytes``)."""
+        return self._layer_ir([child._ir() for child in self.children])
+
+    def _layer_ir(self, charts: List[dict]) -> dict:
         result: dict = {
             "type": "layer",
-            "charts": [child._ir() for child in self.children],
+            "charts": charts,
             "options": self.options,
         }
         if self._builder_chain:

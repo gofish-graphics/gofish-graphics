@@ -181,35 +181,62 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 DeriveOperator,
                 LayerBuilder,
                 Mark,
-                _collect_mark_fns,
-                _collect_mark_lambdas,
+                _MarkFn,
                 _collect_operator_lambdas,
                 _InputRef,
+                _lambda_pairs,
+                _mark_tree,
+                encode_non_finite,
                 tiers_arrow_bytes,
             )
 
             derive_ids: list = []
 
-            def register(lambda_id, fn):
+            def add(lambda_id, fn):
                 derive_ids.append(lambda_id)
                 _registry[lambda_id] = fn
 
-            def register_mark(mark):
-                """Register every callable accessor and every mark function
-                in a mark tree. For an accessor the harness rebuilds an async
-                arrow that POSTs `[row]` to `/derive/<lambda_id>` per
-                invocation; a mark function (a callback or a nested chart,
-                as `.mark(...)` or as a combinator child) answers with an
-                IR."""
-                for lambda_id, rows_fn in _collect_mark_lambdas(mark):
-                    register(lambda_id, rows_fn)
-                for fn in _collect_mark_fns(mark):
-                    register(fn.lambda_id, mark_fn(fn.fn))
+            def register(b):
+                """Register every Python callback in `b` (a chart, a layer,
+                or a mark position's tree), at any depth. A derive operator
+                or an accessor answers with rows; a mark function answers
+                with an IR (`mark_fn`). A nested chart or layer is part of
+                the IR, so the callbacks inside it register too."""
+                if isinstance(b, LayerBuilder):
+                    for child in b.children:
+                        register(child)
+                    # A `.relate(...)` clause that draws is a mark, and may
+                    # carry accessors too (a constraint carries none).
+                    for clause in b._relate or []:
+                        if isinstance(clause, Mark):
+                            register(clause)
+                elif isinstance(b, ChartBuilder):
+                    for op in b.operators:
+                        if isinstance(op, DeriveOperator):
+                            add(op.lambda_id, op.fn)
+                    for lambda_id, rows_fn in _collect_operator_lambdas(
+                        b.operators
+                    ):
+                        add(lambda_id, rows_fn)
+                    if b._mark is not None:
+                        register(b._mark)
+                else:
+                    for node in _mark_tree(b):
+                        if isinstance(node, Mark):
+                            for lambda_id, rows_fn in _lambda_pairs(
+                                node._accessors
+                            ):
+                                add(lambda_id, rows_fn)
+                        elif isinstance(node, _MarkFn):
+                            add(node.lambda_id, mark_fn(node.fn))
+                        elif isinstance(node, (ChartBuilder, LayerBuilder)):
+                            register(node)
 
             def mark_fn(user_fn):
-                """Wrap a `(data) -> ChartBuilder | Mark` mark function for
-                the rows-in / rows-out `/derive/<id>` contract: it answers
-                with a one-element list holding the result's IR."""
+                """Wrap a `(data) -> mark | chart` mark function for the
+                rows-in / rows-out `/derive/<id>` contract: it answers with a
+                one-element list holding the mark-position IR (`to_dict()`)
+                of what the function returned."""
 
                 def wrapped(data):
                     # The harness replaces each live `GoFishRef` argument with
@@ -223,71 +250,20 @@ class DeriveHandler(BaseHTTPRequestHandler):
                         else row
                         for row in data
                     ]
-                    return [ir_of(user_fn(wrapped_data), inline=True)]
+                    result = user_fn(wrapped_data)
+                    register(result)
+                    return [encode_non_finite(result.to_dict())]
 
                 return wrapped
 
-            # TODO(#1088): a chart a mark function returns crosses the JSON
-            # `/derive` RPC with its rows inlined, not as Arrow.
-            def chart_ir(chart_ir: dict, chart: "ChartBuilder", inline: bool) -> dict:
-                """A chart's IR, after registering the callbacks it names.
-                The story's own tiers ship their rows beside the IR, as
-                Arrow (`tierArrow`), like the widget. A chart a mark
-                function returns comes back over the JSON `/derive` RPC, so
-                with `inline` its rows are inlined in the IR's inline form,
-                `{type: "inline", rows}`. Select and previous-tier data are
-                already in the IR."""
-                for op in chart.operators:
-                    if isinstance(op, DeriveOperator):
-                        register(op.lambda_id, op.fn)
-                for lambda_id, rows_fn in _collect_operator_lambdas(
-                    chart.operators
-                ):
-                    register(lambda_id, rows_fn)
-                if chart._mark is not None:
-                    register_mark(chart._mark)
-                if not inline or chart_ir.get("data") is not None:
-                    return chart_ir
-                raw = chart.data
-                if hasattr(raw, "to_dict"):
-                    rows = raw.to_dict("records")
-                elif hasattr(raw, "to_dicts"):
-                    rows = raw.to_dicts()
-                else:
-                    rows = raw
-                if isinstance(rows, list):
-                    return {**chart_ir, "data": {"type": "inline", "rows": rows}}
-                return {**chart_ir, "data": rows}
-
-            def ir_of(b, inline: bool = False) -> dict:
-                """`b.to_ir()`, unchanged except for inlined rows (with
-                `inline`; see `chart_ir`)."""
-                if isinstance(b, Mark):
-                    register_mark(b)
-                    return b.to_ir()
-                if isinstance(b, LayerBuilder):
-                    ir = b.to_ir()
-                    tiers = []
-                    for child, tier in zip(b.children, ir["charts"]):
-                        if isinstance(child, Mark):
-                            register_mark(child)
-                            tiers.append(tier)
-                        else:
-                            tiers.append(chart_ir(tier, child, inline))
-                    # A `.relate(...)` clause that draws is a mark, and may
-                    # carry accessors too (a constraint carries none).
-                    for clause in b._relate or []:
-                        if isinstance(clause, Mark):
-                            register_mark(clause)
-                    return {**ir, "charts": tiers}
-                if isinstance(b, ChartBuilder):
-                    return chart_ir(b.to_ir(), b, inline)
+            if not isinstance(builder, (ChartBuilder, LayerBuilder, Mark)):
                 raise TypeError(
-                    f"a story must return a chart, layer or mark, got {type(b).__name__}"
+                    "a story must return a chart, layer or mark, got "
+                    f"{type(builder).__name__}"
                 )
-
+            register(builder)
             self._json_response(200, {
-                "ir": ir_of(builder),
+                "ir": builder.to_ir(),
                 "tierArrow": [
                     base64.b64encode(b).decode("ascii")
                     for b in tiers_arrow_bytes(builder)

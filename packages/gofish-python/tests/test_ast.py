@@ -662,8 +662,12 @@ class TestChartBuilder:
 
 
 class TestNestedChart:
-    """A nested chart in a mark position crosses as a mark function, both as
-    a chart's `.mark(...)` and as a combinator child (#1112)."""
+    """A nested chart or layer in a mark position crosses as its own IR,
+    inline in the mark tree, both as a chart's `.mark(...)` and as a
+    combinator child (#1112, #1180). JS binds an empty scope to the rows of
+    the partition it sits in, so nothing calls back into Python."""
+
+    ROWS = [{"lake": "A", "species": "Bass", "count": 3}]
 
     def _flower(self):
         return (
@@ -673,28 +677,65 @@ class TestNestedChart:
         )
 
     def test_mark_and_combinator_child_share_one_encoding(self):
-        rows = [{"lake": "A", "species": "Bass", "count": 3}]
-        direct = chart(rows).mark(self._flower()).to_ir()["mark"]
+        direct = chart(self.ROWS).mark(self._flower()).to_ir()["mark"]
         child = layer([rect(w=4, h="count"), self._flower()]).to_dict()
-        assert direct["type"] == "mark-fn"
-        assert child["children"][1] == {
-            "type": "mark-fn",
-            "lambdaId": child["children"][1]["lambdaId"],
+        assert direct == child["children"][1]
+        assert direct == {
+            "type": "chart",
+            "data": {"type": "previous-tier"},
+            "operators": [
+                {"type": "stack", "by": "species", "dir": "x", "h": 40}
+            ],
+            "mark": {"type": "petal", "w": "count", "fill": "species"},
+            "options": direct["options"],
         }
 
-    def test_empty_scope_child_binds_the_partition_rows(self):
-        """Called with the rows of its partition, an empty-scope child
-        returns the chart with those rows as its data, keeping its name."""
-        from gofish.ast import _collect_mark_fns
-
+    def test_nested_chart_keeps_its_name(self):
         m = layer([rect(w=4, h="count"), self._flower().name("flower")])
-        (fn,) = _collect_mark_fns(m)
-        assert m.to_dict()["children"][1]["lambdaId"] == fn.lambda_id
-        rows = [{"lake": "A", "species": "Bass", "count": 3}]
-        ir = fn.fn(rows).to_ir()
-        assert ir["name"] == "flower"
-        assert ir["mark"]["type"] == "petal"
-        assert fn.fn(rows).data == rows
+        assert m.to_dict()["children"][1]["name"] == "flower"
+
+    def test_chart_with_its_own_rows_inlines_them(self):
+        """A nested chart has no tier beside the IR to ship rows in, so its
+        own rows ride inline; the root's rows still ship beside it."""
+        own = [{"x": 1}, {"x": 2}]
+        ir = chart(self.ROWS).mark(chart(own).mark(rect(h="x"))).to_ir()
+        assert ir["data"] is None
+        assert ir["mark"]["data"] == {"type": "inline", "rows": own}
+
+    def test_layer_of_charts_in_mark_position(self):
+        """`layer([chart(...), chart(...)])` is a `LayerBuilder`; in a mark
+        position it crosses as its own `LayerIR`, by the same rule as a
+        nested chart (#1180 gap 1)."""
+        bars_and_area = layer(
+            [
+                chart()
+                .flow(spread(by="year", dir="x"), stack(by="site", dir="y"))
+                .mark(rect(h="yield", fill="site").name("bars")),
+                chart(select_all("bars"))
+                .flow(stack(by="site", dir="x"))
+                .mark(rect(h="yield")),
+            ]
+        )
+        assert isinstance(bars_and_area, LayerBuilder)
+        direct = (
+            chart(self.ROWS)
+            .flow(spread(by="variety", dir="x"))
+            .mark(bars_and_area)
+            .to_ir()["mark"]
+        )
+        child = layer([rect(w=4, h="count"), bars_and_area]).to_dict()
+        assert direct == child["children"][1]
+        assert direct["type"] == "layer"
+        assert "builder" not in direct
+        assert [t["data"] for t in direct["charts"]] == [
+            {"type": "previous-tier"},
+            {"type": "select", "layer": "bars", "mode": "all"},
+        ]
+
+    def test_callable_stays_a_mark_function(self):
+        """A callable is arbitrary Python code, so it still calls back."""
+        ir = chart(self.ROWS).mark(lambda d: chart(d).mark(rect())).to_ir()
+        assert ir["mark"]["type"] == "mark-fn"
 
     def test_child_name_is_visible_to_relate_rest(self):
         seen = {}
