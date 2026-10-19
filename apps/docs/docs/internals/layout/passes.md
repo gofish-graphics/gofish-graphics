@@ -759,7 +759,9 @@ report their size).
   plot has a claim, they are its claim past its plot's, both widened to the
   keyed domain, at its σ. Where its plot fills the room it is given (a
   category axis), its rings' claims are built around a plot of size X, and
-  the plot's size is the X at which they fill the slot. It hands its content
+  the plot's size is the X at which they fill the slot (where fixed parts
+  leave no X that fills it exactly, the X at which the parts that grow with
+  X reach it, as the root solves σ). It hands its content
   (its first child) its slot less its gutters, and seats it past its start
   gutter: the ring pins the ring inside it at a literal pixel (`wrapRing`),
   and that pixel becomes the start gutter (`seatPastGutters`), except on an
@@ -796,7 +798,9 @@ report their size).
 At the root, `layout()` measures what the root draws past its box after its
 one layout (`drawnOverflow`): its ink. A node's box holds what it draws,
 except a layer's ink children, which its box leaves out, so the drawing is
-the hull of the root's box and of every ink child's box. A literal start or
+the hull of the root's box and of every ink child's box. The claim walk
+records the layers that found ink children on the render session, so a
+render with none skips the walk. A literal start or
 pixel offset (`spread({ y: 50 })`, `.translate()`) moves a box, and its claim
 moves with it, so it is no ink. On an axis the render gives no size, the SVG is the root's box
 plus its ink, and the box sits past the ink before it.
