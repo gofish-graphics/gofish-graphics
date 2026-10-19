@@ -25,6 +25,7 @@ import { GoFishRef } from "../ast/_ref";
 import { GoFishNode } from "../ast/_node";
 import { RelateOperand } from "../ast/constraints/relate";
 import { wireOf } from "../ast/wire";
+import { nodeSelectionOf } from "../ast/nodeSelection";
 
 // The widget IR uses these symbol-loose shapes; toJSON returns them as-is.
 // The validator in `gofish-ir` accepts these shapes in permissive mode.
@@ -101,14 +102,13 @@ function wireOpts(
  * takes. A ref to a node (not a name) has no wire form.
  */
 function nodesToIR(nodes: unknown): Frontend.NodeSelectionIR {
-  if (nodes instanceof GoFishRef && nodes.multiplicity === "all")
-    return selectRefIR(nodes) as Frontend.NodeSelectionIR;
-  if (!Array.isArray(nodes))
-    throw new Error(
-      "toJSON: a value that names nodes (a blob's avoiding) is a list of " +
-        "nodes or refs, or one selectAll(name)."
-    );
-  return nodes.map(nodeRefIR);
+  const selection = nodeSelectionOf(
+    nodes,
+    "toJSON: a value that names nodes (a blob's avoiding)"
+  );
+  return "all" in selection
+    ? (selectRefIR(selection.all) as Frontend.NodeSelectionIR)
+    : selection.items.map(nodeRefIR);
 }
 
 /** One node of such a list as a `ref` by its name. A ref by a string name
@@ -119,11 +119,6 @@ function nodeRefIR(item: unknown): Frontend.RefMarkIR {
     return { type: "ref", selection: item.name };
   let node: unknown = item;
   if (item instanceof GoFishRef) {
-    if (item.multiplicity === "all")
-      throw new Error(
-        "toJSON: selectAll(name) names every node of a layer, so it is the " +
-          "whole value (avoiding: selectAll(name)), not an item of a list."
-      );
     if (typeof item.selection === "string")
       return { type: "ref", selection: item.selection };
     if (item.selection !== undefined)

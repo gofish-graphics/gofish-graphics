@@ -42,6 +42,7 @@ import { ovalOutline } from "./enclose/oval";
 import { targetOf } from "../constraints/relationalPaint";
 import { ringExtent } from "../geometry/box";
 import { RelateOperand } from "../constraints/relate";
+import { nodeSelectionOf } from "../nodeSelection";
 
 export type EncloseOptions = {
   /** Pixels between the members and the outline. Default 2. */
@@ -85,30 +86,17 @@ function avoidedRefs(
   layerContext: LayerContext | undefined
 ): GoFishRef[] {
   if (avoiding === undefined) return [];
-  // The same rule as the wire's (NodeSelectionIR): a list of nodes or refs,
-  // or one selectAll(name).
-  const isSelectAll =
-    avoiding instanceof GoFishRef && avoiding.multiplicity === "all";
-  if (!Array.isArray(avoiding) && !isSelectAll)
-    throw new Error(
-      "[gofish] enclose({ shape }): avoiding is a list of nodes or refs, or a selectAll(name) selection; put a single ref in a list: avoiding: [ref(...)]."
-    );
+  const selection = nodeSelectionOf(avoiding, "enclose({ shape }): avoiding");
   let items: unknown[];
-  if (isSelectAll) {
+  if ("all" in selection) {
     if (layerContext === undefined)
       throw new Error(
         "[gofish] enclose({ shape }): avoiding: selectAll(...) names a chart's layer, so it works where enclose is a chart's mark; in the combinator form, list the nodes."
       );
-    else {
-      const resolved = resolveRefData(avoiding as GoFishRef, layerContext);
-      items = Array.isArray(resolved) ? resolved : [resolved];
-    }
-  } else items = avoiding as unknown[];
+    const resolved = resolveRefData(selection.all, layerContext);
+    items = Array.isArray(resolved) ? resolved : [resolved];
+  } else items = selection.items;
   return items.map((item) => {
-    if (item instanceof GoFishRef && item.multiplicity === "all")
-      throw new Error(
-        "[gofish] enclose({ shape }): selectAll(name) names every node of a layer, so it is the whole avoiding value (avoiding: selectAll(name)), not an item of a list."
-      );
     if (item instanceof GoFishRef) {
       const target = item.targetNode;
       return target !== undefined
