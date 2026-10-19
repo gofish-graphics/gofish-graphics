@@ -59,13 +59,13 @@ export const SideTree: StoryObj = {
             spacing: 0.5,
             anchor: "middle",
           },
-          y: { kind: "distribute", spacing: 70, anchor: "middle" },
+          y: { kind: "distribute", spacing: 84, anchor: "middle" },
         }),
         // sibling = (align θ, distribute r): siblings share a spoke (one angle)
         // and stack out along the radius.
         sibling: combine({
           x: { kind: "align", alignment: "middle" },
-          y: { kind: "distribute", spacing: 90, anchor: "middle" },
+          y: { kind: "distribute", spacing: 109, anchor: "middle" },
         }),
         coord: Coord.polar(),
       },

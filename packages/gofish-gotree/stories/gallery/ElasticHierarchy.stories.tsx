@@ -25,8 +25,8 @@ export default meta;
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        w: 26,
-        h: 24 + (d.data.value ?? 1) * 12,
+        w: 46,
+        h: 42 + (d.data.value ?? 1) * 21,
         fill: byDepth()(d),
         stroke: "#08306b",
         strokeWidth: 1,
@@ -43,7 +43,7 @@ export const ElasticHierarchy: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 640, h: 420 });
+    const container = initializeContainer();
     tree(
       {
         node,
@@ -51,12 +51,12 @@ export const ElasticHierarchy: StoryObj = {
         // include on both axes → nest. Larger y pad makes the parent "header"
         // band of empty space; small x pad hugs the subtree horizontally.
         parentChild: combine({
-          x: { kind: "nest", pad: 8 },
-          y: { kind: "nest", pad: 22 },
+          x: { kind: "nest", pad: 14 },
+          y: { kind: "nest", pad: 38 },
         }),
         // flatten x → distribute (margin → spacing); align y → align middle.
         sibling: combine({
-          x: { kind: "distribute", spacing: 8 },
+          x: { kind: "distribute", spacing: 14 },
           y: { kind: "align", alignment: "middle" },
         }),
       },

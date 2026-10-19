@@ -1068,6 +1068,8 @@ function computeNpmDeps(
 let cache: StoryExample[] | undefined;
 /** Harness story id → readable title, for EVERY story (see getStoryTitle). */
 let storyTitles: Map<string, string> | undefined;
+/** Repo-relative path → source text, for each file with a gallery story. */
+let storySources: Map<string, string> | undefined;
 
 /**
  * A readable name for an untagged story: the last segment of its Storybook
@@ -1090,6 +1092,7 @@ export function loadStoryExamples(): StoryExample[] {
   const examples: StoryExample[] = [];
   const seenIds = new Map<string, string>();
   const titles = new Map<string, string>();
+  const sources = new Map<string, string>();
 
   for (const storyFile of files) {
     let parsed: ParsedFile;
@@ -1128,6 +1131,7 @@ export function loadStoryExamples(): StoryExample[] {
         `Gallery story ${relative(REPO_ROOT, storyFile)} has no meta.title.`
       );
     }
+    sources.set(relative(REPO_ROOT, storyFile), parsed.source);
 
     for (const ex of galleryExports) {
       const id = kebab(ex.galleryTitle);
@@ -1182,6 +1186,7 @@ export function loadStoryExamples(): StoryExample[] {
   examples.sort((a, b) => a.title.localeCompare(b.title));
   cache = examples;
   storyTitles = titles;
+  storySources = sources;
   return examples;
 }
 
@@ -1351,4 +1356,11 @@ export function getStoryExampleById(id: string): StoryExample | undefined {
 export function getStoryTitle(storyId: string): string | undefined {
   loadStoryExamples();
   return storyTitles!.get(storyId);
+}
+
+/** The source text of an example's story file (`StoryExample.storyFile`), as
+ * `loadStoryExamples` read it. */
+export function getStorySource(storyFile: string): string | undefined {
+  loadStoryExamples();
+  return storySources!.get(storyFile);
 }

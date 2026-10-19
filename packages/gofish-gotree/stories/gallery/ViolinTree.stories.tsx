@@ -40,7 +40,7 @@ const meta: Meta = { title: "GoTree / Gallery / ViolinTree" };
 export default meta;
 
 const LEAF_THETA = (2 * Math.PI) / 9; // fixed θ-width per node (~9 slots)
-const VALUE_R = 14; // r-units per unit of d.data.value (violin thickness)
+const VALUE_R = 42; // r-units per unit of d.data.value (violin thickness)
 
 const node = (d: any) =>
   d.height === 0
@@ -74,7 +74,7 @@ export const ViolinTree: StoryObj = {
         // NOTES); nest on r grows the parent's rect to embed the subtree.
         parentChild: combine({
           x: { kind: "distribute", spacing: 0, anchor: "middle" },
-          y: { kind: "nest", pad: 6 },
+          y: { kind: "nest", pad: 18 },
         }),
         // sibling: X flatten → distribute θ ; Y flatten → distribute r.
         sibling: combine({

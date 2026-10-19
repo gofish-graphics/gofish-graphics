@@ -54,7 +54,7 @@ export const SpiralLayout: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 520, h: 520 });
+    const container = initializeContainer();
     tree(
       {
         node,
@@ -65,13 +65,11 @@ export const SpiralLayout: StoryObj = {
             kind: "distribute",
             spacing: (2 * Math.PI) / 9,
             anchor: "middle",
-            alignment: "middle",
           },
           y: {
             kind: "distribute",
-            spacing: 50,
+            spacing: 118,
             anchor: "middle",
-            alignment: "middle",
           },
         }),
         // sibling: each next sibling spirals one θ-step around and one r-step out.
@@ -80,13 +78,11 @@ export const SpiralLayout: StoryObj = {
             kind: "distribute",
             spacing: (2 * Math.PI) / 9,
             anchor: "middle",
-            alignment: "middle",
           },
           y: {
             kind: "distribute",
-            spacing: 26,
+            spacing: 62,
             anchor: "middle",
-            alignment: "middle",
           },
         }),
         coord: Coord.polar(),

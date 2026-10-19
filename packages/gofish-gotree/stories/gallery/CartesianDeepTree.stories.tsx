@@ -41,7 +41,7 @@ const deepTree = (() => {
 
 // circle nodes, depth-colored (StaticSize 6 → r 6).
 const node = (d: any) =>
-  circle({ r: 6, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
+  circle({ r: 8, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
 
 export const CartesianDeepTree: StoryObj = {
   tags: ["gallery"],
@@ -53,7 +53,7 @@ export const CartesianDeepTree: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 900, h: 520 });
+    const container = initializeContainer();
     tree(
       {
         node,
@@ -63,10 +63,10 @@ export const CartesianDeepTree: StoryObj = {
           // order "reverse" puts the parent at HIGH y = the bottom in y-down
           // free space, so the root sits at the bottom and leaves climb upward
           // (matching the reference). See issue #143/#16.
-          y: { kind: "distribute", spacing: 80, order: "reverse" },
+          y: { kind: "distribute", spacing: 104, order: "reverse" },
         }),
         sibling: combine({
-          x: { kind: "distribute", spacing: 22 },
+          x: { kind: "distribute", spacing: 29 },
           y: { kind: "align", alignment: "start" },
         }),
       },
