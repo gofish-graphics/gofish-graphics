@@ -277,7 +277,7 @@ export function resolveNodeRefs(
   const out: Record<string, any> = { ...opts };
   for (const [key, value] of Object.entries(opts)) {
     const field = accepted[key];
-    if (field !== undefined && Frontend.carriesNodes(field.type))
+    if (field !== undefined)
       out[key] = Frontend.mapHeldNodes(field.type, value, nodes);
   }
   return out;

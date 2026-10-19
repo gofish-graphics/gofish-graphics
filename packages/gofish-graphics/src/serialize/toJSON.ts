@@ -85,10 +85,7 @@ function wireOpts(
     if (Object.hasOwn(accepted, key) && typeof value !== "function") {
       // A field whose declared type holds nodes (a blob's `avoiding`, inside
       // `shape`) carries their references; every other field is as given.
-      const type = accepted[key].type;
-      out[key] = Frontend.carriesNodes(type)
-        ? Frontend.mapHeldNodes(type, value, nodesToIR)
-        : value;
+      out[key] = Frontend.mapHeldNodes(accepted[key].type, value, nodesToIR);
     }
   }
   return out;

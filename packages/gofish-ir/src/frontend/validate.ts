@@ -38,6 +38,7 @@ import {
 import {
   AUTHORED_REFS,
   BIN_KINDS,
+  taggedBranches,
   LABEL_OPTIONS,
   OPTION_TYPES,
   acceptedFields,
@@ -481,44 +482,6 @@ function walkFieldType(
       walkDescriptorFields(value, path, ctx, type.fields, []);
       return;
   }
-}
-
-/** A branch's tag: the field that names it, and its value. An object
- *  whose required `kind` field is a string literal (a strategy) is tagged
- *  by its `kind`; a hand-authored ref with a `tag` (`field(...)`,
- *  `struct(...)`, AUTHORED_REFS) by its `type`. */
-function branchTag(
-  branch: FieldType
-): { key: "kind" | "type"; value: string } | null {
-  if (branch.kind === "ref") {
-    const tag = AUTHORED_REFS[branch.name]?.tag;
-    return tag === undefined ? null : { key: "type", value: tag };
-  }
-  if (branch.kind !== "object") return null;
-  const tag = branch.fields.kind;
-  return tag !== undefined &&
-    tag.required &&
-    tag.type.kind === "literal" &&
-    typeof tag.type.value === "string"
-    ? { key: "kind", value: tag.type.value }
-    : null;
-}
-
-/** The branches of a tagged union by their tag: every branch tagged by the
- *  same field ({@link branchTag}), no two alike. Null for any other union. */
-function taggedBranches(
-  options: readonly FieldType[]
-): { key: "kind" | "type"; byTag: Map<string, FieldType> } | null {
-  const byTag = new Map<string, FieldType>();
-  let key: "kind" | "type" | undefined;
-  for (const branch of options) {
-    const tag = branchTag(branch);
-    if (tag === null || (key !== undefined && tag.key !== key)) return null;
-    if (byTag.has(tag.value)) return null;
-    key = tag.key;
-    byTag.set(tag.value, branch);
-  }
-  return key === undefined ? null : { key, byTag };
 }
 
 /**

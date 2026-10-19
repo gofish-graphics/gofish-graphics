@@ -2322,45 +2322,98 @@ export function acceptedFields(
   return fields;
 }
 
-/** Whether a value of this type may hold nodes at some depth: a ref whose
- *  authored value holds nodes (`holdsNodes` in `AUTHORED_REFS`), or a union,
- *  array, tuple, record, object or named option type containing one. */
-export function carriesNodes(type: FieldType): boolean {
+/** A named option type's declared type (`t.ref("Shape")` is the `Shape`
+ *  union); undefined for any other ref. */
+const deref = (type: FieldType & { kind: "ref" }): FieldType | undefined =>
+  type.name in OPTION_TYPES ? OPTION_TYPES[type.name].type : undefined;
+
+/** Whether a value of this type may hold, at some depth, a part `isLeaf`
+ *  picks: it is one, or a union, array, tuple, record, object or named
+ *  option type containing one. */
+function carries(type: FieldType, isLeaf: (t: FieldType) => boolean): boolean {
+  if (isLeaf(type)) return true;
+  const sub = (t: FieldType) => carries(t, isLeaf);
   switch (type.kind) {
     case "union":
-      return type.options.some(carriesNodes);
+      return type.options.some(sub);
     case "array":
-      return carriesNodes(type.items);
+      return sub(type.items);
     case "tuple":
-      return type.items.some(carriesNodes);
+      return type.items.some(sub);
     case "record":
-      return carriesNodes(type.valueType);
+      return sub(type.valueType);
     case "object":
-      return Object.values(type.fields).some((f) => carriesNodes(f.type));
-    case "ref":
-      return (
-        AUTHORED_REFS[type.name]?.holdsNodes === true ||
-        (type.name in OPTION_TYPES &&
-          carriesNodes(OPTION_TYPES[type.name].type))
-      );
+      return Object.values(type.fields).some((f) => sub(f.type));
+    case "ref": {
+      const named = deref(type);
+      return named !== undefined && sub(named);
+    }
     default:
       return false;
   }
 }
 
-/** The `kind` literal of an object branch of a tagged union, if it has one. */
-const branchKind = (type: FieldType): unknown =>
-  type.kind === "object" && type.fields.kind?.type.kind === "literal"
-    ? type.fields.kind.type.value
-    : undefined;
+const holdsNodes = (type: FieldType): boolean =>
+  type.kind === "ref" && AUTHORED_REFS[type.name]?.holdsNodes === true;
+const carriesNodesCache = new WeakMap<FieldType, boolean>();
+
+/** Whether a value of this type may hold nodes at some depth: a ref whose
+ *  authored value holds nodes (`holdsNodes` in `AUTHORED_REFS`), or a union,
+ *  array, tuple, record, object or named option type containing one. */
+export function carriesNodes(type: FieldType): boolean {
+  let held = carriesNodesCache.get(type);
+  if (held === undefined) {
+    held = carries(type, holdsNodes);
+    carriesNodesCache.set(type, held);
+  }
+  return held;
+}
+
+/** A branch's tag: the field that names it, and its value. An object
+ *  whose required `kind` field is a string literal (a strategy) is tagged
+ *  by its `kind`; a hand-authored ref with a `tag` (`field(...)`,
+ *  `struct(...)`, AUTHORED_REFS) by its `type`. */
+export function branchTag(
+  branch: FieldType
+): { key: "kind" | "type"; value: string } | null {
+  if (branch.kind === "ref") {
+    const tag = AUTHORED_REFS[branch.name]?.tag;
+    return tag === undefined ? null : { key: "type", value: tag };
+  }
+  if (branch.kind !== "object") return null;
+  const tag = branch.fields.kind;
+  return tag !== undefined &&
+    tag.required &&
+    tag.type.kind === "literal" &&
+    typeof tag.type.value === "string"
+    ? { key: "kind", value: tag.type.value }
+    : null;
+}
+
+/** The branches of a tagged union by their tag: every branch tagged by the
+ *  same field ({@link branchTag}), no two alike. Null for any other union. */
+export function taggedBranches(
+  options: readonly FieldType[]
+): { key: "kind" | "type"; byTag: Map<string, FieldType> } | null {
+  const byTag = new Map<string, FieldType>();
+  let key: "kind" | "type" | undefined;
+  for (const branch of options) {
+    const tag = branchTag(branch);
+    if (tag === null || (key !== undefined && tag.key !== key)) return null;
+    if (byTag.has(tag.value)) return null;
+    key = tag.key;
+    byTag.set(tag.value, branch);
+  }
+  return key === undefined ? null : { key, byTag };
+}
 
 /**
  * `value`, read as a value of `type`, with each part whose type holds nodes
  * (a `holdsNodes` ref, such as a blob's `avoiding`) replaced by `fn(part)`.
  * The walk follows the declared type, not the value: object fields, array
  * and tuple items, record values, named option types, and the branch of a
- * union that the value's `kind` names (a strategy), or the one branch that
- * holds nodes. A part whose type holds no nodes is returned as it is, so the
+ * union that the value's tag names (`taggedBranches`, the rule validation
+ * uses), or else the one branch that holds nodes. A part whose type holds no nodes is returned as it is, so the
  * serializers convert node references exactly where the table says they
  * are.
  */
@@ -2373,21 +2426,19 @@ export function mapHeldNodes(
     return value;
   switch (type.kind) {
     case "ref":
-      if (AUTHORED_REFS[type.name]?.holdsNodes) return fn(value);
-      return mapHeldNodes(OPTION_TYPES[type.name].type, value, fn);
+      if (holdsNodes(type)) return fn(value);
+      return mapHeldNodes(deref(type)!, value, fn);
     case "union": {
-      const branches = type.options.filter(carriesNodes);
-      const kind = (value as { kind?: unknown }).kind;
-      const tagged = branches.find(
-        (b) =>
-          branchKind(
-            b.kind === "ref" && b.name in OPTION_TYPES
-              ? OPTION_TYPES[b.name].type
-              : b
-          ) === kind
-      );
-      const branch =
-        tagged ?? (branches.length === 1 ? branches[0] : undefined);
+      const tagged = taggedBranches(type.options);
+      let branch: FieldType | undefined;
+      if (tagged !== null)
+        branch = tagged.byTag.get(
+          (value as Record<string, unknown>)[tagged.key] as string
+        );
+      else {
+        const holding = type.options.filter(carriesNodes);
+        branch = holding.length === 1 ? holding[0] : undefined;
+      }
       return branch === undefined ? value : mapHeldNodes(branch, value, fn);
     }
     case "array":
@@ -2422,25 +2473,5 @@ export function mapHeldNodes(
  *  exactly the fields of this kind, and the Python generator wraps exactly
  *  these fields' callables as accessors. */
 export function carriesChannel(type: FieldType): boolean {
-  switch (type.kind) {
-    case "channel":
-      return true;
-    case "union":
-      return type.options.some(carriesChannel);
-    case "array":
-      return carriesChannel(type.items);
-    case "tuple":
-      return type.items.some(carriesChannel);
-    case "record":
-      return carriesChannel(type.valueType);
-    case "object":
-      return Object.values(type.fields).some((f) => carriesChannel(f.type));
-    case "ref":
-      return (
-        type.name in OPTION_TYPES &&
-        carriesChannel(OPTION_TYPES[type.name].type)
-      );
-    default:
-      return false;
-  }
+  return carries(type, (t) => t.kind === "channel");
 }
