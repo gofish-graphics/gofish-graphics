@@ -937,6 +937,22 @@ function drawnOverflow(root: GoFishNode): {
     [GoFishNode | undefined, GoFishNode | undefined],
   ];
 } {
+  const farthest: [
+    [GoFishNode | undefined, GoFishNode | undefined],
+    [GoFishNode | undefined, GoFishNode | undefined],
+  ] = [
+    [undefined, undefined],
+    [undefined, undefined],
+  ];
+  // No layer found ink children: the drawing is the root's box.
+  if (!root.tryGetRenderSession()?.inkLayers?.size)
+    return {
+      ink: [
+        [0, 0],
+        [0, 0],
+      ],
+      farthest,
+    };
   const box = (n: GoFishNode, axis: 0 | 1): Span | undefined => {
     const { min, max } = n.dims[axis];
     return min !== undefined &&
@@ -952,13 +968,6 @@ function drawnOverflow(root: GoFishNode): {
     const b = box(root, axis);
     if (b !== undefined) [lo[axis], hi[axis]] = b;
   }
-  const farthest: [
-    [GoFishNode | undefined, GoFishNode | undefined],
-    [GoFishNode | undefined, GoFishNode | undefined],
-  ] = [
-    [undefined, undefined],
-    [undefined, undefined],
-  ];
   const add = (n: GoFishNode, axis: 0 | 1, offset: number) => {
     const b = box(n, axis);
     if (b === undefined) return;

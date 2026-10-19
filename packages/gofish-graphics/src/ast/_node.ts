@@ -161,6 +161,10 @@ export type RenderSession = {
   /** What layout found and drew through anyway (`layoutWarnings.ts`):
    *  fixed parts larger than their slot, a drawing past the canvas. */
   warnings?: LayoutWarning[];
+  /** The layers whose claim walk found ink children (`ClaimWalk.ink`), so
+   *  the render looks for what is drawn past the root's box only where
+   *  there is some (`drawnOverflow` in gofish.tsx). */
+  inkLayers?: Set<GoFishNode>;
 };
 
 /** Record `warning` (if any) on the render of `node`. */

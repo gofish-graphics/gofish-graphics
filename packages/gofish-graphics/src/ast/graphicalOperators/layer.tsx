@@ -626,6 +626,9 @@ export const layer = createNodeOperatorSequential(
             const p = node.claimWalk!.placeChildren(axis, effectiveExtents);
             placements[axis] = p;
             inkChildren[axis] = p.ink;
+            const session = node.tryGetRenderSession();
+            if (p.ink.size > 0 && session !== undefined)
+              (session.inkLayers ??= new Set()).add(node);
           }
           // The claim on each axis from the children's claims `extents`:
           // the fold's (`folded`), or the base union merged with the hull of
