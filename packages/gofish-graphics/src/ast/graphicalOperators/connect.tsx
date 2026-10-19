@@ -500,23 +500,22 @@ export const connect = createNodeOperator(
            *  with their shares of its time (`SequenceCurve.thread`). */
           let steps: Step[] = [];
 
-          // If in center mode, adjust bounding boxes to have zero width/height
-          // with min and max equal to the center point
-
-          // Compute bounding box from connected elements
+          // The box starts from the endpoints (their centers in center mode,
+          // their boxes in edge mode). Each endpoint counts once: the
+          // operands the run's pairs join (a run of one point joins none),
+          // however many points each stands at.
           let box = empty();
-          for (const [b0, b1] of bboxPairs) {
-            for (const b of [b0, b1]) {
-              if (mode === "center") {
-                const cx = (b[0].min! + b[0].max!) / 2;
-                const cy = (b[1].min! + b[1].max!) / 2;
-                box = union(box, bbox(cx, cx, cy, cy));
-              } else {
-                box = union(
-                  box,
-                  bbox(b[0].min!, b[0].max!, b[1].min!, b[1].max!)
-                );
-              }
+          const ends = bboxPairs.length > 0 ? new Set(childPlaceables) : [];
+          for (const { dims: b } of ends) {
+            if (mode === "center") {
+              const cx = (b[0].min! + b[0].max!) / 2;
+              const cy = (b[1].min! + b[1].max!) / 2;
+              box = union(box, bbox(cx, cx, cy, cy));
+            } else {
+              box = union(
+                box,
+                bbox(b[0].min!, b[0].max!, b[1].min!, b[1].max!)
+              );
             }
           }
 

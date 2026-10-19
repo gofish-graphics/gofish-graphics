@@ -110,15 +110,21 @@ const cubicTurns = (p0: number, p1: number, p2: number, p3: number) => {
   const a = -p0 + 3 * p1 - 3 * p2 + p3;
   const b = 2 * (p0 - 2 * p1 + p2);
   const c = p1 - p0;
-  const EPS = 1e-12;
+  // `a` counts as zero when it is tiny next to the other coefficients: a
+  // quadratic written as a cubic (`quadratic`) has `a` = 0 up to rounding.
+  const tol = 1e-9 * Math.max(Math.abs(b), Math.abs(c));
   const roots: number[] = [];
-  if (Math.abs(a) < EPS) {
-    if (Math.abs(b) > EPS) roots.push(-c / b);
+  if (Math.abs(a) <= tol) {
+    if (Math.abs(b) > tol) roots.push(-c / b);
   } else {
     const disc = b * b - 4 * a * c;
     if (disc >= 0) {
-      const s = Math.sqrt(disc);
-      roots.push((-b + s) / (2 * a), (-b - s) / (2 * a));
+      // (-b ± √disc)/(2a) loses the smaller root to cancellation when 4ac is
+      // small next to b². Take the root whose terms add, q/a, and get the
+      // other from the product of the roots, c/a.
+      const q = -(b + (b < 0 ? -1 : 1) * Math.sqrt(disc)) / 2;
+      roots.push(q / a);
+      if (q !== 0) roots.push(c / q);
     }
   }
   return roots.filter((t) => t > 0 && t < 1);
@@ -136,6 +142,8 @@ const cubicAt = (p0: number, p1: number, p2: number, p3: number, t: number) => {
  * A line is bounded by its ends. A cubic is bounded by its ends and by its
  * points where a coordinate's derivative is zero, so the box is tight even
  * when the control points stick out past the curve (an arc's controls do).
+ * A segment with a coordinate that is not a finite number throws: it comes
+ * from a bad position upstream, and dropping it would hide that.
  */
 export const pathBounds = (path: Path): BoundingBox => {
   const lo: Point = [Infinity, Infinity];
@@ -145,6 +153,17 @@ export const pathBounds = (path: Path): BoundingBox => {
     if (v > hi[axis]) hi[axis] = v;
   };
   for (const seg of path) {
+    const points =
+      seg.type === "line"
+        ? seg.points
+        : [seg.start, seg.control1, seg.control2, seg.end];
+    if (!points.every((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]))) {
+      throw new Error(
+        `[gofish] pathBounds: a ${seg.type} segment has a coordinate that ` +
+          `is not a finite number: ${points.map(([x, y]) => `(${x}, ${y})`).join(" ")}. A position ` +
+          `upstream is NaN or infinite.`
+      );
+    }
     if (seg.type === "line") {
       for (const p of seg.points) {
         add(0, p[0]);

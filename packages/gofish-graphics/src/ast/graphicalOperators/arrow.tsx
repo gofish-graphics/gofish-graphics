@@ -2,14 +2,25 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode, type ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, withToPixel } from "../displayList/lowerHelpers";
+import {
+  lowerStyle,
+  pathToPixelSVG,
+  withToPixel,
+} from "../displayList/lowerHelpers";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { axisScale } from "../domain";
 import { createNodeOperator } from "../withGoFish";
 import { orderChildrenForPaint } from "../paintOrder";
-import { type ArrowOptions, getBoxToBoxArrow } from "perfect-arrows";
+import type { ArrowOptions } from "perfect-arrows";
 import { bbox, union } from "../../util/bbox";
-import { type Point, pathBounds, quadratic, segment } from "../../path";
+import {
+  type BezierCurve,
+  type Path,
+  type Point,
+  pathBounds,
+  segment,
+} from "../../path";
+import { perfectArrowsRouter } from "./routers";
 
 export type ArrowOpts = {
   stroke?: string;
@@ -80,19 +91,18 @@ export const arrow = createNodeOperator(
           const fromDims = childPlaceables[0].dims;
           const toDims = childPlaceables[1].dims;
 
-          const arrowTuple = getBoxToBoxArrow(
-            fromDims[0].min!,
-            fromDims[1].min!,
-            fromDims[0].size!,
-            fromDims[1].size!,
-            toDims[0].min!,
-            toDims[1].min!,
-            toDims[0].size!,
-            toDims[1].size!,
-            props
-          );
-
-          const [sx, sy, cx, cy, ex, ey, ae] = arrowTuple;
+          // The body is connect's perfect-arrows route; the head and the
+          // start dot are the arrow's own decoration on it.
+          const body = perfectArrowsRouter(fromDims, toDims, {
+            dir: 0,
+            opts: props,
+          });
+          const arc = body[0] as BezierCurve;
+          const [sx, sy] = arc.start;
+          const [ex, ey] = arc.end;
+          // The end angle: the arc's direction where it ends, from its last
+          // control point to its end.
+          const ae = Math.atan2(ey - arc.control2[1], ex - arc.control2[0]);
           const sw = props.strokeWidth ?? 0;
           // Arrowhead: the head triangle rotated by the end angle and moved
           // to the end. SVG `rotate(θ)` = [[cosθ,-sinθ],[sinθ,cosθ]].
@@ -106,11 +116,15 @@ export const arrow = createNodeOperator(
             ex + (x * sw * cos - y * sw * sin),
             ey + (x * sw * sin + y * sw * cos),
           ]);
-
-          // The box holds the endpoint boxes and everything the arrow draws:
-          // the body bows off the line between its ends (#1166), and the
-          // head and start dot reach past the body's ends.
+          // The start dot's radius. `local` and `toPixel` only move and flip
+          // (no scale), so this length is the same in layout units and in
+          // the pixels `lower` draws it in.
           const dot = props.start ? (4 / 3) * sw : 0;
+
+          // The box holds the endpoint boxes and the geometry of what the
+          // arrow draws: the body bows off the line between its ends (#1166),
+          // and the head and start dot reach past the body's ends. The
+          // stroke's width past that geometry is not counted yet (#1173).
           const box = [
             bbox(
               fromDims[0].min!,
@@ -125,7 +139,7 @@ export const arrow = createNodeOperator(
               toDims[1].max!
             ),
             pathBounds([
-              quadratic([sx, sy], [cx, cy], [ex, ey]),
+              ...body,
               segment(head[0], head[1]),
               segment(head[1], head[2]),
             ]),
@@ -140,15 +154,7 @@ export const arrow = createNodeOperator(
               { min: box.minY, size: box.maxY - box.minY },
             ],
             transform: { translate: [0, 0] },
-            renderData: {
-              sx,
-              sy,
-              cx,
-              cy,
-              ex,
-              ey,
-              head,
-            },
+            renderData: { body, head, dot },
           };
         },
         // IR lowering. The arrow's parts live under the node's translate, so
@@ -173,23 +179,23 @@ export const arrow = createNodeOperator(
           const stroke = props.stroke;
           const items: DisplayList.DisplayItem[] = [];
 
+          const body: Path = data.body;
           if (props.start) {
-            const [cx, cy] = own([data.sx, data.sy]);
+            const [cx, cy] = own((body[0] as BezierCurve).start);
             items.push({
               kind: "ellipse",
               cx,
               cy,
-              rx: (4 / 3) * sw,
-              ry: (4 / 3) * sw,
+              rx: data.dot,
+              ry: data.dot,
               role: "overlay",
               style: lowerStyle({ fill: stroke }),
             });
           }
 
-          // Quadratic body M sx,sy Q cx,cy ex,ey.
           items.push({
             kind: "path",
-            d: `M${px(data.sx, data.sy)} Q${px(data.cx, data.cy)} ${px(data.ex, data.ey)}`,
+            d: pathToPixelSVG(body, own),
             role: "overlay",
             style: lowerStyle({ fill: "none", stroke, strokeWidth: sw }),
           });

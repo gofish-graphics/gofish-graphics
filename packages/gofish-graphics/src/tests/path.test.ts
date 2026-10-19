@@ -630,6 +630,75 @@ function testPathBounds(): boolean {
     Math.abs(hi[1] - box.maxY) < 1e-6;
   console.log(`  sampled curve: ${tight ? "✓ PASSED" : "✗ FAILED"}`);
   ok = ok && tight;
+
+  // A quadratic written as a cubic has a leading coefficient that is only
+  // rounding noise; the naive root formula cancelled here and gave maxY 30.52.
+  const q = pathBounds([
+    quadratic([-958.99, -974.99], [546.81, 907.37], [137.91, -594.95]),
+  ]);
+  // Peak of the quadratic in y: t = (y0 - y1) / (y0 - 2·y1 + y2).
+  const [y0, y1, y2] = [-974.99, 907.37, -594.95];
+  const tq = (y0 - y1) / (y0 - 2 * y1 + y2);
+  const peak = (1 - tq) ** 2 * y0 + 2 * (1 - tq) * tq * y1 + tq ** 2 * y2;
+  const quadOk =
+    Math.abs(q.maxY - peak) < 1e-6 && Math.abs(peak - 71.87) < 0.01;
+  console.log(`  elevated quadratic: ${quadOk ? "✓ PASSED" : "✗ FAILED"}`);
+  if (!quadOk) console.log(`    got maxY ${q.maxY}, want ${peak}`);
+  ok = ok && quadOk;
+
+  // Seeded random quadratics and cubics: the box matches dense sampling.
+  let seed = 1166;
+  const rand = () => {
+    // mulberry32
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const randPoint = (): Point => [(rand() - 0.5) * 2000, (rand() - 0.5) * 2000];
+  let outside = 0;
+  let loose = 0;
+  for (let i = 0; i < 10000; i++) {
+    const c =
+      i % 2 === 0
+        ? quadratic(randPoint(), randPoint(), randPoint())
+        : curve(randPoint(), randPoint(), randPoint(), randPoint());
+    const b = pathBounds([c]);
+    let lo: Point = [Infinity, Infinity];
+    let hi: Point = [-Infinity, -Infinity];
+    const n = 2000;
+    for (let k = 0; k <= n; k++) {
+      const p = evaluateBezierAt(c, k / n);
+      lo = [Math.min(lo[0], p[0]), Math.min(lo[1], p[1])];
+      hi = [Math.max(hi[0], p[0]), Math.max(hi[1], p[1])];
+    }
+    // Every sample is inside the box, and the box is no looser than the
+    // sampling error: the curve is flat at an extreme, so a sample within
+    // a few units of it along the curve is within far less than 0.01 of it.
+    const gaps = [
+      lo[0] - b.minX,
+      lo[1] - b.minY,
+      b.maxX - hi[0],
+      b.maxY - hi[1],
+    ];
+    outside = Math.max(outside, ...gaps.map((g) => -g));
+    loose = Math.max(loose, ...gaps);
+  }
+  const randOk = outside < 1e-9 && loose < 0.01;
+  console.log(
+    `  10k random curves vs sampling: ${randOk ? "✓ PASSED" : "✗ FAILED"} (outside ${outside}, loose ${loose})`
+  );
+  ok = ok && randOk;
+
+  // A non-finite coordinate is an upstream bug: it throws.
+  let threw = false;
+  try {
+    pathBounds([segment([0, 0], [NaN, 1])]);
+  } catch {
+    threw = true;
+  }
+  console.log(`  NaN throws: ${threw ? "✓ PASSED" : "✗ FAILED"}`);
+  ok = ok && threw;
   console.log();
   return ok;
 }
