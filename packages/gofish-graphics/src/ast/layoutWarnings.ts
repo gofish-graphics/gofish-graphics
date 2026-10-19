@@ -39,7 +39,7 @@ export type LayoutWarning = {
 };
 
 /** The prefix every layout warning is printed with. */
-export const LAYOUT_WARNING_PREFIX = "[gofish:layout]";
+const LAYOUT_WARNING_PREFIX = "[gofish:layout]";
 
 const px = (v: number) => `${Math.round(v * 10) / 10} px`;
 
@@ -58,7 +58,7 @@ const chainOn = (
 
 /** `node` as its operator or mark and key: `spread(by: "site")`,
  *  `stack(by: "species")`, `chart`, `rect(key: "Lake A")`. */
-export function describeNode(node: GoFishNode): string {
+function describeNode(node: GoFishNode): string {
   if (node._chartBox !== undefined) return "chart";
   const chain =
     node.axisDir === undefined ? undefined : chainOn(node, node.axisDir);
@@ -91,6 +91,18 @@ const composing = (node: GoFishNode, axis: 0 | 1): GoFishNode[] =>
       (c as GoFishNode).resolveExtent()[axis] !== undefined
   );
 
+/** The child of `node` whose claim on `axis` holds the most fixed pixels,
+ *  or undefined when no child composes into its claim. */
+const largestChild = (
+  node: GoFishNode,
+  axis: 0 | 1
+): GoFishNode | undefined => {
+  const kids = composing(node, axis);
+  return kids.length === 0
+    ? undefined
+    : kids.reduce((a, b) => (fixedPx(b, axis) > fixedPx(a, axis) ? b : a));
+};
+
 /**
  * The node that holds the fixed parts below `start`, and its slot: down
  * from `start` through each node whose fixed pixels are mostly one child's
@@ -107,11 +119,8 @@ function culprit(
   for (;;) {
     if (chainOn(node, axis) !== undefined) break;
     if (node !== start && node._ownScope?.[axis] === true) break;
-    const kids = composing(node, axis);
-    if (kids.length === 0) break;
-    const big = kids.reduce((a, b) =>
-      fixedPx(b, axis) > fixedPx(a, axis) ? b : a
-    );
+    const big = largestChild(node, axis);
+    if (big === undefined) break;
     // Mostly one child's: more than half of the node's fixed pixels. A
     // node whose fixed pixels are spread over its children (a literal
     // position here, a fixed-size box there) holds them itself.
@@ -184,24 +193,41 @@ export function fixedOverflow(
   if (!Number.isFinite(available)) return undefined;
   if (fixedPx(start, axis) <= available + 0.5) return undefined;
   const at = culprit(start, axis, available);
-  const needed = fixedPx(at.node, axis);
-  const parts = fixedParts(at.node, axis);
-  const node = describeNode(at.node);
+  return fixedWarning(
+    at.node,
+    axis,
+    fixedPx(at.node, axis),
+    at.available,
+    fixedParts(at.node, axis),
+    "The parts that scale are drawn as if the fixed parts took no room"
+  );
+}
+
+/** A `fixed-overflow` warning: `node`'s fixed `parts` need `needed` pixels
+ *  on `axis`, more than the `available` pixels of its slot, and its parts
+ *  are drawn as `drawn` says. */
+function fixedWarning(
+  node: GoFishNode,
+  axis: 0 | 1,
+  needed: number,
+  available: number,
+  parts: { part: string; px: number }[],
+  drawn: string
+): LayoutWarning {
+  const what = describeNode(node);
   const name = axisName(axis);
-  const message =
-    `${node} on ${name}: its fixed parts need ${px(needed)}, but its slot ` +
-    `has ${px(Math.max(0, at.available))}. Fixed parts: ` +
-    parts.map((p) => `${p.part} = ${px(p.px)}`).join("; ") +
-    `. The parts that scale are drawn as if the fixed parts took no ` +
-    `room, and the graphic overflows on ${name}.`;
   return {
     kind: "fixed-overflow",
-    node,
+    node: what,
     axis: name,
     needed,
-    available: at.available,
+    available,
     parts,
-    message,
+    message:
+      `${what} on ${name}: its fixed parts need ${px(needed)}, but its slot ` +
+      `has ${px(Math.max(0, available))}. Fixed parts: ` +
+      parts.map((p) => `${p.part} = ${px(p.px)}`).join("; ") +
+      `. ${drawn}, and the graphic overflows on ${name}.`,
   };
 }
 
@@ -213,12 +239,8 @@ export function fixedOverflowInside(
   axis: 0 | 1,
   available: number
 ): LayoutWarning | undefined {
-  const kids = composing(node, axis);
-  if (kids.length === 0) return undefined;
-  const big = kids.reduce((a, b) =>
-    fixedPx(b, axis) > fixedPx(a, axis) ? b : a
-  );
-  return fixedOverflow(big, axis, available);
+  const big = largestChild(node, axis);
+  return big === undefined ? undefined : fixedOverflow(big, axis, available);
 }
 
 /** A `fixed-overflow` warning for the spread `node`, whose spacing alone
@@ -235,22 +257,14 @@ export function spacingOverflow(
   const gaps = chain.children.length - 1;
   const needed = chain.spacing * gaps;
   if (needed <= available + 0.5) return undefined;
-  const nodeName = describeNode(node);
-  const name = axisName(axis);
-  const part = `spacing ${chain.spacing} × ${gaps}`;
-  return {
-    kind: "fixed-overflow",
-    node: nodeName,
-    axis: name,
+  return fixedWarning(
+    node,
+    axis,
     needed,
     available,
-    parts: [{ part, px: needed }],
-    message:
-      `${nodeName} on ${name}: its fixed parts need ${px(needed)}, but its ` +
-      `slot has ${px(available)}. Fixed parts: ${part} = ${px(needed)}. ` +
-      `Its parts are drawn as if the spacing took no room, and the graphic ` +
-      `overflows on ${name}.`,
-  };
+    [{ part: `spacing ${chain.spacing} × ${gaps}`, px: needed }],
+    "Its parts are drawn as if the spacing took no room"
+  );
 }
 
 /** An `ink-overflow` warning: what the graphic draws spans `[lo, hi]` on
