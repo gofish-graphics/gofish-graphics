@@ -181,9 +181,9 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 DeriveOperator,
                 LayerBuilder,
                 Mark,
+                _collect_mark_fns,
                 _collect_mark_lambdas,
                 _collect_operator_lambdas,
-                _MarkFn,
                 _InputRef,
                 tiers_arrow_bytes,
             )
@@ -195,11 +195,16 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 _registry[lambda_id] = fn
 
             def register_mark(mark):
-                """Register every callable accessor in a mark tree. The
-                harness rebuilds an async arrow that POSTs `[row]` to
-                `/derive/<lambda_id>` per invocation."""
+                """Register every callable accessor and every mark function
+                in a mark tree. For an accessor the harness rebuilds an async
+                arrow that POSTs `[row]` to `/derive/<lambda_id>` per
+                invocation; a mark function (a callback or a nested chart,
+                as `.mark(...)` or as a combinator child) answers with an
+                IR."""
                 for lambda_id, rows_fn in _collect_mark_lambdas(mark):
                     register(lambda_id, rows_fn)
+                for fn in _collect_mark_fns(mark):
+                    register(fn.lambda_id, mark_fn(fn.fn))
 
             def mark_fn(user_fn):
                 """Wrap a `(data) -> ChartBuilder | Mark` mark function for
@@ -239,9 +244,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     chart.operators
                 ):
                     register(lambda_id, rows_fn)
-                if isinstance(chart._mark, _MarkFn):
-                    register(chart._mark.lambda_id, mark_fn(chart._mark.fn))
-                elif chart._mark is not None:
+                if chart._mark is not None:
                     register_mark(chart._mark)
                 if not inline or chart_ir.get("data") is not None:
                     return chart_ir
