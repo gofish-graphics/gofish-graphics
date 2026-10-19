@@ -24,6 +24,7 @@ import { Frontend, type DisplayList } from "gofish-ir";
 import {
   lowerChildrenOffset,
   lowerStyle,
+  cornerRadii,
   rectItemFromBox,
 } from "../displayList/lowerHelpers";
 import type { GoFishAST } from "../_ast";
@@ -174,19 +175,21 @@ function Enclose(
           fold(1, "min") - padding,
           fold(1, "max") + padding,
         ];
+        // The children from..to read as outline geometry; an avoided node
+        // that is also a member is left out of the avoided ones.
+        const memberNodes = new Set(
+          children.slice(0, memberCount).map(targetOf)
+        );
+        const geometry = (from: number, to: number): BlobMember[] =>
+          children
+            .slice(from, to)
+            .flatMap((child, i) =>
+              from > 0 && memberNodes.has(targetOf(child))
+                ? []
+                : membersOf(child, placed[from + i].dims)
+            );
         let loops: Pt[][] | undefined;
-        if (shape.kind === "blob") {
-          const memberNodes = new Set(
-            children.slice(0, memberCount).map(targetOf)
-          );
-          const geometry = (from: number, to: number): BlobMember[] =>
-            children
-              .slice(from, to)
-              .flatMap((child, i) =>
-                from > 0 && memberNodes.has(targetOf(child))
-                  ? []
-                  : membersOf(child, placed[from + i].dims)
-              );
+        if (shape.kind === "blob")
           loops = blobOutline(geometry(0, memberCount), {
             convexity: shape.convexity,
             holes: shape.holes,
@@ -196,13 +199,8 @@ function Enclose(
             padding,
             avoiding: geometry(memberCount, children.length),
           });
-        } else if (shape.kind === "oval")
-          loops = ovalOutline(
-            placed
-              .slice(0, memberCount)
-              .flatMap((p, i) => membersOf(children[i], p.dims)),
-            padding
-          );
+        else if (shape.kind === "oval")
+          loops = ovalOutline(geometry(0, memberCount), padding);
         // A computed outline's box is the outline's own.
         const pts = loops?.flat() ?? [];
         if (pts.length > 0) ({ minX, maxX, minY, maxY } = ringExtent(pts));
@@ -266,9 +264,7 @@ function Enclose(
           Math.max(ay, by),
           toPixel,
           {
-            // as in SVG: one radius given is both; neither is 2
-            rx: corners.rx ?? corners.ry ?? 2,
-            ry: corners.ry ?? corners.rx ?? 2,
+            ...cornerRadii(corners.rx, corners.ry, 2),
             role: "overlay",
             style,
           }
