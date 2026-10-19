@@ -17,6 +17,11 @@ CATCH_LOCATIONS = load_json("catch_locations")  # {lake: {"x", "y"}}
 # wind, weather) — mirrors packages/gofish-graphics/src/data/seatle-weather.ts.
 SEATTLE_WEATHER = load_json("seatle_weather")
 
+# Brand values 2000-2019 (year, name, category, value), the bar chart race
+# data — mirrors packages/gofish-graphics/src/data/categoryBrands.ts (dumped
+# from it).
+CATEGORY_BRANDS = load_json("category_brands")
+
 # Resolved color values (color6 palette, gray/neutral, and the spectral.js
 # mix() results the stories compute at runtime — precomputed so Python emits
 # byte-identical fills).

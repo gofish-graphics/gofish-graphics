@@ -152,12 +152,23 @@ packages/gofish-graphics/stories/tutorials/Diagrams.stories.tsx
 packages/gofish-graphics/stories/tutorials/Glyphs.stories.tsx
 
 # The Gapminder animation panels — exempt for the same reason as the bird
-# migration panels above. The `Animated` and `Paused1975` stories are driven by
-# `time.sequence(...)`, which owns a `timer()` clock: a live JS signal with no
+# migration panels above. Each of these stories is driven by
+# `time.sequence(...)` or `time.history`/`.transition(...)` on a `timer()`
+# clock (the paused ones on a clock held still): a live JS signal with no
 # Python/IR bridge, so the spec cannot cross the derive RPC. The two static
-# stories in the file (SpatialTwin, Frame1955) ARE pure specs, but exemption is
-# per FILE and all four are one file (same trade-off as issue #856).
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx
+# stories, SpatialTwin and Frame1955, are pure specs and are ported.
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::Animated
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::Paused1975
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::SequenceOnly
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::Curves
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesThree
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesKinematics
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesKinematicsPaused
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesPaused
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::Trails
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::TrailsPaused
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::TrailsCurves
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::TrailsCurvesPaused
 
 # The Gapminder desugaring tower — exempt for the same reason. Every level in
 # it holds a clock: levels 0 and 1 through `time.sequence(...)`, levels 2 and 3
@@ -169,9 +180,18 @@ packages/gofish-graphics/stories/animated-vega-lite/GapminderTower.stories.tsx
 # The bar chart race, Gapminder's sibling — exempt for the same reason as the
 # Gapminder panels. Every animated story in it holds a `timer()` clock through
 # `time.sequence({ on })`, a live JS signal the derive RPC cannot carry, and the
-# year readout reads it through `live()`. Frame2000 is a pure spec, but
-# exemption is per FILE (same trade-off as issue #856).
-packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx
+# year readout reads it through `live()`. The paused stories hold the same
+# clock still. Frame2000, the static frame, is a pure spec and is ported.
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Animated
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Paused2000
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Paused2010
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Paused2019
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Paused2007_5
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10Paused2007_5
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10Paused2008
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10FromBelow
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10FromBelowPaused2007_5
 
 # The connected scatterplot — exempt for the same reason as the Gapminder
 # panels. Every story in it is driven by `time.sequence(...)`, which owns or is
