@@ -77,6 +77,30 @@ A no-data `chart()` / `chart(**options)` is an **empty scope**: as a `mark(...)`
 it binds the incoming group, and inside [`.layer(...)`](/python/api/core/layer)
 it binds the previous tier's marks.
 
+The same binding applies to a nested chart used as a child of a combinator such
+as [`layer([...])`](/python/api/operators/layer), so a per-group glyph can mix
+marks and a chart. Here each lake draws a stem and a polar flower on top of it:
+
+::: gofish example:flower-chart hidden
+:::
+
+```python
+flower = (
+    chart(coord=Coord.polar(), axes=False)  # no data -> inherits this lake's rows
+    .flow(stack(by="species", dir="x", h=40))
+    .mark(petal(w="count", fill="species"))
+)
+
+chart(stem_data, axes=False).flow(scatter(by="lake", x="x")).mark(
+    layer([
+        rect(w=4, h="count", fill="rgb(0, 142, 91)").name("stem"),
+        flower.name("flower"),
+    ]).relate(lambda stem, flower: [
+        Constraint.align([stem, flower], x="middle", y=["end", "middle"]),
+    ])
+)
+```
+
 The older callback form `mark(lambda data: chart(data, ...).flow(...).mark(...))`
 still works and is equivalent — the function receives each group's data slice and
 returns a nested chart.
