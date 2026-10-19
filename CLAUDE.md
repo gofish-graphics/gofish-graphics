@@ -64,7 +64,7 @@ All paths are relative to `packages/gofish-graphics/`:
 - `src/ast/` - Core AST implementation and rendering engine
 - `src/ast/shapes/` - Basic visual elements (rect, ellipse, petal, text, ref)
 - `src/ast/graphicalOperators/` - Composition operators (stack, stackX, stackY, spread, spreadX, spreadY, layer, connect, wrap, arrow, enclose, frame, position)
-- `src/ast/coordinateTransforms/` - Coordinate system transformations (linear, polar, bipolar, arcLengthPolar, wavy, clock)
+- `src/ast/coordinateTransforms/` - Coordinate system transformations (polar, clock, wavy, geo; plus the internal identity `linear`)
 - `src/ast/marks/` - Fluent chart builder (`chart(data).flow(...).mark(...)`) and the mark factories
 - `src/tests/` - Example charts and visual test cases (not automated unit tests)
 - `src/data/` - Sample datasets used in examples
@@ -110,11 +110,10 @@ The library uses several global contexts during rendering:
 
 Key coordinate systems available, all in the `Coord` family (`Coord.polar()`):
 
-- `Coord.linear` - Standard Cartesian coordinates
 - `Coord.polar` - Polar coordinate system
-- `Coord.bipolar` - Two-pole coordinate system
-- `Coord.arcLengthPolar` - Arc-length based polar coordinates
+- `Coord.clock` - Polar preset (0° at 12 o'clock, clockwise)
 - `Coord.wavy` - Wavy/curved coordinate transformations
+- `Coord.geo` - Geographic coordinates through a map projection
 
 ### Build Configuration (packages/gofish-graphics/)
 

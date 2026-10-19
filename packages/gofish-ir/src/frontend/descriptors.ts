@@ -265,6 +265,12 @@ export interface ConstructDescriptor {
    *  out→subtract, atop→paint). The wire `type` is unchanged either way. */
   pyName?: string;
   doc?: string;
+  /** The field the factory takes as its first argument, before an options
+   *  object of the rest: `Coord.geo("mercator", { lon })`. In Python it is
+   *  a positional-only parameter. The wire form is the same either way
+   *  (`{ type: "geo", projection: "mercator", lon }`). Same notion as
+   *  {@link StrategyKind.positional}. */
+  positional?: string;
   /** Shared field groups folded in (e.g. `boxDims`, `paint`). */
   include?: FieldGroup[];
   /** This construct's own fields (in addition to any `include`d groups). */
@@ -461,11 +467,11 @@ const axisOptions: FieldSpec = {
 export interface StrategyKind {
   doc: string;
   params: FieldGroup;
-  /** The factory takes the kind's one param as its argument, not in an
-   *  options object: `Bin.step(0.5)`, not `Bin.step({ size: 0.5 })`. In
-   *  Python it is a positional-only parameter. The wire form is the same
-   *  either way (`{ kind: "step", size: 0.5 }`). */
-  positional?: true;
+  /** The param the factory takes as its argument, not in an options
+   *  object: `Bin.step(0.5)`, not `Bin.step({ size: 0.5 })`. In Python it
+   *  is a positional-only parameter. The wire form is the same either way
+   *  (`{ kind: "step", size: 0.5 }`). */
+  positional?: string;
 }
 
 /** A factory that makes a kind with some of its params already set
@@ -710,7 +716,7 @@ export const STRATEGIES = {
     kinds: {
       step: {
         doc: "Cells of one width, aligned to multiples of it: a value is in the cell that starts at the largest multiple of the width at or below it. Every value has a cell, whatever the domain.",
-        positional: true,
+        positional: "size",
         params: {
           size: {
             type: t.num({ exclusiveMin: 0, finite: true }),
@@ -721,7 +727,7 @@ export const STRATEGIES = {
       },
       thresholds: {
         doc: "Cells fitted to the domain of the field in the chart's data, which they cover with both ends included: a value on the last edge falls in the last cell, as in numpy's `histogram` and d3's `bin`.",
-        positional: true,
+        positional: "thresholds",
         params: {
           thresholds: {
             type: t.union(
@@ -2219,23 +2225,24 @@ export const COORDS: Record<string, ConstructDescriptor> = {
     doc: "A sinusoidal warp of the plane. No options.",
     fields: {},
   }),
-  bipolar: coordTransform("bipolar", {
-    doc: "Bipolar coordinates from two foci. JS takes `fociDistance` positionally, not as an options object.",
+  geo: coordTransform("geo", {
+    doc: "Geographic coordinates: children lay out in degrees, longitude on x (or the declared name lon) and latitude on y (or lat), and the projection fits that window into the box with one scale factor, so the map keeps its shape.",
+    positional: "projection",
     fields: {
-      fociDistance: {
-        type: t.number,
-        default: 100,
-        doc: "Distance in pixels between the two foci.",
+      projection: {
+        type: t.enum("equalEarth", "mercator"),
+        required: true,
+        doc: 'The map projection, by name: "equalEarth" or "mercator" (latitude clamped to ±85°). In JS it may also be a function [lon, lat] => [x, y], such as a d3-geo projection, which cannot cross the wire.',
+      },
+      lon: {
+        type: t.tuple(t.number, t.number),
+        doc: "Longitude window in degrees. Omitted, the extent of the data in scope.",
+      },
+      lat: {
+        type: t.tuple(t.number, t.number),
+        doc: "Latitude window in degrees. Omitted, the extent of the data in scope.",
       },
     },
-  }),
-  arcLengthPolar: coordTransform("arcLengthPolar", {
-    doc: "Polar-like transform parameterized by arc length. No options.",
-    fields: {},
-  }),
-  linear: coordTransform("linear", {
-    doc: "Identity/Cartesian transform. No options.",
-    fields: {},
   }),
 };
 
@@ -2268,7 +2275,8 @@ export const DESCRIPTOR_TABLES: Readonly<
 };
 
 /** The kinds of construct whose options sit on a wire node of their own (a
- *  coord transform is itself an option, of a chart or a combinator). */
+ *  coord transform is itself an option, of a chart or a combinator, so its
+ *  config is only ever rebuilt, never validated as a node). */
 export type NodeKind = Exclude<ConstructKind, "coord">;
 
 /** The base fields that sit in the same object as a construct's own options

@@ -4,19 +4,18 @@
 The ``Shape`` family. The outline `enclose` draws around its members: the value of its `shape` option. `padding` and the paint stay on `enclose`.
 
 The package binds this module as ``Shape``, so ``Shape.box`` and
-``from gofish.shape import box`` reach the same member. A strategy is a
-plain dict, ``{"kind": ..., **params}``, with snake_case param keys; the option it
-is passed to renames them to the camelCase wire keys. Mirrors JS
-``gofish-graphics/shape``.
+``from gofish.shape import box`` reach the same member. Each member
+returns a plain dict, ``{"kind": ..., **params}``, with
+snake_case param keys; the option it is passed to renames them to the
+camelCase wire keys.
+Mirrors JS ``gofish-graphics/shape``.
 
 A kind with no required option is a value as it is, and calling it sets
 options: ``Shape.box`` is ``Shape.box()`` (#1133).
 """
 
-from __future__ import annotations
-
 import math
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Optional
 
 from ._strategy import bare_kind
 

@@ -81,7 +81,9 @@ implemented and uncommitted. Each step below says so.
   right fix is a polygon mark with holes, which nothing else needs today.
 - One story file, `stories/animated-vega-lite/BirdMigration.stories.tsx`, one
   story per panel, tagged `gallery` with the paper's panel captions as
-  descriptions.
+  descriptions. (Panel A later moved to its own file,
+  `BirdMigrationStatic.stories.tsx`, so that its pure spec could get a Python
+  parity port; #856.)
 
 ## Step 1: cartography, then panel A (static lines)
 

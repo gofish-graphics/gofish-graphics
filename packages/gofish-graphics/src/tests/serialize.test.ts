@@ -1216,11 +1216,9 @@ async function main() {
     // Wire types the descriptor table declares that `mapMark` rebuilds
     // structurally rather than through a factory.
     const STRUCTURAL = new Set(["mark-fn"]);
-    const kinds: Frontend.NodeKind[] = [
-      "operator",
-      "leaf-mark",
-      "combinator-mark",
-    ];
+    const kinds = Object.keys(
+      Frontend.DESCRIPTOR_TABLES
+    ) as Frontend.ConstructKind[];
     const tables = kinds.map((kind) => Frontend.DESCRIPTOR_TABLES[kind]);
     const missing: string[] = [];
     for (const kind of kinds) {
@@ -1255,6 +1253,37 @@ async function main() {
       "every hand-written operator builder has an operator descriptor",
       orphanBuilders.length === 0,
       orphanBuilders.join(", ")
+    );
+    // geo takes its projection positionally and the rest as options.
+    const geoWindow: { lon: [number, number]; lat: [number, number] } = {
+      lon: [-170, -30],
+      lat: [-60, 75],
+    };
+    const geoRebuilt = Serialize.rebuild("coord", "geo", {
+      projection: "mercator",
+      ...geoWindow,
+    });
+    const geoDirect = GoFish.Coord.geo("mercator", geoWindow);
+    check(
+      "a rebuilt geo keeps its lon/lat window",
+      JSON.stringify(geoRebuilt.dataWindow) ===
+        JSON.stringify(geoDirect.dataWindow)
+    );
+    check(
+      "a rebuilt geo projects with its projection",
+      JSON.stringify(geoRebuilt.transform([-100, 40])) ===
+        JSON.stringify(geoDirect.transform([-100, 40]))
+    );
+    let missingProjection = "";
+    try {
+      Serialize.rebuild("coord", "geo", geoWindow);
+    } catch (e) {
+      missingProjection = (e as Error).message;
+    }
+    check(
+      "a missing required positional field throws, naming it",
+      missingProjection === 'coord geo: missing required field "projection"',
+      missingProjection
     );
     check(
       "rebuild is kind-checked (no operator `layer`)",

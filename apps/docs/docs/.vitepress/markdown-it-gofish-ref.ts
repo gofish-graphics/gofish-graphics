@@ -26,6 +26,9 @@
  * the preset's values as their defaults.
  * A field marked `wireOnly` (a Python bridge handle such as `derive`'s
  * `lambdaId`) is left out: it is on the wire, not an option a user passes.
+ * The descriptor's `positional` field (`Coord.geo("mercator", { lon })`) is
+ * the factory's first argument, not a key of its options object, in both
+ * languages: its row comes first and says so.
  *
  * Fields a construct picks up from a shared group (`boxDims`, `paint`) render as
  * their own open subsection ("Box dimensions", "Paint") below the table of the
@@ -208,7 +211,8 @@ function fieldName(name: string, lang: Lang): string {
 function optionsTable(
   rows: Array<[string, FieldSpec]>,
   lang: Lang,
-  md: { render(src: string): string }
+  md: { render(src: string): string },
+  positional?: string
 ): string {
   const header = [
     "| Option | Type | Default | Description |",
@@ -218,10 +222,14 @@ function optionsTable(
     const type =
       lang === "python" ? pyType(spec.type, "doc") : tsType(spec.type);
     const required = spec.required ? "**Required.** " : "";
+    const position =
+      name === positional
+        ? "**Positional:** the first argument, not an option. "
+        : "";
     const doc = spec.doc ? cell(spec.doc) : "";
     return `| ${code(fieldName(name, lang))} | ${code(type)} | ${code(
       formatDefault(spec.default, lang)
-    )} | ${required}${doc} |`;
+    )} | ${required}${position}${doc} |`;
   });
   return md.render([...header, ...body].join("\n"));
 }
@@ -240,6 +248,11 @@ function renderDescriptor(
     ([, spec]) => !spec.wireOnly
   );
 
+  // The positional field leads, as it does in the call.
+  fields.sort(
+    ([a], [b]) => Number(b === d.positional) - Number(a === d.positional)
+  );
+
   const own: Array<[string, FieldSpec]> = [];
   const groups = new Map<string, Array<[string, FieldSpec]>>();
   for (const [name, spec] of fields) {
@@ -256,7 +269,9 @@ function renderDescriptor(
   if (heading) parts.push(md.render(heading));
   if (d.doc) parts.push(md.render(d.doc));
   parts.push(
-    own.length ? optionsTable(own, lang, md) : md.render("_No options._")
+    own.length
+      ? optionsTable(own, lang, md, d.positional)
+      : md.render("_No options._")
   );
   for (const [label, rows] of groups) {
     // An open subsection, not a collapsed block: the shared channels (`w`, `h`,

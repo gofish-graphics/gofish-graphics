@@ -27,11 +27,12 @@ Coord.geo(
 
 ## Parameters
 
-| Option       | Default        | Description                                                       |
-| ------------ | -------------- | ----------------------------------------------------------------- |
-| `projection` | —              | `"equalEarth"`, `"mercator"`, or your own `[lon, lat] => [x, y]`. |
-| `lon`        | the data's own | Longitude window in degrees. Sets the frame.                      |
-| `lat`        | the data's own | Latitude window in degrees. Sets the frame.                       |
+::: gofish-ref geo
+:::
+
+`projection` is the first argument, and `lon` and `lat` go in the options
+object. The table lists the named projections, the ones that can cross to
+Python; JS also takes a function `[lon, lat] => [x, y]`.
 
 Equal Earth and Mercator are implemented in the library, so there is no
 dependency on `d3-geo`. A d3 projection object is callable with `[lon, lat]`,

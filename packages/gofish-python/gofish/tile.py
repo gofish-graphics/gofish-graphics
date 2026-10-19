@@ -4,19 +4,18 @@
 The ``Tile`` family. How `treemap` tiles its box: the value of its `tile` option. Each kind is one of d3-hierarchy's tiling methods.
 
 The package binds this module as ``Tile``, so ``Tile.squarify`` and
-``from gofish.tile import squarify`` reach the same member. A strategy is a
-plain dict, ``{"kind": ..., **params}``, with snake_case param keys; the option it
-is passed to renames them to the camelCase wire keys. Mirrors JS
-``gofish-graphics/tile``.
+``from gofish.tile import squarify`` reach the same member. Each member
+returns a plain dict, ``{"kind": ..., **params}``, with
+snake_case param keys; the option it is passed to renames them to the
+camelCase wire keys.
+Mirrors JS ``gofish-graphics/tile``.
 
 A kind with no required option is a value as it is, and calling it sets
 options: ``Tile.squarify`` is ``Tile.squarify()`` (#1133).
 """
 
-from __future__ import annotations
-
 import math
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Optional
 
 from ._strategy import bare_kind
 

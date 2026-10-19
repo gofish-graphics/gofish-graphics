@@ -21,9 +21,6 @@ import {
   PREVIOUS_LAYER_MARKS,
 } from "../ast/marks/chart";
 import type { AxesOptions, View } from "../ast/gofish";
-import { clock } from "../ast/coordinateTransforms/clock";
-import { polar } from "../ast/coordinateTransforms/polar";
-import { wavy } from "../ast/coordinateTransforms/wavy";
 import { createName, type Token } from "../ast/createName";
 import { Constraint, RelateOperand } from "../ast/constraints";
 import { palette, gradient } from "../families/color";
@@ -244,13 +241,12 @@ function resolveColorConfig(colorSpec: Record<string, any>): any {
 }
 
 function resolveCoordConfig(coordSpec: Record<string, any>): any {
-  // polar/clock options (innerRadius, centralAngle, startAngle, direction,
-  // center) ride along in the spec; pass them through (PolarOptions is all
-  // optional and ignores the extra `type` key).
-  if (coordSpec.type === "clock") return clock(coordSpec);
-  if (coordSpec.type === "polar") return polar(coordSpec);
-  if (coordSpec.type === "wavy") return wavy();
-  return coordSpec;
+  const { type, ...opts } = coordSpec;
+  const coord = rebuild("coord", type, opts);
+  if (coord === undefined) {
+    throw new Error(`Unknown coord type: ${String(type)}`);
+  }
+  return coord;
 }
 
 /** A `SelectRefIR` as the ref it stands for: `mode` "all" is

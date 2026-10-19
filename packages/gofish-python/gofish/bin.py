@@ -4,16 +4,15 @@
 The ``Bin`` family. The cells a key is binned into. `step` and `thresholds` cut the line of one field into intervals: the value of `field(x).bin(...)`. `hex` and `voronoi` divide the plane of two fields into polygons: the value of `struct({ x, y }).bin(...)`. Each kind makes cells that do not overlap, and puts each row in the cell its value falls in.
 
 The package binds this module as ``Bin``, so ``Bin.step`` and
-``from gofish.bin import step`` reach the same member. A strategy is a
-plain dict, ``{"kind": ..., **params}``, with snake_case param keys; the option it
-is passed to renames them to the camelCase wire keys. Mirrors JS
-``gofish-graphics/bin``.
+``from gofish.bin import step`` reach the same member. Each member
+returns a plain dict, ``{"kind": ..., **params}``, with
+snake_case param keys; the option it is passed to renames them to the
+camelCase wire keys.
+Mirrors JS ``gofish-graphics/bin``.
 """
 
-from __future__ import annotations
-
 import math
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict
 
 __all__ = ["step", "thresholds", "hex", "voronoi"]
 

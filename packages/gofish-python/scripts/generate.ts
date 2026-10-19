@@ -19,8 +19,8 @@
  *    marks — pure kwargs-collection, `pyName` supplies the Python-facing
  *    rename (wire `type` stays the descriptor's `type`).
  *  - `_opts(...) -> dict` **cores** for the dual-form constructs (spread,
- *    stack, scatter, group, table, treemap, line, ribbon, layer, the polar
- *    family) — the mechanical kwargs→dict half. The polymorphic
+ *    stack, scatter, group, table, treemap, line, ribbon, layer) — the
+ *    mechanical kwargs→dict half. The polymorphic
  *    operator-vs-combinator (or bag-vs-pairwise-vs-combinator) DISPATCH stays
  *    hand-written in `ast.py`, calling these cores. `_chart_opts` is the
  *    same kind of core for `chart(data, **options)` (CHART_OPTIONS), and
@@ -38,10 +38,15 @@
  *    types (`pyParamChecks`). A factory with no required param is made a
  *    bare kind (`_strategy.bare_kind`, #1133): `Curve.monotone` is the dict
  *    `Curve.monotone()` returns, and can be called to set options.
+ *  - The Coord family module, `gofish/coord.py`: one factory per COORDS
+ *    entry, written by the same family-module writer. Each builds the
+ *    transform's `{"type": ..., **options}` wire config with camelCase keys
+ *    (the `coord` option is not routed by `_to_wire`) and checks its params
+ *    at the call. A coord is a function only, as in JS.
  * `derive`/`resolve`/`join` (real logic: RPC bridge, ref-shape narrowing,
  * DataFrame conversion), `field`/`datum`/`normalize`/`repeat`/`ref`/
- * `selectAll`, and the Color and Coord family modules (`color.py`,
- * `coord.py`; see the note on STRATEGIES) stay hand-written.
+ * `selectAll`, and the Color family module (`color.py`; see the note on
+ * STRATEGIES) stay hand-written.
  */
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -629,46 +634,6 @@ parts.push(
   ) + "\n"
 );
 
-// --- Coord transforms --------------------------------------------------------
-parts.push(
-  "\n# --- Coord transforms ---------------------------------------------------------\n"
-);
-{
-  const d = COORDS["polar"];
-  const ents = entries(d.fields);
-  const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
-  const docLines = ents
-    .map(([py, , spec]) => docLine(py, spec))
-    .filter(Boolean);
-  const docstring = [
-    `    """Shared builder for the polar-family coord configs (polar()/clock()).`,
-    "",
-    "    Only set options are emitted, so defaults stay on the JS side. Wire keys",
-    "    are camelCase to match the JS ``PolarOptions``.",
-    "",
-    "    Args:",
-    ...docLines,
-    `    """`,
-  ].join("\n");
-  const pairs = renderPairs(ents);
-  const body = [
-    `    cfg: Dict[str, Any] = {"type": transform_type}`,
-    `    for _k, _v in [`,
-    pairs,
-    `    ]:`,
-    `        if _v is not None:`,
-    `            cfg[_k] = list(_v) if _k == "center" else _v`,
-    `    return cfg`,
-  ].join("\n");
-  parts.push(
-    [
-      `def _polar_config(transform_type: str, *, ${sig}) -> Dict[str, Any]:`,
-      docstring,
-      body,
-    ].join("\n") + "\n"
-  );
-}
-
 writeFileSync(OUT_FILE, parts.join("\n").replace(/\n{3,}/g, "\n\n\n") + "\n");
 console.log(`wrote ${OUT_FILE}`);
 
@@ -707,6 +672,8 @@ function describeType(type: FieldType): string {
         .join(" and")}`;
     case "object":
       return `a dict with the keys ${Object.keys(type.fields).map(pyKwarg).join(", ")}`;
+    case "tuple":
+      return `a list or tuple of ${type.items.length} items: ${type.items.map(describeType).join(", ")}`;
     case "array":
       if (isTable(type)) return "a table (a list of dict rows, or a dataframe)";
       return `a list${type.minItems !== undefined ? ` of at least ${type.minItems} item${type.minItems === 1 ? "" : "s"}` : ""}, each item ${describeType(type.items)}`;
@@ -742,6 +709,8 @@ function pyTypeTest(type: FieldType, v: string): string {
       return `isinstance(${v}, dict)`;
     case "array":
       return `isinstance(${v}, list)`;
+    case "tuple":
+      return `isinstance(${v}, (list, tuple))`;
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }
@@ -803,6 +772,18 @@ function pyValueChecks(
         ...pyParamChecks(type.items, `${v}_item`, `${label} item`).map(
           (l) => `    ${l}`
         ),
+      ];
+    case "tuple":
+      // Its length, then each item by its own type.
+      return [
+        ...fail(
+          `len(${v}) != ${type.items.length}`,
+          `must have ${type.items.length} items`
+        ),
+        ...type.items.flatMap((item, i) => [
+          `${v}_${i} = ${v}[${i}]`,
+          ...pyParamChecks(item, `${v}_${i}`, `${label}[${i}]`),
+        ]),
       ];
     case "object": {
       // Its keys, then each value by its own type. A key is snake_case, as
@@ -881,45 +862,74 @@ function pyParamChecks(type: FieldType, v: string, label: string): string[] {
   ];
 }
 
-/** One factory of a family: a function that builds the strategy dict. Its
- *  keys are the snake_case kwarg names; the option the dict is passed to
- *  renames them to wire keys (`_to_wire`, by the family's OPTION_TYPES
- *  entry), as for any nested option dict. */
-function renderStrategyFactory(opts: {
+/** How the members of a family module spell the dict they build. */
+interface FamilyWire {
+  /** The key that names the choice: a strategy's `kind`, a coord's `type`. */
+  tag: "kind" | "type";
+  /** The param keys: `"snake"` for the snake_case kwarg names, which the
+   *  option the dict is passed to renames to wire keys (`_to_wire`, by the
+   *  family's OPTION_TYPES entry), as for any nested option dict; `"wire"`
+   *  for the camelCase wire keys themselves, for a family whose option
+   *  `_to_wire` does not route (`coord` is `t.any`). */
+  keys: "snake" | "wire";
+  /** A member with no required param is also a value as it is (a bare
+   *  kind, #1133), as the JS family's members are. */
+  bare: boolean;
+}
+
+/** One member of a family: a function that builds the family's dict. */
+interface FamilyFactory {
   family: string;
+  /** The Python function name. */
   name: string;
-  kind: string;
+  /** The value of the dict's tag key. */
+  tag: string;
   params: FieldGroup;
+  /** Param values, by field name, this member sets before the caller's. */
   preset: Record<string, unknown>;
   doc: string;
-  /** The kind's one param is positional-only (`StrategyKind.positional`). */
-  positional?: true;
-}): string {
-  const { family, name, kind, params, preset, doc, positional } = opts;
-  const ents = entries(params);
+  /** The param that is positional-only; the rest are keyword-only
+   *  (`StrategyKind.positional`, `ConstructDescriptor.positional`). */
+  positional?: string;
+}
+
+/** One member of a family module. It checks each param at the call, from
+ *  its descriptor type (`pyParamChecks`), then builds `{tag: ..., **params}`
+ *  with only the params set, so the defaults stay on the JS side. A table
+ *  param is read into dict rows, and a tuple param goes on the wire as a
+ *  list. */
+function renderFamilyFactory(wire: FamilyWire, f: FamilyFactory): string {
+  const { family, name, tag, params, preset, doc, positional } = f;
+  if (positional !== undefined && !Object.hasOwn(params, positional))
+    throw new Error(`${family}.${name}: no param ${positional}`);
+  const keyOf = (field: string) =>
+    wire.keys === "snake" ? pyKwarg(field) : (params[field].wire ?? field);
+  // The positional param comes first.
+  const fields = Object.keys(params).sort(
+    (a, b) => Number(b === positional) - Number(a === positional)
+  );
+  const ents = fields.map(
+    (field) => [field, pyKwarg(field), params[field]] as const
+  );
   // A preset value is this factory's default for that param.
   const docLines = ents
-    .map(([py, , spec]) => {
-      const field = Object.keys(params).find((f) => pyKwarg(f) === py)!;
-      return docLine(
-        py,
-        field in preset ? { ...spec, default: preset[field] } : spec
-      );
-    })
+    .map(([field, py, spec]) =>
+      docLine(py, field in preset ? { ...spec, default: preset[field] } : spec)
+    )
     .filter(Boolean);
   const docstring = docLines.length
     ? [`    """${doc}`, "", "    Args:", ...docLines, `    """`].join("\n")
     : `    """${doc}"""`;
   const head = [
-    `${pyStr("kind")}: ${pyStr(kind)}`,
+    `${pyStr(wire.tag)}: ${pyStr(tag)}`,
     ...Object.entries(preset).map(
-      ([field, value]) => `${pyStr(pyKwarg(field))}: ${pyLiteral(value)}`
+      ([field, value]) => `${pyStr(keyOf(field))}: ${pyLiteral(value)}`
     ),
   ].join(", ");
-  // A factory with no required param is a bare kind (#1133).
-  const bare = Object.values(params).every((spec) => !spec.required)
-    ? [`@bare_kind(${pyStr(family)})`]
-    : [];
+  const bare =
+    wire.bare && Object.values(params).every((spec) => !spec.required)
+      ? [`@bare_kind(${pyStr(family)})`]
+      : [];
   if (ents.length === 0) {
     return [
       ...bare,
@@ -928,15 +938,19 @@ function renderStrategyFactory(opts: {
       `    return {${head}}`,
     ].join("\n");
   }
-  const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
-  const checks = ents.flatMap(([py, , spec]) => {
+  const checks = ents.flatMap(([field, py, spec]) => {
     // An optional param is checked when it is given; a required one always,
     // so None, which is no value of it, is a TypeError at the call.
     const lines = pyParamChecks(
       spec.type,
       py,
-      positional ? `${family}.${name}(${py})` : `${family}.${name}(${py}=...)`
+      field === positional
+        ? `${family}.${name}(${py})`
+        : `${family}.${name}(${py}=...)`
     );
+    // A tuple, once checked, goes on the wire as a list.
+    const all =
+      spec.type.kind === "tuple" ? [...lines, `${py} = list(${py})`] : lines;
     return [
       // A table is read into dict rows first (a dataframe, or a list of
       // rows), when there is one.
@@ -948,26 +962,31 @@ function renderStrategyFactory(opts: {
           ]
         : []),
       // A param with no Python check (one that holds marks) adds no lines.
-      ...(lines.length === 0
+      ...(all.length === 0
         ? []
         : spec.required
-          ? lines.map((l) => `    ${l}`)
-          : [`    if ${py} is not None:`, ...lines.map((l) => `        ${l}`)]),
+          ? all.map((l) => `    ${l}`)
+          : [`    if ${py} is not None:`, ...all.map((l) => `        ${l}`)]),
     ];
   });
   const body = [
     ...checks,
     `    out: Dict[str, Any] = {${head}}`,
     `    for _k, _v in [`,
-    ...ents.map(([py]) => `        (${pyStr(py)}, ${py}),`),
+    ...ents.map(([field, py]) => `        (${pyStr(keyOf(field))}, ${py}),`),
     `    ]:`,
     `        if _v is not None:`,
     `            out[_k] = _v`,
     `    return out`,
   ].join("\n");
-  if (positional && ents.length !== 1)
-    throw new Error(`${family}.${name}: a positional kind takes one param`);
-  const paramList = positional ? `${sig}, /` : `*, ${sig}`;
+  const sigs = ents.map(([, py, spec]) => pySig(py, spec));
+  const paramList = (
+    positional === undefined
+      ? [`*`, ...sigs]
+      : sigs.length === 1
+        ? [sigs[0], `/`]
+        : [sigs[0], `/`, `*`, ...sigs.slice(1)]
+  ).join(", ");
   return [
     ...bare,
     `def ${name}(${paramList}) -> Dict[str, Any]:`,
@@ -976,48 +995,49 @@ function renderStrategyFactory(opts: {
   ].join("\n");
 }
 
-for (const [family, spec] of Object.entries(STRATEGIES) as Array<
-  [string, StrategyFamily]
->) {
+/** Write `gofish/<module>.py`, the module the package binds as `family`:
+ *  one function per factory. */
+function writeFamilyModule(opts: {
+  family: string;
+  /** The family's doc, the module docstring's first paragraph. */
+  doc: string;
+  /** The descriptor table it is generated from, for the header. */
+  table: string;
+  wire: FamilyWire;
+  factories: FamilyFactory[];
+}): void {
+  const { family, doc, table, wire, factories } = opts;
   const module = family.toLowerCase();
-  const factories = [
-    ...Object.entries(spec.kinds).map(([kind, k]) => ({
-      family,
-      name: pyKwarg(kind),
-      kind,
-      params: k.params,
-      preset: {},
-      doc: k.doc,
-      positional: k.positional,
-    })),
-    ...Object.entries(spec.presets ?? {}).map(([name, p]) => ({
-      family,
-      name: pyKwarg(name),
-      kind: p.kind,
-      params: spec.kinds[p.kind].params,
-      preset: p.values,
-      doc: p.doc,
-    })),
-  ];
   const example = factories[0].name;
-  const isBare = (f: (typeof factories)[number]) =>
-    Object.values(f.params).every((spec) => !spec.required);
-  const bareExample = factories.find(isBare)?.name;
-  const functions = factories.map(renderStrategyFactory);
-  const usesMath = functions.some((f) => f.includes("math."));
-  const anyBare = bareExample !== undefined;
+  const bareExample = wire.bare
+    ? factories.find((f) =>
+        Object.values(f.params).every((spec) => !spec.required)
+      )?.name
+    : undefined;
+  const functions = factories.map((f) => renderFamilyFactory(wire, f));
+  const code = functions.join("\n\n\n");
+  const typing = ["Any", "Dict", "Literal", "Optional"].filter(
+    (n) => n === "Any" || n === "Dict" || code.includes(`${n}[`)
+  );
+  const keys =
+    wire.keys === "snake"
+      ? [
+          `snake_case param keys; the option it is passed to renames them to the`,
+          `camelCase wire keys.`,
+        ]
+      : [`camelCase wire keys; the JS side rebuilds the value from it.`];
   const source = [
     `# GENERATED by packages/gofish-python/scripts/generate.ts from the gofish-ir`,
-    `# STRATEGIES table — do not edit; run \`pnpm --filter gofish-python gen\`.`,
+    `# ${table} table — do not edit; run \`pnpm --filter gofish-python gen\`.`,
     `"""`,
-    `The \`\`${family}\`\` family. ${spec.doc}`,
+    `The \`\`${family}\`\` family. ${doc}`,
     ``,
     `The package binds this module as \`\`${family}\`\`, so \`\`${family}.${example}\`\` and`,
-    `\`\`from gofish.${module} import ${example}\`\` reach the same member. A strategy is a`,
-    `plain dict, \`\`{"kind": ..., **params}\`\`, with snake_case param keys; the option it`,
-    `is passed to renames them to the camelCase wire keys. Mirrors JS`,
-    `\`\`gofish-graphics/${module}\`\`.`,
-    ...(anyBare
+    `\`\`from gofish.${module} import ${example}\`\` reach the same member. Each member`,
+    `returns a plain dict, \`\`{"${wire.tag}": ..., **params}\`\`, with`,
+    ...keys,
+    `Mirrors JS \`\`gofish-graphics/${module}\`\`.`,
+    ...(bareExample !== undefined
       ? [
           ``,
           `A kind with no required option is a value as it is, and calling it sets`,
@@ -1026,19 +1046,69 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
       : []),
     `"""`,
     ``,
-    `from __future__ import annotations`,
-    ``,
-    ...(usesMath ? [`import math`] : []),
-    `from typing import Any, Dict, Literal, Optional`,
-    ...(anyBare ? [``, `from ._strategy import bare_kind`] : []),
+    ...(code.includes("math.") ? [`import math`] : []),
+    `from typing import ${typing.join(", ")}`,
+    ...(bareExample !== undefined
+      ? [``, `from ._strategy import bare_kind`]
+      : []),
     ``,
     `__all__ = [${factories.map((f) => pyStr(f.name)).join(", ")}]`,
     ``,
     ``,
-    functions.join("\n\n\n"),
+    code,
     ``,
   ].join("\n");
   const outFile = join(HERE, "..", "gofish", `${module}.py`);
   writeFileSync(outFile, source);
   console.log(`wrote ${outFile}`);
 }
+
+// The strategy families: gofish/<family>.py, one factory per kind and per
+// preset of the STRATEGIES table.
+for (const [family, spec] of Object.entries(STRATEGIES) as Array<
+  [string, StrategyFamily]
+>) {
+  writeFamilyModule({
+    family,
+    doc: spec.doc,
+    table: "STRATEGIES",
+    wire: { tag: "kind", keys: "snake", bare: true },
+    factories: [
+      ...Object.entries(spec.kinds).map(([kind, k]) => ({
+        family,
+        name: pyKwarg(kind),
+        tag: kind,
+        params: k.params,
+        preset: {},
+        doc: k.doc,
+        positional: k.positional,
+      })),
+      ...Object.entries(spec.presets ?? {}).map(([name, p]) => ({
+        family,
+        name: pyKwarg(name),
+        tag: p.kind,
+        params: spec.kinds[p.kind].params,
+        preset: p.values,
+        doc: p.doc,
+      })),
+    ],
+  });
+}
+
+// The Coord family: gofish/coord.py, one factory per COORDS entry. Its
+// members are functions only, as in JS.
+writeFamilyModule({
+  family: "Coord",
+  doc: "The coordinate transforms of a chart's or a layer's ``coord`` option.",
+  table: "COORDS",
+  wire: { tag: "type", keys: "wire", bare: false },
+  factories: Object.entries(COORDS).map(([type, d]) => ({
+    family: "Coord",
+    name: pyKwarg(d.pyName ?? type),
+    tag: type,
+    params: resolveFields(d),
+    preset: {},
+    doc: d.doc ?? "",
+    positional: d.positional,
+  })),
+});

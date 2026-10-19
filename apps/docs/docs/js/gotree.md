@@ -359,7 +359,7 @@ conventions and switch from JSON descriptors to callable helpers.
 | `Alignment: bottom / right`       | `alignment: "end"`                                 |
 | `SortingCriteria`                 | `sortBy: (d) => ...`                               |
 | `SubtreeWidth`/`Height`           | inside `node`: `value(d.value, "key")`             |
-| `CoordinateSystem.Category`       | `coord: Coord.linear()` or `coord: Coord.polar()`  |
+| `CoordinateSystem.Category`       | no `coord` (Cartesian) or `coord: Coord.polar()`   |
 
 ## Milestone status
 

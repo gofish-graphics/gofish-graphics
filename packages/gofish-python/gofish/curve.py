@@ -4,19 +4,18 @@
 The ``Curve`` family. How a path runs through its points: the value of the `curve` option of `line` and `ribbon`. `linear`, `step`, `monotone` and `smooth` are read over the parameter of the run, from the least to the most smooth; `catmullRom` is a shape on screen; `bezier`, `orthogonal`, `arc` and `perfectArrows` route each pair of neighboring points.
 
 The package binds this module as ``Curve``, so ``Curve.linear`` and
-``from gofish.curve import linear`` reach the same member. A strategy is a
-plain dict, ``{"kind": ..., **params}``, with snake_case param keys; the option it
-is passed to renames them to the camelCase wire keys. Mirrors JS
-``gofish-graphics/curve``.
+``from gofish.curve import linear`` reach the same member. Each member
+returns a plain dict, ``{"kind": ..., **params}``, with
+snake_case param keys; the option it is passed to renames them to the
+camelCase wire keys.
+Mirrors JS ``gofish-graphics/curve``.
 
 A kind with no required option is a value as it is, and calling it sets
 options: ``Curve.linear`` is ``Curve.linear()`` (#1133).
 """
 
-from __future__ import annotations
-
 import math
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Optional
 
 from ._strategy import bare_kind
 

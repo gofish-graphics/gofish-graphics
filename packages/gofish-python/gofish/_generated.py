@@ -1223,31 +1223,3 @@ def _chart_opts(*, w: Optional[float] = None, h: Optional[float] = None, coord: 
             opts[_k] = _v
     return opts
 
-
-# --- Coord transforms ---------------------------------------------------------
-
-def _polar_config(transform_type: str, *, inner_radius: Optional[float] = None, central_angle: Optional[float] = None, start_angle: Optional[float] = None, direction: Optional[float] = None, center: Optional[tuple] = None) -> Dict[str, Any]:
-    """Shared builder for the polar-family coord configs (polar()/clock()).
-
-    Only set options are emitted, so defaults stay on the JS side. Wire keys
-    are camelCase to match the JS ``PolarOptions``.
-
-    Args:
-        inner_radius: Donut hole as a fraction [0,1) of the outer radius. Default 0.
-        central_angle: Total angular sweep in radians. Default 6.283185307179586.
-        start_angle: Angle (radians) of θ=0. Default 1.5707963267948966.
-        direction: +1 counter-clockwise, -1 clockwise (numeric ±1). Default -1.
-        center: Screen-space center offset. Default [0,0].
-    """
-    cfg: Dict[str, Any] = {"type": transform_type}
-    for _k, _v in [
-        ("innerRadius", inner_radius),
-        ("centralAngle", central_angle),
-        ("startAngle", start_angle),
-        ("direction", direction),
-        ("center", center),
-    ]:
-        if _v is not None:
-            cfg[_k] = list(_v) if _k == "center" else _v
-    return cfg
-
