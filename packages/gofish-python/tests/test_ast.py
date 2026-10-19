@@ -661,6 +661,54 @@ class TestChartBuilder:
         assert ir["mark"]["type"] == "line"
 
 
+class TestNestedChart:
+    """A nested chart in a mark position crosses as a mark function, both as
+    a chart's `.mark(...)` and as a combinator child (#1112)."""
+
+    def _flower(self):
+        return (
+            chart(coord=Coord.polar(), axes=False)
+            .flow(stack(by="species", dir="x", h=40))
+            .mark(petal(w="count", fill="species"))
+        )
+
+    def test_mark_and_combinator_child_share_one_encoding(self):
+        rows = [{"lake": "A", "species": "Bass", "count": 3}]
+        direct = chart(rows).mark(self._flower()).to_ir()["mark"]
+        child = layer([rect(w=4, h="count"), self._flower()]).to_dict()
+        assert direct["type"] == "mark-fn"
+        assert child["children"][1] == {
+            "type": "mark-fn",
+            "lambdaId": child["children"][1]["lambdaId"],
+        }
+
+    def test_empty_scope_child_binds_the_partition_rows(self):
+        """Called with the rows of its partition, an empty-scope child
+        returns the chart with those rows as its data, keeping its name."""
+        from gofish.ast import _collect_mark_fns
+
+        m = layer([rect(w=4, h="count"), self._flower().name("flower")])
+        (fn,) = _collect_mark_fns(m)
+        assert m.to_dict()["children"][1]["lambdaId"] == fn.lambda_id
+        rows = [{"lake": "A", "species": "Bass", "count": 3}]
+        ir = fn.fn(rows).to_ir()
+        assert ir["name"] == "flower"
+        assert ir["mark"]["type"] == "petal"
+        assert fn.fn(rows).data == rows
+
+    def test_child_name_is_visible_to_relate_rest(self):
+        seen = {}
+
+        def cb(stem, **rest):
+            seen["rest"] = sorted(rest)
+            return []
+
+        layer(
+            [rect(w=4, h="count").name("stem"), self._flower().name("flower")]
+        ).relate(cb)
+        assert seen == {"rest": ["flower"]}
+
+
 class TestRelateCallback:
     """`.relate()` hands the callback one ref per parameter, by name."""
 

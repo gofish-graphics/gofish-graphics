@@ -196,11 +196,41 @@ class _MarkFn:
     builds a JS Mark whose body fetches `/derive/<id>` per invocation,
     receives a chart IR, and constructs a ChartBuilder JS-side — the same
     object `resolveMarkResult` already accepts as a mark return value.
+
+    A nested chart crosses the same way (see `_as_mark`). `_name` is the name
+    of that chart, so a `.relate(...)` callback with a `**rest` catch-all
+    sees it (`_subtree_names`); on the wire the name travels inside the chart
+    IR the function returns.
     """
 
-    def __init__(self, fn: Callable):
+    def __init__(self, fn: Callable, name: Optional[Union[str, "Token"]] = None):
         self.fn = fn
         self.lambda_id = str(uuid.uuid4())
+        self._name = name
+
+    def to_dict(self) -> dict:
+        return {"type": "mark-fn", "lambdaId": self.lambda_id}
+
+
+def _as_mark(mark: Any) -> Any:
+    """What a mark position holds: the chart's `.mark(...)` and each child of
+    a combinator (`layer([...])`, `spread([...])`, ...). A `Mark` stays as it
+    is. A nested `ChartBuilder` or a callable `(data) -> ChartBuilder | Mark`
+    becomes a `_MarkFn`: JS calls it with the rows of the partition it sits
+    in. An empty-scope nested chart (``chart()`` / ``chart(coord=...)``)
+    binds those rows as its data; a chart with its own data draws as it is.
+    """
+    if isinstance(mark, ChartBuilder):
+        chart = mark
+        return _MarkFn(
+            (lambda data: chart._with_data(data))
+            if chart._uses_previous_marks()
+            else (lambda data: chart),
+            name=chart._name,
+        )
+    if not isinstance(mark, (Mark, _MarkFn)) and callable(mark):
+        return _MarkFn(mark)
+    return mark
 
 
 class _PendingAccessor:
@@ -316,20 +346,38 @@ def _lambda_pairs(accessors: Dict[str, list]) -> List[tuple]:
     ]
 
 
-def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
-    """Walk a Mark tree, yielding `(lambda_id, rows_fn)` pairs for every
-    `_PendingAccessor` in mark kwargs, at any depth (and recursively in
-    combinator `_children` and in the marks of `.relate(...)` clauses).
-    """
-    pairs = _lambda_pairs(mark._accessors)
-    if mark._children is not None:
-        for child in mark._children:
-            pairs.extend(_collect_mark_lambdas(child))
-    # A `.relate(...)` clause that draws is a mark too (a constraint is not).
-    for clause in getattr(mark, "_relate", None) or []:
-        if isinstance(clause, Mark):
-            pairs.extend(_collect_mark_lambdas(clause))
-    return pairs
+def _mark_tree(mark: Any) -> List[Any]:
+    """Every node of a mark position's tree, in order: the mark itself, its
+    combinator `_children`, and the marks of its `.relate(...)` clauses, at
+    any depth. A `_MarkFn` is a leaf: what it draws is built per call."""
+    nodes = [mark]
+    if isinstance(mark, Mark):
+        for child in mark._children or []:
+            nodes.extend(_mark_tree(child))
+        # A `.relate(...)` clause that draws is a mark too (a constraint is not).
+        for clause in getattr(mark, "_relate", None) or []:
+            if isinstance(clause, Mark):
+                nodes.extend(_mark_tree(clause))
+    return nodes
+
+
+def _collect_mark_lambdas(mark: Any) -> List[tuple]:
+    """`(lambda_id, rows_fn)` for every `_PendingAccessor` in the kwargs of
+    a mark tree (`_mark_tree`)."""
+    return [
+        pair
+        for node in _mark_tree(mark)
+        if isinstance(node, Mark)
+        for pair in _lambda_pairs(node._accessors)
+    ]
+
+
+def _collect_mark_fns(mark: Any) -> List["_MarkFn"]:
+    """Every mark function in a mark tree (`_mark_tree`): a chart's own
+    `.mark(fn)` and each nested chart or callable among combinator children.
+    Its reply is an IR, not rows, so a host registers it apart from the
+    accessors."""
+    return [node for node in _mark_tree(mark) if isinstance(node, _MarkFn)]
 
 
 def _collect_operator_lambdas(ops: List["Operator"]) -> List[tuple]:
@@ -412,7 +460,11 @@ class Mark:
         # (e.g. `spread([rect, rect], dir="x")`) and `to_dict()` will emit a
         # `__combinator: true` payload the harness/widget reconstructs by
         # calling the JS-side combinator overload.
-        self._children: Optional[List["Mark"]] = _children
+        # A child may be anything a mark position holds (see `_as_mark`),
+        # including a nested chart.
+        self._children: Optional[List[Any]] = (
+            None if _children is None else [_as_mark(c) for c in _children]
+        )
         # When True, the harness wraps the resulting JS Mark in a
         # `node.scope()` post-pass so that internal names declared via
         # `create_name(...)` don't leak to outer scope. Set by the
@@ -1306,22 +1358,7 @@ class ChartBuilder:
         new_builder = ChartBuilder(
             self.data, self.options, self.operators, z_order=self._z_order
         )
-        # A nested ChartBuilder becomes a mark-fn that binds the incoming
-        # partition datum (empty scope) or draws as-is — reusing the same
-        # lambda_id / derive-server path as an explicit callback.
-        if isinstance(mark, ChartBuilder):
-            child = mark
-            new_builder._mark = _MarkFn(
-                (lambda data: child._with_data(data))
-                if child._uses_previous_marks()
-                else (lambda data: child)
-            )
-        # Wrap callables in `_MarkFn` so the IR carries a stable lambda_id
-        # the derive-server can register and the harness can RPC into.
-        elif not isinstance(mark, Mark) and callable(mark):
-            new_builder._mark = _MarkFn(mark)
-        else:
-            new_builder._mark = mark
+        new_builder._mark = _as_mark(mark)
         return new_builder
 
     def layer(self, child: "ChartBuilder") -> "LayerBuilder":
@@ -1451,10 +1488,7 @@ class ChartBuilder:
         else:
             data_ir = None
 
-        if isinstance(self._mark, _MarkFn):
-            mark_ir = {"type": "mark-fn", "lambdaId": self._mark.lambda_id}
-        else:
-            mark_ir = self._mark.to_dict()
+        mark_ir = self._mark.to_dict()
 
         # Build the IR conditionally: omit optional fields that are unset
         # so the canonical schema's `zOrder: number` (no null) matches
