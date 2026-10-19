@@ -4,7 +4,7 @@
 
 import type { GoFishNode } from "./_node";
 import type { Size } from "./dims";
-import { Extent } from "./extent";
+import { Extent, hullExtent } from "./extent";
 import * as Monotonic from "../util/monotonic";
 import { childNameKey } from "./constraints/shared";
 import { isLiteralSeat } from "./constraints/claimPlacement";
@@ -45,11 +45,7 @@ function ringsAround(chart: GoFishNode, axis: 0 | 1): Extent | undefined {
       return axis === 0 ? [inner, undefined] : [undefined, inner];
     });
     const p = place(axis, extents);
-    if (p.ascent !== undefined && p.descent !== undefined)
-      inner = Extent(
-        Monotonic.envelope([inner.ascent, p.ascent]),
-        Monotonic.envelope([inner.descent, p.descent])
-      );
+    if (p.hull !== undefined) inner = hullExtent(inner, p.hull);
   }
   return inner;
 }

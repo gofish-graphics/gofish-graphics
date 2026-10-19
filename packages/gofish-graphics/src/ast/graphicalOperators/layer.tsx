@@ -26,7 +26,7 @@ import {
   isUNDEFINED,
   magnitude,
 } from "../underlyingSpace";
-import { Extent, impliedExtent, mapsDomain } from "../extent";
+import { Extent, hullExtent, impliedExtent, mapsDomain } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import type { KeyedDomains } from "../keyedDomains";
 import { isValue } from "../data";
@@ -675,17 +675,13 @@ export const layer = createNodeOperatorSequential(
             const p = node._placeChildren!(axis, effectiveExtents);
             placements[axis] = p;
             inkChildren[axis] = p.ink;
-            if (p.ascent === undefined || p.descent === undefined) continue;
+            if (p.hull === undefined) continue;
             const own = resolved[axis];
-            if (own !== undefined)
-              resolved[axis] = Extent(
-                Monotonic.envelope([own.ascent, p.ascent]),
-                Monotonic.envelope([own.descent, p.descent])
-              );
+            if (own !== undefined) resolved[axis] = hullExtent(own, p.hull);
             // A child of the own set that fills the room it is given makes
             // the layer fill it too: it claims no fixed room.
             else if (!ownSetFills(axis, effectiveExtents))
-              resolved[axis] = Extent(p.ascent, p.descent);
+              resolved[axis] = p.hull;
           }
           // The plot's claim (`GoFishNode.resolvePlotExtent`): the same
           // steps over the children's plot claims, with the hull of what
@@ -743,16 +739,10 @@ export const layer = createNodeOperatorSequential(
               continue;
             }
             const p = placements[axis];
-            if (p?.plotAscent === undefined || p.plotDescent === undefined)
-              continue;
+            if (p?.plot === undefined) continue;
             const own = plot[axis];
-            if (own !== undefined)
-              plot[axis] = Extent(
-                Monotonic.envelope([own.ascent, p.plotAscent]),
-                Monotonic.envelope([own.descent, p.plotDescent])
-              );
-            else if (!ownSetFills(axis, effectiveExtents))
-              plot[axis] = Extent(p.plotAscent, p.plotDescent);
+            if (own !== undefined) plot[axis] = hullExtent(own, p.plot);
+            else if (!ownSetFills(axis, effectiveExtents)) plot[axis] = p.plot;
           }
           // The content's claim, which `layout` solves against the layer's box
           // when the layer is sized. A data-valued size reports the claim of
@@ -1433,7 +1423,7 @@ export const layer = createNodeOperatorSequential(
         constraintOperands(),
         new Set(),
         nestedPlacement(axis)
-      ).boxes;
+      ).boxes();
       boxesMemo[axis] = boxes;
       return boxes;
     };

@@ -61,6 +61,13 @@ export const Extent = (
   width: Monotonic.isZero(descent) ? ascent : Monotonic.add(ascent, descent),
 });
 
+/** The hull of claims: each side is the envelope of theirs. */
+export const hullExtent = (...extents: Extent[]): Extent =>
+  Extent(
+    Monotonic.envelope(extents.map((e) => e.ascent)),
+    Monotonic.envelope(extents.map((e) => e.descent))
+  );
+
 /** The claim a type makes by itself, with no pixel overhead: each side is
  *  its data reach from 0 times σ, `max·σ` above and `−min·σ` below. This is
  *  every leaf's claim. A result composed from claims (a spread's spacing, a

@@ -3,7 +3,7 @@
 // </gofish-wiki>
 
 import type { Placeable } from "../_node";
-import type { Extent } from "../extent";
+import { Extent } from "../extent";
 import type { UnderlyingSpace } from "../underlyingSpace";
 import * as Monotonic from "../../util/monotonic";
 import { solvePlacementCells } from "./placementSolver";
@@ -83,21 +83,18 @@ export type ClaimChild = {
 };
 
 export type ClaimPlacement = {
-  /** The hull of the placed children, as a claim's two sides, or undefined
-   *  when none takes room. */
-  ascent?: Monotonic.Monotonic;
-  descent?: Monotonic.Monotonic;
+  /** The hull of the placed children, or undefined when none takes room. */
+  hull?: Extent;
   /** The hull of the placed children that are not dressing (see
    *  {@link placeByClaims}), or undefined when every one is. */
-  plotAscent?: Monotonic.Monotonic;
-  plotDescent?: Monotonic.Monotonic;
+  plot?: Extent;
   /** The children that draw on the axis but are ink there: they take no
    *  room. (A stand-in draws nothing, so it is not among them.) */
   ink: Set<number>;
   /** Each child's box in the layer's frame, where the claim walk knows it
    *  (a child whose size or place depends on a share of the layer's room,
-   *  or on a node only layout places, has none). */
-  boxes: Map<number, BoxForm>;
+   *  or on a node only layout places, has none). Built when first read. */
+  boxes: () => Map<number, BoxForm>;
 };
 
 /** Whether `c` acts on `axis` (for a position, at a point or over a span). */
@@ -518,22 +515,41 @@ export function placeByClaims(
       Monotonic.unknown((sigma) => sign * at(sigma).get(i)![end]);
   }
 
-  const boxes = new Map<number, BoxForm>();
-  for (const i of solved)
-    if (!unplaced.has(i))
-      boxes.set(i, { lo: edge(i, 0, 1), hi: edge(i, 1, 1) });
-  if (hullOf.length === 0) return { ink, boxes };
+  // Each edge's form, built once: the boxes and both hulls read the same
+  // edges.
+  const forms = new Map<number, Monotonic.Monotonic>();
+  const form = (i: number, end: 0 | 1, sign: 1 | -1): Monotonic.Monotonic => {
+    const key = 4 * i + 2 * end + (sign === 1 ? 1 : 0);
+    let f = forms.get(key);
+    if (f === undefined) forms.set(key, (f = edge(i, end, sign)));
+    return f;
+  };
+  let boxes: Map<number, BoxForm> | undefined;
+  const boxesOf = () => {
+    if (boxes !== undefined) return boxes;
+    boxes = new Map();
+    for (const i of solved)
+      if (!unplaced.has(i))
+        boxes.set(i, { lo: form(i, 0, 1), hi: form(i, 1, 1) });
+    return boxes;
+  };
+  if (hullOf.length === 0) return { ink, boxes: boxesOf };
+  const hullOver = (is: number[]): Extent =>
+    Extent(
+      Monotonic.envelope(is.map((i) => form(i, 1, 1))),
+      Monotonic.envelope(is.map((i) => form(i, 0, -1)))
+    );
+  const hull = hullOver(hullOf);
   const plotOf = hullOf.filter((i) => !dressing.has(i));
   return {
     ink,
-    boxes,
-    ascent: Monotonic.envelope(hullOf.map((i) => edge(i, 1, 1))),
-    descent: Monotonic.envelope(hullOf.map((i) => edge(i, 0, -1))),
-    ...(plotOf.length === 0
-      ? {}
-      : {
-          plotAscent: Monotonic.envelope(plotOf.map((i) => edge(i, 1, 1))),
-          plotDescent: Monotonic.envelope(plotOf.map((i) => edge(i, 0, -1))),
-        }),
+    boxes: boxesOf,
+    hull,
+    plot:
+      plotOf.length === hullOf.length
+        ? hull
+        : plotOf.length === 0
+          ? undefined
+          : hullOver(plotOf),
   };
 }

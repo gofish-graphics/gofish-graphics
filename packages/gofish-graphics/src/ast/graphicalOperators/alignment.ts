@@ -22,7 +22,7 @@ import {
   originIs,
 } from "../underlyingSpace";
 import { unionInOrder } from "../measure";
-import { Extent } from "../extent";
+import { Extent, hullExtent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import type { Size } from "../dims";
 import * as Interval from "../../util/interval";
@@ -225,10 +225,7 @@ function overlayClaim(
     const boxes = claiming.filter((c) => !isCONTINUOUS(c.space));
     return boxes.length === 0
       ? undefined
-      : Extent(
-          Monotonic.envelope(boxes.map((c) => c.extent.ascent)),
-          Monotonic.envelope(boxes.map((c) => c.extent.descent))
-        );
+      : hullExtent(...boxes.map((c) => c.extent));
   }
   const above: Monotonic.Monotonic[] = [];
   const below: Monotonic.Monotonic[] = [];
