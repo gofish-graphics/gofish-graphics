@@ -138,22 +138,14 @@ const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
 
 /**
  * Per-render record of every σ-scope solved. Lives on the {@link RenderSession}
- * (one per render, so no cross-render leakage), and is reset at the start of a
- * layout pass so it reflects the last pass if layout re-runs.
+ * (one per render, so no cross-render leakage); a render lays its tree out
+ * once.
  */
 export class ScopeRegistry {
   private entries: ScopeEntry[] = [];
   /** The scope each node with a literal size solves on each axis, from the
    *  claim walk ({@link solveFixed}), with the keyed domain it maps. */
   private fixed = new Map<object, [FixedSolve?, FixedSolve?]>();
-
-  /** Clear the scope dump and the literal sizes' solves — called before the
-   *  root's claim walk, which solves them again, so a second layout pass
-   *  reads no stale solve, and a node dropped from the tree leaves none. */
-  reset(): void {
-    this.entries = [];
-    this.fixed.clear();
-  }
 
   /**
    * Solve the scope of a node with a literal size on one axis (#1114): its
