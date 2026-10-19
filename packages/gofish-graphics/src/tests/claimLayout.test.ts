@@ -8,6 +8,10 @@
 import { chart, spread, rect } from "../lib";
 import { runLayout } from "../ast/gofish";
 import { GoFishNode } from "../ast/_node";
+import { Rect } from "../ast/shapes/rect";
+import { layer } from "../ast/graphicalOperators/layer";
+import { Constraint } from "../ast/constraints";
+import { placementIn } from "../ast/placementClaims";
 import { check, items, report } from "./testHelpers";
 
 /** Every node of the tree under `node`, `node` included. */
@@ -74,6 +78,33 @@ async function main() {
       "the layout warns that the fixed parts overflow on y",
       data.warnings.some((w) => w.kind === "fixed-overflow" && w.axis === "y"),
       data.warnings.map((w) => w.message)
+    );
+  }
+
+  console.log("\n# a literal pin seats a child whatever else acts on it");
+  {
+    // g is pinned at x = 100 and centered with b: the pin places g first,
+    // so the align moves b. The claim walk knows where m, inside g, lands.
+    const m = (Rect as any)({ w: 20, h: 20 }).name("m");
+    const g = (layer as any)([m]).name("g");
+    const b = (Rect as any)({ w: 40, h: 40 }).name("b");
+    const node = (layer as any)([g, b]).relate(({ g, b }: any) => [
+      Constraint.position({ x: 100, anchor: "baseline" }, [g]),
+      Constraint.align({ x: "middle" }, [g, b]),
+    ]);
+    const data = await runLayout({}, node);
+    const [gNode, bNode] = data.child.children as GoFishNode[];
+    const mNode = gNode.children[0] as GoFishNode;
+    check(
+      "the layout centers b on g, pinned at 100",
+      close(bNode.dims[0].center, 110),
+      bNode.dims[0]
+    );
+    const p = placementIn(mNode, data.child, 0);
+    check(
+      "the claim walk places m where the layout does",
+      p !== undefined && close(p.lo.run(1), 100) && close(p.hi.run(1), 120),
+      p && [p.lo.run(1), p.hi.run(1)]
     );
   }
 

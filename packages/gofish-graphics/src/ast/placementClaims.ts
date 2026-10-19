@@ -23,14 +23,17 @@ import { literalSeats, type Placement } from "./constraints/claimPlacement";
  * node on the walk reads y in the same direction. The step into the shared node reads where it seats its
  * child without solving it (its own claim may be the one being computed): a
  * child no constraint acts on sits at its origin, and one a literal
- * position pins sits at that pixel. Anywhere else (a coordinate space, a
+ * position pins sits at that pixel, whatever else acts on it. Anywhere else (a coordinate space, a
  * treemap tile, a band in a scope that mixes data and bands), the claim
  * walk does not know, and the node stays ink.
  */
 
 /** Where `parent` seats `child`'s origin on `axis` without solving: 0 for a
  *  child no constraint acts on there, the pixel a literal position pins it
- *  at, else undefined. A literal start the child has of its own moves it. */
+ *  at, else undefined. A literal pin places the child before the solve, so
+ *  another constraint on the axis (an align) moves only the others, as the
+ *  layout and the claim walk's solve do. A literal start the child has of
+ *  its own moves it. */
 function seatIn(
   parent: GoFishNode,
   child: GoFishNode,
@@ -45,9 +48,7 @@ function seatIn(
   const name = seating.operandName.get(i);
   const seat =
     name === undefined ? undefined : literalSeats(acting).get(name)?.[axis];
-  return seat !== undefined && acting.every((c) => c.type === "position")
-    ? seat + start
-    : undefined;
+  return seat === undefined ? undefined : seat + start;
 }
 
 /** Whether a walk may step through `n` on `axis`: a layer, not a scope of

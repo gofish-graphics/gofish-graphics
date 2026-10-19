@@ -773,7 +773,8 @@ report their size).
   frame starts where its plot does, and what it places with no data (an
   empty cell) lands in the plot, not in the gutter. A literal pin of a
   child's origin places it as soon as it is laid out, so a `ref` into it laid
-  out later reads it where it ends up.
+  out later reads it where it ends up, and another constraint on the axis
+  (an align) moves only the others. The claim walk seats it there too.
 - **A chart with a size of its own.** Its chrome dresses its content inside
   the chart's frame (`frameChart`), so the frame's literal size is the plot:
   the frame adds the gutters its content's claims give around a plot of that
