@@ -927,10 +927,10 @@ non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 // The root's axis order starts at a frame's start edge: the top, or the
 // bottom for a continuous y (`direction` −1).
 const fromFrameStart = (p, size, direction) => (direction === 1 ? p : size - p);
-// A scope solved against the render's slot seats the root's baseline in its
-// own frame (its size, `rootSizes`). Anywhere else the root's box is placed,
-// its start edge at the frame's start.
-given && scoped
+// A scope solved against the render's slot with a data 0 seats the root's
+// baseline in its own frame (its size, `rootSizes`). Anywhere else the
+// root's box is placed, its start edge at the frame's start.
+given && scope?.originPx !== undefined
   ? root.place(
       axis,
       pad + fromFrameStart(offset + seatPx, rootSizes[axis].px, direction),
@@ -950,13 +950,16 @@ at a target coordinate. The canvas is a frame `[pad, size − pad]` on each axis
 the root's axis order starts at the frame's start edge (the bottom for a continuous
 y). _Which_ anchor depends on whether data places the root:
 
-- **A scope solved against the render's slot** (a given dimension that maps a
-  domain) → pin the **baseline** (local `0`) at the scope's seat from the start edge
-  of the root's own frame. The root fills the slot, so its frame is the slot, and
-  the scope's `originPx` already counts the chrome's start gutter, so the root's
-  box, chrome included, starts at the frame's start.
-- **Anywhere else** (a shrink-to-fit dimension, or a given dimension the root maps
-  no domain into: a category axis, a chart with a size of its own) → pin the
+- **A scope solved against the render's slot that has a data 0** (a given
+  dimension that maps a domain with an origin) → pin the **baseline** (local `0`)
+  at the scope's seat from the start edge of the root's own frame. The root fills
+  the slot, so its frame is the slot, and the scope's `originPx` already counts the
+  chrome's start gutter, so the root's box, chrome included, starts at the frame's
+  start.
+- **Anywhere else** (a shrink-to-fit dimension, a given dimension whose scope has
+  no data 0, such as a spread of magnitudes whose rows reach past its origin on
+  either side, or a given dimension the root maps no domain into: a category
+  axis, a chart with a size of its own) → pin the
   root's **box** start edge to the frame's start, at the top-left for either y
   direction (#1032). The box is the whole graphic, chrome included, so a
   shrink-to-fit canvas is exactly the box, and a root smaller than its slot sits

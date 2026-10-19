@@ -797,21 +797,23 @@ export async function layout(
     // along the root's axis order is the pixel `p` from that edge, inward.
     //
     // Where a scope solved against the render's slot places the root's data
-    // (a given dimension that maps a domain), the root is seated by the one
-    // seating rule (`seatInScope`): a free (baseline-magnitude) root's
-    // baseline at the scope's `originPx` (#773: `descent·σ` from the frame's
-    // start edge, plus any overhead, the chrome's start gutter included), and
-    // a pinned or origin-less root at 0. The frame is the root's own size
-    // (`rootSizes`), so a root that does not fill the slot sits at its
-    // top-left rather than at its bottom.
+    // (a given dimension that maps a domain with a data 0), the root is
+    // seated by the one seating rule (`seatInScope`): a free
+    // (baseline-magnitude) root's baseline at the scope's `originPx` (#773:
+    // `descent·σ` from the frame's start edge, plus any overhead, the
+    // chrome's start gutter included), and a pinned root at 0. The frame is
+    // the root's own size (`rootSizes`), so a root that does not fill the
+    // slot sits at its top-left rather than at its bottom.
     //
     // Anywhere else no data places the root, so its box is placed: its start
     // edge at the frame's start, at the top-left for either y direction
     // (#1032). That is a shrink-to-fit dimension, whose box is the canvas,
     // a given dimension whose σ is a share (`sharesRoom`, a category axis
-    // whose bands the slot sizes), and a given dimension the root does not
-    // map a domain into (a chart with a size of its own), whose box sits at
-    // the slot's top-left. The box is the whole graphic, its chrome included. The pin
+    // whose bands the slot sizes), a given dimension whose scope has no
+    // data 0 (a spread of magnitudes, whose rows may reach past its origin
+    // on either side), and a given dimension the root does not map a domain
+    // into (a chart with a size of its own), whose box sits at the slot's
+    // top-left. The box is the whole graphic, its chrome included. The pin
     // uses `pinAnchor`, not the write-once `place()`, so it lands even when
     // the root self-placed (a diagram with its own root transform).
     const placeRoot = (axis: 0 | 1, edge: number) => {
@@ -820,7 +822,7 @@ export async function layout(
       const direction = axis === 0 ? 1 : rootYDirection;
       if (
         given[axis] !== undefined &&
-        rootScopes[axis] !== undefined &&
+        rootScopes[axis]?.originPx !== undefined &&
         !root.sharesRoom(axis)
       ) {
         root.place(
