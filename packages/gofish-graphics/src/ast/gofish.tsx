@@ -41,6 +41,7 @@ import {
 } from "./layoutWarnings";
 import { axisName } from "./constraints/shared";
 import * as Monotonic from "../util/monotonic";
+import { room } from "../util";
 import { KeyedDomains } from "./keyedDomains";
 import {
   fromFrameStart,
@@ -1001,7 +1002,6 @@ function drawnOverflow(root: GoFishNode): {
     const { min, max } = root.dims[axis];
     if (min === undefined || max === undefined || !(lo[axis] <= hi[axis]))
       return [0, 0];
-    const room = (px: number) => (Number.isFinite(px) ? Math.max(0, px) : 0);
     return [room(min - lo[axis]), room(hi[axis] - max)];
   }) as [Span, Span];
   return { ink, farthest };

@@ -5,6 +5,7 @@
 import type { GoFishNode } from "./_node";
 import type { DistributeConstraint } from "./constraints/distribute";
 import { axisIndex, axisName } from "./constraints/shared";
+import { room } from "../util";
 
 /**
  * A problem layout found and drew through anyway (#493): the render keeps
@@ -75,9 +76,7 @@ function describeNode(node: GoFishNode): string {
 
 /** The fixed pixels of `node`'s claim on `axis`: its claim at σ = 0. */
 const fixedPx = (node: GoFishNode, axis: 0 | 1): number => {
-  const claim = node.resolveExtent()[axis];
-  const v = claim?.width.run(0);
-  return v !== undefined && Number.isFinite(v) ? Math.max(0, v) : 0;
+  return room(node.resolveExtent()[axis]?.width.run(0) ?? 0);
 };
 
 /** The children whose claims compose into `node`'s on `axis`: not ink,

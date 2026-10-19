@@ -6,6 +6,7 @@ import type { GoFishNode } from "./_node";
 import type { Size } from "./dims";
 import { Extent, hullExtent } from "./extent";
 import * as Monotonic from "../util/monotonic";
+import { room } from "../util";
 import { childNameKey } from "./constraints/shared";
 import { isLiteralSeat } from "./constraints/claimPlacement";
 import { originIs } from "./underlyingSpace";
@@ -67,8 +68,6 @@ function claims(
     keyed?.scope(chart, axis, space, claim)[1] ?? claim;
   return { chart: wide(chartClaim), plot: wide(plotClaim) };
 }
-
-const room = (px: number) => (Number.isFinite(px) ? Math.max(0, px) : 0);
 
 /** The gutters of the claims `c` at σ. */
 const guttersAt = (
