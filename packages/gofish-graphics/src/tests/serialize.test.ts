@@ -196,6 +196,63 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  // A nested chart in a mark position is its own ChartIR (#1180), as a
+  // chart's `.mark(...)` and as a `layer([...])` child, and round-trips.
+  // -------------------------------------------------------------------------
+  {
+    const rows = [
+      { lake: "A", species: "Bass", count: 3 },
+      { lake: "A", species: "Trout", count: 5 },
+    ];
+    const flower = () =>
+      chart({ axes: false })
+        .flow(stack({ by: "species", dir: "x", h: 40 }))
+        .mark(rect({ w: "count", fill: "species" }))
+        .name("flower");
+    const direct = chart(rows)
+      .flow(spread({ by: "lake", dir: "x" }))
+      .mark(flower());
+    const child = chart(rows)
+      .flow(spread({ by: "lake", dir: "x" }))
+      .mark(layer([rect({ w: 4, h: "count" }), flower()]));
+    const directDoc = await direct.toJSON();
+    const childDoc = await child.toJSON();
+    validateDoc(directDoc, "nested chart as .mark()");
+    validateDoc(childDoc, "nested chart as a layer child");
+    const directMark = (directDoc.root as Frontend.ChartIR).mark as any;
+    const childMark = ((childDoc.root as Frontend.ChartIR).mark as any)
+      .children[1];
+    check(
+      "nested chart emits a ChartIR with previous-tier data and its name",
+      directMark.type === "chart" &&
+        directMark.data?.type === "previous-tier" &&
+        directMark.name === "flower",
+      JSON.stringify(directMark)
+    );
+    check(
+      "a chart's .mark() and a layer child share one encoding",
+      JSON.stringify(directMark) === JSON.stringify(childMark)
+    );
+    for (const [label, doc] of [
+      [".mark()", directDoc],
+      ["layer child", childDoc],
+    ] as const) {
+      const rebuilt = Serialize.buildChart(
+        doc.root,
+        rows,
+        undefined,
+        Serialize.makeTokenResolver()
+      );
+      const doc2 = await rebuilt.toJSON();
+      check(
+        `round-trip preserves a nested chart as ${label}`,
+        JSON.stringify(doc2.root) === JSON.stringify(doc.root),
+        JSON.stringify(doc2.root)
+      );
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Filter: a field predicate is data, so the operator gets its own wire type
   // and round-trips; a hand-written predicate is a live callback, so that
   // filter stays an opaque derive (#853).

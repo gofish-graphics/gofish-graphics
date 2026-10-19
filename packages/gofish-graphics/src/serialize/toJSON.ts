@@ -20,7 +20,8 @@
  */
 
 import { Frontend } from "gofish-ir";
-import type { ChartBuilder, Mark, Operator } from "./registry";
+import type { Mark, Operator } from "./registry";
+import { ChartBuilder, PREVIOUS_LAYER_MARKS } from "../ast/marks/chartBuilder";
 import { GoFishRef } from "../ast/_ref";
 import { wireOf } from "../ast/wire";
 
@@ -167,6 +168,7 @@ interface ChartBuilderInternals {
   operators: Operator<any, any>[];
   finalMark?: Mark<any>;
   nodeZOrder?: number;
+  nodeName?: string;
 }
 
 function chartBuilderInternals(
@@ -179,13 +181,14 @@ function chartBuilderInternals(
     operators: c.operators ?? [],
     finalMark: c.finalMark,
     nodeZOrder: c.nodeZOrder,
+    nodeName: c.nodeName,
   };
 }
 
 async function chartBuilderToChartIR(
   chart: ChartBuilder<any>
 ): Promise<Frontend.ChartIR> {
-  const { data, options, operators, finalMark, nodeZOrder } =
+  const { data, options, operators, finalMark, nodeZOrder, nodeName } =
     chartBuilderInternals(chart);
 
   const ir: Frontend.ChartIR = {
@@ -207,11 +210,18 @@ async function chartBuilderToChartIR(
   if (nodeZOrder !== undefined) {
     ir.zOrder = nodeZOrder;
   }
+  // `chart(...).name(n)`, which a sibling `layer([...]).relate(...)` reads.
+  if (nodeName !== undefined) {
+    ir.name = nodeName;
+  }
   return ir;
 }
 
 function dataToIR(data: unknown): Frontend.DataIR | null {
   if (data == null) return null;
+  // An empty `chart()` scope: the previous tier's marks in a `.layer(...)`
+  // chain, or the rows of the partition a chart in a mark position sits in.
+  if (data === PREVIOUS_LAYER_MARKS) return { type: "previous-tier" };
   // A `GoFishRef` used as chart data (from `ref(name)` or `selectAll(name)`).
   // Only string-layer references serialize; `multiplicity` ("one" | "all")
   // becomes the wire `mode` (emitted unconditionally so JS and Python IR agree).
@@ -273,6 +283,11 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
 }
 
 async function markToIR(mark: Mark<any>): Promise<Frontend.MarkIR> {
+  // A whole chart in a mark position is its own `ChartIR` (see
+  // `Frontend.MarkIR`): a `layer([...])` child holds the chart itself, and
+  // `.mark(chart(...))` a mark whose wire form is the chart.
+  const chart = (mark as unknown) instanceof ChartBuilder ? mark : wireOf(mark);
+  if (chart instanceof ChartBuilder) return chartBuilderToChartIR(chart);
   const tag = readTag(mark);
   if (!tag) {
     throw new Error(

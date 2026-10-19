@@ -42,7 +42,7 @@ import {
   installBuildIn,
   type BuildClockOptions,
 } from "../../animation/install";
-import { wireOf } from "../wire";
+import { withWire, wireOf } from "../wire";
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:
@@ -699,11 +699,16 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     mark: Mark<TOutput> | ChartBuilder<any, any>
   ): ChartBuilder<TInput, TOutput> | LayerBuilder {
     if (mark instanceof ChartBuilder) {
-      const finalMark = ((d: TOutput, _key, layerContext) =>
-        (mark.usesPreviousLayerMarks()
-          ? mark.withData(d)
-          : mark
-        ).withLayerContext(layerContext ?? {})) as Mark<TOutput>;
+      // The wrapper's wire form is the nested chart itself, so the IR
+      // emitter writes it as the chart's own `ChartIR` (see `Frontend.MarkIR`).
+      const finalMark = withWire(
+        ((d: TOutput, _key, layerContext) =>
+          (mark.usesPreviousLayerMarks()
+            ? mark.withData(d)
+            : mark
+          ).withLayerContext(layerContext ?? {})) as Mark<TOutput>,
+        mark
+      );
       return this.with({ finalMark });
     }
 
