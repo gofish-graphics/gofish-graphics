@@ -205,64 +205,37 @@ export const AboveEnd: StoryObj<Args> = {
   },
 };
 
-// ─── All positions grid ────────────────────────────────────────────────────────
-// One row per position so they can be compared side by side.
+// ─── All positions ─────────────────────────────────────────────────────────────
+// The same bars once per position, one story each, so they can be compared by
+// stepping through them in the sidebar.
 
-const ALL_POSITIONS: LabelPosition[] = [
-  "center",
-  "outset",
-  "inset-top",
-  "inset-bottom",
-  "inset-left",
-  "inset-right",
-  "inset-top-start",
-  "inset-top-end",
-  "outset-top",
-  "outset-bottom",
-  "outset-left",
-  "outset-right",
-  "outset-top-start",
-  "outset-top-end",
-];
-
-export const AllPositions: StoryObj<{ w: number; h: number }> = {
-  name: "All positions – comparison",
+const positionStory = (position: LabelPosition): StoryObj<Args> => ({
+  name: `All positions – ${position}`,
   args: { w: 400, h: 180 },
   render: (args) => {
-    const outer = document.createElement("div");
-    outer.style.display = "flex";
-    outer.style.flexDirection = "column";
-    outer.style.gap = "4px";
-    document.body.appendChild(outer);
-
-    for (const pos of ALL_POSITIONS) {
-      const row = document.createElement("div");
-      row.style.display = "flex";
-      row.style.alignItems = "center";
-      row.style.gap = "8px";
-
-      const label = document.createElement("div");
-      label.textContent = pos;
-      label.style.width = "130px";
-      label.style.fontSize = "12px";
-      label.style.fontFamily = "monospace";
-      label.style.flexShrink = "0";
-      row.appendChild(label);
-
-      const container = document.createElement("div");
-      container.style.flex = "1";
-      row.appendChild(container);
-      outer.appendChild(row);
-
-      chart(seafood, { axes: false })
-        .flow(spread({ by: "lake",  dir: "x" }))
-        .mark(rect({ h: "count" }).label(field("count").sum(), { position: pos, fontSize: 9 }))
-        .render(container, { w: args.w, h: args.h });
-    }
-
-    return outer;
+    const container = initializeContainer();
+    chart(seafood, { axes: false })
+      .flow(spread({ by: "lake", dir: "x" }))
+      .mark(rect({ h: "count" }).label(field("count").sum(), { position, fontSize: 9 }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
   },
-};
+});
+
+export const AllPositionsCenter: StoryObj<Args> = positionStory("center");
+export const AllPositionsOutset: StoryObj<Args> = positionStory("outset");
+export const AllPositionsInsetTop: StoryObj<Args> = positionStory("inset-top");
+export const AllPositionsInsetBottom: StoryObj<Args> = positionStory("inset-bottom");
+export const AllPositionsInsetLeft: StoryObj<Args> = positionStory("inset-left");
+export const AllPositionsInsetRight: StoryObj<Args> = positionStory("inset-right");
+export const AllPositionsInsetTopStart: StoryObj<Args> = positionStory("inset-top-start");
+export const AllPositionsInsetTopEnd: StoryObj<Args> = positionStory("inset-top-end");
+export const AllPositionsOutsetTop: StoryObj<Args> = positionStory("outset-top");
+export const AllPositionsOutsetBottom: StoryObj<Args> = positionStory("outset-bottom");
+export const AllPositionsOutsetLeft: StoryObj<Args> = positionStory("outset-left");
+export const AllPositionsOutsetRight: StoryObj<Args> = positionStory("outset-right");
+export const AllPositionsOutsetTopStart: StoryObj<Args> = positionStory("outset-top-start");
+export const AllPositionsOutsetTopEnd: StoryObj<Args> = positionStory("outset-top-end");
 
 // ─── Label on spread (group label) ────────────────────────────────────────────
 // `.label(accessor, options?)` chained on the operator (not the mark): each
@@ -387,52 +360,24 @@ export const HeatmapWithLabels: StoryObj<Args> = {
 // ─── Rotated labels ────────────────────────────────────────────────────────────
 // Labels rotate clockwise for positive values, pivoting at the label's center.
 
-export const Rotated: StoryObj<Args> = {
-  name: "Rotate: diagonal labels",
+const rotatedStory = (rotate: number): StoryObj<Args> => ({
+  name: `Rotate: ${rotate}°`,
   args: { w: 500, h: 300 },
   render: (args) => {
-    const outer = document.createElement("div");
-    outer.style.display = "flex";
-    outer.style.flexDirection = "column";
-    outer.style.gap = "8px";
-    document.body.appendChild(outer);
-
-    const cases: { label: string; rotate: number }[] = [
-      { label: "rotate: 45°", rotate: 45 },
-      { label: "rotate: -30°", rotate: -30 },
-      { label: "rotate: 0°", rotate: 0 },
-    ];
-
-    for (const { label, rotate } of cases) {
-      const row = document.createElement("div");
-      row.style.display = "flex";
-      row.style.alignItems = "center";
-      row.style.gap = "8px";
-
-      const tag = document.createElement("div");
-      tag.textContent = label;
-      tag.style.width = "120px";
-      tag.style.fontSize = "12px";
-      tag.style.fontFamily = "monospace";
-      tag.style.flexShrink = "0";
-      row.appendChild(tag);
-
-      const container = document.createElement("div");
-      container.style.flex = "1";
-      row.appendChild(container);
-      outer.appendChild(row);
-
-      chart(seafood)
-        .flow(spread({ by: "lake",  dir: "x" }))
-        .mark(
-          rect({ h: "count" }).label(field("count").sum(), { position: "outset-top", rotate })
-        )
-        .render(container, { w: args.w, h: args.h });
-    }
-
-    return outer;
+    const container = initializeContainer();
+    chart(seafood)
+      .flow(spread({ by: "lake", dir: "x" }))
+      .mark(
+        rect({ h: "count" }).label(field("count").sum(), { position: "outset-top", rotate })
+      )
+      .render(container, { w: args.w, h: args.h });
+    return container;
   },
-};
+});
+
+export const Rotate45: StoryObj<Args> = rotatedStory(45);
+export const RotateNeg30: StoryObj<Args> = rotatedStory(-30);
+export const Rotate0: StoryObj<Args> = rotatedStory(0);
 
 // ─── Normalized stacked bar (population by age + gender) ──────────────────────
 // Mirrors https://vega.github.io/vega-lite/examples/bar_stacked_normalize_labeled.html

@@ -65,34 +65,11 @@ packages/gofish-graphics/stories/forwardsyntax/FlowerChart.stories.tsx
 # (Vega-Lite ports were brought over from exempt to real parity tests;
 # see tests/python-stories/vega-lite/.)
 
-# Per-export exemptions for Labels.stories.tsx — these stories don't fit
-# the single-chart parity harness (they compose many charts in a flex div,
-# use async mark-as-function, or hand-build raw SVG).
-packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::AllPositions
-packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::Rotated
-packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::LabelOnSpread
+# PositionShowcase is not a GoFish spec: it draws one rect and every label
+# position as raw SVG by hand, from a local copy of the old label-offset math.
+# There is no spec for a Python story to express. The other Labels stories
+# are ported.
 packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::PositionShowcase
-
-# Per-export exemptions for Constraints.stories.tsx — the eight Spread*
-# stories use `renderEquivalentStory()` to mount TWO equivalent charts in
-# a 2-column grid with section headers, demonstrating that
-# `spread({alignment, ...})` equals `align(...) + distribute(...)`. The
-# parity harness captures one chart per story, so this layout shape can't
-# be byte-matched. The eight single-chart exports (AlignOnly, AlignOnlyManualY,
-# DistributeOnly, SubsetSelection, BackgroundNotDistributed, AlignCenterDistributeY,
-# AlignSpan, AlignSize — the last two are the #726 "span"/"size" alignment
-# values) are ported. SpreadX_CenterToCenter now also has a Python port
-# (story_spread_x_center_to_center, the Constraint.distribute half) — it
-# stays on this list because it's still the same two-panel shape that can't
-# be byte-gated, but it is captured + IR-validated rather than skipped.
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_AlignStart
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_AlignEnd
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_AlignMiddle
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_AlignStart
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Spacing
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_Spacing_AlignEnd
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_CenterToCenter
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Reversed
 
 # Per-export exemption for ViolinPlot.stories.tsx — the JS story uses
 # `fast-kde`'s density1d, while the idiomatic Python port

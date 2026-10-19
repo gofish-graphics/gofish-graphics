@@ -1,9 +1,7 @@
 """Equivalent of Labels.stories.tsx — Forward Syntax/Labels.
 
-Ports the single-chart label position/style stories. Multi-chart DOM
-stories (AllPositions, Rotated), the async mark-as-function story
-(LabelOnSpread) and the raw-SVG showcase (PositionShowcase) are exempt
-per `tests/.python-sync-exempt`.
+Ports every story but PositionShowcase, which draws raw SVG by hand rather
+than a GoFish spec and is exempt per `tests/.python-sync-exempt`.
 """
 
 import pandas as pd
@@ -152,6 +150,98 @@ def story_above_end():
     )
 
 
+# ─── all positions: the same bars once per position ─────────────────────────
+
+def _position_story(position):
+    return (
+        chart(SEAFOOD, axes=False)
+        .flow(spread(by="lake", dir="x"))
+        .mark(
+            rect(h="count").label(
+                field("count").sum(), position=position, font_size=9
+            )
+        ),
+        {"w": 400, "h": 180},
+    )
+
+
+def story_all_positions_center():
+    return _position_story("center")
+
+
+def story_all_positions_outset():
+    return _position_story("outset")
+
+
+def story_all_positions_inset_top():
+    return _position_story("inset-top")
+
+
+def story_all_positions_inset_bottom():
+    return _position_story("inset-bottom")
+
+
+def story_all_positions_inset_left():
+    return _position_story("inset-left")
+
+
+def story_all_positions_inset_right():
+    return _position_story("inset-right")
+
+
+def story_all_positions_inset_top_start():
+    return _position_story("inset-top-start")
+
+
+def story_all_positions_inset_top_end():
+    return _position_story("inset-top-end")
+
+
+def story_all_positions_outset_top():
+    return _position_story("outset-top")
+
+
+def story_all_positions_outset_bottom():
+    return _position_story("outset-bottom")
+
+
+def story_all_positions_outset_left():
+    return _position_story("outset-left")
+
+
+def story_all_positions_outset_right():
+    return _position_story("outset-right")
+
+
+def story_all_positions_outset_top_start():
+    return _position_story("outset-top-start")
+
+
+def story_all_positions_outset_top_end():
+    return _position_story("outset-top-end")
+
+
+# ─── label on spread (group label) ───────────────────────────────────────────
+# `.label(...)` on the operator: one label per lake group. Each group is drawn
+# by a per-group sub-chart, a callable mark that crosses the derive RPC.
+
+def story_label_on_spread():
+    return (
+        chart(SEAFOOD, axes=False)
+        .flow(
+            spread(by="lake", dir="x", spacing=50).label(
+                "lake", position="outset-top-start", font_size=13, rotate=60
+            )
+        )
+        .mark(
+            lambda d: chart(d, axes=False)
+            .flow(stack(by="species", dir="x"))
+            .mark(rect(h="count", fill="species"))
+        ),
+        {"w": 500, "h": 300},
+    )
+
+
 # ─── heatmap – center labels (auto-contrast) ─────────────────────────────────
 
 _HEAT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"]
@@ -175,6 +265,34 @@ def story_heatmap_with_labels():
         ),
         {"w": 420, "h": 280},
     )
+
+
+# ─── rotated labels ──────────────────────────────────────────────────────────
+# Labels rotate clockwise for positive values, pivoting at the label's center.
+
+def _rotated_story(rotate):
+    return (
+        chart(SEAFOOD)
+        .flow(spread(by="lake", dir="x"))
+        .mark(
+            rect(h="count").label(
+                field("count").sum(), position="outset-top", rotate=rotate
+            )
+        ),
+        {"w": 500, "h": 300},
+    )
+
+
+def story_rotate45():
+    return _rotated_story(45)
+
+
+def story_rotate_neg30():
+    return _rotated_story(-30)
+
+
+def story_rotate0():
+    return _rotated_story(0)
 
 
 # ─── label on stack operator (per-group, #702) ──────────────────────────────
