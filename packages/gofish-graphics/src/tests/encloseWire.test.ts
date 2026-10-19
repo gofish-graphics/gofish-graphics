@@ -232,6 +232,49 @@ console.log("# what each node value is written as");
   );
 }
 
+console.log("# nested children, rendered and serialized alike");
+{
+  // enclose(opts, [[a, b], c]): rendering flattens the nested list, and
+  // so does toJSON, so the IR rebuilds the same enclosure.
+  const build = () =>
+    chart([{}]).mark(
+      layer([
+        enclose({ shape: Shape.box({ rx: 6 }), padding: 8, fill: "#eee" }, [
+          [
+            spread({ dir: "x", spacing: 20, alignment: "middle" }, [
+              circle({ r: 6, fill: "#111" }),
+              circle({ r: 9, fill: "#111" }),
+            ]),
+            circle({ r: 4, fill: "#c00" }),
+          ],
+          circle({ r: 12, fill: "none", stroke: "#111" }),
+        ]),
+      ])
+    );
+  const doc = await build().toJSON();
+  check("the IR validates", valid(doc) === "", valid(doc));
+  const kids = (doc.root as any).mark.children[0].children.map(
+    (c: any) => c.type
+  );
+  check(
+    "the enclosure's children are written flat",
+    JSON.stringify(kids) === '["spread","circle","circle"]',
+    JSON.stringify(kids)
+  );
+  const js = await svgOf((el) => build().render(el, { w: 200, h: 80 }));
+  const ir = await svgOf((el) =>
+    Serialize.renderIR(Serialize.readIR(JSON.stringify(doc)).root, el, {
+      w: 200,
+      h: 80,
+    })
+  );
+  check(
+    "fromJSON renders the same enclosure",
+    ir === js && js.includes("<rect"),
+    `${ir.length} vs ${js.length} chars`
+  );
+}
+
 console.log("# a single ref is not a node list, in JS as on the wire");
 {
   const message = await errorOf(() =>

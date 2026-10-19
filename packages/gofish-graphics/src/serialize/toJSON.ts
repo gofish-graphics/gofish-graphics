@@ -152,6 +152,21 @@ function selectRefIR(r: GoFishRef): Frontend.SelectRefIR {
   return { type: "select", layer: r.selection, mode: r.multiplicity ?? "one" };
 }
 
+/**
+ * A combinator's child list as the flat list rendering reads
+ * (`reifyChildren`): nested arrays flattened, and a promise of children
+ * (as `map(rows, ...)` returns) awaited. A tagged promise is one mark (a
+ * combinator's own result), so it stays as it is for `markToIR`.
+ */
+async function flatChildren(children: unknown): Promise<unknown[]> {
+  if (children === null || children === undefined) return [];
+  if (Array.isArray(children))
+    return (await Promise.all(children.map(flatChildren))).flat();
+  if (children instanceof Promise && readTag(children) === undefined)
+    return flatChildren(await children);
+  return [children];
+}
+
 function readTag(value: unknown): SerializeTag | undefined {
   const tag = wireOf<SerializeTag>(value);
   if (!tag || typeof tag.type !== "string") return undefined;
@@ -357,15 +372,15 @@ async function markToIR(mark: Mark<any>): Promise<Frontend.MarkIR> {
   if (tag.label !== undefined) chained.label = tag.label;
 
   if (tag.__combinator) {
-    const childrenResolved = tag.children
-      ? await Promise.resolve(tag.children)
-      : [];
+    const childrenResolved = await flatChildren(tag.children);
     const options = wireOpts("combinator-mark", tag.type, tag.opts);
     const ir: Frontend.CombinatorMarkIR = {
       type: tag.type as Frontend.CombinatorMarkType,
       __combinator: true,
       ...(Object.keys(options).length > 0 ? { options } : {}),
-      children: await Promise.all(childrenResolved.map((c) => markToIR(c))),
+      children: await Promise.all(
+        childrenResolved.map((c) => markToIR(c as Mark<any>))
+      ),
       ...chained,
     };
     return ir;
