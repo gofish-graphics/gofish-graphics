@@ -428,7 +428,7 @@ export function placeByClaims(
     // A relation with an operand the solve leaves out (ink) places nothing
     // here.
     const solvable = onAxis.filter((c) =>
-      c.children.every((r) => r === undefined || targets.has(r.name))
+      c.children.every((r) => targets.has(r.name))
     );
     const cells = solvePlacementCells(
       solvable as PlacementConstraint[],

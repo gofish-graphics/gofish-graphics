@@ -438,7 +438,7 @@ export const layer = createNodeOperatorSequential(
           if (!actsOn(c, axis)) continue;
           const kids = new Set<number>();
           for (const r of c.children) {
-            const op = r === undefined ? undefined : operands.get(r.name);
+            const op = operands.get(r.name);
             if (op !== undefined) kids.add(op.child);
           }
           for (const k of kids) {
