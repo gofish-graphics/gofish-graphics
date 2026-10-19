@@ -29,7 +29,11 @@ import {
 } from "fs";
 import { join, dirname, relative } from "path";
 import ts from "typescript";
-import { mapJsToPython } from "./path-mapping.js";
+import {
+  mapJsToPython,
+  JS_STORY_ROOTS,
+  isJsStoryFile,
+} from "./path-mapping.js";
 export { mapJsToPython } from "./path-mapping.js";
 
 // ---------------------------------------------------------------------------
@@ -596,14 +600,8 @@ function mergeBaseOf(baseRef: string): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// Walk all JS stories under packages/gofish-graphics/stories/ and
-// packages/gofish-gotree/stories/ (the tree-DSL package — see #792).
+// Walk all JS stories under JS_STORY_ROOTS.
 // ---------------------------------------------------------------------------
-
-const JS_STORY_ROOTS = [
-  "packages/gofish-graphics/stories",
-  "packages/gofish-gotree/stories",
-];
 
 function walkJsStories(): string[] {
   const out: string[] = [];
@@ -632,9 +630,9 @@ function camelToSnake(s: string): string {
     .toLowerCase();
 }
 
-/** The `export const Foo: StoryObj` names of a JS story file. */
-function readJsStoryExports(absPath: string): string[] {
-  return [...splitStoryExports(readFileSync(absPath, "utf-8")).stories.keys()];
+/** The `export const Foo: StoryObj` names of a JS story file's text. */
+function jsStoryExports(content: string): string[] {
+  return [...splitStoryExports(content).stories.keys()];
 }
 
 /** Extract `def story_foo` names from a Python parity test file. */
@@ -671,10 +669,11 @@ function runFullCoverage(): number {
   let filesWarn = 0;
 
   for (const jsFile of jsStories) {
-    const pythonFile = mapJsToPython(jsFile);
+    const jsText = readFileSync(join(ROOT_DIR, jsFile), "utf-8");
+    const pythonFile = mapJsToPython(jsFile, jsText);
     const pythonAbs = join(ROOT_DIR, pythonFile);
     const fileExempt = isFileExempt(exemptSet, jsFile);
-    const jsExports = readJsStoryExports(join(ROOT_DIR, jsFile));
+    const jsExports = jsStoryExports(jsText);
     exportsTotal += jsExports.length;
 
     if (fileExempt) {
@@ -819,14 +818,9 @@ const mergeBase = mergeBaseOf(baseRef);
 
 const exemptSet = loadExemptSet();
 
-const jsStoryPathRe = new RegExp(
-  `^(${JS_STORY_ROOTS.map((r) => r.replace(/\//g, "\\/")).join(
-    "|"
-  )})\\/.*\\.stories\\.tsx$`
-);
-const addedJs = gitDiff("A", baseRef).filter((f) => f.match(jsStoryPathRe));
-const deletedJs = gitDiff("D", baseRef).filter((f) => f.match(jsStoryPathRe));
-const modifiedJs = gitDiff("M", baseRef).filter((f) => f.match(jsStoryPathRe));
+const addedJs = gitDiff("A", baseRef).filter(isJsStoryFile);
+const deletedJs = gitDiff("D", baseRef).filter(isJsStoryFile);
+const modifiedJs = gitDiff("M", baseRef).filter(isJsStoryFile);
 const allChangedFiles = new Set(gitDiff("ACDMRT", baseRef));
 
 const results: SyncResult[] = [];

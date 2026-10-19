@@ -50,7 +50,7 @@ def find(node, pred):
 
 
 def node_marks(mark):
-    return find(ir(mark), lambda d: str(d.get("name", "")).startswith("root"))
+    return find(ir(mark), lambda d: str(d.get("name", "")).startswith("__gotree-"))
 
 
 def links(mark):
@@ -82,17 +82,17 @@ class TestTree:
         assert by_name["A1"]["value"] is None
         assert by_name["A"]["data"] is DATA["children"][0]
 
-    def test_node_marks_are_named_by_path(self):
+    def test_node_marks_are_named_in_preorder(self):
         names = [m["name"] for m in node_marks(tree(DATA, node=lambda d: circle(r=4)))]
-        assert sorted(names) == ["root", "root/0", "root/0/0", "root/0/1", "root/1"]
+        assert sorted(names) == [f"__gotree-{i}" for i in range(5)]
 
     def test_default_node_is_a_blue_square(self):
-        (root,) = [m for m in node_marks(tree(DATA)) if m["name"] == "root"]
-        assert root == {"type": "rect", "w": 12, "h": 12, "fill": "#4682b4", "name": "root"}
+        (root,) = [m for m in node_marks(tree(DATA)) if m["name"] == "__gotree-0"]
+        assert root == {"type": "rect", "w": 12, "h": 12, "fill": "#4682b4", "name": "__gotree-0"}
 
     def test_empty_children_is_a_leaf(self):
         t = tree({"name": "root", "children": []})
-        assert ir(t)["children"][0]["name"] == "root"
+        assert ir(t)["children"][0]["name"] == "__gotree-0"
 
     def test_data_must_be_a_dict(self):
         with pytest.raises(TypeError, match="nested tree dict"):
@@ -108,10 +108,11 @@ class TestLinks:
     def test_one_line_per_edge_in_breadth_first_order(self):
         lines = links(tree(DATA))
         assert [[c["selection"] for c in l["children"]] for l in lines] == [
-            ["root", "root/0"],
-            ["root", "root/1"],
-            ["root/0", "root/0/0"],
-            ["root/0", "root/0/1"],
+            # Names are preorder ids: root 0, A 1, A1 2, A2 3, B 4.
+            ["__gotree-0", "__gotree-1"],
+            ["__gotree-0", "__gotree-4"],
+            ["__gotree-1", "__gotree-2"],
+            ["__gotree-1", "__gotree-3"],
         ]
 
     def test_default_link_options(self):

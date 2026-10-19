@@ -104,6 +104,13 @@ async function loadPythonModule() {
     __dirname,
     "../docs/.vitepress/data/pythonExamples.__check__.mjs"
   );
+  // pythonExamples.ts also imports the repo's shared tests/scripts/path-mapping.ts;
+  // its temp copy goes beside it so its own `import.meta.dirname` still holds.
+  const pathMappingTs = "../../../../../tests/scripts/path-mapping.ts";
+  const pathMappingTmp = resolve(
+    __dirname,
+    "../../../tests/scripts/path-mapping.__check__.mjs"
+  );
   const textUtilsExisted = ensureTextUtilsTmp();
   const jsTmpExisted = existsSync(jsTmpPath);
   if (!jsTmpExisted)
@@ -112,14 +119,20 @@ async function loadPythonModule() {
       jsTmpPath,
       [["./textUtils.ts", "./textUtils.__check__.mjs"]]
     );
+  transpileTo(
+    resolve(__dirname, "../../../tests/scripts/path-mapping.ts"),
+    pathMappingTmp
+  );
   transpileTo(tsPath, tmpPath, [
     ["./storyExamples.ts", "./storyExamples.__check__.mjs"],
     ["./textUtils.ts", "./textUtils.__check__.mjs"],
+    [pathMappingTs, pathMappingTs.replace(/\.ts$/, ".__check__.mjs")],
   ]);
   try {
     return await import(pathToFileURL(tmpPath).href);
   } finally {
     rmSync(tmpPath, { force: true });
+    rmSync(pathMappingTmp, { force: true });
     if (!jsTmpExisted) rmSync(jsTmpPath, { force: true });
     if (!textUtilsExisted) rmSync(TEXT_UTILS_TMP_PATH, { force: true });
   }

@@ -24,13 +24,18 @@ import {
   readdirSync,
   cpSync,
 } from "fs";
-import { join, dirname } from "path";
+import { join, dirname, relative } from "path";
 import {
   collectParityDiffs,
   formatDomDiff,
   type DiffEntry,
 } from "./diff-utils.js";
-import { mapJsToPython, titleToStoryId } from "./path-mapping.js";
+import {
+  JS_STORY_ROOTS,
+  mapJsToPython,
+  storyMetaTitle,
+  titleToStoryId,
+} from "./path-mapping.js";
 import { createCodeHighlighter } from "./story-specs.js";
 
 // ---------------------------------------------------------------------------
@@ -41,7 +46,6 @@ const SCRIPTS_DIR = import.meta.dirname;
 const TESTS_DIR = dirname(SCRIPTS_DIR);
 const ROOT_DIR = dirname(TESTS_DIR);
 const OUT_DIR = join(TESTS_DIR, "tmp/parity-review-site");
-const STORIES_DIR = join(ROOT_DIR, "packages/gofish-graphics/stories");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -74,19 +78,13 @@ function buildStoryIndex(): Map<string, string> {
         scan(full);
       } else if (entry.name.endsWith(".stories.tsx")) {
         const source = readOptional(full);
-        if (!source) continue;
-        const m = source.match(/title:\s*["']([^"']+)["']/);
-        if (!m) continue;
-        const storyId = titleToStoryId(m[1]);
-        index.set(
-          storyId,
-          "packages/gofish-graphics/stories/" +
-            full.slice(STORIES_DIR.length + 1)
-        );
+        const title = source && storyMetaTitle(source);
+        if (!title) continue;
+        index.set(titleToStoryId(title), relative(ROOT_DIR, full));
       }
     }
   }
-  scan(STORIES_DIR);
+  for (const root of JS_STORY_ROOTS) scan(join(ROOT_DIR, root));
   return index;
 }
 
@@ -455,8 +453,7 @@ for (const diff of parityDiffs) {
   // orphan snapshot whose JS story was deleted).
   if (!pairById.has(fileId)) {
     const jsFile =
-      storyIndex.get(fileId) ??
-      `packages/gofish-graphics/stories/${id}.stories.tsx`;
+      storyIndex.get(fileId) ?? `${JS_STORY_ROOTS[0]}/${id}.stories.tsx`;
     const orphan: StoryPair = {
       id: fileId,
       jsFile,
@@ -571,8 +568,7 @@ if (captureResults) {
     // No matching file pair or export — create an orphan entry so the
     // capture record still surfaces.
     const jsFile =
-      storyIndex.get(fileId) ??
-      `packages/gofish-graphics/stories/${id}.stories.tsx`;
+      storyIndex.get(fileId) ?? `${JS_STORY_ROOTS[0]}/${id}.stories.tsx`;
     const newPair: StoryPair = {
       id: fileId,
       jsFile,
