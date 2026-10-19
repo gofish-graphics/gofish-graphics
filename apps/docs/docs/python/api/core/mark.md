@@ -22,9 +22,9 @@ ChartBuilder.mark(mark) -> ChartBuilder
 
 ## Parameters
 
-| Parameter | Type                                 | Description                                                                                 |
-| --------- | ------------------------------------ | ------------------------------------------------------------------------------------------- |
-| `mark`    | `Mark` \| `ChartBuilder` \| callable | A mark factory result, a nested `chart(...)` drawn per group, or a `(data) -> ChartBuilder` |
+| Parameter | Type                                                   | Description                                                                                                               |
+| --------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `mark`    | `Mark` \| `ChartBuilder` \| `LayerBuilder` \| callable | A mark factory result, a nested `chart(...)` or `layer([chart(...), ...])` drawn per group, or a `(data) -> ChartBuilder` |
 
 Returns a new `ChartBuilder` with the mark set.
 
@@ -101,9 +101,29 @@ chart(stem_data, axes=False).flow(scatter(by="lake", x="x")).mark(
 )
 ```
 
+A layer made only of charts is a mark too, so a per-group overlay (e.g. bars
+plus an area that selects them) needs no callback:
+
+```python
+chart(barley).flow(spread(by="variety", dir="x")).mark(
+    layer([
+        chart()  # inherits this variety's rows
+        .flow(spread(by="year", dir="x"), stack(by="site", dir="y"))
+        .mark(rect(h="yield", fill="site").name("bars")),
+        chart(select_all("bars"))  # scoped to this variety's layer
+        .flow(group(by="site"))
+        .mark(ribbon(opacity=0.7)),
+    ])
+)
+```
+
+A nested chart or layer crosses to JS as its own chart or layer IR, inline in
+the mark tree, so it draws with no call back into Python.
+
 The older callback form `mark(lambda data: chart(data, ...).flow(...).mark(...))`
 still works and is equivalent — the function receives each group's data slice and
-returns a nested chart.
+returns a nested chart. A callback is Python code, so JS calls back into Python
+once per group to run it.
 
 ## Mark-fn over refs — value labels
 

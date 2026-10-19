@@ -58,7 +58,7 @@ chart(barley)
         .mark(rect({ h: "yield", fill: "site" }).name("bars")),
       chart(selectAll("bars")) // scoped to this variety's layer
         .flow(group({ by: "site" }))
-        .mark(area({ opacity: 0.7 })),
+        .mark(ribbon({ opacity: 0.7 })),
     ])
   );
 ```
@@ -99,7 +99,7 @@ rect({ h: "count" }).zOrder(1);
 const isEmphasized = (site: unknown) =>
   site === "Morris" || site === "Grand Rapids";
 
-area({ opacity: 0.7 }).zOrder((d) =>
+ribbon({ opacity: 0.7 }).zOrder((d) =>
   isEmphasized(project(d, "site")) ? 1 : 0
 );
 ```
