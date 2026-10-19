@@ -53,5 +53,28 @@ console.log("# Shape.oval() around an ellipse member");
   );
 }
 
+console.log("# an option a Shape kind does not have is an error naming it");
+for (const [name, make] of [
+  ["Shape.box", () => Shape.box({ padding: 10 })],
+  ["Shape.oval", () => Shape.oval({ padding: 10 })],
+  ["Shape.blob", () => Shape.blob({ padding: 10 })],
+  ["Shape.hull", () => Shape.hull({ padding: 10 })],
+  ["Shape.spine", () => Shape.spine({ padding: 10 })],
+] as [string, () => unknown][]) {
+  let message = "";
+  try {
+    await enclose({ shape: make() }, [ellipse({ w: 20, h: 10 })]).toDisplayList(
+      { w: 100, h: 100 }
+    );
+  } catch (e) {
+    message = (e as Error).message;
+  }
+  check(
+    `${name}({ padding: 10 }) is an error naming padding`,
+    /padding/.test(message),
+    message || "no error"
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

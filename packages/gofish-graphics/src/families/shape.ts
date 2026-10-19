@@ -70,7 +70,15 @@ export const box = bareKind(
  * The smallest-area ellipse that holds every member grown by `enclose`'s
  * `padding`. It may be rotated: it follows the members, not the axes.
  */
-export const oval = bareKind("Shape.oval", (): OvalShape => ({ kind: "oval" }));
+export const oval = bareKind(
+  "Shape.oval",
+  // It has no options; any given ones go through, for enclose's check to
+  // name, as the other kinds' unknown options do.
+  (opts: Omit<OvalShape, "kind"> = {}): OvalShape => ({
+    kind: "oval",
+    ...given(opts),
+  })
+);
 
 /**
  * A smooth region around the members: each member grown by `enclose`'s
