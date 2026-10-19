@@ -609,7 +609,8 @@ export async function layout(
     // overflows the slot like any other fixed size. With no such nodes,
     // what is larger than the slot is pixels that do not scale (a text at
     // a literal position past the slot's end): the data fills the slot,
-    // at the σ where the parts of the claim that grow with σ reach it,
+    // at the σ where the part of the claim that grows with σ, alone,
+    // reaches it (as if the fixed parts took no room),
     // and the pixels overflow.
     // Fixed parts larger than the slot: no σ ≥ 0 fits (a numeric solve
     // of a claim with no pieces would settle at σ = 0), and the layout

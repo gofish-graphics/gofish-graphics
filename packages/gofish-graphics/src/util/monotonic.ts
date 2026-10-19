@@ -254,21 +254,21 @@ export const envelope = (ms: Monotonic[]): Monotonic => {
   return unknown((x: number) => Math.max(...ms.map((m) => m.run(x))));
 };
 
-/** The part of a claim that grows with σ: the envelope of its pieces with a
- *  positive slope, or undefined when it has none. An `unknown` closure has
- *  no pieces to tell apart, so its rising part is the line it tends to as σ
- *  grows (its last piece, for a closure over lines), read off two far
- *  points. */
-export const rising = (x: Monotonic): Monotonic | undefined => {
+/** The part of a claim that grows with σ, alone: the claim with its fixed
+ *  parts (the intercepts) taken out, `s·σ` for the steepest slope `s` of
+ *  its pieces, or undefined when none rises. Solving it against a slot the
+ *  fixed parts overfill gives the σ at which what scales fills the slot,
+ *  drawn as if the fixed parts took no room. An `unknown` closure has no
+ *  pieces to tell apart, so its slope is the one it tends to as σ grows,
+ *  read off two far points. */
+export const rising = (x: Monotonic): Linear | undefined => {
   const ps = piecesOf(x);
-  if (ps === undefined) {
-    const far = 1e6;
-    const slope = (x.run(2 * far) - x.run(far)) / far;
-    if (!(slope > 0) || !Number.isFinite(slope)) return undefined;
-    return linear(slope, x.run(far) - slope * far);
-  }
-  const up = ps.filter((p) => p.slope > 0);
-  return up.length === 0 ? undefined : piecewise(up);
+  const far = 1e6;
+  const slope =
+    ps === undefined
+      ? (x.run(2 * far) - x.run(far)) / far
+      : Math.max(0, ...ps.map((p) => p.slope));
+  return slope > 0 && Number.isFinite(slope) ? linear(slope, 0) : undefined;
 };
 
 /** The max of claims, ignoring zero claims: the {@link envelope} of the

@@ -84,13 +84,16 @@ const ringGutters = (r: Extent, x: number): [number, number] => [
   room(r.ascent.run(x) - x),
 ];
 
-/** The X at which `m` reaches `target` (`m` never decreases), solved as
- *  the root's σ is: where no X reaches it exactly (fixed parts larger than
- *  the target), the X at which the parts that grow with X reach it. */
+/** The X ≥ 0 at which `m` reaches `target` (`m` never decreases), solved
+ *  as the root's σ is: where the fixed parts of `m` alone are larger than
+ *  the target, no X reaches it, and X is where the part that grows with X,
+ *  alone, reaches it (`Monotonic.rising`): drawn as if the fixed parts took
+ *  no room. */
 const solveFor = (m: Monotonic.Monotonic, target: number): number => {
   const x =
-    m.inverse(target, { upperBoundGuess: target }) ??
-    Monotonic.rising(m)?.inverse(target);
+    m.run(0) > target + 0.5
+      ? Monotonic.rising(m)?.inverse(target)
+      : m.inverse(target, { upperBoundGuess: target });
   return x !== undefined && Number.isFinite(x) ? Math.max(0, x) : 0;
 };
 
