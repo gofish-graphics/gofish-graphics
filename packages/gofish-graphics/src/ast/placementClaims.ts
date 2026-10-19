@@ -7,8 +7,6 @@ import * as Monotonic from "../util/monotonic";
 import {
   constraintsOn,
   literalSeats,
-  negate,
-  plus,
   type Placement,
 } from "./constraints/claimPlacement";
 
@@ -65,9 +63,6 @@ const passable = (n: GoFishNode, axis: 0 | 1, direction: number) =>
   n._ownScope?.[axis] !== true &&
   (axis === 0 || n.yFrame.direction === direction);
 
-const shift = (f: Monotonic.Monotonic, by: Monotonic.Monotonic | number) =>
-  plus(f, typeof by === "number" ? Monotonic.linear(0, by) : by);
-
 /** Where `target` lands in `frame`'s frame on `axis`, or undefined when the
  *  claim walk does not know. */
 export function placementIn(
@@ -104,7 +99,7 @@ export function placementIn(
   }
 
   // The target's box, in each ancestor's frame in turn.
-  let lo = negate(extent.descent);
+  let lo = Monotonic.negate(extent.descent);
   let hi = extent.ascent;
   let n = target;
   while (n.parent !== shared) {
@@ -120,17 +115,17 @@ export function placementIn(
       // claim's descent, and past a literal start of its own.
       const claim = n.resolveExtent()[axis];
       if (claim === undefined) return undefined;
-      const origin = shift(
-        plus(box.lo, claim.descent),
+      const origin = Monotonic.adds(
+        Monotonic.add(box.lo, claim.descent),
         n._literalStart?.[axis] ?? 0
       );
-      lo = plus(lo, origin);
-      hi = plus(hi, origin);
+      lo = Monotonic.add(lo, origin);
+      hi = Monotonic.add(hi, origin);
     }
     n = p;
   }
   const seat = seatIn(shared, n, axis);
   if (seat === undefined) return undefined;
   const by = seat - frameAt;
-  return { lo: shift(lo, by), hi: shift(hi, by), extent };
+  return { lo: Monotonic.adds(lo, by), hi: Monotonic.adds(hi, by), extent };
 }

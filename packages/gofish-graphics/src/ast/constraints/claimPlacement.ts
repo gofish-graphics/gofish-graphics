@@ -233,10 +233,6 @@ export function constrainedOn(
   return out;
 }
 
-/** σ ↦ a box's edges, read at each σ asked for. */
-const formOf = (run: (sigma: number) => number): Monotonic.Monotonic =>
-  Monotonic.unknown(run);
-
 const isLinearExtent = (e: Extent): boolean =>
   Monotonic.isLinear(e.ascent) && Monotonic.isLinear(e.descent);
 
@@ -495,7 +491,7 @@ export function placeByClaims(
       // An envelope weighed by a negative number is no envelope (`smul`
       // keeps one only for a positive weight): read such a form at each σ.
       if (terms.some((t) => t.c < 0 && !Monotonic.isLinear(t.m)))
-        return formOf(
+        return Monotonic.unknown(
           (sigma) => c0 + terms.reduce((a, t) => a + t.c * t.m.run(sigma), 0)
         );
       return Monotonic.add(
@@ -522,7 +518,8 @@ export function placeByClaims(
         };
       return memo.boxes;
     };
-    edge = (i, end, sign) => formOf((sigma) => sign * at(sigma).get(i)![end]);
+    edge = (i, end, sign) =>
+      Monotonic.unknown((sigma) => sign * at(sigma).get(i)![end]);
   }
 
   const boxes = new Map<number, BoxForm>();
@@ -544,19 +541,3 @@ export function placeByClaims(
         }),
   };
 }
-
-/** `−f`: exact for a line; a closure for anything else, since the negation
- *  of an envelope is no envelope. */
-export const negate = (f: Monotonic.Monotonic): Monotonic.Monotonic =>
-  Monotonic.isLinear(f)
-    ? Monotonic.smul(-1, f)
-    : Monotonic.unknown((sigma) => -f.run(sigma));
-
-/** `f + g`: exact for two lines or two envelopes; a closure otherwise. */
-export const plus = (
-  f: Monotonic.Monotonic,
-  g: Monotonic.Monotonic
-): Monotonic.Monotonic =>
-  Monotonic.isUnknown(f) || Monotonic.isUnknown(g)
-    ? Monotonic.unknown((sigma) => f.run(sigma) + g.run(sigma))
-    : Monotonic.add(f, g);

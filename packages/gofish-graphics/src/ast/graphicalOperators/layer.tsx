@@ -91,8 +91,6 @@ import {
 import {
   constrainedOn,
   literalSeats,
-  negate,
-  plus,
   placeByClaims,
   type BoxForm,
   type ClaimChild,
@@ -244,8 +242,9 @@ const plotIn = (
   const [f, p] = [full[1], plot[1]];
   if (f === undefined || p === undefined || f === p) return plot;
   // Reflected about the box `[−d, a]`: x ↦ (a − d) − x.
-  const span = plus(f.ascent, negate(f.descent));
-  return [plot[0], Extent(plus(span, p.descent), plus(negate(span), p.ascent))];
+  const { add, negate } = Monotonic;
+  const span = add(f.ascent, negate(f.descent));
+  return [plot[0], Extent(add(span, p.descent), add(negate(span), p.ascent))];
 };
 
 /** The pixels a chart's chrome adds around its plot on `axis`, for a chart

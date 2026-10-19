@@ -236,6 +236,11 @@ export const adds = (fn: Monotonic, scalar: number): Monotonic => {
   return unknown((x: number) => fn.run(x) + scalar);
 };
 
+/** `−f`: exact for a line; a closure for anything else, since the negation
+ *  of an envelope is no envelope (`smul` by −1 would negate each piece). */
+export const negate = (f: Monotonic): Monotonic =>
+  isLinear(f) ? smul(-1, f) : unknown((x: number) => -f.run(x));
+
 /** The upper envelope `max_i m_i(σ)` of claims, over σ ≥ 0. Unlike {@link
  *  max} it keeps lines with a negative slope or a zero line, which a union's
  *  lower reach needs (a pinned interval above 0 reaches down by a negative
