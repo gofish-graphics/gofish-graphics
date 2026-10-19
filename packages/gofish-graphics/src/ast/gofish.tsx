@@ -39,6 +39,7 @@ import {
   reportLayoutWarnings,
   type LayoutWarning,
 } from "./layoutWarnings";
+import { axisName } from "./constraints/shared";
 import * as Monotonic from "../util/monotonic";
 import { KeyedDomains } from "./keyedDomains";
 import {
@@ -817,7 +818,7 @@ export async function layout(
     // uses `pinAnchor`, not the write-once `place()`, so it lands even when
     // the root self-placed (a diagram with its own root transform).
     const placeRoot = (axis: 0 | 1, edge: number) => {
-      const name = axis === 0 ? "x" : "y";
+      const name = axisName(axis);
       const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
       const direction = axis === 0 ? 1 : rootYDirection;
       if (
@@ -872,7 +873,7 @@ export async function layout(
       const { min, max } = root.dims[axis];
       if (size === undefined || min === undefined || max === undefined)
         continue;
-      const name = axis === 0 ? "x" : "y";
+      const name = axisName(axis);
       const fixed = contexts.session.warnings?.some(
         (w) => w.kind === "fixed-overflow" && w.axis === name
       );

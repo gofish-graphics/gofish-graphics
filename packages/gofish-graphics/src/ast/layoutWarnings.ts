@@ -4,7 +4,7 @@
 
 import type { GoFishNode } from "./_node";
 import type { DistributeConstraint } from "./constraints/distribute";
-import { axisIndex } from "./constraints/shared";
+import { axisIndex, axisName } from "./constraints/shared";
 
 /**
  * A problem layout found and drew through anyway (#493): the render keeps
@@ -42,7 +42,6 @@ export type LayoutWarning = {
 export const LAYOUT_WARNING_PREFIX = "[gofish:layout]";
 
 const px = (v: number) => `${Math.round(v * 10) / 10} px`;
-const axisName = (axis: 0 | 1) => (axis === 0 ? "x" : "y");
 
 /** The distribute of the spread or stack `node` is along `axis`, if it is
  *  one (a ring that seats its chrome with a distribute is not). */
