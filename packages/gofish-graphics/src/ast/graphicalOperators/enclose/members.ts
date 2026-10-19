@@ -8,8 +8,9 @@
  * children's `dims` are read in.
  *
  *  - A circle is a disc. An ellipse that is not a circle is the disc of its
- *    enclosing circle (its larger radius), so it is padded a little more
- *    along its short axis.
+ *    enclosing circle (its larger radius) and carries its semi-axes: the
+ *    blob reads the disc, so it pads the ellipse a little more along its
+ *    short axis, and the oval samples the ellipse itself.
  *  - A drawn line (a `line` connector) is its segments, each as wide as its
  *    stroke; a curved piece is cut into 8 straight ones.
  *  - Anything else is its bounding box.
@@ -60,9 +61,13 @@ export function membersOf(child: GoFishAST, dims: Dimensions): BlobMember[] {
     h = y.size ?? 0;
   const node = targetOf(child);
   if (node?.type === "ellipse") {
-    return [
-      { kind: "disc", cx: x0 + w / 2, cy: y0 + h / 2, r: Math.max(w, h) / 2 },
-    ];
+    const disc: BlobMember = {
+      kind: "disc",
+      cx: x0 + w / 2,
+      cy: y0 + h / 2,
+      r: Math.max(w, h) / 2,
+    };
+    return [w === h ? disc : { ...disc, axes: [w / 2, h / 2] }];
   }
   const width = node?.renderData?.centerline as number | undefined;
   if (node && width !== undefined) {

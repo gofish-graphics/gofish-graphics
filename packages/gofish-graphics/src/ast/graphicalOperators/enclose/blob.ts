@@ -38,9 +38,11 @@ import { ringExtent } from "../../geometry/box";
 export type Pt = [number, number];
 /** One member of a blob, or one avoided node: a disc (a circle node), a box
  *  (any other node, by its bounding box), or a segment (one straight piece
- *  of a drawn line, `w` its stroke width). */
+ *  of a drawn line, `w` its stroke width). An ellipse node that is not a
+ *  circle is the disc of its larger radius that also carries its semi-axes
+ *  (`axes`): the blob reads the disc, and the oval samples the ellipse. */
 export type BlobMember =
-  | { kind: "disc"; cx: number; cy: number; r: number }
+  | { kind: "disc"; cx: number; cy: number; r: number; axes?: [number, number] }
   | { kind: "box"; x: number; y: number; w: number; h: number }
   | { kind: "segment"; a: Pt; b: Pt; w: number };
 type Member = BlobMember;

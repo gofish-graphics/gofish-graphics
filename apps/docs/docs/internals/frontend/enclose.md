@@ -58,13 +58,19 @@ the same default installed by name (see
 
 ## Reading members
 
-`members.ts` reads a placed node as blob geometry, in the enclosure's frame:
+`members.ts` reads a placed node as outline geometry, in the enclosure's
+frame:
 
 - A circle (a node of type `ellipse` with equal sides) is a disc.
+- An ellipse that is not a circle is the disc of its larger radius, carrying
+  its two semi-axes as well. The blob reads only the disc, so it pads the
+  ellipse a little more along its short axis (a declared shortcut, below).
+  The oval reads the semi-axes and samples the ellipse itself.
 - A `line` is its segments, each a tube as wide as its stroke. The connector
   records its stroke width in `renderData.centerline`; a `ribbon`, whose
   paths are a band's outline, does not, so it is read as a box.
-- Anything else is its bounding box, with an exact distance to a rectangle.
+- Anything else is its bounding box. The blob measures the distance to it
+  exactly, as a rectangle.
 
 This reader is internal. There is no `members` option and no public geometry
 protocol for it yet.
@@ -74,11 +80,16 @@ protocol for it yet.
 `oval.ts` is pure geometry too: `ovalOutline(members, padding)` returns
 one loop.
 
-1. **Discs.** Each member grown by `padding` is the convex hull of a few
-   discs: a disc grown by `padding`; a box's four corners, each a disc of
-   radius `padding`; a segment's two ends, each a disc of half its width plus
-   `padding`. An ellipse is convex, so it holds a member exactly when it
-   holds these discs.
+1. **Discs.** Each member grown by `padding` is held by the convex hull of
+   a few discs: a disc grown by `padding`; a box's four corners, each a disc
+   of radius `padding`; a segment's two ends, each a disc of half its width
+   plus `padding`; an ellipse that is not a circle, the vertices of the
+   64-gon drawn around it, each a disc of radius `padding`. For a disc, a
+   box and a segment the hull is the padded member itself, so an ellipse
+   holds the member exactly when it holds these discs. An ellipse grown by
+   `padding` is not an ellipse (its ends are blunter), and its hull of discs
+   is a little larger than it: by at most 0.12% of the ellipse's radius,
+   plus the 24-gons' 0.86% of `padding` (step 2).
 2. **Samples.** Each disc is sampled as the 24-gon drawn around it (its
    vertices at `r / cos(π / 24)`), so the samples' convex hull holds every
    padded member. Only that hull goes on.
@@ -218,8 +229,9 @@ Settled:
 
 Shortcuts, each a known approximation:
 
-- An ellipse that is not a circle is read as its enclosing circle (its larger
-  radius), so it gets a little more padding along its short axis.
+- In a blob, an ellipse that is not a circle is read as its enclosing
+  circle (its larger radius), so it gets a little more padding along its
+  short axis. The oval samples the ellipse itself.
 - A curved `line` piece (a Bezier segment) is cut into 8 straight segments.
 - A segment member keeps its own padding band at every `convexity`: a filled
   triangle's side along a member edge is that edge's band, and only the

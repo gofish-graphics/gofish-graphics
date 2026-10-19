@@ -480,6 +480,31 @@ console.log("# Shape.oval(): the minimum-area enclosing ellipse");
     check("no members give no outline", ovalOutline([], 6).length === 0);
   }
   {
+    // A wide ellipse member, 200 by 20, padded by 4: the ellipse grown by 4 is
+    // not an ellipse (its ends are blunter), so the least ellipse around it is
+    // wider than 208 by 28. It must hold the true offset curve, and it is no
+    // circle.
+    const wide: BlobMember = { kind: "disc", cx: 0, cy: 0, r: 100, axes: [100, 10] };
+    const [loop] = ovalOutline([wide], 4);
+    const xs = loop.map((p) => p[0]),
+      ys = loop.map((p) => p[1]);
+    const w = Math.max(...xs) - Math.min(...xs),
+      h = Math.max(...ys) - Math.min(...ys);
+    const offset = Array.from({ length: 2000 }, (_, i): Pt => {
+      const t = (i / 2000) * 2 * Math.PI;
+      const nx = 10 * Math.cos(t),
+        ny = 100 * Math.sin(t),
+        n = Math.hypot(nx, ny);
+      return [100 * Math.cos(t) + (4 * nx) / n, 10 * Math.sin(t) + (4 * ny) / n];
+    });
+    const outside = offset.filter((q) => !inPoly(q, loop)).length;
+    check(
+      "an ellipse member gives an oval around the ellipse, not a circle",
+      w > 208 && w < 230 && h > 28 && h < 31 && outside === 0,
+      `${w.toFixed(1)} by ${h.toFixed(1)}, ${outside} offset points outside`
+    );
+  }
+  {
     const species = ["Adelie", "Chinstrap", "Gentoo"].map((s) =>
       pen.filter((d) => d.Species === s).map(penDisc)
     );

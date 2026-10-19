@@ -6,10 +6,13 @@
  * The outline of `Shape.oval()`: the minimum-area ellipse that holds every
  * member grown by `padding`. Pure geometry, no GoFish nodes.
  *
- * 1. Each padded member is a union of discs: a disc grown by `padding`; a
- *    box's four corners, each a disc of radius `padding` (their convex hull is
- *    the padded box); a segment's two ends, each a disc of radius half its
- *    width plus `padding` (their hull is the padded capsule).
+ * 1. Each padded member is held by the hull of a few discs: a disc grown by
+ *    `padding`; a box's four corners, each a disc of radius `padding` (their
+ *    hull is the padded box); a segment's two ends, each a disc of radius
+ *    half its width plus `padding` (their hull is the padded capsule); an
+ *    ellipse that is not a circle, the vertices of the 64-gon drawn around
+ *    it, each a disc of radius `padding` (their hull holds the ellipse grown
+ *    by `padding`, which is not itself an ellipse).
  * 2. Each disc is sampled as the 24-gon drawn around it, so the samples'
  *    convex hull holds every padded member.
  * 3. Khachiyan's algorithm finds the minimum-area ellipse around that hull to
@@ -30,11 +33,28 @@ export type Ellipse = { c: Pt; a: number; b: number; d: number };
 
 const SIDES = 24;
 const LOOP = 128;
+/** The sides of the polygon drawn around an ellipse member. */
+const ELLIPSE_SIDES = 64;
 
-/** The discs, `[cx, cy, r]`, whose union's hull is the member grown by `pad`. */
+/** The discs, `[cx, cy, r]`, whose union's hull holds the member grown by
+ *  `pad` (is it, but for an ellipse that is not a circle). */
 const discsOf = (m: BlobMember, pad: number): [number, number, number][] =>
   m.kind === "disc"
-    ? [[m.cx, m.cy, m.r + pad]]
+    ? m.axes === undefined
+      ? [[m.cx, m.cy, m.r + pad]]
+      : Array.from(
+          { length: ELLIPSE_SIDES },
+          (_, k): [number, number, number] => {
+            // the polygon around the ellipse: the image of the one around the unit circle
+            const t = (2 * Math.PI * k) / ELLIPSE_SIDES,
+              out = 1 / Math.cos(Math.PI / ELLIPSE_SIDES);
+            return [
+              m.cx + m.axes![0] * out * Math.cos(t),
+              m.cy + m.axes![1] * out * Math.sin(t),
+              pad,
+            ];
+          }
+        )
     : m.kind === "box"
       ? [
           [m.x, m.y, pad],
