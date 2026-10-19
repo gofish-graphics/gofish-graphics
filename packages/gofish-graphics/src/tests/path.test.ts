@@ -16,6 +16,7 @@ import {
   transformPath,
   subdividePath,
   lerpPoint,
+  pathBounds,
 } from "../path";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { CoordinateTransform } from "../ast/coordinateTransforms/coord";
@@ -548,6 +549,58 @@ function testEdgeCases() {
 }
 
 /**
+ * `pathBounds` is the exact box of what a path draws: a bezier's turning
+ * points count, its control points do not.
+ */
+function testPathBounds(): boolean {
+  console.log("Testing pathBounds...");
+  const close = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+  const cases: [string, Path, [number, number, number, number] | undefined][] =
+    [
+      ["empty", [], undefined],
+      ["line", [segment([3, 4], [1, 7])], [1, 4, 3, 7]],
+      // Symmetric hump: controls at y=4, the curve peaks at y=3.
+      ["hump", [curve([0, 0], [0, 4], [4, 4], [4, 0])], [0, 0, 4, 3]],
+      // S-curve whose controls stay between the ends: bounded by the ends.
+      ["s-curve", [curve([0, 0], [5, 0], [5, 10], [10, 10])], [0, 0, 10, 10]],
+    ];
+  let ok = true;
+  for (const [name, path, want] of cases) {
+    const got = pathBounds(path);
+    const pass =
+      want === undefined
+        ? got === undefined
+        : got !== undefined &&
+          close(got.min[0], want[0]) &&
+          close(got.min[1], want[1]) &&
+          close(got.max[0], want[2]) &&
+          close(got.max[1], want[3]);
+    console.log(`  ${name}: ${pass ? "✓ PASSED" : "✗ FAILED"}`);
+    if (!pass) console.log(`    got ${JSON.stringify(got)}, want ${want}`);
+    ok = ok && pass;
+  }
+  // Densely sampled points of a curve stay inside, and touch, its box.
+  const c = curve([0, 0], [-3, 6], [9, 8], [5, -2]);
+  const box = pathBounds([c])!;
+  let lo: Point = [Infinity, Infinity];
+  let hi: Point = [-Infinity, -Infinity];
+  for (let i = 0; i <= 10000; i++) {
+    const p = evaluateBezierAt(c, i / 10000);
+    lo = [Math.min(lo[0], p[0]), Math.min(lo[1], p[1])];
+    hi = [Math.max(hi[0], p[0]), Math.max(hi[1], p[1])];
+  }
+  const tight =
+    Math.abs(lo[0] - box.min[0]) < 1e-6 &&
+    Math.abs(lo[1] - box.min[1]) < 1e-6 &&
+    Math.abs(hi[0] - box.max[0]) < 1e-6 &&
+    Math.abs(hi[1] - box.max[1]) < 1e-6;
+  console.log(`  sampled curve: ${tight ? "✓ PASSED" : "✗ FAILED"}`);
+  ok = ok && tight;
+  console.log();
+  return ok;
+}
+
+/**
  * Run all tests
  */
 export function runTests() {
@@ -558,6 +611,7 @@ export function runTests() {
     testBezierCurvesPolar(),
     testMixedPaths(),
     testEdgeCases(),
+    testPathBounds(),
   ];
 
   const allPassed = results.every((r) => r);
@@ -573,6 +627,7 @@ export function runTests() {
       "Bezier curves under polar transform",
       "Mixed paths (lines and beziers)",
       "Edge cases",
+      "pathBounds",
     ];
     results.forEach((passed, i) => {
       console.log(`  ${passed ? "✓" : "✗"} ${testNames[i]}`);

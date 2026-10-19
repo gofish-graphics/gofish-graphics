@@ -5,6 +5,7 @@ import {
   reversePath,
   samePoint,
   mapPathPoints,
+  pathBounds,
   transformPath,
 } from "../../path";
 import { GoFishAST } from "../_ast";
@@ -453,10 +454,6 @@ export const connect = createNodeOperator(
               clamp(pt[1], onto[1].min!, onto[1].max!),
             ];
 
-            let aMinX = Infinity;
-            let aMaxX = -Infinity;
-            let aMinY = Infinity;
-            let aMaxY = -Infinity;
             for (const [b0, b1] of bboxPairs) {
               let p0: [number, number];
               let p1: [number, number];
@@ -471,23 +468,17 @@ export const connect = createNodeOperator(
                 p1 = anchorPoint(b1, resolvedTarget ?? [0.5, 0.5]);
               }
               paths.push([{ type: "line", points: [p0, p1] }]);
-              aMinX = Math.min(aMinX, p0[0], p1[0]);
-              aMaxX = Math.max(aMaxX, p0[0], p1[0]);
-              aMinY = Math.min(aMinY, p0[1], p1[1]);
-              aMaxY = Math.max(aMaxY, p0[1], p1[1]);
             }
-            const hasPaths = bboxPairs.length > 0;
-            const w = hasPaths ? aMaxX - aMinX : 0;
-            const h = hasPaths ? aMaxY - aMinY : 0;
+            const box = pathBounds(paths.flat());
             return {
               intrinsicDims: [
                 {
-                  min: hasPaths ? aMinX : 0,
-                  size: w,
+                  min: box?.min[0] ?? 0,
+                  size: box ? box.max[0] - box.min[0] : 0,
                 },
                 {
-                  min: hasPaths ? aMinY : 0,
-                  size: h,
+                  min: box?.min[1] ?? 0,
+                  size: box ? box.max[1] - box.min[1] : 0,
                 },
               ],
               transform: { translate: [0, 0] },
@@ -875,6 +866,20 @@ export const connect = createNodeOperator(
               mergedPaths.push(flushRun(run));
               run = [];
             }
+          }
+
+          // The box also holds the drawn path, which can leave the endpoints'
+          // box: an arc bulges out past its chord, a perfect-arrows bow
+          // curves off the line between its boxes, and a smooth sequence
+          // curve can overshoot its points (#1166). The box lives in the
+          // connector's layout space, before any coordinate transform, like
+          // every other shape's; a coord node warps its children's boxes.
+          const drawn = pathBounds(paths.flat());
+          if (drawn !== undefined) {
+            bboxMinX = Math.min(bboxMinX, drawn.min[0]);
+            bboxMaxX = Math.max(bboxMaxX, drawn.max[0]);
+            bboxMinY = Math.min(bboxMinY, drawn.min[1]);
+            bboxMaxY = Math.max(bboxMaxY, drawn.max[1]);
           }
 
           // If no paths were created, use zero dimensions

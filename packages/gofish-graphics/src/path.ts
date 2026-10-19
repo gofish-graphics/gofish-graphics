@@ -88,6 +88,77 @@ export const mapPathPoints = (path: Path, f: (p: Point) => Point): Path =>
           }
   );
 
+/** An axis-aligned box: the low corner and the high corner. */
+export type PathBounds = { min: Point; max: Point };
+
+/** The parameters in (0, 1) where one coordinate of a cubic bezier turns
+ *  around: the roots of that coordinate's derivative, a quadratic in t. */
+const cubicTurns = (p0: number, p1: number, p2: number, p3: number) => {
+  // B'(t)/3 = a·t² + b·t + c
+  const a = -p0 + 3 * p1 - 3 * p2 + p3;
+  const b = 2 * (p0 - 2 * p1 + p2);
+  const c = p1 - p0;
+  const EPS = 1e-12;
+  const roots: number[] = [];
+  if (Math.abs(a) < EPS) {
+    if (Math.abs(b) > EPS) roots.push(-c / b);
+  } else {
+    const disc = b * b - 4 * a * c;
+    if (disc >= 0) {
+      const s = Math.sqrt(disc);
+      roots.push((-b + s) / (2 * a), (-b - s) / (2 * a));
+    }
+  }
+  return roots.filter((t) => t > 0 && t < 1);
+};
+
+const cubicAt = (p0: number, p1: number, p2: number, p3: number, t: number) => {
+  const u = 1 - t;
+  return (
+    u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3
+  );
+};
+
+/**
+ * The exact box around the points a path draws, or `undefined` for an empty
+ * path. A line is bounded by its ends. A cubic is bounded by its ends and by
+ * its points where a coordinate's derivative is zero, so the box is tight even
+ * when the control points stick out past the curve (an arc's controls do).
+ */
+export const pathBounds = (path: Path): PathBounds | undefined => {
+  if (path.length === 0) return undefined;
+  const min: Point = [Infinity, Infinity];
+  const max: Point = [-Infinity, -Infinity];
+  const add = (axis: 0 | 1, v: number) => {
+    if (v < min[axis]) min[axis] = v;
+    if (v > max[axis]) max[axis] = v;
+  };
+  for (const seg of path) {
+    if (seg.type === "line") {
+      for (const p of seg.points) {
+        add(0, p[0]);
+        add(1, p[1]);
+      }
+      continue;
+    }
+    const { start, control1, control2, end } = seg;
+    for (const axis of [0, 1] as const) {
+      const [p0, p1, p2, p3] = [
+        start[axis],
+        control1[axis],
+        control2[axis],
+        end[axis],
+      ];
+      add(axis, p0);
+      add(axis, p3);
+      for (const t of cubicTurns(p0, p1, p2, p3)) {
+        add(axis, cubicAt(p0, p1, p2, p3, t));
+      }
+    }
+  }
+  return { min, max };
+};
+
 export const segmentToSVG = (segment: PathSegment): string => {
   if (segment.type === "line") {
     const [[x1, y1], [x2, y2]] = segment.points;
