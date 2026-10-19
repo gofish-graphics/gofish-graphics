@@ -6,8 +6,11 @@
  */
 // The library first, so its modules initialize in their usual order.
 import { chart, spread, rect } from "../lib";
+import { runLayout } from "../ast/gofish";
+import { GoFishNode } from "../ast/_node";
 import { check, items, report } from "./testHelpers";
 
+/** Every node of the tree under `node`, `node` included. */
 const close = (a: number | undefined, b: number, eps = 1e-6) =>
   a !== undefined && Math.abs(a - b) <= eps;
 
@@ -31,6 +34,46 @@ async function main() {
       "bands sit 110 px apart",
       close(rects[1].x! - rects[0].x! - rects[0].w!, 110),
       rects.map((r) => r.x)
+    );
+  }
+
+  console.log("\n# a chart's content gets no less than no room");
+  {
+    // Three nested charts in 60 px of height: each has 13.3 px, less than
+    // its chrome's gutters, so its content gets 0 px, never a negative size.
+    const rows = ["a", "b", "c"].flatMap((g) =>
+      ["p", "q"].map((i, j) => ({ g, i, v: j + 1 }))
+    );
+    const node = await chart(rows)
+      .flow(spread({ by: "g", dir: "y", spacing: 10 }))
+      .mark((d: any) =>
+        chart(d)
+          .flow(spread({ by: "i", dir: "x", spacing: 2 }))
+          .mark(rect({ h: "v" }))
+      )
+      .resolve();
+    // Record the size each chart hands its content (its first child).
+    const handed: number[][] = [];
+    const proto = GoFishNode.prototype as any;
+    const layout = proto.layout;
+    proto.layout = function (this: GoFishNode, size: number[], ...rest: any[]) {
+      const p = this.parent;
+      if (p?.chrome !== undefined && p.children[0] === this)
+        handed.push([...size]);
+      return layout.call(this, size, ...rest);
+    };
+    const data = await runLayout({ w: 200, h: 60 }, node).finally(
+      () => (proto.layout = layout)
+    );
+    check(
+      "every chart hands its content a size of at least 0",
+      handed.length > 0 && handed.every((s) => s.every((v) => !(v < 0))),
+      handed
+    );
+    check(
+      "the layout warns that the fixed parts overflow on y",
+      data.warnings.some((w) => w.kind === "fixed-overflow" && w.axis === "y"),
+      data.warnings.map((w) => w.message)
     );
   }
 

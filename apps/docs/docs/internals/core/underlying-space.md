@@ -1535,7 +1535,7 @@ reads one: a ring or a label wrapper added later reads the seat of the content
 it wraps. Chrome does take room, as pixels: every chrome shape claims its size,
 and a ring's claim is the hull of what it wraps and of its shapes where its
 constraints place them (`placeByClaims`). A layer that wears chrome hands its
-content its slot less its gutters, read off those claims, and a chart with a
+content its slot less its gutters (never less than 0), read off those claims, and a chart with a
 size of its own adds the gutters its claims give around a plot of that size
 (#1032; see [Chrome gutters](/internals/layout/passes#chrome-gutters)). A child
 placed beside a node inside another child (a label on its mark's ref) takes

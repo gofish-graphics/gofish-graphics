@@ -760,9 +760,11 @@ report their size).
   keyed domain, at its σ. Where its plot fills the room it is given (a
   category axis), its rings' claims are built around a plot of size X, and
   the plot's size is the X at which they fill the slot (where fixed parts
-  leave no X that fills it exactly, the X at which the parts that grow with
-  X reach it, as the root solves σ). It hands its content
-  (its first child) its slot less its gutters, and seats it past its start
+  leave no X that fills it exactly, the X at which the part that grows with
+  X, alone, reaches it, as the root solves σ). It hands its content
+  (its first child) its slot less its gutters, or no room when the gutters
+  are larger than the slot (the scope that solved the slot warns that its
+  fixed parts overflow), and seats it past its start
   gutter: the ring pins the ring inside it at a literal pixel (`wrapRing`),
   and that pixel becomes the start gutter (`seatPastGutters`), except on an
   axis where the content is free (its baseline is its origin, and the start

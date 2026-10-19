@@ -1147,13 +1147,15 @@ export const layer = createNodeOperatorSequential(
             );
             // A node dressed in chrome hands its content (its first child)
             // what the chrome's gutters leave of its slot (#1032), or its
-            // own room in a share scope.
+            // own room in a share scope. Gutters larger than the slot leave
+            // the content no room (the fixed parts overflow, and the scope
+            // that solved the slot warns); an unsized axis (NaN) stays
+            // unsized.
+            const inside = (axis: 0 | 1) =>
+              Math.max(0, proposed[axis] - sum(node.chromeGutters(axis)));
             const layoutSize: Size =
               i === 0 && node.chrome !== undefined
-                ? [
-                    own[0] ?? proposed[0] - sum(node.chromeGutters(0)),
-                    own[1] ?? proposed[1] - sum(node.chromeGutters(1)),
-                  ]
+                ? [own[0] ?? inside(0), own[1] ?? inside(1)]
                 : proposed;
             // Recombine the two forwarding decisions into the single carrier: σ
             // forwards uniformly (childScaleFactors), the anchored map forwards
