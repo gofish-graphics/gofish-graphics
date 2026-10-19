@@ -16,7 +16,7 @@ import { combine, byDepth, mount } from "./_shared";
 const meta: Meta = { title: "GoTree / Gallery / WeaveTree" };
 export default meta;
 
-const node = (d: any) => circle({ r: 6, fill: byDepth()(d) });
+const node = (d: any) => circle({ r: 13, fill: byDepth()(d) });
 
 export const WeaveTree: StoryObj = {
   render: () =>
@@ -25,12 +25,12 @@ export const WeaveTree: StoryObj = {
       // TODO: needs curve links implemented
       link: { curve: Curve.linear(), stroke: "#666", strokeWidth: 1 },
       parentChild: combine({
-        x: { kind: "distribute", spacing: 8 },
+        x: { kind: "distribute", spacing: 18 },
         y: { kind: "align", alignment: "end" },
       }),
       sibling: combine({
-        x: { kind: "distribute", spacing: 12 },
-        y: { kind: "distribute", spacing: 12 },
+        x: { kind: "distribute", spacing: 26 },
+        y: { kind: "distribute", spacing: 26 },
       }),
     }),
 };

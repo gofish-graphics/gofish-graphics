@@ -164,7 +164,7 @@ const links = placed
 
 export const RadialPhylogeneticTree: StoryObj = {
   render: () => {
-    const container = initializeContainer({ w: CANVAS, h: CANVAS });
+    const container = initializeContainer();
     // Node=hidden: the layer holds only links.
     frame({}, [layer([...links])]).render(container, { w: CANVAS, h: CANVAS });
     return container;

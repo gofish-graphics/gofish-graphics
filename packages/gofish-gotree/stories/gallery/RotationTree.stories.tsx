@@ -201,7 +201,7 @@ const links = placed
 
 export const RotationTree: StoryObj = {
   render: () => {
-    const container = initializeContainer({ w: 520, h: 520 });
+    const container = initializeContainer();
     // Inside a coord, paint order = array order (coord's flattenLayout ignores
     // zOrder). Links FIRST (under the nodes); the root node is last within
     // `nodes` so its dark disc caps the center.

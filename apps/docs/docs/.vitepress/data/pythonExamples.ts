@@ -3,11 +3,10 @@
  *
  * Mirrors storyExamples.ts (see that file's header) but on the Python side: for
  * each gallery-tagged story example, it resolves the matching parity test in
- * `tests/python-stories/**​/test_*.py` (via the same title→path convention as
- * `tests/scripts/path-mapping.ts`'s `mapJsToPython`, duplicated below — this file
- * lives in a different package and pnpm workspace boundaries make a cross-package
- * import brittle for a build-time data loader) and synthesizes a standalone,
- * user-facing Python snippet from the matching `story_*` function's body.
+ * `tests/python-stories/**​/test_*.py` (via `tests/scripts/path-mapping.ts`'s
+ * `mapJsToPython`, the same title→path convention the parity checks use) and
+ * synthesizes a standalone, user-facing Python snippet from the matching
+ * `story_*` function's body.
  *
  * For examples with no Python port yet, or whose port can't be cleanly
  * transformed into a standalone snippet (unusual return shape, unrewritable
@@ -26,11 +25,16 @@ import { readFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  getStorySource,
   loadStoryExamples,
   PREVIEW_ROWS,
   type StoryExample,
 } from "./storyExamples.ts";
 import { dedent, indent } from "./textUtils.ts";
+import {
+  mapJsToPython,
+  toKebab,
+} from "../../../../../tests/scripts/path-mapping.ts";
 
 export interface PythonExample {
   id: string;
@@ -72,67 +76,6 @@ function isDatasetModule(module: string): boolean {
 }
 const LOWLEVEL_DATA_DIR = join(PYTHON_STORIES_DIR, "_lowlevel_data");
 const EXEMPT_FILE = join(TESTS_DIR, ".python-sync-exempt");
-
-// ---------------------------------------------------------------------------
-// path-mapping.ts duplicates (source of truth: tests/scripts/path-mapping.ts).
-// Kept in lockstep by hand — both are small and rarely change together.
-// ---------------------------------------------------------------------------
-
-/** CamelCase / spaced / underscored → kebab-case. */
-function toKebab(s: string): string {
-  return s
-    .replace(/([a-z])([A-Z])/g, "$1-$2")
-    .replace(/[\s_]+/g, "-")
-    .toLowerCase();
-}
-
-/** Storybook title + JS file path → the expected Python parity test file. */
-const mapJsToPythonCache = new Map<string, string>();
-function mapJsToPython(jsFileRelToRepo: string): string {
-  const cached = mapJsToPythonCache.get(jsFileRelToRepo);
-  if (cached !== undefined) return cached;
-  const result = computeMapJsToPython(jsFileRelToRepo);
-  mapJsToPythonCache.set(jsFileRelToRepo, result);
-  return result;
-}
-
-function computeMapJsToPython(jsFileRelToRepo: string): string {
-  const absPath = join(REPO_ROOT, jsFileRelToRepo);
-  let title: string | null = null;
-  try {
-    const content = readFileSync(absPath, "utf-8");
-    const m = content.match(/title:\s*["'](.+?)["']/);
-    if (m) title = m[1];
-  } catch {
-    /* unreadable — fall through to path-based fallback */
-  }
-
-  if (title) {
-    const segments = title.split("/").map(toKebab);
-    const dirPath = segments.slice(0, -1).join("/");
-    const basePart = segments[segments.length - 1].replace(/-/g, "_");
-    return `tests/python-stories/${dirPath}/test_${basePart}.py`;
-  }
-
-  // Fallback: derive from file path (CamelCase → snake_case, flatten one level)
-  let rel = jsFileRelToRepo.replace(
-    /^packages\/gofish-graphics\/stories\//,
-    ""
-  );
-  rel = rel.replace(/\.stories\.tsx$/, "");
-  const lastSlash = rel.lastIndexOf("/");
-  const dirPart = lastSlash >= 0 ? rel.slice(0, lastSlash) : ".";
-  const basePart = lastSlash >= 0 ? rel.slice(lastSlash + 1) : rel;
-  const toSnake = (s: string) =>
-    s.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
-  const snakeBase = toSnake(basePart);
-  let snakeDir = toSnake(dirPart);
-  if (snakeDir.includes("/")) {
-    snakeDir = snakeDir.replace(/\/[^/]*$/, "");
-  }
-  const prefix = snakeDir && snakeDir !== "." ? `${snakeDir}/` : "";
-  return `tests/python-stories/${prefix}test_${snakeBase}.py`;
-}
 
 /** JS story export name → the expected `story_*` Python function name. */
 function exportToStoryFn(exportName: string): string {
@@ -813,7 +756,11 @@ export function loadPythonExamples(): PythonExample[] {
 
   const examples: PythonExample[] = jsExamples.map((ex: StoryExample) => {
     const renderDiverges = isExportExempt(exempt, ex.storyFile, ex.exportName);
-    const pyRelPath = mapJsToPython(ex.storyFile);
+    // The story's source as loadStoryExamples already read it.
+    const pyRelPath = mapJsToPython(
+      ex.storyFile,
+      getStorySource(ex.storyFile) ?? null
+    );
     const pyAbsPath = pyRelPath ? join(REPO_ROOT, pyRelPath) : "";
     if (!pyRelPath || !existsSync(pyAbsPath)) {
       return {

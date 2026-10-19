@@ -116,7 +116,7 @@ export const Sunburst: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 540, h: 540 });
+    const container = initializeContainer();
     tree(
       {
         node,

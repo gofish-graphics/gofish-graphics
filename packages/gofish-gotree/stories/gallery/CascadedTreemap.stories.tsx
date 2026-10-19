@@ -24,16 +24,16 @@ export default meta;
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        w: 18 + d.data.value * 10,
-        h: 18 + d.data.value * 10,
+        w: 41 + d.data.value * 23,
+        h: 41 + d.data.value * 23,
         fill: byDepth()(d),
         stroke: "#08306b",
         strokeWidth: 1,
       })
     : rect({ fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
 
-const P = 6; // small nest pad → visible cascade inset border per level
-const G = 8; // sibling spacing
+const P = 14; // small nest pad → visible cascade inset border per level
+const G = 18; // sibling spacing
 
 // dice: siblings spread on X, share a vertical center.
 const dice = combine({
@@ -56,7 +56,7 @@ export const CascadedTreemap: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 640, h: 420 });
+    const container = initializeContainer();
     tree(
       {
         node,

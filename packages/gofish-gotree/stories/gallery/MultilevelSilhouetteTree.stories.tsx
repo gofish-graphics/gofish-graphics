@@ -282,7 +282,7 @@ export const MultilevelSilhouetteTree: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 660, h: 660 });
+    const container = initializeContainer();
     frame({ coord: Coord.polar() as any }, [layer(marks)]).render(container, {
       w: 660,
       h: 660,

@@ -709,6 +709,11 @@ export default defineConfig({
               collapsed: true,
               items: [{ text: "Shape", link: "/python/api/shape" }],
             },
+            {
+              text: "GoTree",
+              collapsed: true,
+              items: [{ text: "tree", link: "/python/gotree" }],
+            },
           ],
         },
       ],

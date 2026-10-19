@@ -5,6 +5,7 @@ import {
   reversePath,
   samePoint,
   mapPathPoints,
+  pathBounds,
   transformPath,
 } from "../../path";
 import { GoFishAST } from "../_ast";
@@ -19,6 +20,13 @@ import {
 } from "../displayList/lowerHelpers";
 import { Dimensions, elaborateDirection, FancyDirection, Size } from "../dims";
 import { pairs } from "../../util";
+import {
+  type BoundingBox,
+  bbox,
+  empty,
+  isEmptyInfinity,
+  union,
+} from "../../util/bbox";
 import { linear } from "../coordinateTransforms/linear";
 import { isValue, MaybeValue } from "../data";
 import { Domain, axisScale } from "../domain";
@@ -163,6 +171,19 @@ function runKnots(
   const sign = Math.sign(numbers[1] - numbers[0]);
   return numbers.map((v) => sign * v);
 }
+
+/** A connector's box as its intrinsic dims; an empty box (nothing to
+ *  connect) is zero-sized at the origin. */
+const boxDims = (box: BoundingBox): Size<{ min: number; size: number }> =>
+  isEmptyInfinity(box)
+    ? [
+        { min: 0, size: 0 },
+        { min: 0, size: 0 },
+      ]
+    : [
+        { min: box.minX, size: box.maxX - box.minX },
+        { min: box.minY, size: box.maxY - box.minY },
+      ];
 
 export const connect = createNodeOperator(
   (
@@ -453,10 +474,6 @@ export const connect = createNodeOperator(
               clamp(pt[1], onto[1].min!, onto[1].max!),
             ];
 
-            let aMinX = Infinity;
-            let aMaxX = -Infinity;
-            let aMinY = Infinity;
-            let aMaxY = -Infinity;
             for (const [b0, b1] of bboxPairs) {
               let p0: [number, number];
               let p1: [number, number];
@@ -471,25 +488,9 @@ export const connect = createNodeOperator(
                 p1 = anchorPoint(b1, resolvedTarget ?? [0.5, 0.5]);
               }
               paths.push([{ type: "line", points: [p0, p1] }]);
-              aMinX = Math.min(aMinX, p0[0], p1[0]);
-              aMaxX = Math.max(aMaxX, p0[0], p1[0]);
-              aMinY = Math.min(aMinY, p0[1], p1[1]);
-              aMaxY = Math.max(aMaxY, p0[1], p1[1]);
             }
-            const hasPaths = bboxPairs.length > 0;
-            const w = hasPaths ? aMaxX - aMinX : 0;
-            const h = hasPaths ? aMaxY - aMinY : 0;
             return {
-              intrinsicDims: [
-                {
-                  min: hasPaths ? aMinX : 0,
-                  size: w,
-                },
-                {
-                  min: hasPaths ? aMinY : 0,
-                  size: h,
-                },
-              ],
+              intrinsicDims: boxDims(pathBounds(paths.flat())),
               transform: { translate: [0, 0] },
               renderData: { paths, defaultColor },
             };
@@ -499,30 +500,22 @@ export const connect = createNodeOperator(
            *  with their shares of its time (`SequenceCurve.thread`). */
           let steps: Step[] = [];
 
-          // If in center mode, adjust bounding boxes to have zero width/height
-          // with min and max equal to the center point
-
-          // Compute bounding box from connected elements
-          let bboxMinX = Infinity;
-          let bboxMaxX = -Infinity;
-          let bboxMinY = Infinity;
-          let bboxMaxY = -Infinity;
-
-          for (const [b0, b1] of bboxPairs) {
+          // The box starts from the endpoints (their centers in center mode,
+          // their boxes in edge mode). Each endpoint counts once: the
+          // operands the run's pairs join (a run of one point joins none),
+          // however many points each stands at.
+          let box = empty();
+          const ends = bboxPairs.length > 0 ? new Set(childPlaceables) : [];
+          for (const { dims: b } of ends) {
             if (mode === "center") {
-              const cx0 = (b0[0].min! + b0[0].max!) / 2;
-              const cy0 = (b0[1].min! + b0[1].max!) / 2;
-              const cx1 = (b1[0].min! + b1[0].max!) / 2;
-              const cy1 = (b1[1].min! + b1[1].max!) / 2;
-              bboxMinX = Math.min(bboxMinX, cx0, cx1);
-              bboxMaxX = Math.max(bboxMaxX, cx0, cx1);
-              bboxMinY = Math.min(bboxMinY, cy0, cy1);
-              bboxMaxY = Math.max(bboxMaxY, cy0, cy1);
+              const cx = (b[0].min! + b[0].max!) / 2;
+              const cy = (b[1].min! + b[1].max!) / 2;
+              box = union(box, bbox(cx, cx, cy, cy));
             } else {
-              bboxMinX = Math.min(bboxMinX, b0[0].min!, b1[0].min!);
-              bboxMaxX = Math.max(bboxMaxX, b0[0].max!, b1[0].max!);
-              bboxMinY = Math.min(bboxMinY, b0[1].min!, b1[1].min!);
-              bboxMaxY = Math.max(bboxMaxY, b0[1].max!, b1[1].max!);
+              box = union(
+                box,
+                bbox(b[0].min!, b[0].max!, b[1].min!, b[1].max!)
+              );
             }
           }
 
@@ -877,21 +870,12 @@ export const connect = createNodeOperator(
             }
           }
 
-          // If no paths were created, use zero dimensions
-          const bboxW = bboxPairs.length > 0 ? bboxMaxX - bboxMinX : 0;
-          const bboxH = bboxPairs.length > 0 ? bboxMaxY - bboxMinY : 0;
+          // The drawn path can leave the endpoints' box: an arc bulges, a
+          // perfect-arrows bow curves, a smooth curve overshoots (#1166).
+          box = union(box, pathBounds(paths.flat()));
 
           return {
-            intrinsicDims: [
-              {
-                min: bboxPairs.length > 0 ? bboxMinX : 0,
-                size: bboxW,
-              },
-              {
-                min: bboxPairs.length > 0 ? bboxMinY : 0,
-                size: bboxH,
-              },
-            ],
+            intrinsicDims: boxDims(box),
             transform: { translate: [0, 0] },
             // The box above is the WHOLE run's, cut or not: the room a line
             // uses over its run, the way a transition claims its whole

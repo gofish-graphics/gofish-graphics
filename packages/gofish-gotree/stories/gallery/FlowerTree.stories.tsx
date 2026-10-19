@@ -46,7 +46,7 @@ export default meta;
 // children — the petal. Leaves (width 1) are the small dark dots.
 const node = (d: any) =>
   circle({
-    r: 6 + Math.sqrt(d.width ?? 1) * 6,
+    r: 35 + Math.sqrt(d.width ?? 1) * 35,
     fill: byDepth()(d),
     stroke: "white",
     strokeWidth: 2,

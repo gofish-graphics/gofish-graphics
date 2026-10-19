@@ -22,7 +22,7 @@ export default meta;
 
 // Circle nodes, colored by depth (dark root → light leaves), static size 14
 // (r = 7), matching the dsl Element block.
-const node = (d: any) => circle({ r: 7, fill: byDepth()(d) });
+const node = (d: any) => circle({ r: 15, fill: byDepth()(d) });
 
 // A deep balanced binary tree so the fractal has enough levels to read as an
 // H-tree (the reference uses a deep balanced tree).
@@ -43,7 +43,7 @@ const balancedTree = (() => {
 // Sibling spacing: the alternating axes need different reach so the squares
 // nest cleanly (classic H-tree halves the segment length each level, but a
 // fixed spacing already reads as the recursive H).
-const S = 64;
+const S = 140;
 
 // Even depths spread siblings horizontally, odd depths vertically — the H ⇄ V
 // swap that draws the H-tree.
@@ -66,7 +66,7 @@ export const HTreeLayout: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 720, h: 560 });
+    const container = initializeContainer();
     tree(
       {
         node,

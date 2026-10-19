@@ -21,6 +21,7 @@ import {
   evenStep,
   segment,
   curve,
+  quadratic,
 } from "../../path";
 import type { Dimensions } from "../dims";
 import type { Curve } from "../../families/curve";
@@ -251,11 +252,11 @@ const arcRouter: Router = (b0, b1, { opts }) => {
 };
 
 /**
- * Box-to-box arrow arc via the `perfect-arrows` library (the routing that used
- * to be locked inside the `arrow` operator). Returns just the arc path; an
- * arrowhead, if wanted, is a separate decoration.
+ * Box-to-box arrow arc via the `perfect-arrows` library. Returns just the arc
+ * path; an arrowhead, if wanted, is a separate decoration (the `arrow`
+ * operator draws its own on this route).
  */
-const perfectArrowsRouter: Router = (b0, b1, { opts }) => {
+export const perfectArrowsRouter: Router = (b0, b1, { opts }) => {
   const [sx, sy, cx, cy, ex, ey] = getBoxToBoxArrow(
     b0[0].min!,
     b0[1].min!,
@@ -267,13 +268,8 @@ const perfectArrowsRouter: Router = (b0, b1, { opts }) => {
     b1[1].size!,
     opts
   );
-  // perfect-arrows returns a quadratic arc (start, control, end); elevate to a
-  // cubic: C1 = P0 + 2/3(C−P0), C2 = P1 + 2/3(C−P1).
-  const p0: Point = [sx, sy];
-  const p1: Point = [ex, ey];
-  const control1: Point = [sx + (2 / 3) * (cx - sx), sy + (2 / 3) * (cy - sy)];
-  const control2: Point = [ex + (2 / 3) * (cx - ex), ey + (2 / 3) * (cy - ey)];
-  return [curve(p0, control1, control2, p1)];
+  // perfect-arrows returns a quadratic arc (start, control, end).
+  return [quadratic([sx, sy], [cx, cy], [ex, ey])];
 };
 
 routes.set("linear", linearRouter);
