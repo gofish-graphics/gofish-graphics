@@ -9,6 +9,7 @@
  */
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
+import { items } from "./testHelpers";
 
 declare const process: { exit(code: number): never };
 const { rect, enclose, circle, Shape } = GoFish as any;
@@ -26,15 +27,10 @@ function check(name: string, ok: boolean, detail?: string): void {
 }
 
 /** The radii of every rect in a display list, in order. */
-const radii = (dl: any): [number, number][] => {
-  const out: [number, number][] = [];
-  const walk = (it: any) => {
-    if (it.kind === "rect") out.push([it.rx, it.ry]);
-    for (const c of it.children ?? []) walk(c);
-  };
-  dl.items.forEach(walk);
-  return out;
-};
+const radii = (dl: any): [number, number][] =>
+  items(dl)
+    .filter((it) => it.kind === "rect")
+    .map((it) => [it.rx, it.ry]);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 console.log("# rect");

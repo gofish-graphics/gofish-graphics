@@ -483,7 +483,7 @@ export class GoFishNode {
   /** The paint-order defaults `layer` installed for its relational-mark
    *  children (`applyRelationalZBelowDefaults`): `.relate()` replaces the
    *  author's constraints, and keeps these. */
-  public _paintDefaults: ConstraintSpec[] = [];
+  public _paintDefaults?: ConstraintSpec[];
   /** Set by `.relate()`: whether it added drawing clauses to this layer, so
    *  a layer without any skips looking for them in `resolveNames`. */
   public _hasRelateClauses: boolean = false;
@@ -2163,7 +2163,7 @@ export class GoFishNode {
     const { constraints, nodes } = await resolveRelateClauses(fn(env), env);
     // The relate's constraints replace an earlier relate's, and the layer's
     // paint-order defaults for its own relational-mark children stay.
-    this.constraints = [...this._paintDefaults, ...constraints];
+    this.constraints = [...(this._paintDefaults ?? []), ...constraints];
     for (const node of nodes) {
       node.parent = this;
       this.children.push(node);

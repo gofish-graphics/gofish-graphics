@@ -70,12 +70,11 @@ console.log("# avoiding: [b] inside .relate(), as Python writes it");
       circle({ r: 5, fill: "#111" }).name("b"),
       circle({ r: 5, fill: "#111" }).name("c"),
     ]);
-  const spec = { shape: Shape.spine({ clearance: 6 }), padding: 22 };
   const js = await svgOf((el) =>
     layer([dots()])
       .relate(({ a, b, c }: any) => [
         enclose(
-          { ...spec, shape: Shape.spine({ avoiding: [b], clearance: 6 }) },
+          { shape: Shape.spine({ avoiding: [b], clearance: 6 }), padding: 22 },
           [a, c]
         ),
       ])

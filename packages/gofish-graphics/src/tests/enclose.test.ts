@@ -402,16 +402,6 @@ console.log("# Shape.oval(): the minimum-area enclosing ellipse");
       ])
     );
   };
-  const inLoop = (p: Pt, loop: Pt[]) => {
-    let inside = false;
-    for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
-      const [xi, yi] = loop[i],
-        [xj, yj] = loop[j];
-      if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi)
-        inside = !inside;
-    }
-    return inside;
-  };
   const ellipseOf = (members: BlobMember[], pad: number) =>
     minEllipse(paddedHull(members, pad));
   /** The semi-axes, larger first, and the larger one's angle in degrees. */
@@ -442,7 +432,7 @@ console.log("# Shape.oval(): the minimum-area enclosing ellipse");
     for (const m of mixed)
       for (const q of boundary(m, pad)) {
         worst = Math.max(worst, ellipseValue(e, q));
-        if (!inLoop(q, loop)) outsideLoop++;
+        if (!inPoly(q, loop)) outsideLoop++;
       }
     check(
       `padding ${pad}: every padded dot, box and segment is inside the ellipse and its outline`,
