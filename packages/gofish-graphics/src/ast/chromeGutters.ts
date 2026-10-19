@@ -8,6 +8,7 @@ import { Extent } from "./extent";
 import * as Monotonic from "../util/monotonic";
 import { findTargetMonotonic } from "../util";
 import { childNameKey } from "./constraints/shared";
+import { isLiteralSeat } from "./constraints/claimPlacement";
 import { originIs } from "./underlyingSpace";
 
 /**
@@ -138,7 +139,7 @@ export function seatPastGutters(chart: GoFishNode): void {
       ? 0
       : chart.chromeGutters(axis)[0];
   for (const c of chart.constraints) {
-    if (c.type !== "position" || c.anchor !== "baseline") continue;
+    if (c.type !== "position" || !isLiteralSeat(c)) continue;
     if (!c.children.some((r) => r.name === name)) continue;
     if (typeof c.x === "number") c.x = seat(0);
     if (typeof c.y === "number") c.y = seat(1);

@@ -123,18 +123,28 @@ const actsOn = (c: ConstraintSpec, axis: 0 | 1): boolean => {
 const relates = (c: ConstraintSpec): boolean =>
   c.type === "align" || c.type === "distribute" || c.type === "nest";
 
-/** The literal pixel a position pins each operand's origin at on `axis`,
- *  by operand name. */
+/** Whether `c` pins its operands' origins at a literal pixel on some axis
+ *  (a point `position`, `anchor: "baseline"`). */
+export const isLiteralSeat = (c: ConstraintSpec): boolean =>
+  c.type === "position" &&
+  c.anchor === "baseline" &&
+  (typeof c.x === "number" || typeof c.y === "number");
+
+/** Per operand name, the literal pixel a `position` pins its origin at on
+ *  each axis (`isLiteralSeat`), the first such pin on each axis. One pass
+ *  over the constraints. */
 export const literalSeats = (
-  constraints: ConstraintSpec[],
-  axis: 0 | 1
-): Map<string, number> => {
-  const seats = new Map<string, number>();
+  constraints: readonly ConstraintSpec[]
+): Map<string, [number | undefined, number | undefined]> => {
+  const seats = new Map<string, [number | undefined, number | undefined]>();
   for (const c of constraints) {
-    if (c.type !== "position" || c.anchor !== "baseline") continue;
-    const v = c[axisName(axis)];
-    if (typeof v !== "number") continue;
-    for (const r of c.children) if (!seats.has(r.name)) seats.set(r.name, v);
+    if (c.type !== "position" || !isLiteralSeat(c)) continue;
+    for (const r of c.children) {
+      let s = seats.get(r.name);
+      if (s === undefined) seats.set(r.name, (s = [undefined, undefined]));
+      if (s[0] === undefined && typeof c.x === "number") s[0] = c.x;
+      if (s[1] === undefined && typeof c.y === "number") s[1] = c.y;
+    }
   }
   return seats;
 };
@@ -386,7 +396,7 @@ export function placeByClaims(
   // Each child's box, `[lo, hi]`, where the solve places it at σ, with the
   // curved claims' sides `sides` (`[ascent, descent]`): a box sits about its
   // origin, or across the span an interval pins.
-  const seats = literalSeats(constraints, axis);
+  const seats = literalSeats(constraints);
   const isCurved = new Set(curved);
   const solve = (sigma: number, sides: Map<number, Box>): Map<number, Box> => {
     const boxOf = (i: number): [number, number] => {
@@ -405,7 +415,7 @@ export function placeByClaims(
       const p = presetOf(i);
       // A child with no name no constraint reads: it sits at its origin.
       const key = c.name ?? `\u0000child:${i}`;
-      const seat = seats.get(key);
+      const seat = seats.get(key)?.[axis];
       const preset =
         p !== undefined
           ? p.lo.run(sigma) - box[0]

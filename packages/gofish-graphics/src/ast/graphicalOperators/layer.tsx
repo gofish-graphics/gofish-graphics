@@ -85,12 +85,12 @@ import {
   placementConstraints,
   childLayoutSizeProposal,
   childPosScalesFor,
-  literalSeats,
   selectGridConstraint,
   solveLayerScales,
 } from "../constraints/proposalPlan";
 import {
   constrainedOn,
+  literalSeats,
   negate,
   plus,
   placeByClaims,
@@ -1054,6 +1054,8 @@ export const layer = createNodeOperatorSequential(
           // that writes them (#878). Plain children lay out before it, as
           // always.
           const relateOrder = relateScheduleForLayout(node, operands);
+          // Where a literal position pins each child's origin, read once.
+          const literalSeatsByName = literalSeats(node.constraints);
 
           const layoutChild = (i: number) => {
             const child = children[i];
@@ -1117,7 +1119,9 @@ export const layer = createNodeOperatorSequential(
             // forwards uniformly (childScaleFactors), the anchored map forwards
             // per child (childPosScalesFor — stripped where a constraint consumed
             // the scale). A stripped map keeps the child's σ.
-            const seats = literalSeats(node.constraints, childName);
+            const seats = (childName === undefined
+              ? undefined
+              : literalSeatsByName.get(childName)) ?? [undefined, undefined];
             const childMaps = childPosScalesFor(
               (children[i] as GoFishNode)._underlyingSpace,
               targetDims,

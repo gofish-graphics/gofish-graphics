@@ -52,7 +52,7 @@ function seatIn(
   if (acting.length === 0) return start;
   const name = [...operands].find(([, op]) => op.direct && op.child === i)?.[0];
   const seat =
-    name === undefined ? undefined : literalSeats(acting, axis).get(name);
+    name === undefined ? undefined : literalSeats(acting).get(name)?.[axis];
   return seat !== undefined && acting.every((c) => c.type === "position")
     ? seat + start
     : undefined;
