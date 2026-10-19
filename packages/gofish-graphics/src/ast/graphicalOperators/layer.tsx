@@ -685,32 +685,43 @@ export const layer = createNodeOperatorSequential(
           // the constraints place leaving out the dressing, and a chain with
           // a stand-in reaching only as far as its stand-ins. A chain's
           // other parts count whole: what hangs off a part inside a chain
-          // takes room between the parts, so it is part of the plot.
-          const childPlots = applyNestExtentPlan(
-            node.children.map((c) =>
-              c instanceof GoFishNode ? plotIn(c, node) : c.resolveExtent()
-            ),
-            t.effectiveChildren,
-            t.nestPlan,
-            fillsRoom
-          );
-          const plot = claimFrom(
-            childPlots,
-            modes.includes("fold")
-              ? composePlanExtents(
-                  t.plan!,
-                  t.composed!,
-                  effectiveExtents,
-                  t.effectiveChildren,
-                  reflected,
-                  {
-                    extents: childPlots,
-                    standIn: node.children.map((c) => c instanceof GoFishRef),
-                  }
-                ).extents
-              : undefined,
-            (p) => p.plot
-          );
+          // takes room between the parts, so it is part of the plot. A layer
+          // whose children are not stand-ins and have their claims as their
+          // plots, with no dressing placed, has its claim as its plot.
+          const plotIsClaim =
+            node.children.every(
+              (c) =>
+                c instanceof GoFishNode &&
+                c.resolvePlotExtent() === c.resolveExtent()
+            ) && placements.every((p) => p === undefined || p.plot === p.hull);
+          const plotOf = () => {
+            const childPlots = applyNestExtentPlan(
+              node.children.map((c) =>
+                c instanceof GoFishNode ? plotIn(c, node) : c.resolveExtent()
+              ),
+              t.effectiveChildren,
+              t.nestPlan,
+              fillsRoom
+            );
+            return claimFrom(
+              childPlots,
+              modes.includes("fold")
+                ? composePlanExtents(
+                    t.plan!,
+                    t.composed!,
+                    effectiveExtents,
+                    t.effectiveChildren,
+                    reflected,
+                    {
+                      extents: childPlots,
+                      standIn: node.children.map((c) => c instanceof GoFishRef),
+                    }
+                  ).extents
+                : undefined,
+              (p) => p.plot
+            );
+          };
+          const plot = plotIsClaim ? resolved : plotOf();
           // The content's claim, which `layout` solves against the layer's box
           // when the layer is sized. A data-valued size reports the claim of
           // its magnitude instead; the content's claim stays inside the box.
@@ -777,9 +788,13 @@ export const layer = createNodeOperatorSequential(
           }) as [Extent | undefined, Extent | undefined];
           // A node with a size of its own is a part of its parent's plot,
           // chrome and dressing included.
-          node._plotExtent = ([0, 1] as const).map((axis) =>
-            dims[axis].size !== undefined ? claims[axis] : at(axis, plot[axis])
-          ) as [Extent | undefined, Extent | undefined];
+          node._plotExtent = plotIsClaim
+            ? undefined
+            : (([0, 1] as const).map((axis) =>
+                dims[axis].size !== undefined
+                  ? claims[axis]
+                  : at(axis, plot[axis])
+              ) as [Extent | undefined, Extent | undefined]);
           return claims;
         },
         layout: (size, scales, children, node, region) => {
