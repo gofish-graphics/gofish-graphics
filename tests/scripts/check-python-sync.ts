@@ -29,7 +29,11 @@ import {
 } from "fs";
 import { join, dirname, relative } from "path";
 import ts from "typescript";
-import { mapJsToPython } from "./path-mapping.js";
+import {
+  mapJsToPython,
+  JS_STORY_ROOTS,
+  isJsStoryFile,
+} from "./path-mapping.js";
 export { mapJsToPython } from "./path-mapping.js";
 
 // ---------------------------------------------------------------------------
@@ -596,11 +600,10 @@ function mergeBaseOf(baseRef: string): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// Walk all JS stories under packages/gofish-graphics/stories/.
+// Walk all JS stories under JS_STORY_ROOTS.
 // ---------------------------------------------------------------------------
 
 function walkJsStories(): string[] {
-  const root = join(ROOT_DIR, "packages/gofish-graphics/stories");
   const out: string[] = [];
   function walk(dir: string) {
     if (!existsSync(dir)) return;
@@ -612,7 +615,7 @@ function walkJsStories(): string[] {
       }
     }
   }
-  walk(root);
+  for (const root of JS_STORY_ROOTS) walk(join(ROOT_DIR, root));
   return out.sort();
 }
 
@@ -627,9 +630,9 @@ function camelToSnake(s: string): string {
     .toLowerCase();
 }
 
-/** The `export const Foo: StoryObj` names of a JS story file. */
-function readJsStoryExports(absPath: string): string[] {
-  return [...splitStoryExports(readFileSync(absPath, "utf-8")).stories.keys()];
+/** The `export const Foo: StoryObj` names of a JS story file's text. */
+function jsStoryExports(content: string): string[] {
+  return [...splitStoryExports(content).stories.keys()];
 }
 
 /** Extract `def story_foo` names from a Python parity test file. */
@@ -666,10 +669,11 @@ function runFullCoverage(): number {
   let filesWarn = 0;
 
   for (const jsFile of jsStories) {
-    const pythonFile = mapJsToPython(jsFile);
+    const jsText = readFileSync(join(ROOT_DIR, jsFile), "utf-8");
+    const pythonFile = mapJsToPython(jsFile, jsText);
     const pythonAbs = join(ROOT_DIR, pythonFile);
     const fileExempt = isFileExempt(exemptSet, jsFile);
-    const jsExports = readJsStoryExports(join(ROOT_DIR, jsFile));
+    const jsExports = jsStoryExports(jsText);
     exportsTotal += jsExports.length;
 
     if (fileExempt) {
@@ -814,15 +818,9 @@ const mergeBase = mergeBaseOf(baseRef);
 
 const exemptSet = loadExemptSet();
 
-const addedJs = gitDiff("A", baseRef).filter((f) =>
-  f.match(/^packages\/gofish-graphics\/stories\/.*\.stories\.tsx$/)
-);
-const deletedJs = gitDiff("D", baseRef).filter((f) =>
-  f.match(/^packages\/gofish-graphics\/stories\/.*\.stories\.tsx$/)
-);
-const modifiedJs = gitDiff("M", baseRef).filter((f) =>
-  f.match(/^packages\/gofish-graphics\/stories\/.*\.stories\.tsx$/)
-);
+const addedJs = gitDiff("A", baseRef).filter(isJsStoryFile);
+const deletedJs = gitDiff("D", baseRef).filter(isJsStoryFile);
+const modifiedJs = gitDiff("M", baseRef).filter(isJsStoryFile);
 const allChangedFiles = new Set(gitDiff("ACDMRT", baseRef));
 
 const results: SyncResult[] = [];

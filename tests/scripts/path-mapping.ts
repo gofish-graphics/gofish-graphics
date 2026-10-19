@@ -26,9 +26,14 @@ const ROOT_DIR = dirname(TESTS_DIR);
  * A digit before a capitalized word is a word break too (`Inner45Outer0` →
  * `inner45-outer0`), matching the export → Python name rule in
  * check-python-sync.ts (`story_…_inner45_outer0`). A digit before an acronym
- * stays joined, so the title `1D Strip Plot` is still `1d-strip-plot`. */
+ * stays joined, so the title `1D Strip Plot` is still `1d-strip-plot`.
+ *
+ * Whitespace around a segment is dropped first: a title written with spaces
+ * around its slashes (`"GoTree / Gallery / arc-tree"`) has the same segments
+ * as one written without them (`go-tree/gallery/arc-tree`). */
 export const toKebab = (s: string) =>
   s
+    .trim()
     .replace(/([a-z])([A-Z])/g, "$1-$2")
     .replace(/([0-9])([A-Z][a-z])/g, "$1-$2")
     .replace(/[\s_]+/g, "-")
@@ -56,24 +61,50 @@ export function storyToPath(title: string, name: string): string {
   return `${segments.join("/")}--${toKebab(name)}`;
 }
 
+/** The directories holding JS Storybook stories, relative to the repo root:
+ * the main library and the gofish-gotree tree-DSL package (#792). */
+export const JS_STORY_ROOTS = [
+  "packages/gofish-graphics/stories",
+  "packages/gofish-gotree/stories",
+];
+
+/** True for a repo-relative path to a story file under one of the roots. */
+export const isJsStoryFile = (f: string) =>
+  JS_STORY_ROOTS.some((r) => f.startsWith(r + "/")) &&
+  f.endsWith(".stories.tsx");
+
+/** The Storybook title of a story file's text: the one on the `Meta` object.
+ * A gallery story also has a `parameters.gallery.title` (its card caption),
+ * which must not be read instead. */
+export function storyMetaTitle(content: string): string | undefined {
+  const afterMeta = content.slice(Math.max(content.search(/:\s*Meta\b/), 0));
+  return afterMeta.match(/title:\s*["'](.+?)["']/)?.[1];
+}
+
+function readOrNull(absPath: string): string | null {
+  try {
+    return readFileSync(absPath, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Maps a JS story file path to the expected Python test file path.
  *
  * e.g. "packages/gofish-graphics/stories/forwardsyntax/Bar/BarBasic.stories.tsx"
  *   →  "tests/python-stories/forwardsyntax/bar/test_bar_basic.py"
+ *
+ * `content` is the story file's text, read from disk when not given; null
+ * (unreadable) falls through to the path-based fallback.
  */
-export function mapJsToPython(jsFile: string): string {
+export function mapJsToPython(
+  jsFile: string,
+  content: string | null = readOrNull(join(ROOT_DIR, jsFile))
+): string {
   // Read the Storybook title from the JS file and derive the Python path from it.
   // e.g. title: "Forward Syntax/Bar/Basic" → "tests/python-stories/forward-syntax/bar/test_basic.py"
-  const absPath = join(ROOT_DIR, jsFile);
-  let title: string | null = null;
-  try {
-    const content = readFileSync(absPath, "utf-8");
-    const m = content.match(/title:\s*["'](.+?)["']/);
-    if (m) title = m[1];
-  } catch {
-    /* file unreadable — fall through to path-based fallback */
-  }
+  const title = content === null ? undefined : storyMetaTitle(content);
 
   if (title) {
     const segments = title.split("/").map(toKebab);
@@ -83,8 +114,11 @@ export function mapJsToPython(jsFile: string): string {
   }
 
   // Fallback: derive from file path (CamelCase → snake_case, flatten one level)
-  let rel = jsFile.replace(/^packages\/gofish-graphics\/stories\//, "");
-  rel = rel.replace(/\.stories\.tsx$/, "");
+  const root = JS_STORY_ROOTS.find((r) => jsFile.startsWith(r + "/"));
+  const rel = (root ? jsFile.slice(root.length + 1) : jsFile).replace(
+    /\.stories\.tsx$/,
+    ""
+  );
   const lastSlash = rel.lastIndexOf("/");
   const dirPart = lastSlash >= 0 ? rel.slice(0, lastSlash) : ".";
   const basePart = lastSlash >= 0 ? rel.slice(lastSlash + 1) : rel;

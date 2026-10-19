@@ -64,8 +64,6 @@ export type GoTreeSpec = {
   parentChild?: CombinerSpec;
   /** Combiner for the sibling group. Called with the full children list. May be depth-indexed. */
   sibling?: CombinerSpec;
-  mode?: "topDown" | "bottomUp";
-  sortBy?: (d: HierarchyDatum) => number;
   coord?: unknown;
 };
 

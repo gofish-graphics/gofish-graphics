@@ -50,7 +50,7 @@ export const Treemap: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 640, h: 420 });
+    const container = initializeContainer();
     tree(
       {
         node,

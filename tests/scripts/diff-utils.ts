@@ -14,7 +14,7 @@ import {
 import { join, dirname } from "path";
 import { diffLines } from "diff";
 import DMP from "diff-match-patch";
-import { storyToPath } from "./path-mapping.js";
+import { storyMetaTitle, storyToPath } from "./path-mapping.js";
 
 /**
  * Character-level diff backed by Google's diff-match-patch with a per-pair
@@ -259,9 +259,8 @@ export function loadExportExemptParityPaths(): Set<string> {
     if (sep === -1) continue; // file-level: handled at capture time
     const jsFile = line.slice(0, sep);
     const exportName = line.slice(sep + 2);
-    const title = readOptional(join(ROOT, jsFile))?.match(
-      /title:\s*["'](.+?)["']/
-    )?.[1];
+    const content = readOptional(join(ROOT, jsFile));
+    const title = content === null ? undefined : storyMetaTitle(content);
     if (title) exempt.add(storyToPath(title, exportName));
   }
   return exempt;

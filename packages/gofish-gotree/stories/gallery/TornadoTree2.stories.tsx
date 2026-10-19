@@ -25,7 +25,7 @@ import { combine, byDepth, mount } from "./_shared";
 // are left UNSIZED on r so `nest` can grow them to wrap their subtree; only the
 // θ-width is fixed. Leaves carry a fixed r-thickness too.
 const LEAF_THETA = 0.12; // angular width of a node (radians)
-const LEAF_R = 14; // radial thickness of a leaf (px in r)
+const LEAF_R = 89; // radial thickness of a leaf (px in r)
 
 const node = (d: any) =>
   d.height === 0
@@ -64,13 +64,13 @@ export const TornadoTree2: StoryObj = {
           x: { kind: "distribute", spacing: 0.5, anchor: "middle" },
           // r: child group nested radially inside the parent (Root include / Y
           // nest). Small pad keeps parent arcs from spiking too far out.
-          y: { kind: "nest", pad: 6 },
+          y: { kind: "nest", pad: 38 },
         }),
         sibling: combine({
           // θ: fan siblings out angularly.
           x: { kind: "distribute", spacing: 0.32, anchor: "middle" },
           // r: step each sibling outward radially → the spiral.
-          y: { kind: "distribute", spacing: 12, anchor: "middle" },
+          y: { kind: "distribute", spacing: 76, anchor: "middle" },
         }),
         coord: Coord.polar(),
       },
