@@ -1,6 +1,7 @@
 import { CoordinateTransform } from "./ast/coordinateTransforms/coord";
 import { lerp } from "./util";
 import { adaptiveResamplePath } from "./adaptive-resampling";
+import type { BoundingBox } from "./util/bbox";
 
 export const lerpPoint = (point1: Point, point2: Point, t: number): Point => {
   return [lerp(point1[0], point2[0], t), lerp(point1[1], point2[1], t)];
@@ -41,6 +42,20 @@ export const curve = (
   control2,
   end,
 });
+
+/** A quadratic bezier (SVG `Q`), written as the cubic that draws the same
+ *  curve: each cubic control sits 2/3 of the way from its end to `control`. */
+export const quadratic = (
+  start: Point,
+  control: Point,
+  end: Point
+): BezierCurve =>
+  curve(
+    start,
+    lerpPoint(start, control, 2 / 3),
+    lerpPoint(end, control, 2 / 3),
+    end
+  );
 
 export type PathSegment = LineSegment | BezierCurve;
 
@@ -87,6 +102,92 @@ export const mapPathPoints = (path: Path, f: (p: Point) => Point): Path =>
             end: f(seg.end),
           }
   );
+
+/** The parameters in (0, 1) where one coordinate of a cubic bezier turns
+ *  around: the roots of that coordinate's derivative, a quadratic in t. */
+const cubicTurns = (p0: number, p1: number, p2: number, p3: number) => {
+  // B'(t)/3 = a·t² + b·t + c
+  const a = -p0 + 3 * p1 - 3 * p2 + p3;
+  const b = 2 * (p0 - 2 * p1 + p2);
+  const c = p1 - p0;
+  // `a` counts as zero when it is tiny next to the other coefficients: a
+  // quadratic written as a cubic (`quadratic`) has `a` = 0 up to rounding.
+  const tol = 1e-9 * Math.max(Math.abs(b), Math.abs(c));
+  const roots: number[] = [];
+  if (Math.abs(a) <= tol) {
+    if (Math.abs(b) > tol) roots.push(-c / b);
+  } else {
+    const disc = b * b - 4 * a * c;
+    if (disc >= 0) {
+      // (-b ± √disc)/(2a) loses the smaller root to cancellation when 4ac is
+      // small next to b². Take the root whose terms add, q/a, and get the
+      // other from the product of the roots, c/a.
+      const q = -(b + (b < 0 ? -1 : 1) * Math.sqrt(disc)) / 2;
+      roots.push(q / a);
+      if (q !== 0) roots.push(c / q);
+    }
+  }
+  return roots.filter((t) => t > 0 && t < 1);
+};
+
+const cubicAt = (p0: number, p1: number, p2: number, p3: number, t: number) => {
+  const u = 1 - t;
+  return (
+    u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3
+  );
+};
+
+/**
+ * The exact box around the points a path draws (`empty()` for an empty path).
+ * A line is bounded by its ends. A cubic is bounded by its ends and by its
+ * points where a coordinate's derivative is zero, so the box is tight even
+ * when the control points stick out past the curve (an arc's controls do).
+ * A segment with a coordinate that is not a finite number throws: it comes
+ * from a bad position upstream, and dropping it would hide that.
+ */
+export const pathBounds = (path: Path): BoundingBox => {
+  const lo: Point = [Infinity, Infinity];
+  const hi: Point = [-Infinity, -Infinity];
+  const add = (axis: 0 | 1, v: number) => {
+    if (v < lo[axis]) lo[axis] = v;
+    if (v > hi[axis]) hi[axis] = v;
+  };
+  for (const seg of path) {
+    const points =
+      seg.type === "line"
+        ? seg.points
+        : [seg.start, seg.control1, seg.control2, seg.end];
+    if (!points.every((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]))) {
+      throw new Error(
+        `[gofish] pathBounds: a ${seg.type} segment has a coordinate that ` +
+          `is not a finite number: ${points.map(([x, y]) => `(${x}, ${y})`).join(" ")}. A position ` +
+          `upstream is NaN or infinite.`
+      );
+    }
+    if (seg.type === "line") {
+      for (const p of seg.points) {
+        add(0, p[0]);
+        add(1, p[1]);
+      }
+      continue;
+    }
+    const { start, control1, control2, end } = seg;
+    for (const axis of [0, 1] as const) {
+      const [p0, p1, p2, p3] = [
+        start[axis],
+        control1[axis],
+        control2[axis],
+        end[axis],
+      ];
+      add(axis, p0);
+      add(axis, p3);
+      for (const t of cubicTurns(p0, p1, p2, p3)) {
+        add(axis, cubicAt(p0, p1, p2, p3, t));
+      }
+    }
+  }
+  return { minX: lo[0], maxX: hi[0], minY: lo[1], maxY: hi[1] };
+};
 
 export const segmentToSVG = (segment: PathSegment): string => {
   if (segment.type === "line") {

@@ -27,14 +27,14 @@ export default meta;
 const node = (d: any) =>
   d.height === 0
     ? ellipse({
-        w: 22 + d.data.value * 14,
-        h: 22 + d.data.value * 14,
+        w: 37 + d.data.value * 24,
+        h: 37 + d.data.value * 24,
         fill: byDepth()(d),
       })
     : ellipse({ fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
 
-const P = 10;
-const G = 8;
+const P = 17;
+const G = 14;
 // dice: siblings stack vertically (spread y), share an x-center.
 const dice = combine({
   x: { kind: "align", alignment: "middle" },
@@ -56,7 +56,7 @@ export const TreemapOval: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 640, h: 420 });
+    const container = initializeContainer();
     tree(
       {
         node,

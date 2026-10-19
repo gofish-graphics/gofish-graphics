@@ -6,20 +6,12 @@
 
 # Low-level API stories
 # Ported to tests/python-stories/low-level-syntax/ (#433): BalloonChart,
-# IcicleChart, NestedWaffleChart, SankeyTree,
+# IcicleChart, NestedMosaicChart, NestedWaffleChart, SankeyTree,
 # StringlineChart, Whisker — all byte-identical to the JS baseline. The ports
 # map the directional operators (stackX, spreadY, ...) to combinator-form spread/stack/connect,
 # frame→layer, and add the polar/wavy coord transforms to the Python wrapper +
 # IR bridge.
 #
-# NestedMosaicChart was ported under #433, but the story was rewritten (#675,
-# then #700) to the fluent `chart().flow(stack(size: field("count").normalize()))`
-# pipeline with a 2-D function fill (`survived == "No" ? gray : classColor[class]`).
-# A function channel can't cross the derive RPC, so it is now exempt — the
-# pure-spec mosaics (atom/Mosaic and Forward Syntax Mosaic Chart) ARE ported
-# and byte-parity-validated.
-packages/gofish-graphics/stories/lowlevel/NestedMosaicChart.stories.tsx
-
 # Per-export exemption — PolarText constructs a raw custom coordinate
 # transform inline ({ type, transform: ([r, theta]) => ..., domain }), an
 # arbitrary JS closure rather than one of the IR's named coord transforms
@@ -114,18 +106,25 @@ packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Rever
 packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx::Default
 
 # ---------------------------------------------------------------------------
-# gofish-gotree (the GoTree tree-DSL package) — exempt from Python parity.
+# gofish-gotree (the GoTree tree-DSL package), #792.
 #
-# These stories ARE captured by the JS visual-diff harness (tests/harness/
-# stories-runner.ts globs gofish-gotree/stories too), so they are tracked for
-# visual regressions. They are NOT mirrored to Python: gofish-gotree is a
-# JS-only package with no Python wrapper, so there is nothing to byte-match.
-#
-# No per-file entries are needed below: this checker (both delta mode and
-# `--all`) hard-filters JS stories to `packages/gofish-graphics/stories/`
-# (see walkJsStories + the gitDiff filters in check-python-sync.ts), so it
-# never walks the gofish-gotree package. If parity coverage is ever extended
-# to gofish-gotree, list its stories here.
+# check-python-sync walks packages/gofish-gotree/stories/ too, and the title
+# "GoTree / Gallery / <name>" maps to tests/python-stories/go-tree/gallery/.
+# The 40 stories built with tree() are ported with `gofish.gotree`. The
+# entries below still need a port. Remove a line when its port exists. The
+# JS visual-diff harness captures these stories either way.
+packages/gofish-gotree/stories/Matrix.stories.tsx
+packages/gofish-gotree/stories/Tree.stories.tsx
+
+# These seven gallery stories do not use tree(): each places its nodes by
+# hand with GoFish marks, so each needs its own port.
+packages/gofish-gotree/stories/gallery/MultilevelSilhouetteTree.stories.tsx
+packages/gofish-gotree/stories/gallery/OutsideInTree.stories.tsx
+packages/gofish-gotree/stories/gallery/RadialDeep.stories.tsx
+packages/gofish-gotree/stories/gallery/RadialPhylogeneticTree.stories.tsx
+packages/gofish-gotree/stories/gallery/RadialTree.stories.tsx
+packages/gofish-gotree/stories/gallery/RadialTreeIncline.stories.tsx
+packages/gofish-gotree/stories/gallery/RotationTree.stories.tsx
 
 # LayeredBarsAndArea stays exempt: it drives a data-driven paint order with
 # `area(...).zOrder(d => …)` and reorders the area selection with a `derive`

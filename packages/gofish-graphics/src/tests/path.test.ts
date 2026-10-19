@@ -16,7 +16,10 @@ import {
   transformPath,
   subdividePath,
   lerpPoint,
+  pathBounds,
+  quadratic,
 } from "../path";
+import { isEmptyInfinity } from "../util/bbox";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { CoordinateTransform } from "../ast/coordinateTransforms/coord";
 
@@ -60,7 +63,7 @@ function evaluatePathAt(path: Path, t: number): Point {
   const seg = path[clampedIndex];
 
   // Calculate local parameter within the segment
-  const segmentT = (t * numSegments) - clampedIndex;
+  const segmentT = t * numSegments - clampedIndex;
 
   if (seg.type === "line") {
     const [p0, p1] = seg.points;
@@ -311,10 +314,20 @@ function testLineSegmentsPolar() {
   console.log(`  Adaptive segments: ${adaptiveResult.length}`);
   console.log(`  Uniform segments: ${uniformResult.length}`);
 
-  const comparison = comparePaths(linePath, adaptiveResult, uniformResult, space, 100);
+  const comparison = comparePaths(
+    linePath,
+    adaptiveResult,
+    uniformResult,
+    space,
+    100
+  );
   console.log(`  Max deviation: ${comparison.maxDeviation.toFixed(4)}`);
-  console.log(`  Adaptive max distance: ${comparison.adaptiveMaxDist.toFixed(4)}`);
-  console.log(`  Uniform max distance: ${comparison.uniformMaxDist.toFixed(4)}`);
+  console.log(
+    `  Adaptive max distance: ${comparison.adaptiveMaxDist.toFixed(4)}`
+  );
+  console.log(
+    `  Uniform max distance: ${comparison.uniformMaxDist.toFixed(4)}`
+  );
 
   // Adaptive should use fewer segments but still be close
   const fewerSegments = adaptiveResult.length < uniformResult.length;
@@ -377,10 +390,20 @@ function testBezierCurvesPolar() {
   console.log(`  Adaptive segments: ${adaptiveResult.length}`);
   console.log(`  Uniform segments: ${uniformResult.length}`);
 
-  const comparison = comparePaths(bezierPath, adaptiveResult, uniformResult, space, 100);
+  const comparison = comparePaths(
+    bezierPath,
+    adaptiveResult,
+    uniformResult,
+    space,
+    100
+  );
   console.log(`  Max deviation: ${comparison.maxDeviation.toFixed(4)}`);
-  console.log(`  Adaptive max distance: ${comparison.adaptiveMaxDist.toFixed(4)}`);
-  console.log(`  Uniform max distance: ${comparison.uniformMaxDist.toFixed(4)}`);
+  console.log(
+    `  Adaptive max distance: ${comparison.adaptiveMaxDist.toFixed(4)}`
+  );
+  console.log(
+    `  Uniform max distance: ${comparison.uniformMaxDist.toFixed(4)}`
+  );
 
   const fewerSegments = adaptiveResult.length < uniformResult.length;
   const deviationOk = comparison.maxDeviation < 10;
@@ -442,10 +465,20 @@ function testMixedPaths() {
   console.log(`  Adaptive segments: ${adaptiveResult.length}`);
   console.log(`  Uniform segments: ${uniformResult.length}`);
 
-  const comparison = comparePaths(mixedPath, adaptiveResult, uniformResult, space, 100);
+  const comparison = comparePaths(
+    mixedPath,
+    adaptiveResult,
+    uniformResult,
+    space,
+    100
+  );
   console.log(`  Max deviation: ${comparison.maxDeviation.toFixed(4)}`);
-  console.log(`  Adaptive max distance: ${comparison.adaptiveMaxDist.toFixed(4)}`);
-  console.log(`  Uniform max distance: ${comparison.uniformMaxDist.toFixed(4)}`);
+  console.log(
+    `  Adaptive max distance: ${comparison.adaptiveMaxDist.toFixed(4)}`
+  );
+  console.log(
+    `  Uniform max distance: ${comparison.uniformMaxDist.toFixed(4)}`
+  );
 
   const fewerSegments = adaptiveResult.length < uniformResult.length;
   const deviationOk = comparison.maxDeviation < 10;
@@ -548,6 +581,129 @@ function testEdgeCases() {
 }
 
 /**
+ * `pathBounds` is the exact box of what a path draws: a bezier's turning
+ * points count, its control points do not.
+ */
+function testPathBounds(): boolean {
+  console.log("Testing pathBounds...");
+  const close = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+  const cases: [string, Path, [number, number, number, number] | undefined][] =
+    [
+      ["empty", [], undefined],
+      ["line", [segment([3, 4], [1, 7])], [1, 4, 3, 7]],
+      // Symmetric hump: controls at y=4, the curve peaks at y=3.
+      ["hump", [curve([0, 0], [0, 4], [4, 4], [4, 0])], [0, 0, 4, 3]],
+      // S-curve whose controls stay between the ends: bounded by the ends.
+      ["s-curve", [curve([0, 0], [5, 0], [5, 10], [10, 10])], [0, 0, 10, 10]],
+      // Quadratic M0,0 Q2,4 4,0 (a perfect-arrows bow): peaks at y=2, half
+      // way to its control.
+      ["quadratic", [quadratic([0, 0], [2, 4], [4, 0])], [0, 0, 4, 2]],
+    ];
+  let ok = true;
+  for (const [name, path, want] of cases) {
+    const got = pathBounds(path);
+    const pass =
+      want === undefined
+        ? isEmptyInfinity(got)
+        : close(got.minX, want[0]) &&
+          close(got.minY, want[1]) &&
+          close(got.maxX, want[2]) &&
+          close(got.maxY, want[3]);
+    console.log(`  ${name}: ${pass ? "✓ PASSED" : "✗ FAILED"}`);
+    if (!pass) console.log(`    got ${JSON.stringify(got)}, want ${want}`);
+    ok = ok && pass;
+  }
+  // Densely sampled points of a curve stay inside, and touch, its box.
+  const c = curve([0, 0], [-3, 6], [9, 8], [5, -2]);
+  const box = pathBounds([c]);
+  let lo: Point = [Infinity, Infinity];
+  let hi: Point = [-Infinity, -Infinity];
+  for (let i = 0; i <= 10000; i++) {
+    const p = evaluateBezierAt(c, i / 10000);
+    lo = [Math.min(lo[0], p[0]), Math.min(lo[1], p[1])];
+    hi = [Math.max(hi[0], p[0]), Math.max(hi[1], p[1])];
+  }
+  const tight =
+    Math.abs(lo[0] - box.minX) < 1e-6 &&
+    Math.abs(lo[1] - box.minY) < 1e-6 &&
+    Math.abs(hi[0] - box.maxX) < 1e-6 &&
+    Math.abs(hi[1] - box.maxY) < 1e-6;
+  console.log(`  sampled curve: ${tight ? "✓ PASSED" : "✗ FAILED"}`);
+  ok = ok && tight;
+
+  // A quadratic written as a cubic has a leading coefficient that is only
+  // rounding noise; the naive root formula cancelled here and gave maxY 30.52.
+  const q = pathBounds([
+    quadratic([-958.99, -974.99], [546.81, 907.37], [137.91, -594.95]),
+  ]);
+  // Peak of the quadratic in y: t = (y0 - y1) / (y0 - 2·y1 + y2).
+  const [y0, y1, y2] = [-974.99, 907.37, -594.95];
+  const tq = (y0 - y1) / (y0 - 2 * y1 + y2);
+  const peak = (1 - tq) ** 2 * y0 + 2 * (1 - tq) * tq * y1 + tq ** 2 * y2;
+  const quadOk =
+    Math.abs(q.maxY - peak) < 1e-6 && Math.abs(peak - 71.87) < 0.01;
+  console.log(`  elevated quadratic: ${quadOk ? "✓ PASSED" : "✗ FAILED"}`);
+  if (!quadOk) console.log(`    got maxY ${q.maxY}, want ${peak}`);
+  ok = ok && quadOk;
+
+  // Seeded random quadratics and cubics: the box matches dense sampling.
+  let seed = 1166;
+  const rand = () => {
+    // mulberry32
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const randPoint = (): Point => [(rand() - 0.5) * 2000, (rand() - 0.5) * 2000];
+  let outside = 0;
+  let loose = 0;
+  for (let i = 0; i < 10000; i++) {
+    const c =
+      i % 2 === 0
+        ? quadratic(randPoint(), randPoint(), randPoint())
+        : curve(randPoint(), randPoint(), randPoint(), randPoint());
+    const b = pathBounds([c]);
+    let lo: Point = [Infinity, Infinity];
+    let hi: Point = [-Infinity, -Infinity];
+    const n = 2000;
+    for (let k = 0; k <= n; k++) {
+      const p = evaluateBezierAt(c, k / n);
+      lo = [Math.min(lo[0], p[0]), Math.min(lo[1], p[1])];
+      hi = [Math.max(hi[0], p[0]), Math.max(hi[1], p[1])];
+    }
+    // Every sample is inside the box, and the box is no looser than the
+    // sampling error: the curve is flat at an extreme, so a sample within
+    // a few units of it along the curve is within far less than 0.01 of it.
+    const gaps = [
+      lo[0] - b.minX,
+      lo[1] - b.minY,
+      b.maxX - hi[0],
+      b.maxY - hi[1],
+    ];
+    outside = Math.max(outside, ...gaps.map((g) => -g));
+    loose = Math.max(loose, ...gaps);
+  }
+  const randOk = outside < 1e-9 && loose < 0.01;
+  console.log(
+    `  10k random curves vs sampling: ${randOk ? "✓ PASSED" : "✗ FAILED"} (outside ${outside}, loose ${loose})`
+  );
+  ok = ok && randOk;
+
+  // A non-finite coordinate is an upstream bug: it throws.
+  let threw = false;
+  try {
+    pathBounds([segment([0, 0], [NaN, 1])]);
+  } catch {
+    threw = true;
+  }
+  console.log(`  NaN throws: ${threw ? "✓ PASSED" : "✗ FAILED"}`);
+  ok = ok && threw;
+  console.log();
+  return ok;
+}
+
+/**
  * Run all tests
  */
 export function runTests() {
@@ -558,6 +714,7 @@ export function runTests() {
     testBezierCurvesPolar(),
     testMixedPaths(),
     testEdgeCases(),
+    testPathBounds(),
   ];
 
   const allPassed = results.every((r) => r);
@@ -573,6 +730,7 @@ export function runTests() {
       "Bezier curves under polar transform",
       "Mixed paths (lines and beziers)",
       "Edge cases",
+      "pathBounds",
     ];
     results.forEach((passed, i) => {
       console.log(`  ${passed ? "✓" : "✗"} ${testNames[i]}`);

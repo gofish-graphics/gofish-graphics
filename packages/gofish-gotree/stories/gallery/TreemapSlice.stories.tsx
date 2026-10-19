@@ -53,7 +53,7 @@ export const TreemapSlice: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 900, h: 360 });
+    const container = initializeContainer();
     tree(
       {
         node,

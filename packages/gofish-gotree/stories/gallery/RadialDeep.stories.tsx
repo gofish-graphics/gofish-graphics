@@ -191,7 +191,7 @@ export const RadialDeep: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 520, h: 520 });
+    const container = initializeContainer();
     // Inside a coord, paint order = array order (coord's flattenLayout ignores
     // zOrder — that's resolved by the ROOT bake, and coord is a bake boundary).
     // So links go FIRST in the array to draw under the nodes, and the root node

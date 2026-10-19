@@ -63,7 +63,7 @@ export const NodeLinkTree: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer({ w: 900, h: 560 });
+    const container = initializeContainer();
     tree(
       {
         node,
@@ -74,7 +74,7 @@ export const NodeLinkTree: StoryObj = {
           y: { kind: "distribute", spacing: 90 },
         }),
         sibling: combine({
-          x: { kind: "distribute", spacing: 24 },
+          x: { kind: "distribute", spacing: 10 },
           // Align siblings to the TOP of their bands so every depth-1 node (even
           // childless ones) sits on one row. In y-down free space the top is the
           // near edge → "start"; otherwise a childless node bottom-aligns down to

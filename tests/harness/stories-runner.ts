@@ -15,6 +15,8 @@ import { disposeChart } from "../../packages/gofish-graphics/src/ast/gofish";
 // Both workspace packages with stories are scanned: gofish-graphics and the
 // gofish-gotree tree-DSL package (the latter compiles its SolidJS source directly
 // via the relative `../../src` import in its stories, so no built dist is needed).
+// These are JS_STORY_ROOTS (tests/scripts/path-mapping.ts) spelled out, because
+// import.meta.glob takes only literal patterns.
 const storyModuleLoaders = {
   ...import.meta.glob(
     "../../packages/gofish-graphics/stories/**/*.stories.tsx"
