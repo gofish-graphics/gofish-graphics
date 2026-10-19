@@ -64,5 +64,21 @@ jobs:
               finding naming the specific source change and the doc page that needs updating.
               If docs were updated appropriately, or no user-facing/feature change is present,
               say so briefly and do not raise a finding.
+
+            Also review the Python code this PR adds or changes, in
+            packages/gofish-python/ and tests/python-stories/. Check two things:
+            - It is idiomatic Python. Flag code that reads like JavaScript written in
+              Python, such as camelCase names, options passed as dicts instead of keyword
+              arguments, index loops where a comprehension or a plain `for` fits, or
+              hand-rolled code where the standard library has the tool.
+            - It parallels the JS. A Python story in tests/python-stories/ should read
+              like the JS story it mirrors under packages/*/stories/, with the same
+              construct names, the same order of steps and the same structure, so a
+              reader can compare the two line by line. A Python API change should match
+              the JS API it mirrors. Flag places where the two differ for no reason.
+              Differences that idiomatic Python requires (snake_case, keyword
+              arguments, lambdas for JS arrow functions) are expected.
+            If the PR changes no Python code, or the code is fine, say so briefly and do
+            not raise a finding.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
