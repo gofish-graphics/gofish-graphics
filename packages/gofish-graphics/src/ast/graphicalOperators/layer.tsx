@@ -591,98 +591,93 @@ export const layer = createNodeOperatorSequential(
           ];
           const operands = constraintOperands();
           const standIns = [placesStandIn(0), placesStandIn(1)];
-          for (const axis of [0, 1] as const) {
-            const folded =
-              t.composed?.fragments[axis] !== undefined &&
-              t.composed.spaces[axis] !== undefined &&
-              !standIns[axis];
-            const grid =
-              t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis]);
+          // How the claim composes each axis: a grid's track axis claims
+          // nothing (the tracks size at layout, in `resolveGridTracks`); a
+          // constraint fold (a spread's align + distribute) has every child
+          // in it; otherwise the base union holds the children that share
+          // the layer's frame, and the claim walk places the rest where the
+          // layer's constraints put them (`placeByClaims`): a ring's axis,
+          // titles and legend around the content it dresses (#1032), a
+          // scatter's marks at their data, a mark aligned on another's end.
+          const modes = ([0, 1] as const).map((axis) =>
+            t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis])
+              ? "grid"
+              : t.composed?.fragments[axis] !== undefined &&
+                  t.composed.spaces[axis] !== undefined &&
+                  !standIns[axis]
+                ? "fold"
+                : "placed"
+          );
+          for (const axis of [0, 1] as const)
             claimPlaced[axis] =
-              folded || grid
-                ? t.placed[axis]
-                : new Set([
+              modes[axis] === "placed"
+                ? new Set([
                     ...t.placed[axis],
                     ...constrainedOn(axis, node.constraints, operands),
-                  ]);
-          }
-          const resolved: [Extent | undefined, Extent | undefined] = [
-            resolveLayerAxisExtent(
-              effectiveExtents,
-              t.effectiveChildren,
-              0,
-              scale[0],
-              t.posDomains.x,
-              t.base.union[0],
-              t.base.spaces[0],
-              claimPlaced[0]
-            ),
-            resolveLayerAxisExtent(
-              effectiveExtents,
-              t.effectiveChildren,
-              1,
-              scale[1],
-              t.posDomains.y,
-              t.base.union[1],
-              t.base.spaces[1],
-              claimPlaced[1]
-            ),
-          ];
-          constraintBudget = undefined;
-          const covered: [boolean, boolean] = [false, false];
-          const reflected = node.children.map(
-            (c) => c.yFrame.direction !== node.yFrame.direction
-          );
-          if (t.plan !== undefined && t.composed !== undefined) {
-            const c = composePlanExtents(
-              t.plan,
-              t.composed,
-              effectiveExtents,
-              t.effectiveChildren,
-              reflected
-            );
-            constraintBudget = c.budget;
-            for (const axis of [0, 1] as const)
-              if (c.covered[axis] && !standIns[axis]) {
-                resolved[axis] = c.extents[axis];
-                covered[axis] = true;
-              }
-          }
-          if (t.gridAxes !== undefined) {
-            // A grid track axis is ordinal, so it claims nothing here (the
-            // tracks size at layout time, in `resolveGridTracks`).
-            for (const axis of [0, 1] as const)
-              if (!isUNDEFINED(t.gridAxes[axis])) resolved[axis] = undefined;
-          }
-          // The children the claim walk places (`claimPlaced`) sit where
-          // the layer's constraints put them (`placeByClaims`): a ring's
-          // axis, titles and legend around the content it dresses (#1032),
-          // a scatter's marks at their data, a mark aligned on another's
-          // end. The claim is the hull of what they draw there too, so a
-          // scope solved at or above the layer leaves them room. An axis a
-          // constraint fold already composed (or a grid's track axis) has
-          // every child in it.
+                  ])
+                : t.placed[axis];
           const placements: [
             ClaimPlacement | undefined,
             ClaimPlacement | undefined,
           ] = [undefined, undefined];
           for (const axis of [0, 1] as const) {
             inkChildren[axis] = new Set();
-            if (covered[axis]) continue;
-            if (t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis]))
+            if (modes[axis] !== "placed" || claimPlaced[axis].size === 0)
               continue;
-            if (claimPlaced[axis].size === 0) continue;
             const p = node._placeChildren!(axis, effectiveExtents);
             placements[axis] = p;
             inkChildren[axis] = p.ink;
-            if (p.hull === undefined) continue;
-            const own = resolved[axis];
-            if (own !== undefined) resolved[axis] = hullExtent(own, p.hull);
-            // A child of the own set that fills the room it is given makes
-            // the layer fill it too: it claims no fixed room.
-            else if (!ownSetFills(axis, effectiveExtents))
-              resolved[axis] = p.hull;
           }
+          // The claim on each axis from the children's claims `extents`:
+          // the fold's (`folded`), or the base union merged with the hull of
+          // what the claim walk places (`hullOf`), so a scope solved at or
+          // above the layer leaves that room. A child of the own set that
+          // fills the room it is given makes the layer fill it too: it
+          // claims no fixed room.
+          const claimFrom = (
+            extents: Size<Extent | undefined>[],
+            folded: Size<Extent | undefined> | undefined,
+            hullOf: (p: ClaimPlacement) => Extent | undefined
+          ): [Extent | undefined, Extent | undefined] =>
+            [0, 1].map((axis) => {
+              const a = axis as 0 | 1;
+              if (modes[a] === "grid") return undefined;
+              if (modes[a] === "fold") return folded![a];
+              const own = resolveLayerAxisExtent(
+                extents,
+                t.effectiveChildren,
+                a,
+                scale[a],
+                a === 0 ? t.posDomains.x : t.posDomains.y,
+                t.base.union[a],
+                t.base.spaces[a],
+                claimPlaced[a]
+              );
+              const p = placements[a];
+              const hull = p === undefined ? undefined : hullOf(p);
+              if (hull === undefined) return own;
+              if (own !== undefined) return hullExtent(own, hull);
+              return ownSetFills(a, effectiveExtents) ? undefined : hull;
+            }) as [Extent | undefined, Extent | undefined];
+          const reflected = node.children.map(
+            (c) => c.yFrame.direction !== node.yFrame.direction
+          );
+          const fold =
+            t.plan !== undefined && t.composed !== undefined
+              ? composePlanExtents(
+                  t.plan,
+                  t.composed,
+                  effectiveExtents,
+                  t.effectiveChildren,
+                  reflected
+                )
+              : undefined;
+          constraintBudget = fold?.budget;
+          const resolved = claimFrom(
+            effectiveExtents,
+            fold?.extents,
+            (p) => p.hull
+          );
           // The plot's claim (`GoFishNode.resolvePlotExtent`): the same
           // steps over the children's plot claims, with the hull of what
           // the constraints place leaving out the dressing, and a chain with
@@ -697,53 +692,23 @@ export const layer = createNodeOperatorSequential(
             t.nestPlan,
             fillsRoom
           );
-          const plot: [Extent | undefined, Extent | undefined] = [
-            resolveLayerAxisExtent(
-              childPlots,
-              t.effectiveChildren,
-              0,
-              scale[0],
-              t.posDomains.x,
-              t.base.union[0],
-              t.base.spaces[0],
-              claimPlaced[0]
-            ),
-            resolveLayerAxisExtent(
-              childPlots,
-              t.effectiveChildren,
-              1,
-              scale[1],
-              t.posDomains.y,
-              t.base.union[1],
-              t.base.spaces[1],
-              claimPlaced[1]
-            ),
-          ];
-          for (const axis of [0, 1] as const) {
-            if (covered[axis]) {
-              plot[axis] = composePlanExtents(
-                t.plan!,
-                t.composed!,
-                effectiveExtents,
-                t.effectiveChildren,
-                reflected,
-                {
-                  extents: childPlots,
-                  standIn: node.children.map((c) => c instanceof GoFishRef),
-                }
-              ).extents[axis];
-              continue;
-            }
-            if (t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis])) {
-              plot[axis] = undefined;
-              continue;
-            }
-            const p = placements[axis];
-            if (p?.plot === undefined) continue;
-            const own = plot[axis];
-            if (own !== undefined) plot[axis] = hullExtent(own, p.plot);
-            else if (!ownSetFills(axis, effectiveExtents)) plot[axis] = p.plot;
-          }
+          const plot = claimFrom(
+            childPlots,
+            modes.includes("fold")
+              ? composePlanExtents(
+                  t.plan!,
+                  t.composed!,
+                  effectiveExtents,
+                  t.effectiveChildren,
+                  reflected,
+                  {
+                    extents: childPlots,
+                    standIn: node.children.map((c) => c instanceof GoFishRef),
+                  }
+                ).extents
+              : undefined,
+            (p) => p.plot
+          );
           // The content's claim, which `layout` solves against the layer's box
           // when the layer is sized. A data-valued size reports the claim of
           // its magnitude instead; the content's claim stays inside the box.
