@@ -23,7 +23,6 @@ def story_orthogonal_grid_embedding():
                     "kind": "distribute",
                     "spacing": 138,
                     "anchor": "middle",
-                    "alignment": "middle",
                 },
             ),
             sibling=combine(
@@ -31,7 +30,6 @@ def story_orthogonal_grid_embedding():
                     "kind": "distribute",
                     "spacing": (2 * math.pi) / 6,
                     "anchor": "middle",
-                    "alignment": "middle",
                 },
                 y={"kind": "align", "alignment": "middle"},
             ),

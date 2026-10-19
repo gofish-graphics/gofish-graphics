@@ -26,12 +26,27 @@ The [JavaScript page](/js/gotree) explains the grammar in more depth.
 from gofish import Curve, circle
 from gofish.gotree import combine, tree
 
+def leaves(n, p):
+    return [{"name": f"{p}{i}"} for i in range(n)]
+
+
 data = {
     "name": "root",
     "children": [
-        {"name": "A", "children": [{"name": "A1"}, {"name": "A2"}]},
-        {"name": "B", "children": [{"name": "B1"}, {"name": "B2"}, {"name": "B3"}]},
-        {"name": "C"},
+        {"name": "a", "children": leaves(3, "a")},
+        {"name": "b", "children": leaves(2, "b")},
+        {"name": "c"},
+        {"name": "d", "children": leaves(2, "d")},
+        {"name": "e", "children": leaves(2, "e")},
+        {"name": "f"},
+        {"name": "g"},
+        {"name": "h", "children": leaves(4, "h")},
+        {"name": "i", "children": leaves(4, "i")},
+        {"name": "j"},
+        {"name": "k", "children": leaves(4, "k")},
+        {"name": "l"},
+        {"name": "m", "children": leaves(4, "m")},
+        {"name": "n", "children": leaves(3, "n")},
     ],
 }
 
@@ -39,17 +54,17 @@ blues = ["#08306b", "#2171b5", "#6baed6"]
 
 tree(
     data,
-    node=lambda d: circle(r=9, fill=blues[d["depth"]]),
+    node=lambda d: circle(r=9, fill=blues[d["depth"]], stroke="#08306b", stroke_width=1),
     link={"curve": Curve.linear(), "stroke": "#555", "stroke_width": 1.5},
     parent_child=combine(
         x={"kind": "align", "alignment": "middle"},
-        y={"kind": "distribute", "spacing": 60},
+        y={"kind": "distribute", "spacing": 90},
     ),
     sibling=combine(
-        x={"kind": "distribute", "spacing": 24},
+        x={"kind": "distribute", "spacing": 10},
         y={"kind": "align", "alignment": "start"},
     ),
-).render(w=600, h=400)
+).render(w=900, h=560)
 ```
 
 ## Example: treemap
@@ -67,10 +82,29 @@ from gofish.gotree import alternate, combine, tree
 data = {
     "name": "root",
     "children": [
-        {"name": "A", "children": [{"name": "A1", "value": 4}, {"name": "A2", "value": 2}]},
-        {"name": "B", "children": [{"name": "B1", "value": 5}, {"name": "B2", "value": 3}]},
+        {
+            "name": "A",
+            "children": [
+                {"name": "A1", "value": 4},
+                {"name": "A2", "value": 2},
+                {"name": "A3", "value": 3},
+            ],
+        },
+        {
+            "name": "B",
+            "children": [
+                {"name": "B1", "value": 5},
+                {
+                    "name": "B2",
+                    "children": [{"name": "B2a", "value": 2}, {"name": "B2b", "value": 1}],
+                },
+            ],
+        },
+        {"name": "C", "children": [{"name": "C1", "value": 3}, {"name": "C2", "value": 2}]},
     ],
 }
+
+blues = ["#08306b", "#2171b5", "#6baed6", "#c6dbef"]
 
 dice = combine(x={"kind": "distribute", "spacing": 9}, y="align")
 slice_ = combine(x="align", y={"kind": "distribute", "spacing": 9})
@@ -78,8 +112,8 @@ slice_ = combine(x="align", y={"kind": "distribute", "spacing": 9})
 
 def node(d):
     if d["height"] == 0:
-        return rect(w=92, h=14 * d["data"]["value"], fill="#6baed6")
-    return rect(fill="#c6dbef", stroke="#08306b", stroke_width=1)
+        return rect(w=92, h=14 * d["data"]["value"], fill=blues[d["depth"]])
+    return rect(fill=blues[d["depth"]], stroke="#08306b", stroke_width=1)
 
 
 tree(
@@ -136,7 +170,7 @@ their children.
 - A dict sets every edge: `curve` (a `Curve` member), `stroke`, `stroke_width`
   and `opacity`.
 - A function `(source, target) -> dict` sets each edge from its two nodes,
-  which are dicts like the one `node` gets.
+  which are dicts like the one `node` gets. It returns `None` to skip an edge.
 
 `curve` takes `Curve.linear` (the default), `Curve.bezier`,
 `Curve.orthogonal` or `Curve.arc`. An orthogonal or bezier link bends along the

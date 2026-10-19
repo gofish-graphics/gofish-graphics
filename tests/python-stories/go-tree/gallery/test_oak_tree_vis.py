@@ -23,7 +23,6 @@ def story_oak_tree_vis():
                     "kind": "distribute",
                     "spacing": 121,
                     "anchor": "middle",
-                    "alignment": "middle",
                 },
             ),
             sibling=combine(

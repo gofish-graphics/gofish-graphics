@@ -7,6 +7,8 @@ the JS `tree()` does is checked by the parity stories under
 tests/python-stories/go-tree/.
 """
 
+import time
+
 import pytest
 
 from gofish import Coord, Curve, circle, layer, rect
@@ -50,7 +52,7 @@ def find(node, pred):
 
 
 def node_marks(mark):
-    return find(ir(mark), lambda d: str(d.get("name", "")).startswith("__gotree-"))
+    return find(ir(mark), lambda d: str(d.get("name", "")).startswith("root"))
 
 
 def links(mark):
@@ -82,21 +84,32 @@ class TestTree:
         assert by_name["A1"]["value"] is None
         assert by_name["A"]["data"] is DATA["children"][0]
 
-    def test_node_marks_are_named_in_preorder(self):
+    def test_node_marks_are_named_by_path(self):
         names = [m["name"] for m in node_marks(tree(DATA, node=lambda d: circle(r=4)))]
-        assert sorted(names) == [f"__gotree-{i}" for i in range(5)]
+        assert sorted(names) == ["root", "root/0", "root/0/0", "root/0/1", "root/1"]
 
     def test_default_node_is_a_blue_square(self):
-        (root,) = [m for m in node_marks(tree(DATA)) if m["name"] == "__gotree-0"]
-        assert root == {"type": "rect", "w": 12, "h": 12, "fill": "#4682b4", "name": "__gotree-0"}
+        (root,) = [m for m in node_marks(tree(DATA)) if m["name"] == "root"]
+        assert root == {"type": "rect", "w": 12, "h": 12, "fill": "#4682b4", "name": "root"}
 
     def test_empty_children_is_a_leaf(self):
         t = tree({"name": "root", "children": []})
-        assert ir(t)["children"][0]["name"] == "__gotree-0"
+        assert ir(t)["children"][0]["name"] == "root"
 
     def test_data_must_be_a_dict(self):
         with pytest.raises(TypeError, match="nested tree dict"):
             tree([1, 2, 3])
+
+    def test_deep_chain_builds(self):
+        # The combiners' relate callbacks build their references directly,
+        # so building a deep tree is linear and needs no recursion.
+        data = {"name": "leaf"}
+        for i in range(1000):
+            data = {"name": str(i), "children": [data]}
+        start = time.perf_counter()
+        t = tree(data)
+        assert time.perf_counter() - start < 5
+        assert isinstance(t, Mark)
 
     def test_coord_wraps_the_tree_in_a_layer(self):
         t = tree(DATA, coord=Coord.polar())
@@ -108,11 +121,10 @@ class TestLinks:
     def test_one_line_per_edge_in_breadth_first_order(self):
         lines = links(tree(DATA))
         assert [[c["selection"] for c in l["children"]] for l in lines] == [
-            # Names are preorder ids: root 0, A 1, A1 2, A2 3, B 4.
-            ["__gotree-0", "__gotree-1"],
-            ["__gotree-0", "__gotree-4"],
-            ["__gotree-1", "__gotree-2"],
-            ["__gotree-1", "__gotree-3"],
+            ["root", "root/0"],
+            ["root", "root/1"],
+            ["root/0", "root/0/0"],
+            ["root/0", "root/0/1"],
         ]
 
     def test_default_link_options(self):
@@ -149,6 +161,14 @@ class TestLinks:
 
     def test_link_none(self):
         assert links(tree(DATA, link="none")) == []
+
+    def test_link_function_returning_none_skips_the_edge(self):
+        # As in JS, where a link function returning null skips the edge.
+        lines = links(tree(DATA, link=lambda s, t: None if t["depth"] == 2 else {}))
+        assert [[c["selection"] for c in l["children"]] for l in lines] == [
+            ["root", "root/0"],
+            ["root", "root/1"],
+        ]
 
     def test_link_bad_string(self):
         with pytest.raises(ValueError, match='"none"'):
@@ -210,6 +230,12 @@ class TestCombiners:
             combine(x="stack")
         with pytest.raises(ValueError, match="kind"):
             combine(y={"kind": "stack"})
+
+    def test_combine_unknown_axis_option(self):
+        with pytest.raises(ValueError, match=r"\['spacng'\].*\['kind', 'spacing', 'order', 'anchor'\]"):
+            combine(x={"kind": "distribute", "spacng": 40})
+        with pytest.raises(ValueError, match="'spacing'"):
+            combine(y={"kind": "align", "spacing": 4})
 
     def test_nest(self):
         out = nest(x=4)([rect(), circle(r=2)]).to_dict()

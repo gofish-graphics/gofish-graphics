@@ -61,7 +61,6 @@ export const OrthogonalGridEmbedding: StoryObj = {
             kind: "distribute",
             spacing: 138,
             anchor: "middle",
-            alignment: "middle",
           },
         }),
         sibling: combine({
@@ -70,7 +69,6 @@ export const OrthogonalGridEmbedding: StoryObj = {
             kind: "distribute",
             spacing: (2 * Math.PI) / 6,
             anchor: "middle",
-            alignment: "middle",
           },
           // r: siblings share a radius.
           y: { kind: "align", alignment: "middle" },

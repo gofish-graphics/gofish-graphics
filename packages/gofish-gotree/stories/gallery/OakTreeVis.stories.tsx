@@ -82,7 +82,6 @@ export const OakTreeVis: StoryObj = {
             kind: "distribute",
             spacing: 121,
             anchor: "middle",
-            alignment: "middle",
           },
         }),
         sibling: combine({

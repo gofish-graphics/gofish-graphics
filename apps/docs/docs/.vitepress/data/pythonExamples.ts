@@ -25,6 +25,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  getStorySource,
   loadStoryExamples,
   PREVIEW_ROWS,
   type StoryExample,
@@ -755,7 +756,11 @@ export function loadPythonExamples(): PythonExample[] {
 
   const examples: PythonExample[] = jsExamples.map((ex: StoryExample) => {
     const renderDiverges = isExportExempt(exempt, ex.storyFile, ex.exportName);
-    const pyRelPath = mapJsToPython(ex.storyFile);
+    // The story's source as loadStoryExamples already read it.
+    const pyRelPath = mapJsToPython(
+      ex.storyFile,
+      getStorySource(ex.storyFile) ?? null
+    );
     const pyAbsPath = pyRelPath ? join(REPO_ROOT, pyRelPath) : "";
     if (!pyRelPath || !existsSync(pyAbsPath)) {
       return {

@@ -84,7 +84,6 @@ export const DeepTree: StoryObj = {
             kind: "distribute",
             spacing: 151,
             anchor: "middle",
-            alignment: "middle",
           },
         }),
         sibling: combine({
@@ -93,7 +92,6 @@ export const DeepTree: StoryObj = {
             kind: "distribute",
             spacing: (2 * Math.PI) / 10,
             anchor: "middle",
-            alignment: "middle",
           },
           // r: all siblings share a radius (same ring).
           y: { kind: "align", alignment: "middle" },

@@ -11,11 +11,10 @@ one definition, without a second implementation.
 """
 
 from collections import deque
-from itertools import count
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 from .. import curve as Curve
-from ..ast import Constraint, Mark, layer, line, rect, ref
+from ..ast import Constraint, Mark, RefSentinel, layer, line, rect, ref
 from ..ast import spread as _gofish_spread
 
 __all__ = [
@@ -121,8 +120,11 @@ def _named(children: List[Any], prefix: str) -> List[Mark]:
     return [layer([c]).name(f"{prefix}-{i}") for i, c in enumerate(children)]
 
 
-def _refs(c: Dict[str, Any], prefix: str, n: int) -> List[Any]:
-    return [c[f"{prefix}-{i}"] for i in range(n)]
+def _refs(prefix: str, n: int) -> List[RefSentinel]:
+    # The references a `.relate()` callback receives for these names, built
+    # directly. A `**c` catch-all would make `.relate()` collect every name
+    # in the subtree at every level, which is quadratic in the tree's depth.
+    return [RefSentinel(f"{prefix}-{i}") for i in range(n)]
 
 
 def distribute(
@@ -145,10 +147,10 @@ def distribute(
     def combine_children(children: List[Any]) -> Mark:
         n = len(children)
 
-        def clauses(**c: Any) -> List[Any]:
+        def clauses() -> List[Any]:
             cs: List[Any] = [
                 Constraint.distribute(
-                    _refs(c, prefix, n),
+                    _refs(prefix, n),
                     dir=dir,
                     spacing=_or(spacing, 0),
                     anchor=_or(anchor, "edge"),
@@ -156,7 +158,7 @@ def distribute(
                 )
             ]
             if alignment is not None:
-                cs.append(Constraint.align(_refs(c, prefix, n), **{other: alignment}))
+                cs.append(Constraint.align(_refs(prefix, n), **{other: alignment}))
             return cs
 
         return layer(_named(children, prefix)).relate(clauses)
@@ -164,7 +166,12 @@ def distribute(
     return Combiner(combine_children, dir)
 
 
-_AXIS_KINDS = ("align", "distribute", "nest")
+# Each axis kind and the options its dict takes besides "kind".
+_AXIS_OPTIONS = {
+    "align": ("alignment",),
+    "distribute": ("spacing", "order", "anchor"),
+    "nest": ("pad",),
+}
 
 
 def _axis(spec: Any, axis: str) -> Optional[Dict[str, Any]]:
@@ -172,10 +179,17 @@ def _axis(spec: Any, axis: str) -> Optional[Dict[str, Any]]:
         return None
     if isinstance(spec, str):
         spec = {"kind": spec}
-    if not isinstance(spec, dict) or spec.get("kind") not in _AXIS_KINDS:
+    if not isinstance(spec, dict) or spec.get("kind") not in _AXIS_OPTIONS:
         raise ValueError(
-            f"gotree.combine(): {axis}= must be one of {list(_AXIS_KINDS)} or a "
+            f"gotree.combine(): {axis}= must be one of {list(_AXIS_OPTIONS)} or a "
             f'dict with one of them as "kind", got {spec!r}'
+        )
+    allowed = ("kind",) + _AXIS_OPTIONS[spec["kind"]]
+    unknown = sorted(set(spec) - set(allowed))
+    if unknown:
+        raise ValueError(
+            f"gotree.combine(): unknown option(s) {unknown} for {axis}= "
+            f'{{"kind": "{spec["kind"]}"}}; expected {list(allowed)}'
         )
     return spec
 
@@ -200,7 +214,7 @@ def combine(
     def combine_children(children: List[Any]) -> Mark:
         n = len(children)
 
-        def clauses(**c: Any) -> List[Any]:
+        def clauses() -> List[Any]:
             cs: List[Any] = []
             for axis, spec in axes.items():
                 if spec is None:
@@ -209,14 +223,14 @@ def combine(
                 if kind == "align":
                     cs.append(
                         Constraint.align(
-                            _refs(c, prefix, n),
+                            _refs(prefix, n),
                             **{axis: _or(spec.get("alignment"), "middle")},
                         )
                     )
                 elif kind == "distribute":
                     cs.append(
                         Constraint.distribute(
-                            _refs(c, prefix, n),
+                            _refs(prefix, n),
                             dir=axis,
                             spacing=_or(spec.get("spacing"), 0),
                             order=_or(spec.get("order"), "forward"),
@@ -231,7 +245,7 @@ def combine(
                         )
                     cs.append(
                         Constraint.nest(
-                            [c[f"{prefix}-0"], c[f"{prefix}-1"]],
+                            _refs(prefix, 2),
                             **{axis: _or(spec.get("pad"), 0)},
                         )
                     )
@@ -259,8 +273,10 @@ def nest(*, x: Optional[float] = None, y: Optional[float] = None) -> Combiner:
         return layer(
             [layer([outer]).name("__nest-outer"), layer([inner]).name("__nest-inner")]
         ).relate(
-            lambda **c: [
-                Constraint.nest([c["__nest-outer"], c["__nest-inner"]], x=x, y=y)
+            lambda: [
+                Constraint.nest(
+                    [RefSentinel("__nest-outer"), RefSentinel("__nest-inner")], x=x, y=y
+                )
             ]
         )
 
@@ -277,21 +293,24 @@ class _Node:
     the root, its height above its deepest leaf, and its children (a node
     whose ``children`` is missing or empty is a leaf). ``datum`` is what the
     node and link functions receive (JS ``HierarchyDatum``), and ``name``
-    names the node's mark so the edges can refer to it."""
+    names the node's mark by its path from the root (``root/0/1``), as JS
+    ``nodePath`` does, so the edges, and users, can refer to it."""
 
-    def __init__(self, data: Any, depth: int, ids: Iterator[int]):
+    def __init__(self, data: Any, depth: int, name: str):
+        self.data = data
         self.depth = depth
-        self.name = f"__gotree-{next(ids)}"
-        kids = data.get("children") if isinstance(data, dict) else None
-        self.children = [_Node(child, depth + 1, ids) for child in kids or []]
-        # `value` is d3's summed value, which gotree never computes.
-        self.datum = {
-            "data": data,
-            "depth": depth,
-            "height": 1 + max((c.datum["height"] for c in self.children), default=-1),
-            "value": None,
-            "width": sum((c.datum["width"] for c in self.children), 0) or 1,
-        }
+        self.name = name
+        self.children: List["_Node"] = []
+        self.datum: Dict[str, Any] = {}
+
+    def pre_order(self) -> List["_Node"]:
+        # Iterative, so a deep tree does not reach Python's recursion limit.
+        out, stack = [], [self]
+        while stack:
+            node = stack.pop()
+            out.append(node)
+            stack.extend(reversed(node.children))
+        return out
 
     def breadth_first(self) -> Iterator["_Node"]:
         queue = deque([self])
@@ -299,6 +318,30 @@ class _Node:
             node = queue.popleft()
             yield node
             queue.extend(node.children)
+
+
+def _hierarchy(data: Any) -> _Node:
+    root = _Node(data, 0, "root")
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        kids = node.data.get("children") if isinstance(node.data, dict) else None
+        node.children = [
+            _Node(child, node.depth + 1, f"{node.name}/{i}")
+            for i, child in enumerate(kids or [])
+        ]
+        stack.extend(node.children)
+    # Children before parents, so each node sums over finished children.
+    for node in reversed(root.pre_order()):
+        # `value` is d3's summed value, which gotree never computes.
+        node.datum = {
+            "data": node.data,
+            "depth": node.depth,
+            "height": 1 + max((c.datum["height"] for c in node.children), default=-1),
+            "value": None,
+            "width": sum((c.datum["width"] for c in node.children), 0) or 1,
+        }
+    return root
 
 
 # ---------------------------------------------------------------------------
@@ -319,26 +362,34 @@ def _resolve(c: CombinerSpec, depth: int) -> Any:
     return c.at_depth(depth) if isinstance(c, DepthCombiner) else c
 
 
-def _render_subtree(
-    node: _Node,
+def _render_tree(
+    root: _Node,
     node_fn: Callable[[Dict[str, Any]], Mark],
     parent_child: CombinerSpec,
     sibling: CombinerSpec,
 ) -> Mark:
-    node_mark = node_fn(node.datum).name(node.name)
-    if not node.children:
-        return node_mark
-    kids = [_render_subtree(c, node_fn, parent_child, sibling) for c in node.children]
-    # Both combiners are resolved at this node's depth, so a level's
-    # parent_child and its children's sibling grouping alternate in sync.
-    child_group = _resolve(sibling, node.depth)(kids)
-    return _resolve(parent_child, node.depth)([node_mark, child_group])
+    # JS `renderSubtree`, without recursion: each node's mark in preorder,
+    # then each subtree composed after its children's.
+    order = root.pre_order()
+    marks = {id(n): node_fn(n.datum).name(n.name) for n in order}
+    for node in reversed(order):
+        if not node.children:
+            continue
+        kids = [marks[id(c)] for c in node.children]
+        # Both combiners are resolved at this node's depth, so a level's
+        # parent_child and its children's sibling grouping alternate in sync.
+        child_group = _resolve(sibling, node.depth)(kids)
+        marks[id(node)] = _resolve(parent_child, node.depth)([marks[id(node)], child_group])
+    return marks[id(root)]
 
 
-def _link_options(link: Any, source: _Node, target: _Node) -> Dict[str, Any]:
+def _link_options(link: Any, source: _Node, target: _Node) -> Optional[Dict[str, Any]]:
     if link is None:
         return {}
     opts = link(source.datum, target.datum) if callable(link) else link
+    if opts is None:
+        # A link function returning null skips the edge in JS.
+        return None
     unknown = sorted(set(opts) - set(_LINK_OPTIONS))
     if unknown:
         raise ValueError(
@@ -376,7 +427,8 @@ def _edges(root: _Node, link: Any, parent_child: CombinerSpec) -> List[Mark]:
         growth_dir = getattr(_resolve(parent_child, node.depth), "growth_dir", None)
         for child in node.children:
             opts = _link_options(link, node, child)
-            edges.append(_link_mark(opts, node.name, child.name, growth_dir))
+            if opts is not None:
+                edges.append(_link_mark(opts, node.name, child.name, growth_dir))
     return edges
 
 
@@ -401,7 +453,8 @@ def tree(
             its number of leaves. Default: a 12 px blue square.
         link: ``"none"`` for no edges, a dict of ``curve`` (a ``Curve``
             member), ``stroke``, ``stroke_width`` and ``opacity``, or a
-            function ``(source, target) -> dict`` over two nodes. Default:
+            function ``(source, target) -> dict`` over two nodes, which
+            returns ``None`` to skip that edge. Default:
             straight gray lines, 1 px wide.
         parent_child: The combiner for a parent and the group of its
             children, built with :func:`spread`, :func:`distribute`,
@@ -425,8 +478,8 @@ def tree(
     if isinstance(link, str) and link != "none":
         raise ValueError(f'gotree.tree(): link= as a string must be "none", got {link!r}')
     parent_child = _or(parent_child, _DEFAULT_PARENT_CHILD)
-    root = _Node(data, 0, count())
-    node_tree = _render_subtree(
+    root = _hierarchy(data)
+    node_tree = _render_tree(
         root, _or(node, _default_node), parent_child, _or(sibling, _DEFAULT_SIBLING)
     )
     edges = _edges(root, link, parent_child)

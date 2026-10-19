@@ -65,13 +65,11 @@ export const SpiralLayout: StoryObj = {
             kind: "distribute",
             spacing: (2 * Math.PI) / 9,
             anchor: "middle",
-            alignment: "middle",
           },
           y: {
             kind: "distribute",
             spacing: 118,
             anchor: "middle",
-            alignment: "middle",
           },
         }),
         // sibling: each next sibling spirals one θ-step around and one r-step out.
@@ -80,13 +78,11 @@ export const SpiralLayout: StoryObj = {
             kind: "distribute",
             spacing: (2 * Math.PI) / 9,
             anchor: "middle",
-            alignment: "middle",
           },
           y: {
             kind: "distribute",
             spacing: 62,
             anchor: "middle",
-            alignment: "middle",
           },
         }),
         coord: Coord.polar(),

@@ -36,7 +36,6 @@ def story_deep_tree():
                     "kind": "distribute",
                     "spacing": 151,
                     "anchor": "middle",
-                    "alignment": "middle",
                 },
             ),
             sibling=combine(
@@ -44,7 +43,6 @@ def story_deep_tree():
                     "kind": "distribute",
                     "spacing": (2 * math.pi) / 10,
                     "anchor": "middle",
-                    "alignment": "middle",
                 },
                 y={"kind": "align", "alignment": "middle"},
             ),

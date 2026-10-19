@@ -22,13 +22,11 @@ def story_spiral_layout():
                     "kind": "distribute",
                     "spacing": (2 * math.pi) / 9,
                     "anchor": "middle",
-                    "alignment": "middle",
                 },
                 y={
                     "kind": "distribute",
                     "spacing": 118,
                     "anchor": "middle",
-                    "alignment": "middle",
                 },
             ),
             sibling=combine(
@@ -36,13 +34,11 @@ def story_spiral_layout():
                     "kind": "distribute",
                     "spacing": (2 * math.pi) / 9,
                     "anchor": "middle",
-                    "alignment": "middle",
                 },
                 y={
                     "kind": "distribute",
                     "spacing": 62,
                     "anchor": "middle",
-                    "alignment": "middle",
                 },
             ),
             coord=Coord.polar(),

@@ -113,22 +113,24 @@ async function loadPythonModule() {
   );
   const textUtilsExisted = ensureTextUtilsTmp();
   const jsTmpExisted = existsSync(jsTmpPath);
-  if (!jsTmpExisted)
-    transpileTo(
-      resolve(__dirname, "../docs/.vitepress/data/storyExamples.ts"),
-      jsTmpPath,
-      [["./textUtils.ts", "./textUtils.__check__.mjs"]]
-    );
-  transpileTo(
-    resolve(__dirname, "../../../tests/scripts/path-mapping.ts"),
-    pathMappingTmp
-  );
-  transpileTo(tsPath, tmpPath, [
-    ["./storyExamples.ts", "./storyExamples.__check__.mjs"],
-    ["./textUtils.ts", "./textUtils.__check__.mjs"],
-    [pathMappingTs, pathMappingTs.replace(/\.ts$/, ".__check__.mjs")],
-  ]);
+  // Every temp file is written inside the try, so the finally removes it
+  // even when a later transpile throws.
   try {
+    if (!jsTmpExisted)
+      transpileTo(
+        resolve(__dirname, "../docs/.vitepress/data/storyExamples.ts"),
+        jsTmpPath,
+        [["./textUtils.ts", "./textUtils.__check__.mjs"]]
+      );
+    transpileTo(
+      resolve(__dirname, "../../../tests/scripts/path-mapping.ts"),
+      pathMappingTmp
+    );
+    transpileTo(tsPath, tmpPath, [
+      ["./storyExamples.ts", "./storyExamples.__check__.mjs"],
+      ["./textUtils.ts", "./textUtils.__check__.mjs"],
+      [pathMappingTs, pathMappingTs.replace(/\.ts$/, ".__check__.mjs")],
+    ]);
     return await import(pathToFileURL(tmpPath).href);
   } finally {
     rmSync(tmpPath, { force: true });
