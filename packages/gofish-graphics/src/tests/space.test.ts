@@ -622,8 +622,10 @@ console.log("# space: one fold for every origin");
   );
   // A fixed-pitch chain folds the parts' sides, not only their widths: a
   // baseline row keeps its descent below its anchor, and a tall middle row
-  // binds even when it is neither first nor last.
-  const pitched = (
+  // binds even when it is neither first nor last. The parts' claims are in
+  // the chain's axis order, and the claim is measured from its origin, the
+  // first part's anchor.
+  const pitchedClaim = (
     targets: CONTINUOUS_TYPE[],
     anchor: "baseline" | "middle"
   ) => {
@@ -633,17 +635,25 @@ console.log("# space: one fold for every origin");
       targets,
       distributeSpaceFold(targets, ["a", "b", "c"], opts),
       opts
-    )!.width.run(1);
+    )!;
   };
+  const pitched = (
+    targets: CONTINUOUS_TYPE[],
+    anchor: "baseline" | "middle"
+  ) => pitchedClaim(targets, anchor).width.run(1);
+  // Rows at 0 and 30: [−10, 20] and [30, 35].
+  const baselineChain = pitchedClaim(
+    [
+      CONTINUOUS(interval(-10, 20), "free"),
+      CONTINUOUS(interval(0, 5), "free"),
+    ],
+    "baseline"
+  );
   ok(
     "a baseline chain counts a row's descent below its anchor",
-    pitched(
-      [
-        CONTINUOUS(interval(-10, 20), "free"),
-        CONTINUOUS(interval(0, 5), "free"),
-      ],
-      "baseline"
-    ) === 50
+    baselineChain.width.run(1) === 45 &&
+      baselineChain.descent.run(1) === 10 &&
+      baselineChain.ascent.run(1) === 35
   );
   ok(
     "a middle chain's tallest row binds wherever it sits",

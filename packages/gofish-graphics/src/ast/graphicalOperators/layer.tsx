@@ -631,12 +631,16 @@ export const layer = createNodeOperatorSequential(
           ];
           constraintBudget = undefined;
           const covered: [boolean, boolean] = [false, false];
+          const reflected = node.children.map(
+            (c) => c.yFrame.direction !== node.yFrame.direction
+          );
           if (t.plan !== undefined && t.composed !== undefined) {
             const c = composePlanExtents(
               t.plan,
               t.composed,
               effectiveExtents,
-              t.effectiveChildren
+              t.effectiveChildren,
+              reflected
             );
             constraintBudget = c.budget;
             for (const axis of [0, 1] as const)
@@ -727,6 +731,7 @@ export const layer = createNodeOperatorSequential(
                 t.composed!,
                 effectiveExtents,
                 t.effectiveChildren,
+                reflected,
                 {
                   extents: childPlots,
                   standIn: node.children.map((c) => c instanceof GoFishRef),

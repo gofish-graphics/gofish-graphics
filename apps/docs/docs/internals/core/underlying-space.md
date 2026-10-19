@@ -821,11 +821,14 @@ fixed-pitch siblings reusing the same anchor vocabulary `align` already uses
 about its chain point by a seat, the next chain point is one step on, and the
 claim is the highest reach above the chain's start plus the lowest reach
 below it, over every part. Only the seat and the step differ. A pitched
-chain's claim steps its anchors against its parts' growth one pitch at a
-time, as a ridgeline reads (rows chained down a y that reads top-down, each
-growing upward from its anchor, see
-[Axis direction](/internals/layout/passes#axis-direction)), and each part
-sits about its anchor:
+chain's claim steps its anchors one pitch at a time in the chain's axis
+order, and reads each part's claim in that order too: the layer reflects
+the claim of a part that reads y the other way about its origin
+(`composePlanExtents`' `reflected`), as its view in the layer's order
+(`orientView`) places it. So a ridgeline's rows (chained down a y that reads
+top-down, each growing upward from its anchor, see
+[Axis direction](/internals/layout/passes#axis-direction)) reach back over
+the rows chained before them. Each part sits about its anchor:
 
 - `"middle"`: half its width above the anchor, half below.
 - `"baseline"`: its own signed sides, ascent above and descent below.
@@ -833,9 +836,10 @@ sits about its anchor:
 - `"end"`: its whole width below the anchor.
 
 So with one-sided parts the claim is `(n−1)·s` plus the tallest reach past
-the chain's end rows: `max_k(h_k − k·s)⁺ + (n−1)·s` for `"start"` (k in
-chain order, the binding row being whichever peak clears the rows chained
-above it; for a ridgeline that's usually the first row). A `"middle"` row
+the chain's end rows: `max_k(h_k − k·s)⁺ + (n−1)·s` for rows that reach
+back over the rows before them, as a ridgeline's do (k in chain order, the
+binding row being whichever peak clears the rows chained above it; usually
+the first row). A `"middle"` row
 taller than both end rows binds too, and a `"baseline"` row's descent counts
 below its anchor. The fold runs in Monotonics, so an all-linear chain's
 claim is an exact envelope that a scope inverts exactly (before, a pitched
@@ -845,7 +849,10 @@ its box by a fraction of a pixel). The fold's child order is the chain order
 
 The type fold has no data part of the chain: a spread separates, so its type
 is ordinal (or undefined) whatever its pitch, and the chain lives only in the
-claim.
+claim. That claim is measured from the chain's origin, where layout seats the
+first part's anchor, as its parent overlays it: an edge chain starts there,
+and a pitched chain reaches past it on both sides (a ridgeline's first peak
+rises above its first baseline).
 
 A spread chain on y needs no paint-side handshake. The chain places each
 target's anchor in the spread's own axis order, and the target is read through

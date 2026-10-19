@@ -56,7 +56,7 @@ import {
   unionChildExtents,
   unionChildSpaces,
 } from "../graphicalOperators/alignment";
-import { impliedExtent, scaleExtent, type Extent } from "../extent";
+import { Extent, impliedExtent, scaleExtent } from "../extent";
 import { type ConstraintSpec } from ".";
 import * as Interval from "../../util/interval";
 import {
@@ -701,6 +701,12 @@ export function composePlanExtents(
   composed: ComposedSpaces,
   childExtents: Size<Extent | undefined>[],
   childSpaces: Size<UnderlyingSpace>[],
+  // Which children read y the other way from the layer. A fold places each
+  // operand about its origin through its view in the layer's axis order
+  // (`orientView`), so it reads the operand's y claim reflected about its
+  // origin: a ridgeline's rows, chained down a spread that reads top-down,
+  // rise above their baselines.
+  reflected: boolean[],
   // The plot's claim instead (`GoFishNode.resolvePlotExtent`): each child's
   // plot claim, and which children are stand-ins. A chain with a stand-in
   // is laid by every part and reaches only as far as its stand-ins: its
@@ -729,10 +735,17 @@ export function composePlanExtents(
       plot !== undefined && idx.some((i) => plot.standIn[i])
         ? idx.map((i) => plot.standIn[i])
         : undefined;
+    // An operand's claim in the layer's axis order.
+    const operand = (claims: Size<Extent | undefined>[], i: number) => {
+      const e = claims[i][axis];
+      return axis === 1 && reflected[i] && e !== undefined
+        ? Extent(e.descent, e.ascent)
+        : e;
+    };
     const fragmentExtent = (f: Fragment): Extent | undefined =>
       f.kind === "distribute"
         ? distributeExtentFold(
-            f.seg.idx.map((i) => childExtents[i][axis]),
+            f.seg.idx.map((i) => operand(childExtents, i)),
             f.seg.idx.map((i) => childSpaces[i][axis]),
             f.space,
             foldOptions(f.seg),
@@ -740,7 +753,7 @@ export function composePlanExtents(
           )
         : f.kind === "align"
           ? resolveAlignmentExtent(
-              f.al.idx.map((i) => childExtents[i][axis]),
+              f.al.idx.map((i) => operand(childExtents, i)),
               f.al.idx.map((i) => childSpaces[i][axis]),
               f.al.anchor,
               f.space

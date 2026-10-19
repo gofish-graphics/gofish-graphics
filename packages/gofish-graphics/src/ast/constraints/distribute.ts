@@ -445,13 +445,12 @@ const STACK: ChainRule = {
 
 /** A spread chain (a non-glued distribute): `"edge"` lays each part's box
  *  `spacing` after the previous one's end; a fixed-pitch anchor lays each
- *  part's anchor `spacing` from the previous one's. A pitched chain's claim
- *  steps against its parts' own growth, as its rows read: content above the
- *  anchor (`start`, `baseline`) rises over the rows chained after it, and
- *  content below it (`end`) hangs under the rows chained before it. That is a
- *  ridgeline: a spread that reads top-down whose rows grow upward (see
- *  `axisDirection.ts`). A baseline-anchored part keeps its signed sides about
- *  its baseline; any other part is its box, seated by its anchor. */
+ *  part's anchor `spacing` from the previous one's. The parts' claims are in
+ *  the chain's axis order (`GoFishNode.resolveExtent` reads a part that
+ *  reads y the other way reflected), so content above a baseline in a row
+ *  that grows upward reaches back over the rows chained before it: a
+ *  ridgeline. A baseline-anchored part keeps its signed sides about its
+ *  baseline; any other part is its box, seated by its anchor. */
 const spreadRule = (anchor: AlignAnchor | "edge"): ChainRule => ({
   seat: (A, part) => {
     const w = box(A, part);
@@ -469,7 +468,7 @@ const spreadRule = (anchor: AlignAnchor | "edge"): ChainRule => ({
   step: (A, part, spacing) =>
     anchor === "edge"
       ? A.add(box(A, part), A.constant(spacing))
-      : A.constant(-spacing),
+      : A.constant(spacing),
 });
 
 /**
@@ -616,15 +615,15 @@ export function distributeExtentFold(
     )
   )
     return undefined;
-  // The chain's type has no data coordinates, so its claim is a box from
-  // its start (its plot, a part of that box, is measured from there too).
-  const chain = chainClaim(
+  // The chain's type has no data coordinates, so its claim is measured from
+  // its origin, where layout seats its first part's anchor: an edge chain
+  // starts there, and a pitched chain reaches past it on both sides (its
+  // plot is measured from there too).
+  return chainClaim(
     targetExtents as Extent[],
     spreadRule(opts.anchor),
     opts.spacing,
     undefined,
     reaches
   );
-  if (reaches !== undefined) return chain;
-  return Extent(chain.width);
 }
