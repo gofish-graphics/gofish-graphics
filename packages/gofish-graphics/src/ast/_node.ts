@@ -220,6 +220,14 @@ export type ClaimWalk = {
   /** Per axis, the literal pixel its own start places it at in its parent
    *  (0 for none). */
   literalStart: [number, number];
+  /** How it seats its children, read by the placement walk through it
+   *  (`placementIn`): a child's index, its name as a direct operand, and per
+   *  axis the constraints that act on it there, by child index. */
+  seating: () => {
+    indexOf: (child: GoFishAST) => number;
+    operandName: Map<number, string>;
+    acting: [Map<number, ConstraintSpec[]>, Map<number, ConstraintSpec[]>];
+  };
   /** Per axis, whether it has a size of its own there, which makes it a
    *  σ-scope of its own. */
   ownScope: [boolean, boolean];

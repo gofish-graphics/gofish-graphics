@@ -89,11 +89,13 @@ import {
   solveLayerScales,
 } from "../constraints/proposalPlan";
 import {
+  actsOn,
   constrainedOn,
   literalSeats,
   placeByClaims,
   type ClaimChild,
   type ClaimPlacement,
+  type Placement,
 } from "../constraints/claimPlacement";
 import { placementIn } from "../placementClaims";
 import {
@@ -338,26 +340,34 @@ export const layer = createNodeOperatorSequential(
     // Per axis, the children that are ink there (`placeByClaims`): they
     // draw, but take no room in the claim, nor in the box.
     const inkChildren: [Set<number>, Set<number>] = [new Set(), new Set()];
+    // Where each child that is a `ref` stand-in has its target land in this
+    // layer's frame on `axis` (`placementIn`), by child index.
+    const standInPlacements = (axis: 0 | 1): (Placement | undefined)[] =>
+      node.children.map((c) =>
+        c instanceof GoFishRef && c.targetNode !== undefined
+          ? placementIn(c.targetNode, node, axis)
+          : undefined
+      );
     // What the claim walk knows of each child on `axis`, for
     // `placeByClaims`: its claim (`extents`), its type, whether it is a `ref`
-    // stand-in and where its target lands here (`placementIn`), whether it
+    // stand-in and where its target lands here (`placed`), whether it
     // reads its place from refs, and whether its own data places it in this
     // layer's frame.
     const claimChildren = (
       axis: 0 | 1,
-      extents: Size<Extent | undefined>[]
+      extents: Size<Extent | undefined>[],
+      placed: (Placement | undefined)[]
     ): ClaimChild[] => {
       const sets = node.sharing().sets[axis];
       let held: boolean | undefined;
       return node.children.map((c, i) => {
         const space = c.resolveUnderlyingSpace()[axis];
-        const target = c instanceof GoFishRef ? c.targetNode : undefined;
         return {
           name: childNameKey(c),
           extent: extents[i]?.[axis],
           space,
           standIn: c instanceof GoFishRef,
-          placed: target && placementIn(target, node, axis),
+          placed: placed[i],
           inkOn:
             (c as GoFishNode).inkOn?.[axis] === true ||
             (alongOwnAxis(c, axis) && (held ??= heldInChain(axis))),
@@ -382,6 +392,21 @@ export const layer = createNodeOperatorSequential(
       }
       return false;
     };
+    // Where the layer's constraints place its children on `axis` in the
+    // claim walk (`placeByClaims`), for their claims `extents`.
+    const placeChildren = (
+      axis: 0 | 1,
+      extents: Size<Extent | undefined>[],
+      placed: (Placement | undefined)[]
+    ) =>
+      placeByClaims(
+        axis,
+        claimChildren(axis, extents, placed),
+        node.constraints,
+        constraintOperands(),
+        claimPlaced[axis],
+        nestedPlacement(axis)
+      );
     // Where an operand nested in a child lands in this layer's frame.
     const nestedPlacement = (axis: 0 | 1) => (name: string) => {
       const op = constraintOperands().get(name);
@@ -389,16 +414,49 @@ export const layer = createNodeOperatorSequential(
         ? placementIn(op.node, node, axis)
         : undefined;
     };
-    // Whether a child is a stand-in the claim walk places on `axis`: the
-    // constraints seat what is related to it where its target lands, so a
-    // fold that starts its children at the layer's origin does not hold.
-    const placesStandIn = (axis: 0 | 1) =>
-      node.children.some(
-        (c) =>
-          c instanceof GoFishRef &&
-          c.targetNode !== undefined &&
-          placementIn(c.targetNode, node, axis) !== undefined
-      );
+    // How this layer seats its children (`ClaimWalk.seating`), read once
+    // for the operands it was read from.
+    let seatingMemo:
+      | {
+          of: Map<string, ResolvedOperand>;
+          seating: ReturnType<NonNullable<GoFishNode["claimWalk"]>["seating"]>;
+        }
+      | undefined;
+    const seating = () => {
+      const operands = constraintOperands();
+      if (seatingMemo?.of === operands) return seatingMemo.seating;
+      const operandName = new Map<number, string>();
+      for (const [name, op] of operands)
+        if (op.direct && !operandName.has(op.child))
+          operandName.set(op.child, name);
+      const acting: [
+        Map<number, ConstraintSpec[]>,
+        Map<number, ConstraintSpec[]>,
+      ] = [new Map(), new Map()];
+      for (const c of node.constraints)
+        for (const axis of [0, 1] as const) {
+          if (!actsOn(c, axis)) continue;
+          const kids = new Set<number>();
+          for (const r of c.children) {
+            const op = r === undefined ? undefined : operands.get(r.name);
+            if (op !== undefined) kids.add(op.child);
+          }
+          for (const k of kids) {
+            const list = acting[axis].get(k);
+            if (list === undefined) acting[axis].set(k, [c]);
+            else list.push(c);
+          }
+        }
+      let index = new Map(node.children.map((c, i) => [c, i]));
+      const indexOf = (child: GoFishAST): number => {
+        const i = index.get(child);
+        if (i !== undefined && node.children[i] === child) return i;
+        index = new Map(node.children.map((c, j) => [c, j]));
+        return index.get(child) ?? -1;
+      };
+      seatingMemo = { of: operands, seating: { indexOf, operandName, acting } };
+      return seatingMemo.seating;
+    };
     // Whether a child of this layer's own set takes whatever room the layer
     // is given on `axis` (it claims none, as a rect with no size does).
     const ownSetFills = (
@@ -590,7 +648,13 @@ export const layer = createNodeOperatorSequential(
             options.transform?.scale?.y ?? 1,
           ];
           const operands = constraintOperands();
-          const standIns = [placesStandIn(0), placesStandIn(1)];
+          // A stand-in the claim walk places on an axis: the constraints
+          // seat what is related to it where its target lands, so a fold
+          // that starts its children at the layer's origin does not hold.
+          const placedStandIns = [standInPlacements(0), standInPlacements(1)];
+          const standIns = placedStandIns.map((ps) =>
+            ps.some((p) => p !== undefined)
+          );
           // How the claim composes each axis: a grid's track axis claims
           // nothing (the tracks size at layout, in `resolveGridTracks`); a
           // constraint fold (a spread's align + distribute) has every child
@@ -624,7 +688,11 @@ export const layer = createNodeOperatorSequential(
             inkChildren[axis] = new Set();
             if (modes[axis] !== "placed" || claimPlaced[axis].size === 0)
               continue;
-            const p = node.claimWalk!.placeChildren(axis, effectiveExtents);
+            const p = placeChildren(
+              axis,
+              effectiveExtents,
+              placedStandIns[axis]
+            );
             placements[axis] = p;
             inkChildren[axis] = p.ink;
             const session = node.tryGetRenderSession();
@@ -1371,20 +1439,14 @@ export const layer = createNodeOperatorSequential(
     node.claimWalk = {
       ink: inkChildren,
       operands: constraintOperands,
+      seating,
       literalStart: [0, 1].map((axis) => {
         const min = dims[axis].min;
         return typeof min === "number" ? min : 0;
       }) as [number, number],
       ownScope: [dims[0].size !== undefined, dims[1].size !== undefined],
       placeChildren: (axis, extents) =>
-        placeByClaims(
-          axis,
-          claimChildren(axis, extents),
-          node.constraints,
-          constraintOperands(),
-          claimPlaced[axis],
-          nestedPlacement(axis)
-        ),
+        placeChildren(axis, extents, standInPlacements(axis)),
       // Memoized with the claims it reads. The claim hook's own placement
       // is not reused: it places the nest-adjusted claims, and only on an
       // axis the claim walk places children on.
@@ -1397,7 +1459,8 @@ export const layer = createNodeOperatorSequential(
           axis,
           claimChildren(
             axis,
-            node.children.map((c) => c.resolveExtent())
+            node.children.map((c) => c.resolveExtent()),
+            standInPlacements(axis)
           ),
           node.constraints,
           constraintOperands(),
