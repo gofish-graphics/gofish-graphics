@@ -271,8 +271,8 @@ export function inkOverflow(
     `the graphic draws past the canvas on ${name}: ${px(before)} before ` +
     `it, ${px(after)} after it. ` +
     (node === undefined
-      ? `Its own box reaches there: a part whose size only layout knows ` +
-        `(an overlap strategy, a pack) took more room than it claimed.`
+      ? `Its own box reaches there, not a part the claim walk left out: ` +
+        `layout drew it larger than its claim, or away from it.`
       : `The farthest is ${what}, which the claim walk could not place ` +
         `(ink), so it took no room.`);
   return {

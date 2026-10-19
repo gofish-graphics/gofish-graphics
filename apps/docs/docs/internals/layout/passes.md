@@ -836,7 +836,9 @@ those lines, so `pnpm capture-one` prints them under the story.
 - **A drawing past the canvas (`ink-overflow`).** After placement, on each
   axis the render sizes and no fixed-overflow was found, the hull of the
   root's box and its ink is checked against the canvas, naming the ink node
-  that reaches farthest.
+  that reaches farthest. Where the root's own box reaches past the canvas,
+  no ink node is to blame, and the warning says only that: layout drew the
+  box larger than its claim, or away from it.
 
 #### Shape geometry after layout
 
