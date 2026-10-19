@@ -1,6 +1,7 @@
 import { CoordinateTransform } from "./ast/coordinateTransforms/coord";
 import { lerp } from "./util";
 import { adaptiveResamplePath } from "./adaptive-resampling";
+import type { BoundingBox } from "./util/bbox";
 
 export const lerpPoint = (point1: Point, point2: Point, t: number): Point => {
   return [lerp(point1[0], point2[0], t), lerp(point1[1], point2[1], t)];
@@ -41,6 +42,20 @@ export const curve = (
   control2,
   end,
 });
+
+/** A quadratic bezier (SVG `Q`), written as the cubic that draws the same
+ *  curve: each cubic control sits 2/3 of the way from its end to `control`. */
+export const quadratic = (
+  start: Point,
+  control: Point,
+  end: Point
+): BezierCurve =>
+  curve(
+    start,
+    lerpPoint(start, control, 2 / 3),
+    lerpPoint(end, control, 2 / 3),
+    end
+  );
 
 export type PathSegment = LineSegment | BezierCurve;
 
@@ -88,9 +103,6 @@ export const mapPathPoints = (path: Path, f: (p: Point) => Point): Path =>
           }
   );
 
-/** An axis-aligned box: the low corner and the high corner. */
-export type PathBounds = { min: Point; max: Point };
-
 /** The parameters in (0, 1) where one coordinate of a cubic bezier turns
  *  around: the roots of that coordinate's derivative, a quadratic in t. */
 const cubicTurns = (p0: number, p1: number, p2: number, p3: number) => {
@@ -120,18 +132,17 @@ const cubicAt = (p0: number, p1: number, p2: number, p3: number, t: number) => {
 };
 
 /**
- * The exact box around the points a path draws, or `undefined` for an empty
- * path. A line is bounded by its ends. A cubic is bounded by its ends and by
- * its points where a coordinate's derivative is zero, so the box is tight even
+ * The exact box around the points a path draws (`empty()` for an empty path).
+ * A line is bounded by its ends. A cubic is bounded by its ends and by its
+ * points where a coordinate's derivative is zero, so the box is tight even
  * when the control points stick out past the curve (an arc's controls do).
  */
-export const pathBounds = (path: Path): PathBounds | undefined => {
-  if (path.length === 0) return undefined;
-  const min: Point = [Infinity, Infinity];
-  const max: Point = [-Infinity, -Infinity];
+export const pathBounds = (path: Path): BoundingBox => {
+  const lo: Point = [Infinity, Infinity];
+  const hi: Point = [-Infinity, -Infinity];
   const add = (axis: 0 | 1, v: number) => {
-    if (v < min[axis]) min[axis] = v;
-    if (v > max[axis]) max[axis] = v;
+    if (v < lo[axis]) lo[axis] = v;
+    if (v > hi[axis]) hi[axis] = v;
   };
   for (const seg of path) {
     if (seg.type === "line") {
@@ -156,7 +167,7 @@ export const pathBounds = (path: Path): PathBounds | undefined => {
       }
     }
   }
-  return { min, max };
+  return { minX: lo[0], maxX: hi[0], minY: lo[1], maxY: hi[1] };
 };
 
 export const segmentToSVG = (segment: PathSegment): string => {

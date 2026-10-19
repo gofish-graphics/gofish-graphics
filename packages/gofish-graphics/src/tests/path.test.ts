@@ -17,7 +17,9 @@ import {
   subdividePath,
   lerpPoint,
   pathBounds,
+  quadratic,
 } from "../path";
+import { isEmptyInfinity } from "../util/bbox";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { CoordinateTransform } from "../ast/coordinateTransforms/coord";
 
@@ -61,7 +63,7 @@ function evaluatePathAt(path: Path, t: number): Point {
   const seg = path[clampedIndex];
 
   // Calculate local parameter within the segment
-  const segmentT = (t * numSegments) - clampedIndex;
+  const segmentT = t * numSegments - clampedIndex;
 
   if (seg.type === "line") {
     const [p0, p1] = seg.points;
@@ -312,10 +314,20 @@ function testLineSegmentsPolar() {
   console.log(`  Adaptive segments: ${adaptiveResult.length}`);
   console.log(`  Uniform segments: ${uniformResult.length}`);
 
-  const comparison = comparePaths(linePath, adaptiveResult, uniformResult, space, 100);
+  const comparison = comparePaths(
+    linePath,
+    adaptiveResult,
+    uniformResult,
+    space,
+    100
+  );
   console.log(`  Max deviation: ${comparison.maxDeviation.toFixed(4)}`);
-  console.log(`  Adaptive max distance: ${comparison.adaptiveMaxDist.toFixed(4)}`);
-  console.log(`  Uniform max distance: ${comparison.uniformMaxDist.toFixed(4)}`);
+  console.log(
+    `  Adaptive max distance: ${comparison.adaptiveMaxDist.toFixed(4)}`
+  );
+  console.log(
+    `  Uniform max distance: ${comparison.uniformMaxDist.toFixed(4)}`
+  );
 
   // Adaptive should use fewer segments but still be close
   const fewerSegments = adaptiveResult.length < uniformResult.length;
@@ -378,10 +390,20 @@ function testBezierCurvesPolar() {
   console.log(`  Adaptive segments: ${adaptiveResult.length}`);
   console.log(`  Uniform segments: ${uniformResult.length}`);
 
-  const comparison = comparePaths(bezierPath, adaptiveResult, uniformResult, space, 100);
+  const comparison = comparePaths(
+    bezierPath,
+    adaptiveResult,
+    uniformResult,
+    space,
+    100
+  );
   console.log(`  Max deviation: ${comparison.maxDeviation.toFixed(4)}`);
-  console.log(`  Adaptive max distance: ${comparison.adaptiveMaxDist.toFixed(4)}`);
-  console.log(`  Uniform max distance: ${comparison.uniformMaxDist.toFixed(4)}`);
+  console.log(
+    `  Adaptive max distance: ${comparison.adaptiveMaxDist.toFixed(4)}`
+  );
+  console.log(
+    `  Uniform max distance: ${comparison.uniformMaxDist.toFixed(4)}`
+  );
 
   const fewerSegments = adaptiveResult.length < uniformResult.length;
   const deviationOk = comparison.maxDeviation < 10;
@@ -443,10 +465,20 @@ function testMixedPaths() {
   console.log(`  Adaptive segments: ${adaptiveResult.length}`);
   console.log(`  Uniform segments: ${uniformResult.length}`);
 
-  const comparison = comparePaths(mixedPath, adaptiveResult, uniformResult, space, 100);
+  const comparison = comparePaths(
+    mixedPath,
+    adaptiveResult,
+    uniformResult,
+    space,
+    100
+  );
   console.log(`  Max deviation: ${comparison.maxDeviation.toFixed(4)}`);
-  console.log(`  Adaptive max distance: ${comparison.adaptiveMaxDist.toFixed(4)}`);
-  console.log(`  Uniform max distance: ${comparison.uniformMaxDist.toFixed(4)}`);
+  console.log(
+    `  Adaptive max distance: ${comparison.adaptiveMaxDist.toFixed(4)}`
+  );
+  console.log(
+    `  Uniform max distance: ${comparison.uniformMaxDist.toFixed(4)}`
+  );
 
   const fewerSegments = adaptiveResult.length < uniformResult.length;
   const deviationOk = comparison.maxDeviation < 10;
@@ -563,25 +595,27 @@ function testPathBounds(): boolean {
       ["hump", [curve([0, 0], [0, 4], [4, 4], [4, 0])], [0, 0, 4, 3]],
       // S-curve whose controls stay between the ends: bounded by the ends.
       ["s-curve", [curve([0, 0], [5, 0], [5, 10], [10, 10])], [0, 0, 10, 10]],
+      // Quadratic M0,0 Q2,4 4,0 (a perfect-arrows bow): peaks at y=2, half
+      // way to its control.
+      ["quadratic", [quadratic([0, 0], [2, 4], [4, 0])], [0, 0, 4, 2]],
     ];
   let ok = true;
   for (const [name, path, want] of cases) {
     const got = pathBounds(path);
     const pass =
       want === undefined
-        ? got === undefined
-        : got !== undefined &&
-          close(got.min[0], want[0]) &&
-          close(got.min[1], want[1]) &&
-          close(got.max[0], want[2]) &&
-          close(got.max[1], want[3]);
+        ? isEmptyInfinity(got)
+        : close(got.minX, want[0]) &&
+          close(got.minY, want[1]) &&
+          close(got.maxX, want[2]) &&
+          close(got.maxY, want[3]);
     console.log(`  ${name}: ${pass ? "✓ PASSED" : "✗ FAILED"}`);
     if (!pass) console.log(`    got ${JSON.stringify(got)}, want ${want}`);
     ok = ok && pass;
   }
   // Densely sampled points of a curve stay inside, and touch, its box.
   const c = curve([0, 0], [-3, 6], [9, 8], [5, -2]);
-  const box = pathBounds([c])!;
+  const box = pathBounds([c]);
   let lo: Point = [Infinity, Infinity];
   let hi: Point = [-Infinity, -Infinity];
   for (let i = 0; i <= 10000; i++) {
@@ -590,10 +624,10 @@ function testPathBounds(): boolean {
     hi = [Math.max(hi[0], p[0]), Math.max(hi[1], p[1])];
   }
   const tight =
-    Math.abs(lo[0] - box.min[0]) < 1e-6 &&
-    Math.abs(lo[1] - box.min[1]) < 1e-6 &&
-    Math.abs(hi[0] - box.max[0]) < 1e-6 &&
-    Math.abs(hi[1] - box.max[1]) < 1e-6;
+    Math.abs(lo[0] - box.minX) < 1e-6 &&
+    Math.abs(lo[1] - box.minY) < 1e-6 &&
+    Math.abs(hi[0] - box.maxX) < 1e-6 &&
+    Math.abs(hi[1] - box.maxY) < 1e-6;
   console.log(`  sampled curve: ${tight ? "✓ PASSED" : "✗ FAILED"}`);
   ok = ok && tight;
   console.log();

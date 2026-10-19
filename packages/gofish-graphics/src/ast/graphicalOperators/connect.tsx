@@ -20,6 +20,13 @@ import {
 } from "../displayList/lowerHelpers";
 import { Dimensions, elaborateDirection, FancyDirection, Size } from "../dims";
 import { pairs } from "../../util";
+import {
+  type BoundingBox,
+  bbox,
+  empty,
+  isEmptyInfinity,
+  union,
+} from "../../util/bbox";
 import { linear } from "../coordinateTransforms/linear";
 import { isValue, MaybeValue } from "../data";
 import { Domain, axisScale } from "../domain";
@@ -164,6 +171,19 @@ function runKnots(
   const sign = Math.sign(numbers[1] - numbers[0]);
   return numbers.map((v) => sign * v);
 }
+
+/** A connector's box as its intrinsic dims; an empty box (nothing to
+ *  connect) is zero-sized at the origin. */
+const boxDims = (box: BoundingBox): Size<{ min: number; size: number }> =>
+  isEmptyInfinity(box)
+    ? [
+        { min: 0, size: 0 },
+        { min: 0, size: 0 },
+      ]
+    : [
+        { min: box.minX, size: box.maxX - box.minX },
+        { min: box.minY, size: box.maxY - box.minY },
+      ];
 
 export const connect = createNodeOperator(
   (
@@ -469,18 +489,8 @@ export const connect = createNodeOperator(
               }
               paths.push([{ type: "line", points: [p0, p1] }]);
             }
-            const box = pathBounds(paths.flat());
             return {
-              intrinsicDims: [
-                {
-                  min: box?.min[0] ?? 0,
-                  size: box ? box.max[0] - box.min[0] : 0,
-                },
-                {
-                  min: box?.min[1] ?? 0,
-                  size: box ? box.max[1] - box.min[1] : 0,
-                },
-              ],
+              intrinsicDims: boxDims(pathBounds(paths.flat())),
               transform: { translate: [0, 0] },
               renderData: { paths, defaultColor },
             };
@@ -494,26 +504,19 @@ export const connect = createNodeOperator(
           // with min and max equal to the center point
 
           // Compute bounding box from connected elements
-          let bboxMinX = Infinity;
-          let bboxMaxX = -Infinity;
-          let bboxMinY = Infinity;
-          let bboxMaxY = -Infinity;
-
+          let box = empty();
           for (const [b0, b1] of bboxPairs) {
-            if (mode === "center") {
-              const cx0 = (b0[0].min! + b0[0].max!) / 2;
-              const cy0 = (b0[1].min! + b0[1].max!) / 2;
-              const cx1 = (b1[0].min! + b1[0].max!) / 2;
-              const cy1 = (b1[1].min! + b1[1].max!) / 2;
-              bboxMinX = Math.min(bboxMinX, cx0, cx1);
-              bboxMaxX = Math.max(bboxMaxX, cx0, cx1);
-              bboxMinY = Math.min(bboxMinY, cy0, cy1);
-              bboxMaxY = Math.max(bboxMaxY, cy0, cy1);
-            } else {
-              bboxMinX = Math.min(bboxMinX, b0[0].min!, b1[0].min!);
-              bboxMaxX = Math.max(bboxMaxX, b0[0].max!, b1[0].max!);
-              bboxMinY = Math.min(bboxMinY, b0[1].min!, b1[1].min!);
-              bboxMaxY = Math.max(bboxMaxY, b0[1].max!, b1[1].max!);
+            for (const b of [b0, b1]) {
+              if (mode === "center") {
+                const cx = (b[0].min! + b[0].max!) / 2;
+                const cy = (b[1].min! + b[1].max!) / 2;
+                box = union(box, bbox(cx, cx, cy, cy));
+              } else {
+                box = union(
+                  box,
+                  bbox(b[0].min!, b[0].max!, b[1].min!, b[1].max!)
+                );
+              }
             }
           }
 
@@ -868,35 +871,12 @@ export const connect = createNodeOperator(
             }
           }
 
-          // The box also holds the drawn path, which can leave the endpoints'
-          // box: an arc bulges out past its chord, a perfect-arrows bow
-          // curves off the line between its boxes, and a smooth sequence
-          // curve can overshoot its points (#1166). The box lives in the
-          // connector's layout space, before any coordinate transform, like
-          // every other shape's; a coord node warps its children's boxes.
-          const drawn = pathBounds(paths.flat());
-          if (drawn !== undefined) {
-            bboxMinX = Math.min(bboxMinX, drawn.min[0]);
-            bboxMaxX = Math.max(bboxMaxX, drawn.max[0]);
-            bboxMinY = Math.min(bboxMinY, drawn.min[1]);
-            bboxMaxY = Math.max(bboxMaxY, drawn.max[1]);
-          }
-
-          // If no paths were created, use zero dimensions
-          const bboxW = bboxPairs.length > 0 ? bboxMaxX - bboxMinX : 0;
-          const bboxH = bboxPairs.length > 0 ? bboxMaxY - bboxMinY : 0;
+          // The drawn path can leave the endpoints' box: an arc bulges, a
+          // perfect-arrows bow curves, a smooth curve overshoots (#1166).
+          box = union(box, pathBounds(paths.flat()));
 
           return {
-            intrinsicDims: [
-              {
-                min: bboxPairs.length > 0 ? bboxMinX : 0,
-                size: bboxW,
-              },
-              {
-                min: bboxPairs.length > 0 ? bboxMinY : 0,
-                size: bboxH,
-              },
-            ],
+            intrinsicDims: boxDims(box),
             transform: { translate: [0, 0] },
             // The box above is the WHOLE run's, cut or not: the room a line
             // uses over its run, the way a transition claims its whole

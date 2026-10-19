@@ -9,6 +9,7 @@ import { createNodeOperator } from "../withGoFish";
 import { orderChildrenForPaint } from "../paintOrder";
 import { type ArrowOptions, getBoxToBoxArrow } from "perfect-arrows";
 import { bbox, union } from "../../util/bbox";
+import { type Point, pathBounds, quadratic, segment } from "../../path";
 
 export type ArrowOpts = {
   stroke?: string;
@@ -91,40 +92,62 @@ export const arrow = createNodeOperator(
             props
           );
 
-          const combinedBBox = union(
+          const [sx, sy, cx, cy, ex, ey, ae] = arrowTuple;
+          const sw = props.strokeWidth ?? 0;
+          // Arrowhead: the head triangle rotated by the end angle and moved
+          // to the end. SVG `rotate(θ)` = [[cosθ,-sinθ],[sinθ,cosθ]].
+          const cos = Math.cos(ae);
+          const sin = Math.sin(ae);
+          const head: Point[] = [
+            [0, -2],
+            [4, 0],
+            [0, 2],
+          ].map(([x, y]) => [
+            ex + (x * sw * cos - y * sw * sin),
+            ey + (x * sw * sin + y * sw * cos),
+          ]);
+
+          // The box holds the endpoint boxes and everything the arrow draws:
+          // the body bows off the line between its ends (#1166), and the
+          // head and start dot reach past the body's ends.
+          const dot = props.start ? (4 / 3) * sw : 0;
+          const box = [
             bbox(
               fromDims[0].min!,
               fromDims[0].max!,
               fromDims[1].min!,
               fromDims[1].max!
             ),
-            bbox(toDims[0].min!, toDims[0].max!, toDims[1].min!, toDims[1].max!)
-          );
+            bbox(
+              toDims[0].min!,
+              toDims[0].max!,
+              toDims[1].min!,
+              toDims[1].max!
+            ),
+            pathBounds([
+              quadratic([sx, sy], [cx, cy], [ex, ey]),
+              segment(head[0], head[1]),
+              segment(head[1], head[2]),
+            ]),
+            bbox(sx - dot, sx + dot, sy - dot, sy + dot),
+          ].reduce(union);
 
           // The arrow is computed and kept in the arrow's axis order; `lower`
           // places it through its `local` map.
           return {
             intrinsicDims: [
-              {
-                min: combinedBBox.minX,
-                size: combinedBBox.maxX - combinedBBox.minX,
-              },
-              {
-                min: combinedBBox.minY,
-                size: combinedBBox.maxY - combinedBBox.minY,
-              },
+              { min: box.minX, size: box.maxX - box.minX },
+              { min: box.minY, size: box.maxY - box.minY },
             ],
             transform: { translate: [0, 0] },
             renderData: {
-              sx: arrowTuple[0],
-              sy: arrowTuple[1],
-              cx: arrowTuple[2],
-              cy: arrowTuple[3],
-              ex: arrowTuple[4],
-              ey: arrowTuple[5],
-              ae: arrowTuple[6],
-              as: arrowTuple[7],
-              ec: arrowTuple[8],
+              sx,
+              sy,
+              cx,
+              cy,
+              ex,
+              ey,
+              head,
             },
           };
         },
@@ -138,7 +161,6 @@ export const arrow = createNodeOperator(
         ): DisplayList.DisplayItem[] => {
           const data = renderData!;
           const sw = props.strokeWidth ?? 0;
-          const endAngle = data.ae; // radians
           const [tx, ty] = displayTranslate(transform);
           const session = node.getRenderSession();
           const outer = session.toPixel!;
@@ -172,21 +194,7 @@ export const arrow = createNodeOperator(
             style: lowerStyle({ fill: "none", stroke, strokeWidth: sw }),
           });
 
-          // Arrowhead: rotate each head point by the end angle, translate to
-          // (ex, ey), then map. SVG `rotate(θ)` = [[cosθ,-sinθ],[sinθ,cosθ]].
-          const cos = Math.cos(endAngle);
-          const sin = Math.sin(endAngle);
-          const head = [
-            [0, -2],
-            [4, 0],
-            [0, 2],
-          ]
-            .map(([x, y]) => [x * sw, y * sw])
-            .map(([x, y]) => [
-              data.ex + (x * cos - y * sin),
-              data.ey + (x * sin + y * cos),
-            ])
-            .map(([x, y]) => px(x, y));
+          const head = data.head.map(([x, y]: Point) => px(x, y));
           items.push({
             kind: "path",
             d: `M${head[0]} L${head[1]} L${head[2]} Z`,
