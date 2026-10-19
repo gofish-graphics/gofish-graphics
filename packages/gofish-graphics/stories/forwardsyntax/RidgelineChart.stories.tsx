@@ -84,7 +84,7 @@ const ridgelineData = monthNames.flatMap((month) =>
 const rowPitch = 24;
 
 export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 330 },
+  args: { w: 500, h: 380 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -125,7 +125,9 @@ export const Default: StoryObj<Args> = {
       // that can't line up with 12 overlapping, unevenly-tall silhouettes.
       // The rules are the same fixed-pitch baseline spread as the ridges, a
       // bare rect per month, so each registers exactly on its ribbon's zero
-      // line. Each rule carries its month as a label outside its left end,
+      // line. Each rule spans the ribbon's run, from the first bin's center
+      // to the last's, so the ribbon's white outline lies along the whole
+      // rule. Each rule carries its month as a label outside its left end,
       // standing on the rule. `.zOrder(-1)` paints the rules BEHIND the
       // ribbons, visible only outside the silhouettes, the classic look.
       .layer(
@@ -140,8 +142,8 @@ export const Default: StoryObj<Args> = {
           )
           .mark(
             rect({
-              x: datum(minTemp),
-              w: datum(maxTemp - minTemp),
+              x: datum(binCenters[0]),
+              w: datum(binCenters[binCount - 1] - binCenters[0]),
               h: 1,
               fill: "#999",
             }).label("month", {

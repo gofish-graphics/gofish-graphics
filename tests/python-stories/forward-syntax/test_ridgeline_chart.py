@@ -77,7 +77,9 @@ def story_default():
         # that can't line up with 12 overlapping, unevenly-tall silhouettes.
         # The rules are the same fixed-pitch baseline spread as the ridges, a
         # bare rect per month, so each registers exactly on its ribbon's zero
-        # line. Each rule carries its month as a label outside its left end,
+        # line. Each rule spans the ribbon's run, from the first bin's center
+        # to the last's, so the ribbon's white outline lies along the whole
+        # rule. Each rule carries its month as a label outside its left end,
         # standing on the rule. `.z_order(-1)` paints the rules BEHIND the
         # ribbons, visible only outside the silhouettes, the classic look.
         .layer(
@@ -92,8 +94,8 @@ def story_default():
             )
             .mark(
                 rect(
-                    x=datum(MIN_TEMP),
-                    w=datum(MAX_TEMP - MIN_TEMP),
+                    x=datum(BIN_CENTERS[0]),
+                    w=datum(BIN_CENTERS[BIN_COUNT - 1] - BIN_CENTERS[0]),
                     h=1,
                     fill="#999",
                 ).label(
@@ -105,5 +107,5 @@ def story_default():
             )
             .z_order(-1)
         ),
-        {"w": 500, "h": 330},
+        {"w": 500, "h": 380},
     )
