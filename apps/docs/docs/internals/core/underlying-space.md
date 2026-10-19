@@ -354,7 +354,10 @@ the two sides:
   with a different step: an edge chain lays each part's box after the
   previous one's end plus the spacing, and a fixed-pitch chain lays each
   part's anchor one pitch from the previous one's. A baseline-pitched part
-  keeps its signed sides about its baseline; any other part is a box.
+  keeps its signed sides about its baseline; any other part is a box. A
+  stack of parts with no data in common (bands, text) folds no data
+  interval, but it still claims its parts by the stack's step, whatever its
+  `anchor`, since its layout lays them head to tail.
 
 With every descent 0, all of this reduces to a single width.
 

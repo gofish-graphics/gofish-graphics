@@ -604,8 +604,10 @@ export function distributeExtentFold(
     );
   }
   // A stack whose parts are not all continuous with an origin is a spread
-  // (see `distributeSpaceFold`), with no spacing: bands with no size of
-  // their own, each a share (`GoFishNode.sharesRoom`), lie end to end.
+  // (see `distributeSpaceFold`), but its layout still lays each part's tail
+  // on the previous part's head, whatever its anchor
+  // (`distributePlacementAnchors`): bands with no size of their own, each a
+  // share (`GoFishNode.sharesRoom`), lie end to end.
   if (
     targetSpaces.length === 0 ||
     !targetSpaces.every(
@@ -619,6 +621,14 @@ export function distributeExtentFold(
   // its origin, where layout seats its first part's anchor: an edge chain
   // starts there, and a pitched chain reaches past it on both sides (its
   // plot is measured from there too).
+  if (opts.glue)
+    return chainClaim(
+      targetExtents.map((e, i) => tailClaim(targetSpaces[i], e!)),
+      STACK,
+      0,
+      opts.origin,
+      reaches
+    );
   return chainClaim(
     targetExtents as Extent[],
     spreadRule(opts.anchor),
