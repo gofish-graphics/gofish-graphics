@@ -47,5 +47,5 @@ def story_treemap_slice():
                 y={"kind": "align", "alignment": "middle"},
             ),
         ),
-        {"w": 900, "h": 360},
+        {},
     )

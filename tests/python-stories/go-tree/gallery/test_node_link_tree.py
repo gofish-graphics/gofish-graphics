@@ -58,5 +58,5 @@ def story_node_link_tree():
                 y={"kind": "align", "alignment": "start"},
             ),
         ),
-        {"w": 900, "h": 560},
+        {},
     )

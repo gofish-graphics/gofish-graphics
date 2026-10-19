@@ -48,5 +48,5 @@ def story_beam_tree():
             parent_child=parent_child,
             sibling=sibling,
         ),
-        {"w": 640, "h": 420},
+        {},
     )

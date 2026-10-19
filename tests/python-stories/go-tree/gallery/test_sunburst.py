@@ -66,5 +66,5 @@ def story_sunburst():
             ),
             coord=Coord.polar(),
         ),
-        {"w": 540, "h": 540},
+        {},
     )
