@@ -179,22 +179,17 @@ export const ellipseLoop = (e: Ellipse, k = LOOP): Pt[] => {
   });
 };
 
-/** The minimum-area ellipse around the members grown by `pad`. Undefined
- *  when no ellipse of positive area exists (no members, or every sample on
- *  one line). */
-export const enclosingEllipse = (
-  members: BlobMember[],
-  pad: number
-): Ellipse | undefined => {
-  const hull = convexHull(samplesOf(members, pad));
-  return hull.length >= 3 ? minEllipse(hull) : undefined;
-};
+/** The convex hull of the samples around the members grown by `pad`: the
+ *  points the ellipse must hold. Fewer than three points when no ellipse
+ *  of positive area exists (every sample on one line). */
+export const paddedHull = (members: BlobMember[], pad: number): Pt[] =>
+  convexHull(samplesOf(members, pad));
 
-/** The outline `Shape.oval()` draws: one loop, the ellipse's, or the
- *  hull of degenerate members (a segment); none for a single point or no members. */
+/** The outline `Shape.oval()` draws: one loop, the minimum-area ellipse's,
+ *  or the hull of degenerate members (a segment); none for a single point
+ *  or no members. */
 export const ovalOutline = (members: BlobMember[], pad: number): Pt[][] => {
-  const e = enclosingEllipse(members, pad);
-  if (e) return [ellipseLoop(e)];
-  const hull = convexHull(samplesOf(members, pad));
+  const hull = paddedHull(members, pad);
+  if (hull.length >= 3) return [ellipseLoop(minEllipse(hull))];
   return hull.length > 0 ? [hull] : [];
 };

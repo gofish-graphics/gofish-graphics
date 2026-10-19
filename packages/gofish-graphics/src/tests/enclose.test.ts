@@ -30,7 +30,8 @@ import {
   ellipseLoop,
   ovalOutline,
   ellipseValue,
-  enclosingEllipse,
+  minEllipse,
+  paddedHull,
   type Ellipse,
 } from "../ast/graphicalOperators/enclose/oval";
 import { penguins } from "../data/penguins";
@@ -411,6 +412,8 @@ console.log("# Shape.oval(): the minimum-area enclosing ellipse");
     }
     return inside;
   };
+  const ellipseOf = (members: BlobMember[], pad: number) =>
+    minEllipse(paddedHull(members, pad));
   /** The semi-axes, larger first, and the larger one's angle in degrees. */
   const axes = (e: Ellipse) => {
     const mid = (e.a + e.d) / 2,
@@ -432,7 +435,7 @@ console.log("# Shape.oval(): the minimum-area enclosing ellipse");
     { kind: "segment", a: [320, 40], b: [360, 150], w: 8 },
   ];
   for (const pad of [0, 6, 20]) {
-    const e = enclosingEllipse(mixed, pad)!;
+    const e = ellipseOf(mixed, pad);
     const loop = ellipseLoop(e);
     let worst = -Infinity,
       outsideLoop = 0;
@@ -449,7 +452,7 @@ console.log("# Shape.oval(): the minimum-area enclosing ellipse");
   }
   {
     const diagonal = Array.from({ length: 9 }, (_, i) => C(20 * i, 20 * i + (i % 2) * 6, 4));
-    const { angle, long, short } = axes(enclosingEllipse(diagonal, 6)!);
+    const { angle, long, short } = axes(ellipseOf(diagonal, 6));
     check(
       "points along a diagonal tilt the ellipse to it",
       Math.abs(angle - 45) < 3 && long > 2 * short,
@@ -457,7 +460,7 @@ console.log("# Shape.oval(): the minimum-area enclosing ellipse");
     );
   }
   {
-    const e = enclosingEllipse([C(50, 40, 7)], 5)!;
+    const e = ellipseOf([C(50, 40, 7)], 5);
     const { long, short } = axes(e);
     const R = 12 / Math.cos(Math.PI / 24);
     check(
@@ -469,7 +472,7 @@ console.log("# Shape.oval(): the minimum-area enclosing ellipse");
   {
     const row = [C(0, 0, 3), C(50, 0, 3), C(100, 0, 3), C(160, 0, 3)];
     const loops = ovalOutline(row, 0);
-    const { long, short } = axes(enclosingEllipse(row, 0)!);
+    const { long, short } = axes(ellipseOf(row, 0));
     const finite = loops.flat().every(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
     check(
       "members on a line give a thin ellipse, with no NaN",
