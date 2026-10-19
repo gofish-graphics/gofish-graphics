@@ -103,12 +103,15 @@ one loop.
    too. The ellipse may be rotated, and the loop is drawn like a blob's: one
    path, through `local` and `toPixel`, so it is right in a y-up frame.
 
-If every sample lies on one line (members with no size and no padding),
-there is no ellipse of positive area; the outline is then the samples' hull,
-a segment, and nothing for a single point. `src/tests/enclose.test.ts` checks
+If every sample lies on or within a hair of one line (members with no size
+and no padding), the least ellipse is flat and its matrix cannot be
+inverted. The hull counts as flat when its area is under 1e-6 of its
+extent's diagonal squared, a test with no scale in it; the outline is then
+the hull itself, a sliver or a segment, and nothing for a single point. `src/tests/enclose.test.ts` checks
 that every padded dot, box and segment of a mixed set is inside the ellipse
 and its loop, that points along a diagonal tilt it to 45°, that one member
-gives a circle, that members on a line give a thin ellipse with no NaN, and
+gives a circle, that members on a line give a thin ellipse with no NaN, that
+zero-size members a hair off one line give their hull with no NaN, and
 that the three penguin species take well under 100 ms.
 
 The ellipse is computed from the members, not fit to their bounding box.

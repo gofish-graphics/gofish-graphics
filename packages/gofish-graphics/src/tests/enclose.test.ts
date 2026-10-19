@@ -478,6 +478,22 @@ console.log("# Shape.oval(): the minimum-area enclosing ellipse");
       JSON.stringify(flat)
     );
     check("no members give no outline", ovalOutline([], 6).length === 0);
+    // Zero-size members a hair off one line, at a small and a large scale:
+    // the hull has three points but no area to speak of, so the outline is
+    // the hull itself, with no NaN.
+    for (const [name, pts] of [
+      ["(0,0), (0.1,0.3), (0.2,0.6)", [[0, 0], [0.1, 0.3 + 1e-9], [0.2, 0.6]]],
+      ["(0,0), (1e4,3e4), (2e4,6e4)", [[0, 0], [1e4, 3e4 + 1e-6], [2e4, 6e4]]],
+    ] as [string, Pt[]][]) {
+      const loops = ovalOutline(pts.map(([x, y]) => C(x, y, 0)), 0);
+      check(
+        `members a hair off one line, ${name}, give their hull with no NaN`,
+        loops.length === 1 &&
+          loops[0].length === 3 &&
+          loops[0].every(([x, y]) => Number.isFinite(x) && Number.isFinite(y)),
+        JSON.stringify(loops)
+      );
+    }
   }
   {
     // A wide ellipse member, 200 by 20, padded by 4: the ellipse grown by 4 is

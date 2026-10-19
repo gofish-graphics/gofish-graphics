@@ -22,11 +22,15 @@
  * 4. The outline is the 128-gon drawn around the ellipse, so it holds the
  *    ellipse too.
  *
- * Degenerate members (every sample on one line, which needs zero radius and
- * zero padding) have no ellipse of positive area; the outline is then their
- * hull: a segment, or nothing for a single point.
+ * Degenerate members (every sample on or within a hair of one line, which
+ * needs zero radius and zero padding) have no ellipse worth fitting: the
+ * least ellipse is flat, and its matrix cannot be inverted. Their hull is
+ * flat when its area is under 1e-6 of its extent's diagonal squared (a scale
+ * free test); the outline is then the hull itself: a sliver or a segment, or
+ * nothing for a single point.
  */
 import { convexHull, discPoly, type BlobMember, type Pt } from "./blob";
+import { ringExtent } from "../../geometry/box";
 
 /** The ellipse `{ p : (p - c)ᵀ A (p - c) <= 1 }`, A = [[a, b], [b, d]]. */
 export type Ellipse = { c: Pt; a: number; b: number; d: number };
@@ -210,6 +214,17 @@ export const paddedHull = (members: BlobMember[], pad: number): Pt[] =>
  *  or no members. */
 export const ovalOutline = (members: BlobMember[], pad: number): Pt[][] => {
   const hull = paddedHull(members, pad);
-  if (hull.length >= 3) return [ellipseLoop(minEllipse(hull))];
+  if (!flat(hull)) return [ellipseLoop(minEllipse(hull))];
   return hull.length > 0 ? [hull] : [];
+};
+
+/** Whether a convex hull has no area to speak of: fewer than three points,
+ *  or an area under 1e-6 of its extent's diagonal squared. */
+const flat = (hull: Pt[]): boolean => {
+  if (hull.length < 3) return true;
+  let area = 0;
+  for (let i = 0, j = hull.length - 1; i < hull.length; j = i++)
+    area += hull[j][0] * hull[i][1] - hull[i][0] * hull[j][1];
+  const { minX, maxX, minY, maxY } = ringExtent(hull);
+  return Math.abs(area) / 2 < 1e-6 * ((maxX - minX) ** 2 + (maxY - minY) ** 2);
 };
