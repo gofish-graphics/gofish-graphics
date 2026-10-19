@@ -39,7 +39,7 @@ import { originIs } from "./underlyingSpace";
 function ringsAround(chart: GoFishNode, axis: 0 | 1): Extent | undefined {
   let inner: Extent = Extent(Monotonic.linear(1, 0));
   for (const ring of chart.chrome!.rings) {
-    const place = ring._placeChildren;
+    const place = ring.claimWalk?.placeChildren;
     if (place === undefined) return undefined;
     const extents = ring.children.map((c, i): Size<Extent | undefined> => {
       if (i > 0) return c.resolveExtent();

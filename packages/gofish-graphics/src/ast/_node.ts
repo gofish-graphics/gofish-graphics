@@ -175,6 +175,60 @@ export const warnLayout = (
   if (!list.some((w) => w.message === warning.message)) list.push(warning);
 };
 
+/** The claim walk's memos of a node (`GoFishNode._claimMemo`), cleared with
+ *  its claims. */
+type ClaimMemo = {
+  /** Per axis, {@link GoFishNode.carriesData}. */
+  carriesData: [boolean | undefined, boolean | undefined];
+  /** Per axis, {@link GoFishNode.sharesRoom}. */
+  sharesRoom: [boolean | undefined, boolean | undefined];
+  /** Per axis, whether the node fills the room it is given
+   *  ({@link GoFishNode.fillsRoom}); set with its claim. */
+  fills?: [boolean, boolean];
+  /** A layer's {@link ClaimWalk.childBoxes}, per axis; `"busy"` while they
+   *  are computed (a ref inside the layer that reads the layer itself). */
+  childBoxes: [
+    Map<number, BoxForm> | "busy" | undefined,
+    Map<number, BoxForm> | "busy" | undefined,
+  ];
+};
+
+const freshClaimMemo = (): ClaimMemo => ({
+  carriesData: [undefined, undefined],
+  sharesRoom: [undefined, undefined],
+  childBoxes: [undefined, undefined],
+});
+
+/** What the claim walk reads of a layer (`GoFishNode.claimWalk`). */
+export type ClaimWalk = {
+  /** Per axis, the indices of its children that are ink there
+   *  (`placeByClaims`), which its claim and box leave out. */
+  ink: [Set<number>, Set<number>];
+  /** Per axis, where the claim walk places each of its children in its
+   *  frame (`placeByClaims`), for a node deep inside it that a ref or a
+   *  label reads (`placementIn`). */
+  childBoxes: (axis: 0 | 1) => Map<number, BoxForm> | undefined;
+  /** Its constraints' operands, resolved. */
+  operands: () => Map<
+    string,
+    { node: GoFishAST; child: number; direct: boolean }
+  >;
+  /** Per axis, the literal pixel its own start places it at in its parent
+   *  (0 for none). */
+  literalStart: [number, number];
+  /** Per axis, whether it has a size of its own there, which makes it a
+   *  σ-scope of its own. */
+  ownScope: [boolean, boolean];
+  /** Where its constraints place its children in the claim walk, for the
+   *  children's claims `extents` on `axis` (see `placeByClaims`). A chart
+   *  reads its rings' through it, around a plot that fills its room
+   *  (`ringsAround` in chromeGutters.ts). */
+  placeChildren: (
+    axis: 0 | 1,
+    extents: Size<Extent | undefined>[]
+  ) => ClaimPlacement;
+};
+
 export type Placeable = {
   dims: Dimensions;
   /** The node's shape in its LOCAL layout frame (see {@link GeometryFn}).
@@ -530,13 +584,8 @@ export class GoFishNode {
   /** Set by a node's claim hook when its plot claim differs from its claim
    *  (see {@link resolvePlotExtent}); cleared with the claims. */
   public _plotExtent?: Size<Extent | undefined> = undefined;
-  /** Memo of {@link carriesData} and {@link sharesRoom}, cleared with the
-   *  claims. */
-  private _carriesData?: [boolean | undefined, boolean | undefined];
-  /** Per axis, whether this node fills the room it is given (see
-   *  {@link fillsRoom}); set by the claim walk. */
-  private _fills?: [boolean, boolean];
-  private _sharesRoom?: [boolean | undefined, boolean | undefined];
+  /** The claim walk's memos of this node, cleared with the claims. */
+  public _claimMemo: ClaimMemo = freshClaimMemo();
   private _layout: Layout;
   /** Per-primitive IR lowering (see {@link Lower}) — the node's sole draw
    *  description. Absent on operators that never lower themselves (their
@@ -673,32 +722,9 @@ export class GoFishNode {
    *  Layout size is separate from drawn size (#493), as a CSS box's ink
    *  overflow or a Typst box's `outset` is. */
   public inkOn?: [boolean, boolean];
-  /** Set on a layer by `layer`: per axis, the indices of its children that
-   *  are ink there (`placeByClaims`), which its claim and box leave out. */
-  public _inkChildren?: [Set<number>, Set<number>];
-  /** Set on a layer by `layer`: per axis, where the claim walk places each
-   *  of its children in its frame (`placeByClaims`), for a node deep inside
-   *  it that a ref or a label reads (`placementIn`). */
-  public _childBoxes?: (axis: 0 | 1) => Map<number, BoxForm> | undefined;
-  /** Set on a layer by `layer`: its constraints' operands, resolved. */
-  public _constraintOperands?: () => Map<
-    string,
-    { node: GoFishAST; child: number; direct: boolean }
-  >;
-  /** Set on a layer by `layer`: per axis, the literal pixel its own start
-   *  places it at in its parent (0 for none). */
-  public _literalStart?: [number, number];
-  /** Set on a layer by `layer`: per axis, whether it has a size of its own
-   *  there, which makes it a σ-scope of its own. */
-  public _ownScope?: [boolean, boolean];
-  /** Set on a layer by `layer`: where its constraints place its children in
-   *  the claim walk, for the children's claims `extents` on `axis` (see
-   *  `placeByClaims`). A chart reads its rings' through it, around a plot
-   *  that fills its room (`ringsAround` in chromeGutters.ts). */
-  public _placeChildren?: (
-    axis: 0 | 1,
-    extents: Size<Extent | undefined>[]
-  ) => ClaimPlacement;
+  /** Set on a layer by `layer`: what the claim walk reads of it. A node
+   *  with none is not a layer. */
+  public claimWalk?: ClaimWalk;
   /** Set on a ROOT node by the surface that built it (a chart builder or a
    *  component thunk): builds a fresh, unlaid-out copy of the same chart.
    *  Layout writes each node's box once, so a choice that must lay the chart
@@ -1118,28 +1144,23 @@ export class GoFishNode {
       this.children,
       this.constraints
     );
-    // A node with no size of its own fills the room it is given. Where the
-    // room is a share (`sharesRoom`), that room is one σ (#493 piece 3).
     // A node fills the room it is given when it has no size of its own: a
     // leaf with no claim, or a node with no size of its own whose children
-    // all fill.
-    this._fills = ([0, 1] as const).map((dim) =>
-      this.children.length === 0
-        ? extent[dim] === undefined && this.inkOn?.[dim] !== true
-        : this._ownScope?.[dim] !== true &&
+    // all fill. Where the room is a share (`sharesRoom`), a leaf that fills
+    // claims one σ (#493 piece 3).
+    this._claimMemo.fills = ([0, 1] as const).map((dim) => {
+      if (this.children.length > 0)
+        return (
+          this.claimWalk?.ownScope[dim] !== true &&
           this.children.every(
-            (c) => c instanceof GoFishNode && c._fills?.[dim] === true
+            (c) => c instanceof GoFishNode && c._claimMemo.fills?.[dim] === true
           )
-    ) as [boolean, boolean];
-    if (this.children.length === 0)
-      for (const dim of [0, 1] as const)
-        if (
-          extent[dim] === undefined &&
-          this.inkOn?.[dim] !== true &&
-          this.sharesRoom(dim) &&
-          this.inShare(dim)
-        )
-          extent[dim] = Extent(Monotonic.linear(1, 0));
+        );
+      const fills = extent[dim] === undefined && this.inkOn?.[dim] !== true;
+      if (fills && this.sharesRoom(dim) && this.inShare(dim))
+        extent[dim] = Extent(Monotonic.linear(1, 0));
+      return fills;
+    }) as [boolean, boolean];
     for (const dim of [0, 1] as const) {
       if (isCONTINUOUS(spaces[dim]) && extent[dim] === undefined)
         throw new Error(
@@ -1158,7 +1179,7 @@ export class GoFishNode {
   private inShare(axis: 0 | 1): boolean {
     for (
       let n: GoFishNode | undefined = this;
-      n !== undefined && n._ownScope?.[axis] !== true;
+      n !== undefined && n.claimWalk?.ownScope[axis] !== true;
       n = n.parent
     )
       if (n.inSlot(axis)) return true;
@@ -1172,7 +1193,7 @@ export class GoFishNode {
    *  plus the padding instead. */
   public fillsRoom(axis: 0 | 1): boolean {
     this.resolveExtent();
-    return this._fills?.[axis] === true;
+    return this._claimMemo.fills?.[axis] === true;
   }
 
   /**
@@ -1196,14 +1217,14 @@ export class GoFishNode {
    * first.
    */
   public carriesData(axis: 0 | 1): boolean {
-    const memo = (this._carriesData ??= [undefined, undefined]);
+    const memo = this._claimMemo.carriesData;
     if (memo[axis] !== undefined) return memo[axis]!;
     const result =
       this._underlyingSpace?.[axis]?.kind === "continuous" ||
       this.children.some(
         (c) =>
           c instanceof GoFishNode &&
-          c._ownScope?.[axis] !== true &&
+          c.claimWalk?.ownScope[axis] !== true &&
           c.carriesData(axis)
       );
     memo[axis] = result;
@@ -1224,10 +1245,13 @@ export class GoFishNode {
    * share there.
    */
   public sharesRoom(axis: 0 | 1): boolean {
-    const memo = (this._sharesRoom ??= [undefined, undefined]);
+    const memo = this._claimMemo.sharesRoom;
     if (memo[axis] !== undefined) return memo[axis]!;
     let scope: GoFishNode = this;
-    while (scope.parent !== undefined && scope._ownScope?.[axis] !== true)
+    while (
+      scope.parent !== undefined &&
+      scope.claimWalk?.ownScope[axis] !== true
+    )
       scope = scope.parent;
     let inCoord = false;
     for (let n: GoFishNode | undefined = this; n; n = n.parent)
@@ -1256,9 +1280,7 @@ export class GoFishNode {
     this._yFrame = undefined;
     this._extent = undefined;
     this._plotExtent = undefined;
-    this._carriesData = undefined;
-    this._sharesRoom = undefined;
-    this._fills = undefined;
+    this._claimMemo = freshClaimMemo();
     this._sharing = undefined;
     this.children.forEach((c) => {
       if (c instanceof GoFishNode) c.clearUnderlyingSpace();

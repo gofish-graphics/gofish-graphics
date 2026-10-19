@@ -92,7 +92,6 @@ import {
   constrainedOn,
   literalSeats,
   placeByClaims,
-  type BoxForm,
   type ClaimChild,
   type ClaimPlacement,
 } from "../constraints/claimPlacement";
@@ -378,7 +377,7 @@ export const layer = createNodeOperatorSequential(
     const heldInChain = (axis: 0 | 1): boolean => {
       for (let p = node.parent; p !== undefined; p = p.parent) {
         if (p.axisDir === axis) return true;
-        if (p._ownScope?.[axis] === true) return false;
+        if (p.claimWalk?.ownScope[axis] === true) return false;
       }
       return false;
     };
@@ -624,7 +623,7 @@ export const layer = createNodeOperatorSequential(
             inkChildren[axis] = new Set();
             if (modes[axis] !== "placed" || claimPlaced[axis].size === 0)
               continue;
-            const p = node._placeChildren!(axis, effectiveExtents);
+            const p = node.claimWalk!.placeChildren(axis, effectiveExtents);
             placements[axis] = p;
             inkChildren[axis] = p.ink;
           }
@@ -1350,47 +1349,45 @@ export const layer = createNodeOperatorSequential(
       },
       children
     );
-    node._inkChildren = inkChildren;
-    node._constraintOperands = constraintOperands;
-    node._literalStart = [0, 1].map((axis) => {
-      const min = dims[axis].min;
-      return typeof min === "number" ? min : 0;
-    }) as [number, number];
-    node._ownScope = [dims[0].size !== undefined, dims[1].size !== undefined];
-    node._placeChildren = (axis, extents) =>
-      placeByClaims(
-        axis,
-        claimChildren(axis, extents),
-        node.constraints,
-        constraintOperands(),
-        claimPlaced[axis],
-        nestedPlacement(axis)
-      );
-    // Where the claim walk places each child, memoized with the claims it
-    // reads; undefined while it is being computed (a ref inside the layer
-    // that reads the layer itself).
-    const boxesMemo: [
-      Map<number, BoxForm> | undefined | "busy",
-      Map<number, BoxForm> | undefined | "busy",
-    ] = [undefined, undefined];
-    node._childBoxes = (axis) => {
-      const memo = boxesMemo[axis];
-      if (memo === "busy") return undefined;
-      if (memo !== undefined) return memo;
-      boxesMemo[axis] = "busy";
-      const boxes = placeByClaims(
-        axis,
-        claimChildren(
+    node.claimWalk = {
+      ink: inkChildren,
+      operands: constraintOperands,
+      literalStart: [0, 1].map((axis) => {
+        const min = dims[axis].min;
+        return typeof min === "number" ? min : 0;
+      }) as [number, number],
+      ownScope: [dims[0].size !== undefined, dims[1].size !== undefined],
+      placeChildren: (axis, extents) =>
+        placeByClaims(
           axis,
-          node.children.map((c) => c.resolveExtent())
+          claimChildren(axis, extents),
+          node.constraints,
+          constraintOperands(),
+          claimPlaced[axis],
+          nestedPlacement(axis)
         ),
-        node.constraints,
-        constraintOperands(),
-        new Set(),
-        nestedPlacement(axis)
-      ).boxes();
-      boxesMemo[axis] = boxes;
-      return boxes;
+      // Memoized with the claims it reads. The claim hook's own placement
+      // is not reused: it places the nest-adjusted claims, and only on an
+      // axis the claim walk places children on.
+      childBoxes: (axis) => {
+        const memo = node._claimMemo.childBoxes;
+        if (memo[axis] === "busy") return undefined;
+        if (memo[axis] !== undefined) return memo[axis];
+        memo[axis] = "busy";
+        const boxes = placeByClaims(
+          axis,
+          claimChildren(
+            axis,
+            node.children.map((c) => c.resolveExtent())
+          ),
+          node.constraints,
+          constraintOperands(),
+          new Set(),
+          nestedPlacement(axis)
+        ).boxes();
+        memo[axis] = boxes;
+        return boxes;
+      },
     };
     // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
     node._elaborateInAxisScope = deferAxisDims(options, dims);

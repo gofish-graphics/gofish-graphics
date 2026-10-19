@@ -86,7 +86,7 @@ const composing = (node: GoFishNode, axis: 0 | 1): GoFishNode[] =>
     (c, i): c is GoFishNode =>
       "resolveExtent" in c &&
       c.type !== "ref" &&
-      !node._inkChildren?.[axis].has(i) &&
+      !node.claimWalk?.ink[axis].has(i) &&
       (c as GoFishNode).resolveExtent()[axis] !== undefined
   );
 
@@ -117,7 +117,7 @@ function culprit(
   let node = start;
   for (;;) {
     if (chainOn(node, axis) !== undefined) break;
-    if (node !== start && node._ownScope?.[axis] === true) break;
+    if (node !== start && node.claimWalk?.ownScope[axis] === true) break;
     const big = largestChild(node, axis);
     if (big === undefined) break;
     // Mostly one child's: more than half of the node's fixed pixels. A
@@ -147,7 +147,7 @@ function fixedParts(
     spacing.set(key, cur);
   };
   const visit = (n: GoFishNode) => {
-    if (n._ownScope?.[axis] === true) {
+    if (n.claimWalk?.ownScope[axis] === true) {
       add(`${describeNode(n)}: its own size`, fixedPx(n, axis));
       return;
     }
@@ -163,7 +163,7 @@ function fixedParts(
     for (const c of composing(n, axis)) visit(c);
   };
   // A node with a size of its own holds that size, whatever is in it.
-  if (node._ownScope?.[axis] === true)
+  if (node.claimWalk?.ownScope[axis] === true)
     return [{ part: "its own size", px: fixedPx(node, axis) }];
   visit(node);
   const parts = [...spacing].map(([key, { each, count }]) => ({

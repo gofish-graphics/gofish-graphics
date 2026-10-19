@@ -707,7 +707,7 @@ report their size).
   stands where its node lands in the layer's frame. The claim walk knows
   that (`placementIn` in `placementClaims.ts`): it takes the node's box and
   moves it by each ancestor's place in the next, where each layer places its
-  children by the same solve (`GoFishNode._childBoxes`). The step into the
+  children by the same solve (`GoFishNode.claimWalk.childBoxes`). The step into the
   node the two share reads only where that node seats its child (its origin,
   or a literal pin), since its own claim may be the one being computed. So a
   `.label()` text beside its bar, or a text in a spread beside a `ref`,

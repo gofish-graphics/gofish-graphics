@@ -15,7 +15,7 @@ import {
  * function of σ, known in the claim walk. A label sits beside its mark, at
  * the mark's edge or center plus a pixel offset, and a ref stands where its
  * target is. The claim walk already knows where each layer's constraints
- * place its children (`placeByClaims`, `GoFishNode._childBoxes`), so it knows
+ * place its children (`placeByClaims`, `ClaimWalk.childBoxes`), so it knows
  * where a node deep inside a layer lands in it: the node's box, moved by each
  * ancestor's place in the next, up to the layer. So a node placed beside a
  * ref takes room where it draws, and σ is solved with it, while the mark it
@@ -40,7 +40,7 @@ function seatIn(
   child: GoFishNode,
   axis: 0 | 1
 ): number | undefined {
-  const operands = parent._constraintOperands?.();
+  const operands = parent.claimWalk?.operands();
   if (operands === undefined) return undefined;
   const i = parent.children.indexOf(child);
   const acting = parent.constraints.filter(
@@ -48,7 +48,7 @@ function seatIn(
       actsOn(c, axis) &&
       c.children.some((r) => operands.get(r.name)?.child === i)
   );
-  const start = child._literalStart?.[axis] ?? 0;
+  const start = child.claimWalk?.literalStart[axis] ?? 0;
   if (acting.length === 0) return start;
   const name = [...operands].find(([, op]) => op.direct && op.child === i)?.[0];
   const seat =
@@ -61,8 +61,8 @@ function seatIn(
 /** Whether a walk may step through `n` on `axis`: a layer, not a scope of
  *  its own there, reading y as `direction` does. */
 const passable = (n: GoFishNode, axis: 0 | 1, direction: number) =>
-  n._childBoxes !== undefined &&
-  n._ownScope?.[axis] !== true &&
+  n.claimWalk !== undefined &&
+  !n.claimWalk.ownScope[axis] &&
   (axis === 0 || n.yFrame.direction === direction);
 
 /** Where `target` lands in `frame`'s frame on `axis`, or undefined when the
@@ -107,7 +107,7 @@ export function placementIn(
   while (n.parent !== shared) {
     const p = n.parent!;
     if (!passable(p, axis, direction)) return undefined;
-    const box = p._childBoxes!(axis)?.get(p.children.indexOf(n));
+    const box = p.claimWalk!.childBoxes(axis)?.get(p.children.indexOf(n));
     if (box === undefined) return undefined;
     if (n === target) {
       lo = box.lo;
@@ -119,7 +119,7 @@ export function placementIn(
       if (claim === undefined) return undefined;
       const origin = Monotonic.adds(
         Monotonic.add(box.lo, claim.descent),
-        n._literalStart?.[axis] ?? 0
+        n.claimWalk?.literalStart[axis] ?? 0
       );
       lo = Monotonic.add(lo, origin);
       hi = Monotonic.add(hi, origin);

@@ -977,7 +977,7 @@ function drawnOverflow(root: GoFishNode): {
     n.children.forEach((c, i) => {
       if (!(c instanceof GoFishNode)) return;
       for (const axis of [0, 1] as const)
-        if (n._inkChildren?.[axis].has(i)) add(c, axis, inner[axis]);
+        if (n.claimWalk?.ink[axis].has(i)) add(c, axis, inner[axis]);
       visit(c, inner);
     });
   };
