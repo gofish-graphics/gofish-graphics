@@ -65,12 +65,6 @@ packages/gofish-graphics/stories/forwardsyntax/FlowerChart.stories.tsx
 # (Vega-Lite ports were brought over from exempt to real parity tests;
 # see tests/python-stories/vega-lite/.)
 
-# PositionShowcase is not a GoFish spec: it draws one rect and every label
-# position as raw SVG by hand, from a local copy of the old label-offset math.
-# There is no spec for a Python story to express. The other Labels stories
-# are ported.
-packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::PositionShowcase
-
 # Per-export exemption for ViolinPlot.stories.tsx — the JS story uses
 # `fast-kde`'s density1d, while the idiomatic Python port
 # (tests/python-stories/low-level-syntax/test_violin_plot.py) uses

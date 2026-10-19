@@ -1,8 +1,4 @@
-"""Equivalent of Labels.stories.tsx — Forward Syntax/Labels.
-
-Ports every story but PositionShowcase, which draws raw SVG by hand rather
-than a GoFish spec and is exempt per `tests/.python-sync-exempt`.
-"""
+"""Equivalent of Labels.stories.tsx — Forward Syntax/Labels."""
 
 import pandas as pd
 
@@ -393,4 +389,52 @@ def story_normalized_stacked_bar_with_labels():
         ),
         # Keep the continuous proportion x-axis at the bottom (y-end).
         {"w": 350, "h": 400},
+    )
+
+
+# ─── position showcase ───────────────────────────────────────────────────────
+# One rect with a label at every position, each naming its own position.
+# Blue = inset positions, amber = outset positions. An inset corner is the
+# same spot from either edge (`inset-top-start` is `inset-left-start`), so
+# each corner gets one label that names both. The single datum maps each
+# position to its text, so `.label(position)` reads that text.
+
+SHOWCASE_LABELS = {
+    "center": "center",
+    "inset-top": "inset-top",
+    "inset-bottom": "inset-bottom",
+    "inset-left": "inset-left",
+    "inset-right": "inset-right",
+    "inset-top-start": "inset-top-start = inset-left-start",
+    "inset-top-end": "inset-top-end = inset-right-start",
+    "inset-bottom-start": "inset-bottom-start = inset-left-end",
+    "inset-bottom-end": "inset-bottom-end = inset-right-end",
+    "outset-top": "outset-top",
+    "outset-top-start": "outset-top-start",
+    "outset-top-end": "outset-top-end",
+    "outset-bottom": "outset-bottom",
+    "outset-bottom-start": "outset-bottom-start",
+    "outset-bottom-end": "outset-bottom-end",
+    "outset-left": "outset-left",
+    "outset-left-start": "outset-left-start",
+    "outset-left-end": "outset-left-end",
+    "outset-right": "outset-right",
+    "outset-right-start": "outset-right-start",
+    "outset-right-end": "outset-right-end",
+}
+
+
+def story_position_showcase():
+    mark = rect(w=660, h=280, fill="#dbeafe", stroke="#3b82f6", stroke_width=1.5)
+    for position in SHOWCASE_LABELS:
+        mark = mark.label(
+            position,
+            position=position,
+            font_size=11,
+            font_family="monospace",
+            color="#92400e" if position.startswith("outset") else "#1d4ed8",
+        )
+    return (
+        chart([SHOWCASE_LABELS], axes=False).mark(mark),
+        {"w": 660, "h": 280},
     )
