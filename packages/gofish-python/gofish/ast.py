@@ -3239,8 +3239,9 @@ def ribbon(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
 def enclose(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     """Enclose mark: an outline drawn around nodes, under them. The outline is
     a ``shape`` from the ``Shape`` family: the padded bounding box
-    (``Shape.box(rx=..., ry=...)``, the default) or a smooth region
-    (``Shape.blob(...)``, ``Shape.hull(...)``, ``Shape.spine(...)``).
+    (``Shape.box(rx=..., ry=...)``, the default), the smallest ellipse around
+    the members (``Shape.oval()``), or a smooth region (``Shape.blob(...)``,
+    ``Shape.hull(...)``, ``Shape.spine(...)``).
 
     Two forms, like :func:`line`: combinator form ``enclose([a, c], ...)``
     (fresh children are laid out as ``layer`` lays them out; ``ref(...)``

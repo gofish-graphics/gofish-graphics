@@ -1032,8 +1032,9 @@ export const ribbon = createRelationalMark<RibbonOptions>(
 
 /**
  * Draw an outline around nodes, under them: their padded bounding box
- * (`Shape.box()`, the default) or a smooth region (`Shape.blob()`,
- * `Shape.hull()`, `Shape.spine()`). The node is built in
+ * (`Shape.box()`, the default), the smallest ellipse around them
+ * (`Shape.oval()`), or a smooth region (`Shape.blob()`, `Shape.hull()`,
+ * `Shape.spine()`). The node is built in
  * `graphicalOperators/enclose.tsx`.
  *
  * - `enclose(opts, children)`: around the children. Fresh children are laid
