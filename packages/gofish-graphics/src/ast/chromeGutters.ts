@@ -6,7 +6,6 @@ import type { GoFishNode } from "./_node";
 import type { Size } from "./dims";
 import { Extent } from "./extent";
 import * as Monotonic from "../util/monotonic";
-import { findTargetMonotonic } from "../util";
 import { childNameKey } from "./constraints/shared";
 import { isLiteralSeat } from "./constraints/claimPlacement";
 import { originIs } from "./underlyingSpace";
@@ -90,14 +89,14 @@ const ringGutters = (r: Extent, x: number): [number, number] => [
   room(r.ascent.run(x) - x),
 ];
 
-/** The X at which `m` reaches `target` (`m` never decreases). */
+/** The X at which `m` reaches `target` (`m` never decreases), solved as
+ *  the root's σ is: where no X reaches it exactly (fixed parts larger than
+ *  the target), the X at which the parts that grow with X reach it. */
 const solveFor = (m: Monotonic.Monotonic, target: number): number => {
-  const x = m.inverse(target);
-  if (x !== undefined && Number.isFinite(x)) return Math.max(0, x);
-  return Math.max(
-    0,
-    findTargetMonotonic(target, (v) => m.run(v))
-  );
+  const x =
+    m.inverse(target, { upperBoundGuess: target }) ??
+    Monotonic.rising(m)?.inverse(target);
+  return x !== undefined && Number.isFinite(x) ? Math.max(0, x) : 0;
 };
 
 /**
