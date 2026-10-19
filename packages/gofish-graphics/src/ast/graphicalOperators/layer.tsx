@@ -348,6 +348,7 @@ export const layer = createNodeOperatorSequential(
       extents: Size<Extent | undefined>[]
     ): ClaimChild[] => {
       const sets = node.sharing().sets[axis];
+      let held: boolean | undefined;
       return node.children.map((c, i) => {
         const space = c.resolveUnderlyingSpace()[axis];
         const target = c instanceof GoFishRef ? c.targetNode : undefined;
@@ -359,7 +360,7 @@ export const layer = createNodeOperatorSequential(
           placed: target && placementIn(target, node, axis),
           inkOn:
             (c as GoFishNode).inkOn?.[axis] === true ||
-            (heldInChain(axis) && alongOwnAxis(c, axis)),
+            (alongOwnAxis(c, axis) && (held ??= heldInChain(axis))),
           dataPositioned:
             sets[i] === 0 && isCONTINUOUS(space) && space.origin !== "free",
         };
