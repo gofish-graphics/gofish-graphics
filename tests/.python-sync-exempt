@@ -137,16 +137,6 @@ packages/gofish-graphics/stories/interaction/Widgets.stories.tsx
 # its own file, BirdMigrationStatic.stories.tsx, and is ported (#856).
 packages/gofish-graphics/stories/animated-vega-lite/BirdMigration.stories.tsx
 
-# Tutorials/Basics and Tutorials/Diagrams are the finished examples of the docs
-# Basics and Diagrams tutorials (the planets diagram): bare marks and operators
-# rendered with no chart() entry point. SHORTCUT: both are pure specs whose
-# constructs (circle, enclose, spread, layer, text, ref, arrow, constrain) all
-# exist in gofish-python, so they could be ported like bluefish/Planets; they
-# are teaching figures and were left exempt to keep the tutorial change
-# docs-only. TODO: port them to tests/python-stories/tutorials/.
-packages/gofish-graphics/stories/tutorials/Basics.stories.tsx
-packages/gofish-graphics/stories/tutorials/Diagrams.stories.tsx
-
 # Tutorials/Glyphs is the finished example of the docs Glyphs tutorial: a glyph
 # passed to `.mark()` as a per-group JS function, which cannot cross the bridge.
 packages/gofish-graphics/stories/tutorials/Glyphs.stories.tsx
