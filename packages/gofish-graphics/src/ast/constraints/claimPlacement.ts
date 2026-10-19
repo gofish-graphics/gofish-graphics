@@ -20,7 +20,7 @@ import type { ConstraintSpec } from ".";
  * labels around the plot, a scatter's marks at their data) sit where its
  * constraints put them, and its claim is the hull of what they draw there.
  * So whatever composes the layer leaves room for them, and the layout that
- * follows lands them inside that room, with no second layout.
+ * follows lands them inside that room.
  *
  * The claim walk places them with the same solve the layout runs (the
  * placement solver), on boxes that are the children's claims instead of

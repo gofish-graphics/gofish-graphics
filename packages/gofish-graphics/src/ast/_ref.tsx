@@ -304,8 +304,8 @@ export class GoFishRef {
     }
 
     // The common ancestor its translate is read through (see `transform`).
-    // The ref's own translate is never part of the walks, so a second
-    // layout reads the same place (#928).
+    // The ref's own translate is never part of the walks, so laying the
+    // ref out again reads the same place (#928).
     this.lca = findLeastCommonAncestor(this, this.selectedNode);
     this.pinned = [undefined, undefined];
 

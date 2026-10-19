@@ -543,11 +543,10 @@ export async function layout(
 
   // `render({ w, h })` is the whole graphic (#493, #1032): the canvas is the
   // slot the root is given, its chrome included. Chrome sits outside its
-  // chart, so the root's
-  // content gets the slot less its chrome's gutters, as every node does
-  // with the slot its parent gives it. Every chrome shape claims its size,
-  // so the root's claim already holds its chrome (`placeByClaims`), and one
-  // layout fits it to the slot.
+  // chart, so the root's content gets the slot less its chrome's gutters,
+  // as every node does with the slot its parent gives it. Every chrome
+  // shape claims its size, so the root's claim already holds its chrome
+  // (`placeByClaims`), and the layout fits it to the slot.
   const root = child;
   // The layout of the root at the render's slot: solve its scopes, lay it
   // out, and place it on the canvas.

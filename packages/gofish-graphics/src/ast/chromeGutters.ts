@@ -20,7 +20,7 @@ import { originIs } from "./underlyingSpace";
  * where its constraints place them (`placeByClaims`), and the chart's claim
  * is its outermost ring's. So a scope solved against a slot already leaves
  * the chrome its room, and the layout reads the gutters off the claims at
- * the size it lays the chart out at, with no second layout.
+ * the size it lays the chart out at.
  *
  * The plot is the chart's content without its dressing
  * (`GoFishNode.resolvePlotExtent`): a label placed beside a mark adds
