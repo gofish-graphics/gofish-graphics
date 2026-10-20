@@ -36,7 +36,10 @@ from gofish import (
     Color,
     Coord,
 )
-from gofish.ast import _RefProxy
+import json
+
+from gofish.arrow_utils import arrow_to_records
+from gofish.ast import _RefProxy, ir_payload
 
 
 class TestOperators:
@@ -317,10 +320,11 @@ class TestRefData:
             select_all("bars").to_dict()
 
     def test_chart_with_regular_data_ir(self):
-        """Test regular chart has null data in IR."""
+        """A chart's own rows are a table it names by id; the rows travel
+        beside the IR (`ir_payload`)."""
         c = chart([{"x": 1}]).mark(rect(h="x"))
         ir = c.to_ir()
-        assert ir["data"] is None
+        assert ir["data"] == {"type": "table", "id": "t0"}
 
 
 class TestColorConfig:
@@ -577,7 +581,7 @@ class TestLayerBuilder:
         assert chart0["mark"]["type"] == "rect"
         assert chart0["mark"]["name"] == "bars"
         assert chart0["operators"][0]["type"] == "spread"
-        assert chart0["data"] is None
+        assert chart0["data"] == {"type": "table", "id": "t0"}
 
         chart1 = ir["charts"][1]
         assert chart1["mark"]["type"] == "line"
@@ -643,7 +647,7 @@ class TestChartBuilder:
         )
         ir = c.to_ir()
 
-        assert ir["data"] is None
+        assert ir["data"] == {"type": "table", "id": "t0"}
         assert ir["options"]["color"] == {"_tag": "palette", "values": "tableau10"}
         assert len(ir["operators"]) == 2
         assert ir["operators"][0]["type"] == "spread"
@@ -695,13 +699,21 @@ class TestNestedChart:
         m = layer([rect(w=4, h="count"), self._flower().name("flower")])
         assert m.to_dict()["children"][1]["name"] == "flower"
 
-    def test_chart_with_its_own_rows_inlines_them(self):
-        """A nested chart has no tier beside the IR to ship rows in, so its
-        own rows ride inline; the root's rows still ship beside it."""
+    def test_chart_with_its_own_rows_names_a_table(self):
+        """A nested chart with rows of its own names a table by id, as the
+        root does (#1088): one rule wherever a chart sits. Both tables ship
+        beside the IR as Arrow, and the same rows object is one table."""
         own = [{"x": 1}, {"x": 2}]
-        ir = chart(self.ROWS).mark(chart(own).mark(rect(h="x"))).to_ir()
-        assert ir["data"] is None
-        assert ir["mark"]["data"] == {"type": "inline", "rows": own}
+        root = chart(self.ROWS).mark(
+            layer([chart(own).mark(rect(h="x")), chart(own).mark(rect(w="x"))])
+        )
+        ir, tables = ir_payload(root)
+        assert ir["data"] == {"type": "table", "id": "t0"}
+        children = ir["mark"]["children"]
+        assert [c["data"] for c in children] == [{"type": "table", "id": "t1"}] * 2
+        assert "inline" not in json.dumps(ir)
+        assert sorted(tables) == ["t0", "t1"]
+        assert arrow_to_records(tables["t1"]) == own
 
     def test_layer_of_charts_in_mark_position(self):
         """`layer([chart(...), chart(...)])` is a `LayerBuilder`; in a mark

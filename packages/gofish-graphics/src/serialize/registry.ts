@@ -93,8 +93,9 @@ export { cutSlices, cutMark, offsetOp };
  * plain JSON values, with any transport-specific wrapping undone, and may
  * attach the column types it decoded (`setColumnTypes`). A lambda accessor
  * reads rows through {@link applyLambdaTyped}, and a `derive` types them
- * with `applySchema` as it types any function's result; a mark function's
- * reply is an IR document, not rows.
+ * with `applySchema` as it types any function's result. A mark function's
+ * reply is not rows but an IR payload ({@link MarkPayload}), so it has its
+ * own call, `applyMark`.
  */
 export interface DeriveBridge {
   /**
@@ -103,6 +104,19 @@ export interface DeriveBridge {
    * JSON values.
    */
   applyLambda(lambdaId: string, rows: any[]): Promise<any[]>;
+  /**
+   * Call the mark function registered under `lambdaId` on one partition's
+   * input. Returns the payload of what it drew: its mark-position IR and the
+   * tables that IR's charts name, decoded, with ids of the reply's own.
+   */
+  applyMark(lambdaId: string, rows: any[]): Promise<MarkPayload>;
+}
+
+/** A mark function's reply: an IR payload of its own, like the top-level
+ *  one (the IR and the tables its charts name, by id). */
+export interface MarkPayload {
+  ir: Frontend.MarkIR;
+  tables: Frontend.Tables;
 }
 
 /**

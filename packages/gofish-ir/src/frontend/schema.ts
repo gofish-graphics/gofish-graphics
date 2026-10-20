@@ -19,7 +19,15 @@ export interface FrontendIRDocument {
   /** Optional URL of the JSON Schema this document claims to conform to. */
   $schema?: string;
   root: FrontendIR;
+  /** The rows of every chart in the document that has rows of its own, by
+   *  the id its `{type: "table", id}` data names (see {@link DataIR}). A
+   *  document JS writes carries them here as JSON; the Python hosts ship the
+   *  same map beside the IR as Arrow instead. */
+  tables?: Tables;
 }
+
+/** Rows by table id: what a `{type: "table", id}` data field names. */
+export type Tables = Record<string, Array<Record<string, unknown>>>;
 
 /** A frontend-IR root is a chart, a multi-chart layer, or a bare mark. */
 export type FrontendIR = ChartIR | LayerIR | RawMarkIR;
@@ -89,7 +97,7 @@ export interface Origin {
 /** A standard chart: data → operators → mark. */
 export interface ChartIR extends BaseIRNode {
   type: "chart";
-  data?: DataIR | null;
+  data: DataIR;
   operators?: OperatorIR[];
   mark: MarkIR;
   options?: Record<string, unknown>;
@@ -133,32 +141,31 @@ export interface RawMarkIR extends BaseIRNode {
 // ---------------------------------------------------------------------------
 
 /**
- * The data field on a chart.
+ * The data field on a chart. Every chart says where its rows come from, in
+ * one of three ways, wherever the chart sits (the root, a mark position, a
+ * tier of a `.layer(...)` chain):
  *
- * - **Inline rows**: `{type: "inline", rows: [...]}` for charts whose data is
- *   embedded in the IR.
+ * - **Table**: `{type: "table", id}` names rows of the chart's own. The rows
+ *   travel beside the IR, keyed by id: a document's `tables` (JSON), or the
+ *   Python hosts' Arrow tables (the widget's `tables` trait, the parity
+ *   harness's `tables`). The ids are the writer's own, unique within one
+ *   payload.
  * - **Select reference**: `{type: "select", layer: "name", mode?}` resolves a
  *   sibling chart's named-mark output at deserialize time. The optional `mode`
  *   discriminates the plural `selectAll()` (`"all"`, an array of refs) from the
  *   singular `ref(name)` used as chart data (`"one"` or absent, a single ref).
- *   The `select()` factory no longer exists in either frontend; `mode: "one"`
- *   (or absent) corresponds to `ref(name)`.
- * - **External**: `{type: "external", id?: "..."}` indicates data ships over a
- *   sidecar transport (anywidget's `tier_arrow` trait) and the id keys into it.
  * - **Previous tier**: `{type: "previous-tier"}` marks an empty `chart()` /
- *   `Chart()` scope inside a `.layer(...)` chain — "inherit the immediately
- *   preceding tier's marks". The deserializer maps this to the JS
- *   `PREVIOUS_LAYER_MARKS` sentinel so `LayerBuilder`'s own `wireTiers()`
- *   (auto-naming the producer's mark + binding this tier to
- *   `selectAll(name)`) runs JS-side — the same code a native
- *   `chart(...).layer(...)` chain goes through. The same sentinel marks an
- *   empty scope in a mark position (`.mark(chart().flow(...))`), where JS
- *   binds it to the rows of the partition the chart sits in.
+ *   `Chart()` scope: its rows are those of the enclosing scope. Inside a
+ *   `.layer(...)` chain that is the previous tier's marks; the deserializer
+ *   maps it to the JS `PREVIOUS_LAYER_MARKS` sentinel so `LayerBuilder`'s own
+ *   `wireTiers()` (auto-naming the producer's mark + binding this tier to
+ *   `selectAll(name)`) runs JS-side. In a mark position
+ *   (`.mark(chart().flow(...))`) it is the rows of the partition the chart
+ *   sits in.
  */
 export type DataIR =
-  | { type: "inline"; rows: Array<Record<string, unknown>> }
+  | { type: "table"; id: string }
   | { type: "select"; layer: string; mode?: "one" | "all" }
-  | { type: "external"; id?: string }
   | { type: "previous-tier" };
 
 // ---------------------------------------------------------------------------

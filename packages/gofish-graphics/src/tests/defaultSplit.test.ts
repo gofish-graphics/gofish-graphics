@@ -548,6 +548,7 @@ async function main() {
     };
     const ir = {
       type: "chart",
+      data: { type: "table", id: "t0" },
       operators: [
         { type: "group", by: "g" },
         { type: "scatter", by: "x", x: "x", y: "y" },
@@ -555,12 +556,7 @@ async function main() {
       mark: { type: "line", fill: { __gofish_lambda: "fg" } },
     } as any;
     const byPython = await renderDisplayList(
-      (GoFish as any).Serialize.buildChart(
-        ir,
-        data,
-        bridge,
-        (GoFish as any).Serialize.makeTokenResolver()
-      ),
+      (GoFish as any).Serialize.buildIR(ir, { bridge, tables: { t0: data } }),
       { w: 200, h: 200 }
     );
     check(

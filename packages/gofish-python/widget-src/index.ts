@@ -2,7 +2,7 @@
  * GoFish Python Widget — self-contained ESM bundle entry point.
  *
  * Trait-based protocol (Altair / Plotly pattern):
- *   - JS reads `spec`, `tier_arrow`, render options on mount and renders.
+ *   - JS reads `spec`, `tables`, render options on mount and renders.
  *   - For `derive` operators and lambda accessors, JS sets `derive_request`
  *     and awaits a `derive_response` change. Python's `@traitlets.observe`
  *     runs the callback. Sequential — at most one in-flight derive per widget.
@@ -20,7 +20,7 @@ import * as Arrow from "apache-arrow";
 import { Serialize, serializeSVG, type View } from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
 import { buildArrowTable } from "./arrowTransport";
-import { arrowB64ToRows, decodeTierRows } from "./arrowDecode";
+import { arrowB64ToRows, decodeTables } from "./arrowDecode";
 
 // Type aliases pointing at the canonical IR schema. Internal usages below
 // keep the legacy `…Spec` names for readability.
@@ -30,7 +30,7 @@ type RawMarkSpec = Frontend.RawMarkIR;
 
 interface WidgetModel {
   get(key: "spec"): ChartSpec | LayerSpec | RawMarkSpec;
-  get(key: "tier_arrow"): string[];
+  get(key: "tables"): Record<string, string>;
   get(key: "width"): number;
   get(key: "height"): number;
   get(key: "axes"): Serialize.RenderIROptions["axes"] | null;
@@ -113,6 +113,16 @@ function makeDeriveBridgeFromRaw(raw: RawDeriveBridge): Serialize.DeriveBridge {
       const arrowBuffer = arrayToArrow(rows);
       const arrowB64 = btoa(String.fromCharCode(...arrowBuffer));
       return arrowB64ToRows(await raw.request(lambdaId, arrowB64));
+    },
+    async applyMark(): Promise<Serialize.MarkPayload> {
+      // The widget does not register mark functions yet (#1049). A nested
+      // chart or layer needs no call: it is part of the IR, and its rows are
+      // among the payload's tables.
+      throw new Error(
+        "a Python mark function (.mark(lambda d: ...)) does not render in " +
+          "the notebook widget yet (#1049); pass the chart itself, " +
+          ".mark(chart(...)), instead"
+      );
     },
   };
 }
@@ -244,8 +254,9 @@ function renderChart(
     ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
     : () => {};
   log("Decoding Arrow data...");
-  // One base64 Arrow stream per chart tier (`tiers_arrow_bytes` in ast.py).
-  const tierRows = decodeTierRows(model.get("tier_arrow"));
+  // The rows of every chart in the spec that has rows of its own, wherever
+  // it sits: one base64 Arrow stream per table id (`ir_payload` in ast.py).
+  const tables = decodeTables(model.get("tables"));
   const renderOptions: Serialize.RenderIROptions = {
     w: model.get("width"),
     h: model.get("height"),
@@ -259,7 +270,7 @@ function renderChart(
   log("Rendering with options:", renderOptions);
   return Serialize.renderIR(spec, container, renderOptions, {
     bridge,
-    tierRows,
+    tables,
   });
 }
 

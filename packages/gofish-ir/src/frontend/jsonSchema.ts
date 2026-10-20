@@ -239,6 +239,15 @@ export const FRONTEND_IR_JSON_SCHEMA = {
     ir: { const: "gofish-frontend" },
     $schema: { type: "string" },
     root: { $ref: "#/$defs/Root" },
+    tables: {
+      type: "object",
+      description:
+        'The rows of every chart in the document that has rows of its own, by the id its {type: "table", id} data names.',
+      additionalProperties: {
+        type: "array",
+        items: { type: "object" },
+      },
+    },
   },
   $defs: {
     Root: {
@@ -264,11 +273,13 @@ export const FRONTEND_IR_JSON_SCHEMA = {
       oneOf: [
         {
           type: "object",
-          required: ["type", "rows"],
+          required: ["type", "id"],
           properties: {
-            type: { const: "inline" },
-            rows: { type: "array", items: { type: "object" } },
+            type: { const: "table" },
+            id: { type: "string" },
           },
+          description:
+            "Rows of the chart's own, by id: they travel beside the IR (a document's tables, or a Python host's Arrow tables).",
         },
         {
           type: "object",
@@ -283,27 +294,19 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           type: "object",
           required: ["type"],
           properties: {
-            type: { const: "external" },
-            id: { type: "string" },
-          },
-        },
-        {
-          type: "object",
-          required: ["type"],
-          properties: {
             type: { const: "previous-tier" },
           },
           description:
-            "An empty chart() scope: inside a .layer(...) chain it inherits the immediately preceding tier's marks; in a mark position it inherits the rows of the partition it sits in.",
+            "An empty chart() scope, whose rows are the enclosing scope's: inside a .layer(...) chain the immediately preceding tier's marks; in a mark position the rows of the partition it sits in.",
         },
       ],
     },
     ChartIR: {
       type: "object",
-      required: ["type", "mark"],
+      required: ["type", "data", "mark"],
       properties: {
         type: { const: "chart" },
-        data: { oneOf: [{ $ref: "#/$defs/DataIR" }, { type: "null" }] },
+        data: { $ref: "#/$defs/DataIR" },
         operators: { type: "array", items: { $ref: "#/$defs/OperatorIR" } },
         mark: { $ref: "#/$defs/MarkIR" },
         options: { $ref: "#/$defs/ChartOptions" },

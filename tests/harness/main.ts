@@ -7,9 +7,10 @@
  * operators, lambda accessors, mark functions) run in
  * `tests/scripts/derive-server.py` and are reached over HTTP POST to
  * `<deriveServerUrl>/derive/<id>` instead of over anywidget traitlets. The
- * rows of each chart tier cross as the widget's do: Arrow bytes from
- * Python's `tiers_arrow_bytes`, decoded by the widget's own decode
- * (`decodeTierRows`), so parity covers that transport too.
+ * tables (the rows of every chart that has rows of its own) cross as the
+ * widget's do: Arrow bytes by table id, from Python's `ir_payload`, decoded
+ * by the widget's own decode (`decodeTables`), so parity covers that
+ * transport too. A mark function's reply is a payload of the same shape.
  *
  * The caller (Playwright) calls `__renderChart__(spec)` (or sets
  * `__GOFISH_SPEC__` before load) and waits for `__GOFISH_RENDER_COMPLETE__`.
@@ -17,16 +18,16 @@
 
 import { Serialize } from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
-import { decodeTierRows } from "gofish-python/arrowDecode";
+import { decodeTables } from "gofish-python/arrowDecode";
 
 /**
- * What `capture-python-dom.ts` sends: a story's IR as the derive server
- * returns it (the builder's own `to_ir()`), each chart tier's rows as base64
- * Arrow, the story's render options, and the derive server's address.
+ * What `capture-python-dom.ts` sends: a story's payload as the derive server
+ * returns it (the builder's own IR, and its tables as base64 Arrow by id),
+ * the story's render options, and the derive server's address.
  */
 interface HarnessSpec {
   ir: Frontend.FrontendIR;
-  tierArrow?: string[];
+  tables: Record<string, string>;
   render: Serialize.RenderIROptions;
   deriveServerUrl?: string;
 }
@@ -40,24 +41,31 @@ declare global {
   }
 }
 
-/** The derive bridge over HTTP: one POST of the rows per call. */
+/** The derive bridge over HTTP: one POST of the rows per call. A derive or
+ *  an accessor answers with rows, a mark function with a payload whose
+ *  tables cross as Arrow, like the story's own. */
 function httpBridge(
   deriveServerUrl: string | undefined
 ): Serialize.DeriveBridge | undefined {
   if (deriveServerUrl === undefined) return undefined;
+  const post = async (lambdaId: string, rows: any[]) => {
+    const resp = await fetch(`${deriveServerUrl}/derive/${lambdaId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rows),
+    });
+    if (!resp.ok) {
+      throw new Error(
+        `derive ${lambdaId} failed: ${resp.status} ${await resp.text()}`
+      );
+    }
+    return Serialize.readIR(await resp.json());
+  };
   return {
-    async applyLambda(lambdaId, rows) {
-      const resp = await fetch(`${deriveServerUrl}/derive/${lambdaId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(rows),
-      });
-      if (!resp.ok) {
-        throw new Error(
-          `derive ${lambdaId} failed: ${resp.status} ${await resp.text()}`
-        );
-      }
-      return Serialize.readIR(await resp.json());
+    applyLambda: post,
+    async applyMark(lambdaId, rows) {
+      const { ir, tables } = await post(lambdaId, rows);
+      return { ir, tables: decodeTables(tables) };
     },
   };
 }
@@ -73,7 +81,7 @@ function renderChart(spec: HarnessSpec) {
     try {
       await Serialize.renderIR(spec.ir, container, spec.render, {
         bridge: httpBridge(spec.deriveServerUrl),
-        tierRows: decodeTierRows(spec.tierArrow ?? []),
+        tables: decodeTables(spec.tables),
       });
       // Allow a tick for SolidJS to flush renders.
       await new Promise<void>((resolve) =>

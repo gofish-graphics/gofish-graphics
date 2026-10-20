@@ -1,13 +1,13 @@
 /**
  * The widget's Arrow decode: Arrow IPC bytes, as Python writes them
  * (`data_to_arrow_bytes` in `gofish/arrow_utils.py`), into the rows a chart
- * reads. The notebook widget decodes every chart tier and every callback
+ * reads. The notebook widget decodes every table and every callback
  * result with it, and the Python parity harness (`tests/harness/main.ts`)
- * decodes its tiers with the same function, so parity tests this transport.
+ * decodes its tables with the same function, so parity tests this transport.
  *
  * The decode attaches column types and leaves converting values to
  * `applySchema`, which every reader of the rows runs first, with its own
- * schema: a chart tier is chart data (`chart(rows, { schema })`), and a
+ * schema: a table is chart data (`chart(rows, { schema })`), and a
  * callback's result goes through `applyLambdaTyped` (Serialize). Each
  * column's values go through one recursive conversion, {@link fromArrow},
  * chosen once per column from its Arrow type:
@@ -41,11 +41,16 @@
 import * as Arrow from "apache-arrow";
 import { Schema, Serialize } from "gofish-graphics";
 
-/** Decode base64 Arrow IPC streams, one per chart tier, into each tier's
- *  rows (see the module comment). This is the widget's `tier_arrow` trait
- *  and the parity harness's `tierArrow`. */
-export function decodeTierRows(b64s: string[]): Record<string, any>[][] {
-  return b64s.map(arrowB64ToRows);
+/** Decode base64 Arrow IPC streams, one per table id, into each table's
+ *  rows (see the module comment): the tables an IR payload's charts name.
+ *  This is the widget's `tables` trait, the parity harness's `tables`, and
+ *  the `tables` of a mark function's reply. */
+export function decodeTables(
+  b64s: Record<string, string>
+): Record<string, Record<string, any>[]> {
+  return Object.fromEntries(
+    Object.entries(b64s).map(([id, b64]) => [id, arrowB64ToRows(b64)])
+  );
 }
 
 /** Decode one base64 Arrow IPC stream into rows (see the module comment). */

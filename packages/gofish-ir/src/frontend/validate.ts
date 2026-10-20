@@ -113,7 +113,28 @@ function walkDocument(node: unknown, path: string, ctx: Context): void {
   });
   optionalField(node, "$schema", path, ctx, expectString);
   expectField(node, "root", path, ctx, walkRoot);
-  rejectUnknown(node, ["irVersion", "ir", "$schema", "root"], path, ctx);
+  optionalField(node, "tables", path, ctx, walkTables);
+  rejectUnknown(
+    node,
+    ["irVersion", "ir", "$schema", "root", "tables"],
+    path,
+    ctx
+  );
+}
+
+/** A document's `tables`: rows (an array of objects) by table id. */
+function walkTables(node: unknown, path: string, ctx: Context): void {
+  if (!isObject(node)) {
+    ctx.errors.push({ path, message: "tables must be an object" });
+    return;
+  }
+  for (const [id, rows] of Object.entries(node)) {
+    if (!Array.isArray(rows) || !rows.every(isObject))
+      ctx.errors.push({
+        path: `${path}.${id}`,
+        message: "a table must be an array of row objects",
+      });
+  }
 }
 
 function walkRoot(node: unknown, path: string, ctx: Context): void {
@@ -147,10 +168,7 @@ function walkChart(
   ctx: Context
 ): void {
   walkBaseFields(node, path, ctx);
-  optionalField(node, "data", path, ctx, (v, p) => {
-    if (v === null) return;
-    walkData(v, p, ctx);
-  });
+  expectField(node, "data", path, ctx, walkData);
   optionalField(node, "operators", path, ctx, (v, p) =>
     walkArray(v, p, ctx, walkOperator)
   );
@@ -237,12 +255,9 @@ function walkData(node: unknown, path: string, ctx: Context): void {
     return;
   }
   switch (node.type) {
-    case "inline":
-      expectField(node, "rows", path, ctx, (v, p) => {
-        if (!Array.isArray(v))
-          ctx.errors.push({ path: p, message: "rows must be an array" });
-      });
-      rejectUnknown(node, ["type", "rows"], path, ctx);
+    case "table":
+      expectField(node, "id", path, ctx, expectString);
+      rejectUnknown(node, ["type", "id"], path, ctx);
       return;
     case "select":
       expectField(node, "layer", path, ctx, expectString);
@@ -255,17 +270,13 @@ function walkData(node: unknown, path: string, ctx: Context): void {
       });
       rejectUnknown(node, ["type", "layer", "mode"], path, ctx);
       return;
-    case "external":
-      optionalField(node, "id", path, ctx, expectString);
-      rejectUnknown(node, ["type", "id"], path, ctx);
-      return;
     case "previous-tier":
       rejectUnknown(node, ["type"], path, ctx);
       return;
     default:
       ctx.errors.push({
         path: `${path}.type`,
-        message: `data type must be "inline" | "select" | "external" | "previous-tier", got ${JSON.stringify(
+        message: `data type must be "table" | "select" | "previous-tier", got ${JSON.stringify(
           node.type
         )}`,
       });

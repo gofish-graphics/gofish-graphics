@@ -30,7 +30,8 @@ def _decode_arrow_b64(b64: str) -> list:
 
 def _make_widget(derive_functions: Dict[str, Any]) -> GoFishChartWidget:
     spec = {
-        "data": None,
+        "type": "chart",
+        "data": {"type": "table", "id": "t0"},
         "operators": [{"type": "derive", "lambdaId": next(iter(derive_functions), "x")}],
         "mark": {"type": "rect"},
         "options": {},
@@ -38,7 +39,7 @@ def _make_widget(derive_functions: Dict[str, Any]) -> GoFishChartWidget:
     }
     return GoFishChartWidget(
         spec=spec,
-        tier_arrow=[data_to_arrow_bytes([{"x": 1}])],
+        tables={"t0": data_to_arrow_bytes([{"x": 1}])},
         derive_functions=derive_functions,
         width=400,
         height=300,
@@ -162,27 +163,42 @@ class TestRenderResultStatus:
         assert widget.error == "boom"
 
 
-class TestTierArrowWireShape:
-    """`tier_arrow` carries one wire shape (#683): a list of base64 Arrow
-    IPC streams, one per chart tier. A single chart is one tier, a layer is
-    one tier per child, and a bare mark has none.
+class TestTablesWireShape:
+    """`tables` carries one wire shape (#683, #1088): base64 Arrow IPC
+    streams by the table id a chart's data names. Every chart in the spec
+    that has rows of its own names one, wherever it sits: the root, each
+    child of a layer, a chart nested in a mark position. A bare mark has
+    none.
     """
 
-    def test_tiers_are_base64_in_order(self):
+    def test_tables_are_base64_by_id(self):
         raw0 = data_to_arrow_bytes([{"x": 1}])
         raw1 = data_to_arrow_bytes([{"x": 2}])
         widget = GoFishChartWidget(
-            spec={"type": "layer", "charts": [], "options": {}},
-            tier_arrow=[raw0, raw1],
+            spec={"type": "chart", "data": {"type": "table", "id": "t0"}},
+            tables={"t0": raw0, "t1": raw1},
             width=400,
             height=300,
         )
-        assert [base64.b64decode(b) for b in widget.tier_arrow] == [raw0, raw1]
+        assert {k: base64.b64decode(b) for k, b in widget.tables.items()} == {
+            "t0": raw0,
+            "t1": raw1,
+        }
 
-    def test_chart_and_mark_tiers(self):
+    def test_chart_and_mark_tables(self):
         c = chart([{"x": 1, "y": 2}]).mark(rect(h="y"))
-        assert len(c.render().tier_arrow) == 1
-        assert rect(w=1, h=1).render().tier_arrow == []
+        assert list(c.render().tables) == ["t0"]
+        assert rect(w=1, h=1).render().tables == {}
+
+    def test_nested_chart_rows_ship_as_a_table(self):
+        """A chart nested in a mark position ships its rows beside the IR
+        like the root's, so the widget draws it with no call to Python."""
+        inner = chart([{"v": 5}, {"v": 7}]).mark(rect(h="v"))
+        widget = chart([{"k": "a"}]).mark(inner).render()
+        assert widget.spec["mark"]["data"] == {"type": "table", "id": "t1"}
+        buf = base64.b64decode(widget.tables["t1"])
+        reader = pa_ipc.open_stream(pa.BufferReader(buf))
+        assert reader.read_all().num_rows == 2
 
     def test_layer_builder_render_does_not_raise(self):
         """Regression test for #683: rendering a `.layer()` chain through the
@@ -196,8 +212,8 @@ class TestTierArrowWireShape:
         widget = layer([c1, c2]).render()
 
         assert widget.spec["type"] == "layer"
-        assert len(widget.tier_arrow) == 2
-        for b64 in widget.tier_arrow:
+        assert len(widget.tables) == 2
+        for b64 in widget.tables.values():
             buf = base64.b64decode(b64)
             reader = pa_ipc.open_stream(pa.BufferReader(buf))
             assert reader.read_all().num_rows == 1

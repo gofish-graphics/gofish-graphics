@@ -11,6 +11,7 @@ export {
   OPERATOR_BUILDERS,
   rebuild,
   type DeriveBridge,
+  type MarkPayload,
 } from "./registry";
 
 // Column types (schema.ts) a host attaches to the rows it decodes, the way a
@@ -23,7 +24,7 @@ export {
 } from "../ast/schema";
 
 export {
-  buildChart,
+  buildIR,
   readIR,
   renderIR,
   constraintFromIR,
@@ -44,6 +45,7 @@ export {
   type RawMarkSpec,
   type RenderIROptions,
   type IRHost,
+  type IRContext,
   type TokenResolver,
   type TokenSentinel,
 } from "./fromJSON";

@@ -24,9 +24,10 @@ class GoFishChartWidget(anywidget.AnyWidget):
 
     # Spec + data: set once in __init__, read by JS on mount.
     spec = traitlets.Dict().tag(sync=True)
-    # Each chart tier's rows: base64 Arrow IPC bytes, one per tier (see
-    # `tiers_arrow_bytes` in ast.py).
-    tier_arrow = traitlets.List(traitlets.Unicode()).tag(sync=True)
+    # The rows of every chart in the spec that has rows of its own, wherever
+    # it sits: base64 Arrow IPC bytes by the table id its data names (see
+    # `ir_payload` in ast.py).
+    tables = traitlets.Dict(value_trait=traitlets.Unicode()).tag(sync=True)
     width = traitlets.Int(800).tag(sync=True)
     height = traitlets.Int(600).tag(sync=True)
     # The JS `.render(container, options)` options. None = the render call did
@@ -57,7 +58,7 @@ class GoFishChartWidget(anywidget.AnyWidget):
     def __init__(
         self,
         spec: Dict[str, Any],
-        tier_arrow: Optional[List[bytes]] = None,
+        tables: Optional[Dict[str, bytes]] = None,
         derive_functions: Optional[Dict[str, Callable]] = None,
         width: int = 800,
         height: int = 600,
@@ -83,9 +84,10 @@ class GoFishChartWidget(anywidget.AnyWidget):
             spec=spec,
             # This constructor owns the base64 wire encoding, so callers hand
             # it raw bytes, never pre-formatted wire strings (see #683).
-            tier_arrow=[
-                base64.b64encode(b).decode("ascii") for b in tier_arrow or []
-            ],
+            tables={
+                table_id: base64.b64encode(b).decode("ascii")
+                for table_id, b in (tables or {}).items()
+            },
             width=width,
             height=height,
             # Per-axis options are snake_case in Python and camelCase on the

@@ -64,7 +64,11 @@ check(
   "missing irVersion is rejected",
   !validate({
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "rect" } },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+    },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -73,7 +77,11 @@ check(
   !validate({
     irVersion: 1,
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "rect" } },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+    },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -82,7 +90,11 @@ check(
   !validate({
     irVersion: 0,
     ir: "gofish-runtime",
-    root: { type: "chart", mark: { type: "rect" } },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+    },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -100,7 +112,7 @@ check(
   !validate({
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart" },
+    root: { type: "chart", data: { type: "table", id: "t0" } },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -109,7 +121,11 @@ check(
   !validate({
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "wormhole" } },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "wormhole" },
+    },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -120,6 +136,7 @@ check(
     ir: "gofish-frontend",
     root: {
       type: "chart",
+      data: { type: "table", id: "t0" },
       operators: [{ type: "evaporate" }],
       mark: { type: "rect" },
     },
@@ -131,7 +148,11 @@ check(
   !validate({
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "ref" } },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "ref" },
+    },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -142,6 +163,7 @@ check(
     ir: "gofish-frontend",
     root: {
       type: "chart",
+      data: { type: "table", id: "t0" },
       mark: {
         type: "layer",
         __combinator: true,
@@ -186,7 +208,11 @@ check(
   !validate({
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "rect" } },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+    },
     extraTopLevel: "no",
   } as unknown as FrontendIRDocument).valid
 );
@@ -196,7 +222,12 @@ check(
   !validate({
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "rect" }, unexpected: 1 },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+      unexpected: 1,
+    },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -207,6 +238,7 @@ check(
     ir: "gofish-frontend",
     root: {
       type: "chart",
+      data: { type: "table", id: "t0" },
       mark: {
         type: "rect",
         h: "count",
@@ -228,7 +260,7 @@ function chart(operators: any[], mark: any = { type: "rect" }) {
   return {
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart", operators, mark },
+    root: { type: "chart", data: { type: "table", id: "t0" }, operators, mark },
   } as unknown as FrontendIRDocument;
 }
 
@@ -247,7 +279,7 @@ const layerOfCharts = {
     nestedChart,
     {
       type: "chart",
-      data: { type: "inline", rows: [] },
+      data: { type: "table", id: "t0" },
       mark: { type: "rect" },
     },
   ],
@@ -272,7 +304,8 @@ check(
 );
 check(
   "a nested chart with no mark is rejected",
-  !validate(chart([], { type: "chart", data: null })).valid
+  !validate(chart([], { type: "chart", data: { type: "table", id: "t0" } }))
+    .valid
 );
 check(
   "a LayerIR in a mark position is rejected (root only)",
@@ -357,7 +390,12 @@ function chartWithOptions(options: unknown) {
   return {
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "rect" }, options },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+      options,
+    },
   } as unknown as FrontendIRDocument;
 }
 
@@ -958,6 +996,7 @@ function chartWithLabel(label: any) {
     ir: "gofish-frontend",
     root: {
       type: "chart",
+      data: { type: "table", id: "t0" },
       mark: { type: "rect", label },
     },
   } as unknown as FrontendIRDocument;
@@ -1026,7 +1065,7 @@ console.log("\n# Non-finite numbers");
       ir: "gofish-frontend",
       root: {
         type: "chart",
-        data: { type: "inline", rows: [{ v: 1 }, { v: Infinity }] },
+        data: { type: "table", id: "t0" },
         operators: [
           {
             type: "scatter",
@@ -1297,7 +1336,7 @@ console.log("\n# Strategies");
       ir: "gofish-frontend",
       root: {
         type: "chart",
-        data: { type: "inline", rows: [] },
+        data: { type: "table", id: "t0" },
         operators: [{ type: "treemap", tile }],
         mark: { type: "rect" },
       },

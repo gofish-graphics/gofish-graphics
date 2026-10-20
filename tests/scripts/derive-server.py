@@ -3,9 +3,9 @@ Python derive server — executes Python derive functions during test rendering.
 
 Endpoints:
   POST /load           — Import a story file, build its IR, and register
-                         derive functions in one shot. Returns the IR, each
-                         chart tier's rows as base64 Arrow (as the widget
-                         ships them), the render options, and the deriveIds.
+                         derive functions in one shot. Returns the IR, its
+                         tables as base64 Arrow by id (as the widget ships
+                         them), the render options, and the deriveIds.
                          Combining import + register avoids the
                          two-process pitfall: `derive(lambda)` mints a fresh
                          UUID per call, so importing the story separately
@@ -108,10 +108,10 @@ class DeriveHandler(BaseHTTPRequestHandler):
         Body: {"storyFile": "/abs/path/test_X.py", "function": "story_default",
                "pythonStoriesDir": "/abs/path/tests/python-stories"}
 
-        Response: {"ir": <the builder's `to_ir()`>,
-                   "tierArrow": [<each chart tier's rows: base64 Arrow IPC,
-                                  `tiers_arrow_bytes`, as the widget ships
-                                  them>],
+        Response: {"ir": <the builder's IR>,
+                   "tables": {<id>: <the rows of each table the IR names:
+                                     base64 Arrow IPC, `ir_payload`, as the
+                                     widget ships them>},
                    "render": <the story's render options>,
                    "deriveIds": [<every lambda id the IR names>]}
         """
@@ -186,9 +186,16 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 _InputRef,
                 _lambda_pairs,
                 _mark_tree,
+                _Tables,
                 encode_non_finite,
-                tiers_arrow_bytes,
+                ir_payload,
             )
+
+            def b64_tables(tables):
+                return {
+                    table_id: base64.b64encode(b).decode("ascii")
+                    for table_id, b in tables.items()
+                }
 
             derive_ids: list = []
 
@@ -234,9 +241,10 @@ class DeriveHandler(BaseHTTPRequestHandler):
 
             def mark_fn(user_fn):
                 """Wrap a `(data) -> mark | chart` mark function for the
-                rows-in / rows-out `/derive/<id>` contract: it answers with a
-                one-element list holding the mark-position IR (`to_dict()`)
-                of what the function returned."""
+                `/derive/<id>` endpoint: it answers with a payload of the
+                same shape as `/load`'s, `{"ir", "tables"}`: the
+                mark-position IR (`to_dict()`) of what the function returned,
+                and the tables its charts name, by ids of its own."""
 
                 def wrapped(data):
                     # The harness replaces each live `GoFishRef` argument with
@@ -252,7 +260,9 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     ]
                     result = user_fn(wrapped_data)
                     register(result)
-                    return [encode_non_finite(result.to_dict())]
+                    tables = _Tables()
+                    ir = encode_non_finite(result.to_dict(tables))
+                    return {"ir": ir, "tables": b64_tables(tables.arrow_bytes())}
 
                 return wrapped
 
@@ -262,12 +272,10 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     f"{type(builder).__name__}"
                 )
             register(builder)
+            ir, tables = ir_payload(builder)
             self._json_response(200, {
-                "ir": builder.to_ir(),
-                "tierArrow": [
-                    base64.b64encode(b).decode("ascii")
-                    for b in tiers_arrow_bytes(builder)
-                ],
+                "ir": ir,
+                "tables": b64_tables(tables),
                 "render": render,
                 "deriveIds": derive_ids,
             })

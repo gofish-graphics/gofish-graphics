@@ -141,12 +141,12 @@ function loadExemptPythonFiles(): Set<string> {
 // Extract IR from Python story (by calling Python)
 // ---------------------------------------------------------------------------
 
-/** What the derive server's `/load` answers: the builder's own `to_ir()`,
- *  each chart tier's rows as base64 Arrow (as the widget ships them), the
+/** What the derive server's `/load` answers: the builder's own IR and
+ *  its tables (base64 Arrow by id, as the widget ships them), the
  *  story's render options, and the lambda ids the IR names. */
 type LoadedStory = {
   ir: Frontend.FrontendIR;
-  tierArrow: string[];
+  tables: Record<string, string>;
   render: Record<string, unknown>;
   deriveIds: string[];
 };
@@ -291,8 +291,8 @@ async function captureStory(
       ? `http://localhost:${DERIVE_SERVER_PORT}`
       : undefined;
 
-  // Inject the spec and trigger the render. The harness decodes the tiers'
-  // rows from `tierArrow`, renders `ir` with `render` as its render options,
+  // Inject the spec and trigger the render. The harness decodes the
+  // `tables`, renders `ir` with `render` as its render options,
   // and reaches Python over `deriveServerUrl`.
   const spec = { ...ir, deriveServerUrl };
 

@@ -482,12 +482,7 @@ const warningsOf = async (
   if (opts.viaIR) {
     // The Python path: serialize to the frontend IR and rebuild from it.
     const doc = await builder.toJSON();
-    builder = Serialize.buildChart(
-      doc.root,
-      regionProduct,
-      undefined,
-      Serialize.makeTokenResolver()
-    );
+    builder = Serialize.buildIR(doc.root, { tables: doc.tables });
   }
   const warnings: string[] = [];
   const warn = console.warn;
