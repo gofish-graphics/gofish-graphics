@@ -660,13 +660,9 @@ async function benchExamplesPy(
           }
           const loadDelta = performance.now() - tLoad;
 
-          // Only a chart root is benchmarked here; a chain, a layer or a bare
-          // mark at the root is skipped (they don't represent the common
-          // per-example case).
-          if (ir?.doc?.root?.type !== "chart") {
-            return { ok: false };
-          }
-
+          // Every root kind renders through the hosts' one entry point
+          // (`Serialize.renderIR`, via the harness), so every story is
+          // benchmarked.
           const deriveServerUrl =
             ir.callbackIds?.length > 0
               ? `http://localhost:${DERIVE_SERVER_PORT}`

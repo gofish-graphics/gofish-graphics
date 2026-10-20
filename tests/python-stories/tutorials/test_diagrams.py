@@ -7,13 +7,7 @@ operators, no `chart()`, as in bluefish/Planets.
 """
 
 from gofish import Constraint, arrow, background, circle, layer, spread, text
-
-PLANETS = [
-    {"name": "mercury", "r": 15, "fill": "#F5E3C8", "stroke": "#EFC9A2"},
-    {"name": "venus", "r": 36, "fill": "#D2913C", "stroke": "#A96F26"},
-    {"name": "earth", "r": 38, "fill": "#3E8CCC", "stroke": "#2F6FA6"},
-    {"name": "mars", "r": 21, "fill": "#F4BC80", "stroke": "#E0954C"},
-]
+from python_stories.data import TUTORIAL_PLANETS
 
 
 def story_diagrams():
@@ -29,7 +23,7 @@ def story_diagrams():
                                 stroke=d["stroke"],
                                 stroke_width=3,
                             ).name(d["name"])
-                            for d in PLANETS
+                            for d in TUTORIAL_PLANETS
                         ],
                         dir="x",
                         spacing=50,

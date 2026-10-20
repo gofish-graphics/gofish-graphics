@@ -8,7 +8,8 @@
  * The decode attaches column types and leaves converting values to
  * `applySchema`, which every reader of the rows runs first, with its own
  * schema: a table is chart data (`chart(rows, { schema })`), and a
- * callback's result goes through `applyLambdaTyped` (Serialize). Each
+ * callback's result goes through `applySchema` where the deserializer reads
+ * it (an accessor's values, a `derive`'s rows with its `schema`). Each
  * column's values go through one recursive conversion, {@link fromArrow},
  * chosen once per column from its Arrow type:
  *

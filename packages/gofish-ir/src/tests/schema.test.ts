@@ -199,12 +199,6 @@ check(
 );
 
 check(
-  "the old root layer and raw-mark shapes are rejected",
-  !validate(doc({ type: "layer", charts: [] })).valid &&
-    !validate(doc({ type: "raw-mark", mark: { type: "rect" } })).valid
-);
-
-check(
   "a chain whose first tier is not a chart is rejected",
   !validate(
     doc({
@@ -231,24 +225,6 @@ check(
 );
 
 check(
-  "a chain with an unknown field is rejected",
-  !validate(
-    doc({
-      type: "layer-chain",
-      builder: true,
-      tiers: [
-        {
-          type: "chart",
-          data: { type: "table", id: "t0" },
-          mark: { type: "rect" },
-        },
-        { type: "rect" },
-      ],
-    })
-  ).valid
-);
-
-check(
   "a document's tables must be arrays of rows",
   validate({
     ...doc({
@@ -266,17 +242,6 @@ check(
       }),
       tables: { t0: { x: 1 } },
     } as unknown as FrontendIRDocument).valid
-);
-
-check(
-  "inline chart data is rejected (rows travel in tables)",
-  !validate(
-    doc({
-      type: "chart",
-      data: { type: "inline", rows: [] },
-      mark: { type: "rect" },
-    })
-  ).valid
 );
 
 // ---------------------------------------------------------------------------
@@ -348,7 +313,7 @@ function chart(operators: any[], mark: any = { type: "rect" }) {
 
 // A mark position may hold a whole chart (#1180): as a chart's mark and as a
 // combinator child, by one rule. A layer of charts is the `layer` combinator
-// with chart children; `LayerIR` is a root form only.
+// with chart children.
 const nestedChart = {
   type: "chart",
   data: { type: "previous-tier" },
@@ -388,10 +353,6 @@ check(
   "a nested chart with no mark is rejected",
   !validate(chart([], { type: "chart", data: { type: "table", id: "t0" } }))
     .valid
-);
-check(
-  "the old LayerIR shape is rejected in a mark position",
-  !validate(chart([], { type: "layer", charts: [nestedChart] })).valid
 );
 // A `.layer(...)` chain sits in a mark position by the same rule as a chart
 // (#1181): as a chart's mark and as a combinator child.

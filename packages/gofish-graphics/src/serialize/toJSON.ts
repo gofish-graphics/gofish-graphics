@@ -218,10 +218,14 @@ async function chartBuilderToChartIR(
   return ir;
 }
 
+/** The rows of a chart with no data: one shared empty table, so every such
+ *  chart in a document names the same table. */
+const NO_TABLE_ROWS: AnyObject[] = Object.freeze([]) as unknown as AnyObject[];
+
 /** A chart's data on the wire. Rows of the chart's own (and no data, which
  *  reads as no rows) go into `tables`, and the chart names them by id. */
 function dataToIR(data: unknown, tables: TableIds): Frontend.DataIR {
-  if (data == null) return tables.add([]);
+  if (data == null) return tables.add(NO_TABLE_ROWS);
   // An empty `chart()` scope: the previous tier's marks in a `.layer(...)`
   // chain, or the rows of the partition a chart in a mark position sits in.
   if (data === PREVIOUS_LAYER_MARKS) return { type: "previous-tier" };
@@ -242,17 +246,11 @@ function dataToIR(data: unknown, tables: TableIds): Frontend.DataIR {
     );
   }
   if (Array.isArray(data)) return tables.add(data as AnyObject[]);
-  // Unknown shape — wrap as a single-row table so the schema is satisfied,
-  // but warn so the caller can investigate. Hitting this path usually
-  // indicates the chart's data argument was neither an array nor a
-  // GoFishRef and isn't structurally what the runtime expects.
-  if (typeof console !== "undefined" && typeof console.warn === "function") {
-    console.warn(
-      "[gofish-ir] toJSON.dataToIR: unrecognized data shape, wrapping as a single-row table. " +
-        "Expected an array or a string-layer GoFishRef."
-    );
-  }
-  return tables.add([data as AnyObject]);
+  throw new Error(
+    "toJSON: a chart's data must be an array of rows, a string-layer ref " +
+      "(ref(name) / selectAll(name)), or an empty chart() scope; got " +
+      `${typeof data}.`
+  );
 }
 
 function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {

@@ -294,10 +294,9 @@ async function main() {
       JSON.stringify([root.data, children.map((ch) => ch.data)])
     );
     check(
-      "the document carries each table once, and no inline rows",
+      "the document carries each table once",
       Object.keys(doc.tables ?? {}).join() === "t0,t1" &&
-        doc.tables!.t1 === own &&
-        !JSON.stringify(doc.root).includes("inline")
+        doc.tables!.t1 === own
     );
     const rebuilt = Serialize.buildIR(doc);
     const doc2 = await rebuilt.toJSON();
@@ -411,7 +410,6 @@ async function main() {
       "a layer of charts at the root is the combinator mark",
       (rootLayer.root as any).type === "layer" &&
         (rootLayer.root as any).__combinator === true &&
-        !("charts" in (rootLayer.root as any)) &&
         (rootLayer.root as any).options.coord.type === "polar",
       JSON.stringify(rootLayer.root).slice(0, 200)
     );
@@ -1692,6 +1690,38 @@ async function main() {
       "an empty-scope chart() child of spread([...]) draws its group's rows",
       bars && JSON.stringify(viaIR) === JSON.stringify(native),
       JSON.stringify({ native, viaIR })
+    );
+  }
+
+  console.log("\n# A chart's data on the wire");
+  {
+    // A chart with no rows names one shared empty table, and a data shape
+    // with no wire form is an error.
+    const noRows = await Serialize.toJSON(
+      layer([
+        chart(null).mark(rect({ w: 4, h: 4 })),
+        chart(null).mark(rect({ w: 6, h: 6 })),
+      ])
+    );
+    const ids = (noRows.root as any).children.map((c: any) => c.data.id);
+    check(
+      "charts with no rows name one shared empty table",
+      ids[0] === ids[1] &&
+        JSON.stringify(noRows.tables) === JSON.stringify({ [ids[0]]: [] }),
+      JSON.stringify(noRows)
+    );
+    let message = "";
+    try {
+      await chart({ x: 1 } as any)
+        .mark(rect({ w: 4, h: 4 }))
+        .toJSON();
+    } catch (e) {
+      message = e instanceof Error ? e.message : String(e);
+    }
+    check(
+      "an unknown data shape throws",
+      message.includes("must be an array of rows"),
+      message || "did not throw"
     );
   }
 

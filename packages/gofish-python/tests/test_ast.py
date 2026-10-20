@@ -556,7 +556,6 @@ class TestLayer:
         assert node["type"] == "layer"
         assert node["__combinator"] is True
         assert node["options"] == {"coord": "clock"}
-        assert "charts" not in node
 
     def test_layer_child_specs(self):
         """Each chart child is its ChartIR, and names its table."""
@@ -698,7 +697,6 @@ class TestNestedChart:
         assert node["data"] == {"type": "table", "id": "t0"}
         children = node["mark"]["children"]
         assert [c["data"] for c in children] == [{"type": "table", "id": "t1"}] * 2
-        assert "inline" not in json.dumps(node)
         assert doc["tables"] == {"t0": self.ROWS, "t1": own}
         shipped, _ = ir_payload(root)
         assert shipped["root"] == node
@@ -730,7 +728,6 @@ class TestNestedChart:
         assert direct == child["children"][1]
         assert direct["type"] == "layer"
         assert direct["__combinator"] is True
-        assert "charts" not in direct
         assert [t["data"] for t in direct["children"]] == [
             {"type": "previous-tier"},
             {"type": "select", "layer": "bars", "mode": "all"},

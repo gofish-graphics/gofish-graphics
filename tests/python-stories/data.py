@@ -27,6 +27,15 @@ CATEGORY_BRANDS = load_json("category_brands")
 # byte-identical fills).
 COLORS = load_json("colors")
 
+# The four planets closest to the sun, the table both tutorial stories
+# (tutorials/Basics.stories.tsx, Diagrams.stories.tsx) draw.
+TUTORIAL_PLANETS = [
+    {"name": "mercury", "r": 15, "fill": "#F5E3C8", "stroke": "#EFC9A2"},
+    {"name": "venus", "r": 36, "fill": "#D2913C", "stroke": "#A96F26"},
+    {"name": "earth", "r": 38, "fill": "#3E8CCC", "stroke": "#2F6FA6"},
+    {"name": "mars", "r": 21, "fill": "#F4BC80", "stroke": "#E0954C"},
+]
+
 SEAFOOD = [
     {"lake": "Lake A", "species": "Bass", "count": 23},
     {"lake": "Lake A", "species": "Trout", "count": 31},

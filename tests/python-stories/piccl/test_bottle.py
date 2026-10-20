@@ -5,11 +5,11 @@ The JS storybook composes the per-category "filled bottle" via
 constraints that pin the bottle, the line, and the percent label together.
 
 The percent label is authored as `text({text: (d) => `${d.amount}%`})` — a
-Python callable. The wrapper wires it through the same derive-server lambda
-registry as `derive()` operators: each lambda gets a UUID, the Mark IR
-carries `{"__gofish_lambda": id}`, and the JS harness swaps in an `async
-(d) => fetch /derive/<id>` arrow at render time. JS sees a real accessor;
-the body just happens to RPC into Python.
+Python callable. The wrapper records it with every other callback the IR
+names, as `derive()` operators are: each lambda gets a UUID, the Mark IR
+carries `{"__gofish_lambda": id}`, and JS swaps in an accessor that calls
+the bridge with its rows at render time. JS sees a real accessor; the body
+just happens to call into Python.
 """
 
 import os
