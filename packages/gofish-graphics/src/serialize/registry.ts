@@ -88,8 +88,8 @@ export { cutSlices, cutMark, offsetOp };
  *  - a `{type: "mark-fn", lambdaId}` mark, with one partition's input.
  *
  * The transport (Arrow over anywidget traitlets, Arrow over HTTP) is the
- * bridge's own: it sends the rows, and decodes the reply's tables before it
- * answers.
+ * bridge's own: it sends the rows, and reads the reply before it answers (its
+ * JSON as `readIR` reads it, its tables decoded).
  */
 export interface DeriveBridge {
   /** Call the Python callback registered under `lambdaId` with `rows`. */

@@ -508,7 +508,7 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
     }
     return (async (data: any, _key: any, _layerContext: any) => {
       const { rows, inputRefs: replyInputRefs } = serializeMarkFnInput(data);
-      const reply = readIR(await bridge.call(lambdaId, rows));
+      const reply = await bridge.call(lambdaId, rows);
       return mapMark(reply.root as MarkSpec, {
         ...ctx,
         // A drawn IR's tables are its charts' rows.
@@ -679,12 +679,14 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
 }
 
 /**
- * Read an IR document (or a bridge call's reply, a document of its own) as
- * it arrives: parse it if it is JSON text, and turn its tagged non-finite
- * numbers (`{ "$numberDouble": "Infinity" }`, written by `toJSON` and
- * Python's `to_ir()`) back into numbers. Each document is decoded once:
- * `buildIR` decodes the one it is given, and a mark function's call the
- * reply it gets back.
+ * Read JSON IR as it arrives: parse it if it is JSON text, and turn its
+ * tagged non-finite numbers (`{ "$numberDouble": "Infinity" }`, written by
+ * `toJSON` and Python's `to_ir()`) back into numbers. It is the JSON codec's
+ * read, so it applies where the JSON encoding put the tags: a whole JSON
+ * document, or, in a document a Python host ships, every part but its
+ * Arrow tables (`decodeDocument` in gofish-python's `arrowBridge.ts`, which
+ * decodes a bridge call's reply the same way). `buildIR` takes a document
+ * read this way.
  */
 export function readIR<T = any>(json: T | string): T {
   return Frontend.decodeNonFinite(
@@ -793,20 +795,21 @@ function definedFields<T extends Record<string, unknown>>(o: T): Partial<T> {
 }
 
 /**
- * Rebuild a frontend-IR document, as it arrives (it is decoded here), into
- * the object a JS author would have written for its root: a `ChartBuilder`,
- * a `LayerBuilder`, or a mark. A root holds anything a mark position does,
- * so it rebuilds as one ({@link mapMark}), reading the document's `tables`
- * (a Python host decodes its Arrow tables first; a table may carry column
- * types, `setColumnTypes`, which the chart reads as it reads its own
- * `schema`'s, and its `schema` wins). `bridge` runs the Python callbacks the
- * IR names. Building throws synchronously on a bad document.
+ * Rebuild a frontend-IR document, as read ({@link readIR} for a JSON
+ * document; a Python host's `decodeDocument`, which also decodes its Arrow
+ * tables), into the object a JS author would have written for its root: a
+ * `ChartBuilder`, a `LayerBuilder`, or a mark. A root holds anything a mark
+ * position does, so it rebuilds as one ({@link mapMark}), reading the
+ * document's `tables` (a table may carry column types, `setColumnTypes`,
+ * which the chart reads as it reads its own `schema`'s, and its `schema`
+ * wins). `bridge` runs the Python callbacks the IR names, and answers each
+ * call with its reply read the same way. Building throws synchronously on a
+ * bad document.
  */
 export function buildIR(
-  encoded: Frontend.FrontendIRDocument,
+  doc: Frontend.FrontendIRDocument,
   bridge?: DeriveBridge
 ): any {
-  const doc = readIR(encoded);
   return mapMark(doc.root, {
     bridge,
     resolveToken: makeTokenResolver(),

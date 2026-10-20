@@ -83,23 +83,30 @@ on the JS side:
 ```ts
 import { Serialize } from "gofish-graphics";
 
-const builder = Serialize.buildIR(doc /* , bridge for Python callbacks */);
+const builder = Serialize.buildIR(
+  Serialize.readIR(json) /* , bridge for Python callbacks */
+);
 
 await builder.render(container, { w: 500, h: 300, axes: true });
 ```
 
-`buildIR` takes one `FrontendIRDocument`, its root and its `tables` as
-rows, and returns what a JS author would have written for the root: a
-`ChartBuilder`, a `LayerBuilder` chain, or a mark. To render a whole
-document in one call, the way the Python widget and the parity harness do:
+`buildIR` takes one `FrontendIRDocument` as read, its root and its `tables`
+as rows, and returns what a JS author would have written for the root: a
+`ChartBuilder`, a `LayerBuilder` chain, or a mark. `Serialize.readIR` reads
+a JSON document, as JSON text or as the object `toJSON` returns: it decodes
+the tagged non-finite numbers the JSON encoding wrote
+([§ Non-finite numbers](/internals/frontend/serialization#non-finite-numbers)).
+To render a whole document in one call, the way the Python widget and the
+parity harness do:
 
 ```ts
 await Serialize.renderIR(doc, container, { w: 500, h: 300 }, bridge);
 ```
 
-A Python host ships the document's tables as base64 Arrow; it decodes them
-into rows (`decodeDocument` in `gofish-python/arrowBridge`) before either
-call.
+A Python host ships the document's tables as base64 Arrow. It reads the
+document with `decodeDocument` (in `gofish-python/arrowBridge`) before
+either call: the JSON part through `readIR`, and the tables from Arrow into
+rows.
 
 | Function                                 | Returns                                   |
 | ---------------------------------------- | ----------------------------------------- |

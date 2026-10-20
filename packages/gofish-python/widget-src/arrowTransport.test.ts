@@ -15,6 +15,7 @@ import * as Arrow from "apache-arrow";
 import { buildArrowTable, LIST_OF_VALUES } from "./arrowTransport";
 import { Serialize, chart, scatter, circle, Schema } from "gofish-graphics";
 import { arrowTableToRows } from "./arrowDecode";
+import { decodeDocument } from "./arrowBridge";
 
 // This file is runnable as a script in Node, but the repo doesn't necessarily
 // include Node type definitions in all TS contexts.
@@ -512,6 +513,30 @@ async function testCallbackResultsAreTyped(): Promise<boolean> {
   return ok;
 }
 
+/** A shipped document's JSON is read as JSON (its non-finite tags decode),
+ *  and its Arrow tables as Arrow only: a row value shaped like the tag is
+ *  data and stays as it is, and a float infinity in a table is a number. */
+function testTagsDecodeOnlyInTheJSON(): boolean {
+  console.log("Test: non-finite tags decode in the JSON, not in Arrow tables");
+  const tag = { $numberDouble: "Infinity" };
+  const b64 = (items: unknown[]) =>
+    btoa(
+      String.fromCharCode(...Arrow.tableToIPC(buildArrowTable(items), "stream"))
+    );
+  const doc = decodeDocument<any>({
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root: { type: "rect", w: tag },
+    tables: { t0: b64([{ s: tag, x: Infinity }]) },
+  } as any);
+  const row = doc.tables.t0[0];
+  const ok = doc.root.w === Infinity && same(row.s, tag) && row.x === Infinity;
+  console.log(
+    ok ? "  ✓ PASSED" : `  ✗ FAILED ${JSON.stringify([doc.root, row])}`
+  );
+  return ok;
+}
+
 export async function runArrowTransportTests(): Promise<boolean> {
   console.log("Running Arrow transport tests...\n");
 
@@ -533,6 +558,7 @@ export async function runArrowTransportTests(): Promise<boolean> {
     await testNaiveTimesReadInTheChartZone(),
     testNestedTimesDecodeAsEpochMs(),
     await testCallbackResultsAreTyped(),
+    testTagsDecodeOnlyInTheJSON(),
   ];
 
   const allPassed = results.every((r) => r);

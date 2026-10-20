@@ -5,13 +5,14 @@
  * A Python host ships a frontend-IR document with its `tables` as base64
  * Arrow IPC streams by id (`ir_payload` in `gofish/ast.py`).
  * {@link decodeDocument} decodes them into the rows `Serialize.buildIR`
- * reads, so Arrow is only an encoding of `tables`. The bridge's one call
+ * reads, so Arrow is only an encoding of `tables`, and reads the rest as
+ * JSON (`Serialize.readIR`). The bridge's one call
  * ({@link arrowBridge}) sends the rows as base64 Arrow, and the reply is a
  * document of the same shape (Python's `answer`), decoded the same way.
  */
 
 import * as Arrow from "apache-arrow";
-import type { Serialize } from "gofish-graphics";
+import { Serialize } from "gofish-graphics";
 import { buildArrowTable } from "./arrowTransport";
 import { decodeTables } from "./arrowDecode";
 
@@ -20,11 +21,17 @@ import { decodeTables } from "./arrowDecode";
 export type ShippedDocument<D extends { tables?: Record<string, unknown[]> }> =
   Omit<D, "tables"> & { tables?: Record<string, string> };
 
-/** Decode a shipped document's tables into rows (see `arrowDecode.ts`). */
+/** Read a shipped document: its JSON as JSON is read (`Serialize.readIR`,
+ *  which decodes the tagged non-finite numbers the JSON encoding wrote), and
+ *  its tables, which are Arrow, into rows (see `arrowDecode.ts`). */
 export function decodeDocument<
   D extends { tables?: Record<string, unknown[]> },
 >(doc: ShippedDocument<D>): D {
-  return { ...doc, tables: decodeTables(doc.tables ?? {}) } as unknown as D;
+  const { tables, ...json } = doc;
+  return {
+    ...Serialize.readIR(json),
+    tables: decodeTables(tables ?? {}),
+  } as unknown as D;
 }
 
 /** `rows` as one base64 Arrow IPC stream (see `arrowTransport.ts`). */

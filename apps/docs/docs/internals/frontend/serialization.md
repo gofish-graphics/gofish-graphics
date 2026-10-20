@@ -370,21 +370,25 @@ boundary, with no per-field rule:
 
 - A writer encodes the whole document as it makes it: JS `toJSON` (through
   `Frontend.encodeIR`, gofish-ir's `frontend/nonFinite.ts`) and Python
-  `to_ir()` (`gofish/_nonfinite.py`). The test derive server encodes the
-  infinities in what it sends the same way.
-- A reader decodes in one place, `Serialize.readIR` (`fromJSON.ts`), which
-  parses JSON text if it is given text and decodes the tags. `buildIR` (and so
-  `renderIR`) reads the root and the tables it is given through it, the parity harness's HTTP bridge reads each
-  derive response through it.
-  The other reconstruction functions (`mapMark`,
-  `mapOperator`, ...) take what `readIR` returns.
+  (`_json_value` in `gofish/ast.py`, through which `to_ir()`, `ir_payload`
+  and every bridge reply write their document). Python's rule also writes a
+  numpy scalar as the Python value it stands for and a date or a datetime
+  (a pandas `Timestamp` too) as its ISO 8601 string, as JSON writes a JS
+  `Date`, so a document is JSON in both hosts.
+- The tag is part of the JSON encoding, so a reader decodes it where the
+  JSON encoding put it, in `Serialize.readIR` (`fromJSON.ts`), which parses
+  JSON text if it is given text and decodes the tags. A JSON document is
+  read whole. A document a Python host ships is JSON except its tables,
+  which are Arrow, so `decodeDocument` (`widget-src/arrowBridge.ts`) reads
+  its JSON part through `readIR` and its tables from Arrow, and never walks
+  a decoded row again; the bridge reads each reply the same way. `buildIR`
+  (and so `renderIR`) and the other reconstruction functions (`mapMark`,
+  `mapOperator`, ...) take a document as read.
 - The validator accepts the tagged `Infinity` and `-Infinity` wherever it
   expects a number, through one check (`isIRNumber`), and the JSON Schema has
   one shared `Number` def that every number field points to. A tagged `NaN`
   where a number is expected is an error: a NaN option is always a bug. Data
   rows are untyped, so a NaN there round-trips.
-- The test derive server keeps its old rule for a NaN in rows: it sends
-  `null`, which is how pandas' missing value reads in JS.
 
 The tag was chosen over protobuf's JSON mapping (a bare string `"Infinity"`
 in a number field) because a string already means a field name in a channel
@@ -1081,6 +1085,17 @@ tables and callbacks of that drawing. The same payload holds the tables
 (`payload.table(data)`), so a chart's rows and its callbacks are found by one
 rule wherever the chart sits.
 
+A host keeps every callback it has registered, so a reply's callbacks need
+names that do not pile up. A mark function's code makes its marks afresh on
+each call, with fresh lambda ids, and it is called once per partition, again
+for each view of a widget. So a reply's payload names each callback it
+records by the call's scope and its walk order, not by its lambda id: the
+scope is a hash of the callback's id and the rows it was called with
+(`answer`). The same call names the same callbacks, and registering them
+replaces the ones it registered before, so the registry holds one set per
+distinct call, which a document's fixed rows bound. A root's callbacks keep
+their lambda ids.
+
 ### One renderer, two hosts
 
 Two hosts render Python IR: the notebook widget
@@ -1102,13 +1117,14 @@ transport:
   server answers `/load` with it. Arrow is only an encoding of `tables`:
   each host decodes them with the one codec, `decodeDocument`
   (`widget-src/arrowBridge.ts`, which the harness imports as the
-  `gofish-python/arrowBridge` package export), before it calls `renderIR`.
-  A JS document's `tables` are already rows. A chart that names a table its
-  document does not carry is an error.
+  `gofish-python/arrowBridge` package export), before it calls `renderIR`;
+  it reads the rest of the document as JSON (`readIR`). A JS document's
+  `tables` are already rows. A chart that names a table its document does
+  not carry is an error, and the validator reports it too, at any depth.
 - **The one bridge call.** `DeriveBridge` has one method,
   `call(lambdaId, rows)`, for every callback kind. Both hosts build it with
   the same codec, `arrowBridge(send)`: the rows go out as base64 Arrow, and
-  the reply is a document of the same shape, its tables decoded. Its root
+  the reply is a document of the same shape, read by `decodeDocument`. Its root
   says what the callback produced: a table reference, `{type: "table",
 id}`, to the list a derive or an accessor returned (`callForRows` in
   `registry.ts` reads it), or the mark-position IR a mark function drew.
@@ -1116,7 +1132,8 @@ id}`, to the list a derive or an accessor returned (`callForRows` in
   `call_response`, and the harness POSTs to the derive server's
   `/call/<id>`. On the Python side both run `answer(callbacks, lambda_id,
 rows_b64)`, which calls the callback, registers the callbacks its reply
-  names, and ships the reply as `ir_payload` ships a root. So the widget
+  names (by the call's scope, § One walk collects the callbacks), and ships
+  the reply as `ir_payload` ships a root. So the widget
   answers mark functions and accessors as the harness does (#1049).
 - **The codec.** It converts each column once by its Arrow type: a
   tz-aware timestamp becomes epoch milliseconds and marks the column as a
