@@ -346,6 +346,32 @@ It also reads naturally for stacked area: `.mark(ribbon({ h: "value" }).stack({ 
 
 No separate pictures: the outputs are A's and today's stacked area.
 
+## Round 2: syntax that follows the data
+
+From review. The data's shape picks the syntax: a **list** becomes a flow tier with `by`; a **record** (a fixed set of fields) becomes the direct-style combinator with one child per field. Parallel sets is a record of axes, each a list of categories, each a list of rows. A sankey is a list of nodes, each a pair (in-links, out-links), each a list of links (d3-sankey's `targetLinks`/`sourceLinks`). Rows are never copied, so "same datum, same ribbon" pairs the ends with no unpivot and no id. Precedent: "the template follows the data definition" (_How to Design Programs_).
+
+Rendered with today's API (specs in `NOTES.md`, "Direct style (round 2)"):
+
+- Parallel sets (`img/direct-parallel-sets.png`): works with `(d) => chart(d)` children, an explicit ribbon tier `group({ by: (r) => r.datum[0] })`, and `spread({ spacing: 0 })` instead of `stack`.
+- Parallel coordinates (`img/direct-parallel-coordinates.png`): the lines join, but every axis shares one y scale (`img/direct-parallel-coordinates-shared-scale.png`); the render uses normalized columns as a declared shortcut.
+- Sankey (`img/direct-sankey-nested.png`): from nodes with `in`/`out` list fields built by a nest join; same geometry as round 1.
+
+Callback-free spellings (emulated, pixel-identical):
+
+- **Over columns, by expression expansion** (polars `pl.col([...])`, dplyr `across`): a combinator child that mentions `cols(["class", "sex", "survived"])` stands for one child per column.
+- **Over a parent's sub-list, by nested data** (d3 `selection.data(d => d.children)`): `chart(field("in"))` reads the parent row's list field. A sankey tree is this rule applied recursively to `children`.
+
+What round 2 needs:
+
+1. Operator combinators pass their scope to a `chart()` child, as `layer` does (a one-line fix; today it throws).
+2. Independent scales for children that read different fields (the one real design gap). Today even separate charts side by side share a domain, against `how-axes-work.md` rule 3.
+3. A ribbon over a record-shaped combinator joins ends from the same datum by default.
+4. A row or link id in Python and on the wire, where object identity is lost.
+
+Bugs found: a `by` function receives the ref, not the row, against the `projectBy` doc comment; a stray "depth" axis appears despite `axes: false`; the stack scale bug again.
+
+My read: round 2 fits the data users already have and keeps types on fields, which round 1 cannot. `unpivot` stays as a converter. New decisions 9 to 12 are listed below.
+
 ## Recommendation
 
 **Approach B, ends are rows**, with three user-facing additions: `unpivot`, `ribbon({ by })`, `ribbon({ at })`.
@@ -390,3 +416,10 @@ No separate pictures: the outputs are A's and today's stacked area.
 - New data helper `unpivot({ on, variable, value, id })`, used inside `derive(...)`; Python `unpivot(on=..., variable=..., value=..., id=...)`.
 - `ribbon({ by })` and `line({ by })`: explicit ribbon identity on the fused form (removed in #786; returns with a narrower meaning).
 - `ribbon({ at })`: part name for both ends, or `{ from, to }` for each end; default is today's facing edges along `dir`.
+
+## Round 2 decisions
+
+9. Make "syntax follows the data" the primary spelling (a record becomes direct-style children, a list becomes a flow), keeping `unpivot` only as a converter?
+10. Expression expansion: may a combinator child that mentions `cols([...])` stand for one child per column, as polars expands `pl.col([...])`?
+11. Nested child data: `chart(field("in"))` (or `unnest`) for a parent's list field, plus a `nestJoin` helper to build it from flat tables?
+12. Independent child scales: should direct-style children that read different fields get their own domains by default, or by an explicit option?

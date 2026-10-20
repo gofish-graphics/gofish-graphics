@@ -596,3 +596,558 @@ B", so A needs no new layout of its own beyond the end sort.
   render option does.
 - A polar `spread` with `spacing` does not span 2π; `stack` does.
 - The energy sankey worked on the full 48-node data set with no subset.
+
+---
+
+## Direct style (round 2)
+
+The syntax follows the data structure. A LIST (rows, groups) is a flow tier
+with `by`. A RECORD (a fixed set of fields) is the combinator form
+`spread(opts, [childA, childB, ...])`, one child per field. Wide data is a
+record of columns, so it is written in the combinator form.
+
+- Stories: `stories/_proposals/stacked-ribbons/DirectStyle.stories.tsx`
+  (titles `Proposals/Stacked Ribbons/Direct Style/...`). No library source
+  was changed.
+- Story-local helpers in that file, all EMULATION and not library API:
+  `inherit` (what the `spread` combinator would do if it passed its scope
+  to a `chart()` child), `sameRow` (a ribbon key), `cols` / `expand`
+  (column expansion), `unnest` (a list field as child data) and `nestJoin`
+  (builds the nested nodes).
+- Every picture below was rendered with `capture-one` and looked at.
+
+| Story                                 | PNG                                                | Result                        |
+| ------------------------------------- | -------------------------------------------------- | ----------------------------- |
+| `ProbeParallelSetsVerbatim`           | `img/direct-parallel-sets-verbatim-fails.png`      | FAILS: throws                 |
+| `ProbeParallelSetsFusedRibbon`        | `img/direct-parallel-sets-fused-fails.png`         | FAILS: no ribbons, stack bug  |
+| `ProbeIdentityByRef`                  | `img/direct-identity-by-ref-fails.png`             | FAILS: no ribbons             |
+| `ParallelSetsDirect`                  | `img/direct-parallel-sets.png`                     | works today                   |
+| `ParallelSetsDirectInherit`           | `img/direct-parallel-sets-inherit.png`             | target spelling + `inherit`   |
+| `ProbeParallelCoordinatesSharedScale` | `img/direct-parallel-coordinates-shared-scale.png` | FAILS: one y scale            |
+| `ProbeSeparateChartsShareScale`       | `img/direct-separate-charts-share-scale.png`       | FAILS: one y scale, no axes   |
+| `ParallelCoordinatesDirect`           | `img/direct-parallel-coordinates.png`              | works with normalized columns |
+| `SankeyDirect`                        | `img/direct-sankey.png`                            | works today                   |
+| `ProbeSankeyDirectStack`              | `img/direct-sankey-stack-fails.png`                | FAILS: stack scale bug        |
+| `SankeyNested`                        | `img/direct-sankey-nested.png`                     | works today                   |
+| `ParallelSetsExpand`                  | `img/direct-parallel-sets-expand.png`              | emulated `cols(...)`          |
+| `SankeyNestedUnnest`                  | `img/direct-sankey-nested-unnest.png`              | emulated `unnest` + `inherit` |
+
+The three parallel sets pictures that work (`Direct`, `DirectInherit`,
+`Expand`) are pixel-identical. The three sankeys that work (`SankeyDirect`,
+`SankeyNested`, `SankeyNestedUnnest`) are identical to each other, and match
+B3's `img/energy-sankey.png` in geometry; only the ribbon colors differ,
+because the color domain is met in a different order.
+
+### R1. Parallel sets (titanic)
+
+Target spelling, verbatim (`ProbeParallelSetsVerbatim`):
+
+```js
+chart(titanic)
+  .mark(
+    spread(
+      { dir: "x", spacing: 120 },
+      ["class", "sex", "survived"].map((axis) =>
+        chart()
+          .flow(
+            spread({ by: axis, dir: "y", spacing: 12 }),
+            stack({ dir: "y" })
+          )
+          .mark(rect({ w: 12, h: "count", fill: "class" }))
+      )
+    )
+  )
+  .layer(ribbon({ opacity: 0.6 }));
+```
+
+- **Works as-is:** no. It throws
+  `TypeError: symbol is not iterable (cannot read property Symbol(Symbol.iterator))`
+  in `splitEntries`. The `spread` combinator calls a function child with its
+  data, and resolves any other child on its own. A `chart()` child is not a
+  function, so it resolves with its data still set to the
+  `PREVIOUS_LAYER_MARKS` symbol, and the inner `spread` tries to group the
+  symbol. `layer([...])` does pass its scope to a `chart()` child
+  (`m.usesPreviousLayerMarks() ? m.withData(d) : m`), and so does
+  `.mark(chart())`. The operator combinators built by `createOperator`
+  (`spread`, `stack`, `scatter`, ...) and the Porter-Duff combinators do not.
+- With the scope passed by hand (`(d) => chart(d)...`), the bars render, but
+  the fused `.layer(ribbon())` draws no ribbons
+  (`ProbeParallelSetsFusedRibbon`). The outer chart has no flow of its own,
+  so its one mark call makes one node, and the ribbon gets a bag of one.
+  This picture also shows the stack scale bug again: the class column (4
+  groups) is drawn shorter than the sex column (2 groups).
+
+Closest working spelling today (`ParallelSetsDirect`):
+
+```js
+// Rank of an end inside its category: the row's categories on the neighbor
+// axes, nearest first, as level indices (first-appearance order). Stored on
+// the row itself so every child sees the SAME row objects.
+const levels = Object.fromEntries(
+  AXES.map((a) => [a, [...new Set(titanic.map((r) => r[a]))]])
+);
+const titanicR = titanic.map((r) => {
+  const row = { ...r };
+  AXES.forEach((a, k) => {
+    const order = [...AXES.slice(0, k).reverse(), ...AXES.slice(k + 1)];
+    row[`rank_${a}`] = order.map((o) => levels[o].indexOf(r[o])).join("|");
+  });
+  return row;
+});
+
+chart(titanicR)
+  .mark(
+    spread(
+      { dir: "x", spacing: 120 },
+      AXES.map(
+        (axis) => (d) =>
+          chart(d)
+            .flow(
+              spread({ by: axis, dir: "y", spacing: 12 }),
+              spread({
+                by: field(`rank_${axis}`).sort(),
+                dir: "y",
+                spacing: 0,
+                axes: false,
+              })
+            )
+            .mark(rect({ w: 12, h: "count", fill: "class" }).name("ends"))
+      )
+    )
+  )
+  .layer(
+    chart(selectAll("ends"))
+      .flow(group({ by: (r) => r.datum[0] }))
+      .mark(ribbon({ opacity: 0.6, fill: "class" }))
+  )
+  .render(container, { w: 500, h: 400 });
+```
+
+- **Works as-is:** yes, with three changes from the target spelling.
+- **Workarounds:**
+  - `(d) => chart(d)` in place of `chart()`, to pass the scope by hand.
+  - The ribbon is an explicit tier over named ends, grouped by the row the
+    end was drawn from: `group({ by: (r) => r.datum[0] })`. No unpivot and
+    no `path` id: the three children read the same row objects, so a row's
+    three ends share one key.
+  - `spread({ spacing: 0 })` over a per-axis `rank_<axis>` in place of
+    `stack`, for two reasons: the stack scale bug, and the order. The rank
+    must be the level index, not the category text: with text the rank sorts
+    `Crew` before `First` while the category tier draws `First` first, and
+    the ribbons cross.
+- `ParallelSetsDirectInherit` is the same chart written with `chart()`
+  children wrapped in the story-local `inherit(...)`. It is pixel-identical,
+  which shows the only missing core behavior for the `chart()` spelling is
+  the combinator passing its scope (one line, the same as `layer`).
+
+### R2. Parallel coordinates (penguins, 4 numeric columns)
+
+Data: `src/data/penguins.ts`, rows with all four of `Beak Length (mm)`,
+`Beak Depth (mm)`, `Flipper Length (mm)`, `Body Mass (g)` (342 rows).
+
+Raw columns (`ProbeParallelCoordinatesSharedScale`):
+
+```js
+chart(pengs)
+  .mark(
+    spread(
+      { dir: "x", spacing: 120 },
+      DIMS.map(
+        (dim) => (d) =>
+          chart(d, { h: 250 })
+            .flow(scatter({ y: dim }))
+            .mark(circle({ r: 1.5, fill: "Species" }).name("pts"))
+      )
+    )
+  )
+  .layer(
+    chart(selectAll("pts"))
+      .flow(group({ by: (r) => r.datum[0] }))
+      .mark(line({ stroke: "Species", opacity: 0.3 }))
+  )
+  .render(container, { w: 500, h: 300 });
+```
+
+- **Works as-is:** no. The lines join correctly, but all four axes share
+  ONE y scale (0 to 6500). The single y axis is titled with all four
+  column names, and the three mm axes are flat along the bottom. `h: 250`
+  on each child chart changes nothing.
+- `ProbeSeparateChartsShareScale` checks the stronger case: two charts with
+  their OWN data (`chart(pengs, { h: 250 })`) side by side in a root
+  `spread`. They still share one y domain (the beak length points collapse
+  to one pixel row), and neither child chart draws an axis. This disagrees
+  with rule 3 of `internals/design/how-axes-work.md` ("Separate `chart()`
+  calls placed side by side are different specs, so their domains are
+  independent"). Either the doc or the code is wrong; worth an issue.
+
+Working version (`ParallelCoordinatesDirect`):
+
+```js
+const extent = Object.fromEntries(
+  DIMS.map((k) => {
+    const v = pengs.map((p) => p[k]);
+    return [k, [Math.min(...v), Math.max(...v)]];
+  })
+);
+const pengsN = pengs.map((p) => {
+  const row = { ...p };
+  for (const k of DIMS) {
+    const [lo, hi] = extent[k];
+    row[`n ${k}`] = (p[k] - lo) / (hi - lo);
+  }
+  return row;
+});
+
+chart(pengsN, { axes: false })
+  .mark(
+    spread(
+      { dir: "x", spacing: 120 },
+      DIMS.map(
+        (dim) => (d) =>
+          chart(d)
+            .flow(scatter({ y: `n ${dim}` }))
+            .mark(circle({ r: 1.5, fill: "Species" }).name("pts"))
+      )
+    )
+  )
+  .layer(
+    chart(selectAll("pts"))
+      .flow(group({ by: (r) => r.datum[0] }))
+      .mark(line({ stroke: "Species", opacity: 0.25 }))
+  )
+  .render(container, { w: 500, h: 300 });
+```
+
+- **Works as-is:** yes, as a DECLARED SHORTCUT: each axis reads a
+  normalized copy of its column, so the axes have no real ticks (they
+  would all read 0 to 1), and they are turned off. The right fix is a
+  per-child domain (an independent y scale per child chart); see Q1.
+- The normalized columns are added to the row objects BEFORE the chart, not
+  with a `derive` inside each child: a child-level `derive` that copies
+  rows would give each child different objects, and `r.datum[0]` would no
+  longer join them.
+
+### R3. Energy sankey (a list of nodes, each a pair of lists of links)
+
+Target spelling:
+
+```js
+chart(nodes)
+  .flow(
+    spread({ by: "depth", dir: "x", spacing: 100 }),
+    spread({ by: "name", dir: "y", spacing: 10 })
+  )
+  .mark((node) =>
+    spread({ dir: "x", spacing: 0 }, [
+      chart(links)
+        .flow(
+          filter((l) => l.target === node.name),
+          stack({ dir: "y" })
+        )
+        .mark(rect({ w: 6, h: "value" })),
+      chart(links)
+        .flow(
+          filter((l) => l.source === node.name),
+          stack({ dir: "y" })
+        )
+        .mark(rect({ w: 6, h: "value" })),
+    ])
+  )
+  .layer(ribbon({ opacity: 0.4 }));
+```
+
+Closest working spelling today (`SankeyDirect`):
+
+```js
+// depth and column order: sankeyPrep.ts, as in B3
+const eNodes = eOrder.map((name) => ({ name, depth: eDepth.get(name) }));
+const eRank = new Map(eOrder.map((n, i) => [n, i]));
+const bySourceRank = [...eLinks].sort(
+  (a, b) => eRank.get(a.source) - eRank.get(b.source)
+);
+const byTargetRank = [...eLinks].sort(
+  (a, b) => eRank.get(a.target) - eRank.get(b.target)
+);
+
+chart(eNodes, { axes: false })
+  .flow(
+    spread({
+      by: field("depth").sort(),
+      dir: "x",
+      spacing: 100,
+      alignment: "start",
+      axes: false,
+    }),
+    spread({
+      by: field("name").sort(eOrder),
+      dir: "y",
+      spacing: 10,
+      axes: false,
+    })
+  )
+  .mark((node) =>
+    spread({ dir: "x", spacing: 0, alignment: "start" }, [
+      chart(bySourceRank)
+        .flow(
+          filter((l) => l.target === node[0].name),
+          spread({ dir: "y", spacing: 0 })
+        )
+        .mark(rect({ w: 6, h: "value", fill: "#555" }).name("ends")),
+      chart(byTargetRank)
+        .flow(
+          filter((l) => l.source === node[0].name),
+          spread({ dir: "y", spacing: 0 })
+        )
+        .mark(rect({ w: 6, h: "value", fill: "#555" }).name("ends")),
+    ])
+  )
+  .layer(
+    chart(selectAll("ends"))
+      .flow(group({ by: (r) => r.datum[0] }))
+      .mark(ribbon({ opacity: 0.4, fill: "source", curve: Curve.bezier() }))
+  )
+  .render(container, { w: 960, h: 600, legend: false });
+```
+
+- **Works as-is:** yes. Same geometry as B3, from the d3 inputs (a nodes
+  list and a links list) with no unpivot and no ends table.
+- **Workarounds:**
+  - A function in `.mark()` receives the group's rows, a LIST, so the
+    node is `node[0]`, not `node`.
+  - `spread({ spacing: 0 })` in place of `stack`. With `stack`
+    (`ProbeSankeyDirectStack`) each column gets its own scale (the stack
+    scale bug again), so one column is drawn about 3x too tall and the
+    ribbon ends do not match.
+  - The end order is the order of the child's data: the links are
+    pre-sorted by the far node's rank (the same proxy as B3).
+  - The fused `.layer(ribbon())` cannot work here, for the reason in R1.
+    The explicit tier groups the ends by link object: each link was drawn
+    twice (as an out-end at its source and an in-end at its target), so its
+    two ends share one key.
+  - Without `chart(eNodes, { axes: false })` a "depth" axis with ticks 0 to
+    7 is drawn over the columns, although both spreads say `axes: false`.
+    The same flow in a `layer([...])` (the probe version of this story) drew
+    no axis. Minor; worth checking when the chart-boundary axes work lands.
+
+Nested-field variant (`SankeyNested`): each node carries list fields `in`
+and `out` holding the SAME link objects (d3-sankey's `node.targetLinks` /
+`node.sourceLinks`), already in far-end order.
+
+```js
+const eNested = nestJoin(eNodes, eLinks, {
+  in: { key: "target", sortBy: (l) => eRank.get(l.source) },
+  out: { key: "source", sortBy: (l) => eRank.get(l.target) },
+});
+
+chart(eNested, { axes: false })
+  .flow(/* the same two spreads */)
+  .mark((node) =>
+    spread({ dir: "x", spacing: 0, alignment: "start" }, [
+      chart(node[0].in)
+        .flow(spread({ dir: "y", spacing: 0 }))
+        .mark(rect({ w: 6, h: "value", fill: "#555" }).name("ends")),
+      chart(node[0].out)
+        .flow(spread({ dir: "y", spacing: 0 }))
+        .mark(rect({ w: 6, h: "value", fill: "#555" }).name("ends")),
+    ])
+  )
+  .layer(/* the same ribbon tier */);
+```
+
+- **Works as-is:** yes. What exists today for "the child's data is a field
+  of the parent row": a function in `.mark()` that reads the row and builds
+  the child chart from it (`chart(node[0].in)`). There is no
+  `chart(field("in"))`: `chart` takes rows or a ref, not a field. Inside a
+  scope-inheriting `chart()`, `derive((rows) => rows.flatMap((r) => r.in))`
+  does the same thing (used by `unnest` below).
+
+### Answers
+
+**Q1. Can a `chart()` child in mark/combinator position inherit its scope?
+Does each child get an independent scale?**
+
+- Inherits in `.mark(chart())` and as a `layer([...])` child. Does NOT
+  inherit as a child of `spread` / `stack` / `scatter` (any `createOperator`
+  combinator) or of the Porter-Duff combinators: it throws `symbol is not
+iterable`. The fix is the line `layer` already has, in the
+  `createOperator` combinator form. `inherit(...)` emulates it, and the
+  result is pixel-identical to passing `(d) => chart(d)` by hand.
+- No independent scales. Nested child charts share the parent's domains (as
+  documented), and so do separate charts with their own data side by side
+  (not as documented). `chart(d, { h })` does not make a domain boundary.
+  There is no syntax to ask for an independent child domain, so parallel
+  coordinates needs a per-axis normalization in the data, which loses the
+  axis ticks. This is the one real gap for parallel coordinates.
+
+**Q2. How can a child read its parent's row?**
+
+- A function in `.mark()` works: `.mark((node) => spread(..., [...]))`. It
+  receives the group's rows as a list, so the row is `node[0]`. The
+  combinator it returns is then resolved with no rows, so its children must
+  carry their own data (`chart(links)`, `chart(node[0].in)`).
+- A nested list field works through the same function
+  (`chart(node[0].in)`), or with no callback through an inheriting
+  `chart()` plus `derive((rows) => rows.flatMap((r) => r.in))`.
+- `createMark` and `join` were not needed. `resolve` is the Approach A
+  route (links resolved against named nodes), not this one.
+
+**Q3. Ribbon identity across child charts?**
+
+- Yes: "same datum = same ribbon" works, with zero core changes, as an
+  explicit tier over named ends:
+  `chart(selectAll("ends")).flow(group({ by: (r) => r.datum[0] })).mark(ribbon())`.
+  Names registered inside child charts (inside a combinator, inside a
+  `.mark()` function) are visible to a sibling `.layer(...)` tier and to a
+  sibling `layer([...])` child. No path id or unpivot is needed.
+- Three sharp edges:
+  1. A `by` function receives the REF, not the row, and `ref.datum` is a
+     bag. `group({ by: (r) => r })` silently makes one group per end and
+     draws nothing (`ProbeIdentityByRef`). `r.datum[0]` is the row. This is
+     the same gap as `filter` on refs (B2), and it contradicts the
+     `projectBy` doc comment ("A key function is applied to each ROW the
+     walk reaches, never to the ref"): `splitKeyFn` returns a key function
+     as-is.
+  2. Identity is object identity, so every child must see the same row
+     objects. Any copy (a `derive` that maps rows) breaks the join.
+  3. The fused `.layer(ribbon())` cannot see across children: the
+     outer chart has no flow, so there is nothing to split.
+
+**Q4.** Skipped (not trivial; the chord findings above stand).
+
+### Callback-free spellings (emulated)
+
+**Expression expansion** (polars `pl.col(["a", "b"])`, dplyr `across`). The
+spelling to show:
+
+```js
+const axes = cols(["class", "sex", "survived"]);
+chart(titanic)
+  .mark(
+    spread({ dir: "x", spacing: 120 }, [
+      chart()
+        .flow(spread({ by: axes, dir: "y", spacing: 12 }), stack({ dir: "y" }))
+        .mark(rect({ w: 12, h: "count", fill: "class" })),
+    ])
+  )
+  .layer(ribbon({ opacity: 0.6 }));
+```
+
+What `ParallelSetsExpand` renders (EMULATED; `expand` is `.map` plus
+`inherit`, and the template is still a function of the column):
+
+```js
+const axes = cols(["class", "sex", "survived"]);
+chart(titanicR)
+  .mark(
+    spread(
+      { dir: "x", spacing: 120 },
+      expand(axes, (axis) =>
+        chart()
+          .flow(
+            spread({ by: axis, dir: "y", spacing: 12 }),
+            spread({
+              by: field(`rank_${axis}`).sort(),
+              dir: "y",
+              spacing: 0,
+              axes: false,
+            })
+          )
+          .mark(rect({ w: 12, h: "count", fill: "class" }).name("ends"))
+      )
+    )
+  )
+  .layer(
+    chart(selectAll("ends"))
+      .flow(group({ by: sameRow }))
+      .mark(ribbon({ opacity: 0.6, fill: "class" }))
+  );
+```
+
+It is pixel-identical to `ParallelSetsDirect`. What real support would need:
+
+1. A multi-column value (`cols([...])`) that is legal wherever one column
+   is (`by`, a channel), and an expansion rule: a combinator child that
+   mentions an n-column value stands for n children, one per column, the
+   way a polars expression with `pl.col([...])` stands for n expressions.
+   If two multi-column values meet in one child they must have the same
+   length and zip (polars raises on a mismatch).
+2. Every expression that depends on the column must expand with it. Here
+   that is the per-axis end order (`rank_<axis>`), which the emulation
+   still names with a template string. In a real version the end order
+   should not be user data at all (see Approach A's "far end's placed
+   position"), so this need may go away.
+3. The `inherit` behavior in the combinator (Q1).
+4. A rule for the ribbon. Under expansion the children are generated, so
+   "same datum = same ribbon" is the natural default for a ribbon over a
+   record-shaped combinator: the fused `.layer(ribbon())` could group the
+   ends by row identity when its chart's mark is a combinator whose
+   children read the same rows. That is the case R1 shows draws nothing
+   today.
+5. Expansion only covers a record of columns of ONE table. The sankey's
+   pair is (in, out), two different subsets of the links, so it is not a
+   column expansion; it needs the next mechanism.
+
+**Nested list fields as child data.** The sankey written with node.in /
+node.out and no callback that reads the parent row (`SankeyNestedUnnest`,
+EMULATED: `inherit` and `unnest` are story-local):
+
+```js
+chart(eNested, { axes: false })
+  .flow(
+    spread({
+      by: field("depth").sort(),
+      dir: "x",
+      spacing: 100,
+      alignment: "start",
+      axes: false,
+    }),
+    spread({
+      by: field("name").sort(eOrder),
+      dir: "y",
+      spacing: 10,
+      axes: false,
+    })
+  )
+  .mark(
+    spread(
+      { dir: "x", spacing: 0, alignment: "start" },
+      inherit([
+        chart()
+          .flow(unnest("in"), spread({ dir: "y", spacing: 0 }))
+          .mark(rect({ w: 6, h: "value", fill: "#555" }).name("ends")),
+        chart()
+          .flow(unnest("out"), spread({ dir: "y", spacing: 0 }))
+          .mark(rect({ w: 6, h: "value", fill: "#555" }).name("ends")),
+      ])
+    )
+  )
+  .layer(
+    chart(selectAll("ends"))
+      .flow(group({ by: sameRow }))
+      .mark(ribbon({ opacity: 0.4, fill: "source", curve: Curve.bezier() }))
+  );
+```
+
+`unnest(f)` is `derive((rows) => rows.flatMap((r) => r[f]))`. It keeps the
+link objects themselves, so the ribbon join still works. The picture is
+identical to `SankeyDirect`. A real version would read
+`chart(field("in"))` or `.flow(unnest("in"))`.
+
+The flat-table helper that builds the nested nodes (`nestJoin` in the
+story file):
+
+```js
+const eNested = nestJoin(eNodes, eLinks, {
+  in: { key: "target", sortBy: (l) => eRank.get(l.source) },
+  out: { key: "source", sortBy: (l) => eRank.get(l.target) },
+});
+```
+
+Its prior art: dplyr `nest_join(nodes, links, by = c(name = "target"),
+name = "in")`, and polars
+`links.group_by("target").agg(pl.all())` joined back onto the nodes (or
+`pl.struct(pl.all()).alias("in")` inside the `agg`). Both put the matching
+rows in a list column. For the ribbon join to work the list must hold the
+SAME link objects in both the `in` of the target and the `out` of the
+source. In JS that is free (references); a columnar Python or IR version
+copies, so it would need a link id to group by instead of object identity.

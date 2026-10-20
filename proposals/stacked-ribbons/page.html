@@ -447,6 +447,12 @@
     keeps one stacking mechanism, and realizes the direction recorded in #745:
     ribbons one-to-one per row, plus per-edge span allocation.
   </div>
+  <p class="small" style="margin-top: 12px; max-width: 82ch">
+    <strong>Update after review:</strong> <a href="#round2">Round 2</a>
+    explores syntax that follows the data's shape (a record becomes direct-style
+    children, a list becomes a flow), with rendered prototypes and four new
+    decisions (9 to 12).
+  </p>
 
   <h2>Terms</h2>
   <dl class="terms">
@@ -1405,6 +1411,319 @@ chart(rows).flow(scatter({ by: "year", x: "year" }))
     </div>
   </div>
 
+  <h2 id="round2">Round 2: syntax that follows the data</h2>
+  <div class="approach-head">
+    <span class="pill">Exploring</span
+    ><span class="small"
+      >From the review discussion. Rendered with today's API; callback-free
+      spellings are emulated with story-local helpers and marked so.</span
+    >
+  </div>
+  <div class="prose">
+    <p>
+      The shape of the data picks the syntax. <code>spread</code> already has
+      both forms, so nothing new is needed for the rule itself:
+    </p>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Data shape</th>
+          <th>Syntax</th>
+          <th>Example</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>a <strong>list</strong> (rows, groups)</td>
+          <td>a flow tier with <code>by</code>: the operator iterates</td>
+          <td>the categories on one axis; the links at one node</td>
+        </tr>
+        <tr>
+          <td>a <strong>record</strong> (a fixed set of fields)</td>
+          <td>the direct-style combinator, one child per field</td>
+          <td>
+            the axes of parallel sets (a record of columns); a node's (in, out)
+            pair
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose">
+    Parallel sets is a record of axes, each a list of categories, each a list of
+    rows. A sankey is a list of nodes, each a pair (in-links, out-links), each a
+    list of links: d3-sankey's <code>node.targetLinks</code> and
+    <code>node.sourceLinks</code>. A sankey tree is the same thing recursively.
+    Rows are never copied, so every end of one row is the same datum, and "same
+    datum, same ribbon" pairs them with no unpivot and no id. The PL precedent
+    is "the template follows the data definition" from
+    <em>How to Design Programs</em>.
+  </p>
+
+  <h3>Parallel sets</h3>
+  <div class="ex">
+    <div>
+      <div class="code-label">Target spelling</div>
+      <pre><code>chart(titanic).mark(
+  spread({ dir: "x", spacing: 120 }, ["class", "sex", "survived"].map((axis) =>
+    chart().flow(spread({ by: axis, dir: "y", spacing: 12 }), stack({ dir: "y" }))
+      .mark(rect({ w: 12, h: "count", fill: "class" }))))
+).layer(ribbon({ opacity: 0.6 }))</code></pre>
+      <div class="code-label">Closest that works today</div>
+      <pre><code>chart(titanicR)   // rows carry a per-axis end order, rank_&lt;axis&gt;
+  .mark(spread({ dir: "x", spacing: 120 }, AXES.map((axis) => (d) =>
+    chart(d)
+      .flow(spread({ by: axis, dir: "y", spacing: 12 }),
+            spread({ by: field(`rank_${axis}`).sort(), dir: "y", spacing: 0 }))
+      .mark(rect({ w: 12, h: "count", fill: "class" }).name("ends")))))
+  .layer(chart(selectAll("ends"))
+    .flow(group({ by: (r) =&gt; r.datum[0] }))      // same row = same ribbon
+    .mark(ribbon({ opacity: 0.6, fill: "class" })))</code></pre>
+      <p class="small">
+        Three changes from the target: <code>(d) =&gt; chart(d)</code> because a
+        <code>chart()</code> child of <code>spread</code> does not inherit its
+        scope (it throws; <code>layer</code> already does this in one line); an
+        explicit ribbon tier grouped by the source row; and
+        <code>spread({ spacing: 0 })</code> instead of <code>stack</code> (the
+        stack scale bug).
+      </p>
+    </div>
+    <figure>
+      <div class="plate crop-m">
+        <img
+          src="img/direct-parallel-sets.png"
+          alt="Parallel sets in direct style"
+        />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Cleaner than round 1: the end order
+        uses category position, not text, so fewer ribbons cross.
+      </figcaption>
+    </figure>
+  </div>
+
+  <h3>Parallel coordinates (penguins, four measurements)</h3>
+  <div class="ex">
+    <div>
+      <pre><code>chart(penguins).mark(
+  spread({ dir: "x", spacing: 120 }, DIMS.map((dim) => (d) =>
+    chart(d).flow(scatter({ y: dim })).mark(circle({ r: 1.5, fill: "Species" }).name("pts"))))
+).layer(chart(selectAll("pts"))
+  .flow(group({ by: (r) =&gt; r.datum[0] }))
+  .mark(line({ stroke: "Species", opacity: 0.3 })))</code></pre>
+      <p class="small">
+        The lines join correctly, but all four axes share one y scale (0 to 6500
+        g), so the three mm axes lie flat. No syntax asks for an independent
+        child scale today, and even two separate charts side by side share one
+        domain, which contradicts rule 3 of <code>how-axes-work.md</code>. The
+        working render uses per-axis normalized columns with ticks turned off: a
+        declared shortcut.
+      </p>
+    </div>
+    <div class="ex" style="margin-top: 0; grid-template-columns: 1fr 1fr">
+      <figure>
+        <div class="plate crop-l">
+          <img
+            src="img/direct-parallel-coordinates-shared-scale.png"
+            alt="Parallel coordinates with one shared scale"
+          />
+        </div>
+        <figcaption>
+          <span class="tag fail">Shared scale</span>Raw columns: one y scale for
+          all four axes.
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="plate crop-l">
+          <img
+            src="img/direct-parallel-coordinates.png"
+            alt="Parallel coordinates with normalized columns"
+          />
+        </div>
+        <figcaption>
+          <span class="tag sketch">Shortcut</span>Normalized columns; no real
+          ticks.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <h3>Sankey: a list of nodes, each a pair of link lists</h3>
+  <div class="ex">
+    <div>
+      <div class="code-label">Works today (callback reads the node)</div>
+      <pre><code>chart(nodes)
+  .flow(spread({ by: field("depth").sort(), dir: "x", spacing: 100 }),
+        spread({ by: field("name").sort(order), dir: "y", spacing: 10 }))
+  .mark((node) =&gt; spread({ dir: "x", spacing: 0 }, [
+    chart(node[0].in).flow(spread({ dir: "y", spacing: 0 })).mark(rect({ w: 6, h: "value" }).name("ends")),
+    chart(node[0].out).flow(spread({ dir: "y", spacing: 0 })).mark(rect({ w: 6, h: "value" }).name("ends")),
+  ]))
+  .layer(chart(selectAll("ends"))
+    .flow(group({ by: (r) =&gt; r.datum[0] }))      // a link's two ends share its object
+    .mark(ribbon({ opacity: 0.4, fill: "source" })))</code></pre>
+      <p class="small">
+        Starts from the d3 inputs (nodes and links), with no unpivot and no ends
+        table. <code>nodes</code> gets <code>in</code>/<code>out</code> list
+        fields holding the same link objects from a nest join (dplyr
+        <code>nest_join</code>; polars
+        <code>group_by().agg(pl.all())</code> then a join). A filter on
+        <code>links</code> inside the callback works too. The function in
+        <code>.mark()</code> receives the group's rows, so the node is
+        <code>node[0]</code>.
+      </p>
+    </div>
+    <figure>
+      <div class="plate crop-m">
+        <img
+          src="img/direct-sankey-nested.png"
+          alt="Energy sankey built from nested node fields"
+        />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Same geometry as round 1's energy
+        sankey; only the color order differs.
+      </figcaption>
+    </figure>
+  </div>
+
+  <h3>Removing the callback: the equivalent of <code>group({ by })</code></h3>
+  <p class="prose">
+    The <code>.map(callback)</code> hides two different iterations. Each has a
+    callback-free precedent, and both render pixel-identical to the versions
+    above (emulated with story-local helpers).
+  </p>
+  <div class="ex">
+    <div>
+      <div class="code-label">1. Over columns: expression expansion</div>
+      <pre><code>const axes = cols(["class", "sex", "survived"]);
+chart(titanic).mark(spread({ dir: "x", spacing: 120 }, [
+  chart().flow(spread({ by: axes, dir: "y", spacing: 12 }), stack({ dir: "y" }))
+    .mark(rect({ w: 12, h: "count", fill: "class" })),
+])).layer(ribbon({ opacity: 0.6 }))</code></pre>
+      <p class="small">
+        A child that mentions a multi-column value stands for one child per
+        column, the way polars expands
+        <code>pl.col(["a", "b"]).sum()</code> into one expression per column
+        (dplyr: <code>across</code>). The expansion happens only in a
+        combinator's child list, so a tuple of columns becomes a tuple of
+        children. Two multi-column values in one child must have the same length
+        and zip.
+      </p>
+    </div>
+    <div>
+      <div class="code-label">2. Over a parent's sub-list: nested data</div>
+      <pre><code>chart(nodes)   // { name, depth, in: [links], out: [links] }
+  .flow(spread({ by: "depth", dir: "x", spacing: 100 }),
+        spread({ by: "name", dir: "y", spacing: 10 }))
+  .mark(spread({ dir: "x", spacing: 0 }, [
+    chart(field("in")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
+    chart(field("out")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
+  ]))
+  .layer(ribbon({ opacity: 0.4 }))</code></pre>
+      <p class="small">
+        A child's data is a list field of the parent row, as in d3's nested
+        selections (<code>selection.data(d =&gt; d.children)</code>). The
+        emulation spells it <code>chart().flow(unnest("in"), ...)</code>. A
+        sankey tree is this rule applied recursively to a
+        <code>children</code> field.
+      </p>
+    </div>
+  </div>
+
+  <h3>What round 2 would need</h3>
+  <ol class="prose" style="max-width: 86ch">
+    <li>
+      <strong>Combinator scope.</strong> <code>spread</code>,
+      <code>stack</code> and the other operator combinators should pass their
+      scope to a <code>chart()</code> child, as <code>layer</code> does. One
+      line; it is a bug fix more than a design change.
+    </li>
+    <li>
+      <strong>Independent child scales.</strong> Children that read different
+      fields need their own domains (parallel coordinates). This is the one real
+      gap, and it touches the axis rules (#1032 chrome at chart boundaries).
+    </li>
+    <li>
+      <strong>Ribbon identity by default.</strong> A ribbon over a record-shaped
+      combinator joins ends that came from the same datum, so
+      <code>.layer(ribbon())</code> works without the explicit
+      <code>selectAll</code> + <code>group</code> tier.
+    </li>
+    <li>
+      <strong>Python and the wire.</strong> Object identity does not survive
+      serialization: a columnar Python or IR version copies rows. There the join
+      needs a row or link id after all, so <code>unpivot</code>'s
+      <code>id</code> comes back in another form.
+    </li>
+    <li>
+      <strong>Bugs found:</strong> a <code>by</code> function receives the ref
+      rather than the row (contradicting the <code>projectBy</code> doc
+      comment), so <code>group({ by: r =&gt; r })</code> silently draws nothing;
+      a "depth" axis appears despite <code>axes: false</code> in the
+      <code>.layer</code> form; the stack scale bug again.
+    </li>
+  </ol>
+
+  <h3>Round 1 vs round 2</h3>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>Round 1: ends are rows</th>
+          <th>Round 2: syntax follows the data</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Data you start from</td>
+          <td>reshaped long (<code>unpivot</code>)</td>
+          <td>as it is: wide rows, or d3's nodes + links (plus a nest join)</td>
+        </tr>
+        <tr>
+          <td>Ribbon identity</td>
+          <td>an <code>id</code> column, <code>ribbon({ by })</code></td>
+          <td>same datum, same ribbon (an id again in Python)</td>
+        </tr>
+        <tr>
+          <td>Per-axis types and scales</td>
+          <td>lost: one mixed <code>category</code> column</td>
+          <td>kept, once child scales exist</td>
+        </tr>
+        <tr>
+          <td>New core</td>
+          <td><code>unpivot</code>, <code>ribbon({ by, at })</code></td>
+          <td>
+            combinator scope, child scales, ribbon default, <code>cols</code>,
+            nested child data, <code>at</code>
+          </td>
+        </tr>
+        <tr>
+          <td>Parallel coordinates</td>
+          <td>no (mixed types)</td>
+          <td>yes, once child scales exist</td>
+        </tr>
+        <tr>
+          <td>Chord</td>
+          <td>yes, with <code>at</code></td>
+          <td>same (each group is a list of matrix cells)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose">
+    <strong>My read:</strong> round 2 is the better match for what users have
+    (wide tables, d3-style node and link lists) and keeps types on fields, which
+    round 1 cannot. Its cost is three core pieces, of which independent child
+    scales is the only real design work. Round 1's <code>unpivot</code> stays as
+    the converter for data that arrives in the other shape. I'd pick round 2 if
+    you're comfortable with expression expansion in child lists. Otherwise,
+    round 2 with the explicit <code>.map</code> still works today.
+  </p>
+
   <h2>Why B</h2>
   <ul class="prose" style="max-width: 84ch">
     <li>
@@ -1495,6 +1814,34 @@ chart(rows).flow(scatter({ by: "year", x: "year" }))
     </li>
     <li>
       <span>A tree-ends helper for sankey trees: here, or with #738?</span>
+    </li>
+    <li>
+      <span
+        >Round 2: make "syntax follows the data" the primary spelling (a record
+        becomes direct-style children, a list becomes a flow), keeping
+        <code>unpivot</code> only as a converter?</span
+      >
+    </li>
+    <li>
+      <span
+        >Expression expansion: may a combinator child that mentions
+        <code>cols([...])</code> stand for one child per column, as polars
+        expands <code>pl.col([...])</code>?</span
+      >
+    </li>
+    <li>
+      <span
+        >Nested child data: <code>chart(field("in"))</code> (or
+        <code>unnest</code>) for a parent's list field, plus a
+        <code>nestJoin</code> helper to build it from flat tables?</span
+      >
+    </li>
+    <li>
+      <span
+        >Independent child scales: should direct-style children that read
+        different fields get their own domains by default, or by an explicit
+        option?</span
+      >
     </li>
   </ol>
 
