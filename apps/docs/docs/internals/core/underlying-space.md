@@ -533,10 +533,11 @@ each inherent to what the origin states are:
 - **A plot claim beside the claim**: the claim folds also compute the
   claim of the plot, which leaves out dressing (a label placed beside a
   `ref` stand-in for its mark) and the chrome rings of a nested node. A
-  chain is laid by every part but reaches only as far as each part's plot,
-  or its stand-ins when it has any (`chainFold`'s `reaches`,
-  `composePlanExtents`' `plot`); an align counts the plot of a child it
-  seats at its own data or origin. A chart with a size of its own maps its plot
+  chain of parts of the plot lays them by their plots, so dressing never
+  moves the parts it dresses: it reaches past the chain, or sits in the gaps
+  (`composePlanExtents`' `parts`, `chainFold`'s `reaches`). The plot of a
+  chain with a stand-in reaches only as far as its stand-ins; an align
+  counts the plot of a child it seats at its own data or origin. A chart with a size of its own maps its plot
   into that size (see
   [Chrome gutters](/internals/layout/passes#chrome-gutters)).
 - **Alignment establishes a baseline; it does not pin**: aligning or

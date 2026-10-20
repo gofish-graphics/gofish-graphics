@@ -790,12 +790,24 @@ report their size).
   its constraints place leaves out the dressing (`placeByClaims`' plot
   hull). A node that wears chrome has its content's plot as its plot: its
   rings are never plot, so a grouped bar chart's inner row of category
-  labels adds around the outer chart's plot, as its own axes do. A chain is
-  laid by every part's whole claim but reaches only as far as each part's
-  plot (`chainFold`'s `reaches`), and a chain with a stand-in only as far as
-  its stand-ins. So a label that hangs between two rows of a spread takes
-  room between them and is part of the plot, and one that hangs off the
-  last row is not. An align counts the plot of a child it seats at its own
+  labels adds around the outer chart's plot, as its own axes do.
+- **Dressing never moves the parts it dresses.** Labels are a layer applied
+  after the spread: they take room in the chart, but do not change how the
+  spread lays out its parts. A chain of parts of the plot lays them by their
+  plots, in its claim (`composePlanExtents` lays each dressed part's plot
+  claim, and the whole part only reaches) and in its layout (a chain edge
+  reads each part's anchors off `GoFishNode.localPlotSpan`, which is a
+  ring's box less its gutters, or the hull of a layer's children that are
+  no dressing). So the spacing is between plots, and σ and the parts' sizes
+  ignore the dressing. A label between two rows sits in the gap, and
+  overlaps where it does not fit (#1171); a label past the first or last
+  row reaches past the chain, into the chart's margin. A chain that slices
+  its room (facet panels) gives each part its slice as its plot, and the
+  part's chrome adds around it (`guttersAroundPlot`). A chain edge to a
+  part that is no part of the plot (dressing, ink, a ring's chrome, a
+  stand-in) clears that part's whole box, so a ring still seats its title
+  past its tick labels. The plot of a chain with a stand-in reaches only as
+  far as its stand-ins (`chainFold`'s `reaches`). An align counts the plot of a child it seats at its own
   data or at its origin, and the whole of a child it places by its box
   (`overlayClaim`). A child that reads y the other
   way has its plot read reflected within its box. The gutters of a chart

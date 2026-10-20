@@ -43,8 +43,9 @@ async function main() {
 
   console.log("\n# a chart's content gets no less than no room");
   {
-    // Three nested charts in 60 px of height: each has 13.3 px, less than
-    // its chrome's gutters, so its content gets 0 px, never a negative size.
+    // Three nested charts in 24 px of height: the spacing and the label row
+    // past the last chart need more, so each content gets 0 px, never a
+    // negative size. (The label rows between the charts sit in the gaps.)
     const rows = ["a", "b", "c"].flatMap((g) =>
       ["p", "q"].map((i, j) => ({ g, i, v: j + 1 }))
     );
@@ -66,7 +67,7 @@ async function main() {
         handed.push([...size]);
       return layout.call(this, size, ...rest);
     };
-    const data = await runLayout({ w: 200, h: 60 }, node).finally(
+    const data = await runLayout({ w: 200, h: 24 }, node).finally(
       () => (proto.layout = layout)
     );
     check(
@@ -156,6 +157,24 @@ async function main() {
     );
     const tallest = Math.max(...bars.map((r) => r.h ?? 0));
     check("the tallest bar fills the 200 px plot", close(tallest, 200, 1e-3), tallest);
+  }
+
+  console.log("\n# labels between the rows of a spread never move the rows");
+  {
+    // Three rows 30 px apart in 150 px, each labeled below: the rows are
+    // laid by their bars, (150 - 2 * 30) / 3 = 30 px each, and the labels
+    // sit in the gaps and past the last row.
+    const rows = ["a", "b", "c"].map((g) => ({ g, v: 1 }));
+    const dl = await chart(rows, { axes: false, legend: false, w: 100, h: 150 })
+      .flow(spread({ by: "g", dir: "y", spacing: 30 }))
+      .mark(rect({ w: "v" }).label("v", { position: "outset-bottom" }))
+      .toDisplayList();
+    const bars = items(dl).filter((i) => i.kind === "rect");
+    check(
+      "every row is 30 px tall",
+      bars.length === 3 && bars.every((r) => close(r.h, 30, 1e-3)),
+      bars.map((r) => r.h)
+    );
   }
 
   report();

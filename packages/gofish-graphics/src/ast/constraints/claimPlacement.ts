@@ -91,6 +91,9 @@ export type ClaimPlacement = {
   /** The children that draw on the axis but are ink there: they take no
    *  room. (A stand-in draws nothing, so it is not among them.) */
   ink: Set<number>;
+  /** The children that are dressing there (see {@link placeByClaims}):
+   *  they take room, but are no part of the plot. */
+  dressing: Set<number>;
   /** Each child's box in the layer's frame, where the claim walk knows it
    *  (a child whose size or place depends on a share of the layer's room,
    *  or on a node only layout places, has none). Built when first read. */
@@ -533,7 +536,7 @@ export function placeByClaims(
         boxes.set(i, { lo: form(i, 0, 1), hi: form(i, 1, 1) });
     return boxes;
   };
-  if (hullOf.length === 0) return { ink, boxes: boxesOf };
+  if (hullOf.length === 0) return { ink, dressing, boxes: boxesOf };
   const hullOver = (is: number[]): Extent =>
     Extent(
       Monotonic.envelope(is.map((i) => form(i, 1, 1))),
@@ -543,6 +546,7 @@ export function placeByClaims(
   const plotOf = hullOf.filter((i) => !dressing.has(i));
   return {
     ink,
+    dressing,
     boxes: boxesOf,
     hull,
     plot:

@@ -208,6 +208,9 @@ export type ClaimWalk = {
   /** Per axis, the indices of its children that are ink there
    *  (`placeByClaims`), which its claim and box leave out. */
   ink: [Set<number>, Set<number>];
+  /** Per axis, the indices of its children that are dressing there
+   *  (`placeByClaims`): they take room, but are no part of its plot. */
+  dressing: [Set<number>, Set<number>];
   /** Per axis, where the claim walk places each of its children in its
    *  frame (`placeByClaims`), for a node deep inside it that a ref or a
    *  label reads (`placementIn`). */
@@ -258,6 +261,9 @@ export type Placeable = {
    *  uses this to express every anchor as `absoluteMin + constant`, including
    *  `baseline` for asymmetric boxes such as text and negative bars. */
   localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
+  /** Where its plot lies in its local frame, when that is not its whole box
+   *  (see `GoFishNode.localPlotSpan`). A chain lays its parts by it. */
+  localPlotSpan?: (axis: 0 | 1) => [number, number] | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
   /** Write an axis extent from owned bbox keys (the size-setting primitive
    *  — `span` and an authoritative `position` pin go through it). Optional
@@ -1651,6 +1657,7 @@ export class GoFishNode {
     }
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
+    this._plotSpan = [undefined, undefined];
     const { intrinsicDims, transform, renderData } = this._layout(
       size,
       orientScales(scales, direction, parentDirection),
@@ -1793,6 +1800,80 @@ export class GoFishNode {
    *  accumulates the parent-frame translate up/down the tree to position a ref. */
   public projectedTranslate(dir: Direction): number | undefined {
     return this._projectTranslate(dir);
+  }
+
+  /** {@link localPlotSpan}'s memo, per axis, cleared when it is laid out
+   *  (`null`: its plot is its box). */
+  private _plotSpan: [
+    [number, number] | null | undefined,
+    [number, number] | null | undefined,
+  ] = [undefined, undefined];
+
+  /**
+   * Where its plot lies on `axis` in its local frame, once laid out: its
+   * box without its dressing and chrome (see {@link resolvePlotExtent}), or
+   * undefined when that is its whole box. A node that wears chrome has its
+   * content's; a layer has the hull of its children that are no dressing
+   * there, each at its own plot. A chain lays its parts by their plots
+   * (`anchorOffset`), so dressing never moves the parts it dresses (#1032).
+   */
+  public localPlotSpan(axis: 0 | 1): [number, number] | undefined {
+    const memo = this._plotSpan[axis];
+    if (memo !== undefined) return memo ?? undefined;
+    const value = this.computePlotSpan(axis);
+    this._plotSpan[axis] = value ?? null;
+    return value;
+  }
+
+  private computePlotSpan(axis: 0 | 1): [number, number] | undefined {
+    // A child's plot in this node's frame, or its box when that is its plot.
+    // `c` as the node it is a child of sees it (`orientView`).
+    const seen = (c: GoFishNode): Placeable =>
+      orientView(c, yDirection(c.parent));
+    // A child's plot in its parent's frame, or its box when that is its
+    // plot.
+    const inFrame = (
+      c: Placeable,
+      plot: [number, number] | undefined
+    ): [number, number] | undefined => {
+      const { min, max } = c.dims[axis];
+      if (min === undefined || max === undefined) return undefined;
+      if (plot === undefined) return [Math.min(min, max), Math.max(min, max)];
+      const shift = min - (c.localAnchor?.(axis, "min") ?? 0);
+      return [plot[0] + shift, plot[1] + shift];
+    };
+    const plotOf = (c: GoFishNode) => {
+      const v = seen(c);
+      return inFrame(v, v.localPlotSpan?.(axis));
+    };
+    if (this.chrome !== undefined) {
+      // Its box less its chrome's gutters, which its layout read off its
+      // claims (`chromeGutters`), in its axis order.
+      const min = this.localAnchor(axis, "min");
+      const max = this.localAnchor(axis, "max");
+      if (min === undefined || max === undefined) return undefined;
+      const [start, end] = this.chromeGutters(axis);
+      const up = axis === 1 && this.yFrame.direction !== 1;
+      return up ? [min + end, max - start] : [min + start, max - end];
+    }
+    const walk = this.claimWalk;
+    const out = (i: number) =>
+      walk?.dressing[axis].has(i) === true || walk?.ink[axis].has(i) === true;
+    const own = this.children.map((c) =>
+      c instanceof GoFishNode ? c.localPlotSpan(axis) : undefined
+    );
+    if (!this.children.some((_, i) => out(i)) && own.every((p) => !p))
+      return undefined;
+    let lo = Infinity;
+    let hi = -Infinity;
+    this.children.forEach((c, i) => {
+      if (out(i) || !(c instanceof GoFishNode)) return;
+      const span = plotOf(c);
+      if (span === undefined) return;
+      lo = Math.min(lo, span[0]);
+      hi = Math.max(hi, span[1]);
+    });
+    return lo <= hi ? [lo, hi] : undefined;
   }
 
   public localAnchor(axis: FancyDirection, anchor: Anchor): number | undefined {

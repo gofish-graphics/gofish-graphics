@@ -229,6 +229,14 @@ function applyRelationalZBelowDefaults(
 
 const sum = ([a, b]: [number, number]) => a + b;
 
+/** Whether `node` is a ring of chrome (`GoFishNode.chrome`): a layer whose
+ *  first child is the ring inside it and whose other children are chrome. */
+const isRing = (node: GoFishNode): boolean => {
+  for (let o: GoFishNode | undefined = node; o !== undefined; o = o.parent)
+    if (o.chrome?.rings.includes(node)) return true;
+  return false;
+};
+
 /** `child`'s plot claim (`GoFishNode.resolvePlotExtent`) in `parent`'s axis
  *  order. A child that reads y the other way is read reflected: its box is
  *  the same, and its plot lies at the other end of it. */
@@ -338,6 +346,8 @@ export const layer = createNodeOperatorSequential(
     // Per axis, the children that are ink there (`placeByClaims`): they
     // draw, but take no room in the claim, nor in the box.
     const inkChildren: [Set<number>, Set<number>] = [new Set(), new Set()];
+    // Per axis, the children that are dressing there (`placeByClaims`).
+    const dressingChildren: [Set<number>, Set<number>] = [new Set(), new Set()];
     // Where each child that is a `ref` stand-in has its target land in this
     // layer's frame on `axis` (`placementIn`), by child index.
     const standInPlacements = (axis: 0 | 1): (Placement | undefined)[] =>
@@ -684,6 +694,7 @@ export const layer = createNodeOperatorSequential(
           ] = [undefined, undefined];
           for (const axis of [0, 1] as const) {
             inkChildren[axis] = new Set();
+            dressingChildren[axis] = new Set();
             if (modes[axis] !== "placed" || claimPlaced[axis].size === 0)
               continue;
             const p = placeChildren(
@@ -693,6 +704,7 @@ export const layer = createNodeOperatorSequential(
             );
             placements[axis] = p;
             inkChildren[axis] = p.ink;
+            dressingChildren[axis] = p.dressing;
             const session = node.tryGetRenderSession();
             if (p.ink.size > 0 && session !== undefined)
               (session.inkLayers ??= new Set()).add(node);
@@ -731,6 +743,27 @@ export const layer = createNodeOperatorSequential(
           const reflected = node.children.map(
             (c) => c.yFrame.direction !== node.yFrame.direction
           );
+          // Each child's plot claim, and what a chain reads to lay it
+          // (`composePlanExtents`' `parts`).
+          const childPlots = applyNestExtentPlan(
+            node.children.map((c) =>
+              c instanceof GoFishNode ? plotIn(c, node) : c.resolveExtent()
+            ),
+            t.effectiveChildren,
+            t.nestPlan,
+            fillsRoom
+          );
+          const ring = isRing(node);
+          const parts = {
+            plots: childPlots,
+            dressed: node.children.map(
+              (c) =>
+                c instanceof GoFishNode &&
+                c.resolvePlotExtent() !== c.resolveExtent()
+            ),
+            standIn: node.children.map((c) => c instanceof GoFishRef),
+            chrome: node.children.map((_, i) => ring && i > 0),
+          };
           const fold =
             t.plan !== undefined && t.composed !== undefined
               ? composePlanExtents(
@@ -738,7 +771,9 @@ export const layer = createNodeOperatorSequential(
                   t.composed,
                   effectiveExtents,
                   t.effectiveChildren,
-                  reflected
+                  reflected,
+                  parts,
+                  false
                 )
               : undefined;
           constraintBudget = fold?.budget;
@@ -762,14 +797,6 @@ export const layer = createNodeOperatorSequential(
                 c.resolvePlotExtent() === c.resolveExtent()
             ) && placements.every((p) => p === undefined || p.plot === p.hull);
           const plotOf = () => {
-            const childPlots = applyNestExtentPlan(
-              node.children.map((c) =>
-                c instanceof GoFishNode ? plotIn(c, node) : c.resolveExtent()
-              ),
-              t.effectiveChildren,
-              t.nestPlan,
-              fillsRoom
-            );
             return claimFrom(
               childPlots,
               modes.includes("fold")
@@ -779,10 +806,8 @@ export const layer = createNodeOperatorSequential(
                     effectiveExtents,
                     t.effectiveChildren,
                     reflected,
-                    {
-                      extents: childPlots,
-                      standIn: node.children.map((c) => c instanceof GoFishRef),
-                    }
+                    parts,
+                    true
                   ).extents
                 : undefined,
               (p) => p.plot
@@ -1132,7 +1157,7 @@ export const layer = createNodeOperatorSequential(
                 ? claim.width.run(sigma)
                 : undefined;
             }) as Size<number | undefined>;
-            const proposed = applyNestLayoutProposal(
+            const proposedParts = applyNestLayoutProposal(
               childLayoutSizeProposal(
                 childName,
                 size,
@@ -1145,6 +1170,22 @@ export const layer = createNodeOperatorSequential(
               layoutPlan.nestPlan?.byDerived.get(i),
               childPlaceables
             );
+            // A part of a chain that slices its room (a facet panel) gets
+            // its slice as its plot: what dresses it (its chrome) adds
+            // around the slice, into the gaps and past the chain's ends, as
+            // the chain lays it by its plot (#1032). A ring's own shapes
+            // are chrome, and take their slices whole.
+            const slice =
+              childName === undefined ? undefined : sliceByName?.get(childName);
+            const proposed = proposedParts.map((v, axis) =>
+              slice !== undefined &&
+              v === slice[axis] &&
+              v !== size[axis] &&
+              !isRing(node) &&
+              child instanceof GoFishNode
+                ? v + sum(guttersAroundPlot(child, axis as 0 | 1, v))
+                : v
+            ) as Size;
             // A node dressed in chrome hands its content (its first child)
             // what the chrome's gutters leave of its slot (#1032), or its
             // own room in a share scope. Gutters larger than the slot leave
@@ -1324,6 +1365,24 @@ export const layer = createNodeOperatorSequential(
               }
             }
 
+            // The children that are no part of this layer's plot, per
+            // axis: its dressing and ink there, and a ring's shapes (its
+            // chrome; a ring's plot is the ring inside it). A chain lays
+            // the parts of the plot by their plots, and places one of these
+            // past the whole box of what it dresses (#1032).
+            const ring = isRing(node);
+            const apart: [Set<string>, Set<string>] = [new Set(), new Set()];
+            for (const [name] of nameToPlaceable) {
+              const i = childOfName.get(name)!;
+              for (const axis of [0, 1] as const)
+                if (
+                  (ring && i > 0) ||
+                  inkChildren[axis].has(i) ||
+                  dressingChildren[axis].has(i)
+                )
+                  apart[axis].add(name);
+            }
+
             applyConstraints(
               placementConstraints(node.constraints, proposals.regionByName),
               nameToPlaceable,
@@ -1332,7 +1391,8 @@ export const layer = createNodeOperatorSequential(
               gridTracks,
               dataPositioned,
               rigid,
-              freeOrigin
+              freeOrigin,
+              apart
             );
 
             // Place any child the constraints left unplaced at its baseline
@@ -1440,6 +1500,7 @@ export const layer = createNodeOperatorSequential(
     );
     node.claimWalk = {
       ink: inkChildren,
+      dressing: dressingChildren,
       operands: constraintOperands,
       seating,
       literalStart: [0, 1].map((axis) => {

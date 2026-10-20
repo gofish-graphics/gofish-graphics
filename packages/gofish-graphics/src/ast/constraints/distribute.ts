@@ -614,9 +614,10 @@ export function distributeExtentFold(
   targetSpaces: UnderlyingSpace[],
   space: UnderlyingSpace,
   opts: DistributeFoldOptions,
-  // The plot of the chain instead (`chainFold`'s `reaches`): how far each
-  // part reaches, in its own frame (its plot's claim; its claim when it
-  // reaches as far as it takes room; undefined when it reaches nothing).
+  // How far each part reaches, when that is not as far as the chain lays it
+  // (`chainFold`'s `reaches`), in the part's own frame: the whole part of a
+  // chain laid by its parts' plots, or, for the plot of a chain with a
+  // stand-in, the stand-ins only (undefined: that part reaches nothing).
   reaches?: (Extent | undefined)[]
 ): Extent | undefined {
   const tails = () =>
