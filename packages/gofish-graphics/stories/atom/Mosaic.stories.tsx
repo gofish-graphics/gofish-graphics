@@ -53,7 +53,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(passengers, { color: Color.palette(["#2b8cbe", "#ff8408"]) })
+    chart(passengers, { color: Color.palette(["#2b8cbe", "#ff8408"]), w: args.w, h: args.h })
       .flow(
         // columns by class — width ∝ each class's passenger count (marginal)
         stack({ by: "pclass", dir: "x", size: "count" }),
@@ -61,7 +61,7 @@ export const Default: StoryObj<Args> = {
         stack({ by: "survived", dir: "y", size: field("count").normalize() })
       )
       .mark(rect({ fill: "survived", stroke: "white", strokeWidth: 1 }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

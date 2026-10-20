@@ -18,9 +18,9 @@ def story_default():
         chart(
             titanic_passengers,
             color=Color.palette(["#2b8cbe", "#ff8408"]),
-            # x = pclass (the columns) at the bottom (y-end), under the
-            # upward-filling columns; y is the dot-row index, so suppress it.
             axes={"x": {"side": "end"}, "y": False},
+            w=520,
+            h=580,
         )
         # Bottom-align the columns (y-down free space: "end" = bottom) so the
         # unit stacks share a baseline and grow upward.
@@ -35,5 +35,5 @@ def story_default():
             )
             .mark(circle(r=4, fill="survived"))
         ),
-        {"w": 520, "h": 580},
+        {},
     )

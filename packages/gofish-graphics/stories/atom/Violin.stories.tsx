@@ -69,7 +69,7 @@ export const Default: StoryObj<Args> = {
       color: Color.palette(["#2b8cbe", "#ff8408"]),
       // x = pclass (the violins) at the bottom (y-end); y is the dot-row index,
       // so suppress it.
-      axes: { x: { side: "end" }, y: false },
+      axes: { x: { side: "end" }, y: false }, w: args.w, h: args.h,
     })
       .flow(
         spread({ by: "pclass", dir: "x", spacing: 48, alignment: "middle" }),
@@ -85,7 +85,7 @@ export const Default: StoryObj<Args> = {
         spread({ dir: "x", spacing: 1, alignment: "middle" })
       )
       .mark(circle({ r: 2, fill: "survived" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

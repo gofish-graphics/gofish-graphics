@@ -75,7 +75,7 @@ export const Default: StoryObj<Args> = {
 
     chart(mosaicPassengers, {
       color: Color.palette(["#2b8cbe", "#ff8408"]),
-      axes: false,
+      axes: false, w: args.w, h: args.h,
     })
       .flow(
         // pclass rows: 1st at the bottom, 3rd at the top
@@ -105,7 +105,7 @@ export const Default: StoryObj<Args> = {
           )
           .mark(circle({ r: 3, fill: "survived" }))
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

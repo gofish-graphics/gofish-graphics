@@ -20,7 +20,12 @@ def story_default():
         return [rows[i : i + size] for i in range(0, len(rows), size)]
 
     return (
-        chart(titanic_passengers, color=Color.palette(["#2b8cbe", "#ff8408"]))
+        chart(
+            titanic_passengers,
+            color=Color.palette(["#2b8cbe", "#ff8408"]),
+            w=720,
+            h=480,
+        )
         .flow(
             table(
                 by={"x": "pclass", "y": "sex"},
@@ -48,5 +53,5 @@ def story_default():
             )
             .mark(circle(r=4, fill="survived"))
         ),
-        {"w": 720, "h": 480},
+        {},
     )
