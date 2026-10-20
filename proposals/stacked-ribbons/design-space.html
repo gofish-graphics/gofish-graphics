@@ -354,6 +354,59 @@
     outline: 2px solid var(--sum);
     outline-offset: 2px;
   }
+
+  /* Syntax highlighting tokens */
+  :root {
+    --hl-kw: #8a3ffc;
+    --hl-str: #1f7a4a;
+    --hl-num: #b5542a;
+    --hl-com: #6b7680;
+    --hl-fn: #1d5f86;
+    --hl-attr: #8a5a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --hl-kw: #c4a2ff;
+      --hl-str: #7fd3a2;
+      --hl-num: #f0a37f;
+      --hl-com: #8b96a1;
+      --hl-fn: #8ccbe8;
+      --hl-attr: #e8c27a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --hl-kw: #c4a2ff;
+    --hl-str: #7fd3a2;
+    --hl-num: #f0a37f;
+    --hl-com: #8b96a1;
+    --hl-fn: #8ccbe8;
+    --hl-attr: #e8c27a;
+  }
+  .hljs-keyword,
+  .hljs-built_in,
+  .hljs-literal {
+    color: var(--hl-kw);
+  }
+  .hljs-string,
+  .hljs-regexp {
+    color: var(--hl-str);
+  }
+  .hljs-number {
+    color: var(--hl-num);
+  }
+  .hljs-comment {
+    color: var(--hl-com);
+    font-style: italic;
+  }
+  .hljs-title,
+  .hljs-title.function_ {
+    color: var(--hl-fn);
+  }
+  .hljs-attr,
+  .hljs-property,
+  .hljs-params {
+    color: var(--hl-attr);
+  }
 </style>
 
 <div class="wrap">
@@ -1241,3 +1294,21 @@ chart(penguins)
     </li>
   </ol>
 </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+  try {
+    hljs.configure({
+      languages: ["javascript", "python"],
+      ignoreUnescapedHTML: true,
+    });
+    document.querySelectorAll("pre code").forEach((el) => {
+      const t = el.textContent;
+      const py =
+        /\blambda\b|\bfor \w+ in \b|^\(chart|\w+=["\[\w]/m.test(t) &&
+        !/=>|\bconst\b/.test(t);
+      el.classList.add(py ? "language-python" : "language-javascript");
+      hljs.highlightElement(el);
+    });
+  } catch (e) {}
+</script>
