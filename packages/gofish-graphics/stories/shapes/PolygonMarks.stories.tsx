@@ -38,9 +38,9 @@ export const DataDrivenFill: StoryObj<Args> = {
         ],
       },
     ];
-    chart(rows, { color: Color.gradient(["#fff5eb", "#7f2704"]), axes: false })
+    chart(rows, { color: Color.gradient(["#fff5eb", "#7f2704"]), axes: false, w: args.w, h: args.h })
       .mark(polygon({ points: "ring", fill: "n" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
