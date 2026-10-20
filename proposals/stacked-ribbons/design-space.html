@@ -622,9 +622,10 @@ chart(titanic)
       <div><b>Control flow</b>a plain loop</div>
       <div><b>Pipeline / direct</b>product, in direct style</div>
       <div>
-        <b>vs .map</b><span style="color: var(--bad)">it is .map</span>; the
-        system never sees the field set, so no per-field titles or scales, and
-        Python leaves only copies
+        <b>vs .map</b>uses <code>.map</code> honestly and adds no construct that
+        duplicates it. Each child reads its own field, so per-field titles and
+        scales become per-child scales (needed anyway). Python's comprehension
+        produces explicit children that serialize.
       </div>
     </div>
   </div>
@@ -672,8 +673,8 @@ chart(penguins)
         are homogeneous
       </div>
       <div>
-        <b>vs .map</b>orthogonal: it is a data view, not iteration; the field
-        set and its types are visible to the system
+        <b>vs .map</b>fine, but it adds a construct (views plus dependent
+        typing) for a job <code>.map</code> already does
       </div>
     </div>
   </div>
@@ -699,8 +700,9 @@ chart(penguins)
         <b>Pipeline / direct</b>puts a product into the pipeline as a tier
       </div>
       <div>
-        <b>vs .map</b>good, but adds a second kind of name, and
-        <code>field.of</code> is indirection that B avoids
+        <b>vs .map</b><span style="color: var(--bad)">overlaps it</span>: a
+        named loop variable is what the arrow parameter of
+        <code>.map</code> already gives, plus <code>field.of</code> indirection
       </div>
     </div>
   </div>
@@ -717,14 +719,26 @@ chart(penguins)
         <b>Pipeline / direct</b>direct only; pipeline and builder stay two
         grammars
       </div>
-      <div><b>vs .map</b>partial: it differs from map only by the key</div>
+      <div>
+        <b>vs .map</b><span style="color: var(--bad)">overlaps it</span>: it
+        differs from map only by a key, and shared rows already give identity
+      </div>
     </div>
   </div>
 
   <p class="prose">
-    <strong>Where this points.</strong> B is the only candidate that scores well
-    on all four criteria. It also explains why the split between pipeline and
-    direct style exists at all:
+    <strong>Where this points (revised).</strong> Criterion 4 means "don't build
+    a second map", and literally using <code>.map</code> is fine. With that
+    reading, <strong>A leads</strong>: it does well on all four criteria and
+    adds no construct at all. A family of fields is a static product, and the
+    host language already has the right tool for a static product generated from
+    a list. C and D now overlap <code>.map</code>. B is the runner-up: the same
+    picture from the sum side, worth having only as convenience for data that is
+    already long, or for a spec that has to stay inside one flow. What A needs
+    is the same plumbing B would need anyway: combinators passing their scope to
+    <code>chart()</code> children, a scale per child that reads a different
+    field, and the rejoin rule below. The sum/product reading still explains the
+    split:
   </p>
   <ul class="prose">
     <li>
@@ -741,9 +755,11 @@ chart(penguins)
     </li>
   </ul>
   <p class="prose">
-    C is the runner-up: it's the same thing with a named loop variable instead
-    of a view. A stays available for free, as plain host code, whenever the
-    system doesn't need to see the loop.
+    So the whole design reduces to the two styles GoFish already has, plus host
+    <code>.map</code>. Lists go in the pipeline. Tuples, whether written out or
+    generated with <code>.map</code>, go in direct style. Nothing new is needed
+    for iteration; the new work is projection, per-child scales, and the rejoin
+    rule.
   </p>
 
   <h2>The rejoin rule</h2>
@@ -958,17 +974,18 @@ chart(tree).flow(spread({ by: "class", dir: "y", spacing: 8 }))
     </li>
     <li>
       <span
-        >Candidate B: is a typed <code>unpivot</code> view (shared rows, a
-        <code>value</code> field whose type depends on <code>name</code>) the
-        construct for fixed families of fields, over a named generator
-        (C)?</span
+        >Candidate A: are products generated with host <code>.map</code> (a
+        Python comprehension) the answer for fixed families of fields, with a
+        typed <code>unpivot</code> view (B) kept only as optional convenience,
+        or dropped?</span
       >
     </li>
     <li>
       <span
-        >Dependent typing: should each <code>name</code> group get its own scale
-        and axis title for <code>value</code> automatically, as a property of
-        the view's type?</span
+        >Per-child scales: should a direct-style child chart that reads a
+        different field get its own scale and axis title by default, with a way
+        to ask for a shared one? (Under B this would instead be dependent typing
+        of <code>value</code>.)</span
       >
     </li>
     <li>
