@@ -148,3 +148,14 @@ class TestWidgetMarkFnBagContract:
         assert ref.index == 0
         assert isinstance(ref.datum, list)
         assert ref.datum == [{"x": 1.0, "label": "a"}, {"x": 2.0, "label": None}]
+
+
+def test_a_list_of_groups_or_values_round_trips():
+    """Data flows as lists, so a callback may return groups or values rather
+    than records: such a list crosses as one `value` column, marked as a list
+    of values, and decodes back to its items (the JS codec does the same)."""
+    from gofish.arrow_utils import data_to_arrow_bytes
+
+    groups = [[{"x": 1}, {"x": 2}], [{"x": 3}]]
+    for items in (groups, ["a", "b"], [1.5, None], []):
+        assert arrow_to_records(data_to_arrow_bytes(items)) == items

@@ -35,16 +35,20 @@
  *    (the zone a chart that declares none reads it in). A list of structs is
  *    a list of rows, so its array carries its own column types like a
  *    table's (`HasCalendar` in the timestamp's zone, or UTC);
- *  - a 64-bit integer (a `bigint`) becomes a JS number.
+ *  - a 64-bit integer (a `bigint`) becomes a JS number;
+ *  - a table the schema metadata marks as a list of values (one `value`
+ *    column, `LIST_OF_VALUES` in `arrowTransport.ts`) is the list of its
+ *    values: a callback may return groups or values rather than records. No
+ *    schema names a column of such a list, so its values convert as values
+ *    inside a list do.
  */
 
 import * as Arrow from "apache-arrow";
 import { Schema, Serialize } from "gofish-graphics";
 
 /** Decode base64 Arrow IPC streams, one per table id, into each table's
- *  rows (see the module comment): the tables an IR payload's charts name.
- *  This is the widget's `tables` trait, the parity harness's `tables`, and
- *  the `tables` of a mark function's reply. */
+ *  rows (see the module comment): a shipped document's `tables`, and those
+ *  of a bridge call's reply. */
 export function decodeTables(
   b64s: Record<string, string>
 ): Record<string, Record<string, any>[]> {
@@ -144,6 +148,14 @@ const isPlainNumeric = (type: Arrow.DataType): boolean =>
 
 /** Decode an Arrow table into rows (see the module comment). */
 export function arrowTableToRows(table: Arrow.Table): Record<string, any>[] {
+  if (table.schema.metadata.get("gofish.list") === "values") {
+    const field = table.schema.fields[0];
+    const column = table.getChildAt(0)!;
+    const convert = orNull(fromArrowNested(field.type));
+    return Array.from({ length: table.numRows }, (_, i) =>
+      convert(column.get(i))
+    );
+  }
   const types = columnTypes(table.schema.fields);
   const columns = table.schema.fields.map((field, i) => {
     const column = table.getChildAt(i)!;

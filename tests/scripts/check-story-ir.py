@@ -2,9 +2,10 @@
 """Quick local IR smoke-check for a single Python story file.
 
 Imports one `tests/python-stories/**/test_*.py`, runs each `story_*` function,
-and calls `.to_ir()` on the returned builder/mark — catching runtime errors
-(KeyError, bad kwargs, wrong combinator shape) in a tight feedback loop without
-spinning up the derive-server or the full capture pipeline.
+and calls `.to_ir()` on the returned builder/mark (its document) — catching
+runtime errors (KeyError, bad kwargs, wrong combinator shape) in a tight
+feedback loop without spinning up the derive-server or the full capture
+pipeline.
 
 This is intentionally lighter than `pnpm --filter @gofish/tests validate-python-ir`,
 which additionally validates every story's IR against the canonical
@@ -73,9 +74,12 @@ def main(argv):
         fn = getattr(mod, name)
         result = fn()
         obj = result[0] if isinstance(result, tuple) else result
-        ir = obj.to_ir()
-        encoded = json.dumps(ir)
-        print(f"  {name}: OK  (ir {len(encoded)} bytes, top type={ir.get('type')})")
+        doc = obj.to_ir()
+        encoded = json.dumps(doc)
+        print(
+            f"  {name}: OK  (document {len(encoded)} bytes, "
+            f"root type={doc['root'].get('type')})"
+        )
     print(f"all stories produced IR ({story_file})")
     return 0
 

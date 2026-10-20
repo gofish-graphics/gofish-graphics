@@ -663,12 +663,12 @@ async function benchExamplesPy(
           // Only a chart root is benchmarked here; a chain, a layer or a bare
           // mark at the root is skipped (they don't represent the common
           // per-example case).
-          if (ir?.ir?.type !== "chart") {
+          if (ir?.doc?.root?.type !== "chart") {
             return { ok: false };
           }
 
           const deriveServerUrl =
-            ir.deriveIds?.length > 0
+            ir.callbackIds?.length > 0
               ? `http://localhost:${DERIVE_SERVER_PORT}`
               : undefined;
           const spec = { ...ir, deriveServerUrl };

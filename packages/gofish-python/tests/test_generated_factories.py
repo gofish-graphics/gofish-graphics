@@ -395,14 +395,14 @@ def test_callables_nested_in_options_bridge_at_any_depth():
     assert d["dims"]["theta"] == {"size": 0.9}
     lambda_id = d["dims"]["r"]["size"]["__gofish_lambda"]
     assert list(ir_payload(m)[1]) == [lambda_id]
-    assert call(m, lambda_id, [{"v": 1}, {"v": 3}]) == [{"value": 2}, {"value": 6}]
+    assert call(m, lambda_id, [{"v": 1}, {"v": 3}]) == [2, 6]
     json.dumps(d)  # no raw function object left on the wire
 
     op = scatter(dims={"theta": lambda d: d["a"], "r": "dist"})
     od = ir(op)
     assert od["dims"]["r"] == "dist"
     lambda_id = od["dims"]["theta"]["__gofish_lambda"]
-    assert call(op, lambda_id, [{"a": 7}]) == [{"value": 7}]
+    assert call(op, lambda_id, [{"a": 7}]) == [7]
     # Copies made by `.translate()` / `.label()` keep the same callback id.
     assert ir(op.translate(x=5))["dims"] == od["dims"]
     json.dumps(od)
@@ -435,7 +435,7 @@ def test_line_and_ribbon_fill_take_a_function():
     for m in (line(fill=lambda d: d["g"]), ribbon(fill=lambda d: d["g"])):
         lambda_id = ir(m)["fill"]["__gofish_lambda"]
         assert list(ir_payload(m)[1]) == [lambda_id]
-        assert call(m, lambda_id, [{"g": "a"}]) == [{"value": "a"}]
+        assert call(m, lambda_id, [{"g": "a"}]) == ["a"]
     # stroke is a color channel too, as in JS.
     assert "__gofish_lambda" in ir(line(stroke=lambda d: d["g"]))["stroke"]
     # A non-channel option still rejects a function.

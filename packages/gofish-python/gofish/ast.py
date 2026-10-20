@@ -3396,7 +3396,8 @@ def _json_rows(data: Any) -> List[dict]:
 
 def _table_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
     """The callback of a ``derive`` operator: its reply's root names the
-    table of the rows ``fn`` returned."""
+    table of the list ``fn`` returned (its rows, or any other items; see
+    ``arrow_utils.to_arrow_table``)."""
 
     def reply(rows: List[Any]) -> Tuple[dict, "_Payload"]:
         payload = _Payload()
@@ -3406,9 +3407,9 @@ def _table_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
 
 
 def _accessor_reply(fn: Callable[[Any], Any]) -> _Reply:
-    """The callback of an accessor: a table with one row per input row,
-    holding ``fn``'s value for that row in its one column, ``value``."""
-    return _table_reply(lambda rows: [{"value": fn(r)} for r in rows])
+    """The callback of an accessor: its reply's root names the table of
+    ``fn``'s values, one per row it was called with."""
+    return _table_reply(lambda rows: [fn(r) for r in rows])
 
 
 def _mark_fn_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
@@ -3422,7 +3423,7 @@ def _mark_fn_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
         return _walk(
             fn(
                 [
-                    _InputRef(int(row["__inputRef"]), row.get("datum"))
+                    _InputRef(row["__inputRef"], row.get("datum"))
                     if isinstance(row, dict) and "__inputRef" in row
                     else row
                     for row in rows

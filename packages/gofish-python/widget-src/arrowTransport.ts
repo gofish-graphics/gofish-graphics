@@ -111,7 +111,12 @@ function inferType(values: readonly any[], path: string): Arrow.DataType {
     case "string":
       return new Arrow.Utf8();
     case "number":
-      return new Arrow.Float64();
+      // JS has one number type. As JSON writes an integral number as an
+      // integer, a column of integral numbers crosses as integers (Python
+      // reads ints), and any other number column as floats.
+      return nonNull.every((v) => Number.isSafeInteger(v))
+        ? new Arrow.Int64()
+        : new Arrow.Float64();
     case "boolean":
       return new Arrow.Bool();
     case "bigint":
@@ -135,6 +140,9 @@ function inferType(values: readonly any[], path: string): Arrow.DataType {
  */
 function normalizeForType(value: any, type: Arrow.DataType): any {
   if (value === null || value === undefined) return null;
+  if (Arrow.DataType.isInt(type) && typeof value === "number") {
+    return BigInt(value);
+  }
   if (Arrow.DataType.isList(type)) {
     const itemType = (type.children[0] as Arrow.Field).type;
     return (value as any[]).map((v) => normalizeForType(v, itemType));
@@ -151,13 +159,43 @@ function normalizeForType(value: any, type: Arrow.DataType): any {
 }
 
 /**
- * Build an Arrow Table from plain-object rows, inferring an explicit type
- * per column (including nested list/struct columns) instead of relying on
+ * Build an Arrow Table from a list: its records' fields as columns, or, for
+ * a list of anything else, one `value` column (see {@link LIST_OF_VALUES}).
+ * It infers an explicit type per column (including nested list/struct columns) instead of relying on
  * `Arrow.tableFromJSON`'s inference, which can't handle a `list<struct>`
  * column at all. Always used uniformly — no fallback to `tableFromJSON` —
  * so there's one code path and one set of encoding rules to reason about.
  */
-export function buildArrowTable(rows: readonly Row[]): Arrow.Table {
+export function buildArrowTable(items: readonly unknown[]): Arrow.Table {
+  if (!items.every(isRecord)) {
+    // Data flows as lists, so a list may hold groups or values, not
+    // records. An Arrow table is a list of records, so it crosses as one
+    // column, `value`, marked as a list of values (`arrowDecode.ts` and
+    // Python's `arrow_utils` give back the items).
+    const table = buildRecordTable(items.map((value) => ({ value })));
+    return new Arrow.Table(
+      new Arrow.Schema(table.schema.fields, LIST_OF_VALUES),
+      table.batches
+    );
+  }
+  return buildRecordTable(items as readonly Row[]);
+}
+
+/** The schema metadata that marks a table as a list of values (its one
+ *  column, `value`) rather than a list of records. Shared with Python's
+ *  `arrow_utils.LIST_OF_VALUES`. */
+export const LIST_OF_VALUES = new Map([["gofish.list", "values"]]);
+
+function isRecord(item: unknown): item is Row {
+  return (
+    item !== null &&
+    typeof item === "object" &&
+    !Array.isArray(item) &&
+    !(item instanceof Date)
+  );
+}
+
+function buildRecordTable(rows: readonly Row[]): Arrow.Table {
   const columnNames: string[] = [];
   const seen = new Set<string>();
   for (const row of rows) {

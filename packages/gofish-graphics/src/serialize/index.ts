@@ -1,21 +1,22 @@
 /**
- * Frontend-IR deserializer for GoFish.
+ * Frontend-IR serialization for GoFish: the emitter (`toJSON`), the
+ * deserializer (`buildIR`, `renderIR`), and the {@link DeriveBridge} a host
+ * supplies to run the Python callbacks a document names.
  *
- * @see {@link ./fromJSON.ts} for the deserializer functions.
- * @see {@link ./registry.ts} for the factory table and
- *      the {@link DeriveBridge} contract.
+ * @see {@link ./fromJSON.ts} for the deserializer.
+ * @see {@link ./registry.ts} for the factory table and the bridge contract.
  */
 
 export {
   FACTORIES,
   OPERATOR_BUILDERS,
   rebuild,
+  type BridgeReply,
   type DeriveBridge,
-  type MarkPayload,
 } from "./registry";
 
 // Column types (schema.ts) a host attaches to the rows it decodes, the way a
-// chart's `schema` attaches them: the Python widget's Arrow decode marks a
+// chart's `schema` attaches them: the Python hosts' Arrow decode marks a
 // timestamp or date column as a time (`HasCalendar`) in the column's zone.
 export {
   getColumnTypes,
@@ -27,26 +28,9 @@ export {
   buildIR,
   readIR,
   renderIR,
-  constraintFromIR,
-  isTokenSentinel,
-  makeTokenResolver,
   mapOperator,
-  resolveNameField,
-  resolveRefSelection,
   unwrapOpts,
-  unwrapValues,
-  wrapWithScope,
-  type ChartSpec,
-  type ConstraintSpec,
-  type LabelSpec,
-  type LayerChainSpec,
-  type MarkSpec,
-  type OperatorSpec,
   type RenderIROptions,
-  type IRHost,
-  type IRContext,
-  type TokenResolver,
-  type TokenSentinel,
 } from "./fromJSON";
 
 export { toJSON } from "./toJSON";

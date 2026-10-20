@@ -37,6 +37,12 @@ def to_arrow_table(data: Any) -> pa.Table:
           dataframe library involved. None is a missing value (null); a
           float NaN stays NaN, a number, since GoFish never reads NaN as
           missing.
+        - Any other list (data flows as lists, so a callback may return a
+          list of groups or of values): an Arrow table is a list of records,
+          so such a list crosses as a table with one column, `value`, one row
+          per item, marked as a list of values in the schema metadata
+          (`LIST_OF_VALUES`). The decode on either side (`arrow_to_records`,
+          `widget-src/arrowDecode.ts`) gives back the items.
         - A `pyarrow.Table` — returned as-is.
         - Any dataframe/lazyframe narwhals recognizes (pandas, polars,
           pyarrow, DuckDB relation, cuDF, Modin, ...) — routed through
@@ -65,7 +71,12 @@ def to_arrow_table(data: Any) -> pa.Table:
         >>> to_arrow_table(pl.DataFrame({"x": [1, 2]}))
     """
     if isinstance(data, (list, tuple)):
-        return _rows_to_table(list(data))
+        items = list(data)
+        if all(isinstance(item, dict) for item in items):
+            return _rows_to_table(items)
+        return _rows_to_table([{"value": item} for item in items]).replace_schema_metadata(
+            LIST_OF_VALUES
+        )
 
     if isinstance(data, pa.Table):
         return data
@@ -82,6 +93,25 @@ def to_arrow_table(data: Any) -> pa.Table:
         nwdata = nwdata.collect()
 
     return nwdata.to_arrow()
+
+
+# The schema metadata that marks a table as a list of values (its one
+# column, `value`) rather than a list of records. Shared with the JS codec
+# (`LIST_OF_VALUES` in `widget-src/arrowTransport.ts`).
+LIST_OF_VALUES = {"gofish.list": "values"}
+
+
+def _table_to_list(table: pa.Table) -> list:
+    """A decoded table as the list it encodes: its rows as dicts, or the
+    values of its one column when the metadata marks a list of values."""
+    metadata = table.schema.metadata or {}
+    if metadata.get(b"gofish.list") == b"values":
+        return table.column("value").to_pylist()
+    columns = {name: table.column(name).to_pylist() for name in table.column_names}
+    return [
+        {name: columns[name][i] for name in table.column_names}
+        for i in range(table.num_rows)
+    ]
 
 
 def _rows_to_table(rows: List[dict]) -> pa.Table:
@@ -192,7 +222,7 @@ def to_records(data: Any) -> List[dict]:
     Returns:
         A list of dicts, one per row, in column order.
     """
-    return to_arrow_table(data).to_pylist()
+    return _table_to_list(to_arrow_table(data))
 
 
 def empty_placeholder_arrow_bytes() -> bytes:
@@ -226,15 +256,14 @@ def empty_placeholder_arrow_bytes() -> bytes:
 
 def arrow_to_records(arrow_bytes: bytes) -> list:
     """
-    Convert Apache Arrow bytes back to a list of plain-dict rows.
+    Convert Apache Arrow bytes back to the list they encode: plain-dict
+    rows, or the items of a list of values (see `to_arrow_table`).
 
     Deliberately bypasses pandas for this: pandas' `to_pandas()` decodes a
     `list<struct>` column (the JS-side widget transport's explicit-schema
     encoding for a mark-fn's multi-row `datum` bag — see
     `widget-src/arrowTransport.ts`, issue #783) into a numpy `ndarray` of
-    dicts rather than a plain Python `list` of dicts, which doesn't match
-    the plain-JSON-over-HTTP shape the parity test harness's derive server
-    hands a mark-fn (`tests/scripts/derive-server.py`).
+    dicts rather than a plain Python `list` of dicts.
     `pyarrow.Array.to_pylist()` decodes straight to native Python
     containers — `list`/`dict`/`None`/scalars — for every level of
     nesting, so a `list<struct>` column round-trips to exactly a
@@ -251,10 +280,4 @@ def arrow_to_records(arrow_bytes: bytes) -> list:
     Example:
         >>> rows = arrow_to_records(arrow_bytes)
     """
-    reader = pa.ipc.open_stream(arrow_bytes)
-    table = reader.read_all()
-    columns = {name: table.column(name).to_pylist() for name in table.column_names}
-    return [
-        {name: columns[name][i] for name in table.column_names}
-        for i in range(table.num_rows)
-    ]
+    return _table_to_list(pa.ipc.open_stream(arrow_bytes).read_all())

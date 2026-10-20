@@ -12,7 +12,7 @@
  */
 
 import * as Arrow from "apache-arrow";
-import { buildArrowTable } from "./arrowTransport";
+import { buildArrowTable, LIST_OF_VALUES } from "./arrowTransport";
 import { Serialize, chart, scatter, circle, Schema } from "gofish-graphics";
 import { arrowTableToRows } from "./arrowDecode";
 
@@ -20,22 +20,14 @@ import { arrowTableToRows } from "./arrowDecode";
 // include Node type definitions in all TS contexts.
 declare const process: any;
 
-function roundTrip(rows: Record<string, any>[]): Arrow.Table {
-  const table = buildArrowTable(rows);
-  const bytes = Arrow.tableToIPC(table);
-  return Arrow.tableFromIPC(bytes);
+/** Encode `items` and decode them back, as the two ends of the bridge do. */
+function roundTrip(items: unknown[]): any[] {
+  const bytes = Arrow.tableToIPC(buildArrowTable(items));
+  return arrowTableToRows(Arrow.tableFromIPC(bytes));
 }
 
-function structToJSON(row: any): any {
-  return row && typeof row.toJSON === "function" ? row.toJSON() : row;
-}
-
-function listToPlain(vec: any): any[] {
-  return Array.from(vec, (item: any) => {
-    if (item && typeof item.toJSON === "function") return structToJSON(item);
-    return item;
-  });
-}
+const same = (a: unknown, b: unknown) =>
+  JSON.stringify(a) === JSON.stringify(b);
 
 function testFlatTable(): boolean {
   console.log("Test: flat table (plain scalar columns)");
@@ -43,35 +35,54 @@ function testFlatTable(): boolean {
     { x: 1, name: "a", ok: true },
     { x: 2, name: "b", ok: false },
   ];
-  const table = roundTrip(rows);
-  if (table.numRows !== 2) {
-    console.log(`  ✗ expected 2 rows, got ${table.numRows}`);
-    return false;
-  }
-  const xs = table.getChild("x")!.toArray();
-  const names = table.getChild("name")!.toArray();
-  const oks = table.getChild("ok")!.toArray();
-  if (xs[0] !== 1 || xs[1] !== 2) {
-    console.log(`  ✗ x column mismatch: ${xs}`);
-    return false;
-  }
-  if (names[0] !== "a" || names[1] !== "b") {
-    console.log(`  ✗ name column mismatch: ${names}`);
-    return false;
-  }
-  if (oks[0] !== true || oks[1] !== false) {
-    console.log(`  ✗ ok column mismatch: ${oks}`);
+  const back = roundTrip(rows);
+  if (!same(back, rows)) {
+    console.log(`  ✗ mismatch: ${JSON.stringify(back)}`);
     return false;
   }
   console.log("  ✓ PASSED");
   return true;
 }
 
+/** JS has one number type; as JSON does, an integral column crosses as
+ *  integers (Python reads ints) and any other as floats. */
+function testIntegralNumbersCrossAsIntegers(): boolean {
+  console.log("Test: integral number columns cross as integers");
+  const table = buildArrowTable([
+    { n: 1, f: 1.5 },
+    { n: -3, f: 2 },
+  ]);
+  const ok =
+    Arrow.DataType.isInt(table.schema.fields[0].type) &&
+    Arrow.DataType.isFloat(table.schema.fields[1].type) &&
+    same(roundTrip([{ n: 1 }, { n: -3 }]), [{ n: 1 }, { n: -3 }]);
+  console.log(ok ? "  ✓ PASSED" : `  ✗ FAILED ${table.schema}`);
+  return ok;
+}
+
+/** Data flows as lists, so a callback may get or return groups or values,
+ *  not records: such a list crosses as one `value` column, marked as a list
+ *  of values, and decodes back to its items. */
+function testListOfValuesRoundTrips(): boolean {
+  console.log("Test: a list of groups or values round-trips");
+  const groups = [[{ x: 1 }, { x: 2 }], [{ x: 3 }]];
+  const values = ["a", "b"];
+  const ok =
+    same(roundTrip(groups), groups) &&
+    same(roundTrip(values), values) &&
+    same(roundTrip([]), []);
+  console.log(
+    ok
+      ? "  ✓ PASSED"
+      : `  ✗ FAILED ${JSON.stringify([roundTrip(groups), roundTrip(values)])}`
+  );
+  return ok;
+}
+
 function testSingleRowStruct(): boolean {
   console.log("Test: single-row struct column (previously-working case)");
   const rows = [{ __inputRef: 0, datum: { x: 1, label: "a" } }];
-  const table = roundTrip(rows);
-  const datum = structToJSON(table.getChild("datum")!.get(0));
+  const [{ datum }] = roundTrip(rows);
   if (datum.x !== 1 || datum.label !== "a") {
     console.log(`  ✗ datum mismatch: ${JSON.stringify(datum)}`);
     return false;
@@ -92,15 +103,9 @@ function testMultiRowBag(): boolean {
     },
     { __inputRef: 1, datum: [{ x: 3, label: "c" }] },
   ];
-  const table = roundTrip(rows);
-  const bag0 = listToPlain(table.getChild("datum")!.get(0));
-  const bag1 = listToPlain(table.getChild("datum")!.get(1));
-  if (bag0.length !== 2 || bag0[0].x !== 1 || bag0[1].label !== "b") {
-    console.log(`  ✗ bag0 mismatch: ${JSON.stringify(bag0)}`);
-    return false;
-  }
-  if (bag1.length !== 1 || bag1[0].x !== 3) {
-    console.log(`  ✗ bag1 mismatch: ${JSON.stringify(bag1)}`);
+  const back = roundTrip(rows);
+  if (!same(back, rows)) {
+    console.log(`  ✗ bag mismatch: ${JSON.stringify(back)}`);
     return false;
   }
   console.log("  ✓ PASSED");
@@ -117,8 +122,7 @@ function testRaggedKeys(): boolean {
       ],
     },
   ];
-  const table = roundTrip(rows);
-  const bag = listToPlain(table.getChild("datum")!.get(0));
+  const [{ datum: bag }] = roundTrip(rows);
   if (bag[0].label !== "a") {
     console.log(`  ✗ bag[0].label mismatch: ${JSON.stringify(bag[0])}`);
     return false;
@@ -136,9 +140,8 @@ function testRaggedKeys(): boolean {
 function testEmptyBag(): boolean {
   console.log("Test: empty bag (datum: [])");
   const rows = [{ __inputRef: 0, datum: [] }];
-  const table = roundTrip(rows);
-  const bag = listToPlain(table.getChild("datum")!.get(0));
-  if (bag.length !== 0) {
+  const [{ datum: bag }] = roundTrip(rows);
+  if (!Array.isArray(bag) || bag.length !== 0) {
     console.log(`  ✗ expected empty list, got ${JSON.stringify(bag)}`);
     return false;
   }
@@ -287,7 +290,7 @@ async function testNaiveTimesReadInTheChartZone(): Promise<boolean> {
 /** Rows without a time column carry no column types. */
 function testPlainColumnsCarryNoTypes(): boolean {
   console.log("Test: plain columns carry no column types");
-  const rows = arrowTableToRows(roundTrip([{ x: 1, s: "a" }]));
+  const rows = roundTrip([{ x: 1, s: "a" }]);
   const ok =
     rows[0].x === 1 &&
     rows[0].s === "a" &&
@@ -434,23 +437,42 @@ function testNestedTimesDecodeAsEpochMs(): boolean {
 /** A callback's decoded rows are typed before anything reads them: a lambda
  *  accessor's result and a derive's result (always a list) hold epoch ms, not
  *  the decode's wall-clock strings, and `derive(fn, { schema })` reads them
- *  in its zone. */
+ *  in its zone. The bridge answers as a Python host does: a reply whose root
+ *  names a table, of rows with a naive timestamp column (`t`) for the derive,
+ *  and of naive timestamp values (a list of values) for the accessor. */
 async function testCallbackResultsAreTyped(): Promise<boolean> {
   console.log("Test: callback results are typed before they are read");
   const feb28 = Date.UTC(2024, 1, 28, 13); // the wall clock, counted as UTC
+  const naive = (rows: any[]) =>
+    Arrow.vectorFromArray(
+      rows.map(() => feb28),
+      new Arrow.TimestampMillisecond()
+    );
+  const values = (rows: any[]) => {
+    const table = new Arrow.Table({ value: naive(rows) });
+    return new Arrow.Table(
+      new Arrow.Schema(table.schema.fields, LIST_OF_VALUES),
+      table.batches
+    );
+  };
   const bridge: Serialize.DeriveBridge = {
-    async applyLambda(_id, rows) {
-      const table = new Arrow.Table({
-        t: Arrow.vectorFromArray(
-          rows.map(() => feb28),
-          new Arrow.TimestampMillisecond()
-        ),
-        n: Arrow.vectorFromArray(
-          rows.map((_, i) => i),
-          new Arrow.Int32()
-        ),
-      });
-      return arrowTableToRows(Arrow.tableFromIPC(Arrow.tableToIPC(table)));
+    async call(id, rows) {
+      const table =
+        id === "f"
+          ? values(rows)
+          : new Arrow.Table({
+              t: naive(rows),
+              n: Arrow.vectorFromArray(
+                rows.map((_, i) => i),
+                new Arrow.Int32()
+              ),
+            });
+      return {
+        root: { type: "table", id: "r" },
+        tables: {
+          r: arrowTableToRows(Arrow.tableFromIPC(Arrow.tableToIPC(table))),
+        },
+      };
     },
   };
   // A Python accessor is resolved over its rows in one batch call.
@@ -477,7 +499,7 @@ async function testCallbackResultsAreTyped(): Promise<boolean> {
     t: { HasCalendar: { zone: "America/New_York" } },
   });
   const ok =
-    fromAccessor.t === feb28 &&
+    fromAccessor === feb28 &&
     Array.isArray(utc) &&
     utc[0].t === feb28 &&
     Array.isArray(ny) &&
@@ -495,6 +517,8 @@ export async function runArrowTransportTests(): Promise<boolean> {
 
   const results = [
     testFlatTable(),
+    testIntegralNumbersCrossAsIntegers(),
+    testListOfValuesRoundTrips(),
     testSingleRowStruct(),
     testMultiRowBag(),
     testRaggedKeys(),

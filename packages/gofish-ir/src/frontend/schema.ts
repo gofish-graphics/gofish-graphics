@@ -21,8 +21,9 @@ export interface FrontendIRDocument {
   root: FrontendIR;
   /** The rows of every chart in the document that has rows of its own, by
    *  the id its `{type: "table", id}` data names (see {@link DataIR}). A
-   *  document JS writes carries them here as JSON; the Python hosts ship the
-   *  same map beside the IR as Arrow instead. */
+   *  document JS writes carries them as JSON rows; a Python host ships each
+   *  table as base64 Arrow instead, an encoding it decodes before
+   *  rebuilding. */
   tables?: Tables;
 }
 
@@ -144,10 +145,10 @@ export interface LayerChainIR extends BaseIRNode {
  * tier of a `.layer(...)` chain):
  *
  * - **Table**: `{type: "table", id}` names rows of the chart's own. The rows
- *   travel beside the IR, keyed by id: a document's `tables` (JSON), or the
- *   Python hosts' Arrow tables (the widget's `tables` trait, the parity
- *   harness's `tables`). The ids are the writer's own, unique within one
- *   payload.
+ *   travel beside the IR, keyed by id, in the document's `tables` (JSON rows
+ *   in a document JS writes; base64 Arrow when a Python host ships it, which
+ *   the host decodes before rebuilding). The ids are the writer's own, unique
+ *   within one document.
  * - **Select reference**: `{type: "select", layer: "name", mode?}` resolves a
  *   sibling chart's named-mark output at deserialize time. The optional `mode`
  *   discriminates the plural `selectAll()` (`"all"`, an array of refs) from the
@@ -162,9 +163,14 @@ export interface LayerChainIR extends BaseIRNode {
  *   sits in.
  */
 export type DataIR =
-  | { type: "table"; id: string }
+  | TableRef
   | { type: "select"; layer: string; mode?: "one" | "all" }
   | { type: "previous-tier" };
+
+/** A reference to one of a document's `tables`, by id: a chart's rows of
+ *  its own. A bridge call's reply names the rows a callback returned the
+ *  same way. */
+export type TableRef = { type: "table"; id: string };
 
 // ---------------------------------------------------------------------------
 // Operators

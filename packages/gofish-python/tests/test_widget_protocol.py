@@ -64,12 +64,12 @@ class TestCallProtocol:
         ]
 
     def test_accessor_answers_one_value_per_row(self):
-        """An accessor's reply is a table with one `value` per input row."""
+        """An accessor's reply names the list of its values, one per row."""
         mark = text(text=lambda d: f"{d['x']}%")
         widget = chart([{"x": 1}]).mark(mark).render()
         lambda_id = widget.doc["root"]["mark"]["text"]["__gofish_lambda"]
         response = _call(widget, lambda_id, [{"x": 1}, {"x": 2}])
-        assert _reply_rows(response) == [{"value": "1%"}, {"value": "2%"}]
+        assert _reply_rows(response) == ["1%", "2%"]
 
     def test_mark_function_reply_registers_its_callbacks(self):
         """A mark function's reply is a document whose root is what it drew;
@@ -84,7 +84,7 @@ class TestCallProtocol:
         accessor = reply["root"]["children"][0]["text"]["__gofish_lambda"]
         assert accessor in widget.callbacks
         response = _call(widget, accessor, [{"x": 5}], "r-1")
-        assert _reply_rows(response) == [{"value": "2"}]
+        assert _reply_rows(response) == ["2"]
 
     def test_request_id_preserved_across_calls(self):
         """Each request_id is echoed back unchanged."""

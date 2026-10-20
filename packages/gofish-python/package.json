@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "exports": {
-    "./arrowDecode": "./widget-src/arrowDecode.ts"
+    "./arrowBridge": "./widget-src/arrowBridge.ts"
   },
   "scripts": {
     "build:widget": "node build-widget.mjs",

@@ -57,6 +57,24 @@ function check(name: string, ok: boolean, detail?: string): void {
   }
 }
 
+/** A document whose root is `root`, with `tables`. */
+function irDoc(root: any, tables: Record<string, any[]>): any {
+  return { irVersion: 0, ir: "gofish-frontend", root, tables };
+}
+
+/** A bridge whose callbacks are accessors, answering as a Python host does:
+ *  a reply whose root names the list of values, `values(id, rows)`. */
+function accessorBridge(values: (id: string, rows: any[]) => unknown[]) {
+  return {
+    async call(id: string, rows: any[]) {
+      return {
+        root: { type: "table" as const, id: "r" },
+        tables: { r: values(id, rows) },
+      };
+    },
+  };
+}
+
 function validateDoc(doc: unknown, label: string) {
   const r = Frontend.validate(doc);
   check(
@@ -181,7 +199,7 @@ async function main() {
       JSON.stringify((ops[0] as any).right) === JSON.stringify(right)
     );
     // fromJSON rebuilds the join via the registry (site 2a) and re-emits it.
-    const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+    const rebuilt = Serialize.buildIR(doc);
     const doc2 = await rebuilt.toJSON();
     const ops2 = (doc2.root as Frontend.ChartIR).operators!;
     check(
@@ -232,7 +250,7 @@ async function main() {
       [".mark()", directDoc],
       ["layer child", childDoc],
     ] as const) {
-      const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+      const rebuilt = Serialize.buildIR(doc);
       const doc2 = await rebuilt.toJSON();
       check(
         `round-trip preserves a nested chart as ${label}`,
@@ -281,7 +299,7 @@ async function main() {
         doc.tables!.t1 === own &&
         !JSON.stringify(doc.root).includes("inline")
     );
-    const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+    const rebuilt = Serialize.buildIR(doc);
     const doc2 = await rebuilt.toJSON();
     check(
       "round-trip preserves nested tables",
@@ -289,7 +307,7 @@ async function main() {
     );
     let message = "";
     try {
-      await Serialize.buildIR(doc.root, { tables: { t0: rows } }).toDisplayList(
+      await Serialize.buildIR({ ...doc, tables: { t0: rows } }).toDisplayList(
         { w: 200, h: 100 }
       );
     } catch (e) {
@@ -349,7 +367,7 @@ async function main() {
       [".mark()", inMark, inMarkDoc],
       ["combinator child", asChild, asChildDoc],
     ] as const) {
-      const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+      const rebuilt = Serialize.buildIR(doc);
       const doc2 = await rebuilt.toJSON();
       check(
         `round-trip preserves a chain as ${label}`,
@@ -427,7 +445,7 @@ async function main() {
         }),
       JSON.stringify(ops[0])
     );
-    const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+    const rebuilt = Serialize.buildIR(doc);
     const doc2 = await rebuilt.toJSON();
     check(
       "round-trip preserves filter op",
@@ -537,7 +555,7 @@ async function main() {
       JSON.stringify((root.mark as any).dims) ===
         JSON.stringify({ theta: { size: { type: "datum", datum: 1 } }, r: 4 })
     );
-    const rebuilt = Serialize.buildIR(root, { tables: doc.tables });
+    const rebuilt = Serialize.buildIR({ ...doc, root });
     const doc2 = await rebuilt.toJSON();
     check(
       "round-trip preserves dims",
@@ -684,7 +702,7 @@ async function main() {
       (decoded.root as any).operators[0].overlap.smoothing === Infinity &&
         (decoded.tables as any).t0[0].w === -Infinity
     );
-    const rebuilt = Serialize.buildIR(decoded.root, { tables: decoded.tables });
+    const rebuilt = Serialize.buildIR(decoded);
     const doc2 = await rebuilt.toJSON();
     check(
       "the rebuilt chart re-emits the same IR",
@@ -910,7 +928,7 @@ async function main() {
         mark.label?.[1]?.fontSize === 9
     );
 
-    const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+    const rebuilt = Serialize.buildIR(doc);
     const doc2 = await rebuilt.toJSON();
     const mark2 = (doc2.root as Frontend.ChartIR).mark as any;
     check(
@@ -940,7 +958,7 @@ async function main() {
         mark.label?.[0]?.fontStyle === "italic"
     );
 
-    const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+    const rebuilt = Serialize.buildIR(doc);
     const doc2 = await rebuilt.toJSON();
     const mark2 = (doc2.root as Frontend.ChartIR).mark as any;
     check(
@@ -991,7 +1009,7 @@ async function main() {
       op.label?.[0]?.position === "outset-top"
     );
 
-    const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+    const rebuilt = Serialize.buildIR(doc);
     const doc2 = await rebuilt.toJSON();
     const op2 = (doc2.root as Frontend.ChartIR).operators![0] as any;
     check(
@@ -1026,7 +1044,7 @@ async function main() {
         op.label?.[1]?.position === "center"
     );
 
-    const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+    const rebuilt = Serialize.buildIR(doc);
     const doc2 = await rebuilt.toJSON();
     const op2 = (doc2.root as Frontend.ChartIR).operators![0] as any;
     check(
@@ -1110,7 +1128,7 @@ async function main() {
         mark.label?.[0]?.accessor?.ops?.[0]?.op === "sum"
     );
 
-    const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+    const rebuilt = Serialize.buildIR(doc);
     const doc2 = await rebuilt.toJSON();
     const mark2 = (doc2.root as Frontend.ChartIR).mark as any;
     check(
@@ -1136,7 +1154,7 @@ async function main() {
         op.label?.[0]?.accessor?.ops?.[0]?.op === "sum"
     );
 
-    const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+    const rebuilt = Serialize.buildIR(doc);
     const doc2 = await rebuilt.toJSON();
     const op2 = (doc2.root as Frontend.ChartIR).operators![0] as any;
     check(
@@ -1264,7 +1282,7 @@ async function main() {
       mark.children?.[1]?.type === "pack" &&
         mark.children[1].__combinator === true
     );
-    const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+    const rebuilt = Serialize.buildIR(doc);
     const doc2 = await rebuilt.toJSON();
     check(
       "combinator pack round-trips through fromJSON",
@@ -1307,7 +1325,7 @@ async function main() {
       .mark(circle({ r: 4 }).name("pts"));
     const doc = await built.toJSON();
     validateDoc(doc, "layer() producer tier");
-    const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+    const rebuilt = Serialize.buildIR(doc);
     const doc2 = await rebuilt.toJSON();
     check(
       "round-trip preserves mark.name",
@@ -1346,7 +1364,7 @@ async function main() {
     ] as const) {
       let message = "";
       try {
-        Serialize.buildIR({ ...ir, ...extra }, { tables: { t0: rows } });
+        Serialize.buildIR(irDoc({ ...ir, ...extra } as any, { t0: rows }));
       } catch (e) {
         message = e instanceof Error ? e.message : String(e);
       }
@@ -1521,12 +1539,10 @@ async function main() {
       message || "did not throw"
     );
     const calls: string[] = [];
-    const bridge = {
-      applyLambda: async (id: string, rows: any[]) => {
-        calls.push(id);
-        return rows.map((r) => r.a);
-      },
-    };
+    const bridge = accessorBridge((id, rows) => {
+      calls.push(id);
+      return rows.map((r) => r.a);
+    });
     const op = Serialize.mapOperator(spec, bridge);
     await chart([{ a: 1 }, { a: 2 }])
       .flow(op)
@@ -1571,12 +1587,10 @@ async function main() {
           Math.abs(r.h - expected[i].h) < 1e-9
       );
     const calls: string[] = [];
-    const bridge = {
-      applyLambda: async (id: string, batch: any[]) => {
-        calls.push(id);
-        return batch.map((r) => r.v);
-      },
-    };
+    const bridge = accessorBridge((id, batch) => {
+      calls.push(id);
+      return batch.map((r) => r.v);
+    });
     const ir = {
       type: "chart",
       data: { type: "table", id: "t0" },
@@ -1584,7 +1598,7 @@ async function main() {
       mark: { type: "rect", w: 10, h: { __gofish_lambda: "hv" } },
     } as any;
     const fromPython = rectsOf(
-      await Serialize.buildIR(ir, { bridge, tables: { t0: rows } }).toDisplayList({ w: 100, h: 100 })
+      await Serialize.buildIR(irDoc(ir, { t0: rows }), bridge).toDisplayList({ w: 100, h: 100 })
     );
     check(
       "a bridged h accessor (a Python lambda) draws the same bars as a field",
@@ -1603,7 +1617,7 @@ async function main() {
       },
     } as any;
     const fromDims = rectsOf(
-      await Serialize.buildIR(dimsIR, { bridge, tables: { t0: rows } }).toDisplayList({ w: 100, h: 100 })
+      await Serialize.buildIR(irDoc(dimsIR, { t0: rows }), bridge).toDisplayList({ w: 100, h: 100 })
     );
     check(
       "a bridged accessor nested in dims draws the same bars as a field",
@@ -1624,7 +1638,7 @@ async function main() {
       ],
       mark: { type: "circle", r: 2 },
     } as any;
-    const dl = await Serialize.buildIR(scatterIR, { bridge, tables: { t0: rows } }).toDisplayList({ w: 100, h: 100 });
+    const dl = await Serialize.buildIR(irDoc(scatterIR, { t0: rows }), bridge).toDisplayList({ w: 100, h: 100 });
     const cxs: number[] = [];
     const walk = (it: any) => {
       if (it.kind === "ellipse") cxs.push(it.cx);

@@ -10,8 +10,8 @@
  * GoFish `ChartBuilder` / `Mark` graph. Each construct the descriptor table
  * declares is rebuilt by one factory, looked up by its wire `type`
  * ({@link rebuild}); the `derive` operator and any `{__gofish_lambda}`
- * sentinels invoke a caller-supplied bridge (typically the Python anywidget
- * bridge).
+ * sentinels invoke a caller-supplied bridge (a Python host: the notebook
+ * widget or the parity harness).
  */
 
 // Source-module imports (not `../lib`) — `lib.ts` re-exports this module,
@@ -68,7 +68,6 @@ import { partition } from "../ast/graphicalOperators/partition";
 import { cut as cutSlices, cutMark } from "../ast/graphicalOperators/cut";
 import { offset as offsetOp } from "../ast/graphicalOperators/offset";
 import { fieldPredicate } from "../ast/fieldExpr";
-import { applySchema } from "../ast/schema";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { clock } from "../ast/coordinateTransforms/clock";
 import { wavy } from "../ast/coordinateTransforms/wavy";
@@ -79,60 +78,63 @@ export type { ChartBuilder, Mark, Operator };
 export { cutSlices, cutMark, offsetOp };
 
 /**
- * Bridge used by the deserializer to invoke Python-registered lambdas.
+ * The bridge the deserializer calls Python callbacks through. The IR names a
+ * callback by lambda id in three places, and each calls the bridge's one
+ * method, `call`, with its rows:
  *
- * The deserializer encounters lambda references in two places:
+ *  - a `derive` operator's `lambdaId`, with the rows the operator gets;
+ *  - a `{ __gofish_lambda: id }` channel value (an accessor), once with all
+ *    the rows of the channel (`RESOLVE_ROWS`);
+ *  - a `{type: "mark-fn", lambdaId}` mark, with one partition's input.
  *
- *  - The `derive` operator's `lambdaId` field — calls `applyLambda` per
- *    operator invocation.
- *  - The `{ __gofish_lambda: id }` channel-value sentinel — converted to an
- *    async per-row accessor.
- *
- * The transport (Arrow over anywidget traitlets, JSON over HTTP, etc.) is the
- * bridge's responsibility. `applyLambda` returns the callback's results as
- * plain JSON values, with any transport-specific wrapping undone, and may
- * attach the column types it decoded (`setColumnTypes`). A lambda accessor
- * reads rows through {@link applyLambdaTyped}, and a `derive` types them
- * with `applySchema` as it types any function's result. A mark function's
- * reply is not rows but an IR payload ({@link MarkPayload}), so it has its
- * own call, `applyMark`.
+ * The transport (Arrow over anywidget traitlets, Arrow over HTTP) is the
+ * bridge's own: it sends the rows, and decodes the reply's tables before it
+ * answers.
  */
 export interface DeriveBridge {
-  /**
-   * Apply the lambda registered under `lambdaId` to a batch of rows.
-   * Returns what the lambda produced (rows, or one value per row) as plain
-   * JSON values.
-   */
-  applyLambda(lambdaId: string, rows: any[]): Promise<any[]>;
-  /**
-   * Call the mark function registered under `lambdaId` on one partition's
-   * input. Returns the payload of what it drew: its mark-position IR and the
-   * tables that IR's charts name, decoded, with ids of the reply's own.
-   */
-  applyMark(lambdaId: string, rows: any[]): Promise<MarkPayload>;
-}
-
-/** A mark function's reply: an IR payload of its own, like the top-level
- *  one (the IR and the tables its charts name, by id). */
-export interface MarkPayload {
-  ir: Frontend.MarkIR;
-  tables: Frontend.Tables;
+  /** Call the Python callback registered under `lambdaId` with `rows`. */
+  call(lambdaId: string, rows: any[]): Promise<BridgeReply>;
 }
 
 /**
- * Call a bridge lambda and type what it returns: the rows go through
- * `applySchema` before anyone reads a value, as a chart's rows do. A bridge
- * may hand back rows whose column types it decoded with them (the widget's
- * Arrow decode types a naive timestamp column as a time and leaves its values
- * as wall-clock ISO strings), so this is where those values become epoch
- * milliseconds.
+ * What a bridge call answers: a document of its own, shaped like the one it
+ * came from (its tables decoded, by ids of the reply's own). Its root is what
+ * the callback produced. A derive or an accessor produces a list (a derive
+ * its rows, or groups; an accessor one value per row it was called with), so
+ * its root names the table that holds the list, `{type: "table", id}`, as a
+ * chart's data names its rows. A mark function produces what it drew, so its
+ * root is that mark-position IR, rebuilt like any other.
  */
-export async function applyLambdaTyped(
+export interface BridgeReply {
+  root: Frontend.FrontendIR | Frontend.TableRef;
+  /** The reply's tables, decoded. A callback's list need not be records,
+   *  so a table here is any list. */
+  tables?: Record<string, unknown[]>;
+}
+
+/**
+ * Call a derive or an accessor through `bridge` and return the list its
+ * reply names, as the bridge decoded it (rows may carry column types,
+ * `setColumnTypes`, which `applySchema` reads). A call with no rows answers
+ * no rows without crossing the bridge.
+ */
+export async function callForRows(
   bridge: DeriveBridge,
   lambdaId: string,
   rows: any[]
 ): Promise<any[]> {
-  return applySchema(await bridge.applyLambda(lambdaId, rows));
+  if (rows.length === 0) return [];
+  const reply = await bridge.call(lambdaId, rows);
+  // A derive's or an accessor's reply names a table by contract.
+  const { id } = reply.root as Frontend.TableRef;
+  const result = reply.tables?.[id];
+  if (result === undefined) {
+    throw new Error(
+      `callback ${lambdaId} answered without the table of rows its root ` +
+        `names (${JSON.stringify(reply.root)})`
+    );
+  }
+  return result;
 }
 
 /**
@@ -228,11 +230,9 @@ export const OPERATOR_BUILDERS: Record<
     // Data always flows as a list, so the lambda gets the list itself.
     // `derive` types what it returns with `schema`, as it does a JS
     // function's result.
-    return derive(
-      async (d: any[]) =>
-        d.length === 0 ? d : bridge.applyLambda(lambdaId, d),
-      { schema: opts.schema }
-    );
+    return derive((d: any[]) => callForRows(bridge, lambdaId, d), {
+      schema: opts.schema,
+    });
   },
   // The IR names the layer to resolve against as a string; the factory takes
   // a selection.
