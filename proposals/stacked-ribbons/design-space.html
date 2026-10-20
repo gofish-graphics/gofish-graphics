@@ -431,6 +431,8 @@
     </p>
     <p class="small">
       <strong>Latest:</strong>
+      <a href="#anchors-v2">anchors written like the rest of GoFish</a> and
+      <a href="#compare">all proposals compared</a>; before that,
       <a href="#anchors">anchors on a mark's boundary</a> (your idea, prototyped
       on seven examples), after <a href="#nodelink">node-link ribbons</a>.
     </p>
@@ -1574,6 +1576,378 @@ chart(penguins)
       stands, reading the anchors is a cycle.
     </li>
   </ul>
+
+  <h2 id="anchors-v2">Anchors, written like the rest of GoFish</h2>
+  <p class="prose">
+    A second pass at anchors, aiming to read like the rest of the system. The
+    first pass mirrored the pipeline (<code>chart().flow().mark()</code> inside
+    a modifier), which you found confusing. GoFish already has a modifier that
+    divides a shape: <code>.cut({ dir, size, inset })</code>. An anchor is the
+    same idea applied to a boundary part instead of the interior. So it can take
+    <code>cut</code>'s option vocabulary and no inner flow.
+  </p>
+
+  <h3>The spelling</h3>
+  <pre><code>// declare: a modifier, a sibling of .label(), .cut() and .name()
+rect({ w: 12, h: "value" })
+  .anchor("in",  { at: "x-min", size: "value" })
+  .anchor("out", { at: "x-max", size: "value" })
+  .name("nodes")
+
+// refer: a small constructor, a sibling of ref(), field() and datum()
+ribbon({ from: anchor("source", "out"), to: anchor("target", "in") })</code></pre>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Option</th>
+          <th>Meaning</th>
+          <th>Where the word comes from</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>at</code></td>
+          <td>
+            The boundary part: <code>x-min</code>, <code>x-max</code>,
+            <code>y-min</code>, <code>y-max</code>, or the coordinate's own
+            dimension names (<code>r-min</code> is a polar rect's inner arc).
+          </td>
+          <td>
+            <code>Place.along({ at })</code> in the label proposal;
+            <code>min</code>/<code>max</code> are GoFish's box-anchor names;
+            dimension names come from #838.
+          </td>
+        </tr>
+        <tr>
+          <td><code>size</code></td>
+          <td>
+            Each slot's length along the part, read from the row attached to it.
+            A field is measured on the mark's own scale; a number is pixels;
+            omitted, the part is divided equally.
+          </td>
+          <td><code>.cut({ size })</code>, with the same omitted rule</td>
+        </tr>
+        <tr>
+          <td><code>inset</code></td>
+          <td>
+            A gap taken out of each slot (d3's <code>ribbon.padAngle</code>).
+          </td>
+          <td><code>.cut({ inset })</code></td>
+        </tr>
+        <tr>
+          <td><code>by</code></td>
+          <td>
+            Groups the slots in the key's sort order; within a group, slots
+            follow where the far end was placed.
+          </td>
+          <td>the split family's one key</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose"><strong>Two rules:</strong></p>
+  <ul class="prose">
+    <li>
+      <strong>Slots are made by attachments.</strong> Each row that a ribbon,
+      line or label attaches to an anchor gets one slot there. A mark's own rows
+      don't become slots unless something attaches them, so the node's own table
+      row never becomes a stray slot.
+    </li>
+    <li>
+      <strong>A reference finds the mark in one of two ways:</strong>
+      <ul>
+        <li>
+          <code>anchor("source", "out")</code> goes through a resolved ref
+          column, for a separate nodes table.
+        </li>
+        <li>
+          <code>anchor("out")</code> goes through ownership: the mark that owns
+          this row, when nodes are drawn from the links themselves.
+        </li>
+      </ul>
+      Either way, the attaching row is the slot's row.
+    </li>
+  </ul>
+  <p class="prose">
+    <strong>The ribbon's width</strong> is its two slots' sizes, so a chord's
+    asymmetric ends fall out with no per-end option. With no anchors named,
+    <code>ribbon</code> and <code>line</code> behave as they do today.
+  </p>
+
+  <h3>The examples</h3>
+  <pre><code>// energy sankey, sankey tree: nodes table + links table
+chart(nodes).flow(...).mark(rect({ w: 12, h: "value" })
+  .anchor("in",  { at: "x-min", size: "value" })
+  .anchor("out", { at: "x-max", size: "value" }).name("nodes"))
+chart(links).flow(resolve(["source", "target"], { from: selectAll("nodes") }))
+  .mark(ribbon({ from: anchor("source", "out"), to: anchor("target", "in") }))
+
+// FrankenSankey: decision first at the bar is the anchor's own `by`
+rect({ w: 14, h: "value" }).anchor("out", { at: "x-max", size: "value", by: field("decision").sort(DECISIONS) })
+
+// school days: nodes drawn from the links, so attach by ownership
+rect({ w: "count", h: 4 })   /* a day */.anchor("emotions", { at: "y-min", size: "count" })
+rect({ w: "count", h: 90 })  /* an emotion */.anchor("days",     { at: "y-max", size: "count" })
+chart(links).mark(ribbon({ from: anchor("emotions"), to: anchor("days"), dir: "y" }))
+
+// chord: sized slots with gaps on the inner arc; cells (i, j) and (j, i) pair by key
+rect({ w: "value" }).anchor("ends", { at: "r-min", size: "value", inset: 0.01 })
+chart(cells).flow(group({ by: chordPair })).mark(ribbon({ ends: anchor("ends"), curve: Curve.chord() }))
+
+// Beatles: no size, so equal slots along the top
+ellipse({ w: 70, h: 44 }).anchor("credits", { at: "y-max" })
+line({ from: "song", to: anchor("writer", "credits") })
+
+// labels: several tags along one edge
+rect({ h: "value" }).anchor("tags", { at: "y-max", size: 16, inset: 2 })
+  .label("name", { position: Place.along({ at: "tags" }) })
+
+// parallel sets (sketch): each cohort row is owned by one category per axis
+chart(titanic).mark(spread({ dir: "x", spacing: 120 }, AXES.map((axis) =&gt;
+  chart().flow(spread({ by: axis, dir: "y", spacing: 12 }))
+    .mark(rect({ w: 12, h: "count", fill: "class" })
+      .anchor("in",  { at: "x-min", size: "count" })
+      .anchor("out", { at: "x-max", size: "count" })))))
+  .layer(ribbon({ from: anchor("out"), to: anchor("in"), opacity: 0.6 }))</code></pre>
+  <p class="prose small">
+    The pictures are the ones in the anchors section above. Only the spelling
+    changed, except for parallel sets, which is a sketch here; its picture would
+    match <code>img/parallel-sets.png</code>. In parallel sets the order of ends
+    inside a category comes out per gap, for free: <code>in</code> slots follow
+    the left neighbor and <code>out</code> slots the right. Round 1 needed a
+    hand-made rank key for that.
+  </p>
+
+  <h3>Why this reads like GoFish</h3>
+  <ul class="prose">
+    <li>
+      <strong>The shape matches what's there.</strong> A mark modifier with an
+      options object, like <code>.cut</code> and <code>.label</code>. A
+      reference constructor, like <code>ref</code> and <code>field</code>. No
+      nested <code>chart</code>, <code>mark</code>, <code>flow</code> or
+      <code>layout</code> inside a mark.
+    </li>
+    <li>
+      <strong>The words are reused:</strong> <code>size</code> and
+      <code>inset</code> from <code>cut</code>, <code>by</code> from the splits,
+      <code>at</code> from <code>Place.along</code>, and <code>min</code>/<code
+        >max</code
+      >
+      from box anchors. The only new words are <code>anchor</code> and its
+      axis-relative part names.
+    </li>
+    <li>
+      <strong>The inner flow was dropped.</strong> It was there for two cases,
+      and both are covered by existing words: the FrankenSankey order is
+      <code>by</code>, and the chord's gaps are <code>inset</code>. If a real
+      example ever needs a whole flow along an edge,
+      <code>slots: [ops]</code> is the extension point. This is a declared
+      simplification.
+    </li>
+  </ul>
+
+  <h3>What still needs deciding</h3>
+  <ul class="prose">
+    <li>
+      <strong>Absolute sizes differ from <code>cut</code>.</strong>
+      <code>cut</code>'s field sizes are relative weights that fill the shape.
+      An anchor's must be absolute, on the mark's scale: a ribbon has to be the
+      same width at both ends, and a node larger than its links must leave
+      slack, not stretch them. This is a reason in the domain, but it is the one
+      place the two words differ.
+    </li>
+    <li>
+      <strong>Where the slots sit when a node has slack.</strong> The default is
+      the part's start, d3's rule. A word to override it is open:
+      <code>alignment</code> already means cross-axis in <code>spread</code>, so
+      it can't be reused here.
+    </li>
+    <li>
+      <strong>Part names.</strong> Labels still use screen words
+      (<code>"outset-top"</code>, and the label proposal's
+      <code>top</code>/<code>right</code> parts). Using axis-relative names for
+      both is one decision across the two proposals.
+    </li>
+    <li>
+      <strong>Node value.</strong> A sankey node is as tall as its larger side.
+      That's a value column (or a data helper), because reading it from the
+      anchors is a cycle.
+    </li>
+    <li>
+      <strong>Ownership across charts.</strong> School days' rows are owned by a
+      day node and an emotion node in two charts.
+      <code>anchor("emotions")</code> picks the owner that has that anchor; on
+      the wire this needs the system's row index.
+    </li>
+  </ul>
+
+  <h2 id="compare">All the proposals, compared</h2>
+  <p class="prose">
+    A <strong>workaround</strong> means the user writes something the
+    visualization doesn't call for: a hand-made sort key, invisible rows, a fake
+    node, a copied row id, an accessor that switches on a tag, or normalized
+    columns. "Rejected" marks a construct you turned down in review. The cells
+    are about each example's spec, from the prototypes.
+  </p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Example</th>
+          <th>1. Ends are rows</th>
+          <th>2. Syntax follows data (nested)</th>
+          <th>3. Node-link allocation</th>
+          <th>4. Grouping by a ref</th>
+          <th>5. Anchors (this)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Parallel sets</td>
+          <td>rank key; id column</td>
+          <td>clean with <code>.map</code></td>
+          <td>via <code>.map</code> (2)</td>
+          <td>via <code>.map</code> (2)</td>
+          <td>clean; end order per gap for free (sketch)</td>
+        </tr>
+        <tr>
+          <td>Parallel coordinates</td>
+          <td>
+            <span style="color: var(--bad)">can't</span>: one mixed value column
+          </td>
+          <td>needs per-child scales</td>
+          <td>same as 2</td>
+          <td>same as 2</td>
+          <td>same as 2</td>
+        </tr>
+        <tr>
+          <td>Energy sankey</td>
+          <td>half-bar nodes (<code>spacing: 0</code>); rank key; id</td>
+          <td>half-bar nodes; <code>field("in")</code>; nest join</td>
+          <td>clean</td>
+          <td>
+            two charts of zero-width ends; <code>alignment</code> picks the edge
+          </td>
+          <td>clean</td>
+        </tr>
+        <tr>
+          <td>Sankey tree</td>
+          <td>blank-key depth rows; rank key</td>
+          <td>zero-width end rects; <code>field("children")</code></td>
+          <td>clean</td>
+          <td>as energy</td>
+          <td>clean</td>
+        </tr>
+        <tr>
+          <td>School days</td>
+          <td>
+            <span style="color: var(--bad)">can't</span>: rows share one spacing
+          </td>
+          <td>clean</td>
+          <td>clean</td>
+          <td>as energy</td>
+          <td>clean</td>
+        </tr>
+        <tr>
+          <td>Beatles</td>
+          <td>
+            <span style="color: var(--bad)">can't</span>: rows share one spacing
+          </td>
+          <td>clean</td>
+          <td>clean (<code>ends: spread()</code>)</td>
+          <td>as energy, with <code>spread</code></td>
+          <td>clean</td>
+        </tr>
+        <tr>
+          <td>FrankenSankey</td>
+          <td>accessor switching on a tag; a union of row kinds</td>
+          <td>clean</td>
+          <td>an order override on the ribbon</td>
+          <td>nested stacks</td>
+          <td>clean (<code>by</code> on the anchor)</td>
+        </tr>
+        <tr>
+          <td>Chord</td>
+          <td>clean with <code>at</code></td>
+          <td>needs <code>at</code> and <code>by</code></td>
+          <td>clean (<code>size: { from, to }</code>)</td>
+          <td><code>alignment</code> on the radial axis</td>
+          <td>clean; the pair key is the domain's</td>
+        </tr>
+        <tr>
+          <td>Labels on edges</td>
+          <td>separate system</td>
+          <td>separate system</td>
+          <td>separate system</td>
+          <td>separate system</td>
+          <td>the same mechanism</td>
+        </tr>
+        <tr>
+          <td><strong>Workarounds, total</strong></td>
+          <td><strong>9, plus 3 can'ts</strong></td>
+          <td><strong>5</strong></td>
+          <td><strong>1</strong></td>
+          <td><strong>about 6</strong> (sketched, not rendered)</td>
+          <td><strong>0</strong></td>
+        </tr>
+        <tr>
+          <td>New concepts</td>
+          <td>
+            <code>unpivot</code>, ribbon <code>by</code>, ribbon <code>at</code>
+          </td>
+          <td>projection, nest join, scope passing, child scales</td>
+          <td>
+            ribbon <code>size</code>, <code>ends</code> option, per-end size,
+            part choice
+          </td>
+          <td>two rules about ref columns</td>
+          <td>
+            <code>.anchor</code>, <code>anchor()</code>, axis-relative parts
+          </td>
+        </tr>
+        <tr>
+          <td>Rejected in review</td>
+          <td>—</td>
+          <td>
+            <code>cols</code> expansion, <code>field</code> in data position,
+            <code>spacing: 0</code>
+          </td>
+          <td>no real stacking</td>
+          <td>—</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>Stacking is visible</td>
+          <td>yes (<code>stack</code> in the flow)</td>
+          <td>yes, but faked</td>
+          <td>
+            <span style="color: var(--bad)">no</span>, hidden in the ribbon
+          </td>
+          <td>yes (<code>stack</code> on a ref)</td>
+          <td>yes, on the node's edge, as <code>cut</code>'s rule</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose">
+    Common to every proposal: parallel coordinates needs a scale per child
+    chart, and a sankey node's value has to come from data. Neither is about
+    divided ends.
+  </p>
+  <p class="prose">
+    <strong>Reading.</strong> Proposal 5 is the only one with no workarounds
+    across the suite. It is also the only one that serves labels with the same
+    mechanism, and it reuses <code>cut</code>'s, <code>by</code>'s and
+    <code>Place.along</code>'s words rather than adding a new grammar. Its
+    costs: two new names (<code>.anchor</code> and <code>anchor()</code>);
+    absolute sizes, the one place it differs from <code>cut</code>; and a shared
+    decision with the label proposal about part names. Node-link allocation (3)
+    is the runner-up: it is just as clean on the examples, but hides the stack
+    inside the ribbon, which is what you objected to. Proposal 5 is essentially
+    proposal 3 with the allocation moved onto the node, where the stack visibly
+    lives.
+  </p>
 
   <h2>Pictures for candidate B</h2>
   <p class="prose small">
