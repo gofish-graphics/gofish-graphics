@@ -72,10 +72,16 @@ export type ClaimChild = {
   space: UnderlyingSpace | undefined;
   /** It is a stand-in for a node elsewhere (a `ref`). */
   standIn: boolean;
-  /** For a stand-in, where its target lands in the layer's frame, when the
-   *  claim walk knows (`placementIn`). */
+  /** It draws a box read off refs it holds (`GoFishNode.placedFromRefs`,
+   *  an `enclose` around placed members). */
+  fromRefs: boolean;
+  /** For a stand-in, where its target lands in the layer's frame, and for a
+   *  node drawn from refs, where it lands, when the claim walk knows
+   *  (`placementIn`). */
   placed?: Placement;
-  /** It reads its place from refs (`GoFishNode.inkOn`): it is ink. */
+  /** It reads its place from refs and the claim walk does not know where
+   *  it lands (`GoFishNode.inkOn`, or a node drawn from refs with no
+   *  `placed`): it is ink. */
   inkOn: boolean;
   /** Its own data places it in the layer's frame (a continuous type with a
    *  data position in the layer's own set), as layout's `dataPositioned`. */
@@ -272,7 +278,9 @@ export function placeByClaims(
       if (p !== undefined) nestedPlaced.set(name, p);
     }
   const presetOf = (i: number): Placement | undefined =>
-    children[i].standIn ? children[i].placed : undefined;
+    children[i].standIn || children[i].fromRefs
+      ? children[i].placed
+      : undefined;
   const inkName = (name: string): boolean => {
     const op = operands.get(name);
     if (op === undefined) return true;
@@ -287,7 +295,11 @@ export function placeByClaims(
     if (op === undefined || !op.direct) return false;
     const c = children[op.child];
     return (
-      !c.standIn && !c.inkOn && c.extent === undefined && !spanned.has(op.child)
+      !c.standIn &&
+      !c.inkOn &&
+      presetOf(op.child) === undefined &&
+      c.extent === undefined &&
+      !spanned.has(op.child)
     );
   };
   // What is unknown spreads through the relations on this axis: whatever
@@ -330,7 +342,12 @@ export function placeByClaims(
   children.forEach((c, i) => {
     if (c.inkOn) ink.add(i);
     if (c.standIn) ink.delete(i);
-    if (c.extent === undefined && !c.standIn && !spanned.has(i))
+    if (
+      c.extent === undefined &&
+      !c.standIn &&
+      presetOf(i) === undefined &&
+      !spanned.has(i)
+    )
       unplaced.add(i);
   });
   // Dressing: what is placed beside a node the claim walk places elsewhere
@@ -353,6 +370,11 @@ export function placeByClaims(
     if (op === undefined || !op.direct || children[op.child].standIn) continue;
     if (dressingRoots.has(find(n))) dressing.add(op.child);
   }
+  // A node drawn around refs (an `enclose`) is placed beside the nodes it
+  // reads, as a label is: dressing too.
+  children.forEach((c, i) => {
+    if (presetOf(i) !== undefined && !c.standIn) dressing.add(i);
+  });
   // What the solve leaves out: the ink, and the stand-ins it cannot place.
   const out = (i: number) =>
     ink.has(i) || (children[i].standIn && children[i].placed === undefined);

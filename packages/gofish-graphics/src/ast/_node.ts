@@ -78,7 +78,11 @@ import {
 } from "./underlyingSpace";
 import { impliedExtents, Extent } from "./extent";
 import * as Monotonic from "../util/monotonic";
-import type { BoxForm, ClaimPlacement } from "./constraints/claimPlacement";
+import type {
+  BoxForm,
+  ClaimPlacement,
+  Placement,
+} from "./constraints/claimPlacement";
 import { toJSON } from "../util/interval";
 import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
@@ -745,6 +749,17 @@ export class GoFishNode {
    *  Layout size is separate from drawn size (#493), as a CSS box's ink
    *  overflow or a Typst box's `outset` is. */
   public inkOn?: [boolean, boolean];
+  /** Set on a node whose box is read off other nodes it holds as refs (an
+   *  `enclose` around placed members): where it lands in `frame`'s frame on
+   *  `axis`, when the claim walk knows where the refs' targets land there
+   *  (`placementIn`), else undefined. Known, it takes room in the layer it
+   *  sits in, as a label beside a ref does, and it is dressing there: no part
+   *  of the plot. Unknown, it is ink, as {@link inkOn} is (see
+   *  `placeByClaims`). */
+  public placedFromRefs?: (
+    frame: GoFishNode,
+    axis: 0 | 1
+  ) => Placement | undefined;
   /** Set on a layer by `layer`: what the claim walk reads of it. A node
    *  with none is not a layer. */
   public claimWalk?: ClaimWalk;

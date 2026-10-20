@@ -233,12 +233,15 @@ export const layer = createNodeOperatorSequential(
     // Per axis, the children that are dressing there (`placeByClaims`).
     const dressingChildren: [Set<number>, Set<number>] = [new Set(), new Set()];
     // Where each child that is a `ref` stand-in has its target land in this
-    // layer's frame on `axis` (`placementIn`), by child index.
+    // layer's frame on `axis` (`placementIn`), and where each child drawn
+    // from refs lands (`GoFishNode.placedFromRefs`), by child index.
     const standInPlacements = (axis: 0 | 1): (Placement | undefined)[] =>
       node.children.map((c) =>
-        c instanceof GoFishRef && c.targetNode !== undefined
-          ? placementIn(c.targetNode, node, axis)
-          : undefined
+        c instanceof GoFishRef
+          ? c.targetNode !== undefined
+            ? placementIn(c.targetNode, node, axis)
+            : undefined
+          : c.placedFromRefs?.(node, axis)
       );
     // What the claim walk knows of each child on `axis`, for
     // `placeByClaims`: its claim (`extents`), its type, whether it is a `ref`
@@ -259,9 +262,13 @@ export const layer = createNodeOperatorSequential(
           extent: extents[i]?.[axis],
           space,
           standIn: c instanceof GoFishRef,
+          fromRefs: c instanceof GoFishNode && c.placedFromRefs !== undefined,
           placed: placed[i],
           inkOn:
             (c as GoFishNode).inkOn?.[axis] === true ||
+            (c instanceof GoFishNode &&
+              c.placedFromRefs !== undefined &&
+              placed[i] === undefined) ||
             (alongOwnAxis(c, axis) && (held ??= heldInChain(axis))),
           dataPositioned:
             sets[i] === 0 && isCONTINUOUS(space) && space.origin !== "free",
@@ -362,7 +369,8 @@ export const layer = createNodeOperatorSequential(
           !sharing.datumPlaced[axis].has(i) &&
           extents[i]?.[axis] === undefined &&
           c instanceof GoFishNode &&
-          c.inkOn?.[axis] !== true
+          c.inkOn?.[axis] !== true &&
+          c.placedFromRefs === undefined
       );
     };
 
@@ -564,12 +572,17 @@ export const layer = createNodeOperatorSequential(
                 ? "fold"
                 : "placed"
           );
+          // A node drawn from refs takes room where the claim walk places it.
+          const fromRefs = node.children.flatMap((c, i) =>
+            c instanceof GoFishNode && c.placedFromRefs !== undefined ? [i] : []
+          );
           for (const axis of [0, 1] as const)
             claimPlaced[axis] =
               modes[axis] === "placed"
                 ? new Set([
                     ...t.placed[axis],
                     ...constrainedOn(axis, node.constraints, operands),
+                    ...fromRefs,
                   ])
                 : t.placed[axis];
           const placements: [

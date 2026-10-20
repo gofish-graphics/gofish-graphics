@@ -715,7 +715,14 @@ report their size).
   describes stays where its own layout puts it. A layer that places such a
   stand-in claims the hull of its solve, not the fold that starts its
   children at its origin. A region (a `partition` cell) places its child
-  across its datum span, as an interval does.
+  across its datum span, as an interval does. An `enclose` around placed
+  members (`.relate()` operands, `ref(...)` children, or a `selectAll` in the
+  chart form) is placed from its refs the same way
+  (`GoFishNode.placedFromRefs`): its box is its members' boxes, each where
+  `placementIn` lands it in the layer that holds the outline, grown by the
+  padding. So the outline takes room where it draws and never moves its
+  members. The box is exact for `Shape.box()`, and a blob lies inside it; an
+  oval can reach past it, and that reach is ink.
 - **Bands are shares, and a share is a claim (#493 piece 3).** On an axis
   where nothing in a scope is sized or placed by data
   (`GoFishNode.carriesData`), σ has no data unit to be the pixels of, so it
@@ -747,8 +754,9 @@ report their size).
   or in its layer's box. That is a node in a coordinate space or under a node
   with a size of its own, one under a node that reads y the other way, a node
   that reads its place from refs (`GoFishNode.inkOn`: the span a label over
-  a run of several slots is centered on), and a band in a scope that mixes
-  data and bands.
+  a run of several slots is centered on, or an `enclose` with a member the
+  claim walk cannot place), and a band in a scope that mixes data and
+  bands.
 - **Nicing holds the domain.** A claim is the hull of what the content draws,
   so widening it to a keyed or niced domain (`widenTo`) takes the farther of
   the claim and the domain's end on each side. A tick label past the last
@@ -783,8 +791,9 @@ report their size).
   it too adds around the plot.
 - **The plot leaves out dressing.** Dressing is what is placed beside a node
   the claim walk places elsewhere: a value label beside its bar's `ref`, a
-  tier of texts seated beside the bars of another tier, and a ring's axes,
-  seated beside the stand-in for its content. Each node has a plot claim
+  tier of texts seated beside the bars of another tier, an `enclose` drawn
+  around placed members, and a ring's axes, seated beside the stand-in for
+  its content. Each node has a plot claim
   next to its claim (`GoFishNode.resolvePlotExtent`): a layer composes its
   children's plot claims the way it composes their claims, its hull of what
   its constraints place leaves out the dressing (`placeByClaims`' plot
