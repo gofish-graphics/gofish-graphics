@@ -776,6 +776,318 @@ layer({ coord: Coord.clock() }, [
     different rows, so both spellings must name the pairing explicitly.
   </p>
 
+  <h2 id="hard">Harder references from #47</h2>
+  <p class="prose">
+    Four more complex pictures from issue #47, each a stress test. All four
+    render today with no library changes, from the closest working spelling.
+    Data: FrankenSankey is <strong>estimated</strong> from the picture, school
+    days is read off its drop rows, and Beatles and trade are
+    <strong>synthetic</strong>, because the PiCCL paper (Shi et al., VIS 2025)
+    has no public data.
+  </p>
+
+  <h3>FrankenSankey: a stacked area that becomes a sankey (FT)</h3>
+  <div class="vs">
+    <figure>
+      <div class="plate">
+        <img
+          src="img/ref/frankensankey-ft.png"
+          alt="FT asylum appeals stacked area alluvial"
+        />
+      </div>
+      <figcaption>
+        <span class="tag">Reference</span>FT, via xeno.graphics "stacked area
+        alluvial diagram".
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="plate">
+        <img
+          src="img/hard-frankensankey-parts.png"
+          alt="GoFish render of the FrankenSankey"
+        />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Proposal 2's shape. Missing: axis,
+        year ticks, and labels on the far side.
+      </figcaption>
+    </figure>
+  </div>
+  <div class="vs">
+    <div>
+      <div class="vs-head p1">Proposal 1: ends are rows</div>
+      <pre><code>const ends = concat(years,
+  unpivot({ on: ["bar", "country"], variable: "side", value: "node", id: "link" })(links));
+chart(ends)
+  .flow(
+    spread({ by: "part", dir: "x", spacing: 150 }),
+    spread({ by: field("year").sort(), dir: "x", spacing: 22 }),
+    spread({ by: "node", dir: "y", spacing: 6 }),
+    stack({ by: field("rank").sort(), dir: "y" })  // bar: decision|country; country: decision
+  )
+  .mark(rect({ w: (d) =&gt; (d.side ? 14 : 0), h: "value", fill: "decision" }))
+  .layer(ribbon({ by: "band", fill: "decision" }))                // the stacked area
+  .layer(ribbon({ by: "link", fill: "decision", opacity: 0.55 })) // the sankey</code></pre>
+    </div>
+    <div>
+      <div class="vs-head p2">Proposal 2: syntax follows the data</div>
+      <pre><code>spread({ dir: "x", spacing: 150 }, [
+  spread({ dir: "x", spacing: 0 }, [
+    chart(years)                                   // the stacked area
+      .flow(spread({ by: "year", dir: "x", spacing: 22 }), stack({ by: "decision", dir: "y" }))
+      .mark(ribbon({ h: "value", fill: "decision" })),
+    chart(links)                                   // the 2017 bar: decision first
+      .flow(stack({ by: "decision", dir: "y" }), stack({ by: "country", dir: "y" }))
+      .mark(rect({ w: 14, h: "value", fill: "decision" })),
+  ]),
+  chart(links)                                     // the countries: country first
+    .flow(spread({ by: "country", dir: "y", spacing: 6 }), stack({ by: "decision", dir: "y" }))
+    .mark(rect({ w: 14, h: "value", fill: "decision" })),
+]).layer(ribbon({ fill: "decision", opacity: 0.55 }))</code></pre>
+    </div>
+  </div>
+  <p class="verdict-line">
+    <strong>More natural: proposal 2.</strong> The end order on each side is
+    just that side's own flow: decision then country in the bar, country then
+    decision at the nodes. Proposal 1 needs a side-dependent <code>rank</code>,
+    a union of two kinds of rows, and a rule that rows with no
+    <code>by</code> key join no ribbon. <strong>New requirements:</strong> a
+    different end order on each side of a gap; a stacked area and a sankey in
+    one picture (two ribbon identities); labels on the far side; an explicit
+    shared-or-independent scale choice.
+  </p>
+
+  <h3>Seven emotional school days (PiCCL)</h3>
+  <div class="vs">
+    <figure>
+      <div class="plate">
+        <img
+          src="img/ref/piccl-school-days.png"
+          alt="PiCCL seven emotional school days"
+        />
+      </div>
+      <figcaption><span class="tag">Reference</span>PiCCL example.</figcaption>
+    </figure>
+    <figure>
+      <div class="plate">
+        <img
+          src="img/hard-school-days-two-rows.png"
+          alt="GoFish render of school days"
+        />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Proposal 2's shape. Missing: glass
+        images, drop rows, legend ribbons.
+      </figcaption>
+    </figure>
+  </div>
+  <div class="vs">
+    <div>
+      <div class="vs-head p1">Proposal 1: ends are rows</div>
+      <pre><code>chart(links)   // { day, emotion, count }
+  .flow(
+    derive(unpivot({ on: ["day", "emotion"], variable: "side", value: "node", id: "link" })),
+    spread({ by: field("side").sort(["day", "emotion"]), dir: "y", spacing: 220 }),
+    spread({ by: field("node").sort([...DAYS, ...EMOTIONS]), dir: "x", spacing: 36 }),
+    stack({ by: field("rank").sort(), dir: "x" })
+  )
+  .mark(rect({ w: "count", h: (d) =&gt; (d.side === "day" ? 4 : 90), fill: "emotion" }))
+  .layer(ribbon({ by: "link", dir: "y", opacity: 0.6 }))</code></pre>
+    </div>
+    <div>
+      <div class="vs-head p2">Proposal 2: syntax follows the data</div>
+      <pre><code>spread({ dir: "y", spacing: 200 }, [
+  chart(links)   // the days: each a stack of its emotions
+    .flow(spread({ by: field("day").sort(DAYS), dir: "x", spacing: 60 }),
+          stack({ by: field("emotion").sort(EMOTIONS), dir: "x" }))
+    .mark(rect({ w: "count", h: 4, fill: "emotion" })),
+  chart(links)   // the glasses: each a stack of its days
+    .flow(spread({ by: field("emotion").sort(EMOTIONS), dir: "x", spacing: 50 }),
+          stack({ by: field("day").sort(DAYS), dir: "x" }))
+    .mark(rect({ w: "count", h: 90, fill: "emotion" })),
+]).layer(ribbon({ dir: "y", opacity: 0.6 }))</code></pre>
+    </div>
+  </div>
+  <p class="verdict-line">
+    <strong>More natural: proposal 2.</strong> The two rows differ in spacing,
+    height and labels, and in proposal 1 they share one node tier. The end order
+    on each side is exact with no rank key: stack by the far node's field.
+    <strong>New requirements:</strong> a spacing per row (proposal 1 cannot
+    express it); image nodes; a node body larger than its ends.
+  </p>
+
+  <h3>Beatles songs and their writers (PiCCL)</h3>
+  <div class="vs">
+    <figure>
+      <div class="plate">
+        <img
+          src="img/ref/piccl-beatles.png"
+          alt="PiCCL Beatles songs to writers"
+        />
+      </div>
+      <figcaption><span class="tag">Reference</span>PiCCL example.</figcaption>
+    </figure>
+    <figure>
+      <div class="plate">
+        <img src="img/hard-beatles.png" alt="GoFish render of Beatles songs" />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Synthetic credits. Missing: head
+        images, staggered note heights.
+      </figcaption>
+    </figure>
+  </div>
+  <div class="vs">
+    <div>
+      <div class="vs-head p1">Proposal 1: ends are rows</div>
+      <pre><code>chart(credits)   // { song, writer }: one row per credit
+  .flow(
+    derive(unpivot({ on: ["song", "writer"], variable: "side", value: "node", id: "credit" })),
+    spread({ by: field("side").sort(["song", "writer"]), dir: "y", spacing: 260 }),
+    spread({ by: "node", dir: "x", spacing: 12 }),   // songs need 18, heads 90
+    spread({ by: field("rank").sort(), dir: "x", spacing: 3 })
+  )
+  .mark(rect({ w: (d) =&gt; (d.side === "song" ? 0 : 1), h: 3, fill: "writer" }))
+  .layer(line({ by: "credit", dir: "y", curve: Curve.bezier() }))</code></pre>
+      <figure>
+        <div class="plate">
+          <img
+            src="img/hard-beatles-flat-fails.png"
+            alt="Beatles with one shared spacing"
+          />
+        </div>
+        <figcaption>
+          <span class="tag fail">Fails</span>One node tier means one spacing, so
+          the heads overlap.
+        </figcaption>
+      </figure>
+    </div>
+    <div>
+      <div class="vs-head p2">Proposal 2: syntax follows the data</div>
+      <pre><code>spread({ dir: "y", spacing: 260 }, [
+  chart(credits)   // the songs
+    .flow(spread({ by: "song", dir: "x", spacing: 18 }), stack({ dir: "x" }))
+    .mark(rect({ w: 0, h: 3 })),
+  chart(credits)   // the heads: each spreads its songs evenly
+    .flow(spread({ by: "writer", dir: "x", spacing: 90 }),
+          spread({ by: "song", dir: "x", spacing: 3 }))
+    .mark(rect({ w: 1, h: 3, fill: "writer" })),
+]).layer(line({ stroke: "writer", dir: "y", curve: Curve.bezier() }))</code></pre>
+    </div>
+  </div>
+  <p class="verdict-line">
+    <strong>More natural: proposal 2</strong>, for the same reason as school
+    days. Ends spaced evenly instead of sized by value already work in both
+    proposals: a constant <code>w</code> plus <code>spread</code> spacing.
+    <strong>New requirements:</strong> an end-size choice (by value, or equal)
+    if ends are ever allocated automatically; a spacing per row; an offset per
+    node; a rule for "same datum" when one song mark carries several credits.
+  </p>
+
+  <h3>Trade network chord (PiCCL)</h3>
+  <div class="vs">
+    <figure>
+      <div class="plate">
+        <img
+          src="img/ref/piccl-trade-chord.png"
+          alt="PiCCL trade chord diagram"
+        />
+      </div>
+      <figcaption><span class="tag">Reference</span>PiCCL example.</figcaption>
+    </figure>
+    <figure>
+      <div class="plate">
+        <img
+          src="img/hard-trade-chord.png"
+          alt="GoFish render of the trade chord"
+        />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Synthetic: 24 countries in 6
+        regions, about 640 ribbons, using the throwaway chord ribbon. Missing:
+        labels; near-neighbor chords should bow toward the ring.
+      </figcaption>
+    </figure>
+  </div>
+  <div class="vs">
+    <div>
+      <div class="vs-head p1">Proposal 1: ends are rows</div>
+      <pre><code>layer({ coord: Coord.clock() }, [
+  chart(cells)   // one row per (from, to) cell: already the ends
+    .flow(
+      spread({ by: field("region").sort(REGIONS), dir: "x", spacing: 0.03, y: 200, h: 12 }),
+      spread({ by: field("from").sort(order), dir: "x", spacing: 0.005 }),
+      stack({ by: field("offset").sort(), dir: "x" })
+    )
+    .mark(rect({ w: "value", fill: "region" }))
+    .layer(ribbon({ by: "chord", at: "bottom", fill: "color", opacity: 0.55 })),
+])</code></pre>
+    </div>
+    <div>
+      <div class="vs-head p2">Proposal 2: syntax follows the data</div>
+      <pre><code>const partners = cols(countries);   // the wide matrix's columns
+layer({ coord: Coord.clock() }, [
+  chart(matrix)
+    .flow(
+      spread({ by: field("region").sort(REGIONS), dir: "x", spacing: 0.03, y: 200, h: 12 }),
+      spread({ by: field("country").sort(order), dir: "x", spacing: 0.005 })
+    )
+    .mark(stack({ dir: "x" }, [rect({ w: partners, fill: "region" })]))
+    .layer(ribbon({ by: chordPair, at: "bottom", fill: "color", opacity: 0.55 })),
+])</code></pre>
+    </div>
+  </div>
+  <p class="verdict-line">
+    <strong>More natural: proposal 1.</strong> The matrix cells already are the
+    ends. Proposal 2 falls back to an explicit <code>by</code>, because ends (i,
+    j) and (j, i) are different cells, and its column order cannot change per
+    row. <strong>New requirements:</strong> a polar spread whose spacing closes
+    the full circle at two levels; <code>at: "bottom"</code> with a curve in
+    screen space; curve tension that depends on how far apart the ends are;
+    radial labels.
+  </p>
+
+  <h3>What the harder references say</h3>
+  <ul class="prose" style="max-width: 86ch">
+    <li>
+      <strong>Two different rows favor proposal 2</strong> (three of four). When
+      the two sides of a gap differ in spacing, size, order or labels, proposal
+      1's single node tier forces them to share. Proposal 2 gives each side its
+      own flow, and each side's end order falls out of that flow with no rank
+      key.
+    </li>
+    <li>
+      <strong>A matrix favors proposal 1.</strong> When the data's rows already
+      are the ends, as in a chord, the flat flow is the natural spelling.
+    </li>
+    <li>
+      <strong>They are not exclusive.</strong> Proposal 2 still needs proposal
+      1's explicit <code>ribbon({ by })</code> for pairings that object identity
+      cannot express.
+    </li>
+    <li>
+      <strong>New cross-cutting requirements:</strong>
+      <ul>
+        <li>
+          a shared-or-independent value scale per child chart (proposal 2 relies
+          on sibling charts sharing one, which the docs say they should not);
+        </li>
+        <li>
+          a ribbon that uses facing edges whatever order its refs come in;
+        </li>
+        <li>end order that differs per side of a gap;</li>
+        <li>equal-size ends as an option next to value-sized ends;</li>
+        <li>image nodes.</li>
+      </ul>
+    </li>
+    <li>
+      <strong>A new bug:</strong> an accessor size is put through the scale.
+      <code>w: 14</code> draws 14 px, but <code>w: (d) =&gt; 14</code> draws 36
+      px. So a table with several kinds of rows cannot give each kind a fixed
+      pixel size.
+    </li>
+  </ul>
+
   <h2>Terms</h2>
   <dl class="terms">
     <dt>Node</dt>
