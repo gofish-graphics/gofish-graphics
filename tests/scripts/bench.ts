@@ -660,9 +660,10 @@ async function benchExamplesPy(
           }
           const loadDelta = performance.now() - tLoad;
 
-          // Only the single-chart path is benchmarked here; layer/raw-mark
-          // are skipped (they don't represent the common per-example case).
-          if (ir?.ir?.type === "layer" || ir?.ir?.type === "raw-mark") {
+          // Only a chart root is benchmarked here; a chain, a layer or a bare
+          // mark at the root is skipped (they don't represent the common
+          // per-example case).
+          if (ir?.ir?.type !== "chart") {
             return { ok: false };
           }
 

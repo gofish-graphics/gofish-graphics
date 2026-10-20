@@ -72,6 +72,7 @@ export type { LayerContext };
 import {
   ChartBuilder,
   LayerBuilder,
+  RenderableBuilder,
   chart,
   resolveRefData,
   PREVIOUS_LAYER_MARKS,
@@ -1121,10 +1122,11 @@ export function layer<T>(
       // A nested empty-scope `chart()` child inherits this layer's incoming
       // partition datum (issue #243), exactly as `.mark(chart())` does — so
       // `layer([chart().flow(...).mark(...), chart(selectAll(...)).mark(...)])`
-      // can be a mark without a `(d) => …` callback. A child with its own data
-      // (e.g. `chart(selectAll(...))`) is left untouched.
+      // can be a mark without a `(d) => …` callback. So does a `.layer(...)`
+      // chain whose first tier is an empty scope (#1181). A child with its own
+      // data (e.g. `chart(selectAll(...))`) is left untouched.
       const child =
-        m instanceof ChartBuilder && m.usesPreviousLayerMarks()
+        m instanceof RenderableBuilder && m.usesPreviousLayerMarks()
           ? m.withData(d)
           : m;
       const result =

@@ -42,17 +42,19 @@ export const exampleBarChart: FrontendIRDocument = {
 };
 
 /**
- * A layer of two charts on the same canvas.
+ * A layer of two charts on the same canvas: `layer([chart(...), chart(...)])`.
  *
- * Exercises: layer root, multiple chart children, the `select`-style data
- * reference (one chart selects from a named layer in the other).
+ * Exercises: a combinator mark at the root (a root holds anything a mark
+ * position does), chart children, the `select`-style data reference (one
+ * chart selects from a named layer in the other).
  */
 export const exampleLayer: FrontendIRDocument = {
   irVersion: 0,
   ir: "gofish-frontend",
   root: {
     type: "layer",
-    charts: [
+    __combinator: true,
+    children: [
       {
         type: "chart",
         data: { type: "table", id: "t0" },
@@ -123,20 +125,58 @@ export const exampleTreemap: FrontendIRDocument = {
 /**
  * A bare mark not wrapped in a chart (e.g. an icon or static decoration).
  *
- * Exercises: raw-mark root, simple leaf mark with literal channel values.
+ * Exercises: a leaf mark at the root, with literal channel values.
  */
 export const exampleCustomMark: FrontendIRDocument = {
   irVersion: 0,
   ir: "gofish-frontend",
   root: {
-    type: "raw-mark",
-    mark: {
-      type: "text",
-      origin: { name: "title" },
-      text: "Catch by Lake",
-      fontSize: 16,
-    },
-    options: { w: 200, h: 40 },
+    type: "text",
+    origin: { name: "title" },
+    text: "Catch by Lake",
+    fontSize: 16,
+  },
+};
+
+/**
+ * A `.layer(...)` chain: bars, then a ribbon over them.
+ *   chart(seafood).flow(spread({by: "lake", dir: "x"}),
+ *                       stack({by: "species", dir: "y"}))
+ *                 .mark(rect({h: "count", fill: "species"}))
+ *                 .layer(chart().flow(group({by: "species"})).mark(ribbon()))
+ *
+ * Exercises: the `layer-chain` root, a `previous-tier` tier.
+ */
+export const exampleLayerChain: FrontendIRDocument = {
+  irVersion: 0,
+  ir: "gofish-frontend",
+  root: {
+    type: "layer-chain",
+    tiers: [
+      {
+        type: "chart",
+        data: { type: "table", id: "t0" },
+        operators: [
+          { type: "spread", by: "lake", dir: "x" },
+          { type: "stack", by: "species", dir: "y" },
+        ],
+        mark: { type: "rect", h: "count", fill: "species" },
+      },
+      {
+        type: "chart",
+        data: { type: "previous-tier" },
+        operators: [{ type: "group", by: "species" }],
+        mark: { type: "ribbon", opacity: 0.8 },
+      },
+    ],
+  },
+  tables: {
+    t0: [
+      { lake: "A", species: "trout", count: 12 },
+      { lake: "A", species: "bass", count: 8 },
+      { lake: "B", species: "trout", count: 5 },
+      { lake: "B", species: "bass", count: 14 },
+    ],
   },
 };
 
@@ -148,5 +188,6 @@ export const allExamples: ReadonlyArray<{
   { name: "layer", doc: exampleLayer },
   { name: "scatter", doc: exampleScatter },
   { name: "treemap", doc: exampleTreemap },
-  { name: "raw-mark", doc: exampleCustomMark },
+  { name: "bare mark", doc: exampleCustomMark },
+  { name: "layer chain", doc: exampleLayerChain },
 ];

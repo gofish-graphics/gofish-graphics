@@ -34,7 +34,7 @@ DATA = {
 
 
 def ir(mark):
-    return mark.to_ir()["mark"]
+    return mark.to_ir()
 
 
 def find(node, pred):
@@ -63,8 +63,9 @@ class TestTree:
     def test_returns_a_layer_mark(self):
         t = tree(DATA)
         assert isinstance(t, Mark)
-        assert t.to_ir()["type"] == "raw-mark"
+        # A root holds the mark itself (#1181).
         assert ir(t)["type"] == "layer"
+        assert ir(t)["__combinator"] is True
 
     def test_node_receives_the_hierarchy_datum(self):
         seen = []

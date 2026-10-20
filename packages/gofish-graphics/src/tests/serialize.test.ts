@@ -243,6 +243,169 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  // Tables by id (#1088): a chart with rows of its own names a table, by one
+  // rule wherever it sits. The rows travel in the document's tables, minted
+  // in walk order; the same rows object is one table.
+  // -------------------------------------------------------------------------
+  {
+    const rows = [
+      { lake: "A", count: 3 },
+      { lake: "B", count: 5 },
+    ];
+    const own = [
+      { day: new Date(Date.UTC(2024, 0, 1)), v: 2 },
+      { day: new Date(Date.UTC(2024, 0, 2)), v: 4 },
+    ];
+    const inner = () =>
+      chart(own, { axes: false })
+        .flow(spread({ by: "day", dir: "x" }))
+        .mark(rect({ h: "v", w: 4 }));
+    const c = chart(rows)
+      .flow(spread({ by: "lake", dir: "x" }))
+      .mark(layer([inner(), inner()]));
+    const doc = await c.toJSON();
+    validateDoc(doc, "nested charts with their own rows");
+    const root = doc.root as Frontend.ChartIR;
+    const children = (root.mark as Frontend.CombinatorMarkIR).children as any[];
+    check(
+      "the root and a nested chart each name a table, in walk order",
+      JSON.stringify(root.data) === '{"type":"table","id":"t0"}' &&
+        children.every(
+          (ch) => JSON.stringify(ch.data) === '{"type":"table","id":"t1"}'
+        ),
+      JSON.stringify([root.data, children.map((ch) => ch.data)])
+    );
+    check(
+      "the document carries each table once, and no inline rows",
+      Object.keys(doc.tables ?? {}).join() === "t0,t1" &&
+        doc.tables!.t1 === own &&
+        !JSON.stringify(doc.root).includes("inline")
+    );
+    const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+    const doc2 = await rebuilt.toJSON();
+    check(
+      "round-trip preserves nested tables",
+      JSON.stringify(doc2) === JSON.stringify(doc)
+    );
+    let message = "";
+    try {
+      await Serialize.buildIR(doc.root, { tables: { t0: rows } }).toDisplayList(
+        { w: 200, h: 100 }
+      );
+    } catch (e) {
+      message = e instanceof Error ? e.message : String(e);
+    }
+    check(
+      "a table the payload does not carry is an error, by id",
+      message.includes('table "t1"'),
+      message || "did not throw"
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // A `.layer(...)` chain sits wherever a chart can (#1181): at the root, as a
+  // chart's `.mark(...)`, and as a combinator child, by one wire type,
+  // `layer-chain`. `layer` means one thing, the combinator mark, at the root
+  // too.
+  // -------------------------------------------------------------------------
+  {
+    const rows = [
+      { site: "A", year: 1931, yield: 3 },
+      { site: "A", year: 1932, yield: 5 },
+      { site: "B", year: 1931, yield: 4 },
+      { site: "B", year: 1932, yield: 2 },
+    ];
+    const chain = () =>
+      chart({ axes: false })
+        .flow(spread({ by: "year", dir: "x", spacing: 4 }))
+        .mark(rect({ h: "yield", w: 8 }))
+        .layer(line({ stroke: "black" }));
+    const inMark = chart(rows)
+      .flow(spread({ by: "site", dir: "x", spacing: 20 }))
+      .mark(chain());
+    const asChild = chart(rows)
+      .flow(spread({ by: "site", dir: "x", spacing: 20 }))
+      .mark(layer([rect({ w: 2, h: 2 }), chain()]));
+    const inMarkDoc = await inMark.toJSON();
+    const asChildDoc = await asChild.toJSON();
+    validateDoc(inMarkDoc, "a chain in .mark()");
+    validateDoc(asChildDoc, "a chain as a combinator child");
+    const direct = (inMarkDoc.root as Frontend.ChartIR).mark as any;
+    const child = ((asChildDoc.root as Frontend.ChartIR).mark as any)
+      .children[1];
+    check(
+      "a chain in .mark() is a layer-chain whose first tier is previous-tier",
+      direct.type === "layer-chain" &&
+        direct.tiers.length === 2 &&
+        direct.tiers[0].data?.type === "previous-tier" &&
+        direct.tiers[1].type === "line",
+      JSON.stringify(direct)
+    );
+    check(
+      "a chain in .mark() and as a combinator child share one encoding",
+      JSON.stringify(direct) === JSON.stringify(child)
+    );
+    for (const [label, built, doc] of [
+      [".mark()", inMark, inMarkDoc],
+      ["combinator child", asChild, asChildDoc],
+    ] as const) {
+      const rebuilt = Serialize.buildIR(doc.root, { tables: doc.tables });
+      const doc2 = await rebuilt.toJSON();
+      check(
+        `round-trip preserves a chain as ${label}`,
+        JSON.stringify(doc2) === JSON.stringify(doc),
+        JSON.stringify(doc2.root)
+      );
+      // Node ids come from a global counter, so they are left out.
+      const paint = async (b: any) =>
+        JSON.stringify(await b.toDisplayList({ w: 300, h: 200 }), (k, v) =>
+          k === "id" ? undefined : v
+        );
+      const original = await paint(built);
+      check(
+        `a rebuilt chain as ${label} draws what the original draws`,
+        original === (await paint(rebuilt)) && original.includes('"path"'),
+        original.slice(0, 200)
+      );
+    }
+
+    // The root holds anything a mark position does: a chain, a layer of
+    // charts (the combinator), a bare mark.
+    const rootChain = await chart(rows)
+      .flow(spread({ by: "site", dir: "x" }))
+      .mark(rect({ h: "yield" }))
+      .layer(line({}))
+      .toJSON();
+    validateDoc(rootChain, "a chain at the root");
+    check(
+      "a chain at the root is the same layer-chain",
+      (rootChain.root as any).type === "layer-chain" &&
+        (rootChain.root as any).tiers[0].data.type === "table"
+    );
+    const rootLayer = await Serialize.toJSON(
+      layer({ coord: GoFish.Coord.polar() }, [
+        chart(rows).mark(rect({ h: "yield" })),
+        chart(rows).mark(rect({ w: "yield" })),
+      ])
+    );
+    validateDoc(rootLayer, "a layer of charts at the root");
+    check(
+      "a layer of charts at the root is the combinator mark",
+      (rootLayer.root as any).type === "layer" &&
+        (rootLayer.root as any).__combinator === true &&
+        !("charts" in (rootLayer.root as any)) &&
+        (rootLayer.root as any).options.coord.type === "polar",
+      JSON.stringify(rootLayer.root).slice(0, 200)
+    );
+    const rootMark = await Serialize.toJSON(rect({ w: 4, h: 4 }));
+    validateDoc(rootMark, "a bare mark at the root");
+    check(
+      "a bare mark at the root is the mark itself",
+      (rootMark.root as any).type === "rect"
+    );
+  }
+
+  // -------------------------------------------------------------------------
   // Filter: a field predicate is data, so the operator gets its own wire type
   // and round-trips; a hand-written predicate is a live callback, so that
   // filter stays an opaque derive (#853).
@@ -425,7 +588,7 @@ async function main() {
         "Curve.monotone in line({ curve })",
         (s) => ({
           toJSON: () =>
-            Serialize.toJSONRawMark(
+            Serialize.toJSON(
               line({ curve: s ? Curve.monotone : Curve.monotone() })
             ),
         }),

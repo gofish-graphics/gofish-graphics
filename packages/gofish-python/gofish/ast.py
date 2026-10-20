@@ -202,7 +202,7 @@ class _MarkFn:
         self.fn = fn
         self.lambda_id = str(uuid.uuid4())
 
-    def to_dict(self, tables: Optional["_Tables"] = None) -> dict:
+    def to_dict(self, payload: Optional["_Payload"] = None) -> dict:
         return {"type": "mark-fn", "lambdaId": self.lambda_id}
 
 
@@ -592,10 +592,11 @@ class Mark:
         new_mark._labels = [*self._labels, _label_spec(accessor, options)]
         return new_mark
 
-    def to_dict(self, tables: Optional["_Tables"] = None) -> dict:
-        """The mark's IR in a mark position. ``tables`` collects the rows of
-        every chart inside it that has rows of its own (see ``_Tables``)."""
-        tables = _Tables() if tables is None else tables
+    def to_dict(self, payload: Optional["_Payload"] = None) -> dict:
+        """The mark's IR, wherever it sits: the root, a mark position, a
+        tier of a ``.layer(...)`` chain. ``payload`` collects what ships beside
+        the IR for the charts inside it (see ``_Payload``)."""
+        payload = _Payload() if payload is None else payload
         # Replace each `_PendingAccessor` (at any depth) with its lambda-id
         # sentinel. The derive-server walks the Mark tree separately to
         # register the underlying callable in the shared registry; the JS
@@ -609,7 +610,7 @@ class Mark:
                 "type": self.mark_type,
                 "__combinator": True,
                 "options": serialized_kwargs,
-                "children": [child.to_dict(tables) for child in self._children],
+                "children": [child.to_dict(payload) for child in self._children],
             }
         else:
             d = {"type": self.mark_type, **serialized_kwargs}
@@ -625,7 +626,7 @@ class Mark:
         # the base class oblivious to the subclass extension.
         relate = getattr(self, "_relate", None)
         if relate is not None:
-            d["relate"] = [_clause_dict(c, tables) for c in relate]
+            d["relate"] = [_clause_dict(c, payload) for c in relate]
         # `@mark`-decorated components flag their output Mark as a
         # scope boundary so the harness wraps the resolved node in
         # `node.scope()` — matches JS createMark's behavior.
@@ -645,7 +646,8 @@ class Mark:
 
     def to_ir(self) -> dict:
         """
-        Top-level IR shape when this Mark is rendered directly (no Chart).
+        The IR when this Mark is rendered directly (no Chart): the mark
+        itself, since a root holds anything a mark position does.
 
         Mirrors JS storybook spelling `spread(opts, [marks]).render(...)`:
         no data, no operators, no chart-level color/coord config. The harness
@@ -654,11 +656,6 @@ class Mark:
         JS storybook export that renders a mark directly.
         """
         return ir_payload(self)[0]
-
-    def _ir(self, tables: "_Tables") -> dict:
-        """The root IR before its non-finite numbers are encoded (see
-        ``ir_payload``)."""
-        return {"type": "raw-mark", "mark": self.to_dict(tables)}
 
     def render(
         self,
@@ -679,21 +676,9 @@ class Mark:
 
         Returns a GoFishChartWidget; in a notebook this auto-displays.
         """
-        from .widget import GoFishChartWidget
-
-        spec, tables = ir_payload(self)
-        widget = GoFishChartWidget(
-            spec=spec,
-            tables=tables,
-            derive_functions={},
-            width=w,
-            height=h,
-            axes=axes,
-            legend=legend,
-            padding=padding,
-            debug=debug,
+        return _render_widget(
+            self, w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
         )
-        return widget
 
     def save(
         self,
@@ -758,7 +743,7 @@ class _InputRef(Mark):
         self._name = name_or_token
         return self
 
-    def to_dict(self, tables: Optional["_Tables"] = None) -> dict:
+    def to_dict(self, payload: Optional["_Payload"] = None) -> dict:
         d: dict = {"type": "ref", "__inputRef": self.index}
         if self._name is not None:
             d["name"] = (
@@ -1265,7 +1250,7 @@ class RelatableMark(Mark):
 # Sentinel chart-data for an empty `chart()` scope used inside `.layer(...)`:
 # "inherit the previous tier's marks". Unlike earlier revisions, this wrapper
 # no longer resolves that wiring itself — it emits `{"type": "previous-tier"}`
-# on the wire (see `ChartBuilder.to_ir`) and lets JS's `LayerBuilder.wireTiers()`
+# on the wire (see `ChartBuilder.to_dict`) and lets JS's `LayerBuilder.wireTiers()`
 # (the real `.layer()` chain's own logic — see chartBuilder.ts) auto-name the
 # preceding tier's mark and bind this tier to `selectAll(thatName)`. This is
 # the shallow-port goal: Python emits tiers as authored, JS owns the auto-naming
@@ -1326,16 +1311,18 @@ class ChartBuilder:
         Set the mark for the chart.
 
         Args:
-            mark: A `Mark` (rect/circle/line/...), a nested `ChartBuilder`, a
-                `LayerBuilder` (``layer([chart(...), chart(...)])``), or a
+            mark: A `Mark` (rect/circle/line/..., or a
+                ``layer([chart(...), ...])``), a nested `ChartBuilder`, a
+                ``chart(...).layer(...)`` chain (a `LayerBuilder`), or a
                 callable `(data) -> ChartBuilder`. A nested chart is the
                 preferred spelling for a per-group sub-chart (issue #243): an
                 empty-scope child (``chart()`` / ``chart(coord=...)``) inherits
                 the incoming partition datum, replacing the
                 ``.mark(lambda data: chart(data, ...).flow(...).mark(...))``
-                callback. A nested chart or layer crosses as its own IR; a
-                callable receives the per-group data slice and returns a
-                ChartBuilder for that slice, calling back into Python.
+                callback; so does the first tier of a chain. A nested chart,
+                chain or layer crosses as its own IR; a callable receives the
+                per-group data slice and returns a ChartBuilder for that
+                slice, calling back into Python.
 
         Returns:
             New ChartBuilder with mark set
@@ -1360,7 +1347,7 @@ class ChartBuilder:
         ``_PREVIOUS_LAYER_MARKS``) and JS's real ``LayerBuilder`` derives it,
         the same as a native ``chart(...).layer(...)`` chain.
         """
-        return LayerBuilder([self, child], builder_chain=True)
+        return LayerBuilder([self, child])
 
     def _uses_previous_marks(self) -> bool:
         """True for an empty ``chart()`` scope (data defers to the prev tier)."""
@@ -1428,21 +1415,16 @@ class ChartBuilder:
         """
         return ir_payload(self)[0]
 
-    def _ir(self, tables: "_Tables") -> dict:
-        """The root IR before its non-finite numbers are encoded (see
-        ``ir_payload``). At the root a chart is its ``ChartIR``, as it is in a
-        mark position."""
-        return self.to_dict(tables)
-
-    def to_dict(self, tables: Optional["_Tables"] = None) -> dict:
+    def to_dict(self, payload: Optional["_Payload"] = None) -> dict:
         """The chart's ``ChartIR``, wherever it sits: the root, a mark
         position (``.mark(chart(...))``, a ``layer([...])`` child), a tier of
         a ``.layer(...)`` chain. Its data is one of three: an empty
         ``chart()`` scope crosses as ``previous-tier`` data, which JS binds to
         the rows of the enclosing scope; a ``ref`` / ``select_all`` as a
         selection; and rows of its own as a table, ``{"type": "table", "id"}``,
-        whose rows ``tables`` collects to ship beside the IR."""
-        tables = _Tables() if tables is None else tables
+        whose rows ``payload`` collects to ship beside the IR, as it does the
+        chart's ``derive`` callbacks."""
+        payload = _Payload() if payload is None else payload
         if self._mark is None:
             raise ValueError("Chart must have a mark before converting to IR")
 
@@ -1473,9 +1455,10 @@ class ChartBuilder:
                 "mode": self.data.multiplicity or "one",
             }
         else:
-            data_ir = tables.add(self.data)
+            data_ir = payload.table(self.data)
+        payload.add_derives(self.operators)
 
-        mark_ir = self._mark.to_dict(tables)
+        mark_ir = self._mark.to_dict(payload)
 
         # Build the IR conditionally: omit optional fields that are unset
         # so the canonical schema's `zOrder: number` (no null) matches
@@ -1539,32 +1522,9 @@ class ChartBuilder:
         """
         if self._mark is None:
             raise ValueError("Chart must have a mark before rendering")
-
-        # Import here to avoid circular dependencies
-        from .widget import GoFishChartWidget
-
-        # The IR and the tables its charts name
-        spec, tables = ir_payload(self)
-
-        # Collect derive functions for RPC execution in the widget
-        derive_functions = {
-            op.lambda_id: op.fn
-            for op in _collect_derive_operators(self.operators)
-        }
-
-        widget = GoFishChartWidget(
-            spec=spec,
-            tables=tables,
-            derive_functions=derive_functions,
-            width=w,
-            height=h,
-            axes=axes,
-            legend=legend,
-            padding=padding,
-            debug=debug,
+        return _render_widget(
+            self, w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
         )
-
-        return widget
 
     def save(
         self,
@@ -1669,34 +1629,27 @@ def spread(
 def layer(
     children: List[Any],
     **options: Any,
-) -> Union["LayerBuilder", "RelatableMark"]:
-    """Layer marks or charts — a single dual-form `layer` (like spread/stack).
+) -> "RelatableMark":
+    """Layer marks or charts: the ``layer`` combinator mark over its children.
 
-    Two element kinds, dispatched by child type:
+    A child is anything a mark position holds: a mark, a nested
+    ``chart(...)``, a ``.layer(...)`` chain, or another ``layer([...])``. The
+    layer renders directly (``.render(...)``) or sits in a mark position, and
+    ``.relate(...)`` adds clauses that relate the names inside it::
 
-    - **Chart tiers** — ``layer([chart(...), chart(...)])`` stacks each chart and
-      emits ``{type: "layer", charts: [...]}`` (returns a ``LayerBuilder``).
-    - **Marks** — ``layer([rect(...).name("a"), ...])`` wraps child marks in a
-      layer node (returns a ``RelatableMark`` that renders directly), with
-      ``.relate(...)`` for clauses that relate the marks::
+        layer([
+            rect(w=80, h=40).name("a"),
+            rect(w=120, h=60).name("b"),
+        ]).relate(lambda a, b: [Constraint.align([a, b], x="end")])
 
-          layer([
-              rect(w=80, h=40).name("a"),
-              rect(w=120, h=60).name("b"),
-          ]).relate(lambda a, b: [Constraint.align([a, b], x="end")])
+    The options are the JS ``layer(options, children)`` options (box dims,
+    ``coord``, ``axes``, ``transform``, ``box``, ``key``), as keyword
+    arguments: ``layer([chart1, chart2], coord=Coord.clock())``. Render
+    options such as ``padding`` go to ``.render(...)``, as in JS.
 
-    Either way the options are the JS ``layer(options, children)`` options
-    (box dims, ``coord``, ``axes``, ``transform``, ``box``, ``key``), as keyword
-    arguments: ``layer([chart1, chart2], coord=Coord.clock())``. Render options such
-    as ``padding`` go to ``.render(...)``, as in JS.
-
-    Mirrors the JS ``layer([...])`` combinator, which is likewise universal over
-    charts and marks.
+    Mirrors the JS ``layer([...])`` combinator, which is likewise universal
+    over charts and marks.
     """
-    # Chart tiers → LayerBuilder; marks → combinator mark. Both take JS
-    # `layer`'s option set.
-    if children and all(isinstance(c, ChartBuilder) for c in children):
-        return LayerBuilder(list(children), _layer_opts(**options) or None)
     return RelatableMark(
         "layer", _children=list(children), **_layer_opts(**options)
     )
@@ -1774,7 +1727,7 @@ class _RefProxy(Mark):
         named._name = name_or_token
         return named
 
-    def to_dict(self, tables: Optional["_Tables"] = None) -> dict:
+    def to_dict(self, payload: Optional["_Payload"] = None) -> dict:
         # `select_all(...)` is a plural chart-data selector — it has no
         # inline-layout meaning. Chart-data serialization is handled by
         # `ChartBuilder.to_ir`, not here.
@@ -3253,11 +3206,11 @@ class CutMark(Mark):
     `to_dict()` serializes the source mark and drops `None` options.
     """
 
-    def to_dict(self, tables: Optional["_Tables"] = None) -> dict:
+    def to_dict(self, payload: Optional["_Payload"] = None) -> dict:
         source = self.kwargs["source"]
         d: dict = {
             "type": "cut",
-            "source": source.to_dict(tables),
+            "source": source.to_dict(payload),
             "dir": self.kwargs["dir"],
         }
         size = self.kwargs.get("size")
@@ -3324,9 +3277,9 @@ def cut(
 class OffsetMark(Mark):
     """The `{type:"offset", ...}` IR node — a child shifted by (x, y) pixels."""
 
-    def to_dict(self, tables: Optional["_Tables"] = None) -> dict:
+    def to_dict(self, payload: Optional["_Payload"] = None) -> dict:
         child = self.kwargs["child"]
-        d: dict = {"type": "offset", "children": [child.to_dict(tables)]}
+        d: dict = {"type": "offset", "children": [child.to_dict(payload)]}
         if self.kwargs.get("x") is not None:
             d["x"] = self.kwargs["x"]
         if self.kwargs.get("y") is not None:
@@ -3413,20 +3366,24 @@ def chart(
     return ChartBuilder(data, _chart_opts(**options) or None)
 
 
-class _Tables:
-    """The tables one IR payload's walk collects: the rows of every chart in
-    it that has rows of its own, wherever the chart sits (the root, a mark
-    position, a tier of a ``.layer(...)`` chain). The chart's data names its
-    table by id (``{"type": "table", "id": "t0"}``), and the rows travel
-    beside the IR, keyed by that id, as Arrow (``ir_payload``). Ids are minted
-    in walk order, and the same data object, used by two charts, is one
-    table."""
+class _Payload:
+    """What one IR walk collects to ship beside the IR, for every chart in it,
+    wherever the chart sits (the root, a mark position, a tier of a
+    ``.layer(...)`` chain):
+
+    - the rows of each chart that has rows of its own. The chart's data names
+      its table by id (``{"type": "table", "id": "t0"}``), and the rows
+      travel beside the IR, keyed by that id, as Arrow. Ids are minted in walk
+      order, and the same data object, used by two charts, is one table;
+    - each chart's ``derive`` callbacks, which the notebook widget calls back
+      by lambda id."""
 
     def __init__(self) -> None:
         self.data: Dict[str, Any] = {}
         self._ids: Dict[int, str] = {}
+        self.derive_functions: Dict[str, Callable] = {}
 
-    def add(self, data: Any) -> dict:
+    def table(self, data: Any) -> dict:
         """The data IR of a chart over ``data``: its table's id."""
         table_id = self._ids.get(id(data))
         if table_id is None:
@@ -3434,6 +3391,11 @@ class _Tables:
             self._ids[id(data)] = table_id
             self.data[table_id] = data
         return {"type": "table", "id": table_id}
+
+    def add_derives(self, operators: List["Operator"]) -> None:
+        """Record a chart's ``derive`` callbacks."""
+        for op in _collect_derive_operators(operators):
+            self.derive_functions[op.lambda_id] = op.fn
 
     def arrow_bytes(self) -> Dict[str, bytes]:
         """Each table's rows as Arrow IPC bytes, by id. Timestamp and date
@@ -3444,122 +3406,80 @@ class _Tables:
         return {tid: data_to_arrow_bytes(d) for tid, d in self.data.items()}
 
 
+def _walk(root: Any) -> Tuple[dict, "_Payload"]:
+    """``root``'s IR (a chart, a ``.layer(...)`` chain, or a mark: a root
+    holds anything a mark position does), encoded once at its top
+    (``encode_non_finite``), and what the walk collected beside it."""
+    payload = _Payload()
+    ir = encode_non_finite(root.to_dict(payload))
+    return ir, payload
+
+
 def ir_payload(root: Any) -> Tuple[dict, Dict[str, bytes]]:
-    """What a host ships to render ``root`` (a chart, a layer, or a mark): its
-    IR, encoded once at its top (``encode_non_finite``), and the Arrow bytes
-    of every table the IR names, by id. The notebook widget sends the tables
-    in its ``tables`` trait, and the parity harness's derive server in its
-    ``tables`` field."""
-    tables = _Tables()
-    ir = encode_non_finite(root._ir(tables))
-    return ir, tables.arrow_bytes()
+    """What a host ships to render ``root``: its IR and the Arrow bytes of
+    every table the IR names, by id. The notebook widget sends the tables in
+    its ``tables`` trait, and the parity harness's derive server in its
+    ``tables`` field, for a story and for each mark function's reply."""
+    ir, payload = _walk(root)
+    return ir, payload.arrow_bytes()
 
 
-def _clause_dict(clause: Any, tables: "_Tables") -> dict:
+def _render_widget(root: Any, **render_options: Any):
+    """Render ``root`` as a notebook widget: its IR, its tables, and the
+    ``derive`` callbacks of every chart in it. The options are the JS
+    ``.render(container, options)`` options."""
+    from .widget import GoFishChartWidget
+
+    ir, payload = _walk(root)
+    w = render_options.pop("w")
+    h = render_options.pop("h")
+    return GoFishChartWidget(
+        spec=ir,
+        tables=payload.arrow_bytes(),
+        derive_functions=payload.derive_functions,
+        width=w,
+        height=h,
+        **render_options,
+    )
+
+
+def _clause_dict(clause: Any, payload: "_Payload") -> dict:
     """A ``.relate(...)`` clause's IR: a mark that draws is a mark position,
-    so the charts inside it add their tables; a constraint has none."""
-    return clause.to_dict(tables) if isinstance(clause, Mark) else clause.to_dict()
+    so the charts inside it add to the payload; a constraint has none."""
+    return clause.to_dict(payload) if isinstance(clause, Mark) else clause.to_dict()
 
 
 class LayerBuilder:
-    """Builder class for composing multiple ChartBuilder instances as a layer."""
+    """A ``chart(...).layer(...)`` chain: tiers stacked in order, each offered
+    the previous tier's marks as its scope (an empty ``chart()`` tier binds
+    them as data). Mirrors the JS ``LayerBuilder``. The chain sits wherever a
+    chart can: it renders on its own, or sits in a mark position
+    (``.mark(...)``, a ``layer([...])`` child), where an empty ``chart()``
+    first tier binds the rows of the partition it sits in."""
 
-    def __init__(
-        self,
-        children: List[ChartBuilder],
-        options: Optional[dict] = None,
-        builder_chain: bool = False,
-    ):
-        self.children = children
-        self.options = options or {}
-        self._relate: Optional[List[Any]] = None
-        # True only for the fluent ``chart(...).layer(...)`` chain (fluent builder
-        # semantics — JS reconstructs it through its own LayerBuilder, inferred
-        # axis titles and all). The array form ``layer([chart1, chart2])`` is
-        # the low-level combinator (mirrors JS ``layer([...])``), so it stays
-        # False and renders without those inferred titles.
-        self._builder_chain = builder_chain
+    def __init__(self, tiers: List[Any]):
+        self.tiers = tiers
 
-    def layer(self, child: ChartBuilder) -> "LayerBuilder":
+    def layer(self, child: Any) -> "LayerBuilder":
         """Stack another tier; an empty ``chart()`` scope inherits the marks of
         the immediately preceding tier (see ``ChartBuilder.layer`` — the
         auto-naming/``selectAll`` wiring is JS-side, not resolved here)."""
-        return LayerBuilder(
-            [*self.children, child],
-            self.options,
-            builder_chain=True,
-        )
-
-    def relate(self, callback: Callable[..., List[Any]]) -> "LayerBuilder":
-        """Relate named nodes inside this layer.
-
-        Mirrors the JS storybook spelling
-        ``layer([sc.name("a"), other.name("b")]).relate(({a, b}) => [...])``.
-        The callback receives one ``RefSentinel`` per parameter it declares
-        without a default and returns a list of clauses: constraints
-        (``Constraint.align(...)`` / ``Constraint.position(...)`` / ...) and
-        marks that draw over the names (``arrow([a, b])``). Names resolve on
-        the JS side, as for ``RelatableMark.relate``.
-
-        Returns:
-            A new LayerBuilder carrying the clauses.
-        """
-        clauses = _relate_clauses(
-            callback(**_callback_refs(callback, self.children))
-        )
-        new_layer = LayerBuilder(
-            self.children, self.options, builder_chain=self._builder_chain
-        )
-        new_layer._relate = clauses
-        return new_layer
+        return LayerBuilder([*self.tiers, child])
 
     def to_ir(self) -> dict:
-        """Convert the layer specification to JSON IR.
-
-        A fluent ``chart(...).layer(...)`` chain tags the node ``builder: True``
-        so JS reconstructs it through the real ``LayerBuilder`` (which owns
-        the builder's render logic — inferred axis titles, etc.) rather than the
-        low-level ``layer([...])`` combinator. This keeps that logic in one place
-        (JS) instead of re-deriving it in the wrapper. The array form
-        ``layer([chart1, chart2])`` leaves it off and renders as the low-level
-        combinator, mirroring JS ``layer([...])``.
-        """
+        """Convert the chain to JSON IR (see ``to_dict``)."""
         return ir_payload(self)[0]
 
-    def to_dict(self, tables: Optional["_Tables"] = None) -> dict:
-        """The layer's IR in a mark position (``.mark(layer([chart(...),
-        chart(...)]))``): the ``layer`` combinator mark, whose children are
-        the charts in their mark-position form (``ChartBuilder.to_dict``), as
-        for any combinator child. ``LayerIR`` is the root form only, where
-        each tier's rows ship beside the IR.
-
-        A ``chart(...).layer(...)`` chain has no mark-position form: the
-        combinator cannot carry the chain's tier wiring, and JS ``.mark()``
-        does not take a chain either. TODO(#1181): decide whether a chain
-        belongs in a mark position at all.
-        """
-        if self._builder_chain:
-            raise TypeError(
-                "a chart(...).layer(...) chain cannot sit in a mark position; "
-                "use layer([chart(...), chart(...)]) there"
-            )
-        mark = RelatableMark("layer", _children=self.children, **self.options)
-        mark._relate = self._relate
-        return mark.to_dict(tables)
-
-    def _ir(self, tables: "_Tables") -> dict:
-        """The root IR before its non-finite numbers are encoded (see
-        ``ir_payload``)."""
-        result: dict = {
-            "type": "layer",
-            "charts": [child._ir(tables) for child in self.children],
-            "options": self.options,
+    def to_dict(self, payload: Optional["_Payload"] = None) -> dict:
+        """The chain's IR, wherever it sits: ``{"type": "layer-chain",
+        "tiers": [...]}``, each tier in its mark-position form. JS rebuilds it
+        through its own ``LayerBuilder``, which owns the chain's tier wiring
+        and render logic (inferred axis titles, the root tier's ``axes``)."""
+        payload = _Payload() if payload is None else payload
+        return {
+            "type": "layer-chain",
+            "tiers": [tier.to_dict(payload) for tier in self.tiers],
         }
-        if self._builder_chain:
-            result["builder"] = True
-        if self._relate is not None:
-            result["relate"] = [_clause_dict(c, tables) for c in self._relate]
-        return result
 
     def render(
         self,
@@ -3571,7 +3491,7 @@ class LayerBuilder:
         debug: bool = False,
     ):
         """
-        Render the layer as an anywidget for Jupyter notebooks.
+        Render the chain as an anywidget for Jupyter notebooks.
 
         The options are the JS ``.render(container, options)`` options.
 
@@ -3590,28 +3510,9 @@ class LayerBuilder:
         Returns:
             GoFishChartWidget instance that will display in Jupyter
         """
-        from .widget import GoFishChartWidget
-
-        # Collect derive functions
-        derive_functions: dict = {}
-        for child in self.children:
-            for op in _collect_derive_operators(child.operators):
-                derive_functions[op.lambda_id] = op.fn
-
-        spec, tables = ir_payload(self)
-
-        widget = GoFishChartWidget(
-            spec=spec,
-            tables=tables,
-            derive_functions=derive_functions,
-            width=w,
-            height=h,
-            axes=axes,
-            legend=legend,
-            padding=padding,
-            debug=debug,
+        return _render_widget(
+            self, w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
         )
-        return widget
 
     def save(
         self,
@@ -3623,7 +3524,7 @@ class LayerBuilder:
         padding: Optional[float] = None,
         debug: bool = False,
     ):
-        """Save the layer's render to ``path`` (see ``ChartBuilder.save``)."""
+        """Save the chain's render to ``path`` (see ``ChartBuilder.save``)."""
         widget = self.render(
             w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
         )

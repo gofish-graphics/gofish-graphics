@@ -29,8 +29,13 @@ export interface FrontendIRDocument {
 /** Rows by table id: what a `{type: "table", id}` data field names. */
 export type Tables = Record<string, Array<Record<string, unknown>>>;
 
-/** A frontend-IR root is a chart, a multi-chart layer, or a bare mark. */
-export type FrontendIR = ChartIR | LayerIR | RawMarkIR;
+/**
+ * A frontend-IR root holds anything a mark position holds ({@link MarkIR}):
+ * a chart, a `.layer(...)` chain, a `layer([...])` of charts or marks, or a
+ * bare mark. It is one rule, so a chart crosses the same way wherever it
+ * sits, and so does a chain.
+ */
+export type FrontendIR = MarkIR;
 
 /**
  * Metadata that any node may carry. v0 emitters leave `meta` unset; later
@@ -111,29 +116,22 @@ export interface ChartIR extends BaseIRNode {
   name?: string;
 }
 
-/** Multiple tiers composed on the same canvas. Each tier is a `ChartIR`; the
- *  `chart(...).layer(mark)` builder chain may also drop in a `RawMarkIR`
- *  tier (a component-level, datumless annotation overlay). The field stays
- *  named `charts` for wire-format stability. */
-export interface LayerIR extends BaseIRNode {
-  type: "layer";
-  charts: Array<ChartIR | RawMarkIR>;
-  options?: Record<string, unknown>;
-  /** Layer-level relate clauses (from `layer([...]).relate(...)`), resolving
-   *  names against the child charts' `name`s. */
-  relate?: RelateClauseIR[];
-  /** True when this came from the `chart(...).layer(...)` builder chain
-   *  (rather than the low-level `layer([...])` combinator). The deserializer
-   *  reconstructs it through the real `LayerBuilder` so JS — not the wrapper —
-   *  owns the builder's render logic (inferred axis titles, etc.). */
-  builder?: boolean;
-}
-
-/** A bare mark, used when no chart-level wrapping is needed. */
-export interface RawMarkIR extends BaseIRNode {
-  type: "raw-mark";
-  mark: MarkIR;
-  options?: Record<string, unknown>;
+/**
+ * A `chart(...).layer(...)` chain: tiers stacked in order, each offered the
+ * previous tier's marks as its scope. The first tier is a chart; a later
+ * tier is anything a mark position holds (a chart, often an empty `chart()`
+ * scope with `{type: "previous-tier"}` data, or a bare mark such as a
+ * relational `line()` or an annotation `text(...)`). The deserializer
+ * rebuilds it through the real `LayerBuilder`, so JS owns the chain's tier
+ * wiring and its render logic (inferred axis titles, the root tier's `axes`).
+ * It sits wherever a chart can: at the root, and in any mark position, where
+ * a first tier with `previous-tier` data binds the rows of the partition the
+ * chain sits in. Its own wire type, so `"layer"` means one thing, the
+ * combinator mark.
+ */
+export interface LayerChainIR extends BaseIRNode {
+  type: "layer-chain";
+  tiers: MarkIR[];
 }
 
 // ---------------------------------------------------------------------------
@@ -626,9 +624,10 @@ export type StructBinIR =
  * position may hold a whole chart, as in JS, where `.mark(chart(...))` and
  * `layer([rect(...), chart(...)])` are ordinary marks. A nested chart crosses
  * as its own `ChartIR` (an empty `chart()` scope as `{type: "previous-tier"}`
- * data, which inherits the rows of the partition it sits in). A layer of
- * charts is the `layer` combinator mark with chart children, like any
- * combinator; `LayerIR` is a root form only.
+ * data, which inherits the rows of the partition it sits in), and a
+ * `.layer(...)` chain as its `LayerChainIR`. A layer of charts is the `layer`
+ * combinator mark with chart children, like any combinator. A root holds
+ * the same things.
  */
 export type MarkIR =
   | LeafMarkIR
@@ -636,7 +635,8 @@ export type MarkIR =
   | RefMarkIR
   | OffsetMarkIR
   | CutMarkIR
-  | ChartIR;
+  | ChartIR
+  | LayerChainIR;
 
 export type LeafMarkType =
   | "rect"
@@ -982,15 +982,13 @@ export function isConstraintIR(clause: RelateClauseIR): clause is ConstraintIR {
 // Discriminator helpers (predicates)
 // ---------------------------------------------------------------------------
 
-/** Discriminate a root document, or a chart in a mark position. */
-export function isChartIR(node: FrontendIR | MarkIR): node is ChartIR {
+/** Discriminate a chart, at the root or in a mark position. */
+export function isChartIR(node: MarkIR): node is ChartIR {
   return node.type === "chart";
 }
-export function isLayerIR(node: FrontendIR): node is LayerIR {
-  return node.type === "layer";
-}
-export function isRawMarkIR(node: FrontendIR): node is RawMarkIR {
-  return node.type === "raw-mark";
+/** Discriminate a `.layer(...)` chain, at the root or in a mark position. */
+export function isLayerChainIR(node: MarkIR): node is LayerChainIR {
+  return node.type === "layer-chain";
 }
 
 /** Discriminate a mark by family. */
@@ -1015,7 +1013,8 @@ export function isLeafMarkIR(mark: MarkIR): mark is LeafMarkIR {
     !isRefMarkIR(mark) &&
     !isOffsetMarkIR(mark) &&
     !isCutMarkIR(mark) &&
-    !isChartIR(mark)
+    !isChartIR(mark) &&
+    !isLayerChainIR(mark)
   );
 }
 

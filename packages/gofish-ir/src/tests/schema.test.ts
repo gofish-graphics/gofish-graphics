@@ -173,28 +173,110 @@ check(
   } as unknown as FrontendIRDocument).valid
 );
 
+// A root holds anything a mark position holds, by one rule (#1181).
+const doc = (root: unknown) =>
+  ({ irVersion: 0, ir: "gofish-frontend", root }) as FrontendIRDocument;
+
 check(
-  "layer with a raw-mark child accepts (component-level annotation tier)",
-  validate({
-    irVersion: 0,
-    ir: "gofish-frontend",
-    root: {
-      type: "layer",
-      charts: [{ type: "raw-mark", mark: { type: "rect" } }],
-    },
-  } as unknown as FrontendIRDocument).valid
+  "a leaf mark, a combinator mark and a chain each accept as the root",
+  validate(doc({ type: "rect", w: 4, h: 4 })).valid &&
+    validate(
+      doc({ type: "layer", __combinator: true, children: [{ type: "rect" }] })
+    ).valid &&
+    validate(
+      doc({
+        type: "layer-chain",
+        tiers: [
+          {
+            type: "chart",
+            data: { type: "table", id: "t0" },
+            mark: { type: "rect" },
+          },
+          { type: "text", text: "caption" },
+        ],
+      })
+    ).valid
 );
 
 check(
-  "layer with a non-chart, non-raw-mark child is rejected",
-  !validate({
-    irVersion: 0,
-    ir: "gofish-frontend",
-    root: {
-      type: "layer",
-      charts: [{ type: "data", foo: 1 }],
-    },
-  } as unknown as FrontendIRDocument).valid
+  "the old root layer and raw-mark shapes are rejected",
+  !validate(doc({ type: "layer", charts: [] })).valid &&
+    !validate(doc({ type: "raw-mark", mark: { type: "rect" } })).valid
+);
+
+check(
+  "a chain whose first tier is not a chart is rejected",
+  !validate(
+    doc({
+      type: "layer-chain",
+      tiers: [{ type: "rect" }, { type: "rect" }],
+    })
+  ).valid
+);
+
+check(
+  "a chain of one tier is rejected",
+  !validate(
+    doc({
+      type: "layer-chain",
+      tiers: [
+        {
+          type: "chart",
+          data: { type: "table", id: "t0" },
+          mark: { type: "rect" },
+        },
+      ],
+    })
+  ).valid
+);
+
+check(
+  "a chain with an unknown field is rejected",
+  !validate(
+    doc({
+      type: "layer-chain",
+      builder: true,
+      tiers: [
+        {
+          type: "chart",
+          data: { type: "table", id: "t0" },
+          mark: { type: "rect" },
+        },
+        { type: "rect" },
+      ],
+    })
+  ).valid
+);
+
+check(
+  "a document's tables must be arrays of rows",
+  validate({
+    ...doc({
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+    }),
+    tables: { t0: [{ x: 1 }] },
+  }).valid &&
+    !validate({
+      ...doc({
+        type: "chart",
+        data: { type: "table", id: "t0" },
+        mark: { type: "rect" },
+      }),
+      tables: { t0: { x: 1 } },
+    } as unknown as FrontendIRDocument).valid
+);
+
+check(
+  "inline chart data is rejected (rows travel in tables)",
+  !validate(
+    doc({
+      type: "chart",
+      data: { type: "inline", rows: [] },
+      mark: { type: "rect" },
+    })
+  ).valid
 );
 
 // ---------------------------------------------------------------------------
@@ -308,8 +390,47 @@ check(
     .valid
 );
 check(
-  "a LayerIR in a mark position is rejected (root only)",
+  "the old LayerIR shape is rejected in a mark position",
   !validate(chart([], { type: "layer", charts: [nestedChart] })).valid
+);
+// A `.layer(...)` chain sits in a mark position by the same rule as a chart
+// (#1181): as a chart's mark and as a combinator child.
+const chain = {
+  type: "layer-chain",
+  tiers: [
+    {
+      type: "chart",
+      data: { type: "previous-tier" },
+      operators: [{ type: "spread", by: "site", dir: "x" }],
+      mark: { type: "rect", h: "yield" },
+    },
+    {
+      type: "chart",
+      data: { type: "previous-tier" },
+      mark: { type: "line" },
+    },
+  ],
+};
+check("a chain as a chart's mark accepts", validate(chart([], chain)).valid);
+check(
+  "a chain as a combinator child accepts",
+  validate(
+    chart([], {
+      type: "layer",
+      __combinator: true,
+      children: [{ type: "rect" }, chain],
+    })
+  ).valid
+);
+check(
+  "a nested chart with rows of its own names a table",
+  validate(
+    chart([], {
+      type: "chart",
+      data: { type: "table", id: "t1" },
+      mark: { type: "rect" },
+    })
+  ).valid
 );
 
 check(

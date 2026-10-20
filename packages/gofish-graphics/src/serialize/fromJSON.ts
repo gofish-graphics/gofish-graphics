@@ -15,7 +15,6 @@
 // Source-module imports — see the note in registry.ts.
 import {
   chart,
-  layer,
   selectAll,
   LayerBuilder,
   PREVIOUS_LAYER_MARKS,
@@ -43,8 +42,7 @@ import {
 } from "./registry";
 
 export type ChartSpec = Frontend.ChartIR;
-export type LayerSpec = Frontend.LayerIR;
-export type RawMarkSpec = Frontend.RawMarkIR;
+export type LayerChainSpec = Frontend.LayerChainIR;
 export type MarkSpec = Frontend.MarkIR;
 export type OperatorSpec = Frontend.OperatorIR;
 /** One entry of a `label` wire array — see `Frontend.LabelSpecIR`. Named
@@ -371,8 +369,7 @@ export function mapMarkChildren(specs: MarkSpec[], ctx: IRContext): any[] {
 /**
  * Rebuild the clauses of a `.relate()` callback, in order: a constraint
  * (it carries `refs`, operand names) through {@link constraintFromIR}, a mark
- * that draws like any other mark. Shared by the `layer` combinator mark and
- * the `LayerIR` root (see {@link renderIR}).
+ * that draws like any other mark.
  */
 function relateClauses(clauses: RelateClauseIR[], ctx: IRContext): unknown[] {
   return clauses.map((c) =>
@@ -453,6 +450,20 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
   // as it does at the root. A layer of charts is the `layer` combinator below.
   if (Frontend.isChartIR(spec)) {
     return chartFromIR(spec, ctx) as unknown as Mark<any>;
+  }
+
+  // A `.layer(...)` chain, wherever it sits (#1181): rebuild it through the
+  // real `LayerBuilder`, the way a JS author writes it, so JS owns the
+  // chain's tier wiring and render logic (inferred axis titles, the root
+  // tier's `axes`). Each tier is a mark position. In a mark position, the
+  // mark machinery binds a first tier with `previous-tier` data to the rows
+  // of the partition the chain sits in, as it does an empty `chart()`.
+  if (Frontend.isLayerChainIR(spec)) {
+    const [first, ...rest] = spec.tiers.map((tier) => mapMark(tier, ctx));
+    return rest.reduce(
+      (chain: any, tier) => chain.layer(tier),
+      first
+    ) as unknown as Mark<any>;
   }
 
   // Mark-as-function: Python registered a `(data) -> mark | chart` callback.
@@ -759,10 +770,11 @@ function definedFields<T extends Record<string, unknown>>(o: T): Partial<T> {
 }
 
 /**
- * Rebuild a whole frontend-IR root (a chart, a layer, or a bare mark), as it
- * arrives (it is decoded here), into the object a JS author would have
- * written: a `ChartBuilder`, a `LayerBuilder`, or a mark. Building throws
- * synchronously on a bad spec.
+ * Rebuild a whole frontend-IR root, as it arrives (it is decoded here), into
+ * the object a JS author would have written: a `ChartBuilder`, a
+ * `LayerBuilder`, or a mark. A root holds anything a mark position does, so
+ * it rebuilds as one ({@link mapMark}). Building throws synchronously on a
+ * bad spec.
  */
 export function buildIR(
   encodedRoot: Frontend.FrontendIR,
@@ -774,9 +786,7 @@ export function buildIR(
     resolveToken: makeTokenResolver(),
     tables: readIR(host.tables ?? {}),
   };
-  if (root.type === "raw-mark") return mapMark(root.mark, ctx);
-  if (root.type === "layer") return buildLayer(root, ctx);
-  return chartFromIR(root, ctx);
+  return mapMark(root, ctx);
 }
 
 /**
@@ -794,29 +804,4 @@ export function renderIR(
 ): Promise<View> {
   const options: any = definedFields({ ...renderOptions });
   return buildIR(encodedRoot, host).render(container, options);
-}
-
-/** Build a `LayerIR` root: the `chart(...).layer(...)` builder chain, or the
- *  `layer(options, tiers)` combinator with its `.relate(...)` clauses. */
-function buildLayer(spec: LayerSpec, ctx: IRContext): any {
-  // A tier is a chart (ChartBuilder) or a component-level annotation
-  // (raw-mark → a Mark).
-  const tiers: any[] = spec.charts.map((tier) =>
-    tier.type === "raw-mark" ? mapMark(tier.mark, ctx) : chartFromIR(tier, ctx)
-  );
-  if (spec.builder) {
-    // Fluent `chart(...).layer(...)` chain: reconstruct through the real
-    // LayerBuilder so JS owns the builder's render logic (inferred axis
-    // titles, the root tier's `axes`, etc.). The first tier is always a
-    // chart; later tiers may be mark tiers (`.layer(text({...}))`).
-    return tiers.slice(1).reduce((acc, tier) => acc.layer(tier), tiers[0]);
-  }
-  const combined = (layer as any)(
-    resolveOptions((spec.options ?? {}) as Record<string, any>),
-    tiers
-  );
-  if (spec.relate === undefined || spec.relate.length === 0) return combined;
-  // Rebuilt per call, as in `mapMark`'s combinator branch.
-  const clauses = spec.relate;
-  return combined.relate(() => relateClauses(clauses, ctx));
 }

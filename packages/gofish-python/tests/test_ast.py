@@ -39,7 +39,7 @@ from gofish import (
 import json
 
 from gofish.arrow_utils import arrow_to_records
-from gofish.ast import _RefProxy, ir_payload
+from gofish.ast import RelatableMark, _RefProxy, ir_payload
 
 
 class TestOperators:
@@ -538,82 +538,58 @@ class TestClockCoord:
         assert ir["options"]["coord"] == {"type": "clock"}
 
 
-class TestLayerBuilder:
-    """Test LayerBuilder and Layer() factory."""
+class TestLayer:
+    """`layer([...])` is the combinator mark over its children, charts or
+    marks, at the root as in a mark position (#1181). `chart(...).layer(...)`
+    is a `LayerBuilder`, the chain."""
 
-    def test_layer_children_only(self):
-        """Test layer([...]) with children only."""
+    def test_layer_of_charts_is_the_combinator_mark(self):
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x").name("bars"))
         c2 = chart(ref("bars")).mark(line())
-        lb = layer([c1, c2])
-        assert isinstance(lb, LayerBuilder)
-        assert lb.options == {}
-        assert len(lb.children) == 2
-
-    def test_layer_with_options(self):
-        """Test layer([...], **options) with keyword options."""
-        data = [{"x": 1}]
-        c1 = chart(data).mark(rect(h="x"))
-        lb = layer([c1], coord="clock")
-        assert isinstance(lb, LayerBuilder)
-        assert lb.options == {"coord": "clock"}
-        assert len(lb.children) == 1
-
-    def test_layer_to_ir_structure(self):
-        """Test LayerBuilder.to_ir() produces correct structure."""
-        data = [{"x": 1}]
-        c1 = chart(data).mark(rect(h="x").name("bars"))
-        c2 = chart(ref("bars")).mark(line())
-        ir = layer([c1, c2]).to_ir()
+        m = layer([c1, c2], coord="clock")
+        assert isinstance(m, RelatableMark)
+        ir = m.to_ir()
         assert ir["type"] == "layer"
-        assert len(ir["charts"]) == 2
-        assert ir["options"] == {}
+        assert ir["__combinator"] is True
+        assert ir["options"] == {"coord": "clock"}
+        assert "charts" not in ir
 
-    def test_layer_to_ir_child_specs(self):
-        """Test child chart specs are correctly embedded in layer IR."""
+    def test_layer_child_specs(self):
+        """Each chart child is its ChartIR, and names its table."""
         data = [{"x": 1}]
         c1 = chart(data).flow(spread(by="x", dir="x")).mark(rect(h="x").name("bars"))
         c2 = chart(ref("bars")).mark(line())
         ir = layer([c1, c2]).to_ir()
 
-        chart0 = ir["charts"][0]
+        chart0 = ir["children"][0]
         assert chart0["mark"]["type"] == "rect"
         assert chart0["mark"]["name"] == "bars"
         assert chart0["operators"][0]["type"] == "spread"
         assert chart0["data"] == {"type": "table", "id": "t0"}
 
-        chart1 = ir["charts"][1]
+        chart1 = ir["children"][1]
         assert chart1["mark"]["type"] == "line"
         assert chart1["data"] == {"type": "select", "layer": "bars", "mode": "one"}
 
-    def test_layer_to_ir_with_options(self):
-        """Test layer options appear in IR."""
-        data = [{"x": 1}]
-        c1 = chart(data).mark(rect(h="x"))
-        ir = layer([c1], coord="clock").to_ir()
-        assert ir["options"] == {"coord": "clock"}
-
-    def test_layer_collect_derive_functions(self):
-        """Test derive functions from all children are collected."""
+    def test_render_registers_every_charts_derives(self):
+        """The widget gets the derive callbacks of every chart in the tree,
+        wherever it sits."""
         data = [{"x": 1}]
         fn1 = lambda d: d
         fn2 = lambda d: d
+        fn3 = lambda d: d
         c1 = chart(data).flow(derive(fn1)).mark(rect(h="x").name("bars"))
         c2 = chart(ref("bars")).flow(derive(fn2)).mark(line())
-        lb = layer([c1, c2])
+        nested = chart(data).mark(chart(data).flow(derive(fn3)).mark(rect()))
+        widget = layer([c1, c2, nested]).render()
+        assert set(widget.derive_functions.values()) == {fn1, fn2, fn3}
 
-        # Collect derive functions manually (mirrors what render() does)
-        derive_functions = {}
-        for child in lb.children:
-            for op in child.operators:
-                from gofish.ast import DeriveOperator
-                if isinstance(op, DeriveOperator):
-                    derive_functions[op.lambda_id] = op.fn
-
-        assert len(derive_functions) == 2
-        assert fn1 in derive_functions.values()
-        assert fn2 in derive_functions.values()
+    def test_chain_is_a_layer_builder(self):
+        c = chart([{"x": 1}]).mark(rect(h="x")).layer(chart().mark(line()))
+        assert isinstance(c, LayerBuilder)
+        assert len(c.tiers) == 2
+        assert len(c.layer(text(text="t")).tiers) == 3
 
 
 class TestChartBuilder:
@@ -716,9 +692,9 @@ class TestNestedChart:
         assert arrow_to_records(tables["t1"]) == own
 
     def test_layer_of_charts_in_mark_position(self):
-        """`layer([chart(...), chart(...)])` is a `LayerBuilder`; in a mark
-        position it crosses as the `layer` combinator mark with chart
-        children, like any combinator (#1180 gap 1). `LayerIR` is root-only."""
+        """`layer([chart(...), chart(...)])` is the `layer` combinator mark
+        with chart children, like any combinator (#1180 gap 1), at the root
+        and in a mark position alike (#1181)."""
         bars_and_area = layer(
             [
                 chart()
@@ -729,7 +705,7 @@ class TestNestedChart:
                 .mark(rect(h="yield")),
             ]
         )
-        assert isinstance(bars_and_area, LayerBuilder)
+        assert isinstance(bars_and_area, RelatableMark)
         direct = (
             chart(self.ROWS)
             .flow(spread(by="variety", dir="x"))
@@ -755,12 +731,60 @@ class TestNestedChart:
             {"type": "align", "options": {"x": "middle"}, "refs": ["a", "b"]}
         ]
 
-    def test_layer_chain_has_no_mark_position_form(self):
-        """A `chart(...).layer(...)` chain cannot sit in a mark position
-        (#1181)."""
-        chain = chart().mark(rect()).layer(chart().mark(rect()))
-        with pytest.raises(TypeError, match="mark position"):
-            chart(self.ROWS).mark(chain).to_ir()
+    def _chain(self):
+        return (
+            chart(axes=False)
+            .flow(spread(by="year", dir="x"))
+            .mark(rect(h="count"))
+            .layer(line(stroke="black"))
+        )
+
+    def test_layer_chain_in_mark_position(self):
+        """A `chart(...).layer(...)` chain sits in a mark position by the same
+        rule as a chart (#1181): its own `layer-chain` IR, whose first tier is
+        an empty scope (previous-tier data, the partition's rows)."""
+        d = chart(self.ROWS).flow(spread(by="lake", dir="x")).mark(self._chain())
+        ir = d.to_ir()["mark"]
+        assert ir["type"] == "layer-chain"
+        assert set(ir) == {"type", "tiers"}
+        assert ir["tiers"][0]["type"] == "chart"
+        assert ir["tiers"][0]["data"] == {"type": "previous-tier"}
+        assert ir["tiers"][1] == {"type": "line", "stroke": "black"}
+
+    def test_layer_chain_as_combinator_child(self):
+        """A chain as a combinator child has the same encoding as in
+        `.mark(...)`."""
+        direct = chart(self.ROWS).mark(self._chain()).to_ir()["mark"]
+        child = layer([rect(w=4, h="count"), self._chain()]).to_dict()
+        assert child["children"][1] == direct
+
+    def test_layer_chain_at_the_root(self):
+        """At the root a chain is the same `layer-chain`; its first tier's own
+        rows name a table."""
+        root = chart(self.ROWS).mark(rect(h="count")).layer(chart().mark(line()))
+        ir, tables = ir_payload(root)
+        assert ir["type"] == "layer-chain"
+        assert ir["tiers"][0]["data"] == {"type": "table", "id": "t0"}
+        assert ir["tiers"][1]["data"] == {"type": "previous-tier"}
+        assert list(tables) == ["t0"]
+
+    def test_nested_chart_with_dates_ships_arrow_times(self):
+        """A nested chart's own rows cross as an Arrow table, so a date column
+        keeps its Arrow type (#1088), as the root's does."""
+        import datetime as dt
+
+        import pyarrow as pa
+        import pyarrow.ipc as pa_ipc
+
+        own = [
+            {"day": dt.date(2024, 1, 1), "v": 2},
+            {"day": dt.date(2024, 1, 2), "v": 3},
+        ]
+        root = chart(self.ROWS).mark(chart(own).mark(rect(h="v")))
+        ir, tables = ir_payload(root)
+        assert ir["mark"]["data"] == {"type": "table", "id": "t1"}
+        schema = pa_ipc.open_stream(pa.BufferReader(tables["t1"])).schema
+        assert pa.types.is_date(schema.field("day").type)
 
     def test_callable_stays_a_mark_function(self):
         """A callable is arbitrary Python code, so it still calls back."""

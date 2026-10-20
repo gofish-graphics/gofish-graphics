@@ -566,14 +566,27 @@ type RenderMeta = {
  * subclass provides only the two pieces `resolveForRender` needs — how to
  * resolve itself to a node, and the chart-level config to render it with.
  *
+ * Both builders sit wherever a chart can, by one rule: at the root, or in a
+ * mark position (`.mark(...)`, a `layer([...])` child), where an empty scope
+ * binds the rows of the enclosing scope. So each also says whether it is an
+ * empty scope (`usesPreviousLayerMarks`), binds rows to it (`withData`), and
+ * resolves into an enclosing scope's registry (`withLayerContext`).
+ *
  * The methods are `declare`d (their bodies come from `attachBuilderTerminals`
  * below) so the terminal list stays defined in exactly one place. Their
  * options also take the build-in clock's (`BuildClockOptions`), which
  * `resolveForRender` reads.
  */
-abstract class RenderableBuilder {
+export abstract class RenderableBuilder {
   abstract resolve(): Promise<GoFishNode>;
   abstract renderMeta(): RenderMeta;
+  /** True when this builder's rows are the enclosing scope's: an empty
+   *  `chart()`, or a chain whose first tier is one. */
+  abstract usesPreviousLayerMarks(): boolean;
+  /** A copy of this builder with the enclosing scope's rows bound to it. */
+  abstract withData(data: unknown): RenderableBuilder;
+  /** A copy of this builder that resolves into `layerContext`. */
+  abstract withLayerContext(layerContext: LayerContext): RenderableBuilder;
 
   declare render: TerminalMethods<BuildClockOptions>["render"];
   declare toSVG: TerminalMethods<BuildClockOptions>["toSVG"];
@@ -663,7 +676,10 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   // `ChartBuilder` may be passed directly instead of a `(data) => Chart(...)`
   // callback (issue #243): an empty-scope child (`chart()` / `chart(options)`)
   // inherits the incoming partition datum; a child with its own data is drawn
-  // as-is per partition.
+  // as-is per partition. A `.layer(...)` chain goes through the same path
+  // (#1181): a chain whose first tier is an empty scope binds that tier to
+  // the partition, and every later tier sees the previous tier's marks, as
+  // at the root.
   //
   // Blank-fusion sugar: a relational mark (`line()`/`ribbon()`) placed
   // directly here elaborates to an invisible anchor tier plus a connector
@@ -693,14 +709,15 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   // mark returns this `ChartBuilder`, so `.name(...)` stays available on it.
   mark(mark: RelationalMark): ChartBuilder<TInput, TOutput> | LayerBuilder;
   mark(
-    mark: Mark<TOutput> | ChartBuilder<any, any>
+    mark: Mark<TOutput> | ChartBuilder<any, any> | LayerBuilder
   ): ChartBuilder<TInput, TOutput>;
   mark(
-    mark: Mark<TOutput> | ChartBuilder<any, any>
+    mark: Mark<TOutput> | ChartBuilder<any, any> | LayerBuilder
   ): ChartBuilder<TInput, TOutput> | LayerBuilder {
-    if (mark instanceof ChartBuilder) {
-      // The wrapper's wire form is the nested chart itself, so the IR
-      // emitter writes it as the chart's own `ChartIR` (see `Frontend.MarkIR`).
+    if (mark instanceof RenderableBuilder) {
+      // The wrapper's wire form is the nested chart or chain itself, so the IR
+      // emitter writes it as its own `ChartIR` or `LayerChainIR` (see
+      // `Frontend.MarkIR`).
       const finalMark = withWire(
         ((d: TOutput, _key, layerContext) =>
           (mark.usesPreviousLayerMarks()
@@ -879,7 +896,8 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   }
 
   /** A copy of this builder with its data replaced — used by `LayerBuilder` to
-   *  bind an empty `Chart()` scope to `selectAll(previousTierMarkName)`. */
+   *  bind an empty `Chart()` scope to `selectAll(previousTierMarkName)`, and
+   *  in a mark position to bind it to the partition's rows. */
   withData(data: TInput): ChartBuilder<TInput, TOutput> {
     return this.with({ data });
   }
@@ -1236,6 +1254,24 @@ export class LayerBuilder extends RenderableBuilder {
    *  scope (see the class doc for how consumption is decided). */
   layer(child: LayerTier): LayerBuilder {
     return new LayerBuilder([...this.tiers, child], this.layerContext);
+  }
+
+  /** True when the first tier is an empty `chart()` scope: the chain's rows
+   *  are then the enclosing scope's, as for an empty `chart()` (#1181). */
+  usesPreviousLayerMarks(): boolean {
+    const first = this.tiers[0];
+    return first instanceof ChartBuilder && first.usesPreviousLayerMarks();
+  }
+
+  /** A copy of this chain with `data` bound to its first tier, the one tier
+   *  whose scope is the enclosing one: in a mark position, the partition's
+   *  rows. Every later tier keeps the previous tier's marks as its scope, so
+   *  `previous-tier` keeps its one meaning. */
+  withData(data: unknown): LayerBuilder {
+    return new LayerBuilder(
+      [this.rootChart().withData(data), ...this.tiers.slice(1)],
+      this.layerContext
+    );
   }
 
   /** The root tier is always a `ChartBuilder` (`.layer` is a method on one), but

@@ -22,14 +22,10 @@ import type { Frontend } from "gofish-ir";
 import { buildArrowTable } from "./arrowTransport";
 import { arrowB64ToRows, decodeTables } from "./arrowDecode";
 
-// Type aliases pointing at the canonical IR schema. Internal usages below
-// keep the legacy `…Spec` names for readability.
-type ChartSpec = Frontend.ChartIR;
-type LayerSpec = Frontend.LayerIR;
-type RawMarkSpec = Frontend.RawMarkIR;
-
 interface WidgetModel {
-  get(key: "spec"): ChartSpec | LayerSpec | RawMarkSpec;
+  // The root: anything a mark position holds (a chart, a chain, a layer, a
+  // mark).
+  get(key: "spec"): Frontend.FrontendIR;
   get(key: "tables"): Record<string, string>;
   get(key: "width"): number;
   get(key: "height"): number;

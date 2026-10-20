@@ -186,8 +186,6 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 _InputRef,
                 _lambda_pairs,
                 _mark_tree,
-                _Tables,
-                encode_non_finite,
                 ir_payload,
             )
 
@@ -204,19 +202,15 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 _registry[lambda_id] = fn
 
             def register(b):
-                """Register every Python callback in `b` (a chart, a layer,
-                or a mark position's tree), at any depth. A derive operator
-                or an accessor answers with rows; a mark function answers
-                with an IR (`mark_fn`). A nested chart or layer is part of
-                the IR, so the callbacks inside it register too."""
+                """Register every Python callback in `b` (a chart, a
+                `.layer(...)` chain, or a mark position's tree), at any
+                depth. A derive operator or an accessor answers with rows; a
+                mark function answers with a payload (`mark_fn`). A nested
+                chart or chain is part of the IR, so the callbacks inside it
+                register too."""
                 if isinstance(b, LayerBuilder):
-                    for child in b.children:
-                        register(child)
-                    # A `.relate(...)` clause that draws is a mark, and may
-                    # carry accessors too (a constraint carries none).
-                    for clause in b._relate or []:
-                        if isinstance(clause, Mark):
-                            register(clause)
+                    for tier in b.tiers:
+                        register(tier)
                 elif isinstance(b, ChartBuilder):
                     for op in b.operators:
                         if isinstance(op, DeriveOperator):
@@ -260,15 +254,14 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     ]
                     result = user_fn(wrapped_data)
                     register(result)
-                    tables = _Tables()
-                    ir = encode_non_finite(result.to_dict(tables))
-                    return {"ir": ir, "tables": b64_tables(tables.arrow_bytes())}
+                    ir, tables = ir_payload(result)
+                    return {"ir": ir, "tables": b64_tables(tables)}
 
                 return wrapped
 
             if not isinstance(builder, (ChartBuilder, LayerBuilder, Mark)):
                 raise TypeError(
-                    "a story must return a chart, layer or mark, got "
+                    "a story must return a chart, a layer chain or a mark, got "
                     f"{type(builder).__name__}"
                 )
             register(builder)

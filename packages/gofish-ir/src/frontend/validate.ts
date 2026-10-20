@@ -112,7 +112,8 @@ function walkDocument(node: unknown, path: string, ctx: Context): void {
       });
   });
   optionalField(node, "$schema", path, ctx, expectString);
-  expectField(node, "root", path, ctx, walkRoot);
+  // A root holds anything a mark position holds (`FrontendIR`).
+  expectField(node, "root", path, ctx, walkMark);
   optionalField(node, "tables", path, ctx, walkTables);
   rejectUnknown(
     node,
@@ -133,31 +134,6 @@ function walkTables(node: unknown, path: string, ctx: Context): void {
       ctx.errors.push({
         path: `${path}.${id}`,
         message: "a table must be an array of row objects",
-      });
-  }
-}
-
-function walkRoot(node: unknown, path: string, ctx: Context): void {
-  if (!isObject(node)) {
-    ctx.errors.push({ path, message: "expected object" });
-    return;
-  }
-  switch (node.type) {
-    case "chart":
-      walkChart(node, path, ctx);
-      return;
-    case "layer":
-      walkLayer(node, path, ctx);
-      return;
-    case "raw-mark":
-      walkRawMark(node, path, ctx);
-      return;
-    default:
-      ctx.errors.push({
-        path: `${path}.type`,
-        message: `root type must be "chart" | "layer" | "raw-mark", got ${JSON.stringify(
-          node.type
-        )}`,
       });
   }
 }
@@ -198,55 +174,30 @@ function walkChart(
   );
 }
 
-function walkLayer(
+/** A `chart(...).layer(...)` chain: at least two tiers, the first a chart,
+ *  each in a mark position. */
+function walkLayerChain(
   node: Record<string, unknown>,
   path: string,
   ctx: Context
 ): void {
   walkBaseFields(node, path, ctx);
-  expectField(node, "charts", path, ctx, (v, p) =>
-    walkArray(v, p, ctx, walkLayerChild)
-  );
-  optionalField(node, "options", path, ctx, expectObject);
-  optionalField(node, "relate", path, ctx, (v, p) =>
-    walkArray(v, p, ctx, walkRelateClause)
-  );
-  optionalField(node, "builder", path, ctx, expectBoolean);
-  rejectUnknown(
-    node,
-    ["type", "charts", "options", "relate", "builder", "origin", "meta"],
-    path,
-    ctx
-  );
-}
-
-function walkLayerChild(node: unknown, path: string, ctx: Context): void {
-  if (isObject(node) && node.type === "chart") {
-    walkChart(node, path, ctx);
-    return;
-  }
-  // A `chart(...).layer(mark)` builder chain drops a component-level
-  // annotation tier straight into `charts` as a raw-mark.
-  if (isObject(node) && node.type === "raw-mark") {
-    walkRawMark(node, path, ctx);
-    return;
-  }
-  ctx.errors.push({
-    path,
-    message:
-      'layer children must be charts or raw-marks (type === "chart" | "raw-mark")',
+  expectField(node, "tiers", path, ctx, (v, p) => {
+    if (!Array.isArray(v) || v.length < 2) {
+      ctx.errors.push({
+        path: p,
+        message: "a layer chain's tiers must be an array of at least two",
+      });
+      return;
+    }
+    if (!isObject(v[0]) || v[0].type !== "chart")
+      ctx.errors.push({
+        path: `${p}[0]`,
+        message: 'a layer chain\'s first tier must be a chart (type "chart")',
+      });
+    walkArray(v, p, ctx, walkMark);
   });
-}
-
-function walkRawMark(
-  node: Record<string, unknown>,
-  path: string,
-  ctx: Context
-): void {
-  walkBaseFields(node, path, ctx);
-  expectField(node, "mark", path, ctx, walkMark);
-  optionalField(node, "options", path, ctx, expectObject);
-  rejectUnknown(node, ["type", "mark", "options", "origin", "meta"], path, ctx);
+  rejectUnknown(node, ["type", "tiers", "origin", "meta"], path, ctx);
 }
 
 function walkData(node: unknown, path: string, ctx: Context): void {
@@ -1061,9 +1012,14 @@ function walkMark(node: unknown, path: string, ctx: Context): void {
     walkCombinatorMark(node, path, ctx);
     return;
   }
-  // A mark position may hold a whole chart (see `MarkIR`).
+  // A mark position may hold a whole chart or a `.layer(...)` chain (see
+  // `MarkIR`).
   if (t === "chart") {
     walkChart(node, path, ctx);
+    return;
+  }
+  if (t === "layer-chain") {
+    walkLayerChain(node, path, ctx);
     return;
   }
   if ((LEAF_MARK_TYPES as readonly string[]).includes(t)) {
@@ -1476,15 +1432,6 @@ function expectString(value: unknown, path: string, ctx: Context): void {
 
 function expectNumber(value: unknown, path: string, ctx: Context): void {
   if (!isIRNumber(value)) ctx.errors.push({ path, message: notANumber(value) });
-}
-
-function expectBoolean(value: unknown, path: string, ctx: Context): void {
-  if (typeof value !== "boolean") {
-    ctx.errors.push({
-      path,
-      message: `expected boolean, got ${typeNameOf(value)}`,
-    });
-  }
 }
 
 /**

@@ -3,8 +3,8 @@
 // </gofish-wiki>
 
 /**
- * Frontend-IR emitter: turns a `ChartBuilder` (or LayerBuilder / RawMark) into
- * a {@link Frontend.FrontendIRDocument}.
+ * Frontend-IR emitter: turns a `ChartBuilder` (or a `LayerBuilder` chain, or a
+ * mark) into a {@link Frontend.FrontendIRDocument}.
  *
  * The emitter walks the runtime operator/mark tree and reads the
  * `__serialize` tag that the factories (`createOperator`, `createMark`, and
@@ -21,7 +21,11 @@
 
 import { Frontend } from "gofish-ir";
 import type { Mark, Operator } from "./registry";
-import { ChartBuilder, PREVIOUS_LAYER_MARKS } from "../ast/marks/chartBuilder";
+import {
+  ChartBuilder,
+  LayerBuilder,
+  PREVIOUS_LAYER_MARKS,
+} from "../ast/marks/chartBuilder";
 import { GoFishRef } from "../ast/_ref";
 import { wireOf } from "../ast/wire";
 
@@ -98,17 +102,20 @@ function readTag(value: unknown): SerializeTag | undefined {
 // ---------------------------------------------------------------------------
 
 /**
- * Emit a frontend-IR document for a {@link ChartBuilder}.
+ * Emit a frontend-IR document whose root is `root`: a {@link ChartBuilder}, a
+ * `.layer(...)` chain ({@link LayerBuilder}), or a mark (a `layer([...])` of
+ * charts or marks, a bare mark). A root holds anything a mark position does,
+ * so this is the one entry point.
  *
  * Async because combinator-form marks may carry their child list as a
  * `Promise<Mark[]>` (when built via helpers like `map(...)`); the emitter
  * resolves these to walk into them.
  */
 export async function toJSON(
-  chart: ChartBuilder<any>
+  root: ChartBuilder<any> | LayerBuilder | Mark<any>
 ): Promise<Frontend.FrontendIRDocument> {
   const tables = new TableIds();
-  return document(await chartBuilderToChartIR(chart, tables), tables);
+  return document(await markToIR(root as Mark<any>, tables), tables);
 }
 
 /**
@@ -147,42 +154,6 @@ function document(root: Frontend.FrontendIRDocument["root"], ids: TableIds) {
     root,
     ...(Object.keys(ids.tables).length > 0 ? { tables: ids.tables } : {}),
   });
-}
-
-/**
- * Emit a frontend-IR document for a `Layer(opts, [chart1, chart2, ...])`
- * combinator. Pass the layer options and the inner ChartBuilders.
- */
-export async function toJSONLayer(
-  options: AnyObject,
-  charts: ChartBuilder<any>[]
-): Promise<Frontend.FrontendIRDocument> {
-  const tables = new TableIds();
-  const root: Frontend.LayerIR = {
-    type: "layer",
-    charts: await Promise.all(
-      charts.map((c) => chartBuilderToChartIR(c, tables))
-    ),
-    ...(Object.keys(options ?? {}).length > 0 ? { options } : {}),
-  };
-  return document(root, tables);
-}
-
-/**
- * Emit a frontend-IR document for a bare mark (no chart wrapper).
- * Used for `mark.render(container, opts)` direct callsites.
- */
-export async function toJSONRawMark(
-  mark: Mark<any>,
-  options?: AnyObject
-): Promise<Frontend.FrontendIRDocument> {
-  const tables = new TableIds();
-  const root: Frontend.RawMarkIR = {
-    type: "raw-mark",
-    mark: await markToIR(mark, tables),
-    ...(options && Object.keys(options).length > 0 ? { options } : {}),
-  };
-  return document(root, tables);
 }
 
 // ---------------------------------------------------------------------------
@@ -303,16 +274,35 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
   } as Frontend.OperatorIR;
 }
 
+/** A `.layer(...)` chain, wherever it sits: its tiers, each in its
+ *  mark-position form. */
+async function layerChainToIR(
+  chain: LayerBuilder,
+  tables: TableIds
+): Promise<Frontend.LayerChainIR> {
+  const tiers = (chain as any).tiers as Mark<any>[];
+  const ir: Frontend.MarkIR[] = [];
+  // In order, so table ids are minted in walk order.
+  for (const tier of tiers) ir.push(await markToIR(tier, tables));
+  return { type: "layer-chain", tiers: ir };
+}
+
 async function markToIR(
   mark: Mark<any>,
   tables: TableIds
 ): Promise<Frontend.MarkIR> {
-  // A whole chart in a mark position is its own `ChartIR` (see
-  // `Frontend.MarkIR`): a `layer([...])` child holds the chart itself, and
-  // `.mark(chart(...))` a mark whose wire form is the chart.
-  const chart = (mark as unknown) instanceof ChartBuilder ? mark : wireOf(mark);
-  if (chart instanceof ChartBuilder)
-    return chartBuilderToChartIR(chart, tables);
+  // A whole chart or `.layer(...)` chain in a mark position is its own
+  // `ChartIR` or `LayerChainIR` (see `Frontend.MarkIR`): a `layer([...])`
+  // child holds the builder itself, and `.mark(chart(...))` a mark whose wire
+  // form is the builder. A root is a mark position too.
+  const builder =
+    (mark as unknown) instanceof ChartBuilder ||
+    (mark as unknown) instanceof LayerBuilder
+      ? mark
+      : wireOf(mark);
+  if (builder instanceof ChartBuilder)
+    return chartBuilderToChartIR(builder, tables);
+  if (builder instanceof LayerBuilder) return layerChainToIR(builder, tables);
   const tag = readTag(mark);
   if (!tag) {
     throw new Error(
@@ -333,13 +323,14 @@ async function markToIR(
       ? await Promise.resolve(tag.children)
       : [];
     const options = wireOpts("combinator-mark", tag.type, tag.opts);
+    // In order, so table ids are minted in walk order.
+    const children: Frontend.MarkIR[] = [];
+    for (const c of childrenResolved) children.push(await markToIR(c, tables));
     const ir: Frontend.CombinatorMarkIR = {
       type: tag.type as Frontend.CombinatorMarkType,
       __combinator: true,
       ...(Object.keys(options).length > 0 ? { options } : {}),
-      children: await Promise.all(
-        childrenResolved.map((c) => markToIR(c, tables))
-      ),
+      children,
       ...chained,
     };
     return ir;

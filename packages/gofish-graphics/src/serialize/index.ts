@@ -39,10 +39,9 @@ export {
   type ChartSpec,
   type ConstraintSpec,
   type LabelSpec,
-  type LayerSpec,
+  type LayerChainSpec,
   type MarkSpec,
   type OperatorSpec,
-  type RawMarkSpec,
   type RenderIROptions,
   type IRHost,
   type IRContext,
@@ -50,7 +49,7 @@ export {
   type TokenSentinel,
 } from "./fromJSON";
 
-export { toJSON, toJSONLayer, toJSONRawMark } from "./toJSON";
+export { toJSON } from "./toJSON";
 
 export { withWire, wireOf } from "../ast/wire";
 

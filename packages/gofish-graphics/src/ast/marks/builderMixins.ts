@@ -13,7 +13,7 @@
  * on every `ChartBuilder` instance.
  */
 
-import { ChartBuilder } from "./chartBuilder";
+import { ChartBuilder, LayerBuilder } from "./chartBuilder";
 import {
   spread,
   stack,
@@ -33,6 +33,10 @@ declare module "./chartBuilder" {
     /** Emit a frontend-IR document. See `gofish-ir`. */
     toJSON(): Promise<Frontend.FrontendIRDocument>;
   }
+  interface LayerBuilder {
+    /** Emit a frontend-IR document whose root is this chain. */
+    toJSON(): Promise<Frontend.FrontendIRDocument>;
+  }
 }
 
 ChartBuilder.prototype.facet = function (opts: SpreadOptions) {
@@ -45,4 +49,8 @@ ChartBuilder.prototype.stack = function (opts: StackOptions) {
 
 ChartBuilder.prototype.toJSON = function () {
   return toJSON(this as unknown as ChartBuilder<any>);
+};
+
+LayerBuilder.prototype.toJSON = function () {
+  return toJSON(this);
 };
