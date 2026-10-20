@@ -22,7 +22,10 @@
 import { Frontend } from "gofish-ir";
 import type { ChartBuilder, Mark, Operator } from "./registry";
 import { GoFishRef } from "../ast/_ref";
+import { GoFishNode } from "../ast/_node";
+import { RelateOperand } from "../ast/constraints/relate";
 import { wireOf } from "../ast/wire";
+import { nodeSelectionOf } from "../ast/nodeSelection";
 
 // The widget IR uses these symbol-loose shapes; toJSON returns them as-is.
 // The validator in `gofish-ir` accepts these shapes in permissive mode.
@@ -80,10 +83,88 @@ function wireOpts(
   const out: AnyObject = {};
   for (const [key, value] of Object.entries(opts)) {
     if (Object.hasOwn(accepted, key) && typeof value !== "function") {
-      out[key] = value;
+      // A field whose declared type holds nodes (a blob's `avoiding`, inside
+      // `shape`) carries their references; every other field is as given.
+      out[key] = Frontend.mapHeldNodes(accepted[key].type, value, nodesToIR);
     }
   }
   return out;
+}
+
+/**
+ * Nodes named inside an option (a blob's `avoiding`), written as their IR
+ * (`Frontend.NodeSelectionIR`), at any depth: a ref becomes
+ * `{ type: "ref", selection }`, and a `selectAll(name)` becomes
+ * `{ type: "select", layer: name, mode: "all" }`, the form chart data
+ * takes. A ref to a node (not a name) has no wire form.
+ */
+function nodesToIR(nodes: unknown): Frontend.NodeSelectionIR {
+  const selection = nodeSelectionOf(
+    nodes,
+    "toJSON: a value that names nodes (a blob's avoiding)"
+  );
+  return "all" in selection
+    ? (selectRefIR(selection.all) as Frontend.NodeSelectionIR)
+    : selection.items.map(nodeRefIR);
+}
+
+/** One node of such a list as a `ref` by its name. A ref by a string name
+ *  and a `.relate()` operand name theirs; a node (or a ref to one) needs a
+ *  string name to cross the wire. */
+function nodeRefIR(item: unknown): Frontend.RefMarkIR {
+  if (item instanceof RelateOperand)
+    return { type: "ref", selection: item.name };
+  let node: unknown = item;
+  if (item instanceof GoFishRef) {
+    if (typeof item.selection === "string")
+      return { type: "ref", selection: item.selection };
+    if (item.selection !== undefined)
+      throw new Error(
+        "toJSON: only a ref by a string name crosses the wire in a node list; " +
+          "a token or path ref does not."
+      );
+    node = item.targetNode;
+  }
+  if (node instanceof GoFishNode) {
+    if (typeof node._name === "string")
+      return { type: "ref", selection: node._name };
+    throw new Error(
+      `toJSON: a ${node.type} node in a node list (a blob's avoiding) has no ` +
+        'name, so it cannot cross the wire. Name it with .name("...") and ' +
+        'list it (or ref("...")) by that name.'
+    );
+  }
+  throw new Error(
+    "toJSON: a node list (a blob's avoiding) holds nodes, refs or .relate() " +
+      `operands, got ${typeof item}.`
+  );
+}
+
+/** A ref by a layer name (`ref(name)`, `selectAll(name)`) as its wire form,
+ *  `SelectRefIR`: `multiplicity` becomes `mode`, emitted always so JS and
+ *  Python IR agree. Only a string-layer ref has one. */
+function selectRefIR(r: GoFishRef): Frontend.SelectRefIR {
+  if (typeof r.selection !== "string")
+    throw new Error(
+      "Cannot serialize a token/path/node-backed ref as a layer selection; " +
+        "only a string-layer ref (ref(name) / selectAll(name)) is serializable."
+    );
+  return { type: "select", layer: r.selection, mode: r.multiplicity ?? "one" };
+}
+
+/**
+ * A combinator's child list as the flat list rendering reads
+ * (`reifyChildren`): nested arrays flattened, and a promise of children
+ * (as `map(rows, ...)` returns) awaited. A tagged promise is one mark (a
+ * combinator's own result), so it stays as it is for `markToIR`.
+ */
+async function flatChildren(children: unknown): Promise<unknown[]> {
+  if (children === null || children === undefined) return [];
+  if (Array.isArray(children))
+    return (await Promise.all(children.map(flatChildren))).flat();
+  if (children instanceof Promise && readTag(children) === undefined)
+    return flatChildren(await children);
+  return [children];
 }
 
 function readTag(value: unknown): SerializeTag | undefined {
@@ -215,19 +296,7 @@ function dataToIR(data: unknown): Frontend.DataIR | null {
   // A `GoFishRef` used as chart data (from `ref(name)` or `selectAll(name)`).
   // Only string-layer references serialize; `multiplicity` ("one" | "all")
   // becomes the wire `mode` (emitted unconditionally so JS and Python IR agree).
-  if (data instanceof GoFishRef) {
-    if (typeof data.selection === "string") {
-      return {
-        type: "select",
-        layer: data.selection,
-        mode: data.multiplicity ?? "one",
-      };
-    }
-    throw new Error(
-      "Cannot serialize a token/path/node-backed ref as chart data; only a " +
-        "string-layer ref (ref(name) / selectAll(name)) is serializable."
-    );
-  }
+  if (data instanceof GoFishRef) return selectRefIR(data);
   if (Array.isArray(data)) {
     return { type: "inline", rows: data as AnyObject[] };
   }
@@ -273,6 +342,20 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
 }
 
 async function markToIR(mark: Mark<any>): Promise<Frontend.MarkIR> {
+  // A ref child (`ref("a")` in a combinator, an enclosure's member) is a
+  // `RefMarkIR` by its name, the form fromJSON reads back with `ref(...)`.
+  if ((mark as unknown) instanceof GoFishRef) {
+    const r = mark as unknown as GoFishRef;
+    if (typeof r.selection !== "string" || r.multiplicity === "all")
+      throw new Error(
+        "toJSON: only a ref by a string name crosses the wire as a child."
+      );
+    return {
+      type: "ref",
+      selection: r.selection,
+      ...(typeof r._name === "string" ? { name: r._name } : {}),
+    };
+  }
   const tag = readTag(mark);
   if (!tag) {
     throw new Error(
@@ -289,15 +372,15 @@ async function markToIR(mark: Mark<any>): Promise<Frontend.MarkIR> {
   if (tag.label !== undefined) chained.label = tag.label;
 
   if (tag.__combinator) {
-    const childrenResolved = tag.children
-      ? await Promise.resolve(tag.children)
-      : [];
+    const childrenResolved = await flatChildren(tag.children);
     const options = wireOpts("combinator-mark", tag.type, tag.opts);
     const ir: Frontend.CombinatorMarkIR = {
       type: tag.type as Frontend.CombinatorMarkType,
       __combinator: true,
       ...(Object.keys(options).length > 0 ? { options } : {}),
-      children: await Promise.all(childrenResolved.map((c) => markToIR(c))),
+      children: await Promise.all(
+        childrenResolved.map((c) => markToIR(c as Mark<any>))
+      ),
       ...chained,
     };
     return ir;

@@ -9,6 +9,7 @@ import type { ChartBuilder, LayerBuilder } from "../marks/chartBuilder";
 import { resolveMarkResult } from "../marks/markResult";
 import { flattenAndAwaitPromises } from "../withGoFish";
 import {
+  isZOrderConstraint,
   validateOperands,
   type ConstraintSpec,
   type ResolvedOperand,
@@ -324,7 +325,15 @@ export function scheduleRelate(
 
 function describeStep(layer: GoFishNode, u: number): string {
   if (u < 0) {
-    const kinds = [...new Set(layer.constraints.map((c) => c.type))];
+    // Only the constraints that place nodes take part in the solve; a z-order
+    // constraint orders paint and never waits for a clause.
+    const kinds = [
+      ...new Set(
+        layer.constraints
+          .filter((c) => !isZOrderConstraint(c))
+          .map((c) => c.type)
+      ),
+    ];
     return kinds.length > 0
       ? `the layer's constraints (${kinds
           .map((k) => `Constraint.${k}`)

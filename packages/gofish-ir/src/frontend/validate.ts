@@ -38,6 +38,7 @@ import {
 import {
   AUTHORED_REFS,
   BIN_KINDS,
+  taggedBranches,
   LABEL_OPTIONS,
   OPTION_TYPES,
   acceptedFields,
@@ -90,6 +91,10 @@ export function validate(doc: unknown): ValidationResult {
 
 interface Context {
   errors: ValidationError[];
+  /** Checking an authored JS value, not IR: a ref whose authored value holds
+   *  nodes (`holdsNodes` in `AUTHORED_REFS`) is passed through, since the
+   *  nodes are only IR once serialized. */
+  authored?: boolean;
 }
 
 function walkDocument(node: unknown, path: string, ctx: Context): void {
@@ -245,15 +250,7 @@ function walkData(node: unknown, path: string, ctx: Context): void {
       rejectUnknown(node, ["type", "rows"], path, ctx);
       return;
     case "select":
-      expectField(node, "layer", path, ctx, expectString);
-      optionalField(node, "mode", path, ctx, (v, p) => {
-        if (v !== "one" && v !== "all")
-          ctx.errors.push({
-            path: p,
-            message: `mode must be "one" | "all", got ${JSON.stringify(v)}`,
-          });
-      });
-      rejectUnknown(node, ["type", "layer", "mode"], path, ctx);
+      walkSelectRef(node, path, ctx);
       return;
     case "external":
       optionalField(node, "id", path, ctx, expectString);
@@ -362,6 +359,8 @@ function walkFieldType(
         fail(`expected a number of at least ${type.min}, got ${n}`);
       else if (type.exclusiveMin !== undefined && !(n > type.exclusiveMin))
         fail(`expected a number above ${type.exclusiveMin}, got ${n}`);
+      else if (type.max !== undefined && !(n <= type.max))
+        fail(`expected a number of at most ${type.max}, got ${n}`);
       else if (type.integer && !Number.isInteger(n))
         fail(`expected a whole number, got ${n}`);
       return;
@@ -485,44 +484,6 @@ function walkFieldType(
   }
 }
 
-/** A branch's tag: the field that names it, and its value. An object
- *  whose required `kind` field is a string literal (a strategy) is tagged
- *  by its `kind`; a hand-authored ref with a `tag` (`field(...)`,
- *  `struct(...)`, AUTHORED_REFS) by its `type`. */
-function branchTag(
-  branch: FieldType
-): { key: "kind" | "type"; value: string } | null {
-  if (branch.kind === "ref") {
-    const tag = AUTHORED_REFS[branch.name]?.tag;
-    return tag === undefined ? null : { key: "type", value: tag };
-  }
-  if (branch.kind !== "object") return null;
-  const tag = branch.fields.kind;
-  return tag !== undefined &&
-    tag.required &&
-    tag.type.kind === "literal" &&
-    typeof tag.type.value === "string"
-    ? { key: "kind", value: tag.type.value }
-    : null;
-}
-
-/** The branches of a tagged union by their tag: every branch tagged by the
- *  same field ({@link branchTag}), no two alike. Null for any other union. */
-function taggedBranches(
-  options: readonly FieldType[]
-): { key: "kind" | "type"; byTag: Map<string, FieldType> } | null {
-  const byTag = new Map<string, FieldType>();
-  let key: "kind" | "type" | undefined;
-  for (const branch of options) {
-    const tag = branchTag(branch);
-    if (tag === null || (key !== undefined && tag.key !== key)) return null;
-    if (byTag.has(tag.value)) return null;
-    key = tag.key;
-    byTag.set(tag.value, branch);
-  }
-  return key === undefined ? null : { key, byTag };
-}
-
 /**
  * Walk `value` against `type` and throw the first problem, as
  * `[gofish] <path>: <message>. <hint>`, naming `where` the value was
@@ -536,7 +497,7 @@ function walkOrThrow(
   where: string,
   hint: string
 ): void {
-  const ctx: Context = { errors: [] };
+  const ctx: Context = { errors: [], authored: true };
   walkFieldType(type, value, where, ctx);
   if (ctx.errors.length > 0) {
     const [{ path, message }] = ctx.errors;
@@ -657,6 +618,7 @@ function walkRefType(
     walkFieldType(optionType.type, value, path, ctx);
     return;
   }
+  if (ctx.authored && AUTHORED_REFS[name]?.holdsNodes) return;
   switch (name) {
     case "LabelIR":
       walkLabel(value, path, ctx);
@@ -669,6 +631,9 @@ function walkRefType(
       return;
     case "RelateClauseIR":
       walkRelateClause(value, path, ctx);
+      return;
+    case "NodeSelectionIR":
+      walkNodeSelection(value, path, ctx);
       return;
     case "FieldAccessor":
       if (!isObject(value)) {
@@ -743,6 +708,54 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
     acceptedFields("operator", node.type) ?? {},
     ["type", "origin", "meta"]
   );
+}
+
+/** `SelectRefIR`: `{ type: "select", layer, mode? }`, the nodes of a named
+ *  layer, as chart data and inside an option. */
+function walkSelectRef(
+  node: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  expectField(node, "layer", path, ctx, expectString);
+  optionalField(node, "mode", path, ctx, (v, p) => {
+    if (v !== "one" && v !== "all")
+      ctx.errors.push({
+        path: p,
+        message: `mode must be "one" | "all", got ${JSON.stringify(v)}`,
+      });
+  });
+  rejectUnknown(node, ["type", "layer", "mode"], path, ctx);
+}
+
+/** `NodeSelectionIR`: a list of `ref` marks, or a `select` of every node of
+ *  a named layer (`selectAll(name)`). */
+function walkNodeSelection(value: unknown, path: string, ctx: Context): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, i) => {
+      const at = `${path}[${i}]`;
+      if (!isObject(item) || item.type !== "ref") {
+        ctx.errors.push({ path: at, message: "expected a ref" });
+        return;
+      }
+      walkRefMark(item, at, ctx);
+    });
+    return;
+  }
+  if (isObject(value) && value.type === "select") {
+    walkSelectRef(value, path, ctx);
+    if (value.mode !== "all")
+      ctx.errors.push({
+        path: `${path}.mode`,
+        message: `a selection of nodes takes every node of its layer: mode must be "all", got ${JSON.stringify(value.mode)}`,
+      });
+    return;
+  }
+  ctx.errors.push({
+    path,
+    message:
+      'expected a list of refs or a selectAll selection ({ type: "select", layer, mode: "all" })',
+  });
 }
 
 function walkTranslate(node: unknown, path: string, ctx: Context): void {

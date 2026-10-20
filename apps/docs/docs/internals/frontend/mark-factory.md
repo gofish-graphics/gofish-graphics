@@ -8,6 +8,7 @@ covers:
   - packages/gofish-graphics/src/ast/channels.ts
   - packages/gofish-graphics/src/ast/marks/chart.ts
   - packages/gofish-graphics/src/ast/marks/markResult.ts
+  - packages/gofish-graphics/src/ast/constraints/relationalPaint.ts
 ---
 
 # `createMark`: turning a shape into a frontend mark
@@ -266,8 +267,9 @@ TYPE: it returns `StripLive<O>`, which is why `line`/`ribbon`'s `produce` reads
 
 The other half of `withGoFish.ts` is `createNodeOperator` /
 `createNodeOperatorSequential`, which every low-level operator (`layer`,
-`spreadX`, `Frame`, …) is built from. They flatten the children array, await its
-promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
+`spreadX`, `Frame`, …) is built from, and `reifyChildren`, which
+`createNodeOperator` and `createRelationalMark`'s combinator form share. They
+flatten the children array, await its promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
 shared by both loops: every child goes to `resolveMarkResult`
 (`marks/markResult.ts`), the single place that knows all the shapes. Five get in:
 
@@ -457,19 +459,29 @@ well.
 
 ## `createRelationalMark`: connectors as marks
 
-`line` and `ribbon` (`src/ast/marks/chart.ts`) are not built on `createMark` —
+`line`, `ribbon` and `enclose` (`src/ast/marks/chart.ts`) are not built on `createMark` —
 they aren't a single low-level shape with channel-annotated props, they're a
 connector that consumes _other_ marks' produced nodes. They're built on the
 sibling factory `createRelationalMark(type, produce)`, where `produce(opts,
-children)` builds the underlying `connect` node; everything else is shared
-dual-form plumbing the factory handles once for both `line` and `ribbon`.
+children, inferred, layerContext)` builds the underlying node (`connect` for
+`line` and `ribbon`, the enclosure built by `encloseNode` in
+`graphicalOperators/enclose.tsx` for `enclose`); everything else is shared
+dual-form plumbing the factory handles once for all three. `layerContext` is
+the chart's named layers where the mark is applied to a chart's data (the bag
+and pairwise forms), so an option that names a layer (a blob's
+`avoiding: selectAll(name)`) resolves against it; it is undefined in the
+combinator form.
 
 `createRelationalMark` dispatches on the shape of its arguments into four call
 forms:
 
-- **Low-level combinator form** — an explicit `children: GoFishAST[]` array is
-  passed as the second argument (used standalone inside a manual
-  `layer([...])`). Connects exactly those children.
+- **Low-level combinator form** — an explicit children array is passed as the
+  second argument (used standalone inside a manual `layer([...])`). It is
+  reified the way every combinator reifies its children (`reifyChildren` in
+  `withGoFish.ts`: nested arrays and promises flatten, marks are called, chart
+  builders resolve), so `enclose(opts, [spread(...)])` takes a fresh child
+  and `line(opts, [ref("a"), ref("b")])` takes refs. Connects exactly those
+  children.
 - **Pairwise `{ from, to }` form** — `opts.from`/`opts.to` name two columns
   holding refs; one connector per row (node-link edges), after
   [`resolve`](/js/api/operators/resolve) has turned endpoint ids into refs.
@@ -509,8 +521,9 @@ them from the serialized opts.)
 
 Every node a relational mark produces, in every call form above, is tagged
 with the operand nodes/refs it was built from (`tagRelationalOperands`, which
-stashes `__relationalOperands` on the node). The `layer` combinator
-(`graphicalOperators/layer.tsx`) reads that tag and installs a default
+stashes `__relationalOperands` on the node). One pass,
+`applyRelationalZBelowDefaults` (`constraints/relationalPaint.ts`), reads
+that tag and installs a default
 `zBelow(self, operand)` paint-order **constraint** — not a hardcoded z-index —
 so the connector paints under whatever it references. Because it's a real
 constraint, it composes with any other constraint in the layer; an explicit
@@ -518,7 +531,16 @@ constraint, it composes with any other constraint in the layer; an explicit
 overrides the default (the tag is only consulted when neither has been set).
 This is what lets `line()`/`ribbon()` sit under the marks they connect with no
 zOrder incantation needed, in every call form including the low-level
-combinator one.
+combinator one. Two refinements: an operand that is the connector's own fresh
+child (`enclose(opts, [spread(...)])` lays its children out and paints them
+itself, over its outline) is not tagged; and the `layer` combinator runs the
+pass over its children, and `GoFishNode.relate` over its drawing clauses. A
+clause's operands are string refs with no target yet, and the pass names
+such a ref's node by its string, with no scope check, since the name is the
+relating layer's (see [Names and Scoping](/internals/core/names-and-scoping)).
+The defaults `layer` installs for its children are kept apart, as
+`_paintDefaults`: a later `.relate()` on the layer replaces the author's
+constraints with its own and keeps them.
 
 ### Blank-fusion: `.mark(R(opts))` sugar
 

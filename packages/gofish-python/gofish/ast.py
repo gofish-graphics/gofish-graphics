@@ -304,6 +304,51 @@ def _wire_options(options: Dict[str, Any], accessors: Dict[str, list]) -> Dict[s
     }
 
 
+def _select_ref(proxy: "_RefProxy") -> Dict[str, Any]:
+    """A ref by a layer name (`ref(name)`, `select_all(name)`) as its wire
+    form, `SelectRefIR`: `{"type": "select", "layer": name, "mode": "one" |
+    "all"}`, "one" for a singular `ref(name)`, "all" for `select_all(name)`.
+    Chart data takes it, and so does an option that names nodes."""
+    selection = proxy._sel()
+    if len(selection) != 1 or not isinstance(selection[0], str):
+        raise ValueError(
+            "a ref used as a layer selection must be a flat single-name "
+            "selection (e.g. `ref(\"bars\")` / `select_all(\"bars\")`); "
+            "token/path refs cannot serialize as one"
+        )
+    return {
+        "type": "select",
+        "layer": selection[0],
+        "mode": proxy.multiplicity or "one",
+    }
+
+
+def _mark_in_option(m: "Mark") -> Any:
+    """A mark named inside an option (a blob's `avoiding`), as the wire names
+    it (`NodeSelectionIR`): `select_all(name)` is every node of the layer, the
+    `SelectRefIR` chart data takes; any other mark (a `ref(...)`, a
+    `.relate()` operand) is its IR."""
+    if getattr(m, "multiplicity", None) == "all":
+        return _select_ref(m)
+    return m.to_dict()
+
+
+def _marks_in_options(options: Dict[str, Any]) -> Dict[str, Any]:
+    """The options with every mark in them, at any depth, written as its IR
+    (`_mark_in_option`). Options without one are the same objects."""
+    return {
+        k: _nonfinite.walk(
+            v,
+            lambda x: _mark_in_option(x)
+            if isinstance(x, Mark)
+            else x
+            if _is_tagged(x)
+            else KEEP,
+        )
+        for k, v in options.items()
+    }
+
+
 def _lambda_pairs(accessors: Dict[str, list]) -> List[tuple]:
     """`(lambda_id, rows_fn)` for every accessor a construct recorded.
     `rows_fn` adapts the user's `(row) -> value` callable to the rows-in /
@@ -567,7 +612,9 @@ class Mark:
         # register the underlying callable in the shared registry; the JS
         # harness/widget substitutes the sentinel for a real `(d) => ...`
         # arrow function whose body RPCs into Python.
-        serialized_kwargs = _wire_options(self.kwargs, self._accessors)
+        serialized_kwargs = _marks_in_options(
+            _wire_options(self.kwargs, self._accessors)
+        )
         if self._children is not None:
             # Combinator form: emit a nested payload the JS side reconstructs
             # via the operator's `(opts, marks)` overload.
@@ -753,7 +800,6 @@ from ._generated import (  # noqa: E402
     subtract,
     paint,
     mask,
-    enclose,
     position,
     arrow,
     _spread_opts,
@@ -769,6 +815,7 @@ from ._generated import (  # noqa: E402
     _partition_opts,
     _line_opts,
     _ribbon_opts,
+    _enclose_opts,
     _layer_opts,
     _chart_opts,
     _label_opts,
@@ -1425,26 +1472,11 @@ class ChartBuilder:
         # inside a `.layer(...)` chain becomes `{"type": "previous-tier"}` (JS's
         # `LayerBuilder.wireTiers()` derives the auto-name/selectAll wiring from
         # this marker — see `_PREVIOUS_LAYER_MARKS`); otherwise None. The select
-        # wire shape is `{"type": "select", "layer": <name>, "mode": "one"|"all"}`
-        # — "one" for a singular `ref(name)`, "all" for `select_all(name)`.
+        # wire shape is `SelectRefIR` (`_select_ref`).
         if self._uses_previous_marks():
             data_ir: Any = {"type": "previous-tier"}
         elif isinstance(self.data, _RefProxy):
-            selection = self.data._sel()
-            if (
-                len(selection) != 1
-                or not isinstance(selection[0], str)
-            ):
-                raise ValueError(
-                    "a ref used as chart data must be a flat single-name "
-                    "selection (e.g. `ref(\"bars\")` / `select_all(\"bars\")`); "
-                    "token/path refs cannot serialize as chart data"
-                )
-            data_ir = {
-                "type": "select",
-                "layer": selection[0],
-                "mode": self.data.multiplicity or "one",
-            }
+            data_ir = _select_ref(self.data)
         else:
             data_ir = None
 
@@ -1671,12 +1703,6 @@ def layer(
     return RelatableMark(
         "layer", _children=list(children), **_layer_opts(**options)
     )
-
-
-# `enclose` is generated (packages/gofish-python/gofish/_generated.py) —
-# pure kwargs-collection, imported above. `background` is an alias: the same
-# function, so it serializes as the same "enclose" IR node.
-background = enclose
 
 
 # Attribute names reserved on `_RefProxy` so they pass through normal
@@ -3200,6 +3226,28 @@ def ribbon(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     if children is not None:
         return Mark("ribbon", _children=list(children), **kwargs)
     return Mark("ribbon", **kwargs)
+
+
+def enclose(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
+    """Enclose mark: an outline drawn around nodes, under them. The outline is
+    a ``shape`` from the ``Shape`` family: the padded bounding box
+    (``Shape.box(rx=..., ry=...)``, the default), the smallest ellipse around
+    the members (``Shape.oval()``), or a smooth region (``Shape.blob(...)``,
+    ``Shape.hull(...)``, ``Shape.spine(...)``).
+
+    Two forms, like :func:`line`: combinator form ``enclose([a, c], ...)``
+    (fresh children are laid out as ``layer`` lays them out; ``ref(...)``
+    children and ``.relate()`` operands are enclosed where they are), and bag
+    form ``chart(select_all("points")).flow(group(by="species"))
+    .mark(enclose(...))``, one outline per group.
+
+    The options are the generated ``_enclose_opts`` core's (see the docs
+    options table); an unknown option raises TypeError.
+    """
+    kwargs = _enclose_opts(**options)
+    if children is not None:
+        return Mark("enclose", _children=list(children), **kwargs)
+    return Mark("enclose", **kwargs)
 
 
 # ─── cut: slice a source shape into N clipped sub-shapes ────────────────────

@@ -103,6 +103,18 @@ export const pixelBox = (
   };
 };
 
+/** A rect's corner radii as in SVG: one of `rx` / `ry` given is both, and
+ *  neither is `fallback` (0 for `rect`, 2 for `Shape.box`). An explicit 0
+ *  stays 0. */
+export const cornerRadii = (
+  rx: number | undefined,
+  ry: number | undefined,
+  fallback: number
+): { rx: number; ry: number } => ({
+  rx: rx ?? ry ?? fallback,
+  ry: ry ?? rx ?? fallback,
+});
+
 /** Build a `RectItem` from a GoFish box (min/max per axis) — see {@link pixelBox}. */
 export const rectItemFromBox = (
   gxMin: number,

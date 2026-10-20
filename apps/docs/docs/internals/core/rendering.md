@@ -117,6 +117,9 @@ resamples. A coordinate transform does: a closed ring of layout points (a
 and, under any other, maps it through the space with adaptive resampling
 (`transformPath(..., { resample: true })`), so a straight edge in data space draws as
 the curve the space makes of it. Only then does it go through `toPixel`.
+A rectangle's corner radii follow SVG's rule, in one helper (`cornerRadii` in
+`lowerHelpers.ts`) that `rect` and `enclose`'s box both use: one of `rx` and `ry`
+given is both, and neither is the shape's own default (0 for `rect`, 2 for the box).
 
 ## The lower pass
 

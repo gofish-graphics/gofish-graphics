@@ -1212,7 +1212,8 @@ during lowering. Shared helpers live in `src/ast/displayList/lowerHelpers.ts`
 here too: on an axis where the rect fills the space it was given (no size or
 span of its own), the drawn box moves in by `inset` pixels at each end. Layout
 never sees it, so the rect's box, which refs and constraints read, stays the
-space it was given.
+space it was given. Its corner radii follow SVG's rule (`cornerRadii`): one of
+`rx` and `ry` given is both, neither is 0, and an explicit 0 stays 0.
 
 A single backend then paints each item. `paintSVG`
 (`src/ast/displayList/paintSVG.tsx`) emits SolidJS JSX for the live path; its

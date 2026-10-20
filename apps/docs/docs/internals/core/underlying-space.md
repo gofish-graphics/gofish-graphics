@@ -1024,8 +1024,8 @@ directed chain source is a deterministic sequence origin, so negative spacing
 remains authored overlap instead of being erased by min-normalization. If a
 graphic needs a floating component to appear at a particular absolute
 coordinate, that placement must be explicit.
-A layer's `.relate()` can also hold drawing clauses (an `arrow`, a
-`background` over refs), which are children of the layer that read positions
+A layer's `.relate()` can also hold drawing clauses (an `arrow`, an
+`enclose` over refs), which are children of the layer that read positions
 instead of writing them. The layer lays out its plain children and runs the
 solve first, then lays out each drawing clause, in the order
 `scheduleRelate` (`constraints/relate.ts`) computes from what each clause

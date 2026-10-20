@@ -200,10 +200,8 @@ export type {
   PartitionPlaneOptions,
 } from "./ast/graphicalOperators/partition";
 export * as Overlap from "./families/overlap";
-export {
-  enclose,
-  enclose as background,
-} from "./ast/graphicalOperators/enclose";
+export type { EncloseOptions } from "./ast/graphicalOperators/enclose";
+export * as Shape from "./families/shape";
 export { Frame as frame } from "./ast/graphicalOperators/frame";
 export { group } from "./ast/graphicalOperators/group";
 export { position } from "./ast/graphicalOperators/position";
@@ -233,6 +231,7 @@ export {
   line,
   blank,
   ribbon,
+  enclose,
   createRelationalMark,
   normalize,
   repeat,

@@ -102,6 +102,7 @@ import { childRole, type SharingPlan } from "./constraints/compose";
 import type { KeyedDomains } from "./keyedDomains";
 import type { LayoutWarning } from "./layoutWarnings";
 import { relateEnv, resolveConstraintOperands } from "./constraints";
+import { applyRelationalZBelowDefaults } from "./constraints/relationalPaint";
 import {
   computeRelateSchedule,
   resolveRelateClauses,
@@ -569,6 +570,10 @@ export class GoFishNode {
    *  `ref` is legal only inside such a clause, and the layer schedules the
    *  clause after the clauses that place what it reads. */
   public _relateClause?: number;
+  /** The paint-order defaults `layer` installed for its relational-mark
+   *  children (`applyRelationalZBelowDefaults`): `.relate()` replaces the
+   *  author's constraints, and keeps these. */
+  public _paintDefaults?: ConstraintSpec[];
   /** Set by `.relate()`: whether it added drawing clauses to this layer, so
    *  a layer without any skips looking for them in `resolveNames`. */
   public _hasRelateClauses: boolean = false;
@@ -2448,7 +2453,7 @@ export class GoFishNode {
    * (`relateEnv`: one operand per name inside the layer) and returns a list of
    * clauses. A clause is either a constraint (`Constraint.align`, ...), which
    * places its operands, or a term that draws: an operator or mark such as
-   * `arrow(opts, [a, b])` or `background(opts, [a, b])`, whose children may
+   * `arrow(opts, [a, b])` or `enclose(opts, [a, b])`, whose children may
    * mix operands from the environment with fresh marks. A drawing clause
    * becomes a child of this layer (flagged `_relateClause`), and the layer
    * lays it out after the clauses that write the positions it reads (see
@@ -2467,11 +2472,18 @@ export class GoFishNode {
     this.children = this.children.filter((c) => !isRelateClause(c));
     const env = relateEnv(this);
     const { constraints, nodes } = await resolveRelateClauses(fn(env), env);
-    this.constraints = constraints;
+    // The relate's constraints replace an earlier relate's, and the layer's
+    // paint-order defaults for its own relational-mark children stay.
+    this.constraints = [...(this._paintDefaults ?? []), ...constraints];
     for (const node of nodes) {
       node.parent = this;
       this.children.push(node);
     }
+    // A drawing clause that is a relational mark (`enclose`, `line`, ...)
+    // paints under the nodes it reads, by the same default a layer gives its
+    // children (`applyRelationalZBelowDefaults`); a clause's operands are
+    // names of this layer.
+    applyRelationalZBelowDefaults(this, nodes);
     this._hasRelateClauses = nodes.length > 0;
     return this;
   }
