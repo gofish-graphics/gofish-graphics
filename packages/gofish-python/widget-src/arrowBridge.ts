@@ -12,21 +12,18 @@
 
 import * as Arrow from "apache-arrow";
 import type { Serialize } from "gofish-graphics";
-import type { Frontend } from "gofish-ir";
 import { buildArrowTable } from "./arrowTransport";
 import { decodeTables } from "./arrowDecode";
 
 /** A document (or a bridge call's reply) as a Python host ships it: its
  *  `tables` as base64 Arrow IPC streams by id. */
-export type ShippedDocument<D extends { tables?: Frontend.Tables }> = Omit<
-  D,
-  "tables"
-> & { tables?: Record<string, string> };
+export type ShippedDocument<D extends { tables?: Record<string, unknown[]> }> =
+  Omit<D, "tables"> & { tables?: Record<string, string> };
 
 /** Decode a shipped document's tables into rows (see `arrowDecode.ts`). */
-export function decodeDocument<D extends { tables?: Frontend.Tables }>(
-  doc: ShippedDocument<D>
-): D {
+export function decodeDocument<
+  D extends { tables?: Record<string, unknown[]> },
+>(doc: ShippedDocument<D>): D {
   return { ...doc, tables: decodeTables(doc.tables ?? {}) } as unknown as D;
 }
 
