@@ -279,6 +279,51 @@
   .ex.three {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+  .vs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+    margin-top: 14px;
+    align-items: start;
+  }
+  .vs > div {
+    min-width: 0;
+    display: grid;
+    gap: 10px;
+    align-content: start;
+  }
+  .vs-head {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--muted);
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--rule);
+  }
+  .vs-head.p1 {
+    border-color: var(--flow);
+    color: var(--flow);
+  }
+  .vs-head.p2 {
+    border-color: var(--pick);
+    color: var(--pick);
+  }
+  .vs .plate img {
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    object-position: left top;
+  }
+  .verdict-line {
+    font-size: 14px;
+    margin: 10px 0 0;
+    max-width: 90ch;
+  }
+  @media (max-width: 860px) {
+    .vs {
+      grid-template-columns: 1fr;
+    }
+  }
   @media (max-width: 860px) {
     .ex,
     .ex.three {
@@ -448,10 +493,287 @@
     ribbons one-to-one per row, plus per-edge span allocation.
   </div>
   <p class="small" style="margin-top: 12px; max-width: 82ch">
-    <strong>Update after review:</strong> <a href="#round2">Round 2</a>
-    explores syntax that follows the data's shape (a record becomes direct-style
+    <strong>Update after review:</strong> <a href="#round2">Round 2</a> explores
+    syntax that follows the data's shape (a record becomes direct-style
     children, a list becomes a flow), with rendered prototypes and four new
-    decisions (9 to 12).
+    decisions (9 to 12). <a href="#versus">Side-by-side specs</a>.
+  </p>
+
+  <h2 id="versus">Proposal 1 vs proposal 2, side by side</h2>
+  <p class="prose">
+    <strong>Proposal 1</strong> is round 1's Approach B, "ends are rows":
+    reshape to one row per end with <code>unpivot</code>, then one flat flow.
+    <strong>Proposal 2</strong> is round 2, "syntax follows the data": a list
+    becomes a flow and a record becomes direct-style children. Both are written
+    in their target spellings. Each picture is the closest render that exists,
+    and its caption says how it was made.
+  </p>
+
+  <h3>Parallel sets</h3>
+  <div class="vs">
+    <div>
+      <div class="vs-head p1">Proposal 1: ends are rows</div>
+      <pre><code>chart(titanic)
+  .flow(
+    derive(unpivot({ on: ["class", "sex", "survived"],
+                     variable: "axis", value: "category", id: "path" })),
+    spread({ by: "axis", dir: "x", spacing: 120 }),
+    spread({ by: field("category").sort(), dir: "y", spacing: 12 }),
+    stack({ by: field("rank").sort(), dir: "y" })   // end order
+  )
+  .mark(rect({ w: 12, h: "count", fill: "class" }))
+  .layer(ribbon({ by: "path", opacity: 0.6 }))</code></pre>
+      <figure>
+        <div class="plate">
+          <img src="img/parallel-sets.png" alt="Parallel sets, proposal 1" />
+        </div>
+        <figcaption>
+          <span class="tag ok">Rendered</span>From today's equivalent spelling.
+        </figcaption>
+      </figure>
+    </div>
+    <div>
+      <div class="vs-head p2">Proposal 2: syntax follows the data</div>
+      <pre><code>const axes = cols(["class", "sex", "survived"]);
+chart(titanic)
+  .mark(spread({ dir: "x", spacing: 120 }, [
+    chart()
+      .flow(spread({ by: axes, dir: "y", spacing: 12 }),
+            stack({ dir: "y" }))                  // end order
+      .mark(rect({ w: 12, h: "count", fill: "class" })),
+  ]))
+  .layer(ribbon({ opacity: 0.6 }))</code></pre>
+      <figure>
+        <div class="plate">
+          <img
+            src="img/direct-parallel-sets.png"
+            alt="Parallel sets, proposal 2"
+          />
+        </div>
+        <figcaption>
+          <span class="tag ok">Rendered</span>Emulated <code>cols</code>;
+          identical to the working <code>.map</code> version.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+  <p class="verdict-line">
+    <strong>Reads more naturally:</strong> proposal 2. The three axes are
+    written as one child per column, with no reshape and no id. Both still need
+    an end order inside each category.
+  </p>
+
+  <h3>Parallel coordinates (penguins)</h3>
+  <div class="vs">
+    <div>
+      <div class="vs-head p1">Proposal 1: ends are rows</div>
+      <pre><code>chart(penguins)
+  .flow(
+    derive(unpivot({ on: DIMS, variable: "dim", value: "v", id: "row" })),
+    spread({ by: "dim", dir: "x", spacing: 120 }),
+    scatter({ y: "v" })             // v mixes mm and g
+  )
+  .mark(circle({ r: 1.5, fill: "Species" }))
+  .layer(line({ by: "row", opacity: 0.3 }))</code></pre>
+      <figure>
+        <div class="plate">
+          <img
+            src="img/direct-parallel-coordinates-shared-scale.png"
+            alt="Parallel coordinates with one shared scale"
+          />
+        </div>
+        <figcaption>
+          <span class="tag fail">Wrong by design</span>One value column means
+          one y scale for all four axes. Shown with the shared-scale render,
+          which has the same effect. Under measure types it is a unit error (mm
+          vs g).
+        </figcaption>
+      </figure>
+    </div>
+    <div>
+      <div class="vs-head p2">Proposal 2: syntax follows the data</div>
+      <pre><code>const dims = cols(["Beak Length (mm)", "Beak Depth (mm)",
+                   "Flipper Length (mm)", "Body Mass (g)"]);
+chart(penguins)
+  .mark(spread({ dir: "x", spacing: 120 }, [
+    chart().flow(scatter({ y: dims }))
+      .mark(circle({ r: 1.5, fill: "Species" })),
+  ]))
+  .layer(line({ opacity: 0.3 }))</code></pre>
+      <figure>
+        <div class="plate">
+          <img
+            src="img/direct-parallel-coordinates.png"
+            alt="Parallel coordinates, proposal 2"
+          />
+        </div>
+        <figcaption>
+          <span class="tag sketch">Shortcut</span>Needs a scale per child chart.
+          Rendered with normalized columns and no ticks.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+  <p class="verdict-line">
+    <strong>Reads more naturally:</strong> proposal 2, and it is the only one
+    that is correct, because each axis keeps its own field, type and scale.
+  </p>
+
+  <h3>Energy sankey</h3>
+  <div class="vs">
+    <div>
+      <div class="vs-head p1">Proposal 1: ends are rows</div>
+      <pre><code>chart(links)
+  .flow(
+    derive(unpivot({ on: ["source", "target"],
+                     variable: "side", value: "node", id: "link" })),
+    spread({ by: field("depth").sort(), dir: "x", spacing: 100 }),
+    spread({ by: field("node").sort(order), dir: "y", spacing: 10 }),
+    spread({ by: field("side").sort(["target", "source"]), dir: "x", spacing: 0 }),
+    stack({ by: field("key").sort(), dir: "y" })   // far node's rank
+  )
+  .mark(rect({ w: 6, h: "value" }))
+  .layer(ribbon({ by: "link", opacity: 0.4, fill: "source" }))</code></pre>
+      <figure>
+        <div class="plate">
+          <img src="img/energy-sankey.png" alt="Energy sankey, proposal 1" />
+        </div>
+        <figcaption>
+          <span class="tag ok">Rendered</span>From today's equivalent spelling.
+        </figcaption>
+      </figure>
+    </div>
+    <div>
+      <div class="vs-head p2">Proposal 2: syntax follows the data</div>
+      <pre><code>chart(nodes)   // nestJoin: each node gets in / out link lists
+  .flow(
+    spread({ by: field("depth").sort(), dir: "x", spacing: 100 }),
+    spread({ by: field("name").sort(order), dir: "y", spacing: 10 })
+  )
+  .mark(spread({ dir: "x", spacing: 0 }, [
+    chart(field("in")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
+    chart(field("out")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
+  ]))
+  .layer(ribbon({ opacity: 0.4, fill: "source" }))</code></pre>
+      <figure>
+        <div class="plate">
+          <img
+            src="img/direct-sankey-energy.png"
+            alt="Energy sankey, proposal 2"
+          />
+        </div>
+        <figcaption>
+          <span class="tag ok">Rendered</span>Emulated <code>field("in")</code>;
+          same geometry.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+  <p class="verdict-line">
+    <strong>Reads more naturally:</strong> roughly even. Proposal 2 says "a node
+    has its in-links and out-links", like d3-sankey, but needs a nest join first
+    and two levels of charts. Proposal 1 is one flat flow and names the ribbon's
+    identity explicitly.
+  </p>
+
+  <h3>Sankey tree (titanic)</h3>
+  <div class="vs">
+    <div>
+      <div class="vs-head p1">Proposal 1: ends are rows</div>
+      <pre><code>chart(titanic)
+  .flow(
+    derive(treeEnds(["class", "sex", "survived"], { id: "path" })),  // decision 8
+    spread({ by: "depth", dir: "x", spacing: 64, alignment: "middle" }),
+    spread({ by: "class", dir: "y", spacing: 8 }),
+    spread({ by: field("sub").sort(), dir: "y", spacing: 4 }),
+    spread({ by: field("leaf").sort(), dir: "y", spacing: 2 }),
+    stack({ by: field("rank").sort(), dir: "y" })
+  )
+  .mark(rect({ w: 40, h: "count", fill: "class" }))
+  .layer(ribbon({ by: "path", opacity: 0.6 }))</code></pre>
+      <figure>
+        <div class="plate">
+          <img src="img/sankey-tree-rows.png" alt="Sankey tree, proposal 1" />
+        </div>
+        <figcaption>
+          <span class="tag ok">Rendered</span>From today's equivalent spelling.
+          <code>treeEnds</code> is the hand-written per-depth rows.
+        </figcaption>
+      </figure>
+    </div>
+    <div>
+      <div class="vs-head p2">Proposal 2: syntax follows the data</div>
+      <pre><code>const box = rect({ w: 40, h: "count", fill: "class" });
+const node = (gap, child) =&gt;
+  spread({ dir: "x", spacing: 64, alignment: "middle" }, [
+    box,
+    chart(field("children")).flow(spread({ dir: "y", spacing: gap })).mark(child),
+  ]);
+
+chart(tree)   // nestTree(titanic, ["class", "sex", "survived"], "count")
+  .flow(spread({ by: "class", dir: "y", spacing: 8 }))
+  .mark(node(4, node(2, box)))
+  .layer(ribbon({ opacity: 0.6, fill: "class" }))</code></pre>
+      <figure>
+        <div class="plate">
+          <img
+            src="img/direct-sankey-tree-nested.png"
+            alt="Sankey tree, proposal 2"
+          />
+        </div>
+        <figcaption>
+          <span class="tag ok">Rendered</span>Emulated; the parent's edge slices
+          (<code>stackedEnds</code>) have no spelling yet.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+  <p class="verdict-line">
+    <strong>Reads more naturally:</strong> proposal 2. A node and its children
+    is the data's real shape. Proposal 1's blank-key depth rows and the
+    <code>sub</code>/<code>leaf</code> tiers are the least natural spec here.
+    Proposal 2 still needs a spelling for the slices of the parent's edge.
+  </p>
+
+  <h3>Chord diagram</h3>
+  <div class="vs">
+    <div>
+      <div class="vs-head p1">Proposal 1: ends are rows</div>
+      <pre><code>layer({ coord: Coord.clock() }, [
+  chart(cells)   // { group, other, value, chord, color }: one row per cell
+    .flow(
+      spread({ by: field("group").sort(names), dir: "x", spacing: 0.04, y: 160, h: 16 }),
+      stack({ by: field("other").sort(names), dir: "x" })
+    )
+    .mark(rect({ w: "value", fill: "group" }))
+    .layer(ribbon({ by: "chord", at: "bottom", fill: "color", opacity: 0.67 })),
+])</code></pre>
+    </div>
+    <div>
+      <div class="vs-head p2">Proposal 2: syntax follows the data</div>
+      <pre><code>const cells = cols(names);   // the matrix is wide: { name, black, blonde, brown, red }
+layer({ coord: Coord.clock() }, [
+  chart(matrix)
+    .flow(spread({ by: field("name").sort(names), dir: "x", spacing: 0.04, y: 160, h: 16 }))
+    .mark(stack({ dir: "x" }, [rect({ w: cells, fill: "name" })]))
+    .layer(ribbon({ by: chordPair, at: "bottom", fill: "color", opacity: 0.67 })),
+])</code></pre>
+    </div>
+  </div>
+  <figure style="max-width: 520px; margin-top: 14px">
+    <div class="plate crop-l">
+      <img src="img/chord-prototype.png" alt="Chord diagram target picture" />
+    </div>
+    <figcaption>
+      <span class="tag sketch">Prototype</span>The target picture for both, from
+      the throwaway chord ribbon. Neither spelling renders yet, because both
+      need <code>at</code>.
+    </figcaption>
+  </figure>
+  <p class="verdict-line">
+    <strong>Reads more naturally:</strong> even. Proposal 2 reads the matrix as
+    it is, but a chord pairs cell (i, j) with cell (j, i), which are two
+    different rows, so both spellings must name the pairing explicitly.
   </p>
 
   <h2>Terms</h2>
