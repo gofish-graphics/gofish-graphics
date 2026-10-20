@@ -7,6 +7,7 @@ import {
   stack,
   table,
   rect,
+  text,
   derive,
   field,
   Color,
@@ -202,37 +203,65 @@ export const AboveEnd: StoryObj<Args> = {
   },
 };
 
-// ─── All positions ─────────────────────────────────────────────────────────────
-// The same bars once per position, one story each, so they can be compared by
-// stepping through them in the sidebar.
+// ─── All positions grid ────────────────────────────────────────────────────────
+// The same bars once per position, each captioned with its position, two to
+// a row (a position beside its counterpart) so they can be compared side by
+// side.
 
-const positionStory = (position: LabelPosition): StoryObj<Args> => ({
-  name: `All positions – ${position}`,
-  args: { w: 400, h: 180 },
+const ALL_POSITIONS: LabelPosition[] = [
+  "center",
+  "outset",
+  "inset-top",
+  "inset-bottom",
+  "inset-left",
+  "inset-right",
+  "inset-top-start",
+  "inset-top-end",
+  "outset-top",
+  "outset-bottom",
+  "outset-left",
+  "outset-right",
+  "outset-top-start",
+  "outset-top-end",
+];
+
+/** A chart captioned above with `caption`. */
+const captioned = (caption: string, body: any) =>
+  spread({ dir: "y", spacing: 16, alignment: "start" }, [
+    text({ text: caption, fontSize: 12, fontFamily: "monospace" }),
+    body,
+  ]);
+
+export const AllPositions: StoryObj<Args> = {
+  name: "All positions – comparison",
+  args: { w: 720, h: 1200 },
   render: (args) => {
     const container = initializeContainer();
-    chart(seafood, { axes: false })
-      .flow(spread({ by: "lake", dir: "x" }))
-      .mark(rect({ h: "count" }).label(field("count").sum(), { position, fontSize: 9 }))
-      .render(container, { w: args.w, h: args.h });
+    const cell = (position: LabelPosition) =>
+      captioned(
+        position,
+        chart(seafood, { axes: false, w: 300, h: 100 })
+          .flow(spread({ by: "lake", dir: "x" }))
+          .mark(
+            rect({ h: "count" }).label(field("count").sum(), {
+              position,
+              fontSize: 9,
+            })
+          )
+      );
+    const rows = Array.from({ length: ALL_POSITIONS.length / 2 }, (_, i) =>
+      spread({ dir: "x", spacing: 48, alignment: "start" }, [
+        cell(ALL_POSITIONS[2 * i]),
+        cell(ALL_POSITIONS[2 * i + 1]),
+      ])
+    );
+    spread({ dir: "y", spacing: 28, alignment: "start" }, rows).render(
+      container,
+      { w: args.w, h: args.h }
+    );
     return container;
   },
-});
-
-export const AllPositionsCenter: StoryObj<Args> = positionStory("center");
-export const AllPositionsOutset: StoryObj<Args> = positionStory("outset");
-export const AllPositionsInsetTop: StoryObj<Args> = positionStory("inset-top");
-export const AllPositionsInsetBottom: StoryObj<Args> = positionStory("inset-bottom");
-export const AllPositionsInsetLeft: StoryObj<Args> = positionStory("inset-left");
-export const AllPositionsInsetRight: StoryObj<Args> = positionStory("inset-right");
-export const AllPositionsInsetTopStart: StoryObj<Args> = positionStory("inset-top-start");
-export const AllPositionsInsetTopEnd: StoryObj<Args> = positionStory("inset-top-end");
-export const AllPositionsOutsetTop: StoryObj<Args> = positionStory("outset-top");
-export const AllPositionsOutsetBottom: StoryObj<Args> = positionStory("outset-bottom");
-export const AllPositionsOutsetLeft: StoryObj<Args> = positionStory("outset-left");
-export const AllPositionsOutsetRight: StoryObj<Args> = positionStory("outset-right");
-export const AllPositionsOutsetTopStart: StoryObj<Args> = positionStory("outset-top-start");
-export const AllPositionsOutsetTopEnd: StoryObj<Args> = positionStory("outset-top-end");
+};
 
 // ─── Label on spread (group label) ────────────────────────────────────────────
 // `.label(accessor, options?)` chained on the operator (not the mark): each
@@ -357,24 +386,30 @@ export const HeatmapWithLabels: StoryObj<Args> = {
 // ─── Rotated labels ────────────────────────────────────────────────────────────
 // Labels rotate clockwise for positive values, pivoting at the label's center.
 
-const rotatedStory = (rotate: number): StoryObj<Args> => ({
-  name: `Rotate: ${rotate}°`,
-  args: { w: 500, h: 300 },
+export const Rotated: StoryObj<Args> = {
+  name: "Rotate: diagonal labels",
+  args: { w: 500, h: 800 },
   render: (args) => {
     const container = initializeContainer();
-    chart(seafood)
-      .flow(spread({ by: "lake", dir: "x" }))
-      .mark(
-        rect({ h: "count" }).label(field("count").sum(), { position: "outset-top", rotate })
+    spread(
+      { dir: "y", spacing: 40, alignment: "start" },
+      [45, -30, 0].map((rotate) =>
+        captioned(
+          `rotate: ${rotate}°`,
+          chart(seafood, { w: 400, h: 180 })
+            .flow(spread({ by: "lake", dir: "x" }))
+            .mark(
+              rect({ h: "count" }).label(field("count").sum(), {
+                position: "outset-top",
+                rotate,
+              })
+            )
+        )
       )
-      .render(container, { w: args.w, h: args.h });
+    ).render(container, { w: args.w, h: args.h });
     return container;
   },
-});
-
-export const Rotate45: StoryObj<Args> = rotatedStory(45);
-export const RotateNeg30: StoryObj<Args> = rotatedStory(-30);
-export const Rotate0: StoryObj<Args> = rotatedStory(0);
+};
 
 // ─── Normalized stacked bar (population by age + gender) ──────────────────────
 // Mirrors https://vega.github.io/vega-lite/examples/bar_stacked_normalize_labeled.html

@@ -10,6 +10,7 @@ from gofish import (
     spread,
     stack,
     table,
+    text,
     Color,
 )
 from python_stories.data import SEAFOOD
@@ -146,75 +147,64 @@ def story_above_end():
     )
 
 
-# ─── all positions: the same bars once per position ─────────────────────────
+# ─── all positions grid ──────────────────────────────────────────────────────
+# The same bars once per position, each captioned with its position, two to a
+# row (a position beside its counterpart) so they can be compared side by side.
 
-def _position_story(position):
-    return (
-        chart(SEAFOOD, axes=False)
-        .flow(spread(by="lake", dir="x"))
-        .mark(
-            rect(h="count").label(
-                field("count").sum(), position=position, font_size=9
-            )
-        ),
-        {"w": 400, "h": 180},
+ALL_POSITIONS = [
+    "center",
+    "outset",
+    "inset-top",
+    "inset-bottom",
+    "inset-left",
+    "inset-right",
+    "inset-top-start",
+    "inset-top-end",
+    "outset-top",
+    "outset-bottom",
+    "outset-left",
+    "outset-right",
+    "outset-top-start",
+    "outset-top-end",
+]
+
+
+def _captioned(caption, body):
+    """A chart captioned above with `caption`."""
+    return spread(
+        [text(text=caption, font_size=12, font_family="monospace"), body],
+        dir="y",
+        spacing=16,
+        alignment="start",
     )
 
 
-def story_all_positions_center():
-    return _position_story("center")
+def story_all_positions():
+    def cell(position):
+        return _captioned(
+            position,
+            chart(SEAFOOD, axes=False, w=300, h=100)
+            .flow(spread(by="lake", dir="x"))
+            .mark(
+                rect(h="count").label(
+                    field("count").sum(), position=position, font_size=9
+                )
+            ),
+        )
 
-
-def story_all_positions_outset():
-    return _position_story("outset")
-
-
-def story_all_positions_inset_top():
-    return _position_story("inset-top")
-
-
-def story_all_positions_inset_bottom():
-    return _position_story("inset-bottom")
-
-
-def story_all_positions_inset_left():
-    return _position_story("inset-left")
-
-
-def story_all_positions_inset_right():
-    return _position_story("inset-right")
-
-
-def story_all_positions_inset_top_start():
-    return _position_story("inset-top-start")
-
-
-def story_all_positions_inset_top_end():
-    return _position_story("inset-top-end")
-
-
-def story_all_positions_outset_top():
-    return _position_story("outset-top")
-
-
-def story_all_positions_outset_bottom():
-    return _position_story("outset-bottom")
-
-
-def story_all_positions_outset_left():
-    return _position_story("outset-left")
-
-
-def story_all_positions_outset_right():
-    return _position_story("outset-right")
-
-
-def story_all_positions_outset_top_start():
-    return _position_story("outset-top-start")
-
-
-def story_all_positions_outset_top_end():
-    return _position_story("outset-top-end")
+    rows = [
+        spread(
+            [cell(ALL_POSITIONS[2 * i]), cell(ALL_POSITIONS[2 * i + 1])],
+            dir="x",
+            spacing=48,
+            alignment="start",
+        )
+        for i in range(len(ALL_POSITIONS) // 2)
+    ]
+    return (
+        spread(rows, dir="y", spacing=28, alignment="start"),
+        {"w": 720, "h": 1200},
+    )
 
 
 # ─── label on spread (group label) ───────────────────────────────────────────
@@ -266,29 +256,28 @@ def story_heatmap_with_labels():
 # ─── rotated labels ──────────────────────────────────────────────────────────
 # Labels rotate clockwise for positive values, pivoting at the label's center.
 
-def _rotated_story(rotate):
+def story_rotated():
     return (
-        chart(SEAFOOD)
-        .flow(spread(by="lake", dir="x"))
-        .mark(
-            rect(h="count").label(
-                field("count").sum(), position="outset-top", rotate=rotate
-            )
+        spread(
+            [
+                _captioned(
+                    f"rotate: {rotate}°",
+                    chart(SEAFOOD, w=400, h=180)
+                    .flow(spread(by="lake", dir="x"))
+                    .mark(
+                        rect(h="count").label(
+                            field("count").sum(), position="outset-top", rotate=rotate
+                        )
+                    ),
+                )
+                for rotate in [45, -30, 0]
+            ],
+            dir="y",
+            spacing=40,
+            alignment="start",
         ),
-        {"w": 500, "h": 300},
+        {"w": 500, "h": 800},
     )
-
-
-def story_rotate45():
-    return _rotated_story(45)
-
-
-def story_rotate_neg30():
-    return _rotated_story(-30)
-
-
-def story_rotate0():
-    return _rotated_story(0)
 
 
 # ─── label on stack operator (per-group, #702) ──────────────────────────────

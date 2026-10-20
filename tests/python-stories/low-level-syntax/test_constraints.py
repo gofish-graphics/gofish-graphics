@@ -3,11 +3,11 @@
 Ports every story: the six that demonstrate `layer + constrain` directly,
 `SpreadEnd_UnderCoordTransform` (the pixel-pure `end` fallback canary, #552),
 `AlignSpan`/`AlignSize` (#726 — the `"span"`/`"size"` alignment values), and
-the eight equivalence cases, each a `*_spread` / `*_constraints` pair showing
-that `spread(...)` places its children the way `align` + `distribute` does.
+the eight equivalence cases, each one graphic showing that `spread(...)`
+places its children the way `align` + `distribute` does.
 """
 
-from gofish import Constraint, datum, layer, rect, spread, Coord
+from gofish import Constraint, datum, layer, rect, spread, text, Coord
 
 
 # ─── partial placement ───────────────────────────────────────────────────────
@@ -121,9 +121,9 @@ def story_align_center_distribute_y():
 
 
 # ─── equivalence: spread = align + distribute ───────────────────────────────
-# Each case is a pair, `<case>_spread` and `<case>_constraints`: the same
-# three rects at the same size, placed once by `spread` and once by the
-# `align` + `distribute` constraints it is equivalent to.
+# Each case is one graphic: the same three rects placed by `spread`, and
+# beside them by the `align` + `distribute` constraints it is equivalent to,
+# each captioned. The two draw the same picture.
 
 
 def _y_rects():
@@ -150,136 +150,126 @@ def _center_to_center_rects():
     ]
 
 
-def story_spread_y_align_start_spread():
-    return spread(_y_rects(), dir="y", alignment="start"), {"w": 300, "h": 300}
-
-
-def story_spread_y_align_start_constraints():
-    return (
-        layer(_y_rects()).relate(lambda a, b, c: [
-            Constraint.align([a, b, c], x="start"),
-            Constraint.distribute([a, b, c], dir="y"),
-        ]),
-        {"w": 300, "h": 300},
+def _captioned(caption, body):
+    """A drawing captioned above with `caption`."""
+    return spread(
+        [text(text=caption, font_size=14), body],
+        dir="y",
+        spacing=12,
+        alignment="start",
     )
 
 
-def story_spread_y_align_end_spread():
-    return spread(_y_rects(), dir="y", alignment="end"), {"w": 300, "h": 300}
-
-
-def story_spread_y_align_end_constraints():
-    return (
-        layer(_y_rects()).relate(lambda a, b, c: [
-            Constraint.align([a, b, c], x="end"),
-            Constraint.distribute([a, b, c], dir="y"),
-        ]),
-        {"w": 300, "h": 300},
-    )
-
-
-def story_spread_y_align_middle_spread():
-    return spread(_y_rects(), dir="y", alignment="middle"), {"w": 300, "h": 300}
-
-
-def story_spread_y_align_middle_constraints():
-    return (
-        layer(_y_rects()).relate(lambda a, b, c: [
-            Constraint.align([a, b, c], x="middle"),
-            Constraint.distribute([a, b, c], dir="y"),
-        ]),
-        {"w": 300, "h": 300},
-    )
-
-
-def story_spread_x_align_start_spread():
-    return spread(_x_rects(), dir="x", alignment="start"), {"w": 300, "h": 300}
-
-
-def story_spread_x_align_start_constraints():
-    return (
-        layer(_x_rects()).relate(lambda a, b, c: [
-            Constraint.align([a, b, c], y="start"),
-            Constraint.distribute([a, b, c], dir="x"),
-        ]),
-        {"w": 300, "h": 300},
-    )
-
-
-def story_spread_y_spacing_spread():
-    return (
-        spread(_y_rects(), dir="y", alignment="start", spacing=20),
-        {"w": 300, "h": 400},
-    )
-
-
-def story_spread_y_spacing_constraints():
-    return (
-        layer(_y_rects()).relate(lambda a, b, c: [
-            Constraint.align([a, b, c], x="start"),
-            Constraint.distribute([a, b, c], dir="y", spacing=20),
-        ]),
-        {"w": 300, "h": 400},
-    )
-
-
-def story_spread_x_spacing_align_end_spread():
-    return (
-        spread(_x_rects(), dir="x", alignment="end", spacing=15),
-        {"w": 400, "h": 300},
-    )
-
-
-def story_spread_x_spacing_align_end_constraints():
-    return (
-        layer(_x_rects()).relate(lambda a, b, c: [
-            Constraint.align([a, b, c], y="end"),
-            Constraint.distribute([a, b, c], dir="x", spacing=15),
-        ]),
-        {"w": 400, "h": 300},
-    )
-
-
-# Center-to-center mode (anchor="middle", #748).
-
-
-def story_spread_x_center_to_center_spread():
+def _equivalence(rects, spread_options, relate, render):
+    """One equivalence case: `rects` placed by `spread(**spread_options)`
+    beside the same rects placed by the constraints `relate` returns."""
     return (
         spread(
-            _center_to_center_rects(),
+            [
+                _captioned("Spread", spread(rects(), **spread_options)),
+                _captioned("Constraints", layer(rects()).relate(relate)),
+            ],
             dir="x",
+            spacing=40,
             alignment="start",
-            spacing=60,
-            anchor="middle",
         ),
-        {"w": 400, "h": 300},
+        render,
     )
 
 
-def story_spread_x_center_to_center_constraints():
-    return (
-        layer(_center_to_center_rects()).relate(lambda a, b, c: [
+def story_spread_y_align_start():
+    return _equivalence(
+        _y_rects,
+        {"dir": "y", "alignment": "start"},
+        lambda a, b, c: [
+            Constraint.align([a, b, c], x="start"),
+            Constraint.distribute([a, b, c], dir="y"),
+        ],
+        {"w": 400, "h": 220},
+    )
+
+
+def story_spread_y_align_end():
+    return _equivalence(
+        _y_rects,
+        {"dir": "y", "alignment": "end"},
+        lambda a, b, c: [
+            Constraint.align([a, b, c], x="end"),
+            Constraint.distribute([a, b, c], dir="y"),
+        ],
+        {"w": 400, "h": 220},
+    )
+
+
+def story_spread_y_align_middle():
+    return _equivalence(
+        _y_rects,
+        {"dir": "y", "alignment": "middle"},
+        lambda a, b, c: [
+            Constraint.align([a, b, c], x="middle"),
+            Constraint.distribute([a, b, c], dir="y"),
+        ],
+        {"w": 400, "h": 220},
+    )
+
+
+def story_spread_x_align_start():
+    return _equivalence(
+        _x_rects,
+        {"dir": "x", "alignment": "start"},
+        lambda a, b, c: [
+            Constraint.align([a, b, c], y="start"),
+            Constraint.distribute([a, b, c], dir="x"),
+        ],
+        {"w": 400, "h": 220},
+    )
+
+
+def story_spread_y_spacing():
+    return _equivalence(
+        _y_rects,
+        {"dir": "y", "alignment": "start", "spacing": 20},
+        lambda a, b, c: [
+            Constraint.align([a, b, c], x="start"),
+            Constraint.distribute([a, b, c], dir="y", spacing=20),
+        ],
+        {"w": 400, "h": 260},
+    )
+
+
+def story_spread_x_spacing_align_end():
+    return _equivalence(
+        _x_rects,
+        {"dir": "x", "alignment": "end", "spacing": 15},
+        lambda a, b, c: [
+            Constraint.align([a, b, c], y="end"),
+            Constraint.distribute([a, b, c], dir="x", spacing=15),
+        ],
+        {"w": 460, "h": 220},
+    )
+
+
+def story_spread_x_center_to_center():
+    return _equivalence(
+        _center_to_center_rects,
+        {"dir": "x", "alignment": "start", "spacing": 60, "anchor": "middle"},
+        lambda a, b, c: [
             Constraint.align([a, b, c], y="start"),
             Constraint.distribute([a, b, c], dir="x", spacing=60, anchor="middle"),
-        ]),
-        {"w": 400, "h": 300},
+        ],
+        {"w": 460, "h": 160},
     )
 
 
-def story_spread_y_reversed_spread():
-    return (
-        spread(_y_rects(), dir="y", alignment="start", reverse=True),
-        {"w": 300, "h": 300},
-    )
-
-
-def story_spread_y_reversed_constraints():
-    return (
-        layer(_y_rects()).relate(lambda a, b, c: [
+def story_spread_y_reversed():
+    return _equivalence(
+        _y_rects,
+        {"dir": "y", "alignment": "start", "reverse": True},
+        lambda a, b, c: [
             Constraint.align([a, b, c], x="start"),
             Constraint.distribute([a, b, c], dir="y", order="reverse"),
-        ]),
-        {"w": 300, "h": 300},
+        ],
+        {"w": 400, "h": 220},
     )
 
 
