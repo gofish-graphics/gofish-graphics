@@ -258,7 +258,9 @@ export const MonthBarsProduct: StoryObj<Args> = {
     const container = initializeContainer();
     chart(between("2014-07-01", "2015-07-01"), {
       schema: { date: Schema.time() },
-      axes: { x: { label: { angle: "auto" } }, y: true }, w: args.w, h: args.h,
+      axes: { x: { label: { angle: "auto" } }, y: true },
+      w: args.w,
+      h: args.h,
     })
       .flow(
         spread({ by: field("date").bin([Calendar.year, Calendar.month]), dir: "x" })
@@ -283,7 +285,9 @@ export const MonthBarsChained: StoryObj<Args> = {
     const container = initializeContainer();
     chart(between("2014-01-01", "2016-01-01"), {
       schema: { date: Schema.time() },
-      axes: true, w: args.w, h: args.h,
+      axes: true,
+      w: args.w,
+      h: args.h,
     })
       .flow(
         spread({
@@ -317,7 +321,9 @@ export const GroupedMonthBars: StoryObj<Args> = {
     const container = initializeContainer();
     chart(winter, {
       schema: { date: Schema.time() },
-      axes: { x: { label: { angle: "auto" } }, y: true }, w: args.w, h: args.h,
+      axes: { x: { label: { angle: "auto" } }, y: true },
+      w: args.w,
+      h: args.h,
     })
       .flow(
         spread({
@@ -339,7 +345,9 @@ export const GroupedMonthBarsHiddenInner: StoryObj<Args> = {
     const container = initializeContainer();
     chart(winter, {
       schema: { date: Schema.time() },
-      axes: { x: { levels: [false, true] }, y: true }, w: args.w, h: args.h,
+      axes: { x: { levels: [false, true] }, y: true },
+      w: args.w,
+      h: args.h,
     })
       .flow(
         spread({
@@ -369,7 +377,9 @@ export const MonthBarsProductTrueWidths: StoryObj<Args> = {
     const container = initializeContainer();
     chart(between("2014-01-01", "2016-01-01"), {
       schema: { date: Schema.time() },
-      axes: true, w: args.w, h: args.h,
+      axes: true,
+      w: args.w,
+      h: args.h,
     })
       .flow(
         partition({
@@ -423,7 +433,9 @@ export const CalendarHeatmap: StoryObj<Args> = {
       axes: {
         x: { title: false, levels: [false, Calendar.month, Calendar.year] },
         y: { title: false },
-      }, w: args.w, h: args.h,
+      },
+      w: args.w,
+      h: args.h,
     })
       .flow(
         table({

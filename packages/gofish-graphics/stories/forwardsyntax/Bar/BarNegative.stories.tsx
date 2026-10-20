@@ -62,7 +62,8 @@ export const UnroundedMin: StoryObj<Args> = {
         { category: "D", value: -35 },
         { category: "E", value: 10 },
         { category: "F", value: -5 },
-      ], { w: args.w, h: args.h }
+      ],
+      { w: args.w, h: args.h }
     )
       .flow(spread({ by: "category", dir: "x" }))
       .mark(rect({ h: "value" }))
@@ -83,7 +84,8 @@ export const AllNegative: StoryObj<Args> = {
         { category: "B", value: -37 },
         { category: "C", value: -23 },
         { category: "D", value: -8 },
-      ], { w: args.w, h: args.h }
+      ],
+      { w: args.w, h: args.h }
     )
       .flow(spread({ by: "category", dir: "x" }))
       .mark(rect({ h: "value" }))
@@ -108,7 +110,8 @@ export const SignedGroup: StoryObj<Args> = {
         { quarter: "Q2", flow: "Outflow", amount: -46 },
         { quarter: "Q3", flow: "Inflow", amount: 48 },
         { quarter: "Q3", flow: "Outflow", amount: -52 },
-      ], { w: args.w, h: args.h }
+      ],
+      { w: args.w, h: args.h }
     )
       .flow(spread({ by: "quarter", dir: "y" }), group({ by: "flow" }))
       .mark(rect({ w: "amount", fill: "flow" }))

@@ -294,7 +294,9 @@ export const Ecological: StoryObj<Args> = {
         "PY engine": "#59a14f",
         "PY load": "#f28e2b",
         "PY RPC": "#e15759",
-      }), w: args.w, h: args.h,
+      }),
+      w: args.w,
+      h: args.h,
     })
       .flow(spread({ by: "stage", dir: "x", spacing: 36 }))
       .mark(rect({ h: "ms", w: 64, fill: "stage" }))

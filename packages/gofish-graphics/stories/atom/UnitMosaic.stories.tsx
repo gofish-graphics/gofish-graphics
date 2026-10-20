@@ -75,7 +75,9 @@ export const Default: StoryObj<Args> = {
 
     chart(mosaicPassengers, {
       color: Color.palette(["#2b8cbe", "#ff8408"]),
-      axes: false, w: args.w, h: args.h,
+      axes: false,
+      w: args.w,
+      h: args.h,
     })
       .flow(
         // pclass rows: 1st at the bottom, 3rd at the top

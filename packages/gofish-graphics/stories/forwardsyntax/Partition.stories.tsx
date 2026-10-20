@@ -203,7 +203,9 @@ export const AirportHexbin: StoryObj<Args> = {
     const container = initializeContainer();
     chart(contiguous(context.loaded.airports), {
       color: Color.gradient("blues"),
-      axes: true, w: args.w, h: args.h,
+      axes: true,
+      w: args.w,
+      h: args.h,
     })
       .flow(
         partition({

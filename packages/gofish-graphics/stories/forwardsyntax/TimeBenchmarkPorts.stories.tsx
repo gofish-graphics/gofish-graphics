@@ -199,7 +199,9 @@ export const SurplusDeficitLine: StoryObj<Args> = {
     const schema = { date: Schema.time() };
     chart(area, {
       schema,
-      color: Color.palette({ Surplus: "#2a9d8f", Deficit: "#e76f51" }), w: args.w, h: args.h,
+      color: Color.palette({ Surplus: "#2a9d8f", Deficit: "#e76f51" }),
+      w: args.w,
+      h: args.h,
     })
       .flow(group({ by: "side" }), scatter({ by: "date", x: "date" }))
       .mark(ribbon({ h: "balance", fill: "side", curve: Curve.linear() }))

@@ -459,7 +459,9 @@ export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
       {
         color: Color.palette({ Female: "#675193", Male: "#ca8861" }),
         // Keep the continuous proportion x-axis at the bottom (y-end).
-        axes: { x: { side: "end", title: "proportion" }, y: true }, w: args.w, h: args.h,
+        axes: { x: { side: "end", title: "proportion" }, y: true },
+        w: args.w,
+        h: args.h,
       }
     )
       .flow(

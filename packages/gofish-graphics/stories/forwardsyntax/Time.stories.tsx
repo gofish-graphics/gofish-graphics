@@ -123,7 +123,9 @@ export const DaylightSavingZone: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(newYork, {
-      schema: { time: Schema.time({ zone: "America/New_York" }) }, w: args.w, h: args.h,
+      schema: { time: Schema.time({ zone: "America/New_York" }) },
+      w: args.w,
+      h: args.h,
     })
       .flow(scatter({ by: "time", x: "time", y: "load" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
@@ -154,7 +156,9 @@ export const EventTimeline: StoryObj<Args> = {
     const container = initializeContainer();
     chart(releases, {
       schema: { date: Schema.time() },
-      axes: { x: true, y: false }, w: args.w, h: args.h,
+      axes: { x: true, y: false },
+      w: args.w,
+      h: args.h,
     })
       .flow(scatter({ by: "name", x: "date" }))
       .mark(circle({ r: 5, fill: "steelblue" }))
@@ -181,7 +185,9 @@ export const WeekOverMonthRows: StoryObj<Args> = {
     const container = initializeContainer();
     chart(visits, {
       schema: { day: Schema.time() },
-      axes: { x: { levels: [Calendar.week, Calendar.month] }, y: true }, w: args.w, h: args.h,
+      axes: { x: { levels: [Calendar.week, Calendar.month] }, y: true },
+      w: args.w,
+      h: args.h,
     })
       .flow(scatter({ by: "day", x: "day", y: "visits" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
@@ -224,7 +230,9 @@ export const QuarterlyBars: StoryObj<Args> = {
           ],
         },
         y: true,
-      }, w: args.w, h: args.h,
+      },
+      w: args.w,
+      h: args.h,
     })
       // The two ends are times, whose unit is an instant, so they share
       // the x axis.

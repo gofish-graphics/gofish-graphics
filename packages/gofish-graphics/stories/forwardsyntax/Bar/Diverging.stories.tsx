@@ -72,7 +72,9 @@ export const Likert: StoryObj<Args> = {
     chart(survey, {
       schema: { response: Schema.ordered(LEVELS).diverging() },
       color: likertColors,
-      axes: { x: { title: "Respondents" }, y: true }, w: args.w, h: args.h,
+      axes: { x: { title: "Respondents" }, y: true },
+      w: args.w,
+      h: args.h,
     })
       .flow(
         spread({ by: "question", dir: "y" }),
@@ -108,7 +110,9 @@ export const LikertEven: StoryObj<Args> = {
     chart(forcedChoice, {
       schema: { response: Schema.ordered(LEVELS4).diverging() },
       color: likertColors,
-      axes: { x: { title: "Respondents" }, y: true }, w: args.w, h: args.h,
+      axes: { x: { title: "Respondents" }, y: true },
+      w: args.w,
+      h: args.h,
     })
       .flow(
         spread({ by: "question", dir: "y" }),
@@ -163,7 +167,9 @@ export const PopulationPyramid: StoryObj<Args> = {
     chart(population, {
       schema: { sex: Schema.ordered(["Women", "Men"]).diverging() },
       color: Color.palette({ Women: "#c05780", Men: "#3b75af" }),
-      axes: { x: { title: "People (millions)" }, y: true }, w: args.w, h: args.h,
+      axes: { x: { title: "People (millions)" }, y: true },
+      w: args.w,
+      h: args.h,
     })
       .flow(
         spread({ by: field("age").reverse(), dir: "y", spacing: 1 }),

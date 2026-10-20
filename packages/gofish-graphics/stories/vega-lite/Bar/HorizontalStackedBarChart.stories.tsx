@@ -30,7 +30,11 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    chart(context.loaded.barley as any[], { color: Color.palette("tableau10"), w: args.w, h: args.h })
+    chart(context.loaded.barley as any[], {
+      color: Color.palette("tableau10"),
+      w: args.w,
+      h: args.h,
+    })
       .flow(spread({ by: "variety",  dir: "y" }), stack({ by: "site",  dir: "x" }))
       .mark(rect({ w: "yield", fill: "site" }))
       .render(container);

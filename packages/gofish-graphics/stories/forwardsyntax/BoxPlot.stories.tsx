@@ -36,7 +36,9 @@ export const GenderPayGap: StoryObj<Args> = {
         Median: pay,
         "75-Percentile": pay,
         Max: pay,
-      }, w: args.w, h: args.h,
+      },
+      w: args.w,
+      h: args.h,
     })
       .flow(
         spread({ by: "Pay Grade", dir: "x", spacing: 24 }),

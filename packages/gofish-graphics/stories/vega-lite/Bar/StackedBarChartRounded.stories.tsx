@@ -44,7 +44,9 @@ export const Default: StoryObj<Args> = {
     // corners of every bar.
     // arguably this should be done with some kind of clip path or something.
     chart(context.loaded.weather as any[], {
-      color: Color.palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }), w: args.w, h: args.h,
+      color: Color.palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }),
+      w: args.w,
+      h: args.h,
     })
       .flow(
         derive((d: any[]) =>

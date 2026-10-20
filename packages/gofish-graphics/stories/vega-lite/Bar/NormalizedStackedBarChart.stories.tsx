@@ -31,7 +31,9 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(context.loaded.population.filter((row) => row.year === 2000) as any[], {
-      color: Color.palette({ Female: "#675193", Male: "#ca8861" }), w: args.w, h: args.h,
+      color: Color.palette({ Female: "#675193", Male: "#ca8861" }),
+      w: args.w,
+      h: args.h,
     })
       .flow(
         derive((d) =>
