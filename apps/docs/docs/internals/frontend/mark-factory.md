@@ -335,6 +335,14 @@ The builder case is the reverse direction of `.layer(node)`, which has always
 accepted low-level nodes: a chart composes inside an operator (`spreadY([map,
 controls])`) exactly as a node composes inside a chart.
 
+Before a builder in a mark position (a chart's `.mark(...)`, a `layer([...])`
+child) resolves, it is bound to the partition's rows when its own rows are
+the enclosing scope's. Both builders answer that question the same way, on
+their shared base `RenderableBuilder`: `usesPreviousLayerMarks()` is true for
+an empty `chart()`, and for a `.layer(...)` chain whose first tier is one,
+and `withData(rows)` binds the rows to the chart, or to the chain's first
+tier (#1181). So a chain sits in a mark position by the same rule as a chart.
+
 ## `.name()`, `.label()`, `.zOrder()`, and `.translate()`
 
 `createMark` returns a `NameableMark`, which is the base mark plus chainable

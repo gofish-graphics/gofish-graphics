@@ -43,7 +43,7 @@ expansion and elaboration. Three consumers:
 | Schema types + validator + canonical examples                                                           | `packages/gofish-ir/src/frontend/`                                                 |
 | JSON Schema (Draft 2020-12)                                                                             | `packages/gofish-ir/dist/frontend/v0.json` (build artifact)                        |
 | JS-side emitter (`Serialize.toJSON`, `ChartBuilder.toJSON()`)                                           | `packages/gofish-graphics/src/serialize/toJSON.ts`                                 |
-| JS-side deserializer (`Serialize.renderIR`, `buildChart`, `mapMark`, …)                                 | `packages/gofish-graphics/src/serialize/fromJSON.ts`                               |
+| JS-side deserializer (`Serialize.renderIR`, `buildIR`, `mapMark`, …)                                    | `packages/gofish-graphics/src/serialize/fromJSON.ts`                               |
 | Deserializer factory table, keyed by the descriptor table                                               | `packages/gofish-graphics/src/serialize/registry.ts`                               |
 | Generated Python factory layer (checked in, CI freshness-checked)                                       | `packages/gofish-python/gofish/_generated.py` (from `scripts/generate.ts`)         |
 | Generated Python strategy families (checked in, CI freshness-checked)                                   | `packages/gofish-python/gofish/{tile,overlap,curve,bin,calendar}.py` (same script) |
@@ -69,12 +69,13 @@ const c = chart(data)
   .flow(spread({ by: "lake", dir: "x" }))
   .mark(rect({ h: "count" }));
 
-// Three call shapes, all returning Promise<FrontendIRDocument>:
-const doc = await c.toJSON(); // method on ChartBuilder
-const doc2 = await Serialize.toJSON(c); // standalone function
-const doc3 = await Serialize.toJSONLayer(opts, [a, b]); // for Layer combinators
-const doc4 = await Serialize.toJSONRawMark(mark, opts); // for bare marks
+// Two call shapes, both returning Promise<FrontendIRDocument>:
+const doc = await c.toJSON(); // method on ChartBuilder and on a .layer(...) chain
+const doc2 = await Serialize.toJSON(c); // any root: a chart, a chain, a mark
 ```
+
+`Serialize.toJSON` takes anything a root holds (below): a chart, a
+`.layer(...)` chain, a `layer([...])` of charts or marks, or a bare mark.
 
 `toJSON` is async because combinator-form marks may carry their child
 list as a `Promise<Mark[]>` (e.g. from `map(...)` helpers); the emitter
@@ -84,11 +85,15 @@ Python (via the wrapper):
 
 ```python
 from gofish import chart, spread, rect
+from gofish.ast import ir_payload
 
 builder = chart(data).flow(spread(by="lake", dir="x")).mark(rect(h="count"))
-doc = builder.to_ir()      # canonical entry point — returns a dict
-doc = builder.to_dict()    # alias
+root = builder.to_ir()              # the root, a dict
+root, tables = ir_payload(builder)  # the root and its tables, as Arrow bytes by id
 ```
+
+`to_ir()` is the root alone; the rows its charts name travel beside it
+(§ One renderer, two hosts).
 
 Validate either against the schema:
 
@@ -102,36 +107,64 @@ The validator has one mode: an unknown field is an error, wherever it sits.
 
 ## The document at a glance
 
-A document is a wrapper that names the schema version, the stage, and
-the root:
+A document is a wrapper that names the schema version, the stage, the
+root, and the rows of its charts:
 
 ```ts
 type FrontendIRDocument = {
   irVersion: 0;
   ir: "gofish-frontend";
   $schema?: string; // optional canonical URL
-  root: ChartIR | LayerIR | RawMarkIR;
+  root: MarkIR;
+  tables?: Record<string, Row[]>; // by table id
 };
 ```
 
-The root types mirror the fluent builder shapes:
+A root holds anything a mark position holds (`MarkIR`, below), by one rule,
+so a chart crosses the same way wherever it sits. The shapes mirror the
+fluent builder:
 
-- `ChartIR` — `{ type: "chart", data?, operators?, mark, options?, zOrder? }`
-- `LayerIR` — `{ type: "layer", charts, options?, relate? }` (each `charts`
-  tier is a `ChartIR`, or a `RawMarkIR` for a component-level annotation tier
-  from the `chart(...).layer(mark)` builder chain)
-- `RawMarkIR` — `{ type: "raw-mark", mark, options? }`
+- `ChartIR`, `{ type: "chart", data, operators?, mark, options?, zOrder?,
+name? }`, for `chart(...)`.
+- `LayerChainIR`, `{ type: "layer-chain", tiers }`, for a
+  `chart(...).layer(...)` chain. Each tier is in a mark position. The first
+  is a chart; a later tier is often an empty `chart()` scope, or a bare
+  mark: a relational `line()` that connects the previous tier's marks, or an
+  annotation such as `text(...)`. The deserializer rebuilds it through the
+  real `LayerBuilder`, so JS owns the chain's tier wiring and its render
+  logic (inferred axis titles, the root tier's `axes`).
+- The `layer` combinator mark, `{ type: "layer", __combinator: true,
+options?, children, relate? }`, for `layer([...])` of charts or marks.
+- Any other mark, such as a bare `rect` or a `spread([...])`.
 
-`data` is either `{type: "inline", rows}`, `{type: "select", layer}`,
-`{type: "external", id?}`, or `{type: "previous-tier"}` — the last marks an
-empty `chart()` scope: inside a `builder: true` layer chain it inherits the
-previous tier's marks, and in a mark position (below) it inherits the rows of
-the partition it sits in. The deserializer maps it to the JS
-`PREVIOUS_LAYER_MARKS` sentinel so the real `LayerBuilder.wireTiers()` derives
-the auto-naming + `selectAll` wiring at resolve time — the producer's
-auto-minted layer name never appears in the IR (mirroring how a relational
-mark's zBelow-by-default paint order stays a resolve-time constraint rather
-than a serialized field). Operators are a flat list (`derive`, `resolve`,
+So `"layer"` names one thing, the combinator, and the chain has its own type.
+The type is named for what it is, the `.layer(...)` chain; its `tiers` are
+the tiers that `previous-tier` data (below) speaks of.
+
+A chart's `data` is one of three:
+
+- `{type: "table", id}` names rows of the chart's own. The rows travel
+  beside the IR, keyed by that id: in a document's `tables` as JSON, or in a
+  Python host's Arrow tables (§ One renderer, two hosts). The ids are the
+  writer's own, unique within one payload; both writers mint them in walk
+  order (`t0`, `t1`, ...), and the same rows object, used by two charts, is
+  one table.
+- `{type: "select", layer, mode?}` reads the marks a sibling named
+  (`ref(name)`, `selectAll(name)`).
+- `{type: "previous-tier"}` marks an empty `chart()` scope: its rows are the
+  enclosing scope's. Inside a `layer-chain` that is the previous tier's
+  marks; in a mark position it is the rows of the partition the chart sits
+  in. A chain whose first tier is an empty scope binds that tier the same
+  way, so a chain in a mark position draws its partition's rows. The
+  deserializer maps it to the JS `PREVIOUS_LAYER_MARKS` sentinel so the real
+  `LayerBuilder.wireTiers()` derives the auto-naming + `selectAll` wiring at
+  resolve time. The producer's auto-minted layer name never appears in the
+  IR (mirroring how a relational mark's zBelow-by-default paint order stays
+  a resolve-time constraint rather than a serialized field).
+
+There is no inline form: a chart with rows has a table, by one rule
+wherever it sits, so a nested chart's rows cross as Arrow too, with their
+column types (#1088). Operators are a flat list (`derive`, `resolve`,
 `join`, `filter`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
 `pack`). `treemap`'s `tile` is a strategy object made by a call in the `Tile`
 family (`Tile.squarify({ ratio })`, `Tile.slice()`, `Tile.dice()`,
@@ -173,24 +206,23 @@ with a JS `.format(fn)` has no wire form, and serializing it is an error. Marks 
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
 `arrow`, `position`, `line`, `ribbon`, `treemap`, `pack`, and the Porter-Duff family),
-refs, the two self-discriminating wrapper marks `offset` and `cut` (below), or
-a whole `ChartIR`. A mark position (a chart's `mark`, a combinator child, a
-`cut` source, a drawing `.relate(...)` clause) may hold a chart, by one rule,
-because JS allows one wherever a mark sits: `.mark(chart(...))`,
+refs, the two self-discriminating wrapper marks `offset` and `cut` (below), a
+whole `ChartIR`, or a `LayerChainIR`. The `__combinator` flag stays: `line`,
+`ribbon`, `spread`, `stack`, `treemap` and `pack` are both leaf marks or
+operators and combinators, so their `type` alone does not say which. A mark
+position (a chart's `mark`, a combinator child, a chain tier, a `cut`
+source, a drawing `.relate(...)` clause, and the root) may hold a chart or a
+chain, by one rule, because JS allows one wherever a mark sits:
+`.mark(chart(...))`, `.mark(chart().flow(...).mark(...).layer(...))`,
 `layer([rect(...), chart(...)])`. The deserializer (`mapMark`) rebuilds the
-same `chart(...)` builder a JS author writes there, and the mark machinery
-binds an empty scope to the partition's rows, as for the JS object. A layer of
-charts in a mark position is the `layer` combinator mark whose children are
-`ChartIR`s, like any combinator; `LayerIR` is a root form only, where each
-tier's rows ship beside the IR. Both emitters write the same thing: Python's
-`ChartBuilder.to_dict()` / `LayerBuilder.to_dict()`, and JS `toJSON`, where
-`.mark(chart(...))` leaves a mark whose wire form (`withWire`) is the chart. A
-`chart(...).layer(...)` chain has no mark-position form (#1181).
-A root tier ships its rows beside the IR (the widget's Arrow sidecar), but a
-chart inside a mark tree has no tier, so a nested chart with rows of its own
-carries them inline (`{type: "inline", rows}`; as JSON, not Arrow, #1088). A
-nested chart is a pure spec, so it needs no call back into Python, and the
-notebook widget draws it.
+same `chart(...)` builder or `LayerBuilder` chain a JS author writes there,
+and the mark machinery binds an empty scope to the partition's rows, as for
+the JS object. A layer of charts is the `layer` combinator mark whose
+children are `ChartIR`s, like any combinator, at the root too. Both emitters
+write the same thing: Python's `to_dict()` on a chart, a chain or a mark,
+and JS `toJSON`, where `.mark(chart(...))` and `.mark(chain)` leave a mark
+whose wire form (`withWire`) is the builder. A nested chart is a pure spec,
+so it needs no call back into Python, and the notebook widget draws it.
 `position` is `enclose`'s undecorated sibling: it sets a single child's
 min-corner `(x, y)` in the parent's coordinates and draws nothing of its own
 (no hull, no styling) — a workaround for `enclose`'s convex-bbox-hull-only
@@ -229,9 +261,14 @@ layer registry, not JSON. `serializeMarkFnInput` in `fromJSON.ts` builds these
 sentinels from the real ref array right before the RPC call and keeps that
 array in closure; the Python side (`_InputRef` in `gofish/ast.py`) wraps each
 sentinel back into an object whose `.datum` reads naturally. The callback may
-return a `ChartBuilder`, a `layer([...])` of charts or a bare `Mark`. The reply
-is the mark-position IR of what it returned (`to_dict()`: a `ChartIR` or a
-`MarkIR`), which `mapMark` rebuilds like any other mark position. A bare mark
+return a `ChartBuilder`, a `.layer(...)` chain, a `layer([...])` of charts or
+a bare `Mark`. The reply is a payload like the top-level one, `{ir, tables}`:
+the mark-position IR of what it returned (`to_dict()`) and the tables its
+charts name, with ids of the reply's own, scoped to that subtree. The bridge
+answers it through its own call, `DeriveBridge.applyMark`, which returns the
+tables decoded (a derive or an accessor answers with rows, through
+`applyLambda`), and `mapMark` rebuilds the IR like any other mark position,
+reading the reply's tables. A bare mark
 lets the callback embed one of its `_InputRef` arguments
 directly in the returned layout (mirroring JS `spread({...}, [d[0],
 text(...)])`). `mapMark` resolves any `{"__inputRef": i}` sentinel found
@@ -255,10 +292,10 @@ serve as a constraint operand from Python exactly as from JS: without the wire
 would fail to resolve.
 
 There is no `connect` field on the wire. `.layer(...)` — the one way to
-overlay a connector — always serializes as an ordinary `LayerIR` tier: an
-empty `chart()` scope crosses as a `ChartIR` whose `data` is
-`{type: "previous-tier"}` (above), and a bare relational mark used directly
-crosses as a plain `RawMarkIR` wrapping that mark's ordinary `MarkIR` — `by`,
+overlay a connector — always serializes as an ordinary tier of a
+`layer-chain`: an empty `chart()` scope crosses as a `ChartIR` whose `data`
+is `{type: "previous-tier"}` (above), and a bare relational mark used
+directly crosses as that mark's ordinary `MarkIR` — `by`,
 where present, is just another field in the `line`/`ribbon` mark's own option
 bag, the same as `stroke` or `opacity`, not a separate IR shape. Elaboration
 (naming the previous tier's mark, wiring the next tier to `selectAll(thatName)`,
@@ -309,10 +346,10 @@ boundary, with no per-field rule:
   `to_ir()` (`gofish/_nonfinite.py`). The test derive server encodes the
   infinities in what it sends the same way.
 - A reader decodes in one place, `Serialize.readIR` (`fromJSON.ts`), which
-  parses JSON text if it is given text and decodes the tags. `renderIR` reads
-  the root it is given through it, the parity harness's HTTP bridge reads each
-  derive response through it, and `buildChart` reads its own arguments
-  through it. The other reconstruction functions (`mapMark`,
+  parses JSON text if it is given text and decodes the tags. `buildIR` (and so
+  `renderIR`) reads the root and the tables it is given through it, the parity harness's HTTP bridge reads each
+  derive response through it.
+  The other reconstruction functions (`mapMark`,
   `mapOperator`, ...) take what `readIR` returns.
 - The validator accepts the tagged `Infinity` and `-Infinity` wherever it
   expects a number, through one check (`isIRNumber`), and the JSON Schema has
@@ -329,7 +366,7 @@ any position.
 
 ### `.relate()` clauses
 
-A `layer` combinator mark (and a `LayerIR`) carries its `.relate()` callback as
+A `layer` combinator mark carries its `.relate()` callback as
 `relate: RelateClauseIR[]`, the callback's clauses in order, already
 evaluated on the authoring side. A clause is a `ConstraintIR`
 (`{ type, options?, refs }`, the operands as names) or a `MarkIR` that draws
@@ -358,12 +395,7 @@ chart(seafood)
   "ir": "gofish-frontend",
   "root": {
     "type": "chart",
-    "data": {
-      "type": "inline",
-      "rows": [
-        /* seafood */
-      ]
-    },
+    "data": { "type": "table", "id": "t0" },
     "options": { "w": 500, "h": 300, "axes": true },
     "operators": [{ "type": "spread", "by": "lake", "dir": "x" }],
     "mark": {
@@ -372,6 +404,11 @@ chart(seafood)
       "h": "count",
       "fill": "species"
     }
+  },
+  "tables": {
+    "t0": [
+      /* seafood */
+    ]
   }
 }
 ```
@@ -398,12 +435,7 @@ chart(data).mark(
   "ir": "gofish-frontend",
   "root": {
     "type": "chart",
-    "data": {
-      "type": "inline",
-      "rows": [
-        /* ... */
-      ]
-    },
+    "data": { "type": "table", "id": "t0" },
     "operators": [],
     "mark": {
       "type": "layer",
@@ -413,6 +445,11 @@ chart(data).mark(
         { "type": "text", "text": "label", "fontSize": 14 }
       ]
     }
+  },
+  "tables": {
+    "t0": [
+      /* ... */
+    ]
   }
 }
 ```
@@ -570,7 +607,7 @@ A strategy family's entry names its Python namespace (`pyFamily`: `Tile`,
 since a namespace is not a type.
 
 **What's still authored, not in the table**: the envelope
-(`ChartIR`/`LayerIR`/`DataIR`/`MarkIR` union, `ChannelValue`,
+(`ChartIR`/`LayerChainIR`/`DataIR`/`MarkIR` union, `ChannelValue`,
 `ConstraintIR`, `LabelIR`, `TranslateIR`) and `cut`/`offset`/
 `ref` — these are structural or recursive shapes rather than flat field
 bags, and stay hand-written in `schema.ts` and `jsonSchema.ts` (the parts
@@ -630,7 +667,7 @@ Six consumers read the table:
   emitter writes each `field(...)` or `datum(...)` instance, and each
   strategy kind used bare (`Curve.monotone`), in its plain `toJSON()` form, so the document it returns validates as the wire carries
   it. It does this in the same pass that encodes non-finite numbers
-  (`Frontend.encodeIR`), which shares unchanged subtrees, so inline rows are
+  (`Frontend.encodeIR`), which shares unchanged subtrees, so table rows are
   not copied, and leaves a value whose `toJSON()` is a primitive (a `Date`,
   a Temporal value) as it is.
 
@@ -656,7 +693,7 @@ Six consumers read the table:
 
 ## The JSON Schema
 
-The schema is Draft 2020-12. Its envelope (`Root`, `ChartIR`, `LayerIR`,
+The schema is Draft 2020-12. Its envelope (`Root`, `ChartIR`, `LayerChainIR`,
 `DataIR`, `ChannelValue`, `ConstraintIR`, `LabelIR`, and friends) is
 hand-written; the per-operator and per-leaf-mark `$defs` are generated
 from `descriptors.ts` at call time (see the previous section) and merged
@@ -680,16 +717,16 @@ The high-level structure:
     "irVersion": { "const": 0 },
     "ir":        { "const": "gofish-frontend" },
     "$schema":   { "type": "string" },
-    "root":      { "$ref": "#/$defs/Root" }
+    "root":      { "$ref": "#/$defs/Root" },
+    "tables":    { /* rows by table id */ }
   },
   "$defs": {
-    "Root":       { "oneOf": [ChartIR, LayerIR, RawMarkIR] },
+    "Root":       { "$ref": "#/$defs/MarkIR" },
     "ChartIR":    { /* type, data, operators, mark, options, zOrder, ... */ },
-    "LayerIR":    { /* type, charts, options, ... */ },
-    "RawMarkIR":  { /* type, mark, options, ... */ },
-    "DataIR":     { "oneOf": [/* inline, select, external, previous-tier */] },
+    "LayerChainIR": { /* type, tiers (first a ChartIR, then MarkIRs) */ },
+    "DataIR":     { "oneOf": [/* table, select, previous-tier */] },
     "OperatorIR": { /* GENERATED oneOf: SpreadOperator | StackOperator | ... | TreemapOperator */ },
-    "MarkIR":     { "oneOf": [LeafMarkIR, CombinatorMarkIR, RefMarkIR, OffsetMarkIR, CutMarkIR, ChartIR] },
+    "MarkIR":     { "oneOf": [LeafMarkIR, CombinatorMarkIR, RefMarkIR, OffsetMarkIR, CutMarkIR, ChartIR, LayerChainIR] },
     "LeafMarkIR": { /* GENERATED oneOf: RectMark | CircleMark | ... */ },
     "LabelIR":      { "oneOf": [/* boolean shorthand, array of {accessor, position, fontSize, ...} specs */] },
     "ConstraintIR": { /* type, options, refs */ },
@@ -997,22 +1034,27 @@ Olli and other pure-JS consumers don't see these — they're a
 Two hosts render Python IR: the notebook widget
 (`packages/gofish-python/widget-src/index.ts`) and the Python parity harness
 (`tests/harness/main.ts`). Both call the same function,
-`Serialize.renderIR(root, container, renderOptions, { bridge, tierRows })`
-in `fromJSON.ts`, which dispatches on the root (chart, layer, bare mark) and
-renders it. What differs between the hosts is only transport:
+`Serialize.renderIR(root, container, renderOptions, { bridge, tables })`
+in `fromJSON.ts`, which rebuilds the root as a mark position (`buildIR`,
+then `mapMark`) and renders it. Every rebuild threads one context object
+(`IRContext`: the bridge, the token resolver, the tables, and a mark
+function's input refs), so a chart rebuilds by one rule wherever it sits.
+What differs between the hosts is only transport:
 
 - **Callbacks.** The widget's `DeriveBridge` sends rows as Arrow over
   anywidget traitlets; the harness's sends them as JSON in an HTTP POST to
   `tests/scripts/derive-server.py` (`/derive/<id>`).
-- **Rows.** Both hosts ship each chart tier's rows the same way: Python's
-  `tiers_arrow_bytes` (`gofish/ast.py`) gives one Arrow IPC stream per tier
-  (one for a chart, one per child for a layer, none for a bare mark), and
-  each crosses as a list of base64 strings. The widget sends the list in its
-  `tier_arrow` trait; the derive server returns it as `tierArrow` beside the
-  builder's own `to_ir()`, which it returns untouched. Both decode it with
-  `decodeTierRows` (`widget-src/arrowDecode.ts`, which the harness imports
-  as the `gofish-python/arrowDecode` package export) and pass the result as
-  `tierRows`. Data in the IR wins over `tierRows`. The decode converts each
+- **Rows.** Both hosts ship the tables the same way: Python walks the
+  whole tree with one collector (`_Payload` in `gofish/ast.py`), which gives
+  each chart with rows of its own, wherever it sits, a table id, and
+  `ir_payload` returns the IR with one Arrow IPC stream per table id. Each
+  crosses as base64. The widget sends the map in its `tables` trait; the
+  derive server returns it as `tables` beside the builder's IR, and a mark
+  function's reply carries its own. Both decode it with `decodeTables`
+  (`widget-src/arrowDecode.ts`, which the harness imports as the
+  `gofish-python/arrowDecode` package export) and pass the result as
+  `tables`; a JS document's `tables` are already rows. A chart that names a
+  table its payload does not carry is an error. The decode converts each
   column once by its Arrow type: a tz-aware timestamp becomes epoch
   milliseconds and marks the column as a time (`HasCalendar` in its zone,
   attached with `Serialize.setColumnTypes`); a naive timestamp or a date is
@@ -1036,10 +1078,9 @@ renders it. What differs between the hosts is only transport:
   missing value of its float columns and pyarrow's `from_pandas` follows
   that rule. A column whose rows mix types (a string in one, a number in
   another) is a loud error in `to_arrow_table`, never a silent coercion.
-  [The one exception](https://github.com/gofish-graphics/gofish-graphics/issues/1088)
-  is a chart that a mark function returns: it comes back over the derive
-  RPC, so the derive server inlines its rows in the IR as
-  `{type: "inline", rows}`.
+  The widget collects each chart's `derive` callbacks in the same walk,
+  so a nested chart's derive is called back like the root's. It does not
+  register mark functions (#1049): its `applyMark` says so.
 - **Render options.** These are the JS `.render(container, options)` options:
   `w`, `h`, `axes`, `padding`, `debug`. The widget reads them from its traits,
   which the Python `.render(...)` call sets; the harness reads the story's
@@ -1047,14 +1088,15 @@ renders it. What differs between the hosts is only transport:
   passed them, so a chart's own `axes` option (or a layer chain's root
   tier's) decides, and the default padding applies.
 
-The layer cases live in `renderIR` too: `builder: true` rebuilds the real
-`LayerBuilder`; otherwise the tiers go to the JS `layer(options, tiers)`
-combinator with the layer's options as they are, and its `relate` clauses are
-rebuilt once and handed to `.relate(...)`. A tier named with
-`chart(...).name(n)` carries `name` on its `ChartIR`, which `buildChart`
-applies with `ChartBuilder.name`, so the clauses can refer to it. Python's
-`layer([...], **options)` takes exactly JS `layer`'s options; `padding` is a
-render option in both languages.
+The root has no cases of its own: a `layer-chain` rebuilds the real
+`LayerBuilder` wherever it sits, and a `layer([...])` of charts is the JS
+`layer(options, children)` combinator with the layer's options as they are,
+whose `relate` clauses are rebuilt once and handed to `.relate(...)`. A
+child named with `chart(...).name(n)` carries `name` on its `ChartIR`,
+which `chartFromIR` applies with `ChartBuilder.name`, so the clauses can
+refer to it. Python's `layer([...], **options)` is always that combinator
+mark and takes exactly JS `layer`'s options; `padding` is a render option in
+both languages.
 
 ## Prior art
 

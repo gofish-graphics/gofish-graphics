@@ -22,9 +22,9 @@ ChartBuilder.mark(mark) -> ChartBuilder
 
 ## Parameters
 
-| Parameter | Type                                                   | Description                                                                                                               |
-| --------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `mark`    | `Mark` \| `ChartBuilder` \| `LayerBuilder` \| callable | A mark factory result, a nested `chart(...)` or `layer([chart(...), ...])` drawn per group, or a `(data) -> ChartBuilder` |
+| Parameter | Type                                                   | Description                                                                                                                                                          |
+| --------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mark`    | `Mark` \| `ChartBuilder` \| `LayerBuilder` \| callable | A mark factory result (`layer([chart(...), ...])` among them), a nested `chart(...)` or `chart(...).layer(...)` chain drawn per group, or a `(data) -> ChartBuilder` |
 
 Returns a new `ChartBuilder` with the mark set.
 
@@ -117,8 +117,27 @@ chart(barley).flow(spread(by="variety", dir="x")).mark(
 )
 ```
 
-A nested chart crosses to JS as its own chart IR, and a layer of charts as the
-`layer` combinator with chart children, inline in the mark tree, so it draws with no call back into Python.
+A `.layer(...)` chain sits where a chart does (#1181). Leave its first tier's
+data off and that tier binds the incoming group; each later tier sees the
+previous tier's marks, as it does at the root. Here each store draws its own
+small line chart, dots with a line over them:
+
+```python
+chart(sales).flow(spread(by="store", dir="x", spacing=32)).mark(
+    chart(axes=False)  # inherits this store's rows
+    .flow(scatter(by="quarter", x="quarter", y="sales"))
+    .mark(circle(r=4, fill="#08519c"))
+    .layer(line(stroke="#6baed6", stroke_width=2))  # connects this store's dots
+)
+```
+
+A chain may also be a child of a combinator, such as `layer([...])`.
+
+A nested chart crosses to JS as its own chart IR, a chain as its own
+`layer-chain` IR, and a layer of charts as the `layer` combinator with chart
+children. A nested chart's own rows travel beside the IR as an Arrow table,
+like the root's, so their column types (a date, a timestamp) survive, and it
+draws with no call back into Python, in the notebook too.
 
 The older callback form `mark(lambda data: chart(data, ...).flow(...).mark(...))`
 still works and is equivalent — the function receives each group's data slice and

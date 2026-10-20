@@ -41,21 +41,22 @@ for the API.
     },
     "root": {
       "$ref": "#/$defs/Root"
+    },
+    "tables": {
+      "type": "object",
+      "description": "The rows of every chart in the document that has rows of its own, by the id its {type: \"table\", id} data names.",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      }
     }
   },
   "$defs": {
     "Root": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/ChartIR"
-        },
-        {
-          "$ref": "#/$defs/LayerIR"
-        },
-        {
-          "$ref": "#/$defs/RawMarkIR"
-        }
-      ]
+      "description": "A root holds anything a mark position holds: a chart, a .layer(...) chain, a layer([...]) of charts or marks, or a bare mark.",
+      "$ref": "#/$defs/MarkIR"
     },
     "Origin": {
       "type": "object",
@@ -76,18 +77,16 @@ for the API.
       "oneOf": [
         {
           "type": "object",
-          "required": ["type", "rows"],
+          "required": ["type", "id"],
           "properties": {
             "type": {
-              "const": "inline"
+              "const": "table"
             },
-            "rows": {
-              "type": "array",
-              "items": {
-                "type": "object"
-              }
+            "id": {
+              "type": "string"
             }
-          }
+          },
+          "description": "Rows of the chart's own, by id: they travel beside the IR (a document's tables, or a Python host's Arrow tables)."
         },
         {
           "type": "object",
@@ -109,41 +108,22 @@ for the API.
           "required": ["type"],
           "properties": {
             "type": {
-              "const": "external"
-            },
-            "id": {
-              "type": "string"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "required": ["type"],
-          "properties": {
-            "type": {
               "const": "previous-tier"
             }
           },
-          "description": "An empty chart() scope: inside a .layer(...) chain it inherits the immediately preceding tier's marks; in a mark position it inherits the rows of the partition it sits in."
+          "description": "An empty chart() scope, whose rows are the enclosing scope's: inside a .layer(...) chain the immediately preceding tier's marks; in a mark position the rows of the partition it sits in."
         }
       ]
     },
     "ChartIR": {
       "type": "object",
-      "required": ["type", "mark"],
+      "required": ["type", "data", "mark"],
       "properties": {
         "type": {
           "const": "chart"
         },
         "data": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/DataIR"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "$ref": "#/$defs/DataIR"
         },
         "operators": {
           "type": "array",
@@ -172,61 +152,25 @@ for the API.
         }
       }
     },
-    "LayerIR": {
+    "LayerChainIR": {
       "type": "object",
-      "required": ["type", "charts"],
+      "required": ["type", "tiers"],
+      "description": "A chart(...).layer(...) chain: tiers stacked in order, each offered the previous tier's marks as its scope. The first tier is a chart; it sits at the root or in any mark position, where a first tier with previous-tier data binds the rows of the partition it sits in.",
       "properties": {
         "type": {
-          "const": "layer"
+          "const": "layer-chain"
         },
-        "charts": {
+        "tiers": {
           "type": "array",
-          "description": "Layer tiers. Each is a ChartIR; the chart(...).layer(mark) builder chain may also include a RawMarkIR tier (a component-level, datumless annotation overlay).",
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/ChartIR"
+            }
+          ],
           "items": {
-            "oneOf": [
-              {
-                "$ref": "#/$defs/ChartIR"
-              },
-              {
-                "$ref": "#/$defs/RawMarkIR"
-              }
-            ]
+            "$ref": "#/$defs/MarkIR"
           }
-        },
-        "options": {
-          "type": "object"
-        },
-        "relate": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/RelateClauseIR"
-          },
-          "description": "Layer-level relate clauses (layer([...]).relate(...)), resolving names against the child charts' names."
-        },
-        "builder": {
-          "type": "boolean",
-          "description": "True when this came from the chart(...).layer(...) builder chain (not the low-level layer([...]) combinator). The deserializer reconstructs it through the real LayerBuilder so JS owns the builder's render logic (inferred axis titles, etc.)."
-        },
-        "origin": {
-          "$ref": "#/$defs/Origin"
-        },
-        "meta": {
-          "$ref": "#/$defs/Meta"
-        }
-      }
-    },
-    "RawMarkIR": {
-      "type": "object",
-      "required": ["type", "mark"],
-      "properties": {
-        "type": {
-          "const": "raw-mark"
-        },
-        "mark": {
-          "$ref": "#/$defs/MarkIR"
-        },
-        "options": {
-          "type": "object"
         },
         "origin": {
           "$ref": "#/$defs/Origin"
@@ -462,9 +406,12 @@ for the API.
         },
         {
           "$ref": "#/$defs/ChartIR"
+        },
+        {
+          "$ref": "#/$defs/LayerChainIR"
         }
       ],
-      "description": "What a mark position holds. Besides the mark kinds, a whole chart may sit where a mark does, as in JS (.mark(chart(...)), layer([rect(...), chart(...)])). A layer of charts is the layer combinator mark with chart children; LayerIR is a root form only."
+      "description": "What a mark position holds, and what a root holds. Besides the mark kinds, a whole chart or a .layer(...) chain may sit where a mark does, as in JS (.mark(chart(...)), layer([rect(...), chart(...)])). A layer of charts is the layer combinator mark with chart children."
     },
     "OffsetMarkIR": {
       "description": "Shift a single child by (x, y) render-pixels without moving the bounds it advertises to its parent. Maps to the public `offset` operator.",

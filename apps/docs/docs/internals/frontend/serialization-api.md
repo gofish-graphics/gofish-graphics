@@ -36,14 +36,15 @@ const builder = chart(data)
 const doc = await builder.toJSON();
 ```
 
-Four entry points, all returning `Promise<FrontendIRDocument>`:
+Two entry points, both returning `Promise<FrontendIRDocument>`:
 
-| Call                                               | When to use                                                                    |
-| -------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `builder.toJSON()`                                 | Most common — a `ChartBuilder` from `chart(...).flow(...).mark(...)`.          |
-| `Serialize.toJSON(builder)`                        | Same, standalone form.                                                         |
-| `Serialize.toJSONLayer(options, [chartA, chartB])` | A multi-chart layer combinator. Pass the layer options and the inner builders. |
-| `Serialize.toJSONRawMark(mark, options?)`          | A bare mark used without a chart wrapper.                                      |
+| Call                     | When to use                                                                                                     |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `builder.toJSON()`       | Most common — a `ChartBuilder` from `chart(...).flow(...).mark(...)`, or a `.layer(...)` chain.                 |
+| `Serialize.toJSON(root)` | Any root: a chart, a chain, a `layer([...])` of charts or marks, or a bare mark. A root holds what a mark does. |
+
+The document carries the rows of every chart that has rows of its own in
+its `tables`, by the id the chart's `{type: "table", id}` data names.
 
 All entry points are async because combinator-form marks may carry their
 child list as a `Promise<Mark[]>` (e.g. from `map(...)` helpers); the
@@ -54,12 +55,15 @@ emitter resolves these to walk into them.
 ```python
 from gofish import chart, spread, rect
 
+from gofish.ast import ir_payload
+
 builder = chart(data).flow(spread(by="lake", dir="x")).mark(rect(h="count"))
-doc = builder.to_ir()      # canonical entry — returns a dict
-doc_alias = builder.to_dict()  # equivalent
+root = builder.to_ir()              # the root, a dict
+root, tables = ir_payload(builder)  # and its tables: Arrow IPC bytes by id
 ```
 
-`LayerBuilder.to_ir()` and bare `Mark.to_ir()` work the same way.
+A `.layer(...)` chain's `to_ir()` and a bare `Mark.to_ir()` work the same
+way. The rows travel beside the root as Arrow, not in it.
 
 The Python IR carries
 [bridge-extension sentinels](/internals/frontend/serialization#bridge-extensions-python-widget)
@@ -75,38 +79,36 @@ on the JS side:
 ```ts
 import { Serialize } from "gofish-graphics";
 
-const resolveToken = Serialize.makeTokenResolver();
-const builder = Serialize.buildChart(
-  chartIR,
-  /* data rows for inline charts */ data,
-  /* bridge for Python lambdas — optional */ undefined,
-  resolveToken
-);
+const builder = Serialize.buildIR(doc.root, {
+  tables: doc.tables,
+  /* bridge for Python lambdas — optional */ bridge: undefined,
+});
 
 await builder.render(container, { w: 500, h: 300, axes: true });
 ```
 
-To render a whole root (a chart, a layer, or a bare mark) in one call, the
-way the Python widget and the parity harness do:
+`buildIR` returns what a JS author would have written: a `ChartBuilder`, a
+`LayerBuilder` chain, or a mark. To render a whole root in one call, the way
+the Python widget and the parity harness do:
 
 ```ts
 await Serialize.renderIR(
   root,
   container,
   { w: 500, h: 300 },
-  { bridge, tierRows }
+  { bridge, tables }
 );
 ```
 
-`tierRows` holds rows shipped beside the IR, one array per chart tier; a
-chart whose IR carries inline rows does not need it.
+`tables` holds the rows of every chart that has rows of its own, by table
+id: a document's `tables`, or a Python host's Arrow tables, decoded.
 
 For finer-grained reconstruction:
 
-| Function                                              | Returns              |
-| ----------------------------------------------------- | -------------------- |
-| `Serialize.buildChart(chartSpec, data, bridge?, tok)` | `ChartBuilder<any>`  |
-| `Serialize.mapOperator(opSpec, bridge?)`              | `Operator<any, any>` |
+| Function                                 | Returns                                   |
+| ---------------------------------------- | ----------------------------------------- |
+| `Serialize.buildIR(root, host?)`         | `ChartBuilder`, `LayerBuilder`, or a mark |
+| `Serialize.mapOperator(opSpec, bridge?)` | `Operator<any, any>`                      |
 
 The `bridge` argument is a `Serialize.DeriveBridge` — required only if
 the IR contains `derive` operators or `{__gofish_lambda}` sentinels

@@ -10,9 +10,9 @@ Sets the visual mark used to render each data group.
 
 ## Parameters
 
-| Parameter | Type                     | Description                                                                            |
-| --------- | ------------------------ | -------------------------------------------------------------------------------------- |
-| `mark`    | `Mark` \| `ChartBuilder` | A mark (e.g. `rect()`, `line()`, `ribbon()`), or a nested `chart(...)` drawn per group |
+| Parameter | Type                                       | Description                                                                                                             |
+| --------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `mark`    | `Mark` \| `ChartBuilder` \| `LayerBuilder` | A mark (e.g. `rect()`, `line()`, `ribbon()`), or a nested `chart(...)` or `chart(...).layer(...)` chain drawn per group |
 
 ## Example
 
@@ -62,6 +62,24 @@ chart(barley)
     ])
   );
 ```
+
+A `.layer(...)` chain sits where a chart does (#1181). Leave its first tier's
+data off and that tier binds the incoming group; each later tier sees the
+previous tier's marks, as it does at the root. Here each store draws its own
+small line chart, dots with a line over them:
+
+```ts
+chart(sales)
+  .flow(spread({ by: "store", dir: "x", spacing: 32 }))
+  .mark(
+    chart({ axes: false }) // inherits this store's rows
+      .flow(scatter({ by: "quarter", x: "quarter", y: "sales" }))
+      .mark(circle({ r: 4, fill: "#08519c" }))
+      .layer(line({ stroke: "#6baed6", strokeWidth: 2 })) // connects this store's dots
+  );
+```
+
+A chain may also be a child of a combinator, such as `layer([...])`.
 
 Marks can also call `.name("layerName")` to register their output nodes for later use with [`ref` / `selectAll`](/js/api/selection/ref):
 

@@ -20,7 +20,7 @@ chart(seafood, axes=True).flow(spread(by="lake", dir="x")).mark(
 ChartBuilder.render(w=800, h=600, axes=None, legend=None, padding=None, debug=False)
 ```
 
-`layer(...)` and `.layer(...)` chains (`LayerBuilder`) and bare marks take the
+`layer([...])` (a mark), `.layer(...)` chains (`LayerBuilder`) and bare marks take the
 same options. They are the JS `.render(container, options)` options, in snake
 case.
 

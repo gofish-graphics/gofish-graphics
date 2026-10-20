@@ -28,7 +28,7 @@ graph TB
         Widget[GoFishChartWidget<br/>widget.py<br/><br/>• Traitlets for sync<br/>• Derive function registry<br/>• @observe(derive_request)]
     end
 
-    Widget -->|"Transport:<br/>• spec (JSON)<br/>• tier_arrow (base64 list)<br/>• Derive RPC via synced traits"| JS
+    Widget -->|"Transport:<br/>• spec (JSON)<br/>• tables (base64 Arrow by id)<br/>• Derive RPC via synced traits"| JS
 
     subgraph Browser["JavaScript Layer (Browser)"]
         JS[Widget Bundle<br/>widget.esm.js]
@@ -196,7 +196,7 @@ Inherits from `anywidget.AnyWidget` to provide seamless Jupyter integration.
 Static (Python → JS, set once in `__init__`):
 
 - `spec` (Dict, synced) — Chart specification JSON
-- `tier_arrow` (List of Unicode, synced) — Base64-encoded Arrow IPC bytes, one per chart tier
+- `tables` (Dict of Unicode, synced) — Base64-encoded Arrow IPC bytes by table id, one per chart with rows of its own, wherever it sits
 - `width`, `height`, `axes`, `debug` (synced) — Render options
 - `container_id` (synced) — Unique DOM element ID
 
@@ -277,7 +277,7 @@ export default {
     (model as any).__gofishBridge = makeDeriveBridge(model);
   },
   async render({ model, el }) {
-    // 1. Deserialize Arrow data from `tier_arrow` trait
+    // 1. Deserialize Arrow data from `tables` trait
     // 2. Map IR operators to GoFish operators
     // 3. Map IR mark to GoFish mark
     // 4. Render chart, then set render_result for status
@@ -442,7 +442,7 @@ chart(data) \
 
 - `GoFishChartWidget` initialized with:
   - `spec` = JSON IR
-  - `tier_arrow` = base64 Arrow bytes, one per chart tier
+  - `tables` = base64 Arrow bytes by table id
   - `derive_functions` = {"abc123": <function>}
   - `width=800, height=600`
 - Widget loads `_esm` bundle from `_static/widget.esm.js`
@@ -580,7 +580,7 @@ Check widget state:
 
 ```python
 print(widget.spec)
-print(len(widget.tier_arrow))  # number of chart tiers
+print(list(widget.tables))  # the table ids the spec names
 print(widget.derive_functions.keys())
 ```
 
