@@ -1435,3 +1435,91 @@ chart(tree)
    edge). Worth checking whether that is the intended default for a
    combinator.
 3. The legend is drawn even with `axes: false`. Minor, not changed.
+
+### R5. SPLOM
+
+A 4 x 4 scatterplot matrix of penguins: the 4 numeric columns of R2, the
+rows that have all four, colored by `Species`. Cells are 90 px with a
+12 px gap. Stories: `stories/_proposals/stacked-ribbons/Splom.stories.tsx`
+(titles `Proposals/Stacked Ribbons/Splom/...`). No library source was
+changed.
+
+| Story           | PNG                      | Result                        |
+| --------------- | ------------------------ | ----------------------------- |
+| `SplomProducts` | `img/splom-products.png` | works with normalized columns |
+| `SplomViews`    | `img/splom-views.png`    | works with normalized columns |
+
+The two PNGs are byte-identical.
+
+`SplomProducts`, direct style. A record of rows, each a record of columns,
+each cell a chart over the parent's data (nested host map). As rendered:
+
+```js
+chart(pengsN, { axes: false })
+  .mark(
+    spread(
+      { dir: "y", spacing: 12 },
+      DIMS.map((row) =>
+        spread(
+          { dir: "x", spacing: 12 },
+          DIMS.map(
+            (col) => (d) =>
+              chart(d, { w: 90, h: 90, axes: false })
+                .flow(scatter({ x: `n ${col}`, y: `n ${row}` }))
+                .mark(circle({ r: 1.5, fill: "Species", opacity: 0.7 }))
+          )
+        )
+      )
+    )
+  )
+  .render(c, { w: 396, h: 396 });
+```
+
+`SplomViews`, "unpivot as a view", emulated. The data is precomputed: one
+row per penguin x (row dim, col dim), with `x` = the col dim's value and
+`y` = the row dim's value. As rendered:
+
+```js
+const ends = pengs.flatMap((p) =>
+  DIMS.flatMap((row) =>
+    DIMS.map((col) => ({
+      Species: p.Species,
+      row,
+      col,
+      x: norm(col, p[col]),
+      y: norm(row, p[row]),
+    }))
+  )
+);
+chart(ends, { axes: false })
+  .flow(
+    spread({ by: "row", dir: "y", spacing: 12 }),
+    spread({ by: "col", dir: "x", spacing: 12 }),
+    scatter({ x: "x", y: "y" })
+  )
+  .mark(circle({ r: 1.5, fill: "Species", opacity: 0.7 }))
+  .render(c, { w: 396, h: 396 });
+```
+
+Works as is:
+
+- The nested `spread` combinators pass their scope to a `(d) => chart(d)`
+  child two levels down. No `inherit` is needed.
+- The flow form needs no callbacks at all: two `by` tiers and a `scatter`.
+
+Shortcuts and sharp edges:
+
+1. **Normalized columns (declared shortcut).** All cells share one x scale
+   and one y scale, so each dim is min-max normalized into [0, 1] (`n <dim>`
+   columns, and `x` / `y` in `ends`). There are no per-cell ticks; a tick
+   would read 0..1. The right fix is per-cell (or per-row and per-column)
+   scale resolution, the same gap as R2.
+2. **Diagonal cells** show the x = y scatter, a straight line. A real SPLOM
+   puts a histogram or the dim's name there. Left as is.
+3. **The unpivot is precomputed** in plain JS (`ends`). There is no view
+   operator; the spec reads only the view's fields.
+4. In `SplomProducts`, `axes: false` on the root chart and on `scatter`
+   did not hide the cells' axes (each cell drew crowded 0..1 ticks). Only
+   `axes: false` on the child `chart(d, ...)` did. In `SplomViews`, the
+   root's `axes: false` is enough.
+5. The legend is drawn even with `axes: false` (as in R4).
