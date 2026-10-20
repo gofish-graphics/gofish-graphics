@@ -58,12 +58,16 @@ from gofish import chart, spread, rect
 from gofish.ast import ir_payload
 
 builder = chart(data).flow(spread(by="lake", dir="x")).mark(rect(h="count"))
-root = builder.to_ir()              # the root, a dict
-root, tables = ir_payload(builder)  # and its tables: Arrow IPC bytes by id
+doc = builder.to_ir()                     # the document, tables as JSON rows
+shipped, callbacks = ir_payload(builder)  # as a host ships it
 ```
 
-A `.layer(...)` chain's `to_ir()` and a bare `Mark.to_ir()` work the same
-way. The rows travel beside the root as Arrow, not in it.
+`to_ir()` returns the same envelope as JS `toJSON`, with its `tables` as
+JSON rows (a time as its ISO string). A `.layer(...)` chain's `to_ir()` and
+a bare `Mark.to_ir()` work the same way. `ir_payload` is what a Python host
+ships: the same document with its tables as base64 Arrow, and the Python
+callbacks the IR names by lambda id, which the host answers JS's calls with
+(`answer`).
 
 The Python IR carries
 [bridge-extension sentinels](/internals/frontend/serialization#bridge-extensions-python-widget)
@@ -79,47 +83,39 @@ on the JS side:
 ```ts
 import { Serialize } from "gofish-graphics";
 
-const builder = Serialize.buildIR(doc.root, {
-  tables: doc.tables,
-  /* bridge for Python lambdas — optional */ bridge: undefined,
-});
+const builder = Serialize.buildIR(doc /* , bridge for Python callbacks */);
 
 await builder.render(container, { w: 500, h: 300, axes: true });
 ```
 
-`buildIR` returns what a JS author would have written: a `ChartBuilder`, a
-`LayerBuilder` chain, or a mark. To render a whole root in one call, the way
-the Python widget and the parity harness do:
+`buildIR` takes one `FrontendIRDocument`, its root and its `tables` as
+rows, and returns what a JS author would have written for the root: a
+`ChartBuilder`, a `LayerBuilder` chain, or a mark. To render a whole
+document in one call, the way the Python widget and the parity harness do:
 
 ```ts
-await Serialize.renderIR(
-  root,
-  container,
-  { w: 500, h: 300 },
-  { bridge, tables }
-);
+await Serialize.renderIR(doc, container, { w: 500, h: 300 }, bridge);
 ```
 
-`tables` holds the rows of every chart that has rows of its own, by table
-id: a document's `tables`, or a Python host's Arrow tables, decoded.
-
-For finer-grained reconstruction:
+A Python host ships the document's tables as base64 Arrow; it decodes them
+into rows (`decodeDocument` in `gofish-python/arrowBridge`) before either
+call.
 
 | Function                                 | Returns                                   |
 | ---------------------------------------- | ----------------------------------------- |
-| `Serialize.buildIR(root, host?)`         | `ChartBuilder`, `LayerBuilder`, or a mark |
+| `Serialize.buildIR(doc, bridge?)`        | `ChartBuilder`, `LayerBuilder`, or a mark |
+| `Serialize.renderIR(doc, el, opts, b?)`  | `Promise<View>`                           |
 | `Serialize.mapOperator(opSpec, bridge?)` | `Operator<any, any>`                      |
 
-The `bridge` argument is a `Serialize.DeriveBridge` — required only if
-the IR contains `derive` operators or `{__gofish_lambda}` sentinels
-(both Python-bridge concerns). A pure-JS-emitted IR doesn't need one;
-pass `undefined`. The widget's bridge implementation (Arrow over anywidget)
-lives in `packages/gofish-python/widget-src/index.ts`, and the parity harness's (JSON
-over HTTP) in `tests/harness/main.ts`, if you need a reference.
-
-`makeTokenResolver()` returns a fresh per-render resolver that mints
-stable JS `Token` instances for the `{__gofish_token, __tag}` sentinels
-the Python wrapper emits.
+The `bridge` argument is a `Serialize.DeriveBridge`, whose one method,
+`call(lambdaId, rows)`, runs a Python callback and answers with a document
+of its own (`Serialize.BridgeReply`): its root is a table reference to the
+list a derive or an accessor returned, or the IR a mark function drew. It is
+required only if the IR names a Python callback (a `derive` operator, a
+`{__gofish_lambda}` sentinel, a `mark-fn`). A pure-JS-emitted IR doesn't
+need one. Both Python hosts build theirs with `arrowBridge(send)`
+(`packages/gofish-python/widget-src/arrowBridge.ts`), over anywidget
+traitlets (`widget-src/index.ts`) and over HTTP (`tests/harness/main.ts`).
 
 ## Validate
 

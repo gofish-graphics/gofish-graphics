@@ -1896,8 +1896,8 @@ reads only the classes, never the builder words. Six classes exist:
   entry (which wins over the decoded type) exactly as it reads the same
   string from JS data, or in UTC without one. The decode only attaches
   types: whoever reads the rows converts them first with its own schema (a
-  chart tier is chart data, a lambda accessor's result goes through
-  `applyLambdaTyped` in `serialize/registry.ts`, and a `derive` types its
+  chart tier is chart data, a lambda accessor's values go through
+  `applySchema` in `serialize/fromJSON.ts`, and a `derive` types its
   result with its own `schema`, so each holds epoch milliseconds). No schema names
   a value inside a list or a struct, so a time there decodes to epoch
   milliseconds (a naive one read in UTC), and a list of structs, a list of

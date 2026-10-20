@@ -63,8 +63,9 @@ chart(seafood, axes=True).flow(spread(by="lake", dir="x")).mark(
 
 ## Inspecting the IR
 
-`.to_ir()` returns the chart's JSON intermediate representation instead of
-rendering — useful for debugging or testing:
+`.to_ir()` returns the chart's intermediate representation document (its
+`root` and its `tables` as JSON rows) instead of rendering — useful for
+debugging or testing:
 
 ```python
 chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count")).to_ir()
