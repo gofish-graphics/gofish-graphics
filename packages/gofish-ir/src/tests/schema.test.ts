@@ -175,7 +175,12 @@ check(
 
 // A root holds anything a mark position holds, by one rule (#1181).
 const doc = (root: unknown) =>
-  ({ irVersion: 0, ir: "gofish-frontend", root }) as FrontendIRDocument;
+  ({
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root,
+    tables: { t0: [] },
+  }) as FrontendIRDocument;
 
 check(
   "a leaf mark, a combinator mark and a chain each accept as the root",
@@ -308,6 +313,7 @@ function chart(operators: any[], mark: any = { type: "rect" }) {
     irVersion: 0,
     ir: "gofish-frontend",
     root: { type: "chart", data: { type: "table", id: "t0" }, operators, mark },
+    tables: { t0: [] },
   } as unknown as FrontendIRDocument;
 }
 
@@ -383,16 +389,31 @@ check(
     })
   ).valid
 );
-check(
-  "a nested chart with rows of its own names a table",
-  validate(
-    chart([], {
-      type: "chart",
-      data: { type: "table", id: "t1" },
-      mark: { type: "rect" },
-    })
-  ).valid
-);
+{
+  const nestedRows = chart([], {
+    type: "chart",
+    data: { type: "table", id: "t1" },
+    mark: { type: "rect" },
+  }) as any;
+  check(
+    "a nested chart with rows of its own names a table",
+    validate({ ...nestedRows, tables: { t0: [], t1: [] } }).valid
+  );
+  // A chart's table, at any depth, must be one of the document's tables.
+  const missing = validate(nestedRows);
+  check(
+    "a chart naming a table the document does not hold is rejected",
+    !missing.valid &&
+      missing.errors.some(
+        (e) => e.path === "$.root.mark.data.id" && /"t1"/.test(e.message)
+      ),
+    JSON.stringify(missing)
+  );
+  check(
+    "a document with no tables naming a table is rejected",
+    !validate({ ...nestedRows, tables: undefined }).valid
+  );
+}
 
 check(
   "spread with valid dir accepts",
@@ -478,6 +499,7 @@ function chartWithOptions(options: unknown) {
       mark: { type: "rect" },
       options,
     },
+    tables: { t0: [] },
   } as unknown as FrontendIRDocument;
 }
 
@@ -1081,6 +1103,7 @@ function chartWithLabel(label: any) {
       data: { type: "table", id: "t0" },
       mark: { type: "rect", label },
     },
+    tables: { t0: [] },
   } as unknown as FrontendIRDocument;
 }
 
@@ -1158,6 +1181,7 @@ console.log("\n# Non-finite numbers");
         mark: { type: "circle", r: 3 },
         zOrder,
       },
+      tables: { t0: [] },
     }) as unknown as FrontendIRDocument;
 
   const plain = validate(doc(5));

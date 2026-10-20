@@ -95,6 +95,9 @@ interface Context {
    *  nodes (`holdsNodes` in `AUTHORED_REFS`) is passed through, since the
    *  nodes are only IR once serialized. */
   authored?: boolean;
+  /** The ids of the document's tables, when the walk is of a document: a
+   *  chart's `{type: "table", id}` must name one of them. */
+  tables?: ReadonlySet<string>;
 }
 
 function walkDocument(node: unknown, path: string, ctx: Context): void {
@@ -117,6 +120,8 @@ function walkDocument(node: unknown, path: string, ctx: Context): void {
       });
   });
   optionalField(node, "$schema", path, ctx, expectString);
+  // Every table a chart names, at any depth, is one of the document's.
+  ctx.tables = new Set(isObject(node.tables) ? Object.keys(node.tables) : []);
   // A root holds anything a mark position holds (`FrontendIR`).
   expectField(node, "root", path, ctx, walkMark);
   optionalField(node, "tables", path, ctx, walkTables);
@@ -212,7 +217,14 @@ function walkData(node: unknown, path: string, ctx: Context): void {
   }
   switch (node.type) {
     case "table":
-      expectField(node, "id", path, ctx, expectString);
+      expectField(node, "id", path, ctx, (v, p) => {
+        expectString(v, p, ctx);
+        if (typeof v === "string" && ctx.tables && !ctx.tables.has(v))
+          ctx.errors.push({
+            path: p,
+            message: `names table ${JSON.stringify(v)}, which the document's tables do not hold`,
+          });
+      });
       rejectUnknown(node, ["type", "id"], path, ctx);
       return;
     case "select":
@@ -380,7 +392,7 @@ function walkFieldType(
       // checked into a probe context of its own.
       const probes: Context[] = [];
       for (const branch of type.options) {
-        const probe: Context = { errors: [] };
+        const probe: Context = { ...ctx, errors: [] };
         walkFieldType(branch, value, path, probe);
         if (probe.errors.length === 0) return;
         probes.push(probe);
