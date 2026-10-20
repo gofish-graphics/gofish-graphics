@@ -3,14 +3,16 @@
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 import datetime
 import decimal
+import hashlib
 import inspect
 import json
 import math
 import re
+import sys
 import uuid
 
 from . import _nonfinite
-from ._nonfinite import KEEP, encode_non_finite
+from ._nonfinite import KEEP, encode_number
 
 T = TypeVar("T")
 
@@ -1349,8 +1351,11 @@ class ChartBuilder(_Root):
         new_builder._mark = _as_mark(mark)
         return new_builder
 
-    def layer(self, child: "ChartBuilder") -> "LayerBuilder":
-        """Stack another tier over this one. ``child`` is its own ``chart(...)``
+    def layer(self, child: Any) -> "LayerBuilder":
+        """Stack another tier over this one. A tier is a mark position: it
+        holds a ``chart(...)`` pipeline, a chain, a mark, or a mark function
+        ``(data) -> mark | chart``, which gets the previous tier's marks.
+        ``child`` is often its own ``chart(...)``
         pipeline; an empty ``chart()`` scope (no data) inherits *this* tier's
         marks (so ``.layer(chart().flow(group(by=...)).mark(ribbon()))`` connects
         what you just drew), while ``chart(table)`` drives the tier from another
@@ -1423,8 +1428,8 @@ class ChartBuilder(_Root):
         return self.flow(stack(by=by, **kwargs))
 
     def children(self) -> List[Any]:
-        """The mark position this chart holds: its mark."""
-        return [self._mark]
+        """The mark position this chart holds: its mark, once it has one."""
+        return [] if self._mark is None else [self._mark]
 
     def to_dict(self, payload: "_Payload") -> dict:
         """The chart's ``ChartIR``, wherever it sits: the root, a mark
@@ -3385,9 +3390,10 @@ def chart(
     return ChartBuilder(data, _chart_opts(**options) or None)
 
 
-# A callback, as a payload records it: the rows JS calls it with, to the
-# reply's root and the payload the reply ships (see `_Payload.callback`).
-_Reply = Callable[[List[Any]], Tuple[dict, "_Payload"]]
+# A callback, as a payload records it: the rows JS calls it with and the
+# call's scope (see `_Payload`), to the reply's root and the payload the reply
+# ships (see `_Payload.callback`).
+_Reply = Callable[[List[Any], str], Tuple[dict, "_Payload"]]
 
 
 class _Payload:
@@ -3403,12 +3409,22 @@ class _Payload:
       ``derive`` operator, an accessor, a mark function), recorded as the
       walk writes its id. A host registers them and answers JS's calls with
       ``answer``. A call's reply is a payload of its own, so a mark
-      function's reply carries the callbacks of what it drew."""
+      function's reply carries the callbacks of what it drew.
 
-    def __init__(self) -> None:
+    A reply's payload has the call's ``scope`` (see ``answer``), and names
+    each callback it records by the scope and its walk order rather than by
+    its lambda id, which the callback's code mints afresh on every call. So
+    the same call (the same partition, drawn again by a second view of the
+    widget) names the same callbacks, and registering them replaces the
+    ones it registered before: the registry holds one set per distinct
+    call, not one per call."""
+
+    def __init__(self, scope: Optional[str] = None) -> None:
         self.tables: Dict[str, Any] = {}
         self._ids: Dict[int, str] = {}
         self.callbacks: Dict[str, _Reply] = {}
+        self._scope = scope
+        self._names: Dict[str, str] = {}
 
     def table(self, data: Any) -> dict:
         """The data IR of a chart over ``data``: its table's id."""
@@ -3421,29 +3437,24 @@ class _Payload:
 
     def callback(self, lambda_id: str, reply: _Reply) -> str:
         """Record the callback named ``lambda_id``; return the id for the
-        IR to write."""
+        IR to write: ``lambda_id`` itself, or, in a reply, its name in the
+        call's scope."""
+        if self._scope is not None:
+            lambda_id = self._names.setdefault(
+                lambda_id, f"{self._scope}.{len(self._names)}"
+            )
         self.callbacks[lambda_id] = reply
         return lambda_id
 
     def json_tables(self) -> Dict[str, List[dict]]:
-        """Each table's rows as JSON rows, by id (a time as its ISO 8601
-        string, as JSON writes a JS ``Date``)."""
-        return {tid: _json_rows(d) for tid, d in self.tables.items()}
+        """Each table's rows as dict rows, by id (``None`` data is no rows),
+        which the document writes as JSON (``_json_value``)."""
+        from .arrow_utils import to_records
 
-
-def _json_rows(data: Any) -> List[dict]:
-    """``data`` (any shape chart data takes; ``None`` is no rows) as a list
-    of JSON-able dict rows."""
-    from .arrow_utils import to_records
-
-    if data is None:
-        return []
-    return _nonfinite.walk(
-        to_records(data),
-        lambda v: v.isoformat()
-        if isinstance(v, (datetime.date, datetime.time))
-        else KEEP,
-    )
+        return {
+            tid: [] if d is None else to_records(d)
+            for tid, d in self.tables.items()
+        }
 
 
 def _table_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
@@ -3451,8 +3462,8 @@ def _table_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
     table of the list ``fn`` returned (its rows, or any other items; see
     ``arrow_utils.to_arrow_table``)."""
 
-    def reply(rows: List[Any]) -> Tuple[dict, "_Payload"]:
-        payload = _Payload()
+    def reply(rows: List[Any], scope: str) -> Tuple[dict, "_Payload"]:
+        payload = _Payload(scope)
         return payload.table(fn(rows)), payload
 
     return reply
@@ -3471,7 +3482,7 @@ def _mark_fn_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
     ``{"__inputRef": i, "datum": ...}`` row (a ref can't cross the bridge);
     it becomes an ``_InputRef``, so ``d[0].datum`` reads as in JS (#591)."""
 
-    def reply(rows: List[Any]) -> Tuple[dict, "_Payload"]:
+    def reply(rows: List[Any], scope: str) -> Tuple[dict, "_Payload"]:
         return _walk(
             fn(
                 [
@@ -3480,27 +3491,57 @@ def _mark_fn_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
                     else row
                     for row in rows
                 ]
-            )
+            ),
+            scope,
         )
 
     return reply
 
 
-def _walk(root: Any) -> Tuple[dict, "_Payload"]:
+def _walk(root: Any, scope: Optional[str] = None) -> Tuple[dict, "_Payload"]:
     """``root``'s IR (a chart, a ``.layer(...)`` chain, or a mark: a root
     holds anything a mark position does), and what the walk collected
-    beside it."""
-    payload = _Payload()
+    beside it, in ``scope`` for a call's reply (see ``_Payload``)."""
+    payload = _Payload(scope)
     return root.to_dict(payload), payload
 
 
+def _json_value(value: Any) -> Any:
+    """``value`` as an IR document's JSON holds it, by one rule for every
+    part of the document (an option, a channel value, a row of a JSON
+    table): a non-finite float in its tagged form (``_nonfinite``), as JS
+    ``toJSON`` writes it; a numpy scalar as the Python value it stands for
+    (``.item()``; a ``datetime64`` as a ``datetime``); and a date, a time or
+    a datetime (a pandas ``Timestamp`` is one) as its ISO 8601 string, as
+    JSON writes a JS ``Date``. Both hosts and ``to_ir()`` write every
+    document through it, so a document is JSON wherever it goes."""
+    np = sys.modules.get("numpy")
+
+    def swap(v: Any) -> Any:
+        if np is not None and isinstance(v, np.generic):
+            item = (
+                v.astype("datetime64[us]").item()
+                if isinstance(v, np.datetime64)
+                else v.item()
+            )
+            out = swap(item)
+            return item if out is KEEP else out
+        if isinstance(v, float):
+            return encode_number(v)
+        if isinstance(v, (datetime.date, datetime.time)):
+            return v.isoformat()
+        return KEEP
+
+    return _nonfinite.walk(value, swap)
+
+
 def _document(root: dict, tables: Dict[str, Any]) -> dict:
-    """The IR document envelope around ``root`` and its ``tables``, encoded
-    once at its top (``encode_non_finite``), as JS ``toJSON`` writes it."""
+    """The IR document envelope around ``root`` and its ``tables``, written
+    as JSON once at its top (``_json_value``), as JS ``toJSON`` writes it."""
     doc: dict = {"irVersion": 0, "ir": "gofish-frontend", "root": root}
     if tables:
         doc["tables"] = tables
-    return encode_non_finite(doc)
+    return _json_value(doc)
 
 
 def _transport(root: dict, payload: "_Payload") -> dict:
@@ -3525,7 +3566,12 @@ def answer(callbacks: Dict[str, _Reply], lambda_id: str, rows_b64: str) -> dict:
     rows JS sent (base64 Arrow), register the callbacks its reply names, and
     return the reply's document, shipped like a root's: its root (a table
     reference for a derive or an accessor, a mark-position IR for a mark
-    function) and its tables as base64 Arrow."""
+    function) and its tables as base64 Arrow.
+
+    The reply's scope is the call itself, the callback and the rows, so the
+    callbacks a mark function's reply names are named by the call that made
+    them (see ``_Payload``): the same call again replaces them, and the
+    registry does not grow with each render."""
     import base64
 
     from .arrow_utils import arrow_to_records
@@ -3533,7 +3579,8 @@ def answer(callbacks: Dict[str, _Reply], lambda_id: str, rows_b64: str) -> dict:
     reply = callbacks.get(lambda_id)
     if reply is None:
         raise KeyError(f"no Python callback is registered as {lambda_id}")
-    root, payload = reply(arrow_to_records(base64.b64decode(rows_b64)))
+    scope = hashlib.sha256(f"{lambda_id}\n{rows_b64}".encode()).hexdigest()[:16]
+    root, payload = reply(arrow_to_records(base64.b64decode(rows_b64)), scope)
     callbacks.update(payload.callbacks)
     return _transport(root, payload)
 
@@ -3574,7 +3621,9 @@ class LayerBuilder(_Root):
     first tier binds the rows of the partition it sits in."""
 
     def __init__(self, tiers: List[Any]):
-        self.tiers = tiers
+        # A tier is a mark position, so it holds what one holds (`_as_mark`):
+        # a callable `(data) -> mark | chart` is a mark function, as in JS.
+        self.tiers = [_as_mark(tier) for tier in tiers]
 
     def layer(self, child: Any) -> "LayerBuilder":
         """Stack another tier; an empty ``chart()`` scope inherits the marks of

@@ -86,6 +86,25 @@ class TestCallProtocol:
         response = _call(widget, accessor, [{"x": 5}], "r-1")
         assert _reply_rows(response) == ["2"]
 
+    def test_a_repeated_call_does_not_grow_the_registry(self):
+        """A mark function mints fresh lambda ids each call, but its reply's
+        callbacks are named by the call, so drawing the same partition again
+        (a second view of the widget) replaces them; another partition adds
+        its own."""
+        widget = (
+            chart([{"x": 1}])
+            .mark(lambda d: layer([text(text=lambda r: str(len(d)))]))
+            .render()
+        )
+        lambda_id = widget.doc["root"]["mark"]["lambdaId"]
+        first = _call(widget, lambda_id, [{"x": 1}, {"x": 2}])["reply"]
+        size = len(widget.callbacks)
+        again = _call(widget, lambda_id, [{"x": 1}, {"x": 2}], "r-1")["reply"]
+        assert again["root"] == first["root"]
+        assert len(widget.callbacks) == size
+        _call(widget, lambda_id, [{"x": 3}], "r-2")
+        assert len(widget.callbacks) == size + 1
+
     def test_request_id_preserved_across_calls(self):
         """Each request_id is echoed back unchanged."""
         widget, lambda_id = _derive_widget(lambda rows: rows)

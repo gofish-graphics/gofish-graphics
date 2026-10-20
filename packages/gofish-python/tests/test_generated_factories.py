@@ -267,9 +267,9 @@ def test_non_finite_numbers_are_tagged_in_the_ir():
     assert overlap["smoothing"] == {"$numberDouble": "Infinity"}
     # The document is strict JSON: no bare Infinity / NaN.
     json.dumps(node, allow_nan=False)
-    from gofish._nonfinite import encode_non_finite
+    from gofish.ast import _json_value
 
-    assert encode_non_finite([-math.inf, math.nan, 2.0, "x"]) == [
+    assert _json_value([-math.inf, math.nan, 2.0, "x"]) == [
         {"$numberDouble": "-Infinity"},
         {"$numberDouble": "NaN"},
         2.0,
@@ -277,9 +277,9 @@ def test_non_finite_numbers_are_tagged_in_the_ir():
     ]
     # Nothing to encode: the same object back (and unchanged parts shared).
     finite = {"a": [1.0, {"b": "x"}], "c": 2}
-    assert encode_non_finite(finite) is finite
+    assert _json_value(finite) is finite
     mixed = {"keep": [1.0], "inf": math.inf}
-    out = encode_non_finite(mixed)
+    out = _json_value(mixed)
     assert out["keep"] is mixed["keep"] and out is not mixed
 
 

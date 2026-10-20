@@ -599,6 +599,25 @@ class TestLayer:
         assert len(c.tiers) == 2
         assert len(c.layer(text(text="t")).tiers) == 3
 
+    def test_a_tier_takes_a_mark_function(self):
+        """A tier is a mark position, so `.layer(fn)` takes a mark function
+        as JS does, on a chart and on a chain."""
+        base = chart([{"x": 1}]).mark(rect(h="x"))
+        for c in (
+            base.layer(lambda d: text(text="t")),
+            base.layer(text(text="a")).layer(lambda d: text(text="t")),
+        ):
+            tier = c.to_ir()["root"]["tiers"][-1]
+            assert tier["type"] == "mark-fn"
+            assert set(ir_payload(c)[1]) == {tier["lambdaId"]}
+
+    def test_a_chart_with_no_mark_in_a_layer_says_so(self):
+        """A `**rest` relate callback walks the layer's names; a chart with
+        no mark there gets the chart's own error, not an AttributeError."""
+        m = layer([chart([{"x": 1}])]).relate(lambda **rest: [])
+        with pytest.raises(ValueError, match="must have a mark"):
+            m.to_ir()
+
 
 class TestChartBuilder:
     """Test ChartBuilder and IR generation."""
@@ -640,6 +659,30 @@ class TestChartBuilder:
         assert node["mark"]["name"] == "bars"
         assert node["mark"]["h"] == "value"
         assert node["mark"]["fill"] == "grp"
+
+    def test_a_document_is_json_by_one_rule(self):
+        """Every document is JSON, by one rule wherever a value sits (an
+        option, a channel, a row of a JSON table), as each host ships it: a
+        numpy scalar is its Python value and a datetime (a pandas Timestamp
+        too) its ISO string, as tables write times."""
+        import datetime as dt
+
+        np = pytest.importorskip("numpy")
+        pd = pytest.importorskip("pandas")
+        when = dt.datetime(2024, 2, 28, 13, 0)
+        rows = [{"x": np.int64(2), "t": pd.Timestamp(when)}]
+        c = chart(rows).mark(
+            rect(w=np.int64(4), h=np.float32(1.5), x=datum(pd.Timestamp(when)))
+            .name("bars")
+        )
+        for doc in (c.to_ir(), ir_payload(c)[0]):
+            json.dumps(doc, allow_nan=False)
+        mark = c.to_ir()["root"]["mark"]
+        assert mark["w"] == 4 and type(mark["w"]) is int
+        assert mark["h"] == 1.5
+        assert mark["x"] == {"type": "datum", "datum": "2024-02-28T13:00:00"}
+        assert c.to_ir()["tables"]["t0"] == [{"x": 2, "t": "2024-02-28T13:00:00"}]
+        assert ir_payload(c)[0]["root"]["mark"] == mark
 
     def test_to_ir_ref_with_line(self):
         """Test ref(...)-as-data chart with line mark."""
