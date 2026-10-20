@@ -131,7 +131,7 @@ export const StackedArea: StoryObj<Args> = {
 };
 
 export const CircleTimeline: StoryObj<Args> = {
-  args: { w: 640 },
+  args: { w: 440 },
   tags: ["gallery"],
   parameters: {
     gallery: {
