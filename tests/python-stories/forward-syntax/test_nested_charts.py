@@ -3,7 +3,7 @@
 import math
 from datetime import datetime, timedelta, timezone
 
-from gofish import chart, circle, line, scatter, spread
+from gofish import chart, circle, line, rect, scatter, spread, text
 
 # Quarterly sales at three stores.
 SALES = [
@@ -79,4 +79,29 @@ def story_daily_highs_over_readings():
             .mark(circle(r=4, fill="firebrick"))
         ),
         {"w": 560, "h": 220},
+    )
+
+
+def story_captioned_bars_per_group():
+    """An empty `chart()` scope as a child of a combinator in a mark
+    position: per store, its name under a small bar chart of its quarters.
+    The mark is the `spread([...])`, and its chart child binds the store's
+    rows, as an empty scope does wherever a chart sits."""
+    return (
+        chart(SALES, axes=False)
+        .flow(spread(by="store", dir="x", spacing=32, alignment="end"))
+        .mark(
+            spread(
+                [
+                    chart()
+                    .flow(spread(by="quarter", dir="x", spacing=4))
+                    .mark(rect(w=16, h="sales", fill="#08519c")),
+                    text(text="store", font_size=12),
+                ],
+                dir="y",
+                spacing=8,
+                alignment="middle",
+            )
+        ),
+        {"w": 420, "h": 220},
     )

@@ -144,11 +144,12 @@ the tiers that `previous-tier` data (below) speaks of.
 A chart's `data` is one of three:
 
 - `{type: "table", id}` names rows of the chart's own. The rows travel
-  beside the IR, keyed by that id: in a document's `tables` as JSON, or in a
-  Python host's Arrow tables (§ One renderer, two hosts). The ids are the
-  writer's own, unique within one payload; both writers mint them in walk
-  order (`t0`, `t1`, ...), and the same rows object, used by two charts, is
-  one table.
+  beside the IR, keyed by that id, in the document's `tables`: JSON rows in a
+  document JS `toJSON` or Python `to_ir()` writes, or base64 Arrow when a
+  Python host ships it, which the host decodes before rebuilding (§ One
+  renderer, two hosts). The ids are the writer's own, unique within one
+  document; both writers mint them in walk order (`t0`, `t1`, ...), and the
+  same rows object, used by two charts, is one table.
 - `{type: "select", layer, mode?}` reads the marks a sibling named
   (`ref(name)`, `selectAll(name)`).
 - `{type: "previous-tier"}` marks an empty `chart()` scope: its rows are the
@@ -216,13 +217,15 @@ chain, by one rule, because JS allows one wherever a mark sits:
 `.mark(chart(...))`, `.mark(chart().flow(...).mark(...).layer(...))`,
 `layer([rect(...), chart(...)])`. The deserializer (`mapMark`) rebuilds the
 same `chart(...)` builder or `LayerBuilder` chain a JS author writes there,
-and the mark machinery binds an empty scope to the partition's rows, as for
-the JS object. A layer of charts is the `layer` combinator mark whose
-children are `ChartIR`s, like any combinator, at the root too. Both emitters
-write the same thing: Python's `to_dict()` on a chart, a chain or a mark,
-and JS `toJSON`, where `.mark(chart(...))` and `.mark(chain)` leave a mark
-whose wire form (`withWire`) is the builder. A nested chart is a pure spec,
-so it needs no call back into Python, and the notebook widget draws it.
+and the mark machinery (`resolveMarkResult`, which resolves every mark
+position against its partition's rows) binds an empty scope to the
+partition's rows, as for the JS object. A layer of charts is the `layer`
+combinator mark whose children are `ChartIR`s, like any combinator, at the
+root too. Both emitters write the same thing: Python's walk (`to_ir()`) of a
+chart, a chain or a mark, and JS `toJSON`, where `.mark(chart(...))` and
+`.mark(chain)` store the builder itself as the chart's mark. A nested chart
+is a pure spec, so it needs no call back into Python, and the notebook widget
+draws it.
 `position` is `enclose`'s undecorated sibling: it sets a single child's
 min-corner `(x, y)` in the parent's coordinates and draws nothing of its own
 (no hull, no styling) — a workaround for `enclose`'s convex-bbox-hull-only

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, spread, scatter, circle, line } from "../../src/lib";
+import { chart, spread, scatter, circle, line, rect, text } from "../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax/Nested Charts",
@@ -96,6 +96,29 @@ export const DailyHighsOverReadings: StoryObj<Args> = {
         chart(dailyHighs)
           .flow(scatter({ by: "time", x: "time", y: "temp" }))
           .mark(circle({ r: 4, fill: "firebrick" }))
+      )
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+// An empty `chart()` scope as a child of a combinator in a mark position: per
+// store, its name under a small bar chart of its quarters. The mark is the
+// `spread([...])`, and its chart child binds the store's rows, as an empty
+// scope does wherever a chart sits.
+export const CaptionedBarsPerGroup: StoryObj<Args> = {
+  args: { w: 420, h: 220 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(sales, { axes: false })
+      .flow(spread({ by: "store", dir: "x", spacing: 32, alignment: "end" }))
+      .mark(
+        spread({ dir: "y", spacing: 8, alignment: "middle" }, [
+          chart()
+            .flow(spread({ by: "quarter", dir: "x", spacing: 4 }))
+            .mark(rect({ w: 16, h: "sales", fill: "#08519c" })),
+          text({ text: "store", fontSize: 12 }),
+        ])
       )
       .render(container, { w: args.w, h: args.h });
     return container;

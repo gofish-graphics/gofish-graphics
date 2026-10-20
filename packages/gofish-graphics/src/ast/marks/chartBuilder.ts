@@ -42,7 +42,7 @@ import {
   installBuildIn,
   type BuildClockOptions,
 } from "../../animation/install";
-import { withWire, wireOf } from "../wire";
+import { wireOf } from "../wire";
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:
@@ -567,10 +567,12 @@ type RenderMeta = {
  * resolve itself to a node, and the chart-level config to render it with.
  *
  * Both builders sit wherever a chart can, by one rule: at the root, or in a
- * mark position (`.mark(...)`, a `layer([...])` child), where an empty scope
- * binds the rows of the enclosing scope. So each also says whether it is an
- * empty scope (`usesPreviousLayerMarks`), binds rows to it (`withData`), and
- * resolves into an enclosing scope's registry (`withLayerContext`).
+ * mark position (`.mark(...)`, a combinator's child), where an empty scope
+ * binds the rows of the partition it sits in ({@link inScope}, which
+ * `resolveMarkResult` applies wherever a mark position resolves its child).
+ * So each also says whether it is an empty scope (`usesPreviousLayerMarks`),
+ * binds rows to it (`withData`), and resolves into an enclosing scope's
+ * registry (`withLayerContext`).
  *
  * The methods are `declare`d (their bodies come from `attachBuilderTerminals`
  * below) so the terminal list stays defined in exactly one place. Their
@@ -588,6 +590,12 @@ export abstract class RenderableBuilder {
   /** A copy of this builder that resolves into `layerContext`. */
   abstract withLayerContext(layerContext: LayerContext): RenderableBuilder;
 
+  /** This builder in a mark position whose partition holds `rows`: an empty
+   *  scope binds them; any other builder keeps its own data. */
+  inScope(rows: unknown): RenderableBuilder {
+    return this.usesPreviousLayerMarks() ? this.withData(rows) : this;
+  }
+
   declare render: TerminalMethods<BuildClockOptions>["render"];
   declare toSVG: TerminalMethods<BuildClockOptions>["toSVG"];
   declare toSVGElement: TerminalMethods<BuildClockOptions>["toSVGElement"];
@@ -601,7 +609,9 @@ type ChartBuilderState<TInput, TOutput> = {
   data: TInput;
   options?: ChartOptions;
   operators: Operator<any, any>[];
-  finalMark?: Mark<TOutput>;
+  /** A mark, or a chart or chain in the mark position (resolved by
+   *  `resolveMarkResult` against each partition's rows). */
+  finalMark?: Mark<TOutput> | RenderableBuilder;
   layerContext: LayerContext;
   nodeZOrder?: number;
   nodeName?: string;
@@ -714,20 +724,9 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   mark(
     mark: Mark<TOutput> | ChartBuilder<any, any> | LayerBuilder
   ): ChartBuilder<TInput, TOutput> | LayerBuilder {
-    if (mark instanceof RenderableBuilder) {
-      // The wrapper's wire form is the nested chart or chain itself, so the IR
-      // emitter writes it as its own `ChartIR` or `LayerChainIR` (see
-      // `Frontend.MarkIR`).
-      const finalMark = withWire(
-        ((d: TOutput, _key, layerContext) =>
-          (mark.usesPreviousLayerMarks()
-            ? mark.withData(d)
-            : mark
-          ).withLayerContext(layerContext ?? {})) as Mark<TOutput>,
-        mark
-      );
-      return this.with({ finalMark });
-    }
+    // A chart or chain is the mark itself, as in any mark position.
+    if (mark instanceof RenderableBuilder)
+      return this.with({ finalMark: mark });
 
     // Only fuse when this chart's data is genuine per-row data that still
     // needs anchors drawn for it. The OTHER well-established bag-form usage —
@@ -928,10 +927,15 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     // a wrapper, so the caller's function is left as it was.
     const finalMark = this.state.finalMark as any;
     const nameable =
-      typeof finalMark.name === "function"
+      typeof finalMark === "function" && typeof finalMark.name === "function"
         ? finalMark
         : nameableMark(((d, key, layerContext) =>
-            finalMark(d, key, layerContext)) as Mark<TOutput>);
+            resolveMarkResult(
+              finalMark,
+              layerContext,
+              d,
+              key
+            )) as Mark<TOutput>);
     const named = nameable.name(autoName) as Mark<TOutput>;
     // Swap the mark in directly instead of re-entering `mark()`: `named` can
     // still carry `__relationalFusable`, and fusion was already decided (and
@@ -991,6 +995,8 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   private async resolveNamed(
     name: string | symbol | undefined
   ): Promise<GoFishNode[]> {
+    // An operator hands the mark it wraps to `resolveMarkResult`, so a chart
+    // or chain in the mark position passes through the flow as a mark does.
     let composedMark = this.state.finalMark as Mark<any>;
     for (const op of this.state.operators.toReversed()) {
       composedMark = await op(composedMark);
@@ -999,8 +1005,9 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     const data = await this.resolveData();
 
     const content = await resolveMarkResult(
-      composedMark(data as any, undefined, this.state.layerContext),
-      this.state.layerContext
+      composedMark,
+      this.state.layerContext,
+      data
     );
 
     // Populate layerContext by walking the finished tree in DFS order.
@@ -1359,16 +1366,7 @@ export class LayerBuilder extends RenderableBuilder {
         // as before. With no previous bag (the previous tier named nothing),
         // the tier has no rows.
         nodes.push(
-          await resolveMarkResult(
-            typeof tier === "function"
-              ? (tier as Mark<any>)(
-                  prevRefs ?? NO_ROWS,
-                  undefined,
-                  sharedContext
-                )
-              : tier,
-            sharedContext
-          )
+          await resolveMarkResult(tier, sharedContext, prevRefs ?? NO_ROWS)
         );
         // A bare mark tier isn't auto-named, so it never becomes the next
         // tier's producer.

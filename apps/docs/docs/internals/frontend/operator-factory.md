@@ -207,8 +207,11 @@ Same machinery, simpler:
    (`src/ast/types.ts`): a `Mark<T>` function, an already-resolved node
    (e.g. `ref(...)`), a promise of one (e.g. a `cut(...)` slice), or a chart
    or layer builder. The list itself may be a promise (e.g. when produced by
-   `map(...)`). Every child goes through `resolveMarkResult`. `layer` and the
-   Porter-Duff combinators in `chart.ts` take the same `MarkChild` type. The
+   `map(...)`). Every child goes through `resolveMarkResult` with `d` and its
+   index as its key, the one rule for a mark position: a mark is called with
+   them, and an empty-scope chart or chain binds `d`. `layer` and the
+   Porter-Duff combinators in `chart.ts` take the same `MarkChild` type and
+   resolve each child the same way. The
    internal node-level operators (`Spread`, `Layer`, ...) that `layout` wraps
    are not exported; the combinator form is the public way to pass explicit
    children.

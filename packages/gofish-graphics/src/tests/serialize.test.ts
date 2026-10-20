@@ -1652,6 +1652,49 @@ async function main() {
     );
   }
 
+  console.log("\n# An empty chart() scope as a combinator child in a mark position");
+  {
+    // A chart sits in any mark position by one rule: an empty scope binds
+    // the rows of the partition it sits in, as a `spread([...])` child as in
+    // `.mark(...)`. Each group's bar chart draws that group's rows, natively
+    // and through the IR.
+    const rows = [
+      { g: "a", q: 1, v: 3 },
+      { g: "a", q: 2, v: 5 },
+      { g: "b", q: 1, v: 2 },
+    ];
+    const heights = (dl: any): number[] => {
+      const out: number[] = [];
+      const walk = (it: any) => {
+        if (it.kind === "rect" && it.w === 7) out.push(it.h);
+        for (const c of it.children ?? []) walk(c);
+      };
+      dl.items.forEach(walk);
+      return out.sort((x, y) => x - y);
+    };
+    const c = chart(rows, { axes: false })
+      .flow(spread({ by: "g", dir: "x" }))
+      .mark(
+        spread({ dir: "y" }, [
+          chart()
+            .flow(spread({ by: "q", dir: "x" }))
+            .mark(rect({ w: 7, h: "v" })),
+          rect({ w: 20, h: 2 }),
+        ])
+      );
+    const native = heights(await c.toDisplayList({ w: 200, h: 100 }));
+    const doc = await c.toJSON();
+    const viaIR = heights(
+      await Serialize.buildIR(doc).toDisplayList({ w: 200, h: 100 })
+    );
+    const bars = native.length === 3 && native.every((h) => h > 0);
+    check(
+      "an empty-scope chart() child of spread([...]) draws its group's rows",
+      bars && JSON.stringify(viaIR) === JSON.stringify(native),
+      JSON.stringify({ native, viaIR })
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exit(1);

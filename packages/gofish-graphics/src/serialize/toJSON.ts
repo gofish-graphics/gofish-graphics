@@ -25,6 +25,7 @@ import {
   ChartBuilder,
   LayerBuilder,
   PREVIOUS_LAYER_MARKS,
+  RenderableBuilder,
 } from "../ast/marks/chartBuilder";
 import { GoFishRef } from "../ast/_ref";
 import { wireOf } from "../ast/wire";
@@ -112,10 +113,10 @@ function readTag(value: unknown): SerializeTag | undefined {
  * resolves these to walk into them.
  */
 export async function toJSON(
-  root: ChartBuilder<any> | LayerBuilder | Mark<any>
+  root: RenderableBuilder | Mark<any>
 ): Promise<Frontend.FrontendIRDocument> {
   const tables = new TableIds();
-  return document(await markToIR(root as Mark<any>, tables), tables);
+  return document(await markToIR(root, tables), tables);
 }
 
 /**
@@ -165,7 +166,7 @@ interface ChartBuilderInternals {
   data: unknown;
   options?: AnyObject;
   operators: Operator<any, any>[];
-  finalMark?: Mark<any>;
+  finalMark?: Mark<any> | RenderableBuilder;
   nodeZOrder?: number;
   nodeName?: string;
 }
@@ -288,27 +289,23 @@ async function layerChainToIR(
 }
 
 async function markToIR(
-  mark: Mark<any>,
+  mark: Mark<any> | RenderableBuilder,
   tables: TableIds
 ): Promise<Frontend.MarkIR> {
-  // A whole chart or `.layer(...)` chain in a mark position is its own
-  // `ChartIR` or `LayerChainIR` (see `Frontend.MarkIR`): a `layer([...])`
-  // child holds the builder itself, and `.mark(chart(...))` a mark whose wire
-  // form is the builder. A root is a mark position too.
-  const builder =
-    (mark as unknown) instanceof ChartBuilder ||
-    (mark as unknown) instanceof LayerBuilder
-      ? mark
-      : wireOf(mark);
-  if (builder instanceof ChartBuilder)
-    return chartBuilderToChartIR(builder, tables);
-  if (builder instanceof LayerBuilder) return layerChainToIR(builder, tables);
+  // A whole chart or `.layer(...)` chain in a mark position (the root, a
+  // `.mark(...)`, a combinator's child) is the builder itself, written as its
+  // own `ChartIR` or `LayerChainIR` (see `Frontend.MarkIR`).
+  if (mark instanceof RenderableBuilder) {
+    return mark instanceof LayerBuilder
+      ? layerChainToIR(mark, tables)
+      : chartBuilderToChartIR(mark as ChartBuilder<any>, tables);
+  }
   const tag = readTag(mark);
   if (!tag) {
     throw new Error(
       "encountered an untagged mark in toJSON; either add a serialize " +
-        "config to its factory or attach its IR form with withWire " +
-        "field at the construction site"
+        "config to its factory or attach its IR form with withWire at the " +
+        "construction site"
     );
   }
   // Chained `.name()` / `.label()` calls land in dedicated tag slots; both
