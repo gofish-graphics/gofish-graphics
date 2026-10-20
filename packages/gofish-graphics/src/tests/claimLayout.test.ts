@@ -139,6 +139,25 @@ async function main() {
     }
   }
 
+  console.log("\n# a sized chart's plot leaves out the nested label rows");
+  {
+    // A grouped bar chart: each group's category labels are a ring of the
+    // inner group, and they sit below the 200 px plot, not inside it. The
+    // y domain nices to [0, 10], so the bar of 10 is the whole plot.
+    const rows = ["a", "b"].flatMap((g) =>
+      ["p", "q"].map((i, j) => ({ g, i, v: 5 * (j + 1) }))
+    );
+    const dl = await chart(rows, { w: 200, h: 200 })
+      .flow(spread({ by: "g", dir: "x" }), stack({ by: "i", dir: "x" }))
+      .mark(rect({ h: "v" }))
+      .toDisplayList();
+    const bars = items(dl).filter(
+      (i) => i.kind === "rect" && i.w !== undefined && i.w > 1
+    );
+    const tallest = Math.max(...bars.map((r) => r.h ?? 0));
+    check("the tallest bar fills the 200 px plot", close(tallest, 200, 1e-3), tallest);
+  }
+
   report();
 }
 

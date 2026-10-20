@@ -256,9 +256,7 @@ const plotIn = (
  *  other node. */
 const chartChrome = (node: GoFishNode, axis: 0 | 1, px: number): number => {
   const content = node.children[0];
-  return node._chartBox?.[axis] === true &&
-    content instanceof GoFishNode &&
-    content.chrome !== undefined
+  return node._chartBox?.[axis] === true && content instanceof GoFishNode
     ? sum(guttersAroundPlot(content, axis, px))
     : 0;
 };
@@ -857,13 +855,15 @@ export const layer = createNodeOperatorSequential(
           }) as [Extent | undefined, Extent | undefined];
           // A node with a size of its own is a part of its parent's plot,
           // chrome and dressing included.
-          node._plotExtent = plotIsClaim
-            ? undefined
-            : (([0, 1] as const).map((axis) =>
-                dims[axis].size !== undefined
-                  ? claims[axis]
-                  : at(axis, plot[axis])
-              ) as [Extent | undefined, Extent | undefined]);
+          const chromeContent = node.chrome?.content.resolvePlotExtent();
+          node._plotExtent =
+            plotIsClaim && chromeContent === undefined
+              ? undefined
+              : (([0, 1] as const).map((axis) =>
+                  dims[axis].size !== undefined
+                    ? claims[axis]
+                    : at(axis, (chromeContent ?? plot)[axis])
+                ) as [Extent | undefined, Extent | undefined]);
           return claims;
         },
         layout: (size, scales, children, node, region) => {

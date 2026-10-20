@@ -778,7 +778,9 @@ report their size).
 - **A chart with a size of its own.** Its chrome dresses its content inside
   the chart's frame (`frameChart`), so the frame's literal size is the plot:
   the frame adds the gutters its content's claims give around a plot of that
-  size (`guttersAroundPlot`), and claims that total.
+  size (`guttersAroundPlot`), and claims that total. Its content need not
+  wear chrome of its own: a label hanging off the first bar is dressing, so
+  it too adds around the plot.
 - **The plot leaves out dressing.** Dressing is what is placed beside a node
   the claim walk places elsewhere: a value label beside its bar's `ref`, a
   tier of texts seated beside the bars of another tier, and a ring's axes,
@@ -786,11 +788,16 @@ report their size).
   next to its claim (`GoFishNode.resolvePlotExtent`): a layer composes its
   children's plot claims the way it composes their claims, its hull of what
   its constraints place leaves out the dressing (`placeByClaims`' plot
-  hull), and a chain with a stand-in is laid by every part but reaches only
-  as far as its stand-ins (`chainFold`'s `reaches`). A chain's other parts,
-  and the children of an align (which places them by their whole boxes),
-  count whole, so a label that hangs off one row of a spread takes room
-  between the rows and is part of the plot. A child that reads y the other
+  hull). A node that wears chrome has its content's plot as its plot: its
+  rings are never plot, so a grouped bar chart's inner row of category
+  labels adds around the outer chart's plot, as its own axes do. A chain is
+  laid by every part's whole claim but reaches only as far as each part's
+  plot (`chainFold`'s `reaches`), and a chain with a stand-in only as far as
+  its stand-ins. So a label that hangs between two rows of a spread takes
+  room between them and is part of the plot, and one that hangs off the
+  last row is not. An align counts the plot of a child it seats at its own
+  data or at its origin, and the whole of a child it places by its box
+  (`overlayClaim`). A child that reads y the other
   way has its plot read reflected within its box. The gutters of a chart
   are its claim past the plot claim of its content (`claims` in
   `chromeGutters.ts`), so a chart with a size of its own maps that plot into

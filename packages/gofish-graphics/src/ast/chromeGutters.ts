@@ -38,7 +38,7 @@ import { originIs } from "./underlyingSpace";
  *  place its shapes in the claim walk (it is not a layer). */
 function ringsAround(chart: GoFishNode, axis: 0 | 1): Extent | undefined {
   let inner: Extent = Extent(Monotonic.linear(1, 0));
-  for (const ring of chart.chrome!.rings) {
+  for (const ring of chart.chrome?.rings ?? []) {
     const place = ring.claimWalk?.placeChildren;
     if (place === undefined) return undefined;
     const extents = ring.children.map((c, i): Size<Extent | undefined> => {
@@ -60,7 +60,7 @@ function claims(
   const chartClaim = chart.resolveExtent()[axis];
   // The plot is the content without its dressing (a value label beside
   // its bar): like chrome, dressing adds around the plot (#1032).
-  const plotClaim = chart.chrome!.content.resolvePlotExtent()[axis];
+  const plotClaim = (chart.chrome?.content ?? chart).resolvePlotExtent()[axis];
   if (chartClaim === undefined || plotClaim === undefined) return undefined;
   const keyed = chart.tryGetRenderSession()?.keyedDomains;
   const space = chart._underlyingSpace?.[axis];

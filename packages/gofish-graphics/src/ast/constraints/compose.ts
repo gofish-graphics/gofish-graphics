@@ -710,10 +710,11 @@ export function composePlanExtents(
   // The plot's claim instead (`GoFishNode.resolvePlotExtent`): each child's
   // plot claim, and which children are stand-ins. A chain with a stand-in
   // is laid by every part and reaches only as far as its stand-ins: its
-  // other parts are dressing laid beside them. An align places its
-  // children by their whole boxes, so they count whole there, as a chain's
-  // other parts do; a child no fold covers sits at its origin, and counts
-  // its plot.
+  // other parts are dressing laid beside them. An align counts the plot of
+  // a child it seats where it does whatever its box (at its own data, or at
+  // the origin), and the whole of a child it places by its box, as a
+  // chain's other parts count whole; a child no fold covers sits at its
+  // origin, and counts its plot.
   plot?: { extents: Size<Extent | undefined>[]; standIn: boolean[] }
 ): {
   covered: [boolean, boolean];
@@ -731,10 +732,6 @@ export function composePlanExtents(
     if (fragments === undefined || space === undefined) continue;
     covered[axis] = true;
     const reached = plot?.extents ?? childExtents;
-    const reaches = (idx: number[]) =>
-      plot !== undefined && idx.some((i) => plot.standIn[i])
-        ? idx.map((i) => plot.standIn[i])
-        : undefined;
     // An operand's claim in the layer's axis order.
     const operand = (claims: Size<Extent | undefined>[], i: number) => {
       const e = claims[i][axis];
@@ -742,21 +739,42 @@ export function composePlanExtents(
         ? Extent(e.descent, e.ascent)
         : e;
     };
+    // How far each part of a chain reaches in the plot, given the parts'
+    // claims: a chain with a stand-in reaches only as far as its
+    // stand-ins, and any other chain as far as each part's plot. Undefined
+    // when every part reaches as far as it takes room.
+    const reaches = (idx: number[], parts: (Extent | undefined)[]) => {
+      if (plot === undefined) return undefined;
+      if (idx.some((i) => plot.standIn[i]))
+        return idx.map((i, k) => (plot.standIn[i] ? parts[k] : undefined));
+      const own = (i: number) =>
+        plot.extents[i][axis] === childExtents[i][axis];
+      if (idx.every(own)) return undefined;
+      return idx.map((i, k) => (own(i) ? parts[k] : operand(plot.extents, i)));
+    };
+    const chainExtent = (
+      idx: number[],
+      f: Fragment & { kind: "distribute" }
+    ) => {
+      const parts = idx.map((i) => operand(childExtents, i));
+      return distributeExtentFold(
+        parts,
+        idx.map((i) => childSpaces[i][axis]),
+        f.space,
+        foldOptions(f.seg),
+        reaches(idx, parts)
+      );
+    };
     const fragmentExtent = (f: Fragment): Extent | undefined =>
       f.kind === "distribute"
-        ? distributeExtentFold(
-            f.seg.idx.map((i) => operand(childExtents, i)),
-            f.seg.idx.map((i) => childSpaces[i][axis]),
-            f.space,
-            foldOptions(f.seg),
-            reaches(f.seg.idx)
-          )
+        ? chainExtent(f.seg.idx, f)
         : f.kind === "align"
           ? resolveAlignmentExtent(
               f.al.idx.map((i) => operand(childExtents, i)),
               f.al.idx.map((i) => childSpaces[i][axis]),
               f.al.anchor,
-              f.space
+              f.space,
+              plot && f.al.idx.map((i) => operand(plot.extents, i))
             )
           : reached[f.index][axis];
     const extent = unionChildExtents(

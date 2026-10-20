@@ -407,6 +407,8 @@ type Arith<T> = {
   scale: (k: number, x: T) => T;
   /** The upper envelope of `xs`. */
   max: (xs: T[]) => T;
+  /** `−x`. */
+  negate: (x: T) => T;
 };
 
 const numbers: Arith<number> = {
@@ -415,6 +417,7 @@ const numbers: Arith<number> = {
   add: (...xs) => xs.reduce((sum, x) => sum + x, 0),
   scale: (k, x) => k * x,
   max: (xs) => Math.max(...xs),
+  negate: (x) => -x,
 };
 
 const monotonics: Arith<Monotonic.Monotonic> = {
@@ -423,6 +426,7 @@ const monotonics: Arith<Monotonic.Monotonic> = {
   add: Monotonic.add,
   scale: Monotonic.smul,
   max: Monotonic.envelope,
+  negate: Monotonic.negate,
 };
 
 /** How a chain lays its parts: where each part sits about its chain point
@@ -485,9 +489,10 @@ const spreadRule = (anchor: AlignAnchor | "edge"): ChainRule => ({
  * linear or piecewise).
  *
  * With `reaches`, the chain is laid by every part but reaches only as far
- * as the parts `reaches` marks: the plot of a chain whose other parts are
- * dressing (a label laid beside a stand-in for its bar; see
- * `GoFishNode.resolvePlotExtent`).
+ * as each part's entry, in the part's own frame (undefined: that part
+ * reaches nothing): the plot of the chain (see
+ * `GoFishNode.resolvePlotExtent`), where each part reaches as far as its
+ * plot and a label it carries past it is dressing.
  */
 function chainFold<T>(
   A: Arith<T>,
@@ -495,7 +500,7 @@ function chainFold<T>(
   rule: ChainRule,
   spacing: number,
   origin: StackOrigin<number> = { part: 0, fraction: 0, mirrored: false },
-  reaches?: boolean[]
+  reaches?: (Sides<T> | undefined)[]
 ): Sides<T> {
   const up: T[] = reaches === undefined ? [A.zero] : [];
   const down: T[] = reaches === undefined ? [A.zero] : [];
@@ -504,9 +509,11 @@ function chainFold<T>(
   parts.forEach((part, k) => {
     const seat = rule.seat(A, part);
     const step = rule.step(A, part, spacing);
-    if (reaches === undefined || reaches[k]) {
-      up.push(A.add(at, seat.ascent));
-      down.push(A.add(seat.descent, A.scale(-1, at)));
+    const reach =
+      reaches === undefined ? seat : seatedReach(A, part, seat, reaches[k]);
+    if (reach !== undefined) {
+      up.push(A.add(at, reach.ascent));
+      down.push(A.add(reach.descent, A.scale(-1, at)));
     }
     if (k === origin.part) zero = A.add(at, A.scale(origin.fraction, step));
     at = A.add(at, step);
@@ -518,6 +525,23 @@ function chainFold<T>(
   };
 }
 
+/** Where `reach`, in `part`'s own frame, sits about the part's chain point
+ *  when the part sits there as `seat`: moved as the part's origin is. */
+function seatedReach<T>(
+  A: Arith<T>,
+  part: Sides<T>,
+  seat: Sides<T>,
+  reach: Sides<T> | undefined
+): Sides<T> | undefined {
+  if (reach === undefined) return undefined;
+  if (reach === part) return seat;
+  if (seat === part) return reach;
+  return {
+    ascent: A.add(seat.ascent, A.negate(part.ascent), reach.ascent),
+    descent: A.add(seat.descent, A.negate(part.descent), reach.descent),
+  };
+}
+
 /** {@link chainFold} over claims, as one Extent. With every part linear or
  *  piecewise it is exact; otherwise the fold runs in numbers at each σ, so a
  *  closure walks the parts once per evaluation. */
@@ -526,13 +550,12 @@ function chainClaim(
   rule: ChainRule,
   spacing: number,
   origin?: StackOrigin<number>,
-  reaches?: boolean[]
+  reaches?: (Extent | undefined)[]
 ): Extent {
-  if (
-    parts.every(
-      (p) => !Monotonic.isUnknown(p.ascent) && !Monotonic.isUnknown(p.descent)
-    )
-  ) {
+  const known = (p: Extent | undefined) =>
+    p === undefined ||
+    (!Monotonic.isUnknown(p.ascent) && !Monotonic.isUnknown(p.descent));
+  if (parts.every(known) && (reaches === undefined || reaches.every(known))) {
     const { ascent, descent } = chainFold(
       monotonics,
       parts,
@@ -553,7 +576,10 @@ function chainClaim(
       rule,
       spacing,
       origin,
-      reaches
+      reaches?.map(
+        (p) =>
+          p && { ascent: p.ascent.run(sigma), descent: p.descent.run(sigma) }
+      )
     );
   return Extent(
     Monotonic.unknown((sigma) => at(sigma).ascent),
@@ -588,20 +614,30 @@ export function distributeExtentFold(
   targetSpaces: UnderlyingSpace[],
   space: UnderlyingSpace,
   opts: DistributeFoldOptions,
-  // The plot of the chain instead (`chainFold`'s `reaches`): only the
-  // marked parts reach.
-  reaches?: boolean[]
+  // The plot of the chain instead (`chainFold`'s `reaches`): how far each
+  // part reaches, in its own frame (its plot's claim; its claim when it
+  // reaches as far as it takes room; undefined when it reaches nothing).
+  reaches?: (Extent | undefined)[]
 ): Extent | undefined {
+  const tails = () =>
+    targetExtents.map((e, i) => tailClaim(targetSpaces[i], e!));
+  // Each part's reach in its tail's frame: a part that is its box
+  // (`tailClaim`) has its origin `descent` above the box's start.
+  const tailReaches = (parts: Extent[]) =>
+    reaches?.map((r, i) => {
+      const whole = targetExtents[i]!;
+      if (r === whole) return parts[i];
+      if (r === undefined || parts[i] === whole) return r;
+      return Extent(
+        Monotonic.add(whole.descent, r.ascent),
+        Monotonic.add(r.descent, Monotonic.negate(whole.descent))
+      );
+    });
   if (isCONTINUOUS(space)) {
     if (opts.size !== undefined && isValue(opts.size))
       return impliedExtent(space);
-    return chainClaim(
-      targetExtents.map((e, i) => tailClaim(targetSpaces[i], e!)),
-      STACK,
-      0,
-      opts.origin,
-      reaches
-    );
+    const parts = tails();
+    return chainClaim(parts, STACK, 0, opts.origin, tailReaches(parts));
   }
   // A stack whose parts are not all continuous with an origin is a spread
   // (see `distributeSpaceFold`), but its layout still lays each part's tail
@@ -621,14 +657,10 @@ export function distributeExtentFold(
   // its origin, where layout seats its first part's anchor: an edge chain
   // starts there, and a pitched chain reaches past it on both sides (its
   // plot is measured from there too).
-  if (opts.glue)
-    return chainClaim(
-      targetExtents.map((e, i) => tailClaim(targetSpaces[i], e!)),
-      STACK,
-      0,
-      opts.origin,
-      reaches
-    );
+  if (opts.glue) {
+    const parts = tails();
+    return chainClaim(parts, STACK, 0, opts.origin, tailReaches(parts));
+  }
   return chainClaim(
     targetExtents as Extent[],
     spreadRule(opts.anchor),
