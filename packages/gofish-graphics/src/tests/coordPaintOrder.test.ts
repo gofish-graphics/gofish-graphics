@@ -18,7 +18,8 @@ import { flattenLayout } from "../ast/coordinateTransforms/bake";
 import { Rect } from "../ast/shapes/rect";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
-import { enclose } from "../ast/graphicalOperators/enclose";
+import { enclose, line } from "../lib";
+import { ref } from "../ast/shapes/ref";
 import { intersect } from "../ast/graphicalOperators/porterDuff";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
 
@@ -379,6 +380,37 @@ console.log("# a z constraint between a compositor's operands is an error");
     ]),
     "zAbove(a, b)",
     "composites"
+  );
+}
+
+console.log(
+  "# relate keeps the paint-order defaults a layer gave its relational children"
+);
+{
+  // A relational mark among a layer's children paints under the nodes it
+  // reads (the zBelow defaults layer installs); a later .relate() on the
+  // layer replaces the author's constraints and keeps those defaults.
+  const A = Rect({ x: 0, y: 0, w: 40, h: 40 }).name("a");
+  const B = Rect({ x: 60, y: 0, w: 40, h: 40 }).name("b");
+  const E = await enclose({ fill: "#eee" }, [ref(A), ref(B)]);
+  await expectLowerOrder(
+    "an enclose child paints under a and b after .relate()",
+    Layer([A, B, E]).relate((c: any) => [
+      Constraint.align({ y: "start" }, [c.a, c.b]),
+    ]),
+    { A, B, E },
+    "E,A,B"
+  );
+  const C = Rect({ x: 0, y: 0, w: 40, h: 40 }).name("c");
+  const D = Rect({ x: 60, y: 0, w: 40, h: 40 }).name("d");
+  const L = await line({ stroke: "black" }, [ref(C), ref(D)]);
+  await expectLowerOrder(
+    "a line child paints under its ends after .relate()",
+    Layer([C, D, L]).relate((c: any) => [
+      Constraint.align({ y: "start" }, [c.c, c.d]),
+    ]),
+    { C, D, L },
+    "L,C,D"
   );
 }
 

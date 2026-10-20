@@ -15,7 +15,7 @@
  * reads it. The placement itself is in `ast/graphicalOperators/overlap.ts`.
  */
 import type { Frontend } from "gofish-ir";
-import { bareKind } from "../ast/strategyKind";
+import { bareKind, given } from "../ast/strategyKind";
 
 /** Every built-in overlap strategy: the value of `scatter`'s `overlap`. */
 export type Overlap = Frontend.OverlapIR;
@@ -32,13 +32,6 @@ export type NoiseOptions = Omit<NoiseStrategy, "kind">;
 
 /** How `noise()` draws each dot's offset inside the outline. */
 export type NoiseRandomness = NonNullable<NoiseOptions["randomness"]>;
-
-/** The options that were given: an option left `undefined` does not
- *  override a preset. */
-const given = <T extends object>(opts: T): Partial<T> =>
-  Object.fromEntries(
-    Object.entries(opts).filter(([, v]) => v !== undefined)
-  ) as Partial<T>;
 
 /**
  * Keep dots apart: each dot keeps its position on the data axis and moves

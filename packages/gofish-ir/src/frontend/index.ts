@@ -48,6 +48,8 @@ export {
   DESCRIPTOR_TABLES,
   acceptedFields,
   carriesChannel,
+  carriesNodes,
+  mapHeldNodes,
   pyType,
   refPyClass,
   AUTHORED_REFS,

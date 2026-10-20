@@ -57,6 +57,7 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
         ...(type.exclusiveMin !== undefined
           ? { exclusiveMinimum: type.exclusiveMin }
           : {}),
+        ...(type.max !== undefined ? { maximum: type.max } : {}),
       };
     case "boolean":
       return { type: "boolean" };
@@ -279,15 +280,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           description:
             "Rows of the chart's own, by id: they travel beside the IR (a document's tables, or a Python host's Arrow tables).",
         },
-        {
-          type: "object",
-          required: ["type", "layer"],
-          properties: {
-            type: { const: "select" },
-            layer: { type: "string" },
-            mode: { enum: ["one", "all"] },
-          },
-        },
+        { $ref: "#/$defs/SelectRefIR" },
         {
           type: "object",
           required: ["type"],
@@ -666,6 +659,31 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           },
         },
       ],
+    },
+    NodeSelectionIR: {
+      description:
+        "Nodes named inside an option (a blob's `avoiding`): a list of refs, or every node of a named layer (selectAll).",
+      oneOf: [
+        { type: "array", items: { $ref: "#/$defs/RefMarkIR" } },
+        {
+          allOf: [
+            { $ref: "#/$defs/SelectRefIR" },
+            { required: ["mode"], properties: { mode: { const: "all" } } },
+          ],
+        },
+      ],
+    },
+    SelectRefIR: {
+      description:
+        'A reference to the nodes of a named layer: ref(name) (mode "one" or absent) or selectAll(name) (mode "all").',
+      type: "object",
+      required: ["type", "layer"],
+      additionalProperties: false,
+      properties: {
+        type: { const: "select" },
+        layer: { type: "string" },
+        mode: { enum: ["one", "all"] },
+      },
     },
     RelateClauseIR: {
       description:

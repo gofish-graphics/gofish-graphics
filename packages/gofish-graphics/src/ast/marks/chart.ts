@@ -38,7 +38,12 @@ import { rect as generatedRect, baseBlank } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
 import type { XYWHDims } from "../dims";
 import { Mark, MarkChild, Operator } from "../types";
-import { addRenderMethod, createMark, type NameableMark } from "../withGoFish";
+import {
+  addRenderMethod,
+  createMark,
+  reifyChildren,
+  type NameableMark,
+} from "../withGoFish";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import {
   resolveMarkResult,
@@ -52,6 +57,11 @@ import {
 } from "./createOperator";
 import type { ModifierConfig, ZOrderValue } from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
+import {
+  encloseNode,
+  type EncloseOptions,
+  type Resolved as EncloseResolved,
+} from "../graphicalOperators/enclose";
 import {
   // `over` stays internal (not re-exported from lib) — it backs the
   // deserializer's `"over"` wire type only; user code should use `layer`.
@@ -657,7 +667,11 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     inferred: InferredRelational,
     /** The key of the group of the default split this connector threads;
      *  undefined when the bag is not split. */
-    key?: string
+    key?: string,
+    /** The chart's named layers, where the mark is applied to a chart's
+     *  data (a `selectAll(...)` an option names resolves against it);
+     *  undefined in the combinator form. */
+    layerContext?: LayerContext
   ) => any,
   config: {
     /** A TEMPORAL connector (`time.transition()`): its path tier is the
@@ -720,7 +734,14 @@ export function createRelationalMark<O extends Record<string, unknown>>(
       operands: GoFishAST[],
       datum: unknown
     ): GoFishNode => {
-      tagRelationalOperands(node, operands);
+      // A fresh operand (a node the connector holds as its own child, as
+      // `enclose(opts, [spread(...)])` does) is painted by the connector,
+      // over its own drawing: only operands placed elsewhere need the
+      // paint-below default.
+      tagRelationalOperands(
+        node,
+        operands.filter((o) => !(o instanceof GoFishNode && o.parent === node))
+      );
       if (datum !== undefined && (node as any).datum === undefined)
         (node as any).datum = datum;
       if (liveChannels)
@@ -736,9 +757,13 @@ export function createRelationalMark<O extends Record<string, unknown>>(
       // tagging are read off the children too, so they have to await it as
       // well. The result stays a thenable carrying the node methods, which is
       // what this form already returned (`produce` is itself async).
-      return addRenderMethod(
+      // The combinator form carries its IR tag (`tagCombinator`), so a
+      // chart that holds it serializes it with its children.
+      const built = addRenderMethod(
         (async () => {
-          const operands = await children;
+          // The same child list every combinator takes: marks, promises and
+          // nested arrays reify to nodes (`reifyChildren`).
+          const operands = await reifyChildren(children);
           const datum = groupDatumOf(operands);
           // The connector's paint is read off its operands' data.
           const paintOpts = await resolveGroupPaint(
@@ -756,6 +781,12 @@ export function createRelationalMark<O extends Record<string, unknown>>(
             datum
           );
         })()
+      );
+      return tagCombinator(
+        built,
+        type,
+        opts,
+        children
       ) as unknown as GoFishNode;
     }
 
@@ -775,7 +806,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
       }
       const from = spatialOpts.from;
       const to = spatialOpts.to;
-      const mark: Mark<any[]> = async (rows: any[]) => {
+      const mark: Mark<any[]> = async (rows: any[], _key, layerContext) => {
         const segments = await Promise.all(
           rows.map(async (row) => {
             const a = row[from];
@@ -795,7 +826,9 @@ export function createRelationalMark<O extends Record<string, unknown>>(
               (await produce(
                 resolveLive(rowOpts, datum),
                 [a, b],
-                inferred
+                inferred,
+                undefined,
+                layerContext
               )) as GoFishNode,
               [a, b],
               datum
@@ -818,7 +851,11 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     // `.mark()`/`.layer()`, and writes it into `inferred`, a cell disjoint
     // from `opts` (see `tagRelationalFusable`'s doc comment). `opts.dir`, if
     // given, still wins over the inferred travel direction.
-    const mark: Mark<GoFishRef[]> = async (d: GoFishRef[]) => {
+    const mark: Mark<GoFishRef[]> = async (
+      d: GoFishRef[],
+      _key,
+      layerContext
+    ) => {
       const split = inferred.split;
       const dir = (opts as any).dir ?? inferred.dir;
       // Only allocate a copy when there's actually an inferred `dir` to
@@ -845,7 +882,8 @@ export function createRelationalMark<O extends Record<string, unknown>>(
                 resolveLive(groupOpts, datum),
                 groupRefs,
                 inferred,
-                key
+                key,
+                layerContext
               )) as GoFishNode,
               groupRefs,
               datum
@@ -863,7 +901,9 @@ export function createRelationalMark<O extends Record<string, unknown>>(
         (await produce(
           resolveLive(groupOpts, datum),
           d,
-          inferred
+          inferred,
+          undefined,
+          layerContext
         )) as GoFishNode,
         d,
         datum
@@ -993,6 +1033,25 @@ export const ribbon = createRelationalMark<RibbonOptions>(
       },
       children
     )
+);
+
+/**
+ * Draw an outline around nodes, under them: their padded bounding box
+ * (`Shape.box()`, the default), the smallest ellipse around them
+ * (`Shape.oval()`), or a smooth region (`Shape.blob()`, `Shape.hull()`,
+ * `Shape.spine()`). The node is built in
+ * `graphicalOperators/enclose.tsx`.
+ *
+ * - `enclose(opts, children)`: around the children. Fresh children are laid
+ *   out as `layer` lays them out; `ref(...)` children and `.relate()`
+ *   operands are enclosed where they are.
+ * - `chart(selectAll(name)).mark(enclose(opts))`: around the selected nodes,
+ *   one outline per group when the flow groups them.
+ */
+export const enclose = createRelationalMark<EncloseOptions>(
+  "enclose",
+  (o, children, _inferred, _key, layerContext) =>
+    encloseNode(o as EncloseResolved, children, layerContext)
 );
 
 /**

@@ -65,6 +65,15 @@ for (const [kind, table] of TABLES) {
 // (`::: gofish-ref ChartOptions`). They are not required, but one documented
 // in one language must be documented in the other.
 const optionTypes = new Set(Object.keys(ir.OPTION_TYPES));
+// So may each member of a strategy family, as `Family.member`
+// (`::: gofish-ref Shape.blob`): a kind, or a preset of one.
+for (const [family, spec] of Object.entries(ir.STRATEGIES)) {
+  for (const member of [
+    ...Object.keys(spec.kinds),
+    ...Object.keys(spec.presets ?? {}),
+  ])
+    optionTypes.add(`${family}.${member}`);
+}
 
 /** Every `::: gofish-ref a b c` name, per language, with the page it came from. */
 function collectRefs(lang) {

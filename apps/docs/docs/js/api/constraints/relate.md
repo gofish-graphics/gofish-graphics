@@ -1,6 +1,6 @@
 # relate
 
-`.relate()` relates named nodes inside a `layer`. Its callback returns a list of clauses. A clause is a **constraint**, which places nodes relative to each other with declarative alignment and distribution rules, or a **drawing clause**, an operator or mark such as `arrow` or `background` drawn over the named nodes. It is the low-level alternative to `spread` when you need precise control over how individual elements relate — for example, aligning a label to the edge of a background, or drawing an arrow from a label to the node it describes.
+`.relate()` relates named nodes inside a `layer`. Its callback returns a list of clauses. A clause is a **constraint**, which places nodes relative to each other with declarative alignment and distribution rules, or a **drawing clause**, an operator or mark such as `arrow` or `enclose` drawn over the named nodes. It is the low-level alternative to `spread` when you need precise control over how individual elements relate — for example, aligning a label to the edge of a background, or drawing an arrow from a label to the node it describes.
 
 ## Usage
 

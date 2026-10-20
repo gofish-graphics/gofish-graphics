@@ -2,18 +2,18 @@
 
 The finished example of the Diagrams tutorial: the Basics picture with
 Mercury labeled. The label is centered on Mercury, spaced off the whole
-background, and an arrow runs from the label to the planet. Bare marks and
+box, and an arrow runs from the label to the planet. Bare marks and
 operators, no `chart()`, as in bluefish/Planets.
 """
 
-from gofish import Constraint, arrow, background, circle, layer, spread, text
+from gofish import Constraint, Shape, arrow, circle, enclose, layer, spread, text
 from python_stories.data import TUTORIAL_PLANETS
 
 
 def story_diagrams():
     return (
         layer([
-            background(
+            enclose(
                 [
                     spread(
                         [
@@ -33,8 +33,7 @@ def story_diagrams():
                 padding=20,
                 fill="#252150",
                 stroke="none",
-                rx=16,
-                ry=16,
+                shape=Shape.box(rx=16),
             ).name("planets"),
             text(text="Mercury", fill="#E94560", font_size=14).name("label"),
         ]).relate(lambda mercury, planets, label, **_: [

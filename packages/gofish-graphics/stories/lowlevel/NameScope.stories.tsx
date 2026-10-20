@@ -10,6 +10,7 @@ import {
   rect,
   spread,
   text,
+  Shape,
 } from "../../src/lib";
 
 // String-name resolution checks. NOT gallery-tagged: these are test-like.
@@ -38,7 +39,12 @@ export const NestedOperand: StoryObj = {
     const container = initializeContainer();
     layer([
       enclose(
-        { padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 },
+        {
+          padding: 20,
+          fill: "#252150",
+          stroke: "none",
+          shape: Shape.box({ rx: 16 }),
+        },
         [
           spread(
             { dir: "x", spacing: 50, alignment: "middle" },

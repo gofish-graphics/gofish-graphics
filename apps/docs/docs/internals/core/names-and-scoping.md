@@ -159,11 +159,11 @@ competes.
 
 An operand does not have to be a direct child. In the Diagrams tutorial's
 final figure, the constraint names `mercury`, which sits inside
-`background(spread(...))` (`background` is `enclose`):
+`enclose(spread(...))`:
 
 ```js
 layer([
-  background({ padding: 20 }, [
+  enclose({ padding: 20 }, [
     spread(
       { dir: "x" },
       planets.map((d) => circle(d).name(d.name))
@@ -204,7 +204,7 @@ returns its target's `geometry()` (the shape queries described under
 ## Drawing clauses and their order
 
 A clause that is not a constraint draws: an operator or mark such as `arrow`,
-`background`, a relational `line`, or an open term that mixes operands with
+a relational `enclose` or `line`, or an open term that mixes operands with
 fresh marks, e.g., `spread({ dir: "y" }, [bar, text(...)])`.
 `resolveRelateClauses` (`constraints/relate.ts`) awaits and flattens the
 callback's result the way an operator treats its children (with the shared
@@ -247,11 +247,17 @@ schedule it computed on the layer, and layout reuses it while the layer has
 the same children and constraints (`relateScheduleForLayout`); a pass that
 rewrites the tree runs `resolveNames` again, which recomputes it.
 
-A clause paints after the plain children, in clause order. The default
-`zBelow` that puts a relational connector under its operands is not applied to
-a clause, because a clause's refs are strings and are not resolved when the
-clause is attached; this matches what a string-ref connector written as a
-plain child got before.
+A clause paints after the plain children, in clause order, except that a
+clause built by `createRelationalMark` (`enclose`, `line`, `ribbon`) paints
+under the nodes it reads. A clause's operands are string refs, which are not
+resolved when the clause is attached, so the default names them:
+`GoFishNode.relate` runs the same pass `layer` runs for its children
+(`applyRelationalZBelowDefaults`), which adds `zBelow(clause, name)` for
+each string-ref operand (see [The Mark Factory](/internals/frontend/mark-factory)). An explicit
+`.zOrder(...)` on the clause wins. `.relate()` replaces the constraints of
+an earlier `.relate()`, but not the defaults `layer` gave its own
+relational-mark children (`_paintDefaults`), so a `line` or `enclose` among
+the layer's children still paints under the nodes it reads.
 
 ## History
 
