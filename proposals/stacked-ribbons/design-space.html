@@ -434,8 +434,9 @@
       <a href="#anchors">anchors</a> in the spelling agreed in review
       (<code>name</code>, <code>position: along(part)</code>,
       <code>slots: data(...).flow(...)</code>) and
-      <a href="#compare">all proposals compared</a>; before that,
-      <a href="#nodelink">node-link ribbons</a>.
+      <a href="#compare">all proposals compared</a>, and
+      <a href="#composition">composition all the way down</a> (what anchors
+      unify); before that, <a href="#nodelink">node-link ribbons</a>.
     </p>
   </header>
 
@@ -1744,6 +1745,146 @@ chart(penguins)
     comes from data. Node-link allocation (3) is the runner-up: it is as clean
     on the examples, but hides the stack inside the ribbon. Proposal 5 is
     proposal 3 with the allocation moved onto the node and written as a flow.
+  </p>
+
+  <h2 id="composition">Composition all the way down</h2>
+  <p class="prose">
+    The anchor design keeps showing up in questions it wasn't built for. The
+    same happened when we worked on the time axis and partitioning together and
+    found they were one idea. It suggests three levels of one recursive
+    structure:
+  </p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Level</th>
+          <th>Composes</th>
+          <th>In</th>
+          <th>Example</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Graphical operators</td>
+          <td>marks</td>
+          <td>a 2D space</td>
+          <td><code>spread</code>, <code>stack</code>, <code>layer</code></td>
+        </tr>
+        <tr>
+          <td><code>data().flow()</code></td>
+          <td>rows into groups and leaves</td>
+          <td>any space: a chart's 2D space, or a side's 1D space</td>
+          <td>
+            <code
+              >data(links, { on: "source" }).flow(stack({ size: "value"
+              }))</code
+            >
+          </td>
+        </tr>
+        <tr>
+          <td>Anchors</td>
+          <td>a 1D space on any mark's boundary</td>
+          <td>the mark's own frame</td>
+          <td><code>.anchor({ name, position: along(part), slots })</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose">
+    Three things can then be defined by rewrite instead of by special code. The
+    principles essay says axes and labels "desugar in spirit more than in
+    implementation", and that "the aspiration is to fold both into the same
+    scheme". Anchors could be that scheme.
+  </p>
+
+  <h3>1. <code>chart()</code> is a data flow in a 2D space</h3>
+  <pre><code>// the data flow: rows → groups → leaves, with no space attached
+data(rows).flow(spread({ by: "lake" }), stack({ by: "species", size: "count" }))
+
+// chart = that flow in a 2D space (scales, coordinate transform, axes, legends)
+chart(rows, { coord, axes }).flow(...).mark(rect(...))
+  ≡ (a 2D space)( data(rows).flow(...).mark(rect(...)) )
+
+// an anchor = the same flow in a 1D space on one side of a mark
+.anchor({ name: "out", position: along("x-max"),
+          slots: data(links, { on: "source" }).flow(stack({ size: "value" })) })</code></pre>
+  <p class="prose small">
+    The code already splits this way:
+    <code>ChartBuilder.resolveNodes()</code> runs the flow, and
+    <code>frameNodes()</code> adds the frame, coordinate transform and axes.
+    Draft issue:
+    <code>proposals/stacked-ribbons/issues/1-data-flow-core.md</code> (a
+    behavior-preserving refactor first, then <code>data()</code>).
+  </p>
+
+  <h3>2. Boundary label strategies are anchors plus text</h3>
+  <pre><code>rect(...).label("name", { position: Place.along({ at: "x-max", side: "outset" }) })
+  ≡ rect(...).anchor({ name: ⟨fresh⟩, position: along("x-max") })
+             + text("name") at that anchor, offset outward</code></pre>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Strategy</th>
+          <th>As anchors</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>Place.along</code></td>
+          <td>one anchor, plus text offset by <code>side</code></td>
+        </tr>
+        <tr>
+          <td>labels along one edge</td>
+          <td>an anchor with a <code>spread</code> flow, one text per slot</td>
+        </tr>
+        <tr>
+          <td><code>Place.start</code> / <code>Place.end</code></td>
+          <td>anchors on a path's end parts</td>
+        </tr>
+        <tr>
+          <td><code>Place.around</code></td>
+          <td>
+            its candidates are point anchors; the first-fit chooser stays a
+            separate step
+          </td>
+        </tr>
+        <tr>
+          <td><code>Place.interior</code></td>
+          <td>
+            <span style="color: var(--bad)">doesn't fit</span>: it places inside
+            a region, not on a boundary
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose small">
+    This would also settle merging <code>along</code> with
+    <code>Place.along</code>, and the shared part-name vocabulary. Draft issue:
+    <code>issues/2-labels-as-anchors.md</code>.
+  </p>
+
+  <h3>3. An axis is a scatter of tick anchors on the frame</h3>
+  <pre><code>// sketch: the y axis as anchors along the frame's left side, placed by value
+frame.anchor({ name: "y-ticks", position: along("x-min"),
+               slots: data(ticks).flow(scatter({ by: "value" })) })
+// tick marks and tick labels attach to the "y-ticks" anchors</code></pre>
+  <p class="prose small">
+    This continues the recursive-axes direction (every node renders its space as
+    an axis). Nested category labels and partitioned time axes would be nested
+    flows inside one anchor. Draft issue:
+    <code>issues/3-axes-as-frame-anchors.md</code>, which touches #1032, #493
+    and #1115.
+  </p>
+
+  <p class="prose">
+    <strong>What this changes for the stacked-ribbons decision:</strong> not the
+    spelling. It's evidence that anchors are a general mechanism, not a sankey
+    feature. The three follow-ups can come after anchors exist. The refactor in
+    (1) is the natural first step, because anchors need the space-free data flow
+    anyway.
   </p>
 
   <h2>Pictures for candidate B</h2>
