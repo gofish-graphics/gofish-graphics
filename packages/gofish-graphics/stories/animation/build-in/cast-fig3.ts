@@ -11,7 +11,7 @@ import {
 import { chinstraps } from "./data";
 
 export default (container: HTMLElement, clock?: BuildClockOptions) =>
-  chart(chinstraps)
+  chart(chinstraps, { w: 420, h: 260 })
     .flow(
       scatter({ x: "beakLength", y: "beakDepth" }).transition({
         enter: time.stagger({ by: field("mass").sort(), lag: 100 }),
@@ -22,4 +22,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
         enter: Animation.wipe({ shape: "circle", duration: 500 }),
       })
     )
-    .render(container, { w: 420, h: 260, ...clock });
+    .render(container, { ...clock });

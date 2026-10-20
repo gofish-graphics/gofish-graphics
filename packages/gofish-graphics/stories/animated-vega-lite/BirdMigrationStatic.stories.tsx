@@ -40,7 +40,7 @@ export const A_StaticLines: StoryObj<Args> = {
     // dropped.
     chart(world110m, {
       coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
-      legend: false,
+      legend: false, w: args.w, h: args.h,
     })
       .mark(polygon({ points: "ring", fill: "#f7f7f7", stroke: "#aaa" }))
       .layer(
@@ -51,7 +51,7 @@ export const A_StaticLines: StoryObj<Args> = {
           )
           .mark(line({ stroke: "species", strokeWidth: 1, opacity: 0.5 }))
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },
