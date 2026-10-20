@@ -172,7 +172,7 @@ class TestNoPandasInstalled:
                 .mark(rect(h="y"))
                 .render(w=200, h=200)
             )
-            assert widget.tables
+            assert widget.doc["tables"]
             assert "pandas" not in sys.modules
             print("OK")
             """

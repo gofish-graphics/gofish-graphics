@@ -12,6 +12,10 @@ shorthand kwarg was removed).
 
 import json
 
+from gofish.ast import ir_payload
+
+from ._ir import call, ir
+
 import pytest
 
 from gofish import (
@@ -50,7 +54,7 @@ from gofish import (
 
 def test_text_accepts_debug_kwarg():
     mark = text(text="hi", debug=True)
-    d = mark.to_dict()
+    d = ir(mark)
     assert d["debug"] is True
 
 
@@ -61,7 +65,7 @@ def test_text_has_no_label_kwarg():
 
 def test_text_label_via_chain():
     mark = text(text="hi").label("name")
-    d = mark.to_dict()
+    d = ir(mark)
     assert d["label"] == [{"accessor": "name"}]
 
 
@@ -74,7 +78,7 @@ def test_repeated_label_calls_append():
         .label("name", position="center", color="white", font_weight="bold")
         .label("count", position="outset-top", font_size=9)
     )
-    d = mark.to_dict()
+    d = ir(mark)
     assert d["label"] == [
         {
             "accessor": "name",
@@ -87,29 +91,29 @@ def test_repeated_label_calls_append():
 
 
 def test_operators_accept_universal_debug_flag():
-    assert spread(by="a", dir="x", debug=True).to_dict()["debug"] is True
-    assert group(by="a", debug=True).to_dict()["debug"] is True
-    assert table(by={"x": "a", "y": "b"}, debug=True).to_dict()["debug"] is True
-    assert treemap(size="v", debug=True).to_dict()["debug"] is True
+    assert ir(spread(by="a", dir="x", debug=True))["debug"] is True
+    assert ir(group(by="a", debug=True))["debug"] is True
+    assert ir(table(by={"x": "a", "y": "b"}, debug=True))["debug"] is True
+    assert ir(treemap(size="v", debug=True))["debug"] is True
 
 
 def test_stack_operator_accepts_spread_parity_options():
-    d = stack(by="a", dir="x", spacing=2).to_dict()
+    d = ir(stack(by="a", dir="x", spacing=2))
     assert d["spacing"] == 2
 
 
 def test_pack_serializes_by():
-    d = pack(by="lake").to_dict()
+    d = ir(pack(by="lake"))
     assert d["type"] == "pack"
     assert d["by"] == "lake"
-    assert pack().to_dict()["type"] == "pack"
+    assert ir(pack())["type"] == "pack"
     # One packing strategy, so no option to choose one (#1013).
     with pytest.raises(TypeError):
         pack(by="lake", method={"kind": "circles"})
 
 
 def test_partition_serializes_a_binned_key():
-    d = partition(by=field("date").bin(Calendar.month), dir="x").to_dict()
+    d = ir(partition(by=field("date").bin(Calendar.month), dir="x"))
     assert d["type"] == "partition"
     assert d["dir"] == "x"
     assert d["by"] == {
@@ -129,9 +133,9 @@ def test_partition_key_per_axis_is_two_partitions():
     a = field("a").bin(Bin.step(1))
     b = field("b").bin(Bin.step(0.5))
     product = partition(by={"x": a, "y": b})
-    assert [op.to_dict() for op in product.operators] == [
-        partition(by=a, dir="x").to_dict(),
-        partition(by=b, dir="y").to_dict(),
+    assert [ir(op) for op in product.operators] == [
+        ir(partition(by=a, dir="x")),
+        ir(partition(by=b, dir="y")),
     ]
 
 
@@ -151,7 +155,7 @@ def test_partition_key_per_axis_checks():
 
 def test_partition_serializes_a_binned_struct():
     key = struct(x="lon", y="lat").bin(Bin.hex(radius={"x": 2, "y": 500}))
-    d = partition(by=key).to_dict()
+    d = ir(partition(by=key))
     assert "dir" not in d
     assert d["by"] == {
         "type": "struct",
@@ -197,7 +201,7 @@ def test_voronoi_seeds_take_a_dataframe():
 
 
 def test_region_takes_paint_only():
-    d = region(fill=field("a").count(), stroke="white", stroke_width=1).to_dict()
+    d = ir(region(fill=field("a").count(), stroke="white", stroke_width=1))
     assert d["type"] == "region"
     assert d["strokeWidth"] == 1
     with pytest.raises(TypeError):
@@ -205,21 +209,21 @@ def test_region_takes_paint_only():
 
 
 def test_rect_inset_is_a_kwarg():
-    assert rect(h="count", inset=1).to_dict()["inset"] == 1
+    assert ir(rect(h="count", inset=1))["inset"] == 1
 
 
 def test_scatter_serializes_separate_overlap():
-    d = scatter(x="mass", alignment="middle", overlap=Overlap.separate(padding=1)).to_dict()
+    d = ir(scatter(x="mass", alignment="middle", overlap=Overlap.separate(padding=1)))
     assert d["type"] == "scatter"
     assert d["overlap"] == {"kind": "separate", "padding": 1}
     assert Overlap.separate() == {"kind": "separate"}
-    assert "overlap" not in scatter(x="mass").to_dict()
+    assert "overlap" not in ir(scatter(x="mass"))
 
 
 def test_scatter_serializes_noise_overlap():
-    d = scatter(
+    d = ir(scatter(
         x="mass", alignment="middle", overlap=Overlap.noise(randomness="quasi", smoothing=100)
-    ).to_dict()
+    ))
     assert d["overlap"] == {"kind": "noise", "randomness": "quasi", "smoothing": 100}
     assert Overlap.noise() == {"kind": "noise"}
     assert Overlap.noise(padding=1, seed=3) == {"kind": "noise", "padding": 1, "seed": 3}
@@ -243,7 +247,7 @@ def test_sina_and_jitter_are_noise_with_other_defaults():
     # Any option overrides the default.
     assert Overlap.sina(smoothing=50, padding=1) == {"kind": "noise", "smoothing": 50, "padding": 1}
     assert Overlap.jitter(randomness="blue")["randomness"] == "blue"
-    d = scatter(x="mass", alignment="middle", overlap=Overlap.sina()).to_dict()
+    d = ir(scatter(x="mass", alignment="middle", overlap=Overlap.sina()))
     assert d["overlap"] == {"kind": "noise", "smoothing": "silverman"}
 
 
@@ -253,16 +257,16 @@ def test_non_finite_numbers_are_tagged_in_the_ir():
 
     from gofish import chart, circle
 
-    ir = (
+    node = (
         chart([{"v": 1.0}, {"v": math.inf}])
         .flow(scatter(x="v", overlap=Overlap.jitter(smoothing=math.inf)))
         .mark(circle(r=3))
-        .to_ir()
+        .to_ir()["root"]
     )
-    overlap = ir["operators"][0]["overlap"]
+    overlap = node["operators"][0]["overlap"]
     assert overlap["smoothing"] == {"$numberDouble": "Infinity"}
     # The document is strict JSON: no bare Infinity / NaN.
-    json.dumps(ir, allow_nan=False)
+    json.dumps(node, allow_nan=False)
     from gofish._nonfinite import encode_non_finite
 
     assert encode_non_finite([-math.inf, math.nan, 2.0, "x"]) == [
@@ -280,19 +284,19 @@ def test_non_finite_numbers_are_tagged_in_the_ir():
 
 
 def test_pack_combinator_form():
-    d = pack([circle(r=10), pack([circle(r=4)])]).to_dict()
+    d = ir(pack([circle(r=10), pack([circle(r=4)])]))
     assert d["type"] == "pack"
     assert d["__combinator"] is True
     assert d["options"] == {}
     assert [c["type"] for c in d["children"]] == ["circle", "pack"]
     assert d["children"][1]["__combinator"] is True
-    assert pack([circle(r=1)]).to_dict()["options"] == {}
+    assert ir(pack([circle(r=1)]))["options"] == {}
     with pytest.raises(ValueError):
         pack([circle(r=1)], by="lake")
 
 
 def test_treemap_serializes_tile_strategy_and_gaps():
-    d = treemap(by="g", tile=Tile.squarify(ratio=1), spacing=2, padding=3).to_dict()
+    d = ir(treemap(by="g", tile=Tile.squarify(ratio=1), spacing=2, padding=3))
     assert d["tile"] == {"kind": "squarify", "ratio": 1}
     assert d["spacing"] == 2
     assert d["padding"] == 3
@@ -303,17 +307,17 @@ def test_treemap_serializes_tile_strategy_and_gaps():
         "binary",
         "sliceDice",
     ]
-    assert "tile" not in treemap().to_dict()
+    assert "tile" not in ir(treemap())
 
 
 def test_treemap_tile_is_a_tagged_union():
     # `tile` is a union of dict shapes told apart by `kind`; `_to_wire` picks
     # the branch by the dict's `kind` and checks its keys against that branch.
-    assert treemap(by="g", tile=Tile.squarify(ratio=1)).to_dict()["tile"] == {
+    assert ir(treemap(by="g", tile=Tile.squarify(ratio=1)))["tile"] == {
         "kind": "squarify",
         "ratio": 1,
     }
-    assert treemap(by="g", tile=Tile.slice_dice()).to_dict()["tile"] == {
+    assert ir(treemap(by="g", tile=Tile.slice_dice()))["tile"] == {
         "kind": "sliceDice"
     }
     with pytest.raises(TypeError, match="ratio"):
@@ -326,7 +330,7 @@ def test_treemap_tile_is_a_tagged_union():
 
 def test_treemap_combinator_accepts_key():
     node = treemap([], size="gross", key="genre")
-    d = node.to_dict()
+    d = ir(node)
     assert d["options"]["key"] == "genre"
     assert d["options"]["size"] == "gross"
 
@@ -334,7 +338,7 @@ def test_treemap_combinator_accepts_key():
 def test_polygon_requires_points():
     with pytest.raises(TypeError):
         polygon(fill="red")
-    d = polygon(points=[[0, 0], [1, 1], [0, 1]]).to_dict()
+    d = ir(polygon(points=[[0, 0], [1, 1], [0, 1]]))
     assert d["points"] == [[0, 0], [1, 1], [0, 1]]
 
 
@@ -357,53 +361,50 @@ def test_circle_ellipse_petal_blank_signatures_are_closed():
 def test_circle_takes_box_dims():
     # circle takes ellipse's box dimensions (#851): w or h sets the diameter,
     # and the positions and dims pass through.
-    assert circle(h="value", fill="red").to_dict() == {
+    assert ir(circle(h="value", fill="red")) == {
         "type": "circle",
         "h": "value",
         "fill": "red",
     }
-    assert circle(w=8, cx=10, em_x=True).to_dict() == {
+    assert ir(circle(w=8, cx=10, em_x=True)) == {
         "type": "circle",
         "w": 8,
         "cx": 10,
         "emX": True,
     }
-    assert circle(dims={"r": {"size": "v"}}).to_dict()["dims"] == {
+    assert ir(circle(dims={"r": {"size": "v"}}))["dims"] == {
         "r": {"size": "v"}
     }
 
 
 def test_fill_opacity_serializes_to_camel_case():
-    assert circle(r=3, fill_opacity=0.6).to_dict() == {
+    assert ir(circle(r=3, fill_opacity=0.6)) == {
         "type": "circle",
         "r": 3,
         "fillOpacity": 0.6,
     }
-    assert ellipse(w=4, h=4, fill_opacity=0.5).to_dict()["fillOpacity"] == 0.5
+    assert ir(ellipse(w=4, h=4, fill_opacity=0.5))["fillOpacity"] == 0.5
 
 
 def test_callables_nested_in_options_bridge_at_any_depth():
     # A callable inside an option's dicts/lists (here `dims`) gets the same
-    # derive-RPC sentinel as a top-level channel, and the collector that
-    # registers callbacks finds it under the same id (#937).
-    from gofish.ast import _collect_mark_lambdas, _collect_operator_lambdas
-
+    # bridge sentinel as a top-level channel, and the payload records its
+    # callback under the same id (#937).
     m = rect(dims={"theta": {"size": 0.9}, "r": {"size": lambda d: d["v"] * 2}})
-    d = m.to_dict()
+    d = ir(m)
     assert d["dims"]["theta"] == {"size": 0.9}
-    sentinel = d["dims"]["r"]["size"]
-    pairs = dict(_collect_mark_lambdas(m))
-    assert list(pairs) == [sentinel["__gofish_lambda"]]
-    assert pairs[sentinel["__gofish_lambda"]]([{"v": 1}, {"v": 3}]) == [2, 6]
+    lambda_id = d["dims"]["r"]["size"]["__gofish_lambda"]
+    assert list(ir_payload(m)[1]) == [lambda_id]
+    assert call(m, lambda_id, [{"v": 1}, {"v": 3}]) == [{"value": 2}, {"value": 6}]
     json.dumps(d)  # no raw function object left on the wire
 
     op = scatter(dims={"theta": lambda d: d["a"], "r": "dist"})
-    od = op.to_dict()
+    od = ir(op)
     assert od["dims"]["r"] == "dist"
-    op_pairs = dict(_collect_operator_lambdas([op]))
-    assert list(op_pairs) == [od["dims"]["theta"]["__gofish_lambda"]]
+    lambda_id = od["dims"]["theta"]["__gofish_lambda"]
+    assert call(op, lambda_id, [{"a": 7}]) == [{"value": 7}]
     # Copies made by `.translate()` / `.label()` keep the same callback id.
-    assert op.translate(x=5).to_dict()["dims"] == od["dims"]
+    assert ir(op.translate(x=5))["dims"] == od["dims"]
     json.dumps(od)
 
 
@@ -421,25 +422,22 @@ def test_a_callable_outside_a_channel_is_a_type_error():
         with pytest.raises(TypeError, match="only channel options take a function"):
             make()
     # Channel options still take one, including circle's raw opacity channel.
-    assert "__gofish_lambda" in rect(h=lambda d: d["v"]).to_dict()["h"]
-    assert "__gofish_lambda" in circle(r=3, opacity=lambda d: 0.5).to_dict()["opacity"]
-    assert "__gofish_lambda" in ellipse(w=4, h=4, stroke=lambda d: "red").to_dict()["stroke"]
-    assert "__gofish_lambda" in spread(by="a", dir="x", w=lambda d: 1).to_dict()["w"]
+    assert "__gofish_lambda" in ir(rect(h=lambda d: d["v"]))["h"]
+    assert "__gofish_lambda" in ir(circle(r=3, opacity=lambda d: 0.5))["opacity"]
+    assert "__gofish_lambda" in ir(ellipse(w=4, h=4, stroke=lambda d: "red"))["stroke"]
+    assert "__gofish_lambda" in ir(spread(by="a", dir="x", w=lambda d: 1))["w"]
 
 
 def test_line_and_ribbon_fill_take_a_function():
     # A field name is shorthand for an accessor, so the connector paint takes
     # a lambda wherever it takes a field name (#1097). It crosses as a
-    # sentinel the derive server registers.
-    from gofish.ast import _collect_mark_lambdas
-
+    # sentinel whose callback the payload records.
     for m in (line(fill=lambda d: d["g"]), ribbon(fill=lambda d: d["g"])):
-        sentinel = m.to_dict()["fill"]
-        pairs = dict(_collect_mark_lambdas(m))
-        assert list(pairs) == [sentinel["__gofish_lambda"]]
-        assert pairs[sentinel["__gofish_lambda"]]([{"g": "a"}]) == ["a"]
+        lambda_id = ir(m)["fill"]["__gofish_lambda"]
+        assert list(ir_payload(m)[1]) == [lambda_id]
+        assert call(m, lambda_id, [{"g": "a"}]) == [{"value": "a"}]
     # stroke is a color channel too, as in JS.
-    assert "__gofish_lambda" in line(stroke=lambda d: d["g"]).to_dict()["stroke"]
+    assert "__gofish_lambda" in ir(line(stroke=lambda d: d["g"]))["stroke"]
     # A non-channel option still rejects a function.
     with pytest.raises(TypeError, match="only channel options take a function"):
         line(stroke_width=lambda d: 2)
@@ -449,25 +447,25 @@ def test_wire_does_not_copy_options_without_accessors():
     # A literal option with no callable inside reaches the IR as the same
     # object, so a large table is not copied on every to_dict().
     op = join([{"k": "a", "v": 1}, {"k": "b", "v": 2}], on="k")
-    assert op.to_dict()["right"] is op.kwargs["right"]
+    assert ir(op)["right"] is op.kwargs["right"]
     m = rect(dims={"theta": {"size": 0.9}})
-    assert m.to_dict()["dims"] is m.kwargs["dims"]
+    assert ir(m)["dims"] is m.kwargs["dims"]
 
 
 def test_snake_case_kwargs_serialize_to_camel_case_wire_keys():
     # Python kwargs are snake_case; the IR keeps the camelCase wire keys.
-    assert text(text="hi", font_size=12, text_anchor="start").to_dict() == {
+    assert ir(text(text="hi", font_size=12, text_anchor="start")) == {
         "type": "text",
         "text": "hi",
         "fontSize": 12,
         "textAnchor": "start",
     }
-    assert stack([], dir="x", em_x=True, key="k").to_dict()["options"] == {
+    assert ir(stack([], dir="x", em_x=True, key="k"))["options"] == {
         "dir": "x",
         "emX": True,
         "key": "k",
     }
-    assert text(text="hi").label("n", font_size=9).to_dict()["label"] == [
+    assert ir(text(text="hi").label("n", font_size=9))["label"] == [
         {"accessor": "n", "fontSize": 9}
     ]
 
@@ -486,7 +484,7 @@ def test_camel_case_kwargs_are_rejected():
 
 
 def test_nested_axes_keys_serialize_to_wire_keys():
-    ir = (
+    node = (
         chart(
             [{"a": "x", "v": 1}],
             axes={"x": {"label": {"angle": 45}, "side": "end"}, "y": True},
@@ -499,16 +497,16 @@ def test_nested_axes_keys_serialize_to_wire_keys():
             )
         )
         .mark(rect(h="v"))
-        .to_ir()
+        .to_ir()["root"]
     )
-    assert ir["options"]["axes"] == {
+    assert node["options"]["axes"] == {
         "x": {"label": {"angle": 45}, "side": "end"},
         "y": True,
     }
-    assert ir["operators"][0]["axes"] == {"y": {"label": {"angle": [90]}, "title": False}}
+    assert node["operators"][0]["axes"] == {"y": {"label": {"angle": [90]}, "title": False}}
     # The boolean forms pass through at both levels.
-    assert chart([], axes=False).mark(rect()).to_ir()["options"]["axes"] is False
-    assert stack([], dir="x", axes={"x": False}).to_dict()["options"]["axes"] == {
+    assert chart([], axes=False).mark(rect()).to_ir()["root"]["options"]["axes"] is False
+    assert ir(stack([], dir="x", axes={"x": False}))["options"]["axes"] == {
         "x": False
     }
 
@@ -537,7 +535,7 @@ def test_data_keyed_dicts_are_untouched():
     # A palette keyed by category, a schema keyed by column, join rows, and
     # inline data rows keep their keys exactly, camelCase or not.
     colors = {"fooBar": "#f00", "baz_qux": "#00f"}
-    ir = (
+    node = (
         chart(
             [{"myCategory": "fooBar", "v": 1}],
             color=Color.palette(colors),
@@ -548,11 +546,11 @@ def test_data_keyed_dicts_are_untouched():
             spread(by="myCategory", dir="x"),
         )
         .mark(rect(h="v", fill="myCategory"))
-        .to_ir()
+        .to_ir()["root"]
     )
-    assert ir["options"]["color"]["values"] == colors
-    assert list(ir["options"]["schema"]) == ["myCategory"]
-    assert ir["operators"][0]["right"] == [{"myCategory": "fooBar", "otherCol": 2}]
+    assert node["options"]["color"]["values"] == colors
+    assert list(node["options"]["schema"]) == ["myCategory"]
+    assert node["operators"][0]["right"] == [{"myCategory": "fooBar", "otherCol": 2}]
 
 
 def test_layer_of_charts_takes_js_layer_options():
@@ -561,8 +559,8 @@ def test_layer_of_charts_takes_js_layer_options():
     # on the wire, and a render option such as `padding` is rejected.
     c1 = chart([{"v": 1}]).mark(rect(h="v"))
     c2 = chart([{"v": 2}]).mark(rect(h="v"))
-    ir = layer([c1, c2], axes={"x": {"label": {"angle": 45}}}).to_ir()
-    assert ir["options"] == {"axes": {"x": {"label": {"angle": 45}}}}
+    node = layer([c1, c2], axes={"x": {"label": {"angle": 45}}}).to_ir()["root"]
+    assert node["options"] == {"axes": {"x": {"label": {"angle": 45}}}}
     with pytest.raises(TypeError, match="unexpected key 'label_angle'"):
         layer([c1, c2], axes={"x": {"label_angle": 45}})
     with pytest.raises(TypeError):
@@ -592,21 +590,21 @@ def test_render_axes_convert_on_every_render_path():
 
 
 def test_dims_values_pass_channel_values_and_check_intervals():
-    d = rect(
+    d = ir(rect(
         dims={
             "theta": {"size": datum(1), "embedded": True},
             "r": field("v").sort(),
             "lon": "a",
             "lat": {"min": "a", "max": datum(2) + 3},
         }
-    ).to_dict()
+    ))
     assert d["dims"] == {
         "theta": {"size": {"type": "datum", "datum": 1}, "embedded": True},
         "r": {"type": "field", "name": "v", "ops": [{"op": "sort"}]},
         "lon": "a",
         "lat": {"min": "a", "max": {"type": "datum", "datum": 2, "offset": 3}},
     }
-    assert scatter(dims={"lon": field("x")}).to_dict()["dims"] == {
+    assert ir(scatter(dims={"lon": field("x")}))["dims"] == {
         "lon": {"type": "field", "name": "x"}
     }
 
@@ -625,8 +623,8 @@ def test_dims_interval_with_unknown_key_is_rejected():
 
 def test_spread_combinator_takes_box_dims():
     children = [rect(w=10, h=10), rect(w=10, h=20)]
-    opts = spread(children, dir="x", cx=200, em_x=True).to_dict()["options"]
+    opts = ir(spread(children, dir="x", cx=200, em_x=True))["options"]
     assert opts["cx"] == 200
     assert opts["emX"] is True
-    opts = stack(children, dir="y", dims={"y": {"min": 0}}).to_dict()["options"]
+    opts = ir(stack(children, dir="y", dims={"y": {"min": 0}}))["options"]
     assert opts["dims"] == {"y": {"min": 0}}

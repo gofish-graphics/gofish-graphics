@@ -12,7 +12,8 @@ single code path transparently support every backend, so pandas is no longer
 a hard runtime dependency of this package.
 """
 
-from typing import Any, List
+import base64
+from typing import Any, Dict, List
 
 import narwhals as nw
 import pyarrow as pa
@@ -149,9 +150,8 @@ def data_to_arrow_bytes(data: Any) -> bytes:
     placeholder table; anything else goes through `to_arrow_table` and
     `arrow_table_to_bytes`.
 
-    This is the one function `ChartBuilder.render`, `LayerBuilder.render`,
-    `join()`, and the derive-callback bridge in `widget.py` should call —
-    none of them should branch on the input's dataframe backend themselves.
+    Every host ships tables through it (`b64_tables`), so nothing branches on
+    the input's dataframe backend itself.
 
     Args:
         data: `None`, a list of dict rows, or a narwhals-supported dataframe.
@@ -167,6 +167,16 @@ def data_to_arrow_bytes(data: Any) -> bytes:
         return empty_placeholder_arrow_bytes()
 
     return arrow_table_to_bytes(table)
+
+
+def b64_tables(tables: Dict[str, Any]) -> Dict[str, str]:
+    """Each table's data (any shape `data_to_arrow_bytes` takes) as a base64
+    Arrow IPC stream, by table id: how a document's `tables` cross to JS from
+    either host (the notebook widget, the parity harness's derive server)."""
+    return {
+        table_id: base64.b64encode(data_to_arrow_bytes(data)).decode("ascii")
+        for table_id, data in tables.items()
+    }
 
 
 def to_records(data: Any) -> List[dict]:

@@ -1,204 +1,181 @@
 """In-process tests for the widget's trait protocol.
 
-These exercise the Python observer side of the JS↔Python derive bridge
-without spinning up a browser. We construct a real ``GoFishChartWidget``
-and drive its ``derive_request`` trait the way the JS bundle would.
+These exercise the Python observer side of the JS↔Python bridge without
+spinning up a browser. We render a real chart to a ``GoFishChartWidget`` and
+drive its ``call_request`` trait the way the JS bundle would: the rows as
+base64 Arrow in, the reply's document (its tables as base64 Arrow) out.
 """
 
 import base64
-from typing import Any, Dict
 
 import pyarrow as pa
 import pyarrow.ipc as pa_ipc
-import pytest
 
-from gofish import chart, layer, rect
-from gofish.arrow_utils import data_to_arrow_bytes
-from gofish.widget import GoFishChartWidget
+from gofish import chart, derive, layer, rect, text
+from gofish.arrow_utils import arrow_to_records, data_to_arrow_bytes
 
 
 def _arrow_b64(rows: list) -> str:
     return base64.b64encode(data_to_arrow_bytes(rows)).decode("utf-8")
 
 
-def _decode_arrow_b64(b64: str) -> list:
-    buf = base64.b64decode(b64)
-    reader = pa_ipc.open_stream(pa.BufferReader(buf))
-    table = reader.read_all()
-    return table.to_pylist()
+def _reply_rows(response: dict) -> list:
+    """The rows of the table a reply's root names."""
+    reply = response["reply"]
+    return arrow_to_records(base64.b64decode(reply["tables"][reply["root"]["id"]]))
 
 
-def _make_widget(derive_functions: Dict[str, Any]) -> GoFishChartWidget:
-    spec = {
-        "type": "chart",
-        "data": {"type": "table", "id": "t0"},
-        "operators": [{"type": "derive", "lambdaId": next(iter(derive_functions), "x")}],
-        "mark": {"type": "rect"},
-        "options": {},
-        "zOrder": None,
+def _derive_widget(fn):
+    """A rendered chart whose flow derives with ``fn``, and its lambda id."""
+    op = derive(fn)
+    widget = chart([{"x": 1}]).flow(op).mark(rect(h="x")).render(w=400, h=300)
+    return widget, op.lambda_id
+
+
+def _call(widget, lambda_id: str, rows: list, request_id: str = "r-0") -> dict:
+    widget.call_request = {
+        "request_id": request_id,
+        "lambda_id": lambda_id,
+        "rows_b64": _arrow_b64(rows),
     }
-    return GoFishChartWidget(
-        spec=spec,
-        tables={"t0": data_to_arrow_bytes([{"x": 1}])},
-        derive_functions=derive_functions,
-        width=400,
-        height=300,
-    )
+    return widget.call_response
 
 
-class TestDeriveProtocol:
-    def test_derive_request_round_trip(self):
-        """derive_request -> observer runs callback -> derive_response set."""
+class TestCallProtocol:
+    def test_derive_round_trip(self):
+        """call_request -> observer runs the callback -> call_response set,
+        whose reply's root names the table of the rows it returned."""
         seen = {}
 
         def fn(rows):
             seen["rows"] = rows
             return [{**r, "doubled": r["x"] * 2} for r in rows]
 
-        widget = _make_widget({"abc": fn})
+        widget, lambda_id = _derive_widget(fn)
+        response = _call(widget, lambda_id, [{"x": 1}, {"x": 2}, {"x": 3}])
 
-        widget.derive_request = {
-            "request_id": "r-0",
-            "lambda_id": "abc",
-            "arrow_b64": _arrow_b64([{"x": 1}, {"x": 2}, {"x": 3}]),
-        }
-
-        assert widget.derive_response is not None
-        assert widget.derive_response["request_id"] == "r-0"
-        assert "result_b64" in widget.derive_response
+        assert response["request_id"] == "r-0"
         assert seen["rows"] == [{"x": 1}, {"x": 2}, {"x": 3}]
-
-        result_rows = _decode_arrow_b64(widget.derive_response["result_b64"])
-        assert result_rows == [
+        assert response["reply"]["root"]["type"] == "table"
+        assert _reply_rows(response) == [
             {"x": 1, "doubled": 2},
             {"x": 2, "doubled": 4},
             {"x": 3, "doubled": 6},
         ]
 
+    def test_accessor_answers_one_value_per_row(self):
+        """An accessor's reply is a table with one `value` per input row."""
+        mark = text(text=lambda d: f"{d['x']}%")
+        widget = chart([{"x": 1}]).mark(mark).render()
+        lambda_id = widget.doc["root"]["mark"]["text"]["__gofish_lambda"]
+        response = _call(widget, lambda_id, [{"x": 1}, {"x": 2}])
+        assert _reply_rows(response) == [{"value": "1%"}, {"value": "2%"}]
+
+    def test_mark_function_reply_registers_its_callbacks(self):
+        """A mark function's reply is a document whose root is what it drew;
+        the callbacks that IR names are registered for later calls."""
+        widget = (
+            chart([{"x": 1}])
+            .mark(lambda d: layer([text(text=lambda r: str(len(d)))]))
+            .render()
+        )
+        lambda_id = widget.doc["root"]["mark"]["lambdaId"]
+        reply = _call(widget, lambda_id, [{"x": 1}, {"x": 2}])["reply"]
+        accessor = reply["root"]["children"][0]["text"]["__gofish_lambda"]
+        assert accessor in widget.callbacks
+        response = _call(widget, accessor, [{"x": 5}], "r-1")
+        assert _reply_rows(response) == [{"value": "2"}]
+
     def test_request_id_preserved_across_calls(self):
         """Each request_id is echoed back unchanged."""
-        widget = _make_widget({"abc": lambda rows: rows})
-
+        widget, lambda_id = _derive_widget(lambda rows: rows)
         for rid in ("r-1", "r-7", "r-99"):
-            widget.derive_request = {
-                "request_id": rid,
-                "lambda_id": "abc",
-                "arrow_b64": _arrow_b64([{"x": 0}]),
-            }
-            assert widget.derive_response["request_id"] == rid
+            assert _call(widget, lambda_id, [{"x": 0}], rid)["request_id"] == rid
 
     def test_unknown_lambda_id_yields_error(self):
-        """Missing lambda_id surfaces as derive_response.error, not an exception."""
-        widget = _make_widget({"abc": lambda rows: rows})
-
-        widget.derive_request = {
-            "request_id": "r-0",
-            "lambda_id": "does-not-exist",
-            "arrow_b64": _arrow_b64([{"x": 1}]),
-        }
-
-        assert widget.derive_response is not None
-        assert widget.derive_response["request_id"] == "r-0"
-        assert "error" in widget.derive_response
-        assert "does-not-exist" in widget.derive_response["error"]
+        """A missing lambda id surfaces as call_response.error, not an exception."""
+        widget, _ = _derive_widget(lambda rows: rows)
+        response = _call(widget, "does-not-exist", [{"x": 1}])
+        assert response["request_id"] == "r-0"
+        assert "does-not-exist" in response["error"]
 
     def test_callback_exception_yields_error_response(self):
-        """A raising user callback becomes a derive_response.error."""
+        """A raising user callback becomes a call_response.error."""
+
         def boom(rows):
             raise RuntimeError("kaboom")
 
-        widget = _make_widget({"abc": boom})
-        widget.derive_request = {
-            "request_id": "r-0",
-            "lambda_id": "abc",
-            "arrow_b64": _arrow_b64([{"x": 1}]),
-        }
-
-        assert widget.derive_response["request_id"] == "r-0"
-        assert "kaboom" in widget.derive_response["error"]
+        widget, lambda_id = _derive_widget(boom)
+        response = _call(widget, lambda_id, [{"x": 1}])
+        assert response["request_id"] == "r-0"
+        assert "kaboom" in response["error"]
 
     def test_empty_request_is_ignored(self):
-        """A None or {} derive_request must not produce a response."""
-        widget = _make_widget({"abc": lambda rows: rows})
-        # Default value is None — set to {} explicitly. The observer
-        # should bail before producing a response.
-        widget.derive_request = {}
-        assert widget.derive_response is None
+        """A None or {} call_request must not produce a response."""
+        widget, _ = _derive_widget(lambda rows: rows)
+        widget.call_request = {}
+        assert widget.call_response is None
 
     def test_callback_receives_list_of_dicts(self):
         """The callback contract is: receive list[dict], return list[dict]."""
+
         def assert_shape(rows):
             assert isinstance(rows, list)
             assert all(isinstance(r, dict) for r in rows)
             return rows
 
-        widget = _make_widget({"abc": assert_shape})
-        widget.derive_request = {
-            "request_id": "r-0",
-            "lambda_id": "abc",
-            "arrow_b64": _arrow_b64([{"a": 1, "b": "x"}, {"a": 2, "b": "y"}]),
-        }
-        assert "result_b64" in widget.derive_response
+        widget, lambda_id = _derive_widget(assert_shape)
+        response = _call(widget, lambda_id, [{"a": 1, "b": "x"}, {"a": 2, "b": "y"}])
+        assert "reply" in response
 
 
 class TestRenderResultStatus:
     def test_done_starts_false(self):
-        widget = _make_widget({"abc": lambda rows: rows})
+        widget, _ = _derive_widget(lambda rows: rows)
         assert widget.done is False
         assert widget.result is False
         assert widget.error is None
 
     def test_done_true_on_success(self):
-        widget = _make_widget({"abc": lambda rows: rows})
+        widget, _ = _derive_widget(lambda rows: rows)
         widget.render_result = {"value": True}
         assert widget.done is True
         assert widget.result is True
         assert widget.error is None
 
     def test_error_string_on_failure(self):
-        widget = _make_widget({"abc": lambda rows: rows})
+        widget, _ = _derive_widget(lambda rows: rows)
         widget.render_result = {"error": "boom"}
         assert widget.done is True
         assert widget.result is False
         assert widget.error == "boom"
 
 
-class TestTablesWireShape:
-    """`tables` carries one wire shape (#683, #1088): base64 Arrow IPC
-    streams by the table id a chart's data names. Every chart in the spec
-    that has rows of its own names one, wherever it sits: the root, each
-    child of a layer, a chart nested in a mark position. A bare mark has
-    none.
-    """
+def _table_rows(b64: str) -> int:
+    reader = pa_ipc.open_stream(pa.BufferReader(base64.b64decode(b64)))
+    return reader.read_all().num_rows
 
-    def test_tables_are_base64_by_id(self):
-        raw0 = data_to_arrow_bytes([{"x": 1}])
-        raw1 = data_to_arrow_bytes([{"x": 2}])
-        widget = GoFishChartWidget(
-            spec={"type": "chart", "data": {"type": "table", "id": "t0"}},
-            tables={"t0": raw0, "t1": raw1},
-            width=400,
-            height=300,
-        )
-        assert {k: base64.b64decode(b) for k, b in widget.tables.items()} == {
-            "t0": raw0,
-            "t1": raw1,
-        }
+
+class TestDocumentWireShape:
+    """The widget's `doc` is the IR document with its `tables` as base64
+    Arrow IPC streams by the table id a chart's data names (#683, #1088).
+    Every chart in the document that has rows of its own names one,
+    wherever it sits: the root, each child of a layer, a chart nested in a
+    mark position. A bare mark has none.
+    """
 
     def test_chart_and_mark_tables(self):
         c = chart([{"x": 1, "y": 2}]).mark(rect(h="y"))
-        assert list(c.render().tables) == ["t0"]
-        assert rect(w=1, h=1).render().tables == {}
+        assert list(c.render().doc["tables"]) == ["t0"]
+        assert "tables" not in rect(w=1, h=1).render().doc
 
     def test_nested_chart_rows_ship_as_a_table(self):
         """A chart nested in a mark position ships its rows beside the IR
         like the root's, so the widget draws it with no call to Python."""
         inner = chart([{"v": 5}, {"v": 7}]).mark(rect(h="v"))
-        widget = chart([{"k": "a"}]).mark(inner).render()
-        assert widget.spec["mark"]["data"] == {"type": "table", "id": "t1"}
-        buf = base64.b64decode(widget.tables["t1"])
-        reader = pa_ipc.open_stream(pa.BufferReader(buf))
-        assert reader.read_all().num_rows == 2
+        doc = chart([{"k": "a"}]).mark(inner).render().doc
+        assert doc["root"]["mark"]["data"] == {"type": "table", "id": "t1"}
+        assert _table_rows(doc["tables"]["t1"]) == 2
 
     def test_layer_builder_render_does_not_raise(self):
         """Regression test for #683: rendering a `.layer()` chain through the
@@ -209,11 +186,9 @@ class TestTablesWireShape:
         c1 = chart([{"x": 1, "y": 2}]).mark(rect(h="y").name("bars"))
         c2 = chart([{"x": 1, "y": 3}]).mark(rect(h="y").name("more_bars"))
 
-        widget = layer([c1, c2]).render()
+        doc = layer([c1, c2]).render().doc
 
-        assert widget.spec["type"] == "layer"
-        assert len(widget.tables) == 2
-        for b64 in widget.tables.values():
-            buf = base64.b64decode(b64)
-            reader = pa_ipc.open_stream(pa.BufferReader(buf))
-            assert reader.read_all().num_rows == 1
+        assert doc["root"]["type"] == "layer"
+        assert len(doc["tables"]) == 2
+        for b64 in doc["tables"].values():
+            assert _table_rows(b64) == 1
