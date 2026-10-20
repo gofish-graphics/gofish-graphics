@@ -142,7 +142,7 @@ function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
   };
   return Object.assign(accessor, {
     [RESOLVE_ROWS]: async (rows: readonly unknown[]) =>
-      applySchema(await callForRows(bridge, lambdaId, [...rows])),
+      applySchema(await callForRows(bridge, lambdaId, rows)),
   });
 }
 

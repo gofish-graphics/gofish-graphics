@@ -91,9 +91,9 @@ class TestUnsupportedInput:
     def test_nan_in_rows_stays_nan(self):
         """GoFish never reads NaN as missing: in dict rows NaN crosses as
         NaN, and only None is null."""
-        values = to_arrow_table(
-            [{"x": 1.0}, {"x": float("nan")}, {"x": None}]
-        ).column("x").to_pylist()
+        values = [
+            r["x"] for r in _records([{"x": 1.0}, {"x": float("nan")}, {"x": None}])
+        ]
         assert values[0] == 1.0
         assert math.isnan(values[1])
         assert values[2] is None
@@ -103,33 +103,60 @@ class TestUnsupportedInput:
         DataFrame's NaN crosses as null."""
         pd = pytest.importorskip("pandas")
         df = pd.DataFrame({"x": [1.0, float("nan")]})
-        assert to_arrow_table(df).column("x").to_pylist() == [1.0, None]
+        assert [r["x"] for r in _records(df)] == [1.0, None]
 
     def test_columns_follow_first_seen_keys(self):
-        table = to_arrow_table([{"a": 1}, {"a": 2, "b": "x"}])
-        assert table.column_names == ["a", "b"]
-        assert table.column("b").to_pylist() == [None, "x"]
+        rows = [{"a": 1}, {"a": 2, "b": "x"}]
+        table = to_arrow_table(rows)
+        assert [f.name for f in table.schema.field("item").type] == ["a", "b"]
+        assert [r["b"] for r in _records(rows)] == [None, "x"]
 
     def test_ints_and_floats_share_a_column(self):
-        table = to_arrow_table([{"n": 1}, {"n": 2.5}, {"n": None}])
-        assert table.column("n").to_pylist() == [1.0, 2.5, None]
+        assert [r["n"] for r in _records([{"n": 1}, {"n": 2.5}, {"n": None}])] == [
+            1.0,
+            2.5,
+            None,
+        ]
 
 
-class TestNoneAndEmpty:
-    def test_none_yields_placeholder(self):
-        from gofish.arrow_utils import empty_placeholder_arrow_bytes
+def _records(data):
+    return arrow_to_records(data_to_arrow_bytes(data))
 
-        assert data_to_arrow_bytes(None) == empty_placeholder_arrow_bytes()
 
-    def test_empty_list_yields_placeholder(self):
-        from gofish.arrow_utils import empty_placeholder_arrow_bytes
+class TestOneColumnOfItems:
+    """A table is a list, so it crosses as one Arrow column, `item`, whose
+    type is the items' type, whatever they are; the decode reads column 0
+    back as the list."""
 
-        assert data_to_arrow_bytes([]) == empty_placeholder_arrow_bytes()
+    def test_every_list_is_one_column_of_its_item_type(self):
+        cases = [
+            (ROWS, pa.types.is_struct),
+            ([[{"x": 1}], [{"x": 2}, {"x": 3}]], pa.types.is_list),
+            (["a", "b"], pa.types.is_string),
+            ([1, 2], pa.types.is_int64),
+        ]
+        for items, is_type in cases:
+            table = to_arrow_table(items)
+            assert table.column_names == ["item"]
+            assert is_type(table.schema.field("item").type)
+            assert _records(items) == items
 
-    def test_empty_pandas_dataframe_yields_placeholder(self):
-        from gofish.arrow_utils import empty_placeholder_arrow_bytes
+    def test_a_dataframe_is_one_struct_column_that_keeps_its_types(self):
+        """A dataframe's columns are the struct's fields, with their Arrow
+        types: an int64 column stays int64 (JS sends it back as integers),
+        and a timestamp keeps its zone."""
+        t = pd.Timestamp("2024-03-01", tz="America/New_York")
+        df = pd.DataFrame({"n": [1, 2], "f": [0.5, 1.0], "t": [t, t]})
+        item = to_arrow_table(df).schema.field("item").type
+        assert pa.types.is_struct(item)
+        assert item.field("n").type == pa.int64()
+        assert item.field("f").type == pa.float64()
+        assert item.field("t").type.tz == "America/New_York"
+        assert _records(pl.DataFrame({"n": [1, 2]})) == [{"n": 1}, {"n": 2}]
 
-        assert data_to_arrow_bytes(pd.DataFrame()) == empty_placeholder_arrow_bytes()
+    def test_none_and_empty_are_no_items(self):
+        for data in (None, [], pd.DataFrame(), pl.DataFrame({"x": []})):
+            assert _records(data) == []
 
 
 class TestNoPandasInstalled:

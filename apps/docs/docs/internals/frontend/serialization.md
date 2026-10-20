@@ -1135,9 +1135,38 @@ rows_b64)`, which calls the callback, registers the callbacks its reply
   names (by the call's scope, § One walk collects the callbacks), and ships
   the reply as `ir_payload` ships a root. So the widget
   answers mark functions and accessors as the harness does (#1049).
-- **The codec.** It converts each column once by its Arrow type: a
+- **The codec.** A table is a list, so in both languages and both
+  directions it is an Arrow table with one column, `item`, whose type is
+  the type of the list's items: a struct column for records (its fields are
+  the records' columns), a scalar column for values (an accessor's), a list
+  column for groups (a derive's). Data flows as lists, so nothing inspects
+  an item's shape: the decode always reads column 0 as the list, and the
+  encode builds the item type from the values by one rule at every depth.
+  Python wraps a dataframe's columns as one struct column without copying
+  them (`_records_table` in `arrow_utils.py`), and a list goes through
+  `pa.array` of its items. The JS decode reads a struct column a field at a
+  time, from its child vectors (`listOf` in `arrowDecode.ts`), so a table
+  of records costs what one column per field cost.
+- **Column types cross both ways.** The decode attaches each record field's
+  type with `Serialize.setColumnTypes`, and the encode reads the types the
+  list carries (`getColumnTypes`) to pick each column's Arrow type. So a
+  column keeps its declared type across a round trip, and nothing guesses a
+  type from the values. A Python integer column decodes as `HasInteger`
+  and goes back as Int64; a time goes back as a millisecond timestamp in its
+  `HasCalendar` zone; a number column JS authored is Float64, because JS has
+  one number type, so `{x: 2}` reaches Python as the float 2.0. The types
+  ride the array, so a split leaf, a `filter`'s result, and a derive's
+  result whose values still fit keep them (`copyColumnTypes`, `applySchema`
+  in `schema.ts`), and the partition a bridge call sends carries its
+  columns' types: a derive sends its input as it is, and a Python
+  accessor's batch call sends the rows inference reads with their types
+  (the mark's rows, an operator's input and its split leaves, or the rows
+  a group's refs reach, `rowsReached`), never a fresh untyped copy. A list inside a record carries its own types, for the
+  fields of its records. A `schema` entry the reader declares for a column
+  replaces its decoded type, integer included.
+- **Values.** The decode converts each column once by its Arrow type: a
   tz-aware timestamp becomes epoch milliseconds and marks the column as a
-  time (`HasCalendar` in its zone, attached with `Serialize.setColumnTypes`);
+  time (`HasCalendar` in its zone);
   a naive timestamp or a date is a wall-clock value, so it becomes an ISO
   string without an offset and is marked `HasCalendar` in UTC, which
   `applySchema` reads in the zone the chart declares for the column, as it
@@ -1154,19 +1183,13 @@ rows_b64)`, which calls the callback, registers the callbacks its reply
   struct, so a time there decodes to epoch milliseconds (a naive timestamp
   or a date read in UTC, as a chart with no zone reads it), and a list of
   structs, a list of rows, carries its own column types (`HasCalendar` in the
-  timestamp's zone, or UTC). A float NaN stays NaN: GoFish never reads NaN as
-  missing. Only a pandas DataFrame's NaN crosses as null, because pandas
-  defines NaN as the missing value of its float columns and pyarrow's
-  `from_pandas` follows that rule. A column whose rows mix types (a string in
-  one, a number in another) is a loud error in `to_arrow_table`, never a
-  silent coercion. Two rules come from Arrow on both directions. An Arrow
-  table is a list of records, but a callback may get or return a list of
-  anything (a derive's groups, an accessor's values), so a list whose items
-  are not all records crosses as one `value` column, marked as a list of
-  values in the schema metadata (`LIST_OF_VALUES`), and decodes back to its
-  items, converted as values inside a list are. And JS has one number type,
-  so the JS encoder writes a number column whose values are all integers as
-  integers, as JSON writes them, and Python reads ints.
+  timestamp's zone, or UTC, and `HasInteger`). A float NaN stays NaN: GoFish
+  never reads NaN as missing. Only a pandas DataFrame's NaN crosses as null,
+  because pandas defines NaN as the missing value of its float columns and
+  pyarrow's `from_pandas` follows that rule. A column whose rows mix types
+  (a string in one, a number in another) is a loud error in either encode
+  (`to_arrow_table`, `buildArrowTable`), naming the column, never a silent
+  coercion.
 - **Render options.** These are the JS `.render(container, options)` options:
   `w`, `h`, `axes`, `legend`, `padding`, `debug`. The widget reads them from
   its traits, which the Python `.render(...)` call sets; the harness reads

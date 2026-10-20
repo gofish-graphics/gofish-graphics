@@ -63,6 +63,41 @@ class TestCallProtocol:
             {"x": 3, "doubled": 6},
         ]
 
+    def test_numbers_reach_a_callback_by_their_declared_type(self):
+        """JS writes a number column by its declared type (the JS half is
+        `testNumbersCrossAsDeclared` in `arrowTransport.test.ts`): a column
+        JS authored, `{x: 2}`, as float64, and a column that arrived from
+        Python as int64 as int64 again. So the callback reads the float 2.0
+        and the int 5, and an int it returns ships as int64."""
+        seen = {}
+
+        def fn(rows):
+            seen["rows"] = rows
+            return rows
+
+        widget, lambda_id = _derive_widget(fn)
+        item = pa.StructArray.from_arrays(
+            [pa.array([2.0], pa.float64()), pa.array([5], pa.int64())],
+            names=["x", "n"],
+        )
+        sink = pa.BufferOutputStream()
+        table = pa.table({"item": item})
+        with pa_ipc.new_stream(sink, table.schema) as writer:
+            writer.write_table(table)
+        widget.call_request = {
+            "request_id": "r-0",
+            "lambda_id": lambda_id,
+            "rows_b64": base64.b64encode(sink.getvalue().to_pybytes()).decode(),
+        }
+        [row] = seen["rows"]
+        assert type(row["x"]) is float and row["x"] == 2.0
+        assert type(row["n"]) is int and row["n"] == 5
+        reply = widget.call_response["reply"]
+        shipped = pa_ipc.open_stream(
+            base64.b64decode(reply["tables"][reply["root"]["id"]])
+        ).read_all()
+        assert shipped.schema.field("item").type.field("n").type == pa.int64()
+
     def test_accessor_answers_one_value_per_row(self):
         """An accessor's reply names the list of its values, one per row."""
         mark = text(text=lambda d: f"{d['x']}%")

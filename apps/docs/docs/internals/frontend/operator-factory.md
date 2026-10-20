@@ -182,8 +182,9 @@ Walking `createOperator.ts:391-415`:
    over all of `d` and produces one value. Inference is synchronous, so
    `buildLayoutOpts` first resolves any Python accessor in a channel with
    `resolveChannelAccessors` (#1080), one call per accessor over every row
-   inference reads: the rows of `d` plus each split entry's rows. That row
-   set is built only when some channel holds a Python accessor.
+   inference reads: the rows of `d` plus each split entry's rows, with
+   `d`'s column types, so the bridge sends each column with its type. That
+   row set is built only when some channel holds a Python accessor.
 4. **Strip factory keys** — `by` and `debug` never reach the low-level
    layout; remove them from opts.
 5. **Inject the grouping measure** — `by` is stripped, but a grouping operator

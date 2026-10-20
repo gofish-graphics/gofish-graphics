@@ -115,22 +115,24 @@ Efficient data transfer between Python and JavaScript using Apache Arrow IPC for
 
 **Key Functions**
 
-`dataframe_to_arrow(df: pd.DataFrame) -> bytes`
+`data_to_arrow_bytes(data) -> bytes`
 
-- Converts pandas DataFrame to Arrow IPC bytes
-- Handles Int64 -> Int32 conversion (JavaScript compatibility)
-- Uses streaming format for efficient serialization
+- Converts a list or any narwhals dataframe to Arrow IPC stream bytes
+- A table is a list, so it is one Arrow column, `item`, of the items' type:
+  a struct column for records (a dataframe's columns wrapped without a
+  copy), a scalar column for values, a list column for groups
 
-`arrow_to_dataframe(arrow_bytes: bytes) -> pd.DataFrame`
+`arrow_to_records(arrow_bytes) -> list`
 
-- Converts Arrow IPC bytes back to pandas DataFrame
-- Used for deserializing data from JavaScript (for derive RPC)
+- Converts Arrow IPC bytes back to the list: column 0's values
+- Used for deserializing data from JavaScript (for every bridge call)
 
 **Type Handling**
 
-- Int64/UInt64 columns are automatically downcast to Int32/UInt32 if values fit
-- Prevents JavaScript BigInt issues while preserving precision when possible
-- Falls back to original type if values are too large
+- Every column keeps its Arrow type: int64 stays int64 (the JS decode types
+  it `HasInteger` and the JS encode sends it back as int64), and
+  timestamps keep their zone
+- The JS decode turns 64-bit integers into JS numbers
 
 ### 3. Intermediate Representation (IR)
 
@@ -293,14 +295,19 @@ export default {
 
 `decodeDocument(doc)` (`arrowBridge.ts`)
 
-- Decodes a shipped document's base64 Arrow tables into rows
-  (`arrowDecode.ts`: column types, BigInt -> Number, a list of values)
+- Decodes a shipped document's base64 Arrow tables into lists
+  (`arrowDecode.ts`): a table is one column of its items, so column 0 is
+  the list; a struct column's fields are the records' columns, read from
+  its child vectors, and carry column types (`HasCalendar` for times,
+  `HasInteger` for integers); BigInt -> Number
 
 `arrowBridge(send)` (`arrowBridge.ts`)
 
 - The `Serialize.DeriveBridge`: one `call(lambdaId, rows)`
-- Encodes the rows as base64 Arrow (`arrowTransport.ts`), sends them, and
-  decodes the reply document's tables
+- Encodes the rows as base64 Arrow (`arrowTransport.ts`: one column of the
+  items; a number column is Int64 when typed `HasInteger`, a timestamp
+  when typed `HasCalendar`, Float64 otherwise), sends them, and decodes the
+  reply document's tables
 - The parity harness builds its bridge with it too, over HTTP
 
 `traitTransport(model)` (`index.ts`)
@@ -437,7 +444,8 @@ chart(data) \
 - AnyWidget calls `initialize({ model })` once to wire up the bridge,
   then `render({ model, el })` to paint the chart
 - Decode each table: base64 -> Arrow bytes -> `Arrow.tableFromIPC()`
-- Convert Arrow Table -> array of objects:
+- Convert the table's one column (a struct column for rows) -> array of
+  objects:
   ```js
   [
     {lake: "A", species: "X", count: 10},

@@ -840,7 +840,7 @@ class TestNestedChart:
         assert doc["root"]["mark"]["data"] == {"type": "table", "id": "t1"}
         arrow = base64.b64decode(doc["tables"]["t1"])
         schema = pa_ipc.open_stream(pa.BufferReader(arrow)).schema
-        assert pa.types.is_date(schema.field("day").type)
+        assert pa.types.is_date(schema.field("item").type.field("day").type)
         # The document's JSON rows carry the date as its ISO string.
         assert root.to_ir()["tables"]["t1"][0]["day"] == "2024-01-01"
 
@@ -1172,7 +1172,12 @@ class TestTime:
         )
         node = chart(df).flow(scatter(by="naive", x="naive", y="n")).mark(line()).to_ir()["root"]
         assert "schema" not in (node["options"] or {})
-        schema = pa.ipc.open_stream(data_to_arrow_bytes(df)).read_all().schema
+        schema = (
+            pa.ipc.open_stream(data_to_arrow_bytes(df))
+            .read_all()
+            .schema.field("item")
+            .type
+        )
         assert pa.types.is_timestamp(schema.field("naive").type)
         assert schema.field("naive").type.tz is None
         assert schema.field("ny").type.tz == "America/New_York"

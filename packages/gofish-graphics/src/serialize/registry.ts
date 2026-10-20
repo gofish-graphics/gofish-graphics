@@ -92,8 +92,10 @@ export { cutSlices, cutMark, offsetOp };
  * JSON as `readIR` reads it, its tables decoded).
  */
 export interface DeriveBridge {
-  /** Call the Python callback registered under `lambdaId` with `rows`. */
-  call(lambdaId: string, rows: any[]): Promise<BridgeReply>;
+  /** Call the Python callback registered under `lambdaId` with `rows`, a
+   *  list that may carry column types (`getColumnTypes`), which the
+   *  transport reads to type its columns. */
+  call(lambdaId: string, rows: readonly unknown[]): Promise<BridgeReply>;
 }
 
 /**
@@ -121,7 +123,7 @@ export interface BridgeReply {
 export async function callForRows(
   bridge: DeriveBridge,
   lambdaId: string,
-  rows: any[]
+  rows: readonly unknown[]
 ): Promise<any[]> {
   if (rows.length === 0) return [];
   const reply = await bridge.call(lambdaId, rows);

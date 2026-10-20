@@ -12,8 +12,18 @@
  */
 
 import * as Arrow from "apache-arrow";
-import { buildArrowTable, LIST_OF_VALUES } from "./arrowTransport";
-import { Serialize, chart, scatter, circle, Schema } from "gofish-graphics";
+import { buildArrowTable } from "./arrowTransport";
+import {
+  Serialize,
+  chart,
+  scatter,
+  spread,
+  circle,
+  layer,
+  rect,
+  text,
+  Schema,
+} from "gofish-graphics";
 import { arrowTableToRows } from "./arrowDecode";
 import { decodeDocument } from "./arrowBridge";
 
@@ -26,6 +36,28 @@ function roundTrip(items: unknown[]): any[] {
   const bytes = Arrow.tableToIPC(buildArrowTable(items));
   return arrowTableToRows(Arrow.tableFromIPC(bytes));
 }
+
+/** A table of records, as Python writes one: one struct column, `item`,
+ *  whose fields are `columns`. */
+function records(columns: Record<string, Arrow.Vector>): Arrow.Table {
+  const entries = Object.entries(columns);
+  const type = new Arrow.Struct(
+    entries.map(([name, v]) => new Arrow.Field(name, v.type, true))
+  );
+  const data = Arrow.makeData({
+    type,
+    length: entries[0][1].length,
+    nullCount: 0,
+    children: entries.map(([, v]) => v.data[0]),
+  });
+  return new Arrow.Table({ item: Arrow.makeVector(data) });
+}
+
+/** The Arrow type of the fields of a table of records `table`. */
+const fieldType = (table: Arrow.Table, name: string): Arrow.DataType =>
+  (table.schema.fields[0].type as Arrow.Struct).children.find(
+    (f) => f.name === name
+  )!.type;
 
 const same = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
@@ -45,30 +77,103 @@ function testFlatTable(): boolean {
   return true;
 }
 
-/** JS has one number type; as JSON does, an integral column crosses as
- *  integers (Python reads ints) and any other as floats. */
-function testIntegralNumbersCrossAsIntegers(): boolean {
-  console.log("Test: integral number columns cross as integers");
-  const table = buildArrowTable([
-    { n: 1, f: 1.5 },
-    { n: -3, f: 2 },
-  ]);
+/** A number column's Arrow type is its declared type, never a guess from
+ *  its values: a column JS authored is Float64 (JS has one number type), so
+ *  `{ x: 2 }` reaches Python as the float 2.0; a column that arrived as
+ *  integers (a Python int64 column, decoded with `HasInteger`) goes back as
+ *  Int64, and keeps it through a split leaf (`copyColumnTypes`); a time
+ *  goes back as a millisecond timestamp in its zone. */
+function testNumbersCrossAsDeclared(): boolean {
+  console.log("Test: number columns cross by their declared type");
+  const authored = buildArrowTable([{ x: 2 }, { x: 3 }]);
+  const fromPython = arrowTableToRows(
+    Arrow.tableFromIPC(
+      Arrow.tableToIPC(
+        records({
+          n: Arrow.vectorFromArray([1n, 5n], new Arrow.Int64()),
+          t: Arrow.vectorFromArray(
+            [0, 1000],
+            new Arrow.TimestampMillisecond("America/New_York")
+          ),
+          f: Arrow.vectorFromArray([1, 2], new Arrow.Float64()),
+        })
+      )
+    )
+  );
+  const leaf = Serialize.setColumnTypes(
+    [fromPython[1]],
+    Serialize.getColumnTypes(fromPython)!
+  );
+  const back = buildArrowTable(leaf);
+  const t = fieldType(back, "t");
   const ok =
-    Arrow.DataType.isInt(table.schema.fields[0].type) &&
-    Arrow.DataType.isFloat(table.schema.fields[1].type) &&
-    same(roundTrip([{ n: 1 }, { n: -3 }]), [{ n: 1 }, { n: -3 }]);
-  console.log(ok ? "  ✓ PASSED" : `  ✗ FAILED ${table.schema}`);
+    Arrow.DataType.isFloat(fieldType(authored, "x")) &&
+    Arrow.DataType.isInt(fieldType(back, "n")) &&
+    (fieldType(back, "n") as Arrow.Int).bitWidth === 64 &&
+    Arrow.DataType.isTimestamp(t) &&
+    t.timezone === "America/New_York" &&
+    Arrow.DataType.isFloat(fieldType(back, "f")) &&
+    same(roundTrip(leaf), [{ n: 5, t: 1000, f: 2 }]);
+  console.log(ok ? "  ✓ PASSED" : `  ✗ FAILED ${back.schema}`);
   return ok;
 }
 
-/** Data flows as lists, so a callback may get or return groups or values,
- *  not records: such a list crosses as one `value` column, marked as a list
- *  of values, and decodes back to its items. */
-function testListOfValuesRoundTrips(): boolean {
-  console.log("Test: a list of groups or values round-trips");
+/** The rows a Python accessor is called with, in a split leaf, carry the
+ *  column types of the chart's data, so the encode sends an integer column
+ *  back to Python as integers (the piccl bottle's `f"{d['amount']}%"`). */
+async function testAccessorRowsCarryTheirTypes(): Promise<boolean> {
+  console.log("Test: a Python accessor's rows carry their column types");
+  const seen: Arrow.DataType[] = [];
+  const bridge: Serialize.DeriveBridge = {
+    async call(_id, rows) {
+      seen.push(fieldType(buildArrowTable(rows), "amount"));
+      return {
+        root: { type: "table", id: "r" },
+        tables: { r: rows.map((r: any) => `${r.amount}%`) },
+      };
+    },
+  };
+  const label = Serialize.unwrapOpts({ __gofish_lambda: "f" }, bridge);
+  const rows = arrowTableToRows(
+    Arrow.tableFromIPC(
+      Arrow.tableToIPC(
+        records({
+          category: Arrow.vectorFromArray(["a", "b"], new Arrow.Utf8()),
+          amount: Arrow.vectorFromArray([30n, 60n], new Arrow.Int64()),
+        })
+      )
+    )
+  );
+  await chart(rows, { axes: false })
+    .flow(spread({ by: "category", dir: "x" }))
+    .mark(layer([rect({ h: "amount", w: 10 }), text({ text: label })]))
+    .toDisplayList({ w: 300, h: 100 });
+  const ok =
+    seen.length === 2 &&
+    seen.every((t) => Arrow.DataType.isInt(t) && t.bitWidth === 64);
+  console.log(ok ? "  ✓ PASSED" : `  ✗ FAILED ${seen.map(String)}`);
+  return ok;
+}
+
+/** Every list is one column of its items, whatever they are: a struct for
+ *  records, a scalar for values, a list for groups. Each decodes back to
+ *  its items. */
+function testEveryListIsOneColumn(): boolean {
+  console.log("Test: every list is one column of its items");
+  const rows = [{ x: 1 }, { x: 2 }];
   const groups = [[{ x: 1 }, { x: 2 }], [{ x: 3 }]];
   const values = ["a", "b"];
+  const typeOf = (items: unknown[]) => {
+    const { fields } = buildArrowTable(items).schema;
+    return fields.length === 1 && fields[0].name === "item"
+      ? fields[0].type
+      : undefined;
+  };
   const ok =
+    Arrow.DataType.isStruct(typeOf(rows)) &&
+    Arrow.DataType.isList(typeOf(groups)) &&
+    Arrow.DataType.isUtf8(typeOf(values)) &&
+    same(roundTrip(rows), rows) &&
     same(roundTrip(groups), groups) &&
     same(roundTrip(values), values) &&
     same(roundTrip([]), []);
@@ -197,7 +302,7 @@ function testTimeColumnsDecodeAsTimes(): boolean {
   console.log("Test: time columns decode with HasCalendar");
   const ms = Date.UTC(2024, 2, 10, 5);
   const day = Date.UTC(2024, 2, 1);
-  const table = new Arrow.Table({
+  const table = records({
     ny: Arrow.vectorFromArray(
       [ms, null],
       new Arrow.TimestampMicrosecond("America/New_York")
@@ -222,6 +327,7 @@ function testTimeColumnsDecodeAsTimes(): boolean {
         ny: Schema.time({ zone: "America/New_York" }).type,
         naive: Schema.time().type,
         d: Schema.time().type,
+        n: { HasInteger: {} },
       });
   console.log(
     ok ? "  ✓ PASSED" : `  ✗ FAILED ${JSON.stringify({ rows, types })}`
@@ -238,7 +344,7 @@ async function testNaiveTimesReadInTheChartZone(): Promise<boolean> {
   console.log("Test: naive timestamps read in the chart's zone");
   const feb28 = Date.UTC(2024, 1, 28); // the wall clock, counted as UTC
   const mar1 = Date.UTC(2024, 2, 1);
-  const table = new Arrow.Table({
+  const table = records({
     t: Arrow.vectorFromArray([feb28, mar1], new Arrow.TimestampMicrosecond()),
     v: Arrow.vectorFromArray([1, 2], new Arrow.Int32()),
   });
@@ -265,7 +371,7 @@ async function testNaiveTimesReadInTheChartZone(): Promise<boolean> {
   const aware = arrowTableToRows(
     Arrow.tableFromIPC(
       Arrow.tableToIPC(
-        new Arrow.Table({
+        records({
           t: Arrow.vectorFromArray(
             [feb28, mar1],
             new Arrow.TimestampMicrosecond("UTC")
@@ -306,7 +412,7 @@ function testListColumnsDecodeAsArrays(): boolean {
   console.log("Test: list columns decode as plain arrays");
   const point = new Arrow.List(new Arrow.Field("item", new Arrow.Float64()));
   const ring = new Arrow.List(new Arrow.Field("item", point));
-  const table = new Arrow.Table({
+  const table = records({
     ring: Arrow.vectorFromArray(
       [
         [
@@ -339,7 +445,7 @@ function testListColumnsDecodeAsArrays(): boolean {
  *  buffer holds, and a NaN stays NaN (GoFish never reads NaN as missing). */
 function testNumericNullsDecodeAsNull(): boolean {
   console.log("Test: numeric nulls decode as null, NaN as NaN");
-  const table = new Arrow.Table({
+  const table = records({
     x: Arrow.vectorFromArray([1.5, null, 3], new Arrow.Float64()),
     n: Arrow.vectorFromArray([null, 2, 3], new Arrow.Int32()),
     f: Arrow.vectorFromArray([NaN, 1, 2], new Arrow.Float64()),
@@ -365,7 +471,7 @@ function testWideIntsAndStructs(): boolean {
     new Arrow.Field("id", new Arrow.Int64()),
     new Arrow.Field("label", new Arrow.Utf8()),
   ]);
-  const table = new Arrow.Table({
+  const table = records({
     t: Arrow.vectorFromArray([1709960400000n, null], new Arrow.Int64()),
     s: Arrow.vectorFromArray([{ id: 7n, label: "a" }, null], at),
   });
@@ -394,7 +500,7 @@ function testNestedTimesDecodeAsEpochMs(): boolean {
     new Arrow.Field("d", new Arrow.DateDay()),
     new Arrow.Field("v", new Arrow.Int32()),
   ]);
-  const table = new Arrow.Table({
+  const table = records({
     points: Arrow.vectorFromArray(
       [[{ naive: ms, ny: ms, d: new Date(day), v: 1 }, null]],
       new Arrow.List(new Arrow.Field("item", point))
@@ -421,6 +527,7 @@ function testNestedTimesDecodeAsEpochMs(): boolean {
         naive: Schema.time().type,
         ny: Schema.time({ zone: "America/New_York" }).type,
         d: Schema.time().type,
+        v: { HasInteger: {} },
       }) &&
     JSON.stringify(rows[0].stamps) === JSON.stringify([ms, null]) &&
     rows[0].at.naive === ms &&
@@ -449,19 +556,13 @@ async function testCallbackResultsAreTyped(): Promise<boolean> {
       rows.map(() => feb28),
       new Arrow.TimestampMillisecond()
     );
-  const values = (rows: any[]) => {
-    const table = new Arrow.Table({ value: naive(rows) });
-    return new Arrow.Table(
-      new Arrow.Schema(table.schema.fields, LIST_OF_VALUES),
-      table.batches
-    );
-  };
+  const values = (rows: any[]) => new Arrow.Table({ item: naive(rows) });
   const bridge: Serialize.DeriveBridge = {
     async call(id, rows) {
       const table =
         id === "f"
           ? values(rows)
-          : new Arrow.Table({
+          : records({
               t: naive(rows),
               n: Arrow.vectorFromArray(
                 rows.map((_, i) => i),
@@ -542,8 +643,9 @@ export async function runArrowTransportTests(): Promise<boolean> {
 
   const results = [
     testFlatTable(),
-    testIntegralNumbersCrossAsIntegers(),
-    testListOfValuesRoundTrips(),
+    testNumbersCrossAsDeclared(),
+    await testAccessorRowsCarryTheirTypes(),
+    testEveryListIsOneColumn(),
     testSingleRowStruct(),
     testMultiRowBag(),
     testRaggedKeys(),

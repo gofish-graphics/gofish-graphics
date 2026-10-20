@@ -1004,7 +1004,9 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
     for (const items of entries?.values() ?? []) {
       for (const row of items) rows.add(row);
     }
-    return [...rows];
+    // The input's rows, with its column types (a Python accessor's call
+    // sends them, typed, across the bridge).
+    return copyColumnTypes([...rows], d);
   });
   const resolved = isThenable(pending) ? await pending : pending;
   const withChannels = applyChannels(resolved, channels, d, entries);

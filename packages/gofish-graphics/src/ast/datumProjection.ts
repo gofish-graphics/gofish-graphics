@@ -40,6 +40,7 @@ import {
 import { chainCells, Cell, CycleCell, KeyCell, type Cells } from "./cells";
 import {
   columnType,
+  copyColumnTypes,
   getColumnTypes,
   orderByLevels,
   type HasDomain,
@@ -78,15 +79,22 @@ function projectValues(
 
 /** The rows a key function reads when it is projected over `obj` (see
  *  {@link projectBy}): every row the walk reaches through refs and bags,
- *  nested ones included. */
+ *  nested ones included, carrying the column types of the bags it reached
+ *  them through. */
 export function rowsReached(obj: unknown): unknown[] {
   const rows: unknown[] = [];
-  walkRows(obj, [], (row) => rows.push(row));
+  walkRows(
+    obj,
+    [],
+    (row) => rows.push(row),
+    (bag) => copyColumnTypes(rows, bag)
+  );
   return rows;
 }
 
 /** Walk `segments` from `obj`, projecting over any array encountered and
- *  through any ref's `.datum`, and `visit` each value the walk reaches.
+ *  through any ref's `.datum`, and `visit` each value the walk reaches
+ *  (and `bag` each array it projects over).
  *
  *  A declared domain case, not a row-vs-list sniff: projection is DEFINED
  *  over nested bags (a bag of refs whose datums are bags of rows, a field
@@ -95,7 +103,8 @@ export function rowsReached(obj: unknown): unknown[] {
 function walkRows(
   obj: unknown,
   segments: string[],
-  visit: (value: unknown) => void
+  visit: (value: unknown) => void,
+  bag?: (list: unknown[]) => void
 ): void {
   const walk = (current: unknown, i: number): void => {
     if (current == null) return; // a missing hop contributes no value
@@ -108,6 +117,7 @@ function walkRows(
     }
     if (Array.isArray(current)) {
       // Project the rest of the walk over every element of the bag.
+      bag?.(current);
       for (const el of current) walk(el, i);
       return;
     }

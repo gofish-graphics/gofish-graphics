@@ -31,15 +31,23 @@ def _ipc_bytes(table: pa.Table) -> bytes:
     return sink.getvalue().to_pybytes()
 
 
+def _records(columns: dict) -> pa.Table:
+    """A table of records, as the JS encoder writes one: one struct column,
+    `item`, whose fields are ``columns``."""
+    return pa.table(
+        {"item": pa.StructArray.from_arrays(list(columns.values()), names=list(columns))}
+    )
+
+
 class TestArrowToRecords:
     def test_flat_table(self):
-        table = pa.table({"x": pa.array([1.0, 2.0]), "name": pa.array(["a", "b"])})
+        table = _records({"x": pa.array([1.0, 2.0]), "name": pa.array(["a", "b"])})
         records = arrow_to_records(_ipc_bytes(table))
         assert records == [{"x": 1.0, "name": "a"}, {"x": 2.0, "name": "b"}]
 
     def test_single_row_struct(self):
         struct_type = pa.struct([("x", pa.float64()), ("label", pa.string())])
-        table = pa.table(
+        table = _records(
             {
                 "__inputRef": pa.array([0.0], type=pa.float64()),
                 "datum": pa.array([{"x": 1.0, "label": "a"}], type=struct_type),
@@ -53,7 +61,7 @@ class TestArrowToRecords:
         multiple rows, transported as a `list<struct>` column."""
         struct_type = pa.struct([("x", pa.float64()), ("label", pa.string())])
         list_type = pa.list_(struct_type)
-        table = pa.table(
+        table = _records(
             {
                 "__inputRef": pa.array([0.0, 1.0], type=pa.float64()),
                 "datum": pa.array(
@@ -82,7 +90,7 @@ class TestArrowToRecords:
         surface that as `None`, not drop the key or raise."""
         struct_type = pa.struct([("x", pa.float64()), ("label", pa.string())])
         list_type = pa.list_(struct_type)
-        table = pa.table(
+        table = _records(
             {
                 "datum": pa.array(
                     [[{"x": 1.0, "label": "a"}, {"x": 2.0, "label": None}]],
@@ -96,7 +104,7 @@ class TestArrowToRecords:
     def test_empty_bag_decodes_to_empty_list(self):
         struct_type = pa.struct([("x", pa.float64())])
         list_type = pa.list_(struct_type)
-        table = pa.table(
+        table = _records(
             {
                 "__inputRef": pa.array([0.0], type=pa.float64()),
                 "datum": pa.array([[]], type=list_type),
@@ -127,7 +135,7 @@ class TestWidgetMarkFnBagContract:
 
         struct_type = pa.struct([("x", pa.float64()), ("label", pa.string())])
         list_type = pa.list_(struct_type)
-        table = pa.table(
+        table = _records(
             {
                 "__inputRef": pa.array([0.0], type=pa.float64()),
                 "datum": pa.array(
@@ -152,8 +160,8 @@ class TestWidgetMarkFnBagContract:
 
 def test_a_list_of_groups_or_values_round_trips():
     """Data flows as lists, so a callback may return groups or values rather
-    than records: such a list crosses as one `value` column, marked as a list
-    of values, and decodes back to its items (the JS codec does the same)."""
+    than records: every list crosses as one column of its items and decodes
+    back to them (the JS codec does the same)."""
     from gofish.arrow_utils import data_to_arrow_bytes
 
     groups = [[{"x": 1}, {"x": 2}], [{"x": 3}]]

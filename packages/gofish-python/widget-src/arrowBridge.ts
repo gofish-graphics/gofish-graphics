@@ -34,9 +34,10 @@ export function decodeDocument<
   } as unknown as D;
 }
 
-/** `rows` as one base64 Arrow IPC stream (see `arrowTransport.ts`). */
-export function rowsToArrowB64(rows: readonly Record<string, any>[]): string {
-  const bytes = Arrow.tableToIPC(buildArrowTable(rows), "stream");
+/** The list `items` as one base64 Arrow IPC stream (see
+ *  `arrowTransport.ts`). */
+export function rowsToArrowB64(items: readonly unknown[]): string {
+  const bytes = Arrow.tableToIPC(buildArrowTable(items), "stream");
   // Chunked, so a large table does not overflow the argument list.
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) {
