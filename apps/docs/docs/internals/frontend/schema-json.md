@@ -462,12 +462,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/ChartIR"
-        },
-        {
-          "$ref": "#/$defs/LayerIR"
         }
       ],
-      "description": "What a mark position holds. Besides the mark kinds, a whole chart or layer may sit where a mark does, as in JS (.mark(chart(...)), layer([rect(...), chart(...)]))."
+      "description": "What a mark position holds. Besides the mark kinds, a whole chart may sit where a mark does, as in JS (.mark(chart(...)), layer([rect(...), chart(...)])). A layer of charts is the layer combinator mark with chart children; LayerIR is a root form only."
     },
     "OffsetMarkIR": {
       "description": "Shift a single child by (x, y) render-pixels without moving the bounds it advertises to its parent. Maps to the public `offset` operator.",

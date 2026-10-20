@@ -439,23 +439,20 @@ export function mapMark(
     return inputRef;
   }
 
-  // A whole chart or layer in a mark position (`.mark(chart(...))`, a
-  // `layer([rect(...), chart(...)])` child): rebuild the same `chart(...)` /
-  // `layer([...])` object a JS author writes there, unresolved, so the mark
-  // machinery treats it as it treats the JS one (an empty `chart()` scope
-  // inherits the rows of the partition it sits in). A chart with rows of its
-  // own carries them inline.
+  // A whole chart in a mark position (`.mark(chart(...))`, a
+  // `layer([rect(...), chart(...)])` child): rebuild the same `chart(...)`
+  // object a JS author writes there, unresolved, so the mark machinery treats
+  // it as it treats the JS one (an empty `chart()` scope inherits the rows of
+  // the partition it sits in). A chart with rows of its own carries them
+  // inline. A layer of charts is the `layer` combinator below.
   if (Frontend.isChartIR(spec)) {
     return chartFromIR(spec, [], bridge, resolveToken) as unknown as Mark<any>;
-  }
-  if (Frontend.isLayerIR(spec)) {
-    return buildLayer(spec, bridge, [], resolveToken) as Mark<any>;
   }
 
   // Mark-as-function: Python registered a `(data) -> mark | chart` callback.
   // The JS Mark calls it through the bridge per invocation. The reply is the
-  // mark-position IR of what the callback returned (a mark, a chart or a
-  // layer), so it rebuilds here like any other mark position. Like a JS mark
+  // mark-position IR of what the callback returned (a mark or a chart; a
+  // layer of charts is a mark), so it rebuilds here like any other mark position. Like a JS mark
   // function's result, it is returned unresolved: the caller,
   // `resolveMarkResult`, resolves a Mark, a ChartBuilder or a LayerBuilder.
   if (spec.type === "mark-fn") {

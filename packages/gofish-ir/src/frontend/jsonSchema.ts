@@ -509,10 +509,9 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         { $ref: "#/$defs/OffsetMarkIR" },
         { $ref: "#/$defs/CutMarkIR" },
         { $ref: "#/$defs/ChartIR" },
-        { $ref: "#/$defs/LayerIR" },
       ],
       description:
-        "What a mark position holds. Besides the mark kinds, a whole chart or layer may sit where a mark does, as in JS (.mark(chart(...)), layer([rect(...), chart(...)])).",
+        "What a mark position holds. Besides the mark kinds, a whole chart may sit where a mark does, as in JS (.mark(chart(...)), layer([rect(...), chart(...)])). A layer of charts is the layer combinator mark with chart children; LayerIR is a root form only.",
     },
     OffsetMarkIR: {
       description:

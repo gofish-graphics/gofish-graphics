@@ -662,8 +662,9 @@ class TestChartBuilder:
 
 
 class TestNestedChart:
-    """A nested chart or layer in a mark position crosses as its own IR,
-    inline in the mark tree, both as a chart's `.mark(...)` and as a
+    """A nested chart in a mark position crosses as its own IR, and a layer of
+    charts as the `layer` combinator with chart children, inline in the mark
+    tree, both as a chart's `.mark(...)` and as a
     combinator child (#1112, #1180). JS binds an empty scope to the rows of
     the partition it sits in, so nothing calls back into Python."""
 
@@ -704,8 +705,8 @@ class TestNestedChart:
 
     def test_layer_of_charts_in_mark_position(self):
         """`layer([chart(...), chart(...)])` is a `LayerBuilder`; in a mark
-        position it crosses as its own `LayerIR`, by the same rule as a
-        nested chart (#1180 gap 1)."""
+        position it crosses as the `layer` combinator mark with chart
+        children, like any combinator (#1180 gap 1). `LayerIR` is root-only."""
         bars_and_area = layer(
             [
                 chart()
@@ -726,11 +727,28 @@ class TestNestedChart:
         child = layer([rect(w=4, h="count"), bars_and_area]).to_dict()
         assert direct == child["children"][1]
         assert direct["type"] == "layer"
-        assert "builder" not in direct
-        assert [t["data"] for t in direct["charts"]] == [
+        assert direct["__combinator"] is True
+        assert "charts" not in direct
+        assert [t["data"] for t in direct["children"]] == [
             {"type": "previous-tier"},
             {"type": "select", "layer": "bars", "mode": "all"},
         ]
+
+    def test_layer_of_charts_keeps_its_relate(self):
+        m = layer(
+            [self._flower().name("a"), self._flower().name("b")]
+        ).relate(lambda a, b: [Constraint.align([a, b], x="middle")])
+        d = chart(self.ROWS).mark(m).to_ir()["mark"]
+        assert d["relate"] == [
+            {"type": "align", "options": {"x": "middle"}, "refs": ["a", "b"]}
+        ]
+
+    def test_layer_chain_has_no_mark_position_form(self):
+        """A `chart(...).layer(...)` chain cannot sit in a mark position
+        (#1181)."""
+        chain = chart().mark(rect()).layer(chart().mark(rect()))
+        with pytest.raises(TypeError, match="mark position"):
+            chart(self.ROWS).mark(chain).to_ir()
 
     def test_callable_stays_a_mark_function(self):
         """A callable is arbitrary Python code, so it still calls back."""

@@ -616,11 +616,12 @@ export type StructBinIR =
 /**
  * What a mark position holds: a chart's `mark`, a combinator's child, a cut's
  * `source`, a drawing `.relate(...)` clause. Besides the mark kinds, a mark
- * position may hold a whole chart or layer, as in JS, where `.mark(chart(...))`
- * and `layer([rect(...), chart(...)])` are ordinary marks. A nested chart
- * crosses as its own `ChartIR` (an empty `chart()` scope as
- * `{type: "previous-tier"}` data, which inherits the rows of the partition it
- * sits in), and a layer of charts as its own `LayerIR`.
+ * position may hold a whole chart, as in JS, where `.mark(chart(...))` and
+ * `layer([rect(...), chart(...)])` are ordinary marks. A nested chart crosses
+ * as its own `ChartIR` (an empty `chart()` scope as `{type: "previous-tier"}`
+ * data, which inherits the rows of the partition it sits in). A layer of
+ * charts is the `layer` combinator mark with chart children, like any
+ * combinator; `LayerIR` is a root form only.
  */
 export type MarkIR =
   | LeafMarkIR
@@ -628,8 +629,7 @@ export type MarkIR =
   | RefMarkIR
   | OffsetMarkIR
   | CutMarkIR
-  | ChartIR
-  | LayerIR;
+  | ChartIR;
 
 export type LeafMarkType =
   | "rect"
@@ -975,14 +975,12 @@ export function isConstraintIR(clause: RelateClauseIR): clause is ConstraintIR {
 // Discriminator helpers (predicates)
 // ---------------------------------------------------------------------------
 
-/** Discriminate a root document, or a chart or layer in a mark position. A
- *  `LayerIR` and the `layer` combinator mark share the type `"layer"`; the
- *  `LayerIR` is the one with `charts`. */
+/** Discriminate a root document, or a chart in a mark position. */
 export function isChartIR(node: FrontendIR | MarkIR): node is ChartIR {
   return node.type === "chart";
 }
-export function isLayerIR(node: FrontendIR | MarkIR): node is LayerIR {
-  return node.type === "layer" && Array.isArray((node as LayerIR).charts);
+export function isLayerIR(node: FrontendIR): node is LayerIR {
+  return node.type === "layer";
 }
 export function isRawMarkIR(node: FrontendIR): node is RawMarkIR {
   return node.type === "raw-mark";
@@ -1010,8 +1008,7 @@ export function isLeafMarkIR(mark: MarkIR): mark is LeafMarkIR {
     !isRefMarkIR(mark) &&
     !isOffsetMarkIR(mark) &&
     !isCutMarkIR(mark) &&
-    !isChartIR(mark) &&
-    !isLayerIR(mark)
+    !isChartIR(mark)
   );
 }
 

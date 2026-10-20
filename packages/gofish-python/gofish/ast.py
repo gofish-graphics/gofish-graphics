@@ -3507,25 +3507,32 @@ class LayerBuilder:
 
     def to_dict(self) -> dict:
         """The layer's IR in a mark position (``.mark(layer([chart(...),
-        chart(...)]))``): its own ``LayerIR``, inline in the mark tree, with
-        each chart tier in its mark-position form (``ChartBuilder.to_dict``)."""
-        return self._layer_ir(
-            [
-                child.to_dict() if isinstance(child, ChartBuilder) else child._ir()
-                for child in self.children
-            ]
-        )
+        chart(...)]))``): the ``layer`` combinator mark, whose children are
+        the charts in their mark-position form (``ChartBuilder.to_dict``), as
+        for any combinator child. ``LayerIR`` is the root form only, where
+        each tier's rows ship beside the IR.
+
+        A ``chart(...).layer(...)`` chain has no mark-position form: the
+        combinator cannot carry the chain's tier wiring, and JS ``.mark()``
+        does not take a chain either. TODO(#1181): decide whether a chain
+        belongs in a mark position at all.
+        """
+        if self._builder_chain:
+            raise TypeError(
+                "a chart(...).layer(...) chain cannot sit in a mark position; "
+                "use layer([chart(...), chart(...)]) there"
+            )
+        mark = RelatableMark("layer", _children=self.children, **self.options)
+        mark._relate = self._relate
+        return mark.to_dict()
 
     def _ir(self) -> dict:
         """``to_ir()`` before its non-finite numbers are encoded (see
         ``Mark._ir``). Each chart tier's rows ship beside the IR
         (``tiers_arrow_bytes``)."""
-        return self._layer_ir([child._ir() for child in self.children])
-
-    def _layer_ir(self, charts: List[dict]) -> dict:
         result: dict = {
             "type": "layer",
-            "charts": charts,
+            "charts": [child._ir() for child in self.children],
             "options": self.options,
         }
         if self._builder_chain:

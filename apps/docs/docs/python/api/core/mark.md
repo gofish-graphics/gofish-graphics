@@ -117,8 +117,8 @@ chart(barley).flow(spread(by="variety", dir="x")).mark(
 )
 ```
 
-A nested chart or layer crosses to JS as its own chart or layer IR, inline in
-the mark tree, so it draws with no call back into Python.
+A nested chart crosses to JS as its own chart IR, and a layer of charts as the
+`layer` combinator with chart children, inline in the mark tree, so it draws with no call back into Python.
 
 The older callback form `mark(lambda data: chart(data, ...).flow(...).mark(...))`
 still works and is equivalent — the function receives each group's data slice and

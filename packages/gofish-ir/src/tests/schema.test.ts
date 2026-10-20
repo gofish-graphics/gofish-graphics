@@ -232,8 +232,9 @@ function chart(operators: any[], mark: any = { type: "rect" }) {
   } as unknown as FrontendIRDocument;
 }
 
-// A mark position may hold a whole chart or layer (#1180): as a chart's mark
-// and as a combinator child, by one rule.
+// A mark position may hold a whole chart (#1180): as a chart's mark and as a
+// combinator child, by one rule. A layer of charts is the `layer` combinator
+// with chart children; `LayerIR` is a root form only.
 const nestedChart = {
   type: "chart",
   data: { type: "previous-tier" },
@@ -241,7 +242,8 @@ const nestedChart = {
 };
 const layerOfCharts = {
   type: "layer",
-  charts: [
+  __combinator: true,
+  children: [
     nestedChart,
     {
       type: "chart",
@@ -273,8 +275,8 @@ check(
   !validate(chart([], { type: "chart", data: null })).valid
 );
 check(
-  "a layer of charts whose tier is a bare mark is rejected",
-  !validate(chart([], { type: "layer", charts: [{ type: "rect" }] })).valid
+  "a LayerIR in a mark position is rejected (root only)",
+  !validate(chart([], { type: "layer", charts: [nestedChart] })).valid
 );
 
 check(
