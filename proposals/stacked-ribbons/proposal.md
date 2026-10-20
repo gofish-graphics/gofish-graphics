@@ -19,6 +19,60 @@ Prototype stories: `packages/gofish-graphics/stories/_proposals/stacked-ribbons/
 - **Part.** A named piece of a mark's outline that the mark declares, such as a rect's `top`, `right`, `bottom`, `left`. The coordinate transform carries parts with it, so a polar rect's `bottom` is its inner arc. The label proposal uses the same word.
 - **Unpivot.** Turn columns into rows: a row with columns `source` and `target` becomes two rows with a `side` column. The polars name (`DataFrame.unpivot`, formerly `melt`); dplyr calls it `pivot_longer`.
 
+## What unpivot does
+
+`unpivot({ on, variable, value, id })` turns some columns into rows. For each input row and each column named in `on`, it writes one output row with:
+
+- a column named by `variable`, holding the _name_ of the column it came from;
+- a column named by `value`, holding that column's _value_;
+- a column named by `id`, holding the input row's position, so every output row remembers which input row it came from;
+- a copy of every column not in `on`.
+
+The `on` columns are dropped, so _n_ rows unpivoted on _k_ columns become _n_ × _k_ rows. Nothing is summed or lost; the data goes from wide to long. Here it turns "one row per link" into "one row per end", and `id` is what `ribbon({ by })` later uses to find a link's ends.
+
+**Example 1, sankey links (real energy data around Coal):**
+
+| source        | target | value  |
+| ------------- | ------ | ------ |
+| Coal imports  | Coal   | 11.606 |
+| Coal reserves | Coal   | 63.965 |
+| Coal          | Solid  | 75.571 |
+
+`unpivot({ on: ["source", "target"], variable: "side", value: "node", id: "link" })` gives:
+
+| link | side   | node          | value  |
+| ---- | ------ | ------------- | ------ |
+| 0    | source | Coal imports  | 11.606 |
+| 0    | target | Coal          | 11.606 |
+| 1    | source | Coal reserves | 63.965 |
+| 1    | target | Coal          | 63.965 |
+| 2    | source | Coal          | 75.571 |
+| 2    | target | Solid         | 75.571 |
+
+Coal now owns three rows. The flow groups by `node`, splits by `side`, and stacks each side: two incoming ends on the left (11.606 + 63.965 = 75.571), one outgoing end on the right. `ribbon({ by: "link" })` joins the two rows that share a link number.
+
+**Example 2, parallel sets (two real titanic rows):**
+
+| class | sex    | survived | count |
+| ----- | ------ | -------- | ----- |
+| First | Female | Yes      | 141   |
+| First | Male   | Yes      | 62    |
+
+`unpivot({ on: ["class", "sex", "survived"], variable: "axis", value: "category", id: "path" })` gives:
+
+| path | axis     | category | count |
+| ---- | -------- | -------- | ----- |
+| 0    | class    | First    | 141   |
+| 0    | sex      | Female   | 141   |
+| 0    | survived | Yes      | 141   |
+| 1    | class    | First    | 62    |
+| 1    | sex      | Male     | 62    |
+| 1    | survived | Yes      | 62    |
+
+Both cohorts land in the same First box and the same Yes box, and split only on the sex axis. One ribbon per `path` threads its three rows. This is ggalluvial's "lodes form"; ggforce's `gather_set_data` and ggsankey's `make_long` do the same reshape.
+
+Spelling notes (decision 3): polars has no `id` option (it adds the row number first with `with_row_index`), and `value: "node"` names the _new_ column, which is easy to confuse with a data column called `value`; dplyr's `names_to` / `values_to` avoids that at the cost of leaving the polars names.
+
 ## What Josh asked, and the answers
 
 | Question in the notes                                                    | Answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |

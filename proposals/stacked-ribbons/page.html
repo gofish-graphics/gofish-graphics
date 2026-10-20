@@ -480,8 +480,341 @@
       Turn columns into rows: a row with <code>source</code> and
       <code>target</code> becomes two rows with a <code>side</code> column. The
       polars name; dplyr says <code>pivot_longer</code>.
+      <a href="#unpivot">Worked example below.</a>
     </dd>
   </dl>
+
+  <h2 id="unpivot">What unpivot does</h2>
+  <div class="prose">
+    <p>
+      <code>unpivot</code> takes some columns of a table and turns them into
+      rows. For each input row, and for each column named in <code>on</code>, it
+      writes one output row. That output row gets:
+    </p>
+    <ul>
+      <li>
+        a column named by <code>variable</code>, holding the <em>name</em> of
+        the column it came from;
+      </li>
+      <li>
+        a column named by <code>value</code>, holding that column's
+        <em>value</em> in the input row;
+      </li>
+      <li>
+        a column named by <code>id</code>, holding the input row's position, so
+        every output row remembers which input row it came from;
+      </li>
+      <li>a copy of every column that is not in <code>on</code>.</li>
+    </ul>
+    <p>
+      The columns in <code>on</code> themselves are dropped. So a table of
+      <em>n</em> rows unpivoted on <em>k</em> columns becomes
+      <em>n</em>&nbsp;×&nbsp;<em>k</em> rows. Nothing is added up or lost: it is
+      the same data, reshaped from wide to long.
+    </p>
+    <p>
+      Here it does one job: it turns "one row per link" into "one row per end".
+      The <code>id</code> column is what lets the ribbon find the ends that
+      belong together later, through <code>ribbon({ by: id })</code>.
+    </p>
+  </div>
+
+  <h3>Example 1: a sankey link has two ends</h3>
+  <p class="prose">
+    Three real links from the energy data, all touching the node
+    <strong>Coal</strong>:
+  </p>
+  <div class="ex">
+    <div>
+      <div class="code-label">Input: one row per link</div>
+      <div class="table-scroll" style="margin: 0">
+        <table style="min-width: 0">
+          <thead>
+            <tr>
+              <th>source</th>
+              <th>target</th>
+              <th>value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Coal imports</td>
+              <td>Coal</td>
+              <td>11.606</td>
+            </tr>
+            <tr>
+              <td>Coal reserves</td>
+              <td>Coal</td>
+              <td>63.965</td>
+            </tr>
+            <tr>
+              <td>Coal</td>
+              <td>Solid</td>
+              <td>75.571</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <pre><code>unpivot({ on: ["source", "target"],
+          variable: "side", value: "node", id: "link" })</code></pre>
+    </div>
+    <div>
+      <div class="code-label">Output: one row per end</div>
+      <div class="table-scroll" style="margin: 0">
+        <table style="min-width: 0">
+          <thead>
+            <tr>
+              <th>link</th>
+              <th>side</th>
+              <th>node</th>
+              <th>value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>0</td>
+              <td>source</td>
+              <td>Coal imports</td>
+              <td>11.606</td>
+            </tr>
+            <tr>
+              <td>0</td>
+              <td>target</td>
+              <td><strong>Coal</strong></td>
+              <td>11.606</td>
+            </tr>
+            <tr>
+              <td>1</td>
+              <td>source</td>
+              <td>Coal reserves</td>
+              <td>63.965</td>
+            </tr>
+            <tr>
+              <td>1</td>
+              <td>target</td>
+              <td><strong>Coal</strong></td>
+              <td>63.965</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>source</td>
+              <td><strong>Coal</strong></td>
+              <td>75.571</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>target</td>
+              <td>Solid</td>
+              <td>75.571</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="ex">
+    <div class="prose">
+      <p>
+        Read the output column by column. <code>side</code> holds the old column
+        names, <code>node</code> holds the old values, and
+        <code>link</code> numbers the input rows. <code>value</code> was not in
+        <code>on</code>, so it is copied onto both ends of its link.
+      </p>
+      <p>
+        Now <strong>Coal</strong> has three rows of its own. The flow groups
+        rows by <code>node</code>, splits each node by <code>side</code>, and
+        stacks the rows on each side. Coal's two incoming ends stack on its left
+        (11.606 + 63.965 = 75.571), and its one outgoing end fills its right.
+        Then <code>ribbon({ by: "link" })</code> joins the two rows that share a
+        link number. For link 1, that is the Coal reserves row and the
+        lower-left end of Coal.
+      </p>
+    </div>
+    <figure>
+      <div class="plate">
+        <svg
+          viewBox="0 0 420 218"
+          role="img"
+          aria-label="The Coal node drawn from its three end rows"
+          style="
+            display: block;
+            width: 100%;
+            height: auto;
+            font-family: var(--font-body);
+          "
+        >
+          <path
+            d="M70 20 C135 20 135 20 200 20 L200 46 C135 46 135 46 70 46 Z"
+            fill="#2c6e8a"
+            fill-opacity="0.35"
+          />
+          <path
+            d="M70 56 C135 56 135 46 200 46 L200 190 C135 190 135 200 70 200 Z"
+            fill="#2c6e8a"
+            fill-opacity="0.35"
+          />
+          <path
+            d="M220 20 C285 20 285 40 350 40 L350 210 C285 210 285 190 220 190 Z"
+            fill="#a65f12"
+            fill-opacity="0.3"
+          />
+          <rect x="60" y="20" width="10" height="26" fill="#5a6672" />
+          <rect x="60" y="56" width="10" height="144" fill="#5a6672" />
+          <rect x="200" y="20" width="10" height="26" fill="#2c6e8a" />
+          <rect
+            x="200"
+            y="46"
+            width="10"
+            height="144"
+            fill="#2c6e8a"
+            fill-opacity="0.7"
+          />
+          <rect x="210" y="20" width="10" height="170" fill="#a65f12" />
+          <rect x="350" y="40" width="10" height="170" fill="#5a6672" />
+          <text x="54" y="33" text-anchor="end" font-size="11" fill="#18212b">
+            Coal imports
+          </text>
+          <text x="54" y="132" text-anchor="end" font-size="11" fill="#18212b">
+            Coal reserves
+          </text>
+          <text
+            x="210"
+            y="14"
+            text-anchor="middle"
+            font-size="12"
+            font-weight="600"
+            fill="#18212b"
+          >
+            Coal
+          </text>
+          <text x="366" y="128" font-size="11" fill="#18212b">Solid</text>
+          <text x="195" y="37" text-anchor="end" font-size="10" fill="#18212b">
+            link 0
+          </text>
+          <text x="195" y="124" text-anchor="end" font-size="10" fill="#18212b">
+            link 1
+          </text>
+          <text x="226" y="124" font-size="10" fill="#18212b">link 2</text>
+        </svg>
+      </div>
+      <figcaption>
+        <span class="tag sketch">Sketch</span>Coal is its three end rows: two
+        stacked on the in side (blue), one on the out side (amber). Each ribbon
+        joins the two rows with the same <code>link</code>.
+      </figcaption>
+    </figure>
+  </div>
+
+  <h3>Example 2: a parallel-sets cohort has one end per axis</h3>
+  <p class="prose">
+    Two real rows of the titanic table. Each row is a cohort of passengers, and
+    each of its three category columns becomes one end:
+  </p>
+  <div class="ex">
+    <div>
+      <div class="code-label">Input: one row per cohort</div>
+      <div class="table-scroll" style="margin: 0">
+        <table style="min-width: 0">
+          <thead>
+            <tr>
+              <th>class</th>
+              <th>sex</th>
+              <th>survived</th>
+              <th>count</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>First</td>
+              <td>Female</td>
+              <td>Yes</td>
+              <td>141</td>
+            </tr>
+            <tr>
+              <td>First</td>
+              <td>Male</td>
+              <td>Yes</td>
+              <td>62</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <pre><code>unpivot({ on: ["class", "sex", "survived"],
+          variable: "axis", value: "category", id: "path" })</code></pre>
+    </div>
+    <div>
+      <div class="code-label">Output: one row per (cohort, axis)</div>
+      <div class="table-scroll" style="margin: 0">
+        <table style="min-width: 0">
+          <thead>
+            <tr>
+              <th>path</th>
+              <th>axis</th>
+              <th>category</th>
+              <th>count</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>0</td>
+              <td>class</td>
+              <td>First</td>
+              <td>141</td>
+            </tr>
+            <tr>
+              <td>0</td>
+              <td>sex</td>
+              <td>Female</td>
+              <td>141</td>
+            </tr>
+            <tr>
+              <td>0</td>
+              <td>survived</td>
+              <td>Yes</td>
+              <td>141</td>
+            </tr>
+            <tr>
+              <td>1</td>
+              <td>class</td>
+              <td>First</td>
+              <td>62</td>
+            </tr>
+            <tr>
+              <td>1</td>
+              <td>sex</td>
+              <td>Male</td>
+              <td>62</td>
+            </tr>
+            <tr>
+              <td>1</td>
+              <td>survived</td>
+              <td>Yes</td>
+              <td>62</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <p class="prose">
+    <code>spread({ by: "axis" })</code> makes the three columns of the picture,
+    and <code>spread({ by: "category" })</code> makes the boxes inside each
+    column. Both cohorts land in the same <em>First</em> box (141 + 62 stacked)
+    and the same <em>Yes</em> box. They split apart only on the sex axis. One
+    ribbon per <code>path</code> threads that cohort's three rows from left to
+    right. This is ggalluvial's "lodes form", and ggforce's
+    <code>gather_set_data</code> and ggsankey's <code>make_long</code> do the
+    same reshape.
+  </p>
+  <p class="prose small">
+    Two notes on the spelling, both part of decision 3. Polars has no
+    <code>id</code> option: there you would add the row number first with
+    <code>with_row_index</code>. And <code>value: "node"</code> names the
+    <em>new</em> column, which is easy to confuse with a data column that is
+    itself called <code>value</code>, as in the energy links. dplyr's
+    <code>names_to</code> / <code>values_to</code> spelling avoids that
+    confusion, at the cost of leaving the polars names.
+  </p>
 
   <h2>Your questions, answered</h2>
   <div class="table-scroll">
