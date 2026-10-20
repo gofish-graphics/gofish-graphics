@@ -1633,6 +1633,175 @@ chart(titanic).mark(spread({ dir: "x", spacing: 120 }, [
     </div>
   </div>
 
+  <h3 id="round2-sankeys">The sankeys in round 2 syntax</h3>
+  <p class="prose">
+    Each spec below is the callback-free target spelling. The render next to it
+    comes from an emulation with story-local helpers (<code>inherit</code>,
+    <code>unnest</code>, <code>stackedEnds</code>, <code>treeRibbon</code>) that
+    rewrites it into today's API, and every rect and ribbon matches the
+    working-today version. The working-today code is in the collapsed blocks.
+  </p>
+
+  <h3>Energy sankey: a list of nodes, each a pair of link lists</h3>
+  <div class="ex">
+    <div>
+      <pre><code>// nestJoin(nodes, links): each node gets in / out lists of the SAME link objects
+chart(nodes)
+  .flow(spread({ by: field("depth").sort(), dir: "x", spacing: 100 }),
+        spread({ by: field("name").sort(order), dir: "y", spacing: 10 }))
+  .mark(spread({ dir: "x", spacing: 0 }, [
+    chart(field("in")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
+    chart(field("out")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
+  ]))
+  .layer(ribbon({ opacity: 0.4, fill: "source" }))</code></pre>
+      <p class="small">
+        The spec reads like the data: a list of nodes (flow), each a pair
+        (direct style), each side a list of links (flow). A link appears once in
+        its source's <code>out</code> and once in its target's <code>in</code>,
+        so the ribbon joins those two ends. End order is the order of the
+        <code>in</code> and <code>out</code> lists, which the nest join sorts by
+        the far node's rank. Column assignment and in-column order are still
+        precomputed.
+      </p>
+      <details>
+        <summary class="small">Working today</summary>
+        <pre><code>chart(eNested, { axes: false })
+  .flow(spread({ by: field("depth").sort(), dir: "x", spacing: 100, alignment: "start" }),
+        spread({ by: field("name").sort(eOrder), dir: "y", spacing: 10 }))
+  .mark((node) =&gt; spread({ dir: "x", spacing: 0, alignment: "start" }, [
+    chart(node[0].in).flow(spread({ dir: "y", spacing: 0 })).mark(rect({ w: 6, h: "value", fill: "#555" }).name("ends")),
+    chart(node[0].out).flow(spread({ dir: "y", spacing: 0 })).mark(rect({ w: 6, h: "value", fill: "#555" }).name("ends")),
+  ]))
+  .layer(chart(selectAll("ends"))
+    .flow(group({ by: (r) =&gt; r.datum[0] }))
+    .mark(ribbon({ opacity: 0.4, fill: "source", curve: Curve.bezier() })))</code></pre>
+      </details>
+    </div>
+    <figure>
+      <div class="plate crop-m">
+        <img
+          src="img/direct-sankey-energy.png"
+          alt="Energy sankey in round 2 syntax"
+        />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Same geometry as round 1. 28 of the
+        68 ribbons run backwards (see "Ribbons can run backwards" below);
+        painting hides it.
+      </figcaption>
+    </figure>
+  </div>
+
+  <h3>Sankey tree: a node is a box and a list of children</h3>
+  <div class="ex">
+    <div>
+      <pre><code>// nestTree(titanic, ["class", "sex", "survived"], "count"): { name, count, children }
+const box = rect({ w: 40, h: "count", fill: "class" });
+const node = (gap, child) =&gt;
+  spread({ dir: "x", spacing: 64, alignment: "middle" }, [
+    box,
+    chart(field("children")).flow(spread({ dir: "y", spacing: gap })).mark(child),
+  ]);
+
+chart(tree)
+  .flow(spread({ by: "class", dir: "y", spacing: 8 }))
+  .mark(node(4, node(2, box)))
+  .layer(ribbon({ opacity: 0.6, fill: "class" }))</code></pre>
+      <p class="small">
+        Each level is the same record (a box, then a column of children), nested
+        once per depth. The gaps narrow with depth (8, 4, 2), so
+        <code>node</code> takes its gap. One spelling is still missing. The
+        ribbon must leave a sub-interval of the parent's right edge, one per
+        child, sized by the child's count, but the children column is taller
+        than the box because of the gaps. The emulation gives each box
+        zero-width end rects, one per child (<code>stackedEnds</code>). In the
+        target spelling, either the ribbon allocates those ends from
+        <code>h</code> (Approach A's <code>size</code>) or the box declares
+        them. That is an open question for the tree.
+      </p>
+      <details>
+        <summary class="small">Working today</summary>
+        <pre><code>const GAPS = [8, 4, 2];
+const box = (n) =&gt; chart([n]).mark(rect({ w: 40, h: "count", fill: "class" }).name("box"));
+const ends = (n) =&gt; chart(asEnds(n.children)).flow(spread({ dir: "y", spacing: 0 }))
+  .mark(rect({ w: 0, h: "count" }).name("box"));
+const level = (nodes, depth) =&gt;
+  chart(nodes).flow(spread({ dir: "y", spacing: GAPS[depth] }))
+    .mark(([n]) =&gt; n.children.length === 0 ? box(n)
+      : spread({ dir: "x", spacing: 64, alignment: "middle" }, [
+          spread({ dir: "x", spacing: 0, alignment: "start" }, [box(n), ends(n)]),
+          level(n.children, depth + 1),
+        ]));
+level(tree, 0)
+  .layer(chart(selectAll("box")).flow(filter((r) =&gt; project(r, "depth") === 1), endsFirst, group({ by: "key" }))
+    .mark(ribbon({ opacity: 0.6, fill: "class", curve: Curve.bezier() })))
+  .layer(chart(selectAll("box")).flow(filter((r) =&gt; project(r, "depth") === 2), endsFirst, group({ by: "key" }))
+    .mark(ribbon({ opacity: 0.6, fill: "survived", curve: Curve.bezier() })))</code></pre>
+      </details>
+    </div>
+    <div class="ex" style="margin-top: 0; grid-template-columns: 1fr 1fr">
+      <figure>
+        <div class="plate crop-l">
+          <img
+            src="img/direct-sankey-tree-nested.png"
+            alt="Sankey tree in round 2 syntax"
+          />
+        </div>
+        <figcaption>
+          <span class="tag ok">Rendered</span>Target spelling (emulated).
+          Ribbons colored by class.
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="plate crop-l">
+          <img
+            src="img/direct-sankey-tree.png"
+            alt="Sankey tree, working-today version"
+          />
+        </div>
+        <figcaption>
+          <span class="tag ok">Rendered</span>Working today, with the last tier
+          colored by survived.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <h3>Sankey tree as one recursive mark</h3>
+  <div class="ex">
+    <div>
+      <pre><code>const node = (self) =&gt;
+  spread({ dir: "x", spacing: 64, alignment: "middle" }, [
+    box,
+    chart(field("children")).flow(spread({ dir: "y", spacing: 4 })).mark(self),
+  ]);
+
+chart(tree).flow(spread({ by: "class", dir: "y", spacing: 8 }))
+  .mark(fix(node))          // node refers to itself; stops at empty children
+  .layer(ribbon({ opacity: 0.6, fill: "class" }))</code></pre>
+      <p class="small">
+        For any depth. <code>fix</code> is the textbook fixed point (<code
+          >fix(f) = f(fix(f))</code
+        >, made lazy), emulated in the story. Its costs in the render: one gap
+        at every depth (8/4/4), an empty column after each leaf, and a picture
+        taller than asked. A real version needs a lazy self-reference and a gap
+        that can read the node's depth.
+      </p>
+    </div>
+    <figure>
+      <div class="plate crop-l">
+        <img
+          src="img/direct-sankey-tree-recursive.png"
+          alt="Sankey tree from one recursive mark"
+        />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>One self-referring mark (emulated);
+        gaps 8/4/4.
+      </figcaption>
+    </figure>
+  </div>
+
   <h3>What round 2 would need</h3>
   <ol class="prose" style="max-width: 86ch">
     <li>
@@ -1664,6 +1833,20 @@ chart(titanic).mark(spread({ dir: "x", spacing: 120 }, [
       comment), so <code>group({ by: r =&gt; r })</code> silently draws nothing;
       a "depth" axis appears despite <code>axes: false</code> in the
       <code>.layer</code> form; the stack scale bug again.
+    </li>
+    <li>
+      <strong>Ribbons can run backwards.</strong> <code>selectAll</code> lists
+      nodes in the order their layout finished, not document order, and a
+      two-end ribbon always runs from its first end's right edge to its second
+      end's left edge. 28 of the energy sankey's 68 ribbons run backwards;
+      painting hides it. Fix: document-order <code>selectAll</code>, or ribbons
+      that use facing edges whatever the order.
+    </li>
+    <li>
+      <strong>Ends need a spelling in the tree.</strong> A parent-to-child
+      ribbon needs a sub-interval of the parent's edge per child. Either the
+      ribbon allocates it (Approach A's <code>size</code>) or the box declares
+      its ends.
     </li>
   </ol>
 

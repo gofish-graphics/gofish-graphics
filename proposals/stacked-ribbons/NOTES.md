@@ -1151,3 +1151,287 @@ rows in a list column. For the ribbon join to work the list must hold the
 SAME link objects in both the `in` of the target and the `out` of the
 source. In JS that is free (references); a columnar Python or IR version
 copies, so it would need a link id to group by instead of object identity.
+
+### R4. Sankey tree (round 2)
+
+Stories: `stories/_proposals/stacked-ribbons/DirectSankeyTree.stories.tsx`
+(title `Proposals/Stacked Ribbons/Direct Style/Sankey Tree`). No library
+source was changed.
+
+| Story                 | PNG                                    | Result                               |
+| --------------------- | -------------------------------------- | ------------------------------------ |
+| `SankeyTreeDirect`    | `img/direct-sankey-tree.png`           | works today                          |
+| `SankeyTreeNested`    | `img/direct-sankey-tree-nested.png`    | target spelling, emulated helpers    |
+| `SankeyTreeRecursive` | `img/direct-sankey-tree-recursive.png` | one self-referring mark, emulated    |
+| `SankeyNestedUnnest`  | `img/direct-sankey-energy.png`         | R3 re-rendered, unchanged (same PNG) |
+
+`SankeyTreeDirect` and `SankeyTreeNested` have the same geometry: every
+rect and every ribbon path in the two DOMs is identical. Only the ribbon
+colors of the second tier differ (`Direct` colors them by `survived`,
+`Nested` by `class`), so the legend differs too.
+
+The data is a nested tree, built in plain JS by the story-local `nestTree`:
+
+```js
+const tree = nestTree(titanic, ["class", "sex", "survived"], "count");
+// [{ name: "First", key: "First", class: "First", depth: 0, count: 325,
+//    children: [{ name: "Female", key: "First/Female", class: "First",
+//                 sex: "Female", depth: 1, count: 145, children: [...] }, ...] }, ...]
+```
+
+A node's children's counts add up to its own count, so the ends of the
+ribbons that leave a box tile its right edge exactly.
+
+**How a ribbon is joined.** Each box with children has a column of
+zero-width END rects on its right edge, one per child, sized by the child's
+count. A ribbon goes from a child's end to the child's box. The end and the
+box are both named `"box"` and both carry the child's `key`, so
+`group({ by: "key" })` over `selectAll("box")` gives exactly the pair. A
+root box has no end, so its group has one ref; a one-ref group draws
+nothing and does not throw.
+
+Shared story-local code (both stories):
+
+```js
+const asEnds = (children) => children.map((c) => ({ ...c, end: true }));
+const endsFirst = derive((refs) =>
+  [...refs].sort(
+    (a, b) => Number(!!project(b, "end")) - Number(!!project(a, "end"))
+  )
+);
+```
+
+#### SankeyTreeDirect (works today)
+
+```js
+const GAPS = [8, 4, 2];
+const box = (n) =>
+  chart([n]).mark(rect({ w: 40, h: "count", fill: "class" }).name("box"));
+const ends = (n) =>
+  chart(asEnds(n.children))
+    .flow(spread({ dir: "y", spacing: 0 }))
+    .mark(rect({ w: 0, h: "count" }).name("box"));
+const level = (nodes, depth) =>
+  chart(nodes)
+    .flow(spread({ dir: "y", spacing: GAPS[depth] }))
+    .mark(([n]) =>
+      n.children.length === 0
+        ? box(n)
+        : spread({ dir: "x", spacing: 64, alignment: "middle" }, [
+            spread({ dir: "x", spacing: 0, alignment: "start" }, [
+              box(n),
+              ends(n),
+            ]),
+            level(n.children, depth + 1),
+          ])
+    );
+
+level(tree, 0)
+  .layer(
+    chart(selectAll("box"))
+      .flow(
+        filter((r) => project(r, "depth") === 1),
+        endsFirst,
+        group({ by: "key" })
+      )
+      .mark(ribbon({ opacity: 0.6, fill: "class", curve: Curve.bezier() }))
+  )
+  .layer(
+    chart(selectAll("box"))
+      .flow(
+        filter((r) => project(r, "depth") === 2),
+        endsFirst,
+        group({ by: "key" })
+      )
+      .mark(ribbon({ opacity: 0.6, fill: "survived", curve: Curve.bezier() }))
+  )
+  .render(container, { w: 360, h: 500, axes: false });
+```
+
+- **Works as-is:** yes. Correct proportions, nested gaps 8 / 4 / 2, no
+  crossings, boxes colored by class, ribbons colored per tier (class, then
+  survived).
+- **Workarounds:**
+  - The recursion is a JS function of the depth (`level(nodes, depth)`),
+    and the mark is a callback that reads the node (`([n]) => ...`),
+    because a function in `.mark()` receives the group's rows, a list.
+  - A box is `chart([n]).mark(rect(...))`, not a bare `rect`: the
+    combinator returned by a `.mark()` callback is resolved with no rows
+    (R3, Q2), so a bare `rect({ h: "count" })` would have nothing to read.
+  - The leaf is a separate branch (`n.children.length === 0 ? box(n)`), so
+    a leaf has no empty children column.
+  - The stacked ends are real (zero-width) rects in the layout. There is no
+    ribbon option for "stack my ends along this box".
+  - Per-tier ribbon colors are two ribbon layers, each filtered by `depth`.
+
+#### SankeyTreeNested (target spelling, emulated)
+
+Target spelling:
+
+```js
+const node = (
+  child // one tree level: a box, then the list of children
+) =>
+  spread({ dir: "x", spacing: 64 }, [
+    rect({ w: 40, h: "count", fill: "class" }).name("box"),
+    chart(field("children"))
+      .flow(spread({ dir: "y", spacing: 4 }))
+      .mark(child),
+  ]);
+chart(tree)
+  .flow(spread({ by: "name", dir: "y", spacing: 8 }))
+  .mark(node(node(rect({ w: 40, h: "count", fill: "class" }).name("box"))))
+  .layer(ribbon({ opacity: 0.6 })); // parent box → child boxes, ends stacked
+```
+
+What renders:
+
+```js
+const box = () => rect({ w: 40, h: "count", fill: "class" }).name("box");
+// One tree level: a box, then the list of children.
+const node = (gap, child) =>
+  spread(
+    { dir: "x", spacing: 64, alignment: "middle" },
+    inherit([
+      stackedEnds(box()),
+      chart()
+        .flow(unnest("children"), spread({ dir: "y", spacing: gap }))
+        .mark(child),
+    ])
+  );
+chart(tree)
+  .flow(spread({ by: "name", dir: "y", spacing: 8 }))
+  .mark(node(4, node(2, box())))
+  .layer(treeRibbon({ opacity: 0.6, fill: "class" }))
+  .render(container, { w: 360, h: 500, axes: false });
+```
+
+Emulated helpers (story-local, not library API):
+
+```js
+// the combinator passes its scope to a chart() child (R1, Q1)
+const inherit = (children) =>
+  children.map((m) =>
+    m instanceof ChartBuilder && m.usesPreviousLayerMarks()
+      ? (d) => m.withData(d)
+      : m
+  );
+// chart(field("children"))  ==  chart().flow(unnest("children"), ...)
+const unnest = (f) => derive((rows) => rows.flatMap((r) => r[f]));
+// the layout half of `.layer(ribbon())`: one zero-width end per child
+const stackedEnds = (boxMark) =>
+  spread(
+    { dir: "x", spacing: 0, alignment: "start" },
+    inherit([
+      boxMark,
+      chart()
+        .flow(
+          derive((rows) => asEnds(rows.flatMap((r) => r.children))),
+          spread({ dir: "y", spacing: 0 })
+        )
+        .mark(rect({ w: 0, h: "count" }).name("box")),
+    ])
+  );
+// the drawing half of `.layer(ribbon())`: one ribbon per (end, box) pair
+const treeRibbon = (opts) =>
+  chart(selectAll("box"))
+    .flow(endsFirst, group({ by: "key" }))
+    .mark(ribbon({ curve: Curve.bezier(), ...opts }));
+```
+
+Differences from the target spelling:
+
+- `chart(field("children"))` is `inherit` plus
+  `chart().flow(unnest("children"), ...)`.
+- `node` takes the gap (`node(4, node(2, box()))`) so the nested gaps are
+  8 / 4 / 2 as in the target picture. With the spelling's fixed
+  `spacing: 4` they would be 8 / 4 / 4.
+- The box is wrapped in `stackedEnds(...)`, and the fused
+  `.layer(ribbon())` is the explicit `.layer(treeRibbon(...))`. Together
+  they do what a real "ribbon from a parent box to its child boxes, ends
+  stacked" would do. The fused `.layer(ribbon())` cannot do this today: the
+  outer chart's flow is the `name` spread over the classes, so a fused
+  ribbon would split by class and join the class boxes to each other.
+- `alignment: "middle"` on the node's `spread`, so a box is centered on its
+  children column, which is taller by the gaps.
+- **Works as-is in the emulation:** a bare `rect(...)` as a child of the
+  combinator under `.mark(...)` IS resolved with the group's rows (it reads
+  `count` and `class`). Only a `chart()` child needs `inherit`.
+
+What real support would need:
+
+1. `inherit` in the `createOperator` combinator form (R1, Q1).
+2. `chart(field("children"))`: a field as chart data, meaning "the current
+   row's list field" (or `.flow(unnest("children"))`).
+3. A ribbon that knows the tree: from a parent's box to each child's box,
+   with its ends stacked along the parent's edge in the order of the
+   children and sized by each child's size. Here the ends are layout
+   objects the user builds. A real version would compute them from the
+   child's size, as B3 and Approach A discuss for the sankey.
+
+#### SankeyTreeRecursive (one mark for any depth, emulated)
+
+```js
+// fix(f) = f(self), where self is the same mark built lazily per group
+const fix = (f) => {
+  const self = (d) => chart(d).mark(f(self));
+  return f(self);
+};
+const node = (child) =>
+  spread(
+    { dir: "x", spacing: 64, alignment: "middle" },
+    inherit([
+      stackedEnds(box()),
+      chart()
+        .flow(unnest("children"), spread({ dir: "y", spacing: 4 }))
+        .mark(child),
+    ])
+  );
+chart(tree)
+  .flow(spread({ by: "name", dir: "y", spacing: 8 }))
+  .mark(fix(node))
+  .layer(treeRibbon({ opacity: 0.6, fill: "class" }))
+  .render(container, { w: 360, h: 500, axes: false });
+```
+
+- **Works:** yes, and it stops by itself. At a leaf `children` is empty, so
+  the children flow has no groups and `self` is never called. An empty
+  child chart and an empty ends chart do not throw.
+- Differences from `Nested`: the gap is the same at every depth
+  (8 / 4 / 4); every leaf gets an empty children column 64 px wide (the
+  legend moves right); and the picture comes out taller than `h: 500` asks
+  (the bottom edge is at 572 px instead of 540 px). The last one was not
+  investigated.
+- What a real version needs: the knot (`self`) must be lazy, so a
+  self-referring mark needs a function or a named mark that is resolved per
+  group (for example a `createMark` body that may refer to its own mark). A
+  gap that depends on the depth would need the gap to read the node
+  (`spacing: field("gap")`) or an option indexed by depth.
+
+#### Bugs and sharp edges found
+
+1. **`selectAll` order is not document order, and a ribbon's direction
+   follows it.** `resolveRefData` lists `layer.nodes` in the order the
+   nodes were registered, which is the order the (async) marks finished
+   resolving. A two-ref `ribbon` (dir x) runs from its first ref's right
+   edge to its second ref's left edge. In the first version of the tree
+   stories, grouped by the child object
+   (`group({ by: (r) => r.datum[0] })`), some tiers came out box first: in
+   `Direct` both tiers, in `Nested` only the second, in `Recursive`
+   neither. Those ribbons ran backwards, from the child box's FAR edge to
+   the parent's end, so they covered the child box. The picture hides this
+   (the boxes are painted on top), but the path is wrong. The stories now
+   draw each end from a copy marked `end: true` and sort ends first
+   (`endsFirst`) before grouping by `key`. R3's energy sankey has the same
+   problem: in `SankeyNestedUnnest` 28 of the 68 ribbons run backwards (for
+   example from x=152 to x=40 instead of from x=46 to x=146), each covering
+   its two 6 px end rects. The fix is one of: `selectAll` in document
+   order, or a ribbon that uses the facing edges of its two refs whatever
+   their order.
+2. **A `spread({ dir: "x" })` combinator with no `alignment` put the
+   zero-width ends BELOW the box** (their top at the box's bottom edge), so
+   the ribbons left from under the boxes. `alignment: "start"` fixes it.
+   This is probably the baseline default (the box's local 0 is its bottom
+   edge). Worth checking whether that is the intended default for a
+   combinator.
+3. The legend is drawn even with `axes: false`. Minor, not changed.
