@@ -39,7 +39,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood)
+    chart(seafood, { w: args.w, h: args.h })
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: "count" }))
       // `.layer()`'s empty scope yields one ref per lake; each ref's datum is
@@ -60,10 +60,7 @@ export const Default: StoryObj<Args> = {
             );
           }) as any)
       )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },
@@ -78,7 +75,7 @@ export const SpeciesCountPerLake: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood)
+    chart(seafood, { w: args.w, h: args.h })
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: "count" }))
       .layer(
@@ -95,10 +92,7 @@ export const SpeciesCountPerLake: StoryObj<Args> = {
             );
           }) as any)
       )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },

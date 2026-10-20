@@ -83,13 +83,15 @@ def story_likert():
             schema={"response": Schema.ordered(LEVELS).diverging()},
             color=LIKERT_COLORS,
             axes={"x": {"title": "Respondents"}, "y": True},
+            w=640,
+            h=300,
         )
         .flow(
             spread(by="question", dir="y"),
             stack(by="response", dir="x"),
         )
         .mark(rect(w="count", fill="response")),
-        {"w": 640, "h": 300},
+        {},
     )
 
 
@@ -100,13 +102,15 @@ def story_likert_even():
             schema={"response": Schema.ordered(LEVELS4).diverging()},
             color=LIKERT_COLORS,
             axes={"x": {"title": "Respondents"}, "y": True},
+            w=640,
+            h=260,
         )
         .flow(
             spread(by="question", dir="y"),
             stack(by="response", dir="x"),
         )
         .mark(rect(w="count", fill="response")),
-        {"w": 640, "h": 260},
+        {},
     )
 
 
@@ -117,11 +121,13 @@ def story_population_pyramid():
             schema={"sex": Schema.ordered(["Women", "Men"]).diverging()},
             color=Color.palette({"Women": "#c05780", "Men": "#3b75af"}),
             axes={"x": {"title": "People (millions)"}, "y": True},
+            w=480,
+            h=440,
         )
         .flow(
             spread(by=field("age").reverse(), dir="y", spacing=1),
             stack(by="sex", dir="x"),
         )
         .mark(rect(w="people", fill="sex")),
-        {"w": 480, "h": 440},
+        {},
     )

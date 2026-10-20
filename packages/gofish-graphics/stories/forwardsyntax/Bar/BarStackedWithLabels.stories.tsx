@@ -31,7 +31,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood)
+    chart(seafood, { w: args.w, h: args.h })
       .flow(
         spread({ by: "lake",  dir: "x" }), //
         stack({ by: "species",  dir: "y" })
@@ -43,10 +43,7 @@ export const Default: StoryObj<Args> = {
           fontSize: 12,
         })
       )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },

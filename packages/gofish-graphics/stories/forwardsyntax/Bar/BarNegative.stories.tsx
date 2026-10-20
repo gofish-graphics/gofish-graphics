@@ -38,13 +38,10 @@ export const Default: StoryObj<Args> = {
       { category: "E", value: 20 },
     ];
 
-    chart(testData)
+    chart(testData, { w: args.w, h: args.h })
       .flow(spread({ by: "category", dir: "x" }))
       .mark(rect({ h: "value" }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },
@@ -65,11 +62,11 @@ export const UnroundedMin: StoryObj<Args> = {
         { category: "D", value: -35 },
         { category: "E", value: 10 },
         { category: "F", value: -5 },
-      ]
+      ], { w: args.w, h: args.h }
     )
       .flow(spread({ by: "category", dir: "x" }))
       .mark(rect({ h: "value" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -86,11 +83,11 @@ export const AllNegative: StoryObj<Args> = {
         { category: "B", value: -37 },
         { category: "C", value: -23 },
         { category: "D", value: -8 },
-      ]
+      ], { w: args.w, h: args.h }
     )
       .flow(spread({ by: "category", dir: "x" }))
       .mark(rect({ h: "value" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -111,11 +108,11 @@ export const SignedGroup: StoryObj<Args> = {
         { quarter: "Q2", flow: "Outflow", amount: -46 },
         { quarter: "Q3", flow: "Inflow", amount: 48 },
         { quarter: "Q3", flow: "Outflow", amount: -52 },
-      ]
+      ], { w: args.w, h: args.h }
     )
       .flow(spread({ by: "quarter", dir: "y" }), group({ by: "flow" }))
       .mark(rect({ w: "amount", fill: "flow" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -143,13 +140,13 @@ export const MixedSignStack: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(cashFlows)
+    chart(cashFlows, { w: args.w, h: args.h })
       .flow(
         spread({ by: "quarter", dir: "x" }),
         stack({ by: "flow", dir: "y" })
       )
       .mark(rect({ h: "amount", fill: "flow" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -161,14 +158,14 @@ export const AllNegativeStack: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(
-      cashFlows.filter((d) => d.direction === "Outflow")
+      cashFlows.filter((d) => d.direction === "Outflow"), { w: args.w, h: args.h }
     )
       .flow(
         spread({ by: "quarter", dir: "x" }),
         stack({ by: "flow", dir: "y" })
       )
       .mark(rect({ h: "amount", fill: "flow" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -180,14 +177,14 @@ export const DivergingStack: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(cashFlows)
+    chart(cashFlows, { w: args.w, h: args.h })
       .flow(
         spread({ by: "quarter", dir: "x" }),
         group({ by: "direction" }),
         stack({ by: "flow", dir: "y" })
       )
       .mark(rect({ h: "amount", fill: "flow" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -205,11 +202,11 @@ export const WaterfallColumn: StoryObj<Args> = {
         { step: "Expansion", change: 20 },
         { step: "Contraction", change: -50 },
         { step: "New business", change: 10 },
-      ]
+      ], { h: args.h }
     )
       .flow(stack({ by: "step", dir: "y" }))
       .mark(rect({ w: 40, h: "change", fill: "step" }))
-      .render(container, { h: args.h });
+      .render(container);
     return container;
   },
 };

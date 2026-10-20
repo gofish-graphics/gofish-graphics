@@ -23,13 +23,10 @@ type Args = { w: number; h: number };
 function renderBar(args: Args, axes: AxesOptions): HTMLElement {
   const container = initializeContainer();
 
-  chart(seafood, { axes })
+  chart(seafood, { axes, w: args.w, h: args.h })
     .flow(spread({ by: "lake",  dir: "x" }))
     .mark(rect({ h: "count" }))
-    .render(container, {
-      w: args.w,
-      h: args.h,
-    });
+    .render(container);
 
   return container;
 }

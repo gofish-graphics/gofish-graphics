@@ -10,14 +10,14 @@ def _bar(axes):
     # `spread({ by, dir })`). A per-operator override on the spread would
     # claim the axes a second time and draw them twice.
     return (
-        chart(SEAFOOD, axes=axes)
+        chart(SEAFOOD, axes=axes, w=400, h=400)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count"))
     )
 
 
 def _story(axes):
-    return (_bar(axes), {"w": 400, "h": 400})
+    return (_bar(axes), {})
 
 
 def story_axes_true():
