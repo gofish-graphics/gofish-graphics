@@ -8,49 +8,49 @@ WEIGHED = [p for p in PENGUINS if p["Body Mass (g)"] is not None]
 
 def story_penguin_mass():
     return (
-        chart(WEIGHED)
+        chart(WEIGHED, w=560)
         .flow(
             spread(by="Species", dir="y", spacing=16),
             scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.noise()),
         )
         .mark(circle(r=3, fill="Species")),
-        {"w": 560},
+        {},
     )
 
 
 def story_penguin_mass_sina():
     return (
-        chart(WEIGHED)
+        chart(WEIGHED, w=560)
         .flow(
             spread(by="Species", dir="y", spacing=16),
             scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.sina()),
         )
         .mark(circle(r=3, fill="Species")),
-        {"w": 560},
+        {},
     )
 
 
 def story_penguin_mass_jitter():
     return (
-        chart(WEIGHED)
+        chart(WEIGHED, w=560)
         .flow(
             spread(by="Species", dir="y", spacing=16),
             scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.jitter()),
         )
         .mark(circle(r=3, fill="Species")),
-        {"w": 560},
+        {},
     )
 
 
 def _dense(overlap):
     return (
-        chart(DENSE_MASSES)
+        chart(DENSE_MASSES, w=640)
         .flow(
             spread(by="group", dir="y", spacing=16),
             scatter(x="mass", alignment="middle", overlap=overlap),
         )
         .mark(circle(r=2, fill="group")),
-        {"w": 640},
+        {},
     )
 
 

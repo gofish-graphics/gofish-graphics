@@ -6,8 +6,8 @@ from python_stories.data import SEAFOOD
 
 def story_nested():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, w=420, h=420)
         .flow(pack(by="lake"), pack())
         .mark(circle(r=12, fill="species")),
-        {"w": 420, "h": 420},
+        {},
     )

@@ -29,10 +29,10 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood)
+    chart(seafood, { h: args.h })
       .flow(spread({ by: "lake", dir: "x", spacing: 64 }))
       .mark(ribbon({ h: "count", opacity: 0.8 }))
-      .render(container, { h: args.h });
+      .render(container);
 
     return container;
   },
@@ -50,13 +50,13 @@ export const Stacked: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood)
+    chart(seafood, { h: args.h })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 64 }),
         stack({ by: "species", dir: "y" })
       )
       .mark(ribbon({ h: "count", fill: "species", opacity: 0.8 }))
-      .render(container, { h: args.h });
+      .render(container);
 
     return container;
   },
@@ -73,10 +73,10 @@ export const Layered: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(streamgraphData)
+    chart(streamgraphData, { h: args.h })
       .flow(spread({ by: "x", dir: "x", spacing: 50 }), group({ by: "c" }))
       .mark(ribbon({ h: "y", fill: "c", opacity: 0.7 }))
-      .render(container, { h: args.h });
+      .render(container);
 
     return container;
   }

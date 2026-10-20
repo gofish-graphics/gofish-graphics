@@ -24,7 +24,7 @@ export const PenguinMass: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    chart(weighed)
+    chart(weighed, { w: 560 })
       .flow(
         spread({ by: "Species", dir: "y", spacing: 16 }),
         scatter({
@@ -34,7 +34,7 @@ export const PenguinMass: StoryObj = {
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
-      .render(container, { w: 560 });
+      .render(container);
 
     return container;
   },
@@ -45,7 +45,7 @@ export const OneSided: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    chart(weighed)
+    chart(weighed, { w: 560, h: 200 })
       .flow(
         scatter({
           x: "Body Mass (g)",
@@ -54,7 +54,7 @@ export const OneSided: StoryObj = {
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
-      .render(container, { w: 560, h: 200 });
+      .render(container);
 
     return container;
   },
@@ -66,7 +66,7 @@ export const MixedRadii: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    chart(weighed.slice(0, 120))
+    chart(weighed.slice(0, 120), { w: 480, h: 200 })
       .flow(
         scatter({
           x: "Flipper Length (mm)",
@@ -80,7 +80,7 @@ export const MixedRadii: StoryObj = {
           fill: "Species",
         })(d)
       )
-      .render(container, { w: 480, h: 200 });
+      .render(container);
 
     return container;
   },

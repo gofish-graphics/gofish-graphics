@@ -6,35 +6,35 @@ from python_stories.data import DRIVING_SHIFTS, SEAFOOD
 
 def story_default():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, w=1000, h=400)
         .flow(
             spread(by="lake", dir="x", spacing=15),
             spread(by="species", dir="x", spacing=2, axes={"x": True, "y": False}),
         )
         .mark(rect(h="count", w=20)),
-        {"w": 1000, "h": 400},
+        {},
     )
 
 
 def story_faceted_scatter_driving():
     return (
-        chart(DRIVING_SHIFTS)
+        chart(DRIVING_SHIFTS, w=800, h=400)
         .flow(
             spread(by="side", dir="x", spacing=50),
             scatter(x="year", y="miles", axes={"x": True, "y": False}),
         )
         .mark(circle(r=3, fill="#4682b4")),
-        {"w": 800, "h": 400},
+        {},
     )
 
 
 def story_faceted_scatter_y():
     return (
-        chart(DRIVING_SHIFTS)
+        chart(DRIVING_SHIFTS, w=400, h=800)
         .flow(
             spread(by="side", dir="y", spacing=50),
             scatter(x="year", y="gas", axes={"x": False, "y": True}),
         )
         .mark(circle(r=3, fill="#e07b39")),
-        {"w": 400, "h": 800},
+        {},
     )

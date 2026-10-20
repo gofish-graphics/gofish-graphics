@@ -8,7 +8,7 @@ WEIGHED = [p for p in PENGUINS if p["Body Mass (g)"] is not None]
 
 def story_penguin_mass():
     return (
-        chart(WEIGHED)
+        chart(WEIGHED, w=560)
         .flow(
             spread(by="Species", dir="y", spacing=16),
             scatter(
@@ -18,13 +18,13 @@ def story_penguin_mass():
             ),
         )
         .mark(circle(r=3, fill="Species")),
-        {"w": 560},
+        {},
     )
 
 
 def story_one_sided():
     return (
-        chart(WEIGHED)
+        chart(WEIGHED, w=560, h=200)
         .flow(
             scatter(
                 x="Body Mass (g)",
@@ -33,5 +33,5 @@ def story_one_sided():
             )
         )
         .mark(circle(r=3, fill="Species")),
-        {"w": 560, "h": 200},
+        {},
     )

@@ -30,13 +30,10 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(catchLocationsArray)
+    chart(catchLocationsArray, { w: args.w, h: args.h })
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
       .mark(circle({ r: 5 }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },
@@ -55,14 +52,11 @@ export const Connected: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(drivingShifts)
+    chart(drivingShifts, { w: args.w, h: args.h })
       .flow(scatter({ by: "year", x: "miles", y: "gas" }))
       .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }))
       .layer(line({ stroke: "black", strokeWidth: 2 }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },
@@ -81,7 +75,7 @@ export const WithPieGlyphs: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(catchLocationsArray)
+    chart(catchLocationsArray, { w: args.w, h: args.h })
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
       // The glyph chart leaves off its data: as a nested mark it inherits its
       // parent partition (the lake's row), joins in that lake's catch rows, and
@@ -94,10 +88,7 @@ export const WithPieGlyphs: StoryObj<Args> = {
           )
           .mark(rect({ w: "count", fill: "species" }))
       )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },
@@ -111,17 +102,14 @@ export const WithPieGlyphsDenormalized: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(catchDataWithLocations)
+    chart(catchDataWithLocations, { w: args.w, h: args.h })
       .flow(scatter({ by: "lake", x: "x", y: "y" }))
       .mark(
         chart({ coord: clock() })
           .flow(stack({ by: "species", dir: "x", h: 20 }))
           .mark(rect({ w: "count", fill: "species" }))
       )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },

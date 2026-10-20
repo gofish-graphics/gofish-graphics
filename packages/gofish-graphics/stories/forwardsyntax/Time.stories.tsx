@@ -62,10 +62,10 @@ export const DailyLine: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(prices, { schema: { date: Schema.time() } })
+    chart(prices, { schema: { date: Schema.time() }, w: args.w, h: args.h })
       .flow(scatter({ by: "date", x: "date", y: "price" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -98,10 +98,10 @@ export const HourlyLine: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(readings)
+    chart(readings, { w: args.w, h: args.h })
       .flow(scatter({ by: "time", x: "time", y: "temp" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -123,11 +123,11 @@ export const DaylightSavingZone: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(newYork, {
-      schema: { time: Schema.time({ zone: "America/New_York" }) },
+      schema: { time: Schema.time({ zone: "America/New_York" }) }, w: args.w, h: args.h,
     })
       .flow(scatter({ by: "time", x: "time", y: "load" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -154,11 +154,11 @@ export const EventTimeline: StoryObj<Args> = {
     const container = initializeContainer();
     chart(releases, {
       schema: { date: Schema.time() },
-      axes: { x: true, y: false },
+      axes: { x: true, y: false }, w: args.w, h: args.h,
     })
       .flow(scatter({ by: "name", x: "date" }))
       .mark(circle({ r: 5, fill: "steelblue" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -181,11 +181,11 @@ export const WeekOverMonthRows: StoryObj<Args> = {
     const container = initializeContainer();
     chart(visits, {
       schema: { day: Schema.time() },
-      axes: { x: { levels: [Calendar.week, Calendar.month] }, y: true },
+      axes: { x: { levels: [Calendar.week, Calendar.month] }, y: true }, w: args.w, h: args.h,
     })
       .flow(scatter({ by: "day", x: "day", y: "visits" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -224,13 +224,13 @@ export const QuarterlyBars: StoryObj<Args> = {
           ],
         },
         y: true,
-      },
+      }, w: args.w, h: args.h,
     })
       // The two ends are times, whose unit is an instant, so they share
       // the x axis.
       .flow(scatter({ by: "start", xMin: "start", xMax: "end" }))
       .mark(rect({ h: "amount" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -241,10 +241,10 @@ export const VerticalDailyDots: StoryObj<Args> = {
   args: { w: 300, h: 480 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(prices, { schema: { date: Schema.time() } })
+    chart(prices, { schema: { date: Schema.time() }, w: args.w, h: args.h })
       .flow(scatter({ by: "date", x: "price", y: "date" }))
       .mark(circle({ r: 1.5, fill: "steelblue" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -271,7 +271,7 @@ export const MonthlyHighs: StoryObj<Args> = {
   args: { w: 480, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(prices.filter((p) => p.date.startsWith("2024")))
+    chart(prices.filter((p) => p.date.startsWith("2024")), { w: args.w, h: args.h })
       .flow(
         derive(
           (rows: { date: string; price: number }[]) => {
@@ -289,7 +289,7 @@ export const MonthlyHighs: StoryObj<Args> = {
         spread({ by: "month", dir: "x" })
       )
       .mark(rect({ h: "price", fill: "steelblue" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };

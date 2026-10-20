@@ -53,7 +53,7 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(nodes, { axes: false })
+    chart(nodes, { axes: false, w: args.w, h: args.h })
       .flow(scatter({ by: "id", x: "grp", y: "id" }))
       .mark(circle({ r: 14, fill: "#4e79a7" }).name("nodes"))
       .layer(
@@ -63,7 +63,7 @@ export const Basic: StoryObj<Args> = {
             line({ from: "source", to: "target", stroke: "#888", strokeWidth: 1.5 })
           )
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

@@ -77,14 +77,14 @@ ABCD_DATA = [{"label": "A"}, {"label": "B"}, {"label": "C"}, {"label": "D"}]
 def story_image_cut():
     """Bottle sliced horizontally by `amount`, arranged vertically by spread."""
     return (
-        chart(BOTTLE_DATA)
+        chart(BOTTLE_DATA, w=400, h=700)
         .flow(spread(dir="y", spacing=4, reverse=True))
         .mark(
             image(href=BOTTLE_PNG, w=193, h=600).cut(
                 dir="y", size="amount", inset=4
             )
         ),
-        {"w": 400, "h": 700, "axes": False},
+        {"axes": False},
     )
 
 
@@ -155,7 +155,7 @@ def story_grouped_cut():
         {"vintage": "2021", "category": "Other", "amount": 15},
     ]
     return (
-        chart(data)
+        chart(data, w=600, h=760)
         .flow(
             spread(by="vintage", dir="x", spacing=40),
             spread(dir="y", spacing=14, reverse=True),
@@ -165,7 +165,7 @@ def story_grouped_cut():
                 dir="y", size="amount", inset=4
             )
         ),
-        {"w": 600, "h": 760, "axes": False},
+        {"axes": False},
     )
 
 
@@ -173,10 +173,10 @@ def story_rect_equal_slices():
     """Solid rect cut into 4 equal slices along x with 4px gaps (sizes
     defaulted to equal, one slice per abcd row)."""
     return (
-        chart(ABCD_DATA)
+        chart(ABCD_DATA, w=600, h=200)
         .flow(spread(dir="x", spacing=4))
         .mark(rect(w=400, h=80, fill="steelblue").cut(dir="x")),
-        {"w": 600, "h": 200, "axes": False},
+        {"axes": False},
     )
 
 
@@ -185,14 +185,14 @@ def story_rect_flush_stack():
     rect cut into 4 equal slices and collapsed back flush with `stack` (no
     spacing option) — a correct recompose shows one continuous border."""
     return (
-        chart(ABCD_DATA)
+        chart(ABCD_DATA, w=600, h=200)
         .flow(stack(dir="x"))
         .mark(
             rect(
                 w=400, h=80, fill="tomato", stroke="#333", stroke_width=3
             ).cut(dir="x")
         ),
-        {"w": 600, "h": 200, "axes": False},
+        {"axes": False},
     )
 
 
@@ -200,10 +200,10 @@ def story_image_equal_slices():
     """Image cut into 3 equal slices along y, exploded vertically with a 14px
     gap so the bottle reads as three separated horizontal slabs."""
     return (
-        chart([{"k": "top"}, {"k": "mid"}, {"k": "bot"}])
+        chart([{"k": "top"}, {"k": "mid"}, {"k": "bot"}], w=600, h=700)
         .flow(spread(dir="y", spacing=14, reverse=True))
         .mark(image(href=BOTTLE_PNG, w=193, h=600).cut(dir="y")),
-        {"w": 600, "h": 700, "axes": False},
+        {"axes": False},
     )
 
 
@@ -288,14 +288,14 @@ def story_image_horizontal_cut():
         {"label": "V", "weight": 1},
     ]
     return (
-        chart(data)
+        chart(data, w=700, h=700)
         .flow(spread(dir="x", spacing=12))
         .mark(
             image(href=BOTTLE_PNG, w=193, h=600).cut(
                 dir="x", size="weight", inset=4
             )
         ),
-        {"w": 700, "h": 700, "axes": False},
+        {"axes": False},
     )
 
 

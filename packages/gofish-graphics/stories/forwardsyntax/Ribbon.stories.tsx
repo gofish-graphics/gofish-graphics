@@ -42,14 +42,14 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood)
+    chart(seafood, { h: args.h })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 64 }),
         stack({ by: field("species").sort("count"), dir: "y" })
       )
       .mark(rect({ h: "count", fill: "species" }))
       .layer(ribbon({ opacity: 0.8 }))
-      .render(container, { h: args.h });
+      .render(container);
 
     return container;
   },

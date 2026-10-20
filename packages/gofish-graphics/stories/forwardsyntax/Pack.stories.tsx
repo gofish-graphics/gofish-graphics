@@ -18,10 +18,10 @@ export const Nested: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    chart(seafood)
+    chart(seafood, { w: 420, h: 420 })
       .flow(pack({ by: "lake" }), pack())
       .mark(circle({ r: 12, fill: "species" }))
-      .render(container, { w: 420, h: 420 });
+      .render(container);
 
     return container;
   },
@@ -33,12 +33,12 @@ export const NestedByCount: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    chart(seafood)
+    chart(seafood, { w: 420, h: 420 })
       .flow(pack({ by: "lake" }), pack())
       .mark((d: CatchData[]) =>
         circle({ r: 3 * Math.sqrt(d[0].count), fill: "species" })(d)
       )
-      .render(container, { w: 420, h: 420 });
+      .render(container);
 
     return container;
   },

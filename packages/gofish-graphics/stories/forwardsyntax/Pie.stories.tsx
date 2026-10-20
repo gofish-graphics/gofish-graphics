@@ -36,13 +36,10 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { coord: clock(), axes: true, padding: args.padding })
+    chart(seafood, { coord: clock(), axes: true, padding: args.padding, w: args.w, h: args.h })
       .flow(stack({ by: "species",  dir: "x" }))
       .mark(rect({ w: "count", fill: "species" }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },
@@ -61,13 +58,10 @@ export const Donut: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { coord: clock(), axes: true, padding: args.padding })
+    chart(seafood, { coord: clock(), axes: true, padding: args.padding, w: args.w, h: args.h })
       .flow(stack({ by: "species",  dir: "x", y: 50, h: 50 }))
       .mark(rect({ w: "count", fill: "species" }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },
@@ -86,7 +80,7 @@ export const Rose: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(nightingale, { coord: clock(), axes: true })
+    chart(nightingale, { coord: clock(), axes: true, w: args.w, h: args.h })
       .flow(
         spread({ by: "Month", dir: "x", spacing: 0, axes: {x: false, y: true} }),
         stack({ by: "Type", dir: "y" }),
@@ -97,10 +91,7 @@ export const Rose: StoryObj<Args> = {
         /* TODO: remove emX wart */
         rect({ w: (Math.PI * 2) / 12, emX: true, h: "Death", fill: "Type" })
       )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },

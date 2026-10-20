@@ -24,17 +24,24 @@ def story_sunflower():
             SUNFLOWER,
             color=Color.gradient(["#fde725", "#21918c", "#440154"]),
             schema={"x": Schema.unit("plane"), "y": Schema.unit("plane")},
+            w=640,
+            h=380,
         )
         .flow(scatter(x="x", y="y"))
         .mark(circle(r=4, fill="i")),
-        {"w": 640, "h": 380},
+        {},
     )
 
 
 def story_uncoupled():
     return (
-        chart(SUNFLOWER, color=Color.gradient(["#fde725", "#21918c", "#440154"]))
+        chart(
+            SUNFLOWER,
+            color=Color.gradient(["#fde725", "#21918c", "#440154"]),
+            w=640,
+            h=380,
+        )
         .flow(scatter(x="x", y="y"))
         .mark(circle(r=4, fill="i")),
-        {"w": 640, "h": 380},
+        {},
     )

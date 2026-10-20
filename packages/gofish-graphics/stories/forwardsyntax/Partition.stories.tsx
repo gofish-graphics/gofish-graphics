@@ -53,7 +53,7 @@ export const MovieRatingsHeatmap: StoryObj<Args> = {
     const movies = (context.loaded.movies as any[]).filter(
       (d) => d["IMDB Rating"] != null && d["Rotten Tomatoes Rating"] != null
     );
-    chart(movies, { color: Color.gradient("blues"), axes: true })
+    chart(movies, { color: Color.gradient("blues"), axes: true, w: args.w, h: args.h })
       .flow(
         partition({
           by: {
@@ -63,7 +63,7 @@ export const MovieRatingsHeatmap: StoryObj<Args> = {
         })
       )
       .mark(region({ fill: field("IMDB Rating").count() }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -74,7 +74,7 @@ export const ProductForm: StoryObj<Args> = {
   args: { w: 320, h: 320 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(measured, { color: Color.gradient("blues"), axes: true })
+    chart(measured, { color: Color.gradient("blues"), axes: true, w: args.w, h: args.h })
       .flow(
         partition({
           by: {
@@ -84,7 +84,7 @@ export const ProductForm: StoryObj<Args> = {
         })
       )
       .mark(region({ fill: field("Body Mass (g)").count() }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -93,7 +93,7 @@ export const NestedForm: StoryObj<Args> = {
   args: { w: 320, h: 320 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(measured, { color: Color.gradient("blues"), axes: true })
+    chart(measured, { color: Color.gradient("blues"), axes: true, w: args.w, h: args.h })
       .flow(
         partition({
           by: field("Flipper Length (mm)").bin(Bin.step(10)),
@@ -105,7 +105,7 @@ export const NestedForm: StoryObj<Args> = {
         })
       )
       .mark(region({ fill: field("Body Mass (g)").count() }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -122,7 +122,7 @@ export const PenguinCellCounts: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(measured, { axes: true })
+    chart(measured, { axes: true, w: args.w, h: args.h })
       .flow(
         partition({
           by: {
@@ -132,7 +132,7 @@ export const PenguinCellCounts: StoryObj<Args> = {
         })
       )
       .mark(text({ text: field("Body Mass (g)").count() }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -144,7 +144,7 @@ export const NestedFlipperThenMass: StoryObj<Args> = {
   args: { w: 420, h: 320 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(measured, { axes: true })
+    chart(measured, { axes: true, w: args.w, h: args.h })
       .flow(
         partition({
           by: field("Flipper Length (mm)").bin(Bin.step(10)),
@@ -153,7 +153,7 @@ export const NestedFlipperThenMass: StoryObj<Args> = {
         partition({ by: field("Body Mass (g)").bin(Bin.step(500)), dir: "y" })
       )
       .mark(text({ text: field("Body Mass (g)").count() }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -162,7 +162,7 @@ export const NestedMassThenFlipper: StoryObj<Args> = {
   args: { w: 420, h: 320 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(measured, { axes: true })
+    chart(measured, { axes: true, w: args.w, h: args.h })
       .flow(
         partition({ by: field("Body Mass (g)").bin(Bin.step(500)), dir: "y" }),
         partition({
@@ -171,7 +171,7 @@ export const NestedMassThenFlipper: StoryObj<Args> = {
         })
       )
       .mark(text({ text: field("Body Mass (g)").count() }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -203,7 +203,7 @@ export const AirportHexbin: StoryObj<Args> = {
     const container = initializeContainer();
     chart(contiguous(context.loaded.airports), {
       color: Color.gradient("blues"),
-      axes: true,
+      axes: true, w: args.w, h: args.h,
     })
       .flow(
         partition({
@@ -213,7 +213,7 @@ export const AirportHexbin: StoryObj<Args> = {
         })
       )
       .mark(region({ fill: field("longitude").count(), stroke: "white" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -236,7 +236,7 @@ export const CarHexbin: StoryObj<Args> = {
     const cars = (context.loaded.cars as any[]).filter(
       (d) => d.Miles_per_Gallon != null && d.Weight_in_lbs != null
     );
-    chart(cars, { color: Color.gradient("viridis"), axes: true })
+    chart(cars, { color: Color.gradient("viridis"), axes: true, w: args.w, h: args.h })
       .flow(
         partition({
           by: struct({ x: "Miles_per_Gallon", y: "Weight_in_lbs" }).bin(
@@ -245,7 +245,7 @@ export const CarHexbin: StoryObj<Args> = {
         })
       )
       .mark(region({ fill: field("Miles_per_Gallon").count() }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -338,7 +338,7 @@ export const AirportHexCounts: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const airports = contiguous(context.loaded.airports);
-    chart(airports, { color: Color.gradient("blues") })
+    chart(airports, { color: Color.gradient("blues"), w: args.w, h: args.h })
       .flow(
         partition({
           by: struct({ x: "longitude", y: "latitude" }).bin(
@@ -352,7 +352,7 @@ export const AirportHexCounts: StoryObj<Args> = {
           text({ text: field("iata").count(), fontSize: 10 }),
         ])
       )
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { axes: true });
     return container;
   },
 };

@@ -31,7 +31,7 @@ def story_movie_ratings_heatmap():
         movies["IMDB Rating"].notna() & movies["Rotten Tomatoes Rating"].notna()
     ]
     return (
-        chart(movies, color=Color.gradient("blues"), axes=True)
+        chart(movies, color=Color.gradient("blues"), axes=True, w=480, h=320)
         .flow(
             partition(
                 by={
@@ -41,7 +41,7 @@ def story_movie_ratings_heatmap():
             )
         )
         .mark(region(fill=field("IMDB Rating").count())),
-        {"w": 480, "h": 320},
+        {},
     )
 
 
@@ -49,7 +49,7 @@ def story_movie_ratings_heatmap():
 # product form is defined as the nested one.
 def story_product_form():
     return (
-        chart(MEASURED, color=Color.gradient("blues"), axes=True)
+        chart(MEASURED, color=Color.gradient("blues"), axes=True, w=320, h=320)
         .flow(
             partition(
                 by={
@@ -59,25 +59,25 @@ def story_product_form():
             )
         )
         .mark(region(fill=field("Body Mass (g)").count())),
-        {"w": 320, "h": 320},
+        {},
     )
 
 
 def story_nested_form():
     return (
-        chart(MEASURED, color=Color.gradient("blues"), axes=True)
+        chart(MEASURED, color=Color.gradient("blues"), axes=True, w=320, h=320)
         .flow(
             partition(by=field("Flipper Length (mm)").bin(Bin.step(10)), dir="x"),
             partition(by=field("Body Mass (g)").bin(Bin.step(500)), dir="y"),
         )
         .mark(region(fill=field("Body Mass (g)").count())),
-        {"w": 320, "h": 320},
+        {},
     )
 
 
 def story_penguin_cell_counts():
     return (
-        chart(MEASURED, axes=True)
+        chart(MEASURED, axes=True, w=420, h=320)
         .flow(
             partition(
                 by={
@@ -87,7 +87,7 @@ def story_penguin_cell_counts():
             )
         )
         .mark(text(text=field("Body Mass (g)").count())),
-        {"w": 420, "h": 320},
+        {},
     )
 
 
@@ -96,25 +96,25 @@ def story_penguin_cell_counts():
 # sits at the center of its rectangle. These two draw the same chart.
 def story_nested_flipper_then_mass():
     return (
-        chart(MEASURED, axes=True)
+        chart(MEASURED, axes=True, w=420, h=320)
         .flow(
             partition(by=field("Flipper Length (mm)").bin(Bin.step(10)), dir="x"),
             partition(by=field("Body Mass (g)").bin(Bin.step(500)), dir="y"),
         )
         .mark(text(text=field("Body Mass (g)").count())),
-        {"w": 420, "h": 320},
+        {},
     )
 
 
 def story_nested_mass_then_flipper():
     return (
-        chart(MEASURED, axes=True)
+        chart(MEASURED, axes=True, w=420, h=320)
         .flow(
             partition(by=field("Body Mass (g)").bin(Bin.step(500)), dir="y"),
             partition(by=field("Flipper Length (mm)").bin(Bin.step(10)), dir="x"),
         )
         .mark(text(text=field("Body Mass (g)").count())),
-        {"w": 420, "h": 320},
+        {},
     )
 
 
@@ -137,14 +137,20 @@ HUBS = [
 
 def story_airport_hexbin():
     return (
-        chart(_contiguous_airports(), color=Color.gradient("blues"), axes=True)
+        chart(
+            _contiguous_airports(),
+            color=Color.gradient("blues"),
+            axes=True,
+            w=600,
+            h=360,
+        )
         .flow(
             partition(
                 by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=1))
             )
         )
         .mark(region(fill=field("longitude").count(), stroke="white")),
-        {"w": 600, "h": 360},
+        {},
     )
 
 
@@ -154,7 +160,7 @@ def story_car_hexbin():
     cars = read_json("cars.json")
     cars = cars[cars["Miles_per_Gallon"].notna() & cars["Weight_in_lbs"].notna()]
     return (
-        chart(cars, color=Color.gradient("viridis"), axes=True)
+        chart(cars, color=Color.gradient("viridis"), axes=True, w=480, h=360)
         .flow(
             partition(
                 by=struct(x="Miles_per_Gallon", y="Weight_in_lbs").bin(
@@ -163,7 +169,7 @@ def story_car_hexbin():
             )
         )
         .mark(region(fill=field("Miles_per_Gallon").count())),
-        {"w": 480, "h": 360},
+        {},
     )
 
 
@@ -226,7 +232,7 @@ def story_penguin_beak_voronoi():
 def story_airport_hex_counts():
     airports = _contiguous_airports()
     return (
-        chart(airports, color=Color.gradient("blues"))
+        chart(airports, color=Color.gradient("blues"), w=600, h=360)
         .flow(
             partition(
                 by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=3))
@@ -240,5 +246,5 @@ def story_airport_hex_counts():
                 ]
             )
         ),
-        {"w": 600, "h": 360, "axes": True},
+        {"axes": True},
     )

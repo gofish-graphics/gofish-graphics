@@ -57,7 +57,7 @@ export const Default: StoryObj<Args> = {
 
     // One plant per lake, planted at the lake's x location: a thin green stem
     // as tall as the lake's total catch, with the flower centered on its top.
-    chart(stemData, { axes: false })
+    chart(stemData, { axes: false, w: args.w, h: args.h })
       .flow(scatter({ by: "lake", x: "x" }))
       .mark(
         layer([
@@ -70,7 +70,7 @@ export const Default: StoryObj<Args> = {
           ]),
         ])
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

@@ -98,7 +98,7 @@ export const Default: StoryObj<Args> = {
 
     chart(ridgelineData, {
       axes: { x: true, y: false },
-      schema: { temp_max: Schema.quantity("Max temperature").unit("°C") },
+      schema: { temp_max: Schema.quantity("Max temperature").unit("°C") }, w: args.w, h: args.h,
     })
       .flow(
         spread({
@@ -154,10 +154,7 @@ export const Default: StoryObj<Args> = {
           )
           .zOrder(-1)
       )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },

@@ -37,14 +37,14 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
     const barley = context.loaded.barley as any[];
 
-    chart(barley)
+    chart(barley, { h: args.h })
       .flow(
         spread({ by: "site", dir: "x", spacing: 110 }),
         spread({ by: "year", dir: "x", spacing: 36 }),
         scatter({ by: "variety", y: "yield" })
       )
       .mark(line({ stroke: "variety", strokeWidth: 2 }))
-      .render(container, { h: args.h });
+      .render(container);
 
     return container;
   },

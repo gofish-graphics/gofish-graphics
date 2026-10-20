@@ -52,7 +52,7 @@ export const RatingHistogram: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(movies, { axes: true })
+    chart(movies, { axes: true, w: args.w, h: args.h })
       .flow(
         spread({
           by: field("rating").bin(Bin.step(0.5)),
@@ -61,7 +61,7 @@ export const RatingHistogram: StoryObj<Args> = {
         })
       )
       .mark(rect({ h: field("rating").count(), fill: "steelblue" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -100,10 +100,10 @@ export const MonthlyBars: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(daily, { schema: { date: Schema.time() }, axes: true })
+    chart(daily, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
       .flow(spread({ by: field("date").bin(Calendar.year).bin(Calendar.month), dir: "x" }))
       .mark(rect({ h: field("value").sum(), fill: "steelblue" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -120,13 +120,13 @@ export const StackedMonthlyBars: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(allDaily, { schema: { date: Schema.time() }, axes: true })
+    chart(allDaily, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
       .flow(
         spread({ by: field("date").bin(Calendar.year).bin(Calendar.month), dir: "x" }),
         stack({ by: "region", dir: "y" })
       )
       .mark(rect({ h: field("value").sum(), fill: "region" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -143,10 +143,10 @@ export const RatingHistogramContinuous: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(movies, { axes: true })
+    chart(movies, { axes: true, w: args.w, h: args.h })
       .flow(partition({ by: field("rating").bin(Bin.step(0.5)), dir: "x" }))
       .mark(rect({ h: field("rating").count(), fill: "steelblue", inset: 0.5 }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -163,10 +163,10 @@ export const MonthBarsTrueWidths: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(allDaily, { schema: { date: Schema.time() }, axes: true })
+    chart(allDaily, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
       .flow(partition({ by: field("date").bin([Calendar.year, Calendar.month]), dir: "x" }))
       .mark(rect({ h: field("value").sum(), fill: "steelblue", inset: 1 }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -183,13 +183,13 @@ export const StackedMonthBarsTrueWidths: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(daily, { schema: { date: Schema.time() }, axes: true })
+    chart(daily, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
       .flow(
         partition({ by: field("date").bin(Calendar.year).bin(Calendar.month), dir: "x" }),
         stack({ by: "region", dir: "y" })
       )
       .mark(rect({ h: field("value").sum(), fill: "region", inset: 1 }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -206,13 +206,13 @@ export const GroupedMonthBarsTrueWidths: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(allDaily, { schema: { date: Schema.time() }, axes: true })
+    chart(allDaily, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
       .flow(
         partition({ by: field("date").bin([Calendar.year, Calendar.month]), dir: "x" }),
         spread({ by: "region", dir: "x" })
       )
       .mark(rect({ h: field("value").sum(), fill: "region" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -236,10 +236,10 @@ export const SeasonalPrecipitation: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(weather, { schema: { date: Schema.time() }, axes: true })
+    chart(weather, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
       .flow(spread({ by: field("date").bin(Calendar.month), dir: "x" }))
       .mark(rect({ h: field("precipitation").mean(), fill: "steelblue" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -258,13 +258,13 @@ export const MonthBarsProduct: StoryObj<Args> = {
     const container = initializeContainer();
     chart(between("2014-07-01", "2015-07-01"), {
       schema: { date: Schema.time() },
-      axes: { x: { label: { angle: "auto" } }, y: true },
+      axes: { x: { label: { angle: "auto" } }, y: true }, w: args.w, h: args.h,
     })
       .flow(
         spread({ by: field("date").bin([Calendar.year, Calendar.month]), dir: "x" })
       )
       .mark(rect({ h: field("precipitation").sum(), fill: "steelblue" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -283,7 +283,7 @@ export const MonthBarsChained: StoryObj<Args> = {
     const container = initializeContainer();
     chart(between("2014-01-01", "2016-01-01"), {
       schema: { date: Schema.time() },
-      axes: true,
+      axes: true, w: args.w, h: args.h,
     })
       .flow(
         spread({
@@ -292,7 +292,7 @@ export const MonthBarsChained: StoryObj<Args> = {
         })
       )
       .mark(rect({ h: field("precipitation").sum(), fill: "steelblue" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -317,7 +317,7 @@ export const GroupedMonthBars: StoryObj<Args> = {
     const container = initializeContainer();
     chart(winter, {
       schema: { date: Schema.time() },
-      axes: { x: { label: { angle: "auto" } }, y: true },
+      axes: { x: { label: { angle: "auto" } }, y: true }, w: args.w, h: args.h,
     })
       .flow(
         spread({
@@ -328,7 +328,7 @@ export const GroupedMonthBars: StoryObj<Args> = {
         spread({ by: byWeather, dir: "x", spacing: 1 })
       )
       .mark(rect({ h: field("weather").count(), fill: "weather" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -339,7 +339,7 @@ export const GroupedMonthBarsHiddenInner: StoryObj<Args> = {
     const container = initializeContainer();
     chart(winter, {
       schema: { date: Schema.time() },
-      axes: { x: { levels: [false, true] }, y: true },
+      axes: { x: { levels: [false, true] }, y: true }, w: args.w, h: args.h,
     })
       .flow(
         spread({
@@ -350,7 +350,7 @@ export const GroupedMonthBarsHiddenInner: StoryObj<Args> = {
         spread({ by: byWeather, dir: "x", spacing: 1 })
       )
       .mark(rect({ h: field("weather").count(), fill: "weather" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -369,7 +369,7 @@ export const MonthBarsProductTrueWidths: StoryObj<Args> = {
     const container = initializeContainer();
     chart(between("2014-01-01", "2016-01-01"), {
       schema: { date: Schema.time() },
-      axes: true,
+      axes: true, w: args.w, h: args.h,
     })
       .flow(
         partition({
@@ -380,7 +380,7 @@ export const MonthBarsProductTrueWidths: StoryObj<Args> = {
       .mark(
         rect({ h: field("precipitation").sum(), fill: "steelblue", inset: 1 })
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -397,10 +397,10 @@ export const WeekdayTemperature: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(weather, { schema: { date: Schema.time() }, axes: true })
+    chart(weather, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
       .flow(spread({ by: field("date").bin(Calendar.weekday), dir: "x" }))
       .mark(rect({ h: field("temp_max").mean(), fill: "steelblue" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -423,7 +423,7 @@ export const CalendarHeatmap: StoryObj<Args> = {
       axes: {
         x: { title: false, levels: [false, Calendar.month, Calendar.year] },
         y: { title: false },
-      },
+      }, w: args.w, h: args.h,
     })
       .flow(
         table({
@@ -437,7 +437,7 @@ export const CalendarHeatmap: StoryObj<Args> = {
         })
       )
       .mark(rect({ fill: field("temp_max").mean() }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };

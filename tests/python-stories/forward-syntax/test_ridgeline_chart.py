@@ -51,6 +51,8 @@ def story_default():
             RIDGELINE_DATA,
             axes={"x": True, "y": False},
             schema={"temp_max": Schema.quantity("Max temperature").unit("°C")},
+            w=500,
+            h=380,
         )
         .flow(
             spread(
@@ -107,5 +109,5 @@ def story_default():
             )
             .z_order(-1)
         ),
-        {"w": 500, "h": 380},
+        {},
     )
