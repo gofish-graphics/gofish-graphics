@@ -294,7 +294,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             type: { const: "previous-tier" },
           },
           description:
-            "An empty chart() scope inside a .layer(...) chain: inherit the immediately preceding tier's marks. Only valid on a tier inside a builder:true LayerIR.",
+            "An empty chart() scope: inside a .layer(...) chain it inherits the immediately preceding tier's marks; in a mark position it inherits the rows of the partition it sits in.",
         },
       ],
     },
@@ -508,7 +508,10 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         { $ref: "#/$defs/RefMarkIR" },
         { $ref: "#/$defs/OffsetMarkIR" },
         { $ref: "#/$defs/CutMarkIR" },
+        { $ref: "#/$defs/ChartIR" },
       ],
+      description:
+        "What a mark position holds. Besides the mark kinds, a whole chart may sit where a mark does, as in JS (.mark(chart(...)), layer([rect(...), chart(...)])). A layer of charts is the layer combinator mark with chart children; LayerIR is a root form only.",
     },
     OffsetMarkIR: {
       description:

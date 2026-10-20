@@ -1050,6 +1050,11 @@ function walkMark(node: unknown, path: string, ctx: Context): void {
     walkCombinatorMark(node, path, ctx);
     return;
   }
+  // A mark position may hold a whole chart (see `MarkIR`).
+  if (t === "chart") {
+    walkChart(node, path, ctx);
+    return;
+  }
   if ((LEAF_MARK_TYPES as readonly string[]).includes(t)) {
     walkLeafMark(node, path, ctx);
     return;

@@ -439,9 +439,22 @@ export function mapMark(
     return inputRef;
   }
 
-  // Mark-as-function: Python registered a `(data) -> ChartBuilder | Mark`
-  // lambda. The JS Mark fetches a chart (or raw-mark) IR per invocation (via
-  // the bridge) and rebuilds it JS-side.
+  // A whole chart in a mark position (`.mark(chart(...))`, a
+  // `layer([rect(...), chart(...)])` child): rebuild the same `chart(...)`
+  // object a JS author writes there, unresolved, so the mark machinery treats
+  // it as it treats the JS one (an empty `chart()` scope inherits the rows of
+  // the partition it sits in). A chart with rows of its own carries them
+  // inline. A layer of charts is the `layer` combinator below.
+  if (Frontend.isChartIR(spec)) {
+    return chartFromIR(spec, [], bridge, resolveToken) as unknown as Mark<any>;
+  }
+
+  // Mark-as-function: Python registered a `(data) -> mark | chart` callback.
+  // The JS Mark calls it through the bridge per invocation. The reply is the
+  // mark-position IR of what the callback returned (a mark or a chart; a
+  // layer of charts is a mark), so it rebuilds here like any other mark position. Like a JS mark
+  // function's result, it is returned unresolved: the caller,
+  // `resolveMarkResult`, resolves a Mark, a ChartBuilder or a LayerBuilder.
   if (spec.type === "mark-fn") {
     const lambdaId = spec.lambdaId as string;
     if (!bridge) {
@@ -451,26 +464,10 @@ export function mapMark(
     }
     return (async (data: any, _key: any, _layerContext: any) => {
       const { rows, inputRefs: newInputRefs } = serializeMarkFnInput(data);
+      // A one-element list (the rows-in / rows-out bridge contract), as plain
+      // JSON: the bridge undoes any transport wrapping.
       const result = await bridge.applyLambda(lambdaId, rows);
-      // Returns a ChartBuilder or a raw Mark, both of which behave as a Mark
-      // in the deserialization pipeline; cast through `unknown` to express
-      // that the deserializer is honoring the existing widget contract.
-      // mark-fn returns a one-element list; result[0] is the chart/mark-spec
-      // dict, as plain JSON (the bridge undoes any transport wrapping).
-      // The reply is the IR root of what the callback returned: a bare Mark
-      // (`{type: "raw-mark"}`, e.g. a `spread([...])` that embeds one of its
-      // input refs), a chart, or a layer (`chart(...).layer(...)`). Like a JS
-      // mark function's result, each is returned unresolved: the caller,
-      // `resolveMarkResult`, resolves a Mark, a ChartBuilder or a
-      // LayerBuilder. Rows travel inline in the reply.
-      const root = result[0] as Frontend.FrontendIR;
-      if (root.type === "raw-mark") {
-        return mapMark(root.mark, bridge, resolveToken, newInputRefs);
-      }
-      if (root.type === "layer") {
-        return buildLayer(root, bridge, [], resolveToken);
-      }
-      return chartFromIR(root, [], bridge, resolveToken);
+      return mapMark(result[0] as MarkSpec, bridge, resolveToken, newInputRefs);
     }) as unknown as Mark<any>;
   }
 

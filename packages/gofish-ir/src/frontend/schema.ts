@@ -151,8 +151,9 @@ export interface RawMarkIR extends BaseIRNode {
  *   `PREVIOUS_LAYER_MARKS` sentinel so `LayerBuilder`'s own `wireTiers()`
  *   (auto-naming the producer's mark + binding this tier to
  *   `selectAll(name)`) runs JS-side — the same code a native
- *   `chart(...).layer(...)` chain goes through. Only valid on a tier inside a
- *   `builder: true` `LayerIR`.
+ *   `chart(...).layer(...)` chain goes through. The same sentinel marks an
+ *   empty scope in a mark position (`.mark(chart().flow(...))`), where JS
+ *   binds it to the rows of the partition the chart sits in.
  */
 export type DataIR =
   | { type: "inline"; rows: Array<Record<string, unknown>> }
@@ -612,12 +613,23 @@ export type StructBinIR =
 // Marks
 // ---------------------------------------------------------------------------
 
+/**
+ * What a mark position holds: a chart's `mark`, a combinator's child, a cut's
+ * `source`, a drawing `.relate(...)` clause. Besides the mark kinds, a mark
+ * position may hold a whole chart, as in JS, where `.mark(chart(...))` and
+ * `layer([rect(...), chart(...)])` are ordinary marks. A nested chart crosses
+ * as its own `ChartIR` (an empty `chart()` scope as `{type: "previous-tier"}`
+ * data, which inherits the rows of the partition it sits in). A layer of
+ * charts is the `layer` combinator mark with chart children, like any
+ * combinator; `LayerIR` is a root form only.
+ */
 export type MarkIR =
   | LeafMarkIR
   | CombinatorMarkIR
   | RefMarkIR
   | OffsetMarkIR
-  | CutMarkIR;
+  | CutMarkIR
+  | ChartIR;
 
 export type LeafMarkType =
   | "rect"
@@ -631,7 +643,7 @@ export type LeafMarkType =
   | "text"
   | "image"
   | "polygon"
-  | "mark-fn"; // Python-bridge: a registered (data) -> ChartBuilder lambda.
+  | "mark-fn"; // Python-bridge: a registered `(data) -> mark | chart` callback.
 // Carries a `lambdaId` field; resolved via the bridge.
 
 export type CombinatorMarkType =
@@ -963,8 +975,8 @@ export function isConstraintIR(clause: RelateClauseIR): clause is ConstraintIR {
 // Discriminator helpers (predicates)
 // ---------------------------------------------------------------------------
 
-/** Discriminate a root document. */
-export function isChartIR(node: FrontendIR): node is ChartIR {
+/** Discriminate a root document, or a chart in a mark position. */
+export function isChartIR(node: FrontendIR | MarkIR): node is ChartIR {
   return node.type === "chart";
 }
 export function isLayerIR(node: FrontendIR): node is LayerIR {
@@ -995,7 +1007,8 @@ export function isLeafMarkIR(mark: MarkIR): mark is LeafMarkIR {
     !isCombinatorMarkIR(mark) &&
     !isRefMarkIR(mark) &&
     !isOffsetMarkIR(mark) &&
-    !isCutMarkIR(mark)
+    !isCutMarkIR(mark) &&
+    !isChartIR(mark)
   );
 }
 

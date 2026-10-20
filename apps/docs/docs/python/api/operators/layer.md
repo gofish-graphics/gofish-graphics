@@ -25,8 +25,10 @@ layer(children, **options) -> Mark
 ```
 
 The children are a positional list of marks; layout options are passed as
-kwargs. A child may also be a nested `chart(...)`, as in a chart's
-[`mark(...)`](/python/api/core/mark#nested-chart-as-a-mark). Children typically carry `.name(...)` tags so they can be referenced
+kwargs. A child may also be a nested `chart(...)` or a layer of charts, as in a
+chart's [`mark(...)`](/python/api/core/mark#nested-chart-as-a-mark). When every
+child is a chart, `layer` returns a `LayerBuilder`, which may itself sit in a
+mark position. Children typically carry `.name(...)` tags so they can be referenced
 from a [`.relate(...)`](/python/api/constraints/relate) callback or by a
 sibling relational mark like [`line`](/python/api/marks/line) / `ref`.
 

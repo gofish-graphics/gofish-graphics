@@ -124,8 +124,9 @@ The root types mirror the fluent builder shapes:
 
 `data` is either `{type: "inline", rows}`, `{type: "select", layer}`,
 `{type: "external", id?}`, or `{type: "previous-tier"}` — the last marks an
-empty `chart()` scope inside a `builder: true` layer chain ("inherit the
-previous tier's marks"). The deserializer maps it to the JS
+empty `chart()` scope: inside a `builder: true` layer chain it inherits the
+previous tier's marks, and in a mark position (below) it inherits the rows of
+the partition it sits in. The deserializer maps it to the JS
 `PREVIOUS_LAYER_MARKS` sentinel so the real `LayerBuilder.wireTiers()` derives
 the auto-naming + `selectAll` wiring at resolve time — the producer's
 auto-minted layer name never appears in the IR (mirroring how a relational
@@ -172,7 +173,24 @@ with a JS `.format(fn)` has no wire form, and serializing it is an error. Marks 
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
 `arrow`, `position`, `line`, `ribbon`, `treemap`, `pack`, and the Porter-Duff family),
-refs, or the two self-discriminating wrapper marks `offset` and `cut` (below).
+refs, the two self-discriminating wrapper marks `offset` and `cut` (below), or
+a whole `ChartIR`. A mark position (a chart's `mark`, a combinator child, a
+`cut` source, a drawing `.relate(...)` clause) may hold a chart, by one rule,
+because JS allows one wherever a mark sits: `.mark(chart(...))`,
+`layer([rect(...), chart(...)])`. The deserializer (`mapMark`) rebuilds the
+same `chart(...)` builder a JS author writes there, and the mark machinery
+binds an empty scope to the partition's rows, as for the JS object. A layer of
+charts in a mark position is the `layer` combinator mark whose children are
+`ChartIR`s, like any combinator; `LayerIR` is a root form only, where each
+tier's rows ship beside the IR. Both emitters write the same thing: Python's
+`ChartBuilder.to_dict()` / `LayerBuilder.to_dict()`, and JS `toJSON`, where
+`.mark(chart(...))` leaves a mark whose wire form (`withWire`) is the chart. A
+`chart(...).layer(...)` chain has no mark-position form (#1181).
+A root tier ships its rows beside the IR (the widget's Arrow sidecar), but a
+chart inside a mark tree has no tier, so a nested chart with rows of its own
+carries them inline (`{type: "inline", rows}`; as JSON, not Arrow, #1088). A
+nested chart is a pure spec, so it needs no call back into Python, and the
+notebook widget draws it.
 `position` is `enclose`'s undecorated sibling: it sets a single child's
 min-corner `(x, y)` in the parent's coordinates and draws nothing of its own
 (no hull, no styling) — a workaround for `enclose`'s convex-bbox-hull-only
@@ -211,9 +229,10 @@ layer registry, not JSON. `serializeMarkFnInput` in `fromJSON.ts` builds these
 sentinels from the real ref array right before the RPC call and keeps that
 array in closure; the Python side (`_InputRef` in `gofish/ast.py`) wraps each
 sentinel back into an object whose `.datum` reads naturally. The callback may
-return a `ChartBuilder` (as before) or — new — a bare `Mark`, wired as
-`{"type": "raw-mark", "mark": <mark-tree>}` (the same shape `Mark.to_ir()`
-uses at the top level), which lets it embed one of its `_InputRef` arguments
+return a `ChartBuilder`, a `layer([...])` of charts or a bare `Mark`. The reply
+is the mark-position IR of what it returned (`to_dict()`: a `ChartIR` or a
+`MarkIR`), which `mapMark` rebuilds like any other mark position. A bare mark
+lets the callback embed one of its `_InputRef` arguments
 directly in the returned layout (mirroring JS `spread({...}, [d[0],
 text(...)])`). `mapMark` resolves any `{"__inputRef": i}` sentinel found
 inside that returned mark tree back to `inputRefs[i]` — the _original_ live
@@ -670,7 +689,7 @@ The high-level structure:
     "RawMarkIR":  { /* type, mark, options, ... */ },
     "DataIR":     { "oneOf": [/* inline, select, external, previous-tier */] },
     "OperatorIR": { /* GENERATED oneOf: SpreadOperator | StackOperator | ... | TreemapOperator */ },
-    "MarkIR":     { "oneOf": [LeafMarkIR, CombinatorMarkIR, RefMarkIR, OffsetMarkIR, CutMarkIR] },
+    "MarkIR":     { "oneOf": [LeafMarkIR, CombinatorMarkIR, RefMarkIR, OffsetMarkIR, CutMarkIR, ChartIR] },
     "LeafMarkIR": { /* GENERATED oneOf: RectMark | CircleMark | ... */ },
     "LabelIR":      { "oneOf": [/* boolean shorthand, array of {accessor, position, fontSize, ...} specs */] },
     "ConstraintIR": { /* type, options, refs */ },
