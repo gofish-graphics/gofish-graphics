@@ -51,7 +51,7 @@ export const Default: StoryObj<Args> = {
 
     // TODO: need a better way of aggregating by count or whatever.
     chart(context.loaded.weather as any[], {
-      color: Color.palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }),
+      color: Color.palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }), w: args.w, h: args.h,
     })
       .flow(
         derive((d: any[]) =>
@@ -64,7 +64,7 @@ export const Default: StoryObj<Args> = {
         stack({ by: field("weather").sort(["sun", "fog", "drizzle", "rain", "snow"]), dir: "y" })
       )
       .mark(rect({ h: field("date").count(), fill: "weather" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

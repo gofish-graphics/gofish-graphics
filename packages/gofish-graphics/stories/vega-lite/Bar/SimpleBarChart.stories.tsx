@@ -41,11 +41,11 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(values)
+    chart(values, { h: args.h })
       .flow(spread({ by: "a",  dir: "x" }))
       .mark(rect({ h: "b" }))
       // Intentionally omit width to cover the rect default-width fallback path.
-      .render(container, { h: args.h });
+      .render(container);
 
     return container;
   },

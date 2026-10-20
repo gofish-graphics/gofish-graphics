@@ -33,10 +33,10 @@ export const Default: StoryObj<Args> = {
       (d) => d.year === 2000
     );
 
-    chart(year2000)
+    chart(year2000, { w: args.w, h: args.h })
       .flow(spread({ by: "age",  dir: "y" }))
       .mark(rect({ w: "people" }))
-      .render(container, { w: args.w, h: args.h});
+      .render(container);
 
     return container;
   },

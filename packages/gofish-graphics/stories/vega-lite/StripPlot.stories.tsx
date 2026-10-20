@@ -33,7 +33,7 @@ export const Default: StoryObj<Args> = {
         cylinders: Math.round(d.Cylinders),
       }));
 
-    chart(cars, { axes: { x: { side: "end" }, y: true } })
+    chart(cars, { axes: { x: { side: "end" }, y: true }, w: args.w, h: args.h })
       .flow(
         // Ascending so cylinders read 3 at the top → 8 at the bottom in y-down.
         derive((d) => [...d].sort((a, b) => a.cylinders - b.cylinders)),
@@ -48,7 +48,7 @@ export const Default: StoryObj<Args> = {
           opacity: 0.7,
         })
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

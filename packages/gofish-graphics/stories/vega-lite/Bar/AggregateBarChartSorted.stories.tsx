@@ -27,10 +27,10 @@ export const Default: StoryObj<Args> = {
     );
 
     // Order age groups by their total (summed) people, descending.
-    chart(year2000)
+    chart(year2000, { w: args.w, h: args.h })
       .flow(spread({ by: field("age").sort("people", "desc"),  dir: "y" }))
       .mark(rect({ w: "people" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

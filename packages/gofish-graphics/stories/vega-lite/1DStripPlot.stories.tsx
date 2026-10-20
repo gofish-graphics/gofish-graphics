@@ -29,13 +29,13 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    chart(context.loaded.weather as any[], { axes: { x: true, y: false } })
+    chart(context.loaded.weather as any[], { axes: { x: true, y: false }, w: args.w })
       .flow(scatter({ by: "date",  x: "precipitation" }))
       .mark(rect({ w: 1, h: 10, fill: "rgb(31, 119, 180)",
         opacity: 0.7,
       }))
 
-      .render(container, { w: args.w });
+      .render(container);
 
     return container;
   },

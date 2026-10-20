@@ -30,12 +30,12 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    chart(context.loaded.movies as any[])
+    chart(context.loaded.movies as any[], { w: args.w, h: args.h })
       .flow(
         spread({ by: field("IMDB Rating").bin(), dir: "x", spacing: 1 })
       )
       .mark(rect({ h: field("IMDB Rating").count() }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },
