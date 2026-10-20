@@ -432,9 +432,18 @@ export function formatDomDiff(before: string, after: string): string {
     }
   }
 
-  return (
+  const html =
     `<table style="border-collapse:collapse;width:100%;font-family:monospace;font-size:12px;line-height:1.6;">` +
     rows.join("") +
-    `</table>`
-  );
+    `</table>`;
+  // Cloudflare Pages refuses any file over 25 MiB, and a diff that size can't
+  // be read anyway, so a huge one is replaced by its size (the screenshots
+  // still show the change).
+  const bytes = Buffer.byteLength(html);
+  if (bytes <= MAX_DOM_DIFF_BYTES) return html;
+  const mib = (n: number) => (n / 2 ** 20).toFixed(1);
+  return `<em>DOM diff too large to show (${mib(bytes)} MiB, limit ${mib(MAX_DOM_DIFF_BYTES)} MiB). Compare the screenshots instead.</em>`;
 }
+
+/** Below Cloudflare Pages' 25 MiB per-file limit. */
+const MAX_DOM_DIFF_BYTES = 20 * 2 ** 20;
