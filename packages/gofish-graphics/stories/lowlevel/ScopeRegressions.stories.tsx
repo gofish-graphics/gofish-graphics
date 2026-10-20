@@ -52,7 +52,7 @@ const heat = () =>
 export const EncloseMixed: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    enclose([
+    enclose({}, [
       spreadX({ spacing: 40, alignment: "start" }, [bars(), heat()]),
     ]).render(container, {});
     return container;

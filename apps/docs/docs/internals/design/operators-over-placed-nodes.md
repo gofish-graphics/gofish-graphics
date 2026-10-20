@@ -81,7 +81,7 @@ ownership-conflict errors promoted from nice-to-have to prerequisite (§4, item 
 **Shipped (2026-09-25): `relate()`.** `.constrain()` is renamed `.relate()` everywhere (JS,
 Python, and the IR's `relate` field, which replaces `constraints`), with no alias. A clause
 is a constraint or a drawing term (an operator or mark such as `arrow`,
-`background`/`enclose`, or a relational `line`), and a drawing term may mix operands with
+or a relational `enclose` or `line`), and a drawing term may mix operands with
 fresh marks. Operands in term position are string refs, and a string `ref` is legal only
 inside a `.relate()` clause; tokens stay legal anywhere. Inside a layer, the clauses run in
 dependency order around the one constraint solve (`scheduleRelate`, `constraints/relate.ts`):

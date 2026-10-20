@@ -130,7 +130,7 @@ The picture is the same, but now the sizes and colors of the planets live in one
 
 ## Drawing a background
 
-Some operators draw something of their own. `background()` is an operator that draws a box behind its children. The box is as big as the children, plus `padding` pixels on every side. Let's put the planets on a dark background:
+Some operators draw something of their own. `enclose()` is an operator that draws a box behind its children. The box is as big as the children, plus `padding` pixels on every side. Let's put the planets on a dark background:
 
 ::: gofish
 
@@ -142,8 +142,13 @@ const data = [
   { name: "mars", r: 21, fill: "#F4BC80", stroke: "#E0954C" },
 ];
 
-gf.background(
-  { padding: 20, fill: "#252150", stroke: "none", rx: 16, ry: 16 },
+gf.enclose(
+  {
+    padding: 20,
+    fill: "#252150",
+    stroke: "none",
+    shape: gf.Shape.box({ rx: 16 }),
+  },
   [
     gf.spread(
       { dir: "x", spacing: 50, alignment: "middle" },
@@ -157,9 +162,9 @@ gf.background(
 
 :::
 
-`fill` is the color of the box. The box gets a thin gray outline by default, so `stroke: "none"` turns it off. `rx` and `ry` round its corners.
+`fill` is the color of the box. The box gets a thin gray outline by default, so `stroke: "none"` turns it off. `shape` picks the outline: `Shape.box()` is a box, and its `rx` and `ry` round the corners.
 
-Notice how the code mirrors the picture. The row of planets is inside the `background()` call, and it is drawn inside the box.
+Notice how the code mirrors the picture. The row of planets is inside the `enclose()` call, and it is drawn inside the box.
 
 ## Where next
 

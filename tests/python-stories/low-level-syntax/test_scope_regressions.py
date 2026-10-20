@@ -58,6 +58,8 @@ def _heat():
 # flip — but its internal lowering must still run the scope walk, so the bars grow
 # UP while the heatmap reads top→bottom.
 def story_enclose_mixed():
+    # JS spells the empty options out (`enclose({}, [...])`); Python takes
+    # them as keyword arguments, so there are none here.
     return (
         enclose(
             [spread([_bars(), _heat()], dir="x", spacing=40, alignment="start")]

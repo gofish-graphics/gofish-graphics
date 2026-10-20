@@ -60,6 +60,8 @@ export type FieldType =
       /** A bound the value must be above (exclusive): `0` for a length that
        *  must be positive. NaN is never above it. */
       exclusiveMin?: number;
+      /** The greatest value allowed (inclusive). NaN is never at most it. */
+      max?: number;
       /** Reject Infinity and -Infinity (NaN is never finite). */
       finite?: boolean;
       /** Only whole numbers. */
@@ -165,13 +167,16 @@ export function pyKwarg(fieldName: string): string {
 export const t = {
   string: { kind: "string" } as FieldType,
   number: { kind: "number" } as FieldType,
-  /** A number with bounds: at least `min`, above `exclusiveMin`, finite
-   *  when `finite`, and whole when `integer` (`t.num({ min: 0, finite: true })`
-   *  for a pixel padding, `t.num({ exclusiveMin: 0, finite: true })` for a
-   *  hex radius, `t.num({ min: 1, integer: true })` for a calendar step). */
+  /** A number with bounds: at least `min`, above `exclusiveMin`, at most
+   *  `max`, finite when `finite`, and whole when `integer`
+   *  (`t.num({ min: 0, finite: true })` for a pixel padding,
+   *  `t.num({ exclusiveMin: 0, finite: true })` for a hex radius,
+   *  `t.num({ min: 0, max: 1 })` for a share, `t.num({ min: 1, integer: true })`
+   *  for a calendar step). */
   num: (bounds: {
     min?: number;
     exclusiveMin?: number;
+    max?: number;
     finite?: boolean;
     integer?: boolean;
   }): FieldType => ({
@@ -792,10 +797,77 @@ export const STRATEGIES = {
       year: calendarKind("Cells of a year, from January 1."),
     },
   },
+  Shape: {
+    doc: "The outline `enclose` draws around its members: the value of its `shape` option. `padding` and the paint stay on `enclose`.",
+    kinds: {
+      box: {
+        doc: "The members' bounding box, grown by `padding`, with rounded corners.",
+        params: {
+          rx: {
+            type: t.num({ min: 0 }),
+            doc: "Corner radius in pixels, x. Default: `ry`, or 2 when neither is given.",
+          },
+          ry: {
+            type: t.num({ min: 0 }),
+            doc: "Corner radius in pixels, y. Default: `rx`, or 2 when neither is given.",
+          },
+        },
+      },
+      oval: {
+        doc: "The smallest-area ellipse that holds every member grown by `padding`. It may be rotated: it follows the members, not the axes.",
+        params: {},
+      },
+      blob: {
+        doc: "A smooth region around the members: each member grown by `padding`, the links of a spanning tree between them (routed around avoided nodes, so the set stays in one piece), and the Delaunay triangles of their points, filled smallest gaps first up to `convexity` of their convex hull. The outline is rounded so its curvature never jumps.",
+        params: {
+          convexity: {
+            type: t.num({ min: 0, max: 1 }),
+            default: 0.5,
+            doc: "The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area.",
+          },
+          holes: {
+            type: t.boolean,
+            default: false,
+            doc: "Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled and each avoided node it held is cut back out as its clearance circle, as `allow_holes` in PostGIS and Shapely.",
+          },
+          roundness: {
+            type: t.num({ min: 0, finite: true }),
+            doc: "How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`.",
+          },
+          neck: {
+            type: t.num({ exclusiveMin: 0, max: 1 }),
+            default: 1,
+            doc: "How far the outline is NOT pulled in between members, above 0 and at most 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. 0 is not allowed: a link `neck` times the bulge would have no width, and its two sides would meet. It never changes the pieces or holes.",
+          },
+          avoiding: {
+            type: t.ref("NodeSelectionIR"),
+            doc: "Nodes to keep out: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. Each avoided node inside the region becomes a round hole, and links route around the others.",
+          },
+          clearance: {
+            type: t.num({ min: 0, finite: true }),
+            default: 4,
+            doc: "Pixels kept between the outline and each avoided node.",
+          },
+        },
+      },
+    },
+    presets: {
+      hull: {
+        kind: "blob",
+        values: { convexity: 1, neck: 1 },
+        doc: "The padded convex hull, rounded: blob with convexity 1 and neck 1. Any option overrides the preset.",
+      },
+      spine: {
+        kind: "blob",
+        values: { convexity: 0 },
+        doc: "The routed spanning tree of tubes and nothing else: blob with convexity 0. Any option overrides the preset.",
+      },
+    },
+  },
 } satisfies Record<string, StrategyFamily>;
 
 /** The name of a strategy family: `"Tile"`, `"Overlap"`, `"Curve"`,
- *  `"Bin"` or `"Calendar"`. */
+ *  `"Bin"`, `"Calendar"` or `"Shape"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
 /** The `Bin` kinds by the key they bin: one field, `field(x).bin(b)`, whose
@@ -963,7 +1035,7 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
  *  `tag` is the value's `type` field, which tells it apart from the other
  *  branches of a union (validate.ts). */
 export const AUTHORED_REFS: Readonly<
-  Record<string, { pyClass?: string; tag?: string }>
+  Record<string, { pyClass?: string; tag?: string; holdsNodes?: true }>
 > = {
   FieldAccessor: { pyClass: "FieldAccessor", tag: "field" },
   StructAccessor: { pyClass: "StructAccessor", tag: "struct" },
@@ -971,6 +1043,13 @@ export const AUTHORED_REFS: Readonly<
   LabelIR: {},
   TranslateIR: {},
   RelateClauseIR: {},
+  // `holdsNodes`: an authored value of this type holds nodes (in JS a list
+  // of nodes or refs, or a `selectAll(name)`; in Python marks such as
+  // `ref(...)` or `select_all(...)`), and the IR holds their references. So
+  // a check of an authored value (`checkStrategy`) and the Python generator
+  // pass it through; the code that reads the nodes checks them, and the
+  // serializers write each node as its IR (`Mark.to_dict` in Python).
+  NodeSelectionIR: { holdsNodes: true },
 };
 
 /** The Python class for a named type, if it has one. */
@@ -1464,8 +1543,14 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     include: [boxDims, paint],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
-      rx: { type: t.number, default: 0, doc: "Corner radius, x." },
-      ry: { type: t.number, default: 0, doc: "Corner radius, y." },
+      rx: {
+        type: t.number,
+        doc: "Corner radius, x. Default: `ry`, or 0 when neither is given.",
+      },
+      ry: {
+        type: t.number,
+        doc: "Corner radius, y. Default: `rx`, or 0 when neither is given.",
+      },
       aspectRatio: {
         type: t.number,
         doc: "w/h ratio to enforce; the constraining axis wins when both are data-driven.",
@@ -1815,6 +1900,45 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     },
   }),
 
+  enclose: leafMark("enclose", {
+    doc: "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs.",
+    fields: {
+      padding: {
+        type: t.number,
+        default: 2,
+        doc: "Pixels between the members and the outline. For a blob, the distance from each member's own outline (around a line's whole length).",
+      },
+      shape: {
+        type: t.ref("Shape"),
+        doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset.",
+      },
+      fill: ch.color(
+        "Fill color of the outline, or a field name or accessor for a color scale (constant within the enclosed group)."
+      ),
+      stroke: ch.color(
+        "Stroke color of the outline, or a field name or accessor for a color scale (constant within the enclosed group). Default a light gray."
+      ),
+      strokeWidth: {
+        type: t.number,
+        default: 1,
+        doc: "Stroke width in pixels.",
+      },
+      strokeDasharray: {
+        type: t.string,
+        doc: 'Raw SVG stroke-dasharray (e.g. "4 2") for a dashed outline.',
+      },
+      opacity: {
+        type: t.number,
+        default: 1,
+        doc: "Opacity of the whole outline, fill and stroke, 0 to 1.",
+      },
+      fillOpacity: {
+        type: t.number,
+        doc: "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`, so a tinted region can keep a full-strength outline.",
+      },
+    },
+  }),
+
   "mark-fn": leafMark("mark-fn", {
     doc: "Python-bridge: a registered `(data) -> ChartBuilder` lambda, resolved via the bridge.",
     fields: {
@@ -1895,36 +2019,8 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   enclose: combinatorMark("enclose", {
-    doc: "Draw a rounded-rect enclosure around the union of the children's bboxes, padded by `padding`.",
-    fields: {
-      padding: {
-        type: t.number,
-        default: 2,
-        doc: "Pixels of slack between the children's bbox union and the drawn enclosure.",
-      },
-      rx: { type: t.number, default: 2, doc: "Corner radius, x." },
-      ry: { type: t.number, default: 2, doc: "Corner radius, y." },
-      fill: {
-        type: t.string,
-        default: "none",
-        doc: "Fill color of the enclosure.",
-      },
-      stroke: {
-        type: t.string,
-        default: "#D1D9E2",
-        doc: "Stroke color of the enclosure.",
-      },
-      strokeWidth: {
-        type: t.number,
-        default: 1,
-        doc: "Stroke width in pixels.",
-      },
-      strokeDasharray: {
-        type: t.string,
-        doc: 'Raw SVG stroke-dasharray (e.g. "4 2") for a dashed enclosure.',
-      },
-      opacity: { type: t.number, default: 1, doc: "Opacity, 0 to 1." },
-    },
+    doc: "Low-level combinator form of `enclose`: the outline around the given children. Same fields as the bag form (LEAF_MARKS.enclose).",
+    fields: resolveFields(LEAF_MARKS.enclose),
   }),
 
   position: combinatorMark("position", {
@@ -2226,31 +2322,156 @@ export function acceptedFields(
   return fields;
 }
 
+/** A named option type's declared type (`t.ref("Shape")` is the `Shape`
+ *  union); undefined for any other ref. */
+const deref = (type: FieldType & { kind: "ref" }): FieldType | undefined =>
+  type.name in OPTION_TYPES ? OPTION_TYPES[type.name].type : undefined;
+
+/** Whether a value of this type may hold, at some depth, a part `isLeaf`
+ *  picks: it is one, or a union, array, tuple, record, object or named
+ *  option type containing one. */
+function carries(type: FieldType, isLeaf: (t: FieldType) => boolean): boolean {
+  if (isLeaf(type)) return true;
+  const sub = (t: FieldType) => carries(t, isLeaf);
+  switch (type.kind) {
+    case "union":
+      return type.options.some(sub);
+    case "array":
+      return sub(type.items);
+    case "tuple":
+      return type.items.some(sub);
+    case "record":
+      return sub(type.valueType);
+    case "object":
+      return Object.values(type.fields).some((f) => sub(f.type));
+    case "ref": {
+      const named = deref(type);
+      return named !== undefined && sub(named);
+    }
+    default:
+      return false;
+  }
+}
+
+const holdsNodes = (type: FieldType): boolean =>
+  type.kind === "ref" && AUTHORED_REFS[type.name]?.holdsNodes === true;
+const carriesNodesCache = new WeakMap<FieldType, boolean>();
+
+/** Whether a value of this type may hold nodes at some depth: a ref whose
+ *  authored value holds nodes (`holdsNodes` in `AUTHORED_REFS`), or a union,
+ *  array, tuple, record, object or named option type containing one. */
+export function carriesNodes(type: FieldType): boolean {
+  let held = carriesNodesCache.get(type);
+  if (held === undefined) {
+    held = carries(type, holdsNodes);
+    carriesNodesCache.set(type, held);
+  }
+  return held;
+}
+
+/** A branch's tag: the field that names it, and its value. An object
+ *  whose required `kind` field is a string literal (a strategy) is tagged
+ *  by its `kind`; a hand-authored ref with a `tag` (`field(...)`,
+ *  `struct(...)`, AUTHORED_REFS) by its `type`. */
+export function branchTag(
+  branch: FieldType
+): { key: "kind" | "type"; value: string } | null {
+  if (branch.kind === "ref") {
+    const tag = AUTHORED_REFS[branch.name]?.tag;
+    return tag === undefined ? null : { key: "type", value: tag };
+  }
+  if (branch.kind !== "object") return null;
+  const tag = branch.fields.kind;
+  return tag !== undefined &&
+    tag.required &&
+    tag.type.kind === "literal" &&
+    typeof tag.type.value === "string"
+    ? { key: "kind", value: tag.type.value }
+    : null;
+}
+
+/** The branches of a tagged union by their tag: every branch tagged by the
+ *  same field ({@link branchTag}), no two alike. Null for any other union. */
+export function taggedBranches(
+  options: readonly FieldType[]
+): { key: "kind" | "type"; byTag: Map<string, FieldType> } | null {
+  const byTag = new Map<string, FieldType>();
+  let key: "kind" | "type" | undefined;
+  for (const branch of options) {
+    const tag = branchTag(branch);
+    if (tag === null || (key !== undefined && tag.key !== key)) return null;
+    if (byTag.has(tag.value)) return null;
+    key = tag.key;
+    byTag.set(tag.value, branch);
+  }
+  return key === undefined ? null : { key, byTag };
+}
+
+/**
+ * `value`, read as a value of `type`, with each part whose type holds nodes
+ * (a `holdsNodes` ref, such as a blob's `avoiding`) replaced by `fn(part)`.
+ * The walk follows the declared type, not the value: object fields, array
+ * and tuple items, record values, named option types, and the branch of a
+ * union that the value's tag names (`taggedBranches`, the rule validation
+ * uses), or else the one branch that holds nodes. A part whose type holds no nodes is returned as it is, so the
+ * serializers convert node references exactly where the table says they
+ * are.
+ */
+export function mapHeldNodes(
+  type: FieldType,
+  value: unknown,
+  fn: (nodes: unknown) => unknown
+): unknown {
+  if (value === undefined || value === null || !carriesNodes(type))
+    return value;
+  switch (type.kind) {
+    case "ref":
+      if (holdsNodes(type)) return fn(value);
+      return mapHeldNodes(deref(type)!, value, fn);
+    case "union": {
+      const tagged = taggedBranches(type.options);
+      let branch: FieldType | undefined;
+      if (tagged !== null)
+        branch = tagged.byTag.get(
+          (value as Record<string, unknown>)[tagged.key] as string
+        );
+      else {
+        const holding = type.options.filter(carriesNodes);
+        branch = holding.length === 1 ? holding[0] : undefined;
+      }
+      return branch === undefined ? value : mapHeldNodes(branch, value, fn);
+    }
+    case "array":
+      return Array.isArray(value)
+        ? value.map((v) => mapHeldNodes(type.items, v, fn))
+        : value;
+    case "tuple":
+      return Array.isArray(value)
+        ? value.map((v, i) =>
+            i < type.items.length ? mapHeldNodes(type.items[i], v, fn) : v
+          )
+        : value;
+    case "record":
+    case "object": {
+      if (typeof value !== "object" || Array.isArray(value)) return value;
+      const out: Record<string, unknown> = { ...(value as object) };
+      for (const [k, v] of Object.entries(out)) {
+        const sub =
+          type.kind === "record" ? type.valueType : type.fields[k]?.type;
+        if (sub !== undefined) out[k] = mapHeldNodes(sub, v, fn);
+      }
+      return out;
+    }
+    default:
+      return value;
+  }
+}
+
 /** Whether a value of this type may hold a channel at some depth: a channel,
  *  or a union, array, tuple, record, object or named option type containing
  *  one. A mark factory's channel map (`createMark` in gofish-graphics) names
  *  exactly the fields of this kind, and the Python generator wraps exactly
  *  these fields' callables as accessors. */
 export function carriesChannel(type: FieldType): boolean {
-  switch (type.kind) {
-    case "channel":
-      return true;
-    case "union":
-      return type.options.some(carriesChannel);
-    case "array":
-      return carriesChannel(type.items);
-    case "tuple":
-      return type.items.some(carriesChannel);
-    case "record":
-      return carriesChannel(type.valueType);
-    case "object":
-      return Object.values(type.fields).some((f) => carriesChannel(f.type));
-    case "ref":
-      return (
-        type.name in OPTION_TYPES &&
-        carriesChannel(OPTION_TYPES[type.name].type)
-      );
-    default:
-      return false;
-  }
+  return carries(type, (t) => t.kind === "channel");
 }

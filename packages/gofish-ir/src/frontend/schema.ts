@@ -156,7 +156,7 @@ export interface RawMarkIR extends BaseIRNode {
  */
 export type DataIR =
   | { type: "inline"; rows: Array<Record<string, unknown>> }
-  | { type: "select"; layer: string; mode?: "one" | "all" }
+  | SelectRefIR
   | { type: "external"; id?: string }
   | { type: "previous-tier" };
 
@@ -608,6 +608,36 @@ export type StructBinIR =
   | { kind: "hex"; radius: number | { x: number; y: number } }
   | { kind: "voronoi"; seeds: Record<string, unknown>[] };
 
+/** A reference to the nodes of a named layer: `ref(name)` (`mode` "one" or
+ *  absent, exactly one node) or `selectAll(name)` (`mode` "all", every node).
+ *  Chart data takes it, and so does an option that names nodes. */
+export type SelectRefIR = {
+  type: "select";
+  layer: string;
+  mode?: "one" | "all";
+};
+
+/** Nodes named on the wire inside an option (a blob's `avoiding`): a list of
+ *  by-name references (`ref(...)` / a `.relate()` operand), or every node of
+ *  a named layer (`selectAll(name)`, the plural form a chart's data takes). */
+export type NodeSelectionIR = RefMarkIR[] | (SelectRefIR & { mode: "all" });
+
+/** The outline `enclose` draws, made by a call in the `Shape` family
+ *  (`Shape.box()`, `Shape.oval()`, `Shape.blob()`; `Shape.hull()` and
+ *  `Shape.spine()` make kind `"blob"` with other params preset). */
+export type ShapeIR =
+  | { kind: "box"; rx?: number; ry?: number }
+  | { kind: "oval" }
+  | {
+      kind: "blob";
+      convexity?: number;
+      holes?: boolean;
+      roundness?: number;
+      neck?: number;
+      avoiding?: NodeSelectionIR;
+      clearance?: number;
+    };
+
 // ---------------------------------------------------------------------------
 // Marks
 // ---------------------------------------------------------------------------
@@ -624,6 +654,7 @@ export type LeafMarkType =
   | "circle"
   | "line"
   | "ribbon"
+  | "enclose"
   | "blank"
   | "region"
   | "ellipse"
@@ -1033,6 +1064,7 @@ export const LEAF_MARK_TYPES: readonly LeafMarkType[] = [
   "circle",
   "line",
   "ribbon",
+  "enclose",
   "blank",
   "region",
   "ellipse",

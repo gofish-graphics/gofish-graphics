@@ -5,7 +5,7 @@ nested anywhere inside the layer (`mercury` inside enclose › spread), and a
 constrained mark repeated per chart row reuses its local names in every row.
 """
 
-from gofish import Constraint, arrow, chart, circle, enclose, layer, rect, spread, text
+from gofish import Constraint, Shape, arrow, chart, circle, enclose, layer, rect, spread, text
 
 PLANETS = [
     {"name": "mercury", "r": 8, "fill": "#b5b5b5", "stroke": "#8a8a8a"},
@@ -38,8 +38,7 @@ def story_nested_operand():
                 padding=20,
                 fill="#252150",
                 stroke="none",
-                rx=16,
-                ry=16,
+                shape=Shape.box(rx=16),
             ).name("planets"),
             text(text="Mercury", fill="#E94560", font_size=14).name("label"),
         ]).relate(lambda mercury, planets, label: [

@@ -44,6 +44,7 @@ import { MARK_CHANNELS } from "../markChannels.generated";
 import { attachCut } from "../graphicalOperators/cut";
 import type { DisplayList } from "gofish-ir";
 import {
+  cornerRadii,
   lowerStyle,
   pathToPixelSVG,
   rectItemFromBox,
@@ -73,8 +74,8 @@ export const Rect = ({
   fill = color6[0],
   stroke = fill,
   strokeWidth = 0,
-  rx = 0,
-  ry = 0,
+  rx: rxGiven,
+  ry: ryGiven,
   filter,
   opacity = 1,
   aspectRatio,
@@ -102,6 +103,7 @@ export const Rect = ({
   // `embedded` is authored by the resolveEmbedding pass (after underlying-space
   // resolves the axis measure), not inferred here — see _node.resolveEmbedding.
   const dims = elaborateDims(fancyDims);
+  const { rx, ry } = cornerRadii(rxGiven, ryGiven, 0);
   if (!(Number.isFinite(inset) && inset >= 0))
     throw new Error(
       `rect: inset must be a number of pixels, 0 or more, got ${inset}.`

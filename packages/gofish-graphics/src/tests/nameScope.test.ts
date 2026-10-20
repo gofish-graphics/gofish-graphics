@@ -514,7 +514,13 @@ async function main() {
         gf
           .layer([
             gf
-              .background({ padding: 20, fill: "#252150", rx: 16 }, [
+              .enclose(
+                {
+                  padding: 20,
+                  fill: "#252150",
+                  shape: gf.Shape.box({ rx: 16 }),
+                },
+                [
                 gf.spread(
                   { dir: "x", spacing: 50, alignment: "middle" },
                   data.map((d) => gf.circle({ r: d.r, fill: "#ccc" }).name(d.name))

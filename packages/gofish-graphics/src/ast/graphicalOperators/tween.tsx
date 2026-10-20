@@ -88,7 +88,7 @@ import {
   type KnotLocation,
 } from "../../interpolate";
 import { bbox, height, unionAll, width } from "../../util/bbox";
-import { targetOf } from "./layer";
+import { targetOf } from "../constraints/relationalPaint";
 import { chainedMarks } from "../../animation/transition";
 import type { TweenEffect } from "../../animation/effects";
 import {
