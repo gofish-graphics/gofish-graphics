@@ -431,10 +431,11 @@
     </p>
     <p class="small">
       <strong>Latest:</strong>
-      <a href="#anchors-v2">anchors written like the rest of GoFish</a> and
+      <a href="#anchors">anchors</a> in the spelling agreed in review
+      (<code>name</code>, <code>position: along(part)</code>,
+      <code>slots: data(...).flow(...)</code>) and
       <a href="#compare">all proposals compared</a>; before that,
-      <a href="#anchors">anchors on a mark's boundary</a> (your idea, prototyped
-      on seven examples), after <a href="#nodelink">node-link ribbons</a>.
+      <a href="#nodelink">node-link ribbons</a>.
     </p>
   </header>
 
@@ -1187,130 +1188,103 @@ chart(penguins)
     and rows across a fixed family of fields, the candidates above.
   </p>
 
-  <h2 id="anchors">Anchors on a mark's boundary</h2>
+  <h2 id="anchors">Anchors</h2>
   <p class="prose">
-    Your idea, prototyped. A mark gets named <strong>anchors</strong>, and each
-    anchor is an ordinary flow laid out in the 1D coordinate along a part of the
-    mark's boundary: an edge, or an arc in polar. The flow's leaves are
-    <strong>slots</strong>, intervals or points that ribbons, lines and labels
-    attach to. So stacking is real again, and it is written on the node, where
-    the stack actually lives. The ribbon goes back to a one-to-one band between
-    two slots, and its width is the slots' size, not a ribbon option.
+    Your idea, worked through with you in review. A mark gets named
+    <strong>anchors</strong>, which are intervals or points laid out along one
+    part of its boundary. Ribbons, lines and labels attach to them. Stacking is
+    real again, and it lives on the node's edge, where you would point to it.
+    The ribbon goes back to a one-to-one band between two anchors, and its width
+    is their size.
   </p>
-  <p class="prose">
-    The idea relates to three things already in this proposal:
-  </p>
-  <ul class="prose">
-    <li>
-      <strong><code>cut</code>:</strong> cut divides the interior; an anchor
-      divides part of the boundary.
-    </li>
-    <li>
-      <strong>Label placement:</strong> <code>Place.along</code> picks one point
-      on an outline; an anchor lays out many slots on one.
-    </li>
-    <li>
-      <strong>Ports and guides:</strong> TikZ anchors, Graphviz and ELK ports,
-      and SwiftUI guides, generalized from single points to laid-out sets.
-    </li>
-  </ul>
-  <p class="prose small">
-    All seven pictures are real renders from an emulation. A story-local helper
-    works out each anchor's flow by hand into slot rows, and slot order is a
-    proxy computed before layout.
-  </p>
-
-  <h3>Spelling: reuse the pipeline names, with one 1D leaf</h3>
+  <pre><code>rect({ w: 12, h: "value" }).anchor({
+  name: "out",                                                  // first, so a search finds it
+  position: along("x-max"),                                     // where: as in .label(text, { position })
+  slots: data(links, { on: "source" }).flow(stack({ size: "value" })),  // what and how: rows, then a flow
+})</code></pre>
   <div class="table-scroll">
     <table>
       <thead>
         <tr>
-          <th>Option</th>
-          <th>Energy sankey node</th>
-          <th>Chord group, with gaps between ends</th>
+          <th>Field</th>
+          <th>Meaning</th>
+          <th>Where it comes from</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td>Reused names</td>
+          <td><code>name</code></td>
+          <td>What ribbons, lines and labels refer to.</td>
+          <td>Written first by convention.</td>
+        </tr>
+        <tr>
+          <td><code>position</code></td>
           <td>
-            <code>chart().flow(stack()).mark(blank({ h: "value" }))</code>
+            <code>along(part)</code> names a 1D space on one side of the mark:
+            <code>x-min</code>, <code>x-max</code>, <code>y-min</code>,
+            <code>y-max</code>, or the coordinate's own dimension names (<code
+              >r-min</code
+            >
+            is a polar rect's inner arc).
           </td>
           <td>
-            <code
-              >chart().flow(spread({ by: "to", spacing: 0.01 })).mark(blank({ w:
-              "value" }))</code
+            The <code>position</code> key of <code>.label()</code>; the label
+            proposal's <code>Place.along</code>; GoFish's <code>min</code>/<code
+              >max</code
             >
+            box anchors; dimension names from #838.
           </td>
         </tr>
         <tr>
-          <td>Dedicated names</td>
+          <td><code>slots</code></td>
           <td>
-            <code>slots().flow(stack()).mark(slot({ size: "value" }))</code>
+            The rows, then how they are arranged. <code>data()</code> is the
+            mark's own rows. <code>data(table, { on })</code> is the rows of
+            another table whose <code>on</code> column refers to this mark.
+            <code>.flow(...)</code> is ordinary operators with their ordinary
+            <code>size</code>, <code>spacing</code> and <code>by</code>;
+            <code>dir</code> comes from the part. Without <code>slots</code>,
+            there's one anchor covering the whole side.
           </td>
           <td>
-            <code
-              >slots().flow(spread({ by: "to", spacing: 0.01 })).mark(slot({
-              size: "value" }))</code
-            >
-          </td>
-        </tr>
-        <tr>
-          <td><strong>Mixed (recommended)</strong></td>
-          <td>
-            <code>chart().flow(stack()).mark(slot({ size: "value" }))</code>
-          </td>
-          <td>
-            <code
-              >chart().flow(spread({ by: "to", spacing: 0.01 })).mark(slot({
-              size: "value" }))</code
-            >
+            <code>data</code> pairs with <code>datum</code> (rows and one
+            value); <code>on</code> as in polars and SQL joins; the operators
+            from the mosaic.
           </td>
         </tr>
       </tbody>
     </table>
   </div>
-  <p class="prose small">Why mixed:</p>
-  <ul class="prose small">
+  <p class="prose"><strong>Four rules:</strong></p>
+  <ul class="prose">
     <li>
-      <strong>The container stays <code>chart()</code>.</strong> It really is an
-      ordinary flow over rows, so a <code>slots()</code> container would say
-      nothing <code>.anchor</code> doesn't already say.
+      <strong>Sizes come from the operators.</strong> A slot's size is
+      <code>stack({ size })</code> or <code>spread({ size })</code>, measured on
+      the host mark's own scale along that side, because it's the same measure.
+      A node bigger than its slots leaves slack; slots longer than the node are
+      a loud error.
     </li>
     <li>
-      <strong>Only the leaf is different,</strong> being 1D and invisible, so
-      only the leaf gets a new name.
+      <strong>Without a <code>size</code>, slots are points.</strong>
+      <code>spread({ spacing })</code> sets their pitch.
     </li>
     <li>
-      <strong><code>size</code>, not <code>w</code>/<code>h</code>.</strong>
-      With <code>w</code>/<code>h</code>, moving an anchor from
-      <code>right</code> to <code>bottom</code> would force a channel rename.
-      <code>cut</code> already uses <code>size</code>. <code>slot()</code> with
-      no size is a point.
+      <strong>Ribbons and lines refer to anchors by name:</strong>
+      <code>ribbon({ from: "out", to: "in" })</code>. Each row sits in the
+      anchors that hold it, so the ribbon for a row runs from its slot in an
+      <code>out</code> anchor to its slot in an <code>in</code> anchor. No
+      <code>resolve</code> and no ref paths are needed.
     </li>
     <li>
-      <strong>Against <code>guide</code>:</strong> it collides with ggplot's
-      <code>guides()</code> (axes and legends), and a Figma guide is a
-      full-canvas line.
-    </li>
-    <li>
-      <strong>Against <code>port</code>:</strong> it is exact for node-link
-      pictures but odd for labels.
-    </li>
-    <li>
-      <strong>Against a chained form</strong>
-      (<code>.anchor(...).flow().mark()</code>): it can't continue with
-      <code>.name()</code> or a second <code>.anchor()</code>.
-    </li>
-    <li>
-      <strong>Closest precedent:</strong> ELK ports. Their side, size, order
-      constraint, alignment and <code>spacing.portPort</code> map onto
-      <code>at</code>, <code>size</code>, the flow's sort, an
-      <code>align</code> option, and <code>spread({ spacing })</code>.
+      <strong
+        >A row in several anchors of the same names is threaded in layout
+        order.</strong
+      >
+      This is the parallel-sets case.
     </li>
   </ul>
 
-  <h3>Energy sankey: slots requested through resolved links</h3>
+  <h3>Energy sankey: rows from the links table</h3>
   <div class="ex">
     <div>
       <pre><code>layer([
@@ -1318,20 +1292,19 @@ chart(penguins)
     .flow(spread({ by: "depth", dir: "x", spacing: 100 }),
           spread({ by: "name", dir: "y", spacing: 10 }))
     .mark(rect({ w: 12, h: "value" })
-      .anchor("in",  { at: "left" },  chart().flow(stack()).mark(slot({ size: "value" })))
-      .anchor("out", { at: "right" }, chart().flow(stack()).mark(slot({ size: "value" })))
-      .name("nodes")),
-  chart(links)
-    .flow(resolve(["source", "target"], { from: selectAll("nodes") }))
-    .mark(ribbon({ from: "source.out", to: "target.in", fill: "source", opacity: 0.45 })),
+      .anchor({ name: "in",  position: along("x-min"),
+                slots: data(links, { on: "target" }).flow(stack({ size: "value" })) })
+      .anchor({ name: "out", position: along("x-max"),
+                slots: data(links, { on: "source" }).flow(stack({ size: "value" })) })),
+  chart(links).mark(ribbon({ from: "out", to: "in", opacity: 0.5 })),
 ])</code></pre>
       <p class="small">
-        <code>"source.out"</code> means the <code>out</code> anchor of the node
-        in the resolved column <code>source</code>, like TikZ's
-        <code>a.east</code> or Graphviz's <code>a:p</code>. The anchor's rows
-        are the links attached to it, one slot each. Open: the node's height
-        must cover its longer anchor (d3's rule), but reading it from the
-        anchors is a cycle, so today it needs a precomputed <code>value</code>.
+        <code>data(links, { on: "source" })</code> is the reverse of
+        <code>resolve</code>: <code>resolve</code> gives a link its node, and
+        <code>on</code> gives a node its links. Both match on the node's key.
+        Slot order defaults to where the far node was placed. Open: the node's
+        <code>value</code> (the larger of its two sides) still comes from data,
+        because reading it from the anchors is a cycle.
       </p>
     </div>
     <figure>
@@ -1344,32 +1317,23 @@ chart(penguins)
     </figure>
   </div>
 
-  <h3>School days: slots from the mark's own rows</h3>
+  <h3>School days: the mark's own rows</h3>
   <div class="ex">
     <div>
       <pre><code>layer([
   spread({ dir: "y", spacing: 200 }, [
-    chart(links)
-      .flow(spread({ by: field("day").sort(DAYS), dir: "x", spacing: 60 }))
-      .mark(rect({ w: "count", h: 4 })
-        .anchor("emotions", { at: "bottom" },
-          chart().flow(stack({ by: "emotion" })).mark(slot({ size: "count" })))),
-    chart(links)
-      .flow(spread({ by: field("emotion").sort(EMOTIONS), dir: "x", spacing: 50 }))
-      .mark(rect({ w: "count", h: 90, fill: "emotion" })
-        .anchor("days", { at: "top" },
-          chart().flow(stack({ by: "day" })).mark(slot({ size: "count" })))),
+    chart(links).flow(spread({ by: field("day").sort(DAYS), dir: "x", spacing: 60 }))
+      .mark(rect({ w: "count", h: 4 }).anchor({ name: "emotions", position: along("y-min"),
+        slots: data().flow(stack({ by: "emotion", size: "count" })) })),
+    chart(links).flow(spread({ by: field("emotion").sort(EMOTIONS), dir: "x", spacing: 50 }))
+      .mark(rect({ w: "count", h: 90, fill: "emotion" }).anchor({ name: "days", position: along("y-max"),
+        slots: data().flow(stack({ by: "day", size: "count" })) })),
   ]),
-  chart(selectAll(["emotions", "days"])).mark(ribbon({ fill: "emotion", opacity: 0.6 })),
+  chart(links).mark(ribbon({ from: "emotions", to: "days", fill: "emotion", opacity: 0.6 })),
 ])</code></pre>
       <p class="small">
-        The cleanest case. Each node is drawn from the links table, so its
-        anchor's <code>chart()</code> inherits the node's own rows. The ribbon
-        joins slots holding the same rows, so no <code>from</code>/<code
-          >to</code
-        >
-        is needed. The node is exactly the sum of its slots, so there is no
-        slack.
+        Each node is drawn from the links, so <code>data()</code> is its own
+        rows. Each node is exactly the sum of its slots, so there's no slack.
       </p>
     </div>
     <figure>
@@ -1382,22 +1346,25 @@ chart(penguins)
     </figure>
   </div>
 
-  <h3>FrankenSankey: the order is the anchor's own flow</h3>
+  <h3>FrankenSankey: a two-tier flow on one side</h3>
   <div class="ex">
     <div>
       <pre><code>chart(links)   // one bar over all the 2017 links
-  .mark(rect({ w: 14, h: "value" })
-    .anchor("out", { at: "right" },
-      chart().flow(stack({ by: field("decision").sort(DECISIONS) }), stack({ by: "country" }))
-             .mark(slot({ size: "value" }))))
-// each country: .anchor("in", { at: "left" }, chart().flow(stack({ by: "decision" })).mark(slot({ size: "value" })))
-// ribbons: chart(selectAll(["out", "in"])).mark(ribbon({ fill: "decision", opacity: 0.55 }))</code></pre>
+  .mark(rect({ w: 14, h: "value" }).anchor({
+    name: "out",
+    position: along("x-max"),
+    slots: data().flow(
+      stack({ by: field("decision").sort(DECISIONS) }),
+      stack({ by: "country", size: "value" })
+    ),
+  }))
+// each country: .anchor({ name: "in", position: along("x-min"),
+//                         slots: data().flow(stack({ by: "decision", size: "value" })) })
+// ribbons: chart(links).mark(ribbon({ from: "out", to: "in", fill: "decision", opacity: 0.55 }))</code></pre>
       <p class="small">
-        This is the strongest argument for a full flow inside the anchor. The
-        decision-first order that needed an
-        <code>ends: stack({ by })</code> override on the node-link ribbon is now
-        two nested stacks on the bar's edge. The order belongs to the node's
-        edge, and it is written there.
+        Decision first, then country, is just the flow. The size sits on the
+        inner stack; the decision groups take their contents' length, as nested
+        stacks do today.
       </p>
     </div>
     <figure>
@@ -1413,28 +1380,31 @@ chart(penguins)
     </figure>
   </div>
 
-  <h3>Chord: sized slots with gaps, the case that needs operator plus mark</h3>
+  <h3>Chord: sized slots with gaps, on the inner arc</h3>
   <div class="ex">
     <div>
-      <pre><code>chart(cells, { coord: Coord.clock() })   // { from, to, value }: the matrix
+      <pre><code>chart(cells, { coord: Coord.clock() })   // { from, to, value }
   .flow(spread({ by: field("from").sort(NAMES), dir: "x", spacing: 0.04, y: 160, h: 16 }))
-  .mark(rect({ w: "value", fill: "from" })
-    .anchor("ends", { at: "bottom" },
-      chart().flow(spread({ by: "to", spacing: 0.01 })).mark(slot({ size: "value" }))))
-  .layer(ribbon({ by: chordPair, curve: Curve.chord(), fill: "lead", opacity: 0.67 }))</code></pre>
+  .mark(rect({ w: "value", fill: "from" }).anchor({
+    name: "ends",
+    position: along("r-min"),
+    slots: data().flow(spread({ by: "to", spacing: 0.01, size: "value" })),
+  }))
+  .layer(chart(cells).flow(group({ by: chordPair }))
+    .mark(ribbon({ ends: "ends", curve: Curve.chord(), fill: "lead", opacity: 0.67 })))</code></pre>
       <p class="small">
-        The slots are sized by data and separated by gaps. That is d3's
-        <code>ribbon.padAngle</code> and circlize's <code>small.gap</code>, and
-        neither one operator nor one option can say both. Cells (i, j) and (j,
-        i) are different rows, so the chord needs an explicit pairing key. Open:
-        should gaps grow the group (what the emulation does) or come out of the
-        slots (what d3 does)? And what unit is a spacing inside a polar anchor
-        in?
+        <code>spread</code> with both <code>size</code> and
+        <code>spacing</code> gives slots sized by data with gaps between them,
+        d3's <code>padAngle</code>. Cells (i, j) and (j, i) are different rows,
+        so they pair by a key (<code>chordPair</code>), and each row ends at its
+        slot in <code>ends</code>. The two ends have different widths because
+        the two slots do. Open: do gaps grow the group or come out of the slots,
+        and what unit is a polar spacing in?
       </p>
     </div>
     <figure>
       <div class="plate">
-        <img src="img/anchors-chord.png" alt="Chord with gaps between ends" />
+        <img src="img/anchors-chord.png" alt="Chord with anchors" />
       </div>
       <figcaption>
         <span class="tag ok">Rendered</span>Emulated anchors, throwaway chord
@@ -1446,25 +1416,29 @@ chart(penguins)
   <h3>Beatles: point slots for lines</h3>
   <div class="ex">
     <div>
-      <pre><code>chart(writers)
-  .flow(spread({ by: field("writer").sort(WRITERS), dir: "x", spacing: 90 }))
-  .mark(ellipse({ w: 70, h: 44, fill: "writer", opacity: 0.35 })
-    .anchor("credits", { at: "top" }, chart().flow(spread()).mark(slot()))
-    .name("writers"))
-// credits: resolve(["song"], ...), resolve(["writer"], ...)
-//   .mark(line({ from: "song", to: "writer.credits", stroke: "writer" }))</code></pre>
+      <pre><code>layer([
+  spread({ dir: "y", spacing: 260 }, [
+    chart(songs).flow(spread({ by: "song", dir: "x", spacing: 18 }))
+      .mark(circle({ r: 2 }).anchor({ name: "foot", position: along("y-min") })),
+    chart(writers).flow(spread({ by: field("writer").sort(WRITERS), dir: "x", spacing: 90 }))
+      .mark(ellipse({ w: 70, h: 44, fill: "writer", opacity: 0.35 }).anchor({
+        name: "credits",
+        position: along("y-max"),
+        slots: data(credits, { on: "writer" }).flow(spread({ spacing: 3 })),
+      })),
+  ]),
+  chart(credits).mark(line({ from: "foot", to: "credits", stroke: "writer" })),
+])</code></pre>
       <p class="small">
-        Point slots: <code>slot()</code> with no size.
-        <code>spread()</code> with no spacing should distribute evenly over the
-        part (ELK's <code>DISTRIBUTED</code>), so it always fits; a fixed 3 px
-        overflowed Lennon's head. A plain ref column at the other end
-        (<code>"song"</code>) keeps today's default anchor point. Open: an
-        ellipse has no <code>top</code> part yet.
+        No <code>size</code>, so the slots are points. Spreading them evenly
+        over the whole side would use the "spacing that fills" setting asked for
+        in #1165, rather than a rule of its own. Open: an ellipse has no
+        <code>y-max</code> part yet.
       </p>
     </div>
     <figure>
       <div class="plate">
-        <img src="img/anchors-beatles.png" alt="Beatles with anchor slots" />
+        <img src="img/anchors-beatles.png" alt="Beatles with anchors" />
       </div>
       <figcaption>
         <span class="tag ok">Rendered</span>Synthetic credits.
@@ -1472,31 +1446,33 @@ chart(penguins)
     </figure>
   </div>
 
-  <h3>Labels: the same mechanism</h3>
+  <h3>Labels and tags</h3>
   <div class="ex">
     <div>
-      <pre><code>.mark(rect({ w: 12, h: "value" })
-  .anchor("in",    { at: "left" },  chart().flow(stack()).mark(slot({ size: "value" })))
-  .anchor("out",   { at: "right" }, chart().flow(stack()).mark(slot({ size: "value" })))
-  .anchor("label", { at: (n) =&gt; (n.depth === last ? "left" : "right") }, chart().mark(slot()))
-  .label("name", { position: Place.along({ at: "label", side: "outset" }) })
-  .name("nodes"))</code></pre>
+      <pre><code>// a label spot: one anchor over the whole side
+.anchor({ name: "label", position: along("x-max") })
+.label("name", { position: Place.along({ at: "label", side: "outset" }) })
+
+// several tags along one edge
+.anchor({ name: "tag", position: along("y-max"),
+          slots: data().flow(spread({ size: 16, spacing: 2 })) })</code></pre>
       <p class="small">
-        A slot is one more named part of the mark's outline, so the label
-        proposal's <code>Place.along({ at: "label" })</code> places a label on
-        it. Several tags along one edge are the same with a flow:
-        <code
-          >chart().flow(spread({ spacing: 4 })).mark(slot({ size: 16 }))</code
-        >, one label per slot. Open: <code>at</code> as a function of the datum
-        (d3's "labels go left in the last column").
+        An anchor is one more named part of the mark's outline, so the label
+        proposal's <code>Place.along({ at })</code> can place a label on it. A
+        cross-proposal choice: <code>along(part)</code> here and
+        <code>Place.along({ at })</code> there mean the same thing, and should
+        become one value.
       </p>
     </div>
     <figure>
       <div class="plate">
-        <img src="img/anchors-labels.png" alt="Labeled energy sankey" />
+        <img
+          src="img/anchors-labels.png"
+          alt="Energy sankey with label anchors"
+        />
       </div>
       <figcaption>
-        <span class="tag ok">Rendered</span>Emulated label slots.
+        <span class="tag ok">Rendered</span>Emulated label anchors.
       </figcaption>
     </figure>
   </div>
@@ -1504,24 +1480,24 @@ chart(penguins)
   <h3>Sankey tree</h3>
   <div class="ex">
     <div>
-      <pre><code>chart(titanic)   // leaf rows
-  .flow(spread({ by: "class", dir: "y", spacing: 8 }),
-        derive(levels(["sex", "survived"])),   // hypothetical: rows repeated per depth
-        spread({ by: "depth", dir: "x", spacing: 64, alignment: "middle" }),
-        spread({ by: "sex", dir: "y", spacing: 4 }),
-        spread({ by: "survived", dir: "y", spacing: 2 }))
-  .mark(rect({ w: 40, h: "count", fill: "class" })
-    .anchor("in",  { at: "left" },  chart().mark(slot({ size: "count" })))
-    .anchor("out", { at: "right" }, chart().flow(stack({ by: "child" })).mark(slot({ size: "count" }))))
-  .layer(ribbon({ from: "out", to: "in", fill: "child", opacity: 0.6 }))</code></pre>
+      <pre><code>layer([
+  chart(treeNodes)   // { key, depth, class, sub, leaf, count }
+    .flow(spread({ by: "class", dir: "y", spacing: 8 }),
+          spread({ by: "depth", dir: "x", spacing: 64, alignment: "middle" }),
+          spread({ by: "sub", dir: "y", spacing: 4 }),
+          spread({ by: "leaf", dir: "y", spacing: 2 }))
+    .mark(rect({ w: 40, h: "count", fill: "class" })
+      .anchor({ name: "in",  position: along("x-min"),
+                slots: data(treeLinks, { on: "target", key: "key" }).flow(stack({ size: "value" })) })
+      .anchor({ name: "out", position: along("x-max"),
+                slots: data(treeLinks, { on: "source", key: "key" }).flow(stack({ size: "value" })) })),
+  chart(treeLinks).mark(ribbon({ from: "out", to: "in", fill: "color", opacity: 0.6 })),
+])</code></pre>
       <p class="small">
-        A parent's <code>out</code> slot for child c holds the same rows as
-        child c's <code>in</code> slot. Finding: an anchor chart with no flow
-        must be one slot over all its rows, as
-        <code>chart(data).mark(rect())</code> is today. Open: rows alone are
-        ambiguous along a chain of single children, so the ribbon names the
-        anchors (<code>from: "out", to: "in"</code>), and a unary chain still
-        needs a "nearest" rule or a key.
+        Each parent's right side is a real stack of its children's slots.
+        <code>key</code> names the node field to match, as
+        <code>resolve</code>'s <code>key</code> does, because the innermost tier
+        is blank for most nodes.
       </p>
     </div>
     <figure>
@@ -1529,258 +1505,65 @@ chart(penguins)
         <img src="img/anchors-sankey-tree.png" alt="Sankey tree with anchors" />
       </div>
       <figcaption>
-        <span class="tag ok">Rendered</span>Identical to the node-link version.
+        <span class="tag ok">Rendered</span>Emulated anchors.
       </figcaption>
     </figure>
   </div>
 
-  <h3>What anchors leave to decide</h3>
-  <ul class="prose" style="max-width: 86ch">
-    <li>
-      <strong>Where an anchor's rows come from.</strong> One rule almost covers
-      both cases: <em>an anchor's rows are the rows attached to it</em>. A
-      mark's own rows attach to its anchors, as in school days, FrankenSankey,
-      the chord and the tree. Rows from another chart attach by name, as in
-      <code>"source.out"</code> for the energy sankey and Beatles. The relation
-      could also be named once on <code>resolve</code>:
-      <code>resolve(..., { attach: { source: "out", target: "in" } })</code>.
-    </li>
-    <li>
-      <strong>How a ribbon finds its slots.</strong> By default, slots holding
-      the same rows join. A name path picks the anchor. An explicit
-      <code>by</code> pairs ends that are different rows, as in the chord.
-    </li>
-    <li>
-      <strong>Reference syntax.</strong> <code>"source.out"</code> (TikZ-like),
-      or <code>"source:out"</code> (Graphviz-like) if dotted field paths are
-      ever planned. Anchor names also need a scoping rule next to
-      <code>.name()</code>.
-    </li>
-    <li>
-      <strong>Direction and units.</strong> The direction is along the part, in
-      the mark's frame before the coordinate transform, so in polar
-      <code>bottom</code> runs along θ. Data sizes are absolute, on the mark's
-      own scale. That is unlike <code>cut</code>, whose weights fill the extent:
-      a ribbon must be the same width at both ends, and a large node must leave
-      slack, not stretch.
-    </li>
-    <li>
-      <strong>Slack and overflow.</strong> An <code>align</code> option places
-      the slots on the part: <code>start</code> for d3 sankeys,
-      <code>middle</code> for labels. The default is a decision. Data-sized
-      overflow is a loud error. Even <code>spread()</code> always fits.
-    </li>
-    <li>
-      <strong>Node size from anchors.</strong> A node that should be as tall as
-      its longer anchor needs either a value column or a declared rule. As it
-      stands, reading the anchors is a cycle.
-    </li>
-  </ul>
-
-  <h2 id="anchors-v2">Anchors, written like the rest of GoFish</h2>
-  <p class="prose">
-    A second pass at anchors, aiming to read like the rest of the system. The
-    first pass mirrored the pipeline (<code>chart().flow().mark()</code> inside
-    a modifier), which you found confusing. GoFish already has a modifier that
-    divides a shape: <code>.cut({ dir, size, inset })</code>. An anchor is the
-    same idea applied to a boundary part instead of the interior. So it can take
-    <code>cut</code>'s option vocabulary and no inner flow.
-  </p>
-
-  <h3>The spelling</h3>
-  <pre><code>// declare: a modifier, a sibling of .label(), .cut() and .name()
-rect({ w: 12, h: "value" })
-  .anchor("in",  { at: "x-min", size: "value" })
-  .anchor("out", { at: "x-max", size: "value" })
-  .name("nodes")
-
-// refer: a small constructor, a sibling of ref(), field() and datum()
-ribbon({ from: anchor("source", "out"), to: anchor("target", "in") })</code></pre>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Option</th>
-          <th>Meaning</th>
-          <th>Where the word comes from</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><code>at</code></td>
-          <td>
-            The boundary part: <code>x-min</code>, <code>x-max</code>,
-            <code>y-min</code>, <code>y-max</code>, or the coordinate's own
-            dimension names (<code>r-min</code> is a polar rect's inner arc).
-          </td>
-          <td>
-            <code>Place.along({ at })</code> in the label proposal;
-            <code>min</code>/<code>max</code> are GoFish's box-anchor names;
-            dimension names come from #838.
-          </td>
-        </tr>
-        <tr>
-          <td><code>size</code></td>
-          <td>
-            Each slot's length along the part, read from the row attached to it.
-            A field is measured on the mark's own scale; a number is pixels;
-            omitted, the part is divided equally.
-          </td>
-          <td><code>.cut({ size })</code>, with the same omitted rule</td>
-        </tr>
-        <tr>
-          <td><code>inset</code></td>
-          <td>
-            A gap taken out of each slot (d3's <code>ribbon.padAngle</code>).
-          </td>
-          <td><code>.cut({ inset })</code></td>
-        </tr>
-        <tr>
-          <td><code>by</code></td>
-          <td>
-            Groups the slots in the key's sort order; within a group, slots
-            follow where the far end was placed.
-          </td>
-          <td>the split family's one key</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-  <p class="prose"><strong>Two rules:</strong></p>
-  <ul class="prose">
-    <li>
-      <strong>Slots are made by attachments.</strong> Each row that a ribbon,
-      line or label attaches to an anchor gets one slot there. A mark's own rows
-      don't become slots unless something attaches them, so the node's own table
-      row never becomes a stray slot.
-    </li>
-    <li>
-      <strong>A reference finds the mark in one of two ways:</strong>
-      <ul>
-        <li>
-          <code>anchor("source", "out")</code> goes through a resolved ref
-          column, for a separate nodes table.
-        </li>
-        <li>
-          <code>anchor("out")</code> goes through ownership: the mark that owns
-          this row, when nodes are drawn from the links themselves.
-        </li>
-      </ul>
-      Either way, the attaching row is the slot's row.
-    </li>
-  </ul>
-  <p class="prose">
-    <strong>The ribbon's width</strong> is its two slots' sizes, so a chord's
-    asymmetric ends fall out with no per-end option. With no anchors named,
-    <code>ribbon</code> and <code>line</code> behave as they do today.
-  </p>
-
-  <h3>The examples</h3>
-  <pre><code>// energy sankey, sankey tree: nodes table + links table
-chart(nodes).flow(...).mark(rect({ w: 12, h: "value" })
-  .anchor("in",  { at: "x-min", size: "value" })
-  .anchor("out", { at: "x-max", size: "value" }).name("nodes"))
-chart(links).flow(resolve(["source", "target"], { from: selectAll("nodes") }))
-  .mark(ribbon({ from: anchor("source", "out"), to: anchor("target", "in") }))
-
-// FrankenSankey: decision first at the bar is the anchor's own `by`
-rect({ w: 14, h: "value" }).anchor("out", { at: "x-max", size: "value", by: field("decision").sort(DECISIONS) })
-
-// school days: nodes drawn from the links, so attach by ownership
-rect({ w: "count", h: 4 })   /* a day */.anchor("emotions", { at: "y-min", size: "count" })
-rect({ w: "count", h: 90 })  /* an emotion */.anchor("days",     { at: "y-max", size: "count" })
-chart(links).mark(ribbon({ from: anchor("emotions"), to: anchor("days"), dir: "y" }))
-
-// chord: sized slots with gaps on the inner arc; cells (i, j) and (j, i) pair by key
-rect({ w: "value" }).anchor("ends", { at: "r-min", size: "value", inset: 0.01 })
-chart(cells).flow(group({ by: chordPair })).mark(ribbon({ ends: anchor("ends"), curve: Curve.chord() }))
-
-// Beatles: no size, so equal slots along the top
-ellipse({ w: 70, h: 44 }).anchor("credits", { at: "y-max" })
-line({ from: "song", to: anchor("writer", "credits") })
-
-// labels: several tags along one edge
-rect({ h: "value" }).anchor("tags", { at: "y-max", size: 16, inset: 2 })
-  .label("name", { position: Place.along({ at: "tags" }) })
-
-// parallel sets (sketch): each cohort row is owned by one category per axis
-chart(titanic).mark(spread({ dir: "x", spacing: 120 }, AXES.map((axis) =&gt;
+  <h3>Parallel sets (sketch)</h3>
+  <pre><code>chart(titanic).mark(spread({ dir: "x", spacing: 120 }, AXES.map((axis) =&gt;
   chart().flow(spread({ by: axis, dir: "y", spacing: 12 }))
     .mark(rect({ w: 12, h: "count", fill: "class" })
-      .anchor("in",  { at: "x-min", size: "count" })
-      .anchor("out", { at: "x-max", size: "count" })))))
-  .layer(ribbon({ from: anchor("out"), to: anchor("in"), opacity: 0.6 }))</code></pre>
+      .anchor({ name: "in",  position: along("x-min"), slots: data().flow(stack({ size: "count" })) })
+      .anchor({ name: "out", position: along("x-max"), slots: data().flow(stack({ size: "count" })) })))))
+  .layer(chart(titanic).mark(ribbon({ from: "out", to: "in", opacity: 0.6 })))</code></pre>
   <p class="prose small">
-    The pictures are the ones in the anchors section above. Only the spelling
-    changed, except for parallel sets, which is a sketch here; its picture would
-    match <code>img/parallel-sets.png</code>. In parallel sets the order of ends
-    inside a category comes out per gap, for free: <code>in</code> slots follow
-    the left neighbor and <code>out</code> slots the right. Round 1 needed a
-    hand-made rank key for that.
+    Not rendered in this spelling; the picture would match
+    <code>img/parallel-sets.png</code>. Each cohort row is held by one category
+    per axis, so its ribbon threads out to in, axis by axis. Ordering slots by
+    the far node gives a per-gap end order for free: the <code>in</code> slots
+    follow the left neighbor, the <code>out</code> slots the right. Round 1
+    needed a hand-made rank key for this.
   </p>
 
-  <h3>Why this reads like GoFish</h3>
-  <ul class="prose">
-    <li>
-      <strong>The shape matches what's there.</strong> A mark modifier with an
-      options object, like <code>.cut</code> and <code>.label</code>. A
-      reference constructor, like <code>ref</code> and <code>field</code>. No
-      nested <code>chart</code>, <code>mark</code>, <code>flow</code> or
-      <code>layout</code> inside a mark.
-    </li>
-    <li>
-      <strong>The words are reused:</strong> <code>size</code> and
-      <code>inset</code> from <code>cut</code>, <code>by</code> from the splits,
-      <code>at</code> from <code>Place.along</code>, and <code>min</code>/<code
-        >max</code
-      >
-      from box anchors. The only new words are <code>anchor</code> and its
-      axis-relative part names.
-    </li>
-    <li>
-      <strong>The inner flow was dropped.</strong> It was there for two cases,
-      and both are covered by existing words: the FrankenSankey order is
-      <code>by</code>, and the chord's gaps are <code>inset</code>. If a real
-      example ever needs a whole flow along an edge,
-      <code>slots: [ops]</code> is the extension point. This is a declared
-      simplification.
-    </li>
-  </ul>
-
   <h3>What still needs deciding</h3>
-  <ul class="prose">
+  <ul class="prose" style="max-width: 86ch">
     <li>
-      <strong>Absolute sizes differ from <code>cut</code>.</strong>
-      <code>cut</code>'s field sizes are relative weights that fill the shape.
-      An anchor's must be absolute, on the mark's scale: a ribbon has to be the
-      same width at both ends, and a node larger than its links must leave
-      slack, not stretch them. This is a reason in the domain, but it is the one
-      place the two words differ.
+      <strong>Slack placement.</strong> Where a block of slots sits on a side
+      longer than it: the part's start by default (d3's rule). The word for
+      overriding it is open, since <code>alignment</code> means the cross axis
+      in <code>spread</code>.
     </li>
     <li>
-      <strong>Where the slots sit when a node has slack.</strong> The default is
-      the part's start, d3's rule. A word to override it is open:
-      <code>alignment</code> already means cross-axis in <code>spread</code>, so
-      it can't be reused here.
+      <strong>Node value.</strong> A sankey node is as tall as its larger side,
+      which has to come from data (a column or a data helper).
     </li>
     <li>
-      <strong>Part names.</strong> Labels still use screen words
-      (<code>"outset-top"</code>, and the label proposal's
-      <code>top</code>/<code>right</code> parts). Using axis-relative names for
-      both is one decision across the two proposals.
+      <strong>Part names.</strong> Labels still use
+      <code>top</code>/<code>right</code>. Using axis-relative names for both is
+      one decision across the two proposals, together with merging
+      <code>along</code> and <code>Place.along</code>.
     </li>
     <li>
-      <strong>Node value.</strong> A sankey node is as tall as its larger side.
-      That's a value column (or a data helper), because reading it from the
-      anchors is a cycle.
+      <strong>Name scope.</strong> Anchor names need a scoping rule next to
+      <code>.name()</code>. On the wire, the join and the row lookup need the
+      system's row index.
     </li>
     <li>
-      <strong>Ownership across charts.</strong> School days' rows are owned by a
-      day node and an emotion node in two charts.
-      <code>anchor("emotions")</code> picks the owner that has that anchor; on
-      the wire this needs the system's row index.
+      <strong>The chord.</strong> Whether gaps grow the group or shrink the
+      slots, and the unit of a spacing inside a polar side.
     </li>
   </ul>
+  <p class="prose small">
+    <strong>How the spelling got here:</strong>
+    <code>chart().flow().mark(blank())</code> inside the modifier (it reused
+    words that mean drawing); <code>cut</code>-style options (the stacking was
+    invisible); a chained <code>.along().flow()</code> (the name came last and
+    the chain didn't nest when formatted); <code>size</code> on the context (it
+    didn't match how <code>size</code> works elsewhere); and
+    <code>along</code> in <code>position</code> with the rows and flow in
+    <code>slots</code> (this version).
+  </p>
 
   <h2 id="compare">All the proposals, compared</h2>
   <p class="prose">
@@ -1799,7 +1582,7 @@ chart(titanic).mark(spread({ dir: "x", spacing: 120 }, AXES.map((axis) =&gt;
           <th>2. Syntax follows data (nested)</th>
           <th>3. Node-link allocation</th>
           <th>4. Grouping by a ref</th>
-          <th>5. Anchors (this)</th>
+          <th>5. Anchors</th>
         </tr>
       </thead>
       <tbody>
@@ -1809,7 +1592,7 @@ chart(titanic).mark(spread({ dir: "x", spacing: 120 }, AXES.map((axis) =&gt;
           <td>clean with <code>.map</code></td>
           <td>via <code>.map</code> (2)</td>
           <td>via <code>.map</code> (2)</td>
-          <td>clean; end order per gap for free (sketch)</td>
+          <td>clean; per-gap end order for free (sketch)</td>
         </tr>
         <tr>
           <td>Parallel coordinates</td>
@@ -1829,7 +1612,10 @@ chart(titanic).mark(spread({ dir: "x", spacing: 120 }, AXES.map((axis) =&gt;
           <td>
             two charts of zero-width ends; <code>alignment</code> picks the edge
           </td>
-          <td>clean</td>
+          <td>
+            clean, with no <code>resolve</code>:
+            <code>data(links, { on })</code> gives each node its links
+          </td>
         </tr>
         <tr>
           <td>Sankey tree</td>
@@ -1865,7 +1651,7 @@ chart(titanic).mark(spread({ dir: "x", spacing: 120 }, AXES.map((axis) =&gt;
           <td>clean</td>
           <td>an order override on the ribbon</td>
           <td>nested stacks</td>
-          <td>clean (<code>by</code> on the anchor)</td>
+          <td>clean: the order is the anchor's two-tier flow</td>
         </tr>
         <tr>
           <td>Chord</td>
@@ -1873,7 +1659,10 @@ chart(titanic).mark(spread({ dir: "x", spacing: 120 }, AXES.map((axis) =&gt;
           <td>needs <code>at</code> and <code>by</code></td>
           <td>clean (<code>size: { from, to }</code>)</td>
           <td><code>alignment</code> on the radial axis</td>
-          <td>clean; the pair key is the domain's</td>
+          <td>
+            clean: <code>spread</code> with <code>size</code> and
+            <code>spacing</code>; the pair key is the domain's
+          </td>
         </tr>
         <tr>
           <td>Labels on edges</td>
@@ -1903,7 +1692,9 @@ chart(titanic).mark(spread({ dir: "x", spacing: 120 }, AXES.map((axis) =&gt;
           </td>
           <td>two rules about ref columns</td>
           <td>
-            <code>.anchor</code>, <code>anchor()</code>, axis-relative parts
+            <code>.anchor({ name, position, slots })</code>,
+            <code>along(part)</code>, <code>data(table, { on })</code>,
+            axis-relative parts
           </td>
         </tr>
         <tr>
@@ -1925,7 +1716,10 @@ chart(titanic).mark(spread({ dir: "x", spacing: 120 }, AXES.map((axis) =&gt;
             <span style="color: var(--bad)">no</span>, hidden in the ribbon
           </td>
           <td>yes (<code>stack</code> on a ref)</td>
-          <td>yes, on the node's edge, as <code>cut</code>'s rule</td>
+          <td>
+            yes: a real <code>stack</code>/<code>spread</code> in the anchor's
+            flow, on the node's edge
+          </td>
         </tr>
       </tbody>
     </table>
@@ -1937,16 +1731,19 @@ chart(titanic).mark(spread({ dir: "x", spacing: 120 }, AXES.map((axis) =&gt;
   </p>
   <p class="prose">
     <strong>Reading.</strong> Proposal 5 is the only one with no workarounds
-    across the suite. It is also the only one that serves labels with the same
-    mechanism, and it reuses <code>cut</code>'s, <code>by</code>'s and
-    <code>Place.along</code>'s words rather than adding a new grammar. Its
-    costs: two new names (<code>.anchor</code> and <code>anchor()</code>);
-    absolute sizes, the one place it differs from <code>cut</code>; and a shared
-    decision with the label proposal about part names. Node-link allocation (3)
-    is the runner-up: it is just as clean on the examples, but hides the stack
-    inside the ribbon, which is what you objected to. Proposal 5 is essentially
-    proposal 3 with the allocation moved onto the node, where the stack visibly
-    lives.
+    across the suite, and the only one that serves labels with the same
+    mechanism. Its stacking is a real operator in a real flow, and its words all
+    come from elsewhere in GoFish: <code>position</code> from labels,
+    <code>size</code>, <code>spacing</code> and <code>by</code> from the
+    operators, <code>on</code> from joins, and <code>data</code> alongside
+    <code>datum</code>. The sankey also needs no <code>resolve</code>. Its
+    costs: three new names (<code>.anchor</code>, <code>along</code>,
+    <code>data</code>); a shared decision with the label proposal about part
+    names and about merging <code>along</code> with <code>Place.along</code>; a
+    word for where slots sit when a node has slack; and a node value that still
+    comes from data. Node-link allocation (3) is the runner-up: it is as clean
+    on the examples, but hides the stack inside the ribbon. Proposal 5 is
+    proposal 3 with the allocation moved onto the node and written as a flow.
   </p>
 
   <h2>Pictures for candidate B</h2>
