@@ -1,0 +1,1247 @@
+<title>Stacked Ribbons Proposal</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Public+Sans:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap"
+/>
+<style>
+  /* Layout: one reading column for prose, widening to two-column "code | picture" rows for every example. */
+  :root {
+    --paper: #f5f7f8;
+    --ink: #18212b;
+    --muted: #5a6672;
+    --rule: #d8dee3;
+    --plate: #ffffff;
+    --code-bg: #eaeef1;
+    --flow: #2c6e8a; /* the ribbon color: accent */
+    --flow-soft: #d6e7ee;
+    --pick: #a65f12; /* recommended marker */
+    --pick-soft: #f6e6d2;
+    --bad: #a3392f;
+    --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+    --font-body:
+      "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #12181e;
+      --ink: #e3e8ec;
+      --muted: #9aa6b1;
+      --rule: #2a343e;
+      --plate: #f4f6f7;
+      --code-bg: #1b232b;
+      --flow: #7fbcd6;
+      --flow-soft: #1d3440;
+      --pick: #e2a35a;
+      --pick-soft: #3a2a17;
+      --bad: #e38a80;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #12181e;
+    --ink: #e3e8ec;
+    --muted: #9aa6b1;
+    --rule: #2a343e;
+    --plate: #f4f6f7;
+    --code-bg: #1b232b;
+    --flow: #7fbcd6;
+    --flow-soft: #1d3440;
+    --pick: #e2a35a;
+    --pick-soft: #3a2a17;
+    --bad: #e38a80;
+    color-scheme: dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.6 var(--font-body);
+  }
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding-block: 40px 96px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .prose {
+    max-width: 68ch;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 650;
+    line-height: 1.15;
+    text-wrap: balance;
+    margin: 0;
+  }
+  h1 {
+    font-size: clamp(2rem, 5vw, 3.1rem);
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 1.7rem;
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 1px solid var(--rule);
+  }
+  h3 {
+    font-size: 1.2rem;
+    font-weight: 500;
+    margin-top: 36px;
+  }
+  p,
+  ul,
+  ol {
+    margin: 12px 0;
+  }
+  li {
+    margin: 4px 0;
+  }
+  a {
+    color: var(--flow);
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.55;
+    background: var(--code-bg);
+    padding: 14px 16px;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin: 0;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+  }
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .lede {
+    font-size: 1.15rem;
+    color: var(--ink);
+  }
+  .summary {
+    display: grid;
+    gap: 10px;
+    margin: 28px 0 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: s;
+  }
+  .summary li {
+    display: grid;
+    grid-template-columns: 2rem 1fr;
+    gap: 8px;
+    max-width: 78ch;
+  }
+  .summary li::before {
+    counter-increment: s;
+    content: counter(s);
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    color: var(--flow);
+  }
+  .verdict {
+    margin-top: 28px;
+    padding: 16px 20px;
+    background: var(--pick-soft);
+    border-left: 4px solid var(--pick);
+    max-width: 82ch;
+  }
+  .verdict strong {
+    color: var(--pick);
+  }
+
+  dl.terms {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 20px;
+    max-width: 86ch;
+  }
+  dl.terms dt {
+    font-weight: 600;
+  }
+  dl.terms dd {
+    margin: 0;
+    color: var(--muted);
+  }
+  @media (max-width: 560px) {
+    dl.terms {
+      grid-template-columns: 1fr;
+    }
+    dl.terms dd {
+      margin-bottom: 8px;
+    }
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+    margin: 16px 0;
+  }
+  table {
+    border-collapse: collapse;
+    font-size: 14.5px;
+    min-width: 560px;
+    width: 100%;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--rule);
+  }
+  th {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  figure {
+    margin: 0;
+    min-width: 0;
+  }
+  .plate {
+    background: var(--plate);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .plate img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .crop-l img {
+    width: 165%;
+    max-width: none;
+  } /* renders sit in the left of a wide canvas */
+  .crop-m img {
+    width: 125%;
+    max-width: none;
+  }
+  figcaption {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  figcaption .tag {
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 11px;
+    margin-right: 6px;
+  }
+  .tag.fail {
+    color: var(--bad);
+  }
+  .tag.ok {
+    color: var(--flow);
+  }
+  .tag.sketch {
+    color: var(--pick);
+  }
+
+  .ex {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 22px;
+    align-items: start;
+    margin-top: 18px;
+  }
+  .ex > div {
+    min-width: 0;
+    display: grid;
+    gap: 10px;
+  }
+  .ex.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  @media (max-width: 860px) {
+    .ex,
+    .ex.three {
+      grid-template-columns: 1fr;
+    }
+  }
+  .code-label {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 18px;
+    margin-top: 18px;
+  }
+  .card {
+    display: grid;
+    gap: 8px;
+    align-content: start;
+    min-width: 0;
+  }
+  .card h4 {
+    margin: 0;
+    font-size: 15px;
+  }
+  .card p {
+    margin: 0;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  .card pre {
+    font-size: 11.5px;
+    padding: 10px 12px;
+  }
+  .card .plate img {
+    aspect-ratio: 16 / 10;
+    object-fit: contain;
+  }
+
+  .approach-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px 14px;
+  }
+  .pill {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--flow-soft);
+    color: var(--flow);
+  }
+  .pill.pick {
+    background: var(--pick-soft);
+    color: var(--pick);
+  }
+  .cols {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 14px;
+  }
+  .cols > div {
+    min-width: 0;
+  }
+  .cols h4 {
+    margin: 0 0 4px;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .cols ul {
+    padding-left: 18px;
+    margin: 0;
+    font-size: 14.5px;
+  }
+  @media (max-width: 760px) {
+    .cols {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  ol.decisions {
+    counter-reset: d;
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+    max-width: 84ch;
+  }
+  ol.decisions li {
+    display: grid;
+    grid-template-columns: 2.2rem 1fr;
+    gap: 8px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  ol.decisions li::before {
+    counter-increment: d;
+    content: counter(d);
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    color: var(--pick);
+    line-height: 1.2;
+  }
+  .small {
+    font-size: 14px;
+    color: var(--muted);
+  }
+  :focus-visible {
+    outline: 2px solid var(--flow);
+    outline-offset: 2px;
+  }
+</style>
+
+<div class="wrap">
+  <header class="prose" style="max-width: 80ch">
+    <div class="eyebrow">GoFish API proposal · Advances #47 · 2026-10-20</div>
+    <h1 style="margin-top: 10px">Stacked and divided ribbons</h1>
+    <p class="lede">
+      A sankey is a stacked area chart whose stacks are nodes. Each ribbon end
+      is a data row, the ends stack inside their node with the ordinary
+      <code>stack</code> operator, and the ribbon stays one-to-one.
+    </p>
+  </header>
+
+  <ol class="summary">
+    <li>
+      <span
+        >Prototypes drew
+        <strong
+          >parallel sets, a sankey tree, and the full 48-node energy sankey with
+          no core change</strong
+        >, using today's <code>stack</code>, <code>spread</code> and
+        <code>ribbon</code>.</span
+      >
+    </li>
+    <li>
+      <span
+        >What is missing is small: a <code>unpivot</code> data helper,
+        <code>ribbon({ by })</code> to name which rows form one ribbon, and, for
+        chord diagrams, <code>ribbon({ at })</code> to say which part of a node
+        each end attaches to.</span
+      >
+    </li>
+    <li>
+      <span
+        >The runner-up has the ribbon allocate its own ends on nodes placed by
+        anything: <code>ribbon({ from, to, size })</code>. It wins if ribbons
+        over independently placed nodes become a priority.</span
+      >
+    </li>
+  </ol>
+  <div class="verdict">
+    <strong>Recommendation: Approach B, ends are rows.</strong> Span allocation
+    is the flow's <code>stack</code>, so it desugars into the existing core,
+    keeps one stacking mechanism, and realizes the direction recorded in #745:
+    ribbons one-to-one per row, plus per-edge span allocation.
+  </div>
+
+  <h2>Terms</h2>
+  <dl class="terms">
+    <dt>Node</dt>
+    <dd>
+      A bar or arc whose length shows a total: a sankey node, a parallel-sets
+      category, a chord group.
+    </dd>
+    <dt>Link</dt>
+    <dd>One flow between two nodes, with a value.</dd>
+    <dt>End</dt>
+    <dd>
+      The interval where one link meets one node. ggalluvial calls it a lode,
+      d3-chord a subgroup, ELK and Graphviz a port.
+    </dd>
+    <dt>Path</dt>
+    <dd>
+      The chain of ends one ribbon threads: two for a sankey link, one per axis
+      for a parallel-sets cohort.
+    </dd>
+    <dt>Part</dt>
+    <dd>
+      A named piece of a mark's outline that the mark declares: a rect's
+      <code>top</code>, <code>right</code>, <code>bottom</code>,
+      <code>left</code>. The coordinate transform carries parts along, so a
+      polar rect's <code>bottom</code> is its inner arc. Same word as in the
+      label proposal.
+    </dd>
+    <dt>Unpivot</dt>
+    <dd>
+      Turn columns into rows: a row with <code>source</code> and
+      <code>target</code> becomes two rows with a <code>side</code> column. The
+      polars name; dplyr says <code>pivot_longer</code>.
+    </dd>
+  </dl>
+
+  <h2>Your questions, answered</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 30%">From the notes</th>
+          <th>Answer</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Extend the existing ribbon API?</td>
+          <td>
+            Yes, by two options: <code>by</code> (which rows form one ribbon)
+            and <code>at</code> (which part each end attaches to). The span
+            allocation itself does not live on the ribbon.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            The <code>stack</code> operator, or a method like
+            <code>ribbon().stack()</code>?
+          </td>
+          <td>
+            The <code>stack</code> operator, applied to the ends inside each
+            node. <code>ribbon().stack()</code> is Approach C below: it would be
+            a second route to stacking next to the flow's <code>stack</code>,
+            which matches the #290 note that a mark-side stack on a connector
+            can only respell a row stack.
+          </td>
+        </tr>
+        <tr>
+          <td>What do enclose, line, cut and labels contribute?</td>
+          <td>
+            <strong>line</strong>: the same ends give parallel coordinates and
+            stringlines. <strong>enclose</strong>: draws a node box when in-sum
+            and out-sum differ (<code>Shape.box()</code>, padding 0).
+            <strong>cut</strong>: another way to make ends when the node is one
+            drawn shape such as an image; for a rect it equals stacking the
+            ends. <strong>labels</strong>: node labels are
+            <code>.label()</code> on the node tier, ribbon labels are
+            <code>Place.along</code>, and <code>at</code> reuses the label
+            proposal's part names.
+          </td>
+        </tr>
+        <tr>
+          <td>One-to-many, many-to-many?</td>
+          <td>
+            Ribbons stay one-to-one per link. Splits and merges come from
+            several ends stacking in one node. The energy sankey (69 links,
+            splits and merges) renders this way.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Today</h2>
+  <p class="prose">
+    A ribbon spans the full facing edge of each operand's box. No option
+    attaches it to part of an edge, so every divided-end example builds one node
+    per end and lists ribbons by name. The gallery Sankey Tree is about 137
+    lines for this reason.
+  </p>
+  <div class="ex">
+    <figure>
+      <div class="plate crop-l">
+        <img
+          src="img/sankey-tree-today.png"
+          alt="Today's hand-built sankey tree of titanic passengers by class, sex and survival"
+        />
+      </div>
+      <figcaption>
+        Sankey Tree story today: one named rect per link end, every ribbon
+        listed in <code>.relate</code>.
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="plate crop-l">
+        <img
+          src="img/ribbon-chart-today.png"
+          alt="Today's ribbon chart of fish species across lakes"
+        />
+      </div>
+      <figcaption>
+        Ribbon Chart today. Already "ends are rows": the nodes are lakes, the
+        ends are species.
+      </figcaption>
+    </figure>
+  </div>
+
+  <h2>Prior work</h2>
+  <p class="prose">
+    Every system that draws sankeys correctly stacks link values inside each
+    node and then joins two intervals. The one general grammar without ends,
+    Mascot, attaches every link at its node's middle and gets a thick-edged
+    node-link diagram instead.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <div class="plate">
+        <img src="img/prior/d3-sankey.png" alt="d3-sankey energy diagram" />
+      </div>
+      <h4>d3-sankey</h4>
+      <p>
+        One layout computes columns, node y, and each link's
+        <code>y0</code>/<code>y1</code> on both edges.
+      </p>
+      <pre><code>d3.sankey().nodeAlign(d3.sankeyJustify)
+  .nodePadding(10).linkSort(null)</code></pre>
+    </div>
+    <div class="card">
+      <div class="plate">
+        <img
+          src="img/prior/ggalluvial.png"
+          alt="ggalluvial titanic alluvial plot"
+        />
+      </div>
+      <h4>ggalluvial</h4>
+      <p>
+        Long "lodes form": one row per (cohort, axis).
+        <code>geom_alluvium</code> keeps order through every axis;
+        <code>geom_flow</code> reorders per gap.
+      </p>
+      <pre><code>geom_alluvium(aes(fill = Survived))
+geom_stratum()  # lode.guidance, aes.bind</code></pre>
+    </div>
+    <div class="card">
+      <div class="plate">
+        <img src="img/prior/ggforce.png" alt="ggforce parallel sets" />
+      </div>
+      <h4>ggforce</h4>
+      <p>
+        <code>gather_set_data</code> makes long data. One gap, one curvature.
+      </p>
+      <pre><code>geom_parallel_sets(aes(fill = Sex),
+  sep = 0.05, strength = 0.5)</code></pre>
+    </div>
+    <div class="card">
+      <div class="plate">
+        <img src="img/prior/ggsankey.png" alt="ggsankey sankey of mtcars" />
+      </div>
+      <h4>ggsankey</h4>
+      <p>
+        <code>make_long</code> gives one row per edge. Sankey and alluvial
+        differ only by gap and baseline.
+      </p>
+      <pre><code>make_long(cyl, vs, am, gear, carb)
+geom_sankey(flow.alpha = .6, space = 10)</code></pre>
+    </div>
+    <div class="card">
+      <div class="plate">
+        <img src="img/prior/circlize.png" alt="circlize chord diagram" />
+      </div>
+      <h4>circlize / d3-chord</h4>
+      <p>
+        Sectors sized by total; links stacked in sectors. d3's
+        <code>ribbon()</code> joins two angle intervals through the center.
+      </p>
+      <pre><code>chordDiagram(mat, link.sort = TRUE)
+d3.chord().padAngle(.05).sortSubgroups(..)</code></pre>
+    </div>
+    <div class="card">
+      <div class="plate">
+        <img src="img/prior/mascot.png" alt="Mascot sankey thumbnail" />
+      </div>
+      <h4>Mascot (foil)</h4>
+      <p>
+        No end concept: every link leaves its node's middle, so widths pile up
+        instead of tiling the edge.
+      </p>
+      <pre><code>sourceAnchor: ["right", "middle"]
+encode(link, "strokeWidth", "value")</code></pre>
+    </div>
+  </div>
+  <p class="small" style="margin-top: 16px">
+    Also surveyed: TikZ <code>sankey</code> (<code
+      >\sankeyfork{a}{25/b,10/c}</code
+    >
+    divides a cross-section into sub-intervals that must sum to the parent, the
+    closest model to this proposal), the Kibana Vega sankey (stack + lookup +
+    linkpath, with node and slot stacks kept in sync only by a shared sort key),
+    ELK port constraints (a ladder of who owns end order), Plotly, Highcharts,
+    ECharts, networkD3, RAWGraphs, Kosara's Parallel Sets. Fixed chart types
+    such as <code>geom_sankey</code> and <code>go.Sankey</code> are foils: they
+    list arrangements instead of composing them.
+  </p>
+
+  <h2>Approach B: ends are rows</h2>
+  <div class="approach-head">
+    <span class="pill pick">Recommended</span
+    ><span class="small"
+      >Unpivot links into end rows; the flow places nodes and stacks ends inside
+      them; the ribbon joins one link's ends.</span
+    >
+  </div>
+
+  <h3>Parallel sets: titanic class, sex, survived</h3>
+  <div class="ex">
+    <div>
+      <div class="code-label">Today (works, zero core changes)</div>
+      <pre><code>const ends = unpivotEnds(sorted, ["class", "sex", "survived"], "count"); // hand JS + rank key
+layer([
+  chart(ends)
+    .flow(
+      spread({ by: "axis", dir: "x", spacing: 120 }),
+      spread({ by: field("category").sort(), dir: "y", spacing: 12 }),
+      spread({ by: field("rank").sort(), dir: "y", spacing: 0, axes: false })
+    )
+    .mark(rect({ w: 12, h: "value", fill: "class" }).name("ends")),
+  chart(selectAll("ends")).flow(group({ by: "path" }))
+    .mark(ribbon({ opacity: 0.6, fill: "class" })),
+])</code></pre>
+      <div class="code-label">Proposed</div>
+      <pre><code>chart(titanic)
+  .flow(
+    derive(unpivot({ on: ["class", "sex", "survived"],
+                     variable: "axis", value: "category", id: "path" })),
+    spread({ by: "axis", dir: "x", spacing: 120 }),
+    spread({ by: field("category").sort(), dir: "y", spacing: 12 }),
+    stack({ by: field("rank").sort(), dir: "y" })   // end order: decision 4
+  )
+  .mark(rect({ w: 12, h: "count", fill: "class" }))
+  .layer(ribbon({ by: "path", opacity: 0.6 }))</code></pre>
+      <div class="code-label">Python</div>
+      <pre><code>(chart(titanic)
+    .flow(derive(unpivot(on=["class", "sex", "survived"],
+                         variable="axis", value="category", id="path")),
+          spread(by="axis", dir="x", spacing=120),
+          spread(by=field("category").sort(), dir="y", spacing=12),
+          stack(by=field("rank").sort(), dir="y"))
+    .mark(rect(w=12, h="count", fill="class"))
+    .layer(ribbon(by="path", opacity=0.6)))</code></pre>
+    </div>
+    <div>
+      <figure>
+        <div class="plate crop-m">
+          <img
+            src="img/parallel-sets.png"
+            alt="Parallel sets of titanic passengers by class, sex and survival"
+          />
+        </div>
+        <figcaption>
+          <span class="tag ok">Rendered</span>From today's working spelling. The
+          proposed sugar rewrites to it exactly.
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="plate crop-m">
+          <img
+            src="img/parallel-sets-fused-fails.png"
+            alt="Fused ribbon form drawing no ribbons"
+          />
+        </div>
+        <figcaption>
+          <span class="tag fail">Fails today</span>Fused
+          <code>.layer(ribbon())</code>: the #786 rule splits by every non-path
+          tier, and the category key changes along a path, so no ribbon has two
+          ends. Hence <code>by</code>.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <h3>Energy sankey: many-to-many, 48 nodes, 69 links</h3>
+  <div class="ex">
+    <div>
+      <div class="code-label">Proposed</div>
+      <pre><code>chart(links)   // { source, target, value } + precomputed depth and order
+  .flow(
+    derive(unpivot({ on: ["source", "target"],
+                     variable: "side", value: "node", id: "link" })),
+    spread({ by: field("depth").sort(), dir: "x", spacing: 100 }),
+    spread({ by: field("node").sort(order), dir: "y", spacing: 10 }),
+    spread({ by: field("side").sort(["target", "source"]),
+             dir: "x", spacing: 0 }),          // in-ends left, out-ends right
+    stack({ by: field("key").sort(), dir: "y" }) // far node's rank
+  )
+  .mark(rect({ w: 6, h: "value", fill: "#555" }))
+  .layer(ribbon({ by: "link", opacity: 0.4, fill: "source" }))</code></pre>
+      <p class="small">
+        A node is its two end stacks side by side, so its height is the larger
+        of its in-sum and out-sum. The side spread's
+        <code>alignment</code> places the slack (TikZ's left/center/right
+        anchor). <code>enclose({ shape: Shape.box(), padding: 0 })</code> over
+        each node's ends draws a box.
+      </p>
+    </div>
+    <div>
+      <figure>
+        <div class="plate crop-m">
+          <img
+            src="img/energy-sankey.png"
+            alt="UK energy sankey with 48 nodes"
+          />
+        </div>
+        <figcaption>
+          <span class="tag ok">Rendered</span>Zero core changes. Columns and
+          in-column order are precomputed (about 100 lines of layout, out of
+          scope). Top-aligned, and gaps do not fill the height (#1165).
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <h3>Sankey tree: titanic tree</h3>
+  <div class="ex">
+    <div>
+      <pre><code>chart(treeEnds)  // one row per (leaf, depth), blank keys for missing levels
+  .flow(
+    spread({ by: "depth", dir: "x", spacing: 64, alignment: "middle" }),
+    spread({ by: "class", dir: "y", spacing: 8 }),
+    spread({ by: field("sub").sort(), dir: "y", spacing: 4 }),
+    spread({ by: field("leaf").sort(), dir: "y", spacing: 2 }),
+    stack({ by: field("rank").sort(), dir: "y" })
+  )
+  .mark(rect({ w: 40, h: "value", fill: "class" }))
+  .layer(ribbon({ by: "path", opacity: 0.6, curve: Curve.bezier() }))</code></pre>
+      <p class="small">
+        About 35 lines against 137 today. Nested gaps are nested
+        <code>spread</code>s because each end row carries its ancestors' keys.
+        <code>unpivot</code> does not make the tree shape (one row per depth
+        with blank keys), so a tree-ends helper is open (decision 8, #738).
+      </p>
+    </div>
+    <div class="ex" style="margin-top: 0; grid-template-columns: 1fr 1fr">
+      <figure>
+        <div class="plate crop-m">
+          <img src="img/sankey-tree-rows.png" alt="Sankey tree from end rows" />
+        </div>
+        <figcaption>
+          <span class="tag ok">Rendered</span>One ribbon per leaf path.
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="plate crop-m">
+          <img
+            src="img/sankey-tree-rows-per-segment.png"
+            alt="Sankey tree colored per segment"
+          />
+        </div>
+        <figcaption>
+          <span class="tag ok">Rendered</span>One ribbon layer per depth pair,
+          colored per tier.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <h3>Chord diagram: Bostock's hair-color matrix</h3>
+  <div class="ex">
+    <div>
+      <div class="code-label">Proposed</div>
+      <pre><code>layer({ coord: Coord.clock() }, [
+  chart(cells)  // { group, other, value, chord: sorted pair, color }
+    .flow(
+      spread({ by: field("group").sort(names), dir: "x", spacing: 0.04, y: 160, h: 16 }),
+      stack({ by: field("other").sort(names), dir: "x" })
+    )
+    .mark(rect({ w: "value", fill: "group" }))
+    .layer(ribbon({ by: "chord", at: "bottom", fill: "color", opacity: 0.67 })),
+])</code></pre>
+      <div class="code-label">Python</div>
+      <pre><code>layer([
+    chart(cells)
+        .flow(spread(by=field("group").sort(names), dir="x", spacing=0.04, y=160, h=16),
+              stack(by=field("other").sort(names), dir="x"))
+        .mark(rect(w="value", fill="group"))
+        .layer(ribbon(by="chord", at="bottom", fill="color", opacity=0.67)),
+], coord=Coord.clock())</code></pre>
+      <p class="small">
+        Each matrix cell is already an end. <code>at: "bottom"</code> attaches
+        both ends to their inner arc. The band leaves each end along that part's
+        outward normal, in screen space. The same rule describes today's sankey
+        bezier (out of <code>right</code> along +x, into <code>left</code> along
+        −x), so chords need no new curve. In Cartesian coordinates it gives
+        thick arc-diagram bands.
+      </p>
+    </div>
+    <div class="ex" style="margin-top: 0; grid-template-columns: 1fr 1fr">
+      <figure>
+        <div class="plate crop-l">
+          <img
+            src="img/chord-today-dir-x.png"
+            alt="Chord attempt that hugs the ring"
+          />
+        </div>
+        <figcaption>
+          <span class="tag fail">Fails today</span>Edge-mode ribbons join facing
+          edges along <code>dir</code>, so bands hug the ring.
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="plate crop-l">
+          <img
+            src="img/chord-prototype.png"
+            alt="Chord diagram from the throwaway prototype"
+          />
+        </div>
+        <figcaption>
+          <span class="tag sketch">Prototype</span>Throwaway ribbon that uses
+          the inner arc and a screen-space curve: the target picture.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <h3>How B composes</h3>
+  <div class="cols">
+    <div>
+      <h4>Desugars into</h4>
+      <ul>
+        <li><code>unpivot</code> is a <code>derive</code> data helper.</li>
+        <li><code>by</code>, <code>at</code> are ribbon options.</li>
+        <li>
+          Span allocation is <code>stack</code>. Node and ribbon share one scale
+          by construction, since the ends are the node.
+        </li>
+        <li>Polar works once <code>at</code> exists.</li>
+        <li>
+          <code>line({ by })</code> over the same ends gives parallel
+          coordinates.
+        </li>
+      </ul>
+    </div>
+    <div>
+      <h4>Overlap check</h4>
+      <ul>
+        <li>
+          <strong>stack</strong>: exact composition; the end stack is a
+          <code>stack</code>.
+        </li>
+        <li>
+          <strong>cut</strong>: degenerate; for a rect node, cutting by link
+          values equals stacking ends. Cut stays the tool for an image node.
+        </li>
+        <li><strong>enclose</strong>: none; it draws node boxes.</li>
+        <li>
+          <strong>#786 default split</strong>: <code>by</code> overrides it only
+          when named.
+        </li>
+      </ul>
+    </div>
+    <div>
+      <h4>Trade-offs</h4>
+      <ul>
+        <li>
+          Easy: no new layout; cohort identity across axes is free; chords and
+          sankeys share one spec shape.
+        </li>
+        <li>
+          Awkward: users think of ends as rows; end order needs a sort key that
+          agrees with the far node; ribbons cannot attach to nodes the flow did
+          not lay out.
+        </li>
+        <li>
+          New terms: <code>unpivot</code>, <code>by</code>, <code>at</code>, all
+          existing words.
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Approach A: the ribbon allocates its own ends</h2>
+  <div class="approach-head">
+    <span class="pill">Runner-up</span
+    ><span class="small"
+      >Nodes table and links table, the d3-sankey inputs. Nodes come from any
+      chart; the ribbon's <code>size</code> divides each node's facing
+      part.</span
+    >
+  </div>
+  <div class="ex">
+    <div>
+      <pre><code>layer([
+  chart(nodes)
+    .flow(spread({ by: "depth", dir: "x", spacing: 100 }),
+          spread({ by: "name", dir: "y", spacing: 10 }))
+    .mark(rect({ w: 12, h: "value" }).name("nodes")),
+  chart(links)
+    .flow(resolve(["source", "target"], { from: selectAll("nodes") }))
+    .mark(ribbon({ from: "source", to: "target", size: "value", opacity: 0.5 })),
+])</code></pre>
+      <pre><code>layer([
+    chart(nodes).flow(spread(by="depth", dir="x", spacing=100),
+                      spread(by="name", dir="y", spacing=10))
+        .mark(rect(w=12, h="value").name("nodes")),
+    chart(links).flow(resolve(["source", "target"], from_=select_all("nodes")))
+        .mark(ribbon(from_="source", to="target", size="value", opacity=0.5)),
+])</code></pre>
+      <p class="small">
+        <strong>Desugars into</strong> a fresh stack of ends per (node, part),
+        placed with <code>relate()</code> and
+        <code>Constraint.align</code> span, then one-to-one ribbons. End order
+        is a sort after the nodes are placed, by the far end's position.
+        <strong>New:</strong> a data channel on a connector that must share the
+        node's scale (same measure), a post-layout sort, a loud error when
+        ribbon sizes exceed the node, and <code>at</code>.
+      </p>
+    </div>
+    <div class="ex" style="margin-top: 0; grid-template-columns: 1fr 1fr">
+      <figure>
+        <div class="plate crop-l">
+          <img
+            src="img/approach-a-sankey-tree.png"
+            alt="Sankey tree through Approach A"
+          />
+        </div>
+        <figcaption>
+          <span class="tag ok">Rendered</span>Via a rewrite into B. Loses B's
+          nested gaps: one flat node order per column.
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="plate crop-l">
+          <img
+            src="img/approach-a-mismatch.png"
+            alt="Approach A with node values that disagree with ribbon sizes"
+          />
+        </div>
+        <figcaption>
+          <span class="tag fail">Mismatch</span>Two tables that must agree: node
+          value smaller than its ribbons. The prototype grows the node and
+          warns.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+  <div class="cols">
+    <div>
+      <h4>Easy</h4>
+      <ul>
+        <li>d3-shaped data as-is.</li>
+        <li>Nodes from any layout: gotree, scatter, a map.</li>
+        <li>Exact crossing-reducing end order, no user sort key.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Awkward</h4>
+      <ul>
+        <li>Node value and ribbon sizes must agree.</li>
+        <li>A connector owns a data channel and a scale.</li>
+        <li>Parallel sets need one link per gap, losing cohort identity.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Overlap</h4>
+      <ul>
+        <li>
+          Exact composition only if defined by the rewrite into
+          <code>relate</code> + <code>stack</code> + <code>ribbon</code>.
+          Otherwise a second stacking mechanism next to <code>stack</code>.
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Approach C: <code>ribbon().stack()</code></h2>
+  <div class="approach-head">
+    <span class="pill">Not recommended</span
+    ><span class="small"
+      >Your floated spelling, read as ggplot's <code>position = "stack"</code>:
+      ribbons that share a node stack their ends there.</span
+    >
+  </div>
+  <div class="ex">
+    <div>
+      <pre><code>// sankey
+chart(links)
+  .flow(resolve(["source", "target"], { from: selectAll("nodes") }))
+  .mark(ribbon({ from: "source", to: "target" }).stack({ size: "value" }))
+
+// and stacked area would gain a second spelling
+chart(rows).flow(scatter({ by: "year", x: "year" }))
+  .mark(ribbon({ h: "value" }).stack({ by: "series" }))</code></pre>
+    </div>
+    <div class="prose">
+      <p>
+        Its sankey meaning is exactly A's, so C is A with a method spelling. It
+        also gives stacked area a second route next to
+        <code>spread(x), stack(series)</code>, which is a large partial overlap
+        with the flow's <code>stack</code>. By the calls, methods and options
+        rule, a method reads its caller's state; this one reads every other
+        ribbon at the same node, which is a set-level operation. No separate
+        pictures: the outputs are A's and today's stacked area.
+      </p>
+    </div>
+  </div>
+
+  <h2>Why B</h2>
+  <ul class="prose" style="max-width: 84ch">
+    <li>
+      <strong>It desugars into the existing core</strong> (principles, "Why keep
+      the core small"). Three of four hard examples needed no core change. The
+      fourth, chords, needs parts, which labels need too.
+    </li>
+    <li>
+      <strong>One concept, one operator</strong> (api-design, "Operators and
+      marks"). Span allocation is <code>stack</code>; A and C add a second
+      stacker unless defined by rewrite.
+    </li>
+    <li>
+      <strong>Data flows as lists.</strong> An end is a row, like ggalluvial's
+      lodes form and circlize's "row order is slot order".
+    </li>
+    <li>
+      <strong>It realizes #745.</strong> Ribbons stay one-to-one per row; the
+      per-edge span allocation turned out to be the flow's stack.
+    </li>
+    <li>
+      <strong>Names from precedent.</strong> <code>unpivot</code> from polars,
+      <code>by</code> the family key, <code>at</code> and part names from the
+      label proposal. Same shape in JS and Python.
+    </li>
+  </ul>
+  <p class="prose">
+    <strong>What would change the pick to A:</strong> ribbons over nodes placed
+    by something other than the flow (gotree trees, node-link diagrams, flow
+    maps) becoming a priority, or crossing-reducing end order proving impossible
+    to state as a data sort. A can later be added as sugar defined by rewrite
+    into B's pieces, so picking B does not close it off.
+  </p>
+  <p class="prose">
+    <strong>Out of scope:</strong> sankey node layout (column assignment,
+    in-column relaxation; #701, #631) and fill-the-height gaps (#1165). Both
+    showed up in the energy prototype; neither is about divided ends.
+  </p>
+
+  <h2>Decisions for you</h2>
+  <ol class="decisions">
+    <li>
+      <span
+        >Is "ends are rows" the model, with span allocation done by the flow's
+        <code>stack</code> (B), rather than by the ribbon (A)?</span
+      >
+    </li>
+    <li>
+      <span
+        >Bring <code>by</code> back on <code>ribbon</code> and
+        <code>line</code> as the ribbon's identity (<code
+          >ribbon({ by: "link" })</code
+        >), with travel order from the outermost tier?</span
+      >
+    </li>
+    <li>
+      <span
+        ><code>unpivot({ on, variable, value, id })</code> inside
+        <code>derive</code>: keep the polars name, and create the row id in the
+        same call rather than a separate <code>withRowIndex</code> step?</span
+      >
+    </li>
+    <li>
+      <span
+        >End order: ship with a user sort key (a declared shortcut) and add a
+        far-end order strategy later? Default per node (alluvium) or per side of
+        each gap (flow)?</span
+      >
+    </li>
+    <li>
+      <span
+        ><code>ribbon({ at: "bottom" })</code> with the label proposal's part
+        names, plus the rule that a ribbon leaves each end along that part's
+        outward normal in screen space?</span
+      >
+    </li>
+    <li>
+      <span
+        >Slack when in-sum and out-sum differ: default <code>alignment</code>
+        <code>start</code> (as d3) or <code>middle</code>?</span
+      >
+    </li>
+    <li>
+      <span
+        >Keep sankey node layout (columns, in-column order, fill-the-height
+        gaps) out of this design, as separate issues?</span
+      >
+    </li>
+    <li>
+      <span>A tree-ends helper for sankey trees: here, or with #738?</span>
+    </li>
+  </ol>
+
+  <h2>Syntax to review</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>New spelling</th>
+          <th>Meaning</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <code>derive(unpivot({ on, variable, value, id }))</code><br /><code
+              >unpivot(on=..., variable=..., value=..., id=...)</code
+            >
+          </td>
+          <td>
+            Columns to rows, keeping a row id that names the path or link.
+          </td>
+        </tr>
+        <tr>
+          <td><code>ribbon({ by })</code>, <code>line({ by })</code></td>
+          <td>
+            Rows that share the key form one ribbon. Removed in #786; returns
+            with this narrower meaning.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <code>ribbon({ at: "bottom" })</code> or
+            <code>{ at: { from, to } }</code>
+          </td>
+          <td>
+            The part each end attaches to. Default is today's facing edges along
+            <code>dir</code>.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Bugs found while prototyping</h2>
+  <ol class="prose small" style="max-width: 86ch">
+    <li>
+      A data-sized <code>stack</code> under two <code>spread</code>s gets its
+      own scale per column when columns have different child counts (workaround:
+      <code>spread({ spacing: 0 })</code>).
+    </li>
+    <li>
+      A y <code>spread</code> orders groups top-down; a y
+      <code>stack</code> orders them bottom-up.
+    </li>
+    <li>
+      <code>filter</code> over a refs bag sees <code>ref.datum</code> as a bag,
+      so <code>r.datum.depth</code> is undefined and everything is silently
+      dropped.
+    </li>
+    <li>
+      In polar, <code>spread</code> with <code>spacing</code> stops near 225°
+      instead of closing the circle.
+    </li>
+    <li>
+      <code>chart(..., { legend: false })</code> on a non-root layer is ignored.
+    </li>
+    <li>
+      The polar bake treats only <code>connect</code> and <code>tween</code> as
+      relational leaves (a hard-coded type list).
+    </li>
+    <li>
+      <code>resolveGroupPaint</code> resolves
+      <code>fill: "&lt;field&gt;"</code> only for registered types.
+    </li>
+  </ol>
+  <p class="small" style="margin-top: 40px">
+    Repo copy: <code>proposals/stacked-ribbons/proposal.md</code> on branch
+    <code>worktree-stacked-ribbons-proposal</code>. Prototype stories:
+    <code>packages/gofish-graphics/stories/_proposals/stacked-ribbons/</code>.
+    Every spec and workaround: <code>proposals/stacked-ribbons/NOTES.md</code>.
+  </p>
+</div>
