@@ -26,7 +26,9 @@ def story_donut():
 
 def story_rose():
     return (
-        chart(NIGHTINGALE, coord=Coord.clock(), axes=True, w=400, h=400)
+        # A wider polar inset, so the rotated radial title fits until the
+        # coord reserves what its axes draw (#1165).
+        chart(NIGHTINGALE, coord=Coord.clock(), axes=True, padding=40, w=400, h=400)
         .flow(
             spread(by="Month", dir="x", spacing=0, axes={"x": False, "y": True}),
             stack(by="Type", dir="y"),

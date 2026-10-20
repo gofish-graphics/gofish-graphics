@@ -307,6 +307,9 @@ export const RoseGradient: StoryObj<Args> = {
 
     chart(roseData, {
       color: Color.gradient("blues"), coord: clock(), axes: true,
+      // A wider polar inset, so the rotated radial title fits until the
+      // coord reserves what its axes draw (#1165).
+      padding: 40,
       w: args.w,
       h: args.h,
     })

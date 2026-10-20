@@ -180,6 +180,9 @@ def story_rose_gradient():
             color=Color.gradient("blues"),
             coord=Coord.clock(),
             axes=True,
+            # A wider polar inset, so the rotated radial title fits until
+            # the coord reserves what its axes draw (#1165).
+            padding=40,
             w=400,
             h=400,
         )

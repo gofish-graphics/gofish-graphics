@@ -80,7 +80,15 @@ export const Rose: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(nightingale, { coord: clock(), axes: true, w: args.w, h: args.h })
+    // A wider polar inset, so the rotated radial title fits until the coord
+    // reserves what its axes draw (#1165).
+    chart(nightingale, {
+      coord: clock(),
+      axes: true,
+      padding: 40,
+      w: args.w,
+      h: args.h,
+    })
       .flow(
         spread({ by: "Month", dir: "x", spacing: 0, axes: {x: false, y: true} }),
         stack({ by: "Type", dir: "y" }),
