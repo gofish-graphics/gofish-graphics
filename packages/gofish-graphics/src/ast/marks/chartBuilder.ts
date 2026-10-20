@@ -1316,6 +1316,20 @@ export class LayerBuilder extends RenderableBuilder {
     for (let i = 0; i < this.tiers.length; i++) {
       let tier = this.tiers[i];
       const hasNext = i < this.tiers.length - 1;
+      // An empty scope binds the previous tier's marks (`inScope`), whether
+      // it is an empty `chart()` or a chain whose first tier is one, so with
+      // no marks to bind it is an error either way.
+      if (
+        tier instanceof RenderableBuilder &&
+        tier.usesPreviousLayerMarks() &&
+        prevRefs === undefined
+      ) {
+        throw new Error(
+          ".layer(Chart()) with an empty scope has no previous tier's " +
+            "marks to draw from — give the first tier real data, or make " +
+            "sure the previous tier actually produced nodes."
+        );
+      }
 
       if (tier instanceof ChartBuilder) {
         // The root tier's clock, offered to every later tier the way the
@@ -1324,16 +1338,8 @@ export class LayerBuilder extends RenderableBuilder {
         // sequence's chart, even when it is written as a nested
         // `chart(selectAll(...))` pipeline.
         if (i > 0) tier.adoptTimeTier(root);
-        if (tier.usesPreviousLayerMarks()) {
-          if (prevRefs === undefined) {
-            throw new Error(
-              ".layer(Chart()) with an empty scope has no previous tier's " +
-                "marks to draw from — give the first tier real data, or make " +
-                "sure the previous tier actually produced nodes."
-            );
-          }
+        if (tier.usesPreviousLayerMarks())
           tier = tier.withData(prevRefs as any);
-        }
         // Auto-name this tier's mark (unless already named) whenever a later
         // tier exists, so its produced nodes are addressable as the next
         // tier's scope — uniformly, regardless of whether the next tier is an
@@ -1363,8 +1369,9 @@ export class LayerBuilder extends RenderableBuilder {
         // previous tier's bag as its datum, uniformly. A relational mark
         // (e.g. `ribbon()`) reads it as the refs it connects; a leaf mark
         // (e.g. `rect({...})`) ignores its datum argument and renders exactly
-        // as before. With no previous bag (the previous tier named nothing),
-        // the tier has no rows.
+        // as before. A chain binds the bag as an empty `chart()` does
+        // (`inScope`). With no previous bag (the previous tier named
+        // nothing), the tier has no rows.
         nodes.push(
           await resolveMarkResult(tier, sharedContext, prevRefs ?? NO_ROWS)
         );
