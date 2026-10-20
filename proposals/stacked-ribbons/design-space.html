@@ -489,37 +489,36 @@
           <td class="prod">product</td>
           <td>combinator children sharing the scope</td>
           <td><span class="status part">half</span></td>
-          <td>sankey node, FrankenSankey, school days</td>
-        </tr>
-        <tr>
-          <td>projection into a sub-list</td>
-          <td class="prod">product</td>
-          <td><code>chart(field("in"))</code></td>
-          <td><span class="status miss">lacks</span></td>
-          <td>sankey node, tree</td>
+          <td>
+            two rows of nodes (school days, Beatles), FrankenSankey's parts
+          </td>
         </tr>
         <tr>
           <td>loop over a fixed set of fields</td>
-          <td>either</td>
-          <td>host <code>.map</code>, or a typed view</td>
-          <td><span class="status miss">open</span></td>
+          <td class="prod">product</td>
+          <td>host <code>.map</code> (a Python comprehension)</td>
+          <td><span class="status part">half</span></td>
           <td>parallel sets and coordinates, SPLOM</td>
         </tr>
         <tr>
-          <td>case split with different branches</td>
-          <td class="sum">sum</td>
+          <td>relation between two tables (node-link)</td>
+          <td>both</td>
           <td>
-            channel accessors like <code>w: d =&gt; d.side ? 14 : 0</code>
+            <code>resolve</code> +
+            <code>ribbon({ from, to, size })</code> allocating ends
           </td>
-          <td><span class="status miss">lacks</span></td>
-          <td>FrankenSankey in sum form</td>
+          <td><span class="status part">half</span></td>
+          <td>sankeys, sankey tree, school days, Beatles, chord</td>
         </tr>
         <tr>
-          <td>recursion</td>
-          <td class="prod">product</td>
-          <td>a host function that calls itself</td>
-          <td><span class="status part">half</span></td>
-          <td>sankey tree</td>
+          <td>projection into a sub-list, case split, recursion</td>
+          <td>—</td>
+          <td>
+            <code>chart(field("in"))</code>, <code>match</code>, a
+            self-referring mark
+          </td>
+          <td><span class="status miss">dropped</span></td>
+          <td>no example left once sankeys and trees are node-link data</td>
         </tr>
         <tr>
           <td>join branches by identity</td>
@@ -533,9 +532,10 @@
   </div>
   <p class="prose small">
     "Half": combinator children don't inherit the scope today (a one-line fix);
-    recursion works but a self-referring mark has no spelling; ribbons join
-    today only through an explicit <code>selectAll</code> +
-    <code>group</code> tier, and run backwards when refs arrive out of order.
+    sibling child charts share one scale; <code>resolve</code> exists but no
+    ribbon allocates ends along an edge; ribbons join today only through an
+    explicit <code>selectAll</code> + <code>group</code> tier, and run backwards
+    when refs arrive out of order.
   </p>
 
   <h3>The shapes of the examples</h3>
@@ -569,28 +569,24 @@
           <td>none</td>
         </tr>
         <tr>
-          <td>Energy sankey</td>
-          <td>nodes, each (in-links, out-links)</td>
-          <td class="prod">product per node</td>
-          <td>link identity</td>
+          <td>Energy sankey, sankey tree</td>
+          <td>node-link: a nodes table and a links table</td>
+          <td>nodes in the pipeline; links resolved</td>
+          <td>each link row is one ribbon</td>
         </tr>
         <tr>
-          <td>Sankey tree</td>
-          <td>recursive (box, children)</td>
-          <td class="prod">product + recursion</td>
-          <td>child identity</td>
-        </tr>
-        <tr>
-          <td>FrankenSankey, school days, Beatles</td>
-          <td>a tuple of different parts</td>
-          <td class="prod">product</td>
-          <td>row identity</td>
+          <td>School days, Beatles, FrankenSankey</td>
+          <td>
+            node-link, with the nodes in a tuple of different rows or parts
+          </td>
+          <td class="prod">product of node charts</td>
+          <td>each link row is one ribbon</td>
         </tr>
         <tr>
           <td>Chord</td>
-          <td>matrix cells</td>
-          <td class="sum">sum</td>
-          <td>a pair key, (i, j) with (j, i)</td>
+          <td>node-link: groups and pairs</td>
+          <td>nodes in the pipeline; pairs resolved</td>
+          <td>each pair row is one ribbon, with two end sizes</td>
         </tr>
       </tbody>
     </table>
@@ -790,8 +786,15 @@ chart(penguins)
       each link's two ends join.
     </li>
     <li>
-      <strong>Products (sankey node, tree, FrankenSankey).</strong> Children
-      share rows by reference, so ends from the same row join.
+      <strong
+        >Products (parallel sets and coordinates written with
+        <code>.map</code>).</strong
+      >
+      Children share rows by reference, so ends from the same row join.
+    </li>
+    <li>
+      <strong>Node-link ribbons</strong> need no rejoin: each link row is one
+      ribbon, and <code>resolve</code> has already named its two nodes.
     </li>
   </ul>
   <p class="prose">
@@ -801,117 +804,328 @@ chart(penguins)
     joining different rows, as in the chord's (i, j) with (j, i).
   </p>
 
-  <h2>The rest of the table: products, projection, case, recursion</h2>
+  <h2 id="nodelink">Node-link data: the ribbon allocates its ends</h2>
+  <p class="prose">
+    Revised after review. A sankey is a node-link diagram, which is the case
+    <code>resolve</code> was built for. Nodes are placed by any chart. A links
+    table's endpoint columns are resolved into refs to those nodes, and the
+    ribbon takes <code>from</code>/<code>to</code> plus a <code>size</code>. At
+    each node the ribbon ends <strong>stack along the facing edge</strong>,
+    ordered by where the far node was placed. That drops the two things the
+    earlier sankey spec needed and you rejected: <code>field("in")</code> in
+    data position, and the <code>spacing: 0</code> spread that faked a node out
+    of two half-bars. Nodes are real marks again. It also solves the tree's open
+    edge-slice problem, because a parent's edge is divided among its children by
+    the same rule.
+  </p>
+  <p class="prose small">
+    Real signature: <code>resolve(cols, { from, key? })</code> replaces each
+    listed column in place with the matching node ref. The default
+    <code>key</code> is each node's innermost <code>by</code> field. All
+    pictures below come from an emulation that rewrites the links into ribbon
+    ends; in it, the far-end order is a proxy computed before layout (the far
+    node's index), because today's API cannot read placed positions.
+  </p>
 
-  <h3>Products with projection: the sankey node</h3>
+  <h3>Energy sankey</h3>
   <div class="ex">
     <div>
-      <pre><code>chart(nodes)   // nest join gives each node in / out lists of shared link rows
-  .flow(spread({ by: "depth", dir: "x", spacing: 100 }),
-        spread({ by: "name", dir: "y", spacing: 10 }))
-  .mark(spread({ dir: "x", spacing: 0 }, [
-    chart(field("in")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
-    chart(field("out")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
-  ]))
-  .layer(ribbon({ opacity: 0.4 }))</code></pre>
+      <pre><code>layer([
+  chart(nodes)
+    .flow(spread({ by: "depth", dir: "x", spacing: 100 }),
+          spread({ by: "name", dir: "y", spacing: 10 }))
+    .mark(rect({ w: 12, h: "value" }).name("nodes")),
+  chart(links)
+    .flow(resolve(["source", "target"], { from: selectAll("nodes") }))
+    .mark(ribbon({ from: "source", to: "target", size: "value", opacity: 0.5 })),
+])</code></pre>
       <p class="small">
-        The node is a product (two different parts); each part is a sum (a list
-        of links). <code>chart(field("in"))</code> is projection, Arrows'
-        <code>arr(.in) &gt;&gt;&gt;</code>, D3's
-        <code>data(d =&gt; d.children)</code>. Sum form also works (round 1's
-        unpivot of <code>source</code>/<code>target</code>, now a view), but
-        there the end order on each side needs a key; here each side's order is
-        just its own flow.
+        The d3-sankey inputs, used as they are: no nest join, no ends table.
       </p>
     </div>
     <figure>
       <div class="plate">
-        <img
-          src="img/direct-sankey-energy.png"
-          alt="Energy sankey as products of link lists"
-        />
+        <img src="img/approach-a-energy.png" alt="Energy sankey, node-link" />
       </div>
       <figcaption>
-        <span class="tag ok">Rendered</span>Product form, emulated projection.
+        <span class="tag ok">Rendered</span>Emulated allocation.
       </figcaption>
     </figure>
   </div>
 
-  <h3>Products with recursion: the sankey tree</h3>
+  <h3>Sankey tree</h3>
   <div class="ex">
     <div>
-      <pre><code>const node = (gap, child) =&gt; spread({ dir: "x", spacing: 64, alignment: "middle" }, [
-  rect({ w: 40, h: "count", fill: "class" }),
-  chart(field("children")).flow(spread({ dir: "y", spacing: gap })).mark(child),
-]);
-chart(tree).flow(spread({ by: "class", dir: "y", spacing: 8 }))
-  .mark(node(4, node(2, rect({ w: 40, h: "count", fill: "class" }))))
-  .layer(ribbon({ opacity: 0.6 }))</code></pre>
+      <pre><code>layer([
+  chart(treeNodes)   // { key, depth, class, sub, leaf, count }
+    .flow(spread({ by: "class", dir: "y", spacing: 8 }),
+          spread({ by: "depth", dir: "x", spacing: 64, alignment: "middle" }),
+          spread({ by: "sub", dir: "y", spacing: 4 }),
+          spread({ by: "leaf", dir: "y", spacing: 2 }))
+    .mark(rect({ w: 40, h: "count", fill: "class" }).name("nodes")),
+  chart(treeLinks)   // { source: parent key, target: child key, value }
+    .flow(resolve(["source", "target"], { from: selectAll("nodes"), key: "key" }))
+    .mark(ribbon({ from: "source", to: "target", size: "value", fill: "color", opacity: 0.6 })),
+])</code></pre>
       <p class="small">
-        A node is a product of a box and a sum of children. Here recursion is
-        host abstraction, which is fine: it's static structure. Still open: each
-        parent-to-child ribbon needs its own slice of the parent's edge. That's
-        a question about ends, not control flow.
+        Each parent's right edge is divided among its children's ribbons
+        automatically. <code>class</code> is nested outside <code>depth</code>:
+        the other way round, the gaps add up differently in each column and the
+        ribbons bend. <code>key: "key"</code> is needed because the innermost
+        tier (<code>leaf</code>) is blank for most nodes.
       </p>
     </div>
     <figure>
       <div class="plate">
-        <img
-          src="img/direct-sankey-tree-nested.png"
-          alt="Sankey tree from nested data"
-        />
+        <img src="img/nodelink-sankey-tree.png" alt="Sankey tree, node-link" />
       </div>
       <figcaption>
-        <span class="tag ok">Rendered</span>Emulated projection and edge slices.
+        <span class="tag ok">Rendered</span>Nested gaps 8/4/2; last tier colored
+        by survived.
       </figcaption>
     </figure>
   </div>
 
-  <h3>Case split: FrankenSankey in each form</h3>
+  <h3>School days: two rows of nodes</h3>
   <div class="ex">
     <div>
-      <div class="label">Product (the parts differ, so list them)</div>
-      <pre><code>spread({ dir: "x", spacing: 150 }, [
-  spread({ dir: "x", spacing: 0 }, [
-    chart(years).flow(spread({ by: "year", dir: "x", spacing: 22 }), stack({ by: "decision", dir: "y" }))
-      .mark(ribbon({ h: "value", fill: "decision" })),
-    chart(links).flow(stack({ by: "decision", dir: "y" }), stack({ by: "country", dir: "y" }))
-      .mark(rect({ w: 14, h: "value", fill: "decision" })),
+      <pre><code>layer([
+  spread({ dir: "y", spacing: 200 }, [
+    chart(links).flow(spread({ by: field("day").sort(DAYS), dir: "x", spacing: 60 }))
+      .mark(rect({ w: "count", h: 4 }).name("nodes")),
+    chart(links).flow(spread({ by: field("emotion").sort(EMOTIONS), dir: "x", spacing: 50 }))
+      .mark(rect({ w: "count", h: 90, fill: "emotion" }).name("nodes")),
   ]),
-  chart(links).flow(spread({ by: "country", dir: "y", spacing: 6 }), stack({ by: "decision", dir: "y" }))
-    .mark(rect({ w: 14, h: "value", fill: "decision" })),
-]).layer(ribbon({ fill: "decision", opacity: 0.55 }))</code></pre>
-      <div class="label">
-        Sum (one table of tagged rows, so the branches need a case split)
-      </div>
-      <pre><code>chart(parts)   // rows tagged part: "area" | "bar" | "country"
-  .flow(match("part", {
-    area:    [spread({ by: "year", dir: "x" }), stack({ by: "decision", dir: "y" })],
-    bar:     [stack({ by: "decision", dir: "y" }), stack({ by: "country", dir: "y" })],
-    country: [spread({ by: "country", dir: "y" }), stack({ by: "decision", dir: "y" })],
-  }))</code></pre>
+  chart(links)
+    .flow(resolve(["day", "emotion"], { from: selectAll("nodes") }))
+    .mark(ribbon({ from: "day", to: "emotion", size: "count", dir: "y", fill: "emotion", opacity: 0.6 })),
+])</code></pre>
       <p class="small">
-        Heterogeneous branches are a product's job. Done as a sum, they need
-        <code>match</code> (ArrowChoice's <code>|||</code>, a
-        <code>switch</code>), which GoFish lacks. Round 1's spec smuggled it
-        into channel accessors. The comparison argues for keeping heterogeneous
-        structure in direct style, and adding <code>match</code> only if a real
-        example needs a sum with different branches.
+        The two rows are a product (direct style), each a sum (a flow), so each
+        row has its own spacing and height. The node charts read the links table
+        directly, so node totals equal the ribbon sizes by construction.
+      </p>
+    </div>
+    <figure>
+      <div class="plate">
+        <img src="img/nodelink-school-days.png" alt="School days, node-link" />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Emulated allocation.
+      </figcaption>
+    </figure>
+  </div>
+
+  <h3>Beatles: equal-size ends on a line</h3>
+  <div class="ex">
+    <div>
+      <pre><code>layer([
+  spread({ dir: "y", spacing: 260 }, [
+    chart(credits).flow(spread({ by: "song", dir: "x", spacing: 18 }))
+      .mark(circle({ r: 2 }).name("nodes")),
+    chart(credits).flow(spread({ by: field("writer").sort(WRITERS), dir: "x", spacing: 90 }))
+      .mark(ellipse({ w: 70, h: 44, fill: "writer", opacity: 0.35 }).name("nodes")),
+  ]),
+  chart(credits)
+    .flow(resolve(["song", "writer"], { from: selectAll("nodes") }))
+    .mark(line({ from: "song", to: "writer", ends: { to: spread() }, stroke: "writer", dir: "y" })),
+])</code></pre>
+      <p class="small">
+        <code>ends: spread()</code> gives equal slots along the head's edge;
+        <code>ends: stack()</code> (the default when there is a
+        <code>size</code>) gives value-sized, touching ends. The choice reuses
+        the existing stack/spread distinction instead of a flag.
+      </p>
+    </div>
+    <figure>
+      <div class="plate">
+        <img src="img/nodelink-beatles.png" alt="Beatles, node-link" />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Synthetic credits.
+      </figcaption>
+    </figure>
+  </div>
+
+  <h3>FrankenSankey: an end-order override</h3>
+  <div class="ex">
+    <div>
+      <pre><code>layer([
+  spread({ dir: "x", spacing: 150, alignment: "end" }, [
+    spread({ dir: "x", spacing: 0, alignment: "end" }, [
+      chart(years).flow(spread({ by: "year", dir: "x", spacing: 22 }), stack({ by: "decision", dir: "y" }))
+        .mark(rect({ w: 0, h: "value", fill: "decision" }).name("area")),
+      chart([{ name: "2017", total: total2017 }]).mark(rect({ w: 14, h: "total" }).name("nodes")),
+    ]),
+    chart(countries).flow(spread({ by: "name", dir: "y", spacing: 6 }))
+      .mark(rect({ w: 14, h: "total" }).name("nodes")),
+  ]),
+  chart(selectAll("area")).flow(group({ by: "decision" })).mark(ribbon({ fill: "decision" })),
+  chart(links)   // { source: "2017", target: country, decision, value }
+    .flow(resolve(["source", "target"], { from: selectAll("nodes"), key: "name" }))
+    .mark(ribbon({ from: "source", to: "target", size: "value", fill: "decision", opacity: 0.55,
+      ends: { from: stack({ by: field("decision").sort(DECISIONS) }),
+              to: stack({ by: field("decision").sort(DECISIONS) }) } })),
+])</code></pre>
+      <p class="small">
+        At the 2017 bar the ends go decision first; at each country they go by
+        decision too. <code>ends: stack({ by })</code> groups the ends in its
+        sort order, and the far node's position orders them within each group.
+        d3's <code>linkSort</code> is one comparator for every node and both
+        sides, so it can't say this; ggalluvial's <code>geom_flow</code> (each
+        node orders its own ends) is the precedent. One alternative removes the
+        override entirely: if the bar is two nodes (the area's two 2017 cells),
+        the default order is already right, and the bar is two-colored as in the
+        FT original.
       </p>
     </div>
     <figure>
       <div class="plate">
         <img
-          src="img/hard-frankensankey-parts.png"
-          alt="FrankenSankey render"
+          src="img/nodelink-frankensankey.png"
+          alt="FrankenSankey, node-link"
         />
       </div>
       <figcaption>
-        <span class="tag ok">Rendered</span>Product form. The sum form is a
-        sketch.
+        <span class="tag ok">Rendered</span>Estimated data.
       </figcaption>
     </figure>
   </div>
+
+  <h3>Chord: asymmetric ends on one part</h3>
+  <div class="ex">
+    <div>
+      <pre><code>layer({ coord: Coord.clock() }, [
+  chart(groups)
+    .flow(spread({ by: field("name").sort(NAMES), dir: "x", spacing: 0.04, y: 160, h: 16 }))
+    .mark(rect({ w: "total", fill: "name" }).name("nodes")),
+  chart(pairs)   // { a, b, ab, ba, lead }, with a &lt;= b
+    .flow(resolve(["a", "b"], { from: selectAll("nodes") }))
+    .mark(ribbon({ from: "a", to: "b", size: { from: "ab", to: "ba" },
+                   at: "bottom", curve: Curve.chord(), fill: "lead", opacity: 0.67 })),
+])</code></pre>
+      <p class="small">
+        A chord's two ends have different widths, so <code>size</code> takes one
+        per end. Both ends sit on the inner arc (<code>at: "bottom"</code>; the
+        spelling for choosing a part is still open), and ends on the same part
+        are ranked together. On a cycle, far position is measured around the
+        circle, <code>(i − j) mod N</code>, which crosses less than d3's order.
+        A self chord gets one end. <code>Curve.chord()</code> is a placeholder
+        name for the throwaway curve.
+      </p>
+    </div>
+    <figure>
+      <div class="plate">
+        <img src="img/nodelink-chord.png" alt="Chord, node-link" />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Throwaway chord curve.
+      </figcaption>
+    </figure>
+  </div>
+
+  <h3>What the node-link ribbon has to define</h3>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Question</th>
+          <th>Proposed answer</th>
+          <th>Example that forces it</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Which nodes</td>
+          <td>
+            <code>from</code>, <code>to</code>: ref columns produced by
+            <code>resolve</code>
+          </td>
+          <td>all</td>
+        </tr>
+        <tr>
+          <td>End size</td>
+          <td>
+            <code>size: "value"</code>, or <code>size: { from, to }</code> when
+            the two ends differ
+          </td>
+          <td>sankeys; chord</td>
+        </tr>
+        <tr>
+          <td>Sized or equal ends</td>
+          <td>
+            <code>ends: stack()</code> (default when sized) or
+            <code>ends: spread({ spacing })</code>; with neither, ends meet at
+            the part's anchor point, which is what <code>line</code> does today
+          </td>
+          <td>Beatles</td>
+        </tr>
+        <tr>
+          <td>End order</td>
+          <td>
+            by the far <em>node</em>'s placed position, ties by row order (the
+            far <em>end</em> would be circular); override with
+            <code>ends: stack({ by })</code>, per side as
+            <code>ends: { from, to }</code>
+          </td>
+          <td>FrankenSankey</td>
+        </tr>
+        <tr>
+          <td>Order on a cycle</td>
+          <td>measured around the cycle</td>
+          <td>chord</td>
+        </tr>
+        <tr>
+          <td>Which part</td>
+          <td>
+            default: the facing edges along <code>dir</code>; otherwise a part
+            name per side (spelling open)
+          </td>
+          <td>chord</td>
+        </tr>
+        <tr>
+          <td>Shared scale</td>
+          <td>
+            <code>size</code> uses the node's measure along the part (<code
+              >h</code
+            >
+            for left and right, <code>w</code> for top and bottom); a unit
+            mismatch is a type error
+          </td>
+          <td>all sized</td>
+        </tr>
+        <tr>
+          <td>Slack and overflow</td>
+          <td>
+            node bigger than its ends: the rest is node body, ends start at the
+            part's start (d3's rule; another anchor is open). Smaller: a loud
+            error naming the node and both sums
+          </td>
+          <td>sankey tree mismatch</td>
+        </tr>
+        <tr>
+          <td>Self link</td>
+          <td>one end</td>
+          <td>chord</td>
+        </tr>
+        <tr>
+          <td>Paint from an endpoint</td>
+          <td>
+            a channel on a resolved column reads the ref's key (<code
+              >fill: "emotion"</code
+            >)
+          </td>
+          <td>school days, Beatles</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose">
+    <strong>The case split goes away.</strong> The FrankenSankey no longer needs
+    a sum with different branches, so <code>match</code> has no motivating
+    example left. The two shapes that remain are node-link data (this section)
+    and rows across a fixed family of fields, the candidates above.
+  </p>
 
   <h2>Pictures for candidate B</h2>
   <p class="prose small">
@@ -997,20 +1211,32 @@ chart(tree).flow(spread({ by: "class", dir: "y", spacing: 8 }))
     </li>
     <li>
       <span
-        >Projection: <code>chart(field("in"))</code> as the way a product's part
-        reads a sub-list of the parent row?</span
+        >Node-link ribbons: <code>ribbon({ from, to, size })</code> after
+        <code>resolve</code>, with ends stacked along the facing edge by the far
+        node's placed position, as the spelling for sankeys, sankey trees and
+        chords?</span
       >
     </li>
     <li>
       <span
-        >Case split: leave <code>match</code> out until a real example needs a
-        sum with different branches?</span
+        >End layout and order: <code>ends: stack()</code> /
+        <code>ends: spread()</code> (reusing the operators, per side as
+        <code>{ from, to }</code>), with <code>stack({ by })</code> as the order
+        override? Or a separate <code>order</code> option?</span
       >
     </li>
     <li>
       <span
-        >Is the tree's per-child edge slice a separate design question about
-        ends, outside this one?</span
+        >Choosing a part (the chord's inner arc): a part name per side on the
+        ribbon, or something else, given that <code>.at</code> didn't
+        land?</span
+      >
+    </li>
+    <li>
+      <span
+        >Node versus ends: a node smaller than its ends is a loud error, and a
+        larger one leaves slack at the part's start. Is that the rule, and
+        should the slack anchor be configurable?</span
       >
     </li>
   </ol>
