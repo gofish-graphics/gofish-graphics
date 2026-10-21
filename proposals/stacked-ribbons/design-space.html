@@ -430,7 +430,11 @@
       the spellings here are hypothetical.
     </p>
     <p class="small">
-      <strong>Latest:</strong>
+      <strong>New (10-21):</strong> a
+      <a href="#half-violin">half violin</a> ribboned to a 100% bar,
+      <a href="#arrows">arrows between boxes</a> with anchors, and a
+      <a href="#review">review</a> of the anchor design.
+      <strong>Before that:</strong>
       <a href="#anchors">anchors</a> in the spelling agreed in review
       (<code>name</code>, <code>position</code> as a part name,
       <code>slots: data(...).flow(...)</code>) and
@@ -946,6 +950,92 @@ layer([
     </figure>
   </div>
 
+  <h3 id="half-violin">
+    Half violin: a side cut by value, ribboned to a 100% bar
+  </h3>
+  <div class="ex">
+    <div>
+      <pre><code>// penguins: { mass, ... }   kde(field, bandwidth): a derive giving rows { mass, density }
+const massBins = field("mass").bin(Bin.thresholds([3000, 4000, 5000, 6000]));
+layer([
+  spread({ dir: "x", spacing: 160 }, [
+    // the half violin; its flat side is cut into mass cells
+    chart(penguins)
+      .flow(derive(kde("mass", 200)), scatter({ by: "mass", y: "mass" }))
+      .mark(
+        ribbon({ w: "density", dir: "y", align: "end", fill: "#c4c4c4" })
+          .anchor({
+            name: "out",
+            position: "x-max",
+            slots: data(penguins).flow(partition({ by: massBins })),
+          })
+          .name("violin")
+      ),
+    // the bar; its side is stacked by each cell's share of the penguins
+    chart(penguins).mark(
+      rect({ w: 14, h: field("mass").count() })
+        .anchor({
+          name: "in",
+          position: "x-min",
+          slots: data().flow(
+            stack({ by: massBins, size: field("mass").count() })
+          ),
+        })
+        .name("bar")
+    ),
+  ]),
+  chart(penguins)
+    .flow(group({ by: massBins }))
+    .mark(
+      ribbon({ from: "violin.out", to: "bar.in", fill: massBins, opacity: 0.55 })
+    ),
+]);</code></pre>
+      <p class="small">
+        Penguin body mass, 342 birds, cut at 3000, 4000, 5000 and 6000 g. The
+        left end of each ribbon is as tall as its cell's range of mass. The
+        right end is as tall as its cell's share of the birds, and the shares
+        add up to 100%. So the two ends of one ribbon are measured in different
+        units, grams and share, and each end is right on its own side. Cells of
+        equal count (quintiles) would make the bar five equal 20% pieces, so the
+        cuts are fixed values instead.
+      </p>
+      <p class="small">
+        <strong>What it adds to the rules.</strong> The violin's slots are not
+        stacked. <code>partition</code> places each cell where its values fall
+        on the violin's own mass scale. So an anchor's flow must get the host
+        mark's <em>position</em> scale along the side, not only its size scale.
+        With that rule, a stacked side and a partitioned side differ only in
+        their flow, and the axis sketch in
+        <a href="#composition">composition</a> (ticks placed by value) uses the
+        same rule. It is also the first example where one ribbon is drawn per
+        group of rows instead of per row.
+      </p>
+      <p class="small">
+        <strong>Open.</strong> A cell edge outside the side (<code
+          >Bin.thresholds(5)</code
+        >
+        rounds out to 2000 and 7000 g) needs a rule: a loud error, or clip. The
+        two charts must not share a y scale, but a <code>spread</code> of charts
+        merges their scales today without a warning, which is the same per-child
+        scale gap as parallel coordinates. Invented here: <code>align</code> on
+        <code>ribbon</code>, and the <code>kde</code>
+        derive (the library has no density helper).
+      </p>
+    </div>
+    <figure>
+      <div class="plate">
+        <img
+          src="img/anchors-half-violin.png"
+          alt="Half violin of penguin mass ribboned to a stacked bar"
+        />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Emulated anchors; the KDE, the cells
+        and the bar heights are computed by hand.
+      </figcaption>
+    </figure>
+  </div>
+
   <h3>Chord: sized slots with gaps, on the inner arc</h3>
   <div class="vs-head p1" style="margin-top: 14px">GoFish (anchors)</div>
   <div class="ex">
@@ -1361,6 +1451,370 @@ await PICCL.show(
     <code>along(part)</code> in <code>position</code> with the rows and flow in
     <code>slots</code>; and finally the <code>along</code> wrapper dropped, so
     <code>position</code> is just the part name (this version).
+  </p>
+
+  <h2 id="arrows">Arrows between boxes</h2>
+  <p class="prose">
+    Your question: how would perfect arrows work with anchors? Two ideas were on
+    the table. One anchors the arrow inside the node and cuts it off at the
+    outline. The other lets the link pick its anchor. Both turn out to be
+    needed, and they do different jobs. Neither needs a new kind of slot.
+  </p>
+
+  <h3>What <code>arrow</code> does today</h3>
+  <p class="prose">
+    <code>arrow(opts, [a, b])</code> reads only the two laid-out bounding boxes
+    and calls perfect-arrows' <code>getBoxToBoxArrow</code>. When the two boxes
+    are nearly in line (within a few degrees of a multiple of 45°), it draws
+    center to center and cuts the line at each padded box. That is already
+    "anchor at the center, then clip". Otherwise it bends the center-to-center
+    ray by the <code>bow</code>, cuts it at the padded box, and nudges each end
+    toward the middle of the side it hit. Each arrow is computed on its own,
+    against boxes only. So arrows into one node pile up on one point, and an
+    arrow out of an ellipse starts off its outline.
+  </p>
+
+  <h3>How other systems pick the end point</h3>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>System</th>
+          <th>Reference point</th>
+          <th>Cut at the outline</th>
+          <th>Choice among candidates</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://docs.jointjs.com/api/connectionPoints/">JointJS</a>
+          </td>
+          <td>
+            <code>anchor</code>: center, perpendicular, <code>midSide</code>
+            (the side facing the other end), top, left, ...
+          </td>
+          <td>
+            <code>connectionPoint</code>: <code>boundary</code> (the real
+            shape), <code>bbox</code>, <code>anchor</code> (no cut)
+          </td>
+          <td><code>midSide</code> picks the facing side per link</td>
+        </tr>
+        <tr>
+          <td>
+            <a href="https://graphviz.org/docs/attrs/headclip/">Graphviz</a>
+          </td>
+          <td>
+            center; ports and compass points <code>n</code>, <code>ne</code>,
+            ...
+          </td>
+          <td><code>headclip</code>, <code>tailclip</code>, on by default</td>
+          <td>
+            <code>_</code> means "a suitable outside side", chosen by layout
+          </td>
+        </tr>
+        <tr>
+          <td><a href="https://tikz.dev/tikz-shapes">TikZ</a></td>
+          <td>
+            <code>(a)</code> is the center; <code>a.east</code> is explicit
+          </td>
+          <td>
+            <code>(a) -- (b)</code> stops at the border toward the other point
+          </td>
+          <td>none</td>
+        </tr>
+        <tr>
+          <td><a href="https://js.cytoscape.org/">Cytoscape.js</a></td>
+          <td><code>source-endpoint</code>: a point or an angle</td>
+          <td><code>outside-to-node</code> (default)</td>
+          <td>none</td>
+        </tr>
+        <tr>
+          <td>
+            <a
+              href="https://www.drawio.com/docs/manual/connectors/connector-fixed-vs-floating/"
+              >draw.io</a
+            >
+          </td>
+          <td>fixed points, or floating</td>
+          <td>a perimeter function per shape</td>
+          <td>floating ends slide around the outline</td>
+        </tr>
+        <tr>
+          <td>
+            <a
+              href="https://docs.yworks.com/yfiles/doc/api/y/layout/PortCandidate.html"
+              >yFiles</a
+            >
+          </td>
+          <td><code>PortCandidate</code>: a side or a fixed point</td>
+          <td>—</td>
+          <td>a short list of candidates with costs, chosen by the layout</td>
+        </tr>
+        <tr>
+          <td>
+            <a
+              href="https://eclipse.dev/elk/reference/options/org-eclipse-elk-portConstraints.html"
+              >ELK</a
+            >
+          </td>
+          <td>ports with a side and an index</td>
+          <td>—</td>
+          <td>
+            <code>portConstraints</code>: the side is chosen first, then the
+            order within the side
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose">
+    JointJS keeps the two ideas apart, which is the model to copy. The
+    <strong>reference point</strong> is the anchor's job. The
+    <strong>cut</strong> is the connection's job.
+  </p>
+
+  <h3>Three ways, rendered</h3>
+  <div class="ex">
+    <figure>
+      <div class="plate">
+        <img
+          src="img/arrows-perfect-arrows.png"
+          alt="Node-link diagram with perfect arrows"
+        />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Today's <code>arrow</code>: ends
+        chosen against boxes, one arrow at a time. Arrows meet on one point at
+        the right of <code>parser</code> and the top of <code>errors</code>, and
+        the arrow out of <code>input</code> starts off the ellipse.
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="plate">
+        <img
+          src="img/arrows-center-clip.png"
+          alt="Node-link diagram, center anchors cut at the outline"
+        />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Center anchor, cut at the outline.
+        The <code>input</code> arrow now starts on the ellipse.
+      </figcaption>
+    </figure>
+  </div>
+  <div class="ex">
+    <figure>
+      <div class="plate">
+        <img
+          src="img/arrows-side-slots.png"
+          alt="Node-link diagram, ends spread on the chosen side"
+        />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Candidate sides. Each end takes the
+        side facing its far node, then the ends on each side are spread (red
+        dots are slots).
+      </figcaption>
+    </figure>
+    <figure>
+      <div class="plate">
+        <img
+          src="img/arrows-side-slots-left-right.png"
+          alt="Node-link diagram, only left and right sides allowed"
+        />
+      </div>
+      <figcaption>
+        <span class="tag ok">Rendered</span>Only left and right allowed. The
+        per-end rule loops the up and down edges around. Doing better is a joint
+        choice, which is a layout algorithm.
+      </figcaption>
+    </figure>
+  </div>
+  <p class="small">Emulated; stories in <code>Arrows.stories.tsx</code>.</p>
+
+  <h3>The spelling</h3>
+  <pre><code>// 1. center anchor, cut at the outline (perfect arrows is this with a bowed curve)
+rect({ w: 90, h: 36 })
+  .anchor({ name: "out", position: "center", slots: data(edges, { on: "from" }) })
+  .anchor({ name: "in", position: "center", slots: data(edges, { on: "to" }) })
+  .name("nodes");
+chart(edges).mark(
+  arrow({
+    from: "nodes.out",
+    to: "nodes.in",
+    curve: Curve.perfectArrows({ bow: 0.2 }),
+    clip: "outline", // the default
+  })
+);
+
+// 2. candidate sides: each end picks one, then the side's flow runs
+rect({ w: 90, h: 36 })
+  .anchor({
+    name: "out",
+    position: ["x-min", "x-max", "y-min", "y-max"],
+    slots: data(edges, { on: "from" }).flow(spread()),
+  })
+  .anchor({
+    name: "in",
+    position: ["x-min", "x-max", "y-min", "y-max"],
+    slots: data(edges, { on: "to" }).flow(spread()),
+  })
+  .name("nodes");</code></pre>
+  <ul class="prose">
+    <li>
+      <strong><code>clip</code> belongs to the connection</strong>, as JointJS's
+      <code>connectionPoint</code>: <code>"outline"</code> (default),
+      <code>"box"</code>, or <code>false</code>. The rule is "the end is where
+      the route first crosses the outline of the mark it refers to". A slot
+      already on the outline is unchanged by it, so ribbons need no special
+      case. It cuts the route, not the straight line, so it works for any
+      <code>curve</code>.
+    </li>
+    <li>
+      <strong><code>"center"</code> is a point anchor.</strong> It is the same
+      kind of name as <code>spread</code>'s existing
+      <code>anchor: "start" | "middle" | "end" | "baseline"</code>, which
+      already names a reference point on each child.
+    </li>
+    <li>
+      <strong>A list in <code>position</code> is a set of candidates.</strong>
+      Each end takes the candidate that faces its far node's center. This is
+      ELK's order. First, each end picks a side from placed node centers.
+      Second, the ends on each side are ordered and the slot flow runs. There is
+      no cycle as long as the first step reads only node centers, never the far
+      slot.
+    </li>
+    <li>
+      <strong>It is not the label chooser.</strong> Labels are placed greedily
+      against obstacles, one at a time. Here each end is ranked on its own, and
+      a side's slots can be laid out only after all its ends are known. What the
+      two share is the input: <code>position</code> as a ranked list of parts,
+      like the label proposal's list of sides.
+    </li>
+    <li>
+      <strong>What it does not do</strong>: choose sides jointly to avoid
+      crossings (yFiles, ELK). That is a graph layout, out of scope like sankey
+      node layout.
+    </li>
+  </ul>
+  <p class="prose small">
+    Found along the way: <code>line</code>'s routers (<code>linear</code>,
+    <code>bezier</code>, ...) draw center to center with no cut, while
+    <code>arrow</code> stops at its padded box. So <code>line</code> and
+    <code>arrow</code> disagree today, and the router signature (two boxes in, a
+    path out) cannot express a cut at a real outline. Also,
+    <code>text({ cx })</code> puts the start of the text at
+    <code>cx</code> while <code>cy</code> centers it, against the rule that text
+    is placed like a rect of the same size.
+  </p>
+
+  <h2 id="review">Review: what holds up, and what should change</h2>
+  <p class="prose">
+    A fresh pass over the anchor design for simplicity, generality and fit with
+    the rest of GoFish, now that it has two more tests it wasn't built for: the
+    half violin and arrows.
+  </p>
+
+  <h3>What holds up</h3>
+  <ul class="prose">
+    <li>
+      <strong>The core idea is small and general.</strong> A named part of a
+      mark gets a 1D flow, and connectors attach to its slots. It covered the
+      half violin by swapping <code>stack</code> for <code>partition</code>, and
+      arrows by adding a point position and a list of positions. Neither needed
+      a new kind of slot.
+    </li>
+    <li>
+      <strong>It fits words GoFish already has.</strong>
+      <code>spread({ anchor: "middle" })</code> already means "a named point on
+      each child". User anchors add to that set of names instead of clashing
+      with it. The flows are the ordinary operators.
+    </li>
+    <li>
+      <strong>The stacking is visible</strong>, on the node's edge, which was
+      the reason node-link allocation was set aside.
+    </li>
+  </ul>
+
+  <h3>What should change or be decided</h3>
+  <ol class="prose" style="max-width: 80ch">
+    <li>
+      <strong>Where the join lives.</strong> This is the biggest one. Today the
+      anchor states the join, with <code>data(links, { on: "source" })</code>.
+      That has four costs. The energy sankey names <code>links</code> three
+      times. The center arrow above declares two anchors only to state a join;
+      it has no layout to do. The ribbon finds its slot by row identity across
+      separate <code>chart(links)</code> calls, so a <code>derive</code> or
+      <code>filter</code> on one side breaks the match without a word. And the
+      comparison table counted proposal 2's nest join as a workaround but this
+      same join as clean. The other way: the join is stated once, on the
+      connection, with the <code>resolve</code> we already have, and an anchor's
+      flow runs over the rows that attach to it.
+      <pre style="margin-top: 8px"><code>rect({ w: 12, h: "value" })
+  .anchor({ name: "in", position: "x-min", slots: stack({ size: "value" }) })
+  .anchor({ name: "out", position: "x-max", slots: stack({ size: "value" }) })
+  .name("nodes");
+chart(links)
+  .flow(resolve(["source", "target"], { from: selectAll("nodes") }))
+  .mark(ribbon({ from: ["source", "out"], to: ["target", "in"] }));
+
+// a center arrow then needs no anchor at all
+chart(edges)
+  .flow(resolve(["from", "to"], { from: selectAll("nodes") }))
+  .mark(arrow({ from: "from", to: "to" }));</code></pre>
+      The stack stays on the node. What is lost is seeing, at the anchor, which
+      table its rows come from. <code>data()</code> (the mark's own rows, as in
+      school days and the half violin) and <code>data(ticks)</code>
+      for axes still make sense, because nothing else states those rows. I lean
+      toward this change, but it reverses the review's choice of
+      <code>data(table, { on })</code>, so it's your call.
+    </li>
+    <li>
+      <strong>One attachment rule for connectors.</strong> The chord uses
+      <code>ribbon({ ends: "groups.ends" })</code> over a group of two rows,
+      while sankeys use <code>from</code>/<code>to</code> over one row. One rule
+      covers both, and parallel sets too: a connector joins the slots that hold
+      its rows, in the order of the anchors it names. <code>from</code>/<code
+        >to</code
+      >
+      stays as the spelling of the common two-anchor case.
+    </li>
+    <li>
+      <strong>An anchor's position is any named geometry of the mark</strong>,
+      not only a side: a point (<code>"center"</code>, and <code>spread</code>'s
+      <code>start</code>/<code>middle</code>/<code>end</code>), a part
+      (<code>"x-max"</code>), or a list of parts (candidates). The definition on
+      this page ("a 1D space on the boundary") is too narrow for arrows. A
+      region (2D) is where <code>Place.interior</code> would go, but no example
+      needs it yet.
+    </li>
+    <li>
+      <strong>The slot flow gets the host's position scale</strong>, not only
+      its size scale. The half violin needs it, and so does the axis sketch.
+    </li>
+    <li>
+      <strong>State the order of evaluation once.</strong> Nodes are placed
+      first, then anchor flows run, then connectors draw. The default slot order
+      ("by the far node's position") and the side choice both read placed nodes,
+      so they depend on the connectors that attach. This is ELK's two-step
+      order, and it is fine, but it is the same fact as "a node's size can't
+      come from its anchors". One rule should explain both.
+    </li>
+    <li>
+      <strong>The comparison scores are mine.</strong> The same session wrote
+      proposal 5 and scored it at zero workarounds. Counted strictly, the
+      chord's <code>chordPair</code> key and the node value taken from data are
+      workarounds too. That puts anchors at about 2. It is still the lowest
+      count, but the margin is smaller than the table says.
+    </li>
+  </ol>
+  <p class="prose">
+    <strong>Common to every proposal</strong>, now seen three times (parallel
+    coordinates, the half violin's grams against shares, separate charts in a
+    <code>spread</code>): charts that measure different things need their own
+    scales. Today a <code>spread</code> of charts merges them without a warning.
+    The measure types work (#955) is the likely place to fix it.
   </p>
 
   <h2 id="compare">All the proposals, compared</h2>

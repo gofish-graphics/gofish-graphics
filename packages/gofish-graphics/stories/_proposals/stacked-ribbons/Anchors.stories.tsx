@@ -25,7 +25,9 @@ import {
   Color,
   Shape,
   enclose,
+  scatter,
 } from "../../../src/lib";
+import { penguins } from "../../../src/data/penguins";
 import { clock } from "../../../src/ast/coordinateTransforms/clock";
 // THROWAWAY prototype; not part of the public API.
 import { chordRibbon } from "../../../src/ast/graphicalOperators/_proposalChordRibbon";
@@ -745,5 +747,134 @@ export const SankeyTree: StoryObj = {
           )
           .mark(ribbon({ fill: "color", opacity: 0.6, curve: Curve.bezier() })),
       ]).render(c, { w: 420, h: 520, axes: false, legend: false } as any);
+    }),
+};
+
+// ===========================================================================
+// 8. Half violin to a stacked bar: ends of different kinds
+// ===========================================================================
+// Penguin body mass (g), the 342 penguins with a mass. The violin's flat side
+// is PARTITIONED by mass: a slot is a cell of the bin, at the cell's place on
+// the violin's own mass axis, as long as the cell is wide. The bar is
+// STACKED by count: a slot is as long as the cell's share of the penguins.
+// So a ribbon goes from a span of mass to a share of the penguins.
+// Target:
+//   // penguins: { mass, ... }    kde(field, bandwidth): a user derive -> { mass, density }
+//   const massBins = field("mass").bin(Bin.thresholds([3000, 4000, 5000, 6000]));
+//   layer([
+//     spread({ dir: "x", spacing: 160 }, [
+//       chart(penguins)
+//         .flow(derive(kde("mass", 200)), scatter({ by: "mass", y: "mass" }))
+//         .mark(
+//           ribbon({ w: "density", dir: "y", align: "end", fill: "#c4c4c4" })
+//             .anchor({ name: "out", position: "x-max",
+//                       slots: data(penguins).flow(partition({ by: massBins })) })
+//             .name("violin")
+//         ),
+//       chart(penguins).mark(
+//         rect({ w: 14, h: field("mass").count() })
+//           .anchor({ name: "in", position: "x-min",
+//                     slots: data().flow(stack({ by: massBins, size: field("mass").count() })) })
+//           .name("bar")
+//       ),
+//     ]),
+//     chart(penguins)
+//       .flow(group({ by: massBins }))
+//       .mark(ribbon({ from: "violin.out", to: "bar.in", fill: massBins, opacity: 0.55 })),
+//   ])
+// EMULATION (anchors.ts is not used: these slots are not a stack):
+// - The violin and its `out` slots are ONE chart of rects (density samples
+//   with h 0, slots with w 0) so they share the mass scale; the violin is a
+//   ribbon through the samples. Two charts in one layer did not share it.
+// - The y scale includes 0, so positions are mass above the minimum.
+// - scatter centers a mark on its y, so a slot's y is its cell's middle.
+// - The violin grows left by a negative `w` (no `align` on ribbon today).
+// - The bar's sizes are written in mass units (share x the violin's span),
+//   because the bar's chart shares the violin's y scale in the spread.
+// - The bar's segments double as its `in` slots (as the FrankenSankey
+//   countries do); the KDE is computed by hand, with cells and edges too.
+const MASS = "Body Mass (g)";
+const massRows = penguins.filter((p) => p[MASS] !== null).map((p) => ({ mass: p[MASS] as number }));
+// Bin.thresholds([3000, 4000, 5000, 6000]) over the domain [2700, 6300]: the
+// domain's ends are the outer edges. (Bin.thresholds(5) would give round
+// outer edges 2000 and 7000, past the violin's ends.)
+const MASS_EDGES = [2700, 3000, 4000, 5000, 6000, 6300];
+const bucketOf = (m: number) => {
+  for (let i = 0; i < MASS_EDGES.length - 2; i++) if (m < MASS_EDGES[i + 1]) return i;
+  return MASS_EDGES.length - 2;
+};
+const BUCKETS = MASS_EDGES.slice(0, -1).map((lo, i) => `${lo}–${MASS_EDGES[i + 1]}`);
+const gaussianKde = (xs: number[], bw: number) => (x: number) =>
+  xs.reduce((s, v) => s + Math.exp(-0.5 * ((x - v) / bw) ** 2), 0) / (xs.length * bw * Math.sqrt(2 * Math.PI));
+export const HalfViolin: StoryObj = {
+  name: "Half Violin",
+  render: () =>
+    show((c) => {
+      const f = gaussianKde(
+        massRows.map((r) => r.mass),
+        200
+      );
+      const lo0 = MASS_EDGES[0];
+      // The violin's density samples, cut at the bin edges so each cell is
+      // its own band. `y` is mass above the minimum (EMULATION: the y scale
+      // starts at 0). `w` is negative so the violin grows to the left of its
+      // flat side.
+      const samples = BUCKETS.flatMap((bucket, i) => {
+        const lo = MASS_EDGES[i];
+        const hi = MASS_EDGES[i + 1];
+        const n = Math.max(4, Math.round((hi - lo) / 50));
+        return Array.from({ length: n + 1 }, (_, k) => {
+          const mass = lo + ((hi - lo) * k) / n;
+          return { kind: "sample", key: `${bucket}/${k}`, bucket, y: mass - lo0, w: -f(mass) * 1e6, h: 0 };
+        });
+      });
+      // The violin's `out` slots: one per cell of the bin, laid at the cell's
+      // own place on the mass axis, with the cell's extent as its length.
+      const out = BUCKETS.map((bucket, i) => ({
+        kind: "slot",
+        key: bucket,
+        bucket,
+        y: (MASS_EDGES[i] + MASS_EDGES[i + 1]) / 2 - lo0, // scatter centers a mark on y
+        w: 0,
+        h: MASS_EDGES[i + 1] - MASS_EDGES[i],
+        pair: bucket,
+        end: 0,
+      }));
+      // The bar's `in` slots: stacked by cell, sized by the cell's share of
+      // the penguins. EMULATION: the share is written in mass units (share x
+      // the violin's extent) because both charts share one y scale.
+      const span = MASS_EDGES[MASS_EDGES.length - 1] - lo0;
+      const bar = BUCKETS.map((bucket, i) => {
+        const n = massRows.filter((r) => bucketOf(r.mass) === i).length;
+        return { kind: "slot", bucket, share: n / massRows.length, size: (n / massRows.length) * span, pair: bucket, end: 1 };
+      });
+      return layer([
+        spread({ dir: "x", spacing: 160, alignment: "start" }, [
+          // The violin and its slots are ONE chart, so they share the y scale.
+          chart([...samples, ...out], { axes: false })
+            .flow(scatter({ by: "key", y: "y", h: 300 }))
+            .mark(rect({ w: "w", h: "h", fill: "bucket" }).name("slots")),
+          chart(bar, { axes: false })
+            .flow(stack({ by: field("bucket").sort(BUCKETS), dir: "y", h: 300 }))
+            .mark(rect({ w: 14, h: "size", fill: "bucket" }).name("slots")),
+        ]),
+        chart(selectAll("slots"))
+          .flow(filter((r: any) => project(r, "kind") === "sample"))
+          .mark(ribbon({ dir: "y", fill: "#c4c4c4", opacity: 1 } as any)),
+        chart(selectAll("slots"))
+          .flow(...pairSlots())
+          .mark(ribbon({ fill: "bucket", opacity: 0.55, curve: Curve.bezier() })),
+        // Labels to the right of the bar: the cell and its share.
+        chart(selectAll("slots"))
+          .flow(filter((r: any) => project(r, "end") === 1))
+          .mark(((refs: any[]) =>
+            layer(
+              refs.map((r: any) => {
+                const d = r.datum[0];
+                const t = text({ text: `${d.bucket} g   ${Math.round(d.share * 100)}%`, fontSize: 10, fill: "#333" });
+                return spread({ dir: "x", spacing: 6, alignment: "middle" }, [r, t]);
+              })
+            )) as any),
+      ]).render(c, { w: 420, h: 320, axes: false, legend: false } as any);
     }),
 };
