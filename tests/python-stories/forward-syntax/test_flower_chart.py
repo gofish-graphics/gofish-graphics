@@ -25,7 +25,7 @@ def story_default():
     # One plant per lake, planted at the lake's x location: a thin green stem
     # as tall as the lake's total catch, with the flower centered on its top.
     return (
-        chart(STEM_DATA, axes=False)
+        chart(STEM_DATA, axes=False, w=400, h=400)
         .flow(scatter(by="lake", x="x"))
         .mark(
             layer([
@@ -35,5 +35,5 @@ def story_default():
                 Constraint.align([stem, flower], x="middle", y=["end", "middle"]),
             ])
         ),
-        {"w": 400, "h": 400},
+        {},
     )

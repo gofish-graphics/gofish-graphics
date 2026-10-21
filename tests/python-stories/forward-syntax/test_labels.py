@@ -203,7 +203,7 @@ def story_all_positions():
     ]
     return (
         spread(rows, dir="y", spacing=28, alignment="start"),
-        {"w": 720, "h": 1200},
+        {},
     )
 
 
@@ -213,7 +213,7 @@ def story_all_positions():
 
 def story_label_on_spread():
     return (
-        chart(SEAFOOD, axes=False)
+        chart(SEAFOOD, axes=False, w=500, h=300)
         .flow(
             spread(by="lake", dir="x", spacing=50).label(
                 "lake", position="outset-top-start", font_size=13, rotate=60
@@ -224,7 +224,7 @@ def story_label_on_spread():
             .flow(stack(by="species", dir="x"))
             .mark(rect(h="count", fill="species"))
         ),
-        {"w": 500, "h": 300},
+        {},
     )
 
 
@@ -276,7 +276,7 @@ def story_rotated():
             spacing=40,
             alignment="start",
         ),
-        {"w": 500, "h": 800},
+        {},
     )
 
 
@@ -427,5 +427,5 @@ def story_position_showcase():
         )
     return (
         chart([SHOWCASE_LABELS], axes=False).mark(mark),
-        {"w": 660, "h": 280},
+        {},
     )

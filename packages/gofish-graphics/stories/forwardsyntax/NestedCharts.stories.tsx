@@ -41,7 +41,7 @@ export const ConnectedDotsPerGroup: StoryObj<Args> = {
   args: { w: 420, h: 220 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(sales)
+    chart(sales, { w: args.w, h: args.h })
       .flow(spread({ by: "store", dir: "x", spacing: 32 }))
       .mark(
         chart({ axes: false })
@@ -49,7 +49,7 @@ export const ConnectedDotsPerGroup: StoryObj<Args> = {
           .mark(circle({ r: 4, fill: "#08519c" }))
           .layer(line({ stroke: "#6baed6", strokeWidth: 2 }))
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -89,7 +89,7 @@ export const DailyHighsOverReadings: StoryObj<Args> = {
   args: { w: 560, h: 220 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(readings)
+    chart(readings, { w: args.w, h: args.h })
       .flow(scatter({ by: "time", x: "time", y: "temp" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
       .layer(
@@ -97,7 +97,7 @@ export const DailyHighsOverReadings: StoryObj<Args> = {
           .flow(scatter({ by: "time", x: "time", y: "temp" }))
           .mark(circle({ r: 4, fill: "firebrick" }))
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -110,7 +110,7 @@ export const CaptionedBarsPerGroup: StoryObj<Args> = {
   args: { w: 420, h: 220 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(sales, { axes: false })
+    chart(sales, { axes: false, w: args.w, h: args.h })
       .flow(spread({ by: "store", dir: "x", spacing: 32, alignment: "end" }))
       .mark(
         spread({ dir: "y", spacing: 8, alignment: "middle" }, [
@@ -120,7 +120,7 @@ export const CaptionedBarsPerGroup: StoryObj<Args> = {
           text({ text: "store", fontSize: 12 }),
         ])
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };

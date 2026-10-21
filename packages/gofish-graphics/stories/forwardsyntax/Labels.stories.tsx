@@ -232,10 +232,9 @@ const captioned = (caption: string, body: any) =>
     body,
   ]);
 
-export const AllPositions: StoryObj<Args> = {
+export const AllPositions: StoryObj = {
   name: "All positions – comparison",
-  args: { w: 720, h: 1200 },
-  render: (args) => {
+  render: () => {
     const container = initializeContainer();
     const cell = (position: LabelPosition) =>
       captioned(
@@ -256,8 +255,7 @@ export const AllPositions: StoryObj<Args> = {
       ])
     );
     spread({ dir: "y", spacing: 28, alignment: "start" }, rows).render(
-      container,
-      { w: args.w, h: args.h }
+      container
     );
     return container;
   },
@@ -386,10 +384,9 @@ export const HeatmapWithLabels: StoryObj<Args> = {
 // ─── Rotated labels ────────────────────────────────────────────────────────────
 // Labels rotate clockwise for positive values, pivoting at the label's center.
 
-export const Rotated: StoryObj<Args> = {
+export const Rotated: StoryObj = {
   name: "Rotate: diagonal labels",
-  args: { w: 500, h: 800 },
-  render: (args) => {
+  render: () => {
     const container = initializeContainer();
     spread(
       { dir: "y", spacing: 40, alignment: "start" },
@@ -406,7 +403,7 @@ export const Rotated: StoryObj<Args> = {
             )
         )
       )
-    ).render(container, { w: args.w, h: args.h });
+    ).render(container);
     return container;
   },
 };
@@ -539,7 +536,7 @@ export const PositionShowcase: StoryObj = {
     );
     chart([SHOWCASE_LABELS], { axes: false })
       .mark(mark)
-      .render(container, { w: 660, h: 280 });
+      .render(container);
     return container;
   },
 };
