@@ -19,19 +19,6 @@
 # bridge. The other TextMarks exports are ported.
 packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx::PolarText
 
-# pack and separate: NestedByCount and MixedRadii compute each pixel radius in
-# a JS function mark (pack cannot yet scale a data-driven size, #967) that
-# builds a mark and applies it to its own rows: `(d) => circle({ r: ...,
-# fill: "species" })(d)`. A Python mark function crosses the bridge (#782),
-# but a Python mark is not callable, so it cannot apply the mark to `d`. The
-# mark it returns is resolved with no rows, as a JS mark function's return
-# value is, so the species `fill` stays a literal color name instead of
-# binding the color scale (and the legend). Ports: #1045 (MixedRadii); NestedByCount
-# is related to #967. Forward Syntax/Pack::Nested, Low Level Syntax/Pack and
-# Forward Syntax/Separate::PenguinMass and ::OneSided are ported.
-packages/gofish-graphics/stories/forwardsyntax/Pack.stories.tsx::NestedByCount
-packages/gofish-graphics/stories/forwardsyntax/Separate.stories.tsx::MixedRadii
-
 # Docs regression test
 packages/gofish-graphics/stories/DocsContextRegression.stories.tsx
 

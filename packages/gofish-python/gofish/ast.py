@@ -224,7 +224,7 @@ def _as_mark(mark: Any) -> Any:
     writes there. A callable `(data) -> mark | chart` is arbitrary Python
     code, so it becomes a `_MarkFn` that JS calls back per partition.
     """
-    if not isinstance(mark, (Mark, _MarkFn, ChartBuilder, LayerBuilder)) and callable(mark):
+    if _is_function(mark):
         return _MarkFn(mark)
     return mark
 
@@ -245,6 +245,35 @@ class _PendingAccessor:
     def __init__(self, fn: Callable):
         self.fn = fn
         self.lambda_id = str(uuid.uuid4())
+
+
+def _is_function(v: Any) -> bool:
+    """A Python function the user wrote: callable, and not a GoFish value. A
+    mark is callable too (``mark(d)`` applies it, as in JS), but it is a mark,
+    not a function to call back."""
+    return callable(v) and not isinstance(v, _Root)
+
+
+def _holds_node(v: Any) -> bool:
+    """Whether ``v`` (a mark's input, ``mark(d)``) is or holds, at any depth
+    of its lists and dicts, a mark, a ref or a chart: a node, not data."""
+    if isinstance(v, _Root):
+        return True
+    if isinstance(v, dict):
+        return any(_holds_node(x) for x in v.values())
+    if isinstance(v, (list, tuple)):
+        return any(_holds_node(x) for x in v)
+    return False
+
+
+def _not_applied(message: str) -> Callable[..., Any]:
+    """The ``__call__`` of a mark position that is not a mark function, so
+    it has no input to apply to: it raises ``message``."""
+
+    def __call__(self: Any, d: Any, key: Any = None) -> Any:
+        raise TypeError(message)
+
+    return __call__
 
 
 def _is_tagged(v: Any) -> bool:
@@ -269,7 +298,7 @@ def _channel(v: Any) -> Any:
         lambda x: x
         if _is_tagged(x)
         else _PendingAccessor(x)
-        if callable(x) and not isinstance(x, _PendingAccessor)
+        if _is_function(x) and not isinstance(x, _PendingAccessor)
         else KEEP,
     )
 
@@ -294,7 +323,7 @@ def _scan_options(construct: str, options: Dict[str, Any]) -> Dict[str, List["_P
                 return x
             if _is_tagged(x):
                 return x
-            if callable(x):
+            if _is_function(x):
                 raise TypeError(
                     f"{construct}: {key} holds a function, but only channel "
                     f"options take a function. Pass a field name or a "
@@ -483,10 +512,9 @@ class Mark(_Root):
         # `create_name(...)` don't leak to outer scope. Set by the
         # `@mark` decorator.
         self._is_scope: bool = False
-        # When set, the harness invokes the JS-side mark with this datum
-        # and key — mirrors the JS `rect({...})(d, key)` pattern used by
-        # `treemap([rect(...)(d1, k1), rect(...)(d2, k2), ...], **opts)`.
-        # Set via `.bind_data(d, key)`.
+        # When set, this mark is applied to this input and key, as the JS
+        # `rect({...})(d, key)` is: the mark position holds the node it
+        # builds from `d`. Set by calling the mark, `mark(d, key)`.
         self._datum: Any = None
         self._datum_set: bool = False
         self._key: Optional[str] = None
@@ -507,19 +535,31 @@ class Mark(_Root):
         target._translate = self._translate
         return target
 
-    def bind_data(self, datum: Any, key: Optional[str] = None) -> "Mark":
-        """Bind a datum (and optional key) to this Mark for the treemap
-        combinator pattern.
+    def __call__(self, d: Any, key: Optional[Union[str, int]] = None) -> "Mark":
+        """Apply this mark to its input ``d`` (and ``key``), as a JS mark is
+        applied: ``circle({...})(d, key)``. The result is a mark whose
+        position holds the node this mark builds from ``d``, whatever rows
+        the position offers. A mark function applies the mark it builds to
+        its own rows, ``lambda d: circle(r=..., fill="species")(d)``, so its
+        channels read ``d`` (a field name binds its scale); a combinator child
+        can be a mark applied to a row of its own,
+        ``rect(fill=datum(genre))({"gross": gross}, genre)``.
 
-        Mirrors JS storybook spelling `rect({...})(d, d.key)` — the mark
-        factory is invoked with `(d, key)` to produce a pre-resolved node
-        with `.datum = d` set. The harness emits the equivalent call.
+        ``d`` is data: rows, a row, or any value JSON holds. A mark or a ref
+        (one a relational mark function was handed) is a node, not data, so
+        it raises.
         """
+        if _holds_node(d):
+            raise TypeError(
+                f"{self.mark_type}(...)(d): d holds a mark or a ref, which is a "
+                "node, not data. Apply a mark to rows; place a node as a "
+                "combinator child instead."
+            )
         new_mark = type(self)(
             self.mark_type, _children=self._children, **self.kwargs
         )
         self._copy_meta(new_mark)
-        new_mark._datum = datum
+        new_mark._datum = d
         new_mark._datum_set = True
         new_mark._key = key
         return new_mark
@@ -668,11 +708,11 @@ class Mark(_Root):
         # `node.scope()` — matches JS createMark's behavior.
         if self._is_scope:
             d["__scope"] = True
-        # `bind_data()` pre-binds a datum + key for the
-        # `rect({...})(d, key)` treemap-combinator invocation pattern.
+        # `mark(d, key)`: the mark applied to its input (see `__call__`).
         if self._datum_set:
             d["__datum"] = self._datum
-            d["__key"] = self._key
+            if self._key is not None:
+                d["__key"] = self._key
         # `.zOrder(n)` — applied post-construction on the JS side.
         if self._z_order is not None:
             d["zOrder"] = self._z_order
@@ -756,6 +796,11 @@ class _InputRef(Mark):
     also fail here: `type(self)(self.mark_type, ...)` doesn't match
     `_InputRef.__init__`'s `(index, datum)` signature).
     """
+
+    __call__ = _not_applied(
+        "A ref a mark function is handed is a node, not a mark, so it cannot "
+        "be applied to rows. Place it as a combinator child."
+    )
 
     def __init__(self, index: int, datum: Any):
         super().__init__("ref")
@@ -847,6 +892,11 @@ class RefSentinel(Mark):
     clause (`arrow([a, b])`) it serializes as `ref("a")`. JS resolves the
     name at layout, from the relating layer.
     """
+
+    __call__ = _not_applied(
+        "A .relate() operand names a node, not a mark, so it cannot be "
+        "applied to rows."
+    )
 
     def __init__(self, ref_name: str):
         super().__init__("ref", selection=ref_name)
@@ -1674,6 +1724,11 @@ class _RefProxy(Mark):
     `ref(token).variables[i].value` accumulates a selection array that
     the harness/widget reconstructs by calling JS `ref([token, "variables", i, "value"])`.
     """
+
+    __call__ = _not_applied(
+        "ref(...) names a node, not a mark, as in JS, so it cannot be applied "
+        "to rows."
+    )
 
     def __init__(self, selection: list, multiplicity: Optional[str] = None):
         super().__init__("ref", selection=list(selection))
@@ -3222,6 +3277,11 @@ class CutMark(Mark):
     `to_dict()` serializes the source mark and drops `None` options.
     """
 
+    __call__ = _not_applied(
+        "cut(...) cannot be applied to rows: as a combinator child it is its "
+        "slices, which are nodes, not a mark."
+    )
+
     def children(self) -> List[Any]:
         """The mark position a cut holds: its source."""
         return [self.kwargs["source"]]
@@ -3296,6 +3356,11 @@ def cut(
 
 class OffsetMark(Mark):
     """The `{type:"offset", ...}` IR node — a child shifted by (x, y) pixels."""
+
+    __call__ = _not_applied(
+        "offset(...) is a node, not a mark, as in JS, so it cannot be applied "
+        "to rows. Apply its child instead: offset(rect(...)(d), x=...)."
+    )
 
     def children(self) -> List[Any]:
         """The mark position an offset holds: its child."""

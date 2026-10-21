@@ -178,6 +178,35 @@ the lake's total catch. Embedding `d[0]` in the returned `spread([...])`
 places the label as a sibling of the bar it labels, using the bar's own
 placed position and size — no separate positioning logic needed.
 
+## Applying a mark to rows
+
+A mark is callable. `mark(d, key=None)` applies it to the input `d`, as a JS
+mark is applied (`circle({ ... })(d)`), and returns a mark that draws the node
+the mark builds from `d`. A callback can apply the mark it builds to its own
+rows, so a field name in a channel reads those rows and binds its scale. Here
+each circle's radius comes from its row's count, and its color from the
+species color scale:
+
+```python
+import math
+
+from gofish import chart, circle, pack
+
+chart(seafood).flow(pack(by="lake"), pack()).mark(
+    lambda d: circle(r=3 * math.sqrt(d[0]["count"]), fill="species")(d)
+)
+```
+
+Without `(d)`, the mark a callback returns is drawn with no rows, as in JS, so
+`fill="species"` is the literal color name.
+
+`d` is data: rows, a row, or any value JSON holds. It raises `TypeError` when
+`d` holds a mark or a ref, since those are nodes, not data. A ref, `cut(...)`
+and `offset(...)` are nodes rather than marks, so calling one raises too.
+
+The input crosses to JS as the mark's `__datum` field (and `key` as
+`__key`), and JS applies the rebuilt mark to it.
+
 ## Labeling a mark
 
 Call `.label(accessor, position=..., font_size=..., color=..., offset=..., rotate=..., font_family=..., font_weight=..., font_style=...)`

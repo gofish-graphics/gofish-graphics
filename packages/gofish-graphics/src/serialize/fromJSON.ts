@@ -437,6 +437,21 @@ function serializeMarkFnInput(items: any[]): {
  *  Python mark-fn embed the ref it was handed directly in its returned
  *  layout (mirrors JS `spread({...}, [d[0], text(...)])`). */
 export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
+  const spec = markSpec as any;
+  const mark = buildMark(markSpec, ctx);
+  if (!("__datum" in spec)) return mark;
+  // A mark applied to its input, the JS `mark(d, key)` (Python
+  // `mark(d, key)`, which writes `__datum` and `__key`): what it holds
+  // is the node the mark builds from `d`, whatever rows the position it
+  // sits in offers.
+  const datum = spec.__datum;
+  const key = spec.__key ?? undefined;
+  return (async (_data: any, _key: any, layerContext: any) =>
+    (mark as any)(datum, key, layerContext)) as Mark<any>;
+}
+
+/** {@link mapMark}, before a mark is applied to its input. */
+function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
   const { bridge, resolveToken, inputRefs } = ctx;
   const spec = markSpec as any;
   const applyTranslate = <T>(mark: T): T =>
@@ -667,13 +682,6 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
     typeof (mark as any).zOrder === "function"
   ) {
     mark = (mark as any).zOrder(spec.zOrder);
-  }
-  if ("__datum" in spec) {
-    const boundDatum = spec.__datum;
-    const boundKey = spec.__key ?? undefined;
-    const inner = mark as any;
-    mark = (async (_data: any, _key: any, layerContext: any) =>
-      inner(boundDatum, boundKey, layerContext)) as Mark<any>;
   }
   return mark;
 }

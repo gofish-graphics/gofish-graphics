@@ -309,6 +309,21 @@ how a per-slice label overlay (`Cut.stories.tsx::ImageCutWithLabels`) can
 `.relate(...)` against a ref it only received through the bridge. Each call asks Python again and builds
 its own mark, so an `__inputRef` always resolves against that call's own refs.
 
+**A mark applied to its input.** A JS mark is a function, and a mark function
+often applies the mark it builds to its own rows,
+`(d) => circle({ r: ..., fill: "species" })(d)`, so a field name in a channel
+reads `d` and binds its scale. A Python `Mark` is callable the same way:
+`mark(d, key)` returns a copy of the mark that carries its input, and the IR
+writes it as the mark's `__datum` (and `__key`) bridge fields, which
+`MARK_BASE_FIELDS` declares for leaf and combinator marks. `mapMark` applies
+them once, after it builds the mark of any kind: the position holds a mark that
+ignores the rows it is offered and calls the built mark with `__datum` and
+`__key`, which is what the JS expression `mark(d, key)` puts there. The same
+fields carry a treemap combinator's children, each applied to its own row.
+The input is data that JSON holds; Python raises when it holds a mark or a
+ref, and a ref, a `cut` and an `offset` (nodes, not mark functions) raise
+when called.
+
 The plain leaf-form `ref` node carries names the same way: `RefMarkIR`
 declares an optional `name`, emitted by Python's `_RefProxy.to_dict(payload)` when
 the ref was renamed and re-applied by the deserializer's `mapMark` via the
@@ -1032,12 +1047,12 @@ in the design improvements:
 The Python wrapper emits a few sentinels that are not part of the
 public schema — they extend it for the round-trip across anywidget:
 
-| Sentinel            | Meaning                                                               |
-| ------------------- | --------------------------------------------------------------------- |
-| `{__gofish_lambda}` | A Python callable; the JS deserializer wires it to an async accessor. |
-| `{__gofish_token}`  | A hygienic-name token; resolved via a per-render token map.           |
-| `__scope: true`     | The `@mark` decorator's scope-wrap signal.                            |
-| `__datum` / `__key` | `bind_data()` pre-binding for Treemap-style invocation.               |
+| Sentinel            | Meaning                                                                 |
+| ------------------- | ----------------------------------------------------------------------- |
+| `{__gofish_lambda}` | A Python callable; the JS deserializer wires it to an async accessor.   |
+| `{__gofish_token}`  | A hygienic-name token; resolved via a per-render token map.             |
+| `__scope: true`     | The `@mark` decorator's scope-wrap signal.                              |
+| `__datum` / `__key` | A mark applied to its input, Python `mark(d, key)` (JS `mark(d, key)`). |
 
 A `{__gofish_lambda}` sentinel may sit at any depth of a channel option, not
 only as a top-level channel: for each option whose descriptor type can hold

@@ -325,11 +325,11 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
   },
   __datum: {
     type: t.any,
-    doc: "Python bind_data(): the datum the mark is pre-bound to.",
+    doc: "Python `mark(d, key)`, the JS `mark(d, key)`: the input the mark is applied to. The mark position holds the node the mark builds from it.",
   },
   __key: {
     type: t.union(t.string, t.number),
-    doc: "Python bind_data(): the key the mark is pre-bound to.",
+    doc: "Python `mark(d, key)`: the key the mark is applied with.",
   },
 });
 

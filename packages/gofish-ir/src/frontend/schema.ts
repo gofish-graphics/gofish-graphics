@@ -724,9 +724,9 @@ export type CombinatorMarkType =
 export interface MarkBridgeFieldsIR {
   /** The mark is a component (the `@mark` decorator's output). */
   __scope?: true;
-  /** `bind_data()`: the datum the mark is pre-bound to. */
+  /** `mark(d, key)`: the input `d` the mark is applied to. */
   __datum?: unknown;
-  /** `bind_data()`: the key the mark is pre-bound to. */
+  /** `mark(d, key)`: the key the mark is applied with. */
   __key?: string | number;
 }
 

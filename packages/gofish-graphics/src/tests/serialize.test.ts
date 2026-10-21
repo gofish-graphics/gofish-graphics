@@ -1725,6 +1725,90 @@ async function main() {
     );
   }
 
+  console.log("\n# A mark applied to its input (`__datum` / `__key`)");
+  {
+    // A mark function that applies the mark it builds to its own rows,
+    // `(d) => circle({...})(d)`: the reply's root is the mark with the rows
+    // as `__datum`, and it draws what the JS mark function draws (the
+    // field-name fill binds the color scale).
+    const rows = [
+      { s: "a", v: 1 },
+      { s: "b", v: 2 },
+      { s: "c", v: 3 },
+    ];
+    const native = await chart(rows, { axes: false })
+      .flow(spread({ by: "s", dir: "x" }))
+      .mark((d: any[]) => circle({ r: 2 + d[0].v, fill: "s" })(d))
+      .toDisplayList({ w: 200, h: 100 });
+    const bridge = {
+      async call(_id: string, d: any[]) {
+        return {
+          root: { type: "circle", r: 2 + d[0].v, fill: "s", __datum: d },
+          tables: {},
+        };
+      },
+    };
+    const root = {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      options: { axes: false },
+      operators: [{ type: "spread", by: "s", dir: "x" }],
+      mark: { type: "mark-fn", lambdaId: "m" },
+    };
+    const viaIR = await Serialize.buildIR(
+      irDoc(root, { t0: rows }),
+      bridge
+    ).toDisplayList({ w: 200, h: 100 });
+    // Node ids count up across renders, so items compare without them.
+    const items = (dl: any) =>
+      JSON.stringify(dl.items.map(({ id: _id, ...it }: any) => it));
+    const fills = new Set(
+      viaIR.items
+        .filter((it: any) => it.kind === "ellipse")
+        .map((it: any) => it.style.fill)
+    );
+    check(
+      "a mark applied to a mark function's rows draws as the JS one does",
+      fills.size === 3 &&
+        items(viaIR) === items(native),
+      JSON.stringify({ fills: [...fills] })
+    );
+
+    // A combinator applied to its own rows and a key, in a position that
+    // offers other rows, draws from its own, as the JS one does.
+    const own = [{ s: "a", v: 30 }];
+    const other = [{ s: "z", v: 5 }];
+    const nativeLayer = await chart(other, { axes: false })
+      .mark(layer([rect({ w: 10, h: "v", fill: "s" })])(own, "a"))
+      .toDisplayList({ w: 100, h: 100 });
+    const applied = irDoc(
+      {
+        type: "chart",
+        data: { type: "table", id: "t0" },
+        options: { axes: false },
+        mark: {
+          type: "layer",
+          __combinator: true,
+          children: [{ type: "rect", w: 10, h: "v", fill: "s" }],
+          __datum: own,
+          __key: "a",
+        },
+      },
+      { t0: other }
+    );
+    validateDoc(applied, "an applied combinator");
+    const appliedDL = await Serialize.buildIR(applied).toDisplayList({
+      w: 100,
+      h: 100,
+    });
+    check(
+      "an applied combinator draws from its own input, as the JS one does",
+      items(appliedDL) === items(nativeLayer) &&
+        items(appliedDL).includes('"text":"a"'),
+      items(appliedDL).slice(0, 300)
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exit(1);

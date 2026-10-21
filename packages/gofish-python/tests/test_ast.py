@@ -1219,3 +1219,60 @@ class TestTime:
         assert back.schema.field("d").type == pa.date32()
         assert back.column("t").to_pylist() == table.column("t").to_pylist()
         assert back.column("d").to_pylist() == [datetime.date(2024, 3, 1)]
+
+
+
+class TestAppliedMark:
+    """`mark(d, key)` applies a mark to its input, as JS `mark(d, key)` does:
+    the IR carries the input as `__datum` (and the key as `__key`)."""
+
+    ROWS = [{"species": "a", "count": 4}, {"species": "b", "count": 9}]
+
+    def test_leaf_mark_applied_to_rows(self):
+        node = ir(circle(r=3, fill="species")(self.ROWS))
+        assert node == {
+            "type": "circle",
+            "r": 3,
+            "fill": "species",
+            "__datum": self.ROWS,
+        }
+
+    def test_combinator_applied_with_a_key(self):
+        node = ir(layer([rect(w=4)])({"gross": 2}, "drama"))
+        assert node["__combinator"] is True
+        assert node["__datum"] == {"gross": 2}
+        assert node["__key"] == "drama"
+
+    def test_applying_keeps_the_mark_unchanged(self):
+        mark = circle(r=3)
+        mark(self.ROWS)
+        assert "__datum" not in ir(mark)
+
+    def test_mark_function_applies_to_its_rows(self):
+        root = chart(self.ROWS).mark(
+            lambda d: circle(r=d[0]["count"], fill="species")(d)
+        )
+        _, callbacks = ir_payload(root)
+        (lambda_id,) = callbacks
+        reply_root, _ = callbacks[lambda_id](self.ROWS, "s")
+        assert reply_root == {
+            "type": "circle",
+            "r": 4,
+            "fill": "species",
+            "__datum": self.ROWS,
+        }
+
+    def test_a_mark_in_a_mark_position_stays_a_mark(self):
+        """A mark is callable, but it is a mark, not a callback: it stays a
+        mark position rather than becoming a mark function."""
+        node = ir(layer([circle(r=3)]))
+        assert node["children"] == [{"type": "circle", "r": 3}]
+        assert ir(chart(self.ROWS).mark(circle(r=3)))["mark"]["type"] == "circle"
+
+    def test_input_holding_a_node_raises(self):
+        with pytest.raises(TypeError, match="node, not data"):
+            circle(r=3)([rect(w=1)])
+
+    def test_ref_is_not_applied(self):
+        with pytest.raises(TypeError, match="cannot be applied"):
+            ref("a")(self.ROWS)
