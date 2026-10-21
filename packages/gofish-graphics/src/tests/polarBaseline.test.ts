@@ -38,18 +38,23 @@ async function wedgeSpans(builder: any): Promise<[number, number][]> {
   const [cx, cy] = [...shared][0].split(",").map(Number);
   return paths.map((ps: Pt[]) => {
     const rim = ps.filter(([x, y]) => Math.hypot(x - cx, y - cy) > 1);
-    // Unwrap the angles along the path so a wedge across ±π stays contiguous.
-    let prev: number | undefined;
-    const angles = rim.map(([x, y]) => {
-      let a = Math.atan2(-(y - cy), x - cx);
-      if (prev !== undefined) {
-        while (a - prev > Math.PI) a -= 2 * Math.PI;
-        while (prev - a > Math.PI) a += 2 * Math.PI;
+    // The wedge is the arc that covers its rim points: the circle minus the
+    // largest gap between neighboring angles. This does not depend on the
+    // order the path visits the points, so a path that goes out and back
+    // through the center (a jump of exactly π) cannot flip a wedge's sides.
+    const TAU = 2 * Math.PI;
+    const angles = rim
+      .map(([x, y]) => (Math.atan2(-(y - cy), x - cx) + TAU) % TAU)
+      .sort((a, b) => a - b);
+    let gapEnd = angles[0];
+    let gap = angles[0] + TAU - angles[angles.length - 1];
+    for (let i = 1; i < angles.length; i++) {
+      if (angles[i] - angles[i - 1] > gap) {
+        gap = angles[i] - angles[i - 1];
+        gapEnd = angles[i];
       }
-      prev = a;
-      return a;
-    });
-    return [Math.min(...angles), Math.max(...angles)];
+    }
+    return [gapEnd, gapEnd + TAU - gap];
   });
 }
 
