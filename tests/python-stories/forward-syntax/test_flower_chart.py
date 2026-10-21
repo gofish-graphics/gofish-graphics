@@ -1,14 +1,11 @@
 """Equivalent of FlowerChart.stories.tsx — Forward Syntax/Flower Chart."""
 
-import math
-
-from gofish import Constraint, Coord, Schema, chart, layer, petal, rect, scatter, stack
+from gofish import Constraint, Coord, chart, layer, petal, rect, scatter, stack
 from python_stories.data import CATCH_LOCATIONS, COLORS, SEAFOOD
 
 # Fixed radius of every flower head, in pixels. The petals fan out to this
 # shared length; only their colors and angular widths vary with the data.
 FLOWER_RADIUS = 40
-SPECIES = ["Bass", "Trout", "Catfish", "Perch", "Salmon"]
 
 # Each species row tagged with its lake's planting location on x.
 STEM_DATA = [{**d, "x": CATCH_LOCATIONS[d["lake"]]["x"]} for d in SEAFOOD]
@@ -17,16 +14,9 @@ STEM_DATA = [{**d, "x": CATCH_LOCATIONS[d["lake"]]["x"]} for d in SEAFOOD]
 def story_default():
     # One flower head: a polar fan of petals, one per species, each as wide
     # as that species' count. It has no data of its own, so as a nested mark
-    # it inherits each lake's rows. The diverging schema centers the stack on
-    # the middle of Salmon's petal (the fifth of five species, so position
-    # 4.5): Salmon is centered at the stack's 0, which polar puts at
-    # `baseline_angle`, and -pi/2 points straight down, onto the stem.
+    # it inherits each lake's rows.
     flower = (
-        chart(
-            coord=Coord.polar(baseline_angle=-math.pi / 2),
-            axes=False,
-            schema={"species": Schema.ordered(SPECIES).diverging(midpoint=4.5)},
-        )
+        chart(coord=Coord.polar(), axes=False)
         .flow(stack(by="species", dir="x", h=FLOWER_RADIUS))
         # TODO(#1111): lighten the petals, as the low-level version did.
         .mark(petal(w="count", fill="species"))
