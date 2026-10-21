@@ -243,6 +243,13 @@ chart(sales, axes=True).flow(spread(by="quarter", dir="x")).mark(
 ).render(w=400, h=300)
 ```
 
+## A chain in a mark position
+
+A `.layer(...)` chain sits wherever a chart can: at the root, as a chart's
+[`mark(...)`](/python/api/core/mark#nested-chart-as-a-mark), or as a child of a
+combinator. In a mark position, a first tier with no data binds the incoming
+group, and each later tier still sees the previous tier's marks.
+
 ## Signature
 
 ```python

@@ -17,10 +17,24 @@ CATCH_LOCATIONS = load_json("catch_locations")  # {lake: {"x", "y"}}
 # wind, weather) — mirrors packages/gofish-graphics/src/data/seatle-weather.ts.
 SEATTLE_WEATHER = load_json("seatle_weather")
 
+# Brand values 2000-2019 (year, name, category, value), the bar chart race
+# data — mirrors packages/gofish-graphics/src/data/categoryBrands.ts (dumped
+# from it).
+CATEGORY_BRANDS = load_json("category_brands")
+
 # Resolved color values (color6 palette, gray/neutral, and the spectral.js
 # mix() results the stories compute at runtime — precomputed so Python emits
 # byte-identical fills).
 COLORS = load_json("colors")
+
+# The four planets closest to the sun, the table both tutorial stories
+# (tutorials/Basics.stories.tsx, Diagrams.stories.tsx) draw.
+TUTORIAL_PLANETS = [
+    {"name": "mercury", "r": 15, "fill": "#F5E3C8", "stroke": "#EFC9A2"},
+    {"name": "venus", "r": 36, "fill": "#D2913C", "stroke": "#A96F26"},
+    {"name": "earth", "r": 38, "fill": "#3E8CCC", "stroke": "#2F6FA6"},
+    {"name": "mars", "r": 21, "fill": "#F4BC80", "stroke": "#E0954C"},
+]
 
 SEAFOOD = [
     {"lake": "Lake A", "species": "Bass", "count": 23},

@@ -2,196 +2,128 @@
  * GoFish Python Widget — self-contained ESM bundle entry point.
  *
  * Trait-based protocol (Altair / Plotly pattern):
- *   - JS reads `spec`, `tier_arrow`, render options on mount and renders.
- *   - For `derive` operators and lambda accessors, JS sets `derive_request`
- *     and awaits a `derive_response` change. Python's `@traitlets.observe`
- *     runs the callback. Sequential — at most one in-flight derive per widget.
+ *   - JS reads `doc` (the IR document, its tables as base64 Arrow) and the
+ *     render options on mount and renders.
+ *   - For every Python callback the IR names (a `derive` operator, an
+ *     accessor, a mark function), JS sets `call_request` and awaits a
+ *     `call_response` change. Python's `@traitlets.observe` answers it.
+ *     Sequential — at most one call in flight per widget.
  *   - On success/failure, JS sets `render_result` so Python can read
  *     `widget.result` / `widget.error` / `widget.done`.
  *
- * The deserializer (mapMark/mapOperator/buildChart and friends) lives in
- * `gofish-graphics/serialize`. This file retains only the widget-bridge
- * concerns: WidgetModel I/O, the Arrow transport (encoding in
- * `arrowTransport.ts`, decoding in `arrowDecode.ts`, which the parity
- * harness shares), and the render entry points.
+ * The deserializer lives in `gofish-graphics/serialize` (`Serialize.renderIR`)
+ * and the Arrow codec in `arrowBridge.ts`, both shared with the parity
+ * harness. This file holds only the widget's transport (the traitlets) and
+ * the render entry points.
  */
 
-import * as Arrow from "apache-arrow";
 import { Serialize, serializeSVG, type View } from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
-import { buildArrowTable } from "./arrowTransport";
-import { arrowB64ToRows, decodeTierRows } from "./arrowDecode";
-
-// Type aliases pointing at the canonical IR schema. Internal usages below
-// keep the legacy `…Spec` names for readability.
-type ChartSpec = Frontend.ChartIR;
-type LayerSpec = Frontend.LayerIR;
-type RawMarkSpec = Frontend.RawMarkIR;
+import {
+  arrowBridge,
+  decodeDocument,
+  type SendCall,
+  type ShippedDocument,
+} from "./arrowBridge";
 
 interface WidgetModel {
-  get(key: "spec"): ChartSpec | LayerSpec | RawMarkSpec;
-  get(key: "tier_arrow"): string[];
+  get(key: "doc"): ShippedDocument<Frontend.FrontendIRDocument>;
   get(key: "width"): number;
   get(key: "height"): number;
   get(key: "axes"): Serialize.RenderIROptions["axes"] | null;
   get(key: "legend"): boolean | null;
   get(key: "debug"): boolean;
   get(key: "container_id"): string;
-  get(
-    key: "derive_response"
-  ): { request_id: string; result_b64?: string; error?: string } | null;
+  get(key: "call_response"): {
+    request_id: string;
+    reply?: ShippedDocument<Serialize.BridgeReply>;
+    error?: string;
+  } | null;
   set(key: string, value: unknown): void;
   save_changes(): void;
   on(event: string, callback: () => void): void;
 }
 
-/**
- * The raw RPC layer underneath the widget bridge: a `request(lambdaId,
- * arrowB64)` channel built on top of anywidget traitlets. The
- * Serialize.DeriveBridge interface (which the deserializer uses) is
- * derived from this — see {@link makeDeriveBridge}.
- */
-interface RawDeriveBridge {
-  request(lambdaId: string, arrowB64: string): Promise<string>;
-}
-
 // ---------------------------------------------------------------------------
-// Arrow utilities (widget transport)
-// ---------------------------------------------------------------------------
-
-function arrayToArrow(rows: Record<string, any>[]): Uint8Array {
-  if (!rows || rows.length === 0) {
-    throw new Error("Cannot serialize empty data to Arrow");
-  }
-  // Explicit-schema construction (issue #783) — see `arrowTransport.ts` for
-  // why `Arrow.tableFromJSON`'s inference isn't used here: it can't handle a
-  // `list<struct>` column at all (e.g. the `datum` field of an
-  // `{__inputRef, datum}` mark-fn sentinel when the ref's bound datum is a
-  // multi-row bag — a `group(...)`'d ref, as in the BarWithLabels/
-  // FlowerChart shape).
-  const table = buildArrowTable(rows);
-
-  if (
-    (Arrow as any).tableToIPC &&
-    typeof (Arrow as any).tableToIPC === "function"
-  ) {
-    const buffer = (Arrow as any).tableToIPC(table);
-    if (buffer && buffer.byteLength > 0) {
-      return buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-    }
-  }
-
-  const writer = (Arrow as any).RecordBatchStreamWriter;
-  if (!writer || typeof writer.writeAll !== "function") {
-    throw new Error("RecordBatchStreamWriter.writeAll is not available");
-  }
-  const stream = writer.writeAll(table);
-  const buffer =
-    typeof stream.toUint8Array === "function"
-      ? stream.toUint8Array(true)
-      : stream.finish();
-  if (!buffer || buffer.byteLength === 0) {
-    throw new Error("Serialized Arrow buffer is empty");
-  }
-  return buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-}
-
-// ---------------------------------------------------------------------------
-// Bridge: low-level RPC and the typed DeriveBridge the deserializer expects
+// Transport: the one bridge call over anywidget traitlets
 // ---------------------------------------------------------------------------
 
 /**
- * Build a typed `Serialize.DeriveBridge` on top of a raw RPC bridge.
- * Translates a rows-in / rows-out `applyLambda` call into the
- * arrow-base64 transport the Python side speaks.
+ * The widget's transport for the bridge's one call: assigns request ids,
+ * sets `call_request`, and resolves the matching promise when
+ * `call_response` arrives.
  */
-function makeDeriveBridgeFromRaw(raw: RawDeriveBridge): Serialize.DeriveBridge {
-  return {
-    async applyLambda(lambdaId: string, rows: any[]): Promise<any[]> {
-      if (rows.length === 0) return [];
-      const arrowBuffer = arrayToArrow(rows);
-      const arrowB64 = btoa(String.fromCharCode(...arrowBuffer));
-      return arrowB64ToRows(await raw.request(lambdaId, arrowB64));
-    },
-  };
-}
-
-/**
- * Per-widget raw RPC bridge: assigns request_ids, sets `derive_request`,
- * resolves the matching promise when `derive_response` arrives.
- */
-function makeRawDeriveBridge(model: WidgetModel): RawDeriveBridge {
+function traitTransport(model: WidgetModel): SendCall {
   let nextId = 0;
+  type Reply = ShippedDocument<Serialize.BridgeReply>;
   const pending = new Map<
     string,
-    { resolve: (v: string) => void; reject: (e: Error) => void }
+    { resolve: (v: Reply) => void; reject: (e: Error) => void }
   >();
 
   if (typeof (model as any).on === "function") {
-    model.on("change:derive_response", () => {
-      const response = model.get("derive_response");
+    model.on("change:call_response", () => {
+      const response = model.get("call_response");
       if (!response || !response.request_id) return;
       const entry = pending.get(response.request_id);
       if (!entry) return;
       pending.delete(response.request_id);
       if (typeof response.error === "string") {
         entry.reject(new Error(response.error));
-      } else if (typeof response.result_b64 === "string") {
-        entry.resolve(response.result_b64);
+      } else if (response.reply) {
+        entry.resolve(response.reply);
       } else {
-        entry.reject(new Error("Invalid derive_response payload"));
+        entry.reject(new Error("Invalid call_response payload"));
       }
     });
   }
 
   // Serialize requests onto a single in-flight queue. Writing the
-  // `derive_request` trait many times in a tick gets coalesced by the
+  // `call_request` trait many times in a tick gets coalesced by the
   // ipykernel / marimo comm — only the latest value reaches Python. By
   // chaining each request after the previous response resolves, every
-  // `derive_request` write happens in its own comm tick.
+  // `call_request` write happens in its own comm tick.
   let chain: Promise<unknown> = Promise.resolve();
 
-  function sendOne(lambdaId: string, arrowB64: string): Promise<string> {
+  function sendOne(lambdaId: string, rowsB64: string): Promise<Reply> {
     if (
       typeof (model as any).set !== "function" ||
       typeof (model as any).save_changes !== "function"
     ) {
       return Promise.reject(
         new Error(
-          "GoFish derive: model.set/save_changes is not available; " +
+          "GoFish bridge: model.set/save_changes is not available; " +
             "trait sync is not supported in this environment"
         )
       );
     }
     const requestId = `r-${nextId++}`;
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<Reply>((resolve, reject) => {
       pending.set(requestId, { resolve, reject });
-      model.set("derive_request", {
+      model.set("call_request", {
         request_id: requestId,
         lambda_id: lambdaId,
-        arrow_b64: arrowB64,
+        rows_b64: rowsB64,
       });
       model.save_changes();
     });
   }
 
-  return {
-    request(lambdaId: string, arrowB64: string): Promise<string> {
-      // Recover from a previous failure so one bad derive doesn't block
-      // the queue.
-      const next = chain.then(
-        () => sendOne(lambdaId, arrowB64),
-        () => sendOne(lambdaId, arrowB64)
-      );
-      chain = next.catch(() => undefined);
-      return next;
-    },
+  return (lambdaId, rowsB64) => {
+    // Recover from a previous failure so one bad call doesn't block the
+    // queue.
+    const next = chain.then(
+      () => sendOne(lambdaId, rowsB64),
+      () => sendOne(lambdaId, rowsB64)
+    );
+    chain = next.catch(() => undefined);
+    return next;
   };
 }
 
-/** Build the full Serialize.DeriveBridge for a widget instance. */
-function makeDeriveBridge(model: WidgetModel): Serialize.DeriveBridge {
-  return makeDeriveBridgeFromRaw(makeRawDeriveBridge(model));
+/** The bridge for a widget instance. */
+function makeBridge(model: WidgetModel): Serialize.DeriveBridge {
+  return arrowBridge(traitTransport(model));
 }
 
 // ---------------------------------------------------------------------------
@@ -228,23 +160,22 @@ function renderError(
   container.replaceChildren(panel);
 }
 
-/** Render the widget's spec into `container` through the library's one IR
- *  renderer (`Serialize.renderIR`, which the parity harness uses too).
- *  Building the chart throws synchronously on a bad spec; the returned
- *  promise settles with the chart's {@link View} once it has resolved. */
+/** Render the widget's document into `container` through the library's one
+ *  IR renderer (`Serialize.renderIR`, which the parity harness uses too),
+ *  with its tables decoded from Arrow. Building the chart throws
+ *  synchronously on a bad document; the returned promise settles with the
+ *  chart's {@link View} once it has resolved. */
 function renderChart(
   model: WidgetModel,
   container: HTMLElement,
   bridge: Serialize.DeriveBridge
 ): Promise<View> {
-  const spec = model.get("spec");
   const debug = model.get("debug");
   const log = debug
     ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
     : () => {};
-  log("Decoding Arrow data...");
-  // One base64 Arrow stream per chart tier (`tiers_arrow_bytes` in ast.py).
-  const tierRows = decodeTierRows(model.get("tier_arrow"));
+  log("Decoding Arrow tables...");
+  const doc = decodeDocument<Frontend.FrontendIRDocument>(model.get("doc"));
   const renderOptions: Serialize.RenderIROptions = {
     w: model.get("width"),
     h: model.get("height"),
@@ -255,10 +186,7 @@ function renderChart(
     debug,
   };
   log("Rendering with options:", renderOptions);
-  return Serialize.renderIR(spec, container, renderOptions, {
-    bridge,
-    tierRows,
-  });
+  return Serialize.renderIR(doc, container, renderOptions, bridge);
 }
 
 // ---------------------------------------------------------------------------
@@ -338,7 +266,7 @@ export default {
   initialize({ model }: { model: WidgetModel }) {
     // Stash the bridge on the model so render() can reuse it without
     // re-wiring listeners on each re-render.
-    (model as any).__gofishBridge = makeDeriveBridge(model);
+    (model as any).__gofishBridge = makeBridge(model);
   },
 
   async render({ model, el }: { model: WidgetModel; el: HTMLElement }) {
@@ -359,7 +287,7 @@ export default {
     if (!bridge) {
       // Fallback if initialize() didn't run for some reason (e.g. older
       // anywidget environment that only calls render).
-      bridge = makeDeriveBridge(model);
+      bridge = makeBridge(model);
       (model as any).__gofishBridge = bridge;
     }
 

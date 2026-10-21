@@ -141,14 +141,15 @@ function loadExemptPythonFiles(): Set<string> {
 // Extract IR from Python story (by calling Python)
 // ---------------------------------------------------------------------------
 
-/** What the derive server's `/load` answers: the builder's own `to_ir()`,
- *  each chart tier's rows as base64 Arrow (as the widget ships them), the
- *  story's render options, and the lambda ids the IR names. */
+/** What the derive server's `/load` answers: the builder's document as the
+ *  widget ships it (its tables as base64 Arrow by id), the story's render
+ *  options, and the lambda ids of the callbacks the IR names. */
 type LoadedStory = {
-  ir: Frontend.FrontendIR;
-  tierArrow: string[];
+  doc: Omit<Frontend.FrontendIRDocument, "tables"> & {
+    tables?: Record<string, string>;
+  };
   render: Record<string, unknown>;
-  deriveIds: string[];
+  callbackIds: string[];
 };
 
 type IRResult =
@@ -157,11 +158,10 @@ type IRResult =
 
 /**
  * Load a story via the derive-server's `/load` endpoint. The server imports
- * the story, builds the IR, *and* registers any `DeriveOperator`s in its
- * registry — all in one call so the lambda_ids in the returned IR match
- * what `/derive/<id>` will look up. Doing import + register separately
- * would mint divergent UUIDs because `derive(lambda)` generates a fresh
- * UUID per call.
+ * the story, builds its document, *and* registers the callbacks it names —
+ * all in one call so the lambda ids in the returned IR match what
+ * `/call/<id>` will look up. Doing import + register separately would mint
+ * divergent UUIDs because `derive(lambda)` generates a fresh UUID per call.
  */
 async function loadStory(story: PythonStory): Promise<IRResult> {
   const storyAbsPath = join(TESTS_DIR, story.file);
@@ -287,12 +287,12 @@ async function captureStory(
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 
   const deriveServerUrl =
-    ir.deriveIds && ir.deriveIds.length > 0
+    ir.callbackIds.length > 0
       ? `http://localhost:${DERIVE_SERVER_PORT}`
       : undefined;
 
-  // Inject the spec and trigger the render. The harness decodes the tiers'
-  // rows from `tierArrow`, renders `ir` with `render` as its render options,
+  // Inject the spec and trigger the render. The harness decodes the
+  // document's tables, renders it with `render` as its render options,
   // and reaches Python over `deriveServerUrl`.
   const spec = { ...ir, deriveServerUrl };
 

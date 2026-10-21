@@ -182,8 +182,9 @@ Walking `createOperator.ts:391-415`:
    over all of `d` and produces one value. Inference is synchronous, so
    `buildLayoutOpts` first resolves any Python accessor in a channel with
    `resolveChannelAccessors` (#1080), one call per accessor over every row
-   inference reads: the rows of `d` plus each split entry's rows. That row
-   set is built only when some channel holds a Python accessor.
+   inference reads: the rows of `d` plus each split entry's rows, with
+   `d`'s column types, so the bridge sends each column with its type. That
+   row set is built only when some channel holds a Python accessor.
 4. **Strip factory keys** — `by` and `debug` never reach the low-level
    layout; remove them from opts.
 5. **Inject the grouping measure** — `by` is stripped, but a grouping operator
@@ -207,8 +208,11 @@ Same machinery, simpler:
    (`src/ast/types.ts`): a `Mark<T>` function, an already-resolved node
    (e.g. `ref(...)`), a promise of one (e.g. a `cut(...)` slice), or a chart
    or layer builder. The list itself may be a promise (e.g. when produced by
-   `map(...)`). Every child goes through `resolveMarkResult`. `layer` and the
-   Porter-Duff combinators in `chart.ts` take the same `MarkChild` type. The
+   `map(...)`). Every child goes through `resolveMarkResult` with `d` and its
+   index as its key, the one rule for a mark position: a mark is called with
+   them, and an empty-scope chart or chain binds `d`. `layer` and the
+   Porter-Duff combinators in `chart.ts` take the same `MarkChild` type and
+   resolve each child the same way. The
    internal node-level operators (`Spread`, `Layer`, ...) that `layout` wraps
    are not exported; the combinator form is the public way to pass explicit
    children.

@@ -215,6 +215,41 @@ async function main() {
     );
   }
 
+  console.log(
+    "\n# An empty-scope tier with no previous marks is an error, a chart or a chain"
+  );
+
+  // A bare mark tier names nothing, so the tier after it has no previous
+  // marks. An empty `chart()` there throws; so does a chain whose first tier
+  // is an empty `chart()`, by the same rule, instead of drawing no rows.
+  for (const [label, tier] of [
+    ["an empty chart()", () => chart().mark(circle({ r: 2 }))],
+    [
+      "a chain whose first tier is an empty chart()",
+      () =>
+        chart()
+          .mark(circle({ r: 2 }))
+          .layer(text({ text: "x" })),
+    ],
+  ] as const) {
+    let threw: unknown;
+    try {
+      await chart(data, { w: 200, h: 200 })
+        .flow(scatter({ by: "id", x: "x", y: "y" }))
+        .mark(circle({ r: 3 }))
+        .layer(text({ text: "caption" }))
+        .layer(tier())
+        .resolve();
+    } catch (e) {
+      threw = e;
+    }
+    check(
+      `${label} after a mark tier throws the empty-scope error`,
+      threw instanceof Error && /has no previous tier's marks/.test(threw.message),
+      threw instanceof Error ? threw.message : String(threw)
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

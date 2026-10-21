@@ -274,9 +274,9 @@ shared by both loops: every child goes to `resolveMarkResult`
 (`marks/markResult.ts`), the single place that knows all the shapes. Five get in:
 
 - an already-built node (or a `GoFishRef`) — used as is;
-- a **mark** (a function) — invoked with `NO_ROWS`, the empty list a root
-  gets (a node built from it has no datum, unlike an empty group a filter
-  left), which is how a bare
+- a **mark** (a function) — invoked with the rows it is given, `NO_ROWS` (the
+  empty list a root gets) by default (a node built from it has no datum,
+  unlike an empty group a filter left), which is how a bare
   `rect({ … })` becomes a node inside `spreadX([...])`, and how a control mark
   (`slider(...)`) is rebuilt on every resolve;
 - a **thunk** (sequential form only) — called, then reified again;
@@ -294,48 +294,29 @@ shared by both loops: every child goes to `resolveMarkResult`
 `resolveMarkResult` rather than each keeping a local builder-child dispatch,
 and the dependency between the two builder modules runs one way:
 `chartBuilder` imports `createOperator` (for `nameableMark`), never the
-reverse. `resolveMarkResult` knows a builder by the method it calls,
-`withLayerContext`, not by its class, which is what lets it sit below
-`chartBuilder`.
+reverse. `resolveMarkResult` knows a builder by the methods it calls,
+`inScope` and `withLayerContext`, not by its class, which is what lets it sit
+below `chartBuilder`.
 
 The builder case is the reverse direction of `.layer(node)`, which has always
 accepted low-level nodes: a chart composes inside an operator (`spreadY([map,
 controls])`) exactly as a node composes inside a chart.
 
-### What an operator accepts as a child
-
-The other half of `withGoFish.ts` is `createNodeOperator` /
-`createNodeOperatorSequential`, which every low-level operator (`layer`,
-`spreadX`, `Frame`, …) is built from. They flatten the children array, await its
-promises, and then reify each child into a `GoFishAST`, through one `reifyChild`
-shared by both loops: every child goes to `resolveMarkResult`
-(`marks/markResult.ts`), the single place that knows all the shapes. Five get in:
-
-- an already-built node (or a `GoFishRef`) — used as is;
-- a **mark** (a function) — invoked with `NO_ROWS` (no rows, so no datum), which is how a bare
-  `rect({ … })` becomes a node inside `spreadX([...])`;
-- a **thunk** (sequential form only) — called, then reified again;
-- a **chart builder** — `chart(...).mark(...)`, with or without `.layer(...)` tiers
-  — resolved through its own `resolve()`. A `LayerBuilder` must go through its
-  own, not the root tier's: that is where a root `coord` is hoisted around every
-  tier, so resolving the tiers by hand would drop the shared projection;
-- a **`.relate()` operand** (a `RelateOperand`, a child of a drawing clause such
-  as `arrow(opts, [a, b])`) — becomes a string `ref` of the name it carries,
-  which resolves from the relating layer (see
-  [Name Resolution & Scoping](/internals/core/names-and-scoping)).
-
-`markResult.ts` imports neither `chartBuilder` nor `createOperator`, so
-`withGoFish`, `createOperator` and `chartBuilder` all use the one
-`resolveMarkResult` rather than each keeping a local builder-child dispatch,
-and the dependency between the two builder modules runs one way:
-`chartBuilder` imports `createOperator` (for `nameableMark`), never the
-reverse. `resolveMarkResult` knows a builder by the method it calls,
-`withLayerContext`, not by its class, which is what lets it sit below
-`chartBuilder`.
-
-The builder case is the reverse direction of `.layer(node)`, which has always
-accepted low-level nodes: a chart composes inside an operator (`spreadY([map,
-controls])`) exactly as a node composes inside a chart.
+`resolveMarkResult` also resolves every mark position, against the rows of
+the partition it sits in: a chart's `.mark(...)` (through the operators of
+its flow, which hand their mark to it), each child of a combinator (`spread`,
+`stack`, `layer`, the compositing operators), and a mark tier of a
+`.layer(...)` chain. It takes the rows and the key beside the child. A mark
+function is called with them, and what it returns is resolved as a root,
+with `NO_ROWS`. A builder is bound to the rows when its own rows are the
+enclosing scope's, by one method on the builders' shared base
+`RenderableBuilder`: `inScope(rows)` is `withData(rows)` when
+`usesPreviousLayerMarks()` is true (an empty `chart()`, or a `.layer(...)`
+chain whose first tier is one, #1181) and the builder itself otherwise. So
+`.mark(chart())` stores the chart itself as the chart's mark, and an empty
+`chart()` binds its partition's rows the same way as a `spread([...])` child,
+a `layer([...])` child or the mark of a flow, and a chain sits in each of
+them by the same rule as a chart.
 
 ## `.name()`, `.label()`, `.zOrder()`, and `.translate()`
 

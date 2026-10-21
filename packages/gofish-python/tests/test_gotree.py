@@ -34,7 +34,7 @@ DATA = {
 
 
 def ir(mark):
-    return mark.to_ir()["mark"]
+    return mark.to_ir()["root"]
 
 
 def find(node, pred):
@@ -63,8 +63,9 @@ class TestTree:
     def test_returns_a_layer_mark(self):
         t = tree(DATA)
         assert isinstance(t, Mark)
-        assert t.to_ir()["type"] == "raw-mark"
+        # A root holds the mark itself (#1181).
         assert ir(t)["type"] == "layer"
+        assert ir(t)["__combinator"] is True
 
     def test_node_receives_the_hierarchy_datum(self):
         seen = []
@@ -192,13 +193,13 @@ class TestLinks:
 
 class TestCombiners:
     def test_spread_uses_the_spread_combinator(self):
-        out = spread(dir="x", spacing=4)([circle(r=1), circle(r=2)]).to_dict()
+        out = ir(spread(dir="x", spacing=4)([circle(r=1), circle(r=2)]))
         assert out["type"] == "spread"
         assert out["options"] == {"dir": "x", "spacing": 4}
         assert spread(dir="y").growth_dir == "y"
 
     def test_distribute_names_children_and_relates_them(self):
-        out = distribute(dir="x", alignment="start")([circle(r=1), circle(r=2)]).to_dict()
+        out = ir(distribute(dir="x", alignment="start")([circle(r=1), circle(r=2)]))
         assert [c["name"] for c in out["children"]] == ["__distribute-0", "__distribute-1"]
         assert out["relate"] == [
             {
@@ -210,7 +211,7 @@ class TestCombiners:
         ]
 
     def test_combine_axes(self):
-        out = combine(x={"kind": "nest", "pad": 3}, y="align")([circle(r=1), circle(r=2)]).to_dict()
+        out = ir(combine(x={"kind": "nest", "pad": 3}, y="align")([circle(r=1), circle(r=2)]))
         assert out["relate"] == [
             {"type": "nest", "options": {"x": 3}, "refs": ["__combine-0", "__combine-1"]},
             {"type": "align", "options": {"y": "middle"}, "refs": ["__combine-0", "__combine-1"]},
@@ -238,7 +239,7 @@ class TestCombiners:
             combine(y={"kind": "align", "spacing": 4})
 
     def test_nest(self):
-        out = nest(x=4)([rect(), circle(r=2)]).to_dict()
+        out = ir(nest(x=4)([rect(), circle(r=2)]))
         assert [c["name"] for c in out["children"]] == ["__nest-outer", "__nest-inner"]
         assert out["relate"] == [
             {"type": "nest", "options": {"x": 4}, "refs": ["__nest-outer", "__nest-inner"]}

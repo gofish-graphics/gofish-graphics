@@ -10,8 +10,9 @@ Extended JSON does::
     math.nan   -> {"$numberDouble": "NaN"}
 
 Mirrors gofish-ir's ``frontend/nonFinite.ts``: the writer encodes the whole
-IR document once, at its top (``to_ir()``), and the JS reader decodes it
-(``Serialize.readIR``) before rebuilding the chart. The validator accepts the
+IR document once, at its top (``_json_value`` in ``ast.py``, through which
+every document is written), and the JS reader decodes the tags where the JSON
+encoding put them (``Serialize.readIR``) before rebuilding the chart. The validator accepts the
 tagged infinities wherever a number is expected and rejects a tagged NaN
 there.
 """
@@ -68,12 +69,3 @@ def walk(value: Any, swap: Callable[[Any], Any]) -> Any:
             return value
         return items if isinstance(value, list) else type(value)(items)
     return value
-
-
-def encode_non_finite(value: Any) -> Any:
-    """Encode every non-finite float in a JSON-shaped value (dicts, lists,
-    tuples, primitives). Returns ``value`` itself when nothing in it changed,
-    and shares every unchanged part otherwise."""
-    return walk(
-        value, lambda v: encode_number(v) if isinstance(v, float) else KEEP
-    )

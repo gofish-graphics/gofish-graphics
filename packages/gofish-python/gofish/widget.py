@@ -1,13 +1,12 @@
 """AnyWidget-based chart rendering for GoFish.
 
 Uses the Altair / Plotly trait protocol: synced traitlets + observer
-handlers, no `experimental.invoke` / `@command`. JS reads the chart spec
-and data on mount; for `derive` operators it round-trips through the
-`derive_request` / `derive_response` trait pair, which works identically
-in Jupyter and marimo.
+handlers, no `experimental.invoke` / `@command`. JS reads the IR document on
+mount; for every Python callback the IR names (a `derive` operator, an
+accessor, a mark function) it round-trips through the `call_request` /
+`call_response` trait pair, which works identically in Jupyter and marimo.
 """
 
-import base64
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -16,17 +15,17 @@ import anywidget
 import traitlets
 
 from ._generated import _to_wire
-from .arrow_utils import arrow_to_records, data_to_arrow_bytes
+from .ast import answer
 
 
 class GoFishChartWidget(anywidget.AnyWidget):
-    """Widget for rendering GoFish charts from JSON specifications."""
+    """Widget for rendering GoFish charts from frontend-IR documents."""
 
-    # Spec + data: set once in __init__, read by JS on mount.
-    spec = traitlets.Dict().tag(sync=True)
-    # Each chart tier's rows: base64 Arrow IPC bytes, one per tier (see
-    # `tiers_arrow_bytes` in ast.py).
-    tier_arrow = traitlets.List(traitlets.Unicode()).tag(sync=True)
+    # The IR document, as a host ships it (`ir_payload` in ast.py): its root
+    # and its tables, the rows of every chart in it that has rows of its own,
+    # as base64 Arrow IPC by the id the chart's data names. Set once in
+    # __init__, read by JS on mount.
+    doc = traitlets.Dict().tag(sync=True)
     width = traitlets.Int(800).tag(sync=True)
     height = traitlets.Int(600).tag(sync=True)
     # The JS `.render(container, options)` options. None = the render call did
@@ -37,10 +36,10 @@ class GoFishChartWidget(anywidget.AnyWidget):
     debug = traitlets.Bool(False).tag(sync=True)
     container_id = traitlets.Unicode().tag(sync=True)
 
-    # Derive RPC: JS posts a request, Python's observer handles it and
-    # writes the response. Sequential — at most one in-flight per widget.
-    derive_request = traitlets.Dict(allow_none=True, default_value=None).tag(sync=True)
-    derive_response = traitlets.Dict(allow_none=True, default_value=None).tag(sync=True)
+    # The one bridge call: JS posts a request, Python's observer answers it
+    # with the reply's document. Sequential — at most one in flight per widget.
+    call_request = traitlets.Dict(allow_none=True, default_value=None).tag(sync=True)
+    call_response = traitlets.Dict(allow_none=True, default_value=None).tag(sync=True)
 
     # Terminal status from the JS side: {value: True} on success or
     # {error: str} on failure. Powers .result/.error/.done.
@@ -55,14 +54,14 @@ class GoFishChartWidget(anywidget.AnyWidget):
     # `.warnings`.
     layout_warnings = traitlets.List(traitlets.Dict()).tag(sync=True)
 
-    # Python-only registry: lambda_id -> callable. Never synced.
-    derive_functions = traitlets.Dict().tag(sync=False)
+    # Python-only registry: lambda_id -> callback (`_Payload.callbacks`).
+    # Never synced. A mark function's reply adds the callbacks it names.
+    callbacks = traitlets.Dict().tag(sync=False)
 
     def __init__(
         self,
-        spec: Dict[str, Any],
-        tier_arrow: Optional[List[bytes]] = None,
-        derive_functions: Optional[Dict[str, Callable]] = None,
+        doc: Dict[str, Any],
+        callbacks: Optional[Dict[str, Callable]] = None,
         width: int = 800,
         height: int = 600,
         axes: Optional[Any] = None,
@@ -83,12 +82,7 @@ class GoFishChartWidget(anywidget.AnyWidget):
 
         super().__init__(
             _esm=esm_code,
-            spec=spec,
-            # This constructor owns the base64 wire encoding, so callers hand
-            # it raw bytes, never pre-formatted wire strings (see #683).
-            tier_arrow=[
-                base64.b64encode(b).decode("ascii") for b in tier_arrow or []
-            ],
+            doc=doc,
             width=width,
             height=height,
             # Per-axis options are snake_case in Python and camelCase on the
@@ -97,7 +91,7 @@ class GoFishChartWidget(anywidget.AnyWidget):
             legend=legend,
             debug=debug,
             container_id=container_id,
-            derive_functions=derive_functions or {},
+            callbacks=callbacks or {},
             **kwargs,
         )
 
@@ -107,47 +101,30 @@ class GoFishChartWidget(anywidget.AnyWidget):
         self._svg: Optional[str] = None
         self._pending_saves: List[Any] = []
 
-    @traitlets.observe("derive_request")
-    def _on_derive_request(self, change):
-        """Run a Python derive callback and publish the result.
+    @traitlets.observe("call_request")
+    def _on_call_request(self, change):
+        """Answer one bridge call from JS.
 
-        JS sets ``derive_request = {request_id, lambda_id, arrow_b64}``.
-        We look up the registered function, run it on the decoded data,
-        and publish ``derive_response = {request_id, result_b64}``.
-        Errors are surfaced via ``derive_response = {request_id, error}``
-        so the JS bridge can reject the awaiting promise.
+        JS sets ``call_request = {request_id, lambda_id, rows_b64}``, the
+        rows as base64 Arrow. ``answer`` runs the callback and returns the
+        reply's document, which we publish as ``call_response = {request_id,
+        reply}``. Errors are surfaced via ``call_response = {request_id,
+        error}`` so the JS bridge can reject the awaiting promise.
         """
         msg = change["new"]
         if not msg:
             return
         request_id = msg.get("request_id")
         lambda_id = msg.get("lambda_id")
-        arrow_b64 = msg.get("arrow_b64")
-        if not request_id or not lambda_id or not arrow_b64:
+        rows_b64 = msg.get("rows_b64")
+        if not request_id or not lambda_id or rows_b64 is None:
             return
 
         try:
-            fn = self.derive_functions.get(lambda_id)
-            if fn is None:
-                raise ValueError(f"Derive function with ID {lambda_id} not found")
-
-            # `arrow_to_records` (not a pandas decode like the pre-narwhals
-            # `arrow_to_dataframe(...).to_dict("records")`)
-            # so a `list<struct>` column (a mark-fn's `datum` multi-row bag,
-            # #783) decodes to a plain `list[dict]` rather than a numpy
-            # `ndarray` of dicts — matching what the parity harness's derive
-            # server hands the same function over its plain-JSON transport.
-            rows = arrow_to_records(base64.b64decode(arrow_b64))
-            result = fn(rows)
-
-            # A user's derive callback can return `None`, a list of dict
-            # rows, or a dataframe from any narwhals-supported backend
-            # (pandas, polars, pyarrow, ...) — `data_to_arrow_bytes` is the
-            # one ingestion choke point that handles all of those shapes.
-            result_b64 = base64.b64encode(data_to_arrow_bytes(result)).decode("utf-8")
-            self.derive_response = {"request_id": request_id, "result_b64": result_b64}
+            reply = answer(self.callbacks, lambda_id, rows_b64)
+            self.call_response = {"request_id": request_id, "reply": reply}
         except Exception as exc:
-            self.derive_response = {"request_id": request_id, "error": str(exc)}
+            self.call_response = {"request_id": request_id, "error": str(exc)}
 
     @traitlets.observe("svg_result")
     def _on_svg_result(self, change):

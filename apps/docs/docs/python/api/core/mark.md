@@ -22,9 +22,9 @@ ChartBuilder.mark(mark) -> ChartBuilder
 
 ## Parameters
 
-| Parameter | Type                                 | Description                                                                                 |
-| --------- | ------------------------------------ | ------------------------------------------------------------------------------------------- |
-| `mark`    | `Mark` \| `ChartBuilder` \| callable | A mark factory result, a nested `chart(...)` drawn per group, or a `(data) -> ChartBuilder` |
+| Parameter | Type                                                   | Description                                                                                                                                                          |
+| --------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mark`    | `Mark` \| `ChartBuilder` \| `LayerBuilder` \| callable | A mark factory result (`layer([chart(...), ...])` among them), a nested `chart(...)` or `chart(...).layer(...)` chain drawn per group, or a `(data) -> ChartBuilder` |
 
 Returns a new `ChartBuilder` with the mark set.
 
@@ -77,9 +77,72 @@ A no-data `chart()` / `chart(**options)` is an **empty scope**: as a `mark(...)`
 it binds the incoming group, and inside [`.layer(...)`](/python/api/core/layer)
 it binds the previous tier's marks.
 
+The same binding applies to a nested chart used as a child of a combinator such
+as [`layer([...])`](/python/api/operators/layer), so a per-group glyph can mix
+marks and a chart. Here each lake draws a stem and a polar flower on top of it:
+
+::: gofish example:flower-chart hidden
+:::
+
+```python
+flower = (
+    chart(coord=Coord.polar(), axes=False)  # no data -> inherits this lake's rows
+    .flow(stack(by="species", dir="x", h=40))
+    .mark(petal(w="count", fill="species"))
+)
+
+chart(stem_data, axes=False).flow(scatter(by="lake", x="x")).mark(
+    layer([
+        rect(w=4, h="count", fill="rgb(0, 142, 91)").name("stem"),
+        flower.name("flower"),
+    ]).relate(lambda stem, flower: [
+        Constraint.align([stem, flower], x="middle", y=["end", "middle"]),
+    ])
+)
+```
+
+A layer made only of charts is a mark too, so a per-group overlay (e.g. bars
+plus an area that selects them) needs no callback:
+
+```python
+chart(barley).flow(spread(by="variety", dir="x")).mark(
+    layer([
+        chart()  # inherits this variety's rows
+        .flow(spread(by="year", dir="x"), stack(by="site", dir="y"))
+        .mark(rect(h="yield", fill="site").name("bars")),
+        chart(select_all("bars"))  # scoped to this variety's layer
+        .flow(group(by="site"))
+        .mark(ribbon(opacity=0.7)),
+    ])
+)
+```
+
+A `.layer(...)` chain sits where a chart does (#1181). Leave its first tier's
+data off and that tier binds the incoming group; each later tier sees the
+previous tier's marks, as it does at the root. Here each store draws its own
+small line chart, dots with a line over them:
+
+```python
+chart(sales).flow(spread(by="store", dir="x", spacing=32)).mark(
+    chart(axes=False)  # inherits this store's rows
+    .flow(scatter(by="quarter", x="quarter", y="sales"))
+    .mark(circle(r=4, fill="#08519c"))
+    .layer(line(stroke="#6baed6", stroke_width=2))  # connects this store's dots
+)
+```
+
+A chain may also be a child of a combinator, such as `layer([...])`.
+
+A nested chart crosses to JS as its own chart IR, a chain as its own
+`layer-chain` IR, and a layer of charts as the `layer` combinator with chart
+children. A nested chart's own rows travel beside the IR as an Arrow table,
+like the root's, so their column types (a date, a timestamp) survive, and it
+draws with no call back into Python, in the notebook too.
+
 The older callback form `mark(lambda data: chart(data, ...).flow(...).mark(...))`
 still works and is equivalent — the function receives each group's data slice and
-returns a nested chart.
+returns a nested chart. A callback is Python code, so JS calls back into Python
+once per group to run it.
 
 ## Mark-fn over refs — value labels
 

@@ -117,7 +117,12 @@ function mapOperator<T, U>(
   const op: Operator<T, U> = async (mark: Mark<U>) =>
     (async (d: T, key?: string | number, layerContext?: LayerContext) => {
       const out = await fn(d, layerContext);
-      return mark(await typeResult(out, d), key, layerContext);
+      return resolveMarkResult(
+        mark,
+        layerContext,
+        await typeResult(out, d),
+        key
+      );
     }) as Mark<T>;
   withWire(op, serialize);
   return op;
@@ -1146,9 +1151,10 @@ function makeRelatableMark<T>(base: Mark<T>): RelatableMark<T> {
 
 /**
  * Mark-combinator form of layer. Resolves each child against the per-datum
- * data and wraps the resulting nodes in a Layer. Children may be:
+ * data and wraps the resulting nodes in a Layer. Children may be anything a
+ * mark position holds (`resolveMarkResult`):
  *   - Mark functions (called with the parent's data),
- *   - ChartBuilders (resolved via their own bound data),
+ *   - charts and chains (an empty scope binds the parent's data),
  *   - already-resolved GoFishNodes (e.g. ref(...)).
  * Supports `.name()`, `.label()`, `.relate()`, and a top-level `.render()`.
  */
@@ -1177,18 +1183,10 @@ export function layer<T>(
     const sharedContext: LayerContext = {};
     const resolved: GoFishNode[] = [];
     for (const m of marks) {
-      // A nested empty-scope `chart()` child inherits this layer's incoming
-      // partition datum (issue #243), exactly as `.mark(chart())` does — so
-      // `layer([chart().flow(...).mark(...), chart(selectAll(...)).mark(...)])`
-      // can be a mark without a `(d) => …` callback. A child with its own data
-      // (e.g. `chart(selectAll(...))`) is left untouched.
-      const child =
-        m instanceof ChartBuilder && m.usesPreviousLayerMarks()
-          ? m.withData(d)
-          : m;
-      const result =
-        typeof child === "function" ? child(d, key, sharedContext) : child;
-      resolved.push(await resolveMarkResult(result, sharedContext));
+      // Each child is a mark position over this layer's rows: an empty-scope
+      // `chart()` child (or a chain whose first tier is one) binds them
+      // (issue #243, #1181), as in every combinator and `.mark(...)`.
+      resolved.push(await resolveMarkResult(m, sharedContext, d, key));
     }
     const node = await Layer(opts, resolved);
     node.datum = datumOfInput(d as unknown[]);
@@ -1217,12 +1215,7 @@ function makePorterDuffCombinator(
     ];
     const base: Mark<T> = async (d, key, layerContext) => {
       const [child0, child1] = await Promise.all(
-        marks.map((m) =>
-          resolveMarkResult(
-            typeof m === "function" ? m(d, key, layerContext) : m,
-            layerContext
-          )
-        )
+        marks.map((m) => resolveMarkResult(m, layerContext, d, key))
       );
       const node = await lowLevel(opts, [child0, child1]);
       node.datum = datumOfInput(d as unknown[]);

@@ -95,6 +95,9 @@ interface Context {
    *  nodes (`holdsNodes` in `AUTHORED_REFS`) is passed through, since the
    *  nodes are only IR once serialized. */
   authored?: boolean;
+  /** The ids of the document's tables, when the walk is of a document: a
+   *  chart's `{type: "table", id}` must name one of them. */
+  tables?: ReadonlySet<string>;
 }
 
 function walkDocument(node: unknown, path: string, ctx: Context): void {
@@ -117,31 +120,30 @@ function walkDocument(node: unknown, path: string, ctx: Context): void {
       });
   });
   optionalField(node, "$schema", path, ctx, expectString);
-  expectField(node, "root", path, ctx, walkRoot);
-  rejectUnknown(node, ["irVersion", "ir", "$schema", "root"], path, ctx);
+  // Every table a chart names, at any depth, is one of the document's.
+  ctx.tables = new Set(isObject(node.tables) ? Object.keys(node.tables) : []);
+  // A root holds anything a mark position holds (`FrontendIR`).
+  expectField(node, "root", path, ctx, walkMark);
+  optionalField(node, "tables", path, ctx, walkTables);
+  rejectUnknown(
+    node,
+    ["irVersion", "ir", "$schema", "root", "tables"],
+    path,
+    ctx
+  );
 }
 
-function walkRoot(node: unknown, path: string, ctx: Context): void {
+/** A document's `tables`: rows (an array of objects) by table id. */
+function walkTables(node: unknown, path: string, ctx: Context): void {
   if (!isObject(node)) {
-    ctx.errors.push({ path, message: "expected object" });
+    ctx.errors.push({ path, message: "tables must be an object" });
     return;
   }
-  switch (node.type) {
-    case "chart":
-      walkChart(node, path, ctx);
-      return;
-    case "layer":
-      walkLayer(node, path, ctx);
-      return;
-    case "raw-mark":
-      walkRawMark(node, path, ctx);
-      return;
-    default:
+  for (const [id, rows] of Object.entries(node)) {
+    if (!Array.isArray(rows) || !rows.every(isObject))
       ctx.errors.push({
-        path: `${path}.type`,
-        message: `root type must be "chart" | "layer" | "raw-mark", got ${JSON.stringify(
-          node.type
-        )}`,
+        path: `${path}.${id}`,
+        message: "a table must be an array of row objects",
       });
   }
 }
@@ -152,10 +154,7 @@ function walkChart(
   ctx: Context
 ): void {
   walkBaseFields(node, path, ctx);
-  optionalField(node, "data", path, ctx, (v, p) => {
-    if (v === null) return;
-    walkData(v, p, ctx);
-  });
+  expectField(node, "data", path, ctx, walkData);
   optionalField(node, "operators", path, ctx, (v, p) =>
     walkArray(v, p, ctx, walkOperator)
   );
@@ -185,55 +184,30 @@ function walkChart(
   );
 }
 
-function walkLayer(
+/** A `chart(...).layer(...)` chain: at least two tiers, the first a chart,
+ *  each in a mark position. */
+function walkLayerChain(
   node: Record<string, unknown>,
   path: string,
   ctx: Context
 ): void {
   walkBaseFields(node, path, ctx);
-  expectField(node, "charts", path, ctx, (v, p) =>
-    walkArray(v, p, ctx, walkLayerChild)
-  );
-  optionalField(node, "options", path, ctx, expectObject);
-  optionalField(node, "relate", path, ctx, (v, p) =>
-    walkArray(v, p, ctx, walkRelateClause)
-  );
-  optionalField(node, "builder", path, ctx, expectBoolean);
-  rejectUnknown(
-    node,
-    ["type", "charts", "options", "relate", "builder", "origin", "meta"],
-    path,
-    ctx
-  );
-}
-
-function walkLayerChild(node: unknown, path: string, ctx: Context): void {
-  if (isObject(node) && node.type === "chart") {
-    walkChart(node, path, ctx);
-    return;
-  }
-  // A `chart(...).layer(mark)` builder chain drops a component-level
-  // annotation tier straight into `charts` as a raw-mark.
-  if (isObject(node) && node.type === "raw-mark") {
-    walkRawMark(node, path, ctx);
-    return;
-  }
-  ctx.errors.push({
-    path,
-    message:
-      'layer children must be charts or raw-marks (type === "chart" | "raw-mark")',
+  expectField(node, "tiers", path, ctx, (v, p) => {
+    if (!Array.isArray(v) || v.length < 2) {
+      ctx.errors.push({
+        path: p,
+        message: "a layer chain's tiers must be an array of at least two",
+      });
+      return;
+    }
+    if (!isObject(v[0]) || v[0].type !== "chart")
+      ctx.errors.push({
+        path: `${p}[0]`,
+        message: 'a layer chain\'s first tier must be a chart (type "chart")',
+      });
+    walkArray(v, p, ctx, walkMark);
   });
-}
-
-function walkRawMark(
-  node: Record<string, unknown>,
-  path: string,
-  ctx: Context
-): void {
-  walkBaseFields(node, path, ctx);
-  expectField(node, "mark", path, ctx, walkMark);
-  optionalField(node, "options", path, ctx, expectObject);
-  rejectUnknown(node, ["type", "mark", "options", "origin", "meta"], path, ctx);
+  rejectUnknown(node, ["type", "tiers", "origin", "meta"], path, ctx);
 }
 
 function walkData(node: unknown, path: string, ctx: Context): void {
@@ -242,19 +216,19 @@ function walkData(node: unknown, path: string, ctx: Context): void {
     return;
   }
   switch (node.type) {
-    case "inline":
-      expectField(node, "rows", path, ctx, (v, p) => {
-        if (!Array.isArray(v))
-          ctx.errors.push({ path: p, message: "rows must be an array" });
+    case "table":
+      expectField(node, "id", path, ctx, (v, p) => {
+        expectString(v, p, ctx);
+        if (typeof v === "string" && ctx.tables && !ctx.tables.has(v))
+          ctx.errors.push({
+            path: p,
+            message: `names table ${JSON.stringify(v)}, which the document's tables do not hold`,
+          });
       });
-      rejectUnknown(node, ["type", "rows"], path, ctx);
+      rejectUnknown(node, ["type", "id"], path, ctx);
       return;
     case "select":
       walkSelectRef(node, path, ctx);
-      return;
-    case "external":
-      optionalField(node, "id", path, ctx, expectString);
-      rejectUnknown(node, ["type", "id"], path, ctx);
       return;
     case "previous-tier":
       rejectUnknown(node, ["type"], path, ctx);
@@ -262,7 +236,7 @@ function walkData(node: unknown, path: string, ctx: Context): void {
     default:
       ctx.errors.push({
         path: `${path}.type`,
-        message: `data type must be "inline" | "select" | "external" | "previous-tier", got ${JSON.stringify(
+        message: `data type must be "table" | "select" | "previous-tier", got ${JSON.stringify(
           node.type
         )}`,
       });
@@ -418,7 +392,7 @@ function walkFieldType(
       // checked into a probe context of its own.
       const probes: Context[] = [];
       for (const branch of type.options) {
-        const probe: Context = { errors: [] };
+        const probe: Context = { ...ctx, errors: [] };
         walkFieldType(branch, value, path, probe);
         if (probe.errors.length === 0) return;
         probes.push(probe);
@@ -1063,6 +1037,16 @@ function walkMark(node: unknown, path: string, ctx: Context): void {
     walkCombinatorMark(node, path, ctx);
     return;
   }
+  // A mark position may hold a whole chart or a `.layer(...)` chain (see
+  // `MarkIR`).
+  if (t === "chart") {
+    walkChart(node, path, ctx);
+    return;
+  }
+  if (t === "layer-chain") {
+    walkLayerChain(node, path, ctx);
+    return;
+  }
   if ((LEAF_MARK_TYPES as readonly string[]).includes(t)) {
     walkLeafMark(node, path, ctx);
     return;
@@ -1473,15 +1457,6 @@ function expectString(value: unknown, path: string, ctx: Context): void {
 
 function expectNumber(value: unknown, path: string, ctx: Context): void {
   if (!isIRNumber(value)) ctx.errors.push({ path, message: notANumber(value) });
-}
-
-function expectBoolean(value: unknown, path: string, ctx: Context): void {
-  if (typeof value !== "boolean") {
-    ctx.errors.push({
-      path,
-      message: `expected boolean, got ${typeNameOf(value)}`,
-    });
-  }
 }
 
 /**

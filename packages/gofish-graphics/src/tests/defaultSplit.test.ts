@@ -57,6 +57,24 @@ function check(name: string, ok: boolean, detail?: string): void {
   }
 }
 
+/** A document whose root is `root`, with `tables`. */
+function irDoc(root: any, tables: Record<string, any[]>): any {
+  return { irVersion: 0, ir: "gofish-frontend", root, tables };
+}
+
+/** A bridge whose callbacks are accessors, answering as a Python host does:
+ *  a reply whose root names the list of values, `values(id, rows)`. */
+function accessorBridge(values: (id: string, rows: any[]) => unknown[]) {
+  return {
+    async call(id: string, rows: any[]) {
+      return {
+        root: { type: "table" as const, id: "r" },
+        tables: { r: values(id, rows) },
+      };
+    },
+  };
+}
+
 function pathCount(doc: { items: { kind: string }[] }): number {
   return doc.items.filter((it) => it.kind === "path").length;
 }
@@ -540,14 +558,13 @@ async function main() {
     // A Python lambda arrives as a batch accessor and is resolved in one
     // bridge call per connector group, before the per-group collapse.
     const calls: string[] = [];
-    const bridge = {
-      applyLambda: async (id: string, rows: any[]) => {
-        calls.push(id);
-        return rows.map((r) => r.g);
-      },
-    };
+    const bridge = accessorBridge((id, rows) => {
+      calls.push(id);
+      return rows.map((r) => r.g);
+    });
     const ir = {
       type: "chart",
+      data: { type: "table", id: "t0" },
       operators: [
         { type: "group", by: "g" },
         { type: "scatter", by: "x", x: "x", y: "y" },
@@ -555,12 +572,7 @@ async function main() {
       mark: { type: "line", fill: { __gofish_lambda: "fg" } },
     } as any;
     const byPython = await renderDisplayList(
-      (GoFish as any).Serialize.buildChart(
-        ir,
-        data,
-        bridge,
-        (GoFish as any).Serialize.makeTokenResolver()
-      ),
+      (GoFish as any).Serialize.buildIR(irDoc(ir, { t0: data }), bridge),
       { w: 200, h: 200 }
     );
     check(

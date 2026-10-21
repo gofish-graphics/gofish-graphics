@@ -53,10 +53,6 @@ packages/gofish-graphics/stories/bench/Benchmarks.stories.tsx
 # with fresh text — the refs can't cross the Python derive RPC, so it can't be
 # expressed with a Python mark-fn. (Ribbon/Layered and NodeLink ARE ported.)
 packages/gofish-graphics/stories/forwardsyntax/LabeledChart.stories.tsx
-# FlowerChart puts a nested chart (the polar flower) in a `layer([...])` child
-# list in mark position. Python cannot serialize a chart as a combinator child
-# yet (#1112). The old low-level port was removed with the fluent rewrite.
-packages/gofish-graphics/stories/forwardsyntax/FlowerChart.stories.tsx
 
 
 # Forward syntax stories needing coord transforms other than clock
@@ -64,35 +60,6 @@ packages/gofish-graphics/stories/forwardsyntax/FlowerChart.stories.tsx
 
 # (Vega-Lite ports were brought over from exempt to real parity tests;
 # see tests/python-stories/vega-lite/.)
-
-# Per-export exemptions for Labels.stories.tsx — these stories don't fit
-# the single-chart parity harness (they compose many charts in a flex div,
-# use async mark-as-function, or hand-build raw SVG).
-packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::AllPositions
-packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::Rotated
-packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::LabelOnSpread
-packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::PositionShowcase
-
-# Per-export exemptions for Constraints.stories.tsx — the eight Spread*
-# stories use `renderEquivalentStory()` to mount TWO equivalent charts in
-# a 2-column grid with section headers, demonstrating that
-# `spread({alignment, ...})` equals `align(...) + distribute(...)`. The
-# parity harness captures one chart per story, so this layout shape can't
-# be byte-matched. The eight single-chart exports (AlignOnly, AlignOnlyManualY,
-# DistributeOnly, SubsetSelection, BackgroundNotDistributed, AlignCenterDistributeY,
-# AlignSpan, AlignSize — the last two are the #726 "span"/"size" alignment
-# values) are ported. SpreadX_CenterToCenter now also has a Python port
-# (story_spread_x_center_to_center, the Constraint.distribute half) — it
-# stays on this list because it's still the same two-panel shape that can't
-# be byte-gated, but it is captured + IR-validated rather than skipped.
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_AlignStart
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_AlignEnd
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_AlignMiddle
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_AlignStart
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Spacing
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_Spacing_AlignEnd
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_CenterToCenter
-packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Reversed
 
 # Per-export exemption for ViolinPlot.stories.tsx — the JS story uses
 # `fast-kde`'s density1d, while the idiomatic Python port
@@ -160,27 +127,28 @@ packages/gofish-graphics/stories/interaction/Widgets.stories.tsx
 # its own file, BirdMigrationStatic.stories.tsx, and is ported (#856).
 packages/gofish-graphics/stories/animated-vega-lite/BirdMigration.stories.tsx
 
-# Tutorials/Basics and Tutorials/Diagrams are the finished examples of the docs
-# Basics and Diagrams tutorials (the planets diagram): bare marks and operators
-# rendered with no chart() entry point. SHORTCUT: both are pure specs whose
-# constructs (circle, enclose, spread, layer, text, ref, arrow, constrain) all
-# exist in gofish-python, so they could be ported like bluefish/Planets; they
-# are teaching figures and were left exempt to keep the tutorial change
-# docs-only. TODO: port them to tests/python-stories/tutorials/.
-packages/gofish-graphics/stories/tutorials/Basics.stories.tsx
-packages/gofish-graphics/stories/tutorials/Diagrams.stories.tsx
-
 # Tutorials/Glyphs is the finished example of the docs Glyphs tutorial: a glyph
 # passed to `.mark()` as a per-group JS function, which cannot cross the bridge.
 packages/gofish-graphics/stories/tutorials/Glyphs.stories.tsx
 
 # The Gapminder animation panels — exempt for the same reason as the bird
-# migration panels above. The `Animated` and `Paused1975` stories are driven by
-# `time.sequence(...)`, which owns a `timer()` clock: a live JS signal with no
+# migration panels above. Each of these stories is driven by
+# `time.sequence(...)` or `time.history`/`.transition(...)` on a `timer()`
+# clock (the paused ones on a clock held still): a live JS signal with no
 # Python/IR bridge, so the spec cannot cross the derive RPC. The two static
-# stories in the file (SpatialTwin, Frame1955) ARE pure specs, but exemption is
-# per FILE and all four are one file (same trade-off as issue #856).
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx
+# stories, SpatialTwin and Frame1955, are pure specs and are ported.
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::Animated
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::Paused1975
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::SequenceOnly
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::Curves
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesThree
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesKinematics
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesKinematicsPaused
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesPaused
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::Trails
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::TrailsPaused
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::TrailsCurves
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::TrailsCurvesPaused
 
 # The Gapminder desugaring tower — exempt for the same reason. Every level in
 # it holds a clock: levels 0 and 1 through `time.sequence(...)`, levels 2 and 3
@@ -192,9 +160,18 @@ packages/gofish-graphics/stories/animated-vega-lite/GapminderTower.stories.tsx
 # The bar chart race, Gapminder's sibling — exempt for the same reason as the
 # Gapminder panels. Every animated story in it holds a `timer()` clock through
 # `time.sequence({ on })`, a live JS signal the derive RPC cannot carry, and the
-# year readout reads it through `live()`. Frame2000 is a pure spec, but
-# exemption is per FILE (same trade-off as issue #856).
-packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx
+# year readout reads it through `live()`. The paused stories hold the same
+# clock still. Frame2000, the static frame, is a pure spec and is ported.
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Animated
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Paused2000
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Paused2010
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Paused2019
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Paused2007_5
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10Paused2007_5
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10Paused2008
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10FromBelow
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10FromBelowPaused2007_5
 
 # The connected scatterplot — exempt for the same reason as the Gapminder
 # panels. Every story in it is driven by `time.sequence(...)`, which owns or is

@@ -7,6 +7,8 @@ import math
 import pytest
 
 import gofish
+
+from ._ir import ir
 from gofish import Bin, Calendar, Coord, Curve, Overlap, Tile, field, line, ribbon, scatter, chart, circle
 
 FAMILIES = {
@@ -94,12 +96,12 @@ def test_curves_are_calls_on_the_wire():
         "bow": 0.3,
         "pad_end": 4,
     }
-    assert line(curve=Curve.perfect_arrows(pad_end=4)).to_dict()["curve"] == {
+    assert ir(line(curve=Curve.perfect_arrows(pad_end=4)))["curve"] == {
         "kind": "perfectArrows",
         "padEnd": 4,
     }
-    assert line(curve=Curve.step()).to_dict()["curve"] == {"kind": "step"}
-    assert ribbon(curve=Curve.bezier()).to_dict()["curve"] == {"kind": "bezier"}
+    assert ir(line(curve=Curve.step()))["curve"] == {"kind": "step"}
+    assert ir(ribbon(curve=Curve.bezier()))["curve"] == {"kind": "bezier"}
     with pytest.raises(TypeError, match="'swoop'"):
         line(curve={"kind": "swoop"})
     with pytest.raises(TypeError, match="did you mean 'pad_end'"):
@@ -234,19 +236,19 @@ def test_every_kind_without_a_required_option_is_bare():
 
 
 def test_bare_kind_wire_form_at_an_option():
-    def ir(curve, overlap):
+    def wire(curve, overlap):
         return (
             chart([{"a": 1, "b": 2}])
             .flow(scatter(x="a", overlap=overlap))
             .mark(circle(r=2))
-            .to_ir(),
-            line(curve=curve).to_dict(),
+            .to_ir()["root"],
+            ir(line(curve=curve)),
         )
 
-    assert ir(Curve.monotone, Overlap.separate) == ir(
+    assert wire(Curve.monotone, Overlap.separate) == wire(
         Curve.monotone(), Overlap.separate()
     )
-    assert line(curve=Curve.perfect_arrows).to_dict()["curve"] == {
+    assert ir(line(curve=Curve.perfect_arrows))["curve"] == {
         "kind": "perfectArrows"
     }
     assert field("d").bin(Calendar.month) == field("d").bin(Calendar.month())

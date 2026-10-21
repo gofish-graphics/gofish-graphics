@@ -2,9 +2,10 @@
  * Validate Python-emitted IRs against the canonical gofish-ir schema.
  *
  * For each Python story under `tests/python-stories/`:
- *   1. Ask `derive-server.py` to import the story and emit its IR.
- *   2. Wrap the result into a `FrontendIRDocument` (Python's `to_dict()`
- *      returns the root only; the wrapper adds `irVersion`/`ir`).
+ *   1. Ask `derive-server.py` to import the story and ship its document, as
+ *      the widget does: its tables as base64 Arrow.
+ *   2. Decode the tables with the hosts' own codec (`decodeDocument`), as the
+ *      harness and the widget do before they render.
  *   3. Run it through `gofish-ir`'s validator. An unknown field is an error.
  *      The bridge fields Python emits (`__gofish_lambda`, `__scope`,
  *      `__datum`/`__key`, ...) are declared in the schema like any other.
@@ -15,6 +16,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Frontend } from "gofish-ir";
+import { decodeDocument } from "gofish-python/arrowBridge";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TESTS_DIR = resolve(HERE, "..");
@@ -138,12 +140,11 @@ async function loadStoryIR(story: PythonStory): Promise<any> {
   return await resp.json();
 }
 
-/** Wrap the IR in the /load response (the builder's own `to_ir()`) into a
- *  FrontendIRDocument. */
-function wrap(serverIR: {
-  ir: Frontend.FrontendIR;
+/** The document in the /load response, its tables decoded. */
+function documentOf(loaded: {
+  doc: Parameters<typeof decodeDocument<Frontend.FrontendIRDocument>>[0];
 }): Frontend.FrontendIRDocument {
-  return { irVersion: 0, ir: "gofish-frontend", root: serverIR.ir };
+  return decodeDocument<Frontend.FrontendIRDocument>(loaded.doc);
 }
 
 // ---------------------------------------------------------------------------
@@ -176,7 +177,7 @@ async function main() {
       );
       continue;
     }
-    const doc = wrap(ir);
+    const doc = documentOf(ir);
     if (
       process.env.DEBUG_DATA &&
       (label.includes("stacked-with-labels") ||

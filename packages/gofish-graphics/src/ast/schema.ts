@@ -41,6 +41,11 @@ import { INSTANT } from "./measure";
  *    milliseconds), once, before any split, so every group of a split reads
  *    the same domain off its column type. The cells of `field(x).bin(p)` are
  *    over it (cells.ts).
+ *  - {@link HasInteger}: the column's values are integers. JS has one number
+ *    type, so a JS column never has it; a host's decode attaches it to a
+ *    column that arrived as integers (a Python int64 column, decoded from
+ *    Arrow), and the host's encode reads it to send the column back as
+ *    integers. Nothing in the engine reads it.
  *
  * A column made from another keeps that column's type: the cells of
  * `field(x).bin(p)` are amounts of `x`'s quantity, in `x`'s unit, and a
@@ -76,6 +81,9 @@ export type HasMidpoint = { at: number };
  *  (`"UTC"` by default). The zone decides where calendar cells start (a day
  *  starts at local midnight) and how labels read. An instant has no zero. */
 export type HasCalendar = { zone: string };
+
+/** The class of a column whose values are integers. It has no options. */
+export type HasInteger = Record<string, never>;
 
 /** The class of a column whose values are amounts in a declared unit:
  *
@@ -113,6 +121,7 @@ export type ColumnType = {
   HasUnit?: HasUnit;
   HasQuantity?: HasQuantity;
   HasDomain?: HasDomain;
+  HasInteger?: HasInteger;
 };
 
 /** Whether `v` is a time column's value as the engine reads it: epoch
@@ -135,7 +144,8 @@ const isEpochMs = (v: unknown): boolean =>
  *  - `HasUnit`: numbers, the amounts the unit measures. In the instant
  *    unit, also a valid `Date`, which is an instant (see `HasCalendar`).
  *  - `HasQuantity`: anything; a name says nothing about the values.
- *  - `HasDomain`: numbers from `lo` to `hi`. */
+ *  - `HasDomain`: numbers from `lo` to `hi`.
+ *  - `HasInteger`: integers. */
 const ACCEPTS: {
   [K in keyof ColumnType]-?: (
     v: unknown,
@@ -150,6 +160,7 @@ const ACCEPTS: {
   HasQuantity: () => true,
   HasDomain: (v, { lo, hi }) =>
     v == null || (typeof v === "number" && lo <= v && v <= hi),
+  HasInteger: (v) => v == null || Number.isInteger(v),
 };
 
 /** Whether `v` is a valid `Date`. */

@@ -1,15 +1,16 @@
 /**
  * Python parity render harness: the page Playwright drives.
  *
- * It renders a Python story's IR through the library's own deserializer,
- * `Serialize.renderIR`, the same function the notebook widget calls. Only the
- * callback transport is the harness's own: Python callbacks (derive
- * operators, lambda accessors, mark functions) run in
- * `tests/scripts/derive-server.py` and are reached over HTTP POST to
- * `<deriveServerUrl>/derive/<id>` instead of over anywidget traitlets. The
- * rows of each chart tier cross as the widget's do: Arrow bytes from
- * Python's `tiers_arrow_bytes`, decoded by the widget's own decode
- * (`decodeTierRows`), so parity covers that transport too.
+ * It renders a Python story's document through the library's own
+ * deserializer, `Serialize.renderIR`, the same function the notebook widget
+ * calls, with the widget's own Arrow codec (`gofish-python/arrowBridge`):
+ * the document's tables arrive as base64 Arrow from Python's `ir_payload`
+ * and are decoded before the render, and the bridge's one call sends rows as
+ * Arrow and decodes the reply's tables, so parity covers that transport too.
+ * Only the transport is the harness's own: Python callbacks (derive
+ * operators, accessors, mark functions) run in `tests/scripts/derive-server.py`
+ * and are reached over HTTP POST to `<deriveServerUrl>/call/<id>` instead of
+ * over anywidget traitlets.
  *
  * The caller (Playwright) calls `__renderChart__(spec)` (or sets
  * `__GOFISH_SPEC__` before load) and waits for `__GOFISH_RENDER_COMPLETE__`.
@@ -17,16 +18,19 @@
 
 import { Serialize } from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
-import { decodeTierRows } from "gofish-python/arrowDecode";
+import {
+  arrowBridge,
+  decodeDocument,
+  type ShippedDocument,
+} from "gofish-python/arrowBridge";
 
 /**
- * What `capture-python-dom.ts` sends: a story's IR as the derive server
- * returns it (the builder's own `to_ir()`), each chart tier's rows as base64
- * Arrow, the story's render options, and the derive server's address.
+ * What `capture-python-dom.ts` sends: a story's document as the derive
+ * server ships it (its tables as base64 Arrow by id), the story's render
+ * options, and the derive server's address.
  */
 interface HarnessSpec {
-  ir: Frontend.FrontendIR;
-  tierArrow?: string[];
+  doc: ShippedDocument<Frontend.FrontendIRDocument>;
   render: Serialize.RenderIROptions;
   deriveServerUrl?: string;
 }
@@ -40,26 +44,25 @@ declare global {
   }
 }
 
-/** The derive bridge over HTTP: one POST of the rows per call. */
+/** The bridge over HTTP: one POST of the rows (base64 Arrow) per call,
+ *  answered by the reply's shipped document. */
 function httpBridge(
   deriveServerUrl: string | undefined
 ): Serialize.DeriveBridge | undefined {
   if (deriveServerUrl === undefined) return undefined;
-  return {
-    async applyLambda(lambdaId, rows) {
-      const resp = await fetch(`${deriveServerUrl}/derive/${lambdaId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(rows),
-      });
-      if (!resp.ok) {
-        throw new Error(
-          `derive ${lambdaId} failed: ${resp.status} ${await resp.text()}`
-        );
-      }
-      return Serialize.readIR(await resp.json());
-    },
-  };
+  return arrowBridge(async (lambdaId, rowsB64) => {
+    const resp = await fetch(`${deriveServerUrl}/call/${lambdaId}`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: rowsB64,
+    });
+    if (!resp.ok) {
+      throw new Error(
+        `call ${lambdaId} failed: ${resp.status} ${await resp.text()}`
+      );
+    }
+    return resp.json();
+  });
 }
 
 function renderChart(spec: HarnessSpec) {
@@ -71,10 +74,12 @@ function renderChart(spec: HarnessSpec) {
   }
   (async () => {
     try {
-      await Serialize.renderIR(spec.ir, container, spec.render, {
-        bridge: httpBridge(spec.deriveServerUrl),
-        tierRows: decodeTierRows(spec.tierArrow ?? []),
-      });
+      await Serialize.renderIR(
+        decodeDocument<Frontend.FrontendIRDocument>(spec.doc),
+        container,
+        spec.render,
+        httpBridge(spec.deriveServerUrl)
+      );
       // Allow a tick for SolidJS to flush renders.
       await new Promise<void>((resolve) =>
         requestAnimationFrame(() => resolve())

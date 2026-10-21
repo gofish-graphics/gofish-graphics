@@ -48,9 +48,12 @@ export function stashLayerName(mark: object, layerName: unknown): void {
   (mark as any).__layerName = layerName;
 }
 
-/** A chart pipeline (`ChartBuilder` or `LayerBuilder`): it resolves to a node
- *  against the layer registry it is given. A mark may return one. */
+/** A chart pipeline (`ChartBuilder` or `LayerBuilder`, a `RenderableBuilder`):
+ *  it binds the rows of the partition it sits in when it is an empty scope
+ *  (`inScope`), and resolves to a node against the layer registry it is
+ *  given. It sits in any mark position, and a mark may return one. */
 type ChartPipeline = {
+  inScope(rows: unknown): ChartPipeline;
   withLayerContext(layerContext: LayerContext): {
     resolve(): Promise<GoFishNode>;
   };
@@ -79,12 +82,20 @@ export const datumOfInput = <T>(d: T[]): T[] | undefined =>
   d === NO_ROWS ? undefined : d;
 
 /**
- * Resolves whatever a Mark returns into a GoFishNode. A mark is called with
- * {@link NO_ROWS}.
+ * Resolve what a mark position holds into a GoFishNode, against the rows of
+ * the partition it sits in (`rows`, keyed `key`). This is the one rule for
+ * every mark position: a chart's `.mark(...)`, each child of a combinator
+ * (`spread`, `stack`, `layer`, ...), a tier of a `.layer(...)` chain. A mark
+ * function is called with the rows; a chart or chain (`ChartPipeline`) binds
+ * them when it is an empty scope (`RenderableBuilder.inScope`); a node is
+ * itself. What a mark function returns is resolved as a root: with
+ * {@link NO_ROWS}, the rows of no partition.
  */
 export async function resolveMarkResult(
   raw: MarkChild,
-  layerContext?: LayerContext
+  layerContext?: LayerContext,
+  rows: unknown = NO_ROWS,
+  key?: string | number
 ): Promise<GoFishNode> {
   // Mark functions are typed as sync-returning, but async marks are a
   // valid pattern (e.g. the Python wrapper's mark-as-function bridges via
@@ -104,13 +115,16 @@ export async function resolveMarkResult(
   // layer context (its own, when there is none), so a `.name(...)` inside it
   // is findable from outside.
   if (isChartPipeline(raw))
-    return raw.withLayerContext(layerContext ?? {}).resolve();
+    return raw
+      .inScope(rows)
+      .withLayerContext(layerContext ?? {})
+      .resolve();
   if (typeof raw === "function")
     return resolveMarkResult(
       // Pass layerContext through so mark wrappers (e.g. .name(...)) that
       // need to register into the layer context still see it when invoked
-      // here. A mark resolved at the root has no rows.
-      (raw as Mark<any>)(NO_ROWS, undefined, layerContext),
+      // here.
+      (raw as Mark<any>)(rows as any, key, layerContext),
       layerContext
     );
   return raw as unknown as GoFishNode;

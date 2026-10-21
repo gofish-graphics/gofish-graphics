@@ -7,15 +7,14 @@
  * a live `ChartBuilder` / `Mark`. Used by the Python widget today and by
  * any JS consumer that wants to reconstruct a chart from JSON.
  *
- * The deserializer is bridge-aware but transport-agnostic. Python lambdas
- * (`{ __gofish_lambda: id }` sentinels and `derive` operators) are resolved
- * via the caller-supplied {@link DeriveBridge}.
+ * The deserializer is bridge-aware but transport-agnostic. Python callbacks
+ * (`derive` operators, `{ __gofish_lambda: id }` accessors, mark functions)
+ * are called through the caller-supplied {@link DeriveBridge}.
  */
 
 // Source-module imports — see the note in registry.ts.
 import {
   chart,
-  layer,
   selectAll,
   LayerBuilder,
   PREVIOUS_LAYER_MARKS,
@@ -30,8 +29,9 @@ import { sealComponent } from "../ast/withGoFish";
 import { resolveMarkResult } from "../ast/marks/markResult";
 import { Frontend } from "gofish-ir";
 import { RESOLVE_ROWS } from "../ast/channels";
+import { applySchema } from "../ast/schema";
 import {
-  applyLambdaTyped,
+  callForRows,
   rebuild,
   cutSlices,
   cutMark,
@@ -43,8 +43,6 @@ import {
 } from "./registry";
 
 export type ChartSpec = Frontend.ChartIR;
-export type LayerSpec = Frontend.LayerIR;
-export type RawMarkSpec = Frontend.RawMarkIR;
 export type MarkSpec = Frontend.MarkIR;
 export type OperatorSpec = Frontend.OperatorIR;
 /** One entry of a `label` wire array — see `Frontend.LabelSpecIR`. Named
@@ -53,6 +51,26 @@ export type OperatorSpec = Frontend.OperatorIR;
 export type LabelSpec = Frontend.LabelSpecIR;
 export type ConstraintSpec = Frontend.ConstraintIR;
 type RelateClauseIR = Frontend.RelateClauseIR;
+
+/**
+ * What rebuilding any part of a document needs besides the part itself.
+ * One object is threaded through every rebuild below, so a chart rebuilds by
+ * one rule wherever it sits (the root, a mark position, a tier of a
+ * `.layer(...)` chain). A mark function's reply is a document of its own,
+ * so the subtree it rebuilds gets its own `tables` and `inputRefs`.
+ */
+export interface IRContext {
+  /** Runs the Python callbacks the IR names. */
+  bridge?: DeriveBridge;
+  /** Mints one JS token per hygienic-name sentinel, per render. */
+  resolveToken: TokenResolver;
+  /** The rows of the document's charts, by the id a `{type: "table", id}`
+   *  data field names. */
+  tables: Frontend.Tables;
+  /** The live `GoFishRef`s a mark function was called with, which an
+   *  `{__inputRef: i}` sentinel in its reply resolves back to. */
+  inputRefs?: any[];
+}
 
 /**
  * Rebuild one constraint clause of a `.relate()` from its IR. The wire
@@ -111,10 +129,10 @@ export function isTokenSentinel(v: any): v is TokenSentinel {
  * Build the accessor for a `{ __gofish_lambda: id }` sentinel. It has only a
  * batch form ({@link RESOLVE_ROWS}): the mark and operator factories resolve
  * it before channel inference (`resolveChannelAccessors` in channels.ts) with
- * one `applyLambdaTyped(bridge, id, rows)` call for all of its rows, typed
- * like any other callback result (a time comes back as epoch milliseconds).
- * That call is the one place a Python accessor crosses the bridge. Called per row, it throws: a
- * Python accessor works only in a channel.
+ * one bridge call for all of its rows. The reply's list has one value per
+ * row, typed by `applySchema` like a chart's rows (a time comes back as epoch
+ * milliseconds). Called per row, it throws: a Python accessor works only in
+ * a channel.
  */
 function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
   const accessor = () => {
@@ -123,8 +141,8 @@ function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
     );
   };
   return Object.assign(accessor, {
-    [RESOLVE_ROWS]: (rows: readonly unknown[]) =>
-      applyLambdaTyped(bridge, lambdaId, [...rows]),
+    [RESOLVE_ROWS]: async (rows: readonly unknown[]) =>
+      applySchema(await callForRows(bridge, lambdaId, rows)),
   });
 }
 
@@ -161,17 +179,6 @@ export function unwrapOpts(value: any, bridge?: DeriveBridge): any {
   return out;
 }
 
-/** Bridge-free variant for callsites that never see lambda sentinels. */
-export function unwrapValues(value: any): any {
-  if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map(unwrapValues);
-  const out: Record<string, any> = {};
-  for (const [k, val] of Object.entries(value)) {
-    out[k] = unwrapValues(val);
-  }
-  return out;
-}
-
 // ---------------------------------------------------------------------------
 // Mark wrappers and field resolution
 // ---------------------------------------------------------------------------
@@ -180,7 +187,8 @@ export function unwrapValues(value: any): any {
  * Wrap a Mark so its resolved GoFishNode gets `.scope()` called. Triggered
  * by the `__scope: true` flag the Python `@mark` decorator stamps on a
  * Mark's IR. Forwards `.name` / `.label` / `.render` / `.relate` so the
- * scoped mark still behaves as a `NameableMark` for the raw-mark render path.
+ * scoped mark still behaves as a `NameableMark`, wherever it sits (a root
+ * renders it directly).
  */
 export function wrapWithScope(inner: any): any {
   // The same closing step a JS `createMark` component gets. (`createMark` no
@@ -362,26 +370,21 @@ export function mapOperator(
  * the combinator factories tolerate both (the pure-JS `Spread(opts, cut(...))`
  * spelling relies on the same tolerance).
  */
-export function mapMarkChildren(
-  specs: MarkSpec[],
-  bridge: DeriveBridge | undefined,
-  resolveToken: TokenResolver,
-  inputRefs?: any[]
-): any[] {
+export function mapMarkChildren(specs: MarkSpec[], ctx: IRContext): any[] {
   const out: any[] = [];
   for (const child of specs as any[]) {
     if (child && child.type === "cut") {
-      const sourceMark = mapMark(child.source, bridge, resolveToken, inputRefs);
+      const sourceMark = mapMark(child.source, ctx);
       // Pure cut requires an array `size`; the field-name-string sugar is only
       // valid in the chart `.mark(cut(...))` (data-bound expand) form.
       const slices = cutSlices(sourceMark as any, {
         dir: child.dir,
-        size: unwrapOpts(child.size, bridge),
+        size: unwrapOpts(child.size, ctx.bridge),
         inset: child.inset,
       });
       out.push(...slices);
     } else {
-      out.push(mapMark(child as MarkSpec, bridge, resolveToken, inputRefs));
+      out.push(mapMark(child as MarkSpec, ctx));
     }
   }
   return out;
@@ -390,19 +393,13 @@ export function mapMarkChildren(
 /**
  * Rebuild the clauses of a `.relate()` callback, in order: a constraint
  * (it carries `refs`, operand names) through {@link constraintFromIR}, a mark
- * that draws like any other mark. Shared by the `layer` combinator mark and
- * the `LayerIR` root (see {@link renderIR}).
+ * that draws like any other mark.
  */
-function relateClauses(
-  clauses: RelateClauseIR[],
-  bridge: DeriveBridge | undefined,
-  resolveToken: TokenResolver,
-  inputRefs?: any[]
-): unknown[] {
+function relateClauses(clauses: RelateClauseIR[], ctx: IRContext): unknown[] {
   return clauses.map((c) =>
     Frontend.isConstraintIR(c)
       ? constraintFromIR(c)
-      : mapMark(c as MarkSpec, bridge, resolveToken, inputRefs)
+      : mapMark(c as MarkSpec, ctx)
   );
 }
 
@@ -434,17 +431,13 @@ function serializeMarkFnInput(items: any[]): {
 }
 
 /** Build a single mark from its IR spec. Recurses into combinator children.
- *  `inputRefs`, when supplied, is the array of real `GoFishRef`s a mark-fn was
- *  invoked with — an `{__inputRef: i}` sentinel anywhere in the (possibly
+ *  `ctx.inputRefs`, when supplied, is the array of real `GoFishRef`s a mark-fn
+ *  was invoked with — an `{__inputRef: i}` sentinel anywhere in the (possibly
  *  Python-returned) mark tree resolves back to `inputRefs[i]`, letting a
  *  Python mark-fn embed the ref it was handed directly in its returned
  *  layout (mirrors JS `spread({...}, [d[0], text(...)])`). */
-export function mapMark(
-  markSpec: MarkSpec,
-  bridge: DeriveBridge | undefined,
-  resolveToken: TokenResolver,
-  inputRefs?: any[]
-): Mark<any> {
+export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
+  const { bridge, resolveToken, inputRefs } = ctx;
   const spec = markSpec as any;
   const applyTranslate = <T>(mark: T): T =>
     spec.translate && typeof (mark as any).translate === "function"
@@ -473,9 +466,39 @@ export function mapMark(
     return inputRef;
   }
 
-  // Mark-as-function: Python registered a `(data) -> ChartBuilder | Mark`
-  // lambda. The JS Mark fetches a chart (or raw-mark) IR per invocation (via
-  // the bridge) and rebuilds it JS-side.
+  // A whole chart in a mark position (`.mark(chart(...))`, a
+  // `layer([rect(...), chart(...)])` child): rebuild the same `chart(...)`
+  // object a JS author writes there, unresolved, so the mark machinery treats
+  // it as it treats the JS one (an empty `chart()` scope inherits the rows of
+  // the partition it sits in). A chart with rows of its own names its table,
+  // as it does at the root. A layer of charts is the `layer` combinator below.
+  if (Frontend.isChartIR(spec)) {
+    return chartFromIR(spec, ctx) as unknown as Mark<any>;
+  }
+
+  // A `.layer(...)` chain, wherever it sits (#1181): rebuild it through the
+  // real `LayerBuilder`, the way a JS author writes it, so JS owns the
+  // chain's tier wiring and render logic (inferred axis titles, the root
+  // tier's `axes`). Each tier is a mark position. In a mark position, the
+  // mark machinery binds a first tier with `previous-tier` data to the rows
+  // of the partition the chain sits in, as it does an empty `chart()`.
+  if (Frontend.isLayerChainIR(spec)) {
+    const [first, ...rest] = spec.tiers.map((tier) => mapMark(tier, ctx));
+    return rest.reduce(
+      (chain: any, tier) => chain.layer(tier),
+      first
+    ) as unknown as Mark<any>;
+  }
+
+  // Mark-as-function: Python registered a `(data) -> mark | chart` callback.
+  // The JS Mark calls it through the bridge per invocation. The reply is a
+  // document like the top-level one: its root is the mark-position IR of
+  // what the callback returned (a mark, a chart or a layer), and its tables
+  // are the ones that IR's charts name, by ids of the reply's own. So it
+  // rebuilds here like any other mark position, with the reply's tables and
+  // the refs this call was given. Like a JS mark function's result, it is
+  // returned unresolved: the caller, `resolveMarkResult`, resolves a Mark, a
+  // ChartBuilder or a LayerBuilder.
   if (spec.type === "mark-fn") {
     const lambdaId = spec.lambdaId as string;
     if (!bridge) {
@@ -484,27 +507,14 @@ export function mapMark(
       );
     }
     return (async (data: any, _key: any, _layerContext: any) => {
-      const { rows, inputRefs: newInputRefs } = serializeMarkFnInput(data);
-      const result = await bridge.applyLambda(lambdaId, rows);
-      // Returns a ChartBuilder or a raw Mark, both of which behave as a Mark
-      // in the deserialization pipeline; cast through `unknown` to express
-      // that the deserializer is honoring the existing widget contract.
-      // mark-fn returns a one-element list; result[0] is the chart/mark-spec
-      // dict, as plain JSON (the bridge undoes any transport wrapping).
-      // The reply is the IR root of what the callback returned: a bare Mark
-      // (`{type: "raw-mark"}`, e.g. a `spread([...])` that embeds one of its
-      // input refs), a chart, or a layer (`chart(...).layer(...)`). Like a JS
-      // mark function's result, each is returned unresolved: the caller,
-      // `resolveMarkResult`, resolves a Mark, a ChartBuilder or a
-      // LayerBuilder. Rows travel inline in the reply.
-      const root = result[0] as Frontend.FrontendIR;
-      if (root.type === "raw-mark") {
-        return mapMark(root.mark, bridge, resolveToken, newInputRefs);
-      }
-      if (root.type === "layer") {
-        return buildLayer(root, bridge, [], resolveToken);
-      }
-      return chartFromIR(root, [], bridge, resolveToken);
+      const { rows, inputRefs: replyInputRefs } = serializeMarkFnInput(data);
+      const reply = await bridge.call(lambdaId, rows);
+      return mapMark(reply.root as MarkSpec, {
+        ...ctx,
+        // A drawn IR's tables are its charts' rows.
+        tables: (reply.tables ?? {}) as Frontend.Tables,
+        inputRefs: replyInputRefs,
+      });
     }) as unknown as Mark<any>;
   }
 
@@ -525,12 +535,7 @@ export function mapMark(
   // public `offset` operator, which accepts a Mark child and resolves it.
   if (spec.type === "offset") {
     const childSpecs = (spec.children ?? []) as MarkSpec[];
-    const [childMark] = mapMarkChildren(
-      childSpecs,
-      bridge,
-      resolveToken,
-      inputRefs
-    );
+    const [childMark] = mapMarkChildren(childSpecs, ctx);
     return applyTranslate(
       offsetOp({ x: spec.x, y: spec.y }, [
         childMark as any,
@@ -544,12 +549,7 @@ export function mapMark(
   // combinator CHILD is instead expanded into its N slice nodes IN PLACE — see
   // `mapMarkChildren` — so extent resolution lives in ONE place, JS-side.)
   if (spec.type === "cut") {
-    const sourceMark = mapMark(
-      spec.source as MarkSpec,
-      bridge,
-      resolveToken,
-      inputRefs
-    );
+    const sourceMark = mapMark(spec.source as MarkSpec, ctx);
     let mark = cutMark({
       source: sourceMark as any,
       dir: spec.dir,
@@ -575,9 +575,7 @@ export function mapMark(
   if (spec.__combinator) {
     const childMarks = mapMarkChildren(
       (spec.children ?? []) as MarkSpec[],
-      bridge,
-      resolveToken,
-      inputRefs
+      ctx
     );
     // Resolve color/coord configs (e.g. a `layer({coord: polar()})` carries
     // its coord transform in the combinator options, not chart options).
@@ -597,9 +595,7 @@ export function mapMark(
       // Rebuilt per call: a `ref(...)` clause is a live GoFishRef that
       // `.name()` mutates in place, so calls must not share one.
       const clauses = spec.relate as RelateClauseIR[];
-      mark = (mark as any).relate(() =>
-        relateClauses(clauses, bridge, resolveToken, inputRefs)
-      );
+      mark = (mark as any).relate(() => relateClauses(clauses, ctx));
     }
     if (spec.__scope) {
       mark = wrapWithScope(mark);
@@ -683,12 +679,14 @@ export function mapMark(
 }
 
 /**
- * Read an IR document (or any part of one, such as a derive response) as it
- * arrives: parse it if it is JSON text, and turn its tagged non-finite
- * numbers (`{ "$numberDouble": "Infinity" }`, written by `toJSON` and Python's
- * `to_ir()`) back into numbers. Each entry point decodes once: `renderIR` its
- * root, `buildChart` its arguments, and a JSON bridge its replies. The
- * builders below take what this returns.
+ * Read JSON IR as it arrives: parse it if it is JSON text, and turn its
+ * tagged non-finite numbers (`{ "$numberDouble": "Infinity" }`, written by
+ * `toJSON` and Python's `to_ir()`) back into numbers. It is the JSON codec's
+ * read, so it applies where the JSON encoding put the tags: a whole JSON
+ * document, or, in a document a Python host ships, every part but its
+ * Arrow tables (`decodeDocument` in gofish-python's `arrowBridge.ts`, which
+ * decodes a bridge call's reply the same way). `buildIR` takes a document
+ * read this way.
  */
 export function readIR<T = any>(json: T | string): T {
   return Frontend.decodeNonFinite(
@@ -697,68 +695,47 @@ export function readIR<T = any>(json: T | string): T {
 }
 
 /**
- * Build a full chart from its IR, as it arrives (it is decoded here). Data is
- * supplied separately (the IR's `data` field may be a `select` reference; row
- * data comes from the caller — either an inline `rows` from the IR or
- * external Arrow data from the Python bridge).
+ * A chart's data, by its IR: the rows of the table it names (an array that
+ * may carry column types, `setColumnTypes`, which the chart reads as it reads
+ * its own `schema`'s, and its `schema` wins), a selection of named marks, or
+ * the empty scope, which `LayerBuilder` (or the mark machinery, in a mark
+ * position) binds to the rows of the enclosing scope.
  */
-export function buildChart(
-  encodedSpec: ChartSpec,
-  encodedData: Record<string, any>[],
-  bridge: DeriveBridge | undefined,
-  resolveToken: TokenResolver
-): ChartBuilder<any> {
-  return chartFromIR(
-    readIR(encodedSpec),
-    readIR(encodedData),
-    bridge,
-    resolveToken
-  );
+function dataFromIR(data: Frontend.DataIR, ctx: IRContext): unknown {
+  switch (data.type) {
+    case "table": {
+      const rows = ctx.tables[data.id];
+      if (rows === undefined) {
+        throw new Error(
+          `a chart names table "${data.id}", which its payload does not carry`
+        );
+      }
+      return rows;
+    }
+    case "select":
+      return refOfSelect(data);
+    case "previous-tier":
+      return PREVIOUS_LAYER_MARKS;
+    default:
+      throw new Error(
+        `unknown chart data type ${JSON.stringify((data as any).type)}`
+      );
+  }
 }
 
-/** {@link buildChart} over an already-decoded spec and rows. */
-function chartFromIR(
-  chartSpec: ChartSpec,
-  data: Record<string, any>[],
-  bridge: DeriveBridge | undefined,
-  resolveToken: TokenResolver
-): ChartBuilder<any> {
+/** Rebuild a chart from its IR, wherever it sits: the same `chart(...)`
+ *  builder a JS author writes there. */
+function chartFromIR(chartSpec: ChartSpec, ctx: IRContext): ChartBuilder<any> {
   const operators: Operator<any, any>[] = [];
   for (const opSpec of (chartSpec.operators ?? []) as OperatorSpec[]) {
-    const op = mapOperator(opSpec, bridge);
+    const op = mapOperator(opSpec, ctx.bridge);
     if (op) operators.push(op);
   }
-  const markSpec = (chartSpec.mark ?? { type: "rect" }) as MarkSpec;
-  const mark = mapMark(markSpec, bridge, resolveToken);
+  const mark = mapMark(chartSpec.mark, ctx);
   const resolvedOptions = resolveOptions(
     ((chartSpec as any).options ?? {}) as Record<string, any>
   );
-
-  // Resolve chartSpec.data. The canonical shapes are:
-  //   - { type: "inline", rows: [...] }  — inline rows live on the spec
-  //   - { type: "select", layer }        — late-bound layer reference
-  //   - { type: "previous-tier" }        — empty chart() scope inside a
-  //                                        .layer(...) builder chain; maps to
-  //                                        the PREVIOUS_LAYER_MARKS sentinel
-  //                                        so LayerBuilder's own wireTiers()
-  //                                        does the auto-naming/selectAll
-  //                                        wiring (see chartBuilder.ts)
-  //   - null / undefined                 — data was shipped via the bridge's
-  //                                        tier_arrow sidecar; use the
-  //                                        `data` argument the caller passed
-  // Data in the IR (inline rows, a selection, the previous tier) wins over
-  // rows the host shipped beside it.
-  let chartData: any = data;
-  const dataField = (chartSpec as any).data;
-  if (dataField && typeof dataField === "object") {
-    if (dataField.type === "select") {
-      chartData = refOfSelect(dataField);
-    } else if (dataField.type === "inline" && Array.isArray(dataField.rows)) {
-      chartData = dataField.rows;
-    } else if (dataField.type === "previous-tier") {
-      chartData = PREVIOUS_LAYER_MARKS;
-    }
-  }
+  const chartData = dataFromIR(chartSpec.data, ctx);
 
   // Cast the flow chain: `chart(...).flow(...).mark(...)` is typed with
   // operator-/mark-input/output relationships the runtime deserializer
@@ -770,7 +747,7 @@ function chartFromIR(
   // sibling `layer([...]).relate(...)` or a cross-chart `selectAll(n)` refer
   // to this chart).
   const zOrder = (chartSpec as any).zOrder as number | undefined;
-  const name = resolveNameField((chartSpec as any).name, resolveToken);
+  const name = resolveNameField((chartSpec as any).name, ctx.resolveToken);
   if (zOrder === undefined && name == null) return builder;
   // A relational mark (line/ribbon) over row data fuses into an anchor tier
   // plus a connector tier, so `.mark()` returns a LayerBuilder, which has
@@ -808,19 +785,6 @@ export interface RenderIROptions {
   debug?: boolean;
 }
 
-/** Where the parts of a render that are not in the IR document come from. */
-export interface IRHost {
-  /** Runs the Python callbacks the IR names (derive operators, lambda
-   *  accessors, mark functions). */
-  bridge?: DeriveBridge;
-  /** Rows shipped beside the IR instead of inline in it (the widget's Arrow
-   *  sidecar), one array per chart tier; a lone chart is tier 0. A chart
-   *  whose `data` is inline, a selection, or the previous tier ignores its
-   *  entry. An array may carry column types (`setColumnTypes`), which the
-   *  chart reads as it reads its own `schema`'s, and its `schema` wins. */
-  tierRows?: Record<string, any>[][];
-}
-
 /** Drop undefined fields, so a render option the host left unset is absent
  *  rather than present-and-undefined. */
 function definedFields<T extends Record<string, unknown>>(o: T): Partial<T> {
@@ -830,67 +794,42 @@ function definedFields<T extends Record<string, unknown>>(o: T): Partial<T> {
 }
 
 /**
- * Render a whole frontend-IR root (a chart, a layer, or a bare mark) into
- * `container`. This is the one entry point both hosts use: the Python widget
- * (Arrow sidecar, anywidget RPC) and the parity harness (the same Arrow
- * sidecar, HTTP RPC).
- * Building throws synchronously on a bad spec; the returned promise settles
- * with the {@link View} once the chart has rendered.
+ * Rebuild a frontend-IR document, as read ({@link readIR} for a JSON
+ * document; a Python host's `decodeDocument`, which also decodes its Arrow
+ * tables), into the object a JS author would have written for its root: a
+ * `ChartBuilder`, a `LayerBuilder`, or a mark. A root holds anything a mark
+ * position does, so it rebuilds as one ({@link mapMark}), reading the
+ * document's `tables` (a table may carry column types, `setColumnTypes`,
+ * which the chart reads as it reads its own `schema`'s, and its `schema`
+ * wins). `bridge` runs the Python callbacks the IR names, and answers each
+ * call with its reply read the same way. Building throws synchronously on a
+ * bad document.
  */
-export function renderIR(
-  encodedRoot: Frontend.FrontendIR,
-  container: HTMLElement,
-  renderOptions: RenderIROptions,
-  host: IRHost = {}
-): Promise<View> {
-  const root = readIR(encodedRoot);
-  const { bridge, tierRows = [] } = host;
-  const resolveToken = makeTokenResolver();
-  const options: any = definedFields({ ...renderOptions });
-  if (root.type === "raw-mark") {
-    const mark = mapMark(root.mark, bridge, resolveToken) as any;
-    return mark.render(container, options);
-  }
-  if (root.type === "layer") {
-    return buildLayer(root, bridge, tierRows, resolveToken).render(
-      container,
-      options
-    );
-  }
-  return chartFromIR(root, tierRows[0] ?? [], bridge, resolveToken).render(
-    container,
-    options
-  );
+export function buildIR(
+  doc: Frontend.FrontendIRDocument,
+  bridge?: DeriveBridge
+): any {
+  return mapMark(doc.root, {
+    bridge,
+    resolveToken: makeTokenResolver(),
+    tables: doc.tables ?? {},
+  });
 }
 
-/** Build a `LayerIR` root: the `chart(...).layer(...)` builder chain, or the
- *  `layer(options, tiers)` combinator with its `.relate(...)` clauses. */
-function buildLayer(
-  spec: LayerSpec,
-  bridge: DeriveBridge | undefined,
-  tierRows: Record<string, any>[][],
-  resolveToken: TokenResolver
-): any {
-  // A tier is a chart (ChartBuilder) or a component-level annotation
-  // (raw-mark → a Mark).
-  const tiers: any[] = spec.charts.map((tier, i) =>
-    tier.type === "raw-mark"
-      ? mapMark(tier.mark, bridge, resolveToken)
-      : chartFromIR(tier, tierRows[i] ?? [], bridge, resolveToken)
-  );
-  if (spec.builder) {
-    // Fluent `chart(...).layer(...)` chain: reconstruct through the real
-    // LayerBuilder so JS owns the builder's render logic (inferred axis
-    // titles, the root tier's `axes`, etc.). The first tier is always a
-    // chart; later tiers may be mark tiers (`.layer(text({...}))`).
-    return tiers.slice(1).reduce((acc, tier) => acc.layer(tier), tiers[0]);
-  }
-  const combined = (layer as any)(
-    resolveOptions((spec.options ?? {}) as Record<string, any>),
-    tiers
-  );
-  if (spec.relate === undefined || spec.relate.length === 0) return combined;
-  // Rebuilt per call, as in `mapMark`'s combinator branch.
-  const clauses = spec.relate;
-  return combined.relate(() => relateClauses(clauses, bridge, resolveToken));
+/**
+ * Render a frontend-IR document into `container` ({@link buildIR}, then its
+ * root's `.render`). This is the one entry point both Python hosts use: the
+ * notebook widget (anywidget traitlets) and the parity harness (HTTP), each
+ * with its tables decoded from Arrow and a bridge over its own transport.
+ * The returned promise settles with the {@link View} once the chart has
+ * rendered.
+ */
+export function renderIR(
+  doc: Frontend.FrontendIRDocument,
+  container: HTMLElement,
+  renderOptions: RenderIROptions,
+  bridge?: DeriveBridge
+): Promise<View> {
+  const options: any = definedFields({ ...renderOptions });
+  return buildIR(doc, bridge).render(container, options);
 }

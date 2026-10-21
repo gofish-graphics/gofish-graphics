@@ -7,14 +7,12 @@ import {
   stack,
   table,
   rect,
+  text,
   derive,
   field,
   Color,
 } from "../../src/lib";
-import {
-  parseLabelPosition,
-  type LabelPosition,
-} from "../../src/ast/labels/labelPlacement";
+import type { LabelPosition } from "../../src/ast/labels/labelPlacement";
 import data from "vega-datasets";
 import { titanicPassengers } from "../../src/data/titanicPassengers";
 
@@ -206,7 +204,9 @@ export const AboveEnd: StoryObj<Args> = {
 };
 
 // ─── All positions grid ────────────────────────────────────────────────────────
-// One row per position so they can be compared side by side.
+// The same bars once per position, each captioned with its position, two to
+// a row (a position beside its counterpart) so they can be compared side by
+// side.
 
 const ALL_POSITIONS: LabelPosition[] = [
   "center",
@@ -225,42 +225,41 @@ const ALL_POSITIONS: LabelPosition[] = [
   "outset-top-end",
 ];
 
-export const AllPositions: StoryObj<{ w: number; h: number }> = {
+/** A chart captioned above with `caption`. */
+const captioned = (caption: string, body: any) =>
+  spread({ dir: "y", spacing: 16, alignment: "start" }, [
+    text({ text: caption, fontSize: 12, fontFamily: "monospace" }),
+    body,
+  ]);
+
+export const AllPositions: StoryObj<Args> = {
   name: "All positions – comparison",
-  args: { w: 400, h: 180 },
+  args: { w: 720, h: 1200 },
   render: (args) => {
-    const outer = document.createElement("div");
-    outer.style.display = "flex";
-    outer.style.flexDirection = "column";
-    outer.style.gap = "4px";
-    document.body.appendChild(outer);
-
-    for (const pos of ALL_POSITIONS) {
-      const row = document.createElement("div");
-      row.style.display = "flex";
-      row.style.alignItems = "center";
-      row.style.gap = "8px";
-
-      const label = document.createElement("div");
-      label.textContent = pos;
-      label.style.width = "130px";
-      label.style.fontSize = "12px";
-      label.style.fontFamily = "monospace";
-      label.style.flexShrink = "0";
-      row.appendChild(label);
-
-      const container = document.createElement("div");
-      container.style.flex = "1";
-      row.appendChild(container);
-      outer.appendChild(row);
-
-      chart(seafood, { axes: false, w: args.w, h: args.h })
-        .flow(spread({ by: "lake",  dir: "x" }))
-        .mark(rect({ h: "count" }).label(field("count").sum(), { position: pos, fontSize: 9 }))
-        .render(container);
-    }
-
-    return outer;
+    const container = initializeContainer();
+    const cell = (position: LabelPosition) =>
+      captioned(
+        position,
+        chart(seafood, { axes: false, w: 300, h: 100 })
+          .flow(spread({ by: "lake", dir: "x" }))
+          .mark(
+            rect({ h: "count" }).label(field("count").sum(), {
+              position,
+              fontSize: 9,
+            })
+          )
+      );
+    const rows = Array.from({ length: ALL_POSITIONS.length / 2 }, (_, i) =>
+      spread({ dir: "x", spacing: 48, alignment: "start" }, [
+        cell(ALL_POSITIONS[2 * i]),
+        cell(ALL_POSITIONS[2 * i + 1]),
+      ])
+    );
+    spread({ dir: "y", spacing: 28, alignment: "start" }, rows).render(
+      container,
+      { w: args.w, h: args.h }
+    );
+    return container;
   },
 };
 
@@ -389,48 +388,26 @@ export const HeatmapWithLabels: StoryObj<Args> = {
 
 export const Rotated: StoryObj<Args> = {
   name: "Rotate: diagonal labels",
-  args: { w: 500, h: 300 },
+  args: { w: 500, h: 800 },
   render: (args) => {
-    const outer = document.createElement("div");
-    outer.style.display = "flex";
-    outer.style.flexDirection = "column";
-    outer.style.gap = "8px";
-    document.body.appendChild(outer);
-
-    const cases: { label: string; rotate: number }[] = [
-      { label: "rotate: 45°", rotate: 45 },
-      { label: "rotate: -30°", rotate: -30 },
-      { label: "rotate: 0°", rotate: 0 },
-    ];
-
-    for (const { label, rotate } of cases) {
-      const row = document.createElement("div");
-      row.style.display = "flex";
-      row.style.alignItems = "center";
-      row.style.gap = "8px";
-
-      const tag = document.createElement("div");
-      tag.textContent = label;
-      tag.style.width = "120px";
-      tag.style.fontSize = "12px";
-      tag.style.fontFamily = "monospace";
-      tag.style.flexShrink = "0";
-      row.appendChild(tag);
-
-      const container = document.createElement("div");
-      container.style.flex = "1";
-      row.appendChild(container);
-      outer.appendChild(row);
-
-      chart(seafood, { w: args.w, h: args.h })
-        .flow(spread({ by: "lake",  dir: "x" }))
-        .mark(
-          rect({ h: "count" }).label(field("count").sum(), { position: "outset-top", rotate })
+    const container = initializeContainer();
+    spread(
+      { dir: "y", spacing: 40, alignment: "start" },
+      [45, -30, 0].map((rotate) =>
+        captioned(
+          `rotate: ${rotate}°`,
+          chart(seafood, { w: 400, h: 180 })
+            .flow(spread({ by: "lake", dir: "x" }))
+            .mark(
+              rect({ h: "count" }).label(field("count").sum(), {
+                position: "outset-top",
+                rotate,
+              })
+            )
         )
-        .render(container);
-    }
-
-    return outer;
+      )
+    ).render(container, { w: args.w, h: args.h });
+    return container;
   },
 };
 
@@ -515,217 +492,54 @@ export const TwoLabelsPerBar: StoryObj<Args> = {
 };
 
 // ─── position showcase ────────────────────────────────────────────────────────
-// A single large rectangle with every position string rendered at its computed
-// location. Blue = inset positions, amber = outset positions.
+// One rect with a label at every position, each naming its own position.
+// Blue = inset positions, amber = outset positions. An inset corner is the
+// same spot from either edge (`inset-top-start` is `inset-left-start`), so
+// each corner gets one label that names both. The single datum maps each
+// position to its text, so `.label(position)` reads that text.
 
-const SHOWCASE_POSITIONS: LabelPosition[] = [
-  "center",
-  "inset-top",
-  "inset-top-start",
-  "inset-top-end",
-  "inset-bottom",
-  "inset-bottom-start",
-  "inset-bottom-end",
-  "inset-left",
-  "inset-left-start",
-  "inset-left-end",
-  "inset-right",
-  "inset-right-start",
-  "inset-right-end",
-  "outset-top",
-  "outset-top-start",
-  "outset-top-end",
-  "outset-bottom",
-  "outset-bottom-start",
-  "outset-bottom-end",
-  "outset-left",
-  "outset-left-start",
-  "outset-left-end",
-  "outset-right",
-  "outset-right-start",
-  "outset-right-end",
-];
-
-// Local re-implementation of the old (deleted) `calculateLabelOffset`/
-// `getLabelTextAnchor` pixel math, kept here purely as a standalone demo of
-// what each `LabelPosition` token means — it draws raw SVG, not a real
-// gofish chart, so it doesn't exercise the label elaboration pass at all.
-function demoLabelOffset(
-  position: LabelPosition,
-  [width, height]: [number, number],
-  offset: number
-): { x: number; y: number } {
-  if (position === "center") return { x: 0, y: 0 };
-  const { side, edge, align } = parseLabelPosition(position);
-
-  if (side === "outset") {
-    switch (edge ?? "top") {
-      case "top": {
-        const xAlign =
-          align === "start" ? -width / 2 : align === "end" ? width / 2 : 0;
-        return { x: xAlign, y: height / 2 + offset };
-      }
-      case "bottom": {
-        const xAlign =
-          align === "start" ? -width / 2 : align === "end" ? width / 2 : 0;
-        return { x: xAlign, y: -(height / 2 + offset) };
-      }
-      case "left": {
-        const yAlign =
-          align === "start" ? height / 2 : align === "end" ? -height / 2 : 0;
-        return { x: -(width / 2 + offset), y: yAlign };
-      }
-      case "right": {
-        const yAlign =
-          align === "start" ? height / 2 : align === "end" ? -height / 2 : 0;
-        return { x: width / 2 + offset, y: yAlign };
-      }
-    }
-  }
-
-  // side === "inset"
-  if (edge === null) return { x: 0, y: 0 };
-
-  switch (edge) {
-    case "top": {
-      const xAlign =
-        align === "start"
-          ? -(width / 2 - offset)
-          : align === "end"
-            ? width / 2 - offset
-            : 0;
-      return { x: xAlign, y: height / 2 - offset };
-    }
-    case "bottom": {
-      const xAlign =
-        align === "start"
-          ? -(width / 2 - offset)
-          : align === "end"
-            ? width / 2 - offset
-            : 0;
-      return { x: xAlign, y: -(height / 2 - offset) };
-    }
-    case "left": {
-      const yAlign =
-        align === "start"
-          ? height / 2 - offset
-          : align === "end"
-            ? -(height / 2 - offset)
-            : 0;
-      return { x: -(width / 2 - offset), y: yAlign };
-    }
-    case "right": {
-      const yAlign =
-        align === "start"
-          ? height / 2 - offset
-          : align === "end"
-            ? -(height / 2 - offset)
-            : 0;
-      return { x: width / 2 - offset, y: yAlign };
-    }
-    default:
-      return { x: 0, y: 0 };
-  }
-}
-
-function demoLabelTextAnchor(
-  position: LabelPosition
-): "start" | "middle" | "end" {
-  if (position === "center") return "middle";
-  const { side, edge, align } = parseLabelPosition(position);
-  const resolvedEdge = edge ?? (side === "inset" ? null : "top");
-
-  if (resolvedEdge === "top" || resolvedEdge === "bottom" || resolvedEdge === null) {
-    if (align === "start") return "start";
-    if (align === "end") return "end";
-    return "middle";
-  }
-
-  if (resolvedEdge === "left") return side === "inset" ? "start" : "end";
-  if (resolvedEdge === "right") return side === "inset" ? "end" : "start";
-
-  return "middle";
-}
+const SHOWCASE_LABELS: Partial<Record<LabelPosition, string>> = {
+  center: "center",
+  "inset-top": "inset-top",
+  "inset-bottom": "inset-bottom",
+  "inset-left": "inset-left",
+  "inset-right": "inset-right",
+  "inset-top-start": "inset-top-start = inset-left-start",
+  "inset-top-end": "inset-top-end = inset-right-start",
+  "inset-bottom-start": "inset-bottom-start = inset-left-end",
+  "inset-bottom-end": "inset-bottom-end = inset-right-end",
+  "outset-top": "outset-top",
+  "outset-top-start": "outset-top-start",
+  "outset-top-end": "outset-top-end",
+  "outset-bottom": "outset-bottom",
+  "outset-bottom-start": "outset-bottom-start",
+  "outset-bottom-end": "outset-bottom-end",
+  "outset-left": "outset-left",
+  "outset-left-start": "outset-left-start",
+  "outset-left-end": "outset-left-end",
+  "outset-right": "outset-right",
+  "outset-right-start": "outset-right-start",
+  "outset-right-end": "outset-right-end",
+};
 
 export const PositionShowcase: StoryObj = {
   name: "Position showcase – all positions on one rect",
   render: () => {
-    const svgW = 700;
-    const svgH = 460;
-    const rectW = 320;
-    const rectH = 200;
-    const cx = svgW / 2;
-    const cy = svgH / 2;
-    const OFFSET = 14;
-
-    const ns = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("width", String(svgW));
-    svg.setAttribute("height", String(svgH));
-    svg.style.fontFamily = "monospace";
-
-    const bg = document.createElementNS(ns, "rect");
-    bg.setAttribute("width", String(svgW));
-    bg.setAttribute("height", String(svgH));
-    bg.setAttribute("fill", "#f9fafb");
-    svg.appendChild(bg);
-
-    // Rectangle
-    const mainRect = document.createElementNS(ns, "rect");
-    mainRect.setAttribute("x", String(cx - rectW / 2));
-    mainRect.setAttribute("y", String(cy - rectH / 2));
-    mainRect.setAttribute("width", String(rectW));
-    mainRect.setAttribute("height", String(rectH));
-    mainRect.setAttribute("fill", "#dbeafe");
-    mainRect.setAttribute("stroke", "#3b82f6");
-    mainRect.setAttribute("stroke-width", "1.5");
-    svg.appendChild(mainRect);
-
-    // Crosshairs
-    for (const [x1, y1, x2, y2] of [
-      [cx - rectW / 2, cy, cx + rectW / 2, cy],
-      [cx, cy - rectH / 2, cx, cy + rectH / 2],
-    ] as [number, number, number, number][]) {
-      const line = document.createElementNS(ns, "line");
-      line.setAttribute("x1", String(x1));
-      line.setAttribute("y1", String(y1));
-      line.setAttribute("x2", String(x2));
-      line.setAttribute("y2", String(y2));
-      line.setAttribute("stroke", "#93c5fd");
-      line.setAttribute("stroke-dasharray", "3 3");
-      svg.appendChild(line);
-    }
-
-    for (const pos of SHOWCASE_POSITIONS) {
-      const { x, y } = demoLabelOffset(pos, [rectW, rectH], OFFSET);
-      const lx = cx + x;
-      const ly = cy - y; // negate: calculateLabelOffset uses y-up coords
-
-      const isInset =
-        pos === "center" || (pos as string).startsWith("inset");
-      const color = isInset ? "#1d4ed8" : "#92400e";
-
-      const dot = document.createElementNS(ns, "circle");
-      dot.setAttribute("cx", String(lx));
-      dot.setAttribute("cy", String(ly));
-      dot.setAttribute("r", "2.5");
-      dot.setAttribute("fill", color);
-      svg.appendChild(dot);
-
-      const text = document.createElementNS(ns, "text");
-      text.setAttribute("x", String(lx));
-      text.setAttribute("y", String(ly));
-      text.setAttribute("fill", color);
-      text.setAttribute("font-size", "9");
-      text.setAttribute("dominant-baseline", "central");
-      text.setAttribute("text-anchor", demoLabelTextAnchor(pos));
-      text.textContent = pos;
-      svg.appendChild(text);
-    }
-
-    const wrapper = document.createElement("div");
-    wrapper.style.padding = "16px";
-    wrapper.appendChild(svg);
-    return wrapper;
+    const container = initializeContainer();
+    const positions = Object.keys(SHOWCASE_LABELS) as LabelPosition[];
+    const mark = positions.reduce(
+      (m, position) =>
+        m.label(position, {
+          position,
+          fontSize: 11,
+          fontFamily: "monospace",
+          color: position.startsWith("outset") ? "#92400e" : "#1d4ed8",
+        }),
+      rect({ w: 660, h: 280, fill: "#dbeafe", stroke: "#3b82f6", strokeWidth: 1.5 })
+    );
+    chart([SHOWCASE_LABELS], { axes: false })
+      .mark(mark)
+      .render(container, { w: 660, h: 280 });
+    return container;
   },
 };

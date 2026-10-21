@@ -85,48 +85,45 @@ console.log("# avoiding: [b] inside .relate(), as Python writes it");
     irVersion: 0,
     ir: "gofish-frontend",
     root: {
-      type: "raw-mark",
-      mark: {
-        type: "layer",
-        __combinator: true,
-        children: [
-          {
-            type: "spread",
-            __combinator: true,
-            options: { dir: "x", spacing: 95, alignment: "middle" },
-            children: ["a", "b", "c"].map((name) => ({
-              type: "circle",
-              r: 5,
-              fill: "#111",
-              name,
-            })),
-          },
-        ],
-        relate: [
-          {
-            type: "enclose",
-            __combinator: true,
-            options: {
-              shape: {
-                kind: "blob",
-                convexity: 0,
-                clearance: 6,
-                avoiding: [{ type: "ref", selection: "b" }],
-              },
-              padding: 22,
+      type: "layer",
+      __combinator: true,
+      children: [
+        {
+          type: "spread",
+          __combinator: true,
+          options: { dir: "x", spacing: 95, alignment: "middle" },
+          children: ["a", "b", "c"].map((name) => ({
+            type: "circle",
+            r: 5,
+            fill: "#111",
+            name,
+          })),
+        },
+      ],
+      relate: [
+        {
+          type: "enclose",
+          __combinator: true,
+          options: {
+            shape: {
+              kind: "blob",
+              convexity: 0,
+              clearance: 6,
+              avoiding: [{ type: "ref", selection: "b" }],
             },
-            children: [
-              { type: "ref", selection: "a" },
-              { type: "ref", selection: "c" },
-            ],
+            padding: 22,
           },
-        ],
-      },
+          children: [
+            { type: "ref", selection: "a" },
+            { type: "ref", selection: "c" },
+          ],
+        },
+      ],
     },
   };
   check("the IR validates", valid(doc) === "", valid(doc));
   const ir = await svgOf((el) =>
-    Serialize.renderIR(doc.root, el, { w: 380, h: 150 })
+    Serialize.renderIR(doc, el, { w: 380, h: 150 })
   );
   check(
     "fromJSON renders the same enclosure as the JS spec",
@@ -160,20 +157,9 @@ console.log("# avoiding: selectAll(name), through JS toJSON and back");
         })
       );
   const build = () => points().layer(outlines());
-  // The two tiers, each emitted by JS, as one builder layer (the form a
-  // Python `.layer(...)` chain takes).
-  const doc = {
-    irVersion: 0,
-    ir: "gofish-frontend",
-    root: {
-      type: "layer",
-      builder: true,
-      charts: [
-        (await points().toJSON()).root,
-        (await outlines().toJSON()).root,
-      ],
-    },
-  };
+  // The chain as JS emits it: a layer-chain of the two tiers, the first
+  // naming its rows' table (the form a Python `.layer(...)` chain takes).
+  const doc = await build().toJSON();
   check("the IR validates", valid(doc) === "", valid(doc));
   const avoiding = JSON.stringify(doc).match(/"avoiding":(\{[^}]*\})/)?.[1];
   check(
@@ -183,12 +169,10 @@ console.log("# avoiding: selectAll(name), through JS toJSON and back");
   );
   const js = await svgOf((el) => build().render(el, { w: 300, h: 200 }));
   const ir = await svgOf((el) =>
-    Serialize.renderIR(
-      Serialize.readIR(JSON.stringify(doc)).root,
-      el,
-      { w: 300, h: 200 },
-      { tierRows: [rows] }
-    )
+    Serialize.renderIR(JSON.parse(JSON.stringify(doc)), el, {
+      w: 300,
+      h: 200,
+    })
   );
   check(
     "fromJSON renders the same enclosures",
@@ -263,7 +247,7 @@ console.log("# nested children, rendered and serialized alike");
   );
   const js = await svgOf((el) => build().render(el, { w: 200, h: 80 }));
   const ir = await svgOf((el) =>
-    Serialize.renderIR(Serialize.readIR(JSON.stringify(doc)).root, el, {
+    Serialize.renderIR(JSON.parse(JSON.stringify(doc)), el, {
       w: 200,
       h: 80,
     })
@@ -296,15 +280,12 @@ console.log("# a single ref is not a node list, in JS as on the wire");
     irVersion: 0,
     ir: "gofish-frontend",
     root: {
-      type: "raw-mark",
-      mark: {
-        type: "enclose",
-        __combinator: true,
-        options: {
-          shape: { kind: "blob", avoiding: { type: "ref", selection: "b" } },
-        },
-        children: [],
+      type: "enclose",
+      __combinator: true,
+      options: {
+        shape: { kind: "blob", avoiding: { type: "ref", selection: "b" } },
       },
+      children: [],
     },
   });
   check("the validator rejects it too", !wire.valid);

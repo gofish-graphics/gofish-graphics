@@ -152,11 +152,9 @@ export async function applyMark<T>(
       )
     );
   }
-  // per-item: one call per leaf; the mark may aggregate.
-  const node = await resolveMarkResult(
-    (mark as Mark<T>)(group as T, groupKey, layerContext),
-    layerContext
-  );
+  // per-item: one call per leaf; the mark may aggregate. The mark is any
+  // mark position's child (a chart or chain binds the leaf as an empty scope).
+  const node = await resolveMarkResult(mark, layerContext, group, groupKey);
   return [node];
 }
 
@@ -1006,7 +1004,9 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
     for (const items of entries?.values() ?? []) {
       for (const row of items) rows.add(row);
     }
-    return [...rows];
+    // The input's rows, with its column types (a Python accessor's call
+    // sends them, typed, across the bridge).
+    return copyColumnTypes([...rows], d);
   });
   const resolved = isThenable(pending) ? await pending : pending;
   const withChannels = applyChannels(resolved, channels, d, entries);
@@ -1050,18 +1050,15 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         // resolved nodes (e.g. `ref(...)`) rather than mark functions, so
         // pass non-functions through as-is.
         const resolvedMarks = await Promise.resolve(marks);
+        // Each child is a mark position over `d` (a chart or chain binds it
+        // as an empty scope). Its key is local (not parent-prefixed) —
+        // matches the operator form: a nested grouping's keys are scoped to
+        // its own subtree, so ordinal axis labels read locally and per-layer
+        // uniqueness suffices.
         const nodes = await Promise.all(
-          resolvedMarks.map(async (mark, i) => {
-            // Local key (not parent-prefixed) — matches the operator form: a
-            // nested grouping's keys are scoped to its own subtree, so ordinal
-            // axis labels read locally and per-layer uniqueness suffices.
-            const currentKey = i;
-            const result =
-              typeof mark === "function"
-                ? mark(d, currentKey, layerContext)
-                : mark;
-            return resolveMarkResult(result, layerContext);
-          })
+          resolvedMarks.map((mark, i) =>
+            resolveMarkResult(mark, layerContext, d, i)
+          )
         );
         const lowOpts = await buildLayoutOpts(
           cfg.channels,
