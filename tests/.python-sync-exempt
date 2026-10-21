@@ -211,3 +211,8 @@ packages/gofish-graphics/stories/forwardsyntax/TimeBenchmarkPorts.stories.tsx::C
 # cannot cross the derive bridge. The other Enclose/Shapes stories are ported.
 packages/gofish-graphics/stories/EncloseShapes.stories.tsx::PenguinsFourShapes
 packages/gofish-graphics/stories/EncloseShapes.stories.tsx::ChartAccentSubSaharanAfrica
+
+# Throwaway prototype stories for the Python animation and interaction API
+# proposal (proposals/python-animation-interaction/). Review material drawn as
+# HTML strips of several charts at several clock or input values; not a spec.
+packages/gofish-graphics/stories/proposals/python-anim-interaction/PythonAnimInteraction.stories.tsx
