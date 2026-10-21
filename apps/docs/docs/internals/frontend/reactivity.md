@@ -14,6 +14,9 @@ covers:
   - packages/gofish-graphics/src/interaction/runtime.ts
   - packages/gofish-graphics/src/interaction/renderTerminal.ts
   - packages/gofish-graphics/src/interaction/widgets.ts
+  - packages/gofish-graphics/src/interaction/readers.ts
+  - packages/gofish-graphics/src/ast/expr.ts
+  - packages/gofish-graphics/src/ast/exprTier.ts
 ---
 
 # Reactivity: signals beside a synchronous pipeline
@@ -47,10 +50,48 @@ An author can put a reactive read in two kinds of place:
   input as a **pipeline dependency**: a change re-runs the _entire_ pipeline
   (resolve → layout → lower → paint) through a rAF-coalesced scheduler.
 
-The split is not configured; it _falls out_ of where the read happens. That is
+The split is not configured; it _falls out_ of where the read happens (for an
+expression, of where it is written; see below). That is
 deliberate — it means the same authoring surface can later grow finer-grained
 incremental layout without an API change (see [Incremental
 outlook](#incremental-outlook)).
+
+## Sources and expressions
+
+Every input is a **source**: an object that carries the `SOURCE` protocol
+(`src/ast/expr.ts`), which names its kind, the options it was made from (its
+declaration in the frontend IR's `sources` table), and how to read it. A clock,
+a signal and a wheel have one value, so each is an **expression** of that
+value and takes the expression methods (`year.floor()`, `cut.gt(50)`). A
+pointer and a drag have several readable values, each one an expression too:
+`hover.over`, `hover.field("species")`, `dr.y`, `dr.dx`, `dr.active`. Their
+spelling lives in one module, `readers.ts`, which also holds what each read
+means. In the IR a read is generic, a source id plus a read name and an
+optional argument (`{ "type": "source", "id": "s1", "read": "y" }`), so a
+respelling changes `readers.ts` alone.
+
+An expression is a tree of literals, `field(...)` reads (with their
+aggregates), source reads and a fixed set of polars operations (`gt`, `add`,
+`and`, `clip`, `fillNull`, `floor`, `round`, `concatStr`, and
+`when/then/otherwise`). It is also a function of the datum, so it is an
+accessor wherever a function is: a channel, a `filter` predicate. Evaluated at
+a mark's datum (a bag of rows), a `field` read folds the rows with its
+aggregate, or collapses them when they agree, and throws when they do not. Null
+propagates, as in polars.
+
+**The tier is inferred.** An expression is data, so the pipeline can see what
+it reads and where its value goes, which a closure hides. `tierOf(channel,
+expr)` (`exprTier.ts`) applies one rule: a source read patches paint when the
+channel is a paint channel (a `DisplayList.Style` key, or text content) and the
+value reaches the screen as written (the channel draws it raw, or every value
+the expression can produce is a literal color, so no color scale stands
+between it and the paint). Anything else is a pipeline read. `liveChannelsOf`
+asks it, so an expression of the paint tier is stamped exactly as a `live(fn)`
+is, and one of the pipeline tier is an ordinary accessor whose read registers
+a pipeline dependency. So `fill: when(hover.over).then("red").otherwise("blue")`
+is a paint patch and `y: cut` lays the chart out again, with no wrapper.
+Text content counts as paint: its box keeps the size measured at resolve, which
+is `live()`'s caveat. That choice is made in `exprTier.ts` and nowhere else.
 
 ## The ambient resolve context
 
@@ -555,10 +596,12 @@ thunk-in-side-table paint path are stable regardless of which direction the
 pipeline's incrementality takes (Solid-izing nodes as memos vs. salsa-style scope
 memoization over the functional pipeline).
 
-## This layer is JS-only
+## What crosses the IR
 
-The reactive layer does not cross the Python↔JS IR bridge: `live()` callbacks and
-input signals are JavaScript closures that cannot be serialized through the
-`derive` RPC. The interaction stories are marked
-[parity-exempt](/internals/python/parity). Everything here is available only from
-the JavaScript API.
+A source crosses the frontend IR as its declaration, in the document's
+`sources` table, and a read of it as an expression (see
+[Frontend IR](/internals/frontend/serialization)). The deserializer builds a
+fresh source from each declaration per `renderIR`, so two charts never share
+one by accident. `live()` callbacks and any source made with a JS function
+option (a drag's `hitTest`) are closures, so they do not cross; serializing
+one is an error.

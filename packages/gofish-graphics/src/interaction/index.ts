@@ -14,6 +14,7 @@
 export { live, isLive } from "./live";
 export type { LiveValue } from "./live";
 export { pointer, drag, click, wheel, timer, signal } from "./inputs";
+export type { PointerReads, DragReads } from "./readers";
 export type {
   FrameBoxReader,
   Pointer,

@@ -3,9 +3,9 @@
  * Run: `pnpm test:expr`.
  */
 import { field } from "../ast/data";
-import { when, concatStr } from "../ast/expr";
+import { when, concatStr, isExpr, exprNode } from "../ast/expr";
 import { tierOf } from "../ast/exprTier";
-import { signal, timer, wheel } from "../interaction/inputs";
+import { signal, timer, drag, pointer, wheel } from "../interaction/inputs";
 
 declare const process: { exit(code: number): never };
 
@@ -88,26 +88,52 @@ console.log("sources");
   ok("a signal is an expression of its value", cut.gt(50)() === true);
   cut.set(40);
   ok("and reads its current value", cut.gt(50)() === false);
-  const year = timer({ domain: [1955, 2005], duration: 1000, playing: false, at: 1997.5 });
+  const year = timer({
+    domain: [1955, 2005],
+    duration: 1000,
+    playing: false,
+    at: 1997.5,
+  });
   ok("timer({ at }) starts at `at`", year() === 1997.5, String(year()));
   ok("year.floor()", year.floor()() === 1997);
   ok(
     "a timer's declaration is its options",
     JSON.stringify((year as any)[Symbol.for("gofish.source")].declaration) ===
-      JSON.stringify({ domain: [1955, 2005], duration: 1000, playing: false, at: 1997.5 })
+      JSON.stringify({
+        domain: [1955, 2005],
+        duration: 1000,
+        playing: false,
+        at: 1997.5,
+      })
   );
   const w = wheel({ range: [3, 40], initial: 12, round: true });
   ok("wheel expr", concatStr("bins: ", w)() === "bins: 12");
+  const dr = drag();
+  ok("a drag read is null before a drag", dr.y() === null);
+  ok("fillNull over a drag read", dr.y.clip(0, 95).fillNull(60)() === 60);
+  ok("drag.active is false at rest", dr.active() === false);
+  const hover = pointer();
+  ok("pointer.over is false off the chart", hover.over([{ a: 1 }]) === false);
+  ok("pointer.field is null off the chart", hover.field("a")() === null);
+  ok("reads are expressions", isExpr(dr.y) && isExpr(hover.over));
+  ok(
+    "a read names its source and its read kind",
+    (() => {
+      const n = exprNode(hover.field("species"));
+      return n.type === "source" && n.read === "field" && n.arg === "species";
+    })()
+  );
 }
 
 console.log("tier inference");
 {
   const cut = signal(60);
-  const colors = when(cut.gt(50)).then("#d62728").otherwise("steelblue");
+  const hover = pointer();
+  const colors = when(hover.over).then("#d62728").otherwise("steelblue");
   ok("literal colors on fill: paint", tierOf("fill", colors) === "paint");
   ok(
     "a scaled value on fill: pipeline",
-    tierOf("fill", when(cut.gt(50)).then("species").otherwise("x")) ===
+    tierOf("fill", when(hover.over).then("species").otherwise("x")) ===
       "pipeline"
   );
   ok("a raw style channel: paint", tierOf("opacity", cut.div(100)) === "paint");

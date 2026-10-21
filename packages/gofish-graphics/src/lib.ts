@@ -330,6 +330,8 @@ export type {
   TimerOptions,
   TimerValues,
   Signal,
+  PointerReads,
+  DragReads,
   SvgPoint,
   SvgBox,
 } from "./interaction";

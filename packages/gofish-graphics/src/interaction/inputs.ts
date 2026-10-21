@@ -32,12 +32,19 @@ import {
   type Source,
   type SourceProtocol,
 } from "../ast/expr";
+import {
+  dragReads,
+  pointerReads,
+  type DragReads,
+  type PointerReads,
+} from "./readers";
 
 /**
  * Every input is a SOURCE (`src/ast/expr.ts`): it carries its kind, the
  * declaration it was made from (its frontend-IR form), and how to read it.
  * An input of one value (a clock, a signal, a wheel) is an expression of that
- * value.
+ * value; a pointer or a drag has several readable values, named in
+ * `readers.ts`.
  */
 function asSource<T extends object>(
   target: T,
@@ -151,7 +158,7 @@ const frameBoxReader = (
 
 /* ------------------------------- pointer -------------------------------- */
 
-export interface Pointer extends FrameBoxReader {
+export interface Pointer extends FrameBoxReader, PointerReads {
   /** Pointer position in svg-local px, or undefined when off the chart. */
   pos(): SvgPoint | undefined;
   /** Per-axis data coordinates under the pointer, via frame conversions.
@@ -203,7 +210,7 @@ export function pointer(): Pointer {
   };
   const { track, invalidate } = dependency(input);
 
-  return {
+  return pointerReads({
     pos() {
       track();
       return pos();
@@ -221,7 +228,7 @@ export function pointer(): Pointer {
       return pxToData(runtime, pos());
     },
     ...frameBoxReader(track, () => runtime),
-  };
+  });
 }
 
 /**
@@ -263,7 +270,7 @@ export interface DragOptions {
   hitTest?: (pt: SvgPoint, hit: Hit | undefined) => boolean;
 }
 
-export interface Drag extends FrameBoxReader {
+export interface Drag extends FrameBoxReader, DragReads {
   /** True while a drag is in progress. */
   isActive(): boolean;
   /** Pointer-down position (svg-local px), if a drag has started. */
@@ -326,36 +333,39 @@ export function drag(options: DragOptions = {}): Drag {
     p: SvgPoint | undefined
   ): { x?: number; y?: number } | undefined => pxToData(runtime, p);
 
-  return {
-    isActive() {
-      track();
-      return active();
+  return dragReads(
+    {
+      isActive() {
+        track();
+        return active();
+      },
+      origin() {
+        track();
+        return origin();
+      },
+      current() {
+        track();
+        return current();
+      },
+      delta() {
+        track();
+        const o = origin();
+        const c = current();
+        if (!o || !c) return undefined;
+        return { x: c.x - o.x, y: c.y - o.y };
+      },
+      originData() {
+        track();
+        return toData(origin());
+      },
+      currentData() {
+        track();
+        return toData(current());
+      },
+      ...frameBoxReader(track, () => runtime),
     },
-    origin() {
-      track();
-      return origin();
-    },
-    current() {
-      track();
-      return current();
-    },
-    delta() {
-      track();
-      const o = origin();
-      const c = current();
-      if (!o || !c) return undefined;
-      return { x: c.x - o.x, y: c.y - o.y };
-    },
-    originData() {
-      track();
-      return toData(origin());
-    },
-    currentData() {
-      track();
-      return toData(current());
-    },
-    ...frameBoxReader(track, () => runtime),
-  };
+    declarationOf("drag", options)
+  );
 }
 
 /* -------------------------------- click --------------------------------- */

@@ -35,6 +35,8 @@ const {
   timer,
   click,
   signal,
+  when,
+  field,
   gofish,
   spreadX,
   group,
@@ -580,6 +582,91 @@ async function main() {
         .join(",")
     );
     ok("hover caused zero re-runs", resolves === 1, `resolves=${resolves}`);
+  }
+
+  /* ------------- expressions: tier inferred, no live() ------------- */
+  console.log("\nexpressions: hover is paint, a position read is pipeline");
+  {
+    const container = makeContainer();
+    let resolves = 0;
+    const hover = pointer();
+    await chart(data, { axes: false })
+      .flow(
+        derive((rows: any) => {
+          resolves++;
+          return rows;
+        }),
+        spread({ by: "cat", dir: "x" })
+      )
+      .mark(
+        rect({
+          h: "count",
+          fill: when(hover.over).then("#f00").otherwise("#00f"),
+        })
+      )
+      .render(container, { w: 200, h: 120 });
+    await settle();
+    const bars = () => Array.from(container.querySelectorAll("rect"));
+    ok(
+      "an expression fill registers the pointer",
+      container.querySelectorAll("[data-gf-id]").length === 3
+    );
+    bars()[1].dispatchEvent(
+      new (globalThis as any).PointerEvent("pointermove", {
+        clientX: 5,
+        clientY: 5,
+        bubbles: true,
+      })
+    );
+    await nextTick();
+    ok(
+      "when(hover.over) patches the hovered bar",
+      bars()
+        .map((r) => r.getAttribute("fill"))
+        .join(",") === "#00f,#f00,#00f",
+      bars()
+        .map((r) => r.getAttribute("fill"))
+        .join(",")
+    );
+    ok("and re-runs nothing", resolves === 1, `resolves=${resolves}`);
+
+    const c2 = makeContainer();
+    let resolves2 = 0;
+    const cut = signal(2.5);
+    await chart(data, { axes: false })
+      .flow(
+        derive((rows: any) => {
+          resolves2++;
+          return rows;
+        }),
+        spread({ by: "cat", dir: "x" })
+      )
+      .mark(
+        rect({
+          h: "count",
+          fill: when(field("count").sum().gt(cut))
+            .then("#f00")
+            .otherwise("#00f"),
+        })
+      )
+      .layer(rect({ y: cut, h: 1, w: 200, fill: "#333" }))
+      .render(c2, { w: 200, h: 120 });
+    await settle();
+    const fills = () =>
+      Array.from(c2.querySelectorAll("rect"))
+        .map((r) => r.getAttribute("fill"))
+        .filter((f) => f !== "#333")
+        .join(",");
+    ok("the fill compares each bar's sum", fills() === "#f00,#f00,#00f", fills());
+    const before = resolves2;
+    cut.set(4);
+    await settle();
+    ok(
+      "a source read in a position re-runs the pipeline",
+      resolves2 === before + 1,
+      `${before} -> ${resolves2}`
+    );
+    ok("and the paint follows", fills() === "#00f,#f00,#00f", fills());
   }
 
   /* ------------------------- drag lifecycle ------------------------ */
