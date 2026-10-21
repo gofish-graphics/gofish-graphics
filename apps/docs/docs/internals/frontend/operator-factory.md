@@ -480,7 +480,16 @@ wrapped mark a form that resolves every link of its modifier chain over a
 list of inputs at once. The split path calls it through `inputsResolver`
 with the split's groups, right before it applies the mark to each group, so
 a Python `zOrder` makes one bridge call per operator call, as the operator's
-own channel accessors do.
+own channel accessors do. A mark that wraps marks forwards the same form by
+one rule, `forwardInputsResolver`: a combinator over its children (`layer`,
+the dual operators' combinator form, the compositing marks), a `.translate`,
+the deserializer's scoped mark and its mark applied to a fixed input each
+resolve their inner marks over the inputs they will apply them to, so a
+batch accessor anywhere inside the mark an operator applies is still one
+call. A mark whose inner marks have none gets no batch form, so it is
+applied with no async step. A child list that is still a promise (`map(...)`)
+cannot be read until the combinator is applied, so its children resolve per
+input.
 
 The **export terminals** — `render`, `toSVG`, `toSVGElement`, `save`,
 `toDisplayList` — are the dual of modifiers: where a modifier mutates the

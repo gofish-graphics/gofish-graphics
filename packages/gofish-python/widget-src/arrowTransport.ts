@@ -11,9 +11,10 @@
  * List of its elements' type (the elements of every array in a column,
  * since a bag's rows come from one dataset), an object a Struct (the union
  * of the keys seen, a missing key null), a string Utf8, a boolean Bool, a
- * bigint Int64. A number's type comes from its column's declared type, never
- * from its values: a column typed `HasCalendar` is a millisecond timestamp
- * in its zone, a column typed `HasInteger` (it arrived as integers) is
+ * bigint Int64, and a ref (`Serialize.BridgeRef`, in a bridge call) the
+ * extension type `gofish.ref` (see `inferField`). A number's type comes
+ * from its column's declared type, never from its values: a column typed
+ * `HasCalendar` is a millisecond timestamp in its zone, a column typed `HasInteger` (it arrived as integers) is
  * Int64, and any other number column is Float64, because JS has one number
  * type. A JS `Date` is an instant: a millisecond timestamp in its column's
  * zone, or UTC. The declared types are the ones the list carries
@@ -39,6 +40,7 @@ type ColumnType = Serialize.ColumnTypes[string];
 /** The handful of shapes a column's values can take, used to pick an Arrow type. */
 type ValueKind =
   | "null"
+  | "ref"
   | "boolean"
   | "number"
   | "bigint"
@@ -49,6 +51,7 @@ type ValueKind =
 
 function kindOf(value: any): ValueKind {
   if (value === null || value === undefined) return "null";
+  if (value instanceof Serialize.BridgeRef) return "ref";
   if (Array.isArray(value)) return "array";
   if (value instanceof Date) return "date";
   const t = typeof value;
@@ -94,6 +97,8 @@ function inferType(
 
   const kind = [...kinds][0];
   switch (kind) {
+    case "ref":
+      return REF_STORAGE;
     case "array": {
       // The homogeneity assumption: every row's array in this column is a
       // bag from the same dataset, so its elements share one schema too.
@@ -104,8 +109,9 @@ function inferType(
         {},
         ...nonNull.map((bag) => Serialize.getColumnTypes(bag) ?? {})
       );
-      const itemType = inferType(elements, `${path}[]`, undefined, types);
-      return new Arrow.List(new Arrow.Field("item", itemType, true));
+      return new Arrow.List(
+        inferField("item", elements, `${path}[]`, undefined, types)
+      );
     }
     case "object": {
       const keys = new Set<string>();
@@ -115,11 +121,7 @@ function inferType(
       const children = [...keys].map((key) => {
         const subValues = nonNull.map((obj) => (key in obj ? obj[key] : null));
         const name = path ? `${path}.${key}` : key;
-        return new Arrow.Field(
-          key,
-          inferType(subValues, name, fields?.[key]),
-          true
-        );
+        return inferField(key, subValues, name, fields?.[key]);
       });
       return new Arrow.Struct(children);
     }
@@ -140,6 +142,40 @@ function inferType(
       );
   }
 }
+
+/**
+ * The field named `name` of `values` (see {@link inferType}). A field of refs
+ * is the extension type `gofish.ref`: its storage is `{index}`, a ref's index
+ * in the call's refs, and the field's metadata names the type, which the
+ * decode on either side reads (`arrowDecode.ts`, the `gofish.ref` type
+ * registered in `gofish/arrow_utils.py`). So a ref is never read off a row's
+ * keys, and no row is read as a ref.
+ */
+function inferField(
+  name: string,
+  values: readonly any[],
+  path: string,
+  type?: ColumnType,
+  fields?: Serialize.ColumnTypes
+): Arrow.Field {
+  const dataType = inferType(values, path, type, fields);
+  return new Arrow.Field(
+    name,
+    dataType,
+    true,
+    dataType === REF_STORAGE ? REF_EXTENSION : undefined
+  );
+}
+
+/** The storage of the `gofish.ref` extension type, and the field metadata
+ *  that names it (Arrow's extension-type convention). */
+const REF_STORAGE = new Arrow.Struct([
+  new Arrow.Field("index", new Arrow.Int64(), true),
+]);
+const REF_EXTENSION = new Map([
+  ["ARROW:extension:name", "gofish.ref"],
+  ["ARROW:extension:metadata", ""],
+]);
 
 /** An instant's Arrow type: a millisecond timestamp in the zone of its
  *  column's calendar, or UTC. */
@@ -180,7 +216,15 @@ function normalizeForType(value: any, type: Arrow.DataType): any {
 /** The Arrow table of the list `items`: one column, `item`, of the items'
  *  type (see the module comment). */
 export function buildArrowTable(items: readonly unknown[]): Arrow.Table {
-  const type = inferType(items, "", undefined, Serialize.getColumnTypes(items));
-  const values = items.map((v) => normalizeForType(v, type));
-  return new Arrow.Table({ item: Arrow.vectorFromArray(values, type as any) });
+  const field = inferField(
+    "item",
+    items,
+    "",
+    undefined,
+    Serialize.getColumnTypes(items)
+  );
+  const values = items.map((v) => normalizeForType(v, field.type));
+  return new Arrow.Table(new Arrow.Schema([field]), {
+    item: Arrow.vectorFromArray(values, field.type as any),
+  } as any);
 }

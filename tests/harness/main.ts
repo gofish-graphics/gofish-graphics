@@ -5,8 +5,9 @@
  * deserializer, `Serialize.renderIR`, the same function the notebook widget
  * calls, with the widget's own Arrow codec (`gofish-python/arrowBridge`):
  * the document's tables arrive as base64 Arrow from Python's `ir_payload`
- * and are decoded before the render, and the bridge's one call sends rows as
- * Arrow and decodes the reply's tables, so parity covers that transport too.
+ * and are decoded before the render, and the bridge's one call sends rows
+ * (and the refs they hold) as Arrow and decodes the reply's tables, so
+ * parity covers that transport too.
  * Only the transport is the harness's own: Python callbacks (derive
  * operators, accessors, mark functions) run in `tests/scripts/derive-server.py`
  * and are reached over HTTP POST to `<deriveServerUrl>/call/<id>` instead of
@@ -44,17 +45,17 @@ declare global {
   }
 }
 
-/** The bridge over HTTP: one POST of the rows (base64 Arrow) per call,
- *  answered by the reply's shipped document. */
+/** The bridge over HTTP: one POST of the call (its rows and refs as base64
+ *  Arrow, JSON) per call, answered by the reply's shipped document. */
 function httpBridge(
   deriveServerUrl: string | undefined
 ): Serialize.DeriveBridge | undefined {
   if (deriveServerUrl === undefined) return undefined;
-  return arrowBridge(async (lambdaId, rowsB64) => {
+  return arrowBridge(async (lambdaId, call) => {
     const resp = await fetch(`${deriveServerUrl}/call/${lambdaId}`, {
       method: "POST",
-      headers: { "Content-Type": "text/plain" },
-      body: rowsB64,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(call),
     });
     if (!resp.ok) {
       throw new Error(

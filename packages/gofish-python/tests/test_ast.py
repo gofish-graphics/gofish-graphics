@@ -279,13 +279,15 @@ class TestMarkZOrder:
 
     def test_function_reads_refs_with_pluck(self):
         """The input of a mark over refs is a list of refs, which JS sends as
-        `{__inputRef, datum}` sentinels; the function gets `_InputRef`s."""
+        `BridgeRef`s with their datums beside them; the function gets
+        `_InputRef`s."""
         from gofish import pluck
+        from gofish.arrow_utils import BridgeRef
 
         m = ribbon().z_order(lambda d: 1 if pluck(d, "site") == ["M"] else 0)
         lambda_id = ir(m)["zOrder"]["__gofish_lambda"]
-        refs = [{"__inputRef": i, "datum": [{"site": "M"}]} for i in range(2)]
-        assert call(m, lambda_id, [refs]) == [1]
+        refs = [[{"site": "M"}], [{"site": "M"}]]
+        assert call(m, lambda_id, [[BridgeRef(0), BridgeRef(1)]], refs) == [1]
 
 
 class TestMarkName:

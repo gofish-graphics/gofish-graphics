@@ -285,17 +285,24 @@ field `resolve` filled with a ref (`LabeledChart`'s `r.ref`), or a `zOrder`
 function over the bag of refs a mark is bound to. A `GoFishRef` is a class
 instance over the render's layer registry, not JSON, so one rule covers every
 bridge call: `callBridge` in `registry.ts` (`encodeInputRefs`) replaces each
-ref, at any depth of the input's lists and plain-object rows, with an
-`{"__inputRef": i, "datum": <rows>}` sentinel, where `i` indexes one flat
-`inputRefs` list. The ref's datum is encoded by the same rule. The walk is
-gofish-ir's `Frontend.walk`, the one the non-finite codec uses: a list or a
-row is copied only when it holds a ref, and a copied list keeps its column
-types, so an input with no refs crosses as it is. On the Python side, `answer`
-decodes every sentinel, wherever it sits in the rows, into an `_InputRef`
-(`_decode_input_refs` in `gofish/ast.py`), whose `.datum` reads naturally
-and which `pluck` reads through. A row that shares an Arrow column with a
-sentinel holds the sentinel's keys as nulls (Arrow types a column by the
-union of its keys), so a sentinel is a dict whose `__inputRef` is set. The callback may
+ref, at any depth of the input's lists and plain-object rows, with a
+`BridgeRef`, its index `i` in one flat `inputRefs` list. A node the input
+holds many times is one index, and its datum crosses once, as `refs[i]`
+beside the rows, encoded by the same rule. The walk is gofish-ir's
+`Frontend.walk`, the one the non-finite codec uses: a list or a row is copied
+only when it holds a ref, and a copied list keeps its column types, so an
+input with no refs crosses as it is. A ref is a value of its own type on the
+wire, the Arrow extension type `gofish.ref` (storage `{index}`, named in the
+field's metadata), in both codecs (`arrowTransport.ts`, `arrow_utils.py`), so
+no row is read as a ref and a ref adds no keys to the rows beside it; a
+column that holds refs and other values is a type conflict, as a string and
+a number are. On the Python side, `answer` turns every index, wherever it
+sits in the rows, into one `_InputRef` (`_decode_input_refs` in
+`gofish/ast.py`), whose `.datum` reads naturally and which `pluck` reads
+through. The rule runs both ways: a reply's tables may hold the refs the call
+was given (a `derive` that keeps the rows `resolve` filled, a mark function's
+chart over them), which Python writes back as `BridgeRef`s
+(`_encode_input_refs`) and `callBridge` resolves to the live refs. The callback may
 return a `ChartBuilder`, a `.layer(...)` chain, a `layer([...])` of charts or
 a bare `Mark`. The reply is a document like the top-level one, through the
 bridge's one call (`DeriveBridge.call`): its root is the mark-position IR of
@@ -308,12 +315,12 @@ payload, so the host registers them before JS calls one. A bare mark
 lets the callback embed one of its `_InputRef` arguments
 directly in the returned layout (mirroring JS `spread({...}, [d[0],
 text(...)])`, or a row's ref, `spread([r["ref"], text(...)])`). `mapMark`
-resolves any `{"__inputRef": i}` sentinel found
+resolves any `{"type": "ref", "__inputRef": i}` node found
 inside that returned mark tree back to `inputRefs[i]` — the _original_ live
 `GoFishRef` from the closure, not a reconstructed stand-in, so the ref's
 identity (and anything already registered against it, e.g. a name from an
 earlier tier) survives. A `.name(...)` call on the Python `_InputRef` (#556)
-rides along as a `name` field on the sentinel and is applied to the resolved
+rides along as a `name` field on the node and is applied to the resolved
 ref before it's returned, since `GoFishRef.name()` mutates in place — this is
 how a per-slice label overlay (`Cut.stories.tsx::ImageCutWithLabels`) can
 `.relate(...)` against a ref it only received through the bridge. Each call asks Python again and builds
@@ -341,7 +348,10 @@ same mutate-in-place `GoFishRef.name()`.
 This is what lets a named ref stand-in, such as `ref(token).name("a")`,
 serve as a constraint operand from Python exactly as from JS: without the wire
 `name`, the reconstructed ref would not answer to `"a"` and the constraint
-would fail to resolve.
+would fail to resolve. A ref has no paint order of its own: a JS `GoFishRef`
+has no `.zOrder()`, so `RefMarkIR` declares no `zOrder`, and a Python ref's
+`z_order` raises, naming the mark that draws the node or a `.relate(...)`
+z constraint as the place to order it.
 
 There is no `connect` field on the wire. `.layer(...)` — the one way to
 overlay a connector — always serializes as an ordinary tier of a

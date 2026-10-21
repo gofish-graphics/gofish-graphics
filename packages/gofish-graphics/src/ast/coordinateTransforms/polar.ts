@@ -1,3 +1,4 @@
+import { Frontend } from "gofish-ir";
 import { CoordinateTransform } from "./coord";
 
 export type PolarOptions = {
@@ -28,20 +29,29 @@ export type PolarOptions = {
  * See `dims` in dims.ts. The plane is y-up, so a positive `direction` turns
  * counter-clockwise on screen. The options expose GoTree's `StartAngle` /
  * `CentralAngle` / `Direction` / `InnerRadius` / `PolarCenter`.
+ *
+ * A preset's defaults are the ones its descriptor declares (gofish-ir's
+ * `COORDS`), which Python's `Coord.polar()` / `Coord.clock()` and the API
+ * reference are generated from, so the two languages default alike.
  */
-export const polarPreset =
-  (type: string, defaults: { baselineAngle: number; direction: 1 | -1 }) =>
-  (opts: PolarOptions = {}): CoordinateTransform => {
+export const polarPreset = (type: "polar" | "clock") => {
+  const defaults = Object.fromEntries(
+    Object.entries(Frontend.resolveFields(Frontend.COORDS[type])).map(
+      ([key, field]) => [key, field.default]
+    )
+  ) as Required<PolarOptions>;
+  return (opts: PolarOptions = {}): CoordinateTransform => {
     const {
-      innerRadius = 0,
-      centralAngle = 2 * Math.PI,
+      innerRadius = defaults.innerRadius,
+      centralAngle = defaults.centralAngle,
       baselineAngle = defaults.baselineAngle,
       direction = defaults.direction,
-      center = [0, 0],
+      center = defaults.center,
     } = opts;
     return {
       type,
       polar: true,
+      dataZeroAtStart: [true, false],
       transform: ([theta, r]: [number, number]) => [
         center[0] + r * Math.cos(baselineAngle + direction * theta),
         center[1] + r * Math.sin(baselineAngle + direction * theta),
@@ -58,10 +68,11 @@ export const polarPreset =
       ],
     };
   };
+};
 
 /**
  * Polar coordinates in the math convention: θ=0 at 3 o'clock (+x), increasing
  * counter-clockwise. For θ=0 at 12 o'clock increasing clockwise, use
  * `clock()`.
  */
-export const polar = polarPreset("polar", { baselineAngle: 0, direction: 1 });
+export const polar = polarPreset("polar");

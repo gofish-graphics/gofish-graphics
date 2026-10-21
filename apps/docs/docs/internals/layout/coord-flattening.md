@@ -250,9 +250,9 @@ children fill the ring, and, for a pinned axis, the map onto the budget that
 its children share. A free child is seated at the scope's `originPx`.
 
 The polar family's angular axis (θ = x) departs from the root in one place: its
-`originPx` is always 0, so data 0 sits at θ = 0 of the transform, which is the
-`baselineAngle`. The root (and `solveScope`) instead puts the claim's low edge at
-the box's low edge (`originPx = claim.descent(σ)`), which on θ would rotate any
+scope seats data 0 at its start, `originPx` 0, so data 0 sits at θ = 0 of the
+transform, which is the `baselineAngle`. The root instead puts the claim's low
+edge at the box's low edge (`originPx = claim.descent(σ)`), which on θ would rotate any
 range that does not start at 0 back to start at the baseline angle, and a stack
 centered on 0 (a diverging schema) would lose its centering. The rule holds for
 every polar coord, full circle or partial arc. σ is unchanged: it still fits the
@@ -261,11 +261,15 @@ full whatever the range, and only where the range sits on it changes. On a
 partial arc a range below 0 therefore runs back past the baseline angle, out of
 the `[0, centralAngle]` sweep. The θ tick ring already assumed data 0 at θ = 0,
 so ticks and content now agree. A range that starts at 0, like a pie's, does not
-move. The transform declares that it belongs to the polar family: `polarPreset`
-stamps `polar: true` on it, and `fitAxis` tests that field rather than the
-transform's `type` tag or the absence of `fit`. A space without it (`linear`,
-`wavy`, a fitted `geo`) seats data 0 by the claim, as the root does. Petals and
-the arc sampling of a warped box (`coordUtils.ts`) read the same field.
+move. The rule is a property of the scope, so every reader of it agrees (the
+children's frame, the solver shadow check, the scope dump): the transform
+declares the axes whose data 0 is the start of their budget (`polarPreset`
+stamps `dataZeroAtStart: [true, false]`), `fitAxis` passes that to
+`solveScope` as the scope's `dataZero: "start"`, and `solveScope` seats data 0
+at the box's low edge. A space without it (`linear`, `wavy`, a fitted `geo`)
+seats data 0 by the claim, as the root does. The transform also declares that
+it belongs to the polar family, `polar: true`, which petals and the arc
+sampling of a warped box (`coordUtils.ts`) read.
 
 The
 coord's type is its children's overlay, kept for its own scope; upward it

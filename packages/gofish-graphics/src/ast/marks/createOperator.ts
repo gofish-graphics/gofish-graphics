@@ -232,6 +232,38 @@ export function inputsResolver<M>(
   return (mark as any)?.[RESOLVE_INPUTS];
 }
 
+/**
+ * Give `mark`, a mark built over `inner` (marks, or anything else a mark
+ * position holds) that applies each of them when it is applied, the batch
+ * form of the inner marks that have one ({@link inputsResolver}). Over
+ * `inputs`, each such inner mark is resolved over the inputs it will be
+ * applied to, `inputsOf(inputs)` (the same inputs, unless the mark applies
+ * its inner marks to inputs of its own), and `rebuild` makes the same mark
+ * over them. A mark whose inner marks have none is left as it is, so it is
+ * applied with no async step. Every mark that wraps marks (a combinator over
+ * its children, a translate, a mark applied to a fixed input) forwards by
+ * this one rule, so a batch accessor anywhere inside a mark makes one call
+ * for all of its inputs.
+ */
+export function forwardInputsResolver<M>(
+  mark: M,
+  inner: readonly unknown[],
+  rebuild: (inner: unknown[]) => Mark<any>,
+  inputsOf: (inputs: readonly unknown[]) => readonly unknown[] = (inputs) =>
+    inputs
+): M {
+  const resolvers = inner.map((m) => inputsResolver(m));
+  if (!resolvers.some((r) => r !== undefined)) return mark;
+  (mark as any)[RESOLVE_INPUTS] = async (inputs: readonly unknown[]) => {
+    const own = inputsOf(inputs);
+    const resolved = await Promise.all(
+      inner.map((m, i) => resolvers[i]?.(own) ?? m)
+    );
+    return withMarkKind(rebuild(resolved), getMarkKind(mark as Mark<any>));
+  };
+  return mark;
+}
+
 export type TranslateModifierOptions = PositionNodeOptions;
 
 /**
@@ -333,6 +365,9 @@ export function translateMark<T>(
     return positionNode(opts, [node]);
   };
   withMarkKind(wrapped, getMarkKind(base));
+  forwardInputsResolver(wrapped, [base], ([m]) =>
+    translateMark(m as Mark<T>, opts)
+  );
   return nameableMark(wrapped) as Mark<T>;
 }
 
@@ -1095,38 +1130,48 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     const opts = withKindValues(given);
     if (marks !== undefined) {
       // Combinator form: apply each mark to the same data d, then layout.
-      const base: Mark<Datum[]> = async (
-        d: Datum[],
-        key?: string | number,
-        layerContext?: LayerContext
-      ) => {
-        // Marks may be a Promise<Mark[]> when produced by helpers like
-        // `map(...)` — await before mapping. Entries may also be already
-        // resolved nodes (e.g. `ref(...)`) rather than mark functions, so
-        // pass non-functions through as-is.
-        const resolvedMarks = await Promise.resolve(marks);
-        // Each child is a mark position over `d` (a chart or chain binds it
-        // as an empty scope). Its key is local (not parent-prefixed) —
-        // matches the operator form: a nested grouping's keys are scoped to
-        // its own subtree, so ordinal axis labels read locally and per-layer
-        // uniqueness suffices.
-        const nodes = await Promise.all(
-          resolvedMarks.map((mark, i) =>
-            resolveMarkResult(mark, layerContext, d, i)
-          )
+      const withChildren =
+        (children: MarkChild[] | Promise<MarkChild[]>): Mark<Datum[]> =>
+        async (
+          d: Datum[],
+          key?: string | number,
+          layerContext?: LayerContext
+        ) => {
+          // Marks may be a Promise<Mark[]> when produced by helpers like
+          // `map(...)` — await before mapping. Entries may also be already
+          // resolved nodes (e.g. `ref(...)`) rather than mark functions, so
+          // pass non-functions through as-is.
+          const resolvedMarks = await Promise.resolve(children);
+          // Each child is a mark position over `d` (a chart or chain binds it
+          // as an empty scope). Its key is local (not parent-prefixed) —
+          // matches the operator form: a nested grouping's keys are scoped to
+          // its own subtree, so ordinal axis labels read locally and per-layer
+          // uniqueness suffices.
+          const nodes = await Promise.all(
+            resolvedMarks.map((mark, i) =>
+              resolveMarkResult(mark, layerContext, d, i)
+            )
+          );
+          const lowOpts = await buildLayoutOpts(
+            cfg.channels,
+            opts,
+            d,
+            undefined,
+            undefined
+          );
+          const node = (await layout(lowOpts, nodes)) as GoFishNode;
+          node.datum = datumOfInput(d);
+          return node;
+        };
+      const combinator = nameableMark(withChildren(marks));
+      // Each child is applied to the combinator's own input. A child list
+      // that is still a promise (`map(...)`) cannot be read until the
+      // combinator is applied, so its children resolve per input.
+      if (Array.isArray(marks)) {
+        forwardInputsResolver(combinator, marks, (children) =>
+          withChildren(children as MarkChild[])
         );
-        const lowOpts = await buildLayoutOpts(
-          cfg.channels,
-          opts,
-          d,
-          undefined,
-          undefined
-        );
-        const node = (await layout(lowOpts, nodes)) as GoFishNode;
-        node.datum = datumOfInput(d);
-        return node;
-      };
-      const combinator = nameableMark(base);
+      }
       if (cfg.serialize) {
         tagCombinator(combinator, cfg.serialize, opts, marks);
       }

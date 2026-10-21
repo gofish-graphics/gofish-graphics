@@ -318,7 +318,8 @@ ribbon(opacity=0.7).z_order(lambda d: 1 if pluck(d, "site")[0] in emphasized els
 
 Within a layer, children paint in `(z_order, document order)` order. A number
 crosses to JS in the IR's `zOrder` field. A function crosses as a bridge
-handle, and JS calls it through the bridge once per mark instance, so it runs
-in Python like a channel accessor. JS reads the site with `project`, which
-Python does not have; [`pluck`](/python/api/selection/ref#pluck) returns the
-one value, since the areas are grouped by site.
+handle, and JS calls it through the bridge once with the inputs of every
+mark instance an operator applies the mark to, so it runs in Python like a
+channel accessor. [`pluck`](/python/api/selection/ref#pluck) returns the
+one value, since the areas are grouped by site; `project(d, "site")` reads
+it as that value, as in JS.

@@ -763,7 +763,6 @@ export interface RefMarkIR extends BaseIRNode {
   selection: string | Array<string | number>;
   name?: string;
   label?: LabelIR;
-  zOrder?: number | BridgeLambdaSentinel;
   translate?: TranslateIR;
 }
 

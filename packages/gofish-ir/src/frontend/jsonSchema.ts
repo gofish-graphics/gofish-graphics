@@ -619,7 +619,6 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         },
         name: { type: "string" },
         label: { $ref: "#/$defs/LabelIR" },
-        zOrder: fieldTypeToSchema(MARK_BASE_FIELDS.zOrder.type),
         translate: { $ref: "#/$defs/Translate" },
       },
     },

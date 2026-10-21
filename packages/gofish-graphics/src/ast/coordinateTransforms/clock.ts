@@ -7,7 +7,4 @@ import { polarPreset } from "./polar";
  * options (e.g. `innerRadius` for a clock rim). The distinct `type` tag keeps
  * the preset through serialization.
  */
-export const clock = polarPreset("clock", {
-  baselineAngle: Math.PI / 2,
-  direction: -1,
-});
+export const clock = polarPreset("clock");

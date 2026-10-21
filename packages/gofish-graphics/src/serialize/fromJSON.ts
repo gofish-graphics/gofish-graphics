@@ -25,7 +25,12 @@ import { Constraint, RelateOperand } from "../ast/constraints";
 import { palette, gradient } from "../families/color";
 import { ref } from "../ast/shapes/ref";
 import { sealComponent } from "../ast/withGoFish";
-import { resolveMarkResult } from "../ast/marks/markResult";
+import {
+  forwardInputsResolver,
+  getMarkKind,
+  nameableMark,
+  withMarkKind,
+} from "../ast/marks/createOperator";
 import { Frontend } from "gofish-ir";
 import { RESOLVE_ROWS } from "../ast/channels";
 import { applySchema } from "../ast/schema";
@@ -190,34 +195,24 @@ export function unwrapOpts(value: any, bridge?: DeriveBridge): any {
 /**
  * Wrap a Mark so its resolved GoFishNode gets `.scope()` called. Triggered
  * by the `__scope: true` flag the Python `@mark` decorator stamps on a
- * Mark's IR. Forwards `.name` / `.label` / `.render` / `.relate` so the
- * scoped mark still behaves as a `NameableMark`, wherever it sits (a root
- * renders it directly).
+ * Mark's IR. It is the mark a JS `createMark` component is: the node closed
+ * as a component, with the modifiers (`.name`, `.label`, `.zOrder`,
+ * `.translate`, …) and terminals of every mark on the outside, wherever it
+ * sits (a root renders it directly).
  */
 export function wrapWithScope(inner: any): any {
   // The same closing step a JS `createMark` component gets. (`createMark` no
   // longer names its node after the data key, since #923, so neither side
   // names here: `mapMark` chains `.name(spec.name)` when the IR has one.)
-  const wrapped: any = async (data: any, key: any, layerContext: any) =>
-    sealComponent(await inner(data, key, layerContext), data);
-  const define = (key: string, value: any) =>
-    Object.defineProperty(wrapped, key, {
-      value,
-      writable: true,
-      configurable: true,
-    });
-  if (typeof inner.render === "function") {
-    define("render", async (container: any, options: any) => {
-      const node: any = await resolveMarkResult(wrapped);
-      return node.render(container, options);
-    });
-  }
-  for (const key of ["name", "label", "relate"] as const) {
-    if (typeof inner[key] === "function") {
-      define(key, (...args: any[]) => wrapWithScope(inner[key](...args)));
-    }
-  }
-  return wrapped;
+  const scoped = (m: any): Mark<any> =>
+    withMarkKind(
+      (async (data: any, key: any, layerContext: any) =>
+        sealComponent(await m(data, key, layerContext), data)) as Mark<any>,
+      getMarkKind(inner)
+    );
+  return nameableMark(
+    forwardInputsResolver(scoped(inner), [inner], ([m]) => scoped(m))
+  );
 }
 
 export function resolveNameField(
@@ -422,8 +417,16 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
   // sits in offers.
   const { __datum: datum, __key: key } =
     markSpec as Frontend.MarkBridgeFieldsIR;
-  return (async (_data: any, _key: any, layerContext: any) =>
-    (mark as any)(datum, key ?? undefined, layerContext)) as Mark<any>;
+  const appliedToDatum = (m: any): Mark<any> =>
+    (async (_data: any, _key: any, layerContext: any) =>
+      m(datum, key ?? undefined, layerContext)) as Mark<any>;
+  // However many inputs it is applied to, the mark is applied to its `__datum` alone.
+  return forwardInputsResolver(
+    appliedToDatum(mark),
+    [mark],
+    ([m]) => appliedToDatum(m),
+    () => [datum]
+  );
 }
 
 /**

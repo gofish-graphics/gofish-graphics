@@ -348,7 +348,10 @@ methods:
   separately-named layers; the [bake pass](/internals/layout/coord-flattening)
   orders each layer's children by `(zOrder, index)`. The constant form
   round-trips through the IR; a callback is dropped from the emitted IR (like a
-  function `.label` accessor).
+  function `.label` accessor). A Python callback is resolved once for every
+  input an operator applies the mark to, also when the mark sits inside a
+  `layer([...])` or a compositing mark, which forward their children's batch
+  form (see [The Operator Factory](/internals/frontend/operator-factory)).
 - `mark.transition({ enter, update, exit })` records how the mark looks in
   each phase of an animation (`Animation.grow()`, `Animation.fadeIn()`, and
   so on) on every produced node. With no `time.sequence` in the flow, the

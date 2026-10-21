@@ -7,8 +7,9 @@
  * {@link decodeDocument} decodes them into the rows `Serialize.buildIR`
  * reads, so Arrow is only an encoding of `tables`, and reads the rest as
  * JSON (`Serialize.readIR`). The bridge's one call
- * ({@link arrowBridge}) sends the rows as base64 Arrow, and the reply is a
- * document of the same shape (Python's `answer`), decoded the same way.
+ * ({@link arrowBridge}) sends the rows and the refs they hold as base64
+ * Arrow, and the reply is a document of the same shape (Python's
+ * `answer`), decoded the same way.
  */
 
 import * as Arrow from "apache-arrow";
@@ -46,20 +47,31 @@ export function rowsToArrowB64(items: readonly unknown[]): string {
   return btoa(binary);
 }
 
-/** How a host's transport sends one call: the callback's lambda id and the
- *  rows as base64 Arrow, answered by the shipped reply. */
+/** A call's input as a host's transport sends it: the rows, and the datum
+ *  of each ref the rows hold, by its index, each as base64 Arrow (Python's
+ *  `answer` reads them). */
+export interface ShippedCall {
+  rows_b64: string;
+  refs_b64: string;
+}
+
+/** How a host's transport sends one call: the callback's lambda id and its
+ *  input, answered by the shipped reply. */
 export type SendCall = (
   lambdaId: string,
-  rowsB64: string
+  call: ShippedCall
 ) => Promise<ShippedDocument<Serialize.BridgeReply>>;
 
-/** The bridge over a host's transport: one call, rows out as Arrow, the
- *  reply's tables decoded from Arrow. */
+/** The bridge over a host's transport: one call, its rows and refs out as
+ *  Arrow, the reply's tables decoded from Arrow. */
 export function arrowBridge(send: SendCall): Serialize.DeriveBridge {
   return {
-    async call(lambdaId, rows) {
+    async call(lambdaId, rows, refs) {
       return decodeDocument<Serialize.BridgeReply>(
-        await send(lambdaId, rowsToArrowB64(rows))
+        await send(lambdaId, {
+          rows_b64: rowsToArrowB64(rows),
+          refs_b64: rowsToArrowB64(refs),
+        })
       );
     },
   };

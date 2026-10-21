@@ -1075,7 +1075,7 @@ const {
   debug: _debug,
   ...COMBINATOR_NODE_FIELDS
 } = MARK_BASE_FIELDS;
-const REF_MARK_FIELDS = markBaseFields("label", "zOrder", "translate");
+const REF_MARK_FIELDS = markBaseFields("label", "translate");
 const CUT_MARK_FIELDS = markBaseFields("zOrder", "translate");
 const OFFSET_MARK_FIELDS = markBaseFields("translate");
 

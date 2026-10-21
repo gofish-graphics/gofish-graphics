@@ -17,8 +17,8 @@ reconstruct the byte-identical data URI here with Vite's exact encoding.
 
 `story_image_cut_with_labels` (JS `ImageCutWithLabels`) is now ported (#591 —
 the ref/datum mark-fn bridge). The mark-fn receives one `_InputRef` per slice
-(reconstructed from the `{__inputRef, datum}` sentinel the JS harness/widget
-sends across the RPC in place of the live ref); `.name("slice")` on it
+(reconstructed from the `BridgeRef` and datum the JS harness/widget sends
+across the RPC in place of the live ref); `.name("slice")` on it
 survives the round trip (#556) via the `_InputRef.name()` override, so the
 per-slice `layer([...]).relate(...)` can target it by name exactly like
 the JS story's `d.name("slice")`.

@@ -69,11 +69,19 @@ export type CoordinateTransform = {
   aliases?: { x?: string; y?: string };
   /**
    * Set by the polar family (`polar()`, `clock()`; see `polarPreset`): axis 0
-   * is an angle θ and axis 1 a radius r. Its angular axis puts data 0 at θ = 0
-   * of the transform (its baseline angle) whatever the data range, and polar
-   * geometry (petals, the arc sampling of a warped box) applies only here.
+   * is an angle θ and axis 1 a radius r. Polar geometry (petals, the arc
+   * sampling of a warped box) applies only here.
    */
   polar?: true;
+  /**
+   * The axes whose data 0 is the start of their budget, whatever the data
+   * range: the polar family's angular axis puts data 0 at θ = 0 of the
+   * transform, its baseline angle, so a centered stack stays centered on
+   * the baseline angle, full circle or partial arc. The coord's scope on
+   * such an axis seats data 0 there (`ScopeMeta.dataZero`); every other axis
+   * seats it by the claim, as the root does.
+   */
+  dataZeroAtStart?: [boolean, boolean];
   /**
    * Donut-hole radius as a fraction [0,1) of the outer radius (polar family).
    * Default 0 (filled disc). `coord.layout` insets the radial range by this.
@@ -328,7 +336,14 @@ export const coord = createNodeOperator(
                       resolved
                     );
             const scope = scopes.solveScope(
-              { kind: "coord", rootKey: node.key ?? node.type, axis },
+              {
+                kind: "coord",
+                rootKey: node.key ?? node.type,
+                axis,
+                dataZero: coordTransform.dataZeroAtStart?.[axis]
+                  ? "start"
+                  : "claim",
+              },
               resolved,
               claim,
               budget
@@ -339,18 +354,6 @@ export const coord = createNodeOperator(
             // unless GOFISH_SOLVER_CHECK is set.
             shadowCheckScaleRoot(claim, budget, scope?.sigma, axis);
             if (scope === undefined) return [1, undefined];
-            // The angular axis of the polar family (θ = x) puts data 0 at
-            // θ = 0 of the transform, its baseline angle, whatever the range:
-            // a centered stack stays centered on the baseline angle, full
-            // circle or partial arc. σ still fits the whole range to the
-            // angular budget. Every other axis, and every other space, seats
-            // data 0 by the claim, as the root does (`solveScope`).
-            if (
-              coordTransform.polar &&
-              axis === 0 &&
-              scope.originPx !== undefined
-            )
-              return [scope.sigma, { sigma: scope.sigma, originPx: 0 }];
             return [scope.sigma, scopeFrame(scope)];
           };
           const [sfX, frameX] = fitAxis(0, budget[0]);

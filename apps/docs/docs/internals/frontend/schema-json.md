@@ -625,16 +625,6 @@ for the API.
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
-        "zOrder": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Number"
-            },
-            {
-              "$ref": "#/$defs/BridgeLambdaSentinel"
-            }
-          ]
-        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }

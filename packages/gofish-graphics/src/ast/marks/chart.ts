@@ -50,6 +50,7 @@ import {
   nameableMark,
   attachModifiers,
   tagCombinator,
+  forwardInputsResolver,
   nameModifier,
   labelModifier,
   zOrderModifier,
@@ -1169,29 +1170,35 @@ export function layer<T>(
 ): RelatableMark<T> {
   const opts = Array.isArray(marksOrOpts) ? {} : marksOrOpts;
   const marks = (Array.isArray(marksOrOpts) ? marksOrOpts : maybeMarks) ?? [];
-  const base: Mark<T> = async (d, key, _layerContext) => {
-    // A layer establishes its OWN local name context: `.name(...)` registrations
-    // and the `ref(name)`/`selectAll(name)` that read them are scoped to *this*
-    // layer's children. We deliberately do NOT inherit the enclosing
-    // `_layerContext` — otherwise a layer nested inside an operator (e.g. one
-    // `layer([bars, area])` per `spread` cell) would share a single context
-    // across every cell, so each cell's `selectAll("bars")` would match every
-    // other cell's bars too (and reference siblings not yet laid out). Names are
-    // local to their layer, mirroring `LayerBuilder.resolve`. Resolve
-    // sequentially so a child referencing a name sees earlier siblings'
-    // registrations.
-    const sharedContext: LayerContext = {};
-    const resolved: GoFishNode[] = [];
-    for (const m of marks) {
-      // Each child is a mark position over this layer's rows: an empty-scope
-      // `chart()` child (or a chain whose first tier is one) binds them
-      // (issue #243, #1181), as in every combinator and `.mark(...)`.
-      resolved.push(await resolveMarkResult(m, sharedContext, d, key));
-    }
-    const node = await Layer(opts, resolved);
-    node.datum = datumOfInput(d as unknown[]);
-    return node;
-  };
+  const withChildren =
+    (children: readonly MarkChild[]): Mark<T> =>
+    async (d, key, _layerContext) => {
+      // A layer establishes its OWN local name context: `.name(...)` registrations
+      // and the `ref(name)`/`selectAll(name)` that read them are scoped to *this*
+      // layer's children. We deliberately do NOT inherit the enclosing
+      // `_layerContext` — otherwise a layer nested inside an operator (e.g. one
+      // `layer([bars, area])` per `spread` cell) would share a single context
+      // across every cell, so each cell's `selectAll("bars")` would match every
+      // other cell's bars too (and reference siblings not yet laid out). Names are
+      // local to their layer, mirroring `LayerBuilder.resolve`. Resolve
+      // sequentially so a child referencing a name sees earlier siblings'
+      // registrations.
+      const sharedContext: LayerContext = {};
+      const resolved: GoFishNode[] = [];
+      for (const m of children) {
+        // Each child is a mark position over this layer's rows: an empty-scope
+        // `chart()` child (or a chain whose first tier is one) binds them
+        // (issue #243, #1181), as in every combinator and `.mark(...)`.
+        resolved.push(await resolveMarkResult(m, sharedContext, d, key));
+      }
+      const node = await Layer(opts, resolved);
+      node.datum = datumOfInput(d as unknown[]);
+      return node;
+    };
+  // Each child is applied to the layer's own input.
+  const base = forwardInputsResolver(withChildren(marks), marks, (children) =>
+    withChildren(children as MarkChild[])
+  );
   return tagCombinator(makeRelatableMark(base), "layer", opts, marks);
 }
 
@@ -1213,14 +1220,20 @@ function makePorterDuffCombinator(
       MarkChild,
       MarkChild,
     ];
-    const base: Mark<T> = async (d, key, layerContext) => {
-      const [child0, child1] = await Promise.all(
-        marks.map((m) => resolveMarkResult(m, layerContext, d, key))
-      );
-      const node = await lowLevel(opts, [child0, child1]);
-      node.datum = datumOfInput(d as unknown[]);
-      return node;
-    };
+    const withChildren =
+      (children: readonly MarkChild[]): Mark<T> =>
+      async (d, key, layerContext) => {
+        const [child0, child1] = await Promise.all(
+          children.map((m) => resolveMarkResult(m, layerContext, d, key))
+        );
+        const node = await lowLevel(opts, [child0, child1]);
+        node.datum = datumOfInput(d as unknown[]);
+        return node;
+      };
+    // Each child is applied to the combinator's own input.
+    const base = forwardInputsResolver(withChildren(marks), marks, (children) =>
+      withChildren(children as MarkChild[])
+    );
     return tagCombinator(nameableMark(base), irType, opts, marks);
   }
   return fn;

@@ -37,6 +37,7 @@ def _call(widget, lambda_id: str, rows: list, request_id: str = "r-0") -> dict:
         "request_id": request_id,
         "lambda_id": lambda_id,
         "rows_b64": _arrow_b64(rows),
+        "refs_b64": _arrow_b64([]),
     }
     return widget.call_response
 
@@ -88,6 +89,7 @@ class TestCallProtocol:
             "request_id": "r-0",
             "lambda_id": lambda_id,
             "rows_b64": base64.b64encode(sink.getvalue().to_pybytes()).decode(),
+            "refs_b64": _arrow_b64([]),
         }
         [row] = seen["rows"]
         assert type(row["x"]) is float and row["x"] == 2.0

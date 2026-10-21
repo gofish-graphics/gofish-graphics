@@ -776,6 +776,16 @@ class Mark(_Root):
         return self.render()._repr_mimebundle_(include=include, exclude=exclude)
 
 
+# A ref is a node another mark drew, and a JS `GoFishRef` has no `.zOrder()`,
+# so neither does a Python ref (`ref(...)`, a ref a mark function is handed).
+_REF_HAS_NO_Z_ORDER = (
+    "A ref names a node that another mark drew, so it has no z_order, as a "
+    "JS ref has no .zOrder(). Set the paint order on the mark that draws the "
+    "node, or order the two in the enclosing layer's .relate(...) with "
+    "Constraint.z_above / Constraint.z_below."
+)
+
+
 class _InputRef(Mark):
     """A `GoFishRef` handed into a mark-fn lambda, reconstructed Python-side
     (issue #591).
@@ -785,17 +795,19 @@ class _InputRef(Mark):
     `BarWithLabels.stories.tsx`'s label mark-fn, whose `.datum` is the group's
     row bag. A `GoFishRef` can't cross the derive RPC as-is (it's a class
     instance over the render's layer registry, not JSON), so the JS side
-    (`encodeInputRefs` in `registry.ts`) replaces each ref, at any depth of
-    the input, with an `{"__inputRef": i, "datum": ...}` sentinel; the derive
-    server wraps every such sentinel back into one of these
-    (`_decode_input_refs`) before calling the user's function, so
-    `d[0].datum` reads exactly like the JS story.
+    (`encodeInputRefs` in `registry.ts`) sends each ref, at any depth of the
+    input, as a `BridgeRef` (its index), and its datum once, in the call's
+    refs; `answer` makes every index one of these (`_decode_input_refs`)
+    before calling the user's function, so `d[0].datum` reads exactly like
+    the JS story. A reply hands one back by its index too: in a table, as a
+    `BridgeRef` (`_encode_input_refs`), and in the marks a mark function
+    draws, as below.
 
     `to_dict()` emits `{"type": "ref", "__inputRef": i}` — no `datum`, since
-    the datum already made the trip once and the JS side round-trips the
-    sentinel back to the *original* live ref object by index rather than
-    reconstructing one from the (re-serialized) datum. This lets a mark-fn
-    embed the ref directly in its returned layout (mirrors JS
+    the datum already made the trip once and the JS side resolves the index
+    back to the *original* live ref object rather than reconstructing one
+    from the (re-serialized) datum. This lets a mark-fn embed the ref
+    directly in its returned layout (mirrors JS
     `spread({...}, [d[0], text(...)])`).
 
     `.name(...)` (issue #556 — a named ref surviving a mark-fn round trip, so
@@ -822,6 +834,9 @@ class _InputRef(Mark):
     def name(self, name_or_token: Union[str, "Token"]) -> "_InputRef":
         self._name = name_or_token
         return self
+
+    def z_order(self, value: Any) -> "Mark":
+        raise TypeError(_REF_HAS_NO_Z_ORDER)
 
     def to_dict(self, payload: "_Payload") -> dict:
         d: dict = {"type": "ref", "__inputRef": self.index}
@@ -1787,6 +1802,9 @@ class _RefProxy(Mark):
         self._copy_meta(named)
         named._name = name_or_token
         return named
+
+    def z_order(self, value: Any) -> "Mark":
+        raise TypeError(_REF_HAS_NO_Z_ORDER)
 
     def to_dict(self, payload: "_Payload") -> dict:
         # `select_all(...)` is a plural chart-data selector, so it has no
@@ -3545,21 +3563,38 @@ def _mark_fn_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
     return reply
 
 
-def _decode_input_refs(value: Any) -> Any:
+def _decode_input_refs(rows: Any, refs: List[Any]) -> Any:
     """The rows of a call from JS, with each ref in them as an ``_InputRef``.
     A live ``GoFishRef`` cannot cross the bridge, so JS sends each one, at any
     depth of the rows (a mark function's input item, a row's field that
-    ``resolve`` filled, a paint-order callback's list of refs), as an
-    ``{"__inputRef": i, "datum": ...}`` sentinel (``encodeInputRefs`` in
-    registry.ts). So ``d[0].datum`` reads as in JS (#591), and ``r["ref"]``
-    places the node ``resolve`` named. A row that shares a column with a
-    sentinel holds the sentinel's keys as nulls (Arrow types a column by the
-    union of its keys), so a sentinel is a dict whose ``__inputRef`` is set."""
+    ``resolve`` filled, a paint-order callback's list of refs), as a
+    ``BridgeRef``, its index in the call's refs, and ``refs[i]`` is that
+    ref's datum (``encodeInputRefs`` in registry.ts). Each index is one
+    node, however many times the rows hold it, so it is one ``_InputRef``.
+    So ``d[0].datum`` reads as in JS (#591), and ``r["ref"]`` places the
+    node ``resolve`` named."""
+    from .arrow_utils import BridgeRef
+
+    nodes = [_InputRef(i, None) for i in range(len(refs))]
 
     def swap(v: Any) -> Any:
-        if isinstance(v, dict) and v.get("__inputRef") is not None:
-            return _InputRef(int(v["__inputRef"]), _decode_input_refs(v.get("datum")))
-        return KEEP
+        return nodes[v.index] if isinstance(v, BridgeRef) else KEEP
+
+    # A ref's datum may hold refs of its own.
+    for node, datum in zip(nodes, refs):
+        node.datum = _nonfinite.walk(datum, swap)
+    return _nonfinite.walk(rows, swap)
+
+
+def _encode_input_refs(value: Any) -> Any:
+    """``value``, a list a reply hands back, with each ``_InputRef`` in it
+    as the ``BridgeRef`` JS resolves back to the live ref it was handed (a
+    ``derive`` that keeps the refs ``resolve`` filled, a mark function's
+    chart over such rows). Data that holds no ref is returned as it is."""
+    from .arrow_utils import BridgeRef
+
+    def swap(v: Any) -> Any:
+        return BridgeRef(v.index) if isinstance(v, _InputRef) else KEEP
 
     return _nonfinite.walk(value, swap)
 
@@ -3627,14 +3662,18 @@ def ir_payload(root: Any) -> Tuple[dict, Dict[str, _Reply]]:
     return _transport(root_ir, payload), payload.callbacks
 
 
-def answer(callbacks: Dict[str, _Reply], lambda_id: str, rows_b64: str) -> dict:
+def answer(
+    callbacks: Dict[str, _Reply], lambda_id: str, rows_b64: str, refs_b64: str
+) -> dict:
     """Answer one call from JS: run the callback named ``lambda_id`` on the
-    rows JS sent (base64 Arrow), register the callbacks its reply names, and
-    return the reply's document, shipped like a root's: its root (a table
-    reference for a derive or an accessor, a mark-position IR for a mark
-    function) and its tables as base64 Arrow.
+    rows JS sent, with the refs they hold (``_decode_input_refs``; both base64
+    Arrow), register the callbacks its reply names, and return the reply's
+    document, shipped like a root's: its root (a table reference for a
+    derive or an accessor, a mark-position IR for a mark function) and its
+    tables as base64 Arrow, each ref in them by its index
+    (``_encode_input_refs``).
 
-    The reply's scope is the call itself, the callback and the rows, so the
+    The reply's scope is the call itself, the callback and its input, so the
     callbacks a mark function's reply names are named by the call that made
     them (see ``_Payload``): the same call again replaces them, and the
     registry does not grow with each render."""
@@ -3645,10 +3684,18 @@ def answer(callbacks: Dict[str, _Reply], lambda_id: str, rows_b64: str) -> dict:
     reply = callbacks.get(lambda_id)
     if reply is None:
         raise KeyError(f"no Python callback is registered as {lambda_id}")
-    scope = hashlib.sha256(f"{lambda_id}\n{rows_b64}".encode()).hexdigest()[:16]
-    rows = _decode_input_refs(arrow_to_records(base64.b64decode(rows_b64)))
+    scope = hashlib.sha256(
+        f"{lambda_id}\n{rows_b64}\n{refs_b64}".encode()
+    ).hexdigest()[:16]
+    rows = _decode_input_refs(
+        arrow_to_records(base64.b64decode(rows_b64)),
+        arrow_to_records(base64.b64decode(refs_b64)),
+    )
     root, payload = reply(rows, scope)
     callbacks.update(payload.callbacks)
+    payload.tables = {
+        tid: _encode_input_refs(data) for tid, data in payload.tables.items()
+    }
     return _transport(root, payload)
 
 
