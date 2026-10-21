@@ -169,6 +169,21 @@ export const coord = createNodeOperator(
     // (one that declares its own window — see `cull` in `lower`). Null for the
     // polar family, whose budget is the content, not a frame.
     const frameRef: { current: [number, number] | null } = { current: null };
+    // The outlines drawn inside the space (`GoFishNode.strokeOverhang`) are
+    // in pixels, while the space lays its interior out in its own
+    // coordinates, so the claim walk cannot tell which shape reaches the
+    // space's edge. The largest outline inside bounds them all: the space
+    // fits its content that much inside its box and widens the box it
+    // measures by it, so its box holds every outline it draws. A space that
+    // frames its own window (geo) clips what its window leaves out, as a map
+    // frame does, outlines included.
+    const outline = (): number => {
+      const largest = (n: GoFishAST): number =>
+        n instanceof GoFishNode
+          ? Math.max(n.strokeOverhang, ...n.children.map(largest))
+          : 0;
+      return framesOwnWindow ? 0 : Math.max(0, ...children.map(largest));
+    };
 
     const coordNode = new GoFishNode(
       {
@@ -238,9 +253,10 @@ export const coord = createNodeOperator(
             r.ascent.run(0),
             coordTransform
           );
+          const o = outline();
           return [
-            boxExtent(UNDEFINED, 0, box.maxX - box.minX),
-            boxExtent(UNDEFINED, 0, box.maxY - box.minY),
+            boxExtent(UNDEFINED, 0, box.maxX - box.minX + 2 * o),
+            boxExtent(UNDEFINED, 0, box.maxY - box.minY + 2 * o),
           ];
         },
         layout: (size, scales, children, node) => {
@@ -467,6 +483,14 @@ export const coord = createNodeOperator(
               maxY: fittedExtent!.height,
             };
           }
+          // The box holds the outlines drawn inside it (`outline`).
+          const o = outline();
+          screenBbox = {
+            minX: screenBbox.minX - o,
+            maxX: screenBbox.maxX + o,
+            minY: screenBbox.minY - o,
+            maxY: screenBbox.maxY + o,
+          };
 
           const {
             minX: screenBboxMinX,

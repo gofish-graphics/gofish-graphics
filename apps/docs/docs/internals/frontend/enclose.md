@@ -55,7 +55,8 @@ In the claim walk, an outline whose members are all refs is placed from
 them, as a label beside a ref is (`GoFishNode.placedFromRefs`; see
 [Overview](/internals/layout/passes)). Its claim in the layer that holds it is
 its members' boxes, each where `placementIn` lands it there, grown by
-`padding`. It takes that room and is dressing: it is no part of the plot, so a
+`padding` and by half its stroke, which is drawn centered on the outline
+(`GoFishNode.strokeOverhang`). It takes that room and is dressing: it is no part of the plot, so a
 chart with a size of its own keeps its plot that size and the outline adds
 around it, and its members never move for it. The box is exact for
 `Shape.box()`, and a blob lies inside it. An oval can reach past it, and that

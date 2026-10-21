@@ -1,6 +1,6 @@
 import { resolveColorChannel } from "../../color";
 import { posFn } from "../domain";
-import { GoFishNode } from "../_node";
+import { GoFishNode, outlineOverhang } from "../_node";
 import { orientDims } from "../axisDirection";
 import { getValue, isValue, MaybeValue } from "../data";
 import {
@@ -266,6 +266,7 @@ export const Text = ({
         dims,
       },
       color: fill,
+      strokeOverhang: outlineOverhang(stroke ?? "none", strokeWidth),
       resolveUnderlyingSpace: () => {
         const xPos = dims[0].center ?? dims[0].min;
         const yPos = dims[1].center ?? dims[1].min;

@@ -1,5 +1,5 @@
 import { resolveColorChannel } from "../../color";
-import { GoFishNode } from "../_node";
+import { GoFishNode, outlineOverhang } from "../_node";
 import { GoFishAST } from "../_ast";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -45,6 +45,7 @@ export const Petal = ({
       // Seed the unit color scale. Prefer whichever channel is data-driven, so
       // `fill: "species"` registers its category (like rect/ellipse do).
       color: isValue(fill) ? fill : stroke,
+      strokeOverhang: outlineOverhang(stroke, strokeWidth),
       // inferDomains: () => {
       //   return [
       //     isValue(dims[0].size)

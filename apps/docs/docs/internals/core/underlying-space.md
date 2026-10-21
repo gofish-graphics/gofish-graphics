@@ -532,7 +532,10 @@ each inherent to what the origin states are:
   over a bar chart) claims nothing, and fills the room of what holds it.
 - **A plot claim beside the claim**: the claim folds also compute the
   claim of the plot, which leaves out dressing (a label placed beside a
-  `ref` stand-in for its mark) and the chrome rings of a nested node. A
+  `ref` stand-in for its mark), a shape's outline (half its stroke past its
+  box, which its claim reaches and its plot leaves out; a node a `nest`
+  derives reaches its own outline past the padded inner's plot,
+  `applyNestExtentPlan`) and the chrome rings of a nested node. A
   chain of parts of the plot lays them by their plots, so dressing never
   moves the parts it dresses: it reaches past the chain, or sits in the gaps
   (`composePlanExtents`' `parts`, `chainFold`'s `reaches`). The plot of a

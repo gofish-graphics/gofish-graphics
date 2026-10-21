@@ -798,8 +798,9 @@ export async function layout(
   // into (a chart with a size of its own), whose box sits at the slot's
   // top-left. The box is the whole graphic, its chrome included. The pin
   // uses `pinAnchor`, not the write-once `place()`, so it lands even when
-  // the root self-placed (a diagram with its own root transform).
-  const placeRoot = (axis: 0 | 1, edge: number) => {
+  // the root self-placed (a diagram with its own root transform). Returns
+  // whether data seated the root.
+  const placeRoot = (axis: 0 | 1, edge: number): boolean => {
     const name = axisName(axis);
     const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
     const direction = axis === 0 ? 1 : rootYDirection;
@@ -818,36 +819,47 @@ export async function layout(
           ),
         "baseline"
       );
-      return;
+      return true;
     }
     root.pinAnchor(
       name,
       edge + fromFrameStart(offset, root.dims[axis].size ?? 0, direction),
       orientSide("min", direction)
     );
+    return false;
   };
-  placeRoot(0, 0);
-  placeRoot(1, 0);
+  const seated = [placeRoot(0, 0), placeRoot(1, 0)];
 
   // What the root draws past its box (#493: layout size is separate from
   // drawn size), in pixels before and after it on each axis: the shapes
-  // that are ink (`placeByClaims`), whose place only layout knows. On an
-  // axis the render gives no size, the canvas grows to hold it: the SVG is
-  // the root's box plus its ink, and the box sits past
-  // the ink before it.
+  // that are ink (`placeByClaims`), whose place only layout knows, and the
+  // outlines drawn past the shapes' boxes (`GoFishNode.strokeOverhang`). On
+  // an axis the render gives no size, the canvas grows to hold it: the SVG
+  // is the root's box plus what it draws past it, and the box sits past
+  // what it draws before it.
   //
-  // On an axis the render gives a size, the ink is not fitted inside it,
-  // and it overflows the canvas. A label placed beside a node takes room
-  // wherever the claim walk knows where the node lands (`placementIn`),
-  // bands of a category axis included (#493 piece 3: `sharesRoom`), so
-  // the ink left is what the claim walk cannot place: inside a coordinate
-  // space, under a node with a size of its own or one that reads y the
-  // other way, a label centered on a run of several slots, and a band in
-  // a scope that mixes data and bands.
+  // On an axis the render gives a size, the outlines of the shapes that
+  // take room are in the root's claim, which was fitted to the canvas, so a
+  // box no data seats sits past the outlines before it, as far as the
+  // outlines after it still fit (a shape that fills the canvas has its
+  // outline centered on the canvas edge, and keeps its box there). The ink
+  // is not
+  // fitted inside the canvas, and it overflows it. A label placed beside a
+  // node takes room wherever the claim walk knows where the node lands
+  // (`placementIn`), bands of a category axis included (#493 piece 3:
+  // `sharesRoom`), so the ink left is what the claim walk cannot place:
+  // inside a coordinate space, under a node with a size of its own or one
+  // that reads y the other way, a label centered on a run of several slots,
+  // and a band in a scope that mixes data and bands.
   const drawn = drawnOverflow(root);
   const ink = drawn.ink;
   for (const axis of [0, 1] as const)
     if (given[axis] === undefined) placeRoot(axis, ink[axis][0]);
+    else if (!seated[axis]) {
+      const [before, after] = drawn.outline[axis];
+      const room = given[axis]! - (root.dims[axis].size ?? 0) - after;
+      placeRoot(axis, Math.max(0, Math.min(before, room)));
+    }
   // What the graphic draws past a canvas the render gives a size, for any
   // reason but fixed parts larger than their slot (warned above): warn.
   for (const axis of [0, 1] as const) {
@@ -925,12 +937,20 @@ type Span = [number, number];
  * How far what `root` draws reaches past its box, in pixels before and after
  * it on each axis, in the canvas's pixel order. A node's box holds what it
  * draws, except a layer's ink children (`placeByClaims`), which its box
- * leaves out: the drawing is the hull of the root's box and of the box of
- * every ink child below it, on the axes it is ink on. A coordinate space's
- * interior is in its own coordinates, and its box stands for it.
+ * leaves out, and a shape's outline, drawn past its box by its
+ * `strokeOverhang`: the drawing is the hull of the root's box, of the box of
+ * every ink child below it on the axes it is ink on, and of the box of every
+ * node grown by its outline. A coordinate space's interior is in its own
+ * coordinates, and its box stands for it, outlines included (`coord`); a
+ * node that clips its content to its box (`GoFishNode.clipsToBox`) draws
+ * nothing past it.
+ *
+ * `outline` is the part of it the root's claim holds: the outlines of the
+ * nodes that take room, ink left out.
  */
 function drawnOverflow(root: GoFishNode): {
   ink: [Span, Span];
+  outline: [Span, Span];
   /** Per axis, the ink child that reaches farthest before and after. */
   farthest: [
     [GoFishNode | undefined, GoFishNode | undefined],
@@ -944,10 +964,16 @@ function drawnOverflow(root: GoFishNode): {
     [undefined, undefined],
     [undefined, undefined],
   ];
-  // No layer found ink children: the drawing is the root's box.
-  if (!root.tryGetRenderSession()?.inkLayers?.size)
+  // No layer found ink children, and no shape draws an outline: the drawing
+  // is the root's box.
+  const session = root.tryGetRenderSession();
+  if (!session?.inkLayers?.size && !session?.outlined)
     return {
       ink: [
+        [0, 0],
+        [0, 0],
+      ],
+      outline: [
         [0, 0],
         [0, 0],
       ],
@@ -962,42 +988,69 @@ function drawnOverflow(root: GoFishNode): {
       ? [min, max]
       : undefined;
   };
-  const lo = [Infinity, Infinity];
-  const hi = [-Infinity, -Infinity];
-  for (const axis of [0, 1] as const) {
-    const b = box(root, axis);
-    if (b !== undefined) [lo[axis], hi[axis]] = b;
-  }
-  const add = (n: GoFishNode, axis: 0 | 1, offset: number) => {
+  // The hull of everything drawn (`all`), and of what takes room (`held`).
+  const hull = () => ({ lo: [Infinity, Infinity], hi: [-Infinity, -Infinity] });
+  const all = hull();
+  const held = hull();
+  const add = (
+    h: ReturnType<typeof hull>,
+    n: GoFishNode,
+    axis: 0 | 1,
+    offset: number,
+    ink: boolean
+  ) => {
     const b = box(n, axis);
     if (b === undefined) return;
-    const [min, max] = [b[0] + offset, b[1] + offset];
-    if (min < lo[axis]) farthest[axis][0] = n;
-    if (max > hi[axis]) farthest[axis][1] = n;
-    lo[axis] = Math.min(lo[axis], min);
-    hi[axis] = Math.max(hi[axis], max);
+    const o = n.strokeOverhang;
+    const [min, max] = [b[0] + offset - o, b[1] + offset + o];
+    if (ink && min < h.lo[axis]) farthest[axis][0] = n;
+    if (ink && max > h.hi[axis]) farthest[axis][1] = n;
+    h.lo[axis] = Math.min(h.lo[axis], min);
+    h.hi[axis] = Math.max(h.hi[axis], max);
   };
-  const visit = (n: GoFishNode, offset: [number, number]) => {
-    if (n.type === "coord") return;
+  for (const axis of [0, 1] as const) {
+    add(all, root, axis, 0, false);
+    add(held, root, axis, 0, false);
+  }
+  // Ink is looked for only where the claim walk recorded some (`inkLayers`).
+  const inkLayer = (session?.inkLayers?.size ?? 0) > 0;
+  const visit = (
+    n: GoFishNode,
+    offset: [number, number],
+    inInk: [boolean, boolean]
+  ) => {
+    if (n.type === "coord" || n.clipsToBox) return;
     const inner: [number, number] = [
       offset[0] + (n.projectedTranslate(0) ?? 0),
       offset[1] + (n.projectedTranslate(1) ?? 0),
     ];
     n.children.forEach((c, i) => {
       if (!(c instanceof GoFishNode)) return;
-      for (const axis of [0, 1] as const)
-        if (n.claimWalk?.ink[axis].has(i)) add(c, axis, inner[axis]);
-      visit(c, inner);
+      const isInk = ([0, 1] as const).map(
+        (axis) => inkLayer && n.claimWalk?.ink[axis].has(i) === true
+      ) as [boolean, boolean];
+      const ink = ([0, 1] as const).map(
+        (axis) => inInk[axis] || isInk[axis]
+      ) as [boolean, boolean];
+      for (const axis of [0, 1] as const) {
+        if (isInk[axis]) add(all, c, axis, inner[axis], true);
+        else if (c.strokeOverhang > 0) {
+          add(all, c, axis, inner[axis], false);
+          if (!ink[axis]) add(held, c, axis, inner[axis], false);
+        }
+      }
+      visit(c, inner, ink);
     });
   };
-  visit(root, [0, 0]);
-  const ink = ([0, 1] as const).map((axis): Span => {
-    const { min, max } = root.dims[axis];
-    if (min === undefined || max === undefined || !(lo[axis] <= hi[axis]))
-      return [0, 0];
-    return [room(min - lo[axis]), room(hi[axis] - max)];
-  }) as [Span, Span];
-  return { ink, farthest };
+  visit(root, [0, 0], [false, false]);
+  const past = (h: ReturnType<typeof hull>) =>
+    ([0, 1] as const).map((axis): Span => {
+      const { min, max } = root.dims[axis];
+      if (min === undefined || max === undefined || !(h.lo[axis] <= h.hi[axis]))
+        return [0, 0];
+      return [room(min - h.lo[axis]), room(h.hi[axis] - max)];
+    }) as [Span, Span];
+  return { ink: past(all), outline: past(held), farthest };
 }
 
 /* top-level pass handler */

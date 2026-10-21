@@ -826,22 +826,48 @@ report their size).
   its size, and its labels, like its chrome, add around it (#1032). A node
   with a size of its own is a part of its parent's plot, chrome and labels
   included.
+- **An outline takes room as dressing does.** A shape's box is its geometry,
+  which data places and sizes and a chain lays out. Its stroke is centered
+  on that geometry, so it is drawn half its width past the box on every side
+  (`GoFishNode.strokeOverhang`, `outlineOverhang` in `_node.ts`; 0 where no
+  stroke is drawn). The shape's claim is its box widened by that, and its
+  plot is its box (`resolveExtent`), so a chain still lays shapes by their
+  boxes and an outline never moves a shape or changes its size: it reaches
+  past the chain, or overlaps its neighbor in the gap. A node that draws
+  from refs (an `enclose` around placed members) widens its placement the
+  same way, and a node a `nest` sizes from its inner claims its own outline
+  past the padded inner's plot (`applyNestExtentPlan`). Inside a coordinate
+  space claims are in the space's units, so they are not widened: the space
+  fits its content inside its box and widens the box it measures by the
+  largest outline inside it (`outline` in `coord.tsx`), so its box holds its
+  outlines. A space that frames its own window (geo) clips them, as it clips
+  the rest of what its window leaves out. A shape that fills the room it is
+  given has no claim to widen, and its outline is centered on the room's
+  edge.
 
 At the root, `layout()` measures what the root draws past its box after its
-one layout (`drawnOverflow`): its ink. A node's box holds what it draws,
-except a layer's ink children, which its box leaves out, so the drawing is
-the hull of the root's box and of every ink child's box. The claim walk
-records the layers that found ink children on the render session, so a
-render with none skips the walk. A literal start or
+one layout (`drawnOverflow`): its ink and its outlines. A node's box holds
+what it draws, except a layer's ink children, which its box leaves out, and
+a shape's outline, drawn past its box: the drawing is the hull of the root's
+box, of every ink child's box, and of every node's box grown by its outline.
+A coordinate space's box stands for its interior, and a node that clips its
+content to its box (a `mask`, a `paint` composite: `GoFishNode.clipsToBox`)
+draws nothing past it. The claim walk records the layers that found ink
+children on the render session, and layout records whether a shape draws an
+outline, so a render with neither skips the walk. A literal start or
 pixel offset (`spread({ y: 50 })`, `.translate()`) moves a box, and its claim
 moves with it, so it is no ink. On an axis the render gives no size, the SVG is the root's box
-plus its ink, and the box sits past the ink before it.
+plus what it draws past it, and the box sits past what it draws before it.
 Content larger than the canvas whatever it is handed (fixed spacing wider
 than the canvas, a literal position past it, an inner size equal to the
 render size) still overflows and is clipped.
 
-On an axis the render gives a size, the ink is not fitted inside it, and it
-overflows the canvas.
+On an axis the render gives a size, the outlines of the nodes that take room
+are in the root's claim, which was fitted to the canvas, so a root that no
+data seats has its box placed past the outlines before it, as far as the
+outlines after it still fit (a shape that fills the canvas keeps its box
+there, its outline centered on the canvas edge). The ink is not fitted
+inside the canvas, and it overflows it.
 
 #### Layout warnings
 

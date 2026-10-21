@@ -251,7 +251,12 @@ its children share. A free child is seated at the scope's `originPx`. The
 coord's type is its children's overlay, kept for its own scope; upward it
 reports nothing on either axis, like every σ-scope root: to its parent it is a
 pixel box, and an explicit `w`/`h` sizes that box as it sizes a layer's (a
-`Frame` with a `coord` forwards its dims, #535). So its axes are its own to draw, and so are their titles: the
+`Frame` with a `coord` forwards its dims, #535). The box holds the outlines
+drawn inside it: a stroke is in pixels while the interior is laid out in the
+space's coordinates, so the box it measures from its content is widened by
+the largest outline inside it (`outline`; see
+[Overview](/internals/layout/passes)). A space that frames its own window
+clips them with the rest of what the window leaves out. So its axes are its own to draw, and so are their titles: the
 radial axis is drawn along the θ = 0 ray, and its title continues the ray
 past its outer end (past the last tick), reading along the ray, so it never
 sits on top of the data. The title is the `axes` option's `y` title,

@@ -62,7 +62,7 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
       // Other operators keep the union-based sizing so unions/xors don't
       // clip content outside the first child's bounds.
       const isAtop = operator === "atop";
-      return new GoFishNode(
+      const node = new GoFishNode(
         {
           type,
           resolveUnderlyingSpace: (
@@ -180,6 +180,8 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
         },
         children
       );
+      node.clipsToBox = isAtop;
+      return node;
     }
   );
 
@@ -242,7 +244,7 @@ export const mask = createNodeOperator(
   (_: Record<string, never>, children: GoFishAST[]) => {
     requireTwoChildren(children);
 
-    return new GoFishNode(
+    const node = new GoFishNode(
       {
         type: "mask",
         resolveUnderlyingSpace: (
@@ -340,5 +342,7 @@ export const mask = createNodeOperator(
       },
       children
     );
+    node.clipsToBox = true;
+    return node;
   }
 );

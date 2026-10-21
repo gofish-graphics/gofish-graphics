@@ -4,7 +4,7 @@
 
 import { color6, resolveColorChannel } from "../../color";
 import { path, transformPath } from "../../path";
-import { GoFishNode } from "../_node";
+import { GoFishNode, outlineOverhang } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
 import {
@@ -132,6 +132,7 @@ export const Rect = ({
       },
       // Used to seed the unit color scale. Prefer whichever channel is data-driven.
       color: isValue(fill) ? fill : stroke,
+      strokeOverhang: outlineOverhang(stroke, strokeWidth),
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]

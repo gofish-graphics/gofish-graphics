@@ -18,7 +18,7 @@
  *  - bag `chart(selectAll(name)).mark(enclose(opts))`: the refs are the
  *    members, one outline per group when the flow groups them.
  */
-import { GoFishNode, placeUnplacedChild } from "../_node";
+import { GoFishNode, outlineOverhang, placeUnplacedChild } from "../_node";
 
 import { Frontend, type DisplayList } from "gofish-ir";
 import {
@@ -151,6 +151,7 @@ function Enclose(
     {
       type: "enclose",
       color: isValue(fill) ? fill : stroke,
+      strokeOverhang: outlineOverhang(stroke, strokeWidth),
       resolveUnderlyingSpace: (): [UnderlyingSpace, UnderlyingSpace] => [
         UNDEFINED,
         UNDEFINED,

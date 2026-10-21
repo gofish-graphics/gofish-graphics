@@ -1,5 +1,5 @@
 import { GoFishAST } from "../_ast";
-import { GoFishNode, type ToPixel } from "../_node";
+import { GoFishNode, outlineOverhang, type ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -64,6 +64,7 @@ export const arrow = createNodeOperator(
     return new GoFishNode(
       {
         type: "arrow",
+        strokeOverhang: outlineOverhang(props.stroke, props.strokeWidth),
         resolveUnderlyingSpace: (
           _childSpaces: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]

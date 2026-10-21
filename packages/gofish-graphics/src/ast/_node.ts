@@ -76,7 +76,7 @@ import {
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
 } from "./underlyingSpace";
-import { impliedExtents, Extent } from "./extent";
+import { impliedExtents, Extent, padExtent } from "./extent";
 import * as Monotonic from "../util/monotonic";
 import type {
   BoxForm,
@@ -170,7 +170,25 @@ export type RenderSession = {
    *  the render looks for what is drawn past the root's box only where
    *  there is some (`drawnOverflow` in gofish.tsx). */
   inkLayers?: Set<GoFishNode>;
+  /** Whether a node laid out draws an outline past its box
+   *  (`GoFishNode.strokeOverhang`), so the render looks for it too. */
+  outlined?: boolean;
 };
+
+/** How far an outline of `stroke` color and `strokeWidth` is drawn past the
+ *  geometry it strokes, on every side: half its width, for a stroke centered
+ *  on the edge, or 0 where none is drawn (no width, or the color `"none"`).
+ *  A shape passes it as its `strokeOverhang`. */
+export const outlineOverhang = (
+  stroke: unknown,
+  strokeWidth: unknown
+): number =>
+  typeof strokeWidth === "number" &&
+  strokeWidth > 0 &&
+  stroke !== "none" &&
+  stroke !== "transparent"
+    ? strokeWidth / 2
+    : 0;
 
 /** Record `warning` (if any) on the render of `node`. */
 export const warnLayout = (
@@ -749,6 +767,21 @@ export class GoFishNode {
    *  Layout size is separate from drawn size (#493), as a CSS box's ink
    *  overflow or a Typst box's `outset` is. */
   public inkOn?: [boolean, boolean];
+  /**
+   * How far this node's outline is drawn past its box on every side, in
+   * pixels: half the width of a centered stroke ({@link outlineOverhang}),
+   * 0 for a node that draws none. The box is the
+   * shape's geometry, which data places and sizes and a chain lays out. The
+   * outline around it is part of the drawing, and takes room as dressing
+   * does: the node's claim is its box widened by it, and its plot is its box
+   * (see {@link resolveExtent}). So a stroke never moves a shape, and the
+   * graphic leaves room for it at its edges.
+   */
+  public strokeOverhang = 0;
+  /** Whether it draws its content only inside its box (a `mask`, a
+   *  composite clipped to its first child): what its content would draw
+   *  past its box, an outline included, is not drawn. */
+  public clipsToBox = false;
   /** Set on a node whose box is read off other nodes it holds as refs (an
    *  `enclose` around placed members): where it lands in `frame`'s frame on
    *  `axis`, when the claim walk knows where the refs' targets land there
@@ -806,6 +839,7 @@ export class GoFishNode {
       lower,
       geometry,
       color,
+      strokeOverhang,
     }: {
       key?: string;
       type: string;
@@ -817,6 +851,8 @@ export class GoFishNode {
       lower?: Lower;
       geometry?: GeometryFn;
       color?: MaybeValue<string>;
+      /** See {@link GoFishNode.strokeOverhang}. */
+      strokeOverhang?: number;
     },
     children: GoFishAST[]
   ) {
@@ -837,6 +873,7 @@ export class GoFishNode {
     this.type = type;
     this.args = args;
     this.color = color;
+    this.strokeOverhang = strokeOverhang ?? 0;
   }
 
   /** This node's sharing plan: its rule ({@link ResolveSharing}) applied to
@@ -1206,8 +1243,33 @@ export class GoFishNode {
             `size claim. Every continuous axis has a claim.`
         );
     }
+    // A drawn outline takes room as dressing does: the claim reaches past
+    // the box by it, and the plot is the box, so a chain still lays the
+    // shape by its box. Inside a coordinate space a claim is in the space's
+    // own units, not pixels, and the space holds its interior's outlines
+    // itself (`coord`).
+    const o = this.strokeOverhang;
+    if (
+      o > 0 &&
+      extent.some((e) => e !== undefined) &&
+      !this.inCoordinateSpace()
+    ) {
+      this._plotExtent ??= extent;
+      this._extent = extent.map((e) =>
+        e === undefined ? undefined : padExtent(e, o)
+      ) as Size<Extent | undefined>;
+      return this._extent;
+    }
     this._extent = extent;
     return extent;
+  }
+
+  /** Whether this node is inside a coordinate space (a `coord` above it),
+   *  whose interior is laid out in the space's own coordinates. */
+  public inCoordinateSpace(): boolean {
+    for (let n = this.parent; n !== undefined; n = n.parent)
+      if (n.type === "coord") return true;
+    return false;
   }
 
   /** Whether the room this node is given on `axis` is a share: it is in a
@@ -1678,6 +1740,10 @@ export class GoFishNode {
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
     this._plotSpan = [undefined, undefined];
+    if (this.strokeOverhang > 0) {
+      const session = this.tryGetRenderSession();
+      if (session !== undefined) session.outlined = true;
+    }
     const { intrinsicDims, transform, renderData } = this._layout(
       size,
       orientScales(scales, direction, parentDirection),

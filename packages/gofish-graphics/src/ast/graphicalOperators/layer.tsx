@@ -26,7 +26,13 @@ import {
   isUNDEFINED,
   magnitude,
 } from "../underlyingSpace";
-import { Extent, hullExtent, impliedExtent, mapsDomain } from "../extent";
+import {
+  Extent,
+  hullExtent,
+  impliedExtent,
+  mapsDomain,
+  padExtent,
+} from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import type { KeyedDomains } from "../keyedDomains";
 import { isValue } from "../data";
@@ -112,6 +118,20 @@ import {
 // (every node that paints its children orders them through the same function).
 
 const sum = ([a, b]: [number, number]) => a + b;
+
+/** `p` grown by an outline drawn `o` pixels past its box on each side
+ *  (`GoFishNode.strokeOverhang`). */
+const outlined = (
+  p: Placement | undefined,
+  o: number
+): Placement | undefined =>
+  p === undefined || o === 0
+    ? p
+    : {
+        lo: Monotonic.adds(p.lo, -o),
+        hi: Monotonic.adds(p.hi, o),
+        extent: padExtent(p.extent, o),
+      };
 
 /** Whether `node` is a ring of chrome (`GoFishNode.chrome`): a layer whose
  *  first child is the ring inside it and whose other children are chrome. */
@@ -234,14 +254,15 @@ export const layer = createNodeOperatorSequential(
     const dressingChildren: [Set<number>, Set<number>] = [new Set(), new Set()];
     // Where each child that is a `ref` stand-in has its target land in this
     // layer's frame on `axis` (`placementIn`), and where each child drawn
-    // from refs lands (`GoFishNode.placedFromRefs`), by child index.
+    // from refs lands (`GoFishNode.placedFromRefs`), by child index, its
+    // outline included (`GoFishNode.strokeOverhang`), as a claim includes it.
     const standInPlacements = (axis: 0 | 1): (Placement | undefined)[] =>
       node.children.map((c) =>
         c instanceof GoFishRef
           ? c.targetNode !== undefined
             ? placementIn(c.targetNode, node, axis)
             : undefined
-          : c.placedFromRefs?.(node, axis)
+          : outlined(c.placedFromRefs?.(node, axis), c.strokeOverhang)
       );
     // What the claim walk knows of each child on `axis`, for
     // `placeByClaims`: its claim (`extents`), its type, whether it is a `ref`
@@ -537,11 +558,27 @@ export const layer = createNodeOperatorSequential(
             const c = node.children[i];
             return c instanceof GoFishNode && c.fillsRoom(axis);
           };
+          // Each child's own plot claim, before the nest padding.
+          const ownPlots = node.children.map((c) =>
+            c instanceof GoFishNode ? plotIn(c, node) : c.resolveExtent()
+          );
+          const overhang = (i: number) => {
+            const c = node.children[i];
+            return c instanceof GoFishNode && !c.inCoordinateSpace()
+              ? c.strokeOverhang
+              : 0;
+          };
+          // A node a nest sizes from its inner whose outline reaches past
+          // its box: its claim is no longer its plot.
+          const outlinedNest = [...(t.nestPlan?.byDerived ?? [])].some(
+            ([i, edges]) => overhang(i) > 0 && edges.some((e) => e.dir === "in")
+          );
           const effectiveExtents = applyNestExtentPlan(
             childExtents,
             t.effectiveChildren,
             t.nestPlan,
-            fillsRoom
+            fillsRoom,
+            { plots: ownPlots, overhang }
           );
           const scale = [
             options.transform?.scale?.x ?? 1,
@@ -643,9 +680,7 @@ export const layer = createNodeOperatorSequential(
           // Each child's plot claim, and what a chain reads to lay it
           // (`composePlanExtents`' `parts`).
           const childPlots = applyNestExtentPlan(
-            node.children.map((c) =>
-              c instanceof GoFishNode ? plotIn(c, node) : c.resolveExtent()
-            ),
+            ownPlots,
             t.effectiveChildren,
             t.nestPlan,
             fillsRoom
@@ -688,11 +723,13 @@ export const layer = createNodeOperatorSequential(
           // whose children are not stand-ins and have their claims as their
           // plots, with no dressing placed, has its claim as its plot.
           const plotIsClaim =
+            !outlinedNest &&
             node.children.every(
               (c) =>
                 c instanceof GoFishNode &&
                 c.resolvePlotExtent() === c.resolveExtent()
-            ) && placements.every((p) => p === undefined || p.plot === p.hull);
+            ) &&
+            placements.every((p) => p === undefined || p.plot === p.hull);
           const plotOf = () => {
             return claimFrom(
               childPlots,

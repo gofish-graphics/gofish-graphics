@@ -182,7 +182,8 @@ async function main() {
     // Three bars in a 200 × 100 plot, with one outline around them, 10 px
     // out. The outline is placed from its refs, as a label is: it adds
     // around the plot, and in a canvas of the plot's size plus the padding
-    // it leaves the bars their 200 × 100.
+    // and the outline's 1 px stroke (half of it past each side) it leaves
+    // the bars their 200 × 100.
     const data = ["a", "b", "c"].map((k, i) => ({ k, v: i + 1 }));
     const bars = (size: { w?: number; h?: number }) =>
       chart(data, { axes: false, ...size })
@@ -195,25 +196,25 @@ async function main() {
       items(await bars({ w: 200, h: 100 }).toDisplayList())
     );
     check(
-      "the outline is the bars' box, 10 px out",
-      close(sized[0].x, 0) &&
-        close(sized[0].y, 0) &&
+      "the outline is the bars' box, 10 px out, its stroke inside the canvas",
+      close(sized[0].x, 0.5) &&
+        close(sized[0].y, 0.5) &&
         close(sized[0].w, 220) &&
         close(sized[0].h, 120),
       sized[0]
     );
     check(
       "the bars keep the 200 × 100 plot",
-      close(sized[1].x, 10) &&
-        close(sized[3].x! + sized[3].w!, 210) &&
+      close(sized[1].x, 10.5) &&
+        close(sized[3].x! + sized[3].w!, 210.5) &&
         close(sized[3].h, 100),
       sized.slice(1)
     );
     const fitted = rects(
-      items(await bars({}).toDisplayList({ w: 220, h: 120 }))
+      items(await bars({}).toDisplayList({ w: 221, h: 121 }))
     );
     check(
-      "in a 220 × 120 canvas the bars get 200 × 100",
+      "in a 221 × 121 canvas the bars get 200 × 100",
       close(fitted[3].x! + fitted[3].w! - fitted[1].x!, 200, 1e-3) &&
         close(fitted[3].h, 100, 1e-3),
       fitted
