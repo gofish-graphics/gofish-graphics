@@ -164,8 +164,10 @@ pluck(ref, "species")  # → ["Bass", "Trout", ...] (distinct across the bag)
 `source` may be a ref that a
 [mark function](/python/api/core/mark#mark-fn-over-refs-value-labels) received
 (`pluck` reads its `datum` bag), a list of rows, or a single row. `path` is a field name
-or a dotted path (`"a.b"`); a list met along the path is read element by
-element, and a row that lacks the field adds no value. Reach for `pluck` when a
+or a path (`"a.b"`, `"a[0]"`), read as JS reads one; a list met along the path is read element by
+element, and a row that lacks the field, or holds `None` there, adds no value.
+Two values are one when JS counts them as one (`1`, `1.0` and `"1"`), so
+`pluck` answers what JS `pluck` answers. Reach for `pluck` when a
 field is multi-valued in the current bag and you want to enumerate its values
 rather than group by it — the case where `by="field"` would resolve to `None`.
 
@@ -182,4 +184,18 @@ chart(seafood, axes=True) \
     .flow(spread(by="lake", dir="x")) \
     .mark(rect(h="count")) \
     .layer(chart().flow(group(by="lake")).mark(label))
+```
+
+## `project(source, path)` — the single value at a path {#project}
+
+`project` is the **collapsing** counterpart to `pluck`: it returns the one value
+at a path **when the bag agrees on it** (the same homogeneity collapse `by`
+performs), and `None` otherwise. Where `pluck(ref, "site")` gives you the
+whole multiset `["Morris"]`, `project(ref, "site")` gives you `"Morris"`
+directly — no indexing.
+
+```python
+from gofish import project
+
+project(ref, "site")  # → "Morris"  (None if the bag disagrees on "site")
 ```

@@ -43,7 +43,7 @@ import { combine, byDepth, mount } from "./_shared";
 //     budget and wedges wrap — visible here as the spiral overlap, which actually
 //     echoes the reference. (The #627 data-position workaround is demonstrated in
 //     RadialDeep.stories.tsx.)
-//  3. polar() now takes options — { innerRadius, centralAngle, startAngle,
+//  3. polar() now takes options — { innerRadius, centralAngle, baselineAngle,
 //     direction, center } since #620 — so InnerRadius, Direction and CentralAngle
 //     are now expressible via polar({ ... }) since #620 (not yet applied here).
 //     Still NOT expressible: the dsl's PolarAxis=x-axis swap, PolarCenter=right
@@ -94,7 +94,7 @@ export const OakTreeVis: StoryObj = {
           // r: stagger siblings radially — the spiral/oak stagger (dsl flatten).
           y: { kind: "distribute", spacing: 61, anchor: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       { w: 520, h: 520 }
     ),

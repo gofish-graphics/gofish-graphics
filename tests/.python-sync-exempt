@@ -11,24 +11,6 @@
 # map the directional operators (stackX, spreadY, ...) to combinator-form spread/stack/connect,
 # frame→layer, and add the polar/wavy coord transforms to the Python wrapper +
 # IR bridge.
-#
-# Per-export exemption — PolarText constructs a raw custom coordinate
-# transform inline ({ type, transform: ([r, theta]) => ..., domain }), an
-# arbitrary JS closure rather than one of the IR's named coord transforms
-# (polar/clock/wavy/geo), so it cannot cross the
-# bridge. The other TextMarks exports are ported.
-packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx::PolarText
-
-# pack: NestedByCount computes each pixel radius in a JS function mark,
-# because pack cannot yet scale a data-driven size (#967); a function mark
-# cannot cross the bridge. Forward Syntax/Pack::Nested and Low Level
-# Syntax/Pack are ported.
-packages/gofish-graphics/stories/forwardsyntax/Pack.stories.tsx::NestedByCount
-
-# separate: MixedRadii computes each pixel radius in a JS function mark, which
-# cannot cross the bridge. Forward Syntax/Separate::PenguinMass and ::OneSided
-# are ported.
-packages/gofish-graphics/stories/forwardsyntax/Separate.stories.tsx::MixedRadii
 
 # Docs regression test
 packages/gofish-graphics/stories/DocsContextRegression.stories.tsx
@@ -47,12 +29,6 @@ packages/gofish-graphics/stories/lowlevel/EncloseRefs.stories.tsx
 # — there is nothing for a Python story to byte-match. Captured by the JS
 # visual harness for regression tracking; intentionally not mirrored to Python.
 packages/gofish-graphics/stories/bench/Benchmarks.stories.tsx
-
-# Forward syntax stories needing unsupported features
-# LabeledChart uses a JS-side function-mark that composes resolved node refs
-# with fresh text — the refs can't cross the Python derive RPC, so it can't be
-# expressed with a Python mark-fn. (Ribbon/Layered and NodeLink ARE ported.)
-packages/gofish-graphics/stories/forwardsyntax/LabeledChart.stories.tsx
 
 
 # Forward syntax stories needing coord transforms other than clock
@@ -77,30 +53,13 @@ packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx::Default
 #
 # check-python-sync walks packages/gofish-gotree/stories/ too, and the title
 # "GoTree / Gallery / <name>" maps to tests/python-stories/go-tree/gallery/.
-# The 40 stories built with tree() are ported with `gofish.gotree`. The
-# entries below still need a port. Remove a line when its port exists. The
-# JS visual-diff harness captures these stories either way.
+# Every story is ported except the constraint matrix: it is not one spec. It
+# lays 36 tree() charts out in an HTML grid with HTML labels from a JS loop,
+# and refits each chart's SVG viewBox to its content in a
+# requestAnimationFrame callback. There is nothing for one Python story to
+# byte-match (same reason as CurveLadder and PenguinsFourShapes). The JS
+# visual-diff harness captures it.
 packages/gofish-gotree/stories/Matrix.stories.tsx
-packages/gofish-gotree/stories/Tree.stories.tsx
-
-# These seven gallery stories do not use tree(): each places its nodes by
-# hand with GoFish marks, so each needs its own port.
-packages/gofish-gotree/stories/gallery/MultilevelSilhouetteTree.stories.tsx
-packages/gofish-gotree/stories/gallery/OutsideInTree.stories.tsx
-packages/gofish-gotree/stories/gallery/RadialDeep.stories.tsx
-packages/gofish-gotree/stories/gallery/RadialPhylogeneticTree.stories.tsx
-packages/gofish-gotree/stories/gallery/RadialTree.stories.tsx
-packages/gofish-gotree/stories/gallery/RadialTreeIncline.stories.tsx
-packages/gofish-gotree/stories/gallery/RotationTree.stories.tsx
-
-# LayeredBarsAndArea stays exempt: it drives a data-driven paint order with
-# `area(...).zOrder(d => …)` and reorders the area selection with a `derive`
-# callback. Both are JS functions that can't cross the derive RPC, and the
-# `.zOrder(fn)` form is omitted from the IR (like a function `.label`), so a
-# Python port can't reproduce — let alone byte-match — the paint ordering that
-# raises the emphasized sites above the gray ones. Revisit once the highlight /
-# `emphasize` API (#641) gives this a serializable, declarative spelling.
-packages/gofish-graphics/stories/vega-lite/Bar/LayeredBarsAndArea.stories.tsx
 
 # ---------------------------------------------------------------------------
 # Interaction/reactivity stories — exempt from Python parity (JS-only feature).
@@ -126,10 +85,6 @@ packages/gofish-graphics/stories/interaction/Widgets.stories.tsx
 # cross the derive RPC. Panel A (the static species lines), a pure spec, is in
 # its own file, BirdMigrationStatic.stories.tsx, and is ported (#856).
 packages/gofish-graphics/stories/animated-vega-lite/BirdMigration.stories.tsx
-
-# Tutorials/Glyphs is the finished example of the docs Glyphs tutorial: a glyph
-# passed to `.mark()` as a per-group JS function, which cannot cross the bridge.
-packages/gofish-graphics/stories/tutorials/Glyphs.stories.tsx
 
 # The Gapminder animation panels — exempt for the same reason as the bird
 # migration panels above. Each of these stories is driven by

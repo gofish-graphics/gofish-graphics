@@ -46,7 +46,7 @@ import { initializeContainer } from "../helper";
 //  - Direction: clockwise — now expressible via polar({ direction }) since #620
 //    — not yet applied here.
 //  - StartAngle / CentralAngle: now expressible via
-//    polar({ startAngle, centralAngle }) since #620 — not yet applied here; as
+//    polar({ baselineAngle, centralAngle }) since #620 — not yet applied here; as
 //    drawn the disc starts at the same angle and the budget is the full 2π.
 //  - PolarAxis: y-axis (the θ/r axis swap from the dsl) is not expressible.
 //  - Link:curve — links are not drawn for a filled-wedge sunburst (link:"none"
@@ -133,7 +133,7 @@ export const Sunburst: StoryObj = {
           // r: siblings share the same ring.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       deepBalancedTree
     ).render(container, { w: 540, h: 540 });

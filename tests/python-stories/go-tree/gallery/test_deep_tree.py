@@ -46,7 +46,7 @@ def story_deep_tree():
                 },
                 y={"kind": "align", "alignment": "middle"},
             ),
-            coord=Coord.polar(),
+            coord=Coord.clock(),
         ),
         {"w": 560, "h": 560},
     )

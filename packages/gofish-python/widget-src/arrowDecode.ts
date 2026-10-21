@@ -7,7 +7,8 @@
  *
  * A table is a list, one Arrow column of its items (see `arrowTransport.ts`),
  * so the decode is always the same: column 0 is the list. Its values go
- * through one recursive conversion, chosen once per Arrow type:
+ * through one recursive conversion, chosen once per field by its Arrow type
+ * (or the extension type its metadata names):
  *
  *  - null stays null (a float NaN stays NaN: GoFish never reads NaN as
  *    missing);
@@ -23,7 +24,10 @@
  *  - a timestamp is epoch milliseconds, a number (a naive timestamp counts
  *    its wall clock as UTC), and a date the epoch milliseconds of its UTC
  *    midnight;
- *  - a 64-bit integer (a `bigint`) becomes a JS number.
+ *  - a 64-bit integer (a `bigint`) becomes a JS number;
+ *  - a value of the extension type `gofish.ref` (a field whose metadata
+ *    names it) becomes a `Serialize.BridgeRef`, the ref a reply hands back
+ *    by its index in the call's refs.
  *
  * One exception, for the fields of the table's own records, which a chart's
  * schema can name: a naive timestamp (no time zone) or a date there is a
@@ -73,21 +77,31 @@ export function arrowTableToRows(table: Arrow.Table): unknown[] {
         `has ${table.numCols} (${table.schema.fields.map((f) => f.name)})`
     );
   }
-  return listOf(table.getChildAt(0)!, fromArrowField);
+  return listOf(table.getChildAt(0)!, table.schema.fields[0], fromRecordField);
 }
 
 type Convert = (value: any) => any;
 
-/** The items of `vector` as a JS array. A struct's items are read a field
- *  at a time from its child vectors, each field converted by `field` of its
- *  type, and the array carries the fields' column types. */
+/** Whether `field` holds refs: the extension type `gofish.ref`, which names
+ *  itself in the field's metadata (see `inferField` in arrowTransport.ts). */
+const isRef = (field: Arrow.Field): boolean =>
+  field.metadata.get("ARROW:extension:name") === "gofish.ref";
+
+/** A `gofish.ref` value, `{index}`, as the ref it stands for. */
+const toRef: Convert = (v) => new Serialize.BridgeRef(Number(v.index));
+
+/** The items of `vector`, the values of the field `item`, as a JS array. A
+ *  struct's items are read a field at a time from its child vectors, each
+ *  field converted by `field`, and the array carries the fields' column
+ *  types. */
 function listOf(
   vector: Arrow.Vector,
-  field: (type: Arrow.DataType) => Convert | undefined
+  item: Arrow.Field,
+  field: (f: Arrow.Field) => Convert | undefined
 ): unknown[] {
   const { type, length } = vector;
-  if (!Arrow.DataType.isStruct(type)) {
-    const convert = orNull(fromArrow(type));
+  if (isRef(item) || !Arrow.DataType.isStruct(type)) {
+    const convert = orNull(fromArrow(item));
     return Array.from({ length }, (_, i) => convert(vector.get(i)));
   }
   const columns = type.children.map((f, j) => {
@@ -99,7 +113,7 @@ function listOf(
       const values = child.toArray();
       return { name: f.name, at: (i: number) => values[i] };
     }
-    const convert = orNull(field(f.type));
+    const convert = orNull(field(f));
     return { name: f.name, at: (i: number) => convert(child.get(i)) };
   });
   const rows: (Record<string, any> | null)[] = [];
@@ -119,32 +133,36 @@ function listOf(
     : rows;
 }
 
-/** How to turn one value of a table record's field of Arrow type `type`
- *  into JS (see the module comment's exception), or undefined when Arrow's
- *  value is already it. */
-function fromArrowField(type: Arrow.DataType): Convert | undefined {
+/** How to turn one value of a table record's field `f` into JS (see the
+ *  module comment's exception), or undefined when Arrow's value is already
+ *  it. */
+function fromRecordField(f: Arrow.Field): Convert | undefined {
+  const { type } = f;
   // Arrow hands back epoch ms; a naive timestamp counts the wall clock as if
   // it were UTC, so its UTC fields are the wall-clock fields.
   if (Arrow.DataType.isTimestamp(type) && !type.timezone) return wallClock;
   if (Arrow.DataType.isDate(type)) {
     return (v: Date | number) => wallClock(+v).split("T")[0];
   }
-  return fromArrow(type);
+  return fromArrow(f);
 }
 
-/** How to turn one value of Arrow type `type` into JS (see the module
- *  comment), or undefined when Arrow's value is already it. */
-function fromArrow(type: Arrow.DataType): Convert | undefined {
+/** How to turn one value of the field `f` into JS (see the module comment),
+ *  or undefined when Arrow's value is already it. */
+function fromArrow(f: Arrow.Field): Convert | undefined {
+  if (isRef(f)) return toRef;
+  const { type } = f;
   // Epoch ms, a naive timestamp's read in UTC.
   if (Arrow.DataType.isTimestamp(type)) return undefined;
   if (Arrow.DataType.isDate(type)) return (v: Date | number) => +v;
   if (Arrow.DataType.isInt(type) && type.bitWidth === 64) return Number;
   if (Arrow.DataType.isList(type) || Arrow.DataType.isFixedSizeList(type)) {
-    return (v: Arrow.Vector) => listOf(v, fromArrow);
+    const item = type.children[0] as Arrow.Field;
+    return (v: Arrow.Vector) => listOf(v, item, fromArrow);
   }
   if (Arrow.DataType.isStruct(type)) {
     const fields = type.children.map(
-      (f) => [f.name, orNull(fromArrow(f.type))] as const
+      (c) => [c.name, orNull(fromArrow(c))] as const
     );
     return (v: any) => {
       const out: Record<string, any> = {};

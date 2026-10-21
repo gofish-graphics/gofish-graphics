@@ -224,7 +224,7 @@ def _as_mark(mark: Any) -> Any:
     writes there. A callable `(data) -> mark | chart` is arbitrary Python
     code, so it becomes a `_MarkFn` that JS calls back per partition.
     """
-    if not isinstance(mark, (Mark, _MarkFn, ChartBuilder, LayerBuilder)) and callable(mark):
+    if _is_function(mark):
         return _MarkFn(mark)
     return mark
 
@@ -245,6 +245,25 @@ class _PendingAccessor:
     def __init__(self, fn: Callable):
         self.fn = fn
         self.lambda_id = str(uuid.uuid4())
+
+
+def _is_function(v: Any) -> bool:
+    """A Python function the user wrote: callable, and not a GoFish value. A
+    mark is callable too (``mark(d)`` applies it, as in JS), but it is a mark,
+    not a function to call back."""
+    return callable(v) and not isinstance(v, _Root)
+
+
+def _holds_node(v: Any) -> bool:
+    """Whether ``v`` (a mark's input, ``mark(d)``) is or holds, at any depth
+    of its lists and dicts, a mark, a ref or a chart: a node, not data."""
+    if isinstance(v, _Root):
+        return True
+    if isinstance(v, dict):
+        return any(_holds_node(x) for x in v.values())
+    if isinstance(v, (list, tuple)):
+        return any(_holds_node(x) for x in v)
+    return False
 
 
 def _is_tagged(v: Any) -> bool:
@@ -269,7 +288,7 @@ def _channel(v: Any) -> Any:
         lambda x: x
         if _is_tagged(x)
         else _PendingAccessor(x)
-        if callable(x) and not isinstance(x, _PendingAccessor)
+        if _is_function(x)
         else KEEP,
     )
 
@@ -294,7 +313,7 @@ def _scan_options(construct: str, options: Dict[str, Any]) -> Dict[str, List["_P
                 return x
             if _is_tagged(x):
                 return x
-            if callable(x):
+            if _is_function(x):
                 raise TypeError(
                     f"{construct}: {key} holds a function, but only channel "
                     f"options take a function. Pass a field name or a "
@@ -308,30 +327,31 @@ def _scan_options(construct: str, options: Dict[str, Any]) -> Dict[str, List["_P
     return found
 
 
+def _wire_accessors(value: Any, payload: "_Payload") -> Any:
+    """``value`` as the wire carries it: each `_PendingAccessor` becomes its
+    `{"__gofish_lambda": id}` sentinel, at any depth, and ``payload`` records
+    its callback (``_accessor_reply``). The JS deserializer turns each
+    sentinel back into an accessor that calls into Python."""
+    return _nonfinite.walk(
+        value,
+        lambda x: {
+            "__gofish_lambda": payload.callback(x.lambda_id, _accessor_reply(x.fn))
+        }
+        if isinstance(x, _PendingAccessor)
+        else x
+        if _is_tagged(x)
+        else KEEP,
+    )
+
+
 def _wire_options(
     options: Dict[str, Any], accessors: Dict[str, list], payload: "_Payload"
 ) -> Dict[str, Any]:
-    """The options as the wire carries them: each `_PendingAccessor` becomes
-    its `{"__gofish_lambda": id}` sentinel, at any depth, and ``payload``
-    records its callback (``_accessor_reply``). Only the options
-    `_scan_options` found accessors in are walked; the rest are the same
-    objects. The JS deserializer turns each sentinel back into an accessor
-    that calls into Python."""
+    """The options as the wire carries them (``_wire_accessors``). Only the
+    options `_scan_options` found accessors in are walked; the rest are the
+    same objects."""
     return {
-        k: _nonfinite.walk(
-            v,
-            lambda x: {
-                "__gofish_lambda": payload.callback(
-                    x.lambda_id, _accessor_reply(x.fn)
-                )
-            }
-            if isinstance(x, _PendingAccessor)
-            else x
-            if _is_tagged(x)
-            else KEEP,
-        )
-        if k in accessors
-        else v
+        k: _wire_accessors(v, payload) if k in accessors else v
         for k, v in options.items()
     }
 
@@ -454,6 +474,10 @@ class _Root:
 class Mark(_Root):
     """Base class for chart marks."""
 
+    _not_applicable: Optional[str] = None
+    """Set on a mark position that is not a mark, so it has no input to
+    apply to (a ref, a cut, an offset): why ``mark(d)`` raises."""
+
     def __init__(
         self,
         mark_type: str,
@@ -483,10 +507,9 @@ class Mark(_Root):
         # `create_name(...)` don't leak to outer scope. Set by the
         # `@mark` decorator.
         self._is_scope: bool = False
-        # When set, the harness invokes the JS-side mark with this datum
-        # and key — mirrors the JS `rect({...})(d, key)` pattern used by
-        # `treemap([rect(...)(d1, k1), rect(...)(d2, k2), ...], **opts)`.
-        # Set via `.bind_data(d, key)`.
+        # When set, this mark is applied to this input and key, as the JS
+        # `rect({...})(d, key)` is: the mark position holds the node it
+        # builds from `d`. Set by calling the mark, `mark(d, key)`.
         self._datum: Any = None
         self._datum_set: bool = False
         self._key: Optional[str] = None
@@ -494,6 +517,21 @@ class Mark(_Root):
         # render). Mirrors JS `node._zOrder` (`.zOrder(n)`).
         self._z_order: Optional[float] = None
         self._translate: Optional[dict] = None
+
+    def _write_meta(self, d: dict, payload: "_Payload") -> dict:
+        """Write the modifiers every mark IR carries into ``d``: its
+        ``name``, ``zOrder`` (a function crosses as an accessor) and
+        ``translate``. The JS side applies them after building the mark
+        (``withMarkMeta`` in fromJSON.ts). Parallel to ``_copy_meta``."""
+        if self._name is not None:
+            d["name"] = (
+                self._name.to_dict() if isinstance(self._name, Token) else self._name
+            )
+        if self._z_order is not None:
+            d["zOrder"] = _wire_accessors(self._z_order, payload)
+        if self._translate:
+            d["translate"] = self._translate
+        return d
 
     def _copy_meta(self, target: "Mark") -> "Mark":
         target._name = self._name
@@ -507,19 +545,33 @@ class Mark(_Root):
         target._translate = self._translate
         return target
 
-    def bind_data(self, datum: Any, key: Optional[str] = None) -> "Mark":
-        """Bind a datum (and optional key) to this Mark for the treemap
-        combinator pattern.
+    def __call__(self, d: Any, key: Optional[Union[str, int]] = None) -> "Mark":
+        """Apply this mark to its input ``d`` (and ``key``), as a JS mark is
+        applied: ``circle({...})(d, key)``. The result is a mark whose
+        position holds the node this mark builds from ``d``, whatever rows
+        the position offers. A mark function applies the mark it builds to
+        its own rows, ``lambda d: circle(r=..., fill="species")(d)``, so its
+        channels read ``d`` (a field name binds its scale); a combinator child
+        can be a mark applied to a row of its own,
+        ``rect(fill=datum(genre))({"gross": gross}, genre)``.
 
-        Mirrors JS storybook spelling `rect({...})(d, d.key)` — the mark
-        factory is invoked with `(d, key)` to produce a pre-resolved node
-        with `.datum = d` set. The harness emits the equivalent call.
+        ``d`` is data: rows, a row, or any value JSON holds. A mark or a ref
+        (one a relational mark function was handed) is a node, not data, so
+        it raises.
         """
+        if self._not_applicable is not None:
+            raise TypeError(self._not_applicable)
+        if _holds_node(d):
+            raise TypeError(
+                f"{self.mark_type}(...)(d): d holds a mark or a ref, which is a "
+                "node, not data. Apply a mark to rows; place a node as a "
+                "combinator child instead."
+            )
         new_mark = type(self)(
             self.mark_type, _children=self._children, **self.kwargs
         )
         self._copy_meta(new_mark)
-        new_mark._datum = datum
+        new_mark._datum = d
         new_mark._datum_set = True
         new_mark._key = key
         return new_mark
@@ -545,12 +597,22 @@ class Mark(_Root):
         new_mark._name = name_or_token
         return new_mark
 
-    def z_order(self, value: float) -> "Mark":
+    def z_order(self, value: Union[float, Callable[[Any], float]]) -> "Mark":
         """Set the default z-order hint for this mark.
 
         Within a single layer's render, marks are sorted by `(z_order, index)`
         before painting. Lower values paint first (further back). Mirrors
-        JS `node.zOrder(n)`.
+        JS `mark.zOrder(value)`.
+
+        ``value`` is a number, or a function of the input a mark instance is
+        bound to, which returns the number. A function makes the paint order
+        data-driven; JS calls it through the bridge once for all of a
+        grouping's instances. The input of a mark over refs (a chart over
+        ``select_all(...)``) is a list of refs, which ``project`` reads::
+
+            ribbon(opacity=0.7).z_order(
+                lambda d: 1 if project(d, "site") in emphasized else 0
+            )
 
         For *relational* paint order ("this above that"), use
         `Constraint.z_above(a, b)` / `Constraint.z_below(a, b)` inside the
@@ -563,7 +625,7 @@ class Mark(_Root):
             self.mark_type, _children=self._children, **self.kwargs
         )
         self._copy_meta(new_mark)
-        new_mark._z_order = value
+        new_mark._z_order = _PendingAccessor(value) if _is_function(value) else value
         return new_mark
 
     def translate(
@@ -650,12 +712,6 @@ class Mark(_Root):
             }
         else:
             d = {"type": self.mark_type, **serialized_kwargs}
-        if self._name is not None:
-            d["name"] = (
-                self._name.to_dict()
-                if isinstance(self._name, Token)
-                else self._name
-            )
         if self._labels:
             d["label"] = self._labels
         # Only RelatableMark carries _relate, but reading via getattr keeps
@@ -668,17 +724,12 @@ class Mark(_Root):
         # `node.scope()` — matches JS createMark's behavior.
         if self._is_scope:
             d["__scope"] = True
-        # `bind_data()` pre-binds a datum + key for the
-        # `rect({...})(d, key)` treemap-combinator invocation pattern.
+        # `mark(d, key)`: the mark applied to its input (see `__call__`).
         if self._datum_set:
             d["__datum"] = self._datum
-            d["__key"] = self._key
-        # `.zOrder(n)` — applied post-construction on the JS side.
-        if self._z_order is not None:
-            d["zOrder"] = self._z_order
-        if self._translate:
-            d["translate"] = self._translate
-        return d
+            if self._key is not None:
+                d["__key"] = self._key
+        return self._write_meta(d, payload)
 
     def render(
         self,
@@ -725,6 +776,16 @@ class Mark(_Root):
         return self.render()._repr_mimebundle_(include=include, exclude=exclude)
 
 
+# A ref is a node another mark drew, and a JS `GoFishRef` has no `.zOrder()`,
+# so neither does a Python ref (`ref(...)`, a ref a mark function is handed).
+_REF_HAS_NO_Z_ORDER = (
+    "A ref names a node that another mark drew, so it has no z_order, as a "
+    "JS ref has no .zOrder(). Set the paint order on the mark that draws the "
+    "node, or order the two in the enclosing layer's .relate(...) with "
+    "Constraint.z_above / Constraint.z_below."
+)
+
+
 class _InputRef(Mark):
     """A `GoFishRef` handed into a mark-fn lambda, reconstructed Python-side
     (issue #591).
@@ -734,16 +795,19 @@ class _InputRef(Mark):
     `BarWithLabels.stories.tsx`'s label mark-fn, whose `.datum` is the group's
     row bag. A `GoFishRef` can't cross the derive RPC as-is (it's a class
     instance over the render's layer registry, not JSON), so the JS side
-    (`serializeMarkFnInput` in `fromJSON.ts`/`main.ts`) replaces each ref
-    argument with an `{"__inputRef": i, "datum": ...}` sentinel; the derive
-    server wraps every such sentinel back into one of these before calling
-    the user's function, so `d[0].datum` reads exactly like the JS story.
+    (`encodeInputRefs` in `registry.ts`) sends each ref, at any depth of the
+    input, as a `BridgeRef` (its index), and its datum once, in the call's
+    refs; `answer` makes every index one of these (`_decode_input_refs`)
+    before calling the user's function, so `d[0].datum` reads exactly like
+    the JS story. A reply hands one back by its index too: in a table, as a
+    `BridgeRef` (`_encode_input_refs`), and in the marks a mark function
+    draws, as below.
 
     `to_dict()` emits `{"type": "ref", "__inputRef": i}` — no `datum`, since
-    the datum already made the trip once and the JS side round-trips the
-    sentinel back to the *original* live ref object by index rather than
-    reconstructing one from the (re-serialized) datum. This lets a mark-fn
-    embed the ref directly in its returned layout (mirrors JS
+    the datum already made the trip once and the JS side resolves the index
+    back to the *original* live ref object rather than reconstructing one
+    from the (re-serialized) datum. This lets a mark-fn embed the ref
+    directly in its returned layout (mirrors JS
     `spread({...}, [d[0], text(...)])`).
 
     `.name(...)` (issue #556 — a named ref surviving a mark-fn round trip, so
@@ -757,6 +821,11 @@ class _InputRef(Mark):
     `_InputRef.__init__`'s `(index, datum)` signature).
     """
 
+    _not_applicable = (
+        "A ref a mark function is handed is a node, not a mark, so it cannot "
+        "be applied to rows. Place it as a combinator child."
+    )
+
     def __init__(self, index: int, datum: Any):
         super().__init__("ref")
         self.index = index
@@ -765,6 +834,9 @@ class _InputRef(Mark):
     def name(self, name_or_token: Union[str, "Token"]) -> "_InputRef":
         self._name = name_or_token
         return self
+
+    def z_order(self, value: Any) -> "Mark":
+        raise TypeError(_REF_HAS_NO_Z_ORDER)
 
     def to_dict(self, payload: "_Payload") -> dict:
         d: dict = {"type": "ref", "__inputRef": self.index}
@@ -847,6 +919,11 @@ class RefSentinel(Mark):
     clause (`arrow([a, b])`) it serializes as `ref("a")`. JS resolves the
     name at layout, from the relating layer.
     """
+
+    _not_applicable = (
+        "A .relate() operand names a node, not a mark, so it cannot be "
+        "applied to rows."
+    )
 
     def __init__(self, ref_name: str):
         super().__init__("ref", selection=ref_name)
@@ -1675,6 +1752,11 @@ class _RefProxy(Mark):
     the harness/widget reconstructs by calling JS `ref([token, "variables", i, "value"])`.
     """
 
+    _not_applicable = (
+        "ref(...) names a node, not a mark, as in JS, so it cannot be applied "
+        "to rows."
+    )
+
     def __init__(self, selection: list, multiplicity: Optional[str] = None):
         super().__init__("ref", selection=list(selection))
         # None means singular (`ref(name)`); "all" means the plural
@@ -1720,6 +1802,9 @@ class _RefProxy(Mark):
         self._copy_meta(named)
         named._name = name_or_token
         return named
+
+    def z_order(self, value: Any) -> "Mark":
+        raise TypeError(_REF_HAS_NO_Z_ORDER)
 
     def to_dict(self, payload: "_Payload") -> dict:
         # `select_all(...)` is a plural chart-data selector, so it has no
@@ -2113,11 +2198,11 @@ def treemap(
 
     Combinator form (positional list of marks): returns a low-level Mark that
     lays out the given pre-data-bound child marks (typically
-    `rect(...).bind_data(d, key)`) by the per-leaf weight given as `size`, one
+    `rect(...)(d, key)`) by the per-leaf weight given as `size`, one
     value per child, in child order.
 
         treemap(
-            [rect(fill=datum(genre)).bind_data({"worldwideGross": gross}, genre)
+            [rect(fill=datum(genre))({"worldwideGross": gross}, genre)
              for genre, gross in groups],
             size=[gross for genre, gross in groups],
             spacing=2,
@@ -2912,7 +2997,7 @@ def filter(
     """
     if isinstance(predicate, FieldPredicate):
         return Operator("filter", predicate=dict(predicate))
-    if callable(predicate):
+    if _is_function(predicate):
         # Data always flows as a list, so the filter keeps a sublist.
         return derive(lambda rows: [row for row in rows if predicate(row)])
     raise TypeError(
@@ -3222,6 +3307,11 @@ class CutMark(Mark):
     `to_dict()` serializes the source mark and drops `None` options.
     """
 
+    _not_applicable = (
+        "cut(...) cannot be applied to rows: as a combinator child it is its "
+        "slices, which are nodes, not a mark."
+    )
+
     def children(self) -> List[Any]:
         """The mark position a cut holds: its source."""
         return [self.kwargs["source"]]
@@ -3242,17 +3332,7 @@ class CutMark(Mark):
         inset = self.kwargs.get("inset")
         if inset is not None:
             d["inset"] = inset
-        if self._name is not None:
-            d["name"] = (
-                self._name.to_dict()
-                if isinstance(self._name, Token)
-                else self._name
-            )
-        if self._z_order is not None:
-            d["zOrder"] = self._z_order
-        if self._translate:
-            d["translate"] = self._translate
-        return d
+        return self._write_meta(d, payload)
 
 
 def cut(
@@ -3297,6 +3377,11 @@ def cut(
 class OffsetMark(Mark):
     """The `{type:"offset", ...}` IR node — a child shifted by (x, y) pixels."""
 
+    _not_applicable = (
+        "offset(...) is a node, not a mark, as in JS, so it cannot be applied "
+        "to rows. Apply its child instead: offset(rect(...)(d), x=...)."
+    )
+
     def children(self) -> List[Any]:
         """The mark position an offset holds: its child."""
         return [self.kwargs["child"]]
@@ -3308,17 +3393,7 @@ class OffsetMark(Mark):
             d["x"] = self.kwargs["x"]
         if self.kwargs.get("y") is not None:
             d["y"] = self.kwargs["y"]
-        if self._name is not None:
-            d["name"] = (
-                self._name.to_dict()
-                if isinstance(self._name, Token)
-                else self._name
-            )
-        if self._z_order is not None:
-            d["zOrder"] = self._z_order
-        if self._translate:
-            d["translate"] = self._translate
-        return d
+        return self._write_meta(d, payload)
 
 
 def offset(
@@ -3478,24 +3553,50 @@ def _accessor_reply(fn: Callable[[Any], Any]) -> _Reply:
 def _mark_fn_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
     """The callback of a mark function: its reply's root is the
     mark-position IR of what ``fn`` drew, and its payload ships that IR's
-    tables and callbacks. JS sends each live ``GoFishRef`` argument as an
-    ``{"__inputRef": i, "datum": ...}`` row (a ref can't cross the bridge);
-    it becomes an ``_InputRef``, so ``d[0].datum`` reads as in JS (#591)."""
+    tables and callbacks. A ref ``fn`` was handed (``_decode_input_refs``)
+    and places in what it drew writes its index, which JS resolves back to
+    the live ref."""
 
     def reply(rows: List[Any], scope: str) -> Tuple[dict, "_Payload"]:
-        return _walk(
-            fn(
-                [
-                    _InputRef(row["__inputRef"], row.get("datum"))
-                    if isinstance(row, dict) and "__inputRef" in row
-                    else row
-                    for row in rows
-                ]
-            ),
-            scope,
-        )
+        return _walk(fn(rows), scope)
 
     return reply
+
+
+def _decode_input_refs(rows: Any, refs: List[Any]) -> Any:
+    """The rows of a call from JS, with each ref in them as an ``_InputRef``.
+    A live ``GoFishRef`` cannot cross the bridge, so JS sends each one, at any
+    depth of the rows (a mark function's input item, a row's field that
+    ``resolve`` filled, a paint-order callback's list of refs), as a
+    ``BridgeRef``, its index in the call's refs, and ``refs[i]`` is that
+    ref's datum (``encodeInputRefs`` in registry.ts). Each index is one
+    node, however many times the rows hold it, so it is one ``_InputRef``.
+    So ``d[0].datum`` reads as in JS (#591), and ``r["ref"]`` places the
+    node ``resolve`` named."""
+    from .arrow_utils import BridgeRef
+
+    nodes = [_InputRef(i, None) for i in range(len(refs))]
+
+    def swap(v: Any) -> Any:
+        return nodes[v.index] if isinstance(v, BridgeRef) else KEEP
+
+    # A ref's datum may hold refs of its own.
+    for node, datum in zip(nodes, refs):
+        node.datum = _nonfinite.walk(datum, swap)
+    return _nonfinite.walk(rows, swap)
+
+
+def _encode_input_refs(value: Any) -> Any:
+    """``value``, a list a reply hands back, with each ``_InputRef`` in it
+    as the ``BridgeRef`` JS resolves back to the live ref it was handed (a
+    ``derive`` that keeps the refs ``resolve`` filled, a mark function's
+    chart over such rows). Data that holds no ref is returned as it is."""
+    from .arrow_utils import BridgeRef
+
+    def swap(v: Any) -> Any:
+        return BridgeRef(v.index) if isinstance(v, _InputRef) else KEEP
+
+    return _nonfinite.walk(value, swap)
 
 
 def _walk(root: Any, scope: Optional[str] = None) -> Tuple[dict, "_Payload"]:
@@ -3561,14 +3662,18 @@ def ir_payload(root: Any) -> Tuple[dict, Dict[str, _Reply]]:
     return _transport(root_ir, payload), payload.callbacks
 
 
-def answer(callbacks: Dict[str, _Reply], lambda_id: str, rows_b64: str) -> dict:
+def answer(
+    callbacks: Dict[str, _Reply], lambda_id: str, rows_b64: str, refs_b64: str
+) -> dict:
     """Answer one call from JS: run the callback named ``lambda_id`` on the
-    rows JS sent (base64 Arrow), register the callbacks its reply names, and
-    return the reply's document, shipped like a root's: its root (a table
-    reference for a derive or an accessor, a mark-position IR for a mark
-    function) and its tables as base64 Arrow.
+    rows JS sent, with the refs they hold (``_decode_input_refs``; both base64
+    Arrow), register the callbacks its reply names, and return the reply's
+    document, shipped like a root's: its root (a table reference for a
+    derive or an accessor, a mark-position IR for a mark function) and its
+    tables as base64 Arrow, each ref in them by its index
+    (``_encode_input_refs``).
 
-    The reply's scope is the call itself, the callback and the rows, so the
+    The reply's scope is the call itself, the callback and its input, so the
     callbacks a mark function's reply names are named by the call that made
     them (see ``_Payload``): the same call again replaces them, and the
     registry does not grow with each render."""
@@ -3579,9 +3684,18 @@ def answer(callbacks: Dict[str, _Reply], lambda_id: str, rows_b64: str) -> dict:
     reply = callbacks.get(lambda_id)
     if reply is None:
         raise KeyError(f"no Python callback is registered as {lambda_id}")
-    scope = hashlib.sha256(f"{lambda_id}\n{rows_b64}".encode()).hexdigest()[:16]
-    root, payload = reply(arrow_to_records(base64.b64decode(rows_b64)), scope)
+    scope = hashlib.sha256(
+        f"{lambda_id}\n{rows_b64}\n{refs_b64}".encode()
+    ).hexdigest()[:16]
+    rows = _decode_input_refs(
+        arrow_to_records(base64.b64decode(rows_b64)),
+        arrow_to_records(base64.b64decode(refs_b64)),
+    )
+    root, payload = reply(rows, scope)
     callbacks.update(payload.callbacks)
+    payload.tables = {
+        tid: _encode_input_refs(data) for tid, data in payload.tables.items()
+    }
     return _transport(root, payload)
 
 

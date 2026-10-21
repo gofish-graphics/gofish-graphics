@@ -64,7 +64,7 @@ def story_sunburst():
                 # r: siblings share the same ring.
                 y={"kind": "align", "alignment": "middle"},
             ),
-            coord=Coord.polar(),
+            coord=Coord.clock(),
         ),
         {"w": 540, "h": 540},
     )

@@ -21,10 +21,16 @@ def ir(node: Any) -> dict:
     return root["operators"][0] if isinstance(node, Operator) else root
 
 
-def call(node: Any, lambda_id: str, rows: List[dict]) -> List[Any]:
+def _b64(items: List[Any]) -> str:
+    return base64.b64encode(data_to_arrow_bytes(items)).decode("ascii")
+
+
+def call(
+    node: Any, lambda_id: str, rows: List[Any], refs: List[Any] = ()
+) -> List[Any]:
     """The rows a host answers JS's call of ``lambda_id`` with, when
-    rendering ``node``: the list its reply's root names."""
+    rendering ``node``: the list its reply's root names. ``refs`` is the
+    datum of each ref (``BridgeRef``) the rows hold, by its index."""
     _, callbacks = ir_payload(_root(node))
-    rows_b64 = base64.b64encode(data_to_arrow_bytes(rows)).decode("ascii")
-    reply = answer(callbacks, lambda_id, rows_b64)
+    reply = answer(callbacks, lambda_id, _b64(rows), _b64(list(refs)))
     return arrow_to_records(base64.b64decode(reply["tables"][reply["root"]["id"]]))

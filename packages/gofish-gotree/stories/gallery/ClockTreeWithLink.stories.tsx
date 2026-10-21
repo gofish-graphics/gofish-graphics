@@ -110,7 +110,7 @@ export const ClockTreeWithLink: StoryObj = {
         }),
         // InnerRadius:0.79 — the thin outer clock rim with an empty center that
         // the step/arc links route through. Now expressible.
-        coord: Coord.polar({ innerRadius: 0.79 }),
+        coord: Coord.clock({ innerRadius: 0.79 }),
       },
       { w: 520, h: 520 },
       clockData

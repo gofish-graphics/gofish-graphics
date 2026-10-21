@@ -370,7 +370,7 @@ export const Sunburst: StoryObj<Args> = {
           spacing: 0,
           alignment: "middle",
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       deepBalancedTree
     ).render(container, { w: args.w, h: args.h });
@@ -482,7 +482,7 @@ export const NestedPietree: StoryObj<Args> = {
           spacing: NPT_SIB,
           alignment: "middle",
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       polarBalancedTree
     ).render(container, { w: args.w, h: args.h });
@@ -522,7 +522,7 @@ export const RadialNodes: StoryObj<Args> = {
           anchor: "middle",
           alignment: "middle",
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       sampleData
     ).render(container, { w: args.w, h: args.h });

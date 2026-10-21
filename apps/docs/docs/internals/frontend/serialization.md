@@ -277,16 +277,32 @@ absolute-vs-weight mixing, measure-unit checks) lives in ONE place, JS-side:
   `cut(source, opts)` returns a `Promise<GoFishNode>[]` that combinators accept
   directly as children (see `mapMarkChildren` in `fromJSON.ts`).
 
-**`mark-fn` over refs** (#591) — a Python `.mark(fn)` callback isn't limited
-to receiving plain data rows: when the callback's `data` is a bag of
-`GoFishRef`s (e.g. the `.layer(chart().flow(group(...)).mark(fn))` shape that
-labels a bar chart's totals), each `GoFishRef` argument crosses the RPC
-serialized as an `{"__inputRef": i, "datum": <rows>}` sentinel rather than as
-a live node reference — a `GoFishRef` is a class instance over the render's
-layer registry, not JSON. `serializeMarkFnInput` in `fromJSON.ts` builds these
-sentinels from the real ref array right before the RPC call and keeps that
-array in closure; the Python side (`_InputRef` in `gofish/ast.py`) wraps each
-sentinel back into an object whose `.datum` reads naturally. The callback may
+**Refs in a callback's input** (#591, #1046) — a Python callback isn't
+limited to receiving plain data rows. Its input may hold `GoFishRef`s: a mark
+function over a bag of refs (the `.layer(chart().flow(group(...)).mark(fn))`
+shape that labels a bar chart's totals), a mark function over rows whose
+field `resolve` filled with a ref (`LabeledChart`'s `r.ref`), or a `zOrder`
+function over the bag of refs a mark is bound to. A `GoFishRef` is a class
+instance over the render's layer registry, not JSON, so one rule covers every
+bridge call: `callBridge` in `registry.ts` (`encodeInputRefs`) replaces each
+ref, at any depth of the input's lists and plain-object rows, with a
+`BridgeRef`, its index `i` in one flat `inputRefs` list. A node the input
+holds many times is one index, and its datum crosses once, as `refs[i]`
+beside the rows, encoded by the same rule. The walk is gofish-ir's
+`Frontend.walk`, the one the non-finite codec uses: a list or a row is copied
+only when it holds a ref, and a copied list keeps its column types, so an
+input with no refs crosses as it is. A ref is a value of its own type on the
+wire, the Arrow extension type `gofish.ref` (storage `{index}`, named in the
+field's metadata), in both codecs (`arrowTransport.ts`, `arrow_utils.py`), so
+no row is read as a ref and a ref adds no keys to the rows beside it; a
+column that holds refs and other values is a type conflict, as a string and
+a number are. On the Python side, `answer` turns every index, wherever it
+sits in the rows, into one `_InputRef` (`_decode_input_refs` in
+`gofish/ast.py`), whose `.datum` reads naturally and which `pluck` reads
+through. The rule runs both ways: a reply's tables may hold the refs the call
+was given (a `derive` that keeps the rows `resolve` filled, a mark function's
+chart over them), which Python writes back as `BridgeRef`s
+(`_encode_input_refs`) and `callBridge` resolves to the live refs. The callback may
 return a `ChartBuilder`, a `.layer(...)` chain, a `layer([...])` of charts or
 a bare `Mark`. The reply is a document like the top-level one, through the
 bridge's one call (`DeriveBridge.call`): its root is the mark-position IR of
@@ -298,16 +314,32 @@ document). Python records the callbacks the reply names in the reply's own
 payload, so the host registers them before JS calls one. A bare mark
 lets the callback embed one of its `_InputRef` arguments
 directly in the returned layout (mirroring JS `spread({...}, [d[0],
-text(...)])`). `mapMark` resolves any `{"__inputRef": i}` sentinel found
+text(...)])`, or a row's ref, `spread([r["ref"], text(...)])`). `mapMark`
+resolves any `{"type": "ref", "__inputRef": i}` node found
 inside that returned mark tree back to `inputRefs[i]` — the _original_ live
 `GoFishRef` from the closure, not a reconstructed stand-in, so the ref's
 identity (and anything already registered against it, e.g. a name from an
 earlier tier) survives. A `.name(...)` call on the Python `_InputRef` (#556)
-rides along as a `name` field on the sentinel and is applied to the resolved
+rides along as a `name` field on the node and is applied to the resolved
 ref before it's returned, since `GoFishRef.name()` mutates in place — this is
 how a per-slice label overlay (`Cut.stories.tsx::ImageCutWithLabels`) can
 `.relate(...)` against a ref it only received through the bridge. Each call asks Python again and builds
 its own mark, so an `__inputRef` always resolves against that call's own refs.
+
+**A mark applied to its input.** A JS mark is a function, and a mark function
+often applies the mark it builds to its own rows,
+`(d) => circle({ r: ..., fill: "species" })(d)`, so a field name in a channel
+reads `d` and binds its scale. A Python `Mark` is callable the same way:
+`mark(d, key)` returns a copy of the mark that carries its input, and the IR
+writes it as the mark's `__datum` (and `__key`) bridge fields, which
+`MARK_BASE_FIELDS` declares for leaf and combinator marks. `mapMark` applies
+them once, after it builds the mark of any kind: the position holds a mark that
+ignores the rows it is offered and calls the built mark with `__datum` and
+`__key`, which is what the JS expression `mark(d, key)` puts there. The same
+fields carry a treemap combinator's children, each applied to its own row.
+The input is data that JSON holds; Python raises when it holds a mark or a
+ref, and a ref, a `cut` and an `offset` (nodes, not mark functions) raise
+when called.
 
 The plain leaf-form `ref` node carries names the same way: `RefMarkIR`
 declares an optional `name`, emitted by Python's `_RefProxy.to_dict(payload)` when
@@ -316,7 +348,10 @@ same mutate-in-place `GoFishRef.name()`.
 This is what lets a named ref stand-in, such as `ref(token).name("a")`,
 serve as a constraint operand from Python exactly as from JS: without the wire
 `name`, the reconstructed ref would not answer to `"a"` and the constraint
-would fail to resolve.
+would fail to resolve. A ref has no paint order of its own: a JS `GoFishRef`
+has no `.zOrder()`, so `RefMarkIR` declares no `zOrder`, and a Python ref's
+`z_order` raises, naming the mark that draws the node or a `.relate(...)`
+z constraint as the place to order it.
 
 There is no `connect` field on the wire. `.layer(...)` — the one way to
 overlay a connector — always serializes as an ordinary tier of a
@@ -334,13 +369,16 @@ serialized as a field, so it composes with any explicit `.zOrder(...)` or
 
 A chart's **coordinate transform** rides the IR as a small spec the deserializer
 maps back to the JS factory by `type` — e.g. `{ type: "polar", innerRadius,
-centralAngle, startAngle, direction, center }`. `fromJSON.ts` rebuilds it
+centralAngle, baselineAngle, direction, center }`. `fromJSON.ts` rebuilds it
 with `rebuild("coord", type, opts)`, the same call that rebuilds an operator
 or a mark (§ Modularity), from the spec without its `type`. An options-object
 factory takes the options whole (`Coord.polar(opts)`), so a parameterized
 polar/clock (donut hole, partial fan, start angle) round-trips without
 per-option plumbing, and the descriptor's `positional` field goes first
-(`Coord.geo(opts.projection, rest)`). An unknown `type` throws.
+(`Coord.geo(opts.projection, rest)`). An unknown `type` throws. `polar` and
+`clock` share one field group and differ only in its `baselineAngle` /
+`direction` defaults, so the `type` tag is what keeps the angular convention
+across the wire when those options are left out.
 
 Channel values (`h`, `w`, `fill`, …) accept bare primitives (the
 shorthand path) or one of three explicit tagged objects:
@@ -1032,12 +1070,12 @@ in the design improvements:
 The Python wrapper emits a few sentinels that are not part of the
 public schema — they extend it for the round-trip across anywidget:
 
-| Sentinel            | Meaning                                                               |
-| ------------------- | --------------------------------------------------------------------- |
-| `{__gofish_lambda}` | A Python callable; the JS deserializer wires it to an async accessor. |
-| `{__gofish_token}`  | A hygienic-name token; resolved via a per-render token map.           |
-| `__scope: true`     | The `@mark` decorator's scope-wrap signal.                            |
-| `__datum` / `__key` | `bind_data()` pre-binding for Treemap-style invocation.               |
+| Sentinel            | Meaning                                                                 |
+| ------------------- | ----------------------------------------------------------------------- |
+| `{__gofish_lambda}` | A Python callable; the JS deserializer wires it to an async accessor.   |
+| `{__gofish_token}`  | A hygienic-name token; resolved via a per-render token map.             |
+| `__scope: true`     | The `@mark` decorator's scope-wrap signal.                              |
+| `__datum` / `__key` | A mark applied to its input, Python `mark(d, key)` (JS `mark(d, key)`). |
 
 A `{__gofish_lambda}` sentinel may sit at any depth of a channel option, not
 only as a top-level channel: for each option whose descriptor type can hold
@@ -1051,16 +1089,30 @@ any other option (`spread(by=lambda d: ...)`), since the JS side resolves
 accessors only in channels. Serializing reads that record, so only the
 options that hold one are walked again. The Python option walks share one
 copy-on-write `walk` (`_nonfinite.py`), which keeps unchanged values as the
-same objects. The accessor JS builds has only a batch form (`RESOLVE_ROWS`):
-channel inference is synchronous, so the mark factory and the operator
-factory first resolve every Python accessor in a channel over the rows they
-are about to infer from (`resolveChannelAccessors` in `channels.ts`), with
-one bridge call per accessor for all of its rows, and inference reads the
-resolved values (#1080). That works the same in every channel kind, size
-and position included. It is the one place a Python accessor crosses the
-bridge, and calling one per row throws. A JS `async (d) => ...` accessor is
-not supported: only Python accessors are resolved this way. When no channel
-holds a Python accessor, nothing is awaited or copied.
+same objects. In a channel, the accessor JS builds is resolved in its batch
+form (`RESOLVE_ROWS`): channel inference is synchronous, so the mark factory
+and the operator factory first resolve every Python accessor in a channel
+over the rows they are about to infer from (`resolveChannelAccessors` in
+`channels.ts`), with one bridge call per accessor for all of its rows, and
+inference reads the resolved values (#1080). That works the same in every
+channel kind, size and position included. A JS `async (d) => ...` accessor is
+not supported in a channel: only Python accessors are resolved this way. When
+no channel holds a Python accessor, nothing is awaited or copied.
+
+Called per row, the accessor throws: it has only its batch form. The other
+place the IR uses it is a mark's `zOrder`: a mark field
+(`MARK_BASE_FIELDS.zOrder`) is a number or a `{__gofish_lambda}` handle.
+Python's `.z_order(fn)` writes the handle, `withMarkMeta` in `fromJSON.ts`
+passes the accessor to the mark's `.zOrder(...)`, and the mark resolves it
+over its inputs the way a channel is resolved over its rows. The operator
+factory hands the mark every group of its split first
+(`inputsResolver` in `createOperator.ts`), so the accessor makes one
+bridge call for all of them, and each instance reads its own value back, as
+it would from a JS `.zOrder((d) => ...)`. A mark applied outside an operator
+resolves it over its one input. That input is often a bag of refs (a ribbon
+over `selectAll(...)`), which crosses by the ref rule above. The Python
+callback is an accessor (`_accessor_reply`), so its reply is a one-value
+table.
 
 Python's `datum(x)` emits the canonical `{type: "datum", datum: x}` shape
 directly — no bridge sentinel needed.
@@ -1122,7 +1174,9 @@ transport:
   `tables` are already rows. A chart that names a table its document does
   not carry is an error, and the validator reports it too, at any depth.
 - **The one bridge call.** `DeriveBridge` has one method,
-  `call(lambdaId, rows)`, for every callback kind. Both hosts build it with
+  `call(lambdaId, rows)`, for every callback kind, and every caller reaches
+  it through `callBridge` in `registry.ts`, which encodes the refs the rows
+  hold (see **Refs in a callback's input** above). Both hosts build it with
   the same codec, `arrowBridge(send)`: the rows go out as base64 Arrow, and
   the reply is a document of the same shape, read by `decodeDocument`. Its root
   says what the callback produced: a table reference, `{type: "table",
@@ -1131,7 +1185,8 @@ id}`, to the list a derive or an accessor returned (`callForRows` in
   Only `send` differs: the widget sets its `call_request` trait and waits for
   `call_response`, and the harness POSTs to the derive server's
   `/call/<id>`. On the Python side both run `answer(callbacks, lambda_id,
-rows_b64)`, which calls the callback, registers the callbacks its reply
+rows_b64)`, which decodes the ref sentinels in the rows, calls the
+  callback, registers the callbacks its reply
   names (by the call's scope, § One walk collects the callbacks), and ships
   the reply as `ir_payload` ships a root. So the widget
   answers mark functions and accessors as the harness does (#1049).

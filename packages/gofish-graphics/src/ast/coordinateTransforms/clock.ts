@@ -1,15 +1,10 @@
-import { CoordinateTransform } from "./coord";
-import { polar, PolarOptions } from "./polar";
+import { polarPreset } from "./polar";
 
 /**
- * Clock coordinate system: a `polar()` preset. 0° at 12 o'clock, increasing
- * clockwise (the standard clock direction) — which are already `polar()`'s
- * defaults, so `clock()` is `polar()` with a distinct `type` tag. The tag is
- * kept because coordUtils' bbox sampling special-cases `"clock"`/`"polar"`, and
- * so user specs read intent. Accepts the same options (e.g. `innerRadius` for a
- * clock rim).
+ * Clock coordinates: the polar transform in the clock convention, θ=0 at
+ * 12 o'clock (+y, up), increasing clockwise. It differs from `polar()` only in
+ * its `baselineAngle` (π/2) and `direction` (-1) defaults, and accepts the same
+ * options (e.g. `innerRadius` for a clock rim). The distinct `type` tag keeps
+ * the preset through serialization.
  */
-export const clock = (opts: PolarOptions = {}): CoordinateTransform => ({
-  ...polar(opts),
-  type: "clock",
-});
+export const clock = polarPreset("clock");

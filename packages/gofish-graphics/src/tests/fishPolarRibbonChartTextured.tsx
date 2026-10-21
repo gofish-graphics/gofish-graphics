@@ -14,7 +14,7 @@ import { layer } from "../ast/graphicalOperators/layer";
 import { ref } from "../ast/shapes/ref";
 import { coord } from "../ast/coordinateTransforms/coord";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
-import { polar } from "../ast/coordinateTransforms/polar";
+import { clock } from "../ast/coordinateTransforms/clock";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
 import { ribbon } from "../lib";
@@ -195,7 +195,7 @@ export const testFishPolarRibbonChartTextured = (
   gofish(
     container,
     { w: size.width, h: size.height, transform: { x: 500, y: 500 }, defs },
-    frame({ coord: polar() }, [
+    frame({ coord: clock() }, [
       stackX(
         {
           y: 50,

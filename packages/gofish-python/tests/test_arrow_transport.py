@@ -4,8 +4,7 @@
 The JS-side encoder (`widget-src/arrowTransport.ts`) builds an explicit
 Arrow schema per RPC call instead of relying on `Arrow.tableFromJSON`'s
 inference (which can't handle a `list<struct>` column at all — the shape
-of a mark-fn's `{__inputRef, datum}` sentinel when the ref's bound datum
-is a multi-row bag). These tests build the equivalent Arrow IPC bytes
+of a ref's datum when it is a multi-row bag). These tests build the equivalent Arrow IPC bytes
 directly with pyarrow (mirroring what the JS encoder produces) and assert
 on `arrow_to_records`'s decode contract: a `list<struct>` column must come
 back as a plain `list[dict]`, not a numpy `ndarray` of dicts, so a mark-fn
@@ -19,8 +18,8 @@ import json
 import pyarrow as pa
 import pytest
 
-from gofish import chart, rect
-from gofish.arrow_utils import arrow_to_records
+from gofish import chart, derive, rect
+from gofish.arrow_utils import BridgeRef, arrow_to_records, data_to_arrow_bytes
 from gofish.ast import _InputRef
 
 
@@ -49,12 +48,12 @@ class TestArrowToRecords:
         struct_type = pa.struct([("x", pa.float64()), ("label", pa.string())])
         table = _records(
             {
-                "__inputRef": pa.array([0.0], type=pa.float64()),
+                "i": pa.array([0.0], type=pa.float64()),
                 "datum": pa.array([{"x": 1.0, "label": "a"}], type=struct_type),
             }
         )
         records = arrow_to_records(_ipc_bytes(table))
-        assert records == [{"__inputRef": 0.0, "datum": {"x": 1.0, "label": "a"}}]
+        assert records == [{"i": 0.0, "datum": {"x": 1.0, "label": "a"}}]
 
     def test_multi_row_bag_decodes_to_plain_list_of_dicts(self):
         """The #783 repro shape: a mark-fn's `datum` bound to a group's
@@ -63,7 +62,7 @@ class TestArrowToRecords:
         list_type = pa.list_(struct_type)
         table = _records(
             {
-                "__inputRef": pa.array([0.0, 1.0], type=pa.float64()),
+                "i": pa.array([0.0, 1.0], type=pa.float64()),
                 "datum": pa.array(
                     [
                         [{"x": 1.0, "label": "a"}, {"x": 2.0, "label": "b"}],
@@ -106,56 +105,145 @@ class TestArrowToRecords:
         list_type = pa.list_(struct_type)
         table = _records(
             {
-                "__inputRef": pa.array([0.0], type=pa.float64()),
+                "i": pa.array([0.0], type=pa.float64()),
                 "datum": pa.array([[]], type=list_type),
             }
         )
         records = arrow_to_records(_ipc_bytes(table))
-        assert records == [{"__inputRef": 0.0, "datum": []}]
+        assert records == [{"i": 0.0, "datum": []}]
         assert isinstance(records[0]["datum"], list)
+
+
+def _b64(items: list) -> str:
+    return base64.b64encode(data_to_arrow_bytes(items)).decode("utf-8")
+
+
+def _mark_fn_widget(seen: dict):
+    """A rendered chart whose mark is a mark function that records its
+    input, and the function's lambda id."""
+
+    def mark_fn(rows):
+        seen["rows"] = rows
+        return rect(w=1, h=1)
+
+    widget = chart([{"x": 1}]).mark(mark_fn).render(w=400, h=300)
+    return widget, widget.doc["root"]["mark"]["lambdaId"]
 
 
 class TestWidgetMarkFnBagContract:
     """End-to-end through the real trait observer (`_on_call_request`), not
     just the arrow_utils helper: a mark function gets the `GoFishRef`
-    arguments JS sends as `{__inputRef, datum}` rows, each an `_InputRef`
-    whose `datum` bag is a plain `list[dict]`, not a numpy `ndarray` of
-    dicts.
+    arguments JS sends as `BridgeRef`s, each with its datum in the call's
+    refs, as `_InputRef`s whose `datum` bag is a plain `list[dict]`, not a
+    numpy `ndarray` of dicts.
     """
 
     def test_mark_fn_receives_plain_list_of_dicts_for_a_bag(self):
         seen = {}
-
-        def mark_fn(refs):
-            seen["refs"] = refs
-            return rect(w=1, h=1)
-
-        widget = chart([{"x": 1}]).mark(mark_fn).render(w=400, h=300)
-        lambda_id = widget.doc["root"]["mark"]["lambdaId"]
-
-        struct_type = pa.struct([("x", pa.float64()), ("label", pa.string())])
-        list_type = pa.list_(struct_type)
-        table = _records(
-            {
-                "__inputRef": pa.array([0.0], type=pa.float64()),
-                "datum": pa.array(
-                    [[{"x": 1.0, "label": "a"}, {"x": 2.0, "label": None}]],
-                    type=list_type,
-                ),
-            }
-        )
+        widget, lambda_id = _mark_fn_widget(seen)
         widget.call_request = {
             "request_id": "r-0",
             "lambda_id": lambda_id,
-            "rows_b64": base64.b64encode(_ipc_bytes(table)).decode("utf-8"),
+            "rows_b64": _b64([BridgeRef(0)]),
+            "refs_b64": _b64([[{"x": 1.0, "label": "a"}, {"x": 2.0, "label": None}]]),
         }
 
         assert widget.call_response["reply"]["root"]["type"] == "rect"
-        [ref] = seen["refs"]
+        [ref] = seen["rows"]
         assert isinstance(ref, _InputRef)
         assert ref.index == 0
         assert isinstance(ref.datum, list)
         assert ref.datum == [{"x": 1.0, "label": "a"}, {"x": 2.0, "label": None}]
+
+    def test_a_ref_in_a_row_field_is_a_ref(self):
+        """A ref in a field of a row (`resolve` fills one) crosses as a
+        `BridgeRef` and decodes into an `_InputRef` where it sits (#1046)."""
+        seen = {}
+        widget, lambda_id = _mark_fn_widget(seen)
+        widget.call_request = {
+            "request_id": "r-0",
+            "lambda_id": lambda_id,
+            "rows_b64": _b64(
+                [
+                    {"ref": BridgeRef(0), "label": "Alpha"},
+                    {"ref": BridgeRef(1), "label": "Bravo"},
+                ]
+            ),
+            "refs_b64": _b64([[{"id": "a"}], [{"id": "b"}]]),
+        }
+
+        assert widget.call_response["reply"]["root"]["type"] == "rect"
+        [a, b] = seen["rows"]
+        assert a["label"] == "Alpha" and b["label"] == "Bravo"
+        assert isinstance(a["ref"], _InputRef) and a["ref"].index == 0
+        assert b["ref"].index == 1 and b["ref"].datum == [{"id": "b"}]
+
+    def test_one_node_is_one_ref(self):
+        """A node the rows hold many times crosses once and is one
+        `_InputRef`, wherever the rows hold it."""
+        seen = {}
+        widget, lambda_id = _mark_fn_widget(seen)
+        widget.call_request = {
+            "request_id": "r-0",
+            "lambda_id": lambda_id,
+            "rows_b64": _b64(
+                [
+                    {"source": BridgeRef(0), "target": BridgeRef(1)},
+                    {"source": BridgeRef(1), "target": BridgeRef(0)},
+                ]
+            ),
+            "refs_b64": _b64([[{"id": "a"}], [{"id": "b"}]]),
+        }
+        [r0, r1] = seen["rows"]
+        assert r0["source"] is r1["target"] and r0["target"] is r1["source"]
+
+    def test_data_is_never_read_as_a_ref(self):
+        """A ref is a value of its own Arrow type, so a column named like
+        the old sentinel is data, and a row keeps exactly its own keys."""
+        seen = {}
+        widget, lambda_id = _mark_fn_widget(seen)
+        rows = [{"__inputRef": 3, "datum": {"x": 1}}, {"__inputRef": None, "datum": None}]
+        widget.call_request = {
+            "request_id": "r-0",
+            "lambda_id": lambda_id,
+            "rows_b64": _b64(rows),
+            "refs_b64": _b64([]),
+        }
+        assert seen["rows"] == rows
+
+
+class TestRefsCrossBack:
+    """A reply hands a ref it was given back by its index: a derive that keeps
+    the refs `resolve` filled ships them as `gofish.ref` values, which JS
+    resolves to the live refs (`callBridge` in registry.ts)."""
+
+    def test_a_derive_hands_its_refs_back(self):
+        op = derive(lambda rows: rows[:1])
+        widget = chart([{"x": 1}]).flow(op).mark(rect(h="x")).render(w=400, h=300)
+        widget.call_request = {
+            "request_id": "r-0",
+            "lambda_id": op.lambda_id,
+            "rows_b64": _b64(
+                [
+                    {"source": BridgeRef(0), "target": BridgeRef(1)},
+                    {"source": BridgeRef(1), "target": BridgeRef(0)},
+                ]
+            ),
+            "refs_b64": _b64([[{"id": "a"}], [{"id": "b"}]]),
+        }
+        reply = widget.call_response["reply"]
+        table = pa.ipc.open_stream(
+            base64.b64decode(reply["tables"][reply["root"]["id"]])
+        ).read_all()
+        source = table.schema.field("item").type.field("source").type
+        assert source.extension_name == "gofish.ref"
+        assert table.column(0).to_pylist() == [
+            {"source": BridgeRef(0), "target": BridgeRef(1)}
+        ]
+
+    def test_refs_and_other_values_in_one_column_conflict(self):
+        with pytest.raises(TypeError, match='column "a"'):
+            data_to_arrow_bytes([{"a": BridgeRef(0)}, {"a": {"index": 1}}])
 
 
 def test_a_list_of_groups_or_values_round_trips():

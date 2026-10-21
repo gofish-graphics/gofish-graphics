@@ -14,8 +14,9 @@ Endpoints:
                          call, so importing the story separately from
                          extracting the IR yields divergent lambda ids.
   POST /call/<id>      — Answer one bridge call (`answer`): the body is the
-                         rows as base64 Arrow, the reply a document of the
-                         same shape as /load's. A mark function's reply
+                         call as JSON, its rows and the refs they hold as
+                         base64 Arrow, the reply a document of the same
+                         shape as /load's. A mark function's reply
                          registers the callbacks it names.
   POST /reset          — Clear all registered callbacks
   GET  /health         — Health check
@@ -166,12 +167,15 @@ class DeriveHandler(BaseHTTPRequestHandler):
             })
 
     def _handle_call(self, lambda_id: str, body: bytes):
-        """Answer one bridge call: the body is the rows as base64 Arrow."""
+        """Answer one bridge call: the body is the call as JSON, its rows and
+        the refs they hold as base64 Arrow (``rows_b64``, ``refs_b64``)."""
         from gofish.ast import answer
 
         try:
+            call = json.loads(body)
             self._json_response(
-                200, answer(_registry, lambda_id, body.decode("ascii"))
+                200,
+                answer(_registry, lambda_id, call["rows_b64"], call["refs_b64"]),
             )
         except Exception as e:
             self._json_response(500, {

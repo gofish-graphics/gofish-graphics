@@ -4,7 +4,7 @@ order: 10
 
 # Coord.polar
 
-Transforms Cartesian coordinates into a polar coordinate system. The x-axis maps to angle (theta) and the y-axis maps to radius.
+Transforms Cartesian coordinates into a polar coordinate system. The x-axis maps to angle (theta) and the y-axis maps to radius. Angles follow the math convention: θ = 0 points right (3 o'clock) and angles increase counter-clockwise.
 
 ::: gofish example:polar-ribbon-chart hidden
 :::
@@ -25,16 +25,22 @@ Coord.polar(
     *,
     inner_radius: float | None = None,   # donut hole, fraction [0,1) of outer radius
     central_angle: float | None = None,  # total sweep in radians (default 2π)
-    start_angle: float | None = None,    # angle (radians) of θ=0 (default π/2)
-    direction: int | None = None,        # +1 CCW, -1 CW (default -1)
+    baseline_angle: float | None = None,  # angle (radians) where θ's 0 sits, from 3 o'clock (default 0)
+    direction: int | None = None,        # +1 CCW, -1 CW (default 1)
     center: tuple[float, float] | None = None,  # screen-space center offset
 ) -> Coord
 ```
 
 ## Parameters
 
-All optional; the defaults reproduce a centered, full-circle disc starting at 12
-o'clock and going clockwise.
+All optional; the defaults give a centered, full-circle disc starting at 3
+o'clock and going counter-clockwise. [`Coord.clock()`](/python/api/coords/clock)
+is the same transform with 0 at 12 o'clock, going clockwise.
+
+The number 0 on the angular axis always sits at `baseline_angle`, whatever
+the θ range and `central_angle`. A range that starts at 0, like a pie's, starts at
+`baseline_angle`. A stack centered on 0 (a `Schema.ordered(...).diverging(...)`
+schema) is centered on `baseline_angle`, and its negative half runs back past it.
 
 ::: gofish-ref polar
 :::
@@ -89,10 +95,10 @@ chart(data, coord=Coord.polar()) \
 
 ## Coordinate Mapping
 
-| Cartesian | Polar                  |
-| --------- | ---------------------- |
-| x         | angle (theta), 0 to 2π |
-| y         | radius from center     |
+| Cartesian | Polar                                                 |
+| --------- | ----------------------------------------------------- |
+| x         | angle (theta), 0 to 2π, 0 at right, counter-clockwise |
+| y         | radius from center                                    |
 
 ## Examples
 
@@ -121,4 +127,4 @@ chart(data, coord=Coord.polar(central_angle=3 * math.pi / 2)) \
 
 ## See Also
 
-- [clock](/python/api/coords/clock) — Similar to polar but with 0° at 12 o'clock
+- [clock](/python/api/coords/clock) — The same transform with 0° at 12 o'clock, going clockwise

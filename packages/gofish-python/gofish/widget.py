@@ -103,8 +103,8 @@ class GoFishChartWidget(anywidget.AnyWidget):
     def _on_call_request(self, change):
         """Answer one bridge call from JS.
 
-        JS sets ``call_request = {request_id, lambda_id, rows_b64}``, the
-        rows as base64 Arrow. ``answer`` runs the callback and returns the
+        JS sets ``call_request = {request_id, lambda_id, rows_b64,
+        refs_b64}``, the rows and the refs they hold as base64 Arrow. ``answer`` runs the callback and returns the
         reply's document, which we publish as ``call_response = {request_id,
         reply}``. Errors are surfaced via ``call_response = {request_id,
         error}`` so the JS bridge can reject the awaiting promise.
@@ -115,11 +115,12 @@ class GoFishChartWidget(anywidget.AnyWidget):
         request_id = msg.get("request_id")
         lambda_id = msg.get("lambda_id")
         rows_b64 = msg.get("rows_b64")
-        if not request_id or not lambda_id or rows_b64 is None:
+        refs_b64 = msg.get("refs_b64")
+        if not request_id or not lambda_id or rows_b64 is None or refs_b64 is None:
             return
 
         try:
-            reply = answer(self.callbacks, lambda_id, rows_b64)
+            reply = answer(self.callbacks, lambda_id, rows_b64, refs_b64)
             self.call_response = {"request_id": request_id, "reply": reply}
         except Exception as exc:
             self.call_response = {"request_id": request_id, "error": str(exc)}

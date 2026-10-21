@@ -612,6 +612,14 @@ work; item (5) covers `FlowerChart` and plausibly `LabeledChart`. Recommendation
 build the `{__inputRef}` RPC — every known use of a bridged ref is an anchor, and anchors
 are the arrangement's job.
 
+> **Note (October 2026):** the `{__inputRef}` RPC was built anyway, in
+> [#782](https://github.com/gofish-graphics/gofish-graphics/pull/782). Since
+> [#1046](https://github.com/gofish-graphics/gofish-graphics/issues/1046) it covers a ref
+> anywhere in a callback's input, a field of a row included, so `LabeledChart` is ported
+> through it. Moving the anchor into the arrangement is still open:
+> [#1190](https://github.com/gofish-graphics/gofish-graphics/issues/1190) tracks it for
+> `LabeledChart`.
+
 ## 5. Open questions
 
 1. ~~**Where may the constraint instantiation appear?**~~ **Resolved (second round):** the

@@ -114,6 +114,14 @@ export interface ScopeMeta {
   /** A stable label for the scope root (node key/type) for the dump. */
   rootKey: string;
   axis: 0 | 1;
+  /**
+   * Where the scope seats data 0: "claim" (the default) at the pixel its
+   * claim puts it, `claim.descent(σ)` above the box's low edge, as the root
+   * does; "start" at the box's low edge, whatever the claim, so data 0 is
+   * the start of the budget (the angular axis of the polar family, whose
+   * data 0 is its baseline angle; see `CoordinateTransform.dataZeroAtStart`).
+   */
+  dataZero?: "claim" | "start";
 }
 
 interface ScopeEntry extends ScopeMeta {
@@ -235,7 +243,8 @@ export class ScopeRegistry {
    * takes its pixels and the data part gets the rest. A scope whose type has
    * an origin also fixes `originPx`, the pixel of data 0: a claim is
    * measured from data 0, so `originPx = claim.descent(σ)` above the box's
-   * low edge. For a pinned claim with no overhead that is `−σ·min`, the
+   * low edge, or the low edge itself for a scope that seats data 0 at its
+   * start (`meta.dataZero`). For a pinned claim with no overhead that is `−σ·min`, the
    * domain's low edge at 0. A scope whose type has no data coordinates
    * (a spread of magnitudes is ordinal) still solves σ from its claim, with no
    * `originPx`.
@@ -264,7 +273,7 @@ export class ScopeRegistry {
       this.entries.push({
         ...meta,
         allocated,
-        frame: `${isCONTINUOUS(space) ? `${space.origin}[${space.dataInterval.min},${space.dataInterval.max}]` : space.kind} ${Monotonic.print(claim.width)}`,
+        frame: `${isCONTINUOUS(space) ? `${space.origin}[${space.dataInterval.min},${space.dataInterval.max}]` : space.kind} ${Monotonic.print(claim.width)}${meta.dataZero === "start" ? " (0 at start)" : ""}`,
         sigma,
         hasMap: hasOrigin(space),
       });
@@ -273,7 +282,11 @@ export class ScopeRegistry {
     const offset = oneValue ? (allocated - claim.width.run(0)) / 2 : 0;
     return {
       sigma,
-      originPx: hasOrigin(space) ? originPxAt(claim, sigma, offset) : undefined,
+      originPx: !hasOrigin(space)
+        ? undefined
+        : meta.dataZero === "start"
+          ? 0
+          : originPxAt(claim, sigma, offset),
     };
   }
 

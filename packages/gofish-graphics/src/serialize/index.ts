@@ -8,6 +8,7 @@
  */
 
 export {
+  BridgeRef,
   FACTORIES,
   OPERATOR_BUILDERS,
   rebuild,

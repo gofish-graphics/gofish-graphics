@@ -3,6 +3,8 @@
 Mirrors packages/gofish-gotree/stories/data.ts.
 """
 
+from python_stories._json_data import load_json
+
 # A moderate sample tree (3 levels, uneven) with leaf `value`s so value-driven
 # layouts (treemaps) have something to size against.
 SAMPLE_TREE = {
@@ -46,3 +48,10 @@ DEPTH_BLUES = ["#08306b", "#2171b5", "#6baed6", "#c6dbef", "#deebf7"]
 def by_depth(colors=DEPTH_BLUES):
     """A node's color from its depth."""
     return lambda d: colors[min(d["depth"], len(colors) - 1)]
+
+
+# The Flare "vis" package tree (its util subtree), vendored from BIT-VIS/gotree
+# (app/hierarchicalData/flare-vis.json, MIT): 1 root, 19 children and 27
+# grandchildren in uneven fans. The gallery ports that place their nodes by
+# hand lay it out. Mirrors packages/gofish-gotree/stories/gallery/_flareVis.ts.
+FLARE_VIS = load_json("flare_vis")

@@ -72,7 +72,7 @@ export const TornadoTree2: StoryObj = {
           // r: step each sibling outward radially → the spiral.
           y: { kind: "distribute", spacing: 76, anchor: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       { w: 560, h: 560 }
     ),

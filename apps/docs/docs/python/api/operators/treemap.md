@@ -88,8 +88,8 @@ treemap(by="genre", size="gross", tile=Tile.squarify(ratio=1))
   `sort="desc"`, that is the largest tile.
 - A treemap accepts a **flat list of children**; for multi-level treemaps,
   compose by nesting `treemap(...)` calls (or add a higher-level wrapper).
-- In the combinator form, each child is bound to its row with
-  `mark.bind_data(d, key)`; chain `.label(accessor, ...)` on the mark to show
+- In the combinator form, each child is applied to its row with
+  `mark(d, key)` (see [Applying a mark to rows](/python/api/core/mark#applying-a-mark-to-rows)); chain `.label(accessor, ...)` on the mark to show
   a field's value on each tile. `size` in combinator form is an **explicit
   list**, one weight per child in child order — it does not read back off
   each child's bound datum.

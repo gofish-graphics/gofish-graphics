@@ -89,7 +89,7 @@ export const TornadoTree: StoryObj = {
           // r: step siblings radially too → fans the level outward (tornado).
           y: { kind: "distribute", spacing: 44, anchor: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       { w: 480, h: 480 }
     ),

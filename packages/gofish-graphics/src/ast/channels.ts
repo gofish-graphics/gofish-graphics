@@ -403,7 +403,7 @@ export type BatchAccessor = ((row: any) => unknown) & {
   [RESOLVE_ROWS]: (rows: readonly unknown[]) => Promise<unknown[]>;
 };
 
-const isBatchAccessor = (v: unknown): v is BatchAccessor =>
+export const isBatchAccessor = (v: unknown): v is BatchAccessor =>
   typeof v === "function" && RESOLVE_ROWS in v;
 
 /** Whether a channel value holds a batch accessor, at any depth of its plain
@@ -418,17 +418,19 @@ const readByRow =
   (row: unknown): unknown => {
     if (!byRow.has(row)) {
       throw new Error(
-        "a Python channel accessor was read on a row it was not resolved " +
-          "over. resolveChannelAccessors must be given every row inference reads."
+        "a Python accessor was read on a row it was not resolved over. " +
+          "resolveValue must be given every row the accessor is read on."
       );
     }
     return byRow.get(row);
   };
 
-/** Resolve the batch accessors in one channel value over `rows`: each is
- *  called once, with all the rows, and replaced by {@link readByRow}. A plain
- *  object is rebuilt only when a child changed. */
-async function resolveValue(
+/** Resolve the batch accessors in one value over `rows`: each is called
+ *  once, with all the rows, and replaced by {@link readByRow}. A plain
+ *  object is rebuilt only when a child changed. A channel value is resolved
+ *  over a mark's rows; a mark's `zOrder` over the inputs the mark is applied
+ *  to (`zOrderModifier`). */
+export async function resolveValue(
   value: unknown,
   rows: readonly unknown[]
 ): Promise<unknown> {
