@@ -21,7 +21,7 @@ import { combine, byDepth, mount, sampleTree } from "./_shared";
 // Siblings distribute angularly (θ spacing in radians) on a shared radius.
 //
 // POLAR LIMITATIONS (no hacks — flagged):
-//  - polar() now takes options — { innerRadius, centralAngle, startAngle,
+//  - polar() now takes options — { innerRadius, centralAngle, baselineAngle,
 //    direction, center } since #620 — so the dsl's InnerRadius, Direction and
 //    CentralAngle are now expressible via polar({ ... }) since #620 (not yet
 //    applied here). The PolarAxis θ/r assignment (swap) is still NOT
@@ -75,7 +75,7 @@ export const FlowerTree: StoryObj = {
           // r: siblings share a radius band.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       {},
       sampleTree

@@ -23,6 +23,7 @@ import {
   arrowBridge,
   decodeDocument,
   type SendCall,
+  type ShippedCall,
   type ShippedDocument,
 } from "./arrowBridge";
 
@@ -85,7 +86,7 @@ function traitTransport(model: WidgetModel): SendCall {
   // `call_request` write happens in its own comm tick.
   let chain: Promise<unknown> = Promise.resolve();
 
-  function sendOne(lambdaId: string, rowsB64: string): Promise<Reply> {
+  function sendOne(lambdaId: string, call: ShippedCall): Promise<Reply> {
     if (
       typeof (model as any).set !== "function" ||
       typeof (model as any).save_changes !== "function"
@@ -103,18 +104,18 @@ function traitTransport(model: WidgetModel): SendCall {
       model.set("call_request", {
         request_id: requestId,
         lambda_id: lambdaId,
-        rows_b64: rowsB64,
+        ...call,
       });
       model.save_changes();
     });
   }
 
-  return (lambdaId, rowsB64) => {
+  return (lambdaId, call) => {
     // Recover from a previous failure so one bad call doesn't block the
     // queue.
     const next = chain.then(
-      () => sendOne(lambdaId, rowsB64),
-      () => sendOne(lambdaId, rowsB64)
+      () => sendOne(lambdaId, call),
+      () => sendOne(lambdaId, call)
     );
     chain = next.catch(() => undefined);
     return next;

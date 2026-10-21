@@ -6,11 +6,13 @@ array-map sugar and becomes a list comprehension. The JS stories pass
 `textAnchor: "start"`, which is now a real IR field (it positions the
 rotation pivot/local origin at the text's first character, center, or last
 character) — ported here too, even though "start" is also the default.
-PolarText is exempt (raw JS coordinate-transform closure, unrelated to
-textAnchor).
+PolarText places a text under `Coord.clock()`, where x is the angle theta
+and y is the radius r.
 """
 
-from gofish import ellipse, spread, text
+import math
+
+from gofish import Coord, ellipse, layer, spread, text
 
 FONT_FAMILY = "Inter, sans-serif"
 
@@ -69,4 +71,24 @@ def story_text_stack_with_ellipse():
             alignment="middle",
         ),
         {"w": 500, "h": 240},
+    )
+
+
+def story_polar_text():
+    return (
+        layer(
+            [
+                text(
+                    text="Polar Text",
+                    x=math.pi / 4,
+                    y=80,
+                    fill="#ff7f50",
+                    font_size=20,
+                    font_family=FONT_FAMILY,
+                    text_anchor="middle",
+                )
+            ],
+            coord=Coord.clock(),
+        ),
+        {"w": 320, "h": 320},
     )

@@ -178,6 +178,58 @@ the lake's total catch. Embedding `d[0]` in the returned `spread([...])`
 places the label as a sibling of the bar it labels, using the bar's own
 placed position and size — no separate positioning logic needed.
 
+A ref may also sit in a field of a row. [`resolve`](/python/api/operators/resolve)
+fills each row's named field with the node it names, so a callback over those
+rows reads the ref from the field and places it the same way:
+
+```python
+from gofish import chart, circle, layer, resolve, scatter, select_all, spread, text
+
+chart(nodes, axes=False).flow(scatter(by="id", x="grp", y="grp")).mark(
+    circle(r=16, fill="#59a14f").name("nodes")
+).layer(
+    chart(labels)
+    .flow(resolve(["ref"], from_=select_all("nodes")))
+    .mark(
+        lambda rows: layer(
+            [spread([r["ref"], text(text=r["label"])], dir="x", spacing=6) for r in rows]
+        )
+    )
+)
+```
+
+A ref crosses to Python as its index and its `datum`, wherever it sits in the
+callback's input, and JS places the live node it stands for.
+
+## Applying a mark to rows
+
+A mark is callable. `mark(d, key=None)` applies it to the input `d`, as a JS
+mark is applied (`circle({ ... })(d)`), and returns a mark that draws the node
+the mark builds from `d`. A callback can apply the mark it builds to its own
+rows, so a field name in a channel reads those rows and binds its scale. Here
+each circle's radius comes from its row's count, and its color from the
+species color scale:
+
+```python
+import math
+
+from gofish import chart, circle, pack
+
+chart(seafood).flow(pack(by="lake"), pack()).mark(
+    lambda d: circle(r=3 * math.sqrt(d[0]["count"]), fill="species")(d)
+)
+```
+
+Without `(d)`, the mark a callback returns is drawn with no rows, as in JS, so
+`fill="species"` is the literal color name.
+
+`d` is data: rows, a row, or any value JSON holds. It raises `TypeError` when
+`d` holds a mark or a ref, since those are nodes, not data. A ref, `cut(...)`
+and `offset(...)` are nodes rather than marks, so calling one raises too.
+
+The input crosses to JS as the mark's `__datum` field (and `key` as
+`__key`), and JS applies the rebuilt mark to it.
+
 ## Labeling a mark
 
 Call `.label(accessor, position=..., font_size=..., color=..., offset=..., rotate=..., font_family=..., font_weight=..., font_style=...)`
@@ -242,3 +294,32 @@ chart(data).flow(
 stack(by="class", dir="y").translate(y=8).label("class")
 stack(by="class", dir="y").label("class").translate(y=8)
 ```
+
+## Paint order {#z-order}
+
+`.z_order(value)` sets the mark's paint-order hint, mirroring JS's
+[`.zOrder(value)`](/js/api/core/mark#zorder): higher values paint later (on
+top). `value` is a number, or a function called once per mark instance with
+the input the mark is bound to, which returns the number. A function makes the
+paint order data-driven without splitting the mark into separately named
+layers:
+
+```python
+from gofish import pluck
+
+# Constant: raise this whole mark above its siblings.
+rect(h="count").z_order(1)
+
+# Data-driven: raise the emphasized sites over the rest. `d` is the list of
+# refs the area is bound to, and `pluck` reads the site off it.
+emphasized = ["Morris", "Grand Rapids"]
+ribbon(opacity=0.7).z_order(lambda d: 1 if pluck(d, "site")[0] in emphasized else 0)
+```
+
+Within a layer, children paint in `(z_order, document order)` order. A number
+crosses to JS in the IR's `zOrder` field. A function crosses as a bridge
+handle, and JS calls it through the bridge once with the inputs of every
+mark instance an operator applies the mark to, so it runs in Python like a
+channel accessor. [`pluck`](/python/api/selection/ref#pluck) returns the
+one value, since the areas are grouped by site; `project(d, "site")` reads
+it as that value, as in JS.

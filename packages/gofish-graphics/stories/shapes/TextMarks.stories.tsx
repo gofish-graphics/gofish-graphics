@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { coord, ellipse, map, stack, spread, text, Coord } from "../../src/lib";
+import { ellipse, layer, map, stack, spread, text, Coord } from "../../src/lib";
 
 const meta: Meta = {
   title: "Shapes/Text Marks",
@@ -132,20 +132,12 @@ export const PolarText: StoryObj<Args> = {
     const container = initializeContainer();
 
     container.innerHTML = "";
-    const polarTransform = Coord.polar();
-    const radialPolar = {
-      type: polarTransform.type,
-      transform: ([r, theta]: [number, number]) => polarTransform.transform([theta, r]),
-      domain: [
-        { min: 0, max: 120, size: 120 },
-        { min: 0, max: Math.PI * 2, size: Math.PI * 2 },
-      ],
-    };
-    coord({ transform: radialPolar }, [
+    // In polar, x is the angle θ and y is the radius r.
+    layer({ coord: Coord.clock() }, [
       text({
         text: "Polar Text",
-        x: 80,
-        y: Math.PI / 4,
+        x: Math.PI / 4,
+        y: 80,
         fill: "#ff7f50",
         fontSize: 20,
         fontFamily,

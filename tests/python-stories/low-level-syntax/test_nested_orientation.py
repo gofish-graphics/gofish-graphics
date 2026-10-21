@@ -74,7 +74,7 @@ def _pie():
                 alignment="start",
             )
         ],
-        coord=Coord.polar(),
+        coord=Coord.clock(),
     )
 
 

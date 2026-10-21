@@ -155,7 +155,7 @@ export const TyreTree: StoryObj = {
           y: { kind: "align", alignment: "start" },
         }),
         // InnerRadius:0.25 — the donut hole (tyre hub). Now expressible.
-        coord: Coord.polar({ innerRadius: 0.25 }),
+        coord: Coord.clock({ innerRadius: 0.25 }),
       },
       sampleTree
     ).render(container, { w: 560, h: 560 });

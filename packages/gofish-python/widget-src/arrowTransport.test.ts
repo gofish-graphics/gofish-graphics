@@ -187,7 +187,7 @@ function testEveryListIsOneColumn(): boolean {
 
 function testSingleRowStruct(): boolean {
   console.log("Test: single-row struct column (previously-working case)");
-  const rows = [{ __inputRef: 0, datum: { x: 1, label: "a" } }];
+  const rows = [{ i: 0, datum: { x: 1, label: "a" } }];
   const [{ datum }] = roundTrip(rows);
   if (datum.x !== 1 || datum.label !== "a") {
     console.log(`  ✗ datum mismatch: ${JSON.stringify(datum)}`);
@@ -201,13 +201,13 @@ function testMultiRowBag(): boolean {
   console.log("Test: multi-row bag (list<struct> — the #783 repro)");
   const rows = [
     {
-      __inputRef: 0,
+      i: 0,
       datum: [
         { x: 1, label: "a" },
         { x: 2, label: "b" },
       ],
     },
-    { __inputRef: 1, datum: [{ x: 3, label: "c" }] },
+    { i: 1, datum: [{ x: 3, label: "c" }] },
   ];
   const back = roundTrip(rows);
   if (!same(back, rows)) {
@@ -245,7 +245,7 @@ function testRaggedKeys(): boolean {
 
 function testEmptyBag(): boolean {
   console.log("Test: empty bag (datum: [])");
-  const rows = [{ __inputRef: 0, datum: [] }];
+  const rows = [{ i: 0, datum: [] }];
   const [{ datum: bag }] = roundTrip(rows);
   if (!Array.isArray(bag) || bag.length !== 0) {
     console.log(`  ✗ expected empty list, got ${JSON.stringify(bag)}`);
@@ -253,6 +253,44 @@ function testEmptyBag(): boolean {
   }
   console.log("  ✓ PASSED");
   return true;
+}
+
+function testRefsAreAValueOfTheirOwn(): boolean {
+  console.log("Test: a ref is a gofish.ref value, never read off data");
+  const { BridgeRef } = Serialize;
+  const rows = [
+    { source: new BridgeRef(0), k: 1 },
+    { source: null, k: 2 },
+  ];
+  const table = Arrow.tableFromIPC(Arrow.tableToIPC(buildArrowTable(rows)));
+  const source = (table.schema.fields[0].type as Arrow.Struct).children[0];
+  const back = arrowTableToRows(table) as any[];
+  const groups = roundTrip([[new BridgeRef(1), new BridgeRef(0)]]) as any[];
+  const top = roundTrip([new BridgeRef(2)]) as any[];
+  // A column named like a ref's storage, or like the old sentinel, is data.
+  const data = [{ __inputRef: 3, index: 4, datum: { x: 1 } }];
+  let mixedThrows = false;
+  try {
+    buildArrowTable([{ a: new BridgeRef(0) }, { a: { index: 1 } }]);
+  } catch {
+    mixedThrows = true;
+  }
+  const ok =
+    source.metadata.get("ARROW:extension:name") === "gofish.ref" &&
+    back[0].source instanceof BridgeRef &&
+    back[0].source.index === 0 &&
+    back[1].source === null &&
+    Object.keys(back[1]).join() === "source,k" &&
+    groups[0][0] instanceof BridgeRef &&
+    groups[0][1].index === 0 &&
+    top[0] instanceof BridgeRef &&
+    top[0].index === 2 &&
+    same(roundTrip(data), data) &&
+    mixedThrows;
+  console.log(
+    ok ? "  ✓ PASSED" : `  ✗ FAILED ${JSON.stringify({ back, groups, top })}`
+  );
+  return ok;
 }
 
 function testConflictingTypesThrow(): boolean {
@@ -652,6 +690,7 @@ export async function runArrowTransportTests(): Promise<boolean> {
     testEmptyBag(),
     testConflictingTypesThrow(),
     testConflictingNestedTypesThrow(),
+    testRefsAreAValueOfTheirOwn(),
     testTimeColumnsDecodeAsTimes(),
     testPlainColumnsCarryNoTypes(),
     testListColumnsDecodeAsArrays(),

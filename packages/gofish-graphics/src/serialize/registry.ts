@@ -72,6 +72,8 @@ import { polar } from "../ast/coordinateTransforms/polar";
 import { clock } from "../ast/coordinateTransforms/clock";
 import { wavy } from "../ast/coordinateTransforms/wavy";
 import { geo } from "../ast/coordinateTransforms/geo";
+import { GoFishRef } from "../ast/_ref";
+import { copyColumnTypes } from "../ast/schema";
 import { Frontend } from "gofish-ir";
 
 export type { ChartBuilder, Mark, Operator };
@@ -84,18 +86,26 @@ export { cutSlices, cutMark, offsetOp };
  *
  *  - a `derive` operator's `lambdaId`, with the rows the operator gets;
  *  - a `{ __gofish_lambda: id }` channel value (an accessor), once with all
- *    the rows of the channel (`RESOLVE_ROWS`);
+ *    the rows of the channel (`RESOLVE_ROWS`), or a mark's `zOrder`, once
+ *    with all the inputs the mark is applied to;
  *  - a `{type: "mark-fn", lambdaId}` mark, with one partition's input.
  *
- * The transport (Arrow over anywidget traitlets, Arrow over HTTP) is the
- * bridge's own: it sends the rows, and reads the reply before it answers (its
- * JSON as `readIR` reads it, its tables decoded).
+ * Each goes through {@link callBridge}, which encodes the refs the input
+ * holds and decodes the ones its reply holds. The transport (Arrow over
+ * anywidget traitlets, Arrow over HTTP) is the bridge's own: it sends the
+ * rows and the refs, and reads the reply before it answers (its JSON as
+ * `readIR` reads it, its tables decoded).
  */
 export interface DeriveBridge {
   /** Call the Python callback registered under `lambdaId` with `rows`, a
    *  list that may carry column types (`getColumnTypes`), which the
-   *  transport reads to type its columns. */
-  call(lambdaId: string, rows: readonly unknown[]): Promise<BridgeReply>;
+   *  transport reads to type its columns. A ref in the rows is a
+   *  {@link BridgeRef}, and `refs[i]` is the datum of ref `i`. */
+  call(
+    lambdaId: string,
+    rows: readonly unknown[],
+    refs: readonly unknown[]
+  ): Promise<BridgeReply>;
 }
 
 /**
@@ -115,6 +125,100 @@ export interface BridgeReply {
 }
 
 /**
+ * A ref as data crossing the bridge: its index in the call's refs. A live
+ * `GoFishRef` is a class instance over the render's nodes, so it cannot
+ * cross as data; this stands in for it, in a call's rows and in a reply's
+ * tables alike. A transport carries it as a value of its own type (the Arrow
+ * codec: the extension type `gofish.ref`), never as a row that looks like
+ * one, so no data can be read as a ref, and no ref adds keys to data.
+ */
+export class BridgeRef {
+  constructor(readonly index: number) {}
+}
+
+/**
+ * A bridge call's input as it crosses: each live `GoFishRef` in `items`, at
+ * any depth of its lists and plain-object rows, becomes a {@link BridgeRef},
+ * one per node however many times the input holds it, and `inputRefs[i]` is
+ * that ref. A ref's datum crosses once, as `refs[i]`, encoded by the same
+ * rule. The refs are wherever the input holds them: the items of a mark
+ * function's input (`.flow(group(...)).mark((refs) => ...)`), a field of a
+ * row (`resolve` fills a row's field with the node it names), the bag of
+ * refs a paint-order callback reads. Python decodes every one into a ref
+ * (`_InputRef`), and hands each back by its index, in a reply's tables or in
+ * the marks a mark function draws, which {@link callBridge} and `mapMark`
+ * resolve back to `inputRefs[i]`.
+ *
+ * A list or a row is copied only when it holds a ref, and a copied list
+ * keeps its column types, so an input with no refs crosses as it is.
+ */
+export function encodeInputRefs(items: readonly unknown[]): {
+  rows: unknown[];
+  refs: unknown[];
+  inputRefs: GoFishRef[];
+} {
+  const inputRefs: GoFishRef[] = [];
+  const indexOf = new Map<GoFishRef, BridgeRef>();
+  const encode = (v: unknown): unknown =>
+    Frontend.walk(v, swapRef, (copy, original) => {
+      copyColumnTypes(copy, original);
+    });
+  const swapRef = (v: unknown): unknown => {
+    if (!(v instanceof GoFishRef)) return undefined;
+    let ref = indexOf.get(v);
+    if (ref === undefined) {
+      ref = new BridgeRef(inputRefs.push(v) - 1);
+      indexOf.set(v, ref);
+    }
+    return ref;
+  };
+  const rows = encode(items) as unknown[];
+  // A ref's datum may hold refs of its own, which join the list as they are
+  // met.
+  const refs: unknown[] = [];
+  for (let i = 0; i < inputRefs.length; i++)
+    refs.push(encode(inputRefs[i].datum));
+  return { rows, refs, inputRefs };
+}
+
+/**
+ * Call the Python callback registered under `lambdaId` with `items`, its
+ * refs encoded ({@link encodeInputRefs}). Every bridge call goes through
+ * here. Returns the reply, each {@link BridgeRef} in its tables the live ref
+ * it names, and the refs, which a mark function's reply may place.
+ */
+export async function callBridge(
+  bridge: DeriveBridge,
+  lambdaId: string,
+  items: readonly unknown[]
+): Promise<{ reply: BridgeReply; inputRefs: GoFishRef[] }> {
+  const { rows, refs, inputRefs } = encodeInputRefs(items);
+  const reply = await bridge.call(lambdaId, rows, refs);
+  const swapRef = (v: unknown): unknown => {
+    if (!(v instanceof BridgeRef)) return undefined;
+    const ref = inputRefs[v.index];
+    if (ref === undefined) {
+      throw new Error(
+        `callback ${lambdaId} answered with ref ${v.index}, but its call ` +
+          `held ${inputRefs.length} ref(s)`
+      );
+    }
+    return ref;
+  };
+  const tables =
+    reply.tables &&
+    Object.fromEntries(
+      Object.entries(reply.tables).map(([id, list]) => [
+        id,
+        Frontend.walk(list, swapRef, (copy, original) => {
+          copyColumnTypes(copy, original);
+        }) as unknown[],
+      ])
+    );
+  return { reply: { ...reply, tables }, inputRefs };
+}
+
+/**
  * Call a derive or an accessor through `bridge` and return the list its
  * reply names, as the bridge decoded it (rows may carry column types,
  * `setColumnTypes`, which `applySchema` reads). A call with no rows answers
@@ -126,7 +230,7 @@ export async function callForRows(
   rows: readonly unknown[]
 ): Promise<any[]> {
   if (rows.length === 0) return [];
-  const reply = await bridge.call(lambdaId, rows);
+  const { reply } = await callBridge(bridge, lambdaId, rows);
   // A derive's or an accessor's reply names a table by contract.
   const { id } = reply.root as Frontend.TableRef;
   const result = reply.tables?.[id];

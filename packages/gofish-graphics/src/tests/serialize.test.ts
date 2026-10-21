@@ -18,6 +18,11 @@ import { resolveLabelText } from "../ast/labels/labelPlacement";
 //  runs build first via the test:serialize script.
 import * as GoFish from "../../dist/index.js";
 
+/** A display list's top-level items as JSON, for comparing two renders.
+ *  Node ids count up across renders, so the items compare without them. */
+const itemsJSON = (dl: any): string =>
+  JSON.stringify(dl.items.map(({ id: _id, ...it }: any) => it));
+
 const {
   chart,
   spread,
@@ -30,6 +35,8 @@ const {
   text,
   layer,
   pack,
+  resolve,
+  selectAll,
   derive,
   join,
   filter,
@@ -1722,6 +1729,355 @@ async function main() {
       "an unknown data shape throws",
       message.includes("must be an array of rows"),
       message || "did not throw"
+    );
+  }
+
+  console.log("\n# A mark applied to its input (`__datum` / `__key`)");
+  {
+    // A mark function that applies the mark it builds to its own rows,
+    // `(d) => circle({...})(d)`: the reply's root is the mark with the rows
+    // as `__datum`, and it draws what the JS mark function draws (the
+    // field-name fill binds the color scale).
+    const rows = [
+      { s: "a", v: 1 },
+      { s: "b", v: 2 },
+      { s: "c", v: 3 },
+    ];
+    const native = await chart(rows, { axes: false })
+      .flow(spread({ by: "s", dir: "x" }))
+      .mark((d: any[]) => circle({ r: 2 + d[0].v, fill: "s" })(d))
+      .toDisplayList({ w: 200, h: 100 });
+    const bridge = {
+      async call(_id: string, d: any[]) {
+        return {
+          root: { type: "circle", r: 2 + d[0].v, fill: "s", __datum: d },
+          tables: {},
+        };
+      },
+    };
+    const root = {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      options: { axes: false },
+      operators: [{ type: "spread", by: "s", dir: "x" }],
+      mark: { type: "mark-fn", lambdaId: "m" },
+    };
+    const viaIR = await Serialize.buildIR(
+      irDoc(root, { t0: rows }),
+      bridge
+    ).toDisplayList({ w: 200, h: 100 });
+    const fills = new Set(
+      viaIR.items
+        .filter((it: any) => it.kind === "ellipse")
+        .map((it: any) => it.style.fill)
+    );
+    check(
+      "a mark applied to a mark function's rows draws as the JS one does",
+      fills.size === 3 &&
+        itemsJSON(viaIR) === itemsJSON(native),
+      JSON.stringify({ fills: [...fills] })
+    );
+
+    // A combinator applied to its own rows and a key, in a position that
+    // offers other rows, draws from its own, as the JS one does.
+    const own = [{ s: "a", v: 30 }];
+    const other = [{ s: "z", v: 5 }];
+    const nativeLayer = await chart(other, { axes: false })
+      .mark(layer([rect({ w: 10, h: "v", fill: "s" })])(own, "a"))
+      .toDisplayList({ w: 100, h: 100 });
+    const applied = irDoc(
+      {
+        type: "chart",
+        data: { type: "table", id: "t0" },
+        options: { axes: false },
+        mark: {
+          type: "layer",
+          __combinator: true,
+          children: [{ type: "rect", w: 10, h: "v", fill: "s" }],
+          __datum: own,
+          __key: "a",
+        },
+      },
+      { t0: other }
+    );
+    validateDoc(applied, "an applied combinator");
+    const appliedDL = await Serialize.buildIR(applied).toDisplayList({
+      w: 100,
+      h: 100,
+    });
+    check(
+      "an applied combinator draws from its own input, as the JS one does",
+      itemsJSON(appliedDL) === itemsJSON(nativeLayer) &&
+        itemsJSON(appliedDL).includes('"text":"a"'),
+      itemsJSON(appliedDL).slice(0, 300)
+    );
+  }
+
+  console.log("\n# Refs cross the bridge wherever the input holds them");
+  {
+    // `resolve` fills each label row's `ref` field with the node it names.
+    // The mark function's rows cross with each ref as a `BridgeRef` (its
+    // datum beside the rows, in the call's refs), and a reply that places
+    // one by its index draws the live ref, as the JS mark function places
+    // `r.ref` (#1046).
+    const nodes = [
+      { id: "a", grp: 0 },
+      { id: "b", grp: 1 },
+    ];
+    const labels = [
+      { ref: "a", label: "Alpha" },
+      { ref: "b", label: "Bravo" },
+    ];
+    const nodesTier = () =>
+      chart(nodes, { axes: false })
+        .flow(scatter({ by: "id", x: "grp", y: "grp" }))
+        .mark(circle({ r: 16, fill: "#59a14f" }).name("nodes"));
+    const native = await nodesTier()
+      .layer(
+        chart(labels)
+          .flow(resolve(["ref"], { from: selectAll("nodes") }))
+          .mark((rows: any[]) =>
+            layer(
+              rows.map((r) =>
+                spread({ dir: "x", spacing: 6 }, [
+                  r.ref,
+                  text({ text: r.label }),
+                ])
+              )
+            )
+          )
+      )
+      .toDisplayList({ w: 300, h: 200 });
+    const doc = await Serialize.toJSON(
+      nodesTier().layer(
+        chart(labels)
+          .flow(resolve(["ref"], { from: selectAll("nodes") }))
+          .mark(rect({ w: 1, h: 1 }))
+      )
+    );
+    (doc.root as any).tiers[1].mark = { type: "mark-fn", lambdaId: "m" };
+    let sent: any[] = [];
+    let sentRefs: any[] = [];
+    const bridge = {
+      async call(_id: string, rows: any[], refs: any[]) {
+        sent = rows;
+        sentRefs = refs;
+        return {
+          root: {
+            type: "layer",
+            __combinator: true,
+            options: {},
+            children: rows.map((r) => ({
+              type: "spread",
+              __combinator: true,
+              options: { dir: "x", spacing: 6 },
+              children: [
+                { type: "ref", __inputRef: r.ref.index },
+                { type: "text", text: r.label },
+              ],
+            })),
+          },
+          tables: {},
+        };
+      },
+    };
+    const viaIR = await Serialize.buildIR(doc, bridge).toDisplayList({
+      w: 300,
+      h: 200,
+    });
+    check(
+      "a ref in a row's field crosses as a BridgeRef, its datum in the refs",
+      sent.length === 2 &&
+        sent[0].ref instanceof Serialize.BridgeRef &&
+        sent[0].ref.index === 0 &&
+        sent[1].ref.index === 1 &&
+        Object.keys(sent[0]).join() === "ref,label" &&
+        JSON.stringify(sentRefs[1]) === JSON.stringify([nodes[1]]) &&
+        sent[0].label === "Alpha",
+      JSON.stringify({ sent, sentRefs })
+    );
+    check(
+      "a reply that places a row's ref draws as the JS mark function does",
+      itemsJSON(viaIR) === itemsJSON(native) && itemsJSON(viaIR).includes("Bravo"),
+      itemsJSON(viaIR).slice(0, 300)
+    );
+  }
+
+  console.log("\n# A reply hands the refs it was given back");
+  {
+    // `resolve` fills each edge's `source` and `target` with nodes; a derive
+    // that keeps some of the rows answers with the refs by index, and they
+    // draw as the live refs, as the JS derive's rows do.
+    const nodes = [
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 1, y: 2 },
+      { id: "c", x: 2, y: 0 },
+    ];
+    const edges = [
+      { source: "a", target: "b" },
+      { source: "b", target: "c" },
+      { source: "c", target: "a" },
+    ];
+    const graph = (keep: any) =>
+      chart(nodes, { axes: false })
+        .flow(scatter({ by: "id", x: "x", y: "y" }))
+        .mark(circle({ r: 5 }).name("nodes"))
+        .layer(
+          chart(edges)
+            .flow(
+              resolve(["source", "target"], { from: selectAll("nodes") }),
+              keep
+            )
+            .mark(line({ from: "source", to: "target" }))
+        );
+    const native = await graph(
+      derive((rows: any[]) => rows.slice(0, 2))
+    ).toDisplayList({ w: 200, h: 200 });
+    const doc = await Serialize.toJSON(graph(filter(() => true)));
+    const ops = (doc.root as any).tiers[1].operators;
+    ops[ops.length - 1] = { type: "derive", lambdaId: "keep" };
+    let sentRefs: any[] = [];
+    let sent: any[] = [];
+    const viaIR = await Serialize.buildIR(doc, {
+      async call(_id: string, rows: any[], refs: any[]) {
+        sent = rows;
+        sentRefs = refs;
+        return {
+          root: { type: "table" as const, id: "r" },
+          tables: { r: rows.slice(0, 2) },
+        };
+      },
+    }).toDisplayList({ w: 200, h: 200 });
+    check(
+      "a node a call holds many times crosses once",
+      sentRefs.length === 3 &&
+        sent[0].target === sent[1].source &&
+        sent[2].target === sent[0].source,
+      JSON.stringify({ sent, sentRefs })
+    );
+    // A connector's item holds its live refs, so it is compared by its
+    // drawing.
+    const drawing = (dl: any) =>
+      JSON.stringify(dl.items, (k, v) =>
+        k === "id" || k === "datum" ? undefined : v
+      );
+    check(
+      "a derive's reply that keeps its refs draws as the JS derive does",
+      drawing(viaIR) === drawing(native) &&
+        viaIR.items.length === native.items.length,
+      drawing(viaIR).slice(0, 300)
+    );
+  }
+
+  console.log("\n# A Python `zOrder` function");
+  {
+    // `zOrder: {__gofish_lambda}` is called through the bridge once with the
+    // input of every mark instance the spread applies the mark to, and gives
+    // each instance the value a JS `.zOrder((d) => ...)` gives it.
+    const rows = [
+      { s: "a", v: 3 },
+      { s: "b", v: 2 },
+      { s: "c", v: 1 },
+    ];
+    const z = (d: any[]) => (d[0].s === "a" ? 1 : 0);
+    const native = await chart(rows, { axes: false })
+      .flow(spread({ by: "s", dir: "x", spacing: -5 }))
+      .mark(rect({ w: 10, h: "v", fill: "s" }).zOrder(z))
+      .toDisplayList({ w: 100, h: 100 });
+    const doc = irDoc(
+      {
+        type: "chart",
+        data: { type: "table", id: "t0" },
+        options: { axes: false },
+        operators: [{ type: "spread", by: "s", dir: "x", spacing: -5 }],
+        mark: {
+          type: "rect",
+          w: 10,
+          h: "v",
+          fill: "s",
+          zOrder: { __gofish_lambda: "z" },
+        },
+      },
+      { t0: rows }
+    );
+    validateDoc(doc, "a mark whose zOrder is a Python function");
+    let calls = 0;
+    const viaIR = await Serialize.buildIR(
+      doc,
+      accessorBridge((_id, inputs) => {
+        calls += 1;
+        return inputs.map(z);
+      })
+    ).toDisplayList({ w: 100, h: 100 });
+    const unordered = await chart(rows, { axes: false })
+      .flow(spread({ by: "s", dir: "x", spacing: -5 }))
+      .mark(rect({ w: 10, h: "v", fill: "s" }))
+      .toDisplayList({ w: 100, h: 100 });
+    const fills = viaIR.items.map((it: any) => it.style?.fill);
+    check(
+      "a Python zOrder function orders paint as the JS one does",
+      calls === 1 &&
+        itemsJSON(viaIR) === itemsJSON(native) &&
+        itemsJSON(native) !== itemsJSON(unordered),
+      JSON.stringify({ calls, fills })
+    );
+    const bad = Frontend.validate(
+      irDoc(
+        { ...doc.root, mark: { ...doc.root.mark, zOrder: { fn: "z" } } },
+        { t0: rows }
+      )
+    );
+    check(
+      "a zOrder that is neither a number nor a bridge handle is rejected",
+      !bad.valid
+    );
+    // A mark inside a mark that wraps it (a combinator's child, a mark
+    // applied to a fixed input) is still resolved once for every input.
+    const nativeLayered = await chart(rows, { axes: false })
+      .flow(spread({ by: "s", dir: "x", spacing: -5 }))
+      .mark(layer([rect({ w: 10, h: "v", fill: "s" }).zOrder(z)]))
+      .toDisplayList({ w: 100, h: 100 });
+    const layered = irDoc(
+      {
+        ...doc.root,
+        mark: {
+          type: "layer",
+          __combinator: true,
+          options: {},
+          children: [doc.root.mark],
+        },
+      },
+      { t0: rows }
+    );
+    calls = 0;
+    const layeredViaIR = await Serialize.buildIR(
+      layered,
+      accessorBridge((_id, inputs) => {
+        calls += 1;
+        return inputs.map(z);
+      })
+    ).toDisplayList({ w: 100, h: 100 });
+    check(
+      "a Python zOrder on a combinator's child is one call for every input",
+      calls === 1 && itemsJSON(layeredViaIR) === itemsJSON(nativeLayered),
+      JSON.stringify({ calls })
+    );
+    const applied = irDoc(
+      { ...doc.root, mark: { ...doc.root.mark, __datum: [rows[0]] } },
+      { t0: rows }
+    );
+    const inputs: unknown[][] = [];
+    await Serialize.buildIR(
+      applied,
+      accessorBridge((_id, batch) => {
+        inputs.push(batch);
+        return batch.map(z);
+      })
+    ).toDisplayList({ w: 100, h: 100 });
+    check(
+      "a Python zOrder on a mark applied to its input is one call",
+      inputs.length === 1 && inputs[0].length === 1,
+      JSON.stringify(inputs)
     );
   }
 

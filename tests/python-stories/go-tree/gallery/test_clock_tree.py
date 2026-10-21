@@ -61,7 +61,7 @@ def story_clock_tree():
                 x={"kind": "distribute", "spacing": 0, "anchor": "edge"},
                 y={"kind": "align", "alignment": "middle"},
             ),
-            coord=Coord.polar(inner_radius=0.72),
+            coord=Coord.clock(inner_radius=0.72),
         ),
         {"w": 540, "h": 540},
     )

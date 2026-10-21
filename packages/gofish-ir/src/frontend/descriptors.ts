@@ -311,7 +311,10 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
   name: { type: t.string, doc: 'Layer name, from `.name("...")`.' },
   label: { type: t.ref("LabelIR") },
   relate: { type: t.array(t.ref("RelateClauseIR")) },
-  zOrder: { type: t.number },
+  zOrder: {
+    type: t.union(t.number, t.ref("BridgeLambdaSentinel")),
+    doc: "Paint-order hint, from `.zOrder(value)`: a number, or a Python function (a bridge handle) the mark calls once per instance with the input it is bound to.",
+  },
   translate: { type: t.ref("TranslateIR") },
   debug: {
     type: t.boolean,
@@ -325,11 +328,11 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
   },
   __datum: {
     type: t.any,
-    doc: "Python bind_data(): the datum the mark is pre-bound to.",
+    doc: "Python `mark(d, key)`, the JS `mark(d, key)`: the input the mark is applied to. The mark position holds the node the mark builds from it.",
   },
   __key: {
     type: t.union(t.string, t.number),
-    doc: "Python bind_data(): the key the mark is pre-bound to.",
+    doc: "Python `mark(d, key)`: the key the mark is applied with.",
   },
 });
 
@@ -1049,6 +1052,7 @@ export const AUTHORED_REFS: Readonly<
   ChunkKey: { pyClass: "ChunkKey", tag: "chunk" },
   LabelIR: {},
   TranslateIR: {},
+  BridgeLambdaSentinel: {},
   RelateClauseIR: {},
   // `holdsNodes`: an authored value of this type holds nodes (in JS a list
   // of nodes or refs, or a `selectAll(name)`; in Python marks such as
@@ -2190,43 +2194,48 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
 
 // The field names are the camelCase wire keys; Python's Coord.polar()/clock() spell
 // them in snake_case (inner_radius, ...) like every other generated kwarg (see
-// `pyKwarg`).
-const polarFields: FieldGroup = group({
-  innerRadius: {
-    type: t.number,
-    default: 0,
-    doc: "Donut hole as a fraction [0,1) of the outer radius.",
-  },
-  centralAngle: {
-    type: t.number,
-    default: 2 * Math.PI,
-    doc: "Total angular sweep in radians.",
-  },
-  startAngle: {
-    type: t.number,
-    default: Math.PI / 2,
-    doc: "Angle (radians) of θ=0.",
-  },
-  direction: {
-    type: t.number,
-    default: -1,
-    doc: "+1 counter-clockwise, -1 clockwise (numeric ±1).",
-  },
-  center: {
-    type: t.tuple(t.number, t.number),
-    default: [0, 0],
-    doc: "Screen-space center offset.",
-  },
-});
+// `pyKwarg`). `polar` and `clock` share these fields and differ only in the
+// `baselineAngle` / `direction` defaults (the angular convention).
+const polarFields = (defaults: {
+  baselineAngle: number;
+  direction: number;
+}): FieldGroup =>
+  group({
+    innerRadius: {
+      type: t.number,
+      default: 0,
+      doc: "Donut hole as a fraction [0,1) of the outer radius.",
+    },
+    centralAngle: {
+      type: t.number,
+      default: 2 * Math.PI,
+      doc: "Total angular sweep in radians.",
+    },
+    baselineAngle: {
+      type: t.number,
+      default: defaults.baselineAngle,
+      doc: "The angle where the angular axis's 0 sits: radians, measured counter-clockwise from 3 o'clock. Data 0 on θ maps here for every θ range and every sweep.",
+    },
+    direction: {
+      type: t.number,
+      default: defaults.direction,
+      doc: "+1 counter-clockwise, -1 clockwise (numeric ±1).",
+    },
+    center: {
+      type: t.tuple(t.number, t.number),
+      default: [0, 0],
+      doc: "Screen-space center offset.",
+    },
+  });
 
 export const COORDS: Record<string, ConstructDescriptor> = {
   polar: coordTransform("polar", {
-    doc: "Maps (θ, r) → screen. θ is axis 0 (x, or the declared name theta), r is axis 1 (y, or r); `dims` and `dir` inside it may use theta/r.",
-    fields: polarFields,
+    doc: "Maps (θ, r) → screen in the math convention: θ=0 at 3 o'clock, increasing counter-clockwise. θ is axis 0 (x, or the declared name theta), r is axis 1 (y, or r); `dims` and `dir` inside it may use theta/r.",
+    fields: polarFields({ baselineAngle: 0, direction: 1 }),
   }),
   clock: coordTransform("clock", {
-    doc: "A `Coord.polar()` preset (0° at 12 o'clock, clockwise — already polar's defaults) kept as a distinct type tag for bbox sampling and user intent.",
-    fields: polarFields,
+    doc: "The polar transform in the clock convention: θ=0 at 12 o'clock, increasing clockwise. It differs from `Coord.polar()` only in the `baselineAngle` and `direction` defaults.",
+    fields: polarFields({ baselineAngle: Math.PI / 2, direction: -1 }),
   }),
   wavy: coordTransform("wavy", {
     doc: "A sinusoidal warp of the plane. No options.",

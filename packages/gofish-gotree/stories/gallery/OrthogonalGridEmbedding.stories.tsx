@@ -35,7 +35,7 @@ import { combine, byDepth, mount } from "./_shared";
 //    nodes now auto-fit via a data-sized θ extent since #622; this point/circle-node gap is
 //    tracked in #627 (data-position workaround shown in RadialDeep.stories.tsx).
 //    Spacing is hand-tuned for the small sampleTree.
-//  - polar() now takes options — { innerRadius, centralAngle, startAngle,
+//  - polar() now takes options — { innerRadius, centralAngle, baselineAngle,
 //    direction, center } since #620 — so InnerRadius, Direction and CentralAngle
 //    are now expressible via polar({ ... }) since #620 (not yet applied here).
 //    The PolarAxis θ/r swap is still NOT expressible (no transposed variant).
@@ -73,7 +73,7 @@ export const OrthogonalGridEmbedding: StoryObj = {
           // r: siblings share a radius.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       {}
     ),

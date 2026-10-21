@@ -41,7 +41,7 @@ import { combine, byDepth, mount } from "./_shared";
 //  - PolarCenter: right is not expressible — the dsl's PolarCenter is a
 //    polar-space anchor (place the pole at the shape's "right"), which polar()'s
 //    screen-offset `center` does not cover. The partial (≈270°) sweep IS now
-//    expressible via polar({ startAngle, centralAngle }) since #620 — not yet
+//    expressible via polar({ baselineAngle, centralAngle }) since #620 — not yet
 //    applied here; this port renders a FULL concentric-ring disc, not the
 //    reference's off-center partial fan.
 //  - RootHeight: rdepth — radius-driven-by-depth is not a knob; concentric rings
@@ -50,7 +50,7 @@ import { combine, byDepth, mount } from "./_shared";
 //    radial-thickness knob under polar (thickness is the emY band height in
 //    r-units). I approximate thin rings with a small band height + a radial gap.
 //  - InnerRadius / Direction / StartAngle / CentralAngle: now expressible via
-//    polar({ innerRadius, direction, startAngle, centralAngle }) since #620 —
+//    polar({ innerRadius, direction, baselineAngle, centralAngle }) since #620 —
 //    not yet applied here (the hollow-center inner radius, CW/CCW direction,
 //    start angle, and sub-2π central angle).
 //  - Angular AUTO-FIT (#618): leaves carry a unit `w` (θ) weight, nest-θ grows
@@ -134,7 +134,7 @@ export const SectorTree: StoryObj = {
           x: { kind: "distribute", spacing: 0, anchor: "edge" },
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       { w: 560, h: 560 },
       deepBalancedTree

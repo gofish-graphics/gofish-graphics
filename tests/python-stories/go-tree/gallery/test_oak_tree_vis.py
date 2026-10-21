@@ -33,7 +33,7 @@ def story_oak_tree_vis():
                 },
                 y={"kind": "distribute", "spacing": 61, "anchor": "middle"},
             ),
-            coord=Coord.polar(),
+            coord=Coord.clock(),
         ),
         {"w": 520, "h": 520},
     )

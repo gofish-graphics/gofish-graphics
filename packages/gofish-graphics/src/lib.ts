@@ -91,9 +91,8 @@ export { ref } from "./ast/shapes/ref";
 
 // The ref runtime class itself (not just the `ref(...)` factory) — needed by
 // consumers that must distinguish "a resolved node ref" from "a plain data
-// row" at runtime, e.g. the Python-bridge mark-fn plumbing (issue #591) that
-// serializes each `GoFishRef` argument as an `{__inputRef, datum}` sentinel
-// before it crosses the RPC boundary.
+// row" at runtime, e.g. the Python bridge (issue #591), which sends each
+// `GoFishRef` in a call as a `Serialize.BridgeRef`.
 export { GoFishRef } from "./ast/_ref";
 
 // Datum projection — `pluck(ref, "species")` returns the full set of distinct

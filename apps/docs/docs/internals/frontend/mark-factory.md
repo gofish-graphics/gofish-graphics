@@ -348,7 +348,10 @@ methods:
   separately-named layers; the [bake pass](/internals/layout/coord-flattening)
   orders each layer's children by `(zOrder, index)`. The constant form
   round-trips through the IR; a callback is dropped from the emitted IR (like a
-  function `.label` accessor).
+  function `.label` accessor). A Python callback is resolved once for every
+  input an operator applies the mark to, also when the mark sits inside a
+  `layer([...])` or a compositing mark, which forward their children's batch
+  form (see [The Operator Factory](/internals/frontend/operator-factory)).
 - `mark.transition({ enter, update, exit })` records how the mark looks in
   each phase of an animation (`Animation.grow()`, `Animation.fadeIn()`, and
   so on) on every produced node. With no `time.sequence` in the flow, the
@@ -373,11 +376,14 @@ labeling, or positioning one mark never affects another.
 
 These methods are not hand-rolled here. `createMark` calls `nameableMark`,
 which is one application of the shared **modifier factory** in
-`createOperator.ts`: a `ModifierConfig` (`{ name, apply, tag? }`) plus
+`createOperator.ts`: a `ModifierConfig` (`{ name, apply, tag?, resolveArgs? }`) plus
 `attachModifiers(base, configs)`. `apply(node, layerContext, datum, ...args)`
 mutates each produced node (once per node — every slice for an expand mark like
 `cut`) and receives the per-instance datum, so a modifier like `.zOrder` can
-derive a value from the data; `tag` stamps metadata on the
+derive a value from the data; `resolveArgs`, when a modifier declares it,
+resolves a Python callback argument over the mark's inputs in one bridge call
+(see [The Operator Factory](/internals/frontend/operator-factory)); `tag`
+stamps metadata on the
 wrapped mark function once (propagating the wire tag, `wireOf`, and stashing the
 layer name — a mark no longer carries an axis-field tag, since axis titles now
 derive from each node's resolved space `measure`).

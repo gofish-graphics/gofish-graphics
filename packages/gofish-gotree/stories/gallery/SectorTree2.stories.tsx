@@ -137,7 +137,7 @@ export const SectorTree2: StoryObj = {
           // r: siblings share the same ring.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       deepBalancedTree
     ).render(container);

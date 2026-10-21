@@ -33,7 +33,7 @@ def story_orthogonal_grid_embedding():
                 },
                 y={"kind": "align", "alignment": "middle"},
             ),
-            coord=Coord.polar(),
+            coord=Coord.clock(),
         ),
         {},
     )

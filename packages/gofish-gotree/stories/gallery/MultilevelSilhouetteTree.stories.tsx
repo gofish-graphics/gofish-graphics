@@ -74,7 +74,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //    straight-in-screen links (and curve links generally) land with #637.
 //  - Angular gaps: GoTree's flatten Margin gives the thin white seams; here they
 //    are a small fixed angular inset per wedge plus the white stroke.
-//  - polar() options (#620: innerRadius/direction/startAngle/centralAngle) and
+//  - polar() options (#620: innerRadius/direction/baselineAngle/centralAngle) and
 //    θ-extent auto-fit (#622) would let the DSL express the ring fit and hole;
 //    the numbers bake them in instead. The PolarAxis θ/r swap is still not
 //    expressible (no transposed variant).
@@ -283,7 +283,7 @@ export const MultilevelSilhouetteTree: StoryObj = {
   },
   render: () => {
     const container = initializeContainer();
-    frame({ coord: Coord.polar() as any }, [layer(marks)]).render(container, {
+    frame({ coord: Coord.clock() as any }, [layer(marks)]).render(container, {
       w: 660,
       h: 660,
     });

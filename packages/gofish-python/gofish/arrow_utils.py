@@ -15,6 +15,9 @@ A table is a list, so it crosses as one Arrow column, `item`, of the list's
 items, in both directions: a struct column for records, a scalar column for
 values, a list column for groups. The JS codec (`widget-src/arrowTransport.ts`
 and `widget-src/arrowDecode.ts`) writes and reads the same shape.
+
+A ref in a bridge call (`BridgeRef`) is a value of its own type, the Arrow
+extension type `gofish.ref`, in both codecs.
 """
 
 import base64
@@ -30,6 +33,56 @@ _SUPPORTED_INPUTS_MSG = (
 
 # The name of a table's one column, the list's items.
 ITEM = "item"
+
+
+class BridgeRef:
+    """A ref as data crossing the bridge: its index in the call's refs (JS
+    ``Serialize.BridgeRef``). A ref is a node of the JS render, so it cannot
+    cross as data; this stands in for it in a call's rows and in a reply's
+    tables. It crosses as a value of its own Arrow type, the extension type
+    ``gofish.ref`` (storage ``{index}``), never as a row that looks like one,
+    so no data is read as a ref and no ref adds keys to data."""
+
+    __slots__ = ("index",)
+
+    def __init__(self, index: int):
+        self.index = index
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, BridgeRef) and other.index == self.index
+
+    def __hash__(self) -> int:
+        return hash(("BridgeRef", self.index))
+
+    def __repr__(self) -> str:
+        return f"BridgeRef({self.index})"
+
+
+class _RefScalar(pa.ExtensionScalar):
+    def as_py(self, *args: Any, **kwargs: Any) -> Optional[BridgeRef]:
+        return None if self.value is None else BridgeRef(self.value["index"].as_py())
+
+
+class _RefType(pa.ExtensionType):
+    """The Arrow type of a ref (see ``BridgeRef``), as the JS codec writes it
+    (``inferField`` in ``widget-src/arrowTransport.ts``)."""
+
+    def __init__(self) -> None:
+        super().__init__(pa.struct([("index", pa.int64())]), "gofish.ref")
+
+    def __arrow_ext_serialize__(self) -> bytes:
+        return b""
+
+    @classmethod
+    def __arrow_ext_deserialize__(cls, storage_type: pa.DataType, serialized: bytes):
+        return cls()
+
+    def __arrow_ext_scalar_class__(self):
+        return _RefScalar
+
+
+REF_TYPE = _RefType()
+pa.register_extension_type(REF_TYPE)
 
 
 def to_arrow_table(data: Any) -> pa.Table:
@@ -120,21 +173,67 @@ def _records_table(table: pa.Table) -> pa.Table:
 
 def _items_table(items: List[Any]) -> pa.Table:
     """``items`` as one column of their type. Values whose types conflict at
-    some column are a loud ``TypeError`` naming the column."""
-    try:
-        return pa.table({ITEM: pa.array(items, from_pandas=False)})
-    except (pa.ArrowTypeError, pa.ArrowInvalid):
-        conflict = _conflict(items, "")
-        if conflict is None:
-            raise
-        path, kinds = conflict
-        where = f'column "{path}" has' if path else "the items have"
-        raise TypeError(
-            f"Chart data: {where} conflicting types across rows "
-            f"({', '.join(kinds)}) — rows sharing a column must share a "
-            f"type; coerce the column to one type or drop it before passing "
-            f"the data to chart()."
-        ) from None
+    some column are a loud ``TypeError`` naming the column. A ref
+    (``BridgeRef``) is a value of the ``gofish.ref`` type: Arrow cannot read
+    an extension type from Python values, so the items are read with each
+    ref as its storage, ``{index}``, and each column of refs is then cast to
+    the ref type. Since a ref's storage looks like a record, a column
+    that holds refs is first checked to hold nothing else."""
+    ref_paths: List[Tuple[Any, ...]] = []
+    storage = [_ref_storage(item, (), ref_paths) for item in items]
+    conflict = _conflict(items, "") if ref_paths else None
+    if conflict is None:
+        try:
+            array = pa.array(storage, from_pandas=False)
+            for path in dict.fromkeys(ref_paths):
+                array = array.cast(_with_ref(array.type, path))
+            return pa.table({ITEM: array})
+        except (pa.ArrowTypeError, pa.ArrowInvalid):
+            conflict = _conflict(items, "")
+            if conflict is None:
+                raise
+    path, kinds = conflict
+    where = f'column "{path}" has' if path else "the items have"
+    raise TypeError(
+        f"Chart data: {where} conflicting types across rows "
+        f"({', '.join(kinds)}) — rows sharing a column must share a "
+        f"type; coerce the column to one type or drop it before passing "
+        f"the data to chart()."
+    )
+
+
+# A step into the items of a list, in the path of a column of refs.
+_ELEMENT = object()
+
+
+def _ref_storage(value: Any, path: Tuple[Any, ...], ref_paths: list) -> Any:
+    """``value`` with each ``BridgeRef`` as its storage, ``{index}``, and the
+    path of each column that holds one (a key of a record, ``_ELEMENT`` for
+    the items of a list) added to ``ref_paths``. Shares what holds no ref."""
+    if isinstance(value, BridgeRef):
+        ref_paths.append(path)
+        return {"index": value.index}
+    if isinstance(value, dict):
+        out = {k: _ref_storage(v, (*path, k), ref_paths) for k, v in value.items()}
+        return out if any(out[k] is not value[k] for k in value) else value
+    if isinstance(value, (list, tuple)):
+        out_list = [_ref_storage(v, (*path, _ELEMENT), ref_paths) for v in value]
+        changed = any(a is not b for a, b in zip(out_list, value))
+        return out_list if changed else value
+    return value
+
+
+def _with_ref(t: pa.DataType, path: Tuple[Any, ...]) -> pa.DataType:
+    """``t`` with the column at ``path`` (see ``_ref_storage``) the ref
+    type."""
+    if not path:
+        return REF_TYPE
+    step, rest = path[0], path[1:]
+    if step is _ELEMENT:
+        return pa.list_(t.value_field.with_type(_with_ref(t.value_type, rest)))
+    return pa.struct(
+        [f.with_type(_with_ref(f.type, rest)) if f.name == step else f for f in t]
+    )
 
 
 def _conflict(values: List[Any], path: str) -> Optional[Tuple[str, List[str]]]:
@@ -160,6 +259,8 @@ def _conflict(values: List[Any], path: str) -> Optional[Tuple[str, List[str]]]:
 def _value_kind(value: Any) -> str:
     """The kind of one value, as the JS transport names kinds
     (`arrowTransport.ts`): ints and floats are both numbers."""
+    if isinstance(value, BridgeRef):
+        return "ref"
     if isinstance(value, bool):
         return "boolean"
     if isinstance(value, (int, float)):

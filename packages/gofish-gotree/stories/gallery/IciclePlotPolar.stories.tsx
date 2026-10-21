@@ -108,7 +108,7 @@ export const IciclePlot: StoryObj = {
           x: { kind: "distribute", spacing: 0 },
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       sampleTree
     ).render(container);

@@ -24,6 +24,7 @@ export {
   encodeIR,
   decodeNonFinite,
   isPlainObject,
+  walk,
   type NonFiniteNumberIR,
 } from "./nonFinite.js";
 export {

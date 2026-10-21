@@ -41,7 +41,7 @@ def story_spiral_layout():
                     "anchor": "middle",
                 },
             ),
-            coord=Coord.polar(),
+            coord=Coord.clock(),
         ),
         {},
     )

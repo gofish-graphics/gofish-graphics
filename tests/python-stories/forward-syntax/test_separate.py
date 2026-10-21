@@ -35,3 +35,23 @@ def story_one_sided():
         .mark(circle(r=3, fill="Species")),
         {},
     )
+
+
+def story_mixed_radii():
+    return (
+        chart(WEIGHED[:120], w=480, h=200)
+        .flow(
+            scatter(
+                x="Flipper Length (mm)",
+                alignment="middle",
+                overlap=Overlap.separate(padding=1),
+            )
+        )
+        .mark(
+            lambda d: circle(
+                r=2 + (d[0]["Body Mass (g)"] - 2700) / 600,
+                fill="Species",
+            )(d)
+        ),
+        {},
+    )

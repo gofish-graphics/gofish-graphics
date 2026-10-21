@@ -46,7 +46,7 @@ import { initializeContainer } from "../helper";
 //    at r = bandHeight, not r = 0, so the root renders as a thin ring around a
 //    hole instead of a filled disc — observe the hollow center.
 //  - Direction / StartAngle / CentralAngle: now expressible via
-//    polar({ direction, startAngle, centralAngle }) since #620 — not yet applied
+//    polar({ direction, baselineAngle, centralAngle }) since #620 — not yet applied
 //    here (the dsl's clockwise / start-angle / sub-2π knobs).
 //  - PolarAxis (θ/r axis swap) is not expressible.
 //  - Link:hidden → link:"none" here (correct for a filled-wedge sector chart);
@@ -144,7 +144,7 @@ export const HierarchicalSectorChart: StoryObj = {
           // r: siblings share the same ring.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       sectorTree
     ).render(container, { w: 560, h: 560 });

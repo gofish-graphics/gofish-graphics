@@ -724,9 +724,9 @@ export type CombinatorMarkType =
 export interface MarkBridgeFieldsIR {
   /** The mark is a component (the `@mark` decorator's output). */
   __scope?: true;
-  /** `bind_data()`: the datum the mark is pre-bound to. */
+  /** `mark(d, key)`: the input `d` the mark is applied to. */
   __datum?: unknown;
-  /** `bind_data()`: the key the mark is pre-bound to. */
+  /** `mark(d, key)`: the key the mark is applied with. */
   __key?: string | number;
 }
 
@@ -735,7 +735,7 @@ export interface LeafMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   name?: string;
   label?: LabelIR;
   relate?: RelateClauseIR[];
-  zOrder?: number;
+  zOrder?: number | BridgeLambdaSentinel;
   translate?: TranslateIR;
   [key: string]: unknown;
 }
@@ -753,7 +753,7 @@ export interface CombinatorMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   name?: string;
   label?: LabelIR;
   relate?: RelateClauseIR[];
-  zOrder?: number;
+  zOrder?: number | BridgeLambdaSentinel;
   translate?: TranslateIR;
 }
 
@@ -763,7 +763,6 @@ export interface RefMarkIR extends BaseIRNode {
   selection: string | Array<string | number>;
   name?: string;
   label?: LabelIR;
-  zOrder?: number;
   translate?: TranslateIR;
 }
 
@@ -804,7 +803,7 @@ export interface CutMarkIR extends BaseIRNode {
   size?: string | Array<number | DatumValue>;
   inset?: number;
   name?: string;
-  zOrder?: number;
+  zOrder?: number | BridgeLambdaSentinel;
   translate?: TranslateIR;
 }
 
