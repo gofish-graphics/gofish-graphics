@@ -646,43 +646,40 @@
 
   <div class="vs" style="margin-top: 12px">
     <div>
-      <div class="vs-head p2">PiCCL: its sankey example</div>
+      <div class="vs-head p2">
+        PiCCL: its sankey example, with <code>.mapValue</code> as
+        <code>field(...)</code>
+      </div>
       <pre><code>const rect = new PICCL.Rect({
   width: 100,
-  height: 1000,
+  height: field("Value"),
   stroke: "white",
   strokeWidth: 2,
-})
-  .mapValue("height", "Value")
-  .mapValue("linkId", "id")
-  .mapValue("fill", "Value");
-
-const label = new PICCL.Text({ fill: "white", fontSize: 20 }).mapValue(
-  "content",
-  "Name"
-);
-
+  linkId: field("id"),
+  fill: field("Value"),
+});
+const label = new PICCL.Text({
+  fill: "white",
+  fontSize: 20,
+  content: field("Name"),
+});
 const glyph = PICCL.union([rect, label]).pointSnap(label, rect, {
   anchor: [1, 0.5],
   offset: [10, -7],
 });
-
 const stack = PICCL.replicate(glyph, "Name").stackLayout("y", 6);
-
 const collection = PICCL.replicate(stack, "Kind")
   .stackLayout("x", 500)
   .alignLayout("y", 0.5);
-
 const link = PICCL.link(collection, {
   linkByData: true,
   filter: rect,
   opacity: 0.5,
   shape: "bezier",
   curveness: 100,
-})
-  .mapValue("linkWidth", "Value")
-  .mapValue("fill", "Value");
-
+  linkWidth: field("Value"),
+  fill: field("Value"),
+});
 await PICCL.show(
   [
     [link, data["links.csv"]],
@@ -697,7 +694,9 @@ await PICCL.show(
         lays the bands side by side along each node's edge on its own, with no
         option for their order or packing. In the anchor version the division is
         a visible <code>stack</code> on each side, with its order and sizes
-        stated. Source:
+        stated. (The original also sets a constant
+        <code>height: 1000</code> before mapping height to <code>Value</code>;
+        the mapping replaces it here.) Source:
         <a href="https://piccl.github.io/example/sankey%20diagram"
           >https://piccl.github.io/example/sankey%20diagram</a
         >.
@@ -770,7 +769,10 @@ await PICCL.show(
 
   <div class="vs" style="margin-top: 12px">
     <div>
-      <div class="vs-head p2">PiCCL: the original spec</div>
+      <div class="vs-head p2">
+        PiCCL: the original spec, with <code>.mapValue</code> as
+        <code>field(...)</code>
+      </div>
       <pre><code>const palette = [
   "rgb(235,207,79)",
   "rgb(159,115,166)",
@@ -782,12 +784,10 @@ const creatBarChart = () =&gt; {
   const waterDrop = new PICCL.Picture({
     url: "water_drop.svg",
     height: 15,
-  }).mapValue("color", "emotion", { palette });
+    color: field("emotion", { palette }),
+  });
   const row = PICCL.repeat(waterDrop, "count").stackLayout("x", 2);
-  const label = new PICCL.Text({ textAnchor: "end" }).mapValue(
-    "content",
-    "day"
-  );
+  const label = new PICCL.Text({ textAnchor: "end", content: field("day") });
   const rowWithLabel = PICCL.union([row, label]).pointSnap(label, row, {
     anchor: [0, 0.5],
     offset: [-10, -4],
@@ -799,25 +799,31 @@ const dayRect = new PICCL.Rect({
   fill: "white",
   height: 30,
   width: 50,
-}).mapValue("linkId", "name");
+  linkId: field("name"),
+});
 const label = new PICCL.Text({
   fill: "#6a473b",
   fontSize: 30,
   textAnchor: "middle",
-}).mapValue("content", "name");
+  content: field("name"),
+});
 const glyphDay = PICCL.union([dayRect, label]).pointSnap(label, dayRect, {
   anchor: [0.5, 0.3],
 });
 const daysCollection = PICCL.replicate(glyphDay, "name").stackLayout("x", 120);
-const waterCup = new PICCL.Picture({ url: "cup_of_water.png", width: 90 })
-  .mapValue("linkId", "emotion")
-  .mapValue("color", "emotion");
+const waterCup = new PICCL.Picture({
+  url: "cup_of_water.png",
+  width: 90,
+  linkId: field("emotion"),
+  color: field("emotion"),
+});
 const emotionLabel = new PICCL.Text({
   fill: "white",
   fontSize: 20,
   textAnchor: "middle",
   fontFamily: "Impact ",
-}).mapValue("content", "emotion");
+  content: field("emotion"),
+});
 const barChart = creatBarChart();
 const glyphEmotion = PICCL.union([waterCup, emotionLabel, barChart])
   .pointSnap(emotionLabel, waterCup, { anchor: [0.5, 0.3] })
@@ -842,31 +848,39 @@ const link = PICCL.link(composite, {
   opacity: 0.4,
   shape: "bezier",
   curveness: 300,
-})
-  .mapValue("linkWidth", "count")
-  .mapValue("fill", "target_id");
+  linkWidth: field("count"),
+  fill: field("target_id"),
+});
 const drop2 = new PICCL.Picture({
   url: "drop3.png",
   height: 70,
   x: -200,
   y: 500,
-}).mapValue("color", "emotion");
-const dropAnchor = new PICCL.Rect({ height: 50, width: 0 }).mapValue(
-  "linkId",
-  "emotion"
-);
+  color: field("emotion"),
+});
+const dropAnchor = new PICCL.Rect({
+  height: 50,
+  width: 0,
+  linkId: field("emotion"),
+});
 const dl = new PICCL.Text({
   fill: "white",
   textAnchor: "middle",
   fontSize: 24,
-}).mapValue("content", "emotion");
+  content: field("emotion"),
+});
 const dg = PICCL.union([drop2, dropAnchor, dl])
   .pointSnap(drop2, dropAnchor)
   .pointSnap(dl, drop2, { offset: [20, -10] });
 const dropCollection = PICCL.replicate(dg, "emotion").stackLayout("-y", 70);
-const rectForLink = new PICCL.Rect({ width: 50, height: 0, x: -440, y: 580 })
-  .mapValue("fill", "emotion")
-  .mapValue("linkId", "emotion");
+const rectForLink = new PICCL.Rect({
+  width: 50,
+  height: 0,
+  x: -440,
+  y: 580,
+  fill: field("emotion"),
+  linkId: field("emotion"),
+});
 const rectCollection = PICCL.replicate(rectForLink, "emotion").stackLayout(
   "-x",
   -20
@@ -1030,25 +1044,25 @@ await PICCL.show(
 
   <div class="vs" style="margin-top: 12px">
     <div>
-      <div class="vs-head p2">PiCCL: the original spec</div>
+      <div class="vs-head p2">
+        PiCCL: the original spec, with <code>.mapValue</code> as
+        <code>field(...)</code>
+      </div>
       <pre><code>const circle = new PICCL.Circle({ r: 800, innerRadius: 780 });
-
 const [chart, arc] = PICCL.divide(circle, "angular", {
   key: "id",
   sizeEncode: "Total",
   gap: 0.5,
 });
-arc.sort("Region").mapValue("fill", "Region").mapValue("linkId", "id");
-
-const label = new PICCL.Text({ fill: "white", fontSize: 20 }).mapValue(
-  "content",
-  "Name"
-);
-
+arc.sort("Region").set({ fill: field("Region"), linkId: field("id") });
+const label = new PICCL.Text({
+  fill: "white",
+  fontSize: 20,
+  content: field("Name"),
+});
 PICCL.union([arc, label])
   .pointSnap(label, arc, { anchor: [0.5, 1], offset: [0.5, 20] })
   .orientMatch(label, arc, -90);
-
 const link = PICCL.link(chart, {
   linkByData: true,
   filter: arc,
@@ -1056,10 +1070,9 @@ const link = PICCL.link(chart, {
   srcDirection: "inner",
   dstDirection: "inner",
   shape: "arc",
-})
-  .mapValue("linkWidth", "Amount")
-  .mapValue("fill", "Region");
-
+  linkWidth: field("Amount"),
+  fill: field("Region"),
+});
 PICCL.show(
   [
     [link, data["links.csv"]],
@@ -1078,7 +1091,10 @@ PICCL.show(
         <code>"inner"</code> edge. But the arc size (<code>Total</code>) and the
         band widths (<code>Amount</code>) are separate encodings, so nothing
         makes the bands fill their arc. In the anchor version both are on the
-        group's own scale, so a mismatch is a loud error. Source:
+        group's own scale, so a mismatch is a loud error. (<code>arc</code>
+        comes out of <code>divide</code> rather than a constructor, so
+        <code>.set({ ... })</code> stands in for its <code>.mapValue</code>
+        calls.) Source:
         <a href="https://piccl.github.io/example/chord%20diagram"
           >https://piccl.github.io/example/chord%20diagram</a
         >.
@@ -1144,54 +1160,56 @@ PICCL.show(
 
   <div class="vs" style="margin-top: 12px">
     <div>
-      <div class="vs-head p2">PiCCL: the original spec</div>
-      <pre><code>const bar = new PICCL.Rect({ width: 2 })
-  .mapValue("fill", "writer")
-  .mapValue("height", "peak", {
-    scale: new PICCL.LinearScale({ range: [200, 0] }),
-  })
-  .mapValue("linkId", "name");
-const note = new PICCL.Picture({ url: "note.png", width: 10 }).mapValue(
-  "color",
-  "year"
-);
+      <div class="vs-head p2">
+        PiCCL: the original spec, with <code>.mapValue</code> as
+        <code>field(...)</code>
+      </div>
+      <pre><code>const bar = new PICCL.Rect({
+  width: 2,
+  fill: field("writer"),
+  height: field("peak", { scale: new PICCL.LinearScale({ range: [200, 0] }) }),
+  linkId: field("name"),
+});
+const note = new PICCL.Picture({
+  url: "note.png",
+  width: 10,
+  color: field("year"),
+});
 const glyph = PICCL.union([bar, note]).pointSnap(note, bar, {
   sourceAnchor: [0.5, 0.5],
   targetAnchor: [0.5, 1],
 });
-
 const bars = PICCL.replicate(glyph).stackLayout("x", 5);
-
-const memberImage = new PICCL.Picture({ colorMode: "darkness", width: 150 })
-  .mapValue("url", "url")
-  .mapValue("color", "name");
-const rectForLink = new PICCL.Rect({ width: 60, height: 0 }).mapValue(
-  "linkId",
-  "name"
-);
-
+const memberImage = new PICCL.Picture({
+  colorMode: "darkness",
+  width: 150,
+  url: field("url"),
+  color: field("name"),
+});
+const rectForLink = new PICCL.Rect({
+  width: 60,
+  height: 0,
+  linkId: field("name"),
+});
 const memberGlyph = PICCL.union([memberImage, rectForLink]).pointSnap(
   rectForLink,
   memberImage,
   { anchor: [0.5, 1] }
 );
-
 const memberCollection = PICCL.replicate(memberGlyph).stackLayout("x", 20);
-
 const composite = PICCL.union([bars, memberCollection]).pointSnap(
   bars,
   memberCollection,
   { sourceAnchor: [0.5, 0], targetAnchor: [0.5, 1], offset: [0, 200] }
 );
-
 const link = PICCL.link(composite, {
   linkByData: true,
   srcDirection: "bottom",
   dstDirection: "top",
   shape: "bezier",
   curveness: 100,
-}).mapValue("fill", "target_id");
-
+  fill: field("target_id"),
+});
 await PICCL.show(
   [
     [bars, data["songs.csv"]],
