@@ -11,13 +11,6 @@
 # map the directional operators (stackX, spreadY, ...) to combinator-form spread/stack/connect,
 # frame→layer, and add the polar/wavy coord transforms to the Python wrapper +
 # IR bridge.
-#
-# Per-export exemption — PolarText constructs a raw custom coordinate
-# transform inline ({ type, transform: ([r, theta]) => ..., domain }), an
-# arbitrary JS closure rather than one of the IR's named coord transforms
-# (polar/clock/wavy/geo), so it cannot cross the
-# bridge. The other TextMarks exports are ported.
-packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx::PolarText
 
 # Docs regression test
 packages/gofish-graphics/stories/DocsContextRegression.stories.tsx
@@ -77,14 +70,15 @@ packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx::Default
 # visual-diff harness captures it.
 packages/gofish-gotree/stories/Matrix.stories.tsx
 
-# LayeredBarsAndArea stays exempt: it drives a data-driven paint order with
-# `area(...).zOrder(d => …)` and reorders the area selection with a `derive`
-# callback. Both are JS functions that can't cross the derive RPC, and the
-# `.zOrder(fn)` form is omitted from the IR (like a function `.label`), so a
-# Python port can't reproduce — let alone byte-match — the paint ordering that
+# Per-export exemption — LayeredBarsAndArea's Default and HoistedVarietySpread
+# drive a data-driven paint order with `ribbon(...).zOrder(d => …)`. The
+# function form of `.zOrder` is a JS closure and is omitted from the IR (like a
+# function `.label`), so a Python port can't reproduce the paint order that
 # raises the emphasized sites above the gray ones. Revisit once the highlight /
 # `emphasize` API (#641) gives this a serializable, declarative spelling.
-packages/gofish-graphics/stories/vega-lite/Bar/LayeredBarsAndArea.stories.tsx
+# TwoSites has no `.zOrder(fn)` and is ported.
+packages/gofish-graphics/stories/vega-lite/Bar/LayeredBarsAndArea.stories.tsx::Default
+packages/gofish-graphics/stories/vega-lite/Bar/LayeredBarsAndArea.stories.tsx::HoistedVarietySpread
 
 # ---------------------------------------------------------------------------
 # Interaction/reactivity stories — exempt from Python parity (JS-only feature).
