@@ -25,7 +25,7 @@ Coord.polar(
     *,
     inner_radius: float | None = None,   # donut hole, fraction [0,1) of outer radius
     central_angle: float | None = None,  # total sweep in radians (default 2π)
-    start_angle: float | None = None,    # angle (radians) of θ=0, from 3 o'clock (default 0)
+    baseline_angle: float | None = None,  # angle (radians) where θ's 0 sits, from 3 o'clock (default 0)
     direction: int | None = None,        # +1 CCW, -1 CW (default 1)
     center: tuple[float, float] | None = None,  # screen-space center offset
 ) -> Coord
@@ -36,6 +36,11 @@ Coord.polar(
 All optional; the defaults give a centered, full-circle disc starting at 3
 o'clock and going counter-clockwise. [`Coord.clock()`](/python/api/coords/clock)
 is the same transform with 0 at 12 o'clock, going clockwise.
+
+The number 0 on the angular axis always sits at `baseline_angle`, whatever
+the θ range and `central_angle`. A range that starts at 0, like a pie's, starts at
+`baseline_angle`. A stack centered on 0 (a `Schema.ordered(...).diverging(...)`
+schema) is centered on `baseline_angle`, and its negative half runs back past it.
 
 ::: gofish-ref polar
 :::

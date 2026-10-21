@@ -332,6 +332,14 @@ export const coord = createNodeOperator(
             // unless GOFISH_SOLVER_CHECK is set.
             shadowCheckScaleRoot(claim, budget, scope?.sigma, axis);
             if (scope === undefined) return [1, undefined];
+            // The angular axis of the polar family (θ = x) puts data 0 at
+            // θ = 0 of the transform, its baseline angle, whatever the range:
+            // a centered stack stays centered on the baseline angle, full
+            // circle or partial arc. σ still fits the whole range to the
+            // angular budget. Every other axis seats data 0 by the claim, as
+            // the root does (`solveScope`).
+            if (!framesOwnWindow && axis === 0 && scope.originPx !== undefined)
+              return [scope.sigma, { sigma: scope.sigma, originPx: 0 }];
             return [scope.sigma, scopeFrame(scope)];
           };
           const [sfX, frameX] = fitAxis(0, budget[0]);

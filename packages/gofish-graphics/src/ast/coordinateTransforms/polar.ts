@@ -6,10 +6,12 @@ export type PolarOptions = {
   /** Total angular sweep in radians. Default 2π (full circle). */
   centralAngle?: number;
   /**
-   * Angle (radians) of θ=0, measured counter-clockwise from 3 o'clock.
-   * Default 0 for `polar()` (3 o'clock) and π/2 for `clock()` (12 o'clock).
+   * The angle where the angular axis's 0 sits: radians, measured
+   * counter-clockwise from 3 o'clock. Data 0 on θ always maps here, whatever
+   * the θ range and `centralAngle` (a centered stack centers on it). Default
+   * 0 for `polar()` (3 o'clock) and π/2 for `clock()` (12 o'clock).
    */
-  startAngle?: number;
+  baselineAngle?: number;
   /**
    * +1 counter-clockwise, -1 clockwise. Default +1 for `polar()` and -1 for
    * `clock()`.
@@ -21,27 +23,27 @@ export type PolarOptions = {
 
 /**
  * The polar family: one transform, (θ, r) → plane, whose presets differ only
- * in the angular convention they default to (`startAngle`, `direction`).
+ * in the angular convention they default to (`baselineAngle`, `direction`).
  * θ is axis 0 (`x`, or the declared name `theta`), r is axis 1 (`y`, or `r`).
  * See `dims` in dims.ts. The plane is y-up, so a positive `direction` turns
  * counter-clockwise on screen. The options expose GoTree's `StartAngle` /
  * `CentralAngle` / `Direction` / `InnerRadius` / `PolarCenter`.
  */
 export const polarPreset =
-  (type: string, defaults: { startAngle: number; direction: 1 | -1 }) =>
+  (type: string, defaults: { baselineAngle: number; direction: 1 | -1 }) =>
   (opts: PolarOptions = {}): CoordinateTransform => {
     const {
       innerRadius = 0,
       centralAngle = 2 * Math.PI,
-      startAngle = defaults.startAngle,
+      baselineAngle = defaults.baselineAngle,
       direction = defaults.direction,
       center = [0, 0],
     } = opts;
     return {
       type,
       transform: ([theta, r]: [number, number]) => [
-        center[0] + r * Math.cos(startAngle + direction * theta),
-        center[1] + r * Math.sin(startAngle + direction * theta),
+        center[0] + r * Math.cos(baselineAngle + direction * theta),
+        center[1] + r * Math.sin(baselineAngle + direction * theta),
       ],
       aliases: { x: "theta", y: "r" },
       innerRadius,
@@ -61,4 +63,4 @@ export const polarPreset =
  * counter-clockwise. For θ=0 at 12 o'clock increasing clockwise, use
  * `clock()`.
  */
-export const polar = polarPreset("polar", { startAngle: 0, direction: 1 });
+export const polar = polarPreset("polar", { baselineAngle: 0, direction: 1 });

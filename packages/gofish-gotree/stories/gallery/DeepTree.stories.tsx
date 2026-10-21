@@ -37,7 +37,7 @@ import { combine, byDepth, mount } from "./_shared";
 //    these is tracked in #627, and its data-position workaround (leaf-slot box
 //    packing in the data pass) is demonstrated in RadialDeep.stories.tsx. The
 //    tree below is kept modest so the structure stays legible.
-//  - polar() now takes options — { innerRadius, centralAngle, startAngle,
+//  - polar() now takes options — { innerRadius, centralAngle, baselineAngle,
 //    direction, center } since #620 — so InnerRadius 0, Direction "clockwise",
 //    CentralAngle 1 and StartAngle 0 are now expressible via polar({ ... })
 //    since #620 (not yet applied here). Still NOT expressible: the PolarAxis

@@ -53,7 +53,7 @@ Today this family is crippled by **hardcoding**, not by missing math:
   have **identical** transforms (both `r·cos(−θ+π/2), r·sin(−θ+π/2)` — already 0-at-12,
   clockwise). So "clock = polar but starting at 12" is already true of `polar`, and
   `clock` is a duplicate. Resolution: make a single parameterized polar and expose
-  `polar()` / `clock()` as **presets** (different default startAngle/direction).
+  `polar()` / `clock()` as **presets** (different default baselineAngle/direction).
 
 ## Scaffolded plan (phases, roughly ordered by leverage & risk)
 
@@ -75,7 +75,7 @@ Today this family is crippled by **hardcoding**, not by missing math:
 
 ### Phase 1 — Parameterized polar/clock (#618 polar options, #117, #535)
 
-- `polar({ startAngle, centralAngle, direction, innerRadius, center })`; `clock()` as
+- `polar({ baselineAngle, centralAngle, direction, innerRadius, center })`; `clock()` as
   a preset. `innerRadius` gives donut holes / clock rims (ClockTree, TyreTree).
 - Fixes #117 (r-axis 0 in the wrong place) via a real radial domain + innerRadius.
 - Fold in #535: the explicit-size self-scaling rule must cover the coord branch.

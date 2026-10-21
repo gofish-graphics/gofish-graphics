@@ -247,7 +247,23 @@ canvas (gofish.tsx) — here the angular/radial budget plays the canvas role. It
 same `solveScope` the root uses: σ from the coord's claim (its children's
 claims overlaid, or a declared window's width) against the budget, so the
 children fill the ring, and, for a pinned axis, the map onto the budget that
-its children share. A free child is seated at the scope's `originPx`. The
+its children share. A free child is seated at the scope's `originPx`.
+
+The polar family's angular axis (θ = x) departs from the root in one place: its
+`originPx` is always 0, so data 0 sits at θ = 0 of the transform, which is the
+`baselineAngle`. The root (and `solveScope`) instead puts the claim's low edge at
+the box's low edge (`originPx = claim.descent(σ)`), which on θ would rotate any
+range that does not start at 0 back to start at the baseline angle, and a stack
+centered on 0 (a diverging schema) would lose its centering. The rule holds for
+every polar coord, full circle or partial arc. σ is unchanged: it still fits the
+whole claim, `[min, max]`, to the angular budget, so a full circle stays exactly
+full whatever the range, and only where the range sits on it changes. On a
+partial arc a range below 0 therefore runs back past the baseline angle, out of
+the `[0, centralAngle]` sweep. The θ tick ring already assumed data 0 at θ = 0,
+so ticks and content now agree. A range that starts at 0, like a pie's, does not
+move.
+
+The
 coord's type is its children's overlay, kept for its own scope; upward it
 reports nothing on either axis, like every σ-scope root: to its parent it is a
 pixel box, and an explicit `w`/`h` sizes that box as it sizes a layer's (a

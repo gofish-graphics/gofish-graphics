@@ -27,7 +27,7 @@ gf.chart(seafood, { coord: gf.Coord.clock() })
 Coord.clock(options?: {
   innerRadius?: number; // donut hole, fraction [0,1) of outer radius. Default 0
   centralAngle?: number; // total sweep in radians. Default 2π
-  startAngle?: number; // angle (radians) of θ=0, from 3 o'clock. Default π/2 (12 o'clock)
+  baselineAngle?: number; // angle (radians) where θ's 0 sits, from 3 o'clock. Default π/2 (12 o'clock)
   direction?: 1 | -1; // +1 CCW, -1 CW. Default -1 (clockwise)
   center?: [number, number]; // screen-space center offset. Default [0, 0]
 });
@@ -39,9 +39,10 @@ Coord.clock(options?: {
 :::
 
 `Coord.clock()` is the [`Coord.polar()`](/js/api/coords/polar) transform and accepts the same
-options — `innerRadius`, `centralAngle`, `startAngle`, `direction`, `center`. Only the
-`startAngle` and `direction` defaults differ: 0° at 12 o'clock, clockwise. See
-[polar's Parameters](/js/api/coords/polar#parameters).
+options — `innerRadius`, `centralAngle`, `baselineAngle`, `direction`, `center`. Only the
+`baselineAngle` and `direction` defaults differ: 0° at 12 o'clock, clockwise. See
+[polar's Parameters](/js/api/coords/polar#parameters). As in polar, the number 0 on
+the angular axis always sits at `baselineAngle`.
 
 ## Usage
 

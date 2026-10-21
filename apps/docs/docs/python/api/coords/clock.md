@@ -25,7 +25,7 @@ Coord.clock(
     *,
     inner_radius: float | None = None,
     central_angle: float | None = None,
-    start_angle: float | None = None,
+    baseline_angle: float | None = None,
     direction: int | None = None,
     center: tuple[float, float] | None = None,
 ) -> Coord
@@ -37,10 +37,11 @@ Coord.clock(
 :::
 
 `Coord.clock()` is the [`Coord.polar()`](/python/api/coords/polar) transform and accepts the same
-options — `inner_radius`, `central_angle`, `start_angle`, `direction`, `center`.
-Only the `start_angle` and `direction` defaults differ: 0° at 12 o'clock,
+options — `inner_radius`, `central_angle`, `baseline_angle`, `direction`, `center`.
+Only the `baseline_angle` and `direction` defaults differ: 0° at 12 o'clock,
 clockwise. See
-[polar's Parameters](/python/api/coords/polar#parameters).
+[polar's Parameters](/python/api/coords/polar#parameters). As in polar, the number 0
+on the angular axis always sits at `baseline_angle`.
 
 ## Usage
 

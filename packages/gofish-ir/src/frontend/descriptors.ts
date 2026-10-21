@@ -2188,9 +2188,9 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
 // The field names are the camelCase wire keys; Python's Coord.polar()/clock() spell
 // them in snake_case (inner_radius, ...) like every other generated kwarg (see
 // `pyKwarg`). `polar` and `clock` share these fields and differ only in the
-// `startAngle` / `direction` defaults (the angular convention).
+// `baselineAngle` / `direction` defaults (the angular convention).
 const polarFields = (defaults: {
-  startAngle: number;
+  baselineAngle: number;
   direction: number;
 }): FieldGroup =>
   group({
@@ -2204,10 +2204,10 @@ const polarFields = (defaults: {
       default: 2 * Math.PI,
       doc: "Total angular sweep in radians.",
     },
-    startAngle: {
+    baselineAngle: {
       type: t.number,
-      default: defaults.startAngle,
-      doc: "Angle (radians) of θ=0, measured counter-clockwise from 3 o'clock.",
+      default: defaults.baselineAngle,
+      doc: "The angle where the angular axis's 0 sits: radians, measured counter-clockwise from 3 o'clock. Data 0 on θ maps here for every θ range and every sweep.",
     },
     direction: {
       type: t.number,
@@ -2224,11 +2224,11 @@ const polarFields = (defaults: {
 export const COORDS: Record<string, ConstructDescriptor> = {
   polar: coordTransform("polar", {
     doc: "Maps (θ, r) → screen in the math convention: θ=0 at 3 o'clock, increasing counter-clockwise. θ is axis 0 (x, or the declared name theta), r is axis 1 (y, or r); `dims` and `dir` inside it may use theta/r.",
-    fields: polarFields({ startAngle: 0, direction: 1 }),
+    fields: polarFields({ baselineAngle: 0, direction: 1 }),
   }),
   clock: coordTransform("clock", {
-    doc: "The polar transform in the clock convention: θ=0 at 12 o'clock, increasing clockwise. It differs from `Coord.polar()` only in the `startAngle` and `direction` defaults.",
-    fields: polarFields({ startAngle: Math.PI / 2, direction: -1 }),
+    doc: "The polar transform in the clock convention: θ=0 at 12 o'clock, increasing clockwise. It differs from `Coord.polar()` only in the `baselineAngle` and `direction` defaults.",
+    fields: polarFields({ baselineAngle: Math.PI / 2, direction: -1 }),
   }),
   wavy: coordTransform("wavy", {
     doc: "A sinusoidal warp of the plane. No options.",

@@ -29,7 +29,7 @@ import { combine, byDepth, mount } from "./_shared";
 //    hollow from r=0 to r=0.72·R and the wedges live in the outer rim — the true
 //    clock face the dsl asks for. This was the single biggest fidelity gap and is
 //    now closed.
-//  - StartAngle / Direction / CentralAngle: polar() now takes startAngle,
+//  - StartAngle / Direction / CentralAngle: polar() now takes baselineAngle,
 //    direction, and centralAngle knobs. We keep the defaults here (12-o'clock
 //    start, clockwise, full 2π) — the GoTree StartAngle:0.01 uses a different
 //    zero/winding convention, and the default already reads as a clock face.

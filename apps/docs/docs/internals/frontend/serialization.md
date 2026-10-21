@@ -358,14 +358,14 @@ serialized as a field, so it composes with any explicit `.zOrder(...)` or
 
 A chart's **coordinate transform** rides the IR as a small spec the deserializer
 maps back to the JS factory by `type` — e.g. `{ type: "polar", innerRadius,
-centralAngle, startAngle, direction, center }`. `fromJSON.ts` rebuilds it
+centralAngle, baselineAngle, direction, center }`. `fromJSON.ts` rebuilds it
 with `rebuild("coord", type, opts)`, the same call that rebuilds an operator
 or a mark (§ Modularity), from the spec without its `type`. An options-object
 factory takes the options whole (`Coord.polar(opts)`), so a parameterized
 polar/clock (donut hole, partial fan, start angle) round-trips without
 per-option plumbing, and the descriptor's `positional` field goes first
 (`Coord.geo(opts.projection, rest)`). An unknown `type` throws. `polar` and
-`clock` share one field group and differ only in its `startAngle` /
+`clock` share one field group and differ only in its `baselineAngle` /
 `direction` defaults, so the `type` tag is what keeps the angular convention
 across the wire when those options are left out.
 

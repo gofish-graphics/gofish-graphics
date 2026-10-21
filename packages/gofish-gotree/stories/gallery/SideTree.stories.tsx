@@ -25,10 +25,10 @@ import { combine, byDepth, mount } from "./_shared";
 // accumulate. Same convention as RadialTree / RadialNodes / Sunburst.
 //
 // POLAR LIMITATIONS (no hacks here — flagged for follow-up):
-//  - polar() now takes options — { innerRadius, centralAngle, startAngle,
+//  - polar() now takes options — { innerRadius, centralAngle, baselineAngle,
 //    direction, center } since #620 — so the dsl's StartAngle 0.17 (and any
 //    InnerRadius / Direction / CentralAngle) are now expressible via
-//    polar({ startAngle: 0.17, ... }) since #620 (not yet applied here); the
+//    polar({ baselineAngle: 0.17, ... }) since #620 (not yet applied here); the
 //    tree still starts at the default angle instead of being rotated ~0.17 rad.
 //  - No angular auto-fit for POINT nodes: θ spacing is a fixed per-level
 //    constant, it does not shrink with node count, so wide/deep trees can

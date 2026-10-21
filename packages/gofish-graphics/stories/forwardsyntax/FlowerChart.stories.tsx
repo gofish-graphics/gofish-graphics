@@ -10,6 +10,7 @@ import {
   petal,
   Constraint,
   Coord,
+  Schema,
 } from "../../src/lib";
 import { color } from "../../src/color";
 
@@ -27,6 +28,7 @@ type Args = { w: number; h: number };
 // Fixed radius of every flower head, in pixels. The petals fan out to this
 // shared length; only their colors and angular widths vary with the data.
 const FLOWER_RADIUS = 40;
+const SPECIES = ["Bass", "Trout", "Catfish", "Perch", "Salmon"];
 
 // Each species row tagged with its lake's planting location on x.
 const stemData = seafood.map((d) => ({
@@ -49,8 +51,17 @@ export const Default: StoryObj<Args> = {
 
     // One flower head: a polar fan of petals, one per species, each as wide
     // as that species' count. It has no data of its own, so as a nested mark
-    // it inherits each lake's rows.
-    const flower = chart({ coord: Coord.polar(), axes: false })
+    // it inherits each lake's rows. The diverging schema centers the stack on
+    // the middle of Salmon's petal (the fifth of five species, so position
+    // 4.5): Salmon is centered at the stack's 0, which polar puts at
+    // `baselineAngle`, and -π/2 points straight down, onto the stem.
+    const flower = chart({
+      coord: Coord.polar({ baselineAngle: -Math.PI / 2 }),
+      axes: false,
+      schema: {
+        species: Schema.ordered(SPECIES).diverging({ midpoint: 4.5 }),
+      },
+    })
       .flow(stack({ by: "species", dir: "x", h: FLOWER_RADIUS }))
       // TODO(#1111): lighten the petals, as the low-level version did.
       .mark(petal({ w: "count", fill: "species" }));

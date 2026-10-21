@@ -53,7 +53,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //    wedges are allotted CONTIGUOUS spans; the thin white seams between them are
 //    the white stroke, exactly as in the reference — not real angular gaps.
 //  - θ-extent angular auto-fit (#622) and polar() options (#620,
-//    innerRadius/direction/startAngle) would let the DSL express the angular fit
+//    innerRadius/direction/baselineAngle) would let the DSL express the angular fit
 //    and the hole once the inverted-radial gap (above) is closed; here the raw
 //    radians/pixels bypass the scale machinery (the "simple thing for now" #627
 //    calls for), so those knobs are baked into the numbers instead.

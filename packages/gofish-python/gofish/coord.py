@@ -16,13 +16,13 @@ from typing import Any, Dict, Optional
 __all__ = ["polar", "clock", "wavy", "geo"]
 
 
-def polar(*, inner_radius: Optional[float] = None, central_angle: Optional[float] = None, start_angle: Optional[float] = None, direction: Optional[float] = None, center: Optional[tuple] = None) -> Dict[str, Any]:
+def polar(*, inner_radius: Optional[float] = None, central_angle: Optional[float] = None, baseline_angle: Optional[float] = None, direction: Optional[float] = None, center: Optional[tuple] = None) -> Dict[str, Any]:
     """Maps (θ, r) → screen in the math convention: θ=0 at 3 o'clock, increasing counter-clockwise. θ is axis 0 (x, or the declared name theta), r is axis 1 (y, or r); `dims` and `dir` inside it may use theta/r.
 
     Args:
         inner_radius: Donut hole as a fraction [0,1) of the outer radius. Default 0.
         central_angle: Total angular sweep in radians. Default 6.283185307179586.
-        start_angle: Angle (radians) of θ=0, measured counter-clockwise from 3 o'clock. Default 0.
+        baseline_angle: The angle where the angular axis's 0 sits: radians, measured counter-clockwise from 3 o'clock. Data 0 on θ maps here for every θ range and every sweep. Default 0.
         direction: +1 counter-clockwise, -1 clockwise (numeric ±1). Default 1.
         center: Screen-space center offset. Default [0,0].
     """
@@ -36,11 +36,11 @@ def polar(*, inner_radius: Optional[float] = None, central_angle: Optional[float
             raise TypeError(f"Coord.polar(central_angle=...) must be a number, got {type(central_angle).__name__}")
         if math.isnan(central_angle):
             raise ValueError(f"Coord.polar(central_angle=...) must not be NaN, got {central_angle!r}")
-    if start_angle is not None:
-        if not (isinstance(start_angle, (int, float)) and not isinstance(start_angle, bool)):
-            raise TypeError(f"Coord.polar(start_angle=...) must be a number, got {type(start_angle).__name__}")
-        if math.isnan(start_angle):
-            raise ValueError(f"Coord.polar(start_angle=...) must not be NaN, got {start_angle!r}")
+    if baseline_angle is not None:
+        if not (isinstance(baseline_angle, (int, float)) and not isinstance(baseline_angle, bool)):
+            raise TypeError(f"Coord.polar(baseline_angle=...) must be a number, got {type(baseline_angle).__name__}")
+        if math.isnan(baseline_angle):
+            raise ValueError(f"Coord.polar(baseline_angle=...) must not be NaN, got {baseline_angle!r}")
     if direction is not None:
         if not (isinstance(direction, (int, float)) and not isinstance(direction, bool)):
             raise TypeError(f"Coord.polar(direction=...) must be a number, got {type(direction).__name__}")
@@ -66,7 +66,7 @@ def polar(*, inner_radius: Optional[float] = None, central_angle: Optional[float
     for _k, _v in [
         ("innerRadius", inner_radius),
         ("centralAngle", central_angle),
-        ("startAngle", start_angle),
+        ("baselineAngle", baseline_angle),
         ("direction", direction),
         ("center", center),
     ]:
@@ -75,13 +75,13 @@ def polar(*, inner_radius: Optional[float] = None, central_angle: Optional[float
     return out
 
 
-def clock(*, inner_radius: Optional[float] = None, central_angle: Optional[float] = None, start_angle: Optional[float] = None, direction: Optional[float] = None, center: Optional[tuple] = None) -> Dict[str, Any]:
-    """The polar transform in the clock convention: θ=0 at 12 o'clock, increasing clockwise. It differs from `Coord.polar()` only in the `startAngle` and `direction` defaults.
+def clock(*, inner_radius: Optional[float] = None, central_angle: Optional[float] = None, baseline_angle: Optional[float] = None, direction: Optional[float] = None, center: Optional[tuple] = None) -> Dict[str, Any]:
+    """The polar transform in the clock convention: θ=0 at 12 o'clock, increasing clockwise. It differs from `Coord.polar()` only in the `baselineAngle` and `direction` defaults.
 
     Args:
         inner_radius: Donut hole as a fraction [0,1) of the outer radius. Default 0.
         central_angle: Total angular sweep in radians. Default 6.283185307179586.
-        start_angle: Angle (radians) of θ=0, measured counter-clockwise from 3 o'clock. Default 1.5707963267948966.
+        baseline_angle: The angle where the angular axis's 0 sits: radians, measured counter-clockwise from 3 o'clock. Data 0 on θ maps here for every θ range and every sweep. Default 1.5707963267948966.
         direction: +1 counter-clockwise, -1 clockwise (numeric ±1). Default -1.
         center: Screen-space center offset. Default [0,0].
     """
@@ -95,11 +95,11 @@ def clock(*, inner_radius: Optional[float] = None, central_angle: Optional[float
             raise TypeError(f"Coord.clock(central_angle=...) must be a number, got {type(central_angle).__name__}")
         if math.isnan(central_angle):
             raise ValueError(f"Coord.clock(central_angle=...) must not be NaN, got {central_angle!r}")
-    if start_angle is not None:
-        if not (isinstance(start_angle, (int, float)) and not isinstance(start_angle, bool)):
-            raise TypeError(f"Coord.clock(start_angle=...) must be a number, got {type(start_angle).__name__}")
-        if math.isnan(start_angle):
-            raise ValueError(f"Coord.clock(start_angle=...) must not be NaN, got {start_angle!r}")
+    if baseline_angle is not None:
+        if not (isinstance(baseline_angle, (int, float)) and not isinstance(baseline_angle, bool)):
+            raise TypeError(f"Coord.clock(baseline_angle=...) must be a number, got {type(baseline_angle).__name__}")
+        if math.isnan(baseline_angle):
+            raise ValueError(f"Coord.clock(baseline_angle=...) must not be NaN, got {baseline_angle!r}")
     if direction is not None:
         if not (isinstance(direction, (int, float)) and not isinstance(direction, bool)):
             raise TypeError(f"Coord.clock(direction=...) must be a number, got {type(direction).__name__}")
@@ -125,7 +125,7 @@ def clock(*, inner_radius: Optional[float] = None, central_angle: Optional[float
     for _k, _v in [
         ("innerRadius", inner_radius),
         ("centralAngle", central_angle),
-        ("startAngle", start_angle),
+        ("baselineAngle", baseline_angle),
         ("direction", direction),
         ("center", center),
     ]:
