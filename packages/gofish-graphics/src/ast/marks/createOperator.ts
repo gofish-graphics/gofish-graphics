@@ -42,7 +42,9 @@ import {
 } from "./markResult";
 import {
   CHANNEL_INFER,
+  isBatchAccessor,
   resolveChannelAccessors,
+  resolveValue,
   axisSlotKind,
   resolveColumn,
   type DimsChannelSpec,
@@ -194,14 +196,41 @@ export type ModifierConfig<Args extends any[] = any[]> = {
     ...args: Args
   ) => void | Promise<void>;
   tag?: (wrapped: Mark<any>, base: Mark<any>, ...args: Args) => void;
+  /**
+   * For a modifier whose argument may be a batch accessor (a Python
+   * callback, `RESOLVE_ROWS` in channels.ts): given the args, the function
+   * that resolves them over the inputs the mark is applied to, or undefined
+   * when there is nothing to resolve. The mark resolves them once per input
+   * it is called with, and once for all of its inputs when the operator
+   * factory hands it every group first ({@link inputsResolver}).
+   */
+  resolveArgs?: (
+    ...args: Args
+  ) => ((inputs: readonly unknown[]) => Promise<Args>) | undefined;
 };
 
 /** A paint-order hint: a constant, or a callback resolved per-instance against
- *  the datum the mark is bound to. The callback may answer a promise (a
- *  Python callback answers through the bridge). */
-export type ZOrderValue<T = any> =
-  | number
-  | ((datum: T) => number | Promise<number>);
+ *  the datum the mark is bound to. */
+export type ZOrderValue<T = any> = number | ((datum: T) => number);
+
+/** The symbol under which a mark carries the form of itself whose modifier
+ *  arguments are resolved over a list of inputs ({@link inputsResolver}). */
+const RESOLVE_INPUTS: unique symbol = Symbol.for("gofish.resolveInputs");
+
+/**
+ * For a mark whose modifiers carry batch accessors (a Python `zOrder`
+ * callback): the function that resolves them over `inputs`, every input the
+ * mark is about to be applied to, in one call each, and answers the mark
+ * with them resolved. Undefined for a mark with none, which is applied as it
+ * is, with no async step, like a modifier with no `resolveArgs`. The
+ * operator factory calls it with its split's groups, the way it resolves its
+ * own channel accessors over all of its rows (`resolveChannelAccessors`).
+ */
+export function inputsResolver<M>(
+  mark: M
+): ((inputs: readonly unknown[]) => Promise<M>) | undefined {
+  return (mark as any)?.[RESOLVE_INPUTS];
+}
 
 export type TranslateModifierOptions = PositionNodeOptions;
 
@@ -232,12 +261,15 @@ function modifierMethod(
   redecorate: (m: Mark<any>) => Mark<any>
 ): (...args: any[]) => Mark<any> {
   return (...args: any[]) => {
+    const resolveArgs = cfg.resolveArgs?.(...args);
     const wrapped: Mark<any> = async (
       d: any,
       key?: string | number,
       layerContext?: LayerContext
     ) => {
       const raw = await (base as any)(d, key, layerContext);
+      // Resolved once per input, however many nodes it produces.
+      const applied = resolveArgs ? await resolveArgs([d]) : args;
       // Expand-kind marks return an array of nodes; per-item return one.
       // Apply the modifier to each produced node either way.
       if (getMarkKind(base) === "expand") {
@@ -245,13 +277,25 @@ function modifierMethod(
           (raw as GoFishNode[]).map((r) => resolveMarkResult(r, layerContext))
         );
         for (const node of nodes)
-          await cfg.apply(node, layerContext, d, ...args);
+          await cfg.apply(node, layerContext, d, ...applied);
         return nodes as unknown as GoFishNode;
       }
       const node = await resolveMarkResult(raw, layerContext);
-      await cfg.apply(node, layerContext, d, ...args);
+      await cfg.apply(node, layerContext, d, ...applied);
       return node;
     };
+    // The same chain with every link's arguments resolved over `inputs`
+    // (`inputsResolver`), so a batch accessor anywhere in it makes one
+    // call for all of them.
+    const resolveBase = inputsResolver(base);
+    if (resolveArgs || resolveBase) {
+      (wrapped as any)[RESOLVE_INPUTS] = async (inputs: readonly unknown[]) =>
+        modifierMethod(
+          resolveBase ? await resolveBase(inputs) : base,
+          cfg,
+          redecorate
+        )(...(resolveArgs ? await resolveArgs(inputs) : args));
+    }
     // Preserve the kind tag so applyMark dispatches correctly through the
     // wrapped mark, then let the modifier stamp its own metadata.
     withMarkKind(wrapped, getMarkKind(base));
@@ -439,9 +483,17 @@ export const labelModifier = {
  */
 export const zOrderModifier = {
   name: "zOrder",
-  apply: async (node, _layerContext, datum, value) => {
-    node.zOrder(typeof value === "function" ? await value(datum) : value);
+  apply: (node, _layerContext, datum, value) => {
+    node.zOrder(typeof value === "function" ? value(datum) : value);
   },
+  // A Python callback is called through the bridge once with every input
+  // (`resolveValue`), and read back by input.
+  resolveArgs: (value) =>
+    isBatchAccessor(value)
+      ? async (inputs) => [
+          (await resolveValue(value, inputs)) as (datum: unknown) => number,
+        ]
+      : undefined,
   tag: (wrapped, base, value) => {
     // A constant hint round-trips; a callback can't be JSON-serialized, so it
     // is dropped from the emitted IR (the rest of the tag still propagates),
@@ -1135,6 +1187,13 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         // and a nested split or a mark's color channel still sees an ordered
         // column.
         for (const leaf of entries.values()) copyColumnTypes(leaf, d);
+        // Resolve the mark's batch accessors (a Python `zOrder` callback)
+        // over every group at once, rather than once per group. A mark with
+        // none is applied as it is, with no async step.
+        const resolveMark = inputsResolver(mark);
+        const leafMark = resolveMark
+          ? await resolveMark([...entries.values()])
+          : mark;
         // Route each leaf through applyMark so expand-kind marks (e.g. `cut`)
         // can return arrays that we flatten across leaves. A per-item mark is
         // called once per leaf and applyMark wraps its node in a singleton.
@@ -1154,7 +1213,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             const currentKey: string | number =
               cell?.id ?? (i as string | number);
             const leafNodes = await applyMark(
-              mark,
+              leafMark,
               leaf,
               currentKey,
               layerContext

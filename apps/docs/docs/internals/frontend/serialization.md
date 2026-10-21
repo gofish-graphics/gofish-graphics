@@ -287,9 +287,10 @@ instance over the render's layer registry, not JSON, so one rule covers every
 bridge call: `callBridge` in `registry.ts` (`encodeInputRefs`) replaces each
 ref, at any depth of the input's lists and plain-object rows, with an
 `{"__inputRef": i, "datum": <rows>}` sentinel, where `i` indexes one flat
-`inputRefs` list. The ref's datum is encoded by the same rule. A list or a row
-is copied only when it holds a ref, and a copied list keeps its column types,
-so an input with no refs crosses as it is. On the Python side, `answer`
+`inputRefs` list. The ref's datum is encoded by the same rule. The walk is
+gofish-ir's `Frontend.walk`, the one the non-finite codec uses: a list or a
+row is copied only when it holds a ref, and a copied list keeps its column
+types, so an input with no refs crosses as it is. On the Python side, `answer`
 decodes every sentinel, wherever it sits in the rows, into an `_InputRef`
 (`_decode_input_refs` in `gofish/ast.py`), whose `.datum` reads naturally
 and which `pluck` reads through. A row that shares an Arrow column with a
@@ -1088,16 +1089,20 @@ channel kind, size and position included. A JS `async (d) => ...` accessor is
 not supported in a channel: only Python accessors are resolved this way. When
 no channel holds a Python accessor, nothing is awaited or copied.
 
-The accessor is also an async function of one input, which makes one bridge
-call. The one place the IR calls it that way is a mark's `zOrder`: a mark
-field (`MARK_BASE_FIELDS.zOrder`) is a number or a `{__gofish_lambda}`
-handle. Python's `.z_order(fn)` writes the handle, `withZOrder` in
-`fromJSON.ts` passes the accessor to the mark's `.zOrder(...)`, and
-`zOrderModifier` awaits it once per mark instance with the input the
-instance is bound to, as it calls a JS `.zOrder((d) => ...)`. That input is
-often a bag of refs (a ribbon over `selectAll(...)`), which crosses by the
-ref rule above. The Python callback is an accessor (`_accessor_reply`), so
-its reply is a one-value table.
+Called per row, the accessor throws: it has only its batch form. The other
+place the IR uses it is a mark's `zOrder`: a mark field
+(`MARK_BASE_FIELDS.zOrder`) is a number or a `{__gofish_lambda}` handle.
+Python's `.z_order(fn)` writes the handle, `withMarkMeta` in `fromJSON.ts`
+passes the accessor to the mark's `.zOrder(...)`, and the mark resolves it
+over its inputs the way a channel is resolved over its rows. The operator
+factory hands the mark every group of its split first
+(`inputsResolver` in `createOperator.ts`), so the accessor makes one
+bridge call for all of them, and each instance reads its own value back, as
+it would from a JS `.zOrder((d) => ...)`. A mark applied outside an operator
+resolves it over its one input. That input is often a bag of refs (a ribbon
+over `selectAll(...)`), which crosses by the ref rule above. The Python
+callback is an accessor (`_accessor_reply`), so its reply is a one-value
+table.
 
 Python's `datum(x)` emits the canonical `{type: "datum", datum: x}` shape
 directly — no bridge sentinel needed.

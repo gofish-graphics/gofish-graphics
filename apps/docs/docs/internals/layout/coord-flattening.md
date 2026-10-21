@@ -261,7 +261,11 @@ full whatever the range, and only where the range sits on it changes. On a
 partial arc a range below 0 therefore runs back past the baseline angle, out of
 the `[0, centralAngle]` sweep. The θ tick ring already assumed data 0 at θ = 0,
 so ticks and content now agree. A range that starts at 0, like a pie's, does not
-move.
+move. The transform declares that it belongs to the polar family: `polarPreset`
+stamps `polar: true` on it, and `fitAxis` tests that field rather than the
+transform's `type` tag or the absence of `fit`. A space without it (`linear`,
+`wavy`, a fitted `geo`) seats data 0 by the claim, as the root does. Petals and
+the arc sampling of a warped box (`coordUtils.ts`) read the same field.
 
 The
 coord's type is its children's overlay, kept for its own scope; upward it

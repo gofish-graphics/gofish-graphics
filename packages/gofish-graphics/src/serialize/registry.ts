@@ -87,7 +87,7 @@ export { cutSlices, cutMark, offsetOp };
  *  - a `derive` operator's `lambdaId`, with the rows the operator gets;
  *  - a `{ __gofish_lambda: id }` channel value (an accessor), once with all
  *    the rows of the channel (`RESOLVE_ROWS`), or a mark's `zOrder`, once
- *    per mark instance with the input the mark was applied to;
+ *    with all the inputs the mark is applied to;
  *  - a `{type: "mark-fn", lambdaId}` mark, with one partition's input.
  *
  * Each goes through {@link callBridge}, which encodes the refs the input
@@ -139,23 +139,14 @@ export function encodeInputRefs(items: readonly unknown[]): {
   inputRefs: GoFishRef[];
 } {
   const inputRefs: GoFishRef[] = [];
-  const encode = (v: unknown): unknown => {
-    if (v instanceof GoFishRef) {
-      const i = inputRefs.push(v) - 1;
-      return { __inputRef: i, datum: encode(v.datum) };
-    }
-    if (Array.isArray(v)) {
-      const out = v.map(encode);
-      return out.some((x, i) => x !== v[i]) ? copyColumnTypes(out, v) : v;
-    }
-    if (Frontend.isPlainObject(v)) {
-      const entries = Object.entries(v);
-      const out = entries.map(([, x]) => encode(x));
-      return out.some((x, i) => x !== entries[i][1])
-        ? Object.fromEntries(entries.map(([k], i) => [k, out[i]]))
-        : v;
-    }
-    return v;
+  const encode = (v: unknown): unknown =>
+    Frontend.walk(v, swapRef, (copy, original) => {
+      copyColumnTypes(copy, original);
+    });
+  const swapRef = (v: unknown): unknown => {
+    if (!(v instanceof GoFishRef)) return undefined;
+    const i = inputRefs.push(v) - 1;
+    return { __inputRef: i, datum: encode(v.datum) };
   };
   return { rows: encode(items) as unknown[], inputRefs };
 }

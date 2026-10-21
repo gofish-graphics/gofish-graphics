@@ -4,6 +4,7 @@ import math
 
 from gofish import Constraint, Coord, Curve, circle, layer, rect, text
 from gofish.gotree import distribute, nest, tree
+from python_stories.gotree_data import by_depth
 
 SAMPLE_DATA = {
     "name": "root",
@@ -58,7 +59,7 @@ def story_node_link():
             SAMPLE_DATA,
             node=lambda d: circle(
                 r=10,
-                fill=DEPTH_COLOR[min(d["depth"], len(DEPTH_COLOR) - 1)],
+                fill=by_depth(DEPTH_COLOR)(d),
                 stroke="#1f3a5f",
                 stroke_width=1,
             ),
@@ -234,7 +235,7 @@ def sunburst_node(d):
         h=BAND_HEIGHT,
         em_x=True,
         em_y=True,
-        fill=POLAR_GREENS[min(d["depth"], len(POLAR_GREENS) - 1)],
+        fill=by_depth(POLAR_GREENS)(d),
         stroke="white",
         stroke_width=2,
     )
@@ -264,7 +265,7 @@ def icicle_node(d):
     return rect(
         w=d["width"] * ICICLE_LEAF_WIDTH,
         h=BAND_HEIGHT,
-        fill=POLAR_GREENS[min(d["depth"], len(POLAR_GREENS) - 1)],
+        fill=by_depth(POLAR_GREENS)(d),
         stroke="white",
         stroke_width=2,
     )
@@ -306,9 +307,7 @@ def nested_pie_node(d):
     return rect(
         em_x=True,
         em_y=True,
-        fill=POLAR_GREENS[
-            min(len(POLAR_GREENS) - 1 - d["height"], len(POLAR_GREENS) - 1)
-        ],
+        fill=POLAR_GREENS[len(POLAR_GREENS) - 1 - d["height"]],
         stroke="white",
         stroke_width=4,
     )
@@ -334,7 +333,7 @@ def story_radial_nodes():
             SAMPLE_DATA,
             node=lambda d: circle(
                 r=8,
-                fill=DEPTH_COLOR[min(d["depth"], len(DEPTH_COLOR) - 1)],
+                fill=by_depth(DEPTH_COLOR)(d),
                 stroke="#1f3a5f",
                 stroke_width=1,
             ),

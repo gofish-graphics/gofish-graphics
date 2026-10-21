@@ -41,6 +41,7 @@ export const polarPreset =
     } = opts;
     return {
       type,
+      polar: true,
       transform: ([theta, r]: [number, number]) => [
         center[0] + r * Math.cos(baselineAngle + direction * theta),
         center[1] + r * Math.sin(baselineAngle + direction * theta),

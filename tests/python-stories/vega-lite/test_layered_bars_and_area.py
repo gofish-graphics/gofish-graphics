@@ -1,8 +1,8 @@
 """Equivalent of Bar/LayeredBarsAndArea.stories.tsx — Vega-Lite/Layered Bars and Area.
 
 Default and HoistedVarietySpread order their areas with a function
-`.z_order(...)`, called through the bridge once per area with the list of refs
-the area is bound to, and read the site with `project` (one value, since the
+`.z_order(...)`, called through the bridge once with the list of refs each
+area is bound to, and read the site with `project` (one value, since the
 areas are grouped by site). The JS `filter` on the rows of TwoSites is plain data prep and becomes
 a pandas filter here.
 """
@@ -23,6 +23,7 @@ from gofish import (
 from vega_datasets import data as vega_data
 
 EMPHASIZED = ["Morris", "Grand Rapids"]
+SITE_COLORS = Color.palette({"Morris": "#e15759", "Grand Rapids": "#4e79a7"})
 
 
 def story_default():
@@ -32,9 +33,7 @@ def story_default():
             [
                 chart(
                     barley,
-                    color=Color.palette(
-                        {"Morris": "#e15759", "Grand Rapids": "#4e79a7"}
-                    ),
+                    color=SITE_COLORS,
                 )
                 .flow(
                     spread(by="variety", dir="x", spacing=20),
@@ -65,9 +64,7 @@ def story_two_sites():
             [
                 chart(
                     barley,
-                    color=Color.palette(
-                        {"Morris": "#e15759", "Grand Rapids": "#4e79a7"}
-                    ),
+                    color=SITE_COLORS,
                 )
                 .flow(
                     spread(by="variety", dir="x", spacing=20),
@@ -89,7 +86,7 @@ def story_hoisted_variety_spread():
     return (
         chart(
             barley,
-            color=Color.palette({"Morris": "#e15759", "Grand Rapids": "#4e79a7"}),
+            color=SITE_COLORS,
         )
         .flow(spread(by="variety", dir="x", spacing=20))
         .mark(

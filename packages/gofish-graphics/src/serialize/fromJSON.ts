@@ -24,7 +24,6 @@ import { createName, type Token } from "../ast/createName";
 import { Constraint, RelateOperand } from "../ast/constraints";
 import { palette, gradient } from "../families/color";
 import { ref } from "../ast/shapes/ref";
-import { GoFishRef } from "../ast/_ref";
 import { sealComponent } from "../ast/withGoFish";
 import { resolveMarkResult } from "../ast/marks/markResult";
 import { Frontend } from "gofish-ir";
@@ -129,20 +128,26 @@ export function isTokenSentinel(v: any): v is TokenSentinel {
 
 /**
  * Build the accessor for a `{ __gofish_lambda: id }` sentinel: a Python
- * function, called through the bridge. Called with one input (a mark's
- * `zOrder` is called once per mark instance), it makes one bridge call and
- * answers a promise of the one value. A channel resolves it in its batch form
- * instead ({@link RESOLVE_ROWS}): the mark and operator factories resolve it
- * before channel inference (`resolveChannelAccessors` in channels.ts) with
- * one bridge call for all of its rows. Either way the reply's list has one
- * value per input, typed by `applySchema` like a chart's rows (a time comes
- * back as epoch milliseconds).
+ * function, called through the bridge. It has only a batch form
+ * ({@link RESOLVE_ROWS}): one bridge call for every input it is resolved
+ * over. A channel resolves it over its rows before inference
+ * (`resolveChannelAccessors` in channels.ts); a mark's `zOrder` over the
+ * inputs the mark is applied to (`inputsResolver` in createOperator.ts).
+ * The reply's list has one value per input, typed by `applySchema` like a
+ * chart's rows (a time comes back as epoch milliseconds). Called per row, it
+ * throws.
  */
 function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
-  const resolveRows = async (rows: readonly unknown[]) =>
-    applySchema(await callForRows(bridge, lambdaId, rows));
-  const accessor = async (input: unknown) => (await resolveRows([input]))[0];
-  return Object.assign(accessor, { [RESOLVE_ROWS]: resolveRows });
+  const accessor = () => {
+    throw new Error(
+      "a Python accessor was called per row; it is resolved only over a " +
+        "list of inputs (a channel's rows, a zOrder's mark inputs)"
+    );
+  };
+  return Object.assign(accessor, {
+    [RESOLVE_ROWS]: async (rows: readonly unknown[]) =>
+      applySchema(await callForRows(bridge, lambdaId, rows)),
+  });
 }
 
 /**
@@ -409,40 +414,46 @@ function relateClauses(clauses: RelateClauseIR[], ctx: IRContext): unknown[] {
  *  Python mark-fn embed the ref it was handed directly in its returned
  *  layout (mirrors JS `spread({...}, [d[0], text(...)])`). */
 export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
-  const spec = markSpec as any;
   const mark = buildMark(markSpec, ctx);
-  if (!("__datum" in spec)) return mark;
+  if (!("__datum" in markSpec)) return mark;
   // A mark applied to its input, the JS `mark(d, key)` (Python
   // `mark(d, key)`, which writes `__datum` and `__key`): what it holds
   // is the node the mark builds from `d`, whatever rows the position it
   // sits in offers.
-  const datum = spec.__datum;
-  const key = spec.__key ?? undefined;
+  const { __datum: datum, __key: key } =
+    markSpec as Frontend.MarkBridgeFieldsIR;
   return (async (_data: any, _key: any, layerContext: any) =>
-    (mark as any)(datum, key, layerContext)) as Mark<any>;
+    (mark as any)(datum, key ?? undefined, layerContext)) as Mark<any>;
 }
 
-/** `mark` with its IR's `zOrder`: a number, or a Python function
- *  (`{__gofish_lambda}`), which the mark calls once per instance with the
- *  input it was applied to, as it calls a JS `.zOrder((d) => ...)`. */
-function withZOrder(
-  mark: Mark<any>,
-  zOrder: unknown,
-  bridge: DeriveBridge | undefined
-): Mark<any> {
-  return zOrder != null && typeof (mark as any).zOrder === "function"
-    ? (mark as any).zOrder(unwrapOpts(zOrder, bridge))
-    : mark;
+/**
+ * `mark` with the modifiers its IR carries, chained in the order a JS
+ * author writes them: `.translate(...)`, `.name(...)`, `.zOrder(...)`. A
+ * `zOrder` is a number, or a Python function (`{__gofish_lambda}`), which
+ * the mark resolves over the inputs it is applied to (`inputsResolver`),
+ * as it calls a JS `.zOrder((d) => ...)` per input.
+ */
+function withMarkMeta<M>(
+  mark: M,
+  spec: { translate?: unknown; name?: unknown; zOrder?: unknown },
+  ctx: IRContext
+): M {
+  let out: any = mark;
+  if (spec.translate && typeof out.translate === "function") {
+    out = out.translate(spec.translate);
+  }
+  const name = resolveNameField(spec.name as any, ctx.resolveToken);
+  if (name != null && typeof out.name === "function") out = out.name(name);
+  if (spec.zOrder != null && typeof out.zOrder === "function") {
+    out = out.zOrder(unwrapOpts(spec.zOrder, ctx.bridge));
+  }
+  return out;
 }
 
 /** {@link mapMark}, before a mark is applied to its input. */
 function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
   const { bridge, resolveToken, inputRefs } = ctx;
   const spec = markSpec as any;
-  const applyTranslate = <T>(mark: T): T =>
-    spec.translate && typeof (mark as any).translate === "function"
-      ? ((mark as any).translate(spec.translate) as T)
-      : mark;
 
   // `{__inputRef: i}` sentinel — round-trip back to the real `GoFishRef` a
   // mark-fn's input held (see `encodeInputRefs` in registry.ts), rather than
@@ -527,7 +538,14 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
     if (spec.name != null) {
       (refNode as any).name(resolveNameField(spec.name, resolveToken));
     }
-    return applyTranslate(refNode as unknown as Mark<any>);
+    // Named in place above, so only its translate is chained.
+    return withMarkMeta(
+      refNode as unknown as Mark<any>,
+      {
+        translate: spec.translate,
+      },
+      ctx
+    );
   }
 
   // `offset` node: shift a single child by (x, y) render-pixels. Maps to the
@@ -535,10 +553,12 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
   if (spec.type === "offset") {
     const childSpecs = (spec.children ?? []) as MarkSpec[];
     const [childMark] = mapMarkChildren(childSpecs, ctx);
-    return applyTranslate(
+    return withMarkMeta(
       offsetOp({ x: spec.x, y: spec.y }, [
         childMark as any,
-      ]) as unknown as Mark<any>
+      ]) as unknown as Mark<any>,
+      spec,
+      ctx
     );
   }
 
@@ -549,19 +569,13 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
   // `mapMarkChildren` — so extent resolution lives in ONE place, JS-side.)
   if (spec.type === "cut") {
     const sourceMark = mapMark(spec.source as MarkSpec, ctx);
-    let mark = cutMark({
+    const mark = cutMark({
       source: sourceMark as any,
       dir: spec.dir,
       size: unwrapOpts(spec.size, bridge),
       inset: spec.inset,
     });
-    mark = applyTranslate(mark);
-    const nameVal = resolveNameField(spec.name, resolveToken);
-    if (nameVal != null && typeof (mark as any).name === "function") {
-      mark = (mark as any).name(nameVal);
-    }
-    mark = withZOrder(mark, spec.zOrder, bridge);
-    return mark;
+    return withMarkMeta(mark, spec, ctx);
   }
 
   // Combinator-form marks: a layout operator (`spread`, `layer`, `arrow`,
@@ -594,17 +608,12 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
     if (spec.__scope) {
       mark = wrapWithScope(mark);
     }
-    mark = applyTranslate(mark);
-    const nameVal = resolveNameField(spec.name, resolveToken);
-    if (nameVal != null && typeof (mark as any).name === "function") {
-      mark = (mark as any).name(nameVal);
-    }
-    mark = withZOrder(mark, spec.zOrder, bridge);
-    return mark;
+    return withMarkMeta(mark, spec, ctx);
   }
 
-  // `zOrder` is not a factory option: `withZOrder` applies it below.
-  const { type, name: layerName, zOrder: _zOrder, ...rest } = spec as any;
+  // `name` and `zOrder` are not factory options: `withMarkMeta` applies them
+  // below.
+  const { type, name: _name, zOrder: _zOrder, ...rest } = spec as any;
   // Label is an array of `{accessor, ...opts}` specs — pull out and call the
   // chained `.label(accessor, opts)` method once per entry, in order, so
   // repeated `.label()` calls round-trip (adds one external label layer per
@@ -647,13 +656,7 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
   if (spec.__scope) {
     mark = wrapWithScope(mark);
   }
-  mark = applyTranslate(mark);
-  const nameVal = resolveNameField(layerName, resolveToken);
-  if (nameVal != null && typeof (mark as any).name === "function") {
-    mark = (mark as any).name(nameVal);
-  }
-  mark = withZOrder(mark, spec.zOrder, bridge);
-  return mark;
+  return withMarkMeta(mark, spec, ctx);
 }
 
 /**

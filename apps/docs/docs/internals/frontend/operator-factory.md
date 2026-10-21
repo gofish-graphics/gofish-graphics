@@ -461,16 +461,26 @@ A modifier's `apply(node, layerContext, datum, ...args)` receives the
 factory saw — so a modifier can produce a _data-driven_ value rather than a
 constant. `nameModifier` / `labelModifier` / `relateModifier` ignore it, but
 `zOrderModifier` uses it: `.zOrder(value)` takes a `ZOrderValue<T> = number |
-((datum: T) => number | Promise<number>)` and, when handed a callback, awaits it
-against this datum to set each produced node's paint-order hint. That is what lets paint
+((datum: T) => number)` and, when handed a callback, calls it on this datum to
+set each produced node's paint-order hint. That is what lets paint
 order be data-driven (e.g. raise one category over the rest) without splitting a
 mark into separately-named layers — the callback runs once per replicated
 instance, and the [bake pass](/internals/layout/coord-flattening) already orders
 each layer's children by `(zOrder, index)`. A constant hint round-trips through
 the IR; a JS callback can't be serialized, so its `tag` hook drops it from the
-emitted IR (the same as a function `.label` accessor). A Python callback crosses
-as a bridge handle, which the deserializer rebuilds as an async function, so
-the same modifier awaits it (see [Frontend IR](/internals/frontend/serialization)).
+emitted IR (the same as a function `.label` accessor).
+
+A Python callback crosses as a bridge handle, which the deserializer rebuilds
+as an accessor with only a batch form (`RESOLVE_ROWS`; see
+[Frontend IR](/internals/frontend/serialization)). A `ModifierConfig` may
+declare `resolveArgs` for such an argument, and `zOrderModifier` does: the
+wrapped mark resolves the argument once per input it is called with (so an
+expand mark's slices share one value), and `modifierMethod` also gives the
+wrapped mark a form that resolves every link of its modifier chain over a
+list of inputs at once. The split path calls it through `inputsResolver`
+with the split's groups, right before it applies the mark to each group, so
+a Python `zOrder` makes one bridge call per operator call, as the operator's
+own channel accessors do.
 
 The **export terminals** — `render`, `toSVG`, `toSVGElement`, `save`,
 `toDisplayList` — are the dual of modifiers: where a modifier mutates the

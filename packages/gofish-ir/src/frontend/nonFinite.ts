@@ -130,18 +130,29 @@ export function decodeNonFinite<T>(value: T): T {
   ) as T;
 }
 
-/** Rebuild `value` bottom-up, replacing any node `swap` answers for. Shares
- *  every subtree that did not change. */
-function walk(value: unknown, swap: (v: unknown) => unknown): unknown {
+/**
+ * Rebuild `value` bottom-up through its arrays and plain objects, replacing
+ * any node `swap` answers for (anything but `undefined`). Shares every
+ * subtree that did not change, so a value with nothing to swap comes back
+ * as it is. `copied`, when given, is told each array it had to copy, with
+ * the original, so a caller can carry what the array holds besides its
+ * items (gofish-graphics' column types, `encodeInputRefs`).
+ */
+export function walk(
+  value: unknown,
+  swap: (v: unknown) => unknown,
+  copied?: (copy: unknown[], original: unknown[]) => void
+): unknown {
   const swapped = swap(value);
   if (swapped !== undefined) return swapped;
   if (Array.isArray(value)) {
     let out: unknown[] | undefined;
     for (let i = 0; i < value.length; i++) {
       const item = value[i];
-      const next = walk(item, swap);
+      const next = walk(item, swap, copied);
       if (next !== item) (out ??= value.slice())[i] = next;
     }
+    if (out) copied?.(out, value);
     return out ?? value;
   }
   if (isPlainObject(value)) {
@@ -149,7 +160,7 @@ function walk(value: unknown, swap: (v: unknown) => unknown): unknown {
     for (const k in value) {
       if (!Object.prototype.hasOwnProperty.call(value, k)) continue;
       const item = value[k];
-      const next = walk(item, swap);
+      const next = walk(item, swap, copied);
       if (next !== item) (out ??= { ...value })[k] = next;
     }
     return out ?? value;

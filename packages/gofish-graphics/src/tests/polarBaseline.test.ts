@@ -11,22 +11,9 @@
 
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
+import { check, items, report } from "./testHelpers";
 
 const { chart, stack, rect, Schema, Coord } = GoFish as any;
-
-declare const process: { exit(code: number): never };
-
-let passed = 0;
-let failed = 0;
-function check(name: string, ok: boolean, detail?: string): void {
-  if (ok) {
-    passed += 1;
-    console.log(`  ok  ${name}`);
-  } else {
-    failed += 1;
-    console.error(`  FAIL ${name}${detail ? ` — ${detail}` : ""}`);
-  }
-}
 
 type Pt = [number, number];
 const pointsOf = (d: string): Pt[] => {
@@ -42,8 +29,8 @@ const key = ([x, y]: Pt) => `${x.toFixed(3)},${y.toFixed(3)}`;
  *  The center is the one point every wedge shares (its r = 0 corners). */
 async function wedgeSpans(builder: any): Promise<[number, number][]> {
   const dl = await builder.toDisplayList({ w: 200, h: 200 });
-  const paths = dl.items
-    .filter((it: any) => it.kind === "path")
+  const paths = items(dl)
+    .filter((it) => it.kind === "path")
     .map((it: any) => pointsOf(it.d));
   const shared = paths
     .map((ps: Pt[]) => new Set(ps.map(key)))
@@ -55,10 +42,10 @@ async function wedgeSpans(builder: any): Promise<[number, number][]> {
     let prev: number | undefined;
     const angles = rim.map(([x, y]) => {
       let a = Math.atan2(-(y - cy), x - cx);
-      if (prev !== undefined)
+      if (prev !== undefined) {
         while (a - prev > Math.PI) a -= 2 * Math.PI;
-      if (prev !== undefined)
         while (prev - a > Math.PI) a += 2 * Math.PI;
+      }
       prev = a;
       return a;
     });
@@ -149,8 +136,7 @@ async function main() {
     );
   }
 
-  console.log(`\n${passed} passed, ${failed} failed`);
-  if (failed > 0) process.exit(1);
+  report();
 }
 
 main();

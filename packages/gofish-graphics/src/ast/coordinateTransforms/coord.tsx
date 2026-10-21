@@ -68,6 +68,13 @@ export type CoordinateTransform = {
    */
   aliases?: { x?: string; y?: string };
   /**
+   * Set by the polar family (`polar()`, `clock()`; see `polarPreset`): axis 0
+   * is an angle θ and axis 1 a radius r. Its angular axis puts data 0 at θ = 0
+   * of the transform (its baseline angle) whatever the data range, and polar
+   * geometry (petals, the arc sampling of a warped box) applies only here.
+   */
+  polar?: true;
+  /**
    * Donut-hole radius as a fraction [0,1) of the outer radius (polar family).
    * Default 0 (filled disc). `coord.layout` insets the radial range by this.
    */
@@ -336,9 +343,13 @@ export const coord = createNodeOperator(
             // θ = 0 of the transform, its baseline angle, whatever the range:
             // a centered stack stays centered on the baseline angle, full
             // circle or partial arc. σ still fits the whole range to the
-            // angular budget. Every other axis seats data 0 by the claim, as
-            // the root does (`solveScope`).
-            if (!framesOwnWindow && axis === 0 && scope.originPx !== undefined)
+            // angular budget. Every other axis, and every other space, seats
+            // data 0 by the claim, as the root does (`solveScope`).
+            if (
+              coordTransform.polar &&
+              axis === 0 &&
+              scope.originPx !== undefined
+            )
               return [scope.sigma, { sigma: scope.sigma, originPx: 0 }];
             return [scope.sigma, scopeFrame(scope)];
           };

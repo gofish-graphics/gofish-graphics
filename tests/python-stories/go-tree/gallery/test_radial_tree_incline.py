@@ -10,7 +10,7 @@ the derivation.
 import math
 
 from gofish import Coord, Curve, ellipse, layer, line
-from python_stories.gotree_data import FLARE_VIS
+from python_stories.gotree_data import FLARE_VIS, by_depth
 
 NODE_R = 11
 RING_SPACING = 120
@@ -80,7 +80,7 @@ def node_mark(p):
         y=p["r"] - NODE_R,
         w=NODE_R * 2,
         h=NODE_R * 2,
-        fill=DEPTH_COLORS[min(p["depth"], len(DEPTH_COLORS) - 1)],
+        fill=by_depth(DEPTH_COLORS)(p),
         stroke="white",
         stroke_width=2.25,
     )

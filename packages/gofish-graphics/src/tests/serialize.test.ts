@@ -18,6 +18,11 @@ import { resolveLabelText } from "../ast/labels/labelPlacement";
 //  runs build first via the test:serialize script.
 import * as GoFish from "../../dist/index.js";
 
+/** A display list's top-level items as JSON, for comparing two renders.
+ *  Node ids count up across renders, so the items compare without them. */
+const itemsJSON = (dl: any): string =>
+  JSON.stringify(dl.items.map(({ id: _id, ...it }: any) => it));
+
 const {
   chart,
   spread,
@@ -1761,9 +1766,6 @@ async function main() {
       irDoc(root, { t0: rows }),
       bridge
     ).toDisplayList({ w: 200, h: 100 });
-    // Node ids count up across renders, so items compare without them.
-    const items = (dl: any) =>
-      JSON.stringify(dl.items.map(({ id: _id, ...it }: any) => it));
     const fills = new Set(
       viaIR.items
         .filter((it: any) => it.kind === "ellipse")
@@ -1772,7 +1774,7 @@ async function main() {
     check(
       "a mark applied to a mark function's rows draws as the JS one does",
       fills.size === 3 &&
-        items(viaIR) === items(native),
+        itemsJSON(viaIR) === itemsJSON(native),
       JSON.stringify({ fills: [...fills] })
     );
 
@@ -1805,9 +1807,9 @@ async function main() {
     });
     check(
       "an applied combinator draws from its own input, as the JS one does",
-      items(appliedDL) === items(nativeLayer) &&
-        items(appliedDL).includes('"text":"a"'),
-      items(appliedDL).slice(0, 300)
+      itemsJSON(appliedDL) === itemsJSON(nativeLayer) &&
+        itemsJSON(appliedDL).includes('"text":"a"'),
+      itemsJSON(appliedDL).slice(0, 300)
     );
   }
 
@@ -1880,8 +1882,6 @@ async function main() {
       w: 300,
       h: 200,
     });
-    const items = (dl: any) =>
-      JSON.stringify(dl.items.map(({ id: _id, ...it }: any) => it));
     check(
       "a ref in a row's field crosses as a sentinel with its datum",
       sent.length === 2 &&
@@ -1893,15 +1893,16 @@ async function main() {
     );
     check(
       "a reply that places a row's ref draws as the JS mark function does",
-      items(viaIR) === items(native) && items(viaIR).includes("Bravo"),
-      items(viaIR).slice(0, 300)
+      itemsJSON(viaIR) === itemsJSON(native) && itemsJSON(viaIR).includes("Bravo"),
+      itemsJSON(viaIR).slice(0, 300)
     );
   }
 
   console.log("\n# A Python `zOrder` function");
   {
-    // `zOrder: {__gofish_lambda}` is called once per mark instance with the
-    // input the instance is bound to, as a JS `.zOrder((d) => ...)` is.
+    // `zOrder: {__gofish_lambda}` is called through the bridge once with the
+    // input of every mark instance the spread applies the mark to, and gives
+    // each instance the value a JS `.zOrder((d) => ...)` gives it.
     const rows = [
       { s: "a", v: 3 },
       { s: "b", v: 2 },
@@ -1937,8 +1938,6 @@ async function main() {
         return inputs.map(z);
       })
     ).toDisplayList({ w: 100, h: 100 });
-    const items = (dl: any) =>
-      JSON.stringify(dl.items.map(({ id: _id, ...it }: any) => it));
     const unordered = await chart(rows, { axes: false })
       .flow(spread({ by: "s", dir: "x", spacing: -5 }))
       .mark(rect({ w: 10, h: "v", fill: "s" }))
@@ -1946,9 +1945,9 @@ async function main() {
     const fills = viaIR.items.map((it: any) => it.style?.fill);
     check(
       "a Python zOrder function orders paint as the JS one does",
-      calls === 3 &&
-        items(viaIR) === items(native) &&
-        items(native) !== items(unordered),
+      calls === 1 &&
+        itemsJSON(viaIR) === itemsJSON(native) &&
+        itemsJSON(native) !== itemsJSON(unordered),
       JSON.stringify({ calls, fills })
     );
     const bad = Frontend.validate(

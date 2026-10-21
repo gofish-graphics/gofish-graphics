@@ -265,7 +265,7 @@ class TestCompose:
 
 class TestMarkZOrder:
     """`.z_order(value)`: a number, or a function JS calls through the bridge
-    once per mark instance with the input the mark is bound to."""
+    once with the inputs of every mark instance a grouping applies it to."""
 
     def test_number(self):
         assert ir(rect(h="value").z_order(2))["zOrder"] == 2
@@ -273,9 +273,9 @@ class TestMarkZOrder:
     def test_function_is_an_accessor(self):
         m = ribbon(opacity=0.7).z_order(lambda d: 1 if d[0]["site"] == "M" else 0)
         lambda_id = ir(m)["zOrder"]["__gofish_lambda"]
-        # JS calls it with one input: the list the mark instance is bound to.
-        assert call(m, lambda_id, [[{"site": "M"}]]) == [1]
-        assert call(m, lambda_id, [[{"site": "G"}]]) == [0]
+        # JS calls it once with every instance's input: the list each mark
+        # instance is bound to.
+        assert call(m, lambda_id, [[{"site": "M"}], [{"site": "G"}]]) == [1, 0]
 
     def test_function_reads_refs_with_pluck(self):
         """The input of a mark over refs is a list of refs, which JS sends as
@@ -1244,7 +1244,6 @@ class TestTime:
         assert back.schema.field("d").type == pa.date32()
         assert back.column("t").to_pylist() == table.column("t").to_pylist()
         assert back.column("d").to_pylist() == [datetime.date(2024, 3, 1)]
-
 
 
 class TestAppliedMark:

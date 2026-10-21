@@ -112,13 +112,7 @@ export const Petal = ({
         _children,
         node
       ): DisplayList.DisplayItem[] => {
-        if (
-          !coordinateTransform ||
-          (coordinateTransform.type !== "polar" &&
-            coordinateTransform.type !== "clock")
-        ) {
-          return [];
-        }
+        if (!coordinateTransform?.polar) return [];
         const space = coordinateTransform;
         const isXEmbedded = dims[0].embedded;
         const isYEmbedded = dims[1].embedded;

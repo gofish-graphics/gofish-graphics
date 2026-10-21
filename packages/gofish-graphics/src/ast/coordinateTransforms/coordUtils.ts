@@ -48,10 +48,7 @@ export function sampleBoundingBoxPoints(
   samples.push([maxX, maxY]);
 
   // Sample along edges - more samples for better accuracy with polar coordinates
-  const numSamples =
-    coordTransform.type === "clock" || coordTransform.type === "polar"
-      ? 50
-      : 20;
+  const numSamples = coordTransform.polar ? 50 : 20;
   for (let i = 0; i <= numSamples; i++) {
     const t = i / numSamples;
     // Bottom edge
@@ -65,7 +62,7 @@ export function sampleBoundingBoxPoints(
   }
 
   // For polar coordinates, also sample the center point (r=0) and midpoints
-  if (coordTransform.type === "clock" || coordTransform.type === "polar") {
+  if (coordTransform.polar) {
     // Center point
     samples.push([(minX + maxX) / 2, 0]);
     // Additional samples at intermediate radii for better coverage
