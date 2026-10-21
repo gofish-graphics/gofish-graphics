@@ -64,7 +64,11 @@ check(
   "missing irVersion is rejected",
   !validate({
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "rect" } },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+    },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -73,7 +77,11 @@ check(
   !validate({
     irVersion: 1,
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "rect" } },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+    },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -82,7 +90,11 @@ check(
   !validate({
     irVersion: 0,
     ir: "gofish-runtime",
-    root: { type: "chart", mark: { type: "rect" } },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+    },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -100,7 +112,7 @@ check(
   !validate({
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart" },
+    root: { type: "chart", data: { type: "table", id: "t0" } },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -109,7 +121,11 @@ check(
   !validate({
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "wormhole" } },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "wormhole" },
+    },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -120,6 +136,7 @@ check(
     ir: "gofish-frontend",
     root: {
       type: "chart",
+      data: { type: "table", id: "t0" },
       operators: [{ type: "evaporate" }],
       mark: { type: "rect" },
     },
@@ -131,7 +148,11 @@ check(
   !validate({
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "ref" } },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "ref" },
+    },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -142,6 +163,7 @@ check(
     ir: "gofish-frontend",
     root: {
       type: "chart",
+      data: { type: "table", id: "t0" },
       mark: {
         type: "layer",
         __combinator: true,
@@ -151,28 +173,80 @@ check(
   } as unknown as FrontendIRDocument).valid
 );
 
-check(
-  "layer with a raw-mark child accepts (component-level annotation tier)",
-  validate({
+// A root holds anything a mark position holds, by one rule (#1181).
+const doc = (root: unknown) =>
+  ({
     irVersion: 0,
     ir: "gofish-frontend",
-    root: {
-      type: "layer",
-      charts: [{ type: "raw-mark", mark: { type: "rect" } }],
-    },
-  } as unknown as FrontendIRDocument).valid
+    root,
+    tables: { t0: [] },
+  }) as FrontendIRDocument;
+
+check(
+  "a leaf mark, a combinator mark and a chain each accept as the root",
+  validate(doc({ type: "rect", w: 4, h: 4 })).valid &&
+    validate(
+      doc({ type: "layer", __combinator: true, children: [{ type: "rect" }] })
+    ).valid &&
+    validate(
+      doc({
+        type: "layer-chain",
+        tiers: [
+          {
+            type: "chart",
+            data: { type: "table", id: "t0" },
+            mark: { type: "rect" },
+          },
+          { type: "text", text: "caption" },
+        ],
+      })
+    ).valid
 );
 
 check(
-  "layer with a non-chart, non-raw-mark child is rejected",
-  !validate({
-    irVersion: 0,
-    ir: "gofish-frontend",
-    root: {
-      type: "layer",
-      charts: [{ type: "data", foo: 1 }],
-    },
-  } as unknown as FrontendIRDocument).valid
+  "a chain whose first tier is not a chart is rejected",
+  !validate(
+    doc({
+      type: "layer-chain",
+      tiers: [{ type: "rect" }, { type: "rect" }],
+    })
+  ).valid
+);
+
+check(
+  "a chain of one tier is rejected",
+  !validate(
+    doc({
+      type: "layer-chain",
+      tiers: [
+        {
+          type: "chart",
+          data: { type: "table", id: "t0" },
+          mark: { type: "rect" },
+        },
+      ],
+    })
+  ).valid
+);
+
+check(
+  "a document's tables must be arrays of rows",
+  validate({
+    ...doc({
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+    }),
+    tables: { t0: [{ x: 1 }] },
+  }).valid &&
+    !validate({
+      ...doc({
+        type: "chart",
+        data: { type: "table", id: "t0" },
+        mark: { type: "rect" },
+      }),
+      tables: { t0: { x: 1 } },
+    } as unknown as FrontendIRDocument).valid
 );
 
 // ---------------------------------------------------------------------------
@@ -186,7 +260,11 @@ check(
   !validate({
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "rect" } },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+    },
     extraTopLevel: "no",
   } as unknown as FrontendIRDocument).valid
 );
@@ -196,7 +274,12 @@ check(
   !validate({
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "rect" }, unexpected: 1 },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+      unexpected: 1,
+    },
   } as unknown as FrontendIRDocument).valid
 );
 
@@ -207,6 +290,7 @@ check(
     ir: "gofish-frontend",
     root: {
       type: "chart",
+      data: { type: "table", id: "t0" },
       mark: {
         type: "rect",
         h: "count",
@@ -228,8 +312,107 @@ function chart(operators: any[], mark: any = { type: "rect" }) {
   return {
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart", operators, mark },
+    root: { type: "chart", data: { type: "table", id: "t0" }, operators, mark },
+    tables: { t0: [] },
   } as unknown as FrontendIRDocument;
+}
+
+// A mark position may hold a whole chart (#1180): as a chart's mark and as a
+// combinator child, by one rule. A layer of charts is the `layer` combinator
+// with chart children.
+const nestedChart = {
+  type: "chart",
+  data: { type: "previous-tier" },
+  mark: { type: "petal", w: "count" },
+};
+const layerOfCharts = {
+  type: "layer",
+  __combinator: true,
+  children: [
+    nestedChart,
+    {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+    },
+  ],
+};
+check(
+  "a nested chart as a chart's mark accepts",
+  validate(chart([], nestedChart)).valid
+);
+check(
+  "a nested chart and a layer of charts as combinator children accept",
+  validate(
+    chart([], {
+      type: "layer",
+      __combinator: true,
+      children: [{ type: "rect" }, nestedChart, layerOfCharts],
+    })
+  ).valid
+);
+check(
+  "a layer of charts as a chart's mark accepts",
+  validate(chart([], layerOfCharts)).valid
+);
+check(
+  "a nested chart with no mark is rejected",
+  !validate(chart([], { type: "chart", data: { type: "table", id: "t0" } }))
+    .valid
+);
+// A `.layer(...)` chain sits in a mark position by the same rule as a chart
+// (#1181): as a chart's mark and as a combinator child.
+const chain = {
+  type: "layer-chain",
+  tiers: [
+    {
+      type: "chart",
+      data: { type: "previous-tier" },
+      operators: [{ type: "spread", by: "site", dir: "x" }],
+      mark: { type: "rect", h: "yield" },
+    },
+    {
+      type: "chart",
+      data: { type: "previous-tier" },
+      mark: { type: "line" },
+    },
+  ],
+};
+check("a chain as a chart's mark accepts", validate(chart([], chain)).valid);
+check(
+  "a chain as a combinator child accepts",
+  validate(
+    chart([], {
+      type: "layer",
+      __combinator: true,
+      children: [{ type: "rect" }, chain],
+    })
+  ).valid
+);
+{
+  const nestedRows = chart([], {
+    type: "chart",
+    data: { type: "table", id: "t1" },
+    mark: { type: "rect" },
+  }) as any;
+  check(
+    "a nested chart with rows of its own names a table",
+    validate({ ...nestedRows, tables: { t0: [], t1: [] } }).valid
+  );
+  // A chart's table, at any depth, must be one of the document's tables.
+  const missing = validate(nestedRows);
+  check(
+    "a chart naming a table the document does not hold is rejected",
+    !missing.valid &&
+      missing.errors.some(
+        (e) => e.path === "$.root.mark.data.id" && /"t1"/.test(e.message)
+      ),
+    JSON.stringify(missing)
+  );
+  check(
+    "a document with no tables naming a table is rejected",
+    !validate({ ...nestedRows, tables: undefined }).valid
+  );
 }
 
 check(
@@ -310,7 +493,13 @@ function chartWithOptions(options: unknown) {
   return {
     irVersion: 0,
     ir: "gofish-frontend",
-    root: { type: "chart", mark: { type: "rect" }, options },
+    root: {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      mark: { type: "rect" },
+      options,
+    },
+    tables: { t0: [] },
   } as unknown as FrontendIRDocument;
 }
 
@@ -911,8 +1100,10 @@ function chartWithLabel(label: any) {
     ir: "gofish-frontend",
     root: {
       type: "chart",
+      data: { type: "table", id: "t0" },
       mark: { type: "rect", label },
     },
+    tables: { t0: [] },
   } as unknown as FrontendIRDocument;
 }
 
@@ -979,7 +1170,7 @@ console.log("\n# Non-finite numbers");
       ir: "gofish-frontend",
       root: {
         type: "chart",
-        data: { type: "inline", rows: [{ v: 1 }, { v: Infinity }] },
+        data: { type: "table", id: "t0" },
         operators: [
           {
             type: "scatter",
@@ -990,6 +1181,7 @@ console.log("\n# Non-finite numbers");
         mark: { type: "circle", r: 3 },
         zOrder,
       },
+      tables: { t0: [] },
     }) as unknown as FrontendIRDocument;
 
   const plain = validate(doc(5));
@@ -1250,7 +1442,7 @@ console.log("\n# Strategies");
       ir: "gofish-frontend",
       root: {
         type: "chart",
-        data: { type: "inline", rows: [] },
+        data: { type: "table", id: "t0" },
         operators: [{ type: "treemap", tile }],
         mark: { type: "rect" },
       },

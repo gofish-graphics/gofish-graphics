@@ -1,22 +1,13 @@
 """Equivalent of lowlevel/Constraints.stories.tsx — Low Level Syntax/Constraints.
 
-Ports the nine single-chart stories: the six that demonstrate
-`layer + constrain` directly, `SpreadEnd_UnderCoordTransform` (the
-pixel-pure `end` fallback canary, #552), and `AlignSpan`/`AlignSize` (#726 —
-the `"span"`/`"size"` alignment values). The eight side-by-side equivalence
-stories (`SpreadY_*`, `SpreadX_*`) use a multi-panel DOM scaffold that
-doesn't fit the single-chart parity harness — those are per-export exempt.
-`SpreadY_AlignMiddle` specifically now compares two freely translated systems
-after layout normalization instead of pinning a child to the canvas center; that
-change remains covered by the JS side-by-side story and the confluence tests.
-
-`story_spread_x_center_to_center` additionally ports the `Constraint.distribute`
-half of `SpreadX_CenterToCenter` (still exempt from byte-matching for the same
-multi-panel reason, but now captured + IR-validated) — the first Python
-coverage of `anchor="middle"` (#748).
+Ports every story: the six that demonstrate `layer + constrain` directly,
+`SpreadEnd_UnderCoordTransform` (the pixel-pure `end` fallback canary, #552),
+`AlignSpan`/`AlignSize` (#726 — the `"span"`/`"size"` alignment values), and
+the eight equivalence cases, each one graphic showing that `spread(...)`
+places its children the way `align` + `distribute` does.
 """
 
-from gofish import Constraint, datum, layer, rect, spread, Coord
+from gofish import Constraint, datum, layer, rect, spread, text, Coord
 
 
 # ─── partial placement ───────────────────────────────────────────────────────
@@ -129,27 +120,156 @@ def story_align_center_distribute_y():
     )
 
 
-# ─── center-to-center mode (anchor="middle", #748) ──────────────────────────
+# ─── equivalence: spread = align + distribute ───────────────────────────────
+# Each case is one graphic: the same three rects placed by `spread`, and
+# beside them by the `align` + `distribute` constraints it is equivalent to,
+# each captioned. The two draw the same picture.
+
+
+def _y_rects():
+    return [
+        rect(w=80, h=40, fill="#e63946").name("a"),
+        rect(w=120, h=40, fill="#457b9d").name("b"),
+        rect(w=60, h=40, fill="#2a9d8f").name("c"),
+    ]
+
+
+def _x_rects():
+    return [
+        rect(w=40, h=80, fill="#e63946").name("a"),
+        rect(w=40, h=120, fill="#457b9d").name("b"),
+        rect(w=40, h=60, fill="#2a9d8f").name("c"),
+    ]
+
+
+def _center_to_center_rects():
+    return [
+        rect(w=30, h=80, fill="#e63946").name("a"),
+        rect(w=50, h=80, fill="#457b9d").name("b"),
+        rect(w=20, h=80, fill="#2a9d8f").name("c"),
+    ]
+
+
+def _captioned(caption, body):
+    """A drawing captioned above with `caption`."""
+    return spread(
+        [text(text=caption, font_size=14), body],
+        dir="y",
+        spacing=12,
+        alignment="start",
+    )
+
+
+def _equivalence(rects, spread_options, relate, render):
+    """One equivalence case: `rects` placed by `spread(**spread_options)`
+    beside the same rects placed by the constraints `relate` returns."""
+    return (
+        spread(
+            [
+                _captioned("Spread", spread(rects(), **spread_options)),
+                _captioned("Constraints", layer(rects()).relate(relate)),
+            ],
+            dir="x",
+            spacing=40,
+            alignment="start",
+        ),
+        render,
+    )
+
+
+def story_spread_y_align_start():
+    return _equivalence(
+        _y_rects,
+        {"dir": "y", "alignment": "start"},
+        lambda a, b, c: [
+            Constraint.align([a, b, c], x="start"),
+            Constraint.distribute([a, b, c], dir="y"),
+        ],
+        {"w": 400, "h": 220},
+    )
+
+
+def story_spread_y_align_end():
+    return _equivalence(
+        _y_rects,
+        {"dir": "y", "alignment": "end"},
+        lambda a, b, c: [
+            Constraint.align([a, b, c], x="end"),
+            Constraint.distribute([a, b, c], dir="y"),
+        ],
+        {"w": 400, "h": 220},
+    )
+
+
+def story_spread_y_align_middle():
+    return _equivalence(
+        _y_rects,
+        {"dir": "y", "alignment": "middle"},
+        lambda a, b, c: [
+            Constraint.align([a, b, c], x="middle"),
+            Constraint.distribute([a, b, c], dir="y"),
+        ],
+        {"w": 400, "h": 220},
+    )
+
+
+def story_spread_x_align_start():
+    return _equivalence(
+        _x_rects,
+        {"dir": "x", "alignment": "start"},
+        lambda a, b, c: [
+            Constraint.align([a, b, c], y="start"),
+            Constraint.distribute([a, b, c], dir="x"),
+        ],
+        {"w": 400, "h": 220},
+    )
+
+
+def story_spread_y_spacing():
+    return _equivalence(
+        _y_rects,
+        {"dir": "y", "alignment": "start", "spacing": 20},
+        lambda a, b, c: [
+            Constraint.align([a, b, c], x="start"),
+            Constraint.distribute([a, b, c], dir="y", spacing=20),
+        ],
+        {"w": 400, "h": 260},
+    )
+
+
+def story_spread_x_spacing_align_end():
+    return _equivalence(
+        _x_rects,
+        {"dir": "x", "alignment": "end", "spacing": 15},
+        lambda a, b, c: [
+            Constraint.align([a, b, c], y="end"),
+            Constraint.distribute([a, b, c], dir="x", spacing=15),
+        ],
+        {"w": 460, "h": 220},
+    )
 
 
 def story_spread_x_center_to_center():
-    # Port of the `SpreadX_CenterToCenter` equivalence story (still on the
-    # per-export exempt list — it's a two-panel `renderEquivalentStory()`
-    # scaffold the single-chart parity harness can't byte-match — but
-    # captured + IR-validated here via its `Constraint.distribute` half,
-    # `spread({ dir: "x", alignment: "start", spacing: 60, anchor: "middle" })`
-    # ≡ `align(y="start") + distribute(dir="x", spacing=60, anchor="middle")`.
-    # First Python coverage of `anchor="middle"`.
-    return (
-        layer([
-            rect(w=30, h=80, fill="#e63946").name("a"),
-            rect(w=50, h=80, fill="#457b9d").name("b"),
-            rect(w=20, h=80, fill="#2a9d8f").name("c"),
-        ]).relate(lambda a, b, c: [
+    return _equivalence(
+        _center_to_center_rects,
+        {"dir": "x", "alignment": "start", "spacing": 60, "anchor": "middle"},
+        lambda a, b, c: [
             Constraint.align([a, b, c], y="start"),
             Constraint.distribute([a, b, c], dir="x", spacing=60, anchor="middle"),
-        ]),
-        {"w": 400, "h": 300},
+        ],
+        {"w": 460, "h": 160},
+    )
+
+
+def story_spread_y_reversed():
+    return _equivalence(
+        _y_rects,
+        {"dir": "y", "alignment": "start", "reverse": True},
+        lambda a, b, c: [
+            Constraint.align([a, b, c], x="start"),
+            Constraint.distribute([a, b, c], dir="y", order="reverse"),
+        ],
+        {"w": 400, "h": 220},
     )
 
 

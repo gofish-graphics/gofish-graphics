@@ -10,9 +10,15 @@ or `data_to_arrow_bytes` rather than branching on `isinstance(x, pd.DataFrame)`
 itself — narwhals (https://narwhals-dev.github.io/narwhals/) is what makes a
 single code path transparently support every backend, so pandas is no longer
 a hard runtime dependency of this package.
+
+A table is a list, so it crosses as one Arrow column, `item`, of the list's
+items, in both directions: a struct column for records, a scalar column for
+values, a list column for groups. The JS codec (`widget-src/arrowTransport.ts`
+and `widget-src/arrowDecode.ts`) writes and reads the same shape.
 """
 
-from typing import Any, List
+import base64
+from typing import Any, Dict, List, Optional, Tuple
 
 import narwhals as nw
 import pyarrow as pa
@@ -22,41 +28,58 @@ _SUPPORTED_INPUTS_MSG = (
     "(pandas, polars, pyarrow, DuckDB relation, etc.)"
 )
 
+# The name of a table's one column, the list's items.
+ITEM = "item"
+
 
 def to_arrow_table(data: Any) -> pa.Table:
     """
-    Ingest chart/layer/derive data of *any* supported shape into a
-    `pyarrow.Table`. This is the single ingestion choke point: every call
-    site that used to branch on `isinstance(data, pd.DataFrame)` now just
-    calls this (or `data_to_arrow_bytes`, below).
+    Ingest chart/layer/derive data of *any* supported shape into the
+    `pyarrow.Table` that crosses the bridge. This is the single ingestion
+    choke point: every call site that used to branch on
+    `isinstance(data, pd.DataFrame)` now just calls this (or
+    `data_to_arrow_bytes`, below).
+
+    A table is a list, so it is one Arrow column, `item`, whose type is the
+    type of the list's items: a struct for records (its fields are the
+    columns), a scalar for values, a list for groups. Data flows as lists,
+    so nothing inspects an item's shape; the decode on either side
+    (`arrow_to_records`, `widget-src/arrowDecode.ts`) reads column 0 back
+    as the list.
 
     Supported shapes:
-        - A list of dict rows (including `[]`) — built directly with
-          pyarrow, one column per key in the order keys first appear, no
-          dataframe library involved. None is a missing value (null); a
-          float NaN stays NaN, a number, since GoFish never reads NaN as
-          missing.
-        - A `pyarrow.Table` — returned as-is.
+        - Any list (including `[]`): its items as one column, `pa.array` of
+          the items. A list of dicts is a struct column, one field per key
+          in the order keys first appear (a dict without the key holds null
+          there). None is a missing value (null); a float NaN stays NaN, a
+          number, since GoFish never reads NaN as missing.
+        - A `pyarrow.Table`: a list of records, its columns the struct's
+          fields, wrapped without a copy.
         - Any dataframe/lazyframe narwhals recognizes (pandas, polars,
           pyarrow, DuckDB relation, cuDF, Modin, ...) — routed through
-          `narwhals.from_native`. Lazy frames are collected before the
-          Arrow export, since the wire format is always a materialized
-          table. A pandas float column's NaN crosses as null: pandas
-          defines NaN as the missing value of its own float columns, and
-          pyarrow's `from_pandas` follows that rule. It is pandas' rule
-          about pandas data, not a GoFish rule; a polars NaN stays NaN.
+          `narwhals.from_native`, exported to Arrow, and wrapped as a
+          `pyarrow.Table` is. Lazy frames are collected before the Arrow
+          export, since the wire format is always a materialized table. A
+          pandas float column's NaN crosses as null: pandas defines NaN as
+          the missing value of its own float columns, and pyarrow's
+          `from_pandas` follows that rule. It is pandas' rule about pandas
+          data, not a GoFish rule; a polars NaN stays NaN.
+
+    Every column keeps its Arrow type: timestamp and date columns keep their
+    time zone, and integers stay integers (the JS decode types them
+    `HasInteger`, so the JS encode sends them back as integers).
 
     Anything else raises `TypeError` naming the actual type received and
     the supported inputs, rather than failing deep inside pandas/pyarrow
-    with an opaque message. So do dict rows whose column holds values of
-    conflicting types (a string in one row, a number in another): the error
-    names the column and the types; the data is never coerced silently.
+    with an opaque message. So does a list whose values conflict in type at
+    some column (a string in one row, a number in another): the error names
+    the column and the types; the data is never coerced silently.
 
     Args:
-        data: List of dict rows, or a narwhals-supported dataframe.
+        data: A list, or a narwhals-supported dataframe.
 
     Returns:
-        A `pyarrow.Table`.
+        A `pyarrow.Table` of one column, `item`.
 
     Example:
         >>> to_arrow_table([{"x": 1, "y": 2}])
@@ -64,10 +87,10 @@ def to_arrow_table(data: Any) -> pa.Table:
         >>> to_arrow_table(pl.DataFrame({"x": [1, 2]}))
     """
     if isinstance(data, (list, tuple)):
-        return _rows_to_table(list(data))
+        return _items_table(list(data))
 
     if isinstance(data, pa.Table):
-        return data
+        return _records_table(data)
 
     try:
         nwdata = nw.from_native(data)
@@ -80,34 +103,62 @@ def to_arrow_table(data: Any) -> pa.Table:
     if isinstance(nwdata, nw.LazyFrame):
         nwdata = nwdata.collect()
 
-    return nwdata.to_arrow()
+    return _records_table(nwdata.to_arrow())
 
 
-def _rows_to_table(rows: List[dict]) -> pa.Table:
-    """Dict `rows` as a table: one column per key, in the order keys first
-    appear (a row without the key holds null there). A column whose values
-    have conflicting types is a loud `TypeError` naming the column."""
-    names = list(dict.fromkeys(key for row in rows for key in row))
-    columns = []
-    for name in names:
-        values = [row.get(name) for row in rows]
-        try:
-            columns.append(pa.array(values, from_pandas=False))
-        except (pa.ArrowTypeError, pa.ArrowInvalid):
-            kinds = dict.fromkeys(_value_kind(v) for v in values if v is not None)
-            if len(kinds) < 2:
-                raise
-            raise TypeError(
-                f'Chart data: column "{name}" has conflicting types across '
-                f"rows ({', '.join(kinds)}) — rows sharing a column must share "
-                f"a type; coerce the column to one type or drop it before "
-                f"passing the data to chart()."
-            ) from None
-    return pa.Table.from_arrays(columns, names=names)
+def _records_table(table: pa.Table) -> pa.Table:
+    """The records of ``table`` as one struct column whose fields are its
+    columns, each record batch wrapped without a copy."""
+    chunks = [
+        pa.StructArray.from_arrays(batch.columns, fields=list(batch.schema))
+        for batch in table.to_batches()
+    ]
+    return pa.table(
+        {ITEM: pa.chunked_array(chunks, type=pa.struct(list(table.schema)))}
+    )
+
+
+def _items_table(items: List[Any]) -> pa.Table:
+    """``items`` as one column of their type. Values whose types conflict at
+    some column are a loud ``TypeError`` naming the column."""
+    try:
+        return pa.table({ITEM: pa.array(items, from_pandas=False)})
+    except (pa.ArrowTypeError, pa.ArrowInvalid):
+        conflict = _conflict(items, "")
+        if conflict is None:
+            raise
+        path, kinds = conflict
+        where = f'column "{path}" has' if path else "the items have"
+        raise TypeError(
+            f"Chart data: {where} conflicting types across rows "
+            f"({', '.join(kinds)}) — rows sharing a column must share a "
+            f"type; coerce the column to one type or drop it before passing "
+            f"the data to chart()."
+        ) from None
+
+
+def _conflict(values: List[Any], path: str) -> Optional[Tuple[str, List[str]]]:
+    """Where ``values`` conflict in kind, found by the walk the JS encode's
+    type inference makes (``inferType`` in ``arrowTransport.ts``, which
+    names a column the same way): the column's path and its kinds, or None.
+    Only the error message reads it."""
+    present = [v for v in values if v is not None]
+    kinds = list(dict.fromkeys(_value_kind(v) for v in present))
+    if len(kinds) > 1:
+        return path, kinds
+    if kinds == ["object"]:
+        for key in dict.fromkeys(key for v in present for key in v):
+            name = f"{path}.{key}" if path else key
+            found = _conflict([v.get(key) for v in present], name)
+            if found is not None:
+                return found
+    if kinds == ["array"]:
+        return _conflict([x for v in present for x in v], f"{path}[]")
+    return None
 
 
 def _value_kind(value: Any) -> str:
-    """The kind of one row value, as the JS transport names kinds
+    """The kind of one value, as the JS transport names kinds
     (`arrowTransport.ts`): ints and floats are both numbers."""
     if isinstance(value, bool):
         return "boolean"
@@ -120,6 +171,17 @@ def _value_kind(value: Any) -> str:
     if isinstance(value, dict):
         return "object"
     return type(value).__name__
+
+
+def _table_to_list(table: pa.Table) -> list:
+    """A table as the list it holds: its one column's values, records as
+    dicts."""
+    if table.num_columns != 1:
+        raise ValueError(
+            "Arrow transport: a table is one column of its items, but this "
+            f"one has {table.num_columns} ({', '.join(table.column_names)})"
+        )
+    return table.column(0).to_pylist()
 
 
 def arrow_table_to_bytes(table: pa.Table) -> bytes:
@@ -145,86 +207,58 @@ def arrow_table_to_bytes(table: pa.Table) -> bytes:
 def data_to_arrow_bytes(data: Any) -> bytes:
     """
     Full ingestion pipeline from chart/layer/derive data to the Arrow IPC
-    wire bytes the widget expects: `None` or zero rows become the shared
-    placeholder table; anything else goes through `to_arrow_table` and
-    `arrow_table_to_bytes`.
+    wire bytes the widget expects: `to_arrow_table`, then
+    `arrow_table_to_bytes`. `None` (a tier with no data of its own) is no
+    items, `[]`.
 
-    This is the one function `ChartBuilder.render`, `LayerBuilder.render`,
-    `join()`, and the derive-callback bridge in `widget.py` should call —
-    none of them should branch on the input's dataframe backend themselves.
+    Every host ships tables through it (`b64_tables`), so nothing branches on
+    the input's dataframe backend itself.
 
     Args:
-        data: `None`, a list of dict rows, or a narwhals-supported dataframe.
+        data: `None`, a list, or a narwhals-supported dataframe.
 
     Returns:
         Arrow IPC format bytes.
     """
-    if data is None:
-        return empty_placeholder_arrow_bytes()
-
-    table = to_arrow_table(data)
-    if table.num_rows == 0:
-        return empty_placeholder_arrow_bytes()
-
-    return arrow_table_to_bytes(table)
+    return arrow_table_to_bytes(to_arrow_table([] if data is None else data))
 
 
-def to_records(data: Any) -> List[dict]:
+def b64_tables(tables: Dict[str, Any]) -> Dict[str, str]:
+    """Each table's data (any shape `data_to_arrow_bytes` takes) as a base64
+    Arrow IPC stream, by table id: how a document's `tables` cross to JS from
+    either host (the notebook widget, the parity harness's derive server)."""
+    return {
+        table_id: base64.b64encode(data_to_arrow_bytes(data)).decode("ascii")
+        for table_id, data in tables.items()
+    }
+
+
+def to_records(data: Any) -> List[Any]:
     """
     Ingest data of any supported shape (see `to_arrow_table`) and return it
-    as a plain list of dict rows — used where the caller needs JSON-able
-    rows rather than an Arrow table (e.g. `join()`'s right-hand table,
-    which is inlined into the IR as JSON).
+    as the plain list it holds (dict rows for records) — used where the
+    caller needs JSON-able rows rather than an Arrow table (e.g. `join()`'s
+    right-hand table, which is inlined into the IR as JSON).
 
     Args:
-        data: List of dict rows, or a narwhals-supported dataframe.
+        data: A list, or a narwhals-supported dataframe.
 
     Returns:
-        A list of dicts, one per row, in column order.
+        The list, dicts for records, in column order.
     """
-    return to_arrow_table(data).to_pylist()
-
-
-def empty_placeholder_arrow_bytes() -> bytes:
-    """
-    Arrow IPC bytes for an empty table with a single dummy `_placeholder`
-    column — the wire payload for a chart tier that has no data of its own
-    (a `ref`/`select_all` chart borrowing nodes from a sibling, or a tier
-    whose data is `None`/empty). The widget only needs *some* valid Arrow
-    stream; the placeholder column is never read.
-
-    Extracted so `Mark.render`, `ChartBuilder.render`, and
-    `LayerBuilder.render`'s `_serialize_child_data` all emit byte-identical
-    empty tables from one place instead of re-deriving the schema/sink/
-    writer boilerplate.
-
-    Example:
-        >>> arrow_data = empty_placeholder_arrow_bytes()
-    """
-    schema = pa.schema([pa.field("_placeholder", pa.int32())])
-    # NOTE: the copy-pasted originals built this via
-    # `pa.Table.from_arrays([], schema=schema)`, which modern pyarrow rejects
-    # ("Schema and number of arrays unequal" — one field, zero arrays), so any
-    # widget render hitting this path crashed. `empty_table()` is the
-    # supported spelling for the same 0-row, 1-column table.
-    table = schema.empty_table()
-    sink = pa.BufferOutputStream()
-    with pa.ipc.new_stream(sink, schema) as writer:
-        writer.write_table(table)
-    return sink.getvalue().to_pybytes()
+    return _table_to_list(to_arrow_table(data))
 
 
 def arrow_to_records(arrow_bytes: bytes) -> list:
     """
-    Convert Apache Arrow bytes back to a list of plain-dict rows.
+    Convert Apache Arrow bytes back to the list they encode: column 0's
+    values, dicts for records (see `to_arrow_table`).
 
     Deliberately bypasses pandas for this: pandas' `to_pandas()` decodes a
     `list<struct>` column (the JS-side widget transport's explicit-schema
     encoding for a mark-fn's multi-row `datum` bag — see
     `widget-src/arrowTransport.ts`, issue #783) into a numpy `ndarray` of
-    dicts rather than a plain Python `list` of dicts, which doesn't match
-    the plain-JSON-over-HTTP shape the parity test harness's derive server
-    hands a mark-fn (`tests/scripts/derive-server.py`).
+    dicts rather than a plain Python `list` of dicts.
     `pyarrow.Array.to_pylist()` decodes straight to native Python
     containers — `list`/`dict`/`None`/scalars — for every level of
     nesting, so a `list<struct>` column round-trips to exactly a
@@ -236,15 +270,9 @@ def arrow_to_records(arrow_bytes: bytes) -> list:
         arrow_bytes: Arrow IPC format bytes
 
     Returns:
-        A list of dicts, one per row, in column order.
+        The list the table holds.
 
     Example:
         >>> rows = arrow_to_records(arrow_bytes)
     """
-    reader = pa.ipc.open_stream(arrow_bytes)
-    table = reader.read_all()
-    columns = {name: table.column(name).to_pylist() for name in table.column_names}
-    return [
-        {name: columns[name][i] for name in table.column_names}
-        for i in range(table.num_rows)
-    ]
+    return _table_to_list(pa.ipc.open_stream(arrow_bytes).read_all())

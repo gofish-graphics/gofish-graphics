@@ -1,75 +1,44 @@
 """
-Python derive server — executes Python derive functions during test rendering.
+Python derive server: the parity harness's Python host. It answers the JS
+bridge's one call for every Python callback a story names (a derive
+operator, an accessor, a mark function), as the notebook widget does.
 
 Endpoints:
-  POST /load           — Import a story file, build its IR, and register
-                         derive functions in one shot. Returns the IR, each
-                         chart tier's rows as base64 Arrow (as the widget
-                         ships them), the render options, and the deriveIds.
-                         Combining import + register avoids the
-                         two-process pitfall: `derive(lambda)` mints a fresh
-                         UUID per call, so importing the story separately
-                         from extracting the IR yields divergent lambda_ids.
-  POST /derive/<id>    — Execute a registered derive function on JSON data
-  POST /reset          — Clear all registered functions
+  POST /load           — Import a story file and build its document in one
+                         shot (`ir_payload`): the root and its tables as base64
+                         Arrow by id, as the widget ships them. Registers the
+                         callbacks the document names, and returns the
+                         document, the render options and the callback ids.
+                         Combining import + register avoids the two-process
+                         pitfall: `derive(lambda)` mints a fresh UUID per
+                         call, so importing the story separately from
+                         extracting the IR yields divergent lambda ids.
+  POST /call/<id>      — Answer one bridge call (`answer`): the body is the
+                         rows as base64 Arrow, the reply a document of the
+                         same shape as /load's. A mark function's reply
+                         registers the callbacks it names.
+  POST /reset          — Clear all registered callbacks
   GET  /health         — Health check
 
-The capture-python-dom.ts script starts this server, posts /load for each
-story (which both extracts the IR and registers derives), then the test
-harness calls /derive/<id> during chart rendering.
+The capture-python-dom.ts script starts this server and posts /load for each
+story; the test harness calls /call/<id> during the render.
 """
 
-import base64
 import importlib
 import importlib.util
 import json
-import math
 import sys
 import os
 import traceback
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
-
-def _sanitize_for_json(obj):
-    """Make values JSON-safe.
-
-    - ±Infinity floats → the IR's tagged form `{"$numberDouble": "Infinity"}`
-      (gofish's `_nonfinite.py`), which the harness decodes back to a number.
-      json.dumps would write a bare `Infinity`, which JSON.parse rejects.
-    - NaN floats → None: in rows (pandas' missing value) NaN means "no
-      value", which JS spells `null`. Spec fields never get here as NaN:
-      `to_ir()` has already tagged them.
-    - pandas Timestamps and other "stringifiable" non-native types →
-      `str(obj)` so a Seattle-weather `date` column survives the round-trip
-      as the same `YYYY-MM-DD HH:MM:SS` string the harness would have seen
-      from JSON anyway.
-    """
-    if obj is None or isinstance(obj, (bool, int, str)):
-        return obj
-    if isinstance(obj, float):
-        if math.isnan(obj):
-            return None
-        return encode_number(obj)
-    if isinstance(obj, dict):
-        return {k: _sanitize_for_json(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_sanitize_for_json(v) for v in obj]
-    # numpy scalars, pandas Timestamps, datetime.date / datetime — fall
-    # back to the value's own string form so we never crash the response.
-    try:
-        return str(obj)
-    except Exception:
-        return None
-
 # Add project root to path so we can import gofish
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "packages/gofish-python"))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "tests"))
 
-from gofish._nonfinite import encode_number  # noqa: E402
-
-# Registry: lambdaId → Python function
+# Registry: lambda id → callback (`_Payload.callbacks`)
 _registry: dict = {}
 
 # Track where the `python_stories` package was registered from, so a /load
@@ -93,9 +62,9 @@ class DeriveHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/load":
             self._handle_load(body)
-        elif parsed.path.startswith("/derive/"):
-            lambda_id = parsed.path[len("/derive/"):]
-            self._handle_derive(lambda_id, body)
+        elif parsed.path.startswith("/call/"):
+            lambda_id = parsed.path[len("/call/"):]
+            self._handle_call(lambda_id, body)
         elif parsed.path == "/reset":
             _registry.clear()
             self._json_response(200, {"status": "cleared"})
@@ -103,17 +72,17 @@ class DeriveHandler(BaseHTTPRequestHandler):
             self._json_response(404, {"error": "not found"})
 
     def _handle_load(self, body: bytes):
-        """Import a story, extract its IR, and register its derive functions.
+        """Import a story, build its document, and register the callbacks
+        it names.
 
         Body: {"storyFile": "/abs/path/test_X.py", "function": "story_default",
                "pythonStoriesDir": "/abs/path/tests/python-stories"}
 
-        Response: {"ir": <the builder's `to_ir()`>,
-                   "tierArrow": [<each chart tier's rows: base64 Arrow IPC,
-                                  `tiers_arrow_bytes`, as the widget ships
-                                  them>],
+        Response: {"doc": <the builder's document, as the widget ships it
+                           (`ir_payload`): its root and its tables as base64
+                           Arrow IPC by id>,
                    "render": <the story's render options>,
-                   "deriveIds": [<every lambda id the IR names>]}
+                   "callbackIds": [<every lambda id the IR names>]}
         """
         try:
             data = json.loads(body)
@@ -176,121 +145,19 @@ class DeriveHandler(BaseHTTPRequestHandler):
             builder = result[0]
             render = result[1] if len(result) > 1 else {}
 
-            from gofish.ast import (
-                ChartBuilder,
-                DeriveOperator,
-                LayerBuilder,
-                Mark,
-                _collect_mark_lambdas,
-                _collect_operator_lambdas,
-                _MarkFn,
-                _InputRef,
-                tiers_arrow_bytes,
-            )
+            from gofish.ast import ChartBuilder, LayerBuilder, Mark, ir_payload
 
-            derive_ids: list = []
-
-            def register(lambda_id, fn):
-                derive_ids.append(lambda_id)
-                _registry[lambda_id] = fn
-
-            def register_mark(mark):
-                """Register every callable accessor in a mark tree. The
-                harness rebuilds an async arrow that POSTs `[row]` to
-                `/derive/<lambda_id>` per invocation."""
-                for lambda_id, rows_fn in _collect_mark_lambdas(mark):
-                    register(lambda_id, rows_fn)
-
-            def mark_fn(user_fn):
-                """Wrap a `(data) -> ChartBuilder | Mark` mark function for
-                the rows-in / rows-out `/derive/<id>` contract: it answers
-                with a one-element list holding the result's IR."""
-
-                def wrapped(data):
-                    # The harness replaces each live `GoFishRef` argument with
-                    # an `{"__inputRef": i, "datum": ...}` sentinel (a ref
-                    # can't cross as JSON). Rebuild an `_InputRef` per
-                    # sentinel so the user's function sees `d[0].datum` as in
-                    # JS (issue #591). Plain rows pass through unchanged.
-                    wrapped_data = [
-                        _InputRef(row["__inputRef"], row.get("datum"))
-                        if isinstance(row, dict) and "__inputRef" in row
-                        else row
-                        for row in data
-                    ]
-                    return [ir_of(user_fn(wrapped_data), inline=True)]
-
-                return wrapped
-
-            # TODO(#1088): a chart a mark function returns crosses the JSON
-            # `/derive` RPC with its rows inlined, not as Arrow.
-            def chart_ir(chart_ir: dict, chart: "ChartBuilder", inline: bool) -> dict:
-                """A chart's IR, after registering the callbacks it names.
-                The story's own tiers ship their rows beside the IR, as
-                Arrow (`tierArrow`), like the widget. A chart a mark
-                function returns comes back over the JSON `/derive` RPC, so
-                with `inline` its rows are inlined in the IR's inline form,
-                `{type: "inline", rows}`. Select and previous-tier data are
-                already in the IR."""
-                for op in chart.operators:
-                    if isinstance(op, DeriveOperator):
-                        register(op.lambda_id, op.fn)
-                for lambda_id, rows_fn in _collect_operator_lambdas(
-                    chart.operators
-                ):
-                    register(lambda_id, rows_fn)
-                if isinstance(chart._mark, _MarkFn):
-                    register(chart._mark.lambda_id, mark_fn(chart._mark.fn))
-                elif chart._mark is not None:
-                    register_mark(chart._mark)
-                if not inline or chart_ir.get("data") is not None:
-                    return chart_ir
-                raw = chart.data
-                if hasattr(raw, "to_dict"):
-                    rows = raw.to_dict("records")
-                elif hasattr(raw, "to_dicts"):
-                    rows = raw.to_dicts()
-                else:
-                    rows = raw
-                if isinstance(rows, list):
-                    return {**chart_ir, "data": {"type": "inline", "rows": rows}}
-                return {**chart_ir, "data": rows}
-
-            def ir_of(b, inline: bool = False) -> dict:
-                """`b.to_ir()`, unchanged except for inlined rows (with
-                `inline`; see `chart_ir`)."""
-                if isinstance(b, Mark):
-                    register_mark(b)
-                    return b.to_ir()
-                if isinstance(b, LayerBuilder):
-                    ir = b.to_ir()
-                    tiers = []
-                    for child, tier in zip(b.children, ir["charts"]):
-                        if isinstance(child, Mark):
-                            register_mark(child)
-                            tiers.append(tier)
-                        else:
-                            tiers.append(chart_ir(tier, child, inline))
-                    # A `.relate(...)` clause that draws is a mark, and may
-                    # carry accessors too (a constraint carries none).
-                    for clause in b._relate or []:
-                        if isinstance(clause, Mark):
-                            register_mark(clause)
-                    return {**ir, "charts": tiers}
-                if isinstance(b, ChartBuilder):
-                    return chart_ir(b.to_ir(), b, inline)
+            if not isinstance(builder, (ChartBuilder, LayerBuilder, Mark)):
                 raise TypeError(
-                    f"a story must return a chart, layer or mark, got {type(b).__name__}"
+                    "a story must return a chart, a layer chain or a mark, got "
+                    f"{type(builder).__name__}"
                 )
-
+            doc, callbacks = ir_payload(builder)
+            _registry.update(callbacks)
             self._json_response(200, {
-                "ir": ir_of(builder),
-                "tierArrow": [
-                    base64.b64encode(b).decode("ascii")
-                    for b in tiers_arrow_bytes(builder)
-                ],
+                "doc": doc,
                 "render": render,
-                "deriveIds": derive_ids,
+                "callbackIds": list(callbacks),
             })
         except Exception as e:
             self._json_response(500, {
@@ -298,32 +165,20 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 "traceback": traceback.format_exc(),
             })
 
-    # TODO(#1088): rows cross this RPC as JSON, not as the widget's Arrow.
-    def _handle_derive(self, lambda_id: str, body: bytes):
-        """Execute a registered derive function on JSON data."""
-        if lambda_id not in _registry:
-            self._json_response(404, {
-                "error": f"Unknown lambda_id: {lambda_id}",
-                "registered": list(_registry.keys()),
-            })
-            return
+    def _handle_call(self, lambda_id: str, body: bytes):
+        """Answer one bridge call: the body is the rows as base64 Arrow."""
+        from gofish.ast import answer
 
         try:
-            data = json.loads(body)
-            fn = _registry[lambda_id]
-            result = fn(data)
-
-            # Ensure result is JSON-serializable
-            if hasattr(result, "to_dicts"):
-                # Polars DataFrame
-                result = result.to_dicts()
-            elif hasattr(result, "to_dict"):
-                # Pandas DataFrame
-                result = result.to_dict("records")
-
-            self._json_response(200, result)
+            self._json_response(
+                200, answer(_registry, lambda_id, body.decode("ascii"))
+            )
         except Exception as e:
-            self._json_response(500, {"error": str(e), "lambda_id": lambda_id})
+            self._json_response(500, {
+                "error": str(e),
+                "lambda_id": lambda_id,
+                "traceback": traceback.format_exc(),
+            })
 
     def _json_response(self, status: int, data):
         self.send_response(status)
@@ -332,7 +187,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
-        self.wfile.write(json.dumps(_sanitize_for_json(data)).encode())
+        self.wfile.write(json.dumps(data, allow_nan=False).encode())
 
     def do_OPTIONS(self):
         """Handle CORS preflight."""
@@ -346,37 +201,6 @@ class DeriveHandler(BaseHTTPRequestHandler):
         """Suppress default logging unless DEBUG is set."""
         if os.environ.get("DEBUG"):
             super().log_message(format, *args)
-
-
-def register_story_derives(story_module_name: str):
-    """
-    Import a story module and register all DeriveOperator functions.
-
-    Story modules define story_*() functions that return (ChartBuilder, options).
-    We extract DeriveOperator instances from the builder's operators list.
-    """
-    from gofish.ast import DeriveOperator
-
-    mod = importlib.import_module(story_module_name)
-
-    for attr_name in dir(mod):
-        if not attr_name.startswith("story_"):
-            continue
-        story_fn = getattr(mod, attr_name)
-        if not callable(story_fn):
-            continue
-
-        result = story_fn()
-        if not isinstance(result, tuple) or len(result) < 1:
-            continue
-
-        builder = result[0]
-        if not hasattr(builder, "operators"):
-            continue
-
-        for op in builder.operators:
-            if isinstance(op, DeriveOperator):
-                _registry[op.lambda_id] = op.fn
 
 
 def main():

@@ -35,10 +35,11 @@ const spec: Frontend.FrontendIRDocument = {
   ir: "gofish-frontend",
   root: {
     type: "chart",
-    data: { type: "inline", rows: [{ category: "A", value: 5 }] },
+    data: { type: "table", id: "t0" },
     operators: [{ type: "spread", by: "category", dir: "x" }],
     mark: { type: "rect", h: "value" },
   },
+  tables: { t0: [{ category: "A", value: 5 }] },
 };
 
 const result = Frontend.validate(spec);

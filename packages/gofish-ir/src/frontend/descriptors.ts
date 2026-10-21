@@ -23,7 +23,7 @@
  *
  * Out of scope for this table (stay hand-authored in `schema.ts` /
  * `jsonSchema.ts` / `validate.ts`, per the design doc's staging): `cut`,
- * `offset`, `ref`, constraints, and the envelope types (ChartIR, LayerIR,
+ * `offset`, `ref`, constraints, and the envelope types (ChartIR, LayerChainIR,
  * DataIR, ChannelValue, LabelIR, TranslateIR). Those are
  * structural/recursive shapes rather than flat field bags, and are cheap to
  * keep authored.

@@ -1,38 +1,40 @@
 /**
- * Explicit-schema Arrow table construction for the widget RPC transport
- * (issue #783).
+ * The widget's Arrow encode: a list, as JS holds it, into the Arrow table
+ * that crosses the bridge to Python (`arrow_to_records` in
+ * `gofish/arrow_utils.py` reads it back).
  *
- * `Arrow.tableFromJSON`'s built-in type inference only handles flat,
- * JSON-primitive columns — it throws `Unable to infer Vector type from
- * input values` on a column whose value is a *list of objects*
- * (`list<struct>`), which is exactly the shape of a mark-fn's
- * `{__inputRef, datum}` sentinel when the ref's bound datum is a
- * multi-row bag (a `group(...)`'d ref — see `serializeMarkFnInput` in
- * `gofish-graphics/src/serialize/fromJSON.ts`). A single-row struct datum
- * happens to encode fine under `tableFromJSON`, which is why this only
- * surfaced for the multi-row case.
+ * A table is a list, so it is one Arrow column, `item`, whose type is the
+ * type of the list's items: a struct for records (one field per key), a
+ * scalar for values, a list for groups. Data flows as lists and nothing
+ * inspects an item's shape: the item type is built from the values, by one
+ * rule at every depth. Each value's kind picks its Arrow type: an array is a
+ * List of its elements' type (the elements of every array in a column,
+ * since a bag's rows come from one dataset), an object a Struct (the union
+ * of the keys seen, a missing key null), a string Utf8, a boolean Bool, a
+ * bigint Int64. A number's type comes from its column's declared type, never
+ * from its values: a column typed `HasCalendar` is a millisecond timestamp
+ * in its zone, a column typed `HasInteger` (it arrived as integers) is
+ * Int64, and any other number column is Float64, because JS has one number
+ * type. A JS `Date` is an instant: a millisecond timestamp in its column's
+ * zone, or UTC. The declared types are the ones the list carries
+ * (`Serialize.getColumnTypes`), for the fields of its records, and the ones
+ * each array carries, for the fields of the records inside it.
  *
- * Rather than special-case that one sentinel shape, this builds an
- * explicit Arrow type for every column (recursively, for nested lists and
- * structs) by walking the actual row values, then hands that type to
- * `Arrow.vectorFromArray` — which (unlike `tableFromJSON`) accepts an
- * explicit type for arbitrary nested shapes instead of trying to infer
- * one. This is generic RPC transport capability, not an `__inputRef`
- * special case: it fixes encoding for *any* row shape with a nested
- * array-of-objects column.
+ * `Arrow.tableFromJSON` is not used: its inference handles only flat
+ * JSON-primitive columns and throws on a list of structs (#783), so every
+ * type here is explicit and goes to `Arrow.vectorFromArray`.
  *
- * Homogeneity assumption: rows within a nested bag (e.g. a group's row
- * bag) are assumed to share one schema — a reasonable assumption since
- * they come from one dataset. Missing keys are treated as null (ragged
- * but homogeneous data is fine); a key present with genuinely conflicting
- * types across rows (e.g. a string in one row, a number in another) is a
- * loud error naming the column and the conflicting types, not a silent
+ * A key whose values have conflicting kinds (a string in one row, a number
+ * in another) is a loud error naming the column and the kinds, not a silent
  * coercion.
  */
 
 import * as Arrow from "apache-arrow";
+import { Serialize } from "gofish-graphics";
 
 type Row = Record<string, any>;
+
+type ColumnType = Serialize.ColumnTypes[string];
 
 /** The handful of shapes a column's values can take, used to pick an Arrow type. */
 type ValueKind =
@@ -58,12 +60,18 @@ function kindOf(value: any): ValueKind {
 }
 
 /**
- * Infer an explicit Arrow type for a column (or a nested field/list-item)
- * from its actual values, recursing into arrays (→ List) and objects (→
- * Struct, unioning keys across all objects seen). Throws if the non-null
- * values disagree on kind (e.g. string vs number) — see module doc.
+ * The Arrow type of `values` (a column, or the items of a list) from their
+ * kinds and `type`, the column's declared type, recursing into arrays (→
+ * List) and objects (→ Struct, whose keys have the declared types
+ * `fields`). Throws if the non-null values disagree on kind (see the module
+ * comment); `path` names the column in the message.
  */
-function inferType(values: readonly any[], path: string): Arrow.DataType {
+function inferType(
+  values: readonly any[],
+  path: string,
+  type?: ColumnType,
+  fields?: Serialize.ColumnTypes
+): Arrow.DataType {
   const nonNull = values.filter((v) => v !== null && v !== undefined);
   if (nonNull.length === 0) {
     // No values to infer from (an all-null column, or an empty bag with no
@@ -76,7 +84,8 @@ function inferType(values: readonly any[], path: string): Arrow.DataType {
   const kinds = new Set(nonNull.map(kindOf));
   if (kinds.size > 1) {
     throw new Error(
-      `Arrow transport: column "${path}" has conflicting types across rows ` +
+      `Arrow transport: ${path ? `column "${path}"` : "the items"} ` +
+        `${path ? "has" : "have"} conflicting types across rows ` +
         `(${[...kinds].join(", ")}) — this bridge assumes rows sharing a ` +
         `column share a type; coerce or split the data before sending it ` +
         `across the RPC.`
@@ -88,9 +97,14 @@ function inferType(values: readonly any[], path: string): Arrow.DataType {
     case "array": {
       // The homogeneity assumption: every row's array in this column is a
       // bag from the same dataset, so its elements share one schema too.
-      // Flatten all elements from all rows to infer one element type.
+      // Flatten all elements from all rows to infer one element type, with
+      // the column types the bags carry.
       const elements: any[] = ([] as any[]).concat(...(nonNull as any[][]));
-      const itemType = inferType(elements, `${path}[]`);
+      const types: Serialize.ColumnTypes = Object.assign(
+        {},
+        ...nonNull.map((bag) => Serialize.getColumnTypes(bag) ?? {})
+      );
+      const itemType = inferType(elements, `${path}[]`, undefined, types);
       return new Arrow.List(new Arrow.Field("item", itemType, true));
     }
     case "object": {
@@ -98,32 +112,39 @@ function inferType(values: readonly any[], path: string): Arrow.DataType {
       for (const obj of nonNull) {
         for (const key of Object.keys(obj)) keys.add(key);
       }
-      const fields = [...keys].map((key) => {
+      const children = [...keys].map((key) => {
         const subValues = nonNull.map((obj) => (key in obj ? obj[key] : null));
+        const name = path ? `${path}.${key}` : key;
         return new Arrow.Field(
           key,
-          inferType(subValues, `${path}.${key}`),
+          inferType(subValues, name, fields?.[key]),
           true
         );
       });
-      return new Arrow.Struct(fields);
+      return new Arrow.Struct(children);
     }
     case "string":
       return new Arrow.Utf8();
     case "number":
-      return new Arrow.Float64();
+      if (type?.HasCalendar) return instant(type);
+      return type?.HasInteger ? new Arrow.Int64() : new Arrow.Float64();
+    case "date":
+      return instant(type);
     case "boolean":
       return new Arrow.Bool();
     case "bigint":
       return new Arrow.Int64();
-    case "date":
-      return new Arrow.DateMillisecond();
     default:
       throw new Error(
         `Arrow transport: unsupported value kind "${kind}" for column "${path}"`
       );
   }
 }
+
+/** An instant's Arrow type: a millisecond timestamp in the zone of its
+ *  column's calendar, or UTC. */
+const instant = (type?: ColumnType): Arrow.DataType =>
+  new Arrow.TimestampMillisecond(type?.HasCalendar?.zone ?? "UTC");
 
 /**
  * Reshape a value to exactly match `type` before handing it to
@@ -135,6 +156,12 @@ function inferType(values: readonly any[], path: string): Arrow.DataType {
  */
 function normalizeForType(value: any, type: Arrow.DataType): any {
   if (value === null || value === undefined) return null;
+  if (Arrow.DataType.isInt(type) && typeof value === "number") {
+    return BigInt(value);
+  }
+  if (Arrow.DataType.isTimestamp(type) && value instanceof Date) {
+    return value.getTime();
+  }
   if (Arrow.DataType.isList(type)) {
     const itemType = (type.children[0] as Arrow.Field).type;
     return (value as any[]).map((v) => normalizeForType(v, itemType));
@@ -150,31 +177,10 @@ function normalizeForType(value: any, type: Arrow.DataType): any {
   return value;
 }
 
-/**
- * Build an Arrow Table from plain-object rows, inferring an explicit type
- * per column (including nested list/struct columns) instead of relying on
- * `Arrow.tableFromJSON`'s inference, which can't handle a `list<struct>`
- * column at all. Always used uniformly — no fallback to `tableFromJSON` —
- * so there's one code path and one set of encoding rules to reason about.
- */
-export function buildArrowTable(rows: readonly Row[]): Arrow.Table {
-  const columnNames: string[] = [];
-  const seen = new Set<string>();
-  for (const row of rows) {
-    for (const key of Object.keys(row)) {
-      if (!seen.has(key)) {
-        seen.add(key);
-        columnNames.push(key);
-      }
-    }
-  }
-
-  const vectors: Record<string, Arrow.Vector> = {};
-  for (const name of columnNames) {
-    const rawValues = rows.map((row) => (name in row ? row[name] : null));
-    const type = inferType(rawValues, name);
-    const values = rawValues.map((v) => normalizeForType(v, type));
-    vectors[name] = Arrow.vectorFromArray(values, type as any);
-  }
-  return new Arrow.Table(vectors);
+/** The Arrow table of the list `items`: one column, `item`, of the items'
+ *  type (see the module comment). */
+export function buildArrowTable(items: readonly unknown[]): Arrow.Table {
+  const type = inferType(items, "", undefined, Serialize.getColumnTypes(items));
+  const values = items.map((v) => normalizeForType(v, type));
+  return new Arrow.Table({ item: Arrow.vectorFromArray(values, type as any) });
 }

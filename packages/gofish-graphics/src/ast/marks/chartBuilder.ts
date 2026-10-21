@@ -566,14 +566,35 @@ type RenderMeta = {
  * subclass provides only the two pieces `resolveForRender` needs — how to
  * resolve itself to a node, and the chart-level config to render it with.
  *
+ * Both builders sit wherever a chart can, by one rule: at the root, or in a
+ * mark position (`.mark(...)`, a combinator's child), where an empty scope
+ * binds the rows of the partition it sits in ({@link inScope}, which
+ * `resolveMarkResult` applies wherever a mark position resolves its child).
+ * So each also says whether it is an empty scope (`usesPreviousLayerMarks`),
+ * binds rows to it (`withData`), and resolves into an enclosing scope's
+ * registry (`withLayerContext`).
+ *
  * The methods are `declare`d (their bodies come from `attachBuilderTerminals`
  * below) so the terminal list stays defined in exactly one place. Their
  * options also take the build-in clock's (`BuildClockOptions`), which
  * `resolveForRender` reads.
  */
-abstract class RenderableBuilder {
+export abstract class RenderableBuilder {
   abstract resolve(): Promise<GoFishNode>;
   abstract renderMeta(): RenderMeta;
+  /** True when this builder's rows are the enclosing scope's: an empty
+   *  `chart()`, or a chain whose first tier is one. */
+  abstract usesPreviousLayerMarks(): boolean;
+  /** A copy of this builder with the enclosing scope's rows bound to it. */
+  abstract withData(data: unknown): RenderableBuilder;
+  /** A copy of this builder that resolves into `layerContext`. */
+  abstract withLayerContext(layerContext: LayerContext): RenderableBuilder;
+
+  /** This builder in a mark position whose partition holds `rows`: an empty
+   *  scope binds them; any other builder keeps its own data. */
+  inScope(rows: unknown): RenderableBuilder {
+    return this.usesPreviousLayerMarks() ? this.withData(rows) : this;
+  }
 
   declare render: TerminalMethods<BuildClockOptions>["render"];
   declare toSVG: TerminalMethods<BuildClockOptions>["toSVG"];
@@ -588,7 +609,9 @@ type ChartBuilderState<TInput, TOutput> = {
   data: TInput;
   options?: ChartOptions;
   operators: Operator<any, any>[];
-  finalMark?: Mark<TOutput>;
+  /** A mark, or a chart or chain in the mark position (resolved by
+   *  `resolveMarkResult` against each partition's rows). */
+  finalMark?: Mark<TOutput> | RenderableBuilder;
   layerContext: LayerContext;
   nodeZOrder?: number;
   nodeName?: string;
@@ -663,7 +686,10 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   // `ChartBuilder` may be passed directly instead of a `(data) => Chart(...)`
   // callback (issue #243): an empty-scope child (`chart()` / `chart(options)`)
   // inherits the incoming partition datum; a child with its own data is drawn
-  // as-is per partition.
+  // as-is per partition. A `.layer(...)` chain goes through the same path
+  // (#1181): a chain whose first tier is an empty scope binds that tier to
+  // the partition, and every later tier sees the previous tier's marks, as
+  // at the root.
   //
   // Blank-fusion sugar: a relational mark (`line()`/`ribbon()`) placed
   // directly here elaborates to an invisible anchor tier plus a connector
@@ -693,19 +719,14 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   // mark returns this `ChartBuilder`, so `.name(...)` stays available on it.
   mark(mark: RelationalMark): ChartBuilder<TInput, TOutput> | LayerBuilder;
   mark(
-    mark: Mark<TOutput> | ChartBuilder<any, any>
+    mark: Mark<TOutput> | ChartBuilder<any, any> | LayerBuilder
   ): ChartBuilder<TInput, TOutput>;
   mark(
-    mark: Mark<TOutput> | ChartBuilder<any, any>
+    mark: Mark<TOutput> | ChartBuilder<any, any> | LayerBuilder
   ): ChartBuilder<TInput, TOutput> | LayerBuilder {
-    if (mark instanceof ChartBuilder) {
-      const finalMark = ((d: TOutput, _key, layerContext) =>
-        (mark.usesPreviousLayerMarks()
-          ? mark.withData(d)
-          : mark
-        ).withLayerContext(layerContext ?? {})) as Mark<TOutput>;
-      return this.with({ finalMark });
-    }
+    // A chart or chain is the mark itself, as in any mark position.
+    if (mark instanceof RenderableBuilder)
+      return this.with({ finalMark: mark });
 
     // Only fuse when this chart's data is genuine per-row data that still
     // needs anchors drawn for it. The OTHER well-established bag-form usage —
@@ -874,7 +895,8 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   }
 
   /** A copy of this builder with its data replaced — used by `LayerBuilder` to
-   *  bind an empty `Chart()` scope to `selectAll(previousTierMarkName)`. */
+   *  bind an empty `Chart()` scope to `selectAll(previousTierMarkName)`, and
+   *  in a mark position to bind it to the partition's rows. */
   withData(data: TInput): ChartBuilder<TInput, TOutput> {
     return this.with({ data });
   }
@@ -905,10 +927,15 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     // a wrapper, so the caller's function is left as it was.
     const finalMark = this.state.finalMark as any;
     const nameable =
-      typeof finalMark.name === "function"
+      typeof finalMark === "function" && typeof finalMark.name === "function"
         ? finalMark
         : nameableMark(((d, key, layerContext) =>
-            finalMark(d, key, layerContext)) as Mark<TOutput>);
+            resolveMarkResult(
+              finalMark,
+              layerContext,
+              d,
+              key
+            )) as Mark<TOutput>);
     const named = nameable.name(autoName) as Mark<TOutput>;
     // Swap the mark in directly instead of re-entering `mark()`: `named` can
     // still carry `__relationalFusable`, and fusion was already decided (and
@@ -968,6 +995,8 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   private async resolveNamed(
     name: string | symbol | undefined
   ): Promise<GoFishNode[]> {
+    // An operator hands the mark it wraps to `resolveMarkResult`, so a chart
+    // or chain in the mark position passes through the flow as a mark does.
     let composedMark = this.state.finalMark as Mark<any>;
     for (const op of this.state.operators.toReversed()) {
       composedMark = await op(composedMark);
@@ -976,8 +1005,9 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     const data = await this.resolveData();
 
     const content = await resolveMarkResult(
-      composedMark(data as any, undefined, this.state.layerContext),
-      this.state.layerContext
+      composedMark,
+      this.state.layerContext,
+      data
     );
 
     // Populate layerContext by walking the finished tree in DFS order.
@@ -1233,6 +1263,24 @@ export class LayerBuilder extends RenderableBuilder {
     return new LayerBuilder([...this.tiers, child], this.layerContext);
   }
 
+  /** True when the first tier is an empty `chart()` scope: the chain's rows
+   *  are then the enclosing scope's, as for an empty `chart()` (#1181). */
+  usesPreviousLayerMarks(): boolean {
+    const first = this.tiers[0];
+    return first instanceof ChartBuilder && first.usesPreviousLayerMarks();
+  }
+
+  /** A copy of this chain with `data` bound to its first tier, the one tier
+   *  whose scope is the enclosing one: in a mark position, the partition's
+   *  rows. Every later tier keeps the previous tier's marks as its scope, so
+   *  `previous-tier` keeps its one meaning. */
+  withData(data: unknown): LayerBuilder {
+    return new LayerBuilder(
+      [this.rootChart().withData(data), ...this.tiers.slice(1)],
+      this.layerContext
+    );
+  }
+
   /** The root tier is always a `ChartBuilder` (`.layer` is a method on one), but
    *  IR deserialization also constructs `LayerBuilder`s, so assert it. */
   private rootChart(): ChartBuilder<any, any> {
@@ -1268,6 +1316,20 @@ export class LayerBuilder extends RenderableBuilder {
     for (let i = 0; i < this.tiers.length; i++) {
       let tier = this.tiers[i];
       const hasNext = i < this.tiers.length - 1;
+      // An empty scope binds the previous tier's marks (`inScope`), whether
+      // it is an empty `chart()` or a chain whose first tier is one, so with
+      // no marks to bind it is an error either way.
+      if (
+        tier instanceof RenderableBuilder &&
+        tier.usesPreviousLayerMarks() &&
+        prevRefs === undefined
+      ) {
+        throw new Error(
+          ".layer(Chart()) with an empty scope has no previous tier's " +
+            "marks to draw from — give the first tier real data, or make " +
+            "sure the previous tier actually produced nodes."
+        );
+      }
 
       if (tier instanceof ChartBuilder) {
         // The root tier's clock, offered to every later tier the way the
@@ -1276,16 +1338,8 @@ export class LayerBuilder extends RenderableBuilder {
         // sequence's chart, even when it is written as a nested
         // `chart(selectAll(...))` pipeline.
         if (i > 0) tier.adoptTimeTier(root);
-        if (tier.usesPreviousLayerMarks()) {
-          if (prevRefs === undefined) {
-            throw new Error(
-              ".layer(Chart()) with an empty scope has no previous tier's " +
-                "marks to draw from — give the first tier real data, or make " +
-                "sure the previous tier actually produced nodes."
-            );
-          }
+        if (tier.usesPreviousLayerMarks())
           tier = tier.withData(prevRefs as any);
-        }
         // Auto-name this tier's mark (unless already named) whenever a later
         // tier exists, so its produced nodes are addressable as the next
         // tier's scope — uniformly, regardless of whether the next tier is an
@@ -1315,19 +1369,11 @@ export class LayerBuilder extends RenderableBuilder {
         // previous tier's bag as its datum, uniformly. A relational mark
         // (e.g. `ribbon()`) reads it as the refs it connects; a leaf mark
         // (e.g. `rect({...})`) ignores its datum argument and renders exactly
-        // as before. With no previous bag (the previous tier named nothing),
-        // the tier has no rows.
+        // as before. A chain binds the bag as an empty `chart()` does
+        // (`inScope`). With no previous bag (the previous tier named
+        // nothing), the tier has no rows.
         nodes.push(
-          await resolveMarkResult(
-            typeof tier === "function"
-              ? (tier as Mark<any>)(
-                  prevRefs ?? NO_ROWS,
-                  undefined,
-                  sharedContext
-                )
-              : tier,
-            sharedContext
-          )
+          await resolveMarkResult(tier, sharedContext, prevRefs ?? NO_ROWS)
         );
         // A bare mark tier isn't auto-named, so it never becomes the next
         // tier's producer.

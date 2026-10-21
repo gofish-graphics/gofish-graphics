@@ -264,6 +264,13 @@ gf.chart(sales, { axes: true })
 
 :::
 
+## A chain in a mark position
+
+A `.layer(...)` chain sits wherever a chart can: at the root, as a chart's
+[`.mark(...)`](/js/api/core/mark#nested-chart-as-a-mark), or as a child of a
+combinator. In a mark position, a first tier with no data binds the incoming
+group, and each later tier still sees the previous tier's marks.
+
 ## Signature
 
 ```ts

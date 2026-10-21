@@ -660,14 +660,11 @@ async function benchExamplesPy(
           }
           const loadDelta = performance.now() - tLoad;
 
-          // Only the single-chart path is benchmarked here; layer/raw-mark
-          // are skipped (they don't represent the common per-example case).
-          if (ir?.ir?.type === "layer" || ir?.ir?.type === "raw-mark") {
-            return { ok: false };
-          }
-
+          // Every root kind renders through the hosts' one entry point
+          // (`Serialize.renderIR`, via the harness), so every story is
+          // benchmarked.
           const deriveServerUrl =
-            ir.deriveIds?.length > 0
+            ir.callbackIds?.length > 0
               ? `http://localhost:${DERIVE_SERVER_PORT}`
               : undefined;
           const spec = { ...ir, deriveServerUrl };

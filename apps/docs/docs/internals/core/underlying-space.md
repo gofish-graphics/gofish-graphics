@@ -1896,8 +1896,8 @@ reads only the classes, never the builder words. Six classes exist:
   entry (which wins over the decoded type) exactly as it reads the same
   string from JS data, or in UTC without one. The decode only attaches
   types: whoever reads the rows converts them first with its own schema (a
-  chart tier is chart data, a lambda accessor's result goes through
-  `applyLambdaTyped` in `serialize/registry.ts`, and a `derive` types its
+  chart tier is chart data, a lambda accessor's values go through
+  `applySchema` in `serialize/fromJSON.ts`, and a `derive` types its
   result with its own `schema`, so each holds epoch milliseconds). No schema names
   a value inside a list or a struct, so a time there decodes to epoch
   milliseconds (a naive one read in UTC), and a list of structs, a list of
@@ -1940,11 +1940,19 @@ reads only the classes, never the builder words. Six classes exist:
   (`bin(field)`'s `start`/`end`/`size` are amounts of `field`'s quantity, in
   `field`'s declared unit if it has one; its `count` is in `"count"`).
 - `HasDomain` (`{ lo, hi }`, #1059): the interval the column's values span,
-  from the least to the greatest, in the data it was typed with. It is the
-  one class nothing declares: `applySchema` computes it for every column whose
+  from the least to the greatest, in the data it was typed with. Nothing
+  declares it: `applySchema` computes it for every column whose
   values are all finite numbers (missing values aside; a time's values are
   epoch milliseconds by then), after the other classes. It is what a binned
   key's cells cover (see [Cells](#cells-a-binned-key)).
+- `HasInteger` (`{}`): the values are integers. JS has one number type, so
+  no JS column has it and no builder writes it: the Python hosts' Arrow
+  decode attaches it to a column that arrived as integers, and their encode
+  reads it to send the column back to Python as integers (see
+  [the codec](/internals/frontend/serialization#one-renderer-two-hosts)).
+  Nothing in the engine reads it. It moves with the rest of the column's
+  type, and a `derive` keeps it only while the column still holds
+  integers.
 
 The types ride the chart's data array under the `COLUMN_TYPES` symbol:
 `ChartBuilder` copies the array and tags it (`applySchema`, which keeps the
@@ -2003,8 +2011,9 @@ to each split leaf and to a `filter`'s result with the other classes, the
 same record, so a split leaf holds one group's rows and its column still has
 the domain of the whole data. A chart over a selection
 (`chart(selectAll(...))`) types a list of refs, so `ChartBuilder` passes
-`applySchema` the rows the refs stand for (`rowsReached`), and the domain is
-over those. Declaring a domain is not supported yet: a `schema` record that
+`applySchema` the rows the refs stand for (`rowsReached`, which carries the
+column types of the bags it reads the rows from), and the domain is over
+those. Declaring a domain is not supported yet: a `schema` record that
 gives a column one (`{ HasDomain: { lo, hi } }`, which no builder writes) is
 a loud error in `columnTypeOf`.
 

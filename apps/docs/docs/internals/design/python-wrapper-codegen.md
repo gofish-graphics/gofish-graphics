@@ -32,8 +32,9 @@ could be generated mechanically, from what source, and what the options are.
 - Confirmed **avoidable elaboration** (the wrapper does more than a shallow
   port needs):
   - `_wire_layer_tier` re-derives the `.layer()` auto-naming + `selectAll`
-    rewiring in Python, even though the `builder: true` IR tag exists
-    precisely so JS's `LayerBuilder` can own that logic.
+    rewiring in Python, even though JS's `LayerBuilder` can own that logic
+    (since done: a chain crosses as its own `layer-chain` IR and JS rebuilds
+    it through the real `LayerBuilder`).
   - `RelatableMark.relate` re-implemented the JS
     `collectConstraintRefs` tree-walk so callbacks got refs synchronously.
     (Since removed: the callback now gets one ref per declared parameter
@@ -314,8 +315,8 @@ Those four aliases have since folded into `dims` (see above).
 ## Recommended staging
 
 1. **Shallow-port refactor (no codegen yet).** Move `_wire_layer_tier`'s
-   auto-naming/`selectAll` wiring JS-side behind the existing
-   `builder: true` tag; evaluate doing the same for the relate ref-walk;
+   auto-naming/`selectAll` wiring JS-side (done: the chain is its own
+   `layer-chain` IR); evaluate doing the same for the relate ref-walk;
    dedupe the placeholder-Arrow helper. Shrinks and regularizes the residue
    so the generated/hand-written boundary is clean.
 2. **Descriptor table + Python generator** for operators, constraints,

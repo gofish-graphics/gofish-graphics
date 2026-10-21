@@ -25,10 +25,10 @@ graph TB
     IR -->|"Serialization:<br/>• JSON IR (spec)<br/>• Apache Arrow (data)<br/>• base64 encoding"| Widget
 
     subgraph AnyWidget["AnyWidget Bridge"]
-        Widget[GoFishChartWidget<br/>widget.py<br/><br/>• Traitlets for sync<br/>• Derive function registry<br/>• @observe(derive_request)]
+        Widget[GoFishChartWidget<br/>widget.py<br/><br/>• Traitlets for sync<br/>• Callback registry<br/>• @observe(call_request)]
     end
 
-    Widget -->|"Transport:<br/>• spec (JSON)<br/>• tier_arrow (base64 list)<br/>• Derive RPC via synced traits"| JS
+    Widget -->|"Transport:<br/>• doc (JSON IR, tables as base64 Arrow by id)<br/>• one bridge call via synced traits"| JS
 
     subgraph Browser["JavaScript Layer (Browser)"]
         JS[Widget Bundle<br/>widget.esm.js]
@@ -115,22 +115,24 @@ Efficient data transfer between Python and JavaScript using Apache Arrow IPC for
 
 **Key Functions**
 
-`dataframe_to_arrow(df: pd.DataFrame) -> bytes`
+`data_to_arrow_bytes(data) -> bytes`
 
-- Converts pandas DataFrame to Arrow IPC bytes
-- Handles Int64 -> Int32 conversion (JavaScript compatibility)
-- Uses streaming format for efficient serialization
+- Converts a list or any narwhals dataframe to Arrow IPC stream bytes
+- A table is a list, so it is one Arrow column, `item`, of the items' type:
+  a struct column for records (a dataframe's columns wrapped without a
+  copy), a scalar column for values, a list column for groups
 
-`arrow_to_dataframe(arrow_bytes: bytes) -> pd.DataFrame`
+`arrow_to_records(arrow_bytes) -> list`
 
-- Converts Arrow IPC bytes back to pandas DataFrame
-- Used for deserializing data from JavaScript (for derive RPC)
+- Converts Arrow IPC bytes back to the list: column 0's values
+- Used for deserializing data from JavaScript (for every bridge call)
 
 **Type Handling**
 
-- Int64/UInt64 columns are automatically downcast to Int32/UInt32 if values fit
-- Prevents JavaScript BigInt issues while preserving precision when possible
-- Falls back to original type if values are too large
+- Every column keeps its Arrow type: int64 stays int64 (the JS decode types
+  it `HasInteger` and the JS encode sends it back as int64), and
+  timestamps keep their zone
+- The JS decode turns 64-bit integers into JS numbers
 
 ### 3. Intermediate Representation (IR)
 
@@ -195,15 +197,18 @@ Inherits from `anywidget.AnyWidget` to provide seamless Jupyter integration.
 
 Static (Python → JS, set once in `__init__`):
 
-- `spec` (Dict, synced) — Chart specification JSON
-- `tier_arrow` (List of Unicode, synced) — Base64-encoded Arrow IPC bytes, one per chart tier
-- `width`, `height`, `axes`, `debug` (synced) — Render options
+- `doc` (Dict, synced) — The IR document as `ir_payload` ships it: its
+  `root`, and its `tables` (the rows of every chart with rows of its own,
+  wherever it sits) as base64 Arrow IPC by table id
+- `width`, `height`, `axes`, `legend`, `padding`, `debug` (synced) — Render options
 - `container_id` (synced) — Unique DOM element ID
 
-Derive RPC (bidirectional via observers):
+The bridge's one call (bidirectional via observers), for every Python
+callback the IR names (a derive operator, an accessor, a mark function):
 
-- `derive_request` (Dict, synced, JS → Python) — `{request_id, lambda_id, arrow_b64}`
-- `derive_response` (Dict, synced, Python → JS) — `{request_id, result_b64}` or `{request_id, error}`
+- `call_request` (Dict, synced, JS → Python) — `{request_id, lambda_id, rows_b64}`
+- `call_response` (Dict, synced, Python → JS) — `{request_id, reply}` (the
+  reply's document, its tables as base64 Arrow) or `{request_id, error}`
 
 Status (JS → Python, terminal):
 
@@ -211,17 +216,18 @@ Status (JS → Python, terminal):
 
 Python-only:
 
-- `derive_functions` (Dict, NOT synced) — `lambda_id -> callable` registry
+- `callbacks` (Dict, NOT synced) — `lambda_id -> callback` registry, the
+  `payload.callbacks` of the IR walk; a mark function's reply adds its own
 
 **Widget Initialization Flow**
 
 1. Load pre-built widget bundle from `gofish/_static/widget.esm.js`
 2. Fail fast with clear error if bundle is missing
-3. Convert Arrow bytes to base64 for transport
-4. Store derive functions in Python-side registry
+3. Sync the document `ir_payload` built (tables already base64 Arrow)
+4. Store the callbacks in the Python-side registry
 5. Initialize AnyWidget with `_esm` code and synced traitlets
 
-**RPC Mechanism for Derive**
+**RPC Mechanism for Callbacks**
 
 We follow the Altair `JupyterChart` / Plotly `FigureWidget` pattern: synced
 traitlets + observer handlers, no `experimental.invoke` and no custom messages.
@@ -229,24 +235,25 @@ This works identically in Jupyter and marimo because `experimental.invoke` is
 unsupported in marimo.
 
 ```python
-@traitlets.observe("derive_request")
-def _on_derive_request(self, change):
+@traitlets.observe("call_request")
+def _on_call_request(self, change):
     msg = change["new"]
     if not msg:
         return
     request_id = msg["request_id"]
     try:
-        fn = self.derive_functions[msg["lambda_id"]]
-        df = arrow_to_dataframe(base64.b64decode(msg["arrow_b64"]))
-        result_df = pd.DataFrame(fn(df.to_dict("records")))
-        result_b64 = base64.b64encode(dataframe_to_arrow(result_df)).decode()
-        self.derive_response = {"request_id": request_id, "result_b64": result_b64}
+        # Run the callback on the decoded rows, register the callbacks its
+        # reply names, and ship the reply as a document.
+        reply = answer(self.callbacks, msg["lambda_id"], msg["rows_b64"])
+        self.call_response = {"request_id": request_id, "reply": reply}
     except Exception as exc:
-        self.derive_response = {"request_id": request_id, "error": str(exc)}
+        self.call_response = {"request_id": request_id, "error": str(exc)}
 ```
 
-The JS side correlates responses to requests via `request_id`. Derive ops are
-sequential (one in-flight per widget), so a single trait pair is enough. The
+`answer` (in `gofish/ast.py`) is the same function the parity harness's
+derive server answers with. The JS side correlates responses to requests via
+`request_id`. Calls are sequential (one in-flight per widget), so a single
+trait pair is enough. The
 fire-and-forget shape avoids the comm-during-cell-execution issue documented
 in [ipywidgets#1349](https://github.com/jupyter-widgets/ipywidgets/issues/1349).
 
@@ -267,81 +274,67 @@ Self-contained ESM bundle that runs in the browser.
 The widget is a single TypeScript module bundled with all dependencies:
 
 ```typescript
-import * as Arrow from "apache-arrow";
-import { chart, spread, stack, ... } from "gofish-graphics";
+import { Serialize } from "gofish-graphics";
+import { arrowBridge, decodeDocument } from "./arrowBridge";
 
 export default {
   initialize({ model }) {
-    // Wire up the derive bridge: a per-widget pending map +
-    // model.on("change:derive_response") listener.
-    (model as any).__gofishBridge = makeDeriveBridge(model);
+    // Wire up the bridge: the one Arrow codec over a per-widget pending
+    // map + model.on("change:call_response") listener.
+    (model as any).__gofishBridge = arrowBridge(traitTransport(model));
   },
   async render({ model, el }) {
-    // 1. Deserialize Arrow data from `tier_arrow` trait
-    // 2. Map IR operators to GoFish operators
-    // 3. Map IR mark to GoFish mark
-    // 4. Render chart, then set render_result for status
-  }
-}
+    // 1. Decode the `doc` trait's tables from Arrow (decodeDocument)
+    // 2. Serialize.renderIR(doc, container, renderOptions, bridge)
+    // 3. Set render_result for status
+  },
+};
 ```
 
 **Key Functions**
 
-`arrowTableToArray(table: Arrow.Table)`
+`decodeDocument(doc)` (`arrowBridge.ts`)
 
-- Converts Arrow Table to array of plain objects
-- Handles BigInt -> Number conversion
-- Compatible with GoFish's data format expectations
+- Decodes a shipped document's base64 Arrow tables into lists
+  (`arrowDecode.ts`): a table is one column of its items, so column 0 is
+  the list; a struct column's fields are the records' columns, read from
+  its child vectors, and carry column types (`HasCalendar` for times,
+  `HasInteger` for integers); BigInt -> Number
 
-`arrayToArrow(rows: object[])`
+`arrowBridge(send)` (`arrowBridge.ts`)
 
-- Converts array of objects to Arrow IPC bytes
-- Used for serialize data for derive RPC
-- Tries multiple methods for Arrow API compatibility
+- The `Serialize.DeriveBridge`: one `call(lambdaId, rows)`
+- Encodes the rows as base64 Arrow (`arrowTransport.ts`: one column of the
+  items; a number column is Int64 when typed `HasInteger`, a timestamp
+  when typed `HasCalendar`, Float64 otherwise), sends them, and decodes the
+  reply document's tables
+- The parity harness builds its bridge with it too, over HTTP
 
-`mapOperator(opSpec, bridge)`
+`traitTransport(model)` (`index.ts`)
 
-- Maps IR operator spec to GoFish operator function
-- Rebuilds it with `rebuild("operator", type, opts, { bridge })` (serialize/registry.ts)
-- Special handling for `derive` (creates an async operator that calls
-  `bridge.request(lambdaId, arrowB64)`)
-
-`mapMark(markSpec)`
-
-- Maps IR mark spec to GoFish mark function
-- Rebuilds it with `rebuild("leaf-mark" | "combinator-mark", type, opts)`
+- The widget's `send`: sets `call_request`, resolves on the matching
+  `call_response`, one request in flight at a time
 
 `renderChart(model, container, bridge)`
 
-- Main rendering orchestrator
-- Deserializes data and spec
-- Reconstructs operator pipeline
-- Calls GoFish's `chart().flow().mark()` API
-- Renders to DOM container
+- Decodes the `doc` trait and calls `Serialize.renderIR`, the one IR
+  renderer the parity harness uses too
 
-**Derive RPC Implementation**
+**Callback Implementation**
 
-The derive operator in JavaScript is async and calls back to Python via the
-synced trait protocol:
+The deserializer (`gofish-graphics/serialize`) calls the bridge wherever the
+IR names a Python callback. A `derive` operator rebuilds as:
 
 ```typescript
-derive: (opts, bridge) => {
-  const lambdaId = opts.lambdaId;
-  return derive(async (d) => {
-    const rows = normalizeToArray(d);
-    if (rows.length === 0) return Array.isArray(d) ? d : (d ?? null);
-    const arrowB64 = btoa(String.fromCharCode(...arrayToArrow(rows)));
-    // Bridge sets `derive_request` and resolves on `change:derive_response`
-    // with a matching request_id.
-    const resultB64 = await bridge.request(lambdaId, arrowB64);
-    const resultBuffer = Uint8Array.from(atob(resultB64), (c) =>
-      c.charCodeAt(0)
-    );
-    const resultArray = arrowTableToArray(Arrow.tableFromIPC(resultBuffer));
-    return Array.isArray(d) ? resultArray : (resultArray[0] ?? null);
+derive: (opts, bridge) =>
+  derive((d) => callForRows(bridge, opts.lambdaId, d), {
+    schema: opts.schema,
   });
-};
 ```
+
+`callForRows` makes the call and reads the list the reply's root names
+(`{type: "table", id}`). An accessor reads its values the same way, and a
+mark function rebuilds the IR its reply's root holds.
 
 **Error Handling**
 
@@ -433,27 +426,26 @@ chart(data) \
 
 **2. Serialization (Python)**
 
-- DataFrame -> Arrow IPC bytes via `dataframe_to_arrow()`
-- Arrow bytes -> base64 string for JSON transport
-- Chart spec -> JSON IR via `to_ir()`
-- Derive functions collected: `{"abc123": lambda df: df.sort_values("count")}`
+- One IR walk (`ir_payload`) writes the IR and collects what ships beside
+  it: each chart's rows as a table, as base64 Arrow IPC by id, and every
+  callback the IR names: `{"abc123": <the derive's callback>}`
 
 **3. Widget Creation (Python)**
 
 - `GoFishChartWidget` initialized with:
-  - `spec` = JSON IR
-  - `tier_arrow` = base64 Arrow bytes, one per chart tier
-  - `derive_functions` = {"abc123": <function>}
+  - `doc` = the IR document, tables as base64 Arrow by table id
+  - `callbacks` = {"abc123": <the derive's callback>}
   - `width=800, height=600`
 - Widget loads `_esm` bundle from `_static/widget.esm.js`
 - Widget syncs traitlets to JavaScript
 
 **4. Widget Render (JavaScript)**
 
-- AnyWidget calls `initialize({ model })` once to wire up the derive bridge,
+- AnyWidget calls `initialize({ model })` once to wire up the bridge,
   then `render({ model, el })` to paint the chart
-- Decode base64 -> Arrow bytes -> `Arrow.tableFromIPC()`
-- Convert Arrow Table -> array of objects:
+- Decode each table: base64 -> Arrow bytes -> `Arrow.tableFromIPC()`
+- Convert the table's one column (a struct column for rows) -> array of
+  objects:
   ```js
   [
     {lake: "A", species: "X", count: 10},
@@ -470,11 +462,7 @@ chart(data) \
   ```
 - Map `derive` operator:
   ```js
-  derive(async (d) => {
-    // d is current data (array of objects)
-    // Serialize to Arrow, call Python, deserialize result
-    return await executeDeriveViaRPC("abc123", d);
-  });
+  derive((d) => callForRows(bridge, "abc123", d));
   ```
 - Map `stack` operator:
   ```js
@@ -502,29 +490,22 @@ JavaScript side:
 // Current data at this point in pipeline
 const currentData = [...];  // After spread
 
-// Serialize to Arrow
-const arrowBuffer = arrayToArrow(currentData);
-const arrowB64 = btoa(String.fromCharCode(...arrowBuffer));
-
-// Set the derive_request trait; resolve when derive_response arrives
-// with a matching request_id.
-const resultB64 = await bridge.request("abc123", arrowB64);
-
-// Deserialize result
-const resultBuffer = Uint8Array.from(atob(resultB64), c => c.charCodeAt(0));
-const resultTable = Arrow.tableFromIPC(resultBuffer);
-const sortedData = arrowTableToArray(resultTable);
+// The bridge encodes the rows as base64 Arrow, sets the call_request trait,
+// and resolves when call_response arrives with a matching request_id. The
+// reply is a document: its root names the table of the rows the callback
+// returned, and its tables are decoded.
+const reply = await bridge.call("abc123", currentData);
+const sortedData = reply.tables[reply.root.id];
 ```
 
-Python side (`@traitlets.observe("derive_request")`):
+Python side (`@traitlets.observe("call_request")`):
 
 ```python
-# change.new == {"request_id": "r-0", "lambda_id": "abc123", "arrow_b64": ...}
-df = arrow_to_dataframe(base64.b64decode(msg["arrow_b64"]))
-fn = self.derive_functions["abc123"]  # lambda rows: sorted(rows, key=...)
-result_df = pd.DataFrame(fn(df.to_dict("records")))
-result_b64 = base64.b64encode(dataframe_to_arrow(result_df)).decode()
-self.derive_response = {"request_id": "r-0", "result_b64": result_b64}
+# change.new == {"request_id": "r-0", "lambda_id": "abc123", "rows_b64": ...}
+reply = answer(self.callbacks, "abc123", msg["rows_b64"])
+# reply == {"irVersion": 0, "ir": "gofish-frontend",
+#           "root": {"type": "table", "id": "t0"}, "tables": {"t0": <base64 Arrow>}}
+self.call_response = {"request_id": "r-0", "reply": reply}
 ```
 
 **8. Final Render (JavaScript)**
@@ -579,9 +560,9 @@ widget = chart(data).mark(rect(h="y")).render(debug=True)
 Check widget state:
 
 ```python
-print(widget.spec)
-print(len(widget.tier_arrow))  # number of chart tiers
-print(widget.derive_functions.keys())
+print(widget.doc["root"])
+print(list(widget.doc.get("tables", {})))  # the table ids the IR names
+print(widget.callbacks.keys())
 ```
 
 ### JavaScript Side

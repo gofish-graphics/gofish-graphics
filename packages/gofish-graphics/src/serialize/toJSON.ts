@@ -3,8 +3,8 @@
 // </gofish-wiki>
 
 /**
- * Frontend-IR emitter: turns a `ChartBuilder` (or LayerBuilder / RawMark) into
- * a {@link Frontend.FrontendIRDocument}.
+ * Frontend-IR emitter: turns a `ChartBuilder` (or a `LayerBuilder` chain, or a
+ * mark) into a {@link Frontend.FrontendIRDocument}.
  *
  * The emitter walks the runtime operator/mark tree and reads the
  * `__serialize` tag that the factories (`createOperator`, `createMark`, and
@@ -20,7 +20,13 @@
  */
 
 import { Frontend } from "gofish-ir";
-import type { ChartBuilder, Mark, Operator } from "./registry";
+import type { Mark, Operator } from "./registry";
+import {
+  ChartBuilder,
+  LayerBuilder,
+  PREVIOUS_LAYER_MARKS,
+  RenderableBuilder,
+} from "../ast/marks/chartBuilder";
 import { GoFishRef } from "../ast/_ref";
 import { GoFishNode } from "../ast/_node";
 import { RelateOperand } from "../ast/constraints/relate";
@@ -178,63 +184,58 @@ function readTag(value: unknown): SerializeTag | undefined {
 // ---------------------------------------------------------------------------
 
 /**
- * Emit a frontend-IR document for a {@link ChartBuilder}.
+ * Emit a frontend-IR document whose root is `root`: a {@link ChartBuilder}, a
+ * `.layer(...)` chain ({@link LayerBuilder}), or a mark (a `layer([...])` of
+ * charts or marks, a bare mark). A root holds anything a mark position does,
+ * so this is the one entry point.
  *
  * Async because combinator-form marks may carry their child list as a
  * `Promise<Mark[]>` (when built via helpers like `map(...)`); the emitter
  * resolves these to walk into them.
  */
 export async function toJSON(
-  chart: ChartBuilder<any>
+  root: RenderableBuilder | Mark<any>
 ): Promise<Frontend.FrontendIRDocument> {
-  return document(await chartBuilderToChartIR(chart));
+  const tables = new TableIds();
+  return document(await markToIR(root, tables), tables);
 }
 
 /**
- * Wrap a root in the IR document envelope, encoded as the wire carries it
- * (gofish-ir's `encodeIR`): a `field(...)` or `datum(...)` instance in its
- * plain form, and every non-finite number (`Infinity`, `-Infinity`, `NaN`)
- * in its tagged form, since JSON has no spelling for them. A reader decodes
- * them with `Serialize.readIR` before rebuilding the chart.
+ * The tables one document's walk collects: the rows of every chart in it
+ * that has rows of its own, each under the id its `{type: "table", id}` data
+ * names. Ids are minted in walk order (`t0`, `t1`, ...), and the same rows
+ * object, used by two charts, is one table.
  */
-function document(root: Frontend.FrontendIRDocument["root"]) {
+class TableIds {
+  readonly tables: Frontend.Tables = {};
+  private readonly ids = new Map<object, string>();
+
+  add(rows: AnyObject[]): Frontend.DataIR {
+    let id = this.ids.get(rows);
+    if (id === undefined) {
+      id = `t${this.ids.size}`;
+      this.ids.set(rows, id);
+      this.tables[id] = rows;
+    }
+    return { type: "table", id };
+  }
+}
+
+/**
+ * Wrap a root and its tables in the IR document envelope, encoded as the
+ * wire carries it (gofish-ir's `encodeIR`): a `field(...)` or `datum(...)`
+ * instance in its plain form, and every non-finite number (`Infinity`,
+ * `-Infinity`, `NaN`) in its tagged form, since JSON has no spelling for
+ * them. A reader decodes them with `Serialize.readIR` before rebuilding the
+ * chart.
+ */
+function document(root: Frontend.FrontendIRDocument["root"], ids: TableIds) {
   return Frontend.encodeIR<Frontend.FrontendIRDocument>({
     irVersion: 0,
     ir: "gofish-frontend",
     root,
+    ...(Object.keys(ids.tables).length > 0 ? { tables: ids.tables } : {}),
   });
-}
-
-/**
- * Emit a frontend-IR document for a `Layer(opts, [chart1, chart2, ...])`
- * combinator. Pass the layer options and the inner ChartBuilders.
- */
-export async function toJSONLayer(
-  options: AnyObject,
-  charts: ChartBuilder<any>[]
-): Promise<Frontend.FrontendIRDocument> {
-  const root: Frontend.LayerIR = {
-    type: "layer",
-    charts: await Promise.all(charts.map(chartBuilderToChartIR)),
-    ...(Object.keys(options ?? {}).length > 0 ? { options } : {}),
-  };
-  return document(root);
-}
-
-/**
- * Emit a frontend-IR document for a bare mark (no chart wrapper).
- * Used for `mark.render(container, opts)` direct callsites.
- */
-export async function toJSONRawMark(
-  mark: Mark<any>,
-  options?: AnyObject
-): Promise<Frontend.FrontendIRDocument> {
-  const root: Frontend.RawMarkIR = {
-    type: "raw-mark",
-    mark: await markToIR(mark),
-    ...(options && Object.keys(options).length > 0 ? { options } : {}),
-  };
-  return document(root);
 }
 
 // ---------------------------------------------------------------------------
@@ -246,8 +247,9 @@ interface ChartBuilderInternals {
   data: unknown;
   options?: AnyObject;
   operators: Operator<any, any>[];
-  finalMark?: Mark<any>;
+  finalMark?: Mark<any> | RenderableBuilder;
   nodeZOrder?: number;
+  nodeName?: string;
 }
 
 function chartBuilderInternals(
@@ -260,20 +262,22 @@ function chartBuilderInternals(
     operators: c.operators ?? [],
     finalMark: c.finalMark,
     nodeZOrder: c.nodeZOrder,
+    nodeName: c.nodeName,
   };
 }
 
 async function chartBuilderToChartIR(
-  chart: ChartBuilder<any>
+  chart: ChartBuilder<any>,
+  tables: TableIds
 ): Promise<Frontend.ChartIR> {
-  const { data, options, operators, finalMark, nodeZOrder } =
+  const { data, options, operators, finalMark, nodeZOrder, nodeName } =
     chartBuilderInternals(chart);
 
   const ir: Frontend.ChartIR = {
     type: "chart",
-    data: dataToIR(data),
+    data: dataToIR(data, tables),
     mark: finalMark
-      ? await markToIR(finalMark)
+      ? await markToIR(finalMark, tables)
       : ({ type: "rect" } as Frontend.LeafMarkIR),
   };
   // Match how `options` / `zOrder` are handled — omit empty arrays so a
@@ -288,37 +292,34 @@ async function chartBuilderToChartIR(
   if (nodeZOrder !== undefined) {
     ir.zOrder = nodeZOrder;
   }
+  // `chart(...).name(n)`, which a sibling `layer([...]).relate(...)` reads.
+  if (nodeName !== undefined) {
+    ir.name = nodeName;
+  }
   return ir;
 }
 
-function dataToIR(data: unknown): Frontend.DataIR | null {
-  if (data == null) return null;
+/** The rows of a chart with no data: one shared empty table, so every such
+ *  chart in a document names the same table. */
+const NO_TABLE_ROWS: AnyObject[] = Object.freeze([]) as unknown as AnyObject[];
+
+/** A chart's data on the wire. Rows of the chart's own (and no data, which
+ *  reads as no rows) go into `tables`, and the chart names them by id. */
+function dataToIR(data: unknown, tables: TableIds): Frontend.DataIR {
+  if (data == null) return tables.add(NO_TABLE_ROWS);
+  // An empty `chart()` scope: the previous tier's marks in a `.layer(...)`
+  // chain, or the rows of the partition a chart in a mark position sits in.
+  if (data === PREVIOUS_LAYER_MARKS) return { type: "previous-tier" };
   // A `GoFishRef` used as chart data (from `ref(name)` or `selectAll(name)`).
   // Only string-layer references serialize; `multiplicity` ("one" | "all")
   // becomes the wire `mode` (emitted unconditionally so JS and Python IR agree).
   if (data instanceof GoFishRef) return selectRefIR(data);
-  if (Array.isArray(data)) {
-    return { type: "inline", rows: data as AnyObject[] };
-  }
-  // Already wrapped (a previous round-trip).
-  if (
-    typeof data === "object" &&
-    (data as any).type === "inline" &&
-    Array.isArray((data as any).rows)
-  ) {
-    return data as Frontend.DataIR;
-  }
-  // Unknown shape — wrap as single-row inline so the schema is satisfied,
-  // but warn so the caller can investigate. Hitting this path usually
-  // indicates the chart's data argument was neither an array nor a
-  // GoFishRef and isn't structurally what the runtime expects.
-  if (typeof console !== "undefined" && typeof console.warn === "function") {
-    console.warn(
-      "[gofish-ir] toJSON.dataToIR: unrecognized data shape, wrapping as single-row inline. " +
-        "Expected an array, a string-layer GoFishRef, or a pre-wrapped {type:'inline', rows} value."
-    );
-  }
-  return { type: "inline", rows: [data as AnyObject] };
+  if (Array.isArray(data)) return tables.add(data as AnyObject[]);
+  throw new Error(
+    "toJSON: a chart's data must be an array of rows, a string-layer ref " +
+      "(ref(name) / selectAll(name)), or an empty chart() scope; got " +
+      `${typeof data}.`
+  );
 }
 
 function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
@@ -341,7 +342,31 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
   } as Frontend.OperatorIR;
 }
 
-async function markToIR(mark: Mark<any>): Promise<Frontend.MarkIR> {
+/** A `.layer(...)` chain, wherever it sits: its tiers, each in its
+ *  mark-position form. */
+async function layerChainToIR(
+  chain: LayerBuilder,
+  tables: TableIds
+): Promise<Frontend.LayerChainIR> {
+  const tiers = (chain as any).tiers as Mark<any>[];
+  const ir: Frontend.MarkIR[] = [];
+  // In order, so table ids are minted in walk order.
+  for (const tier of tiers) ir.push(await markToIR(tier, tables));
+  return { type: "layer-chain", tiers: ir };
+}
+
+async function markToIR(
+  mark: Mark<any> | RenderableBuilder,
+  tables: TableIds
+): Promise<Frontend.MarkIR> {
+  // A whole chart or `.layer(...)` chain in a mark position (the root, a
+  // `.mark(...)`, a combinator's child) is the builder itself, written as its
+  // own `ChartIR` or `LayerChainIR` (see `Frontend.MarkIR`).
+  if (mark instanceof RenderableBuilder) {
+    return mark instanceof LayerBuilder
+      ? layerChainToIR(mark, tables)
+      : chartBuilderToChartIR(mark as ChartBuilder<any>, tables);
+  }
   // A ref child (`ref("a")` in a combinator, an enclosure's member) is a
   // `RefMarkIR` by its name, the form fromJSON reads back with `ref(...)`.
   if ((mark as unknown) instanceof GoFishRef) {
@@ -360,8 +385,8 @@ async function markToIR(mark: Mark<any>): Promise<Frontend.MarkIR> {
   if (!tag) {
     throw new Error(
       "encountered an untagged mark in toJSON; either add a serialize " +
-        "config to its factory or attach its IR form with withWire " +
-        "field at the construction site"
+        "config to its factory or attach its IR form with withWire at the " +
+        "construction site"
     );
   }
   // Chained `.name()` / `.label()` calls land in dedicated tag slots; both
@@ -374,13 +399,15 @@ async function markToIR(mark: Mark<any>): Promise<Frontend.MarkIR> {
   if (tag.__combinator) {
     const childrenResolved = await flatChildren(tag.children);
     const options = wireOpts("combinator-mark", tag.type, tag.opts);
+    // In order, so table ids are minted in walk order.
+    const children: Frontend.MarkIR[] = [];
+    for (const c of childrenResolved)
+      children.push(await markToIR(c as Mark<any>, tables));
     const ir: Frontend.CombinatorMarkIR = {
       type: tag.type as Frontend.CombinatorMarkType,
       __combinator: true,
       ...(Object.keys(options).length > 0 ? { options } : {}),
-      children: await Promise.all(
-        childrenResolved.map((c) => markToIR(c as Mark<any>))
-      ),
+      children,
       ...chained,
     };
     return ir;
