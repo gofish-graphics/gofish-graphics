@@ -10,7 +10,7 @@ An axis is ticks and tick labels along one side of the plot frame, placed by val
 // sketch
 frame.anchor({
   name: "y-ticks",
-  position: along("x-min"),
+  position: "x-min",
   slots: data(ticks).flow(scatter({ by: "value" })),
 });
 // tick marks and labels attach to the "y-ticks" anchors

@@ -432,7 +432,7 @@
     <p class="small">
       <strong>Latest:</strong>
       <a href="#anchors">anchors</a> in the spelling agreed in review
-      (<code>name</code>, <code>position: along(part)</code>,
+      (<code>name</code>, <code>position</code> as a part name,
       <code>slots: data(...).flow(...)</code>) and
       <a href="#compare">all proposals compared</a>, and
       <a href="#composition">composition all the way down</a> (what anchors
@@ -451,7 +451,7 @@
   </p>
   <pre><code>rect({ w: 12, h: "value" }).anchor({
   name: "out", // first, so a search finds it
-  position: along("x-max"), // where: as in .label(text, { position })
+  position: "x-max", // where: as in .label(text, { position })
   slots: data(links, { on: "source" }).flow(stack({ size: "value" })), // what and how: rows, then a flow
 });</code></pre>
   <div class="table-scroll">
@@ -472,7 +472,8 @@
         <tr>
           <td><code>position</code></td>
           <td>
-            <code>along(part)</code> names a 1D space on one side of the mark:
+            A part name: the side of the mark whose 1D space the slots are laid
+            out in:
             <code>x-min</code>, <code>x-max</code>, <code>y-min</code>,
             <code>y-max</code>, or the coordinate's own dimension names (<code
               >r-min</code
@@ -611,12 +612,12 @@
       rect({ w: 12, h: "value" })
         .anchor({
           name: "in",
-          position: along("x-min"),
+          position: "x-min",
           slots: data(links, { on: "target" }).flow(stack({ size: "value" })),
         })
         .anchor({
           name: "out",
-          position: along("x-max"),
+          position: "x-max",
           slots: data(links, { on: "source" }).flow(stack({ size: "value" })),
         })
         .name("nodes")
@@ -724,7 +725,7 @@ await PICCL.show(
         rect({ w: "count", h: 4 })
           .anchor({
             name: "out",
-            position: along("y-min"),
+            position: "y-min",
             slots: data().flow(stack({ by: "emotion", size: "count" })),
           })
           .name("days")
@@ -737,7 +738,7 @@ await PICCL.show(
         rect({ w: "count", h: 90, fill: "emotion" })
           .anchor({
             name: "in",
-            position: along("y-max"),
+            position: "y-max",
             slots: data().flow(stack({ by: "day", size: "count" })),
           })
           .name("emotions")
@@ -956,7 +957,7 @@ await PICCL.show(
     rect({ w: 14, h: "value" })
       .anchor({
         name: "out",
-        position: along("x-max"),
+        position: "x-max",
         slots: data().flow(
           stack({ by: field("decision").sort(DECISIONS) }),
           stack({ by: "country", size: "value" })
@@ -964,7 +965,7 @@ await PICCL.show(
       })
       .name("bar")
   );
-// each country: .anchor({ name: "in", position: along("x-min"),
+// each country: .anchor({ name: "in", position: "x-min",
 //   slots: data().flow(stack({ by: "decision", size: "value" })) }).name("countries")
 // ribbons: chart(links).mark(ribbon({ from: "bar.out", to: "countries.in", fill: "decision", opacity: 0.55 }))</code></pre>
       <p class="small">
@@ -1004,7 +1005,7 @@ await PICCL.show(
     rect({ w: "value", fill: "from" })
       .anchor({
         name: "ends",
-        position: along("r-min"),
+        position: "r-min",
         slots: data().flow(spread({ by: "to", spacing: 0.01, size: "value" })),
       })
       .name("groups")
@@ -1120,7 +1121,7 @@ PICCL.show(
       .flow(spread({ by: "song", dir: "x", spacing: 18 }))
       .mark(
         circle({ r: 2 })
-          .anchor({ name: "foot", position: along("y-min") })
+          .anchor({ name: "foot", position: "y-min" })
           .name("songs")
       ),
     chart(writers)
@@ -1131,7 +1132,7 @@ PICCL.show(
         ellipse({ w: 70, h: 44, fill: "writer", opacity: 0.35 })
           .anchor({
             name: "credits",
-            position: along("y-max"),
+            position: "y-max",
             slots: data(credits, { on: "writer" }).flow(spread({ spacing: 3 })),
           })
           .name("writers")
@@ -1243,22 +1244,22 @@ await PICCL.show(
   <div class="ex">
     <div>
       <pre><code>// a label spot: one anchor over the whole side
-.anchor({ name: "label", position: along("x-max") })
+.anchor({ name: "label", position: "x-max" })
   .label("name", { position: Place.along({ at: "label", side: "outset" }) })
 
   // several tags along one edge
   .anchor({
     name: "tag",
-    position: along("y-max"),
+    position: "y-max",
     slots: data().flow(spread({ size: 16, spacing: 2 })),
   });</code></pre>
       <p class="small">
         An anchor is one more named part of the mark's outline, so the label
         proposal's <code>Place.along({ at })</code> can place a label on it. A
         label is on its own mark, so it names the anchor unqualified
-        (<code>"label"</code>). A cross-proposal choice:
-        <code>along(part)</code> here and <code>Place.along({ at })</code> there
-        mean the same thing, and should become one value.
+        (<code>"label"</code>). A cross-proposal choice: a part name here and
+        <code>Place.along({ at })</code>'s <code>at</code> there name the same
+        thing, so the two should share one vocabulary.
       </p>
     </div>
     <figure>
@@ -1289,14 +1290,14 @@ await PICCL.show(
       rect({ w: 40, h: "count", fill: "class" })
         .anchor({
           name: "in",
-          position: along("x-min"),
+          position: "x-min",
           slots: data(treeLinks, { on: "target", key: "key" }).flow(
             stack({ size: "value" })
           ),
         })
         .anchor({
           name: "out",
-          position: along("x-max"),
+          position: "x-max",
           slots: data(treeLinks, { on: "source", key: "key" }).flow(
             stack({ size: "value" })
           ),
@@ -1336,12 +1337,12 @@ await PICCL.show(
             rect({ w: 12, h: "count", fill: "class" })
               .anchor({
                 name: "in",
-                position: along("x-min"),
+                position: "x-min",
                 slots: data().flow(stack({ size: "count" })),
               })
               .anchor({
                 name: "out",
-                position: along("x-max"),
+                position: "x-max",
                 slots: data().flow(stack({ size: "count" })),
               })
               .name("categories")
@@ -1378,8 +1379,8 @@ await PICCL.show(
     <li>
       <strong>Part names.</strong> Labels still use
       <code>top</code>/<code>right</code>. Using axis-relative names for both is
-      one decision across the two proposals, together with merging
-      <code>along</code> and <code>Place.along</code>.
+      one decision across the two proposals, together with
+      <code>Place.along</code>'s <code>at</code>.
     </li>
     <li>
       <strong>Name scope.</strong> Anchor names need a scoping rule next to
@@ -1397,9 +1398,10 @@ await PICCL.show(
     words that mean drawing); <code>cut</code>-style options (the stacking was
     invisible); a chained <code>.along().flow()</code> (the name came last and
     the chain didn't nest when formatted); <code>size</code> on the context (it
-    didn't match how <code>size</code> works elsewhere); and
-    <code>along</code> in <code>position</code> with the rows and flow in
-    <code>slots</code> (this version).
+    didn't match how <code>size</code> works elsewhere);
+    <code>along(part)</code> in <code>position</code> with the rows and flow in
+    <code>slots</code>; and finally the <code>along</code> wrapper dropped, so
+    <code>position</code> is just the part name (this version).
   </p>
 
   <h2 id="compare">All the proposals, compared</h2>
@@ -1530,8 +1532,7 @@ await PICCL.show(
           <td>two rules about ref columns</td>
           <td>
             <code>.anchor({ name, position, slots })</code>,
-            <code>along(part)</code>, <code>data(table, { on })</code>,
-            axis-relative parts
+            <code>data(table, { on })</code>, axis-relative part names
           </td>
         </tr>
         <tr>
@@ -1574,13 +1575,13 @@ await PICCL.show(
     <code>size</code>, <code>spacing</code> and <code>by</code> from the
     operators, <code>on</code> from joins, and <code>data</code> alongside
     <code>datum</code>. The sankey also needs no <code>resolve</code>. Its
-    costs: three new names (<code>.anchor</code>, <code>along</code>,
-    <code>data</code>); a shared decision with the label proposal about part
-    names and about merging <code>along</code> with <code>Place.along</code>; a
-    word for where slots sit when a node has slack; and a node value that still
-    comes from data. Node-link allocation (3) is the runner-up: it is as clean
-    on the examples, but hides the stack inside the ribbon. Proposal 5 is
-    proposal 3 with the allocation moved onto the node and written as a flow.
+    costs: two new names (<code>.anchor</code> and <code>data</code>); a shared
+    decision with the label proposal about part names and about sharing them
+    with <code>Place.along</code>'s <code>at</code>; a word for where slots sit
+    when a node has slack; and a node value that still comes from data.
+    Node-link allocation (3) is the runner-up: it is as clean on the examples,
+    but hides the stack inside the ribbon. Proposal 5 is proposal 3 with the
+    allocation moved onto the node and written as a flow.
   </p>
 
   <h2 id="composition">Composition all the way down</h2>
@@ -1622,7 +1623,7 @@ await PICCL.show(
           <td>Anchors</td>
           <td>a 1D space on any mark's boundary</td>
           <td>the mark's own frame</td>
-          <td><code>.anchor({ name, position: along(part), slots })</code></td>
+          <td><code>.anchor({ name, position, slots })</code></td>
         </tr>
       </tbody>
     </table>
@@ -1643,7 +1644,7 @@ chart(rows, { coord, axes }).flow(...).mark(rect(...))
   ≡ (a 2D space)( data(rows).flow(...).mark(rect(...)) )
 
 // an anchor = the same flow in a 1D space on one side of a mark
-.anchor({ name: "out", position: along("x-max"),
+.anchor({ name: "out", position: "x-max",
           slots: data(links, { on: "source" }).flow(stack({ size: "value" })) })</code></pre>
   <p class="prose small">
     The code already splits this way:
@@ -1656,7 +1657,7 @@ chart(rows, { coord, axes }).flow(...).mark(rect(...))
 
   <h3>2. Boundary label strategies are anchors plus text</h3>
   <pre><code>rect(...).label("name", { position: Place.along({ at: "x-max", side: "outset" }) })
-  ≡ rect(...).anchor({ name: ⟨fresh⟩, position: along("x-max") })
+  ≡ rect(...).anchor({ name: ⟨fresh⟩, position: "x-max" })
              + text("name") at that anchor, offset outward</code></pre>
   <div class="table-scroll">
     <table>
@@ -1697,8 +1698,8 @@ chart(rows, { coord, axes }).flow(...).mark(rect(...))
     </table>
   </div>
   <p class="prose small">
-    This would also settle merging <code>along</code> with
-    <code>Place.along</code>, and the shared part-name vocabulary. Draft issue:
+    This would also settle the part-name vocabulary that anchors and
+    <code>Place.along</code> share. Draft issue:
     <code>issues/2-labels-as-anchors.md</code>.
   </p>
 
@@ -1706,7 +1707,7 @@ chart(rows, { coord, axes }).flow(...).mark(rect(...))
   <pre><code>// sketch: the y axis as anchors along the frame's left side, placed by value
 frame.anchor({
   name: "y-ticks",
-  position: along("x-min"),
+  position: "x-min",
   slots: data(ticks).flow(scatter({ by: "value" })),
 });
 // tick marks and tick labels attach to the "y-ticks" anchors</code></pre>
