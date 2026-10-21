@@ -397,6 +397,112 @@ export const FrankenSankey: StoryObj = {
 };
 
 // ===========================================================================
+// 3b. FrankenSankey without the bar: the area's own 2017 cells carry `out`
+// ===========================================================================
+// Target:
+//   // years: { year, decision, value }   links (2017): { year, country, decision, value }
+//   layer([
+//     spread({ dir: "x", spacing: 150, alignment: "end" }, [
+//       chart(years)
+//         .flow(spread({ by: "year", dir: "x", spacing: 22 }), stack({ by: "decision", dir: "y" }))
+//         .mark(rect({ w: 0, h: "value", fill: "decision" })
+//           .anchor({ name: "out", position: "x-max",
+//                     slots: data(links, { on: ["year", "decision"] }).flow(stack({ size: "value" })) })
+//           .name("area")),
+//       chart(links)
+//         .flow(spread({ by: "country", dir: "y", spacing: 6 }))
+//         .mark(rect({ w: 14, h: "value" })
+//           .anchor({ name: "in", position: "x-min", slots: data().flow(stack({ by: "decision", size: "value" })) })
+//           .name("countries")),
+//     ]),
+//     chart(selectAll("area")).flow(group({ by: "decision" })).mark(ribbon({ fill: "decision" })),
+//     chart(links).mark(ribbon({ from: "area.out", to: "countries.in", fill: "decision", opacity: 0.55 })),
+//   ])
+// Only the two 2017 cells match link rows, so only they get slots. The
+// `stack` in `out` has no `by`, so its order is the default: the far end's
+// placed position (emulated by the country's rank `ci`).
+// EMULATION: the slots of the two 2017 cells are drawn as a second chart of
+// zero-width rects laid at the area's right end (spread spacing 0), so they
+// sit exactly on the 2017 column. The 2017 cells use the exact link sums so
+// the slots fill them with no slack.
+export const FrankenSankeyNoBar: StoryObj = {
+  name: "FrankenSankey No Bar",
+  render: () =>
+    show((c) => {
+      const rowId = (r: any) => `${r.country}/${r.decision}`;
+      const cellValue = (d: string) => sum(asylumLinks.filter((l) => l.decision === d), "value");
+      const areaRows = frankenEnds
+        .filter((e) => e.kind === "area")
+        .map((e) => (e.col === 2017 ? { ...e, value: cellValue(e.decision) } : e));
+      // The area cells that match link rows on (year, decision): the 2017 ones.
+      const cells2017 = areaRows.filter((e) => e.col === 2017);
+      const out = anchorSlots({
+        nodes: cells2017,
+        nodeKey: (n) => `${n.col}/${n.decision}`,
+        nodeValue: (n) => n.value,
+        anchors: [
+          {
+            name: "out",
+            rows: (n) => asylumLinks.filter((l) => l.decision === n.decision),
+            size: (rs) => sum(rs, "value"),
+            order: (_n, rs) => [rs[0].ci], // far-position default, by proxy rank
+            pair: (rs) => rs.map(rowId).join(","),
+            end: 0,
+          },
+        ],
+      });
+      const countries = anchorSlots({
+        nodes: COUNTRIES.map((country) => ({ country })),
+        nodeKey: (n) => n.country,
+        anchors: [
+          {
+            name: "in",
+            rows: (n) => asylumLinks.filter((l) => l.country === n.country),
+            slotBy: (r) => r.decision,
+            size: (rs) => sum(rs, "value"),
+            order: (_n, rs) => [rs[0].di],
+            pair: (rs) => rs.map(rowId).join(","),
+            end: 1,
+            fields: (rs) => ({ decision: rs[0].decision }),
+          },
+        ],
+      });
+      [...out.report, ...countries.report].forEach((m) => console.warn(m));
+      return layer([
+        spread({ dir: "x", spacing: 150, alignment: "end" }, [
+          spread({ dir: "x", spacing: 0, alignment: "end" }, [
+            chart(areaRows, { color: FT, axes: false })
+              .flow(
+                spread({ by: field("col").sort(), dir: "x", spacing: 22, alignment: "end" }),
+                spread({ by: field("key").sort(), dir: "y", spacing: 0, axes: false })
+              )
+              .mark(rect({ w: 0, h: "value", fill: "decision" }).name("area")),
+            // The `out` slots of the 2017 cells, stacked in the cells' order.
+            chart(out.slots, { axes: false })
+              .flow(
+                spread({ by: field("key").sort(), dir: "y", spacing: 0, axes: false }),
+                spread({ by: field("slot").sort(), dir: "y", spacing: 0, axes: false })
+              )
+              .mark(rect({ w: 0, h: "value", fill: "decision" }).name("slots")),
+          ]),
+          chart(countries.slots, { axes: false })
+            .flow(
+              spread({ by: field("country").sort(COUNTRIES), dir: "y", spacing: 6, axes: false }),
+              spread({ by: field("slot").sort(), dir: "y", spacing: 0, axes: false })
+            )
+            .mark(rect({ w: 14, h: "value", fill: "decision" }).name("slots")),
+        ]),
+        chart(selectAll("area"))
+          .flow(sortRefs((r) => project(r, "col") as number), group({ by: "decision" }))
+          .mark(ribbon({ fill: "decision", opacity: 1 })),
+        chart(selectAll("slots"))
+          .flow(...pairSlots())
+          .mark(ribbon({ fill: "decision", opacity: 0.55, curve: Curve.bezier() })),
+      ]).render(c, { w: 420, h: 320, axes: false, legend: false } as any);
+    }),
+};
+
+// ===========================================================================
 // 4. Chord with gaps between the ends of a group (S1: groups from cells)
 // ===========================================================================
 // Target, reused names:

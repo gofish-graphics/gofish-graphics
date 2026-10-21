@@ -871,35 +871,30 @@ await PICCL.show(
     </figure>
   </div>
 
-  <h3>FrankenSankey: a two-tier flow on one side</h3>
+  <h3>FrankenSankey: the area's own cells carry the anchors</h3>
   <div class="ex">
     <div>
-      <pre><code>// years: { year, decision, value }   links (2017): { country, decision, value }
+      <pre><code>// years: { year, decision, value }   links (2017): { year, country, decision, value }
 layer([
   spread({ dir: "x", spacing: 150, alignment: "end" }, [
-    spread({ dir: "x", spacing: 0, alignment: "end" }, [
-      // the stacked area: one column per year, accepted on rejected
-      chart(years)
-        .flow(
-          spread({ by: "year", dir: "x", spacing: 22 }),
-          stack({ by: "decision", dir: "y" })
-        )
-        .mark(rect({ w: 0, h: "value", fill: "decision" }).name("area")),
-      // the 2017 bar: one rect over all the 2017 links, its ends decision first, then country
-      chart(links).mark(
-        rect({ w: 14, h: "value" })
+    // the stacked area; its 2017 cells carry the sankey's out-ends
+    chart(years)
+      .flow(
+        spread({ by: "year", dir: "x", spacing: 22 }),
+        stack({ by: "decision", dir: "y" })
+      )
+      .mark(
+        rect({ w: 0, h: "value", fill: "decision" })
           .anchor({
             name: "out",
             position: "x-max",
-            slots: data().flow(
-              stack({ by: field("decision").sort(DECISIONS) }),
-              stack({ by: "country", size: "value" })
+            slots: data(links, { on: ["year", "decision"] }).flow(
+              stack({ size: "value" })
             ),
           })
-          .name("bar")
+          .name("area")
       ),
-    ]),
-    // the countries: one rect per country, its ends by decision
+    // the countries
     chart(links)
       .flow(spread({ by: "country", dir: "y", spacing: 6 }))
       .mark(
@@ -907,9 +902,7 @@ layer([
           .anchor({
             name: "in",
             position: "x-min",
-            slots: data().flow(
-              stack({ by: field("decision").sort(DECISIONS), size: "value" })
-            ),
+            slots: data().flow(stack({ by: "decision", size: "value" })),
           })
           .name("countries")
       ),
@@ -918,10 +911,10 @@ layer([
   chart(selectAll("area"))
     .flow(group({ by: "decision" }))
     .mark(ribbon({ fill: "decision" })),
-  // the sankey: each link from its slot on the bar to its slot at its country
+  // the sankey: from each link's slot on its 2017 cell to its slot at its country
   chart(links).mark(
     ribbon({
-      from: "bar.out",
+      from: "area.out",
       to: "countries.in",
       fill: "decision",
       opacity: 0.55,
@@ -929,15 +922,21 @@ layer([
   ),
 ]);</code></pre>
       <p class="small">
-        Decision first, then country, is just the flow. The size sits on the
-        inner stack; the decision groups take their contents' length, as nested
-        stacks do today.
+        There is no separate bar. The stacked area's 2017 column already holds
+        one cell per decision, and those cells carry the
+        <code>out</code> anchor, so the sankey leaves the area's last slice
+        directly. Decision-first order comes from the area's own stack. Within
+        each cell, the slots follow where each country was placed, the default,
+        so the anchor's flow needs no <code>by</code>.
+        <code>on: ["year", "decision"]</code> joins on the cell's full key,
+        outermost first, as a list of join columns does in polars. Every area
+        cell has the anchor, but only the 2017 cells get rows.
       </p>
     </div>
     <figure>
       <div class="plate">
         <img
-          src="img/anchors-frankensankey.png"
+          src="img/anchors-frankensankey-nobar.png"
           alt="FrankenSankey with anchors"
         />
       </div>
@@ -1450,7 +1449,7 @@ await PICCL.show(
           <td>clean</td>
           <td>an order override on the ribbon</td>
           <td>nested stacks</td>
-          <td>clean: the order is the anchor's two-tier flow</td>
+          <td>clean: no bar; the area's 2017 cells carry the anchors</td>
         </tr>
         <tr>
           <td>Chord</td>

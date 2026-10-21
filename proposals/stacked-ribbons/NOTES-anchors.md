@@ -652,3 +652,30 @@ and `w` on `top`/`bottom`.
   along one edge are one anchor with a flow. Anchors are the "many" that
   `Place.along` lacks. This also means `Outline.parts` should accept parts
   that are sub-intervals of other parts.
+
+### FrankenSankey without the bar
+
+Story: `Anchors/FrankenSankeyNoBar`. Image:
+`img/anchors-frankensankey-nobar.png`. There is no separate 2017 bar. The
+area's own cells carry the `out` anchor, with slots from
+`data(links, { on: ["year", "decision"] })`. Only the two 2017 cells
+(accepted, rejected) match link rows, so only they get slots. The ribbons
+leave the right side of the 2017 slice. Decision-first order comes from the
+area's stack. Inside each cell, the slots follow the far country's position.
+
+Emulation notes:
+
+- The `out` slots are a second chart of zero-width rects. It sits right
+  after the area in a `spread` with spacing 0, so it lands on the 2017
+  column. It stacks by cell and then by slot rank, which is the cell's
+  stack order.
+- The far-position default is a proxy rank (the country index `ci`), as
+  in the other stories, because the countries are not placed yet.
+- The 2017 cells use the exact sums of the link rows. The estimated
+  `asylumYears` row is rounded, and the rounded total would leave a tiny
+  slack or overflow in the cell.
+- The cells of the other years have no matching rows, so they get no
+  slots. They need no slack row, because an anchor with no rows is empty.
+- What did not fit: nothing in the picture. With `w: 0`, `x-max` is the
+  same line as the cell, so the area ribbon ends and the sankey ribbons
+  start on one vertical line. This matches the FT picture.
