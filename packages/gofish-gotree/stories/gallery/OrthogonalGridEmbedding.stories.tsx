@@ -75,6 +75,6 @@ export const OrthogonalGridEmbedding: StoryObj = {
         }),
         coord: Coord.polar(),
       },
-      { w: 480, h: 480 }
+      {}
     ),
 };

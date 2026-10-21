@@ -44,5 +44,5 @@ def story_cascaded_treemap():
             ),
             sibling=alternate([dice, slice_]),
         ),
-        {"w": 640, "h": 420},
+        {},
     )

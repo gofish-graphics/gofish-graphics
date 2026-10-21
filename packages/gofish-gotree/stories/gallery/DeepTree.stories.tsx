@@ -98,7 +98,7 @@ export const DeepTree: StoryObj = {
         }),
         coord: Coord.polar(),
       },
-      { w: 560, h: 560 },
+      {},
       deepTree
     ),
 };

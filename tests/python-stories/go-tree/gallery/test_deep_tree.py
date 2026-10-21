@@ -48,5 +48,5 @@ def story_deep_tree():
             ),
             coord=Coord.polar(),
         ),
-        {"w": 560, "h": 560},
+        {},
     )

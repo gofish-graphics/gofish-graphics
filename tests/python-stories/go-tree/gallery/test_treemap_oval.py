@@ -42,5 +42,5 @@ def story_treemap_oval():
             ),
             sibling=alternate([slice_, dice]),
         ),
-        {"w": 640, "h": 420},
+        {},
     )

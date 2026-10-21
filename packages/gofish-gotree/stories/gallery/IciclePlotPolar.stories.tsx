@@ -111,7 +111,7 @@ export const IciclePlot: StoryObj = {
         coord: Coord.polar(),
       },
       sampleTree
-    ).render(container, { w: 560, h: 560 });
+    ).render(container);
     return container;
   },
 };

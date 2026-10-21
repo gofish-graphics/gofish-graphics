@@ -77,7 +77,7 @@ export const FlowerTree: StoryObj = {
         }),
         coord: Coord.polar(),
       },
-      { w: 520, h: 520 },
+      {},
       sampleTree
     ),
 };

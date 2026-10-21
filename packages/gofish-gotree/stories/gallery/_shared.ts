@@ -19,7 +19,7 @@ export type { CombineAxis } from "../../src";
 // Render a GoTreeSpec into a fresh container. Returns the container.
 export const mount = (
   spec: any,
-  size: { w: number; h: number } = { w: 640, h: 420 },
+  size: { w?: number; h?: number } = { w: 640, h: 420 },
   data: any = sampleTree
 ) => {
   const c = initializeContainer();

@@ -35,5 +35,5 @@ def story_orthogonal_grid_embedding():
             ),
             coord=Coord.polar(),
         ),
-        {"w": 480, "h": 480},
+        {},
     )
