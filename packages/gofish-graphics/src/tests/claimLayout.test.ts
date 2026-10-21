@@ -220,6 +220,30 @@ async function main() {
     );
   }
 
+  console.log("\n# a labeled chart chained down a spread sits past its sibling");
+  {
+    // A chart reads y up and the spread reads it down. The chart's labels
+    // make its plot differ from its box, so the spread lays it by its plot,
+    // which its view in the spread's axis order must read reflected.
+    const data = [
+      { k: "a", v: 1 },
+      { k: "b", v: 2 },
+    ];
+    const dl = await spread({ dir: "y", spacing: 16, alignment: "start" }, [
+      rect({ w: 30, h: 10 }),
+      chart(data, { axes: false, w: 100, h: 50 })
+        .flow(spread({ by: "k", dir: "x" }))
+        .mark(rect({ h: "v" }).label("v", { position: "center" })),
+    ]).toDisplayList({});
+    const rects = items(dl).filter((i) => i.kind === "rect");
+    const top = Math.min(...rects.slice(1).map((r) => r.y!));
+    check(
+      "the chart's plot starts 16 px below the rect",
+      close(rects[0].y, 0) && close(top, rects[0].y! + 10 + 16),
+      rects.map((r) => [r.y, r.h])
+    );
+  }
+
   report();
 }
 

@@ -1846,12 +1846,10 @@ export class GoFishNode {
   }
 
   private computePlotSpan(axis: 0 | 1): [number, number] | undefined {
-    // A child's plot in this node's frame, or its box when that is its plot.
-    // `c` as the node it is a child of sees it (`orientView`).
-    const seen = (c: GoFishNode): Placeable =>
-      orientView(c, yDirection(c.parent));
     // A child's plot in its parent's frame, or its box when that is its
-    // plot.
+    // plot. Both are in pixels, as the child stores its box, whichever way
+    // the parent reads y: a parent that reads y the other way sees the span
+    // through its view of the child (`orientView`), which reflects it.
     const inFrame = (
       c: Placeable,
       plot: [number, number] | undefined
@@ -1862,10 +1860,7 @@ export class GoFishNode {
       const shift = min - (c.localAnchor?.(axis, "min") ?? 0);
       return [plot[0] + shift, plot[1] + shift];
     };
-    const plotOf = (c: GoFishNode) => {
-      const v = seen(c);
-      return inFrame(v, v.localPlotSpan?.(axis));
-    };
+    const plotOf = (c: GoFishNode) => inFrame(c, c.localPlotSpan(axis));
     if (this.chrome !== undefined) {
       // Its box less its chrome's gutters, which its layout read off its
       // claims (`chromeGutters`), in its axis order.

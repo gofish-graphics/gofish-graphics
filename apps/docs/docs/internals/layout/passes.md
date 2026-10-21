@@ -807,7 +807,8 @@ report their size).
   claim, and the whole part only reaches) and in its layout (a chain edge
   reads each part's anchors off `GoFishNode.localPlotSpan`, which is a
   ring's box less its gutters, or the hull of a layer's children that are
-  no dressing). So the spacing is between plots, and σ and the parts' sizes
+  no dressing, in the node's own pixels; a chain that reads y the other way
+  reads it reflected, as it reads the part's box). So the spacing is between plots, and σ and the parts' sizes
   ignore the dressing. A label between two rows sits in the gap, and
   overlaps where it does not fit (#1171); a label past the first or last
   row reaches past the chain, into the chart's margin. A chain that slices
