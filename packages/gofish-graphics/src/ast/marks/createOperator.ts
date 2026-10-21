@@ -197,8 +197,11 @@ export type ModifierConfig<Args extends any[] = any[]> = {
 };
 
 /** A paint-order hint: a constant, or a callback resolved per-instance against
- *  the datum the mark is bound to. */
-export type ZOrderValue<T = any> = number | ((datum: T) => number);
+ *  the datum the mark is bound to. The callback may answer a promise (a
+ *  Python callback answers through the bridge). */
+export type ZOrderValue<T = any> =
+  | number
+  | ((datum: T) => number | Promise<number>);
 
 export type TranslateModifierOptions = PositionNodeOptions;
 
@@ -436,8 +439,8 @@ export const labelModifier = {
  */
 export const zOrderModifier = {
   name: "zOrder",
-  apply: (node, _layerContext, datum, value) => {
-    node.zOrder(typeof value === "function" ? value(datum) : value);
+  apply: async (node, _layerContext, datum, value) => {
+    node.zOrder(typeof value === "function" ? await value(datum) : value);
   },
   tag: (wrapped, base, value) => {
     // A constant hint round-trips; a callback can't be JSON-serialized, so it

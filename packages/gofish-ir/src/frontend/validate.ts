@@ -609,6 +609,14 @@ function walkRefType(
     case "NodeSelectionIR":
       walkNodeSelection(value, path, ctx);
       return;
+    case "BridgeLambdaSentinel":
+      if (!isObject(value) || typeof value.__gofish_lambda !== "string") {
+        ctx.errors.push({
+          path,
+          message: `expected a { __gofish_lambda } bridge handle, got ${typeNameOf(value)}`,
+        });
+      }
+      return;
     case "FieldAccessor":
       if (!isObject(value)) {
         ctx.errors.push({

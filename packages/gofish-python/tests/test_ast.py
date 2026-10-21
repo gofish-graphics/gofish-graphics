@@ -42,7 +42,7 @@ import json
 from gofish.arrow_utils import arrow_to_records
 from gofish.ast import RelatableMark, _RefProxy, ir_payload
 
-from ._ir import ir
+from ._ir import call, ir
 
 
 class TestOperators:
@@ -261,6 +261,31 @@ class TestCompose:
         builder = chart([{"a": 1}]).flow(compose(d, spread(dir="x")))
         ops = builder.mark(rect(w=1, h=1)).to_ir()["root"]["operators"]
         assert ops[0] == {"type": "derive", "lambdaId": d.lambda_id}
+
+
+class TestMarkZOrder:
+    """`.z_order(value)`: a number, or a function JS calls through the bridge
+    once per mark instance with the input the mark is bound to."""
+
+    def test_number(self):
+        assert ir(rect(h="value").z_order(2))["zOrder"] == 2
+
+    def test_function_is_an_accessor(self):
+        m = ribbon(opacity=0.7).z_order(lambda d: 1 if d[0]["site"] == "M" else 0)
+        lambda_id = ir(m)["zOrder"]["__gofish_lambda"]
+        # JS calls it with one input: the list the mark instance is bound to.
+        assert call(m, lambda_id, [[{"site": "M"}]]) == [1]
+        assert call(m, lambda_id, [[{"site": "G"}]]) == [0]
+
+    def test_function_reads_refs_with_pluck(self):
+        """The input of a mark over refs is a list of refs, which JS sends as
+        `{__inputRef, datum}` sentinels; the function gets `_InputRef`s."""
+        from gofish import pluck
+
+        m = ribbon().z_order(lambda d: 1 if pluck(d, "site") == ["M"] else 0)
+        lambda_id = ir(m)["zOrder"]["__gofish_lambda"]
+        refs = [{"__inputRef": i, "datum": [{"site": "M"}]} for i in range(2)]
+        assert call(m, lambda_id, [refs]) == [1]
 
 
 class TestMarkName:

@@ -337,30 +337,31 @@ def _scan_options(construct: str, options: Dict[str, Any]) -> Dict[str, List["_P
     return found
 
 
+def _wire_accessors(value: Any, payload: "_Payload") -> Any:
+    """``value`` as the wire carries it: each `_PendingAccessor` becomes its
+    `{"__gofish_lambda": id}` sentinel, at any depth, and ``payload`` records
+    its callback (``_accessor_reply``). The JS deserializer turns each
+    sentinel back into an accessor that calls into Python."""
+    return _nonfinite.walk(
+        value,
+        lambda x: {
+            "__gofish_lambda": payload.callback(x.lambda_id, _accessor_reply(x.fn))
+        }
+        if isinstance(x, _PendingAccessor)
+        else x
+        if _is_tagged(x)
+        else KEEP,
+    )
+
+
 def _wire_options(
     options: Dict[str, Any], accessors: Dict[str, list], payload: "_Payload"
 ) -> Dict[str, Any]:
-    """The options as the wire carries them: each `_PendingAccessor` becomes
-    its `{"__gofish_lambda": id}` sentinel, at any depth, and ``payload``
-    records its callback (``_accessor_reply``). Only the options
-    `_scan_options` found accessors in are walked; the rest are the same
-    objects. The JS deserializer turns each sentinel back into an accessor
-    that calls into Python."""
+    """The options as the wire carries them (``_wire_accessors``). Only the
+    options `_scan_options` found accessors in are walked; the rest are the
+    same objects."""
     return {
-        k: _nonfinite.walk(
-            v,
-            lambda x: {
-                "__gofish_lambda": payload.callback(
-                    x.lambda_id, _accessor_reply(x.fn)
-                )
-            }
-            if isinstance(x, _PendingAccessor)
-            else x
-            if _is_tagged(x)
-            else KEEP,
-        )
-        if k in accessors
-        else v
+        k: _wire_accessors(v, payload) if k in accessors else v
         for k, v in options.items()
     }
 
@@ -585,12 +586,22 @@ class Mark(_Root):
         new_mark._name = name_or_token
         return new_mark
 
-    def z_order(self, value: float) -> "Mark":
+    def z_order(self, value: Union[float, Callable[[Any], float]]) -> "Mark":
         """Set the default z-order hint for this mark.
 
         Within a single layer's render, marks are sorted by `(z_order, index)`
         before painting. Lower values paint first (further back). Mirrors
-        JS `node.zOrder(n)`.
+        JS `mark.zOrder(value)`.
+
+        ``value`` is a number, or a function called once per mark instance
+        with the input the mark is bound to, which returns the number. A
+        function makes the paint order data-driven. The input of a mark over
+        refs (a chart over ``select_all(...)``) is a list of refs, which
+        ``pluck`` reads::
+
+            ribbon(opacity=0.7).z_order(
+                lambda d: 1 if pluck(d, "site")[0] in emphasized else 0
+            )
 
         For *relational* paint order ("this above that"), use
         `Constraint.z_above(a, b)` / `Constraint.z_below(a, b)` inside the
@@ -603,7 +614,7 @@ class Mark(_Root):
             self.mark_type, _children=self._children, **self.kwargs
         )
         self._copy_meta(new_mark)
-        new_mark._z_order = value
+        new_mark._z_order = _PendingAccessor(value) if _is_function(value) else value
         return new_mark
 
     def translate(
@@ -713,9 +724,10 @@ class Mark(_Root):
             d["__datum"] = self._datum
             if self._key is not None:
                 d["__key"] = self._key
-        # `.zOrder(n)` — applied post-construction on the JS side.
+        # `.zOrder(value)` — applied post-construction on the JS side; a
+        # function crosses as an accessor.
         if self._z_order is not None:
-            d["zOrder"] = self._z_order
+            d["zOrder"] = _wire_accessors(self._z_order, payload)
         if self._translate:
             d["translate"] = self._translate
         return d
@@ -3309,7 +3321,7 @@ class CutMark(Mark):
                 else self._name
             )
         if self._z_order is not None:
-            d["zOrder"] = self._z_order
+            d["zOrder"] = _wire_accessors(self._z_order, payload)
         if self._translate:
             d["translate"] = self._translate
         return d
@@ -3380,7 +3392,7 @@ class OffsetMark(Mark):
                 else self._name
             )
         if self._z_order is not None:
-            d["zOrder"] = self._z_order
+            d["zOrder"] = _wire_accessors(self._z_order, payload)
         if self._translate:
             d["translate"] = self._translate
         return d
@@ -3543,24 +3555,35 @@ def _accessor_reply(fn: Callable[[Any], Any]) -> _Reply:
 def _mark_fn_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
     """The callback of a mark function: its reply's root is the
     mark-position IR of what ``fn`` drew, and its payload ships that IR's
-    tables and callbacks. JS sends each live ``GoFishRef`` argument as an
-    ``{"__inputRef": i, "datum": ...}`` row (a ref can't cross the bridge);
-    it becomes an ``_InputRef``, so ``d[0].datum`` reads as in JS (#591)."""
+    tables and callbacks. A ref ``fn`` was handed (``_decode_input_refs``)
+    and places in what it drew writes its index, which JS resolves back to
+    the live ref."""
 
     def reply(rows: List[Any], scope: str) -> Tuple[dict, "_Payload"]:
-        return _walk(
-            fn(
-                [
-                    _InputRef(row["__inputRef"], row.get("datum"))
-                    if isinstance(row, dict) and "__inputRef" in row
-                    else row
-                    for row in rows
-                ]
-            ),
-            scope,
-        )
+        return _walk(fn(rows), scope)
 
     return reply
+
+
+def _decode_input_refs(value: Any) -> Any:
+    """The rows of a call from JS, with each ref in them as an ``_InputRef``.
+    A live ``GoFishRef`` cannot cross the bridge, so JS sends each one, at any
+    depth of the rows (a mark function's input item, a row's field that
+    ``resolve`` filled, a paint-order callback's list of refs), as an
+    ``{"__inputRef": i, "datum": ...}`` sentinel (``encodeInputRefs`` in
+    registry.ts). So ``d[0].datum`` reads as in JS (#591), and ``r["ref"]``
+    places the node ``resolve`` named. A row that shares a column with a
+    sentinel holds the sentinel's keys as nulls (Arrow types a column by the
+    union of its keys), so a sentinel is a dict whose ``__inputRef`` is set."""
+    if isinstance(value, list):
+        return [_decode_input_refs(v) for v in value]
+    if isinstance(value, dict):
+        if value.get("__inputRef") is not None:
+            return _InputRef(
+                int(value["__inputRef"]), _decode_input_refs(value.get("datum"))
+            )
+        return {k: _decode_input_refs(v) for k, v in value.items()}
+    return value
 
 
 def _walk(root: Any, scope: Optional[str] = None) -> Tuple[dict, "_Payload"]:
@@ -3645,7 +3668,8 @@ def answer(callbacks: Dict[str, _Reply], lambda_id: str, rows_b64: str) -> dict:
     if reply is None:
         raise KeyError(f"no Python callback is registered as {lambda_id}")
     scope = hashlib.sha256(f"{lambda_id}\n{rows_b64}".encode()).hexdigest()[:16]
-    root, payload = reply(arrow_to_records(base64.b64decode(rows_b64)), scope)
+    rows = _decode_input_refs(arrow_to_records(base64.b64decode(rows_b64)))
+    root, payload = reply(rows, scope)
     callbacks.update(payload.callbacks)
     return _transport(root, payload)
 

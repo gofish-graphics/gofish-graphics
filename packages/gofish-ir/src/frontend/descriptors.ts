@@ -311,7 +311,10 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
   name: { type: t.string, doc: 'Layer name, from `.name("...")`.' },
   label: { type: t.ref("LabelIR") },
   relate: { type: t.array(t.ref("RelateClauseIR")) },
-  zOrder: { type: t.number },
+  zOrder: {
+    type: t.union(t.number, t.ref("BridgeLambdaSentinel")),
+    doc: "Paint-order hint, from `.zOrder(value)`: a number, or a Python function (a bridge handle) the mark calls once per instance with the input it is bound to.",
+  },
   translate: { type: t.ref("TranslateIR") },
   debug: {
     type: t.boolean,
@@ -1042,6 +1045,7 @@ export const AUTHORED_REFS: Readonly<
   ChunkKey: { pyClass: "ChunkKey", tag: "chunk" },
   LabelIR: {},
   TranslateIR: {},
+  BridgeLambdaSentinel: {},
   RelateClauseIR: {},
   // `holdsNodes`: an authored value of this type holds nodes (in JS a list
   // of nodes or refs, or a `selectAll(name)`; in Python marks such as

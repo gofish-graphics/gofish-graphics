@@ -70,3 +70,13 @@ def pluck(source: Any, path: str) -> List[Any]:
 
     walk(source, 0)
     return out
+
+
+def project(source: Any, path: str) -> Any:
+    """The single value at ``path``: :func:`pluck`'s values collapsed, as
+    ``by="field"`` collapses them. It is ``None`` when no row has the field
+    or the rows disagree. Use it to read a field off the bag a node was built
+    from, ``project(d, "site")``.
+    """
+    values = pluck(source, path)
+    return values[0] if len(values) == 1 else None

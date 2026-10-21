@@ -183,3 +183,17 @@ chart(seafood, axes=True) \
     .mark(rect(h="count")) \
     .layer(chart().flow(group(by="lake")).mark(label))
 ```
+
+## `project(source, path)` — the single value at a path {#project}
+
+`project` is the **collapsing** counterpart to `pluck`: it returns the one value
+at a path **when the bag agrees on it** (the same homogeneity collapse `by`
+performs), and `None` otherwise. Where `pluck(ref, "site")` gives you the
+whole multiset `["Morris"]`, `project(ref, "site")` gives you `"Morris"`
+directly — no indexing.
+
+```python
+from gofish import project
+
+project(ref, "site")  # → "Morris"  (None if the bag disagrees on "site")
+```

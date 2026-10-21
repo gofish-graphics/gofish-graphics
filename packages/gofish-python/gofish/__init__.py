@@ -59,7 +59,7 @@ from .ast import (
     struct,
     chunk,
 )
-from .datum_projection import pluck
+from .datum_projection import pluck, project
 from .charts import bar_chart
 
 # Strategy families (#1013): one module per family, with a lowercase file
@@ -132,6 +132,7 @@ __all__ = [
     "struct",
     "chunk",
     "pluck",
+    "project",
     "bar_chart",
     "Bin",
     "Color",

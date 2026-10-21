@@ -735,7 +735,7 @@ export interface LeafMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   name?: string;
   label?: LabelIR;
   relate?: RelateClauseIR[];
-  zOrder?: number;
+  zOrder?: number | BridgeLambdaSentinel;
   translate?: TranslateIR;
   [key: string]: unknown;
 }
@@ -753,7 +753,7 @@ export interface CombinatorMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   name?: string;
   label?: LabelIR;
   relate?: RelateClauseIR[];
-  zOrder?: number;
+  zOrder?: number | BridgeLambdaSentinel;
   translate?: TranslateIR;
 }
 
@@ -763,7 +763,7 @@ export interface RefMarkIR extends BaseIRNode {
   selection: string | Array<string | number>;
   name?: string;
   label?: LabelIR;
-  zOrder?: number;
+  zOrder?: number | BridgeLambdaSentinel;
   translate?: TranslateIR;
 }
 
@@ -804,7 +804,7 @@ export interface CutMarkIR extends BaseIRNode {
   size?: string | Array<number | DatumValue>;
   inset?: number;
   name?: string;
-  zOrder?: number;
+  zOrder?: number | BridgeLambdaSentinel;
   translate?: TranslateIR;
 }
 

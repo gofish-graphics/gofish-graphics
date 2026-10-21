@@ -30,15 +30,6 @@ packages/gofish-graphics/stories/lowlevel/EncloseRefs.stories.tsx
 # visual harness for regression tracking; intentionally not mirrored to Python.
 packages/gofish-graphics/stories/bench/Benchmarks.stories.tsx
 
-# Forward syntax stories needing unsupported features
-# LabeledChart's function mark receives the rows `resolve(["ref"], ...)`
-# made, and each row holds a live node ref in its `ref` field. The bridge
-# turns a ref into an `_InputRef` only when the ref is a whole input item
-# (#591), not a field of a row, so the call fails to encode the rows for
-# Python ("Cannot encode value of type function"). Port: #1046.
-# (Ribbon/Layered and NodeLink ARE ported.)
-packages/gofish-graphics/stories/forwardsyntax/LabeledChart.stories.tsx
-
 
 # Forward syntax stories needing coord transforms other than clock
 # (clock is now supported)
@@ -69,16 +60,6 @@ packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx::Default
 # byte-match (same reason as CurveLadder and PenguinsFourShapes). The JS
 # visual-diff harness captures it.
 packages/gofish-gotree/stories/Matrix.stories.tsx
-
-# Per-export exemption — LayeredBarsAndArea's Default and HoistedVarietySpread
-# drive a data-driven paint order with `ribbon(...).zOrder(d => …)`. The
-# function form of `.zOrder` is a JS closure and is omitted from the IR (like a
-# function `.label`), so a Python port can't reproduce the paint order that
-# raises the emphasized sites above the gray ones. Revisit once the highlight /
-# `emphasize` API (#641) gives this a serializable, declarative spelling.
-# TwoSites has no `.zOrder(fn)` and is ported.
-packages/gofish-graphics/stories/vega-lite/Bar/LayeredBarsAndArea.stories.tsx::Default
-packages/gofish-graphics/stories/vega-lite/Bar/LayeredBarsAndArea.stories.tsx::HoistedVarietySpread
 
 # ---------------------------------------------------------------------------
 # Interaction/reactivity stories — exempt from Python parity (JS-only feature).

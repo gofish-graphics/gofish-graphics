@@ -1,6 +1,6 @@
 """Tests for `pluck`, the Python port of JS `pluck` (datumProjection.ts)."""
 
-from gofish import pluck
+from gofish import pluck, project
 from gofish.ast import _InputRef
 
 ROWS = [
@@ -50,3 +50,13 @@ def test_dotted_path_projects_through_nested_lists():
 def test_object_values_deduplicate_by_content():
     rows = [{"p": {"x": 1}}, {"p": {"x": 1}}, {"p": {"x": 2}}]
     assert pluck(rows, "p") == [{"x": 1}, {"x": 2}]
+
+
+def test_project_collapses_agreeing_values():
+    assert project(ROWS, "lake") == "A"
+    assert project(_InputRef(0, ROWS), "lake") == "A"
+
+
+def test_project_is_none_when_rows_disagree_or_lack_the_field():
+    assert project(ROWS, "species") is None
+    assert project(ROWS, "missing") is None

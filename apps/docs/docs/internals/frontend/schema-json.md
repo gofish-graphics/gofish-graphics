@@ -458,7 +458,14 @@ for the API.
           "type": "string"
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -568,7 +575,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "debug": {
           "type": "boolean"
@@ -612,7 +626,14 @@ for the API.
           "$ref": "#/$defs/LabelIR"
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -824,15 +845,19 @@ for the API.
           }
         },
         {
-          "type": "object",
-          "required": ["__gofish_lambda"],
-          "properties": {
-            "__gofish_lambda": {
-              "type": "string"
-            }
-          }
+          "$ref": "#/$defs/BridgeLambdaSentinel"
         }
       ]
+    },
+    "BridgeLambdaSentinel": {
+      "description": "Python-bridge handle for a Python function: JS calls it through the bridge by this lambda id.",
+      "type": "object",
+      "required": ["__gofish_lambda"],
+      "properties": {
+        "__gofish_lambda": {
+          "type": "string"
+        }
+      }
     },
     "DeriveOperator": {
       "description": "Transforms the data with a function, `derive(fn)`. A function does not serialize: the IR carries a Python bridge handle in its place.",
@@ -1748,7 +1773,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -1853,7 +1885,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -1958,7 +1997,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -2050,7 +2096,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -2192,7 +2245,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "debug": {
           "type": "boolean"
@@ -2295,7 +2355,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -2370,7 +2437,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -2424,7 +2498,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -2478,7 +2559,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -2574,7 +2662,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "debug": {
           "type": "boolean"
@@ -2662,7 +2757,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "debug": {
           "type": "boolean"
@@ -2729,7 +2831,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "debug": {
           "type": "boolean"
@@ -2764,7 +2873,14 @@ for the API.
           }
         },
         "zOrder": {
-          "$ref": "#/$defs/Number"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
         },
         "debug": {
           "type": "boolean"

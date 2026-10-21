@@ -157,6 +157,45 @@ class TestWidgetMarkFnBagContract:
         assert isinstance(ref.datum, list)
         assert ref.datum == [{"x": 1.0, "label": "a"}, {"x": 2.0, "label": None}]
 
+    def test_a_ref_in_a_row_field_is_a_ref(self):
+        """A ref in a field of a row (`resolve` fills one) crosses as the
+        same sentinel and decodes into an `_InputRef` where it sits (#1046)."""
+        seen = {}
+
+        def mark_fn(rows):
+            seen["rows"] = rows
+            return rect(w=1, h=1)
+
+        widget = chart([{"x": 1}]).mark(mark_fn).render(w=400, h=300)
+        lambda_id = widget.doc["root"]["mark"]["lambdaId"]
+
+        sentinel = pa.struct(
+            [("__inputRef", pa.float64()), ("datum", pa.list_(pa.struct([("id", pa.string())])))]
+        )
+        table = _records(
+            {
+                "ref": pa.array(
+                    [
+                        {"__inputRef": 0.0, "datum": [{"id": "a"}]},
+                        {"__inputRef": 1.0, "datum": [{"id": "b"}]},
+                    ],
+                    type=sentinel,
+                ),
+                "label": pa.array(["Alpha", "Bravo"]),
+            }
+        )
+        widget.call_request = {
+            "request_id": "r-0",
+            "lambda_id": lambda_id,
+            "rows_b64": base64.b64encode(_ipc_bytes(table)).decode("utf-8"),
+        }
+
+        assert widget.call_response["reply"]["root"]["type"] == "rect"
+        [a, b] = seen["rows"]
+        assert a["label"] == "Alpha" and b["label"] == "Bravo"
+        assert isinstance(a["ref"], _InputRef) and a["ref"].index == 0
+        assert b["ref"].index == 1 and b["ref"].datum == [{"id": "b"}]
+
 
 def test_a_list_of_groups_or_values_round_trips():
     """Data flows as lists, so a callback may return groups or values rather
